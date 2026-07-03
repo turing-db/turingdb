@@ -116,15 +116,15 @@ private:
     std::vector<std::pair<uint64_t, std::optional<int64_t>>> _rows;
 };
 
-// Collects the single-row nullable-int64 result a COUNT emits: one chunk with one
-// present value. Captures every value it sees, so a test can assert both that
-// exactly one row came out and what its tally is.
+// Collects the single-row unsigned-i64 result a COUNT emits: one non-nullable
+// !nl.chunk<ui64> with one row. Captures every value it sees, so a test can assert
+// both that exactly one row came out and what its tally is.
 class CollectingCountSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* values = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[0]);
+        const auto* values = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[0]);
         ASSERT_NE(values, nullptr);
 
         const auto& raw = values->getRaw();
@@ -133,10 +133,10 @@ public:
         }
     }
 
-    const std::vector<std::optional<int64_t>>& getValues() const { return _values; }
+    const std::vector<uint64_t>& getValues() const { return _values; }
 
 private:
-    std::vector<std::optional<int64_t>> _values;
+    std::vector<uint64_t> _values;
 };
 
 // Scan all nodes and output them
@@ -323,8 +323,8 @@ func.func @main() {
 
 // Scan all nodes and count them. The tally is created once at function scope by
 // nl.count, incremented per scan chunk by nl.count_update, and - after the loop -
-// nl.count_result yields the single tally row that the second loop's nl.output
-// emits. Node IDs are never null, so this is the total node count.
+// nl.count_result materializes the single ui64 tally row that the function-scope
+// nl.output emits. Node IDs are never null, so this is the total node count.
 constexpr const char* nlCountNodesProgram = R"mlir(
 func.func @main() {
   %c = nl.count
@@ -332,10 +332,8 @@ func.func @main() {
   nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
     nl.count_update %c, %a : !nl.chunk<!storage.node_id>
   }
-  %r = nl.count_result(%c) : !nl.iter<!nl.chunk<!storage.nullable<i64>>>
-  nl.for %n in %r : !nl.iter<!nl.chunk<!storage.nullable<i64>>> {
-    nl.output(%n) : !nl.chunk<!storage.nullable<i64>>
-  }
+  %r = nl.count_result(%c) : !nl.chunk<ui64>
+  nl.output(%r) : !nl.chunk<ui64>
   func.return
 }
 )mlir";
@@ -352,10 +350,8 @@ func.func @main() {
     %values = nl.get_node_properties(%a, %score) : !nl.chunk<!storage.nullable<i64>>
     nl.count_update %c, %values : !nl.chunk<!storage.nullable<i64>>
   }
-  %r = nl.count_result(%c) : !nl.iter<!nl.chunk<!storage.nullable<i64>>>
-  nl.for %n in %r : !nl.iter<!nl.chunk<!storage.nullable<i64>>> {
-    nl.output(%n) : !nl.chunk<!storage.nullable<i64>>
-  }
+  %r = nl.count_result(%c) : !nl.chunk<ui64>
+  nl.output(%r) : !nl.chunk<ui64>
   func.return
 }
 )mlir";
@@ -1077,7 +1073,7 @@ TEST_F(NLExecutorTest, countsAllNodes) {
     CollectingCountSink sink;
     runProgram(nlCountNodesProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
 
-    const std::vector<std::optional<int64_t>> expected {4};
+    const std::vector<uint64_t> expected {4};
     EXPECT_EQ(sink.getValues(), expected);
 }
 
@@ -1092,7 +1088,7 @@ TEST_F(NLExecutorTest, countsAcrossChunks) {
     CollectingCountSink sink;
     runProgram(nlCountNodesProgram, reader.getView(), 1, sink);
 
-    const std::vector<std::optional<int64_t>> expected {4};
+    const std::vector<uint64_t> expected {4};
     EXPECT_EQ(sink.getValues(), expected);
 }
 
@@ -1106,7 +1102,7 @@ TEST_F(NLExecutorTest, countsOnlyNonNullValues) {
     CollectingCountSink sink;
     runProgram(nlCountScoresProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
 
-    const std::vector<std::optional<int64_t>> expected {2};
+    const std::vector<uint64_t> expected {2};
     EXPECT_EQ(sink.getValues(), expected);
 }
 

@@ -254,7 +254,8 @@ public:
 
 private:
     // Output chunks are node ID, edge ID and edge type ID chunks from traversals,
-    // or nullable value chunks (ColumnOptVector) from a property read
+    // nullable value chunks (ColumnOptVector) from a property read, or the
+    // non-nullable ColumnVector<uint64_t> a db.count emits
     static void printCell(const Column* column, size_t row) {
         if (const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(column)) {
             std::cout << (*nodeIDs)[row].getValue();
@@ -262,6 +263,8 @@ private:
             std::cout << (*edgeIDs)[row].getValue();
         } else if (const auto* edgeTypes = dynamic_cast<const ColumnEdgeTypes*>(column)) {
             std::cout << (*edgeTypes)[row].getValue();
+        } else if (const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(column)) {
+            std::cout << (*counts)[row];
         } else if (printValueCell<int64_t>(column, row)
                    || printValueCell<uint64_t>(column, row)
                    || printValueCell<double>(column, row)

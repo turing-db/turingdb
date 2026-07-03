@@ -30,7 +30,6 @@ private:
         GetOutEdges,
         GetInEdges,
         Sort,
-        Count,
     };
 
     // Settings of the iterators passed to each for loop
@@ -41,9 +40,6 @@ private:
 
         // The accumulator a Sort iterator drains; null for the other kinds.
         NLSortState* _sortState {nullptr};
-
-        // The tally a Count iterator reads to emit its single row; null otherwise.
-        NLCountState* _countState {nullptr};
     };
 
     NLProgram* _program {nullptr};
@@ -69,8 +65,7 @@ private:
     llvm::DenseMap<mlir::Value, NLDistinctState*> _distinctStates;
 
     // nl.count handle SSA value -> the runtime tally it produces, so the
-    // nl.count_update and the nl.for over nl.count_result that name the handle find
-    // the same counter
+    // nl.count_update and nl.count_result that name the handle find the same counter
     llvm::DenseMap<mlir::Value, NLCountState*> _countStates;
 
     void translateBlock(mlir::Block& block, NLStmtContainer* body);
@@ -167,12 +162,10 @@ private:
     // the present values for a nullable value chunk)
     void translateCountUpdate(mlir::nl::CountUpdate update, NLStmtContainer* body);
 
-    // Translate the nl.for over an nl.count_result iterator: allocate the single
-    // loop variable (a nullable i64 count chunk), map it, and record the emit-loop
-    // statement (materialize the tally as one present row, run the body once)
-    void translateCountLoop(const IteratorConfig& config,
-                            mlir::Block& loopBody,
-                            NLStmtContainer* body);
+    // Translate an nl.count_result: look up the tally the handle names, allocate the
+    // unsigned i64 count chunk it produces, map the op result to it, and record the
+    // emit statement (materialize the final tally as the chunk's single row)
+    void translateCountResult(mlir::nl::CountResult result, NLStmtContainer* body);
 
     // The runtime tally a count handle names. The handle is a required operand of
     // nl.count_update and nl.count_result, so this throws if it was not produced by

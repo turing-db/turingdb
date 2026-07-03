@@ -704,31 +704,32 @@ def CountUpdate : NLOp<"count_update", []> {
 /**
 * CountResult
 */
-// Pure: given a filled counter it deterministically yields the same one-row
-// iterator, and it produces no side effect of its own - materializing the tally
-// row happens in the driving nl.for. Mirrors nl.sort: a source op whose nl.for
-// does the work.
-def CountResult : NLOp<"count_result", [Pure]> {
-  let summary = "Create a database iterator over the single result row of a count";
+// NOT Pure: it reads the handle's mutable tally (set by the nl.count_updates in
+// the producing loop), so it must run exactly where it sits - after that loop -
+// and must not be hoisted, CSE'd or eliminated. The count sibling of
+// nl.limit_truncate, which likewise reads mutable counter state.
+def CountResult : NLOp<"count_result", []> {
+  let summary = "Materialize the single result row of a count as a chunk";
   let description = [{
-    The source op for the emit phase of a COUNT, the count counterpart of nl.sort.
-    It consumes a filled nl.count_state and produces an iterator whose one and only
-    step yields a single-row chunk: the tally, as a nullable (always-present) i64.
-    An enclosing nl.for binds that one chunk and emits it once:
+    The emit step of a COUNT. It reads a filled nl.count_state and materializes the
+    tally directly as a single-row chunk - one unsigned i64. A count is a
+    non-negative number that is never null, so the chunk is a plain !nl.chunk<ui64>,
+    not a nullable value chunk.
 
-      %r = nl.count_result(%c) : !nl.iter<!nl.chunk<!storage.nullable<i64>>>
-      nl.for %n in %r : !nl.iter<!nl.chunk<!storage.nullable<i64>>> {
-        nl.output(%n) : !nl.chunk<!storage.nullable<i64>>
-      }
+    Unlike nl.sort it is not a source iterator: a COUNT collapses to exactly one
+    row, so there is nothing to iterate. It produces the chunk in place, at function
+    scope after the producing loop, and nl.output consumes it there - no emit loop:
 
-    The result chunk type is fixed (a nullable i64) but cannot be inferred from the
-    parameterless state handle, so it is spelled after the colon, the same as
-    nl.sort's iterator type. Placing nl.count_result after the producing loop
-    guarantees the counter is final by the time the driving loop first steps.
+      %r = nl.count_result(%c) : !nl.chunk<ui64>
+      nl.output(%r) : !nl.chunk<ui64>
+
+    The result chunk type is fixed (a ui64) but cannot be inferred from the
+    parameterless state handle, so it is spelled after the colon. Placing
+    nl.count_result after the producing loop guarantees the tally is final.
   }];
 
   let arguments = (ins NLCountStateHandle:$state);
-  let results   = (outs NLIterator:$result);
+  let results   = (outs NLChunk:$result);
 
   let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
 }

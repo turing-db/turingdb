@@ -99,9 +99,10 @@ public:
     // mutator.
     static void runCountUpdate(NLExecutionContext* context, NLFunctionData* data);
 
-    // The emit phase of a COUNT: materialize the final tally as a single present
-    // int64 row into the loop variable, then run the body (the nl.output) once.
-    static void runCountLoop(NLExecutionContext* context, NLFunctionData* data);
+    // The emit step of a COUNT: materialize the final tally as the output chunk's
+    // single unsigned i64 row. Runs once, after the producing loop; nl.output emits
+    // the chunk at function scope.
+    static void runCountResult(NLExecutionContext* context, NLFunctionData* data);
 
     static void runOutput(NLExecutionContext* context, NLFunctionData* data);
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);

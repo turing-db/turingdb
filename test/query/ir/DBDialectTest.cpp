@@ -190,8 +190,8 @@ func.func @main() {
 const char* const countProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %n = db.count(%a) : (!db.column<!storage.node_id>) -> !db.column<i64>
-  db.output(%n) : !db.column<i64>
+  %n = db.count(%a) : (!db.column<!storage.node_id>) -> !db.column<ui64>
+  db.output(%n) : !db.column<ui64>
   return
 }
 )mlir";
@@ -703,11 +703,11 @@ TEST_F(DBDialectTest, parsesCount) {
     ASSERT_TRUE(count);
 
     // One column in, one integer column out - the input and result types are
-    // unrelated (a node ID column counted into an i64 column).
+    // unrelated (a node ID column counted into a ui64 column).
     const mlir::Type nodeIDColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::NodeIDType::get(&_context));
-    const mlir::Type intColumnType = mlir::db::ColumnType::get(&_context, mlir::IntegerType::get(&_context, 64));
+    const mlir::Type countColumnType = mlir::db::ColumnType::get(&_context, mlir::IntegerType::get(&_context, 64, mlir::IntegerType::Unsigned));
     EXPECT_EQ(count.getInput().getType(), nodeIDColumnType);
-    EXPECT_EQ(count.getResult().getType(), intColumnType);
+    EXPECT_EQ(count.getResult().getType(), countColumnType);
 }
 
 TEST_F(DBDialectTest, countRoundTripsThroughTextualForm) {

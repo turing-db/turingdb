@@ -114,8 +114,6 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             _iteratorConfigs[getInEdges.getResult()] = config;
         } else if (nl::Sort sort = mlir::dyn_cast<nl::Sort>(operation)) {
             _iteratorConfigs[sort.getResult()] = IteratorConfig {IteratorKind::Sort, {}, {}, sortStateFor(sort.getState())};
-        } else if (nl::CountResult countResult = mlir::dyn_cast<nl::CountResult>(operation)) {
-            _iteratorConfigs[countResult.getResult()] = IteratorConfig {IteratorKind::Count, {}, {}, nullptr, countStateFor(countResult.getState())};
         } else if (nl::For forLoop = mlir::dyn_cast<nl::For>(operation)) {
             translateFor(forLoop, body);
         } else if (mlir::isa<nl::GetPropertyType>(operation)) {
@@ -158,6 +156,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateCountState(count, body);
         } else if (nl::CountUpdate countUpdate = mlir::dyn_cast<nl::CountUpdate>(operation)) {
             translateCountUpdate(countUpdate, body);
+        } else if (nl::CountResult countResult = mlir::dyn_cast<nl::CountResult>(operation)) {
+            translateCountResult(countResult, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
@@ -190,9 +190,6 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
     } else if (config._kind == IteratorKind::Sort) {
         // A sort emit loop is never limit-bounded: ORDER BY must see every row.
         translateSortLoop(config, loopBody, body);
-    } else if (config._kind == IteratorKind::Count) {
-        // A count emit loop yields the single tally row; it is never limit-bounded.
-        translateCountLoop(config, loopBody, body);
     } else {
         translateEdgeLoop(config, loopBody, limit, body);
     }
@@ -312,11 +309,12 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
         throw IRException("nl.output requires at least one column");
     }
 
-    if (!mlir::isa<nl::For>(output->getParentOp())) {
-        throw IRException("nl.output must appear inside an nl.for body");
-    }
-
-    // Check that the columns passed to output are all variables of the innermost loop
+    // Output is either the per-step sink inside an nl.for body, or - for an
+    // aggregate like COUNT that collapses to one row - a one-shot emit at function
+    // scope. Either way its columns must be bound in the output's own block, which
+    // the per-column check below enforces: a loop variable of this loop, or a chunk
+    // materialized in this block (a property fetch, or nl.count_result at function
+    // scope). A chunk from an outer or sibling loop fails that check.
     mlir::Block* outputBlock = output->getBlock();
 
     NLOutputData* outputData = _program->allocFunctionData<NLOutputData>();
@@ -737,30 +735,21 @@ void NLTranslator::translateCountUpdate(nl::CountUpdate update, NLStmtContainer*
     body->addStmt(NLFunctionDescriptor {&NLExecutor::runCountUpdate, data});
 }
 
-void NLTranslator::translateCountLoop(const IteratorConfig& config,
-                                      mlir::Block& loopBody,
-                                      NLStmtContainer* body) {
-    NLCountState* state = config._countState;
-    if (!state) {
-        throw IRException("nl.count_result iterator must carry a count tally");
-    }
+void NLTranslator::translateCountResult(nl::CountResult result, NLStmtContainer* body) {
+    // The handle is a required operand, so countStateFor returns its tally or
+    // throws if it was not produced by an nl.count.
+    NLCountState* state = countStateFor(result.getState());
 
-    // The count iterator yields a single chunk - the one-row tally - so For::verify
-    // binds exactly one loop variable to it.
-    if (loopBody.getNumArguments() != 1) {
-        throw IRException("nl.count_result loop must bind exactly one variable");
-    }
+    // The result is the unsigned i64 count chunk (!nl.chunk<ui64>) runCountResult
+    // fills with the single tally row. It is the one non-nullable value chunk in the
+    // pipeline, so allocate its ColumnVector<uint64_t> directly - the shared
+    // allocColumnForChunkType only knows ID chunks and nullable value chunks.
+    ColumnVector<uint64_t>* output = _memory->alloc<ColumnVector<uint64_t>>();
+    output->reserve(_program->getChunkSize());
+    _valueSlots[result.getResult()] = output;
 
-    // The loop variable is the nullable i64 count chunk runCountLoop fills with the
-    // single tally row.
-    const mlir::Value loopVariable = loopBody.getArgument(0);
-    Column* output = allocColumnForChunkType(loopVariable.getType());
-    _valueSlots[loopVariable] = output;
-
-    NLCountLoopData* loopData = _program->allocFunctionData<NLCountLoopData>(state, output);
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runCountLoop, loopData});
-
-    translateBlock(loopBody, loopData->getStmts());
+    NLCountResultData* data = _program->allocFunctionData<NLCountResultData>(state, output);
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runCountResult, data});
 }
 
 NLCountState* NLTranslator::countStateFor(mlir::Value handle) const {

@@ -129,15 +129,15 @@ private:
     std::vector<std::pair<uint64_t, std::optional<int64_t>>> _rows;
 };
 
-// Collects the single-row nullable-int64 result a COUNT emits: one chunk with one
-// present value. Captures every value seen, so a test can assert both that exactly
-// one row came out and what its tally is.
+// Collects the single-row unsigned-i64 result a COUNT emits: one non-nullable
+// !nl.chunk<ui64> with one row. Captures every value seen, so a test can assert
+// both that exactly one row came out and what its tally is.
 class CollectingCountSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* values = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[0]);
+        const auto* values = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[0]);
         ASSERT_NE(values, nullptr);
 
         const auto& raw = values->getRaw();
@@ -146,10 +146,10 @@ public:
         }
     }
 
-    const std::vector<std::optional<int64_t>>& getValues() const { return _values; }
+    const std::vector<uint64_t>& getValues() const { return _values; }
 
 private:
-    std::vector<std::optional<int64_t>> _values;
+    std::vector<uint64_t> _values;
 };
 
 // Collects (node ID, nullable string property) rows. The value column is a
@@ -829,8 +829,8 @@ func.func @main() {
 const char* const countNodesProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %n = db.count(%a) : (!db.column<!storage.node_id>) -> !db.column<i64>
-  db.output(%n) : !db.column<i64>
+  %n = db.count(%a) : (!db.column<!storage.node_id>) -> !db.column<ui64>
+  db.output(%n) : !db.column<ui64>
   return
 }
 )mlir";
@@ -842,8 +842,8 @@ const char* const countScoresProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %n = db.count(%score) : (!db.column<none>) -> !db.column<i64>
-  db.output(%n) : !db.column<i64>
+  %n = db.count(%score) : (!db.column<none>) -> !db.column<ui64>
+  db.output(%n) : !db.column<ui64>
   return
 }
 )mlir";
@@ -2751,7 +2751,7 @@ TEST_F(DBLoweringTest, countsNodes) {
     CollectingCountSink sink;
     runLoweredProgram(countNodesProgram, reader.getView(), sink);
 
-    const std::vector<std::optional<int64_t>> expected {4};
+    const std::vector<uint64_t> expected {4};
     EXPECT_EQ(sink.getValues(), expected);
 }
 
@@ -2765,7 +2765,7 @@ TEST_F(DBLoweringTest, countsNodesAcrossChunks) {
     CollectingCountSink sink;
     runLoweredProgram(countNodesProgram, reader.getView(), sink, /*chunkSize=*/2);
 
-    const std::vector<std::optional<int64_t>> expected {4};
+    const std::vector<uint64_t> expected {4};
     EXPECT_EQ(sink.getValues(), expected);
 }
 
@@ -2780,13 +2780,15 @@ TEST_F(DBLoweringTest, countsNonNullScores) {
     CollectingCountSink sink;
     runLoweredProgram(countScoresProgram, reader.getView(), sink);
 
-    const std::vector<std::optional<int64_t>> expected {2};
+    const std::vector<uint64_t> expected {2};
     EXPECT_EQ(sink.getValues(), expected);
 }
 
 // db.count lowers to the pipeline-breaker shape: a hoisted nl.count, a single
-// nl.count_update in the producing loop, and an nl.count_result emit loop after it -
-// two nl.for loops (the producing scan and the one-step emit), no nl.sort_buffer.
+// nl.count_update in the producing loop, and an nl.count_result after it that
+// materializes the tally chunk at function scope. Because count collapses to one
+// row it opens no emit loop, so there is exactly one nl.for (the producing scan)
+// and no nl.sort_buffer.
 TEST_F(DBLoweringTest, lowersCountToPipelineBreaker) {
     auto graph = buildDiamondGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
@@ -2832,7 +2834,7 @@ TEST_F(DBLoweringTest, lowersCountToPipelineBreaker) {
     EXPECT_EQ(countCount, 1u);
     EXPECT_EQ(updateCount, 1u);
     EXPECT_EQ(resultCount, 1u);
-    EXPECT_EQ(forCount, 2u);
+    EXPECT_EQ(forCount, 1u);
     EXPECT_EQ(sortBufferCount, 0u);
 }
 

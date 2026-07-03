@@ -588,19 +588,17 @@ void NLExecutor::runCountUpdate(NLExecutionContext* context, NLFunctionData* dat
     update->getState()->add(count(update->getRows()));
 }
 
-void NLExecutor::runCountLoop(NLExecutionContext* context, NLFunctionData* data) {
-    NLCountLoopData* loopData = static_cast<NLCountLoopData*>(data);
+void NLExecutor::runCountResult(NLExecutionContext* context, NLFunctionData* data) {
+    const NLCountResultData* result = static_cast<NLCountResultData*>(data);
 
     // The aggregate collapses every counted row to a single result row: write the
-    // final tally into the loop variable as one present (never-null) int64. Runs
-    // after the producing loop, so the counter holds the whole dataflow's count.
-    const size_t count = loopData->getState()->getCount();
-    ColumnOptVector<int64_t>* output = static_cast<ColumnOptVector<int64_t>*>(loopData->getOutput());
-    std::vector<std::optional<int64_t>>& raw = output->getRaw();
-    raw.assign(1, std::optional<int64_t>(static_cast<int64_t>(count)));
-
-    // Emit that one row once (the body is the nl.output).
-    runBody(context, loopData->getStmts());
+    // final tally into the output chunk as one unsigned i64 (the !nl.chunk<ui64>
+    // count column). Runs after the producing loop, so the counter holds the whole
+    // dataflow's count; nl.output emits this chunk at function scope.
+    const size_t count = result->getState()->getCount();
+    ColumnVector<uint64_t>* output = static_cast<ColumnVector<uint64_t>*>(result->getOutput());
+    std::vector<uint64_t>& raw = output->getRaw();
+    raw.assign(1, static_cast<uint64_t>(count));
 }
 
 NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {

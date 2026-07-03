@@ -691,24 +691,23 @@ void DBLowering::lowerCount(mlir::db::Count count) {
     _builder.create<nl::CountUpdate>(loc, state, inputChunk);
 
     // COUNT is a pipeline breaker: the tally is final only once every row has been
-    // seen. So - like db.sort - the result is emitted after the producing loop, by
-    // an nl.count_result source iterator and its nl.for, placed before the
-    // func.return. The iterator yields exactly one chunk: the single-row count as a
-    // nullable (always-present) i64, so nl.output stays inside a loop as it must.
+    // seen. Since it collapses to exactly one row there is nothing to iterate, so -
+    // unlike db.sort - it opens no emit loop: nl.count_result materializes the tally
+    // chunk in place at function scope (after the producing loop, before the
+    // func.return), and db.output consumes it there. The chunk is the single-row
+    // count as an unsigned i64 (!nl.chunk<ui64>) - a non-negative tally that is
+    // never null, so no nullable wrapper.
     mlir::MLIRContext* const context = _builder.getContext();
-    const mlir::Type elementType = _builder.getIntegerType(64);
-    const storage::NullableType nullableType = storage::NullableType::get(context, elementType);
-    const nl::ChunkType countChunkType = nl::ChunkType::get(context, nullableType);
-    const nl::IteratorType iteratorType = nl::IteratorType::get(context, {countChunkType});
+    const mlir::Type countElementType = _builder.getIntegerType(64, /*isSigned=*/false);
+    const nl::ChunkType countChunkType = nl::ChunkType::get(context, countElementType);
 
     setInsertionInto(_entryBlock);
-    nl::CountResult result = _builder.create<nl::CountResult>(loc, iteratorType, state);
+    nl::CountResult result = _builder.create<nl::CountResult>(loc, countChunkType, state);
 
-    // db.count's single result maps to the emit loop's single variable, so the
-    // db.output that follows lowers into the emit loop body reading the one-row
-    // count chunk. The emit loop is never limit-bounded (count.getOperation() opens
-    // no producing loop, so assignProducerLoops never attaches a handle to it).
-    buildLoopForSource(result.getResult(), count.getOperation());
+    // db.count's result maps to that chunk, so the db.output that follows lowers
+    // into a function-scope nl.output reading it - the block that holds the chunk is
+    // the entry block, so lowerOutput places nl.output there.
+    _valueMap[count.getResult()] = result.getResult();
 }
 
 void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {
