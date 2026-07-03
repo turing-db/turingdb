@@ -56,7 +56,7 @@
 - [ObjectMap reserve/publish](feedback_objectmap_reserve_publish.md) — reserve name before the load, publish after, work in between
 
 ## Storage / Index Design
-- [String-property index decision — ART + SIMD + fingerprint + leaf-verify + AMAC 8-way](project_string_index_decision.md) — the decided read path; absent-key-safe; now beats the multiversion hash on hits AND misses (leaf fingerprint rejects colliding absent keys before the leaf load: serial 152→53, batched 90→40) and keeps ordered/range/time-travel. Value-in-pointer + front Bloom filter REJECTED. Hash now has no point-read edge; route only write-dominated slices to it. Evidence: tools/index-sim/report_art_miss.md
+- [String-property index decision — ART + SIMD + fingerprint + leaf-verify + AMAC 8-way](project_string_index_decision.md) — the decided read path; absent-key-safe; now beats the multiversion hash on hits AND misses (leaf fingerprint rejects colliding absent keys before the leaf load: serial 152→53, batched 90→40) and keeps ordered/range/time-travel. Value-in-pointer + front Bloom filter REJECTED. Hash now has no point-read edge; route only write-dominated slices to it. Evidence: docs/ART.md (the decompose/miss/opt prototypes + report_art*.md were removed as dead code; index_sim/index_bench now live in samples/index-sim/)
 
 ## Distributed / Replication Design
 - [Distribution design docs + unified identity model](reference_distribution_design_docs.md) — REPLICATE.md / GRAPHHUB.md / hub-spec live in sibling clones ($HOME); unified identity model in docs/IDENTITY_MODEL.md

@@ -15,7 +15,7 @@ The read path, stated unambiguously:
 
 **Value-in-pointer is still rejected** for production: it skips the un-discriminated suffix verify, so it false-positives on prefix-colliding absent keys (200000/200000 measured). The fingerprint is its SOUND dual — same spare-pointer-bits mechanism, but it stores a fingerprint that still verifies, not a value that skips the verify. A front Bloom/quotient filter is also rejected: it re-hashes the whole key on every lookup (the cost ART exists to avoid) and needs its own versioned structure.
 
-Backed by `docs/ART.md` and `tools/index-sim/report_art_miss.md` + `index_miss.cpp` (the fingerprint), on top of `report_art_opt.md` + `index_opt.cpp` (the rest) and `report_art.md` / `index_decompose.cpp` (decomposition).
+Backed by `docs/ART.md`. The `index_decompose.cpp` / `index_miss.cpp` / `index_opt.cpp` prototypes and their `report_art*.md` reports were removed as dead code; the decision's evidence is preserved inline (the table below) and in `docs/ART.md`, and the ART wall-clock validation survives in `samples/index-sim/report_bench.md`. The surviving cost-model + benchmark are `index_sim`/`index_bench`, now under `samples/index-sim/`.
 
 **Why (fair, absent-safe, measured — high-cardinality 16-byte HEAD reads, cyc/op, median of 3, Intel Core Ultra 7 265):**
 | variant (all verify; 0 false-positives) | HIT | MISS |
@@ -36,7 +36,7 @@ On HITS ART already beat the hash (the hash pays FNV ~94 cyc/probe; ART hashes n
 - Carry a per-leaf-edge fingerprint of the full key (16-bit CRC32 in the child pointer's spare bits); reject on fingerprint mismatch before the leaf load; on a match, still verify the full key. Do not maintain a separate front filter.
 - Verify the full key at the leaf — do **not** inline the value in the child pointer.
 - Expose an AMAC-style batched/pipelined lookup for batch-probe sites (join probes, `IN` filters, key-column scans); do not loop scalar lookups there.
-- Keep path compression + lazy expansion (mandatory for long/structured keys: 44→6 dependent loads measured) and chain prefix nodes past the inline-prefix cap — the `index_bench` prototype mis-branches once a shared prefix exceeds `ART_MAX_PREFIX=16`; fixed in `index_opt.cpp`.
+- Keep path compression + lazy expansion (mandatory for long/structured keys: 44→6 dependent loads measured) and chain prefix nodes past the inline-prefix cap — the `index_bench` prototype (`samples/index-sim/`) mis-branches once a shared prefix exceeds `ART_MAX_PREFIX=16`.
 - Pair with transient/folded commits to contain persistent-ART write/memory cost (the Node256 copy-on-write clone cost flagged in `report_bench.md`).
 
 Relevant to scale-out / versioned storage: see [[project_partitioning]].
