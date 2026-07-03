@@ -434,15 +434,6 @@ def Count : TuringOp<"count", [Pure]> {
       %a = db.scan_nodes() : !db.column<!storage.node_id>
       %n = db.count(%a) : (!db.column<!storage.node_id>) -> !db.column<i64>
       db.output(%n) : !db.column<i64>
-
-    Unlike the pass-through ops (db.limit, db.sort, db.remove_duplicates) it neither
-    keeps its input's arity nor its type: it takes one column and yields one integer
-    column, whatever the input column's type. Count is a pipeline breaker like
-    db.sort - the tally is known only once every row has been seen - so it lowers to
-    a hoisted nl.count counter, an nl.count_update in the producing loop body that
-    charges each chunk's non-null rows, and - after the loop - an nl.count_result
-    source iterator whose nl.for emits the single tally row. Counting a
-    deterministic read of the graph is itself deterministic, so the op is Pure.
   }];
 
   // One column in, one integer column out. The input and result types are

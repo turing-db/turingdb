@@ -670,11 +670,6 @@ def Count : NLOp<"count", []> {
     Produces the !nl.count_state handle nl.count_update increments and
     nl.count_result reads. The result type is buildable and omitted.
 
-    Unlike nl.limit it never appears on an nl.for: a COUNT drives no loop
-    early-exit, since every row must be seen before the tally is final. But like
-    nl.sort_buffer it is a pipeline breaker - nl.count_result emits its row only
-    after the producing loop has filled the counter.
-
       %c = nl.count
   }];
 
