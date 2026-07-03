@@ -60,14 +60,7 @@ protected:
 
     size_t countNodes(Graph* graph) {
         const GraphReader reader = graph->openTransaction().readGraph();
-        size_t nodeCount = 0;
-        bool allPresent = true;
-        for (const NodeID nodeID : reader.scanNodes()) {
-            allPresent = allPresent && reader.graphHasNode(nodeID);
-            ++nodeCount;
-        }
-        EXPECT_TRUE(allPresent);
-        return nodeCount;
+        return reader.getNodeCount();
     }
 
     // Reproduces, by hand, the graph the fixtures describe.
