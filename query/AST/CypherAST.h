@@ -79,6 +79,7 @@ class ProcedureLookup;
 class ProcedureManager;
 class LoadGraphQuery;
 class LoadGMLQuery;
+class LoadParquetQuery;
 class LoadJsonlQuery;
 class LoadCommitQuery;
 class S3ConnectQuery;
@@ -162,6 +163,7 @@ public:
     friend ListGraphQuery;
     friend CreateGraphQuery;
     friend LoadGMLQuery;
+    friend LoadParquetQuery;
     friend LoadJsonlQuery;
     friend LoadCommitQuery;
     friend S3ConnectQuery;

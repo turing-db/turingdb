@@ -47,6 +47,7 @@
 #include "nodes/ListGraphNode.h"
 #include "nodes/CreateGraphNode.h"
 #include "nodes/LoadGMLNode.h"
+#include "nodes/LoadParquetNode.h"
 #include "nodes/LoadJsonlNode.h"
 #include "nodes/S3ConnectNode.h"
 #include "nodes/S3TransferNode.h"
@@ -75,6 +76,7 @@
 #include "ShowProceduresQuery.h"
 #include "LoadGraphQuery.h"
 #include "LoadGMLQuery.h"
+#include "LoadParquetQuery.h"
 #include "LoadJsonlQuery.h"
 #include "CreateVectorIndexQuery.h"
 #include "LoadVectorQuery.h"
@@ -163,6 +165,10 @@ void PlanGraphGenerator::generate(const QueryCommand* query) {
 
         case QueryCommand::Kind::LOAD_GML_QUERY:
             generateLoadGMLQuery(static_cast<const LoadGMLQuery*>(query));
+        break;
+
+        case QueryCommand::Kind::LOAD_PARQUET_QUERY:
+            generateLoadParquetQuery(static_cast<const LoadParquetQuery*>(query));
         break;
 
         case QueryCommand::Kind::S3_CONNECT_QUERY:
@@ -323,6 +329,11 @@ void PlanGraphGenerator::generateCreateGraphQuery(const CreateGraphQuery* query)
 void PlanGraphGenerator::generateLoadGMLQuery(const LoadGMLQuery* loadGML) {
     LoadGMLNode* loadGMLNode = _tree.create<LoadGMLNode>(loadGML->getGraphName(), loadGML->getFilePath());
     _tree.newOut<ProduceResultsNode>(loadGMLNode);
+}
+
+void PlanGraphGenerator::generateLoadParquetQuery(const LoadParquetQuery* loadParquet) {
+    LoadParquetNode* loadParquetNode = _tree.create<LoadParquetNode>(loadParquet->getGraphName(), loadParquet->getFilePath());
+    _tree.newOut<ProduceResultsNode>(loadParquetNode);
 }
 
 void PlanGraphGenerator::generateLoadJsonlQuery(const LoadJsonlQuery* query) {

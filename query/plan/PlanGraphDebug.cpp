@@ -21,6 +21,7 @@
 #include "nodes/ScanNodesByLabelNode.h"
 #include "nodes/LoadGraphNode.h"
 #include "nodes/LoadGMLNode.h"
+#include "nodes/LoadParquetNode.h"
 #include "nodes/ConstScanNode.h"
 #include "nodes/ConstWriteSourceNode.h"
 #include "nodes/ExprEvalNode.h"
@@ -263,6 +264,12 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
 
             case PlanGraphOpcode::LOAD_GML: {
                 const auto* n = dynamic_cast<LoadGMLNode*>(node.get());
+                output << "        __graph__: " << n->getGraphName() << "\n";
+                output << "        __filepath__: " << n->getFilePath().get() << "\n";
+            } break;
+
+            case PlanGraphOpcode::LOAD_PARQUET: {
+                const auto* n = dynamic_cast<LoadParquetNode*>(node.get());
                 output << "        __graph__: " << n->getGraphName() << "\n";
                 output << "        __filepath__: " << n->getFilePath().get() << "\n";
             } break;

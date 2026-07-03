@@ -21,6 +21,7 @@
 #include "LoadGraphQuery.h"
 #include "CreateGraphQuery.h"
 #include "LoadGMLQuery.h"
+#include "LoadParquetQuery.h"
 #include "LoadJsonlQuery.h"
 #include "S3ConnectQuery.h"
 #include "S3TransferQuery.h"
@@ -93,6 +94,10 @@ void CypherAnalyzer::analyze() {
 
             case QueryCommand::Kind::LOAD_GML_QUERY:
                 analyze(static_cast<LoadGMLQuery*>(query));
+            break;
+
+            case QueryCommand::Kind::LOAD_PARQUET_QUERY:
+                analyze(static_cast<LoadParquetQuery*>(query));
             break;
 
             case QueryCommand::Kind::CREATE_GRAPH_QUERY:
@@ -415,6 +420,26 @@ void CypherAnalyzer::analyze(LoadGMLQuery* loadGML) {
                                    "character '{}' not allowed.",
                                    c),
                        loadGML);
+        }
+    }
+}
+
+void CypherAnalyzer::analyze(LoadParquetQuery* loadParquet) {
+    std::string_view graphName = loadParquet->getGraphName();
+    if (graphName.empty()) {
+        graphName = loadParquet->getFilePath().basename();
+    }
+
+    loadParquet->setGraphName(graphName);
+
+    // Check that the graph name is only [A-Z0-9_]+
+    for (char c : graphName) {
+        if (!(isalnum(c) || c == '_')) [[unlikely]] {
+            throwError(fmt::format(
+                           "Graph name must only contain alphanumeric characters or '_': "
+                           "character '{}' not allowed.",
+                           c),
+                       loadParquet);
         }
     }
 }

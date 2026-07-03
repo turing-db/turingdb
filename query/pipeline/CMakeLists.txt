@@ -45,6 +45,7 @@ set(processors_sources
     processors/ListGraphProcessor.cpp
     processors/CreateGraphProcessor.cpp
     processors/LoadGMLProcessor.cpp
+    processors/LoadParquetProcessor.cpp
     processors/LoadJsonlProcessor.cpp
     processors/S3ConnectProcessor.cpp
     processors/S3PullProcessor.cpp

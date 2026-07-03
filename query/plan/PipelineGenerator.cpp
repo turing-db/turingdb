@@ -74,6 +74,7 @@
 #include "nodes/ListGraphNode.h"
 #include "nodes/CreateGraphNode.h"
 #include "nodes/LoadGMLNode.h"
+#include "nodes/LoadParquetNode.h"
 #include "nodes/LoadJsonlNode.h"
 #include "nodes/S3ConnectNode.h"
 #include "nodes/S3TransferNode.h"
@@ -506,6 +507,10 @@ PipelineOutputInterface* PipelineGenerator::translateNode(PlanGraphNode* node) {
 
         case PlanGraphOpcode::LOAD_GML:
             return translateLoadGML(static_cast<LoadGMLNode*>(node));
+        break;
+
+        case PlanGraphOpcode::LOAD_PARQUET:
+            return translateLoadParquet(static_cast<LoadParquetNode*>(node));
         break;
 
         case PlanGraphOpcode::CREATE_GRAPH:
@@ -1601,6 +1606,11 @@ PipelineOutputInterface* PipelineGenerator::translateMergeDataPartsNode(MergeDat
 
 PipelineOutputInterface* PipelineGenerator::translateLoadGML(LoadGMLNode* node) {
     _builder.addLoadGML(node->getGraphName(), node->getFilePath());
+    return _builder.getPendingOutputInterface();
+}
+
+PipelineOutputInterface* PipelineGenerator::translateLoadParquet(LoadParquetNode* node) {
+    _builder.addLoadParquet(node->getGraphName(), node->getFilePath());
     return _builder.getPendingOutputInterface();
 }
 
