@@ -212,7 +212,11 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
                     continue;
                 }
 
-                stack.emplace_back(other, e, pred);
+                if (pred && predPred && (pred != predPred)) {
+                    stack.emplace_back(other, e, nullptr);
+                } else {
+                    stack.emplace_back(other, e, pred);
+                }
             }
 
             // Do not yet have an edge-triple
@@ -226,31 +230,40 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
                 continue;
             }
 
-            const EdgeMetadata::EdgeType producedType = pred->data().type();
-            const bool getOut = producedType == EdgeMetadata::EdgeType::GET_OUT_EDGES;
-            const bool getIn = producedType == EdgeMetadata::EdgeType::GET_IN_EDGES;
-            // GetOuts cannot be translated until their target is discovered
-            if (getOut || getIn) {
-                defined.insert(var); // Mark as defined to avoid retraversal
-                continue;
-            }
+            const auto producesEdgeVar = [](const DependencyEdge* e) {
+                const EdgeMetadata::EdgeType producedType = e->data().type();
+                const bool getOut = producedType == EdgeMetadata::EdgeType::GET_OUT_EDGES;
+                const bool getIn = producedType == EdgeMetadata::EdgeType::GET_IN_EDGES;
+                return getOut || getIn;
+            };
 
-            const bool getTgt = producedType == EdgeMetadata::EdgeType::GET_EDGE_TGT;
-            const bool getSrc = producedType == EdgeMetadata::EdgeType::GET_EDGE_SRC;
+            const auto producesNodeVar = [](const DependencyEdge* e) {
+                const EdgeMetadata::EdgeType producedType = e->data().type();
+                const bool getTgt = producedType == EdgeMetadata::EdgeType::GET_EDGE_TGT;
+                const bool getSrc = producedType == EdgeMetadata::EdgeType::GET_EDGE_SRC;
+                return getTgt || getSrc;
+            };
 
-            bioassert(getTgt or getSrc, "Unsupported edge type.");
+            const DependencyEdge* edgeVarProd = producesEdgeVar(pred) ? pred : predPred;
+            const DependencyEdge* nodeVarProd = producesNodeVar(pred) ? pred : predPred;
 
-            auto [src, edge, tgt] = getOrder(var, pred, predPred);
+            bioassert(producesEdgeVar(edgeVarProd), "No edge producer");
+            bioassert(producesNodeVar(nodeVarProd), "No node producer");
 
-            if (getTgt) {
+            if (nodeVarProd->data().type() == EdgeMetadata::EdgeType::GET_EDGE_TGT) {
+                auto [src, edge, tgt] = getOrder(var, nodeVarProd, edgeVarProd);
                 addGetOutEdges(src, edge, tgt);
-            } else if (getSrc) {
-                addGetInEdges(src, edge, tgt);
-            }
+                defined.insert(src);
+                defined.insert(edge);
+                defined.insert(tgt);
 
-            defined.insert(src);
-            defined.insert(edge);
-            defined.insert(tgt);
+            } else if (nodeVarProd->data().type() == EdgeMetadata::EdgeType::GET_EDGE_SRC) {
+                auto [src, edge, tgt] = getOrder(var, edgeVarProd, nodeVarProd);
+                addGetInEdges(src, edge, tgt);
+                defined.insert(src);
+                defined.insert(edge);
+                defined.insert(tgt);
+            }
         }
     }
 }
