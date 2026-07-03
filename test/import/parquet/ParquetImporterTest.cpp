@@ -178,3 +178,9 @@ TEST_F(ParquetImporterTest, HandlesRowGroupLargerThanChunk) {
 
     ASSERT_EQ(countNodes(imported), expectedNodeCount);
 }
+
+int main(int argc, char** argv) {
+    return turing::test::turingTestMain(argc, argv, [] {
+        testing::GTEST_FLAG(repeat) = 5;
+    });
+}
