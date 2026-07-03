@@ -46,6 +46,7 @@ class ChangeNode;
 class ListGraphNode;
 class CreateGraphNode;
 class LoadGMLNode;
+class LoadParquetNode;
 class S3ConnectNode;
 class S3TransferNode;
 class ShowProceduresNode;
@@ -157,6 +158,7 @@ private:
     PipelineOutputInterface* translateListGraphNode(ListGraphNode* node);
     PipelineOutputInterface* translateCreateGraphNode(CreateGraphNode* node);
     PipelineOutputInterface* translateLoadGML(LoadGMLNode* node);
+    PipelineOutputInterface* translateLoadParquet(LoadParquetNode* node);
     PipelineOutputInterface* translateS3ConnectNode(S3ConnectNode* node);
     PipelineOutputInterface* translateS3TransferNode(S3TransferNode* node);
     PipelineOutputInterface* translateShowProceduresNode(ShowProceduresNode* node);

@@ -62,6 +62,7 @@
     #include "stmt/SetItem.h"
     #include "LoadGraphQuery.h"
     #include "LoadGMLQuery.h"
+    #include "LoadParquetQuery.h"
     #include "LoadJsonlQuery.h"
     #include "LoadCommitQuery.h"
     #include "ShowProceduresQuery.h"
@@ -347,7 +348,7 @@
 %type<db::QueryCommand*> query
 %type<db::LoadGraphQuery*> loadGraph
 %type<db::LoadGMLQuery*> loadGML
-%type<db::LoadGMLQuery*> loadParquet
+%type<db::LoadParquetQuery*> loadParquet
 %type<db::LoadJsonlQuery*> loadJsonl
 %type<db::LoadCommitQuery*> loadCommitQuery
 %type<db::Stmt*> readingStatement
@@ -585,14 +586,13 @@ loadGML
     ;
 
 loadParquet
-    // FIXME : Create LoadParquet query, rather than LoadGMLQuery
     : LOAD PARQUET STRING_LITERAL AS ID {
-        $$ = LoadGMLQuery::create(ast, fs::Path(std::string($3)));
+        $$ = LoadParquetQuery::create(ast, fs::Path(std::string($3)));
         $$->setGraphName($5);
         LOC($$, @$);
       }
     | LOAD PARQUET STRING_LITERAL {
-        $$ = LoadGMLQuery::create(ast, fs::Path(std::string($3)));
+        $$ = LoadParquetQuery::create(ast, fs::Path(std::string($3)));
         LOC($$, @$);
       }
     ;

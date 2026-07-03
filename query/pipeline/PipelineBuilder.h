@@ -189,6 +189,8 @@ public:
     // Load graph
     PipelineValueOutputInterface& addLoadGraph(std::string_view graphName);
     PipelineValueOutputInterface& addLoadGML(std::string_view graphName, const fs::Path& filePath);
+    PipelineValueOutputInterface& addLoadParquet(std::string_view graphName,
+                                                 const fs::Path& filePath);
     PipelineValueOutputInterface& addLoadJsonl(std::string_view graphName,
                                                const fs::Path& filePath,
                                                const EmbeddingsSpec& embeddingSpecs);

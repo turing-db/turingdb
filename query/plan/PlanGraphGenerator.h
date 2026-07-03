@@ -23,6 +23,7 @@ class LoadGraphQuery;
 class ListGraphQuery;
 class CreateGraphQuery;
 class LoadGMLQuery;
+class LoadParquetQuery;
 class LoadJsonlQuery;
 class LoadCommitQuery;
 class S3ConnectQuery;
@@ -68,6 +69,7 @@ private:
     void generateListGraphQuery(const ListGraphQuery* query);
     void generateCreateGraphQuery(const CreateGraphQuery* query);
     void generateLoadGMLQuery(const LoadGMLQuery* query);
+    void generateLoadParquetQuery(const LoadParquetQuery* query);
     void generateLoadJsonlQuery(const LoadJsonlQuery* query);
     void generateS3ConnectQuery(const S3ConnectQuery* query);
     void generateS3TransferQuery(const S3TransferQuery* query);

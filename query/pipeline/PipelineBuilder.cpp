@@ -46,6 +46,7 @@
 #include "processors/LoadGraphProcessor.h"
 #include "processors/CreateGraphProcessor.h"
 #include "processors/LoadGMLProcessor.h"
+#include "processors/LoadParquetProcessor.h"
 #include "processors/LoadJsonlProcessor.h"
 #include "processors/S3ConnectProcessor.h"
 #include "processors/S3PullProcessor.h"
@@ -986,6 +987,24 @@ PipelineValueOutputInterface& PipelineBuilder::addLoadGML(std::string_view graph
     _pendingOutput.setInterface(&output);
 
     _lastProc = loadGML;
+    return output;
+}
+
+PipelineValueOutputInterface& PipelineBuilder::addLoadParquet(std::string_view graphName,
+                                                              const fs::Path& filePath) {
+    LoadParquetProcessor* loadParquet =
+        LoadParquetProcessor::create(_pipeline, graphName, filePath);
+
+    PipelineValueOutputInterface& output = loadParquet->output();
+
+    Dataframe* df = output.getDataframe();
+    NamedColumn* graphNameValue = allocColumn<ColumnConst<types::String::Primitive>>(df);
+    graphNameValue->rename("graphName");
+    output.setValue(graphNameValue);
+
+    _pendingOutput.setInterface(&output);
+
+    _lastProc = loadParquet;
     return output;
 }
 

@@ -15,6 +15,7 @@ class CreateGraphQuery;
 class DeclContext;
 class ChangeQuery;
 class LoadGMLQuery;
+class LoadParquetQuery;
 class LoadJsonlQuery;
 class ChangeQuery;
 class S3ConnectQuery;
@@ -51,6 +52,7 @@ public:
     void analyze(const LoadGraphQuery* loadGraph);
     void analyze(const CreateGraphQuery* createGraph);
     void analyze(LoadGMLQuery* loadGML);
+    void analyze(LoadParquetQuery* loadParquet);
     void analyze(LoadJsonlQuery* loadJsonl);
     void analyze(const S3ConnectQuery* s3Connect);
     void analyze(S3TransferQuery* s3Transfer);

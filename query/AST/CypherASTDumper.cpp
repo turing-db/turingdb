@@ -31,6 +31,7 @@
 #include "ListGraphQuery.h"
 #include "CreateGraphQuery.h"
 #include "LoadGMLQuery.h"
+#include "LoadParquetQuery.h"
 #include "LoadJsonlQuery.h"
 #include "S3ConnectQuery.h"
 #include "S3TransferQuery.h"
@@ -120,6 +121,10 @@ void CypherASTDumper::dump(std::ostream& out) {
 
             case QueryCommand::Kind::LOAD_GML_QUERY:
                 dump(out, static_cast<const LoadGMLQuery*>(query));
+            break;
+
+            case QueryCommand::Kind::LOAD_PARQUET_QUERY:
+                dump(out, static_cast<const LoadParquetQuery*>(query));
             break;
 
             case QueryCommand::Kind::S3_CONNECT_QUERY:
@@ -344,6 +349,13 @@ void CypherASTDumper::dump(std::ostream& out, const LoadGMLQuery* query) {
     out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
     out << "    _" << std::hex << query << " {\n";
     out << "        ASTType LoadGMLQuery\n";
+    out << "    }\n";
+}
+
+void CypherASTDumper::dump(std::ostream& out, const LoadParquetQuery* query) {
+    out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
+    out << "    _" << std::hex << query << " {\n";
+    out << "        ASTType LoadParquetQuery\n";
     out << "    }\n";
 }
 
