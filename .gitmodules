@@ -31,3 +31,6 @@
 [submodule "external/llvm-project"]
 	path = external/llvm-project
 	url = https://github.com/turing-db/llvm.git
+[submodule "external/benchmark"]
+	path = external/benchmark
+	url = https://github.com/google/benchmark.git

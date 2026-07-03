@@ -51,6 +51,7 @@ add_subdirectory(gnn)
 add_subdirectory(list-buffer)
 add_subdirectory(mlir)
 add_subdirectory(vardeps)
+add_subdirectory(index-sim)
 
 set (SCRIPT_LIST_CONTENT "")
 list (LENGTH SAMPLE_LIST SAMPLE_COUNT)

@@ -63,6 +63,7 @@ set(storage_sources
         indexers/EdgeIndexer.cpp
 
         indexes/StringIndex.cpp
+        indexes/AdaptiveRadixTree.cpp
         indexers/StringPropertyIndexer.cpp
 
         indexes/IndexManager.cpp
