@@ -73,13 +73,13 @@ public:
         return true;
     }
 
-    // Fires before the values callback for each sub-batch on a column that has
-    // definition or repetition levels. For repeated columns (max_repetition_level > 0),
-    // rep_levels[i] == 0 marks the start of a new top-level row and rep_levels[i] > 0
-    // is a continuation element within the same list. For non-repeated optional columns
-    // (max_repetition_level == 0, max_definition_level > 0), repLevels is an empty span.
-    // def_levels[i] == max_definition_level means the value is present; lower values
-    // indicate a null. Both spans are parallel to the values span that follows.
+    // max rep levels > 0 => repeated column
+    //                    => repLevels[i] == 0 => start of next element
+    //
+    // max rep level = 0 => non-repeated
+    //                      max def level > 0 => optional column
+    //                                        => defLevels[i] = max def level => nonnull
+    //                                        => defLevels[i] < max def level => null
     virtual bool onLevels(size_t columnIndex,
                           std::span<const int16_t> repLevels,
                           std::span<const int16_t> defLevels) {
