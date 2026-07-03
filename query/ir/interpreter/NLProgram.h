@@ -842,12 +842,14 @@ private:
     NLCountFunction _count {nullptr};
 };
 
-// nl.for over nl.count_result data: the emit phase of a COUNT. Holds the tally and
-// the loop variable to fill with the single result row - a nullable (always-present)
-// i64 count column. Runs once, after the producing loop, so the tally is final.
-class NLCountLoopData : public NLFunctionData {
+// nl.count_result data: the emit step of a COUNT. Holds the tally and the output
+// column to fill with the single result row - an unsigned i64 count column
+// (ColumnVector<uint64_t>). Runs once, after the producing loop, so the tally is
+// final; it materializes the chunk in place, with no body of its own (nl.output
+// consumes it at function scope).
+class NLCountResultData : public NLFunctionData {
 public:
-    NLCountLoopData(NLCountState* state, Column* output)
+    NLCountResultData(NLCountState* state, Column* output)
         : _state(state),
         _output(output)
     {
@@ -856,13 +858,9 @@ public:
     NLCountState* getState() const { return _state; }
     Column* getOutput() const { return _output; }
 
-    NLStmtContainer* getStmts() { return &_stmts; }
-    const NLStmtContainer* getStmts() const { return &_stmts; }
-
 private:
     NLCountState* _state {nullptr};
     Column* _output {nullptr};
-    NLStmtContainer _stmts;
 };
 
 // nl.output data

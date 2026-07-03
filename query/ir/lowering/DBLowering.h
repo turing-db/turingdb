@@ -58,12 +58,13 @@ class GraphView;
 //                                          nl.count_update in the producing loop
 //                                          body that charges each chunk's non-null
 //                                          rows, and - after the loop - an
-//                                          nl.count_result source iterator whose
-//                                          nl.for emits the single tally row. A
-//                                          pipeline breaker like db.sort (the count
-//                                          is final only once every row is seen), so
-//                                          it has an emit loop; but it collapses to
-//                                          one row rather than re-emitting the input
+//                                          nl.count_result that materializes the
+//                                          single tally row (an unsigned i64,
+//                                          !nl.chunk<ui64>) which a function-scope
+//                                          nl.output emits. A pipeline breaker like
+//                                          db.sort (the count is final only once
+//                                          every row is seen), but it collapses to
+//                                          one row, so it opens no emit loop
 //
 // db.get_node_properties / db.get_edge_properties resolve their property name
 // against the graph schema here (hence the GraphView): the name is hoisted into
@@ -174,11 +175,11 @@ private:
 
     // Lower a db.count: hoist an nl.count tally to the top of the entry block,
     // place an nl.count_update in the innermost producing loop body to charge each
-    // chunk's non-null rows, then - after the producing loop - emit an
-    // nl.count_result source iterator and an nl.for over it that yields the single
-    // tally row (a nullable, always-present i64). db.count's result maps to that
-    // emit loop's variable, so the db.output that follows lowers into the emit loop
-    // body. A pipeline breaker like db.sort, but it collapses to one row.
+    // chunk's non-null rows, then - after the producing loop - an nl.count_result
+    // that materializes the single tally row (an unsigned i64, !nl.chunk<ui64>) at
+    // function scope. db.count's result maps to that chunk, so the db.output that
+    // follows lowers into a function-scope nl.output reading it. A pipeline breaker
+    // like db.sort, but it collapses to one row, so it opens no emit loop.
     void lowerCount(mlir::db::Count count);
 
     void lowerOutput(mlir::db::Output output);

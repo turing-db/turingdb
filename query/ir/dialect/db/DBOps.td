@@ -432,8 +432,8 @@ def Count : TuringOp<"count", [Pure]> {
     count(*) is expressed by counting such a column:
 
       %a = db.scan_nodes() : !db.column<!storage.node_id>
-      %n = db.count(%a) : (!db.column<!storage.node_id>) -> !db.column<i64>
-      db.output(%n) : !db.column<i64>
+      %n = db.count(%a) : (!db.column<!storage.node_id>) -> !db.column<ui64>
+      db.output(%n) : !db.column<ui64>
   }];
 
   // One column in, one integer column out. The input and result types are
