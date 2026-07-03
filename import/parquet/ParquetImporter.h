@@ -10,10 +10,23 @@ namespace db {
 
 class CommitBuilder;
 
-// Imports a split Parquet export made of two parquet files: one holding the nodes
-// (`__id`, `__labels`, node properties) and one holding the edges (`__source`,
-// `__target`, `__type`, edge properties). The node file is imported first so that
-// every edge endpoint is already mapped to a NodeID by the time the edges are read.
+/**
+ * @brief Given two Parquet files containing nodes and edges in the expected format,
+ * builds the graph in @ref _builder
+ *
+ * @detail Expected format:
+ *     - @ref _nodeFile:
+ *       Required columns:
+ *           - __id : INT64
+ *           - __labels : BYTE_ARRAY [ BYTE_ARRAY] (max nesting: 1)
+ *       Any other columns are interpreted as properties
+ *     - @ref _edgeFile:
+ *       Required columns:
+ *           - __source : INT64
+ *           - __target : INT64
+ *           - __type : BYTE_ARRAY (max nesting: 0)
+ *       Any other columns are interpreted as properties
+ */
 class ParquetImporter {
 public:
     ParquetImporter(fs::Path nodeFile, fs::Path edgeFile, CommitBuilder* builder)
