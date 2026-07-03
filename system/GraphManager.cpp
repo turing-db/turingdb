@@ -168,7 +168,8 @@ Graph* GraphManager::importGraph(std::string_view graphName,
             return loadParquetDB(graphName, absolute, jobSystem);
         break;
         case GraphFileType::UNKNOWN:
-            // If we can not determine the file type, assume it is a JSONL graph.
+            // If we can not determine the file type, assume it is a JSONL graph
+            // FIXME To be changed
             return loadJsonlDB(graphName, absolute, jobSystem, embeddingSpecs);
         break;
         case GraphFileType::_SIZE:
@@ -370,8 +371,6 @@ Graph* GraphManager::loadParquetDB(std::string_view graphName,
     auto graph = Graph::create(std::string(graphName), graphPath);
     Graph* graphPtr = graph.get();
 
-    // A split-Parquet export is a directory holding the nodes and the edges in
-    // two separate files.
     const fs::Path nodeFile = dbPath / PARQUET_NODES_FILE;
     const fs::Path edgeFile = dbPath / PARQUET_EDGES_FILE;
 
