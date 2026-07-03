@@ -141,16 +141,16 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
     VariableDependencyGraph vdg;
     vdg.buildFromAST(ast);
 
-    if (vdg.empty()) {
-        return;
-    }
-
     { // Create main
         _opBuilder->setInsertionPointToEnd(module->getBody());
         const mlir::FunctionType funcType = mlir::FunctionType::get(_mlirCtxt, {}, {});
         auto func = _opBuilder->create<mlir::func::FuncOp>(loc, "main", funcType);
         mlir::Block& block = *func.addEntryBlock();
         _opBuilder->setInsertionPointToStart(&block);
+    }
+
+    if (vdg.empty()) {
+        return;
     }
 
     std::unordered_set<const VariableDependency*> defined;
