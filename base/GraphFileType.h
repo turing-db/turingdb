@@ -10,6 +10,7 @@ enum class GraphFileType {
     JSONL,
     BINARY,
     PARQUET,
+
     _SIZE
 };
 
@@ -18,5 +19,6 @@ using GraphFileTypeDescription = EnumToString<GraphFileType>::Create<
     EnumStringPair<GraphFileType::GML, "GML">,
     EnumStringPair<GraphFileType::JSONL, "JSONL">,
     EnumStringPair<GraphFileType::BINARY, "BINARY">,
-    EnumStringPair<GraphFileType::PARQUET, "PARQUET">>;
+    EnumStringPair<GraphFileType::PARQUET, "PARQUET">
+>;
 }

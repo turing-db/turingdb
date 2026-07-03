@@ -21,14 +21,25 @@ namespace db {
 
 class DataPartBuilder;
 
-// Imports the edge file of a split-Parquet export: reads `__source`, `__target`
-// and `__type`, resolving each endpoint through the source-ID -> NodeID mapping
-// the node visitor populated.
+/**
+ * @brief Edge parser of the @ref ParquetImporter
+ *
+ * @detail Schema: Required columns:
+ *           - __source : INT64
+ *           - __target : INT64
+ *           - __type : BYTE_ARRAY (max nesting: 0)
+ *       Any other columns are interpreted as properties
+ */
 class ParquetEdgeVisitor final : public ParquetImportVisitor {
 public:
     using ParquetImportVisitor::ParquetImportVisitor;
 
+    /**
+    * @brief Parses column schema, extracts relevant columns
+    * @throws If missing any required columns
+    */
     bool onFileStart(const parquet::FileMetaData& metadata) final;
+
     bool onRowGroupStart(size_t rowGroupIndex, const parquet::RowGroupMetaData& metadata) final;
 
     bool onLevels(size_t columnIndex,
@@ -36,14 +47,18 @@ public:
                   std::span<const int16_t> defLevels) final;
 
     bool onInt64Values(size_t columnIndex, std::span<const int64_t> values) final;
+
     bool onByteArrayValues(size_t columnIndex, std::span<const parquet::ByteArray> values) final;
 
     bool onChunkEnd(size_t rowGroupIndex, size_t firstRowInRowGroup, size_t rows) final;
 
 private:
     void fillEdgeTypes(std::span<const parquet::ByteArray> types);
+
     void createEdges(DataPartBuilder* builder);
+
     void applyEdgeProperties();
+
     void addEdgeProperty(const EdgeRecord& edge,
                          const PropertyColumn& prop,
                          size_t columnIndex,

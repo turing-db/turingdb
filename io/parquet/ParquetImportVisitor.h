@@ -23,12 +23,9 @@ namespace db {
 
 class CommitBuilder;
 
-// Base for the split-Parquet import visitors. Owns the machinery shared between
-// node and edge parsing: property-column discovery, per-chunk value capture, and
-// the mapping from the source IDs in the file to the TuringDB NodeIDs assigned by
-// the builder. The concrete @ref ParquetNodeVisitor and @ref ParquetEdgeVisitor
-// handle the entity-specific columns (`__id`/`__labels` and
-// `__source`/`__target`/`__type` respectively).
+/**
+ * @brief Logic shared between @ref ParquetNodeVisitor and @ref ParquetEdgeVisitor
+ */
 class ParquetImportVisitor : public ParquetSaxVisitor {
 public:
     using NodeIDs = std::span<const int64_t>;
@@ -40,14 +37,12 @@ public:
     {
     }
 
-    // Property columns produce doubles/bools/int32s that no entity column claims,
-    // so the base captures them directly. The derived visitors handle int64 and
-    // byte-array columns because those also carry the entity-specific columns.
     bool onInt32Values(size_t columnIndex, std::span<const int32_t> values) override;
     bool onDoubleValues(size_t columnIndex, std::span<const double> values) override;
     bool onBoolValues(size_t columnIndex, std::span<const bool> values) override;
 
 protected:
+    // Struct to store information of a property column for ingestion into TuringDB
     struct PropertyColumn {
         std::string name;
         ValueType valueType;
@@ -67,8 +62,7 @@ protected:
     static constexpr parquet::Type::type LABELS_COL_TYPE = parquet::Type::BYTE_ARRAY;
     static constexpr parquet::Type::type EDGE_TYPE_COL_TYPE = parquet::Type::BYTE_ARRAY;
 
-    // A column that is not an id/label/type column is treated as a property.
-    // Infers its value type and registers the property type with the builder.
+    // Infers a property column value type and registers property type
     void discoverPropertyColumn(size_t columnIndex,
                                 const std::string& path,
                                 parquet::Type::type physicalType,
@@ -84,9 +78,8 @@ protected:
 
     CommitBuilder* _builder {nullptr};
 
-    // Mapping the source IDs in the file to TuringDB IDs as defined by the
-    // DataPartBuilder. Owned by the importer: filled by the node visitor, read by
-    // the edge visitor.
+    // Maps node IDs as defined by the parquet file to TuringDB NodeIDs defined by the
+    // @ref DataPartBuilder used when importing
     IDMap& _nodeIDs;
 
     std::unordered_map<size_t, PropertyColumn> _propertyColumns;

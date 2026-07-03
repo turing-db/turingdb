@@ -10,12 +10,10 @@
 #include "versioning/CommitBuilder.h"
 #include "writers/MetadataBuilder.h"
 
-#include "FatalException.h"
-
 using namespace db;
 
-bool ParquetImportVisitor::onInt32Values(size_t columnIndex, std::span<const int32_t> values) {
-    return true;
+bool ParquetImportVisitor::onInt32Values(size_t, std::span<const int32_t>) {
+    throw TuringException("INT32 columns are not supported. Please use INT64.");
 }
 
 bool ParquetImportVisitor::onDoubleValues(size_t columnIndex, std::span<const double> values) {
@@ -101,7 +99,7 @@ void ParquetImportVisitor::capturePropertyByteArray(size_t columnIndex,
 }
 
 void ParquetImportVisitor::resetPropertyChunk() {
-    for (auto& [columnIndex, levels] : _propDefLevels) {
+    for (auto& [_, levels] : _propDefLevels) {
         levels.clear();
     }
 }

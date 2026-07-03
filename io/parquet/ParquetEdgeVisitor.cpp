@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <type_traits>
 
 #include <range/v3/view/zip.hpp>
 
@@ -148,6 +149,8 @@ void ParquetEdgeVisitor::createEdges(DataPartBuilder* builder) {
         const EdgeRecord edgeRecord = builder->addEdge(typeID, srcID, tgtID);
         _chunkEdgeRecords.push_back(edgeRecord);
     }
+
+    static_assert(std::is_trivially_copyable_v<EdgeRecord>);
 }
 
 void ParquetEdgeVisitor::applyEdgeProperties() {

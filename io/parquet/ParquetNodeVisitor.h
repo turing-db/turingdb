@@ -20,9 +20,16 @@ namespace db {
 
 class DataPartBuilder;
 
-// Imports the node file of a split-Parquet export: reads `__id` and
-// `__labels.list.element`, creates the nodes, and records the source-ID -> NodeID
-// mapping that the edge visitor later consumes.
+/**
+ * @brief Node parser of the @ref ParquetImporter
+ *
+ * @detail Schema: Required columns:
+ *     - @ref _nodeFile:
+ *       Required columns:
+ *           - __id : INT64
+ *           - __labels : BYTE_ARRAY [ BYTE_ARRAY] (max nesting: 1)
+ *       Any other columns are interpreted as properties
+ */
 class ParquetNodeVisitor final : public ParquetImportVisitor {
 public:
     using ParquetImportVisitor::ParquetImportVisitor;
@@ -42,12 +49,16 @@ public:
 
 private:
     void fillLabels(std::span<const parquet::ByteArray> labels);
+
     void createNodes(DataPartBuilder* builder);
+
     void applyNodeProperties();
+
     void addNodeProperty(NodeID id,
                          const PropertyColumn& prop,
                          size_t columnIndex,
                          size_t valueIndex);
+
     void resetChunk();
 
     size_t _nodeColIdx {INVALID_COL_IDX};
