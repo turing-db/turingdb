@@ -50,6 +50,7 @@ add_subdirectory(tfl)
 add_subdirectory(gnn)
 add_subdirectory(list-buffer)
 add_subdirectory(mlir)
+add_subdirectory(query_bench)
 add_subdirectory(vardeps)
 
 set (SCRIPT_LIST_CONTENT "")
