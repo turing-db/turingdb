@@ -32,9 +32,9 @@ bool ParquetImportVisitor::onBoolValues(size_t columnIndex, std::span<const bool
 }
 
 void ParquetImportVisitor::discoverPropertyColumn(size_t columnIndex,
-                                                 const std::string& path,
-                                                 parquet::Type::type physicalType,
-                                                 int16_t maxDefLevel) {
+                                                  const std::string& path,
+                                                  parquet::Type::type physicalType,
+                                                  int16_t maxDefLevel) {
     MetadataBuilder& metadataBuilder = _builder->metadata();
 
     ValueType valueType = ValueType::Invalid;
