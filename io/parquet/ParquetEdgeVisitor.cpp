@@ -40,7 +40,6 @@ bool ParquetEdgeVisitor::onFileStart(const parquet::FileMetaData& metadata) {
             const bool isInt64 = type == NODE_COL_TYPE;
             bioassert(isInt64, "Edge source column was not integral.");
             _srcColIdx = columnIndex;
-            _srcIdMaxDefLevel = maxDefLevel;
         } else if (path == TARGET_COL_PATH) {
             const bool isInt64 = type == NODE_COL_TYPE;
             bioassert(isInt64, "Edge target column was not integral.");
@@ -80,9 +79,7 @@ bool ParquetEdgeVisitor::onRowGroupStart(size_t, const parquet::RowGroupMetaData
 bool ParquetEdgeVisitor::onLevels(size_t columnIndex,
                                   std::span<const int16_t> repLevels,
                                   std::span<const int16_t> defLevels) {
-    if (columnIndex == _srcColIdx) {
-        _chunkSrcIdDefLevels.insert(end(_chunkSrcIdDefLevels), begin(defLevels), end(defLevels));
-    } else {
+    if (_propertyColumns.contains(columnIndex)) {
         capturePropertyLevels(columnIndex, defLevels);
     }
     return true;
@@ -109,11 +106,11 @@ bool ParquetEdgeVisitor::onByteArrayValues(size_t columnIndex,
     return true;
 }
 
-bool ParquetEdgeVisitor::onChunkEnd(size_t, size_t, size_t) {
+bool ParquetEdgeVisitor::onChunkEnd(size_t, size_t, size_t rows) {
     DataPartBuilder& builder = _builder->getCurrentBuilder();
 
     createEdges(&builder);
-    applyEdgeProperties();
+    applyEdgeProperties(rows);
 
     resetChunk();
 
@@ -153,22 +150,38 @@ void ParquetEdgeVisitor::createEdges(DataPartBuilder* builder) {
     static_assert(std::is_trivially_copyable_v<EdgeRecord>);
 }
 
-void ParquetEdgeVisitor::applyEdgeProperties() {
-    const size_t numRows = _chunkSrcIdDefLevels.size();
+void ParquetEdgeVisitor::applyEdgeProperties(size_t numRows) {
+    bioassert(_chunkEdgeRecords.size() == numRows, "Edge count does not match chunk rows");
 
     for (const auto& [columnIndex, prop] : _propertyColumns) {
         const auto defLevelsIt = _propDefLevels.find(columnIndex);
-        if (defLevelsIt == end(_propDefLevels) || defLevelsIt->second.empty()) {
+        // Non-optional columns do not have an entry
+        const bool haveDefLevels = defLevelsIt != end(_propDefLevels);
+
+        const std::vector<int16_t>* defLevels = nullptr;
+        if (haveDefLevels) {
+            const std::vector<int16_t>& lvls = defLevelsIt->second;
+            if (!lvls.empty()) {
+                defLevels = &lvls;
+            }
+        }
+
+        // Fast path: no def levels so every row has a property value
+        if (!defLevels) {
+            for (size_t row = 0; row < numRows; row++) {
+                const EdgeRecord& edgeRecord = _chunkEdgeRecords[row];
+                addEdgeProperty(edgeRecord, prop, columnIndex, row);
+            }
+
             continue;
         }
 
-        const std::vector<int16_t>& defLevels = defLevelsIt->second;
+        bioassert(defLevels->size() == numRows, "Definition levels, row mismatch.");
+        // Def levels so nullable property, check every row for nullity
         size_t valueIndex = 0;
-
         for (size_t row = 0; row < numRows; ++row) {
-            const bool hasValue = defLevels[row] == prop.maxDefLevel;
-            if (!hasValue) {
-                continue;
+            if ((*defLevels)[row] != prop.maxDefLevel) {
+                continue; // null value at this row
             }
 
             const EdgeRecord& edgeRecord = _chunkEdgeRecords[row];
@@ -228,6 +241,5 @@ void ParquetEdgeVisitor::resetChunk() {
     _chunkTgtIds = {};
     _chunkEdgeTypes.clear();
     _chunkEdgeRecords.clear();
-    _chunkSrcIdDefLevels.clear();
     resetPropertyChunk();
 }
