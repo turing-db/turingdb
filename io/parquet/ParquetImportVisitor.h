@@ -46,7 +46,7 @@ protected:
     // Struct to store information of a property column for ingestion into TuringDB
     struct PropertyColumn {
         std::string name;
-        ValueType valueType;
+        ValueType valueType {ValueType::Invalid};
         PropertyTypeID propertyTypeID;
         int16_t maxDefLevel {0};
     };
