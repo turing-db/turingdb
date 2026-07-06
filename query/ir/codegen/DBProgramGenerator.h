@@ -22,7 +22,6 @@ class DBProgramGenerator {
 public:
     using VariableIdentities = std::vector<mlir::TypedValue<mlir::Type>>;
     using VariableIdentityMap = std::unordered_map<const VariableDependency*, VariableIdentities>;
-    using EdgeProducerMap = std::unordered_map<const VariableDependency*, const VariableDependency*>;
 
     void generate(const CypherAST* ast, mlir::ModuleOp* module);
 
@@ -32,10 +31,6 @@ private:
 
     // Maps a Cypher variable to all of its MLIR variable uses, in order of appearence
     VariableIdentityMap _varMap;
-
-    // Maps Cypher edge variables to the Cypher node variable which produced them
-    // Can be the source or the target of the edge, depending on traversal
-    EdgeProducerMap _edgeProdMap;
 
     void addScanNodes(const VariableDependency* var);
 
