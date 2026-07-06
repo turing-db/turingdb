@@ -221,43 +221,49 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
                 continue;
             }
 
+            // Have we found a (source, edge, target) triple yet on this traversal?
+            const bool haveTriple = pred && predPred;
+
             for (const DependencyEdge* e : var->edges()) {
                 const VariableDependency* other = e->src() == var ? e->tgt() : e->src();
                 if (defined.contains(other)) {
                     continue;
                 }
 
-                if (pred && predPred && (pred != predPred)) {
+                if (haveTriple) {
+                    // We have discovered a full (src, edge, tgt) triple, set the next
+                    // elements on the stack to only have (src, edge) and await tgt
                     stack.emplace_back(other, e, nullptr);
                 } else {
+                    // We have not yet discovered a full (src, edge, tgt) triple, but the
+                    // next elements on stack will have such a triple
                     stack.emplace_back(other, e, pred);
                 }
             }
 
-            // Do not yet have an edge-triple
-            if (!pred || ! predPred) {
+            // Only translate when we have a full triple
+            if (!haveTriple) {
                 defined.insert(var); // Mark as defined to avoid retraversal
                 continue;
             }
 
-            // After an edge source/target is translated
-            if (pred == predPred) {
-                continue;
-            }
-
-            // Reorder according to whether we encountered
-            // Get{Out|In}Edges or GetEdge{Src|Tgt} first
+            // The order we encountered the nodes may not be source, edge, target, it may
+            // be target, edge, source. Determine a definitive order, irrespective of
+            // traversal
             const DependencyEdge* edgeVarProd = producesEdgeVar(pred) ? pred : predPred;
             const DependencyEdge* nodeVarProd = producesNodeVar(pred) ? pred : predPred;
             bioassert(producesEdgeVar(edgeVarProd), "No edge producer");
             bioassert(producesNodeVar(nodeVarProd), "No node producer");
 
+            // Only one of either source or target should be defined. Determine which end
+            // of the triple is defined
             const bool edgeSrcDefined = defined.contains(edgeVarProd->src());
             const bool nodeTgtDefined = defined.contains(nodeVarProd->tgt());
             bioassert((edgeSrcDefined ^ nodeTgtDefined)
                           && (edgeSrcDefined || nodeTgtDefined),
                       "No defined start");
 
+            // Determine the semantic direction of the query
             const EdgeMetadata::EdgeType eData = nodeVarProd->data().type();
             const bool outwards = eData == EdgeMetadata::EdgeType::GET_EDGE_TGT;
             const bool inwards = eData == EdgeMetadata::EdgeType::GET_EDGE_SRC;
@@ -267,11 +273,12 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
             VariableDependency* edge = nullptr;
             VariableDependency* tgt = nullptr;
 
+            // Orientate the operation such that the source operand is defined
             if (edgeSrcDefined) {
                 src = edgeVarProd->src();
                 edge = edgeVarProd->tgt();
                 tgt = nodeVarProd->tgt();
-            } else {
+            } else /* (nodeTgtDefined) */ {
                 src = nodeVarProd->tgt();
                 edge = nodeVarProd->src();
                 tgt = edgeVarProd->src();
