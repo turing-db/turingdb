@@ -218,7 +218,13 @@ void ParquetEdgeVisitor::addEdgeProperty(const EdgeRecord& edge,
         break;
 
         case ValueType::String: {
-            const parquet::ByteArray& bytes = _propByteArrayVals.at(columnIndex)[valueIndex];
+            const std::span<const parquet::ByteArray> values =
+                _propByteArrayVals.at(columnIndex);
+            bioassert(valueIndex < values.size(),
+                      "String property '{}': value index {} out of range (captured {})",
+                      prop.name, valueIndex, values.size());
+
+            const parquet::ByteArray& bytes = values[valueIndex];
             const std::string_view value(reinterpret_cast<const char*>(bytes.ptr),
                                          bytes.len);
             builder.addEdgeProperty<types::String>(edge, prop.propertyTypeID, value);
