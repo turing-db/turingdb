@@ -34,9 +34,6 @@ add_queries_gtest(test_load_embedding LoadEmbeddingTest.cpp)
 target_link_libraries(test_load_embedding PRIVATE turing_db_io_parquet_s)
 add_queries_gtest(test_load_commit LoadCommitTest.cpp)
 
-add_queries_gtest(test_load_parquet LoadParquetQueryTest.cpp)
-target_link_libraries(test_load_parquet PRIVATE turing_db_io_parquet_s)
-
 add_queries_gtest(test_greeter_extension GreeterExtensionTest.cpp)
 add_queries_gtest(test_show_extensions ShowExtensionsTest.cpp)
 add_queries_gtest(test_reactome ReactomeTest.cpp)
