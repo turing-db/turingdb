@@ -29,7 +29,9 @@ class CommitBuilder;
  */
 class ParquetImporter {
 public:
-    ParquetImporter(fs::Path nodeFile, fs::Path edgeFile, CommitBuilder* builder)
+    ParquetImporter(fs::Path nodeFile,
+                    fs::Path edgeFile,
+                    CommitBuilder* builder)
         : _nodeFile(std::move(nodeFile)),
         _edgeFile(std::move(edgeFile)),
         _builder(builder)
