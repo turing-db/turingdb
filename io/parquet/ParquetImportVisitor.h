@@ -39,6 +39,7 @@ public:
 
     bool onInt32Values(size_t columnIndex, std::span<const int32_t> values) override;
     bool onDoubleValues(size_t columnIndex, std::span<const double> values) override;
+    bool onFloatValues(size_t columnIndex, std::span<const float> values) override;
     bool onBoolValues(size_t columnIndex, std::span<const bool> values) override;
 
 protected:

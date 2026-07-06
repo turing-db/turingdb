@@ -17,6 +17,10 @@ bool ParquetImportVisitor::onInt32Values(size_t, std::span<const int32_t>) {
     throw TuringException("INT32 columns are not supported. Please use INT64.");
 }
 
+bool ParquetImportVisitor::onFloatValues(size_t, std::span<const float>) {
+    throw TuringException("FLOAT columns are not supported. Please use DOUBLE.");
+}
+
 bool ParquetImportVisitor::onDoubleValues(size_t columnIndex, std::span<const double> values) {
     if (_propertyColumns.contains(columnIndex)) {
         _propDoubleVals[columnIndex] = values;
@@ -41,7 +45,6 @@ void ParquetImportVisitor::discoverPropertyColumn(size_t columnIndex,
     // FIXME: Byte arrays always strings. Check for lists, etc.
     switch (physicalType) {
         case parquet::Type::INT64:
-        case parquet::Type::INT32:
             valueType = ValueType::Int64;
         break;
         case parquet::Type::BYTE_ARRAY:
@@ -52,10 +55,11 @@ void ParquetImportVisitor::discoverPropertyColumn(size_t columnIndex,
         break;
 
         case parquet::Type::DOUBLE:
-        case parquet::Type::FLOAT:
             valueType = ValueType::Double;
         break;
 
+        case parquet::Type::FLOAT:
+        case parquet::Type::INT32:
         case parquet::Type::INT96:
         case parquet::Type::FIXED_LEN_BYTE_ARRAY:
         case parquet::Type::UNDEFINED:
