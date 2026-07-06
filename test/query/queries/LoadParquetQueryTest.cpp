@@ -142,11 +142,14 @@ protected:
 };
 
 TEST_F(LoadParquetQueryTest, loadParquetSucceeds) {
-    EXPECT_TRUE(query("LOAD PARQUET 'typed' AS typed"));
+    auto res = query("LOAD PARQUET 'typed' AS typed");
+    EXPECT_TRUE(res) << res.getError();
+
 }
 
 TEST_F(LoadParquetQueryTest, canQueryLoadedGraph) {
-    ASSERT_TRUE(query("LOAD PARQUET 'typed' AS typed"));
+    auto res = query("LOAD PARQUET 'typed' AS typed");
+    ASSERT_TRUE(res) << res.getError();
     EXPECT_TRUE(query("MATCH (n) RETURN n", "typed"));
 }
 
