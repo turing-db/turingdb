@@ -51,13 +51,11 @@ private:
     size_t _nodeColIdx {INVALID_COL_IDX};
     size_t _lblColIdx {INVALID_COL_IDX};
 
-    // For row X in column Y : deflevel(X) == maxdeflevel(Y) => row X is non-null.
-    int16_t _nodeIdMaxDefLevel {0};
+    // For row X in the labels column: deflevel(X) == maxdeflevel => row X is non-null.
     int16_t _lblMaxDefLevel {0};
 
     NodeIDs _chunkNodeIds;
     std::vector<std::vector<LabelID>> _chunkNodeLabels;
-    std::vector<int16_t> _chunkNodeIdDefLevels;
 
     // Representation/definition levels for label byte arrays
     std::span<const int16_t> _chunkLabelRepLevels;
@@ -67,7 +65,7 @@ private:
 
     void createNodes(DataPartBuilder* builder);
 
-    void applyNodeProperties();
+    void applyNodeProperties(size_t numRows);
 
     void addNodeProperty(NodeID id,
                          const PropertyColumn& prop,

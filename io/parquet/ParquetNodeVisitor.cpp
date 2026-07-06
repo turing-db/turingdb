@@ -40,7 +40,6 @@ bool ParquetNodeVisitor::onFileStart(const parquet::FileMetaData& metadata) {
             const bool isInt64 = type == NODE_COL_TYPE;
             bioassert(isInt64, "Node column was not integral.");
             _nodeColIdx = columnIndex;
-            _nodeIdMaxDefLevel = maxDefLevel;
         } else if (path == LABELS_COL_PATH) {
             const bool isLabels = type == LABELS_COL_TYPE;
             bioassert(isLabels, "Labels column was not a byte array.");
@@ -75,11 +74,13 @@ bool ParquetNodeVisitor::onLevels(size_t columnIndex,
     if (columnIndex == _lblColIdx) {
         _chunkLabelRepLevels = repLevels;
         _chunkLabelDefLevels = defLevels;
-    } else if (columnIndex == _nodeColIdx) {
-        _chunkNodeIdDefLevels.insert(end(_chunkNodeIdDefLevels), begin(defLevels), end(defLevels));
-    } else {
+        return true;
+    }
+
+    if (_propertyColumns.contains(columnIndex)) {
         capturePropertyLevels(columnIndex, defLevels);
     }
+
     return true;
 }
 
@@ -102,11 +103,11 @@ bool ParquetNodeVisitor::onByteArrayValues(size_t columnIndex,
     return true;
 }
 
-bool ParquetNodeVisitor::onChunkEnd(size_t, size_t, size_t) {
+bool ParquetNodeVisitor::onChunkEnd(size_t, size_t, size_t rows) {
     DataPartBuilder& builder = _builder->getCurrentBuilder();
 
     createNodes(&builder);
-    applyNodeProperties();
+    applyNodeProperties(rows);
 
     resetChunk();
 
@@ -156,22 +157,38 @@ void ParquetNodeVisitor::createNodes(DataPartBuilder* builder) {
     }
 }
 
-void ParquetNodeVisitor::applyNodeProperties() {
-    const size_t numRows = _chunkNodeIdDefLevels.size();
+void ParquetNodeVisitor::applyNodeProperties(size_t numRows) {
+    bioassert(_chunkNodeIds.size() == numRows, "Node id count does not match chunk rows");
 
     for (const auto& [columnIndex, prop] : _propertyColumns) {
         const auto defLevelsIt = _propDefLevels.find(columnIndex);
-        if (defLevelsIt == end(_propDefLevels) || defLevelsIt->second.empty()) {
+        // Non-optional columns do not have an entry
+        const bool haveDefLevels = defLevelsIt != end(_propDefLevels);
+
+        const std::vector<int16_t>* defLevels = nullptr;
+        if (haveDefLevels) {
+            const std::vector<int16_t>& lvls = defLevelsIt->second;
+            if (!lvls.empty()) {
+                defLevels = &lvls;
+            }
+        }
+
+        // Fast path: no def levels so every row has a property value
+        if (!defLevels) {
+            for (size_t row = 0; row < numRows; row++) {
+                const NodeID nodeID = _nodeIDs.at(_chunkNodeIds[row]);
+                addNodeProperty(nodeID, prop, columnIndex, row);
+            }
+
             continue;
         }
 
-        const std::vector<int16_t>& defLevels = defLevelsIt->second;
+        bioassert(defLevels->size() == numRows, "Definition levels, row mismatch.");
+        // Def levels so nullable property, check every row for nullity
         size_t valueIndex = 0;
-
         for (size_t row = 0; row < numRows; ++row) {
-            const bool hasValue = defLevels[row] == prop.maxDefLevel;
-            if (!hasValue) {
-                continue;
+            if ((*defLevels)[row] != prop.maxDefLevel) {
+                continue; // null value at this row
             }
 
             const NodeID nodeID = _nodeIDs.at(_chunkNodeIds[row]);
@@ -229,7 +246,6 @@ void ParquetNodeVisitor::addNodeProperty(NodeID id,
 void ParquetNodeVisitor::resetChunk() {
     _chunkNodeIds = {};
     _chunkNodeLabels.clear();
-    _chunkNodeIdDefLevels.clear();
     _chunkLabelRepLevels = {};
     _chunkLabelDefLevels = {};
     resetPropertyChunk();

@@ -1,9 +1,11 @@
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "FileUtils.h"
 #include "Graph.h"
@@ -13,6 +15,7 @@
 #include "TuringDB.h"
 #include "comparators/GraphComparator.h"
 #include "datapart/EdgeRecord.h"
+#include "metadata/GraphMetadata.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
 #include "versioning/Transaction.h"
@@ -170,6 +173,40 @@ TEST_F(ParquetImporterTest, HandlesRowGroupLargerThanChunk) {
     ASSERT_NE(imported, nullptr);
 
     ASSERT_EQ(countNodes(imported), expectedNodeCount);
+}
+
+// Properties must import even when __id / __source are REQUIRED (non-nullable)
+// columns, which carry no definition levels. The chunk row count comes from
+// onChunkEnd, not from a def-level stream. The `age`/`weight` properties are also
+// REQUIRED, exercising the "no def levels => all rows present" path.
+TEST_F(ParquetImporterTest, ImportsPropertiesWithRequiredIdColumns) {
+    constexpr std::string_view graphName = "required";
+
+    SystemAccessor system = _env->getSystemManager().accessUnique();
+    Graph* imported =
+        importSplit(system, graphName, "required_nodes.parquet", "required_edges.parquet");
+    ASSERT_NE(imported, nullptr);
+
+    const GraphReader reader = imported->openTransaction().readGraph();
+    const GraphMetadata& metadata = reader.getMetadata();
+
+    const auto ageType = metadata.propTypes().get("age");
+    ASSERT_TRUE(ageType.has_value());
+    std::vector<int64_t> ages;
+    for (const int64_t age : reader.scanNodeProperties<types::Int64>(ageType->_id)) {
+        ages.push_back(age);
+    }
+    std::ranges::sort(ages);
+    ASSERT_EQ(ages, (std::vector<int64_t>{10, 20, 30}));
+
+    const auto weightType = metadata.propTypes().get("weight");
+    ASSERT_TRUE(weightType.has_value());
+    std::vector<double> weights;
+    for (const double weight : reader.scanEdgeProperties<types::Double>(weightType->_id)) {
+        weights.push_back(weight);
+    }
+    std::ranges::sort(weights);
+    ASSERT_EQ(weights, (std::vector<double>{1.5, 2.5}));
 }
 
 int main(int argc, char** argv) {

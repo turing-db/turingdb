@@ -57,7 +57,7 @@ private:
 
     void createEdges(DataPartBuilder* builder);
 
-    void applyEdgeProperties();
+    void applyEdgeProperties(size_t numRows);
 
     void addEdgeProperty(const EdgeRecord& edge,
                          const PropertyColumn& prop,
@@ -69,15 +69,10 @@ private:
     size_t _tgtColIdx {INVALID_COL_IDX};
     size_t _edgetypeColIdx {INVALID_COL_IDX};
 
-    // For row X in column Y : deflevel(X) == maxdeflevel(Y) => row X is non-null.
-    int16_t _srcIdMaxDefLevel {0};
-
     NodeIDs _chunkSrcIds;
     NodeIDs _chunkTgtIds;
     std::vector<EdgeTypeID> _chunkEdgeTypes;
     std::vector<EdgeRecord> _chunkEdgeRecords;
-
-    std::vector<int16_t> _chunkSrcIdDefLevels;
 };
 
 }
