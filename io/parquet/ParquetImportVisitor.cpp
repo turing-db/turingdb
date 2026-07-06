@@ -1,14 +1,15 @@
 #include "ParquetImportVisitor.h"
 
 #include <string>
-
-#include <parquet/types.h>
 #include <utility>
 
-#include "TuringException.h"
+#include <parquet/types.h>
+
 #include "metadata/PropertyType.h"
 #include "versioning/CommitBuilder.h"
 #include "writers/MetadataBuilder.h"
+
+#include "TuringException.h"
 
 using namespace db;
 

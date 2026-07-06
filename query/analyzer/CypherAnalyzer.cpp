@@ -434,7 +434,7 @@ void CypherAnalyzer::analyze(LoadParquetQuery* loadParquet) {
 
     // Check that the graph name is only [A-Z0-9_]+
     for (char c : graphName) {
-        if (!(isalnum(c) || c == '_')) [[unlikely]] {
+        if (!(isalnum(c) || c == '_')) {
             throwError(fmt::format(
                            "Graph name must only contain alphanumeric characters or '_': "
                            "character '{}' not allowed.",
