@@ -32,7 +32,7 @@ struct Predecessors {
     const VariableDependency* _target {nullptr};
 };
 
-Predecessors getOrder(const VariableDependency* cur,
+[[maybe_unused]] Predecessors getOrder(const VariableDependency* cur,
                       const DependencyEdge* pred,
                       const DependencyEdge* predPred) {
     // cur(a) -[pred]- u -[predPred]- v: but edges can be any direction
@@ -211,12 +211,6 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
             const auto [var, pred, predPred] = stack.back();
             stack.pop_back();
 
-            spdlog::info("traversing {}", var->getName());
-            if (pred) spdlog::info("\tvia {} -> {}", pred->src()->getName(), pred->tgt()->getName());
-            if (predPred) spdlog::info("\tvia {} -> {}", predPred->src()->getName(), predPred->tgt()->getName());
-            spdlog::info("");
-
-
             const auto seenOrMeta = [&defined](const DependencyEdge* e) {
                 return !e->isMetaEdge() || defined.contains(e->src());
             };
@@ -258,23 +252,30 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
             bioassert(producesEdgeVar(edgeVarProd), "No edge producer");
             bioassert(producesNodeVar(nodeVarProd), "No node producer");
 
-            const VariableDependency* endpoint1 = var;
-            const VariableDependency* endpoint2 = nodeVarProd->src();
+            const bool edgeSrcDefined = defined.contains(edgeVarProd->src());
+            const bool nodeTgtDefined = defined.contains(nodeVarProd->tgt());
+            bioassert((edgeSrcDefined ^ nodeTgtDefined)
+                          && (edgeSrcDefined || nodeTgtDefined),
+                      "No defined start");
 
-            const VariableDependency* start = defined.contains(endpoint1) ? endpoint1 : endpoint2;
-            const VariableDependency* end = defined.contains(endpoint1) ? endpoint2 : endpoint1;
-            bioassert(defined.contains(start), "No defined start point.");
-            bioassert(!defined.contains(end), "Defined end point.");
-
-            // Reorder according to whether we encountered GetEdgeSrc or GetEdgeTgt
             const EdgeMetadata::EdgeType eData = nodeVarProd->data().type();
             const bool outwards = eData == EdgeMetadata::EdgeType::GET_EDGE_TGT;
             const bool inwards = eData == EdgeMetadata::EdgeType::GET_EDGE_SRC;
             bioassert(outwards || inwards, "Unknown edge type.");
-            const DependencyEdge* edge1 = outwards ? nodeVarProd : edgeVarProd;
-            const DependencyEdge* edge2 = outwards ? edgeVarProd : nodeVarProd;
 
-            auto [src, edge, tgt] = getOrder(var, edge1, edge2);
+            VariableDependency* src = nullptr;
+            VariableDependency* edge = nullptr;
+            VariableDependency* tgt = nullptr;
+
+            if (edgeSrcDefined) {
+                src = edgeVarProd->src();
+                edge = edgeVarProd->tgt();
+                tgt = nodeVarProd->tgt();
+            } else {
+                src = nodeVarProd->tgt();
+                edge = nodeVarProd->src();
+                tgt = edgeVarProd->src();
+            }
 
             if (outwards) {
                 addGetOutEdges(src, edge, tgt);
