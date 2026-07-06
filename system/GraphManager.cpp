@@ -384,8 +384,16 @@ Graph* GraphManager::loadParquetDB(std::string_view graphName,
     ChangeAccessor changeAccessor = change->access();
     CommitBuilder* commitBuilder = changeAccessor.pendingCommits().back().get();
 
+    // Unfortunately I think we need to have this try-catch due to the dependency on the
+    // Parquet lib which throws. Removing would require a rewrite of the reader.
+    // TODO: Attempt to remove this try-catch and make the importer/reader exception free
     ParquetImporter importer(nodeFile, edgeFile, commitBuilder);
-    importer.import();
+    try {
+        importer.import();
+    } catch (...) {
+        _graphLoadStatus.removeLoadingGraph(graphName);
+        throw;
+    }
 
     const auto submitRes = _changes.submitChange(changeAccessor, *jobSystem);
 
