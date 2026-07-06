@@ -256,16 +256,13 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
                 tgt = edgeVarProd->src();
             }
 
-            // Determine the semantic direction of the query (out edge, in edge); we may
-            // translate it in the reverse direction depending on traversal order
-            const EdgeMetadata::EdgeType edgeType = nodeVarProd->data().type();
-
+            const EdgeMetadata::EdgeType edgeType = edgeVarProd->data().type();
             switch (edgeType) {
-                case EdgeMetadata::EdgeType::GET_EDGE_TGT:
+                case EdgeMetadata::EdgeType::GET_OUT_EDGES:
                     addGetOutEdges(src, edge, tgt);
                 break;
 
-                case EdgeMetadata::EdgeType::GET_EDGE_SRC:
+                case EdgeMetadata::EdgeType::GET_IN_EDGES:
                     addGetInEdges(src, edge, tgt);
                 break;
 
@@ -273,9 +270,12 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
                     throw TuringException("MERGE edges not yet supported.");
                 break;
 
-                case EdgeMetadata::EdgeType::GET_OUT_EDGES:
-                case EdgeMetadata::EdgeType::GET_IN_EDGES:
                 case EdgeMetadata::EdgeType::GET_EDGES:
+                    throw TuringException("Undirected edges not yet supported.");
+                break;
+
+                case EdgeMetadata::EdgeType::GET_EDGE_TGT:
+                case EdgeMetadata::EdgeType::GET_EDGE_SRC:
                     throw FatalException(fmt::format("Attempted to translate {}",
                                                      EdgeTypeName::value(edgeType)));
                 break;
