@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <unordered_set>
 
-#include "StorageTypes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -13,6 +12,7 @@
 
 #include "DBOps.h"
 #include "DBTypes.h"
+#include "StorageTypes.h"
 
 #include "DependencyEdge.h"
 #include "EdgeMetadata.h"
@@ -20,33 +20,12 @@
 #include "VariableDependencyGraph.h"
 
 #include "BioAssert.h"
-#include "spdlog/spdlog.h"
+#include "FatalException.h"
+#include "TuringException.h"
 
 using namespace db;
 
 namespace {
-
-struct Predecessors {
-    const VariableDependency* _source {nullptr};
-    const VariableDependency* _edge {nullptr};
-    const VariableDependency* _target {nullptr};
-};
-
-[[maybe_unused]] Predecessors getOrder(const VariableDependency* cur,
-                      const DependencyEdge* pred,
-                      const DependencyEdge* predPred) {
-    // cur(a) -[pred]- u -[predPred]- v: but edges can be any direction
-
-    bioassert(cur == pred->src() or cur == pred->tgt(), "Invalid triple.");
-
-    const VariableDependency* u = pred->src() == cur ? pred->tgt() : pred->src();
-
-    bioassert(u == predPred->src() or u == predPred->tgt(), "Invalid triple.");
-
-    const VariableDependency* v = u == predPred->src() ? predPred->tgt() : predPred->src();
-
-    return {._source = v, ._edge = u, ._target = cur};
-}
 
 bool producesEdgeVar(const DependencyEdge* e) {
     const EdgeMetadata::EdgeType producedType = e->data().type();
@@ -236,7 +215,7 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
                     stack.emplace_back(other, e, nullptr);
                 } else {
                     // We have not yet discovered a full (src, edge, tgt) triple, but the
-                    // next elements on stack will have such a triple
+                    // next elements on stack will have such a triple (with @ref pred)
                     stack.emplace_back(other, e, pred);
                 }
             }
@@ -259,15 +238,8 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
             // of the triple is defined
             const bool edgeSrcDefined = defined.contains(edgeVarProd->src());
             const bool nodeTgtDefined = defined.contains(nodeVarProd->tgt());
-            bioassert((edgeSrcDefined ^ nodeTgtDefined)
-                          && (edgeSrcDefined || nodeTgtDefined),
-                      "No defined start");
-
-            // Determine the semantic direction of the query
-            const EdgeMetadata::EdgeType eData = nodeVarProd->data().type();
-            const bool outwards = eData == EdgeMetadata::EdgeType::GET_EDGE_TGT;
-            const bool inwards = eData == EdgeMetadata::EdgeType::GET_EDGE_SRC;
-            bioassert(outwards || inwards, "Unknown edge type.");
+            bioassert(edgeSrcDefined ^ nodeTgtDefined, "Ambiguous definition");
+            bioassert(edgeSrcDefined || nodeTgtDefined, "No defined start");
 
             VariableDependency* src = nullptr;
             VariableDependency* edge = nullptr;
@@ -284,10 +256,33 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
                 tgt = edgeVarProd->src();
             }
 
-            if (outwards) {
-                addGetOutEdges(src, edge, tgt);
-            } else /* (inwards) */ {
-                addGetInEdges(src, edge, tgt);
+            // Determine the semantic direction of the query (out edge, in edge); we may
+            // translate it in the reverse direction depending on traversal order
+            const EdgeMetadata::EdgeType edgeType = nodeVarProd->data().type();
+
+            switch (edgeType) {
+                case EdgeMetadata::EdgeType::GET_EDGE_TGT:
+                    addGetOutEdges(src, edge, tgt);
+                break;
+
+                case EdgeMetadata::EdgeType::GET_EDGE_SRC:
+                    addGetInEdges(src, edge, tgt);
+                break;
+
+                case EdgeMetadata::EdgeType::MERGE:
+                    throw TuringException("MERGE edges not yet supported.");
+                break;
+
+                case EdgeMetadata::EdgeType::GET_OUT_EDGES:
+                case EdgeMetadata::EdgeType::GET_IN_EDGES:
+                case EdgeMetadata::EdgeType::GET_EDGES:
+                    throw FatalException(fmt::format("Attempted to translate {}",
+                                                     EdgeTypeName::value(edgeType)));
+                break;
+
+                case EdgeMetadata::EdgeType::_SIZE:
+                    throw FatalException("Attempted to translate invalid edge.");
+                break;
             }
 
             defined.insert(src);
