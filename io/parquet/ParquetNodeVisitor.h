@@ -48,19 +48,6 @@ public:
     bool onChunkEnd(size_t rowGroupIndex, size_t firstRowInRowGroup, size_t rows) final;
 
 private:
-    void fillLabels(std::span<const parquet::ByteArray> labels);
-
-    void createNodes(DataPartBuilder* builder);
-
-    void applyNodeProperties();
-
-    void addNodeProperty(NodeID id,
-                         const PropertyColumn& prop,
-                         size_t columnIndex,
-                         size_t valueIndex);
-
-    void resetChunk();
-
     size_t _nodeColIdx {INVALID_COL_IDX};
     size_t _lblColIdx {INVALID_COL_IDX};
 
@@ -75,6 +62,19 @@ private:
     // Representation/definition levels for label byte arrays
     std::span<const int16_t> _chunkLabelRepLevels;
     std::span<const int16_t> _chunkLabelDefLevels;
+
+    void fillLabels(std::span<const parquet::ByteArray> labels);
+
+    void createNodes(DataPartBuilder* builder);
+
+    void applyNodeProperties();
+
+    void addNodeProperty(NodeID id,
+                         const PropertyColumn& prop,
+                         size_t columnIndex,
+                         size_t valueIndex);
+
+    void resetChunk();
 };
 
 }

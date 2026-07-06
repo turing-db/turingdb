@@ -50,6 +50,24 @@ protected:
         int16_t maxDefLevel {0};
     };
 
+    CommitBuilder* _builder {nullptr};
+
+    // Maps node IDs as defined by the parquet file to TuringDB NodeIDs defined by the
+    // @ref DataPartBuilder used when importing
+    IDMap& _nodeIDs;
+
+    std::unordered_map<size_t, PropertyColumn> _propertyColumns;
+
+    // Maps a property column index => values of that column
+    std::unordered_map<size_t, std::span<const int64_t>> _propInt64Vals;
+    std::unordered_map<size_t, std::span<const double>> _propDoubleVals;
+    std::unordered_map<size_t, std::span<const bool>> _propBoolVals;
+    std::unordered_map<size_t, std::span<const parquet::ByteArray>> _propByteArrayVals;
+
+    // Maps a property column index => definition levels of that column.
+    // Used to encode null/nans for simple types.
+    std::unordered_map<size_t, std::vector<int16_t>> _propDefLevels;
+
     static constexpr size_t INVALID_COL_IDX = std::numeric_limits<size_t>::max();
 
     static constexpr std::string_view NODE_COL_PATH = "__id";
@@ -75,24 +93,5 @@ protected:
     void capturePropertyByteArray(size_t columnIndex, std::span<const parquet::ByteArray> values);
 
     void resetPropertyChunk();
-
-    CommitBuilder* _builder {nullptr};
-
-    // Maps node IDs as defined by the parquet file to TuringDB NodeIDs defined by the
-    // @ref DataPartBuilder used when importing
-    IDMap& _nodeIDs;
-
-    std::unordered_map<size_t, PropertyColumn> _propertyColumns;
-
-    // Maps a property column index => values of that column
-    std::unordered_map<size_t, std::span<const int64_t>> _propInt64Vals;
-    std::unordered_map<size_t, std::span<const double>> _propDoubleVals;
-    std::unordered_map<size_t, std::span<const bool>> _propBoolVals;
-    std::unordered_map<size_t, std::span<const parquet::ByteArray>> _propByteArrayVals;
-
-    // Maps a property column index => definition levels of that column.
-    // Used to encode null/nans for simple types.
-    std::unordered_map<size_t, std::vector<int16_t>> _propDefLevels;
 };
-
 }
