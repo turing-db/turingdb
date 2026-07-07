@@ -64,7 +64,3 @@ def multipage_string_nodes():
 if __name__ == "__main__":
     minimal_edges()
     multipage_string_nodes()
-    empty_labels_nodes()
-    nulltype_nodes_and_edges()
-    list_property_nodes()
-    wrongtype_id_nodes()
