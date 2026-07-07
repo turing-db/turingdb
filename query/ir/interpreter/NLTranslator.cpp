@@ -816,7 +816,7 @@ void NLTranslator::translateAggregateState(nl::Aggregate aggregate, NLStmtContai
     // nullable value column the reduction folds into.
     const auto stateType = mlir::cast<nl::AggregateStateType>(aggregate.getState().getType());
     const ValueType accumulatorType = valueTypeFromElementType(stateType.getElementType());
-    Column* accumulator = allocOptColumnForValueType(accumulatorType);
+    Column* accumulator = allocSingleRowOptColumnForValueType(accumulatorType);
     state->setAccumulator(accumulator);
 
     // The reset re-initializes the accumulator each time the block holding this
@@ -1071,15 +1071,26 @@ Column* NLTranslator::allocColumnForKind(NLChunkKind kind) {
 // allocation-free. The value type was baked into the chunk during lowering and
 // re-resolved from the schema here.
 Column* NLTranslator::allocOptColumnForValueType(ValueType valueType) {
-    const size_t chunkSize = _program->getChunkSize();
+    // Per-step loop columns reserve a full chunk so execution stays
+    // allocation-free.
+    return allocOptColumn(valueType, _program->getChunkSize());
+}
 
-    // Allocate a ColumnOptVector for the value type's primitive, reserving a
-    // full chunk so execution stays allocation-free; ValueTypeDispatcher maps
-    // the runtime value type to that compile-time primitive.
+Column* NLTranslator::allocSingleRowOptColumnForValueType(ValueType valueType) {
+    // The aggregate accumulator only ever holds one row (reset assign(1, ...),
+    // update rewrites .front()), so reserve a single element rather than a chunk
+    // it would never fill.
+    return allocOptColumn(valueType, 1);
+}
+
+Column* NLTranslator::allocOptColumn(ValueType valueType, size_t reserveSize) {
+    // Allocate a ColumnOptVector for the value type's primitive, reserving
+    // reserveSize optionals up front; ValueTypeDispatcher maps the runtime value
+    // type to that compile-time primitive.
     Column* column = nullptr;
     const auto allocate = [&]<SupportedType T>() {
         ColumnOptVector<typename T::Primitive>* typed = _memory->alloc<ColumnOptVector<typename T::Primitive>>();
-        typed->reserve(chunkSize);
+        typed->reserve(reserveSize);
         column = typed;
     };
     ValueTypeDispatcher(valueType).execute(allocate);

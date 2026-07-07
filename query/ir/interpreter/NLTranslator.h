@@ -250,7 +250,15 @@ private:
 
     Column* allocColumn(mlir::Value chunkValue);
     Column* allocColumnForKind(NLChunkKind kind);
+
+    // Allocate a nullable value column for the value type's primitive. The
+    // per-step variant reserves a full chunk so the loop body stays
+    // allocation-free; the single-row variant reserves one element for an
+    // accumulator that never grows past its one row.
     Column* allocOptColumnForValueType(ValueType valueType);
+    Column* allocSingleRowOptColumnForValueType(ValueType valueType);
+    Column* allocOptColumn(ValueType valueType, size_t reserveSize);
+
     Column* getColumn(mlir::Value chunkValue) const;
     static NLChunkKind getChunkKind(mlir::Type chunkType);
     static NLChunkKind chunkKindFromElementType(mlir::Type elementType);
