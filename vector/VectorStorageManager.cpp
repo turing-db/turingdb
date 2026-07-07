@@ -95,6 +95,23 @@ VectorResult<void> VectorStorageManager::createLibraryStorage(const VecLib& lib)
     return {};
 }
 
+VectorResult<void> VectorStorageManager::persistShardRouter(const VecLib& lib) {
+    const auto* meta = lib.metadata();
+
+    std::shared_lock lock(_mutex);
+
+    const auto it = _storages.find(meta->_id);
+    if (it == _storages.end()) {
+        return VectorError::result(VectorErrorCode::LibraryDoesNotExist);
+    }
+
+    // Re-serialize the router so the shard signature set registered while adding
+    // embeddings survives a restart. createLibraryStorage() only writes the empty
+    // router at index-creation time; without this, an exact search after reload
+    // would iterate an empty signature set and return no results.
+    return it->second->_shardRouterWriter.write(lib.shardRouter());
+}
+
 bool VectorStorageManager::libraryExists(const VecLibID& libID) const {
     return getLibraryPath(libID).exists();
 }

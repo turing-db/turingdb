@@ -114,6 +114,13 @@ VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate* batch) {
 
     _metadata._modifiedAt = Clock::now().time_since_epoch().count();
 
+    // Persist the router so the shard signatures just registered survive a restart;
+    // exact search iterates the instantiated signature set and would otherwise find
+    // nothing after reload.
+    if (auto res = _storage->persistShardRouter(*this); !res) {
+        return nonstd::make_unexpected(res.error());
+    }
+
     return {};
 }
 
