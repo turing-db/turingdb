@@ -116,6 +116,16 @@ bool ParquetNodeVisitor::onByteArrayValues(size_t columnIndex,
 }
 
 bool ParquetNodeVisitor::onChunkEnd(size_t, size_t, size_t rows) {
+    if (_chunkNodeIds.size() != rows) {
+        throw TuringException("Node file: __id must not contain null values.");
+    }
+
+    for (const std::vector<LabelID>& nodeLabels : _chunkNodeLabels) {
+        if (nodeLabels.empty()) {
+            throw TuringException("Node file: every node must have a non-empty __labels list.");
+        }
+    }
+
     DataPartBuilder& builder = _builder->getCurrentBuilder();
 
     createNodes(&builder);
@@ -134,15 +144,16 @@ void ParquetNodeVisitor::fillLabels(std::span<const parquet::ByteArray> labels) 
     size_t valueIndex = 0;
 
     for (size_t i = 0; i < _chunkLabelRepLevels.size(); ++i) {
-        const bool hasValue = _chunkLabelDefLevels[i] == _lblMaxDefLevel;
-
-        if (!hasValue) {
-            continue;
-        }
-
         const bool nextNode = _chunkLabelRepLevels[i] == 0;
         if (nextNode) {
             _chunkNodeLabels.emplace_back();
+        }
+
+        // If this is somehow null (should've been guarded in onFileStart), then an empty
+        // list gets caught and throws in @ref onChunkEnd
+        const bool hasValue = _chunkLabelDefLevels[i] == _lblMaxDefLevel;
+        if (!hasValue) {
+            continue;
         }
 
         const parquet::ByteArray& bytes = labels[valueIndex++];

@@ -273,7 +273,7 @@ TEST_F(ParquetImporterTest, ImportsStringPropertySpanningManyPages) {
 
     std::vector<std::string> expected;
     for (size_t i = 0; i < expectedNodeCount; ++i) {
-        expected.push_back(
+        expected.emplace_back(
             fmt::format("person_number_{:05d}_padded_so_the_value_is_wide_enough", i));
     }
     std::ranges::sort(expected);
