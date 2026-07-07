@@ -14,7 +14,6 @@
 #include <parquet/types.h>
 
 #include "ID.h"
-#include "TuringException.h"
 #include "datapart/EdgeRecord.h"
 #include "metadata/PropertyType.h"
 #include "versioning/CommitBuilder.h"
@@ -23,6 +22,7 @@
 
 #include "BioAssert.h"
 #include "FatalException.h"
+#include "TuringException.h"
 
 using namespace db;
 namespace rv = ranges::views;
