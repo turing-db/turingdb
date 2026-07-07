@@ -7,12 +7,15 @@
 #include <string_view>
 #include <vector>
 
+#include <spdlog/fmt/fmt.h>
+
 #include "FileUtils.h"
 #include "Graph.h"
 #include "JobSystem.h"
 #include "Path.h"
 #include "SystemManager.h"
 #include "TuringDB.h"
+#include "TuringException.h"
 #include "comparators/GraphComparator.h"
 #include "datapart/EdgeRecord.h"
 #include "metadata/GraphMetadata.h"
@@ -130,6 +133,28 @@ protected:
         return graph;
     }
 
+    // Imports the given fixture pair and asserts the importer did not fail by tripping
+    // an internal assertion (bioassert, which throws a FatalException whose message
+    // starts with "Internal Error"). Malformed or unsupported input must surface as a
+    // clean, user-facing error (or import successfully) rather than as an internal
+    // logic error. Used by the findings that reject bad input via bioassert today.
+    void importExpectingNoInternalAssertion(SystemAccessor& system,
+                                            std::string_view graphName,
+                                            std::string_view nodeFixture,
+                                            std::string_view edgeFixture) {
+        try {
+            importSplit(system, graphName, nodeFixture, edgeFixture);
+        } catch (const TuringException& e) {
+            const std::string message = e.what();
+            const bool trippedInternalAssertion =
+                message.find("Internal Error") != std::string::npos;
+            EXPECT_FALSE(trippedInternalAssertion)
+                << "import tripped an internal assertion instead of handling the input "
+                   "cleanly:\n"
+                << message;
+        }
+    }
+
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<JobSystem> _jobSystem;
 };
@@ -207,6 +232,114 @@ TEST_F(ParquetImporterTest, ImportsPropertiesWithRequiredIdColumns) {
     }
     std::ranges::sort(weights);
     ASSERT_EQ(weights, (std::vector<double>{1.5, 2.5}));
+}
+
+// --- Bug-demonstration tests (branch code-review findings 1-5) ---
+//
+// Each test asserts the CORRECT behavior, so it fails against current main and turns
+// green once the finding is fixed. bioassert throws a catchable FatalException (a
+// TuringException) rather than aborting, so importGraph propagates these failures to
+// the caller here.
+
+// Finding 1: a BYTE_ARRAY (string) property column split across many Parquet data
+// pages within one row group. capturePropertyByteArray overwrites its stored span on
+// every page, keeping only the last page's values, so on current main the import
+// trips the "value index out of range" assertion (or assigns values from the wrong
+// page). Correct behavior: every node's string property imports intact.
+TEST_F(ParquetImporterTest, ImportsStringPropertySpanningManyPages) {
+    constexpr std::string_view graphName = "multipage";
+    constexpr size_t expectedNodeCount = 500;
+
+    SystemAccessor system = _env->getSystemManager().accessUnique();
+    Graph* imported = nullptr;
+    ASSERT_NO_THROW(imported = importSplit(system,
+                                           graphName,
+                                           "multipage_string_nodes.parquet",
+                                           "minimal_edges.parquet"));
+    ASSERT_NE(imported, nullptr);
+    ASSERT_EQ(countNodes(imported), expectedNodeCount);
+
+    const GraphReader reader = imported->openTransaction().readGraph();
+    const GraphMetadata& metadata = reader.getMetadata();
+
+    const auto nameType = metadata.propTypes().get("name");
+    ASSERT_TRUE(nameType.has_value());
+
+    std::vector<std::string> names;
+    for (const std::string_view name : reader.scanNodeProperties<types::String>(nameType->_id)) {
+        names.emplace_back(name);
+    }
+    std::ranges::sort(names);
+
+    std::vector<std::string> expected;
+    for (size_t i = 0; i < expectedNodeCount; ++i) {
+        expected.push_back(
+            fmt::format("person_number_{:05d}_padded_so_the_value_is_wide_enough", i));
+    }
+    std::ranges::sort(expected);
+
+    ASSERT_EQ(names, expected);
+}
+
+// Finding 2: a node whose __labels list is empty. fillLabels skips the empty entry
+// before emplacing the per-node label vector, so _chunkNodeLabels ends up shorter
+// than _chunkNodeIds and createNodes trips its "NodeID, Label mismatch" assertion on
+// current main. Correct behavior: the empty-label node imports (with no labels).
+TEST_F(ParquetImporterTest, ImportsNodeWithEmptyLabelList) {
+    constexpr std::string_view graphName = "emptylabels";
+    constexpr size_t expectedNodeCount = 3;
+
+    SystemAccessor system = _env->getSystemManager().accessUnique();
+    Graph* imported = nullptr;
+    ASSERT_NO_THROW(imported = importSplit(system,
+                                           graphName,
+                                           "empty_labels_nodes.parquet",
+                                           "minimal_edges.parquet"));
+    ASSERT_NE(imported, nullptr);
+    ASSERT_EQ(countNodes(imported), expectedNodeCount);
+}
+
+// Finding 3: an edge whose __type is null. fillEdgeTypes never consults the __type
+// definition levels, so it delivers fewer EdgeTypeIDs than rows and createEdges trips
+// its "Edge, Type mismatch" assertion on current main. A null edge type is invalid
+// input and must be surfaced cleanly, not as an internal logic error.
+TEST_F(ParquetImporterTest, RejectsNullEdgeTypeCleanly) {
+    constexpr std::string_view graphName = "nulltype";
+
+    SystemAccessor system = _env->getSystemManager().accessUnique();
+    importExpectingNoInternalAssertion(system,
+                                       graphName,
+                                       "nulltype_nodes.parquet",
+                                       "nulltype_edges.parquet");
+}
+
+// Finding 4: a repeated (LIST) property column. discoverPropertyColumn classifies it
+// by physical type alone and registers it as a scalar property, so its level stream
+// outruns the row count and applyNodeProperties trips "Definition levels, row
+// mismatch" on current main. An unsupported LIST property must be rejected cleanly.
+TEST_F(ParquetImporterTest, RejectsListPropertyColumnCleanly) {
+    constexpr std::string_view graphName = "listprop";
+
+    SystemAccessor system = _env->getSystemManager().accessUnique();
+    importExpectingNoInternalAssertion(system,
+                                       graphName,
+                                       "list_property_nodes.parquet",
+                                       "minimal_edges.parquet");
+}
+
+// Finding 5: a required column with the wrong physical type (__id as INT32). onFileStart
+// enforces the type with a bioassert, so a schema-mismatched file trips an internal
+// assertion on current main, whereas a missing column raises a clean TuringException a
+// few lines later. Correct behavior: a wrong-typed required column is rejected the same
+// clean way.
+TEST_F(ParquetImporterTest, RejectsWrongTypedRequiredColumnCleanly) {
+    constexpr std::string_view graphName = "wrongtype";
+
+    SystemAccessor system = _env->getSystemManager().accessUnique();
+    importExpectingNoInternalAssertion(system,
+                                       graphName,
+                                       "wrongtype_id_nodes.parquet",
+                                       "minimal_edges.parquet");
 }
 
 int main(int argc, char** argv) {
