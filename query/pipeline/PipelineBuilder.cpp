@@ -1391,7 +1391,8 @@ PipelineValueOutputInterface& PipelineBuilder::addLoadEmbedding(std::string_view
 
 PipelineValuesOutputInterface& PipelineBuilder::addVectorSearch(std::string_view indexName,
                                                                 uint64_t k,
-                                                                const std::vector<float>& queryVector) {
+                                                                const std::vector<float>& queryVector,
+                                                                NamedColumn*& scoreColumn) {
     VectorSearchProcessor* proc = VectorSearchProcessor::create(_pipeline, indexName, k, queryVector);
 
     PipelineValuesOutputInterface& output = proc->outIds();
@@ -1400,6 +1401,10 @@ PipelineValuesOutputInterface& PipelineBuilder::addVectorSearch(std::string_view
     NamedColumn* idsCol = allocColumn<ColumnVector<types::Int64::Primitive>>(df);
     idsCol->rename("ids");
     output.setValues(idsCol);
+
+    scoreColumn = allocColumn<ColumnVector<types::Double::Primitive>>(df);
+    scoreColumn->rename("score");
+    proc->setScoreColumn(scoreColumn);
 
     _pendingOutput.setInterface(&output);
     return output;

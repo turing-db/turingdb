@@ -391,6 +391,84 @@ TEST_F(VectorQueriesTest, vectorSearchReturnsCorrectResults) {
     ASSERT_TRUE(executed);
 }
 
+TEST_F(VectorQueriesTest, vectorSearchYieldsScore) {
+    // Create a vector index with dimension 4
+    auto createRes = query("CREATE VECTOR INDEX score_test WITH DIMENSION 4 METRIC EUCLID", "default", [](const Dataframe*) {});
+    ASSERT_TRUE(createRes.isOk()) << "Create failed: " << createRes.getError();
+
+    // Define test vectors
+    std::vector<TestVector> testVectors = {
+        {1, {1.0f, 0.0f, 0.0f, 0.0f}},   // exact match with the query
+        {2, {0.0f, 1.0f, 0.0f, 0.0f}},   // far from the query
+        {3, {0.0f, 0.0f, 1.0f, 0.0f}},   // far from the query
+        {4, {0.9f, 0.1f, 0.0f, 0.0f}},   // close to the query
+        {5, {0.8f, 0.2f, 0.0f, 0.0f}},   // also close to the query
+    };
+
+    // Write vectors to CSV file in the data directory
+    std::string dataDir = _outDir + "/turing/data";
+    std::string vectorFile = dataDir + "/score_vectors.csv";
+    {
+        std::ofstream out(vectorFile);
+        for (const auto& vec : testVectors) {
+            out << vec._id;
+            for (float v : vec.values) {
+                out << "," << v;
+            }
+            out << "\n";
+        }
+    }
+
+    // Load vectors (path relative to data directory)
+    std::string loadQuery = "LOAD VECTOR FROM \"score_vectors.csv\" IN score_test";
+    auto loadRes = query(loadQuery, "default", [](const Dataframe*) {});
+    ASSERT_TRUE(loadRes.isOk()) << "Load failed: " << loadRes.getError();
+
+    // Define query vector and compute expected results
+    std::vector<float> queryVector = {1.0f, 0.0f, 0.0f, 0.0f};
+    const size_t k = 3;
+    std::vector<int64_t> expectedIds;
+    findKNearestNeighbors(expectedIds, testVectors, queryVector, k);
+
+    // Search and yield both the ids and their scores
+    bool executed = false;
+    const auto res = query("VECTOR SEARCH IN score_test FOR 3 (1.0, 0.0, 0.0, 0.0) YIELD ids, score RETURN ids, score", "default", [&](const Dataframe* df) -> void {
+            ASSERT_TRUE(df != nullptr);
+            ASSERT_EQ(df->cols().size(), 2);
+            ASSERT_EQ(df->getLogicalRowCount(), k);
+
+            const auto& cols = df->cols();
+            ASSERT_EQ(cols.at(0)->getName(), "ids");
+            ASSERT_EQ(cols.at(1)->getName(), "score");
+
+            const auto* colIds = cols.at(0)->as<ColumnVector<types::Int64::Primitive>>();
+            const auto* colScores = cols.at(1)->as<ColumnVector<types::Double::Primitive>>();
+            ASSERT_TRUE(colIds != nullptr);
+            ASSERT_TRUE(colScores != nullptr);
+
+            // Verify each result row holds the expected neighbor with its squared
+            // euclidean distance to the query (faiss reports squared L2 for EUCLID)
+            for (size_t i = 0; i < k; ++i) {
+                ASSERT_EQ(colIds->at(i), expectedIds[i])
+                    << "Mismatch at position " << i << ": expected " << expectedIds[i]
+                    << ", got " << colIds->at(i);
+
+                const auto matchesId = [&](const TestVector& vec) { return vec._id == expectedIds[i]; };
+                const auto expectedVec = std::find_if(testVectors.begin(), testVectors.end(), matchesId);
+                ASSERT_TRUE(expectedVec != testVectors.end());
+
+                const float expectedScore = euclideanDistanceSquared(expectedVec->values, queryVector);
+                ASSERT_NEAR(colScores->at(i), expectedScore, 1e-5)
+                    << "Score mismatch at position " << i << " for id " << expectedIds[i];
+            }
+
+            executed = true;
+        });
+
+    ASSERT_TRUE(res.isOk()) << "Query failed: " << res.getError();
+    ASSERT_TRUE(executed);
+}
+
 TEST_F(VectorQueriesTest, vectorSearchWithDifferentK) {
     // Create a vector index
     auto createRes = query("CREATE VECTOR INDEX k_test WITH DIMENSION 4 METRIC EUCLID", "default", [](const Dataframe*) {});

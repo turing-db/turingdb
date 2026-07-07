@@ -240,13 +240,19 @@ void ReadStmtGenerator::generateVectorSearchStmt(const VectorSearchStmt* stmt) {
         stmt->getK(),
         std::move(queryVector));
 
-    // Register the 'ids' variable for downstream use
+    // Register the yielded variables ('ids', 'score') for downstream use
     const YieldClause* yield = stmt->getYield();
     if (yield) {
         YieldItems* yieldItems = yield->getItems();
         for (SymbolExpr* yieldItemExpr : *yieldItems) {
             const VarDecl* decl = yieldItemExpr->getExprVarDecl();
-            node->setIDsVarDecl(decl);
+
+            if (yieldItemExpr->getSymbol()->getName() == "score") {
+                node->setScoreVarDecl(decl);
+            } else {
+                node->setIDsVarDecl(decl);
+            }
+
             _variables->setProducer(yieldItemExpr->getDecl(), node);
         }
     }

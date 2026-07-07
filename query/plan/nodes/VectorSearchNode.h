@@ -30,11 +30,15 @@ public:
     void setIDsVarDecl(const VarDecl* decl) { _idsVarDecl = decl; }
     const VarDecl* getIDsVarDecl() const { return _idsVarDecl; }
 
+    void setScoreVarDecl(const VarDecl* decl) { _scoreVarDecl = decl; }
+    const VarDecl* getScoreVarDecl() const { return _scoreVarDecl; }
+
 private:
     std::string_view _indexName;
     uint64_t _k {10};
     std::vector<float> _queryVector;
     const VarDecl* _idsVarDecl {nullptr};
+    const VarDecl* _scoreVarDecl {nullptr};
 };
 
 }

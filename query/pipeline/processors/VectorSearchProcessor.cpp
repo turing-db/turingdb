@@ -79,12 +79,18 @@ void VectorSearchProcessor::execute() {
             fmt::format("Vector search failed: {}", searchResult.error().fmtMessage()));
     }
 
-    // Output result IDs to column
+    // Output result IDs and scores to columns
     using ColumnInt = ColumnVector<types::Int64::Primitive>;
     ColumnInt* colIds = _outIds.getValues()->as<ColumnInt>();
 
     const std::span<const int64_t> ids = result.ids();
     colIds->getRaw().assign(ids.begin(), ids.end());
+
+    using ColumnDouble = ColumnVector<types::Double::Primitive>;
+    ColumnDouble* scoreColumn = _scoreColumn->as<ColumnDouble>();
+
+    const std::span<const float> distances = result.distances();
+    scoreColumn->getRaw().assign(distances.begin(), distances.end());
 
     _outIds.getPort()->writeData();
     finish();

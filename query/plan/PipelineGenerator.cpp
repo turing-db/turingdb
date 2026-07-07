@@ -1758,16 +1758,22 @@ PipelineOutputInterface* PipelineGenerator::translateLoadEmbeddingNode(LoadEmbed
 }
 
 PipelineOutputInterface* PipelineGenerator::translateVectorSearchNode(VectorSearchNode* node) {
+    NamedColumn* scoreColumn = nullptr;
     PipelineValuesOutputInterface& output = _builder.addVectorSearch(
-        node->getIndexName(), node->getK(), node->getQueryVector());
+        node->getIndexName(), node->getK(), node->getQueryVector(), scoreColumn);
 
-    // Register the 'ids' column so RETURN can find it
+    // Register the 'ids' and 'score' columns so RETURN can find them
     const VarDecl* idsDecl = node->getIDsVarDecl();
     if (idsDecl) {
         NamedColumn* idsCol = output.getValues();
         if (idsCol) {
             _declToColumn[idsDecl] = idsCol->getTag();
         }
+    }
+
+    const VarDecl* scoreDecl = node->getScoreVarDecl();
+    if (scoreDecl) {
+        _declToColumn[scoreDecl] = scoreColumn->getTag();
     }
 
     return _builder.getPendingOutputInterface();
