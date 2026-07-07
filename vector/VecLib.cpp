@@ -121,16 +121,17 @@ VectorResult<void> VecLib::search(const VectorSearchQuery* query, VectorSearchRe
     const std::span<const float> embeddings = query->embeddings();
     const size_t maxResultCount = query->resultCount();
 
-    std::vector<LSHSignature> searchSignatures;
-
-    // Compute signature
-    _shardRouter->getSearchSignatures(embeddings, searchSignatures);
-
     results->reset();
     results->setAscendingIsBetter(_metadata._metric == DistanceMetric::EUCLIDEAN_DIST);
 
     std::vector<float> distances(maxResultCount);
     std::vector<faiss::idx_t> indices(maxResultCount);
+
+    // Exact search: probe every shard that holds vectors instead of routing the
+    // query to an LSH neighbourhood. Each shard is a flat (brute-force) FAISS
+    // index and every vector lives in exactly one shard, so scanning all of them
+    // returns the true k nearest neighbours rather than an approximation.
+    const std::set<LSHSignature>& searchSignatures = _shardRouter->getInstantiatedShardSignatures();
 
     for (const LSHSignature& signature : searchSignatures) {
         const VecLibShardAccessor shard = _shardCache->getShard(_metadata, signature);
