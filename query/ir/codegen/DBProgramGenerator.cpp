@@ -118,10 +118,14 @@ void DBProgramGenerator::addEdgeTraversal(const VariableDependency* src,
     [[maybe_unused]] const mlir::Value newEdgeTypes = op.getResult(2);
     const mlir::Value newTgts = op.getResult(3);
 
-    registerValue(src, newSrcs);
+    if constexpr (std::is_same_v<EdgeOp, mlir::db::GetOutEdges>) {
+        registerValue(src, newSrcs);
+        registerValue(tgt, newTgts);
+    } else {
+        registerValue(src, newTgts);
+        registerValue(tgt, newSrcs);
+    }
     registerValue(edge, newEdges);
-    // FIXME: How do we register the edge types?
-    registerValue(tgt, newTgts);
 
     // Register the new values of the carry set, appearing starting from index 4 in the
     // result range
