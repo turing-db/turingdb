@@ -6,6 +6,7 @@
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
 
+#include "DBOps.h"
 #include "DBTypes.h"
 
 namespace mlir {
@@ -38,9 +39,21 @@ private:
 
     void addScanNodes(const VariableDependency* var);
 
-    void addGetOutEdges(const VariableDependency* src, const VariableDependency* edge, const VariableDependency* tgt);
+    template<typename EdgeOp>
+    void addEdgeTraversal(const VariableDependency* src,
+                          const VariableDependency* edge,
+                          const VariableDependency* tgt,
+                          const std::vector<const VariableDependency*>& carrySet);
 
-    void addGetInEdges(const VariableDependency* src, const VariableDependency* edge, const VariableDependency* tgt);
+    template <typename... Args>
+    void addGetOutEdges(Args&&... args) {
+        return addEdgeTraversal<mlir::db::GetOutEdges>(std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    void addGetInEdges(Args&&... args) {
+        return addEdgeTraversal<mlir::db::GetInEdges>(std::forward<Args>(args)...);
+    }
 
     mlir::db::ColumnType allocColumnType(mlir::Type type);
     void registerValue(const VariableDependency* var, mlir::TypedValue<mlir::Type> val);
