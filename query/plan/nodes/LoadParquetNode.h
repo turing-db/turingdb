@@ -1,7 +1,6 @@
 #pragma once
 
 #include <string_view>
-#include <utility>
 
 #include "PlanGraphNode.h"
 
@@ -11,10 +10,10 @@ namespace db {
 
 class LoadParquetNode final : public PlanGraphNode {
 public:
-    LoadParquetNode(PlanGraphNodeID id, std::string_view graphName, fs::Path filePath)
+    LoadParquetNode(PlanGraphNodeID id, std::string_view graphName, const fs::Path& filePath)
         : PlanGraphNode(id, PlanGraphOpcode::LOAD_PARQUET),
         _graphName(graphName),
-        _filePath(std::move(filePath))
+        _filePath(filePath)
     {
     }
 
