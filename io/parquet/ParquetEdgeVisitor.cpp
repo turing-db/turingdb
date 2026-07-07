@@ -60,6 +60,11 @@ bool ParquetEdgeVisitor::onFileStart(const parquet::FileMetaData& metadata) {
 
             _edgetypeColIdx = columnIndex;
         } else {
+            const bool isListProperty = maxRepLevel >= 1;
+            if (isListProperty) {
+                throw TuringException(fmt::format(
+                    "List properties are not supported; properties must be scalar-valued (column: {}).", path));
+            }
             discoverPropertyColumn(columnIndex, path, type, maxDefLevel);
         }
     }
