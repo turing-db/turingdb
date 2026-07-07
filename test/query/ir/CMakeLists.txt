@@ -21,6 +21,7 @@ add_ir_tests(test_query_ir_nldialect NLDialectTest.cpp)
 # The branch two-hop test runs against the shared SimpleGraph fixture.
 add_ir_tests(test_query_ir_branch_two_hop BranchTwoHopTest.cpp)
 target_link_libraries(test_query_ir_branch_two_hop PRIVATE turing_db_examples_s)
+
 add_turing_test(test_query_ir_equivalence EquivalenceTest.cpp)
 target_link_libraries(test_query_ir_equivalence PRIVATE
         turing_db_s
