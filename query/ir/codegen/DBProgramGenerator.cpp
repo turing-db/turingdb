@@ -315,7 +315,9 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
 
 void DBProgramGenerator::generateOutput(const CypherAST* ast) {
     const CypherAST::QueryCommands& queries = ast->queries();
-    bioassert(queries.size() == 1, "Multiple queries not yet supported.");
+    if (queries.size() != 1) {
+        throw TuringException("Multiple queries not yet supported.");
+    };
 
     const QueryCommand* query = queries.front();
 
@@ -328,7 +330,7 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
     const Projection* proj = rtn->getProjection();
 
     const bool all = proj->isReturningAll();
-    // FIXME: Detect the unused MLIR vars are return those
+    // FIXME: Detect the unused MLIR vars and return those
     bioassert(!all, "Returning all is not yet supported.");
 
     const Projection::Items& returned = proj->items();
@@ -352,6 +354,7 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
         } else {
             var = item;
         }
+        bioassert(var, "Could not determine return variable.");
 
         const std::string_view name = var->getName();
         const auto findIt = finalIdentities.find(name);
@@ -361,7 +364,8 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
         return mlirCol;
     };
 
-    llvm::SmallVector<mlir::Value, 5> outputted;
+    constexpr size_t avgOut = 5;
+    llvm::SmallVector<mlir::Value, avgOut> outputted;
     for (const Projection::ReturnItem item : returned) {
         const mlir::Value itemCol = std::visit(lookup, item);
         outputted.push_back(itemCol);

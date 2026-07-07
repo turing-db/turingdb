@@ -65,8 +65,10 @@ VariableDependencyGraph::~VariableDependencyGraph() {
 
 void VariableDependencyGraph::buildFromAST(const CypherAST* ast) {
     bioassert(ast->queries().size() == 1, "Single queries only.");
+
     const QueryCommand* q = ast->queries().front();
     const auto* spq = dynamic_cast<const SinglePartQuery*>(q);
+    bioassert(spq, "Non-SinglePartQueries are not yet supported.");
 
     const StmtContainer* stmtsContainer = spq->getReadStmts();
     const StmtContainer::Stmts& stmts = stmtsContainer->stmts();
@@ -84,6 +86,7 @@ void VariableDependencyGraph::buildFromAST(const CypherAST* ast) {
             registerPatternElement(ele);
         }
     }
+
     eliminateCycles();
 }
 

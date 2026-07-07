@@ -548,7 +548,7 @@ int main(int argc, char** argv) {
         .store_into(dumpCode)
         .help("Dump the full MLIR code of every function in the module");
 
-    parser.add_argument("-dump-lowered")
+    parser.add_argument("-l", "--dump-lowered")
         .store_into(dumpLowered)
         .help("Lower the db-dialect 'main' to the nl dialect and dump it (no execution)");
 
