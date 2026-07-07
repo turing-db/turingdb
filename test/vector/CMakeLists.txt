@@ -6,3 +6,4 @@ function(add_vector_tests exe_name cpp_file)
 endfunction()
 
 add_vector_tests(test_jsonimporter JsonImporterTest.cpp)
+add_vector_tests(test_vector_reload VectorReloadTest.cpp)

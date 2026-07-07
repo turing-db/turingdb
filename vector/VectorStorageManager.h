@@ -31,6 +31,7 @@ public:
     [[nodiscard]] static VectorResult<std::unique_ptr<VectorStorageManager>> create(const fs::Path& rootPath);
 
     [[nodiscard]] VectorResult<void> createLibraryStorage(const VecLib& lib);
+    [[nodiscard]] VectorResult<void> persistShardRouter(const VecLib& lib);
     [[nodiscard]] bool libraryExists(const VecLibID& libID) const;
     [[nodiscard]] VectorResult<void> deleteLibraryStorage(const VecLibID& libID);
 
