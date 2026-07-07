@@ -262,4 +262,5 @@ TEST_F(EquivalenceTest, trees) {
     expectEquivalent("MATCH (b)-->(a), (c)-->(a) RETURN c");
     // Disabled due to suspected v2 bug
     // expectEquivalent("MATCH (a)-->(b)-->(c), (b)-->(e) RETURN a");
+    expectEquivalent("MATCH (a)-->(b)-->(c), (b)-->(e) RETURN a");
 }
