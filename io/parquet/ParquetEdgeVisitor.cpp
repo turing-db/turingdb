@@ -123,6 +123,14 @@ bool ParquetEdgeVisitor::onByteArrayValues(size_t columnIndex,
 }
 
 bool ParquetEdgeVisitor::onChunkEnd(size_t, size_t, size_t rows) {
+    if (_chunkSrcIds.size() != rows || _chunkTgtIds.size() != rows) {
+        throw TuringException("Edge file: __source/__target must not contain null values.");
+    }
+
+    if (_chunkEdgeTypes.size() != rows) {
+        throw TuringException("Edge file: __type must not contain null values.");
+    }
+
     DataPartBuilder& builder = _builder->getCurrentBuilder();
 
     createEdges(&builder);

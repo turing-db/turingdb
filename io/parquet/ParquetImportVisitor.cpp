@@ -109,7 +109,11 @@ void ParquetImportVisitor::capturePropertyByteArray(size_t columnIndex,
     std::vector<std::string>& strings = _propByteArrayVals[columnIndex];
     strings.reserve(strings.size() + values.size());
     for (const parquet::ByteArray& bytes : values) {
-        strings.emplace_back(reinterpret_cast<const char*>(bytes.ptr), bytes.len);
+        if (!bytes.ptr || bytes.len == 0) {
+            strings.emplace_back();
+        } else {
+            strings.emplace_back(reinterpret_cast<const char*>(bytes.ptr), bytes.len);
+        }
     }
 }
 
