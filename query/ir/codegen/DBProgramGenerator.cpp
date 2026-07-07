@@ -74,66 +74,61 @@ void DBProgramGenerator::addScanNodes(const VariableDependency* var) {
     registerValue(var, scan.getResult());
 }
 
-void DBProgramGenerator::addGetOutEdges(const VariableDependency* src,
-                                        const VariableDependency* edge,
-                                        const VariableDependency* tgt) {
+template<typename EdgeOp>
+void DBProgramGenerator::addEdgeTraversal(const VariableDependency* src,
+                                          const VariableDependency* edge,
+                                          const VariableDependency* tgt,
+                                          const std::vector<const VariableDependency*>& carrySet) {
+    static_assert(std::is_same_v<EdgeOp, mlir::db::GetOutEdges>
+                      or std::is_same_v<EdgeOp, mlir::db::GetInEdges>, "Invalid op");
+
     bioassert(src, "Null source");
     bioassert(tgt, "Null target");
 
-    bioassert(_varMap.contains(src), "GetOutEdges without source");
+    bioassert(_varMap.contains(src), "Edge traversal without source");
 
     const auto srcs = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
-    const auto etype = allocColumnType(mlir::storage::EdgeTypeIDType::get(_mlirCtxt));
+    const auto eids = allocColumnType(mlir::storage::EdgeIDType::get(_mlirCtxt));
+    const auto etypes = allocColumnType(mlir::storage::EdgeTypeIDType::get(_mlirCtxt));
     const auto tgts = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
-    const auto edges = allocColumnType(mlir::storage::EdgeIDType::get(_mlirCtxt));
 
-    const auto input = _varMap[src].back();
+    const mlir::Value input = _varMap[src].back();
+
+    llvm::SmallVector<const VariableDependency*> carried;
+    llvm::SmallVector<mlir::Value> operands {input};
+    llvm::SmallVector<mlir::Type> results {srcs, eids, etypes, tgts};
+    for (const VariableDependency* var : carrySet) {
+        // source variable is expliclty filtered by the edge op
+        if (var == src) {
+            continue;
+        }
+
+        const mlir::Value column = _varMap[var].back();
+        carried.push_back(var);
+        operands.push_back(column);
+        results.push_back(column.getType());
+    }
 
     const auto loc = _opBuilder->getUnknownLoc();
-    auto goe = _opBuilder->create<mlir::db::GetOutEdges>(
-        loc, mlir::TypeRange {srcs, edges, etype, tgts}, mlir::ValueRange {input});
+    auto op = _opBuilder->create<EdgeOp>(loc, results, operands);
 
-    const mlir::Value newSrcs = goe.getResult(0);
+    const mlir::Value newSrcs = op.getResult(0);
+    const mlir::Value newEdges = op.getResult(1);
+    [[maybe_unused]] const mlir::Value newEdgeTypes = op.getResult(2);
+    const mlir::Value newTgts = op.getResult(3);
+
     registerValue(src, newSrcs);
-    const mlir::Value newEIDs = goe.getResult(1);
-    if (edge) {
-        registerValue(edge, newEIDs);
-    }
-    [[maybe_unused]] const mlir::Value newETypes = goe.getResult(2);
+    registerValue(edge, newEdges);
     // FIXME: How do we register the edge types?
-    const mlir::Value newTgts = goe.getResult(3);
     registerValue(tgt, newTgts);
-}
 
-void DBProgramGenerator::addGetInEdges(const VariableDependency* src,
-                                       const VariableDependency* edge,
-                                       const VariableDependency* tgt) {
-    bioassert(src, "Null source");
-    bioassert(tgt, "Null target");
-
-    bioassert(_varMap.contains(src), "GetInEdges without source");
-
-    const auto srcs = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
-    const auto etype = allocColumnType(mlir::storage::EdgeTypeIDType::get(_mlirCtxt));
-    const auto tgts = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
-    const auto edges = allocColumnType(mlir::storage::EdgeIDType::get(_mlirCtxt));
-
-    const auto input = _varMap[src].back();
-
-    const auto loc = _opBuilder->getUnknownLoc();
-    auto gie = _opBuilder->create<mlir::db::GetInEdges>(
-        loc, mlir::TypeRange {srcs, edges, etype, tgts}, mlir::ValueRange {input});
-
-    const mlir::Value newSrcs = gie.getResult(0);
-    registerValue(src, newSrcs);
-    const mlir::Value newEIDs = gie.getResult(1);
-    if (edge) {
-        registerValue(edge, newEIDs);
+    // Register the new values of the carry set, appearing starting from index 4 in the
+    // result range
+    constexpr size_t GET_X_EDGES_RES_SIZE = 4;
+    for (size_t i = 0; i < carried.size(); i++) {
+        const size_t resultIndex = GET_X_EDGES_RES_SIZE + i;
+        registerValue(carried[i], op.getResult(resultIndex));
     }
-    [[maybe_unused]] const mlir::Value newETypes = gie.getResult(2);
-    // FIXME: How do we register the edge types?
-    const mlir::Value newTgts = gie.getResult(3);
-    registerValue(tgt, newTgts);
 }
 
 void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) {
@@ -178,6 +173,9 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
 
     std::vector<Frame> stack;
 
+    // Forms the "carried set" for each connected component
+    std::vector<const VariableDependency*> carriedSet;
+
     // TODO: Use nodes at ends of diameter
     for (const VariableDependency& root : vdg.vars()) {
         if (defined.contains(&root)) {
@@ -204,6 +202,8 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
 
         addScanNodes(&root);
         defined.insert(&root);
+
+        carriedSet.clear();
 
         // DFS from this root
         stack.emplace_back(&root, nullptr);
@@ -280,11 +280,11 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
             const EdgeMetadata::EdgeType edgeType = edgeVarProd->data().type();
             switch (edgeType) {
                 case EdgeMetadata::EdgeType::GET_OUT_EDGES:
-                    addGetOutEdges(src, edge, tgt);
+                    addGetOutEdges(src, edge, tgt, carriedSet);
                 break;
 
                 case EdgeMetadata::EdgeType::GET_IN_EDGES:
-                    addGetInEdges(src, edge, tgt);
+                    addGetInEdges(src, edge, tgt, carriedSet);
                 break;
 
                 case EdgeMetadata::EdgeType::MERGE:
@@ -309,6 +309,10 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
             defined.insert(src);
             defined.insert(edge);
             defined.insert(tgt);
+
+            carriedSet.push_back(src);
+            carriedSet.push_back(edge);
+            carriedSet.push_back(tgt);
         }
     }
 }
@@ -364,8 +368,7 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
         return mlirCol;
     };
 
-    constexpr size_t avgOut = 5;
-    llvm::SmallVector<mlir::Value, avgOut> outputted;
+    llvm::SmallVector<mlir::Value> outputted;
     for (const Projection::ReturnItem item : returned) {
         const mlir::Value itemCol = std::visit(lookup, item);
         outputted.push_back(itemCol);
