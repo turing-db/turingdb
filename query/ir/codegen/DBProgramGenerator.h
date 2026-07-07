@@ -9,6 +9,8 @@
 #include "DBOps.h"
 #include "DBTypes.h"
 
+#include "VariableDependencyGraph.h"
+
 namespace mlir {
 class ModuleOp;
 class OpBuilder;
@@ -32,6 +34,8 @@ private:
 
     // Maps a Cypher variable to all of its MLIR variable uses, in order of appearence
     VariableIdentityMap _varMap;
+
+    VariableDependencyGraph _vdg;
 
     void generateTraversal(const CypherAST* ast);
 
