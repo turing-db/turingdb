@@ -57,7 +57,7 @@ LSHSignature LSHShardRouter::getSignature(std::span<const float> vector) const {
 void LSHShardRouter::getSearchSignatures(std::span<const float> vector, std::vector<LSHSignature>& signatures) const {
     bioassert(vector.size() == _dim, "LSHShardRouter: vector size must be equal to dimension");
     signatures.resize(_nbits + 1);
-    
+
     const LSHSignature sig = getSignature(vector);
 
     // Exact match

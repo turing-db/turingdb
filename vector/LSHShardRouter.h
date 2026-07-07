@@ -27,6 +27,10 @@ public:
 
     LSHSignature getSignature(std::span<const float> vector) const;
 
+    // Approximate-search routing: the query's own shard signature plus its
+    // Hamming-distance-1 neighbours. Currently unused — VecLib::search probes
+    // every instantiated shard for exact results — but kept so approximate
+    // search can be re-enabled without reimplementing it.
     void getSearchSignatures(std::span<const float> vector,
                              std::vector<LSHSignature>& signatures) const;
 
