@@ -58,6 +58,50 @@ mlir::Type valueTypeToElementType(mlir::OpBuilder& builder, ValueType valueType)
     throw IRException("Unhandled property value type");
 }
 
+// The accumulator (and result) element type of an aggregate over a column whose
+// nullable value chunk wraps inputElement. avg always reduces to an f64; sum,
+// min and max keep the input's own type. Throws for a value type the reduction
+// cannot handle: sum/avg need a numeric column, min/max an orderable one (so a
+// string sum, a bool sum or an embedding min is rejected, matching Cypher).
+mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
+                                      storage::AggregateKind kind,
+                                      mlir::Type inputElement) {
+    const bool isFloat = mlir::isa<mlir::Float64Type>(inputElement);
+    const auto integerType = mlir::dyn_cast<mlir::IntegerType>(inputElement);
+    const bool isBool = integerType && integerType.getWidth() == 1;
+    const bool isInteger = integerType && !isBool;
+    const bool isNumeric = isFloat || isInteger;
+    const bool isString = mlir::isa<storage::StringType>(inputElement);
+
+    switch (kind) {
+        case storage::AggregateKind::Sum:
+            if (!isNumeric) {
+                throw IRException("db.sum requires a numeric column");
+            }
+            return inputElement;
+        break;
+
+        case storage::AggregateKind::Avg:
+            if (!isNumeric) {
+                throw IRException("db.avg requires a numeric column");
+            }
+            return builder.getF64Type();
+        break;
+
+        case storage::AggregateKind::Min:
+        case storage::AggregateKind::Max:
+            // min/max order the values, so anything with a natural order is fine -
+            // numbers, strings and bools - but an embedding has none.
+            if (!isNumeric && !isString && !isBool) {
+                throw IRException("db.min/db.max requires an orderable column");
+            }
+            return inputElement;
+        break;
+    }
+
+    throw IRException("Unhandled aggregate kind");
+}
+
 // The single nl.output that solely consumes every result in the range, or a null
 // op if any result has more than one use, a non-nl.output user, or a different
 // output than its siblings. Read the direction as "one shared output user => the
@@ -217,6 +261,14 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerRemoveDuplicates(distinct);
     } else if (mlir::db::Count count = mlir::dyn_cast<mlir::db::Count>(operation)) {
         lowerCount(count);
+    } else if (mlir::db::Sum sum = mlir::dyn_cast<mlir::db::Sum>(operation)) {
+        lowerAggregate(sum.getInput(), sum.getResult(), storage::AggregateKind::Sum);
+    } else if (mlir::db::Min min = mlir::dyn_cast<mlir::db::Min>(operation)) {
+        lowerAggregate(min.getInput(), min.getResult(), storage::AggregateKind::Min);
+    } else if (mlir::db::Max max = mlir::dyn_cast<mlir::db::Max>(operation)) {
+        lowerAggregate(max.getInput(), max.getResult(), storage::AggregateKind::Max);
+    } else if (mlir::db::Avg avg = mlir::dyn_cast<mlir::db::Avg>(operation)) {
+        lowerAggregate(avg.getInput(), avg.getResult(), storage::AggregateKind::Avg);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
     } else if (mlir::isa<mlir::func::ReturnOp>(operation)) {
@@ -708,6 +760,58 @@ void DBLowering::lowerCount(mlir::db::Count count) {
     // into a function-scope nl.output reading it - the block that holds the chunk is
     // the entry block, so lowerOutput places nl.output there.
     _valueMap[count.getResult()] = result.getResult();
+}
+
+void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::AggregateKind kind) {
+    // The nl chunk the aggregated column lowered to; the update folds its per-step
+    // non-null values into the accumulator.
+    const mlir::Value inputChunk = mapValue(input);
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    // The input must be a property value column - a nullable value chunk - since
+    // these reduce the values themselves (unlike count(*), which tallies IDs). An
+    // ID chunk has no value to reduce, so reject it here.
+    const nl::ChunkType inputChunkType = mlir::cast<nl::ChunkType>(inputChunk.getType());
+    const auto inputNullable = mlir::dyn_cast<storage::NullableType>(inputChunkType.getElementType());
+    if (!inputNullable) {
+        throw IRException("db aggregate requires a property value column");
+    }
+
+    // The accumulator (and result) element type: avg widens to f64, the rest keep
+    // the input type. This also validates the reduction against the value type.
+    const mlir::Type resultElement = aggregateResultElementType(_builder, kind, inputNullable.getValueType());
+
+    // The accumulator is hoisted to the top of the entry block, above every loop,
+    // so it is reset once at function scope and dominates the update in the
+    // producing loop body and the emit that reads it after the loop. The count
+    // sibling; a correlated aggregate (reset per enclosing step) would hoist into
+    // its enclosing loop body instead - future work, as for the streaming limit.
+    _builder.setInsertionPointToStart(_entryBlock);
+    const nl::AggregateStateType stateType = nl::AggregateStateType::get(context, resultElement);
+    const mlir::Value state = _builder.create<nl::Aggregate>(loc, stateType, kind).getState();
+
+    // The update sits in the innermost producing loop body, where the aggregated
+    // column is bound (the same block db.output would emit from), and folds each
+    // step's non-null values into the accumulator.
+    setInsertionInto(ownerBlock(inputChunk));
+    _builder.create<nl::AggregateUpdate>(loc, state, inputChunk, kind);
+
+    // Like db.count, an aggregate is a pipeline breaker that collapses to one row,
+    // so it opens no emit loop: nl.aggregate_result materializes the reduced value
+    // in place at function scope (after the producing loop, before the func.return).
+    // The result is a single-row nullable value chunk - an aggregate can be null
+    // (min/max/avg of no non-null row), and sum rides the same representation.
+    const storage::NullableType resultNullable = storage::NullableType::get(context, resultElement);
+    const nl::ChunkType resultChunkType = nl::ChunkType::get(context, resultNullable);
+
+    setInsertionInto(_entryBlock);
+    nl::AggregateResult aggregateResult = _builder.create<nl::AggregateResult>(loc, resultChunkType, state, kind);
+
+    // The db aggregate's result maps to that chunk, so the db.output that follows
+    // lowers into a function-scope nl.output reading it, exactly as db.count does.
+    _valueMap[result] = aggregateResult.getResult();
 }
 
 void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {

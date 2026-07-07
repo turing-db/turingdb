@@ -17,6 +17,10 @@
 
 namespace {
 
+// Defined below with the other program strings; declared here so the fixture's
+// checkAggregateOp helper (an inline member) can name it.
+std::string aggregateProgram(const char* op);
+
 // A context with just the dialects a db-dialect program needs: db for the query
 // ops and func for the enclosing function.
 class DBDialectTest : public ::testing::Test {
@@ -46,6 +50,35 @@ protected:
         });
 
         return product;
+    }
+
+    // Parses one aggregate op program (db.sum / db.min / db.max / db.avg), asserts
+    // the op is present with the spelled input/result column types, and that printing
+    // it and re-parsing still verifies (the printer and parser are inverses). One
+    // typed helper covers all four ops, which differ only in their name.
+    template <typename OpType>
+    void checkAggregateOp(const char* op) {
+        const mlir::OwningOpRef<mlir::ModuleOp> module = parse(aggregateProgram(op).c_str());
+        ASSERT_TRUE(module) << op;
+
+        OpType aggregate;
+        module.get().walk([&](OpType found) {
+            aggregate = found;
+        });
+        ASSERT_TRUE(aggregate) << op;
+
+        // One property column in, one reduced column out - the two spelled i64 columns.
+        const mlir::Type int64ColumnType = mlir::db::ColumnType::get(&_context, mlir::IntegerType::get(&_context, 64));
+        EXPECT_EQ(aggregate.getInput().getType(), int64ColumnType) << op;
+        EXPECT_EQ(aggregate.getResult().getType(), int64ColumnType) << op;
+
+        std::string printed;
+        llvm::raw_string_ostream stream(printed);
+        module.get().print(stream);
+
+        const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+        ASSERT_TRUE(reparsed) << op;
+        EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed))) << op;
     }
 
     mlir::MLIRContext _context;
@@ -195,6 +228,23 @@ func.func @main() {
   return
 }
 )mlir";
+
+// MATCH (a) RETURN sum(a.score): a property column reduced to a single-row result.
+// Each reduction is its own op - db.sum / db.min / db.max / db.avg - the way count(*)
+// is db.count. Like db.count they change arity and type, so the input and result
+// types are unrelated; only the op name differs, which lets one program string cover
+// all four ops.
+std::string aggregateProgram(const char* op) {
+    return std::string("func.func @main() {\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "  %s = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<i64>\n"
+                       "  %r = db.")
+           + op
+           + "(%s) : (!db.column<i64>) -> !db.column<i64>\n"
+             "  db.output(%r) : !db.column<i64>\n"
+             "  return\n"
+             "}\n";
+}
 
 TEST_F(DBDialectTest, parsesCrossProductOfTwoScans) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(crossProductProgram);
@@ -723,6 +773,16 @@ TEST_F(DBDialectTest, countRoundTripsThroughTextualForm) {
     const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
     ASSERT_TRUE(reparsed);
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, parsesAndRoundTripsAggregateOps) {
+    // Each aggregate is its own op - db.sum / db.min / db.max / db.avg - so each
+    // parses to its own type, exposes the spelled input/result columns, and survives
+    // a print/re-parse round trip.
+    checkAggregateOp<mlir::db::Sum>("sum");
+    checkAggregateOp<mlir::db::Min>("min");
+    checkAggregateOp<mlir::db::Max>("max");
+    checkAggregateOp<mlir::db::Avg>("avg");
 }
 
 }

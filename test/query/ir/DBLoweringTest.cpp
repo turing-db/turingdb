@@ -152,6 +152,50 @@ private:
     std::vector<uint64_t> _values;
 };
 
+// Collects the single-row nullable int64 result a SUM/MIN/MAX over an Int64 column
+// emits: one !nl.chunk<!storage.nullable<i64>> with one row (present or null).
+class CollectingOptInt64Sink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* values = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[0]);
+        ASSERT_NE(values, nullptr);
+
+        const auto& raw = values->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _values.push_back(raw[rowIndex]);
+        }
+    }
+
+    const std::vector<std::optional<int64_t>>& getValues() const { return _values; }
+
+private:
+    std::vector<std::optional<int64_t>> _values;
+};
+
+// Collects the single-row nullable double result an AVG emits: one
+// !nl.chunk<!storage.nullable<f64>> with one row.
+class CollectingOptDoubleSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* values = dynamic_cast<const ColumnOptVector<double>*>(chunks[0]);
+        ASSERT_NE(values, nullptr);
+
+        const auto& raw = values->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _values.push_back(raw[rowIndex]);
+        }
+    }
+
+    const std::vector<std::optional<double>>& getValues() const { return _values; }
+
+private:
+    std::vector<std::optional<double>> _values;
+};
+
 // Collects (node ID, nullable string property) rows. The value column is a
 // !storage.nullable<!storage.string> chunk, storage's ColumnOptVector<string_view>.
 class CollectingNodeStringPropSink : public NLOutputSink {
@@ -847,6 +891,23 @@ func.func @main() {
   return
 }
 )mlir";
+
+// MATCH (a) RETURN <agg>(a.score): reduce the non-null scores with the given
+// aggregate op (db.sum / db.min / db.max / db.avg). The db result value type is
+// resolved during lowering (the property is Int64, so sum/min/max stay Int64 and
+// avg widens to f64), so the db column types are left as none - the same way the
+// property column is spelled.
+std::string aggregateScoreProgram(const char* op) {
+    return std::string("func.func @main() {\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
+                       "  %r = db.")
+           + op
+           + "(%score) : (!db.column<none>) -> !db.column<none>\n"
+             "  db.output(%r) : !db.column<none>\n"
+             "  return\n"
+             "}\n";
+}
 
 }
 
@@ -2832,6 +2893,119 @@ TEST_F(DBLoweringTest, lowersCountToPipelineBreaker) {
     });
 
     EXPECT_EQ(countCount, 1u);
+    EXPECT_EQ(updateCount, 1u);
+    EXPECT_EQ(resultCount, 1u);
+    EXPECT_EQ(forCount, 1u);
+    EXPECT_EQ(sortBufferCount, 0u);
+}
+
+TEST_F(DBLoweringTest, sumsScores) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Scores 100, 200 and null: sum(a.score) adds the present values to 300 (the
+    // null is ignored), through the full db -> nl lowering.
+    CollectingOptInt64Sink sink;
+    runLoweredProgram(aggregateScoreProgram("sum").c_str(), reader.getView(), sink);
+
+    const std::vector<std::optional<int64_t>> expected {300};
+    EXPECT_EQ(sink.getValues(), expected);
+}
+
+TEST_F(DBLoweringTest, minsAndMaxsScores) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // min/max(a.score) over 100, 200, null are the smallest and largest present
+    // values.
+    CollectingOptInt64Sink minSink;
+    runLoweredProgram(aggregateScoreProgram("min").c_str(), reader.getView(), minSink);
+    EXPECT_EQ(minSink.getValues(), (std::vector<std::optional<int64_t>> {100}));
+
+    CollectingOptInt64Sink maxSink;
+    runLoweredProgram(aggregateScoreProgram("max").c_str(), reader.getView(), maxSink);
+    EXPECT_EQ(maxSink.getValues(), (std::vector<std::optional<int64_t>> {200}));
+}
+
+TEST_F(DBLoweringTest, averagesScores) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // avg(a.score) divides the sum of the present values (300) by their count (2),
+    // widening to f64, so the single result row is a present 150.0.
+    CollectingOptDoubleSink sink;
+    runLoweredProgram(aggregateScoreProgram("avg").c_str(), reader.getView(), sink);
+
+    const std::vector<std::optional<double>> expected {150.0};
+    EXPECT_EQ(sink.getValues(), expected);
+}
+
+TEST_F(DBLoweringTest, averagesScoresAcrossChunks) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // At chunk size 1 the scores span three scan chunks; the accumulator is reset
+    // once at function scope, not per chunk, so avg still totals 150.0.
+    CollectingOptDoubleSink sink;
+    runLoweredProgram(aggregateScoreProgram("avg").c_str(), reader.getView(), sink, /*chunkSize=*/1);
+
+    const std::vector<std::optional<double>> expected {150.0};
+    EXPECT_EQ(sink.getValues(), expected);
+}
+
+// A db aggregate op lowers to the pipeline-breaker shape, the same as db.count: a
+// hoisted nl.aggregate, a single nl.aggregate_update in the producing loop, and an
+// nl.aggregate_result after it that materializes the reduced chunk at function
+// scope. It collapses to one row, so there is exactly one nl.for (the producing
+// scan) and no nl.sort_buffer.
+TEST_F(DBLoweringTest, lowersAggregateToPipelineBreaker) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    const std::string programText = aggregateScoreProgram("sum");
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(programText, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &reader.getView());
+    lowering.lower(dbFunction, *nlModule);
+
+    size_t aggregateCount = 0;
+    size_t updateCount = 0;
+    size_t resultCount = 0;
+    size_t forCount = 0;
+    size_t sortBufferCount = 0;
+
+    nlModule->walk([&](mlir::Operation* operation) {
+        if (mlir::isa<mlir::nl::Aggregate>(operation)) {
+            aggregateCount++;
+        } else if (mlir::isa<mlir::nl::AggregateUpdate>(operation)) {
+            updateCount++;
+        } else if (mlir::isa<mlir::nl::AggregateResult>(operation)) {
+            resultCount++;
+        } else if (mlir::isa<mlir::nl::For>(operation)) {
+            forCount++;
+        } else if (mlir::isa<mlir::nl::SortBuffer>(operation)) {
+            sortBufferCount++;
+        }
+    });
+
+    EXPECT_EQ(aggregateCount, 1u);
     EXPECT_EQ(updateCount, 1u);
     EXPECT_EQ(resultCount, 1u);
     EXPECT_EQ(forCount, 1u);

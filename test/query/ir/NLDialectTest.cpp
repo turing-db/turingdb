@@ -221,6 +221,100 @@ TEST_F(NLDialectTest, verifierAcceptsCountChain) {
     EXPECT_EQ(result.getResult().getType(), countChunkType);
 }
 
+// The aggregate chain verifies: an nl.aggregate producing the accumulator handle,
+// an nl.aggregate_update folding the value chunk into it, and an nl.aggregate_result
+// that materializes the single reduced chunk, emitted by a function-scope nl.output -
+// all naming the one handle and carrying the same reduction. The value sibling of
+// the count-chain test.
+TEST_F(NLDialectTest, verifierAcceptsAggregateChain) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+
+    // A function whose entry block takes one nullable-int64 value chunk - the
+    // property column an aggregate folds (unlike count, an aggregate reduces values,
+    // so its input is a value chunk, not an ID chunk).
+    const mlir::Type int64Type = mlir::IntegerType::get(&_context, 64);
+    const mlir::Type valueChunkType = mlir::nl::ChunkType::get(&_context,
+                                                               mlir::storage::NullableType::get(&_context, int64Type));
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {valueChunkType}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+    const mlir::Value chunk = function.getBody().front().getArgument(0);
+
+    // sum over an i64 column: the accumulator (state) and the result are both nullable
+    // int64, so the state carries the i64 element type.
+    const mlir::nl::AggregateStateType stateType = mlir::nl::AggregateStateType::get(&_context, int64Type);
+    const mlir::Value handle = builder.create<mlir::nl::Aggregate>(loc, stateType, mlir::storage::AggregateKind::Sum).getState();
+    builder.create<mlir::nl::AggregateUpdate>(loc, handle, chunk, mlir::storage::AggregateKind::Sum);
+
+    const mlir::Type resultChunkType = mlir::nl::ChunkType::get(&_context,
+                                                                mlir::storage::NullableType::get(&_context, int64Type));
+    mlir::nl::AggregateResult result = builder.create<mlir::nl::AggregateResult>(loc, resultChunkType, handle, mlir::storage::AggregateKind::Sum);
+    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {result.getResult()}, mlir::Value(), mlir::Value());
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+    EXPECT_EQ(result.getState(), handle);
+    EXPECT_EQ(result.getResult().getType(), resultChunkType);
+    EXPECT_EQ(result.getKind(), mlir::storage::AggregateKind::Sum);
+}
+
+// The update's fold handler is picked from its own kind, but the accumulator was
+// reset by the producing nl.aggregate's kind - so a differing kind folds into a
+// wrongly-initialized accumulator (a min-reset null read as a present sum, which
+// crashes at runtime). The verifier must reject the mismatch before execution.
+TEST_F(NLDialectTest, verifierRejectsMismatchedAggregateKind) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+
+    const mlir::Type int64Type = mlir::IntegerType::get(&_context, 64);
+    const mlir::Type valueChunkType = mlir::nl::ChunkType::get(&_context,
+                                                               mlir::storage::NullableType::get(&_context, int64Type));
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {valueChunkType}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+    const mlir::Value chunk = function.getBody().front().getArgument(0);
+
+    // Reset for a sum, but fold as a min against the same handle.
+    const mlir::nl::AggregateStateType stateType = mlir::nl::AggregateStateType::get(&_context, int64Type);
+    const mlir::Value handle = builder.create<mlir::nl::Aggregate>(loc, stateType, mlir::storage::AggregateKind::Sum).getState();
+    builder.create<mlir::nl::AggregateUpdate>(loc, handle, chunk, mlir::storage::AggregateKind::Min);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    // Swallow the verifier's diagnostic so the deliberate failure does not print.
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+    EXPECT_TRUE(mlir::failed(mlir::verify(function)));
+}
+
+// avg accumulates a running sum as f64, so an nl.aggregate avg whose state is not an
+// f64 accumulator (here an i64) would type-confuse the avg handler at runtime; the
+// verifier rejects it at the source op.
+TEST_F(NLDialectTest, verifierRejectsAvgWithNonFloatState) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    const mlir::Type int64Type = mlir::IntegerType::get(&_context, 64);
+    const mlir::nl::AggregateStateType i64State = mlir::nl::AggregateStateType::get(&_context, int64Type);
+    builder.create<mlir::nl::Aggregate>(loc, i64State, mlir::storage::AggregateKind::Avg);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+    EXPECT_TRUE(mlir::failed(mlir::verify(function)));
+}
+
 // A folded nl.output carries the single handle of the truncate adjacent to it,
 // never both: an output with both a limit and a skip handle fails verification.
 TEST_F(NLDialectTest, verifierRejectsOutputWithBothLimitAndSkip) {

@@ -4,6 +4,7 @@
 include "mlir/IR/AttrTypeBase.td"
 
 include "StorageDialect.td"
+include "StorageEnums.td"
 
 class StorageType<string name, string typeMnemonic, list<Trait> traits = []>
     : TypeDef<Storage, name, traits> {

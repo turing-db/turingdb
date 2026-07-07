@@ -8,6 +8,8 @@
 
 using namespace mlir::storage;
 
+#include "StorageEnums.cpp.inc"
+
 #define GET_TYPEDEF_CLASSES
 #include "StorageTypes.cpp.inc"
 

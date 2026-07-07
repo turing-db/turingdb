@@ -449,4 +449,39 @@ def Count : TuringOp<"count", [Pure]> {
   }];
 }
 
+/**
+* Aggregates: Sum / Min / Max / Avg
+*/
+// The value-reducing counterparts of db.count. Each consumes the whole dataflow of
+// one property column and produces a single-row column holding the reduction.
+// Cypher aggregates ignore nulls, so they reduce only the non-null rows.
+//
+// Unlike count(*), which tallies rows regardless of value and so accepts an ID
+// column, these reduce the values themselves, so the input must be a property
+// value column. The result value type follows Cypher and is resolved during
+// lowering: sum and min/max keep the input's type, avg is always a float, and the
+// result is null when no non-null row was seen (except sum, which is 0). Like
+// db.count the input and result types are unrelated, so there is no verifier.
+//
+// One op per reduction, the way db.count is its own op: the op name is the
+// aggregate, so no kind attribute is needed and each reads like `db.sum(%x)`. They
+// share this base since only the name differs.
+class AggregateOp<string mnemonic> : TuringOp<mnemonic, [Pure]> {
+  let summary = "Reduce a column of property values to a single-row result";
+
+  let arguments = (ins Column:$input);
+  let results   = (outs Column:$result);
+
+  // One operand and one result, so functional-type(operands, results) prints the
+  // `(!db.column<...>) -> !db.column<...>` form, the same as db.count.
+  let assemblyFormat = [{
+    `(` $input `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+def Sum : AggregateOp<"sum">;
+def Min : AggregateOp<"min">;
+def Max : AggregateOp<"max">;
+def Avg : AggregateOp<"avg">;
+
 #endif //TURINGDB_OPS

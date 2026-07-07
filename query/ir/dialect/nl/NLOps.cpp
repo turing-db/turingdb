@@ -26,6 +26,31 @@ Type getEdgeTypeIDChunkType(MLIRContext* context) {
     return ChunkType::get(context, storage::EdgeTypeIDType::get(context));
 }
 
+// The value type an aggregate reduces: the T in a !nl.chunk<!storage.nullable<T>>.
+// Aggregates fold property values, so an update's input and a result's output are
+// always such chunks. Returns a null Type for anything else (an ID chunk, say), so
+// the caller can reject it.
+Type aggregateValueType(Type chunkType) {
+    const auto chunk = dyn_cast<ChunkType>(chunkType);
+    if (!chunk) {
+        return Type();
+    }
+
+    const auto nullable = dyn_cast<storage::NullableType>(chunk.getElementType());
+    if (!nullable) {
+        return Type();
+    }
+
+    return nullable.getValueType();
+}
+
+// The nl.aggregate that produced this state handle, or a null op if the handle is
+// not the result of one (a block argument, say). nl.aggregate_update /
+// nl.aggregate_result use it to reconcile their kind with the accumulator's reset.
+Aggregate producingAggregate(Value state) {
+    return state.getDefiningOp<Aggregate>();
+}
+
 // Out- and in-edge fetches expose the same row of chunks - source node IDs,
 // edge IDs, edge type IDs and target node IDs - followed by one filtered chunk
 // per carried column, so a loop body written for one direction works unchanged
@@ -334,6 +359,88 @@ LogicalResult For::verify() {
 LogicalResult Output::verify() {
     if (getLimit() && getSkip()) {
         return emitOpError("carries both a limit and a skip handle; a folded output takes at most one");
+    }
+
+    return success();
+}
+
+// avg accumulates a running sum as f64, so its accumulator state must be an f64;
+// sum/min/max accumulate in the value's own type, so any value element type is
+// fine here (the update and result ops check the input/output against it).
+LogicalResult Aggregate::verify() {
+    if (getKind() == storage::AggregateKind::Avg) {
+        const auto stateType = cast<AggregateStateType>(getState().getType());
+        if (!isa<Float64Type>(stateType.getElementType())) {
+            return emitOpError("avg must produce an f64 accumulator state");
+        }
+    }
+
+    return success();
+}
+
+// The fold handler is selected from this op's kind and the input's value type, and
+// it reads the accumulator as its own type; the accumulator was reset by the
+// producing nl.aggregate's kind. Reconcile all three so a mismatch is rejected
+// rather than folding into a wrongly-typed or wrongly-initialized accumulator.
+LogicalResult AggregateUpdate::verify() {
+    const storage::AggregateKind kind = getKind();
+
+    // The input is a property value chunk; its value type is what the fold reads.
+    const Type inputValueType = aggregateValueType(getRows().getType());
+    if (!inputValueType) {
+        return emitOpError("input must be a nullable value chunk (a property column)");
+    }
+
+    // avg folds any numeric input into an f64 accumulator; sum/min/max fold into an
+    // accumulator of the input's own value type.
+    const Type accumulatorType = cast<AggregateStateType>(getState().getType()).getElementType();
+    if (kind == storage::AggregateKind::Avg) {
+        if (!isa<Float64Type>(accumulatorType)) {
+            return emitOpError("avg must fold into an f64 accumulator state");
+        }
+    } else if (inputValueType != accumulatorType) {
+        return emitOpError("sum/min/max must fold into an accumulator of the input's value type");
+    }
+
+    // The accumulator's reset depends on the producer's kind (a present zero for
+    // sum/avg, null for min/max), so a differing kind here folds into the wrong one.
+    if (Aggregate producer = producingAggregate(getState())) {
+        if (producer.getKind() != kind) {
+            return emitOpError("kind must match the nl.aggregate that produced the state");
+        }
+    }
+
+    return success();
+}
+
+// The result sibling of AggregateUpdate::verify: the emit handler copies the
+// accumulator into the result (or divides by the count for avg), both read as the
+// result's value type, so the result must be a nullable value chunk whose value
+// type matches the reduction, and the kind must match the producer.
+LogicalResult AggregateResult::verify() {
+    const storage::AggregateKind kind = getKind();
+
+    const Type resultValueType = aggregateValueType(getResult().getType());
+    if (!resultValueType) {
+        return emitOpError("result must be a nullable value chunk");
+    }
+
+    // avg emits an f64 result from an f64 accumulator; sum/min/max emit a result of
+    // the accumulator's own value type.
+    const Type accumulatorType = cast<AggregateStateType>(getState().getType()).getElementType();
+    if (kind == storage::AggregateKind::Avg) {
+        const bool bothF64 = isa<Float64Type>(accumulatorType) && isa<Float64Type>(resultValueType);
+        if (!bothF64) {
+            return emitOpError("avg must emit an f64 result from an f64 accumulator state");
+        }
+    } else if (resultValueType != accumulatorType) {
+        return emitOpError("sum/min/max must emit a result of the accumulator's value type");
+    }
+
+    if (Aggregate producer = producingAggregate(getState())) {
+        if (producer.getKind() != kind) {
+            return emitOpError("kind must match the nl.aggregate that produced the state");
+        }
     }
 
     return success();

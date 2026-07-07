@@ -234,6 +234,219 @@ size_t countPresentColumn(const Column* column) {
     });
 }
 
+// Reset a sum/avg accumulator to a present zero (its identity): a running sum
+// starts at zero and stays present regardless of nulls, so an empty input sums
+// to zero, matching Cypher.
+template <typename Primitive>
+void aggregateResetZero(NLAggregateState* state) {
+    auto* accumulator = static_cast<ColumnOptVector<Primitive>*>(state->getAccumulator());
+    accumulator->getRaw().assign(1, std::optional<Primitive>(Primitive {}));
+    state->setCount(0);
+}
+
+// Reset a min/max accumulator to null: with no non-null row seen yet there is no
+// extreme, and an all-null (or empty) input reduces to null, matching Cypher.
+template <typename Primitive>
+void aggregateResetNull(NLAggregateState* state) {
+    auto* accumulator = static_cast<ColumnOptVector<Primitive>*>(state->getAccumulator());
+    accumulator->getRaw().assign(1, std::nullopt);
+    state->setCount(0);
+}
+
+// Add two aggregate values with defined overflow. A signed integer sum wraps in
+// two's complement (matching Cypher's Java-long integer sum) rather than invoking
+// C++ signed-overflow undefined behavior; unsigned integers already wrap by the
+// language, and doubles use the built-in +.
+template <typename Primitive>
+Primitive numericAdd(Primitive accumulator, Primitive value) {
+    if constexpr (std::is_integral_v<Primitive> && std::is_signed_v<Primitive>) {
+        using Unsigned = std::make_unsigned_t<Primitive>;
+        return static_cast<Primitive>(static_cast<Unsigned>(accumulator) + static_cast<Unsigned>(value));
+    } else {
+        return accumulator + value;
+    }
+}
+
+// Fold a chunk's present values into a sum accumulator (same primitive as the
+// input). The accumulator is always present, so read-modify-write its one row.
+template <typename Primitive>
+void aggregateUpdateSum(NLAggregateState* state, const Column* input) {
+    auto* accumulator = static_cast<ColumnOptVector<Primitive>*>(state->getAccumulator());
+    std::optional<Primitive>& current = accumulator->getRaw().front();
+    const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
+
+    Primitive running = current.value();
+    for (const std::optional<Primitive>& value : inputRaw) {
+        if (value.has_value()) {
+            running = numericAdd(running, *value);
+        }
+    }
+
+    current = running;
+}
+
+// Fold a chunk's present values into a min (IsMax false) or max (IsMax true)
+// accumulator. The first present value seeds the accumulator; later values
+// replace it when more extreme. Nulls are skipped, so an all-null input leaves
+// the accumulator null.
+template <typename Primitive, bool IsMax>
+void aggregateUpdateMinMax(NLAggregateState* state, const Column* input) {
+    auto* accumulator = static_cast<ColumnOptVector<Primitive>*>(state->getAccumulator());
+    std::optional<Primitive>& current = accumulator->getRaw().front();
+    const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
+
+    for (const std::optional<Primitive>& value : inputRaw) {
+        if (!value.has_value()) {
+            continue;
+        }
+
+        if (!current.has_value()) {
+            current = *value;
+        } else if constexpr (IsMax) {
+            if (*current < *value) {
+                current = *value;
+            }
+        } else {
+            if (*value < *current) {
+                current = *value;
+            }
+        }
+    }
+}
+
+// Fold a chunk's present values into an avg accumulator: a running f64 sum plus a
+// count of the non-null rows (the input primitive is widened to f64). avg divides
+// the two at the emit step, so both are accumulated here.
+template <typename Primitive>
+void aggregateUpdateAvg(NLAggregateState* state, const Column* input) {
+    auto* accumulator = static_cast<ColumnOptVector<double>*>(state->getAccumulator());
+    std::optional<double>& current = accumulator->getRaw().front();
+    const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
+
+    double running = current.value();
+    size_t seen = 0;
+    for (const std::optional<Primitive>& value : inputRaw) {
+        if (value.has_value()) {
+            running += static_cast<double>(*value);
+            seen++;
+        }
+    }
+
+    current = running;
+    state->addCount(seen);
+}
+
+// Emit a sum/min/max result: the accumulator already holds the reduced value in
+// the result's own type, so copy its single row into the output (a present sum,
+// or the extreme / null for min/max).
+template <typename Primitive>
+void aggregateResultCopy(const NLAggregateState* state, Column* output) {
+    const auto* accumulator = static_cast<const ColumnOptVector<Primitive>*>(state->getAccumulator());
+    auto* typedOutput = static_cast<ColumnOptVector<Primitive>*>(output);
+    typedOutput->getRaw().assign(1, accumulator->getRaw().front());
+}
+
+// Emit an avg result: divide the running f64 sum by the non-null count. With no
+// non-null row the average is null (division is undefined), matching Cypher.
+void aggregateResultAvg(const NLAggregateState* state, Column* output) {
+    const auto* accumulator = static_cast<const ColumnOptVector<double>*>(state->getAccumulator());
+    auto* typedOutput = static_cast<ColumnOptVector<double>*>(output);
+    std::vector<std::optional<double>>& outputRaw = typedOutput->getRaw();
+    const size_t count = state->getCount();
+
+    if (count == 0) {
+        outputRaw.assign(1, std::nullopt);
+    } else {
+        const double average = accumulator->getRaw().front().value() / static_cast<double>(count);
+        outputRaw.assign(1, std::optional<double>(average));
+    }
+}
+
+// The fold handler for a sum over a column of this value type. sum adds the
+// values, so only a numeric column is valid - a string or bool sum is rejected
+// (which also keeps aggregateUpdateSum from being instantiated for a type whose
+// operator+= would not compile).
+NLAggregateUpdateFunction selectSumUpdate(ValueType inputType) {
+    switch (inputType) {
+        case ValueType::Int64:
+            return &aggregateUpdateSum<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &aggregateUpdateSum<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &aggregateUpdateSum<types::Double::Primitive>;
+        break;
+
+        default:
+            throw IRException("sum requires a numeric column");
+        break;
+    }
+
+    return nullptr;
+}
+
+// The fold handler for an avg over a column of this value type. avg widens each
+// value to f64, so - like sum - only a numeric column is valid.
+NLAggregateUpdateFunction selectAvgUpdate(ValueType inputType) {
+    switch (inputType) {
+        case ValueType::Int64:
+            return &aggregateUpdateAvg<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &aggregateUpdateAvg<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &aggregateUpdateAvg<types::Double::Primitive>;
+        break;
+
+        default:
+            throw IRException("avg requires a numeric column");
+        break;
+    }
+
+    return nullptr;
+}
+
+// The fold handler for a min (IsMax false) or max (IsMax true) over a column of
+// this value type. min/max order the values, so any orderable type is valid -
+// numbers, bools and strings - but an embedding has no order (its < would not
+// compile), so it is rejected.
+template <bool IsMax>
+NLAggregateUpdateFunction selectMinMaxUpdate(ValueType inputType) {
+    switch (inputType) {
+        case ValueType::Int64:
+            return &aggregateUpdateMinMax<types::Int64::Primitive, IsMax>;
+        break;
+
+        case ValueType::UInt64:
+            return &aggregateUpdateMinMax<types::UInt64::Primitive, IsMax>;
+        break;
+
+        case ValueType::Double:
+            return &aggregateUpdateMinMax<types::Double::Primitive, IsMax>;
+        break;
+
+        case ValueType::Bool:
+            return &aggregateUpdateMinMax<types::Bool::Primitive, IsMax>;
+        break;
+
+        case ValueType::String:
+            return &aggregateUpdateMinMax<types::String::Primitive, IsMax>;
+        break;
+
+        default:
+            throw IRException("min/max requires an orderable column");
+        break;
+    }
+
+    return nullptr;
+}
+
 // Execute a get_out_edges/get_in_edges loop
 template <typename ChunkWriterType>
 void runEdgeLoopSteps(NLExecutionContext* context,
@@ -601,6 +814,29 @@ void NLExecutor::runCountResult(NLExecutionContext* context, NLFunctionData* dat
     raw.assign(1, static_cast<uint64_t>(count));
 }
 
+void NLExecutor::runAggregateReset(NLExecutionContext* context, NLFunctionData* data) {
+    const NLAggregateResetData* reset = static_cast<NLAggregateResetData*>(data);
+    reset->getReset()(reset->getState());
+}
+
+void NLExecutor::runAggregateUpdate(NLExecutionContext* context, NLFunctionData* data) {
+    const NLAggregateUpdateData* update = static_cast<NLAggregateUpdateData*>(data);
+
+    // Fold this step's non-null values into the accumulator the way its kind and
+    // value type demand (add for sum/avg, keep the extreme for min/max).
+    update->getUpdate()(update->getState(), update->getInput());
+}
+
+void NLExecutor::runAggregateResult(NLExecutionContext* context, NLFunctionData* data) {
+    const NLAggregateResultData* result = static_cast<NLAggregateResultData*>(data);
+
+    // The aggregate collapses every folded row to a single result row: write the
+    // reduced value into the output chunk's one nullable row. Runs after the
+    // producing loop, so the accumulator holds the whole dataflow's reduction;
+    // nl.output emits this chunk at function scope.
+    result->getResult()(result->getState(), result->getOutput());
+}
+
 NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {
     switch (kind) {
         case NLChunkKind::NodeID:
@@ -833,6 +1069,64 @@ NLCountFunction NLExecutor::selectOptCountFunction(ValueType valueType) {
     ValueTypeDispatcher(valueType).execute(select);
 
     return count;
+}
+
+NLAggregateResetFunction NLExecutor::selectAggregateReset(AggregateKind kind, ValueType accumulatorType) {
+    // sum/avg reset to a present zero (their identity); min/max reset to null. Both
+    // resets compile for any value type and lowering has already validated the
+    // kind / type pairing (and the update selector re-checks it), so a single
+    // dispatch over the accumulator type suffices here.
+    const bool resetsToZero = (kind == AggregateKind::Sum || kind == AggregateKind::Avg);
+
+    NLAggregateResetFunction reset = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        reset = resetsToZero ? &aggregateResetZero<typename T::Primitive>
+                             : &aggregateResetNull<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(accumulatorType).execute(select);
+
+    return reset;
+}
+
+NLAggregateUpdateFunction NLExecutor::selectAggregateUpdate(AggregateKind kind, ValueType inputType) {
+    switch (kind) {
+        case AggregateKind::Sum:
+            return selectSumUpdate(inputType);
+        break;
+
+        case AggregateKind::Avg:
+            return selectAvgUpdate(inputType);
+        break;
+
+        case AggregateKind::Min:
+            return selectMinMaxUpdate</*IsMax=*/false>(inputType);
+        break;
+
+        case AggregateKind::Max:
+            return selectMinMaxUpdate</*IsMax=*/true>(inputType);
+        break;
+    }
+
+    bioassert(false, "Unhandled aggregate kind");
+    return nullptr;
+}
+
+NLAggregateResultFunction NLExecutor::selectAggregateResult(AggregateKind kind, ValueType resultType) {
+    if (kind == AggregateKind::Avg) {
+        // avg always emits an f64 (the running sum divided by the count), whatever
+        // the input type was.
+        return &aggregateResultAvg;
+    }
+
+    // sum/min/max hold the reduced value in the result's own type, so the emit is a
+    // copy of the accumulator's single row - valid for any value type.
+    NLAggregateResultFunction result = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        result = &aggregateResultCopy<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(resultType).execute(select);
+
+    return result;
 }
 
 NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
