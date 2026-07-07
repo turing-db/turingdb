@@ -516,20 +516,24 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
 
     for (SymbolExpr* yieldItemExpr : *yieldItems) {
         const Symbol* yieldItem = yieldItemExpr->getSymbol();
+        const std::string_view yieldName = yieldItem->getName();
 
-        if (yieldItem->getName() != "ids") {
-            throwError(fmt::format("VECTOR SEARCH only supports YIELD ids, got '{}'",
-                                   yieldItem->getName()), stmt);
+        EvaluatedType yieldType = EvaluatedType::Invalid;
+        if (yieldName == "ids") {
+            yieldType = EvaluatedType::Integer;
+        } else if (yieldName == "score") {
+            yieldType = EvaluatedType::Double;
+        } else {
+            throwError(fmt::format("VECTOR SEARCH only supports YIELD ids and score, got '{}'",
+                                   yieldName), stmt);
         }
 
-        if (_ctxt->hasDecl(yieldItem->getName())) {
-            throwError(fmt::format("Variable '{}' already declared", yieldItem->getName()),
+        if (_ctxt->hasDecl(yieldName)) {
+            throwError(fmt::format("Variable '{}' already declared", yieldName),
                        yieldItemExpr);
         }
 
-        VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast,
-                                                       EvaluatedType::Integer,
-                                                       yieldItem->getName());
+        VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast, yieldType, yieldName);
         yieldItemExpr->setDecl(decl);
         yieldItemExpr->setExprVarDecl(decl);
     }

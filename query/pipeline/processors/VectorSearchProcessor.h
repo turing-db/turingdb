@@ -25,11 +25,14 @@ public:
 
     PipelineValuesOutputInterface& outIds() { return _outIds; }
 
+    void setScoreColumn(NamedColumn* scoreColumn) { _scoreColumn = scoreColumn; }
+
 protected:
     std::string_view _indexName;
     uint64_t _k {10};
     std::vector<float> _queryVector;
     PipelineValuesOutputInterface _outIds;
+    NamedColumn* _scoreColumn {nullptr};
 
     VectorSearchProcessor(std::string_view indexName,
                           uint64_t k,

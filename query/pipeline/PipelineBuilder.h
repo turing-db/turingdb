@@ -233,7 +233,8 @@ public:
                                                    std::string_view propertyName);
     PipelineValuesOutputInterface& addVectorSearch(std::string_view indexName,
                                                    uint64_t k,
-                                                   const std::vector<float>& queryVector);
+                                                   const std::vector<float>& queryVector,
+                                                   NamedColumn*& scoreColumn);
     PipelineValueOutputInterface& addDeleteVectorIndex(std::string_view indexName);
     PipelineValuesOutputInterface& addShowVectorIndexes();
 
