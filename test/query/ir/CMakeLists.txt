@@ -15,3 +15,7 @@ add_ir_tests(test_query_ir_nlexecutor NLExecutorTest.cpp)
 add_ir_tests(test_query_ir_dblowering DBLoweringTest.cpp)
 add_ir_tests(test_query_ir_dbdialect DBDialectTest.cpp)
 add_ir_tests(test_query_ir_nldialect NLDialectTest.cpp)
+
+# The branch two-hop test runs against the shared SimpleGraph fixture.
+add_ir_tests(test_query_ir_branch_two_hop BranchTwoHopTest.cpp)
+target_link_libraries(test_query_ir_branch_two_hop PRIVATE turing_db_examples_s)
