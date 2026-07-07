@@ -156,6 +156,8 @@ private:
 // emits: one !nl.chunk<!storage.nullable<i64>> with one row (present or null).
 class CollectingOptInt64Sink : public NLOutputSink {
 public:
+    using OptInt64Values = std::vector<std::optional<int64_t>>;
+
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
@@ -168,16 +170,18 @@ public:
         }
     }
 
-    const std::vector<std::optional<int64_t>>& getValues() const { return _values; }
+    const OptInt64Values& getValues() const { return _values; }
 
 private:
-    std::vector<std::optional<int64_t>> _values;
+    OptInt64Values _values;
 };
 
 // Collects the single-row nullable double result an AVG emits: one
 // !nl.chunk<!storage.nullable<f64>> with one row.
 class CollectingOptDoubleSink : public NLOutputSink {
 public:
+    using OptDoubleValues = std::vector<std::optional<double>>;
+
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
@@ -190,10 +194,10 @@ public:
         }
     }
 
-    const std::vector<std::optional<double>>& getValues() const { return _values; }
+    const OptDoubleValues& getValues() const { return _values; }
 
 private:
-    std::vector<std::optional<double>> _values;
+    OptDoubleValues _values;
 };
 
 // Collects (node ID, nullable string property) rows. The value column is a

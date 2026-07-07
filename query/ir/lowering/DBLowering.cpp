@@ -74,28 +74,31 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
     const bool isString = mlir::isa<storage::StringType>(inputElement);
 
     switch (kind) {
-        case storage::AggregateKind::Sum:
+        case storage::AggregateKind::Sum: {
             if (!isNumeric) {
                 throw IRException("db.sum requires a numeric column");
             }
             return inputElement;
+        }
         break;
 
-        case storage::AggregateKind::Avg:
+        case storage::AggregateKind::Avg: {
             if (!isNumeric) {
                 throw IRException("db.avg requires a numeric column");
             }
             return builder.getF64Type();
+        }
         break;
 
         case storage::AggregateKind::Min:
-        case storage::AggregateKind::Max:
+        case storage::AggregateKind::Max: {
             // min/max order the values, so anything with a natural order is fine -
             // numbers, strings and bools - but an embedding has none.
             if (!isNumeric && !isString && !isBool) {
                 throw IRException("db.min/db.max requires an orderable column");
             }
             return inputElement;
+        }
         break;
     }
 
