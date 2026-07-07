@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <string_view>
 #include <type_traits>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -339,7 +340,7 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
 
     const Projection::Items& returned = proj->items();
 
-    StringHashMap<std::string_view, mlir::Value> finalIdentities;
+    std::unordered_map<std::string_view, mlir::Value> finalIdentities;
     for (auto& [cypherVar, mlirCol] : _varMap) {
         const std::string_view varName = cypherVar->getName();
 
