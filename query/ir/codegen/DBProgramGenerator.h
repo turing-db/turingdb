@@ -32,6 +32,10 @@ private:
     // Maps a Cypher variable to all of its MLIR variable uses, in order of appearence
     VariableIdentityMap _varMap;
 
+    void generateTraversal(const CypherAST* ast);
+
+    void generateOutput(const CypherAST* ast);
+
     void addScanNodes(const VariableDependency* var);
 
     void addGetOutEdges(const VariableDependency* src, const VariableDependency* edge, const VariableDependency* tgt);

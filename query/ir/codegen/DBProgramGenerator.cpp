@@ -1,14 +1,18 @@
 #include "DBProgramGenerator.h"
 
 #include <algorithm>
+#include <string_view>
+#include <type_traits>
 #include <unordered_set>
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/TypeRange.h"
+#include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
+#include "llvm/ADT/SmallVector.h"
 
 #include "DBOps.h"
 #include "DBTypes.h"
@@ -18,6 +22,16 @@
 #include "EdgeMetadata.h"
 #include "VariableDependency.h"
 #include "VariableDependencyGraph.h"
+
+#include "CypherAST.h"
+#include "Projection.h"
+#include "QueryCommand.h"
+#include "SinglePartQuery.h"
+#include "decl/VarDecl.h"
+#include "expr/Expr.h"
+#include "stmt/ReturnStmt.h"
+
+#include "StringHashMap.h"
 
 #include "BioAssert.h"
 #include "FatalException.h"
@@ -130,18 +144,25 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
     _opBuilder = &builder;
 
     _mlirCtxt->loadDialect<mlir::db::DB>();
-    const mlir::Location loc = _opBuilder->getUnknownLoc();
-
-    VariableDependencyGraph vdg;
-    vdg.buildFromAST(ast);
+    const mlir::Location uloc = _opBuilder->getUnknownLoc();
 
     { // Create main
         _opBuilder->setInsertionPointToEnd(module->getBody());
         const mlir::FunctionType funcType = mlir::FunctionType::get(_mlirCtxt, {}, {});
-        auto func = _opBuilder->create<mlir::func::FuncOp>(loc, "main", funcType);
+        auto func = _opBuilder->create<mlir::func::FuncOp>(uloc, "main", funcType);
         mlir::Block& block = *func.addEntryBlock();
         _opBuilder->setInsertionPointToStart(&block);
     }
+
+    generateTraversal(ast);
+    generateOutput(ast);
+
+    _opBuilder->create<mlir::func::ReturnOp>(uloc);
+}
+
+void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
+    VariableDependencyGraph vdg;
+    vdg.buildFromAST(ast);
 
     if (vdg.empty()) {
         return;
@@ -157,7 +178,7 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
 
     std::vector<Frame> stack;
 
-    // TODO: Use nodes at ends of diameter, find using dijkstra
+    // TODO: Use nodes at ends of diameter
     for (const VariableDependency& root : vdg.vars()) {
         if (defined.contains(&root)) {
             continue;
@@ -290,4 +311,60 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
             defined.insert(tgt);
         }
     }
+}
+
+void DBProgramGenerator::generateOutput(const CypherAST* ast) {
+    const CypherAST::QueryCommands& queries = ast->queries();
+    bioassert(queries.size() == 1, "Multiple queries not yet supported.");
+
+    const QueryCommand* query = queries.front();
+
+    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
+    if (!sglPart) {
+        throw TuringException("Non-single part queries are not yet supported.");
+    }
+
+    const ReturnStmt* rtn = sglPart->getReturnStmt();
+    const Projection* proj = rtn->getProjection();
+
+    const bool all = proj->isReturningAll();
+    // FIXME: Detect the unused MLIR vars are return those
+    bioassert(!all, "Returning all is not yet supported.");
+
+    const Projection::Items& returned = proj->items();
+
+    StringHashMap<std::string_view, mlir::Value> finalIdentities;
+    for (auto& [cypherVar, mlirCol] : _varMap) {
+        const mlir::Value finalValue = mlirCol.back();
+        const std::string_view varName = cypherVar->getName();
+
+        finalIdentities[varName] = finalValue;
+    }
+
+    const auto lookup = [&](auto&& item) -> mlir::Value {
+        using Type = std::remove_cvref_t<decltype(item)>;
+
+        const VarDecl* var = nullptr;
+        if constexpr (std::is_same_v<Type, Expr* >) {
+            var = item->getExprVarDecl();
+        } else {
+            var = item;
+        }
+
+        const std::string_view name = var->getName();
+        const auto findIt = finalIdentities.find(name);
+        bioassert(findIt != end(finalIdentities), "Return item {} not found,", name);
+
+        const mlir::Value mlirCol = findIt->second;
+        return mlirCol;
+    };
+
+    llvm::SmallVector<mlir::Value, 5> outputted;
+    for (const Projection::ReturnItem item : returned) {
+        const mlir::Value itemCol = std::visit(lookup, item);
+        outputted.push_back(itemCol);
+    }
+
+    const mlir::Location loc = _opBuilder->getUnknownLoc();
+    _opBuilder->create<mlir::db::Output>(loc, mlir::ValueRange{outputted});
 }
