@@ -335,8 +335,10 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
 
     StringHashMap<std::string_view, mlir::Value> finalIdentities;
     for (auto& [cypherVar, mlirCol] : _varMap) {
-        const mlir::Value finalValue = mlirCol.back();
         const std::string_view varName = cypherVar->getName();
+
+        bioassert(not mlirCol.empty(), "No definitions for {}", varName);
+        const mlir::Value finalValue = mlirCol.back();
 
         finalIdentities[varName] = finalValue;
     }
@@ -353,7 +355,7 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
 
         const std::string_view name = var->getName();
         const auto findIt = finalIdentities.find(name);
-        bioassert(findIt != end(finalIdentities), "Return item {} not found,", name);
+        bioassert(findIt != end(finalIdentities), "Return item {} not found.", name);
 
         const mlir::Value mlirCol = findIt->second;
         return mlirCol;
