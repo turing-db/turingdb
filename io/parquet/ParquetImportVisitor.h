@@ -63,7 +63,8 @@ protected:
     std::unordered_map<size_t, std::span<const int64_t>> _propInt64Vals;
     std::unordered_map<size_t, std::span<const double>> _propDoubleVals;
     std::unordered_map<size_t, std::span<const bool>> _propBoolVals;
-    std::unordered_map<size_t, std::span<const parquet::ByteArray>> _propByteArrayVals;
+    // String properties need be owning as Parquet pages strings in and out when reading
+    std::unordered_map<size_t, std::vector<std::string>> _propByteArrayVals;
 
     // Maps a property column index => definition levels of that column.
     // Used to encode null/nans for simple types.
