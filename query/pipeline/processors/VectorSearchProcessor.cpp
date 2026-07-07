@@ -86,11 +86,14 @@ void VectorSearchProcessor::execute() {
     const std::span<const int64_t> ids = result.ids();
     colIds->getRaw().assign(ids.begin(), ids.end());
 
+    // There is a single metric column: the score. The search result reports it as
+    // a distance (squared L2 for EUCLID, inner product for cosine), which is the
+    // value we expose to the user as the per-result score.
     using ColumnDouble = ColumnVector<types::Double::Primitive>;
     ColumnDouble* scoreColumn = _scoreColumn->as<ColumnDouble>();
 
-    const std::span<const float> distances = result.distances();
-    scoreColumn->getRaw().assign(distances.begin(), distances.end());
+    const std::span<const float> scores = result.distances();
+    scoreColumn->getRaw().assign(scores.begin(), scores.end());
 
     _outIds.getPort()->writeData();
     finish();
