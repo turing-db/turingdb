@@ -139,6 +139,51 @@ private:
     std::vector<uint64_t> _values;
 };
 
+// Collects the single-row nullable int64 result a SUM/MIN/MAX over an Int64
+// column emits: one !nl.chunk<!storage.nullable<i64>> with one row. Captures the
+// value (present or null), so a test can assert both the arity and the reduction.
+class CollectingOptInt64Sink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* values = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[0]);
+        ASSERT_NE(values, nullptr);
+
+        const auto& raw = values->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _values.push_back(raw[rowIndex]);
+        }
+    }
+
+    const std::vector<std::optional<int64_t>>& getValues() const { return _values; }
+
+private:
+    std::vector<std::optional<int64_t>> _values;
+};
+
+// Collects the single-row nullable double result an AVG emits: one
+// !nl.chunk<!storage.nullable<f64>> with one row.
+class CollectingOptDoubleSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* values = dynamic_cast<const ColumnOptVector<double>*>(chunks[0]);
+        ASSERT_NE(values, nullptr);
+
+        const auto& raw = values->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _values.push_back(raw[rowIndex]);
+        }
+    }
+
+    const std::vector<std::optional<double>>& getValues() const { return _values; }
+
+private:
+    std::vector<std::optional<double>> _values;
+};
+
 // Scan all nodes and output them
 constexpr const char* scanProgram = R"mlir(
 func.func @main() {
@@ -356,6 +401,51 @@ func.func @main() {
 }
 )mlir";
 
+// Scan all nodes, read each one's "score", and reduce the non-null values with
+// the given aggregate - Cypher sum/min/max(a.score). The accumulator is created
+// once at function scope, folded per scan chunk by nl.aggregate_update, and - after
+// the loop - nl.aggregate_result materializes the single reduced row that the
+// function-scope nl.output emits. A null value (node 2 has no score) is ignored.
+// sum/min/max keep the Int64 type, so the state and result are !nl...<i64>.
+std::string nlIntAggregateScoresProgram(const char* kind) {
+    return std::string("func.func @main() {\n"
+                       "  %score = nl.get_property_type(\"score\")\n"
+                       "  %s = nl.aggregate ")
+           + kind
+           + " : !nl.aggregate_state<i64>\n"
+             "  %nodes = nl.scan_nodes()\n"
+             "  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {\n"
+             "    %values = nl.get_node_properties(%a, %score) : !nl.chunk<!storage.nullable<i64>>\n"
+             "    nl.aggregate_update "
+           + kind
+           + " %s, %values : !nl.aggregate_state<i64>, !nl.chunk<!storage.nullable<i64>>\n"
+             "  }\n"
+             "  %r = nl.aggregate_result "
+           + kind
+           + " (%s) : !nl.aggregate_state<i64> -> !nl.chunk<!storage.nullable<i64>>\n"
+             "  nl.output(%r) : !nl.chunk<!storage.nullable<i64>>\n"
+             "  func.return\n"
+             "}\n";
+}
+
+// avg(a.score): the same shape, but avg accumulates in f64 (the running sum) and
+// divides by the non-null count, so the state and result are !nl...<f64> while the
+// input chunk stays the Int64 property column.
+constexpr const char* nlAvgScoresProgram = R"mlir(
+func.func @main() {
+  %score = nl.get_property_type("score")
+  %s = nl.aggregate avg : !nl.aggregate_state<f64>
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %values = nl.get_node_properties(%a, %score) : !nl.chunk<!storage.nullable<i64>>
+    nl.aggregate_update avg %s, %values : !nl.aggregate_state<f64>, !nl.chunk<!storage.nullable<i64>>
+  }
+  %r = nl.aggregate_result avg (%s) : !nl.aggregate_state<f64> -> !nl.chunk<!storage.nullable<f64>>
+  nl.output(%r) : !nl.chunk<!storage.nullable<f64>>
+  func.return
+}
+)mlir";
+
 // Counts appendChunks calls and the total rows emitted, to prove a limited run
 // emits a clamped prefix (a partial final chunk) and stops the loop early.
 class CountingSink : public NLOutputSink {
@@ -559,6 +649,33 @@ protected:
         builder.addNodeProperty<types::Int64>(nodeA, scoreID, 100);
         builder.addNodeProperty<types::Int64>(nodeB, scoreID, 200);
         // nodeC has no "score" property, so a property read returns null for it
+
+        const auto submitResult = change->access().submit(*_jobSystem);
+        EXPECT_TRUE(submitResult);
+
+        return graph;
+    }
+
+    // Two nodes with a "score" Int64 property declared in the schema but assigned to
+    // neither, so every score read is null. Exercises the aggregate identity/empty
+    // branches: sum of no non-null value is a present zero, min/max/avg are null. The
+    // property is still in the schema, so nl.get_property_type("score") resolves.
+    std::unique_ptr<Graph> buildAllNullScoredGraph() {
+        auto graph = Graph::create();
+
+        auto change = graph->newChange();
+        auto* commitBuilder = change->access().getTip();
+        auto& builder = commitBuilder->newBuilder();
+        auto& metadata = builder.getMetadata();
+
+        metadata.getOrCreateLabel("0");
+        metadata.getOrCreateEdgeType("0");
+        metadata.getOrCreatePropertyType("score", ValueType::Int64);
+
+        const LabelSet labelset = LabelSet::fromList({0});
+        builder.addNode(labelset);
+        builder.addNode(labelset);
+        // No node carries a "score", so every property read returns null
 
         const auto submitResult = change->access().submit(*_jobSystem);
         EXPECT_TRUE(submitResult);
@@ -1103,6 +1220,119 @@ TEST_F(NLExecutorTest, countsOnlyNonNullValues) {
     runProgram(nlCountScoresProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
 
     const std::vector<uint64_t> expected {2};
+    EXPECT_EQ(sink.getValues(), expected);
+}
+
+TEST_F(NLExecutorTest, sumsNonNullValues) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Scores 100, 200 and null: sum(a.score) adds the present values, so the single
+    // result row is a present 300 (the null is ignored).
+    CollectingOptInt64Sink sink;
+    runProgram(nlIntAggregateScoresProgram("sum").c_str(), reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<std::optional<int64_t>> expected {300};
+    EXPECT_EQ(sink.getValues(), expected);
+}
+
+TEST_F(NLExecutorTest, minOfNonNullValues) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // min(a.score) over 100, 200, null is the smallest present value, 100.
+    CollectingOptInt64Sink sink;
+    runProgram(nlIntAggregateScoresProgram("min").c_str(), reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<std::optional<int64_t>> expected {100};
+    EXPECT_EQ(sink.getValues(), expected);
+}
+
+TEST_F(NLExecutorTest, maxOfNonNullValues) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // max(a.score) over 100, 200, null is the largest present value, 200.
+    CollectingOptInt64Sink sink;
+    runProgram(nlIntAggregateScoresProgram("max").c_str(), reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<std::optional<int64_t>> expected {200};
+    EXPECT_EQ(sink.getValues(), expected);
+}
+
+TEST_F(NLExecutorTest, avgOfNonNullValues) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // avg(a.score) divides the sum of the present values (300) by their count (2),
+    // ignoring the null, so the single result row is a present 150.0.
+    CollectingOptDoubleSink sink;
+    runProgram(nlAvgScoresProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<std::optional<double>> expected {150.0};
+    EXPECT_EQ(sink.getValues(), expected);
+}
+
+TEST_F(NLExecutorTest, sumsAcrossChunks) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // chunkSize 1 folds one node per step, so the accumulator is grown across
+    // several steps; nl.aggregate resets it once at function scope, not per chunk,
+    // so the sum is still 300.
+    CollectingOptInt64Sink sink;
+    runProgram(nlIntAggregateScoresProgram("sum").c_str(), reader.getView(), 1, sink);
+
+    const std::vector<std::optional<int64_t>> expected {300};
+    EXPECT_EQ(sink.getValues(), expected);
+}
+
+TEST_F(NLExecutorTest, sumOfAllNullIsZero) {
+    auto graph = buildAllNullScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // No node carries a score, so sum folds no value: it stays at its identity, a
+    // present 0 (Cypher's sum of an all-null/empty input is 0, never null).
+    CollectingOptInt64Sink sink;
+    runProgram(nlIntAggregateScoresProgram("sum").c_str(), reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<std::optional<int64_t>> expected {0};
+    EXPECT_EQ(sink.getValues(), expected);
+}
+
+TEST_F(NLExecutorTest, minMaxOfAllNullIsNull) {
+    auto graph = buildAllNullScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // With no non-null value, min/max never seed their accumulator, so each emits a
+    // single null row (Cypher's min/max of an all-null/empty input is null).
+    CollectingOptInt64Sink minSink;
+    runProgram(nlIntAggregateScoresProgram("min").c_str(), reader.getView(), ChunkConfig::CHUNK_SIZE, minSink);
+    EXPECT_EQ(minSink.getValues(), (std::vector<std::optional<int64_t>> {std::nullopt}));
+
+    CollectingOptInt64Sink maxSink;
+    runProgram(nlIntAggregateScoresProgram("max").c_str(), reader.getView(), ChunkConfig::CHUNK_SIZE, maxSink);
+    EXPECT_EQ(maxSink.getValues(), (std::vector<std::optional<int64_t>> {std::nullopt}));
+}
+
+TEST_F(NLExecutorTest, avgOfAllNullIsNull) {
+    auto graph = buildAllNullScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The non-null count is zero, so avg divides nothing and emits a single null row
+    // (Cypher's avg of an all-null/empty input is null, not 0).
+    CollectingOptDoubleSink sink;
+    runProgram(nlAvgScoresProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<std::optional<double>> expected {std::nullopt};
     EXPECT_EQ(sink.getValues(), expected);
 }
 

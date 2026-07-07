@@ -68,6 +68,11 @@ private:
     // nl.count_update and nl.count_result that name the handle find the same counter
     llvm::DenseMap<mlir::Value, NLCountState*> _countStates;
 
+    // nl.aggregate handle SSA value -> the runtime accumulator it produces, so the
+    // nl.aggregate_update and nl.aggregate_result that name the handle find the same
+    // accumulator
+    llvm::DenseMap<mlir::Value, NLAggregateState*> _aggregateStates;
+
     void translateBlock(mlir::Block& block, NLStmtContainer* body);
     void translateFor(mlir::nl::For forLoop, NLStmtContainer* body);
     void translateScanLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
@@ -171,6 +176,26 @@ private:
     // nl.count_update and nl.count_result, so this throws if it was not produced by
     // an nl.count.
     NLCountState* countStateFor(mlir::Value handle) const;
+
+    // Translate an nl.aggregate: allocate its runtime accumulator (a single-row
+    // nullable value column of the state handle's element type), map the handle to
+    // it, and record the reset statement (run each time the block runs)
+    void translateAggregateState(mlir::nl::Aggregate aggregate, NLStmtContainer* body);
+
+    // Translate an nl.aggregate_update: look up the accumulator the handle names and
+    // record the fold of the chunk's non-null values into it (selected from the
+    // reduction and the input value type)
+    void translateAggregateUpdate(mlir::nl::AggregateUpdate update, NLStmtContainer* body);
+
+    // Translate an nl.aggregate_result: look up the accumulator the handle names,
+    // allocate the single-row nullable value chunk it produces, map the op result to
+    // it, and record the emit statement (materialize the reduced value)
+    void translateAggregateResult(mlir::nl::AggregateResult result, NLStmtContainer* body);
+
+    // The runtime accumulator an aggregate handle names. The handle is a required
+    // operand of nl.aggregate_update and nl.aggregate_result, so this throws if it
+    // was not produced by an nl.aggregate.
+    NLAggregateState* aggregateStateFor(mlir::Value handle) const;
 
     // Pool-allocate a buffer/loop column matching a chunk type - an ID column for
     // an ID chunk, a nullable value column for a !nl.nullable<...> chunk - and the

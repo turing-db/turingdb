@@ -863,6 +863,116 @@ private:
     Column* _output {nullptr};
 };
 
+// The reduction one nl.aggregate applies. The runtime counterpart of the MLIR
+// storage::AggregateKind: the translator maps the op's kind onto this, and it -
+// with the column value type - selects the reset/update/result handlers below.
+enum class AggregateKind {
+    Sum,
+    Min,
+    Max,
+    Avg,
+};
+
+// Runtime state of one SUM/MIN/MAX/AVG: the running accumulator. The value
+// sibling of NLCountState - where a count holds a tally, this holds the reduced
+// value in a single-row nullable value column (owned elsewhere; a borrowed
+// pointer here), plus a count of the non-null rows folded in (only avg divides by
+// it). nl.aggregate resets it, nl.aggregate_update is the sole folder, and
+// nl.aggregate_result reads it to emit the single result row. The accumulator's
+// element type is fixed by the handlers, so the state itself is type-erased.
+class NLAggregateState {
+public:
+    // The single-row accumulator column (a ColumnOptVector of the accumulator's
+    // primitive), reset by the reset handler and folded into by the update handler.
+    Column* getAccumulator() const { return _accumulator; }
+    void setAccumulator(Column* accumulator) { _accumulator = accumulator; }
+
+    // The number of non-null rows folded in so far, used only by avg.
+    size_t getCount() const { return _count; }
+    void setCount(size_t count) { _count = count; }
+    void addCount(size_t count) { _count += count; }
+
+private:
+    Column* _accumulator {nullptr};
+    size_t _count {0};
+};
+
+// Handlers of one aggregate, selected during translation from the reduction and
+// the column value type (as the count / gather / append families are), so the
+// per-type fan-out lives in one place. Reset re-initializes the accumulator (a
+// present zero for sum/avg, null for min/max) and zeroes the count; update folds
+// a chunk's non-null values into the accumulator; result writes the single
+// reduced row into the output column.
+using NLAggregateResetFunction = void (*)(NLAggregateState* state);
+using NLAggregateUpdateFunction = void (*)(NLAggregateState* state, const Column* input);
+using NLAggregateResultFunction = void (*)(const NLAggregateState* state, Column* output);
+
+// nl.aggregate data: re-initializes an accumulator each time the block it lives in
+// runs - once at function scope for a top-level aggregate. The value sibling of
+// NLCountResetData; the reset handler knows the accumulator's type and kind.
+class NLAggregateResetData : public NLFunctionData {
+public:
+    NLAggregateResetData(NLAggregateState* state, NLAggregateResetFunction reset)
+        : _state(state),
+        _reset(reset)
+    {
+    }
+
+    NLAggregateState* getState() const { return _state; }
+    NLAggregateResetFunction getReset() const { return _reset; }
+
+private:
+    NLAggregateState* _state {nullptr};
+    NLAggregateResetFunction _reset {nullptr};
+};
+
+// nl.aggregate_update data: the accumulator to fold into, the input chunk to
+// reduce, and the fold handler that reduces it (selected from the kind and the
+// input value type). Runs once per producing-loop step. The value sibling of
+// NLCountUpdateData.
+class NLAggregateUpdateData : public NLFunctionData {
+public:
+    NLAggregateUpdateData(NLAggregateState* state, const Column* input, NLAggregateUpdateFunction update)
+        : _state(state),
+        _input(input),
+        _update(update)
+    {
+    }
+
+    NLAggregateState* getState() const { return _state; }
+    const Column* getInput() const { return _input; }
+    NLAggregateUpdateFunction getUpdate() const { return _update; }
+
+private:
+    NLAggregateState* _state {nullptr};
+    const Column* _input {nullptr};
+    NLAggregateUpdateFunction _update {nullptr};
+};
+
+// nl.aggregate_result data: the emit step of an aggregate. Holds the accumulator,
+// the output column to fill with the single result row (a nullable value column),
+// and the emit handler (a copy for sum/min/max, a divide-by-count for avg). Runs
+// once, after the producing loop, so the accumulator is final. The value sibling
+// of NLCountResultData.
+class NLAggregateResultData : public NLFunctionData {
+public:
+    NLAggregateResultData(NLAggregateState* state, Column* output, NLAggregateResultFunction result)
+        : _state(state),
+        _output(output),
+        _result(result)
+    {
+    }
+
+    NLAggregateState* getState() const { return _state; }
+    Column* getOutput() const { return _output; }
+    NLAggregateResultFunction getResult() const { return _result; }
+
+private:
+    NLAggregateState* _state {nullptr};
+    Column* _output {nullptr};
+    NLAggregateResultFunction _result {nullptr};
+};
+
 // nl.output data
 class NLOutputData : public NLFunctionData {
 public:
@@ -957,6 +1067,16 @@ public:
         return statePtr;
     }
 
+    // Allocate one aggregate's runtime accumulator, owned by the program; the
+    // reset, update and emit statements that share it hold a borrowed pointer. The
+    // value sibling of allocCountState.
+    NLAggregateState* allocAggregateState() {
+        auto state = std::make_unique<NLAggregateState>();
+        NLAggregateState* statePtr = state.get();
+        _aggregateStates.push_back(std::move(state));
+        return statePtr;
+    }
+
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
@@ -971,6 +1091,7 @@ private:
     std::vector<std::unique_ptr<NLSortState>> _sortStates;
     std::vector<std::unique_ptr<NLDistinctState>> _distinctStates;
     std::vector<std::unique_ptr<NLCountState>> _countStates;
+    std::vector<std::unique_ptr<NLAggregateState>> _aggregateStates;
     NLStmtContainer _stmts;
 };
 

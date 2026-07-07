@@ -7,6 +7,10 @@ set(LLVM_TARGET_DEFINITIONS StorageTypes.td)
 mlir_tablegen(StorageTypes.h.inc     -gen-typedef-decls -dialect storage  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
 mlir_tablegen(StorageTypes.cpp.inc   -gen-typedef-defs  -dialect storage  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
 
+set(LLVM_TARGET_DEFINITIONS StorageEnums.td)
+mlir_tablegen(StorageEnums.h.inc     -gen-enum-decls    EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
+mlir_tablegen(StorageEnums.cpp.inc   -gen-enum-defs     EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
+
 add_public_tablegen_target(StorageDialectIncGen)
 
 set_source_files_properties(

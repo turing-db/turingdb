@@ -734,4 +734,104 @@ def CountResult : NLOp<"count_result", []> {
   let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
 }
 
+/**
+* Aggregate
+*/
+// NOT Pure: the value-reducing sibling of nl.count. Each nl.aggregate is a
+// distinct accumulator, so two must never be CSE'd into one, and an unread one
+// must not be DCE'd - resetting the accumulator is a side effect.
+def Aggregate : NLOp<"aggregate", []> {
+  let summary = "Create (and reset) a value-aggregate accumulator";
+  let description = [{
+    The value-reducing counterpart of nl.count. Sits at the top of the scope it
+    governs, where it resets the accumulator once per execution of that block, and
+    produces the !nl.aggregate_state handle nl.aggregate_update folds into and
+    nl.aggregate_result reads. `$kind` selects the reduction (sum/min/max/avg); the
+    state type carries the accumulator element type, so the result type is spelled.
+
+      %s = nl.aggregate sum : !nl.aggregate_state<i64>
+  }];
+
+  let arguments = (ins AggregateKind:$kind);
+  let results   = (outs NLAggregateState:$state);
+  let assemblyFormat = "$kind attr-dict `:` qualified(type($state))";
+
+  // avg accumulates a running sum as f64, so its accumulator state must be f64;
+  // the other kinds accumulate in the value's own type.
+  let hasVerifier = 1;
+}
+
+/**
+* AggregateUpdate
+*/
+// NOT Pure: it folds the chunk into the handle, so it must run exactly where it
+// sits, once per producing-loop step. The value sibling of nl.count_update.
+def AggregateUpdate : NLOp<"aggregate_update", []> {
+  let summary = "Fold this step's non-null rows into a value-aggregate accumulator";
+  let description = [{
+    Runs in the producing loop body, once per step. Reduces the present (non-null)
+    values of the current nullable value chunk into the accumulator - adding them
+    (sum/avg) or keeping the extreme (min/max) - matching Cypher, where these
+    aggregates ignore null rows. The sole accumulator mutator.
+
+      nl.aggregate_update sum %s, %v : !nl.aggregate_state<i64>, !nl.chunk<!storage.nullable<i64>>
+
+    The input is always a nullable value chunk (a property fetch); its value type
+    need not match the accumulator's - an avg of an i64 column folds into an f64
+    accumulator, so both types are spelled after the colon.
+  }];
+
+  let arguments = (ins NLAggregateState:$state, NLChunk:$rows, AggregateKind:$kind);
+
+  let assemblyFormat = [{
+    $kind $state `,` $rows attr-dict `:` qualified(type($state)) `,` qualified(type($rows))
+  }];
+
+  // The fold handler is picked from this op's kind but the accumulator was reset by
+  // the producing nl.aggregate's kind, and the handler reads the accumulator as its
+  // own value type - so a kind that disagrees with the producer, an input that is
+  // not a nullable value chunk, or a state element type that does not match the
+  // reduction would fold into a wrongly-typed or wrongly-initialized accumulator.
+  // The verifier reconciles all three so such IR is rejected rather than crashing.
+  let hasVerifier = 1;
+}
+
+/**
+* AggregateResult
+*/
+// NOT Pure: it reads the handle's mutable accumulator (set by the
+// nl.aggregate_updates in the producing loop), so it must run exactly where it
+// sits - after that loop. The value sibling of nl.count_result.
+def AggregateResult : NLOp<"aggregate_result", []> {
+  let summary = "Materialize the single result row of a value-aggregate as a chunk";
+  let description = [{
+    The emit step of a SUM/MIN/MAX/AVG. It reads a filled nl.aggregate_state and
+    materializes the reduced value directly as a single-row nullable value chunk.
+    Unlike count, an aggregate can be null (min/max/avg of no non-null row), so the
+    result is a nullable value chunk, not a plain chunk; sum is never null (0 for an
+    empty input) but rides the same nullable representation for uniformity.
+
+      %r = nl.aggregate_result sum (%s) : !nl.aggregate_state<i64> -> !nl.chunk<!storage.nullable<i64>>
+      nl.output(%r) : !nl.chunk<!storage.nullable<i64>>
+
+    Like nl.count_result it is not a source iterator: an aggregate collapses to one
+    row, so it produces the chunk in place at function scope after the producing
+    loop, and nl.output consumes it there - no emit loop.
+  }];
+
+  let arguments = (ins NLAggregateState:$state, AggregateKind:$kind);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = [{
+    $kind `(` $state `)` attr-dict `:` qualified(type($state)) `->` qualified(type($result))
+  }];
+
+  // The emit handler copies the accumulator into the result (or divides for avg),
+  // both read as the result's value type, so the result must be a nullable value
+  // chunk whose value type matches the reduction, and the kind must match the
+  // producing nl.aggregate - the verifier enforces both. The result sibling of
+  // AggregateUpdate's verifier.
+  let hasVerifier = 1;
+}
+
 #endif //TURINGDB_NL_OPS

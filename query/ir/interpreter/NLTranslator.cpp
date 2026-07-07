@@ -72,6 +72,44 @@ ValueType valueTypeFromElementType(mlir::Type elementType) {
     throw IRException("Unsupported nullable value chunk element type");
 }
 
+// The runtime reduction the interpreter dispatches on, from the MLIR one the op
+// carries. The two enums are kept separate so the runtime (NLProgram / NLExecutor)
+// stays free of the MLIR dialect headers; this is the one place they meet.
+AggregateKind toRuntimeAggregateKind(storage::AggregateKind kind) {
+    switch (kind) {
+        case storage::AggregateKind::Sum:
+            return AggregateKind::Sum;
+        break;
+
+        case storage::AggregateKind::Min:
+            return AggregateKind::Min;
+        break;
+
+        case storage::AggregateKind::Max:
+            return AggregateKind::Max;
+        break;
+
+        case storage::AggregateKind::Avg:
+            return AggregateKind::Avg;
+        break;
+    }
+
+    throw IRException("Unhandled aggregate kind");
+}
+
+// The value type wrapped by a nullable value chunk (!nl.chunk<!storage.nullable<T>>).
+// An aggregate reduces property values, so its input and result are always such
+// chunks; a chunk that is not a nullable value chunk (an ID chunk) is rejected.
+ValueType nullableChunkValueType(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+    const auto nullableType = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
+    if (!nullableType) {
+        throw IRException("aggregate requires a nullable value chunk");
+    }
+
+    return valueTypeFromElementType(nullableType.getValueType());
+}
+
 }
 
 NLTranslator::NLTranslator(NLProgram* program, LocalMemory* memory, const GraphView* view)
@@ -158,6 +196,12 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateCountUpdate(countUpdate, body);
         } else if (nl::CountResult countResult = mlir::dyn_cast<nl::CountResult>(operation)) {
             translateCountResult(countResult, body);
+        } else if (nl::Aggregate aggregate = mlir::dyn_cast<nl::Aggregate>(operation)) {
+            translateAggregateState(aggregate, body);
+        } else if (nl::AggregateUpdate aggregateUpdate = mlir::dyn_cast<nl::AggregateUpdate>(operation)) {
+            translateAggregateUpdate(aggregateUpdate, body);
+        } else if (nl::AggregateResult aggregateResult = mlir::dyn_cast<nl::AggregateResult>(operation)) {
+            translateAggregateResult(aggregateResult, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
@@ -756,6 +800,77 @@ NLCountState* NLTranslator::countStateFor(mlir::Value handle) const {
     const auto stateIt = _countStates.find(handle);
     if (stateIt == _countStates.end()) {
         throw IRException("count handle must be produced by an nl.count");
+    }
+
+    return stateIt->second;
+}
+
+void NLTranslator::translateAggregateState(nl::Aggregate aggregate, NLStmtContainer* body) {
+    // Allocate the runtime accumulator and map the handle to it, so the update and
+    // the emit that name the handle share the same accumulator.
+    NLAggregateState* state = _program->allocAggregateState();
+    _aggregateStates[aggregate.getState()] = state;
+
+    // The state handle's element type is the accumulator's value type (f64 for an
+    // avg, the input type otherwise), baked during lowering. Allocate the single-row
+    // nullable value column the reduction folds into.
+    const auto stateType = mlir::cast<nl::AggregateStateType>(aggregate.getState().getType());
+    const ValueType accumulatorType = valueTypeFromElementType(stateType.getElementType());
+    Column* accumulator = allocOptColumnForValueType(accumulatorType);
+    state->setAccumulator(accumulator);
+
+    // The reset re-initializes the accumulator each time the block holding this
+    // nl.aggregate runs (once at function scope for a top-level aggregate): a present
+    // zero for sum/avg, null for min/max.
+    const AggregateKind kind = toRuntimeAggregateKind(aggregate.getKind());
+    const NLAggregateResetFunction reset = NLExecutor::selectAggregateReset(kind, accumulatorType);
+
+    NLAggregateResetData* resetData = _program->allocFunctionData<NLAggregateResetData>(state, reset);
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runAggregateReset, resetData});
+}
+
+void NLTranslator::translateAggregateUpdate(nl::AggregateUpdate update, NLStmtContainer* body) {
+    // The handle is a required operand, so aggregateStateFor returns its accumulator
+    // or throws if it was not produced by an nl.aggregate.
+    NLAggregateState* state = aggregateStateFor(update.getState());
+
+    // Fold the chunk's non-null values the way its kind and value type demand. The
+    // input value type may differ from the accumulator's (an avg of i64 folds into
+    // an f64 accumulator), so the handler is selected from the input type here.
+    const mlir::Value rows = update.getRows();
+    const Column* input = getColumn(rows);
+    const AggregateKind kind = toRuntimeAggregateKind(update.getKind());
+    const ValueType inputType = nullableChunkValueType(rows.getType());
+    const NLAggregateUpdateFunction fold = NLExecutor::selectAggregateUpdate(kind, inputType);
+
+    NLAggregateUpdateData* data = _program->allocFunctionData<NLAggregateUpdateData>(state, input, fold);
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runAggregateUpdate, data});
+}
+
+void NLTranslator::translateAggregateResult(nl::AggregateResult result, NLStmtContainer* body) {
+    // The handle is a required operand, so aggregateStateFor returns its accumulator
+    // or throws if it was not produced by an nl.aggregate.
+    NLAggregateState* state = aggregateStateFor(result.getState());
+
+    // The result is a single-row nullable value chunk runAggregateResult fills with
+    // the reduced value. Allocate its ColumnOptVector on the result value type and
+    // map the op result to it.
+    const mlir::Value resultChunk = result.getResult();
+    const ValueType resultType = nullableChunkValueType(resultChunk.getType());
+    Column* output = allocOptColumnForValueType(resultType);
+    _valueSlots[resultChunk] = output;
+
+    const AggregateKind kind = toRuntimeAggregateKind(result.getKind());
+    const NLAggregateResultFunction emit = NLExecutor::selectAggregateResult(kind, resultType);
+
+    NLAggregateResultData* data = _program->allocFunctionData<NLAggregateResultData>(state, output, emit);
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runAggregateResult, data});
+}
+
+NLAggregateState* NLTranslator::aggregateStateFor(mlir::Value handle) const {
+    const auto stateIt = _aggregateStates.find(handle);
+    if (stateIt == _aggregateStates.end()) {
+        throw IRException("aggregate handle must be produced by an nl.aggregate");
     }
 
     return stateIt->second;

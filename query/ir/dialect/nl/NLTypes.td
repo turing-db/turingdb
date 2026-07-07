@@ -72,6 +72,27 @@ def NLCountState : NLType<"CountState", "count_state"> {
     }];
 }
 
+def NLAggregateState : NLType<"AggregateState", "aggregate_state"> {
+    let summary = "A value-aggregate accumulator handle";
+    let description = [{
+        Stands for one SUM/MIN/MAX/AVG's running accumulator. Produced by
+        nl.aggregate, folded into by nl.aggregate_update once per producing-loop
+        step, and read by nl.aggregate_result to emit the single result row once the
+        loop is exhausted. The value-reducing sibling of !nl.count_state: where a
+        count holds only a tally, this holds the reduced value, so it is parameterized
+        by the accumulator's element type (the resolved property primitive - f64 for
+        an avg, the input type otherwise). Like a count it drives no early-exit; every
+        row must be seen before the accumulator is final, so no nl.for names it.
+    }];
+
+    // The accumulator's element type, baked during lowering. avg accumulates as
+    // f64; sum/min/max accumulate in the input's own type. It is spelled in the
+    // assembly of the ops naming the handle, since - unlike the parameterless
+    // state handles - there is no single concrete type to build.
+    let parameters = (ins "::mlir::Type":$elementType);
+    let assemblyFormat = "`<` $elementType `>`";
+}
+
 def NLChunk : NLType<"Chunk", "chunk"> {
     let summary = "A bounded batch of values";
     let description = "One column chunk filled by a single database iterator step";

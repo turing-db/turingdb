@@ -65,6 +65,17 @@ class GraphView;
 //                                          db.sort (the count is final only once
 //                                          every row is seen), but it collapses to
 //                                          one row, so it opens no emit loop
+//   db.sum / db.min / db.max / db.avg  ->  the value-reducing siblings of db.count: a
+//                                          hoisted nl.aggregate accumulator, an
+//                                          nl.aggregate_update in the producing loop
+//                                          body that folds each chunk's non-null
+//                                          values, and - after the loop - an
+//                                          nl.aggregate_result that materializes the
+//                                          single reduced row (a nullable value chunk)
+//                                          which a function-scope nl.output emits.
+//                                          Same pipeline-breaker, one-row shape as
+//                                          db.count; one db op per reduction, each
+//                                          carrying its nl.aggregate kind
 //
 // db.get_node_properties / db.get_edge_properties resolve their property name
 // against the graph schema here (hence the GraphView): the name is hoisted into
@@ -181,6 +192,19 @@ private:
     // follows lowers into a function-scope nl.output reading it. A pipeline breaker
     // like db.sort, but it collapses to one row, so it opens no emit loop.
     void lowerCount(mlir::db::Count count);
+
+    // Lower a db.sum / db.min / db.max / db.avg: the value-reducing siblings of
+    // lowerCount. The db op names the reduction (`kind`); the input and result SSA
+    // values are the column being reduced and the single-row result. Hoist an
+    // nl.aggregate accumulator to the top of the entry block, place an
+    // nl.aggregate_update in the innermost producing loop body to fold each chunk's
+    // non-null values, then - after the loop - an nl.aggregate_result that
+    // materializes the single reduced row as a nullable value chunk at function
+    // scope. The db result maps to that chunk. The accumulator element type (and thus
+    // the result value type) follows Cypher: avg widens to f64, sum/min/max keep the
+    // input's value type; sum/avg require a numeric column and min/max an orderable
+    // one, so a string sum or an embedding min is rejected here.
+    void lowerAggregate(mlir::Value input, mlir::Value result, mlir::storage::AggregateKind kind);
 
     void lowerOutput(mlir::db::Output output);
 

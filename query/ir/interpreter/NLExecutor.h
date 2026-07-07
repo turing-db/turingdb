@@ -104,6 +104,18 @@ public:
     // the chunk at function scope.
     static void runCountResult(NLExecutionContext* context, NLFunctionData* data);
 
+    // Re-initialize an aggregate accumulator; runs each time its block runs.
+    static void runAggregateReset(NLExecutionContext* context, NLFunctionData* data);
+
+    // Fold this step's chunk's non-null values into the accumulator. The sole
+    // accumulator mutator.
+    static void runAggregateUpdate(NLExecutionContext* context, NLFunctionData* data);
+
+    // The emit step of an aggregate: materialize the reduced value as the output
+    // chunk's single nullable value row. Runs once, after the producing loop;
+    // nl.output emits the chunk at function scope.
+    static void runAggregateResult(NLExecutionContext* context, NLFunctionData* data);
+
     static void runOutput(NLExecutionContext* context, NLFunctionData* data);
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
 
@@ -151,6 +163,14 @@ public:
     // counts only its present values. Used by nl.count_update.
     static size_t countAllRows(const Column* column);
     static NLCountFunction selectOptCountFunction(ValueType valueType);
+
+    // The reset / fold / emit handlers for one aggregate, selected from the
+    // reduction and a value type (the accumulator's for reset/result, the input's
+    // for update). Throw for a value type the reduction cannot handle: sum/avg need
+    // a numeric type, min/max an orderable one. Used by the nl.aggregate ops.
+    static NLAggregateResetFunction selectAggregateReset(AggregateKind kind, ValueType accumulatorType);
+    static NLAggregateUpdateFunction selectAggregateUpdate(AggregateKind kind, ValueType inputType);
+    static NLAggregateResultFunction selectAggregateResult(AggregateKind kind, ValueType resultType);
 
     // The with-null property fetch handler for an ID type (NodeID/EdgeID) and a
     // value type (types::Double, ...). The translator picks the specialization
