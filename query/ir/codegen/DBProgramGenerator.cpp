@@ -161,10 +161,9 @@ void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) 
 }
 
 void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
-    VariableDependencyGraph vdg;
-    vdg.buildFromAST(ast);
+    _vdg.buildFromAST(ast);
 
-    if (vdg.empty()) {
+    if (_vdg.empty()) {
         return;
     }
 
@@ -182,7 +181,7 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
     std::vector<const VariableDependency*> carriedSet;
 
     // TODO: Use nodes at ends of diameter
-    for (const VariableDependency& root : vdg.vars()) {
+    for (const VariableDependency& root : _vdg.vars()) {
         if (defined.contains(&root)) {
             continue;
         }
