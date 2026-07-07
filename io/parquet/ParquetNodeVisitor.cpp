@@ -53,10 +53,10 @@ bool ParquetNodeVisitor::onFileStart(const parquet::FileMetaData& metadata) {
             _lblColIdx = columnIndex;
             _lblMaxDefLevel = maxDefLevel;
         } else {
-            const bool isNested = maxRepLevel > 1;
-            if (isNested) {
+            const bool isListProperty = maxRepLevel >= 1;
+            if (isListProperty) {
                 throw TuringException(fmt::format(
-                    "Nested types are not yet supported (column: {}).", path));
+                    "List properties are not supported; properties must be scalar-valued (column: {}).", path));
             }
             discoverPropertyColumn(columnIndex, path, type, maxDefLevel);
         }
