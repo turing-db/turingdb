@@ -14,6 +14,7 @@
 #include <parquet/types.h>
 
 #include "ID.h"
+#include "TuringException.h"
 #include "datapart/EdgeRecord.h"
 #include "metadata/PropertyType.h"
 #include "versioning/CommitBuilder.h"
@@ -35,18 +36,28 @@ bool ParquetEdgeVisitor::onFileStart(const parquet::FileMetaData& metadata) {
         const std::string path = desc->path()->ToDotString();
         const parquet::Type::type type = desc->physical_type();
         const int16_t maxDefLevel = desc->max_definition_level();
+        const int16_t maxRepLevel = desc->max_repetition_level();
 
         if (path == SOURCE_COL_PATH) {
             const bool isInt64 = type == NODE_COL_TYPE;
-            bioassert(isInt64, "Edge source column was not integral.");
+            if (!isInt64) {
+                throw TuringException("Edge source column was not of type INT64.");
+            }
+
             _srcColIdx = columnIndex;
         } else if (path == TARGET_COL_PATH) {
             const bool isInt64 = type == NODE_COL_TYPE;
-            bioassert(isInt64, "Edge target column was not integral.");
+            if (!isInt64) {
+                throw TuringException("Edge target column was not of type INT64.");
+            }
+
             _tgtColIdx = columnIndex;
         } else if (path == EDGE_TYPE_COL_PATH) {
-            const bool isString = type == EDGE_TYPE_COL_TYPE;
-            bioassert(isString, "Edge type column was not string.");
+            const bool isString = type == EDGE_TYPE_COL_TYPE && maxRepLevel == 0;
+            if (!isString) {
+                throw TuringException("Edge type column was not type 1D BYTE_ARRAY.");
+            }
+
             _edgetypeColIdx = columnIndex;
         } else {
             discoverPropertyColumn(columnIndex, path, type, maxDefLevel);
@@ -218,16 +229,12 @@ void ParquetEdgeVisitor::addEdgeProperty(const EdgeRecord& edge,
         break;
 
         case ValueType::String: {
-            const std::span<const parquet::ByteArray> values =
-                _propByteArrayVals.at(columnIndex);
+            const std::vector<std::string>& values = _propByteArrayVals.at(columnIndex);
             bioassert(valueIndex < values.size(),
                       "String property '{}': value index {} out of range (captured {})",
                       prop.name, valueIndex, values.size());
 
-            const parquet::ByteArray& bytes = values[valueIndex];
-            const std::string_view value(reinterpret_cast<const char*>(bytes.ptr),
-                                         bytes.len);
-            builder.addEdgeProperty<types::String>(edge, prop.propertyTypeID, value);
+            builder.addEdgeProperty<types::String>(edge, prop.propertyTypeID, values[valueIndex]);
         }
         break;
 

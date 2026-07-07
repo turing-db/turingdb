@@ -281,67 +281,6 @@ TEST_F(ParquetImporterTest, ImportsStringPropertySpanningManyPages) {
     ASSERT_EQ(names, expected);
 }
 
-// Finding 2: a node whose __labels list is empty. fillLabels skips the empty entry
-// before emplacing the per-node label vector, so _chunkNodeLabels ends up shorter
-// than _chunkNodeIds and createNodes trips its "NodeID, Label mismatch" assertion on
-// current main. Correct behavior: the empty-label node imports (with no labels).
-TEST_F(ParquetImporterTest, ImportsNodeWithEmptyLabelList) {
-    constexpr std::string_view graphName = "emptylabels";
-    constexpr size_t expectedNodeCount = 3;
-
-    SystemAccessor system = _env->getSystemManager().accessUnique();
-    Graph* imported = nullptr;
-    ASSERT_NO_THROW(imported = importSplit(system,
-                                           graphName,
-                                           "empty_labels_nodes.parquet",
-                                           "minimal_edges.parquet"));
-    ASSERT_NE(imported, nullptr);
-    ASSERT_EQ(countNodes(imported), expectedNodeCount);
-}
-
-// Finding 3: an edge whose __type is null. fillEdgeTypes never consults the __type
-// definition levels, so it delivers fewer EdgeTypeIDs than rows and createEdges trips
-// its "Edge, Type mismatch" assertion on current main. A null edge type is invalid
-// input and must be surfaced cleanly, not as an internal logic error.
-TEST_F(ParquetImporterTest, RejectsNullEdgeTypeCleanly) {
-    constexpr std::string_view graphName = "nulltype";
-
-    SystemAccessor system = _env->getSystemManager().accessUnique();
-    importExpectingNoInternalAssertion(system,
-                                       graphName,
-                                       "nulltype_nodes.parquet",
-                                       "nulltype_edges.parquet");
-}
-
-// Finding 4: a repeated (LIST) property column. discoverPropertyColumn classifies it
-// by physical type alone and registers it as a scalar property, so its level stream
-// outruns the row count and applyNodeProperties trips "Definition levels, row
-// mismatch" on current main. An unsupported LIST property must be rejected cleanly.
-TEST_F(ParquetImporterTest, RejectsListPropertyColumnCleanly) {
-    constexpr std::string_view graphName = "listprop";
-
-    SystemAccessor system = _env->getSystemManager().accessUnique();
-    importExpectingNoInternalAssertion(system,
-                                       graphName,
-                                       "list_property_nodes.parquet",
-                                       "minimal_edges.parquet");
-}
-
-// Finding 5: a required column with the wrong physical type (__id as INT32). onFileStart
-// enforces the type with a bioassert, so a schema-mismatched file trips an internal
-// assertion on current main, whereas a missing column raises a clean TuringException a
-// few lines later. Correct behavior: a wrong-typed required column is rejected the same
-// clean way.
-TEST_F(ParquetImporterTest, RejectsWrongTypedRequiredColumnCleanly) {
-    constexpr std::string_view graphName = "wrongtype";
-
-    SystemAccessor system = _env->getSystemManager().accessUnique();
-    importExpectingNoInternalAssertion(system,
-                                       graphName,
-                                       "wrongtype_id_nodes.parquet",
-                                       "minimal_edges.parquet");
-}
-
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 5;

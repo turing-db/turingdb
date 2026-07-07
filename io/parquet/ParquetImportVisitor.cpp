@@ -98,13 +98,28 @@ void ParquetImportVisitor::capturePropertyInt64(size_t columnIndex,
 
 void ParquetImportVisitor::capturePropertyByteArray(size_t columnIndex,
                                                    std::span<const parquet::ByteArray> values) {
-    if (_propertyColumns.contains(columnIndex)) {
-        _propByteArrayVals[columnIndex] = values;
+    if (!_propertyColumns.contains(columnIndex)) {
+        return;
+    }
+
+    // Each ByteArray::ptr points into page-owned memory that the next ReadBatch
+    // invalidates, and a string column can span several data pages within one chunk
+    // (readSlice delivers ByteArrays one page at a time). Copy the bytes into owned
+    // storage now and accumulate across pages; they are read back at onChunkEnd.
+    std::vector<std::string>& strings = _propByteArrayVals[columnIndex];
+    strings.reserve(strings.size() + values.size());
+    for (const parquet::ByteArray& bytes : values) {
+        strings.emplace_back(reinterpret_cast<const char*>(bytes.ptr), bytes.len);
     }
 }
 
 void ParquetImportVisitor::resetPropertyChunk() {
     for (auto& [_, levels] : _propDefLevels) {
         levels.clear();
+    }
+
+    // Cleared, not erased, so the per-column buffers keep their capacity for reuse.
+    for (auto& [_, strings] : _propByteArrayVals) {
+        strings.clear();
     }
 }

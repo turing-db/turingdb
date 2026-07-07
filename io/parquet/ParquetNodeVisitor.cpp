@@ -35,17 +35,29 @@ bool ParquetNodeVisitor::onFileStart(const parquet::FileMetaData& metadata) {
         const std::string path = desc->path()->ToDotString();
         const parquet::Type::type type = desc->physical_type();
         const int16_t maxDefLevel = desc->max_definition_level();
+        const int16_t maxRepLevel = desc->max_repetition_level();
 
         if (path == NODE_COL_PATH) {
             const bool isInt64 = type == NODE_COL_TYPE;
-            bioassert(isInt64, "Node column was not integral.");
+            if (!isInt64) {
+                throw TuringException("Node column was not of type INT64.");
+            }
+
             _nodeColIdx = columnIndex;
         } else if (path == LABELS_COL_PATH) {
-            const bool isLabels = type == LABELS_COL_TYPE;
-            bioassert(isLabels, "Labels column was not a byte array.");
+            const bool isLabels = type == LABELS_COL_TYPE && maxRepLevel == 1;
+            if (!isLabels) {
+                throw TuringException("Label column was not a singly nested BYTE_ARRAY.");
+            }
+
             _lblColIdx = columnIndex;
             _lblMaxDefLevel = maxDefLevel;
         } else {
+            const bool isNested = maxRepLevel > 1;
+            if (isNested) {
+                throw TuringException(fmt::format(
+                    "Nested types are not yet supported (column: {}).", path));
+            }
             discoverPropertyColumn(columnIndex, path, type, maxDefLevel);
         }
     }
@@ -225,15 +237,12 @@ void ParquetNodeVisitor::addNodeProperty(NodeID id,
         break;
 
         case ValueType::String: {
-            const std::span<const parquet::ByteArray> values = _propByteArrayVals.at(columnIndex);
+            const std::vector<std::string>& values = _propByteArrayVals.at(columnIndex);
             bioassert(valueIndex < values.size(),
                       "String property '{}': value index {} out of range (captured {})",
                       prop.name, valueIndex, values.size());
 
-            const parquet::ByteArray& bytes = values[valueIndex];
-            const std::string_view value(reinterpret_cast<const char*>(bytes.ptr),
-                                         bytes.len);
-            builder.addNodeProperty<types::String>(id, prop.propertyTypeID, value);
+            builder.addNodeProperty<types::String>(id, prop.propertyTypeID, values[valueIndex]);
         }
         break;
 
