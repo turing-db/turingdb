@@ -66,6 +66,14 @@ Regression tests are Python-based and located in `regress/`. Each test has a `ru
 - Key components: Graph, NodeContainer, EdgeContainer, DataPart
 - Subdirectories: columns, iterators, indexers, versioning, mergers
 
+### Data model invariants
+
+These are structural properties of the graph model, not validation rules layered on top — the storage layer *cannot represent* a violation. Treat them as ground truth when reasoning about correctness (a "bug" that assumes the opposite is not a bug). Code that ingests external data (`import/`, `LOAD PARQUET`/GML/JSONL) must treat a violation as malformed **user input** and reject it with a clear `TuringException`, not as an internal error.
+
+- **Every node has at least one label.** An empty label set is not representable; there is no "unlabeled node". An import file with a node whose label list is empty/null is malformed input, not a node to be created label-less.
+- **Every edge has exactly one edge type.** A null/empty edge type is not representable; an edge cannot exist without a type. A null `__type` in an import file is malformed input.
+- **Properties are scalar-valued; there is no list/array property container.** Property values are single scalars (see `ValueType`: Int64, Double, Bool, String, …). **Lists exist only in the query language**, never as a stored node/edge property. A LIST-typed column in an import file is unsupported input, not a property to ingest.
+
 ### Server (`server/`, `net/`)
 - Single TCP listener with two response strategies selected at startup by `USE_TURING_PROTO`:
   - **REST (default):** in-tree HTTP/1.1 stack — `net/http_parser/HTTPParser`, `net/http_common/HTTPWriter`, dispatched by `server/DBServerProcessor`. JSON over HTTP, endpoints routed in `server/DBURIParser.h` / `server/Endpoints.h`. No third-party web framework.
