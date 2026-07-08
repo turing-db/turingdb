@@ -1,8 +1,11 @@
 #pragma once
 
+#include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
+#include "llvm/ADT/SmallVector.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
 
@@ -14,12 +17,15 @@
 namespace mlir {
 class ModuleOp;
 class OpBuilder;
+class Block;
+class Region;
 }
 
 namespace db {
 
 class CypherAST;
 class VariableDependency;
+class DependencyEdge;
 
 class DBProgramGenerator {
 public:
@@ -41,7 +47,27 @@ private:
 
     VariableDependencyGraph _vdg;
 
+    struct TranslatedComponent {
+        std::unique_ptr<mlir::Region> _region;
+        std::vector<const VariableDependency*> _vars;
+        llvm::SmallVector<mlir::Value> _columns;
+    };
+
     void generateTraversal(const CypherAST* ast);
+
+    // Translate a connectected component of @ref _vdg, fills @param outVars
+    void translateComponent(const VariableDependency* root,
+                            std::unordered_set<const VariableDependency*>& defined,
+                            std::vector<const VariableDependency*>& outVars);
+
+    // Converts an arbitrary number of connected components into a cascading nest of
+    // CrossProducts
+    void buildCrossProductCascade(std::vector<TranslatedComponent>& components,
+                                  mlir::Block* targetBlock,
+                                  llvm::SmallVectorImpl<mlir::Value>& results);
+
+    // Moves a translated connected component into a CrossProduct factor
+    void moveComponentToFactor(TranslatedComponent& component, mlir::Block* factorBlock);
 
     void generateOutput(const CypherAST* ast);
 

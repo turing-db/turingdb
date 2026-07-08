@@ -1,14 +1,17 @@
 #include "DBProgramGenerator.h"
 
 #include <algorithm>
+#include <memory>
 #include <string_view>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/Block.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Region.h"
 #include "mlir/IR/TypeRange.h"
 #include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
@@ -195,18 +198,13 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
         return;
     }
 
+    // Main block is saved so we can splice into it after generation
+    mlir::Block* const mainBlock = _opBuilder->getInsertionBlock();
+
     std::unordered_set<const VariableDependency*> defined;
 
-    struct Frame {
-        const VariableDependency* _var {nullptr};
-        const DependencyEdge* _predEdge {nullptr};
-        const DependencyEdge* _predPredEdge {nullptr};
-    };
-
-    std::vector<Frame> stack;
-
-    // Forms the "carried set" for each connected component
-    std::vector<const VariableDependency*> carriedSet;
+    // Connected components
+    std::vector<TranslatedComponent> components;
 
     // TODO: Use nodes at ends of diameter
     for (const VariableDependency& root : _vdg.vars()) {
@@ -228,126 +226,256 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
             continue;
         }
 
-        addScanNodes(&root);
-        defined.insert(&root);
+        TranslatedComponent& component = components.emplace_back();
+        component._region = std::make_unique<mlir::Region>();
 
-        carriedSet.clear();
+        mlir::Block* const scratch = new mlir::Block();
+        component._region->push_back(scratch);
+        _opBuilder->setInsertionPointToStart(scratch);
 
-        // DFS from this root
-        stack.emplace_back(&root, nullptr);
-        while (!stack.empty()) {
-            const auto [var, pred, predPred] = stack.back();
-            stack.pop_back();
+        translateComponent(&root, defined, component._vars);
 
-            const auto seenOrMeta = [&defined](const DependencyEdge* e) {
-                return !e->isMetaEdge() || defined.contains(e->src());
-            };
-            const bool canTraverse = std::ranges::all_of(var->incoming(), seenOrMeta);
-
-            // If we cannot traverse now, we will find another path to this node
-            if (!canTraverse) {
-                continue;
-            }
-
-            // Have we found a (source, edge, target) triple yet on this traversal?
-            const bool haveTriple = pred && predPred;
-
-            for (const DependencyEdge* e : var->edges()) {
-                const VariableDependency* other = e->src() == var ? e->tgt() : e->src();
-                if (defined.contains(other)) {
-                    continue;
-                }
-
-                if (haveTriple) {
-                    // We have discovered a full (src, edge, tgt) triple, set the next
-                    // elements on the stack to only have (src, edge) and await tgt
-                    stack.emplace_back(other, e, nullptr);
-                } else {
-                    // We have not yet discovered a full (src, edge, tgt) triple, but the
-                    // next elements on stack will have such a triple (with @ref pred)
-                    stack.emplace_back(other, e, pred);
-                }
-            }
-
-            // Only translate when we have a full triple
-            if (!haveTriple) {
-                defined.insert(var); // Mark as defined to avoid retraversal
-                continue;
-            }
-
-            // The order we encountered the nodes may not be source, edge, target, it may
-            // be target, edge, source. Determine a definitive order, irrespective of
-            // traversal
-            const DependencyEdge* edgeVarProd = producesEdgeVar(pred) ? pred : predPred;
-            const DependencyEdge* nodeVarProd = producesNodeVar(pred) ? pred : predPred;
-            bioassert(producesEdgeVar(edgeVarProd), "No edge producer");
-            bioassert(producesNodeVar(nodeVarProd), "No node producer");
-
-            // Only one of either source or target should be defined. Determine which end
-            // of the triple is defined
-            const bool edgeSrcDefined = defined.contains(edgeVarProd->src());
-            const bool nodeTgtDefined = defined.contains(nodeVarProd->tgt());
-            bioassert(edgeSrcDefined ^ nodeTgtDefined, "Ambiguous definition");
-            bioassert(edgeSrcDefined || nodeTgtDefined, "No defined start");
-
-            VariableDependency* src = nullptr;
-            VariableDependency* edge = nullptr;
-            VariableDependency* tgt = nullptr;
-
-            // Orientate the operation such that the source operand is defined
-            if (edgeSrcDefined) {
-                src = edgeVarProd->src();
-                edge = edgeVarProd->tgt();
-                tgt = nodeVarProd->tgt();
-            } else /* (nodeTgtDefined) */ {
-                src = nodeVarProd->tgt();
-                edge = nodeVarProd->src();
-                tgt = edgeVarProd->src();
-            }
-
-            // We may walk an edge backwards compared to the cypher pattern. In such a
-            // case we emit the opposite traversal.
-            const EdgeMetadata::EdgeType prodType = edgeVarProd->data().type();
-            const EdgeMetadata::EdgeType logicalDir =
-                edgeSrcDefined ? prodType : reverseEdge(prodType);
-
-            switch (logicalDir) {
-                case EdgeMetadata::EdgeType::GET_OUT_EDGES:
-                    addGetOutEdges(src, edge, tgt, carriedSet);
-                break;
-
-                case EdgeMetadata::EdgeType::GET_IN_EDGES:
-                    addGetInEdges(src, edge, tgt, carriedSet);
-                break;
-
-                case EdgeMetadata::EdgeType::MERGE:
-                    throw TuringException("MERGE edges not yet supported.");
-                break;
-
-                case EdgeMetadata::EdgeType::GET_EDGES:
-                    throw TuringException("Undirected edges not yet supported.");
-                break;
-
-                case EdgeMetadata::EdgeType::GET_EDGE_TGT:
-                case EdgeMetadata::EdgeType::GET_EDGE_SRC:
-                    throw FatalException(fmt::format("Attempted to translate {}",
-                                                     EdgeTypeName::value(logicalDir)));
-                break;
-
-                case EdgeMetadata::EdgeType::_SIZE:
-                    throw FatalException("Attempted to translate invalid edge.");
-                break;
-            }
-
-            defined.insert(src);
-            defined.insert(edge);
-            defined.insert(tgt);
-
-            carriedSet.push_back(src);
-            carriedSet.push_back(edge);
-            carriedSet.push_back(tgt);
+        for (const VariableDependency* var : component._vars) {
+            bioassert(_varMap.contains(var), "Component var {} not registered", var->getName());
+            component._columns.push_back(_varMap[var].back());
         }
     }
+
+    if (components.empty()) {
+        return;
+    }
+
+    // Single connected component, no need to X prod any islands
+    if (components.size() == 1) {
+        TranslatedComponent& comp = components.front();
+
+        const auto& reg = comp._region;
+        bioassert(reg->hasOneBlock(), "Connected component region did not have 1 block");
+
+        // Get the ops for this connected component
+        mlir::Block& block = reg->front();
+        mlir::Block::OpListType& ops = block.getOperations();
+
+        // Get the block for main
+        const auto mainEnd = mainBlock->end();
+        mlir::Block::OpListType& mainOps = mainBlock->getOperations();
+
+        // Splice the ops for this component into the end of main
+        mainOps.splice(mainEnd, ops);
+
+        _opBuilder->setInsertionPointToEnd(mainBlock);
+        return;
+    }
+
+    llvm::SmallVector<mlir::Value> results;
+    buildCrossProductCascade(components, mainBlock, results);
+
+    size_t resultIndex = 0;
+    for (const TranslatedComponent& component : components) {
+        for (const VariableDependency* var : component._vars) {
+            registerValue(var, results[resultIndex]);
+            resultIndex++;
+        }
+    }
+
+    _opBuilder->setInsertionPointToEnd(mainBlock);
+}
+
+void DBProgramGenerator::translateComponent(const VariableDependency* root,
+                                            std::unordered_set<const VariableDependency*>& defined,
+                                            std::vector<const VariableDependency*>& outVars) {
+    struct Frame {
+        const VariableDependency* _var {nullptr};
+        const DependencyEdge* _predEdge {nullptr};
+        const DependencyEdge* _predPredEdge {nullptr};
+    };
+
+    // Makes var an output on first encounter
+    const auto markDefined = [&](const VariableDependency* var) {
+        if (defined.insert(var).second) {
+            outVars.push_back(var);
+        }
+    };
+
+    addScanNodes(root);
+    markDefined(root);
+
+    // Forms the "carried set" for this connected component
+    std::vector<const VariableDependency*> carriedSet;
+
+    std::vector<Frame> stack;
+
+    // DFS from this root
+    stack.emplace_back(root, nullptr);
+    while (!stack.empty()) {
+        const auto [var, pred, predPred] = stack.back();
+        stack.pop_back();
+
+        const auto seenOrMeta = [&defined](const DependencyEdge* e) {
+            return !e->isMetaEdge() || defined.contains(e->src());
+        };
+        const bool canTraverse = std::ranges::all_of(var->incoming(), seenOrMeta);
+
+        // If we cannot traverse now, we will find another path to this node
+        if (!canTraverse) {
+            continue;
+        }
+
+        // Have we found a (source, edge, target) triple yet on this traversal?
+        const bool haveTriple = pred && predPred;
+
+        for (const DependencyEdge* e : var->edges()) {
+            const VariableDependency* other = e->src() == var ? e->tgt() : e->src();
+            if (defined.contains(other)) {
+                continue;
+            }
+
+            if (haveTriple) {
+                // We have discovered a full (src, edge, tgt) triple, set the next
+                // elements on the stack to only have (src, edge) and await tgt
+                stack.emplace_back(other, e, nullptr);
+            } else {
+                // We have not yet discovered a full (src, edge, tgt) triple, but the
+                // next elements on stack will have such a triple (with @ref pred)
+                stack.emplace_back(other, e, pred);
+            }
+        }
+
+        // Only translate when we have a full triple
+        if (!haveTriple) {
+            markDefined(var); // Mark as defined to avoid retraversal
+            continue;
+        }
+
+        // The order we encountered the nodes may not be source, edge, target, it may
+        // be target, edge, source. Determine a definitive order, irrespective of
+        // traversal
+        const DependencyEdge* edgeVarProd = producesEdgeVar(pred) ? pred : predPred;
+        const DependencyEdge* nodeVarProd = producesNodeVar(pred) ? pred : predPred;
+        bioassert(producesEdgeVar(edgeVarProd), "No edge producer");
+        bioassert(producesNodeVar(nodeVarProd), "No node producer");
+
+        // Only one of either source or target should be defined. Determine which end
+        // of the triple is defined
+        const bool edgeSrcDefined = defined.contains(edgeVarProd->src());
+        const bool nodeTgtDefined = defined.contains(nodeVarProd->tgt());
+        bioassert(edgeSrcDefined ^ nodeTgtDefined, "Ambiguous definition");
+        bioassert(edgeSrcDefined || nodeTgtDefined, "No defined start");
+
+        VariableDependency* src = nullptr;
+        VariableDependency* edge = nullptr;
+        VariableDependency* tgt = nullptr;
+
+        // Orientate the operation such that the source operand is defined
+        if (edgeSrcDefined) {
+            src = edgeVarProd->src();
+            edge = edgeVarProd->tgt();
+            tgt = nodeVarProd->tgt();
+        } else /* (nodeTgtDefined) */ {
+            src = nodeVarProd->tgt();
+            edge = nodeVarProd->src();
+            tgt = edgeVarProd->src();
+        }
+
+        const EdgeMetadata::EdgeType edgeType = edgeVarProd->data().type();
+        switch (edgeType) {
+            case EdgeMetadata::EdgeType::GET_OUT_EDGES:
+                addGetOutEdges(src, edge, tgt, carriedSet);
+            break;
+
+            case EdgeMetadata::EdgeType::GET_IN_EDGES:
+                addGetInEdges(src, edge, tgt, carriedSet);
+            break;
+
+            case EdgeMetadata::EdgeType::MERGE:
+                throw TuringException("MERGE edges not yet supported.");
+            break;
+
+            case EdgeMetadata::EdgeType::GET_EDGES:
+                throw TuringException("Undirected edges not yet supported.");
+            break;
+
+            case EdgeMetadata::EdgeType::GET_EDGE_TGT:
+            case EdgeMetadata::EdgeType::GET_EDGE_SRC:
+                throw FatalException(fmt::format("Attempted to translate {}",
+                                                 EdgeTypeName::value(edgeType)));
+            break;
+
+            case EdgeMetadata::EdgeType::_SIZE:
+                throw FatalException("Attempted to translate invalid edge.");
+            break;
+        }
+
+        markDefined(src);
+        markDefined(edge);
+        markDefined(tgt);
+
+        carriedSet.push_back(src);
+        carriedSet.push_back(edge);
+        carriedSet.push_back(tgt);
+    }
+}
+
+void DBProgramGenerator::buildCrossProductCascade(std::vector<TranslatedComponent>& components,
+                                                  mlir::Block* targetBlock,
+                                                  llvm::SmallVectorImpl<mlir::Value>& results) {
+    const size_t count = components.size();
+    bioassert(count >= 2, "Cross product cascade needs at least two components");
+
+    const mlir::Location loc = _opBuilder->getUnknownLoc();
+
+    mlir::Block* currentTarget = targetBlock;
+
+    mlir::Block* pendingYieldBlock = nullptr;
+
+    for (size_t i = 0; i + 1 < count; i++) {
+        llvm::SmallVector<mlir::Type> resultTypes;
+        for (size_t j = i; j < count; j++) {
+            for (const mlir::Value column : components[j]._columns) {
+                resultTypes.push_back(column.getType());
+            }
+        }
+
+        _opBuilder->setInsertionPointToEnd(currentTarget);
+        auto crossProduct = _opBuilder->create<mlir::db::CrossProduct>(loc, resultTypes);
+
+        mlir::Block* const leftBlock = &crossProduct.getLeftFactor().front();
+        mlir::Block* const rightBlock = &crossProduct.getRightFactor().front();
+
+        moveComponentToFactor(components[i], leftBlock);
+
+        const mlir::ResultRange crossResults = crossProduct.getResults();
+        if (pendingYieldBlock) {
+            _opBuilder->setInsertionPointToEnd(pendingYieldBlock);
+            _opBuilder->create<mlir::db::Yield>(loc, mlir::ValueRange {crossResults});
+        } else {
+            results.assign(crossResults.begin(), crossResults.end());
+        }
+
+        const bool lastPair = i + 2 == count;
+        if (lastPair) {
+            moveComponentToFactor(components[i + 1], rightBlock);
+        } else {
+            currentTarget = rightBlock;
+            pendingYieldBlock = rightBlock;
+        }
+    }
+}
+
+void DBProgramGenerator::moveComponentToFactor(TranslatedComponent& component, mlir::Block* factorBlock) {
+    // Insertion point into the factor
+    auto factorEnd = factorBlock->end();
+
+    auto& compReg = component._region;
+    mlir::Block& compBlock = compReg->front();
+    // Operations to insert
+    mlir::Block::OpListType& compOps = compBlock.getOperations();
+
+    factorBlock->getOperations().splice(factorEnd, compOps);
+
+    _opBuilder->setInsertionPointToEnd(factorBlock);
+    const mlir::Location loc = _opBuilder->getUnknownLoc();
+    _opBuilder->create<mlir::db::Yield>(loc, mlir::ValueRange {component._columns});
 }
 
 void DBProgramGenerator::generateOutput(const CypherAST* ast) {
