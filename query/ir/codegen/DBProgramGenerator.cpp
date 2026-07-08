@@ -15,8 +15,10 @@
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "llvm/ADT/SmallVector.h"
 
+#include "DBDialect.h"
 #include "DBOps.h"
 #include "DBTypes.h"
+#include "StorageDialect.h"
 #include "StorageTypes.h"
 
 #include "DependencyEdge.h"
@@ -31,8 +33,6 @@
 #include "decl/VarDecl.h"
 #include "expr/Expr.h"
 #include "stmt/ReturnStmt.h"
-
-#include "StringHashMap.h"
 
 #include "BioAssert.h"
 #include "FatalException.h"
@@ -54,6 +54,25 @@ bool producesNodeVar(const DependencyEdge* e) {
     const bool getTgt = producedType == EdgeMetadata::EdgeType::GET_EDGE_TGT;
     const bool getSrc = producedType == EdgeMetadata::EdgeType::GET_EDGE_SRC;
     return getTgt || getSrc;
+}
+
+EdgeMetadata::EdgeType reverseEdge(EdgeMetadata::EdgeType type) {
+    switch (type) {
+        case EdgeMetadata::EdgeType::GET_OUT_EDGES:
+            return EdgeMetadata::EdgeType::GET_IN_EDGES;
+        break;
+
+        case EdgeMetadata::EdgeType::GET_IN_EDGES:
+            return db::EdgeMetadata::EdgeType::GET_OUT_EDGES;
+        break;
+
+        default:
+            throw FatalException("Invalid attempt to reverse direction");
+        break;
+    }
+
+    throw FatalException("Uncaught edge type.");
+
 }
 
 }
@@ -151,6 +170,8 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
     bioassert(_mlirCtxt, "Null context");
 
     _mlirCtxt->loadDialect<mlir::db::DB>();
+    _mlirCtxt->loadDialect<mlir::storage::Storage>();
+    _mlirCtxt->loadDialect<mlir::func::FuncDialect>();
     const mlir::Location uloc = _opBuilder.getUnknownLoc();
 
     { // Create main
@@ -284,7 +305,12 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
                 tgt = edgeVarProd->src();
             }
 
-            const EdgeMetadata::EdgeType edgeType = edgeVarProd->data().type();
+            // We may walk an edge backwards compared to the cypher pattern. In such a
+            // case we emit the opposite traversal.
+            const EdgeMetadata::EdgeType prodType = edgeVarProd->data().type();
+            const EdgeMetadata::EdgeType edgeType =
+                edgeSrcDefined ? prodType : reverseEdge(prodType);
+
             switch (edgeType) {
                 case EdgeMetadata::EdgeType::GET_OUT_EDGES:
                     addGetOutEdges(src, edge, tgt, carriedSet);
