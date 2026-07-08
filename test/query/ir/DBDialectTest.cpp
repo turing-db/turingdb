@@ -100,6 +100,31 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (a), (b), (c) RETURN a, b, c: a three-way product. The db dialect has no
+// n-ary cross_product; a third factor is expressed by nesting, so the outer
+// product's left factor is itself a db.cross_product crossing (a) with (b), and
+// the outer product crosses that pair with (c). The factor region holds another
+// db.cross_product - the op nests - and the outer product surfaces three columns.
+const char* const nestedCrossProductProgram = R"mlir(
+func.func @main() {
+  %0:3 = db.cross_product factor {
+    %1:2 = db.cross_product factor {
+      %a = db.scan_nodes() : !db.column<!storage.node_id>
+      db.yield %a : !db.column<!storage.node_id>
+    } factor {
+      %b = db.scan_nodes() : !db.column<!storage.node_id>
+      db.yield %b : !db.column<!storage.node_id>
+    }
+    db.yield %1#0, %1#1 : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  } factor {
+    %c = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %c : !db.column<!storage.node_id>
+  }
+  db.output(%0#0, %0#1, %0#2) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // MATCH (a), (b) RETURN a: the right factor surfaces no column, so its db.yield
 // is empty - which the verifier rejects, since a side's row count is read from
 // its first yielded column.
@@ -327,6 +352,60 @@ TEST_F(DBDialectTest, verifierRejectsResultsNotMatchingYields) {
         return mlir::success();
     });
     EXPECT_TRUE(mlir::failed(mlir::verify(product.getOperation())));
+}
+
+TEST_F(DBDialectTest, parsesNestedCrossProduct) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(nestedCrossProductProgram);
+    ASSERT_TRUE(module);
+
+    // Two products in the module: the outer one and the inner one nested in its
+    // left factor.
+    llvm::SmallVector<mlir::db::CrossProduct, 2> products;
+    module.get().walk([&](mlir::db::CrossProduct op) {
+        products.push_back(op);
+    });
+    ASSERT_EQ(products.size(), 2u);
+
+    // The outer product surfaces three columns (a, b, c); the inner one two
+    // (a, b) - which tells the two apart independently of walk order.
+    mlir::db::CrossProduct outer;
+    mlir::db::CrossProduct inner;
+    for (mlir::db::CrossProduct product : products) {
+        if (product.getResults().size() == 3u) {
+            outer = product;
+        } else {
+            inner = product;
+        }
+    }
+    ASSERT_TRUE(outer);
+    ASSERT_TRUE(inner);
+
+    // The inner product sits inside the outer's left factor, so a factor region
+    // does hold another db.cross_product - the op nests.
+    EXPECT_EQ(inner->getParentOfType<mlir::db::CrossProduct>().getOperation(), outer.getOperation());
+
+    // All three of the outer product's columns are node ID columns.
+    const mlir::Type nodeIDColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    const mlir::Operation::result_range outerResults = outer.getResults();
+    ASSERT_EQ(outerResults.size(), 3u);
+    for (const mlir::Value result : outerResults) {
+        EXPECT_EQ(result.getType(), nodeIDColumnType);
+    }
+}
+
+TEST_F(DBDialectTest, nestedCrossProductRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(nestedCrossProductProgram);
+    ASSERT_TRUE(module);
+
+    // Printing then re-parsing a nested product yields a module that still
+    // verifies, so the custom printer and parser are inverses through nesting.
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
 }
 
 TEST_F(DBDialectTest, parsesLimit) {

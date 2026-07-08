@@ -86,7 +86,10 @@ class GraphView;
 // loops nested inside the outer factor's innermost loop body, so the inner
 // factor re-runs once per outer chunk (a nested-loop join, bounded memory) -
 // bridged at the deepest point by an nl.cross_product that crosses the two
-// factors' yielded chunks just before db.output consumes them.
+// factors' yielded chunks just before db.output consumes them. A factor may
+// itself be a db.cross_product (the three-way MATCH (a), (b), (c)): the product
+// stands in for that factor's innermost loop, so the enclosing factor nests
+// under it and the two products compose into one deeper loop nest.
 //
 class DBLowering {
 public:
@@ -240,7 +243,7 @@ private:
     // top of the entry block (above every loop) and reused on later lookups
     mlir::Value getOrCreatePropertyTypeHandle(llvm::StringRef propertyName);
 
-    // The !nl.chunk<!nl.nullable<T>> a fetch of this property produces, with T
+    // The !nl.chunk<!storage.nullable<T>> a fetch of this property produces, with T
     // the value type the name resolves to in the schema
     mlir::Type propertyValueChunkType(llvm::StringRef propertyName);
 
