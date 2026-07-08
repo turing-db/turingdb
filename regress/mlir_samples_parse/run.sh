@@ -39,7 +39,7 @@ for f in "${samples[@]}"; do
     name=$(basename "$f")
     checked+=1
 
-    if "$MLIR_TOOL" "$f" >/dev/null 2>&1; then
+    if "$MLIR_TOOL" -f "$f" >/dev/null 2>&1; then
         parsed=1
     else
         parsed=0
@@ -59,7 +59,7 @@ for f in "${samples[@]}"; do
             echo "ok    $name"
         else
             echo "FAIL  $name (did not parse):"
-            "$MLIR_TOOL" "$f" 2>&1 | sed 's/^/        /' | head -5
+            "$MLIR_TOOL" -f "$f" 2>&1 | sed 's/^/        /' | head -5
             failures+=("$name")
         fi
     fi
