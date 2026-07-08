@@ -96,9 +96,9 @@ VectorResult<void> VectorStorageManager::createLibraryStorage(const VecLib& lib)
 }
 
 VectorResult<void> VectorStorageManager::persistShardRouter(const VecLib& lib) {
-    const auto* meta = lib.metadata();
-
     std::shared_lock lock(_mutex);
+
+    const auto* meta = lib.metadata();
 
     const auto it = _storages.find(meta->_id);
     if (it == _storages.end()) {
