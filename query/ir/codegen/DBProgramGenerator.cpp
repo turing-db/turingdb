@@ -308,10 +308,10 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
             // We may walk an edge backwards compared to the cypher pattern. In such a
             // case we emit the opposite traversal.
             const EdgeMetadata::EdgeType prodType = edgeVarProd->data().type();
-            const EdgeMetadata::EdgeType edgeType =
+            const EdgeMetadata::EdgeType logicalDir =
                 edgeSrcDefined ? prodType : reverseEdge(prodType);
 
-            switch (edgeType) {
+            switch (logicalDir) {
                 case EdgeMetadata::EdgeType::GET_OUT_EDGES:
                     addGetOutEdges(src, edge, tgt, carriedSet);
                 break;
@@ -331,7 +331,7 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
                 case EdgeMetadata::EdgeType::GET_EDGE_TGT:
                 case EdgeMetadata::EdgeType::GET_EDGE_SRC:
                     throw FatalException(fmt::format("Attempted to translate {}",
-                                                     EdgeTypeName::value(edgeType)));
+                                                     EdgeTypeName::value(logicalDir)));
                 break;
 
                 case EdgeMetadata::EdgeType::_SIZE:
