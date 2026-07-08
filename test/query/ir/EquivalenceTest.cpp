@@ -234,6 +234,10 @@ TEST_F(EquivalenceTest, outEdges) {
     expectEquivalent("MATCH (a)-->(b)-->(c) RETURN c");
     expectEquivalent("MATCH (a)-->(b)-->(c) RETURN a, b, c");
     expectEquivalent("MATCH (a)-->(b)-->(c) RETURN a, c");
+
+    expectEquivalent("MATCH (a)-->(b)-->(c)-->(d) RETURN a, b, c, d");
+    expectEquivalent("MATCH (a)-->(b)-->(c)-->(d) RETURN b, c");
+    expectEquivalent("MATCH (a)-->(b)-->(c)-->(d) RETURN a, d");
 }
 
 TEST_F(EquivalenceTest, inEdges) {
@@ -246,6 +250,10 @@ TEST_F(EquivalenceTest, inEdges) {
     expectEquivalent("MATCH (a)<--(b)<--(c) RETURN c");
     expectEquivalent("MATCH (a)<--(b)<--(c) RETURN a, b, c");
     expectEquivalent("MATCH (a)<--(b)<--(c) RETURN a, c");
+
+    expectEquivalent("MATCH (a)<--(b)<--(c)<--(d) RETURN a, b, c, d");
+    expectEquivalent("MATCH (a)<--(b)<--(c)<--(d) RETURN b, c");
+    expectEquivalent("MATCH (a)<--(b)<--(c)<--(d) RETURN a, d");
 }
 
 TEST_F(EquivalenceTest, trees) {
