@@ -119,7 +119,7 @@ def NLPropertyType : NLType<"PropertyType", "property_type"> {
 }
 
 // NLNodeIDChunk is a type *constraint*, not a new type: it restricts an op
-// operand to !nl.chunk<!nl.node_id> without defining anything new. Ops use it
+// operand to !nl.chunk<!storage.node_id> without defining anything new. Ops use it
 // in their (ins ...) clause where NLChunk would accept a chunk of anything.
 //
 // It is built from two tablegen pieces:
@@ -144,7 +144,7 @@ def NLNodeIDChunk : Type<
                   "::mlir::storage::NodeIDType::get($_builder.getContext()))">;
 
 // The edge-chunk counterpart of NLNodeIDChunk: constrains an operand to
-// !nl.chunk<!nl.edge_id> and carries a BuildableType recipe so an assembly
+// !nl.chunk<!storage.edge_id> and carries a BuildableType recipe so an assembly
 // format can omit the type. See NLNodeIDChunk above for the piece-by-piece
 // breakdown of Type<CPred, summary, cppClass> + BuildableType.
 def NLEdgeIDChunk : Type<

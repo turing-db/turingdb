@@ -6,11 +6,11 @@ module {
     // scan loop (so it stops once the budget is spent), an nl.limit_update that
     // charges each chunk against the budget, and an nl.limit_truncate that cuts
     // the chunk to the prefix the budget allows before nl.output emits it.
-    %a = db.scan_nodes() : !db.column<"a">
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
 
-    %la = db.limit(%a) count 3 : (!db.column<"a">) -> !db.column<"a">
+    %la = db.limit(%a) count 3 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
 
-    db.output(%la) : !db.column<"a">
+    db.output(%la) : !db.column<!storage.node_id>
 
     return
   }
