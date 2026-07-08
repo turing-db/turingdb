@@ -90,6 +90,16 @@ DBProgramGenerator::DBProgramGenerator(mlir::ModuleOp* mainModule)
 DBProgramGenerator::~DBProgramGenerator() {
 }
 
+DBProgramGenerator::DBProgramGenerator(mlir::ModuleOp* mainModule)
+    : _module(mainModule),
+    _mlirCtxt(_module->getContext()),
+    _opBuilder(_module->getBodyRegion())
+{
+}
+
+DBProgramGenerator::~DBProgramGenerator() {
+}
+
 mlir::db::ColumnType DBProgramGenerator::allocColumnType(mlir::Type type) {
     return mlir::db::ColumnType::get(_mlirCtxt, type);
 }
@@ -199,7 +209,7 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
     }
 
     // Main block is saved so we can splice into it after generation
-    mlir::Block* const mainBlock = _opBuilder->getInsertionBlock();
+    mlir::Block* const mainBlock = _opBuilder.getInsertionBlock();
 
     std::unordered_set<const VariableDependency*> defined;
 
@@ -230,8 +240,8 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
         component._region = std::make_unique<mlir::Region>();
 
         mlir::Block* const scratch = new mlir::Block();
-        component._region->push_back(scratch);
-        _opBuilder->setInsertionPointToStart(scratch);
+        component._region->push_back(scratch); // Region destructor frees scratch
+        _opBuilder.setInsertionPointToStart(scratch);
 
         translateComponent(&root, defined, component._vars);
 
@@ -263,7 +273,7 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
         // Splice the ops for this component into the end of main
         mainOps.splice(mainEnd, ops);
 
-        _opBuilder->setInsertionPointToEnd(mainBlock);
+        _opBuilder.setInsertionPointToEnd(mainBlock);
         return;
     }
 
@@ -278,7 +288,7 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
         }
     }
 
-    _opBuilder->setInsertionPointToEnd(mainBlock);
+    _opBuilder.setInsertionPointToEnd(mainBlock);
 }
 
 void DBProgramGenerator::translateComponent(const VariableDependency* root,
@@ -422,7 +432,7 @@ void DBProgramGenerator::buildCrossProductCascade(std::vector<TranslatedComponen
     const size_t count = components.size();
     bioassert(count >= 2, "Cross product cascade needs at least two components");
 
-    const mlir::Location loc = _opBuilder->getUnknownLoc();
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
 
     mlir::Block* currentTarget = targetBlock;
 
@@ -436,8 +446,8 @@ void DBProgramGenerator::buildCrossProductCascade(std::vector<TranslatedComponen
             }
         }
 
-        _opBuilder->setInsertionPointToEnd(currentTarget);
-        auto crossProduct = _opBuilder->create<mlir::db::CrossProduct>(loc, resultTypes);
+        _opBuilder.setInsertionPointToEnd(currentTarget);
+        auto crossProduct = _opBuilder.create<mlir::db::CrossProduct>(loc, resultTypes);
 
         mlir::Block* const leftBlock = &crossProduct.getLeftFactor().front();
         mlir::Block* const rightBlock = &crossProduct.getRightFactor().front();
@@ -446,8 +456,8 @@ void DBProgramGenerator::buildCrossProductCascade(std::vector<TranslatedComponen
 
         const mlir::ResultRange crossResults = crossProduct.getResults();
         if (pendingYieldBlock) {
-            _opBuilder->setInsertionPointToEnd(pendingYieldBlock);
-            _opBuilder->create<mlir::db::Yield>(loc, mlir::ValueRange {crossResults});
+            _opBuilder.setInsertionPointToEnd(pendingYieldBlock);
+            _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {crossResults});
         } else {
             results.assign(crossResults.begin(), crossResults.end());
         }
@@ -473,9 +483,9 @@ void DBProgramGenerator::moveComponentToFactor(TranslatedComponent& component, m
 
     factorBlock->getOperations().splice(factorEnd, compOps);
 
-    _opBuilder->setInsertionPointToEnd(factorBlock);
-    const mlir::Location loc = _opBuilder->getUnknownLoc();
-    _opBuilder->create<mlir::db::Yield>(loc, mlir::ValueRange {component._columns});
+    _opBuilder.setInsertionPointToEnd(factorBlock);
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {component._columns});
 }
 
 void DBProgramGenerator::generateOutput(const CypherAST* ast) {
