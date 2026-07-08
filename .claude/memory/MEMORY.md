@@ -60,4 +60,6 @@
 
 ## Workflow Preferences
 - [Test-first: write failing test before fix](feedback_test_first.md)
+- [Test against simpledb fixture](feedback_test_on_simpledb.md) — use real SimpleGraph, not a bespoke minimal graph, esp. for bugs reported on simpledb
+- [Separate test file per feature](feedback_separate_test_file.md) — new test → its own .cpp + CMake target, don't append to an existing test file
 - [Explicit CI runner labels](feedback_explicit_ci_runner_labels.md) — put real runner labels in each workflow's os_list + `runs-on: ${{ matrix.os }}`, not a computed ternary / runner-group object
