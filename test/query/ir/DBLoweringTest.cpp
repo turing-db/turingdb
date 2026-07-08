@@ -37,6 +37,8 @@
 #include "NLOps.h"
 #include "NLOutputSink.h"
 
+#include "SimpleGraph.h"
+
 #include "TuringTest.h"
 
 using namespace db;
@@ -485,6 +487,32 @@ func.func @main() {
     db.yield %b, %score : !db.column<!storage.node_id>, !db.column<none>
   }
   db.output(%0#0, %0#2) : !db.column<!storage.node_id>, !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a), (b), (c) RETURN a, b, c: a three-way product. The db dialect has no
+// n-ary cross_product, so the third factor is expressed by nesting - the outer
+// product's left factor is itself a db.cross_product crossing (a) with (b), and
+// the outer product crosses that pair with (c). Lowering nests the inner
+// product's loops inside the outer product's, so the result is every (a, b, c)
+// triple over the node set, |nodes|^3 rows.
+constexpr const char* nestedCrossProductScansProgram = R"mlir(
+func.func @main() {
+  %0:3 = db.cross_product factor {
+    %1:2 = db.cross_product factor {
+      %a = db.scan_nodes() : !db.column<!storage.node_id>
+      db.yield %a : !db.column<!storage.node_id>
+    } factor {
+      %b = db.scan_nodes() : !db.column<!storage.node_id>
+      db.yield %b : !db.column<!storage.node_id>
+    }
+    db.yield %1#0, %1#1 : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  } factor {
+    %c = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %c : !db.column<!storage.node_id>
+  }
+  db.output(%0#0, %0#1, %0#2) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
 )mlir";
@@ -1090,6 +1118,22 @@ protected:
         interpreter.run();
     }
 
+    // Fills the node ID set of a graph by lowering and running MATCH (a) RETURN a,
+    // so a cross product's expected result is derived from the graph rather than
+    // from a hardcoded node count.
+    void collectNodeIDs(const GraphView& view, std::vector<uint64_t>& nodes) {
+        CollectingNodeSink scanSink;
+        runLoweredProgram(scanProgram, view, scanSink);
+
+        std::vector<std::vector<uint64_t>> scanRows;
+        scanSink.sortedRows(scanRows);
+
+        nodes.clear();
+        for (const std::vector<uint64_t>& row : scanRows) {
+            nodes.push_back(row.front());
+        }
+    }
+
     std::unique_ptr<JobSystem> _jobSystem;
 };
 
@@ -1346,6 +1390,74 @@ TEST_F(DBLoweringTest, executesCrossProductOfNodeProperty) {
     std::sort(expected.begin(), expected.end());
 
     std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, executesNestedCrossProductOnSimpleGraph) {
+    // MATCH (a), (b), (c) RETURN a, b, c on the shared simpledb graph: a
+    // three-way product the db dialect models as a cross_product whose left
+    // factor is itself a cross_product. Executed, it is the whole node set
+    // crossed with itself three times, so |nodes|^3 rows.
+    auto graph = Graph::create();
+    SimpleGraph::createSimpleGraph(graph.get());
+
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    std::vector<uint64_t> nodes;
+    collectNodeIDs(reader.getView(), nodes);
+    ASSERT_FALSE(nodes.empty());
+
+    // Every (a, b, c) triple over the node set.
+    std::vector<std::vector<uint64_t>> expected;
+    for (const uint64_t a : nodes) {
+        for (const uint64_t b : nodes) {
+            for (const uint64_t c : nodes) {
+                expected.push_back({a, b, c});
+            }
+        }
+    }
+    std::sort(expected.begin(), expected.end());
+
+    CollectingNodeSink sink;
+    runLoweredProgram(nestedCrossProductScansProgram, reader.getView(), sink);
+
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows.size(), nodes.size() * nodes.size() * nodes.size());
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, executesNestedCrossProductSpanningChunks) {
+    // The same three-way product on simpledb, but a small chunk splits each scan
+    // into several chunks, so the inner product re-runs once per (a, b) chunk
+    // pair and the outer product crosses that materialized result with each c
+    // chunk. The row set is unchanged - still every (a, b, c) triple.
+    auto graph = Graph::create();
+    SimpleGraph::createSimpleGraph(graph.get());
+
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    std::vector<uint64_t> nodes;
+    collectNodeIDs(reader.getView(), nodes);
+    ASSERT_FALSE(nodes.empty());
+
+    std::vector<std::vector<uint64_t>> expected;
+    for (const uint64_t a : nodes) {
+        for (const uint64_t b : nodes) {
+            for (const uint64_t c : nodes) {
+                expected.push_back({a, b, c});
+            }
+        }
+    }
+    std::sort(expected.begin(), expected.end());
+
+    CollectingNodeSink sink;
+    runLoweredProgram(nestedCrossProductScansProgram, reader.getView(), sink, /*chunkSize=*/3);
+
+    std::vector<std::vector<uint64_t>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows, expected);
 }

@@ -398,6 +398,15 @@ void DBLowering::lowerCrossProduct(mlir::db::CrossProduct product) {
     for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
         _valueMap[dbResults[resultIndex]] = crossResults[resultIndex];
     }
+
+    // The crossed columns live in innerBody, so when this product is itself
+    // nested in a factor - e.g. the three-way MATCH (a), (b), (c), where a
+    // cross_product's factor is another cross_product - it stands in for that
+    // factor's innermost loop: the enclosing factor roots its next op (or a
+    // deeper product) there. Record it the way buildLoopForSource records a real
+    // loop, so lowerFactor sees a factor whose innermost "loop" is this product.
+    // At top level nothing reads _innermostLoopBody, so this is a no-op there.
+    _innermostLoopBody = innerBody;
 }
 
 mlir::Block* DBLowering::lowerFactor(mlir::Region& factor,
