@@ -264,3 +264,16 @@ TEST_F(EquivalenceTest, trees) {
     // expectEquivalent("MATCH (a)-->(b)-->(c), (b)-->(e) RETURN a");
     expectEquivalent("MATCH (a)-->(b)-->(c), (b)-->(e) RETURN a");
 }
+
+TEST_F(EquivalenceTest, crossProd) {
+    expectEquivalent("MATCH (a), (b) RETURN a");
+    expectEquivalent("MATCH (a), (b) RETURN b");
+    expectEquivalent("MATCH (a), (b) RETURN a, b");
+
+    expectEquivalent("MATCH (a), (b), (c) RETURN b");
+    expectEquivalent("MATCH (a), (b), (c) RETURN a, b, c");
+
+    expectEquivalent("MATCH (a)-->(d), (b), (c) RETURN a, b, c, d");
+
+    expectEquivalent("MATCH (a)-->(d), (b)-->(e), (c)-->(f) RETURN a, b, c, d, e, f");
+}
