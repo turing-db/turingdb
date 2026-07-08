@@ -864,4 +864,66 @@ TEST_F(DBDialectTest, parsesAndRoundTripsAggregateOps) {
     checkAggregateOp<mlir::db::Avg>("avg");
 }
 
+// MATCH (a:Person:Employee) RETURN a: a scan restricted to the nodes carrying
+// both labels.
+const char* const scanByLabelProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes_by_label(["Person", "Employee"]) : !db.column<!storage.node_id>
+  db.output(%a) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// A label scan with no labels: rejected by the verifier.
+const char* const emptyLabelScanProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes_by_label([]) : !db.column<!storage.node_id>
+  db.output(%a) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(DBDialectTest, parsesScanNodesByLabel) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(scanByLabelProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::ScanNodesByLabel scan;
+    module.get().walk([&](mlir::db::ScanNodesByLabel op) {
+        scan = op;
+    });
+    ASSERT_TRUE(scan);
+
+    // The two spelled label names come back in order, and the result is a single
+    // node ID column.
+    const mlir::ArrayAttr labels = scan.getLabels();
+    ASSERT_EQ(labels.size(), 2u);
+    EXPECT_EQ(mlir::cast<mlir::StringAttr>(labels[0]).getValue(), "Person");
+    EXPECT_EQ(mlir::cast<mlir::StringAttr>(labels[1]).getValue(), "Employee");
+
+    const mlir::Type nodeIDColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    EXPECT_EQ(scan.getResult().getType(), nodeIDColumnType);
+}
+
+TEST_F(DBDialectTest, scanNodesByLabelRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(scanByLabelProgram);
+    ASSERT_TRUE(module);
+
+    // Printing then re-parsing yields a module that still verifies, so the
+    // db.scan_nodes_by_label printer and parser are inverses.
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, verifierRejectsScanNodesByLabelWithoutLabels) {
+    // The op parses - an empty array is well-formed syntax - but the verifier
+    // rejects a label-free label scan, so the module fails to build.
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyLabelScanProgram);
+    EXPECT_FALSE(module);
+}
+
 }

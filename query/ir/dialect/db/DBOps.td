@@ -18,6 +18,45 @@ def ScanNodes : TuringOp<"scan_nodes", [Pure]> {
 }
 
 /**
+* ScanNodesByLabel
+*/
+def ScanNodesByLabel : TuringOp<"scan_nodes_by_label", [Pure]> {
+  let summary = "Produce the nodes in the graph carrying every given label";
+
+  let description = [{
+    In `MATCH (a:Person)` the node column is not every node but only those
+    carrying the Person label; `MATCH (a:Person:Employee)` narrows further to
+    the nodes carrying both:
+
+      %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+      %b = db.scan_nodes_by_label(["Person", "Employee"]) : !db.column<!storage.node_id>
+
+    `labels` is that set of label names, spelled the same as in the query. A
+    node qualifies when its own label set contains every requested label (a
+    superset match), so a node labelled `Person:Employee:Manager` still matches
+    `["Person", "Employee"]`. It follows that if any requested label was never
+    created on a node - it is absent from the schema - the conjunction matches
+    nothing and the scan yields no rows. Lowering resolves each name to a
+    storage LabelID. Scanning the graph is a deterministic read, so the op is
+    Pure.
+
+    The label list must not be empty: a label-free scan is `db.scan_nodes`.
+  }];
+
+  // `labels` is the set of symbolic label names. Being an attribute and not an
+  // SSA value, it is absent from `operands`; lowering resolves each name to a
+  // storage LabelID.
+  let arguments = (ins StrArrayAttr:$labels);
+  let results   = (outs ColumnNodeIDs:$result);
+  let hasVerifier = 1;
+
+  // The label list prints inside the parens as `["Person", "Employee"]`, ahead
+  // of the colon, the same place db.get_node_properties prints its name; the
+  // result type follows, qualified, as db.scan_nodes prints it.
+  let assemblyFormat = "`(` $labels `)` attr-dict `:` qualified(type($result))";
+}
+
+/**
 * GetOutEdges
 */
 def GetOutEdges : TuringOp<"get_out_edges", [Pure]> {

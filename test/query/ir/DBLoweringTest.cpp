@@ -325,6 +325,42 @@ func.func @main() {
 }
 )mlir";
 
+// Scan only the nodes carrying the "Person" label
+constexpr const char* scanByLabelPersonProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+  db.output(%a) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// Scan only the nodes carrying the "City" label
+constexpr const char* scanByLabelCityProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes_by_label(["City"]) : !db.column<!storage.node_id>
+  db.output(%a) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// Scan only the nodes carrying both the "Person" and "City" labels
+constexpr const char* scanByLabelPersonAndCityProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes_by_label(["Person", "City"]) : !db.column<!storage.node_id>
+  db.output(%a) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// Scan by a label no node was ever created with; the result is empty
+constexpr const char* scanByLabelUnknownProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes_by_label(["Robot"]) : !db.column<!storage.node_id>
+  db.output(%a) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // One hop along out-edges, outputting (source, target) pairs
 constexpr const char* oneHopOutProgram = R"mlir(
 func.func @main() {
@@ -1088,6 +1124,37 @@ protected:
         return graph;
     }
 
+    // Five nodes over two labels: node 0, 1 are Person; node 2, 4 are City;
+    // node 3 carries both. A scan by "Person" is a superset match, so it keeps
+    // node 3 too - the (Person), (Person,City) nodes - and a scan by both labels
+    // keeps only node 3. No edges: a label scan reads only the node containers.
+    std::unique_ptr<Graph> buildLabeledGraph() {
+        auto graph = Graph::create();
+
+        auto change = graph->newChange();
+        auto* commitBuilder = change->access().getTip();
+        auto& builder = commitBuilder->newBuilder();
+        auto& metadata = builder.getMetadata();
+
+        const LabelID personID = metadata.getOrCreateLabel("Person");
+        const LabelID cityID = metadata.getOrCreateLabel("City");
+
+        const LabelSet person = LabelSet::fromList({personID});
+        const LabelSet city = LabelSet::fromList({cityID});
+        const LabelSet personAndCity = LabelSet::fromList({personID, cityID});
+
+        builder.addNode(person);        // node 0
+        builder.addNode(person);        // node 1
+        builder.addNode(city);          // node 2
+        builder.addNode(personAndCity); // node 3
+        builder.addNode(city);          // node 4
+
+        const auto submitResult = change->access().submit(*_jobSystem);
+        EXPECT_TRUE(submitResult);
+
+        return graph;
+    }
+
     // Parses a db-dialect program, lowers it to nl with DBLowering, and runs
     // the lowered nl function against the graph view. The chunk size is exposed
     // so a test can force a product to span chunk boundaries.
@@ -1134,6 +1201,24 @@ protected:
         }
     }
 
+    // Runs a single-column node scan program and returns its node IDs sorted.
+    // The storage assigns node IDs grouped by label set, not by insertion order,
+    // so the label-scan tests assert the semantics (superset match, conjunction =
+    // intersection) against the plain scan rather than hardcoding an ID scheme.
+    std::vector<uint64_t> collectScan(const char* program, const GraphView& view) {
+        CollectingNodeSink sink;
+        runLoweredProgram(program, view, sink);
+
+        std::vector<std::vector<uint64_t>> rows;
+        sink.sortedRows(rows);
+
+        std::vector<uint64_t> nodeIDs;
+        for (const std::vector<uint64_t>& row : rows) {
+            nodeIDs.push_back(row.front());
+        }
+        return nodeIDs;
+    }
+
     std::unique_ptr<JobSystem> _jobSystem;
 };
 
@@ -1149,6 +1234,52 @@ TEST_F(DBLoweringTest, lowersScanNodes) {
     std::vector<std::vector<uint64_t>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, executesScanNodesByLabel) {
+    auto graph = buildLabeledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+
+    const std::vector<uint64_t> all = collectScan(scanProgram, view);
+    const std::vector<uint64_t> person = collectScan(scanByLabelPersonProgram, view);
+    const std::vector<uint64_t> city = collectScan(scanByLabelCityProgram, view);
+    const std::vector<uint64_t> both = collectScan(scanByLabelPersonAndCityProgram, view);
+
+    // Two Person-only, two City-only, one Person+City node.
+    EXPECT_EQ(all.size(), 5u);
+    EXPECT_EQ(person.size(), 3u);   // the two Person-only plus the Person+City node
+    EXPECT_EQ(city.size(), 3u);     // the two City-only plus the Person+City node
+    EXPECT_EQ(both.size(), 1u);     // only the Person+City node
+
+    // A label scan is a superset match, so its result is a subset of all nodes.
+    EXPECT_TRUE(std::includes(all.begin(), all.end(), person.begin(), person.end()));
+    EXPECT_TRUE(std::includes(all.begin(), all.end(), city.begin(), city.end()));
+
+    // The conjunction is exactly the intersection of the single-label scans, and
+    // every node has Person or City, so their union is all nodes.
+    std::vector<uint64_t> intersection;
+    std::set_intersection(person.begin(), person.end(),
+                          city.begin(), city.end(),
+                          std::back_inserter(intersection));
+    EXPECT_EQ(intersection, both);
+
+    std::vector<uint64_t> unionSet;
+    std::set_union(person.begin(), person.end(),
+                   city.begin(), city.end(),
+                   std::back_inserter(unionSet));
+    EXPECT_EQ(unionSet, all);
+}
+
+TEST_F(DBLoweringTest, executesScanNodesByLabelUnknownIsEmpty) {
+    auto graph = buildLabeledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // "Robot" was never created, so the conjunction is unsatisfiable: no rows.
+    const std::vector<uint64_t> robots = collectScan(scanByLabelUnknownProgram, reader.getView());
+    EXPECT_TRUE(robots.empty());
 }
 
 TEST_F(DBLoweringTest, lowersOneHopOutEdges) {

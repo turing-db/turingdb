@@ -380,4 +380,27 @@ TEST_F(NLDialectTest, verifierAcceptsBoundedSortBuffer) {
     EXPECT_EQ(*buffer.getTopK(), 5u);
 }
 
+// nl.scan_nodes_by_label infers a single node-ID chunk iterator - the same
+// result shape as nl.scan_nodes - since the label list filters rows, not
+// columns. The two spelled labels are carried on the op verbatim.
+TEST_F(NLDialectTest, scanNodesByLabelInfersNodeIDIterator) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    const mlir::ArrayAttr labels = builder.getStrArrayAttr({"Person", "Employee"});
+    mlir::nl::ScanNodesByLabel scan = builder.create<mlir::nl::ScanNodesByLabel>(loc, labels);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    const mlir::Type chunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    const mlir::Type iteratorType = mlir::nl::IteratorType::get(&_context, {chunkType});
+    EXPECT_EQ(scan.getResult().getType(), iteratorType);
+    EXPECT_EQ(scan.getLabels().size(), 2u);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+}
+
 }

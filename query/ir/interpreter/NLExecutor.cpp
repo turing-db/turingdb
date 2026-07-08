@@ -9,6 +9,7 @@
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/GetPropertiesWithNullIterator.h"
 #include "iterators/ScanNodesIterator.h"
+#include "iterators/ScanNodesByLabelIterator.h"
 #include "columns/ColumnOptVector.h"
 #include "metadata/PropertyType.h"
 
@@ -524,6 +525,48 @@ void NLExecutor::runScanNodesLoop(NLExecutionContext* context, NLFunctionData* d
     const NLLimitState* limit = loopData->getLimit();
 
     ScanNodesChunkWriter chunkWriter(*context->getView());
+    chunkWriter.setNodeIDs(nodeIDs);
+
+    const auto runIteration = [&]() {
+        chunkWriter.fill(chunkSize);
+
+        if (nodeIDs->empty()) {
+            return;
+        }
+
+        runBody(context, loopBody);
+    };
+
+    if (limit) {
+        while (chunkWriter.isValid() && limit->getRemaining() > 0) {
+            runIteration();
+        }
+    } else {
+        while (chunkWriter.isValid()) {
+            runIteration();
+        }
+    }
+}
+
+void NLExecutor::runScanNodesByLabelLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLScanByLabelLoopData* loopData = static_cast<NLScanByLabelLoopData*>(data);
+
+    // A requested label was absent from the schema, so no node carries the full
+    // conjunction: the scan matches nothing and the loop body never runs.
+    if (!loopData->isMatchable()) {
+        return;
+    }
+
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    ColumnNodeIDs* nodeIDs = loopData->getNodeIDs();
+    const size_t chunkSize = context->getChunkSize();
+
+    // A null limit leaves the loop unbounded, exactly as in runScanNodesLoop.
+    const NLLimitState* limit = loopData->getLimit();
+
+    // The LabelSetHandle borrows the loop data's owned LabelSet, which lives for
+    // the whole program, so the handle stays valid for every fill below.
+    ScanNodesByLabelChunkWriter chunkWriter(*context->getView(), LabelSetHandle(loopData->getLabelSet()));
     chunkWriter.setNodeIDs(nodeIDs);
 
     const auto runIteration = [&]() {

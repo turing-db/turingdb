@@ -187,6 +187,16 @@ LogicalResult CrossProduct::verify() {
     return success();
 }
 
+// A label scan must name at least one label to filter by; a label-free scan of
+// every node is db.scan_nodes, so an empty label list is malformed IR here.
+LogicalResult ScanNodesByLabel::verify() {
+    if (getLabels().empty()) {
+        return emitOpError("requires at least one label");
+    }
+
+    return success();
+}
+
 // db.limit passes its columns straight through, so the results must be exactly
 // the input columns - same count, same types and in the same order.
 LogicalResult Limit::verify() {

@@ -244,6 +244,8 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
 void DBLowering::lowerOperation(mlir::Operation& operation) {
     if (mlir::db::ScanNodes scanNodes = mlir::dyn_cast<mlir::db::ScanNodes>(operation)) {
         lowerScanNodes(scanNodes);
+    } else if (mlir::db::ScanNodesByLabel scanNodesByLabel = mlir::dyn_cast<mlir::db::ScanNodesByLabel>(operation)) {
+        lowerScanNodesByLabel(scanNodesByLabel);
     } else if (mlir::db::GetOutEdges getOutEdges = mlir::dyn_cast<mlir::db::GetOutEdges>(operation)) {
         lowerGetOutEdges(getOutEdges);
     } else if (mlir::db::GetInEdges getInEdges = mlir::dyn_cast<mlir::db::GetInEdges>(operation)) {
@@ -290,6 +292,19 @@ void DBLowering::lowerScanNodes(mlir::db::ScanNodes scanNodes) {
 
     nl::ScanNodes nodes = _builder.create<nl::ScanNodes>(_builder.getUnknownLoc());
     buildLoopForSource(nodes.getResult(), scanNodes.getOperation());
+}
+
+void DBLowering::lowerScanNodesByLabel(mlir::db::ScanNodesByLabel scanNodesByLabel) {
+    // The label sibling of lowerScanNodes: a scan reads no column, so its loop
+    // sits at the top of the current root block. The label list is a filter on
+    // the rows, not a column input, so it is forwarded as-is to the nl op -
+    // translation resolves the names against the schema, the same way the
+    // property name on nl.get_property_type is resolved by its consumer.
+    setInsertionInto(_rootBlock);
+
+    nl::ScanNodesByLabel nodes = _builder.create<nl::ScanNodesByLabel>(_builder.getUnknownLoc(),
+                                                                       scanNodesByLabel.getLabelsAttr());
+    buildLoopForSource(nodes.getResult(), scanNodesByLabel.getOperation());
 }
 
 void DBLowering::lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges) {
@@ -835,7 +850,7 @@ void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {
         return;
     }
 
-    const bool opensLoop = mlir::isa<mlir::db::ScanNodes, mlir::db::GetOutEdges, mlir::db::GetInEdges>(definingOp);
+    const bool opensLoop = mlir::isa<mlir::db::ScanNodes, mlir::db::ScanNodesByLabel, mlir::db::GetOutEdges, mlir::db::GetInEdges>(definingOp);
     const bool isCrossProduct = mlir::isa<mlir::db::CrossProduct>(definingOp);
 
     // The first limit, in program order, to claim a producer wins, so a loop

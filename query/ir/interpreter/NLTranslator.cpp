@@ -140,6 +140,12 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
     for (mlir::Operation& operation : block) {
         if (nl::ScanNodes scanNodes = mlir::dyn_cast<nl::ScanNodes>(operation)) {
             _iteratorConfigs[scanNodes.getResult()] = IteratorConfig {IteratorKind::ScanNodes, {}, {}};
+        } else if (nl::ScanNodesByLabel scanNodesByLabel = mlir::dyn_cast<nl::ScanNodesByLabel>(operation)) {
+            IteratorConfig config {IteratorKind::ScanNodesByLabel, {}, {}};
+            for (const mlir::Attribute label : scanNodesByLabel.getLabels()) {
+                config._labels.push_back(mlir::cast<mlir::StringAttr>(label).str());
+            }
+            _iteratorConfigs[scanNodesByLabel.getResult()] = config;
         } else if (nl::GetOutEdges getOutEdges = mlir::dyn_cast<nl::GetOutEdges>(operation)) {
             IteratorConfig config {IteratorKind::GetOutEdges, getOutEdges.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getOutEdges.getColumnsToFilter();
@@ -231,6 +237,8 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
     // Translate the loop differently depending on the kind of iterator associated
     if (config._kind == IteratorKind::ScanNodes) {
         translateScanLoop(loopBody, limit, body);
+    } else if (config._kind == IteratorKind::ScanNodesByLabel) {
+        translateScanByLabelLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::Sort) {
         // A sort emit loop is never limit-bounded: ORDER BY must see every row.
         translateSortLoop(config, loopBody, body);
@@ -248,6 +256,40 @@ void NLTranslator::translateScanLoop(mlir::Block& loopBody, NLLimitState* limit,
     loopData->setLimit(limit);
 
     body->addStmt(NLFunctionDescriptor {&NLExecutor::runScanNodesLoop, loopData});
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateScanByLabelLoop(const IteratorConfig& config,
+                                            mlir::Block& loopBody,
+                                            NLLimitState* limit,
+                                            NLStmtContainer* body) {
+    // A label scan binds the same single node ID chunk as a plain scan.
+    ColumnNodeIDs* nodeIDs = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(0)));
+
+    // Resolve the label names into the LabelSet the scan filters by. A node
+    // matches when its label set is a superset of this one, so the requested
+    // labels are ANDed. If any name is absent from the schema, no node can
+    // carry it: the conjunction is unsatisfiable and the scan is marked
+    // unmatchable (it emits nothing) rather than dropping the name and matching
+    // a weaker set.
+    LabelSet labelset;
+    bool matchable = true;
+    const LabelMap& labels = _view->metadata().labels();
+    for (const std::string& label : config._labels) {
+        const std::optional<LabelID> id = labels.get(label);
+        if (!id) {
+            matchable = false;
+            break;
+        }
+
+        labelset.set(*id);
+    }
+
+    NLScanByLabelLoopData* loopData = _program->allocFunctionData<NLScanByLabelLoopData>(nodeIDs, labelset, matchable);
+    loopData->setLimit(limit);
+
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runScanNodesByLabelLoop, loopData});
 
     translateBlock(loopBody, loopData->getStmts());
 }
