@@ -354,8 +354,11 @@ public:
                 _outBuf->copyVarLenData(val->data(), columnByteSize);
             }
         } else if constexpr (db::IsEntityList<T>) {
-            // EntityList is only used as ColumnVector<EntityList>, never optional
-            static_assert(false, "Sending ColumnOptVector<EntityList> not supported");
+            // EntityList is only used as ColumnVector<EntityList>, never optional.
+            // sizeof(T) == 0 (never true) keeps the assert dependent on T so it only
+            // fires if this branch is ever instantiated; a bare static_assert(false)
+            // is diagnosed eagerly by pre-P2593 compilers even when discarded.
+            static_assert(sizeof(T) == 0, "Sending ColumnOptVector<EntityList> not supported");
         } else if constexpr (db::IsNull<T>) {
             // Don't send anything for property null
         } else {
@@ -440,8 +443,9 @@ public:
             _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
             _outBuf->copyVarLenData(val.data(), columnByteSize);
         } else if constexpr (db::IsEntityList<T>) {
-            throw FatalException("ColumnOptConst<EntityList> is not supported");
-            static_assert(false, "ColumnOptConst<EntityList> is not supported");
+            // EntityList is only used as ColumnVector<EntityList>, never optional.
+            // Dependent condition (see the ColumnOptVector<EntityList> branch above).
+            static_assert(sizeof(T) == 0, "ColumnOptConst<EntityList> is not supported");
         } else if constexpr (db::IsNull<T>) {
             // Don't send anything for property null
         } else {
