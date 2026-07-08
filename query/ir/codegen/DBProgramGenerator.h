@@ -26,11 +26,15 @@ public:
     using VariableIdentities = std::vector<mlir::TypedValue<mlir::Type>>;
     using VariableIdentityMap = std::unordered_map<const VariableDependency*, VariableIdentities>;
 
-    void generate(const CypherAST* ast, mlir::ModuleOp* module);
+    explicit DBProgramGenerator(mlir::ModuleOp* mainModule);
+    ~DBProgramGenerator();
+
+    void generate(const CypherAST* ast);
 
 private:
+    mlir::ModuleOp* _module {nullptr};
     mlir::MLIRContext* _mlirCtxt {nullptr};
-    mlir::OpBuilder* _opBuilder {nullptr};
+    mlir::OpBuilder _opBuilder;
 
     // Maps a Cypher variable to all of its MLIR variable uses, in order of appearence
     VariableIdentityMap _varMap;

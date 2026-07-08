@@ -248,8 +248,8 @@ void progGen(std::string_view query,
     const double analyzeMs = Ms(Clock::now() - analyzeStart).count();
 
     const auto codegenStart = Clock::now();
-    DBProgramGenerator generator;
-    generator.generate(&ast, module);
+    DBProgramGenerator generator(module);
+    generator.generate(&ast);
     const double codegenMs = Ms(Clock::now() - codegenStart).count();
 
     std::cout << "[progGen] parse: " << parseMs << " ms, "

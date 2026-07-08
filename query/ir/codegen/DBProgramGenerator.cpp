@@ -58,6 +58,16 @@ bool producesNodeVar(const DependencyEdge* e) {
 
 }
 
+DBProgramGenerator::DBProgramGenerator(mlir::ModuleOp* mainModule)
+    : _module(mainModule),
+    _mlirCtxt(_module->getContext()),
+    _opBuilder(_module->getBodyRegion())
+{
+}
+
+DBProgramGenerator::~DBProgramGenerator() {
+}
+
 mlir::db::ColumnType DBProgramGenerator::allocColumnType(mlir::Type type) {
     return mlir::db::ColumnType::get(_mlirCtxt, type);
 }
@@ -70,7 +80,7 @@ void DBProgramGenerator::addScanNodes(const VariableDependency* var) {
     bioassert(!_varMap.contains(var), "ScanNodes for registered variable");
 
     const auto col = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
-    auto scan = _opBuilder->create<mlir::db::ScanNodes>(_opBuilder->getUnknownLoc(), col);
+    auto scan = _opBuilder.create<mlir::db::ScanNodes>(_opBuilder.getUnknownLoc(), col);
 
     registerValue(var, scan.getResult());
 }
@@ -110,8 +120,8 @@ void DBProgramGenerator::addEdgeTraversal(const VariableDependency* src,
         results.push_back(column.getType());
     }
 
-    const auto loc = _opBuilder->getUnknownLoc();
-    auto op = _opBuilder->create<EdgeOp>(loc, results, operands);
+    const auto loc = _opBuilder.getUnknownLoc();
+    auto op = _opBuilder.create<EdgeOp>(loc, results, operands);
 
     const mlir::Value newSrcs = op.getResult(0);
     const mlir::Value newEdges = op.getResult(1);
@@ -136,28 +146,25 @@ void DBProgramGenerator::addEdgeTraversal(const VariableDependency* src,
     }
 }
 
-void DBProgramGenerator::generate(const CypherAST* ast, mlir::ModuleOp* module) {
-    _mlirCtxt = module->getContext();
+void DBProgramGenerator::generate(const CypherAST* ast) {
+    bioassert(_module, "Null module");
     bioassert(_mlirCtxt, "Null context");
 
-    mlir::OpBuilder builder(module->getBodyRegion());
-    _opBuilder = &builder;
-
     _mlirCtxt->loadDialect<mlir::db::DB>();
-    const mlir::Location uloc = _opBuilder->getUnknownLoc();
+    const mlir::Location uloc = _opBuilder.getUnknownLoc();
 
     { // Create main
-        _opBuilder->setInsertionPointToEnd(module->getBody());
+        _opBuilder.setInsertionPointToEnd(_module->getBody());
         const mlir::FunctionType funcType = mlir::FunctionType::get(_mlirCtxt, {}, {});
-        auto func = _opBuilder->create<mlir::func::FuncOp>(uloc, "main", funcType);
+        auto func = _opBuilder.create<mlir::func::FuncOp>(uloc, "main", funcType);
         mlir::Block& block = *func.addEntryBlock();
-        _opBuilder->setInsertionPointToStart(&block);
+        _opBuilder.setInsertionPointToStart(&block);
     }
 
     generateTraversal(ast);
     generateOutput(ast);
 
-    _opBuilder->create<mlir::func::ReturnOp>(uloc);
+    _opBuilder.create<mlir::func::ReturnOp>(uloc);
 }
 
 void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
@@ -378,6 +385,6 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
         outputted.push_back(itemCol);
     }
 
-    const mlir::Location loc = _opBuilder->getUnknownLoc();
-    _opBuilder->create<mlir::db::Output>(loc, mlir::ValueRange{outputted});
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    _opBuilder.create<mlir::db::Output>(loc, mlir::ValueRange{outputted});
 }
