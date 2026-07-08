@@ -566,7 +566,10 @@ void NLExecutor::runScanNodesByLabelLoop(NLExecutionContext* context, NLFunction
 
     // The LabelSetHandle borrows the loop data's owned LabelSet, which lives for
     // the whole program, so the handle stays valid for every fill below.
-    ScanNodesByLabelChunkWriter chunkWriter(*context->getView(), LabelSetHandle(loopData->getLabelSet()));
+    const GraphView& view = *context->getView();
+    const LabelSetHandle labelset(loopData->getLabelSet());
+
+    ScanNodesByLabelChunkWriter chunkWriter(view, labelset);
     chunkWriter.setNodeIDs(nodeIDs);
 
     const auto runIteration = [&]() {
