@@ -67,7 +67,11 @@ done
 
 echo
 echo "=== mlir_samples_parse: checked $checked sample(s), ${#failures[@]} failure(s) ==="
-for t in "${failures[@]}"; do echo "  - $t"; done
+# Guard the expansion: under `set -u`, macOS's bash 3.2 treats "${failures[@]}"
+# on an empty array as an unbound variable, so only expand it when non-empty.
+if [[ ${#failures[@]} -gt 0 ]]; then
+    for t in "${failures[@]}"; do echo "  - $t"; done
+fi
 
 # Non-zero exit on any failure.
 [[ ${#failures[@]} -eq 0 ]]
