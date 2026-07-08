@@ -22,6 +22,31 @@ def ScanNodes : NLOp<"scan_nodes", [Pure, InferTypeOpAdaptor]> {
 }
 
 /**
+* ScanNodesByLabel
+*/
+def ScanNodesByLabel : NLOp<"scan_nodes_by_label", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create a database iterator over the nodes carrying every given label";
+  let description = [{
+    Imperative counterpart of db.scan_nodes_by_label. Each step of an enclosing
+    nl.for fills one chunk of the node IDs whose label set is a superset of
+    `labels`:
+
+      %nodes = nl.scan_nodes_by_label(["Person", "Employee"])
+
+    `labels` is the same list of label names db.scan_nodes_by_label carried;
+    translation resolves each name to a storage LabelID, the same way an
+    nl.get_property_type name is resolved by the property fetch that consumes
+    it. A label absent from the schema leaves the conjunction unsatisfiable, so
+    the loop yields no chunk. Filtering by label narrows only the rows, never
+    their shape, so - like nl.scan_nodes - the result is always
+    !nl.iter<!nl.chunk<!storage.node_id>> and is inferred, not spelled out.
+  }];
+  let arguments = (ins StrArrayAttr:$labels);
+  let results   = (outs NLIterator:$result);
+  let assemblyFormat = "`(` $labels `)` attr-dict";
+}
+
+/**
 * GetOutEdges
 */
 def GetOutEdges : NLOp<"get_out_edges", [Pure, InferTypeOpAdaptor]> {

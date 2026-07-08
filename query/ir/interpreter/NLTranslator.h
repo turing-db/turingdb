@@ -27,6 +27,7 @@ private:
     // Kind of iterators passed to each for loop
     enum class IteratorKind {
         ScanNodes,
+        ScanNodesByLabel,
         GetOutEdges,
         GetInEdges,
         Sort,
@@ -40,6 +41,10 @@ private:
 
         // The accumulator a Sort iterator drains; null for the other kinds.
         NLSortState* _sortState {nullptr};
+
+        // The label names a ScanNodesByLabel iterator filters by; empty for the
+        // other kinds. Resolved to a LabelSet when the loop is translated.
+        std::vector<std::string> _labels;
     };
 
     NLProgram* _program {nullptr};
@@ -76,6 +81,15 @@ private:
     void translateBlock(mlir::Block& block, NLStmtContainer* body);
     void translateFor(mlir::nl::For forLoop, NLStmtContainer* body);
     void translateScanLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
+
+    // Translate the nl.for over an nl.scan_nodes_by_label iterator: resolve the
+    // config's label names against the schema into a LabelSet (marking the scan
+    // unmatchable if any name is absent), allocate the node loop variable, and
+    // record the label-filtered scan loop statement in body
+    void translateScanByLabelLoop(const IteratorConfig& config,
+                                  mlir::Block& loopBody,
+                                  NLLimitState* limit,
+                                  NLStmtContainer* body);
     void translateEdgeLoop(const IteratorConfig& config,
                            mlir::Block& loopBody,
                            NLLimitState* limit,

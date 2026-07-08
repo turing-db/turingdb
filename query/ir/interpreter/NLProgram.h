@@ -12,6 +12,7 @@
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
+#include "metadata/LabelSet.h"
 
 namespace db {
 
@@ -184,6 +185,31 @@ private:
     ColumnNodeIDs* _nodeIDs {nullptr};
     NLLimitState* _limit {nullptr};
     NLStmtContainer _stmts;
+};
+
+// nl.scan_nodes_by_label loop data: a node scan restricted to the nodes whose
+// label set is a superset of _labelset. Reuses the plain scan's node chunk,
+// limit and body; adds the resolved label set the ScanNodesByLabelChunkWriter
+// filters by.
+class NLScanByLabelLoopData : public NLScanLoopData {
+public:
+    // The label set is owned here so the LabelSetHandle the executor builds each
+    // run points at storage that outlives it (this data lives for the whole
+    // program). _matchable is false when a requested label was absent from the
+    // schema, leaving the conjunction unsatisfiable, so the loop emits no row.
+    NLScanByLabelLoopData(ColumnNodeIDs* nodeIDs, const LabelSet& labelset, bool matchable)
+        : NLScanLoopData(nodeIDs),
+        _labelset(labelset),
+        _matchable(matchable)
+    {
+    }
+
+    const LabelSet& getLabelSet() const { return _labelset; }
+    bool isMatchable() const { return _matchable; }
+
+private:
+    LabelSet _labelset;
+    bool _matchable {true};
 };
 
 // nl.get_out_edges and nl.get_in_edges loop data

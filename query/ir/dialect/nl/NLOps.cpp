@@ -80,6 +80,17 @@ LogicalResult ScanNodes::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+// A label scan filters the rows a plain scan would produce, never their shape,
+// so it produces the same single chunk of node IDs per step - the label list is
+// a filter, not a result type.
+LogicalResult ScanNodesByLabel::inferReturnTypes(MLIRContext* context,
+                                                 std::optional<Location> location,
+                                                 ScanNodesByLabel::Adaptor adaptor,
+                                                 SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(IteratorType::get(context, {getNodeIDChunkType(context)}));
+    return success();
+}
+
 // An out-edges fetch produces one row of edge chunks per step, then one
 // filtered chunk per carried column, mirroring db.get_out_edges
 LogicalResult GetOutEdges::inferReturnTypes(MLIRContext* context,
