@@ -193,10 +193,6 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
             continue;
         }
 
-        const auto isEdgeTgtEdgeVar = [](const DependencyEdge* e) -> bool {
-            return e->data().type() == EdgeMetadata::EdgeType::GET_OUT_EDGES
-                || e->data().type() == EdgeMetadata::EdgeType::GET_IN_EDGES;
-        };
         const auto isEdgeTgtMetaVar = [](const DependencyEdge* e) -> bool {
             return e->isMetaEdge();
         };
@@ -204,7 +200,7 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
         // A valid root is a non-meta Cypher variable which is a node
         const bool validRoot =
             std::ranges::none_of(root.incoming(), [&](const DependencyEdge* e) {
-                return isEdgeTgtEdgeVar(e) || isEdgeTgtMetaVar(e);
+                return producesEdgeVar(e) || isEdgeTgtMetaVar(e);
             });
 
         if (!validRoot) {
