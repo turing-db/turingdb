@@ -8,15 +8,15 @@ module {
     // clobber each other. The scan loop is shared by both limits' producing
     // nests; the outer (first, in program order) limit claims it, and the second
     // limit's nl.limit_truncate still caps the expansion independently.
-    %a = db.scan_nodes() : !db.column<"a">
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
 
-    %la = db.limit(%a) count 2 : (!db.column<"a">) -> !db.column<"a">
+    %la = db.limit(%a) count 2 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
 
-    %a1, %e0, %et0, %b = db.get_out_edges(%la, {}) : (!db.column<"a">) -> (!db.column<"a1">, !db.column<"e0">, !db.column<"et0">, !db.column<"b">)
+    %a1, %e0, %et0, %b = db.get_out_edges(%la, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
 
-    %lb = db.limit(%b) count 3 : (!db.column<"b">) -> !db.column<"b">
+    %lb = db.limit(%b) count 3 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
 
-    db.output(%lb) : !db.column<"b">
+    db.output(%lb) : !db.column<!storage.node_id>
 
     return
   }

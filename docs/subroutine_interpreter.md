@@ -10,14 +10,14 @@ without lowering to LLVM and without walking MLIR data structures at runtime.
 ```mlir
 func.func @two_hop() {
   %nodes = nl.scan_nodes()
-  nl.for %a in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
     %edges = nl.get_out_edges(%a, {})
     nl.for %srcs, %eids, %etypes, %b in %edges
-        : !nl.iter<!nl.chunk<!nl.node_id>, !nl.chunk<!nl.edge_id>, !nl.chunk<!nl.edge_type_id>, !nl.chunk<!nl.node_id>> {
-      %hop = nl.get_out_edges(%b, {%srcs}) : !nl.chunk<!nl.node_id>
+        : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
+      %hop = nl.get_out_edges(%b, {%srcs}) : !nl.chunk<!storage.node_id>
       nl.for %srcs2, %eids2, %etypes2, %c, %aFiltered in %hop
-          : !nl.iter<!nl.chunk<!nl.node_id>, !nl.chunk<!nl.edge_id>, !nl.chunk<!nl.edge_type_id>, !nl.chunk<!nl.node_id>, !nl.chunk<!nl.node_id>> {
-        nl.output(%aFiltered, %c) : !nl.chunk<!nl.node_id>, !nl.chunk<!nl.node_id>
+          : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>> {
+        nl.output(%aFiltered, %c) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
       }
     }
   }

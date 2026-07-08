@@ -198,7 +198,7 @@ private:
     NLAggregateState* aggregateStateFor(mlir::Value handle) const;
 
     // Pool-allocate a buffer/loop column matching a chunk type - an ID column for
-    // an ID chunk, a nullable value column for a !nl.nullable<...> chunk - and the
+    // an ID chunk, a nullable value column for a !storage.nullable<...> chunk - and the
     // append/gather/compare handler for that element type. The compare selector
     // throws for chunk types that have no order (an embedding key).
     Column* allocColumnForChunkType(mlir::Type chunkType);
@@ -208,7 +208,7 @@ private:
     static NLKeyAppendFunction selectKeyAppendForChunkType(mlir::Type chunkType);
 
     // The non-null row count handler for a chunk type - the all-rows count for an
-    // ID chunk, the present-value count for a !nl.nullable<...> chunk. Used by
+    // ID chunk, the present-value count for a !storage.nullable<...> chunk. Used by
     // nl.count_update.
     static NLCountFunction selectCountForChunkType(mlir::Type chunkType);
 

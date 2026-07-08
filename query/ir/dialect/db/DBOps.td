@@ -101,8 +101,8 @@ def GetNodeProperties : TuringOp<"get_node_properties", [Pure]> {
     traversal carries only node IDs; this op fetches the value behind `a.name`,
     one per node, into a new column:
 
-      %a    = db.scan_nodes() : !db.column<"a">
-      %name = db.get_node_properties(%a, "name") : (!db.column<"a">) -> !db.column<"a.name">
+      %a    = db.scan_nodes() : !db.column<!storage.node_id>
+      %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
 
     A node may not have the property, so missing values come back null and no
     node is dropped - the lowering uses the with-null property fetch. One op
@@ -138,11 +138,12 @@ def GetEdgeProperties : TuringOp<"get_edge_properties", [Pure]> {
     this op fetches the value behind `e.weight`, one per edge, with missing
     values null:
 
-      %weight = db.get_edge_properties(%eids, "weight") : (!db.column<"eids">) -> !db.column<"e.weight">
+      %weight = db.get_edge_properties(%eids, "weight") : (!db.column<!storage.edge_id>) -> !db.column<none>
 
-    A db.column is just a named column at this level, so node and edge columns
-    are indistinguishable in the type; the op chosen - node vs edge - selects
-    which side of the graph the property is read from.
+    The input column carries its element type - !storage.edge_id here - and the
+    op chosen (get_node_properties vs get_edge_properties) selects which side of
+    the graph the property is read from. The value column is left typed none: the
+    property's value type is only resolved against the schema during lowering.
   }];
 
   let arguments = (ins Column:$input_edges, StrAttr:$property);
@@ -168,11 +169,11 @@ def CrossProduct : TuringOp<"cross_product", [Pure]> {
     arguments, so the two factors share no SSA value.
 
       %a, %b = db.cross_product factor {
-        %x = db.scan_nodes() : !db.column<"a">
-        db.yield %x : !db.column<"a">
+        %x = db.scan_nodes() : !db.column<!storage.node_id>
+        db.yield %x : !db.column<!storage.node_id>
       } factor {
-        %y = db.scan_nodes() : !db.column<"b">
-        db.yield %y : !db.column<"b">
+        %y = db.scan_nodes() : !db.column<!storage.node_id>
+        db.yield %y : !db.column<!storage.node_id>
       }
 
     Because the factors are disconnected, which columns end up in the result
@@ -241,7 +242,7 @@ def Output : TuringOp<"output"> {
   let description = [{
       Sends a number of columns to output.
 
-      db.output(%a, %b, %c) : !db.column<a>, !db.column<b>, !db.column<c>
+      db.output(%a, %b, %c) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
 
     Variadic<Column> accepts any number of columns of any value. The op has no
     results and is deliberately not Pure: emitting the result is its whole
@@ -265,9 +266,9 @@ def Limit : TuringOp<"limit", [Pure]> {
     to the first N rows of the columns flowing into db.output, passing them
     through unchanged:
 
-      %a  = db.scan_nodes() : !db.column<"a">
-      %la = db.limit(%a) count 3 : (!db.column<"a">) -> !db.column<"a">
-      db.output(%la) : !db.column<"a">
+      %a  = db.scan_nodes() : !db.column<!storage.node_id>
+      %la = db.limit(%a) count 3 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+      db.output(%la) : !db.column<!storage.node_id>
 
     It lowers to a hoisted nl.limit handle, an nl.limit_update in the innermost
     loop body, a `limit` operand on every nl.for in the nest, and a `limit`
@@ -301,9 +302,9 @@ def Skip : TuringOp<"skip", [Pure]> {
     The declarative counterpart of a Cypher RETURN ... SKIP M. Drops the first M
     rows of the columns flowing through it, passing the rest through unchanged:
 
-      %a  = db.scan_nodes() : !db.column<"a">
-      %sa = db.skip(%a) count 3 : (!db.column<"a">) -> !db.column<"a">
-      db.output(%sa) : !db.column<"a">
+      %a  = db.scan_nodes() : !db.column<!storage.node_id>
+      %sa = db.skip(%a) count 3 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+      db.output(%sa) : !db.column<!storage.node_id>
   }];
 
   // The columns flow through unchanged; count is unsigned - a count of rows to
@@ -334,11 +335,11 @@ def Sort : TuringOp<"sort", [Pure]> {
     so that the key columns are sorted; every column moves as one row, so the
     projection stays row-aligned:
 
-      %a     = db.scan_nodes() : !db.column<"a">
-      %score = db.get_node_properties(%a, "score") : (!db.column<"a">) -> !db.column<"a.score">
+      %a     = db.scan_nodes() : !db.column<!storage.node_id>
+      %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
       %sa, %sscore = db.sort(%a, %score) keys [1] ascending [true]
-                       : (!db.column<"a">, !db.column<"a.score">) -> (!db.column<"a">, !db.column<"a.score">)
-      db.output(%sa, %sscore) : !db.column<"a">, !db.column<"a.score">
+                       : (!db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
+      db.output(%sa, %sscore) : !db.column<!storage.node_id>, !db.column<none>
 
     A row is sorted across several columns: `keys` is the list of column indices
     to sort by, most significant first (so `keys [1, 0]` sorts by column 1, ties
@@ -388,9 +389,9 @@ def RemoveDuplicates : TuringOp<"remove_duplicates", [Pure]> {
     nulls count as equal, as Cypher DISTINCT dedups nulls together. The columns
     pass through unchanged in count and type; only duplicate rows are removed:
 
-      %a  = db.scan_nodes() : !db.column<"a">
-      %da = db.remove_duplicates(%a) : (!db.column<"a">) -> !db.column<"a">
-      db.output(%da) : !db.column<"a">
+      %a  = db.scan_nodes() : !db.column<!storage.node_id>
+      %da = db.remove_duplicates(%a) : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+      db.output(%da) : !db.column<!storage.node_id>
 
     Unlike db.sort it is not a pipeline breaker: it emits a row the moment it first
     sees it, keeping only a growing seen-set. It lowers to a hoisted nl.distinct

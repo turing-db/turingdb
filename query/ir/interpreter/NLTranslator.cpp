@@ -48,7 +48,7 @@ NLHandlerFunction selectPropertyFetchHandler(bool isNode, ValueType valueType) {
 // Reverse of DBLowering's valueTypeToElementType: recover the storage value
 // type baked into a nullable value chunk's element type. A cross product result
 // keeps its input chunk's element type, so a crossed property column carries the
-// same !nl.nullable<...> the fetch produced, and this maps it back to allocate
+// same !storage.nullable<...> the fetch produced, and this maps it back to allocate
 // the matching nullable value column and pick the broadcast.
 ValueType valueTypeFromElementType(mlir::Type elementType) {
     if (mlir::isa<storage::StringType>(elementType)) {
@@ -876,7 +876,7 @@ NLAggregateState* NLTranslator::aggregateStateFor(mlir::Value handle) const {
     return stateIt->second;
 }
 
-// An ID chunk allocates an ID column on its kind; a !nl.nullable<...> chunk
+// An ID chunk allocates an ID column on its kind; a !storage.nullable<...> chunk
 // allocates a ColumnOptVector on its value type. Mirrors addCrossColumn's split.
 Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);

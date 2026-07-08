@@ -15,7 +15,7 @@ def ScanNodes : NLOp<"scan_nodes", [Pure, InferTypeOpAdaptor]> {
   let description = [{
     Imperative counterpart of db.scan_nodes. Each step of an enclosing
     nl.for fills one chunk of node IDs. The result type is always
-    !nl.iter<!nl.chunk<!nl.node_id>> and is inferred, not spelled out.
+    !nl.iter<!nl.chunk<!storage.node_id>> and is inferred, not spelled out.
   }];
   let results   = (outs NLIterator:$result);
   let assemblyFormat = "`(`operands`)` attr-dict";
@@ -40,7 +40,7 @@ def GetOutEdges : NLOp<"get_out_edges", [Pure, InferTypeOpAdaptor]> {
       %edges = nl.get_out_edges(%a, {})
       nl.for %srcs, %eids, %etypes, %b in %edges {
         // second hop b->c, carrying the `a` of this step (here %srcs)
-        %hop = nl.get_out_edges(%b, {%srcs}) : !nl.chunk<!nl.node_id>
+        %hop = nl.get_out_edges(%b, {%srcs}) : !nl.chunk<!storage.node_id>
         nl.for %srcs2, %eids2, %etypes2, %c, %aFiltered in %hop { ... }
       }
 
@@ -131,14 +131,14 @@ def GetNodeProperties : NLOp<"get_node_properties", [Pure]> {
     into the current nl.for body.
 
     A node may not have the property, so the result is a nullable value chunk -
-    !nl.chunk<!nl.nullable<...>>, storage's ColumnOptVector. Missing values come
+    !nl.chunk<!storage.nullable<...>>, storage's ColumnOptVector. Missing values come
     back null; no row is dropped. The wrapped type is the concrete primitive the
     property resolved to during lowering.
 
       %weight = nl.get_property_type("weight")
       nl.for %nodes in %scan {
-        %values = nl.get_node_properties(%nodes, %weight) : !nl.chunk<!nl.nullable<f64>>
-        nl.output(%nodes, %values) : !nl.chunk<!nl.node_id>, !nl.chunk<!nl.nullable<f64>>
+        %values = nl.get_node_properties(%nodes, %weight) : !nl.chunk<!storage.nullable<f64>>
+        nl.output(%nodes, %values) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<f64>>
       }
   }];
 
@@ -181,7 +181,7 @@ def For : NLOp<"for", [SingleBlockImplicitTerminator<"Yield">]> {
     Each step fills the next chunks of the iterator and binds them to the
     loop variables, one variable per chunk:
 
-    nl.for %chunk in %nodes : !nl.iter<!nl.chunk<!nl.node_id>> {
+    nl.for %chunk in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
         ...
     }
 
@@ -190,7 +190,7 @@ def For : NLOp<"for", [SingleBlockImplicitTerminator<"Yield">]> {
     every nl.for in a LIMIT's nest carries the same handle and the break unwinds
     the whole nest:
 
-    nl.for %chunk in %nodes limit %h : !nl.iter<!nl.chunk<!nl.node_id>> {
+    nl.for %chunk in %nodes limit %h : !nl.iter<!nl.chunk<!storage.node_id>> {
         ...
     }
   }];
@@ -235,7 +235,7 @@ def CrossProduct : NLOp<"cross_product", [Pure, InferTypeOpAdaptor, AttrSizedOpe
     every outer row against every inner row.
 
       %a, %b = nl.cross_product {%a} {%b}
-                 : {!nl.chunk<!nl.node_id>} {!nl.chunk<!nl.node_id>}
+                 : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.node_id>}
 
     The two brace groups are the columns each factor contributes, in db.yield
     order; the op's results are the outer columns followed by the inner, each
@@ -250,7 +250,7 @@ def CrossProduct : NLOp<"cross_product", [Pure, InferTypeOpAdaptor, AttrSizedOpe
     would be wasted work. Absent, the whole N*M product is built.
 
       %a, %b = nl.cross_product {%a} {%b} limit %h
-                 : {!nl.chunk<!nl.node_id>} {!nl.chunk<!nl.node_id>}
+                 : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.node_id>}
   }];
 
   // The outer and inner column groups to cross, plus the optional limit handle.
@@ -288,8 +288,8 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
     query result, one output column per chunk. The columns are typically loop
     variables, so each nl.for step emits one chunk per column:
 
-    nl.output(%targets) : !nl.chunk<!nl.node_id>
-    nl.output(%sources, %targets) : !nl.chunk<!nl.node_id>, !nl.chunk<!nl.node_id>
+    nl.output(%targets) : !nl.chunk<!storage.node_id>
+    nl.output(%sources, %targets) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
 
     Variadic<NLChunk> accepts any number of chunks of any element type. The op
     is deliberately not Pure: emitting output is its whole point, so it must
@@ -303,7 +303,7 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
     output can read the budgeted prefix off the handle instead of copying it. It
     never mutates the budget - it only reads how many rows to emit:
 
-    nl.output(%targets) limit %h : !nl.chunk<!nl.node_id>
+    nl.output(%targets) limit %h : !nl.chunk<!storage.node_id>
 
     An optional `skip` operand carries an !nl.skip_state handle and is the skip
     sibling of the limit form: when present, output emits the surviving suffix
@@ -314,7 +314,7 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
     path the suffix could not take through the sink before output learned an
     offset). Like the limit form it never mutates the counter:
 
-    nl.output(%targets) skip %h : !nl.chunk<!nl.node_id>
+    nl.output(%targets) skip %h : !nl.chunk<!storage.node_id>
   }];
 
   // Three variable-length operand groups - the columns, the optional limit and
@@ -403,7 +403,7 @@ def LimitTruncate : NLOp<"limit_truncate", [InferTypeOpAdaptor]> {
     awareness of its own. The columns pass through unchanged in type; only the row
     count is cut.
 
-      %a' = nl.limit_truncate %h, (%a) : !nl.chunk<!nl.node_id>
+      %a' = nl.limit_truncate %h, (%a) : !nl.chunk<!storage.node_id>
   }];
 
   // The limit handle whose emitThisStep sizes the copy, then the columns to cut.
@@ -488,7 +488,7 @@ def SkipTruncate : NLOp<"skip_truncate", [InferTypeOpAdaptor]> {
     survives only when the suffix feeds an inner sub-pipeline (a chained query)
     that reads from row zero and so needs the rows lifted to the front.
 
-      %a' = nl.skip_truncate %h, (%a) : !nl.chunk<!nl.node_id>
+      %a' = nl.skip_truncate %h, (%a) : !nl.chunk<!storage.node_id>
   }];
 
   // The skip handle whose offset/count size the copy, then the columns to cut.
@@ -562,7 +562,7 @@ def SortCollect : NLOp<"sort_collect", []> {
     handle, so that by the time the producing loop is exhausted the buffers hold
     every row. The columns are taken together so the buffers stay row-aligned.
 
-      nl.sort_collect %state, (%a, %score) : !nl.chunk<!nl.node_id>, !nl.chunk<!nl.nullable<i64>>
+      nl.sort_collect %state, (%a, %score) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i64>>
   }];
 
   // The accumulator handle, then the columns to append. The column chunk types
@@ -592,9 +592,9 @@ def Sort : NLOp<"sort", [Pure]> {
     per column per step - the same chunk shape the buffers were collected with, so
     an enclosing nl.for binds one loop variable per column:
 
-      %sorted = nl.sort(%state) : !nl.iter<!nl.chunk<!nl.node_id>, !nl.chunk<!nl.nullable<i64>>>
+      %sorted = nl.sort(%state) : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i64>>>
       nl.for %a, %score in %sorted : !nl.iter<...> {
-        nl.output(%a, %score) : !nl.chunk<!nl.node_id>, !nl.chunk<!nl.nullable<i64>>
+        nl.output(%a, %score) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i64>>
       }
 
     The iterator chunk types match the collected columns, but cannot be inferred
@@ -643,7 +643,7 @@ def DistinctFilter : NLOp<"distinct_filter", [InferTypeOpAdaptor]> {
     DISTINCT awareness. And because it shrinks each chunk, a following nl.limit_update
     charges the deduped count, so a downstream LIMIT bounds the producing loop.
 
-      %da = nl.distinct_filter %s, (%a) : !nl.chunk<!nl.node_id>
+      %da = nl.distinct_filter %s, (%a) : !nl.chunk<!storage.node_id>
   }];
 
   let arguments = (ins NLDistinctStateHandle:$state, Variadic<NLChunk>:$columns);

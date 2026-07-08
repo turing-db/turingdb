@@ -7,11 +7,13 @@ module {
     // "name" must be a property that exists in the loaded graph (-graph): the
     // db -> nl lowering resolves the name against the schema and bakes its value
     // type into the result chunk. Swap it for a property your graph actually has.
-    %a = db.scan_nodes() : !db.column<none>
+    // The value column type is left as none in the db dialect - the concrete
+    // type is only known once the property name is resolved during lowering.
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
 
-    %name = db.get_node_properties(%a, "name") : (!db.column<none>) -> !db.column<none>
+    %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
 
-    db.output(%a, %name) : !db.column<none>, !db.column<none>
+    db.output(%a, %name) : !db.column<!storage.node_id>, !db.column<none>
 
     return
   }
