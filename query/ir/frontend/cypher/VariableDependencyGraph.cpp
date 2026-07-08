@@ -66,24 +66,24 @@ VariableDependencyGraph::~VariableDependencyGraph() {
 void VariableDependencyGraph::buildFromAST(const CypherAST* ast) {
     bioassert(ast->queries().size() == 1, "Single queries only.");
 
-    const QueryCommand* q = ast->queries().front();
-    const auto* spq = dynamic_cast<const SinglePartQuery*>(q);
+    const QueryCommand* query = ast->queries().front();
+    const auto* spq = dynamic_cast<const SinglePartQuery*>(query);
     bioassert(spq, "Non-SinglePartQueries are not yet supported.");
 
     const StmtContainer* stmtsContainer = spq->getReadStmts();
     const StmtContainer::Stmts& stmts = stmtsContainer->stmts();
 
-    for (Stmt* s : stmts) {
-        const auto* rd = dynamic_cast<const MatchStmt*>(s);
-        if (!rd) {
+    for (Stmt* stmt : stmts) {
+        const auto* match = dynamic_cast<const MatchStmt*>(stmt);
+        if (!match) {
             spdlog::warn("Non-match statement: skipped");
             continue;
         }
 
-        const Pattern* ptn = rd->getPattern();
-        const Pattern::PatternElements& eles = ptn->elements();
-        for (const PatternElement* ele : eles) {
-            registerPatternElement(ele);
+        const Pattern* pattern = match->getPattern();
+        const Pattern::PatternElements& elements = pattern->elements();
+        for (const PatternElement* element : elements) {
+            registerPatternElement(element);
         }
     }
 
