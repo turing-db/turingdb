@@ -185,8 +185,8 @@ protected:
         mlir::OwningOpRef<mlir::ModuleOp> owningModule = mlir::ModuleOp::create(builder.getUnknownLoc());
         mlir::ModuleOp module = owningModule.get();
 
-        DBProgramGenerator generator;
-        generator.generate(&ast, &module);
+        DBProgramGenerator generator(&module);
+        generator.generate(&ast);
 
         EquivalenceSink sink(rows);
         LocalMemory memory;
