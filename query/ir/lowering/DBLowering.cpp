@@ -1,6 +1,7 @@
 #include "DBLowering.h"
 
 #include <algorithm>
+#include <mlir/IR/Location.h>
 #include <optional>
 
 #include "mlir/IR/Block.h"
@@ -103,6 +104,50 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
     }
 
     throw IRException("Unhandled aggregate kind");
+}
+
+struct NumericOperand {
+    mlir::Type numeric;
+    bool nullable {false};
+};
+
+NumericOperand numericOperand(mlir::Type chunkType) {
+    const auto chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        throw IRException("db.add operand must be a value column");
+    }
+
+    mlir::Type element = chunk.getElementType();
+    bool nullable = false;
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(element)) {
+        nullable = true;
+        element = nullableType.getValueType();
+    }
+
+    const bool isFloat = mlir::isa<mlir::Float64Type>(element);
+    const auto integerType = mlir::dyn_cast<mlir::IntegerType>(element);
+    const bool isInt64 = integerType && integerType.getWidth() == 64;
+    if (!isFloat && !isInt64) {
+        throw IRException("db.add requires numeric operands");
+    }
+
+    return {.numeric = element, .nullable = nullable};
+}
+
+mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
+    const bool anyFloat = mlir::isa<mlir::Float64Type>(lhs) || mlir::isa<mlir::Float64Type>(rhs);
+    if (anyFloat) {
+        return builder.getF64Type();
+    }
+
+    const auto lhsInteger = mlir::cast<mlir::IntegerType>(lhs);
+    const auto rhsInteger = mlir::cast<mlir::IntegerType>(rhs);
+    const bool anyUnsigned = lhsInteger.isUnsigned() || rhsInteger.isUnsigned();
+    if (anyUnsigned) {
+        return builder.getIntegerType(64, /*isSigned=*/false);
+    }
+
+    return builder.getIntegerType(64);
 }
 
 // The single nl.output that solely consumes every result in the range, or a null
@@ -276,6 +321,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerAggregate(avg.getInput(), avg.getResult(), storage::AggregateKind::Avg);
     } else if (mlir::db::ConstantOp constant = mlir::dyn_cast<mlir::db::ConstantOp>(operation)) {
         lowerConstant(constant);
+    } else if (mlir::db::AddOp add = mlir::dyn_cast<mlir::db::AddOp>(operation)) {
+        lowerAdd(add);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
     } else if (mlir::isa<mlir::func::ReturnOp>(operation)) {
@@ -1000,6 +1047,46 @@ void DBLowering::lowerConstant(mlir::db::ConstantOp constant) {
 
     nl::Constant nlConstant = _builder.create<nl::Constant>(_builder.getUnknownLoc(), constant.getValue());
     _valueMap[constant.getResult()] = nlConstant.getResult();
+}
+
+void DBLowering::lowerAdd(mlir::db::AddOp add) {
+    const mlir::Value lhsChunk = mapValue(add.getLhs());
+    const mlir::Value rhsChunk = mapValue(add.getRhs());
+
+    const NumericOperand lhs = numericOperand(lhsChunk.getType());
+    const NumericOperand rhs = numericOperand(rhsChunk.getType());
+
+    const mlir::Type promoted = promoteNumeric(_builder, lhs.numeric, rhs.numeric);
+    const bool resultNullable = lhs.nullable || rhs.nullable;
+
+    mlir::Type resultElement = promoted;
+    if (resultNullable) {
+        resultElement = storage::NullableType::get(_builder.getContext(), promoted);
+    }
+
+    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
+
+    setInsertionInto(deeperBlock(lhsChunk, rhsChunk));
+
+    const mlir::Location uloc = _builder.getUnknownLoc();
+    nl::Add addOp = _builder.create<nl::Add>(uloc, resultType, lhsChunk, rhsChunk);
+    _valueMap[add.getResult()] = addOp.getResult();
+}
+
+mlir::Block* DBLowering::deeperBlock(mlir::Value first, mlir::Value second) {
+    mlir::Block* const firstBlock = ownerBlock(first);
+    mlir::Block* const secondBlock = ownerBlock(second);
+    if (firstBlock == secondBlock) {
+        return firstBlock;
+    }
+
+    if (firstBlock == _entryBlock) {
+        return secondBlock;
+    } else if (secondBlock == _entryBlock) {
+        return firstBlock;
+    }
+
+    throw IRException("db.add operands must be bound in the same loop");
 }
 
 void DBLowering::lowerOutput(mlir::db::Output output) {
