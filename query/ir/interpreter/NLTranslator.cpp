@@ -9,6 +9,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Verifier.h"
 
+#include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
 #include "metadata/GraphMetadata.h"
 #include "metadata/PropertyType.h"
@@ -496,11 +497,12 @@ void NLTranslator::translateConstant(nl::Constant constant) {
 
     Column* column = nullptr;
     const auto materialize = [&]<SupportedType T>() {
-        auto* typed = _memory->alloc<ColumnVector<typename T::Primitive>>();
-        typed->getRaw().assign(1, constantValueAs<T>(value));
+        auto* typed = _memory->alloc<ColumnConst<typename T::Primitive>>();
+        typed->set(constantValueAs<T>(value));
         column = typed;
     };
     ValueTypeDispatcher(valueType).execute(materialize);
+    bioassert(column, "Failed to allocate column.");
 
     _valueSlots[constant.getResult()] = column;
 }
