@@ -2,6 +2,7 @@
 
 #include <stddef.h>
 
+#include "columns/ColumnOperator.h"
 #include "metadata/PropertyType.h"
 
 #include "NLProgram.h"
@@ -124,12 +125,10 @@ public:
     // translation, which fills the pre-allocated result chunk from the two operands.
     static void runBinary(NLExecutionContext* context, NLFunctionData* data);
 
-    // Select the typed add kernel for the runtime column kinds of lhs and rhs and
-    // allocate the matching result column in memory - its type is the
-    // ColumnCombination of the operands (promoted element, nullable iff an operand
-    // is). Returns the kernel and sets result. Reuses the storage-level binary-op
-    // dispatch, so promotion, null propagation and constant broadcast are inherited.
-    static NLBinaryFn selectAdd(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
+    // Get the binary function pointer to execute this op
+    template <ColumnOperator Op>
+    static NLBinaryFn selectBinary(const Column* lhs, const Column* rhs,
+                                   LocalMemory* memory, Column*& result);
 
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
 
