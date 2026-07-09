@@ -45,8 +45,6 @@
 
 ## Code Style Feedback
 
-The `@`-imports below pull each rule's full text (rationale + how-to-apply + examples) into every session via CLAUDE.md.
-
 - @feedback_braces_and_style.md — Braces on all bodies, memory access patterns
 - @feedback_coding_style.md — POD defaults, getX() getters, no return-by-value, impl in .cpp, destructors in .cpp, throw TuringException
 - @feedback_functions_vs_operators.md — Embedding ops should be functions, not binary operators
@@ -77,9 +75,6 @@ The `@`-imports below pull each rule's full text (rationale + how-to-apply + exa
 - @feedback_parquet_helpers.md — tools/turing-parquet: multi-step ops on Parquet types get a dedicated ParquetXxx class
 - @feedback_dump_object_bytes.md — bulk-write trivially-copyable object bytes, layouts pinned by central static_asserts; no staging
 - @feedback_doc_utility_functions.md — one-line WHAT comment above each free function in tool .cpp drivers
-
-## Distributed / Replication Design
-- @reference_distribution_design_docs.md — REPLICATE.md / GRAPHHUB.md / hub-spec live in sibling clones ($HOME); unified identity model in docs/IDENTITY_MODEL.md
 
 ## Workflow Preferences
 - @feedback_test_first.md — write failing test before fix
