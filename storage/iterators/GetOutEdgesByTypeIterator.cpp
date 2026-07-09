@@ -5,7 +5,7 @@
 #include "columns/ColumnIDs.h"
 #include "IteratorUtils.h"
 
-namespace db {
+using namespace db;
 
 GetOutEdgesByTypeChunkWriter::GetOutEdgesByTypeChunkWriter(const GraphView& view,
                                                            const ColumnNodeIDs* inputNodeIDs,
@@ -117,6 +117,4 @@ void GetOutEdgesByTypeChunkWriter::fill(size_t maxCount) {
     if (_view.tombstones().hasEdges()) {
         filterTombstones();
     }
-}
-
 }
