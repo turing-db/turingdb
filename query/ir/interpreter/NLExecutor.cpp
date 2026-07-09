@@ -33,23 +33,35 @@ using namespace db;
 
 namespace {
 
-template <typename ResCol, typename LhsCol, typename RhsCol>
-void applyAdd(Column* result, const Column* lhs, const Column* rhs) {
-    BinaryOperators::exec<Add>(static_cast<ResCol*>(result),
-                               static_cast<const LhsCol*>(lhs),
-                               static_cast<const RhsCol*>(rhs));
+template <ColumnOperator Op>
+struct BinaryOpFunctor;
+
+template <>
+struct BinaryOpFunctor<OP_ADD> {
+    using Type = Add;
+};
+
+template <ColumnOperator Op, typename ResCol, typename LhsCol, typename RhsCol>
+void applyBinaryOp(Column* result, const Column* lhs, const Column* rhs) {
+    BinaryOperators::exec<typename BinaryOpFunctor<Op>::Type>(static_cast<ResCol*>(result),
+                                                              static_cast<const LhsCol*>(lhs),
+                                                              static_cast<const RhsCol*>(rhs));
 }
 
-struct AddSelector {
+template <ColumnOperator Op>
+struct BinaryOpSelector {
     LocalMemory* _memory {nullptr};
     Column* _result {nullptr};
     NLBinaryFn _fn {nullptr};
 
     template <typename LhsCol, typename RhsCol>
     void operator()(const LhsCol*, const RhsCol*) {
-        using ResCol = typename ColumnCombination<Add, LhsCol, RhsCol>::ResultColumnType;
-        _result = _memory->alloc<ResCol>();
-        _fn = &applyAdd<ResCol, LhsCol, RhsCol>;
+        using OpType = typename BinaryOpFunctor<Op>::Type;
+        using ResCol = ColumnCombination<OpType, LhsCol, RhsCol>;
+        using ResColType = ResCol::ResultColumnType;
+
+        _result = _memory->alloc<ResColType>();
+        _fn = &applyBinaryOp<Op, ResColType, LhsCol, RhsCol>;
     }
 };
 
@@ -856,13 +868,17 @@ void NLExecutor::runBinary(NLExecutionContext*, NLFunctionData* data) {
     binary->getFn()(binary->getResult(), binary->getLhs(), binary->getRhs());
 }
 
-NLBinaryFn NLExecutor::selectAdd(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result) {
-    using Pairs = PairRestrictions<OP_ADD>;
+template <ColumnOperator Op>
+NLBinaryFn NLExecutor::selectBinary(const Column* lhs,
+                                    const Column* rhs,
+                                    LocalMemory* memory,
+                                    Column*& result) {
+    using Pairs = PairRestrictions<Op>;
 
-    AddSelector selector {._memory = memory};
+    BinaryOpSelector<Op> selector {._memory = memory};
     ColumnDoubleDispatcher<typename Pairs::Allowed,
                            typename Pairs::AllowedMixed,
-                           AddSelector,
+                           BinaryOpSelector<Op>,
                            typename Pairs::Excluded>::dispatch(lhs, rhs, selector);
 
     result = selector._result;
@@ -1397,3 +1413,5 @@ template void NLExecutor::runPropertyFetch<EdgeID, types::Double>(NLExecutionCon
 template void NLExecutor::runPropertyFetch<EdgeID, types::Bool>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::String>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::Embedding>(NLExecutionContext*, NLFunctionData*);
+
+template NLBinaryFn NLExecutor::selectBinary<OP_ADD>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
