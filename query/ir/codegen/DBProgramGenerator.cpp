@@ -144,7 +144,7 @@ void DBProgramGenerator::addEdgeTraversal(const VariableDependency* src,
 
     const mlir::Value newSrcs = op.getResult(0);
     const mlir::Value newEdges = op.getResult(1);
-    [[maybe_unused]] const mlir::Value newEdgeTypes = op.getResult(2);
+    // TODO: Register opResult(2): the edge types
     const mlir::Value newTgts = op.getResult(3);
 
     if constexpr (std::is_same_v<EdgeOp, mlir::db::GetOutEdges>) {
