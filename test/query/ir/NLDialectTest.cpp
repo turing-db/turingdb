@@ -403,4 +403,36 @@ TEST_F(NLDialectTest, scanNodesByLabelInfersNodeIDIterator) {
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
 }
 
+// nl.get_out_edges_by_type infers the same four-chunk edge iterator as
+// nl.get_out_edges - sources, edge IDs, edge type IDs, targets - since the edge
+// type filters rows, not columns. The type is a resolved nl.get_edge_type handle,
+// not a name on the op.
+TEST_F(NLDialectTest, getOutEdgesByTypeInfersEdgeIterator) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    mlir::func::FuncOp function = buildOneChunkFunction(builder, *module);
+    mlir::Block& entryBlock = function.getBody().front();
+    const mlir::Value nodes = entryBlock.getArgument(0);
+
+    mlir::nl::GetEdgeType handle = builder.create<mlir::nl::GetEdgeType>(loc, builder.getStringAttr("KNOWS"));
+    mlir::nl::GetOutEdgesByType edges = builder.create<mlir::nl::GetOutEdgesByType>(loc,
+                                                                                   nodes,
+                                                                                   handle.getResult(),
+                                                                                   mlir::ValueRange {});
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    const mlir::Type nodeChunk = mlir::nl::ChunkType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    const mlir::Type edgeIDChunk = mlir::nl::ChunkType::get(&_context, mlir::storage::EdgeIDType::get(&_context));
+    const mlir::Type edgeTypeIDChunk = mlir::nl::ChunkType::get(&_context, mlir::storage::EdgeTypeIDType::get(&_context));
+    const mlir::Type iteratorType = mlir::nl::IteratorType::get(&_context, {nodeChunk, edgeIDChunk, edgeTypeIDChunk, nodeChunk});
+
+    EXPECT_EQ(edges.getResult().getType(), iteratorType);
+    // The hop's edge_type operand is the get_edge_type handle, which carries the name.
+    EXPECT_EQ(edges.getEdgeType(), handle.getResult());
+    EXPECT_EQ(handle.getName(), "KNOWS");
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+}
+
 }

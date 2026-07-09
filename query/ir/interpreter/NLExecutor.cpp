@@ -6,7 +6,9 @@
 #include <type_traits>
 
 #include "iterators/GetInEdgesIterator.h"
+#include "iterators/GetInEdgesByTypeIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
+#include "iterators/GetOutEdgesByTypeIterator.h"
 #include "iterators/GetPropertiesWithNullIterator.h"
 #include "iterators/ScanNodesIterator.h"
 #include "iterators/ScanNodesByLabelIterator.h"
@@ -619,6 +621,42 @@ void NLExecutor::runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* 
     }
 
     GetInEdgesChunkWriter chunkWriter(*context->getView(), inputNodeIDs);
+    chunkWriter.setIndices(loopData->getIndices());
+    chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
+    chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
+    chunkWriter.setSrcIDs(loopData->getSources());
+
+    runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getTargets());
+}
+
+void NLExecutor::runGetOutEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLEdgeByTypeLoopData* loopData = static_cast<NLEdgeByTypeLoopData*>(data);
+    const ColumnNodeIDs* inputNodeIDs = loopData->getInput();
+
+    // An edge type absent from the schema matches no edge, and an empty input has
+    // no edges to walk: either way the loop body never runs.
+    if (!loopData->isMatchable() || inputNodeIDs->empty()) {
+        return;
+    }
+
+    GetOutEdgesByTypeChunkWriter chunkWriter(*context->getView(), inputNodeIDs, loopData->getEdgeType());
+    chunkWriter.setIndices(loopData->getIndices());
+    chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
+    chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
+    chunkWriter.setTgtIDs(loopData->getTargets());
+
+    runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getSources());
+}
+
+void NLExecutor::runGetInEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLEdgeByTypeLoopData* loopData = static_cast<NLEdgeByTypeLoopData*>(data);
+    const ColumnNodeIDs* inputNodeIDs = loopData->getInput();
+
+    if (!loopData->isMatchable() || inputNodeIDs->empty()) {
+        return;
+    }
+
+    GetInEdgesByTypeChunkWriter chunkWriter(*context->getView(), inputNodeIDs, loopData->getEdgeType());
     chunkWriter.setIndices(loopData->getIndices());
     chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());

@@ -118,6 +118,18 @@ def NLPropertyType : NLType<"PropertyType", "property_type"> {
     }];
 }
 
+def NLEdgeType : NLType<"EdgeType", "edge_type"> {
+    let summary = "A resolved edge type handle";
+    let description = [{
+        The edge sibling of !nl.property_type. Stands for one relationship type of
+        the graph - storage's EdgeTypeID - once its name has been resolved.
+        Produced by nl.get_edge_type ahead of the loops and consumed by the by-type
+        edge hops, so the name is looked up once rather than per step when a hop is
+        nested in a loop. It is not a chunk element type: it names an edge type, it
+        does not hold values.
+    }];
+}
+
 // NLNodeIDChunk is a type *constraint*, not a new type: it restricts an op
 // operand to !nl.chunk<!storage.node_id> without defining anything new. Ops use it
 // in their (ins ...) clause where NLChunk would accept a chunk of anything.
@@ -162,6 +174,15 @@ def NLPropertyTypeHandle : Type<
         CPred<"::llvm::isa<::mlir::nl::PropertyTypeType>($_self)">,
         "property type handle", "::mlir::nl::PropertyTypeType">,
     BuildableType<"::mlir::nl::PropertyTypeType::get($_builder.getContext())">;
+
+// Constrains an operand to a resolved !nl.edge_type handle, the edge sibling of
+// NLPropertyTypeHandle. The single concrete type - there is only ever
+// !nl.edge_type - lets the by-type edge hops omit the handle's type in their
+// assembly format, building it from this recipe instead.
+def NLEdgeTypeHandle : Type<
+        CPred<"::llvm::isa<::mlir::nl::EdgeTypeType>($_self)">,
+        "edge type handle", "::mlir::nl::EdgeTypeType">,
+    BuildableType<"::mlir::nl::EdgeTypeType::get($_builder.getContext())">;
 
 // Constrains an operand to an !nl.limit_state handle, the same way
 // NLPropertyTypeHandle constrains the property handle. The single concrete type

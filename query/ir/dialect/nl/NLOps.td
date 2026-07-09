@@ -117,6 +117,73 @@ def GetInEdges : NLOp<"get_in_edges", [Pure, InferTypeOpAdaptor]> {
 }
 
 /**
+* GetOutEdgesByType
+*/
+def GetOutEdgesByType : NLOp<"get_out_edges_by_type", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create a database iterator over the out-edges of one edge type of a chunk of nodes";
+  let description = [{
+    Imperative counterpart of db.get_out_edges_by_type. It fills the same row of
+    chunks as nl.get_out_edges - source node IDs, edge IDs, edge type IDs and
+    target node IDs, then one filtered chunk per carried column - but keeps only
+    the out-edges whose type is `edge_type`:
+
+      %knows = nl.get_edge_type("KNOWS")
+      %likes = nl.get_edge_type("LIKES")
+      %edges = nl.get_out_edges_by_type(%a, %knows, {})
+      nl.for %srcs, %eids, %etypes, %b in %edges {
+        %hop = nl.get_out_edges_by_type(%b, %likes, {%srcs}) : !nl.chunk<!storage.node_id>
+        ...
+      }
+
+    `edge_type` is an !nl.edge_type handle produced by nl.get_edge_type, not a name
+    on the op: the name is resolved once above the loops, so a hop nested in a loop
+    reuses the resolved handle rather than looking the name up per step (the same
+    split as nl.get_property_type and the property fetches). Filtering by type
+    narrows only the rows, never their shape, so the result iterator type is
+    identical to nl.get_out_edges' and is inferred; only the carried chunk types
+    are spelled out, after the colon.
+  }];
+
+  // `edge_type` is the resolved handle from nl.get_edge_type. The carry set is
+  // NLChunk, not NLNodeIDChunk, so chunks of any element type can be carried,
+  // exactly as on nl.get_out_edges.
+  let arguments = (ins NLNodeIDChunk:$input_nodes, NLEdgeTypeHandle:$edge_type, Variadic<NLChunk>:$columns_to_filter);
+  let results   = (outs NLIterator:$result);
+
+  // The handle prints as %h inside the parens after input_nodes; its type is
+  // buildable and so omitted, as nl.get_node_properties omits its property handle
+  // type. As on nl.get_out_edges, only the carried chunk types are spelled, in the
+  // optional group that drops the colon when the carry set is empty.
+  let assemblyFormat = [{
+    `(` $input_nodes `,` $edge_type `,` `{` $columns_to_filter `}` `)` attr-dict
+    ( `:` qualified(type($columns_to_filter))^ )?
+  }];
+}
+
+/**
+* GetInEdgesByType
+*/
+def GetInEdgesByType : NLOp<"get_in_edges_by_type", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create a database iterator over the in-edges of one edge type of a chunk of nodes";
+  let description = [{
+    The reverse-direction sibling of nl.get_out_edges_by_type and the by-type
+    sibling of nl.get_in_edges: it fills the same chunk shape as in-edges but keeps
+    only the in-edges whose type is `edge_type`. The carry set and the result
+    iterator type match nl.get_out_edges_by_type, so the two are interchangeable in
+    a loop; `edge_type` is the same nl.get_edge_type handle and an unresolved type
+    yields no chunk.
+  }];
+
+  let arguments = (ins NLNodeIDChunk:$input_nodes, NLEdgeTypeHandle:$edge_type, Variadic<NLChunk>:$columns_to_filter);
+  let results   = (outs NLIterator:$result);
+
+  let assemblyFormat = [{
+    `(` $input_nodes `,` $edge_type `,` `{` $columns_to_filter `}` `)` attr-dict
+    ( `:` qualified(type($columns_to_filter))^ )?
+  }];
+}
+
+/**
 * GetPropertyType
 */
 def GetPropertyType : NLOp<"get_property_type", [Pure]> {
@@ -139,6 +206,34 @@ def GetPropertyType : NLOp<"get_property_type", [Pure]> {
   // The property name, the same `name`/`weight` spelled in the query.
   let arguments = (ins StrAttr:$name);
   let results   = (outs NLPropertyType:$result);
+
+  // No operands and a constant result type, so nothing is printed after the name.
+  let assemblyFormat = "`(` $name `)` attr-dict";
+}
+
+/**
+* GetEdgeType
+*/
+def GetEdgeType : NLOp<"get_edge_type", [Pure]> {
+  let summary = "Resolve an edge type name to an edge type handle, once, ahead of the loops";
+  let description = [{
+    The edge sibling of nl.get_property_type. Looks the relationship-type name up
+    in the graph schema and yields an !nl.edge_type handle for its storage
+    EdgeTypeID. It takes no chunk, so it sits at function scope above the loop
+    nest: a query resolves each name once here and feeds the handle to every
+    get_out_edges_by_type / get_in_edges_by_type hop, instead of resolving the name
+    per step when the hop is nested in a loop.
+
+      %knows = nl.get_edge_type("KNOWS")
+
+    The result is always !nl.edge_type. That type is parameterless and so
+    buildable, so the assembly omits it. Pure, so it can be hoisted and shared
+    across the loops below it.
+  }];
+
+  // The edge type name, the same `KNOWS` spelled in the query.
+  let arguments = (ins StrAttr:$name);
+  let results   = (outs NLEdgeType:$result);
 
   // No operands and a constant result type, so nothing is printed after the name.
   let assemblyFormat = "`(` $name `)` attr-dict";

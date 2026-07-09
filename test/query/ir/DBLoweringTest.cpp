@@ -408,6 +408,51 @@ func.func @main() {
 }
 )mlir";
 
+// One hop along the out-edges of a single edge type, outputting (source, target)
+// pairs. Only the KNOWS edges survive - the rest are filtered in the chunk
+// writer - so this is a strict subset of the unfiltered oneHopOutProgram.
+constexpr const char* oneHopOutByTypeKnowsProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %srcs, %eids, %etypes, %b = db.get_out_edges_by_type(%a, "KNOWS", {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  db.output(%srcs, %b) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// The LIKES sibling of oneHopOutByTypeKnowsProgram: the complementary edge set.
+constexpr const char* oneHopOutByTypeLikesProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %srcs, %eids, %etypes, %b = db.get_out_edges_by_type(%a, "LIKES", {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  db.output(%srcs, %b) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// A by-type hop naming an edge type the graph never created: the type resolves
+// to nothing, so the hop matches no edge and emits no row.
+constexpr const char* oneHopOutByTypeUnknownProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %srcs, %eids, %etypes, %b = db.get_out_edges_by_type(%a, "ROBOTS", {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  db.output(%srcs, %b) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// The in-edge by-type mirror: the same KNOWS edge set, discovered walking
+// predecessors. The writer fills the source side and the target is gathered from
+// the input, so the (source, target) pairs match the out-edge KNOWS hop.
+constexpr const char* oneHopInByTypeKnowsProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %srcs, %eids, %etypes, %b = db.get_in_edges_by_type(%a, "KNOWS", {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  db.output(%srcs, %b) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // Scan all nodes and output each node with its "score" property, which some
 // nodes lack (those come back null, none are dropped)
 constexpr const char* nodePropertiesProgram = R"mlir(
@@ -1019,6 +1064,40 @@ protected:
         return graph;
     }
 
+    // Four nodes (one label set, so IDs follow insertion order) linked by two
+    // edge types: KNOWS on 0->1 and 1->2, LIKES on 0->2 and 2->3. Each type is a
+    // strict subset of all four out-edges and the two types partition them, so a
+    // by-type hop must return exactly its own edges and the two together the whole
+    // out-edge set.
+    std::unique_ptr<Graph> buildTypedEdgeGraph() {
+        auto graph = Graph::create();
+
+        auto change = graph->newChange();
+        auto* commitBuilder = change->access().getTip();
+        auto& builder = commitBuilder->newBuilder();
+        auto& metadata = builder.getMetadata();
+
+        metadata.getOrCreateLabel("0");
+        const EdgeTypeID knowsID = metadata.getOrCreateEdgeType("KNOWS");
+        const EdgeTypeID likesID = metadata.getOrCreateEdgeType("LIKES");
+
+        const LabelSet labelset = LabelSet::fromList({0});
+        const NodeID node0 = builder.addNode(labelset);
+        const NodeID node1 = builder.addNode(labelset);
+        const NodeID node2 = builder.addNode(labelset);
+        const NodeID node3 = builder.addNode(labelset);
+
+        builder.addEdge(knowsID, node0, node1);
+        builder.addEdge(likesID, node0, node2);
+        builder.addEdge(knowsID, node1, node2);
+        builder.addEdge(likesID, node2, node3);
+
+        const auto submitResult = change->access().submit(*_jobSystem);
+        EXPECT_TRUE(submitResult);
+
+        return graph;
+    }
+
     // A second datapart with nodes 4, 5 and the edge 4 -> 5, growing the node
     // count past the top-K trim threshold in the trims-across-chunks test.
     void addSecondPart(Graph& graph) {
@@ -1309,6 +1388,77 @@ TEST_F(DBLoweringTest, lowersOneHopInEdges) {
     runLoweredProgram(oneHopInProgram, reader.getView(), sink);
 
     const std::vector<std::vector<uint64_t>> expected {{0, 1}, {0, 2}, {1, 3}, {2, 3}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, executesGetOutEdgesByType) {
+    auto graph = buildTypedEdgeGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+
+    // KNOWS is 0->1 and 1->2; LIKES is 0->2 and 2->3. Each hop returns exactly
+    // its own edges, and the two together are the whole out-edge set.
+    CollectingNodeSink knowsSink;
+    runLoweredProgram(oneHopOutByTypeKnowsProgram, view, knowsSink);
+    std::vector<std::vector<uint64_t>> knowsRows;
+    knowsSink.sortedRows(knowsRows);
+    const std::vector<std::vector<uint64_t>> knowsExpected {{0, 1}, {1, 2}};
+    EXPECT_EQ(knowsRows, knowsExpected);
+
+    CollectingNodeSink likesSink;
+    runLoweredProgram(oneHopOutByTypeLikesProgram, view, likesSink);
+    std::vector<std::vector<uint64_t>> likesRows;
+    likesSink.sortedRows(likesRows);
+    const std::vector<std::vector<uint64_t>> likesExpected {{0, 2}, {2, 3}};
+    EXPECT_EQ(likesRows, likesExpected);
+}
+
+TEST_F(DBLoweringTest, executesGetInEdgesByType) {
+    auto graph = buildTypedEdgeGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The KNOWS edges discovered walking predecessors are the same (source,
+    // target) pairs as the out-edge KNOWS hop.
+    CollectingNodeSink sink;
+    runLoweredProgram(oneHopInByTypeKnowsProgram, reader.getView(), sink);
+
+    const std::vector<std::vector<uint64_t>> expected {{0, 1}, {1, 2}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, getOutEdgesByTypeUnknownIsEmpty) {
+    auto graph = buildTypedEdgeGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // "ROBOTS" was never created, so no edge carries it: the hop yields no rows.
+    CollectingNodeSink sink;
+    runLoweredProgram(oneHopOutByTypeUnknownProgram, reader.getView(), sink);
+
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_TRUE(rows.empty());
+}
+
+TEST_F(DBLoweringTest, executesGetOutEdgesByTypeAcrossChunks) {
+    auto graph = buildTypedEdgeGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // chunkSize 1 forces the writer to fill at most one matching edge per step, so
+    // it must stop mid-span on the row budget (node 0 carries KNOWS then LIKES) and
+    // resume from the same edge on the next fill without re-emitting or skipping a
+    // match. The KNOWS result must still be exactly the two KNOWS edges.
+    CollectingNodeSink sink;
+    runLoweredProgram(oneHopOutByTypeKnowsProgram, reader.getView(), sink, /*chunkSize=*/1);
+
+    const std::vector<std::vector<uint64_t>> expected {{0, 1}, {1, 2}};
     std::vector<std::vector<uint64_t>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows, expected);

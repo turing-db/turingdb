@@ -172,6 +172,7 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     // in the entry block; a cross product retargets the root per factor.
     _valueMap.clear();
     _propertyTypes.clear();
+    _edgeTypes.clear();
     _rootBlock = _entryBlock;
     _innermostLoopBody = nullptr;
     _limitHandles.clear();
@@ -250,6 +251,10 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerGetOutEdges(getOutEdges);
     } else if (mlir::db::GetInEdges getInEdges = mlir::dyn_cast<mlir::db::GetInEdges>(operation)) {
         lowerGetInEdges(getInEdges);
+    } else if (mlir::db::GetOutEdgesByType getOutEdgesByType = mlir::dyn_cast<mlir::db::GetOutEdgesByType>(operation)) {
+        lowerGetOutEdgesByType(getOutEdgesByType);
+    } else if (mlir::db::GetInEdgesByType getInEdgesByType = mlir::dyn_cast<mlir::db::GetInEdgesByType>(operation)) {
+        lowerGetInEdgesByType(getInEdgesByType);
     } else if (mlir::db::GetNodeProperties getNodeProperties = mlir::dyn_cast<mlir::db::GetNodeProperties>(operation)) {
         lowerGetNodeProperties(getNodeProperties);
     } else if (mlir::db::GetEdgeProperties getEdgeProperties = mlir::dyn_cast<mlir::db::GetEdgeProperties>(operation)) {
@@ -342,6 +347,53 @@ void DBLowering::lowerGetInEdges(mlir::db::GetInEdges getInEdges) {
     // carried chunk - is inferred from the operands.
     nl::GetInEdges edges = _builder.create<nl::GetInEdges>(_builder.getUnknownLoc(), inputChunk, carriedChunks);
     buildLoopForSource(edges.getResult(), getInEdges.getOperation());
+}
+
+void DBLowering::lowerGetOutEdgesByType(mlir::db::GetOutEdgesByType getOutEdgesByType) {
+    // The by-type sibling of lowerGetOutEdges: identical shape, plus the edge type.
+    // The name is hoisted into an nl.get_edge_type handle at the top of the entry
+    // block, so it is resolved once above the loops rather than carried on the hop
+    // (the same split lowerGetNodeProperties uses for a property name). The handle
+    // is created before the loop's insertion point is set below.
+    const mlir::Value inputChunk = mapValue(getOutEdgesByType.getInputNodes());
+    const mlir::Value edgeTypeHandle = getOrCreateEdgeTypeHandle(getOutEdgesByType.getEdgeType());
+
+    llvm::SmallVector<mlir::Value, 4> carriedChunks;
+    for (const mlir::Value carriedColumn : getOutEdgesByType.getColumnsToFilter()) {
+        carriedChunks.push_back(mapValue(carriedColumn));
+    }
+
+    setInsertionInto(ownerBlock(inputChunk));
+
+    // The result iterator type - the four fixed edge chunks plus one per carried
+    // chunk - is inferred from the operands, exactly as for get_out_edges.
+    nl::GetOutEdgesByType edges = _builder.create<nl::GetOutEdgesByType>(_builder.getUnknownLoc(),
+                                                                         inputChunk,
+                                                                         edgeTypeHandle,
+                                                                         carriedChunks);
+    buildLoopForSource(edges.getResult(), getOutEdgesByType.getOperation());
+}
+
+void DBLowering::lowerGetInEdgesByType(mlir::db::GetInEdgesByType getInEdgesByType) {
+    // The predecessor counterpart of lowerGetOutEdgesByType: same shape, reverse
+    // direction, edge type hoisted into the same nl.get_edge_type handle.
+    const mlir::Value inputChunk = mapValue(getInEdgesByType.getInputNodes());
+    const mlir::Value edgeTypeHandle = getOrCreateEdgeTypeHandle(getInEdgesByType.getEdgeType());
+
+    llvm::SmallVector<mlir::Value, 4> carriedChunks;
+    for (const mlir::Value carriedColumn : getInEdgesByType.getColumnsToFilter()) {
+        carriedChunks.push_back(mapValue(carriedColumn));
+    }
+
+    setInsertionInto(ownerBlock(inputChunk));
+
+    // The result iterator type - the four fixed edge chunks plus one per carried
+    // chunk - is inferred from the operands, exactly as for get_in_edges.
+    nl::GetInEdgesByType edges = _builder.create<nl::GetInEdgesByType>(_builder.getUnknownLoc(),
+                                                                       inputChunk,
+                                                                       edgeTypeHandle,
+                                                                       carriedChunks);
+    buildLoopForSource(edges.getResult(), getInEdgesByType.getOperation());
 }
 
 void DBLowering::lowerGetNodeProperties(mlir::db::GetNodeProperties getNodeProperties) {
@@ -480,6 +532,25 @@ mlir::Value DBLowering::getOrCreatePropertyTypeHandle(llvm::StringRef propertyNa
                                                                         _builder.getStringAttr(propertyName));
     const mlir::Value handle = handleOp.getResult();
     _propertyTypes[propertyName] = handle;
+
+    return handle;
+}
+
+mlir::Value DBLowering::getOrCreateEdgeTypeHandle(llvm::StringRef edgeTypeName) {
+    // The edge sibling of getOrCreatePropertyTypeHandle: dedup per name and hoist
+    // the handle to the top of the entry block, above every loop, so a by-type hop
+    // nested in a loop reuses one resolved handle rather than re-carrying the name.
+    const auto existing = _edgeTypes.find(edgeTypeName);
+    if (existing != _edgeTypes.end()) {
+        return existing->second;
+    }
+
+    _builder.setInsertionPointToStart(_entryBlock);
+
+    nl::GetEdgeType handleOp = _builder.create<nl::GetEdgeType>(_builder.getUnknownLoc(),
+                                                               _builder.getStringAttr(edgeTypeName));
+    const mlir::Value handle = handleOp.getResult();
+    _edgeTypes[edgeTypeName] = handle;
 
     return handle;
 }
@@ -850,7 +921,12 @@ void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {
         return;
     }
 
-    const bool opensLoop = mlir::isa<mlir::db::ScanNodes, mlir::db::ScanNodesByLabel, mlir::db::GetOutEdges, mlir::db::GetInEdges>(definingOp);
+    const bool opensLoop = mlir::isa<mlir::db::ScanNodes,
+                                     mlir::db::ScanNodesByLabel,
+                                     mlir::db::GetOutEdges,
+                                     mlir::db::GetInEdges,
+                                     mlir::db::GetOutEdgesByType,
+                                     mlir::db::GetInEdgesByType>(definingOp);
     const bool isCrossProduct = mlir::isa<mlir::db::CrossProduct>(definingOp);
 
     // The first limit, in program order, to claim a producer wins, so a loop
