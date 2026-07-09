@@ -173,13 +173,13 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             IteratorConfig config {IteratorKind::GetOutEdgesByType, getOutEdgesByType.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getOutEdgesByType.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
-            config._edgeType = edgeTypeName(getOutEdgesByType.getEdgeType()).str();
+            config._edgeType = edgeTypeName(getOutEdgesByType.getEdgeType());
             _iteratorConfigs[getOutEdgesByType.getResult()] = config;
         } else if (nl::GetInEdgesByType getInEdgesByType = mlir::dyn_cast<nl::GetInEdgesByType>(operation)) {
             IteratorConfig config {IteratorKind::GetInEdgesByType, getInEdgesByType.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getInEdgesByType.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
-            config._edgeType = edgeTypeName(getInEdgesByType.getEdgeType()).str();
+            config._edgeType = edgeTypeName(getInEdgesByType.getEdgeType());
             _iteratorConfigs[getInEdgesByType.getResult()] = config;
         } else if (nl::Sort sort = mlir::dyn_cast<nl::Sort>(operation)) {
             _iteratorConfigs[sort.getResult()] = IteratorConfig {IteratorKind::Sort, {}, {}, sortStateFor(sort.getState())};

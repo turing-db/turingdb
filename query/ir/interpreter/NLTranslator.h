@@ -52,9 +52,11 @@ private:
         llvm::SmallVector<llvm::StringRef, 4> _labels;
 
         // The edge type name a GetOutEdgesByType / GetInEdgesByType iterator
-        // filters by; empty for the other kinds. Resolved to an EdgeTypeID when
-        // the loop is translated.
-        std::string _edgeType;
+        // filters by; empty for the other kinds. Like _labels, a view into the
+        // op's interned StringAttr storage, which the MLIRContext keeps alive for
+        // the whole translation; resolved to an EdgeTypeID when the loop is
+        // translated.
+        llvm::StringRef _edgeType;
     };
 
     NLProgram* _program {nullptr};
