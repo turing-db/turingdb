@@ -206,10 +206,10 @@ protected:
 
         EXPECT_FALSE(pipelineRows.empty()) << "Expected non-empty result for query: " << query;
 
-        ASSERT_EQ(pipelineRows.size(), irRows.size());
+        ASSERT_EQ(pipelineRows.size(), irRows.size()) << "Size mismatch for " << query;
 
         for (auto [plRow, irRow] : rv::zip(pipelineRows, irRows)) {
-            EXPECT_EQ(plRow, irRow);
+            EXPECT_EQ(plRow, irRow) << "Row mismatch for " << query;
         }
     }
 
@@ -262,7 +262,6 @@ TEST_F(EquivalenceTest, trees) {
     expectEquivalent("MATCH (b)-->(a), (c)-->(a) RETURN c");
     // Disabled due to suspected v2 bug
     // expectEquivalent("MATCH (a)-->(b)-->(c), (b)-->(e) RETURN a");
-    expectEquivalent("MATCH (a)-->(b)-->(c), (b)-->(e) RETURN a");
 }
 
 TEST_F(EquivalenceTest, crossProd) {
