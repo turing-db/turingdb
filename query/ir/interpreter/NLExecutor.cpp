@@ -11,17 +11,44 @@
 #include "iterators/ScanNodesIterator.h"
 #include "iterators/ScanNodesByLabelIterator.h"
 #include "columns/ColumnOptVector.h"
+#include "columns/ColumnConst.h"
+#include "columns/ColumnCombinations.h"
+#include "columns/ColumnOperator.h"
+#include "columns/ColumnOperators.h"
+#include "columns/ColumnOperatorDispatcher.h"
+#include "columns/AllowedKinds.h"
 #include "metadata/PropertyType.h"
 
 #include "NLProgram.h"
 #include "NLOutputSink.h"
 
+#include "LocalMemory.h"
 #include "IRException.h"
 #include "BioAssert.h"
 
 using namespace db;
 
 namespace {
+
+template <typename ResCol, typename LhsCol, typename RhsCol>
+void applyAdd(Column* result, const Column* lhs, const Column* rhs) {
+    BinaryOperators::exec<Add>(static_cast<ResCol*>(result),
+                               static_cast<const LhsCol*>(lhs),
+                               static_cast<const RhsCol*>(rhs));
+}
+
+struct AddSelector {
+    LocalMemory* _memory {nullptr};
+    Column* _result {nullptr};
+    NLBinaryFn _fn {nullptr};
+
+    template <typename LhsCol, typename RhsCol>
+    void operator()(const LhsCol*, const RhsCol*) {
+        using ResCol = typename ColumnCombination<Add, LhsCol, RhsCol>::ResultColumnType;
+        _result = _memory->alloc<ResCol>();
+        _fn = &applyAdd<ResCol, LhsCol, RhsCol>;
+    }
+};
 
 // Execute a body of statements
 void runBody(NLExecutionContext* context, const NLStmtContainer* body) {
@@ -737,6 +764,24 @@ void NLExecutor::runOutput(NLExecutionContext* context, NLFunctionData* data) {
     }
 
     context->getSink()->appendChunks(cols, offset, rowCount);
+}
+
+void NLExecutor::runBinary(NLExecutionContext*, NLFunctionData* data) {
+    const NLBinaryData* binary = static_cast<NLBinaryData*>(data);
+    binary->getFn()(binary->getResult(), binary->getLhs(), binary->getRhs());
+}
+
+NLBinaryFn NLExecutor::selectAdd(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result) {
+    using Pairs = PairRestrictions<OP_ADD>;
+
+    AddSelector selector {._memory = memory};
+    ColumnDoubleDispatcher<typename Pairs::Allowed,
+                           typename Pairs::AllowedMixed,
+                           AddSelector,
+                           typename Pairs::Excluded>::dispatch(lhs, rhs, selector);
+
+    result = selector._result;
+    return selector._fn;
 }
 
 void NLExecutor::runSortReset(NLExecutionContext* context, NLFunctionData* data) {
