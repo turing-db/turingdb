@@ -44,22 +44,60 @@
 - Unit tests: `ctest` or `ctest --output-on-failure`
 
 ## Code Style Feedback
-- [Braces and memory access patterns](feedback_braces_and_style.md)
-- [Coding style preferences](feedback_coding_style.md) — POD defaults, getX() getters, no return-by-value, impl in .cpp, destructors in .cpp, throw TuringException
-- [Functions vs operators](feedback_functions_vs_operators.md) — Embedding ops should be functions, not binary operators
-- [Private member ordering](feedback_private_member_ordering.md) — Variables before functions in private sections
-- [Return type same line](feedback_return_type_same_line.md) — Return type and function name on one line
-- [Code spacing](feedback_code_spacing.md) — Blank lines between logical groups, don't write compact code
-- [Const and span preferences](feedback_const_and_span.md) — const on locals, std::span for non-owning references
-- [No auto for casts](feedback_no_auto_for_casts.md) — Explicit types at static_cast sites, hoist getters into locals
-- [Friend placement](feedback_friend_placement.md) — `friend` declarations at top of `public:`, no `class` keyword
-- [ObjectMap reserve/publish](feedback_objectmap_reserve_publish.md) — reserve name before the load, publish after, work in between
+
+The `@`-imports below pull each rule's full text (rationale + how-to-apply + examples) into every session via CLAUDE.md.
+
+- @feedback_braces_and_style.md — Braces on all bodies, memory access patterns
+- @feedback_coding_style.md — POD defaults, getX() getters, no return-by-value, impl in .cpp, destructors in .cpp, throw TuringException
+- @feedback_functions_vs_operators.md — Embedding ops should be functions, not binary operators
+- @feedback_private_member_ordering.md — Variables before functions in private sections
+- @feedback_return_type_same_line.md — Return type and function name on one line
+- @feedback_code_spacing.md — Blank lines between logical groups, don't write compact code
+- @feedback_const_and_span.md — const on locals, std::span for non-owning references
+- @feedback_no_auto_for_casts.md — Explicit types at static_cast sites, hoist getters into locals
+- @feedback_friend_placement.md — `friend` declarations at top of `public:`, no `class` keyword
+- @feedback_objectmap_reserve_publish.md — reserve name before the load, publish after, work in between
+- @feedback_no_shared_ptr.md — never introduce shared_ptr; raw pointer / reference / unique_ptr instead
+- @feedback_no_abbreviations.md — spell identifiers out (rowGroup, not rg; column, not col)
+- @feedback_size_t_for_indices.md — size_t for indices and counts in new code, narrow at API boundaries
+- @feedback_switch_case_break.md — return inside the case body, break still written aligned to case
+- @feedback_naming_throw.md — throw-prefixed names (throwError) for helpers that always throw
+- @feedback_no_k_prefix_constants.md — no Google-style k-prefix; use descriptive constant names
+- @feedback_exit_status_macros.md — return EXIT_SUCCESS / EXIT_FAILURE from main, not 0 / 1
+- @feedback_cpp_using_namespace.md — `using namespace db;` at top of .cpp, no body-wrapping namespace
+- @feedback_call_arg_alignment.md — wrapping a call: one argument per line, aligned under the first
+- @feedback_no_unused_param_comments.md — don't wrap unused parameter names in /*comments*/
+- @feedback_no_void_cast_unused.md — don't add `(void)param;` lines for unused parameters
+- @feedback_pipeline_exception.md — FatalException in storage, PipelineException in pipeline
+- @feedback_anon_namespace_at_top.md — anonymous namespace block goes at the top of the .cpp, after `using namespace db;`
+- @feedback_no_namespace_comment.md — no `// namespace` comment on a closing brace
+- @feedback_no_default_ctors_in_header.md — define ctors and dtors in .cpp, never `= default` in headers
+- @feedback_no_friends.md — prefer targeted public getters/setters over `friend`
+- @feedback_pass_through_extracted_data.md — reuse caller-extracted data as a parameter, don't re-extract in the callee
+- @feedback_parquet_helpers.md — tools/turing-parquet: multi-step ops on Parquet types get a dedicated ParquetXxx class
+- @feedback_dump_object_bytes.md — bulk-write trivially-copyable object bytes, layouts pinned by central static_asserts; no staging
+- @feedback_doc_utility_functions.md — one-line WHAT comment above each free function in tool .cpp drivers
 
 ## Distributed / Replication Design
-- [Distribution design docs + unified identity model](reference_distribution_design_docs.md) — REPLICATE.md / GRAPHHUB.md / hub-spec live in sibling clones ($HOME); unified identity model in docs/IDENTITY_MODEL.md
+- @reference_distribution_design_docs.md — REPLICATE.md / GRAPHHUB.md / hub-spec live in sibling clones ($HOME); unified identity model in docs/IDENTITY_MODEL.md
 
 ## Workflow Preferences
-- [Test-first: write failing test before fix](feedback_test_first.md)
-- [Test against simpledb fixture](feedback_test_on_simpledb.md) — use real SimpleGraph, not a bespoke minimal graph, esp. for bugs reported on simpledb
-- [Separate test file per feature](feedback_separate_test_file.md) — new test → its own .cpp + CMake target, don't append to an existing test file
-- [Explicit CI runner labels](feedback_explicit_ci_runner_labels.md) — put real runner labels in each workflow's os_list + `runs-on: ${{ matrix.os }}`, not a computed ternary / runner-group object
+- @feedback_test_first.md — write failing test before fix
+- @feedback_test_on_simpledb.md — use real SimpleGraph, not a bespoke minimal graph, esp. for bugs reported on simpledb
+- @feedback_separate_test_file.md — new test → its own .cpp + CMake target, don't append to an existing test file
+- @feedback_explicit_ci_runner_labels.md — put real runner labels in each workflow's os_list + `runs-on: ${{ matrix.os }}`, not a computed ternary / runner-group object
+- @feedback_no_build_during_iteration.md — don't build after every micro-edit; wait until the user asks
+- @feedback_no_redundant_cmake.md — don't run `cmake ..` before `make`; make reconfigures itself
+
+## Project context
+- @project_partitioning.md — partitioning is near-term; some customers asked for METIS-style structural partitioning
+- @project_replication_motivation.md — replication driven by BOTH scaling past single-node memory AND write availability
+
+## Build & CI
+- @feedback_no_macos_strip.md — wheel build's `_strip_binary` is Linux-only; skip strip on macOS (dylib/codesign issues)
+
+## Codebase references
+- @reference_bioassert_throws.md — bioassert throws a catchable FatalException (TuringException); the abort() is dead code
+- @reference_gcc_maybe_uninit_sort.md — sort an index permutation to dodge GCC's -Wmaybe-uninitialized; a call-site pragma can't suppress it
+- @reference_no_string_predicates.md — no CONTAINS / STARTS WITH / ENDS WITH; StringOperator existing in the AST does NOT imply support
+- @reference_change_visibility.md — within a change MATCH sees the COMMITted tip (read-your-own-writes works after COMMIT); after SUBMIT the change is gone, checkout head to see committed data
