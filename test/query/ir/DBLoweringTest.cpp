@@ -1201,22 +1201,21 @@ protected:
         }
     }
 
-    // Runs a single-column node scan program and returns its node IDs sorted.
-    // The storage assigns node IDs grouped by label set, not by insertion order,
-    // so the label-scan tests assert the semantics (superset match, conjunction =
-    // intersection) against the plain scan rather than hardcoding an ID scheme.
-    std::vector<uint64_t> collectScan(const char* program, const GraphView& view) {
+    // Runs a single-column node scan program and fills nodeIDs with its node IDs,
+    // sorted. The storage assigns node IDs grouped by label set, not by insertion
+    // order, so the label-scan tests assert the semantics (superset match,
+    // conjunction = intersection) against the plain scan rather than hardcoding an
+    // ID scheme.
+    void collectScan(const char* program, const GraphView& view, std::vector<uint64_t>& nodeIDs) {
         CollectingNodeSink sink;
         runLoweredProgram(program, view, sink);
 
         std::vector<std::vector<uint64_t>> rows;
         sink.sortedRows(rows);
 
-        std::vector<uint64_t> nodeIDs;
         for (const std::vector<uint64_t>& row : rows) {
             nodeIDs.push_back(row.front());
         }
-        return nodeIDs;
     }
 
     std::unique_ptr<JobSystem> _jobSystem;
@@ -1242,10 +1241,14 @@ TEST_F(DBLoweringTest, executesScanNodesByLabel) {
     const GraphReader reader = transaction.readGraph();
     const GraphView& view = reader.getView();
 
-    const std::vector<uint64_t> all = collectScan(scanProgram, view);
-    const std::vector<uint64_t> person = collectScan(scanByLabelPersonProgram, view);
-    const std::vector<uint64_t> city = collectScan(scanByLabelCityProgram, view);
-    const std::vector<uint64_t> both = collectScan(scanByLabelPersonAndCityProgram, view);
+    std::vector<uint64_t> all;
+    std::vector<uint64_t> person;
+    std::vector<uint64_t> city;
+    std::vector<uint64_t> both;
+    collectScan(scanProgram, view, all);
+    collectScan(scanByLabelPersonProgram, view, person);
+    collectScan(scanByLabelCityProgram, view, city);
+    collectScan(scanByLabelPersonAndCityProgram, view, both);
 
     // Two Person-only, two City-only, one Person+City node.
     EXPECT_EQ(all.size(), 5u);
@@ -1278,7 +1281,8 @@ TEST_F(DBLoweringTest, executesScanNodesByLabelUnknownIsEmpty) {
     const GraphReader reader = transaction.readGraph();
 
     // "Robot" was never created, so the conjunction is unsatisfiable: no rows.
-    const std::vector<uint64_t> robots = collectScan(scanByLabelUnknownProgram, reader.getView());
+    std::vector<uint64_t> robots;
+    collectScan(scanByLabelUnknownProgram, reader.getView(), robots);
     EXPECT_TRUE(robots.empty());
 }
 
