@@ -289,6 +289,44 @@ func.func @main() {
 }
 )mlir";
 
+// Two constants added at function scope.
+constexpr const char* addConstantsProgram = R"mlir(
+func.func @main() {
+  %x = nl.constant(10 : i64)
+  %y = nl.constant(20 : i64)
+  %s = nl.add %x, %y : (!nl.chunk<i64>, !nl.chunk<i64>) -> !nl.chunk<i64>
+  nl.output(%s) : !nl.chunk<i64>
+  func.return
+}
+)mlir";
+
+// A mixed-type add promoting to a double.
+constexpr const char* addPromotesProgram = R"mlir(
+func.func @main() {
+  %x = nl.constant(10 : i64)
+  %y = nl.constant(2.5 : f64)
+  %s = nl.add %x, %y : (!nl.chunk<i64>, !nl.chunk<f64>) -> !nl.chunk<f64>
+  nl.output(%s) : !nl.chunk<f64>
+  func.return
+}
+)mlir";
+
+// A constant broadcast against a per-node property column, inside the scan loop:
+// null + 10 = null for a node without a score.
+constexpr const char* addPropertyConstantProgram = R"mlir(
+func.func @main() {
+  %score = nl.get_property_type("score")
+  %k = nl.constant(10 : i64)
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %v = nl.get_node_properties(%a, %score) : !nl.chunk<!storage.nullable<i64>>
+    %sum = nl.add %v, %k : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i64>>
+    nl.output(%a, %sum) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i64>>
+  }
+  func.return
+}
+)mlir";
+
 // Scan all nodes and output them
 constexpr const char* scanProgram = R"mlir(
 func.func @main() {
@@ -902,6 +940,48 @@ TEST_F(NLExecutorTest, constantAllSupportedTypes) {
     EXPECT_EQ(sink.getUint(), 7u);
     EXPECT_DOUBLE_EQ(sink.getDouble(), 2.5);
     EXPECT_TRUE(sink.getBool());
+}
+
+TEST_F(NLExecutorTest, addConstants) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingConstSink<int64_t> sink;
+    runProgram(addConstantsProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<std::vector<int64_t>> expected {{30}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(NLExecutorTest, addPromotesMixedTypesToDouble) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingConstSink<double> sink;
+    runProgram(addPromotesProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<std::vector<double>> expected {{12.5}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(NLExecutorTest, addConstantToNodePropertyBroadcasting) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeIntPropSink sink;
+    runProgram(addPropertyConstantProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    // The constant 10 is broadcast against each node's score; node 2 has no score,
+    // so null + 10 stays null.
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {
+        {0, 110}, {1, 210}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
 }
 
 TEST_F(NLExecutorTest, getNodeProperties) {

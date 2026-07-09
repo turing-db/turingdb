@@ -423,6 +423,52 @@ func.func @main() {
 }
 )mlir";
 
+// RETURN 10 + 20: two constants added, a single-row result at function scope.
+constexpr const char* addConstantsProgram = R"mlir(
+func.func @main() {
+  %x = db.constant(10 : i64)
+  %y = db.constant(20 : i64)
+  %s = db.add %x, %y : (!db.column<i64>, !db.column<i64>) -> !db.column<i64>
+  db.output(%s) : !db.column<i64>
+  return
+}
+)mlir";
+
+// RETURN 10 + 2.5: a mixed-type add promoting to a double result.
+constexpr const char* addPromotesProgram = R"mlir(
+func.func @main() {
+  %x = db.constant(10 : i64)
+  %y = db.constant(2.5 : f64)
+  %s = db.add %x, %y : (!db.column<i64>, !db.column<f64>) -> !db.column<f64>
+  db.output(%s) : !db.column<f64>
+  return
+}
+)mlir";
+
+// MATCH (a) RETURN a, a.score + 10 to ensure nulls are propagated
+constexpr const char* addPropertyConstantProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %k = db.constant(10 : i64)
+  %sum = db.add %score, %k : (!db.column<none>, !db.column<i64>) -> !db.column<none>
+  db.output(%a, %sum) : !db.column<!storage.node_id>, !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a) RETURN a, a.score + a.score
+constexpr const char* addTwoPropertiesProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %score2 = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %sum = db.add %score, %score2 : (!db.column<none>, !db.column<none>) -> !db.column<none>
+  db.output(%a, %sum) : !db.column<!storage.node_id>, !db.column<none>
+  return
+}
+)mlir";
+
 // Scan all nodes and output them
 constexpr const char* scanProgram = R"mlir(
 func.func @main() {
@@ -1443,6 +1489,64 @@ TEST_F(DBLoweringTest, lowersConstantsOfAllSupportedTypes) {
     EXPECT_EQ(sink.getUint(), 7u);
     EXPECT_DOUBLE_EQ(sink.getDouble(), 2.5);
     EXPECT_TRUE(sink.getBool());
+}
+
+TEST_F(DBLoweringTest, addsTwoConstants) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingConstSink<int64_t> sink;
+    runLoweredProgram(addConstantsProgram, reader.getView(), sink);
+
+    const std::vector<std::vector<int64_t>> expected {{30}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(DBLoweringTest, addPromotesMixedTypesToDouble) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingConstSink<double> sink;
+    runLoweredProgram(addPromotesProgram, reader.getView(), sink);
+
+    const std::vector<std::vector<double>> expected {{12.5}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(DBLoweringTest, addsConstantToNodePropertyBroadcasting) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeIntPropSink sink;
+    runLoweredProgram(addPropertyConstantProgram, reader.getView(), sink);
+
+    // The constant 10 is broadcast against each node's score; node 2 has no score,
+    // so null + 10 stays null.
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {
+        {0, 110}, {1, 210}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, addsTwoNodeProperties) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeIntPropSink sink;
+    runLoweredProgram(addTwoPropertiesProgram, reader.getView(), sink);
+
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {
+        {0, 200}, {1, 400}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
 }
 
 TEST_F(DBLoweringTest, lowersOneHopOutEdges) {
