@@ -873,4 +873,22 @@ def Constant : NLOp<"constant", [Pure, InferTypeOpAdaptor]> {
   let assemblyFormat = "`(` $value `)` attr-dict";
 }
 
+/**
+* Add
+*/
+def Add : NLOp<"add", [Pure]> {
+  let summary = "Row-wise addition of two value chunks";
+  let description = [{
+      Result type is determined by the types (e.g. int -> double promotion
+      on double + double), and nullability (e.g. null + non-null = null).
+
+      %r = nl.add %x, %y : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i64>>
+  }];
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
 #endif //TURINGDB_NL_OPS
