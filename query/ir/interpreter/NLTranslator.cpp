@@ -513,7 +513,7 @@ void NLTranslator::translateAdd(nl::Add add, NLStmtContainer* body) {
     const Column* rhs = getColumn(add.getRhs());
 
     Column* result = nullptr;
-    const NLBinaryFn fn = NLExecutor::selectAdd(lhs, rhs, _memory, result);
+    const NLBinaryFn fn = NLExecutor::selectBinary<OP_ADD>(lhs, rhs, _memory, result);
     bioassert(result, "Failed to translate ADD result.");
 
     _valueSlots[add.getResult()] = result;
