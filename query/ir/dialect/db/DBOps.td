@@ -655,4 +655,30 @@ def ConstantOp : TuringOp<"constant", [Pure, ConstantLike, DeclareOpInterfaceMet
   let assemblyFormat = "`(` $value `)` attr-dict";
 }
 
+class PredicateOp<string mnemonic, list<Trait> traits = []>
+    : TuringOp<mnemonic, traits>,
+      Arguments<(ins Column:$lhs, Column:$rhs)> {
+  let results = (outs ColumnBools:$result);
+  let assemblyFormat = "$lhs`,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
+def AndOp : PredicateOp<"and", [Pure]> {
+  let summary = "Performs row-wise logical AND on its two input columns";
+  let arguments = (ins ColumnBools : $lhs, ColumnBools : $rhs);
+}
+
+def OrOp : PredicateOp<"or", [Pure]> {
+  let summary = "Performs row-wise logical OR on its two input columns";
+  let arguments = (ins ColumnBools : $lhs, ColumnBools : $rhs);
+}
+
+def AddOp : BinaryOp<"add", [Pure]> {
+  let summary = "Row-wise addition of two value columns";
+
+  let arguments = (ins Column:$lhs, Column:$rhs);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
 #endif //TURINGDB_OPS
