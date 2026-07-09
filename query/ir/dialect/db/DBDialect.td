@@ -22,12 +22,4 @@ def DB : Dialect {
 class TuringOp<string mnemonic, list<Trait> traits = []>
     : Op<DB, mnemonic, traits>;
 
-class UnaryOp<string mnemonic, list<Trait> traits = []>
-    : TuringOp<mnemonic, traits>;
-
-// TODO: Not sure if this top-level, generic op is the best
-// way to do this. To revisit
-class BinaryOp<string mnemonic, list<Trait> traits = []>
-    : TuringOp<mnemonic, traits>;
-
 #endif //TURINGDB_DIALECT
