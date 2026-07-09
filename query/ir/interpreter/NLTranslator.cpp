@@ -5,6 +5,7 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "mlir/IR/Block.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Verifier.h"
 
@@ -70,6 +71,21 @@ ValueType valueTypeFromElementType(mlir::Type elementType) {
     }
 
     throw IRException("Unsupported nullable value chunk element type");
+}
+
+template <SupportedType T>
+typename T::Primitive constantValueAs(mlir::TypedAttr value) {
+    if constexpr (std::same_as<T, types::Int64>) {
+        return mlir::cast<mlir::IntegerAttr>(value).getInt();
+    } else if constexpr (std::same_as<T, types::UInt64>) {
+        return mlir::cast<mlir::IntegerAttr>(value).getValue().getZExtValue();
+    } else if constexpr (std::same_as<T, types::Double>) {
+        return mlir::cast<mlir::FloatAttr>(value).getValueAsDouble();
+    } else if constexpr (std::same_as<T, types::Bool>) {
+        return CustomBool(mlir::cast<mlir::IntegerAttr>(value).getInt() != 0);
+    } else { // string and embedding not yet supported
+        throw IRException("Unsupported constant value type");
+    }
 }
 
 // The runtime reduction the interpreter dispatches on, from the MLIR one the op
@@ -162,6 +178,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateFor(forLoop, body);
         } else if (mlir::isa<nl::GetPropertyType>(operation)) {
             // The handle carries only a name; a fetch resolves it on consumption
+        } else if (nl::Constant constant = mlir::dyn_cast<nl::Constant>(operation)) {
+            translateConstant(constant);
         } else if (nl::GetNodeProperties getNodeProperties = mlir::dyn_cast<nl::GetNodeProperties>(operation)) {
             translatePropertyFetch(getNodeProperties.getInputNodes(),
                                    getNodeProperties.getPropertyType(),
@@ -386,6 +404,22 @@ void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
 
     const NLHandlerFunction handler = selectPropertyFetchHandler(isNode, valueType);
     body->addStmt(NLFunctionDescriptor {handler, fetchData});
+}
+
+void NLTranslator::translateConstant(nl::Constant constant) {
+    const mlir::TypedAttr value = mlir::cast<mlir::TypedAttr>(constant.getValue());
+    const auto chunkType = mlir::cast<nl::ChunkType>(constant.getResult().getType());
+    const ValueType valueType = valueTypeFromElementType(chunkType.getElementType());
+
+    Column* column = nullptr;
+    const auto materialize = [&]<SupportedType T>() {
+        auto* typed = _memory->alloc<ColumnVector<typename T::Primitive>>();
+        typed->getRaw().assign(1, constantValueAs<T>(value));
+        column = typed;
+    };
+    ValueTypeDispatcher(valueType).execute(materialize);
+
+    _valueSlots[constant.getResult()] = column;
 }
 
 void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {

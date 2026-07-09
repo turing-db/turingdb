@@ -238,6 +238,10 @@ private:
                                 mlir::Value resultValue,
                                 bool isNode,
                                 NLStmtContainer* body);
+
+    // Allocates singleton column for the constant and assigns MLIR value
+    void translateConstant(mlir::nl::Constant constant);
+
     void translateOutput(mlir::nl::Output output, NLStmtContainer* body);
 
     // Translate an nl.cross_product: allocate an output column per crossed
