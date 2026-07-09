@@ -48,8 +48,7 @@ static EdgeMetadata::EdgeType directionToType(EdgePattern::Direction dir) {
 static EdgeMetadata::EdgeType edgeTypeToNodeType(EdgeMetadata::EdgeType t) {
     if (t == EdgeMetadata::EdgeType::GET_OUT_EDGES) {
         return EdgeMetadata::EdgeType::GET_EDGE_TGT;
-    }
-    if (t == EdgeMetadata::EdgeType::GET_IN_EDGES) {
+    } else if (t == EdgeMetadata::EdgeType::GET_IN_EDGES) {
         return EdgeMetadata::EdgeType::GET_EDGE_SRC;
     }
     throw FatalException(
@@ -73,7 +72,7 @@ void VariableDependencyGraph::buildFromAST(const CypherAST* ast) {
     const StmtContainer* stmtsContainer = spq->getReadStmts();
     const StmtContainer::Stmts& stmts = stmtsContainer->stmts();
 
-    for (Stmt* stmt : stmts) {
+    for (const Stmt* stmt : stmts) {
         const auto* match = dynamic_cast<const MatchStmt*>(stmt);
         if (!match) {
             spdlog::warn("Non-match statement: skipped");
