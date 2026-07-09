@@ -160,6 +160,15 @@ LogicalResult CrossProduct::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+LogicalResult Constant::inferReturnTypes(MLIRContext* context,
+                                         std::optional<Location> location,
+                                         Constant::Adaptor adaptor,
+                                         SmallVectorImpl<Type>& inferredReturnTypes) {
+    const TypedAttr value = cast<TypedAttr>(adaptor.getValue());
+    inferredReturnTypes.push_back(ChunkType::get(context, value.getType()));
+    return success();
+}
+
 // A truncate passes its columns through unchanged - only the row count is cut -
 // so each result keeps its input column's chunk type.
 LogicalResult LimitTruncate::inferReturnTypes(MLIRContext* context,

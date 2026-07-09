@@ -3,6 +3,7 @@
 
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/BuiltinAttributeInterfaces.td"
 
 include "NLDialect.td"
 include "NLTypes.td"
@@ -970,6 +971,19 @@ def AggregateResult : NLOp<"aggregate_result", []> {
   // producing nl.aggregate - the verifier enforces both. The result sibling of
   // AggregateUpdate's verifier.
   let hasVerifier = 1;
+}
+
+def Constant : NLOp<"constant", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Materialize a constant scalar as a single-row chunk";
+  let description = [{
+      Represents a ColumnVector<T> with a single row
+      %c = nl.constant(30 : i64) : !nl.chunk<i64>
+  }];
+
+  let arguments = (ins TypedAttrInterface:$value);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "`(` $value `)` attr-dict";
 }
 
 #endif //TURINGDB_NL_OPS
