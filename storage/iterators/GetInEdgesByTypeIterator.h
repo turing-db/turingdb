@@ -6,13 +6,6 @@
 
 namespace db {
 
-// The predecessor counterpart of GetOutEdgesByTypeChunkWriter: a
-// GetInEdgesChunkWriter restricted to the in-edges of one edge type, modelling the
-// MATCH (a)<-[:TYPE]-(b) hop. It reuses GetInEdgesIterator's datapart and node-span
-// navigation unchanged - only fill() differs: it walks each node's in-edge span
-// edge by edge and writes only the records whose _edgeTypeID matches straight into
-// the output columns, so the by-type filter costs no extra copy over the plain
-// fetch.
 class GetInEdgesByTypeChunkWriter : public GetInEdgesIterator {
 public:
     GetInEdgesByTypeChunkWriter() = delete;
@@ -29,7 +22,6 @@ public:
     void setEdgeTypes(ColumnEdgeTypes* types) { _types = types; }
 
 private:
-    // The single edge type kept; every other type is skipped during fill().
     EdgeTypeID _edgeType;
 
     ColumnVector<size_t>* _indices {nullptr};

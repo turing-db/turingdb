@@ -6,12 +6,6 @@
 
 namespace db {
 
-// A GetOutEdgesChunkWriter restricted to the out-edges of one edge type, modelling
-// the MATCH (a)-[:TYPE]->(b) hop. It reuses GetOutEdgesIterator's datapart and
-// node-span navigation unchanged - only fill() differs: it walks each node's edge
-// span edge by edge and writes only the records whose _edgeTypeID matches straight
-// into the output columns. No unfiltered chunk is materialized and then filtered,
-// so the by-type filter costs no extra copy over the plain fetch.
 class GetOutEdgesByTypeChunkWriter : public GetOutEdgesIterator {
 public:
     GetOutEdgesByTypeChunkWriter() = delete;
@@ -28,7 +22,6 @@ public:
     void setEdgeTypes(ColumnEdgeTypes* types) { _types = types; }
 
 private:
-    // The single edge type kept; every other type is skipped during fill().
     EdgeTypeID _edgeType;
 
     ColumnVector<size_t>* _indices {nullptr};
