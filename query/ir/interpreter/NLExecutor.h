@@ -46,6 +46,13 @@ public:
     static void runScanNodesByLabelLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
+
+    // The by-type edge hops: like runGetOutEdgesLoop / runGetInEdgesLoop, but the
+    // chunk writer keeps only the edges of the loop data's resolved edge type. An
+    // unmatchable type (a name absent from the schema) emits nothing.
+    static void runGetOutEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data);
+    static void runGetInEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data);
+
     static void runCrossProduct(NLExecutionContext* context, NLFunctionData* data);
 
     // Reset a limit counter to its budget; runs each time its block runs.

@@ -26,6 +26,19 @@ namespace storage = mlir::storage;
 
 namespace {
 
+// The edge type name carried by the nl.get_edge_type handle a by-type hop's
+// edge_type operand names. The name lives on the handle op, not the hop, so it is
+// resolved once above the loops; a hop reads it back through its operand here (the
+// same way translatePropertyFetch reads a property name off nl.get_property_type).
+llvm::StringRef edgeTypeName(mlir::Value handle) {
+    nl::GetEdgeType handleOp = handle.getDefiningOp<nl::GetEdgeType>();
+    if (!handleOp) {
+        throw IRException("edge_type operand must come from nl.get_edge_type");
+    }
+
+    return handleOp.getName();
+}
+
 // The with-null fetch handler for a property's value type, on the node side
 // when isNode is true and the edge side otherwise. Selecting it here keeps the
 // value-type dispatch with the rest of translation; the handler bodies live in
@@ -156,12 +169,24 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             const mlir::OperandRange carriedColumns = getInEdges.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
             _iteratorConfigs[getInEdges.getResult()] = config;
+        } else if (nl::GetOutEdgesByType getOutEdgesByType = mlir::dyn_cast<nl::GetOutEdgesByType>(operation)) {
+            IteratorConfig config {IteratorKind::GetOutEdgesByType, getOutEdgesByType.getInputNodes(), {}};
+            const mlir::OperandRange carriedColumns = getOutEdgesByType.getColumnsToFilter();
+            config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
+            config._edgeType = edgeTypeName(getOutEdgesByType.getEdgeType()).str();
+            _iteratorConfigs[getOutEdgesByType.getResult()] = config;
+        } else if (nl::GetInEdgesByType getInEdgesByType = mlir::dyn_cast<nl::GetInEdgesByType>(operation)) {
+            IteratorConfig config {IteratorKind::GetInEdgesByType, getInEdgesByType.getInputNodes(), {}};
+            const mlir::OperandRange carriedColumns = getInEdgesByType.getColumnsToFilter();
+            config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
+            config._edgeType = edgeTypeName(getInEdgesByType.getEdgeType()).str();
+            _iteratorConfigs[getInEdgesByType.getResult()] = config;
         } else if (nl::Sort sort = mlir::dyn_cast<nl::Sort>(operation)) {
             _iteratorConfigs[sort.getResult()] = IteratorConfig {IteratorKind::Sort, {}, {}, sortStateFor(sort.getState())};
         } else if (nl::For forLoop = mlir::dyn_cast<nl::For>(operation)) {
             translateFor(forLoop, body);
-        } else if (mlir::isa<nl::GetPropertyType>(operation)) {
-            // The handle carries only a name; a fetch resolves it on consumption
+        } else if (mlir::isa<nl::GetPropertyType, nl::GetEdgeType>(operation)) {
+            // The handle carries only a name; a fetch/hop resolves it on consumption
         } else if (nl::GetNodeProperties getNodeProperties = mlir::dyn_cast<nl::GetNodeProperties>(operation)) {
             translatePropertyFetch(getNodeProperties.getInputNodes(),
                                    getNodeProperties.getPropertyType(),
@@ -309,11 +334,36 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
 
     const ColumnNodeIDs* inputNodeIDs = static_cast<const ColumnNodeIDs*>(getColumn(config._inputNodes));
 
-    NLEdgeLoopData* loopData = _program->allocFunctionData<NLEdgeLoopData>(inputNodeIDs,
-                                                                           sources,
-                                                                           edgeIDs,
-                                                                           edgeTypes,
-                                                                           targets);
+    const bool byType = config._kind == IteratorKind::GetOutEdgesByType
+                        || config._kind == IteratorKind::GetInEdgesByType;
+
+    // A by-type hop carries the resolved edge type in an NLEdgeByTypeLoopData; a
+    // plain hop uses the base NLEdgeLoopData. The shared driver below (reserve,
+    // carried columns, body) works through the base pointer either way.
+    NLEdgeLoopData* loopData = nullptr;
+    if (byType) {
+        // Resolve the edge type name against the schema, exactly as
+        // translateScanByLabelLoop resolves its labels. A name absent from the
+        // schema matches no edge, so the loop is marked unmatchable and emits
+        // nothing rather than filtering against a bogus type.
+        const std::optional<EdgeTypeID> edgeTypeID = _view->metadata().edgeTypes().get(config._edgeType);
+        const bool matchable = edgeTypeID.has_value();
+        const EdgeTypeID resolvedType = matchable ? *edgeTypeID : EdgeTypeID();
+
+        loopData = _program->allocFunctionData<NLEdgeByTypeLoopData>(inputNodeIDs,
+                                                                     sources,
+                                                                     edgeIDs,
+                                                                     edgeTypes,
+                                                                     targets,
+                                                                     resolvedType,
+                                                                     matchable);
+    } else {
+        loopData = _program->allocFunctionData<NLEdgeLoopData>(inputNodeIDs,
+                                                               sources,
+                                                               edgeIDs,
+                                                               edgeTypes,
+                                                               targets);
+    }
     loopData->setLimit(limit);
 
     // Reserve scratch indices column
@@ -346,9 +396,16 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
         loopData->addCarriedColumn(carriedColumn);
     }
 
-    const bool isOutEdges = config._kind == IteratorKind::GetOutEdges;
-    const NLHandlerFunction handler = isOutEdges ? &NLExecutor::runGetOutEdgesLoop
-                                                 : &NLExecutor::runGetInEdgesLoop;
+    NLHandlerFunction handler = nullptr;
+    if (config._kind == IteratorKind::GetOutEdges) {
+        handler = &NLExecutor::runGetOutEdgesLoop;
+    } else if (config._kind == IteratorKind::GetInEdges) {
+        handler = &NLExecutor::runGetInEdgesLoop;
+    } else if (config._kind == IteratorKind::GetOutEdgesByType) {
+        handler = &NLExecutor::runGetOutEdgesByTypeLoop;
+    } else {
+        handler = &NLExecutor::runGetInEdgesByTypeLoop;
+    }
     body->addStmt(NLFunctionDescriptor {handler, loopData});
 
     translateBlock(loopBody, loopData->getStmts());

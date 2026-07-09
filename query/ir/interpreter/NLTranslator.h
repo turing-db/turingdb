@@ -31,6 +31,8 @@ private:
         ScanNodesByLabel,
         GetOutEdges,
         GetInEdges,
+        GetOutEdgesByType,
+        GetInEdgesByType,
         Sort,
     };
 
@@ -48,6 +50,11 @@ private:
         // which the MLIRContext keeps alive for the whole translation; they are
         // resolved to a LabelSet as soon as the loop is translated.
         llvm::SmallVector<llvm::StringRef, 4> _labels;
+
+        // The edge type name a GetOutEdgesByType / GetInEdgesByType iterator
+        // filters by; empty for the other kinds. Resolved to an EdgeTypeID when
+        // the loop is translated.
+        std::string _edgeType;
     };
 
     NLProgram* _program {nullptr};

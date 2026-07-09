@@ -926,4 +926,53 @@ TEST_F(DBDialectTest, verifierRejectsScanNodesByLabelWithoutLabels) {
     EXPECT_FALSE(module);
 }
 
+// MATCH (a)-[:KNOWS]->(b)<-[:LIKES]-(c): one by-type out-edge hop and one by-type
+// in-edge hop, so both ops' assembly formats (the type name inside the parens)
+// are exercised.
+const char* const edgesByTypeProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %s0, %e0, %et0, %b = db.get_out_edges_by_type(%a, "KNOWS", {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %s1, %e1, %et1, %c = db.get_in_edges_by_type(%b, "LIKES", {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  db.output(%s0, %c) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(DBDialectTest, parsesGetEdgesByType) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(edgesByTypeProgram);
+    ASSERT_TRUE(module);
+
+    // The type name spelled inside each op's parens comes back on the edge_type
+    // attribute.
+    mlir::db::GetOutEdgesByType outByType;
+    module.get().walk([&](mlir::db::GetOutEdgesByType op) {
+        outByType = op;
+    });
+    ASSERT_TRUE(outByType);
+    EXPECT_EQ(outByType.getEdgeType(), "KNOWS");
+
+    mlir::db::GetInEdgesByType inByType;
+    module.get().walk([&](mlir::db::GetInEdgesByType op) {
+        inByType = op;
+    });
+    ASSERT_TRUE(inByType);
+    EXPECT_EQ(inByType.getEdgeType(), "LIKES");
+}
+
+TEST_F(DBDialectTest, edgesByTypeRoundTripThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(edgesByTypeProgram);
+    ASSERT_TRUE(module);
+
+    // Printing then re-parsing yields a module that still verifies, so the
+    // by-type edge op printers and parsers are inverses.
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
 }

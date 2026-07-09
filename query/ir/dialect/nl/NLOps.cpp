@@ -111,6 +111,26 @@ LogicalResult GetInEdges::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+// Filtering out-edges by type narrows only the rows, never their shape, so a
+// by-type fetch produces the same iterator as GetOutEdges - the edge type name is
+// a filter, not a result type.
+LogicalResult GetOutEdgesByType::inferReturnTypes(MLIRContext* context,
+                                                  std::optional<Location> location,
+                                                  GetOutEdgesByType::Adaptor adaptor,
+                                                  SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(getEdgeIteratorType(context, adaptor.getColumnsToFilter()));
+    return success();
+}
+
+// The in-edge by-type sibling: same iterator shape as GetInEdges, narrowed by type.
+LogicalResult GetInEdgesByType::inferReturnTypes(MLIRContext* context,
+                                                 std::optional<Location> location,
+                                                 GetInEdgesByType::Adaptor adaptor,
+                                                 SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(getEdgeIteratorType(context, adaptor.getColumnsToFilter()));
+    return success();
+}
+
 // A cross product yields one chunk per crossed column - the outer columns
 // followed by the inner - each keeping its input chunk's element type, since
 // the broadcast only changes the row count, not the element kind.

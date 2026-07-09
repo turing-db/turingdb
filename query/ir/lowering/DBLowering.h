@@ -112,6 +112,11 @@ private:
     // resolved once and shared by every fetch that reads it
     llvm::StringMap<mlir::Value> _propertyTypes;
 
+    // Edge type name -> the hoisted nl.get_edge_type handle, so a name is resolved
+    // once and shared by every by-type edge hop that reads it (the edge sibling of
+    // _propertyTypes)
+    llvm::StringMap<mlir::Value> _edgeTypes;
+
     // Entry block of the nl function being built
     mlir::Block* _entryBlock {nullptr};
 
@@ -155,6 +160,8 @@ private:
     void lowerScanNodesByLabel(mlir::db::ScanNodesByLabel scanNodesByLabel);
     void lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges);
     void lowerGetInEdges(mlir::db::GetInEdges getInEdges);
+    void lowerGetOutEdgesByType(mlir::db::GetOutEdgesByType getOutEdgesByType);
+    void lowerGetInEdgesByType(mlir::db::GetInEdgesByType getInEdgesByType);
     void lowerGetNodeProperties(mlir::db::GetNodeProperties getNodeProperties);
     void lowerGetEdgeProperties(mlir::db::GetEdgeProperties getEdgeProperties);
     void lowerCrossProduct(mlir::db::CrossProduct product);
@@ -243,6 +250,11 @@ private:
     // The nl.get_property_type handle for a property name, inserted once at the
     // top of the entry block (above every loop) and reused on later lookups
     mlir::Value getOrCreatePropertyTypeHandle(llvm::StringRef propertyName);
+
+    // The nl.get_edge_type handle for an edge type name, inserted once at the top
+    // of the entry block (above every loop) and reused on later lookups - the edge
+    // sibling of getOrCreatePropertyTypeHandle
+    mlir::Value getOrCreateEdgeTypeHandle(llvm::StringRef edgeTypeName);
 
     // The !nl.chunk<!storage.nullable<T>> a fetch of this property produces, with T
     // the value type the name resolves to in the schema

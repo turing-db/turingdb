@@ -271,6 +271,35 @@ private:
     ColumnVector<size_t> _indices;
 };
 
+// nl.get_out_edges_by_type / nl.get_in_edges_by_type loop data: an edge hop
+// restricted to one edge type. Reuses the plain edge hop's chunks, limit, carry
+// set and body; adds the resolved EdgeTypeID the Get{Out,In}EdgesByTypeChunkWriter
+// filters by. _matchable is false when the type name was absent from the schema,
+// so no edge can match and the loop emits no row - the edge sibling of
+// NLScanByLabelLoopData.
+class NLEdgeByTypeLoopData : public NLEdgeLoopData {
+public:
+    NLEdgeByTypeLoopData(const ColumnNodeIDs* input,
+                         ColumnNodeIDs* sources,
+                         ColumnEdgeIDs* edgeIDs,
+                         ColumnEdgeTypes* edgeTypes,
+                         ColumnNodeIDs* targets,
+                         EdgeTypeID edgeType,
+                         bool matchable)
+        : NLEdgeLoopData(input, sources, edgeIDs, edgeTypes, targets),
+        _edgeType(edgeType),
+        _matchable(matchable)
+    {
+    }
+
+    EdgeTypeID getEdgeType() const { return _edgeType; }
+    bool isMatchable() const { return _matchable; }
+
+private:
+    EdgeTypeID _edgeType;
+    bool _matchable {true};
+};
+
 // nl.get_node_properties / nl.get_edge_properties data: a with-null property
 // read that maps the input ID column to a nullable value column, one value per
 // input row (missing values are null, no row dropped). The node-vs-edge ID type
