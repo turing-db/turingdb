@@ -274,6 +274,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerAggregate(max.getInput(), max.getResult(), storage::AggregateKind::Max);
     } else if (mlir::db::Avg avg = mlir::dyn_cast<mlir::db::Avg>(operation)) {
         lowerAggregate(avg.getInput(), avg.getResult(), storage::AggregateKind::Avg);
+    } else if (mlir::db::ConstantOp constant = mlir::dyn_cast<mlir::db::ConstantOp>(operation)) {
+        lowerConstant(constant);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
     } else if (mlir::isa<mlir::func::ReturnOp>(operation)) {
@@ -990,6 +992,14 @@ void DBLowering::foldSkipTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
         output.erase();
         truncate.erase();
     }
+}
+
+void DBLowering::lowerConstant(mlir::db::ConstantOp constant) {
+    // Constants are loop-invariant so hoist
+    _builder.setInsertionPointToStart(_entryBlock);
+
+    nl::Constant nlConstant = _builder.create<nl::Constant>(_builder.getUnknownLoc(), constant.getValue());
+    _valueMap[constant.getResult()] = nlConstant.getResult();
 }
 
 void DBLowering::lowerOutput(mlir::db::Output output) {
