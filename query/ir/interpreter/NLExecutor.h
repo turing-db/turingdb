@@ -10,6 +10,7 @@ namespace db {
 
 class GraphView;
 class NLOutputSink;
+class LocalMemory;
 
 class NLExecutionContext {
 public:
@@ -126,6 +127,18 @@ public:
     static void runAggregateResult(NLExecutionContext* context, NLFunctionData* data);
 
     static void runOutput(NLExecutionContext* context, NLFunctionData* data);
+
+    // Run a row-wise binary op (nl.add): invoke the typed kernel bound at
+    // translation, which fills the pre-allocated result chunk from the two operands.
+    static void runBinary(NLExecutionContext* context, NLFunctionData* data);
+
+    // Select the typed add kernel for the runtime column kinds of lhs and rhs and
+    // allocate the matching result column in memory - its type is the
+    // ColumnCombination of the operands (promoted element, nullable iff an operand
+    // is). Returns the kernel and sets result. Reuses the storage-level binary-op
+    // dispatch, so promotion, null propagation and constant broadcast are inherited.
+    static NLBinaryFn selectAdd(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
+
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
 
     // Gather for a nullable value chunk of this value type (sort emit re-chunk).
