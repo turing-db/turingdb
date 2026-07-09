@@ -43,6 +43,8 @@
 
 #include "DBProgramGenerator.h"
 #include "StorageDialect.h"
+#include "columns/ColumnConst.h"
+#include "columns/ColumnOptVector.h"
 
 #include "LocalMemory.h"
 
