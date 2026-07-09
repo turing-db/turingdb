@@ -1105,6 +1105,32 @@ private:
     const Column* _cardinality {nullptr};
 };
 
+// Binary function to execute
+using NLBinaryFn = void (*)(Column* result, const Column* lhs, const Column* rhs);
+
+// Binary function to execute, plus operands and results
+class NLBinaryData : public NLFunctionData {
+public:
+    NLBinaryData(const Column* lhs, const Column* rhs, Column* result, NLBinaryFn fn)
+        : _lhs(lhs),
+        _rhs(rhs),
+        _result(result),
+        _fn(fn)
+    {
+    }
+
+    const Column* getLhs() const { return _lhs; }
+    const Column* getRhs() const { return _rhs; }
+    Column* getResult() const { return _result; }
+    NLBinaryFn getFn() const { return _fn; }
+
+private:
+    const Column* _lhs {nullptr};
+    const Column* _rhs {nullptr};
+    Column* _result {nullptr};
+    NLBinaryFn _fn {nullptr};
+};
+
 class NLProgram {
 public:
     NLProgram();

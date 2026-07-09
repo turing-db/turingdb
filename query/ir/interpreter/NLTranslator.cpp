@@ -208,6 +208,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             // The handle carries only a name; a fetch/hop resolves it on consumption
         } else if (nl::Constant constant = mlir::dyn_cast<nl::Constant>(operation)) {
             translateConstant(constant);
+        } else if (nl::Add add = mlir::dyn_cast<nl::Add>(operation)) {
+            translateAdd(add, body);
         } else if (nl::GetNodeProperties getNodeProperties = mlir::dyn_cast<nl::GetNodeProperties>(operation)) {
             translatePropertyFetch(getNodeProperties.getInputNodes(),
                                    getNodeProperties.getPropertyType(),
@@ -504,6 +506,20 @@ void NLTranslator::translateConstant(nl::Constant constant) {
     bioassert(column, "Failed to allocate column.");
 
     _valueSlots[res] = column;
+}
+
+void NLTranslator::translateAdd(nl::Add add, NLStmtContainer* body) {
+    const Column* lhs = getColumn(add.getLhs());
+    const Column* rhs = getColumn(add.getRhs());
+
+    Column* result = nullptr;
+    const NLBinaryFn fn = NLExecutor::selectAdd(lhs, rhs, _memory, result);
+    bioassert(result, "Failed to translate ADD result.");
+
+    _valueSlots[add.getResult()] = result;
+
+    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runBinary, data});
 }
 
 void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {

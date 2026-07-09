@@ -21,3 +21,6 @@ target_link_libraries(turing_db_ir_interpreter_s
 
 target_include_directories(turing_db_ir_interpreter_s PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_include_directories(turing_db_ir_interpreter_s PRIVATE
+    ${CMAKE_SOURCE_DIR}/query/pipeline)
