@@ -314,6 +314,10 @@ private:
                    || printValueCell<std::string_view>(column, row)
                    || printEmbeddingCell(column, row)) {
             // Printed by the helper for whichever nullable value type matched
+        } else if (printPlainValueCell<int64_t>(column, row)
+                   || printPlainValueCell<double>(column, row)
+                   || printPlainBoolCell(column, row)) {
+            // A plain, non-null value column - the shape a db.constant lowers to
         } else {
             std::cout << "?";
         }
@@ -335,6 +339,32 @@ private:
             std::cout << "null";
         }
 
+        return true;
+    }
+
+    // Print one cell of a plain, non-null value column if it has element type T -
+    // the shape a db.constant lowers to (a ColumnVector, not the ColumnOptVector a
+    // property read produces); returns whether the column matched T.
+    template <typename T>
+    static bool printPlainValueCell(const Column* column, size_t row) {
+        const auto* values = dynamic_cast<const ColumnVector<T>*>(column);
+        if (!values) {
+            return false;
+        }
+
+        std::cout << (*values)[row];
+        return true;
+    }
+
+    // A plain bool constant column: CustomBool has no operator<<, so render it
+    // through its bool conversion, as true/false.
+    static bool printPlainBoolCell(const Column* column, size_t row) {
+        const auto* values = dynamic_cast<const ColumnVector<CustomBool>*>(column);
+        if (!values) {
+            return false;
+        }
+
+        std::cout << (static_cast<bool>((*values)[row]) ? "true" : "false");
         return true;
     }
 
