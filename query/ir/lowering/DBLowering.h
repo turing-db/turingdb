@@ -224,6 +224,9 @@ private:
     // Hoists an nl.constant to the top of the entry block
     void lowerConstant(mlir::db::ConstantOp constant);
 
+    // Performs null- and type- promotions
+    void lowerAdd(mlir::db::AddOp add);
+
     void lowerOutput(mlir::db::Output output);
 
     // Lower one factor region of a db.cross_product into a loop nest rooted at
@@ -274,6 +277,9 @@ private:
     // The nl chunk a db value lowered to, and the block that holds a chunk
     mlir::Value mapValue(mlir::Value dbValue) const;
     static mlir::Block* ownerBlock(mlir::Value chunkValue);
+
+    // Find the first place where both @param first and @param second are valid
+    mlir::Block* deeperBlock(mlir::Value first, mlir::Value second);
 };
 
 }
