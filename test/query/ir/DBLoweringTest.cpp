@@ -15,6 +15,7 @@
 
 #include "Graph.h"
 #include "JobSystem.h"
+#include "columns/ColumnConst.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnOptVector.h"
 #include "datapart/EdgeRecord.h"
@@ -315,6 +316,112 @@ public:
 private:
     std::vector<std::pair<uint64_t, std::optional<int64_t>>> _rows;
 };
+
+// Collects constant result rows: each output column is a ColumnConst<T> - the
+// single broadcast value a db.constant lowers to - so a constant program emits
+// exactly one row, one value per column. Every column must be a ColumnConst<T>.
+template <typename T>
+class CollectingConstSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            std::vector<T> row;
+            for (const Column* chunk : chunks) {
+                const auto* values = dynamic_cast<const ColumnConst<T>*>(chunk);
+                ASSERT_NE(values, nullptr);
+                row.push_back((*values)[rowIndex]);
+            }
+            _rows.push_back(row);
+        }
+    }
+
+    const std::vector<std::vector<T>>& rows() const { return _rows; }
+
+private:
+    std::vector<std::vector<T>> _rows;
+};
+
+// RETURN 30: one constant projected straight to output. It touches no graph -
+// the constant is materialized at function scope and emitted as a single row.
+constexpr const char* singleConstantProgram = R"mlir(
+func.func @main() {
+  %c = db.constant(30 : i64)
+  db.output(%c) : !db.column<i64>
+  return
+}
+)mlir";
+
+// RETURN 10, 20, 30: several constants projected together as one row.
+constexpr const char* multipleConstantsProgram = R"mlir(
+func.func @main() {
+  %a = db.constant(10 : i64)
+  %b = db.constant(20 : i64)
+  %c = db.constant(30 : i64)
+  db.output(%a, %b, %c) : !db.column<i64>, !db.column<i64>, !db.column<i64>
+  return
+}
+)mlir";
+
+// RETURN 2.5: a single double constant, exercising the f64 value type.
+constexpr const char* doubleConstantProgram = R"mlir(
+func.func @main() {
+  %c = db.constant(2.5 : f64)
+  db.output(%c) : !db.column<f64>
+  return
+}
+)mlir";
+
+// Collects one row of the four supported constant value types, each a ColumnConst
+// of its primitive, in the fixed projection order (Int64, UInt64, Double, Bool).
+// String and embedding are not representable constants, so they are not covered.
+class CollectingAllTypesConstSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 4u);
+        ASSERT_EQ(rowCount, 1u);
+
+        const auto* ints = dynamic_cast<const ColumnConst<int64_t>*>(chunks[0]);
+        const auto* uints = dynamic_cast<const ColumnConst<uint64_t>*>(chunks[1]);
+        const auto* doubles = dynamic_cast<const ColumnConst<double>*>(chunks[2]);
+        const auto* bools = dynamic_cast<const ColumnConst<CustomBool>*>(chunks[3]);
+        ASSERT_NE(ints, nullptr);
+        ASSERT_NE(uints, nullptr);
+        ASSERT_NE(doubles, nullptr);
+        ASSERT_NE(bools, nullptr);
+
+        _seen = true;
+        _int = (*ints)[offset];
+        _uint = (*uints)[offset];
+        _double = (*doubles)[offset];
+        _bool = static_cast<bool>((*bools)[offset]);
+    }
+
+    bool seen() const { return _seen; }
+    int64_t getInt() const { return _int; }
+    uint64_t getUint() const { return _uint; }
+    double getDouble() const { return _double; }
+    bool getBool() const { return _bool; }
+
+private:
+    bool _seen {false};
+    int64_t _int {0};
+    uint64_t _uint {0};
+    double _double {0.0};
+    bool _bool {false};
+};
+
+// RETURN 30, 7, 2.5, true: one constant of each supported value type projected
+// together as a single row.
+constexpr const char* allTypesConstantsProgram = R"mlir(
+func.func @main() {
+  %i = db.constant(30 : i64)
+  %u = db.constant(7 : ui64)
+  %f = db.constant(2.5 : f64)
+  %b = db.constant(true)
+  db.output(%i, %u, %f, %b) : !db.column<i64>, !db.column<ui64>, !db.column<f64>, !db.column<i1>
+  return
+}
+)mlir";
 
 // Scan all nodes and output them
 constexpr const char* scanProgram = R"mlir(
@@ -1374,6 +1481,58 @@ TEST_F(DBLoweringTest, executesScanNodesByLabelUnknownIsEmpty) {
     std::vector<uint64_t> robots;
     collectScan(scanByLabelUnknownProgram, reader.getView(), robots);
     EXPECT_TRUE(robots.empty());
+}
+
+TEST_F(DBLoweringTest, lowersSingleConstant) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingConstSink<int64_t> sink;
+    runLoweredProgram(singleConstantProgram, reader.getView(), sink);
+
+    const std::vector<std::vector<int64_t>> expected {{30}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(DBLoweringTest, lowersMultipleConstants) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingConstSink<int64_t> sink;
+    runLoweredProgram(multipleConstantsProgram, reader.getView(), sink);
+
+    // One row of three constant columns, in projection order.
+    const std::vector<std::vector<int64_t>> expected {{10, 20, 30}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(DBLoweringTest, lowersDoubleConstant) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingConstSink<double> sink;
+    runLoweredProgram(doubleConstantProgram, reader.getView(), sink);
+
+    const std::vector<std::vector<double>> expected {{2.5}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(DBLoweringTest, lowersConstantsOfAllSupportedTypes) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingAllTypesConstSink sink;
+    runLoweredProgram(allTypesConstantsProgram, reader.getView(), sink);
+
+    ASSERT_TRUE(sink.seen());
+    EXPECT_EQ(sink.getInt(), 30);
+    EXPECT_EQ(sink.getUint(), 7u);
+    EXPECT_DOUBLE_EQ(sink.getDouble(), 2.5);
+    EXPECT_TRUE(sink.getBool());
 }
 
 TEST_F(DBLoweringTest, lowersOneHopOutEdges) {
