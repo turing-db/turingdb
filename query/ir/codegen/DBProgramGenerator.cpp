@@ -90,16 +90,6 @@ DBProgramGenerator::DBProgramGenerator(mlir::ModuleOp* mainModule)
 DBProgramGenerator::~DBProgramGenerator() {
 }
 
-DBProgramGenerator::DBProgramGenerator(mlir::ModuleOp* mainModule)
-    : _module(mainModule),
-    _mlirCtxt(_module->getContext()),
-    _opBuilder(_module->getBodyRegion())
-{
-}
-
-DBProgramGenerator::~DBProgramGenerator() {
-}
-
 mlir::db::ColumnType DBProgramGenerator::allocColumnType(mlir::Type type) {
     return mlir::db::ColumnType::get(_mlirCtxt, type);
 }
@@ -387,8 +377,13 @@ void DBProgramGenerator::translateComponent(const VariableDependency* root,
             tgt = edgeVarProd->src();
         }
 
-        const EdgeMetadata::EdgeType edgeType = edgeVarProd->data().type();
-        switch (edgeType) {
+        // We may walk an edge backwards compared to the cypher pattern. In such a
+        // case we emit the opposite traversal.
+        const EdgeMetadata::EdgeType prodType = edgeVarProd->data().type();
+        const EdgeMetadata::EdgeType logicalDir =
+            edgeSrcDefined ? prodType : reverseEdge(prodType);
+
+        switch (logicalDir) {
             case EdgeMetadata::EdgeType::GET_OUT_EDGES:
                 addGetOutEdges(src, edge, tgt, carriedSet);
             break;
@@ -408,7 +403,7 @@ void DBProgramGenerator::translateComponent(const VariableDependency* root,
             case EdgeMetadata::EdgeType::GET_EDGE_TGT:
             case EdgeMetadata::EdgeType::GET_EDGE_SRC:
                 throw FatalException(fmt::format("Attempted to translate {}",
-                                                 EdgeTypeName::value(edgeType)));
+                                                 EdgeTypeName::value(logicalDir)));
             break;
 
             case EdgeMetadata::EdgeType::_SIZE:
