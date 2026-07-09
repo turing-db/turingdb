@@ -217,6 +217,9 @@ private:
     // one, so a string sum or an embedding min is rejected here.
     void lowerAggregate(mlir::Value input, mlir::Value result, mlir::storage::AggregateKind kind);
 
+    // Hoists an nl.constant to the top of the entry block
+    void lowerConstant(mlir::db::ConstantOp constant);
+
     void lowerOutput(mlir::db::Output output);
 
     // Lower one factor region of a db.cross_product into a loop nest rooted at
