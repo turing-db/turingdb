@@ -143,7 +143,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
         } else if (nl::ScanNodesByLabel scanNodesByLabel = mlir::dyn_cast<nl::ScanNodesByLabel>(operation)) {
             IteratorConfig config {IteratorKind::ScanNodesByLabel, {}, {}};
             for (const mlir::Attribute label : scanNodesByLabel.getLabels()) {
-                config._labels.push_back(mlir::cast<mlir::StringAttr>(label).str());
+                config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
             }
             _iteratorConfigs[scanNodesByLabel.getResult()] = config;
         } else if (nl::GetOutEdges getOutEdges = mlir::dyn_cast<nl::GetOutEdges>(operation)) {
@@ -265,7 +265,8 @@ void NLTranslator::translateScanByLabelLoop(const IteratorConfig& config,
                                             NLLimitState* limit,
                                             NLStmtContainer* body) {
     // A label scan binds the same single node ID chunk as a plain scan.
-    ColumnNodeIDs* nodeIDs = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(0)));
+    const mlir::Value nodeChunk = loopBody.getArgument(0);
+    ColumnNodeIDs* nodeIDs = static_cast<ColumnNodeIDs*>(allocColumn(nodeChunk));
 
     // Resolve the label names into the LabelSet the scan filters by. A node
     // matches when its label set is a superset of this one, so the requested
@@ -276,7 +277,7 @@ void NLTranslator::translateScanByLabelLoop(const IteratorConfig& config,
     LabelSet labelset;
     bool matchable = true;
     const LabelMap& labels = _view->metadata().labels();
-    for (const std::string& label : config._labels) {
+    for (const llvm::StringRef label : config._labels) {
         const std::optional<LabelID> id = labels.get(label);
         if (!id) {
             matchable = false;

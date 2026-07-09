@@ -3,6 +3,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 
 #include "metadata/PropertyType.h"
 
@@ -43,8 +44,10 @@ private:
         NLSortState* _sortState {nullptr};
 
         // The label names a ScanNodesByLabel iterator filters by; empty for the
-        // other kinds. Resolved to a LabelSet when the loop is translated.
-        std::vector<std::string> _labels;
+        // other kinds. These are views into the op's interned StringAttr storage,
+        // which the MLIRContext keeps alive for the whole translation; they are
+        // resolved to a LabelSet as soon as the loop is translated.
+        llvm::SmallVector<llvm::StringRef, 4> _labels;
     };
 
     NLProgram* _program {nullptr};
