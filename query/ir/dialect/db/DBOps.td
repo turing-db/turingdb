@@ -580,4 +580,13 @@ def SubOp : BinaryOp<"sub", [Pure]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
+def MulOp : BinaryOp<"mul", [Pure]> {
+  let summary = "Row-wise multiplication of two value columns";
+
+  let arguments = (ins Column:$lhs, Column:$rhs);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
 #endif //TURINGDB_OPS
