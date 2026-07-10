@@ -4,8 +4,6 @@
 #include <memory>
 #include <string_view>
 #include <type_traits>
-#include <unordered_map>
-#include <unordered_set>
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Block.h"
@@ -201,7 +199,7 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
     // Main block is saved so we can splice into it after generation
     mlir::Block* const mainBlock = _opBuilder.getInsertionBlock();
 
-    std::unordered_set<const VariableDependency*> defined;
+    DefinedVars defined;
 
     // Connected components
     std::vector<TranslatedComponent> components;
@@ -282,7 +280,7 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
 }
 
 void DBProgramGenerator::translateComponent(const VariableDependency* root,
-                                            std::unordered_set<const VariableDependency*>& defined,
+                                            DefinedVars& defined,
                                             std::vector<const VariableDependency*>& outVars) {
     struct Frame {
         const VariableDependency* _var {nullptr};
