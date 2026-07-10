@@ -21,4 +21,25 @@ def AggregateKind : I64EnumAttr<"AggregateKind", "A property-value aggregate", [
     let cppNamespace = "::mlir::storage";
 }
 
+// The reduction one function of a grouped aggregation applies. Unlike
+// AggregateKind it includes COUNT: a grouped aggregate carries a list of
+// functions (db.group_aggregate's `kinds`), and count is one of them - it
+// tallies each group's non-null rows the same way sum/min/max/avg reduce their
+// values, so the four value reductions and the row tally share one enum here.
+//
+// The cases keep AggregateKind's order for the four value reductions, with COUNT
+// prepended at 0, so a GroupAggregateKind other than Count maps onto the matching
+// AggregateKind by name. It is stored on the ops as a DenseI64ArrayAttr of these
+// integer values (as db.sort stores its key column indices), so no enum-array
+// attribute machinery is needed; the values are range-checked in the verifiers.
+def GroupAggregateKind : I64EnumAttr<"GroupAggregateKind", "A grouped aggregate function", [
+    I64EnumAttrCase<"Count", 0, "count">,
+    I64EnumAttrCase<"Sum", 1, "sum">,
+    I64EnumAttrCase<"Min", 2, "min">,
+    I64EnumAttrCase<"Max", 3, "max">,
+    I64EnumAttrCase<"Avg", 4, "avg">,
+]> {
+    let cppNamespace = "::mlir::storage";
+}
+
 #endif // STORAGE_ENUMS

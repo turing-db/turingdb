@@ -3,8 +3,12 @@
 
 #include "llvm/ADT/SmallVector.h"
 
+#include "StorageEnums.h"
+
 using namespace mlir;
 using namespace mlir::db;
+
+namespace storage = mlir::storage;
 
 #define GET_OP_CLASSES
 #include "DBOps.cpp.inc"
@@ -301,4 +305,62 @@ LogicalResult ConstantOp::inferReturnTypes(MLIRContext* context,
     inferredReturnTypes.emplace_back(
         mlir::db::ColumnType::get(context, typedValue.getType()));
     return mlir::success();
+}
+
+// db.group_aggregate splits its columns into keyCount grouping keys followed by
+// one input per aggregate, so keyCount and kinds must partition the columns with
+// at least one of each. Its results are the key columns (passed through) then one
+// per aggregate, so the key results must match their key columns; the aggregate
+// result types are resolved during lowering and left unconstrained (as db.count).
+LogicalResult GroupAggregate::verify() {
+    const OperandRange columns = getColumns();
+    const Operation::result_range results = getResults();
+    const uint64_t keyCount = getKeyCount();
+    const ArrayRef<int64_t> kinds = getKinds();
+
+    // A grouped aggregate with no key is a whole-stream aggregate (db.count /
+    // db.sum ...); with no aggregate it is a projection or DISTINCT. Either way it
+    // is not this op, so require at least one of each.
+    if (keyCount == 0) {
+        return emitOpError("requires at least one grouping key");
+    }
+
+    if (kinds.empty()) {
+        return emitOpError("requires at least one aggregate");
+    }
+
+    // Every column is either a grouping key or one aggregate's input, so the two
+    // counts must sum to the column count exactly.
+    if (columns.size() != keyCount + kinds.size()) {
+        return emitOpError("expects ") << (keyCount + kinds.size())
+                                       << " columns, one per grouping key and aggregate, but has "
+                                       << columns.size();
+    }
+
+    // One result per grouping key then one per aggregate.
+    if (results.size() != columns.size()) {
+        return emitOpError("expects ") << columns.size()
+                                       << " results, one per grouping key and aggregate, but has "
+                                       << results.size();
+    }
+
+    // The grouping keys pass through unchanged, so each key result keeps its key
+    // column's type. The aggregate result types are resolved during lowering.
+    for (size_t keyIndex = 0; keyIndex < keyCount; keyIndex++) {
+        if (columns[keyIndex].getType() != results[keyIndex].getType()) {
+            return emitOpError("grouping-key result ") << keyIndex
+                                                       << " must have the same type as key column "
+                                                       << keyIndex;
+        }
+    }
+
+    // Each kind names one aggregate's reduction, so it must be a valid
+    // GroupAggregateKind (count / sum / min / max / avg).
+    for (const int64_t kind : kinds) {
+        if (!storage::symbolizeGroupAggregateKind(kind)) {
+            return emitOpError("has an unknown aggregate kind ") << kind;
+        }
+    }
+
+    return success();
 }

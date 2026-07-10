@@ -245,6 +245,21 @@ private:
     // Applies a mask to a carry set
     void lowerFilter(mlir::db::FilterOp filter);
 
+    // Lower a db.group_aggregate: the grouped, multi-row sibling of lowerAggregate,
+    // modeled on lowerSort. Hoist an nl.group_aggregate_buffer accumulator (carrying
+    // keyCount and the aggregate kinds) to the top of the entry block, place an
+    // nl.group_aggregate_update in the innermost producing loop body to fold each
+    // chunk into the per-group state, then - after the producing loop - emit an
+    // nl.group_aggregate source iterator and an nl.for over it that yields one row
+    // per group. db.group_aggregate's results (the grouping-key columns then the
+    // aggregate results) map to that emit loop's variables, so the db.output that
+    // follows lowers into the emit loop body. The aggregate result chunk types are
+    // resolved here from each kind and its input column: a ui64 for count, the
+    // input's value type for sum/min/max, f64 for avg; a sum/min/max/avg requires a
+    // property value column (an ID column is rejected), so a grouped sum of node IDs
+    // is caught here.
+    void lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate);
+
     void lowerOutput(mlir::db::Output output);
 
     // Lower one factor region of a db.cross_product into a loop nest rooted at

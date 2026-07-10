@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -1114,6 +1115,193 @@ private:
     NLAggregateResultFunction _result {nullptr};
 };
 
+// The reduction one function of a grouped aggregation applies. The runtime
+// counterpart of the MLIR storage::GroupAggregateKind: the translator maps the
+// op's kind onto this and - with the column value type - selects the grow/fold/
+// emit handlers below. Unlike the scalar AggregateKind it includes Count, since a
+// grouped aggregate tallies each group's rows the same way it reduces their
+// values.
+enum class GroupAggregateKind {
+    Count,
+    Sum,
+    Min,
+    Max,
+    Avg,
+};
+
+// Append the values of the given rows of an input chunk onto the tail of a
+// growing key buffer of the same element type. nl.group_aggregate_update calls
+// this with the rows that created a new group this step, so the buffer holds one
+// key value per group in group-creation order. One per column kind / value type,
+// selected during translation the way the gather and append families are.
+using NLGroupKeyGatherFunction = void (*)(const Column* input,
+                                          const std::vector<size_t>& rows,
+                                          Column* buffer);
+
+// Grow one aggregate's per-group state to hold groupCount groups, initializing the
+// newly added groups to the reduction's identity - a present zero (sum/avg), a
+// null (min/max) or a zero tally (count). The accumulator column holds the reduced
+// value per group (null for count); counts holds the per-group non-null tally
+// (used by count and avg). One per kind / value type, selected during translation.
+using NLGroupAggregateGrowFunction = void (*)(Column* accumulator,
+                                              std::vector<uint64_t>& counts,
+                                              size_t groupCount);
+
+// Fold this step's chunk into the per-group state: for each input row, reduce its
+// value (or tally it) into the group named by groups[row]. groups is the row ->
+// group-index map nl.group_aggregate_update built for this step. One per kind /
+// value type.
+using NLGroupAggregateFoldFunction = void (*)(Column* accumulator,
+                                              std::vector<uint64_t>& counts,
+                                              const Column* input,
+                                              const std::vector<size_t>& groups);
+
+// Materialize the reduction of groups [begin, begin + count) into an emit output
+// column: a copy of the accumulator slice (sum/min/max), a per-group divide
+// (avg), or the tally slice (count). Runs once per emit chunk. One per kind /
+// value type.
+using NLGroupAggregateEmitFunction = void (*)(const Column* accumulator,
+                                              const std::vector<uint64_t>& counts,
+                                              size_t begin,
+                                              size_t count,
+                                              Column* output);
+
+// Runtime state of one grouped aggregation: a hash table from the serialized
+// grouping-key tuple to a dense group index, the distinct key values per group,
+// and one accumulator per aggregate function. nl.group_aggregate_buffer resets it,
+// nl.group_aggregate_update assigns each row to its group and folds the aggregate
+// inputs, and the nl.for over nl.group_aggregate emits one row per group. The
+// grouped sibling of NLSortState: it keys rows by the grouping tuple and reduces
+// within each group rather than buffering every row for a global reorder.
+//
+// This is the single global open-addressing... conceptually; the group table is a
+// std::unordered_map here (the "simplest correct thing" first cut). The
+// accumulators are designed row-per-group so a future two-phase merge can combine
+// two tables group by group.
+class NLGroupAggregateState {
+public:
+    // One grouping-key column. The distinct key value per group accumulates in
+    // _buffer (grown as groups appear, in creation order); the update reads the
+    // incoming chunk _input and the emit fills the loop variable _output.
+    // _keyAppend serializes a row into the group key (the DISTINCT serializer),
+    // _gatherAppend copies the new-group rows into _buffer, and _emitCopy copies a
+    // buffer slice into _output at emit.
+    struct KeyColumn {
+        const Column* _input {nullptr};
+        Column* _buffer {nullptr};
+        Column* _output {nullptr};
+        NLKeyAppendFunction _keyAppend {nullptr};
+        NLGroupKeyGatherFunction _gatherAppend {nullptr};
+        NLCopyFunction _emitCopy {nullptr};
+    };
+
+    // One aggregate. The update folds the incoming chunk _input into the per-group
+    // state (_accumulator, one reduced value per group - null for count - and
+    // _counts, one non-null tally per group, used by count and avg); the emit fills
+    // the loop variable _output. _grow/_fold/_emit are baked from the kind and the
+    // value type.
+    struct Aggregate {
+        const Column* _input {nullptr};
+        Column* _accumulator {nullptr};
+        Column* _output {nullptr};
+        std::vector<uint64_t> _counts;
+        NLGroupAggregateGrowFunction _grow {nullptr};
+        NLGroupAggregateFoldFunction _fold {nullptr};
+        NLGroupAggregateEmitFunction _emit {nullptr};
+    };
+
+    void addKeyColumn(const KeyColumn& key) { _keyColumns.push_back(key); }
+    void addAggregate(const Aggregate& aggregate) { _aggregates.push_back(aggregate); }
+
+    // Mutable so the emit-loop translation can fill in each column's _output after
+    // the update translation set up the rest.
+    std::vector<KeyColumn>& keyColumns() { return _keyColumns; }
+    std::vector<Aggregate>& aggregates() { return _aggregates; }
+
+    std::unordered_map<std::string, size_t>& groups() { return _groups; }
+
+    size_t getGroupCount() const { return _groupCount; }
+    void setGroupCount(size_t count) { _groupCount = count; }
+
+    // Scratch reused per update step: the row key being built, the per-row group
+    // index map, and the incoming rows that created a new group this step.
+    std::string& keyScratch() { return _key; }
+    std::vector<size_t>& groupIndicesScratch() { return _groupIndices; }
+    std::vector<size_t>& newGroupRowsScratch() { return _newGroupRows; }
+
+    // Empty the group table, key buffers, accumulators and tallies, so the
+    // aggregation starts fresh. Runs each time nl.group_aggregate_buffer's block
+    // runs (once at function scope for a top-level grouped RETURN).
+    void reset();
+
+private:
+    std::vector<KeyColumn> _keyColumns;
+    std::vector<Aggregate> _aggregates;
+
+    // The serialized grouping-key tuple -> its dense group index. The group index
+    // is the row a group occupies in every key buffer and accumulator.
+    std::unordered_map<std::string, size_t> _groups;
+    size_t _groupCount {0};
+
+    std::string _key;
+    std::vector<size_t> _groupIndices;
+    std::vector<size_t> _newGroupRows;
+};
+
+// nl.group_aggregate_buffer data: resets a grouped accumulator to empty each time
+// the block it lives in runs - once at function scope for a top-level grouped
+// RETURN. The grouped sibling of NLSortResetData.
+class NLGroupAggregateResetData : public NLFunctionData {
+public:
+    NLGroupAggregateResetData(NLGroupAggregateState* state)
+        : _state(state)
+    {
+    }
+
+    NLGroupAggregateState* getState() const { return _state; }
+
+private:
+    NLGroupAggregateState* _state {nullptr};
+};
+
+// nl.group_aggregate_update data: the accumulator to fold this step's chunk into.
+// The key columns and aggregates it reads live on the shared state (their _input
+// chunks are the loop variables refilled each step), so this only names the state.
+// The grouped sibling of NLSortCollectData.
+class NLGroupAggregateUpdateData : public NLFunctionData {
+public:
+    NLGroupAggregateUpdateData(NLGroupAggregateState* state)
+        : _state(state)
+    {
+    }
+
+    NLGroupAggregateState* getState() const { return _state; }
+
+private:
+    NLGroupAggregateState* _state {nullptr};
+};
+
+// nl.for over nl.group_aggregate data: the emit phase of a grouped aggregation.
+// The key buffers, accumulators and emit outputs all live on the shared state, so
+// this holds the state (fully folded by now) and the loop body to run per emit
+// chunk. The grouped sibling of NLSortLoopData.
+class NLGroupAggregateLoopData : public NLFunctionData {
+public:
+    NLGroupAggregateLoopData(NLGroupAggregateState* state)
+        : _state(state)
+    {
+    }
+
+    NLGroupAggregateState* getState() const { return _state; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
+    NLGroupAggregateState* _state {nullptr};
+    NLStmtContainer _stmts;
+};
+
 // nl.output data
 class NLOutputData : public NLFunctionData {
 public:
@@ -1273,6 +1461,16 @@ public:
         return statePtr;
     }
 
+    // Allocate one grouped aggregation's runtime accumulator, owned by the program;
+    // the reset, update and emit statements that share it hold a borrowed pointer.
+    // The grouped sibling of allocSortState.
+    NLGroupAggregateState* allocGroupAggregateState() {
+        auto state = std::make_unique<NLGroupAggregateState>();
+        NLGroupAggregateState* statePtr = state.get();
+        _groupAggregateStates.push_back(std::move(state));
+        return statePtr;
+    }
+
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
@@ -1288,6 +1486,7 @@ private:
     std::vector<std::unique_ptr<NLDistinctState>> _distinctStates;
     std::vector<std::unique_ptr<NLCountState>> _countStates;
     std::vector<std::unique_ptr<NLAggregateState>> _aggregateStates;
+    std::vector<std::unique_ptr<NLGroupAggregateState>> _groupAggregateStates;
     NLStmtContainer _stmts;
 };
 
