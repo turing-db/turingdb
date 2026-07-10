@@ -227,6 +227,9 @@ private:
     // Performs null- and type- promotions
     void lowerAdd(mlir::db::AddOp add);
 
+    // Performs null- and type- promotions
+    void lowerSub(mlir::db::SubOp sub);
+
     // Handles nullity of its output depending on operands
     void lowerEq(mlir::db::EqOp eq);
 
