@@ -247,6 +247,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerScanNodes(scanNodes);
     } else if (mlir::db::ScanNodesByLabel scanNodesByLabel = mlir::dyn_cast<mlir::db::ScanNodesByLabel>(operation)) {
         lowerScanNodesByLabel(scanNodesByLabel);
+    } else if (mlir::db::ScanEdges scanEdges = mlir::dyn_cast<mlir::db::ScanEdges>(operation)) {
+        lowerScanEdges(scanEdges);
     } else if (mlir::db::GetOutEdges getOutEdges = mlir::dyn_cast<mlir::db::GetOutEdges>(operation)) {
         lowerGetOutEdges(getOutEdges);
     } else if (mlir::db::GetInEdges getInEdges = mlir::dyn_cast<mlir::db::GetInEdges>(operation)) {
@@ -310,6 +312,17 @@ void DBLowering::lowerScanNodesByLabel(mlir::db::ScanNodesByLabel scanNodesByLab
     nl::ScanNodesByLabel nodes = _builder.create<nl::ScanNodesByLabel>(_builder.getUnknownLoc(),
                                                                        scanNodesByLabel.getLabelsAttr());
     buildLoopForSource(nodes.getResult(), scanNodesByLabel.getOperation());
+}
+
+void DBLowering::lowerScanEdges(mlir::db::ScanEdges scanEdges) {
+    // The edge sibling of lowerScanNodes: a scan reads no column, so its loop
+    // sits at the top of the current root block. The nl.scan_edges iterator
+    // produces the four fixed edge chunks, which buildLoopForSource binds to the
+    // op's four results in order.
+    setInsertionInto(_rootBlock);
+
+    nl::ScanEdges edges = _builder.create<nl::ScanEdges>(_builder.getUnknownLoc());
+    buildLoopForSource(edges.getResult(), scanEdges.getOperation());
 }
 
 void DBLowering::lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges) {
@@ -923,6 +936,7 @@ void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {
 
     const bool opensLoop = mlir::isa<mlir::db::ScanNodes,
                                      mlir::db::ScanNodesByLabel,
+                                     mlir::db::ScanEdges,
                                      mlir::db::GetOutEdges,
                                      mlir::db::GetInEdges,
                                      mlir::db::GetOutEdgesByType,

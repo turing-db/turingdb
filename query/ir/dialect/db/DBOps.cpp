@@ -92,6 +92,13 @@ LogicalResult verifyPassThrough(Operation* op,
 }
 
 // Ensures each variable has a numeric name
+void ScanEdges::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    for (Value result : getResults()) {
+        setNameFn(result, "");
+    }
+}
+
+// Ensures each variable has a numeric name
 void GetOutEdges::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     for (Value result : getResults()) {
         setNameFn(result, "");

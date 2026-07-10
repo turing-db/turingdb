@@ -58,6 +58,45 @@ def ScanNodesByLabel : TuringOp<"scan_nodes_by_label", [Pure]> {
 }
 
 /**
+* ScanEdges
+*/
+def ScanEdges : TuringOp<"scan_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+  let summary = "Produce every edge in the graph as four row-aligned columns";
+
+  let description = [{
+    The edge counterpart of db.scan_nodes: where that produces every node, this
+    produces every edge, expanded into the same four row-aligned columns a hop
+    exposes - the source node, the edge, its type and the target node:
+
+      %srcs, %eids, %etypes, %tgts = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+
+    It reads no column and takes no input, so - like db.scan_nodes - it opens a
+    dataflow rather than consuming one. Unlike db.get_out_edges there is no source
+    node column to walk from and no carry set to filter: every edge is emitted
+    once. The four result chunks are the same shape and order db.get_out_edges
+    produces (sources, edge IDs, edge type IDs, targets), so a downstream op reads
+    them the same way. Scanning the graph is a deterministic read, so the op is
+    Pure.
+  }];
+
+  // No operands: a scan opens the dataflow. The four results are the source
+  // nodes, the edges, their types and the target nodes, in the same order
+  // db.get_out_edges produces them.
+  let results = (outs ColumnNodeIDs:$srcids,
+                      ColumnEdgeIDs:$eids,
+                      ColumnEdgeTypes:$etypes,
+                      ColumnNodeIDs:$tgtids);
+
+  // A source op has no meaningful operand arrow, so - like db.scan_nodes - the
+  // result types are spelled straight after the colon rather than through a
+  // functional-type; qualified(...) keeps the leading !db. on each.
+  let assemblyFormat = [{
+    `(`operands`)` attr-dict `:` qualified(type($srcids)) `,` qualified(type($eids)) `,`
+    qualified(type($etypes)) `,` qualified(type($tgtids))
+  }];
+}
+
+/**
 * GetOutEdges
 */
 def GetOutEdges : TuringOp<"get_out_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {

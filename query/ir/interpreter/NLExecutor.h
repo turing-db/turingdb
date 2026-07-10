@@ -44,6 +44,7 @@ public:
 
     static void runScanNodesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runScanNodesByLabelLoop(NLExecutionContext* context, NLFunctionData* data);
+    static void runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
 
