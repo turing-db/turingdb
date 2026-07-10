@@ -42,7 +42,7 @@ private:
     mlir::MLIRContext* _mlirCtxt {nullptr};
     mlir::OpBuilder _opBuilder;
 
-    // Maps a Cypher variable to all of its MLIR variable uses, in order of appearence
+    // Maps a Cypher variable to all of its MLIR variable defs, in order of appearance
     VariableIdentityMap _varMap;
 
     VariableDependencyGraph _vdg;
@@ -55,7 +55,7 @@ private:
 
     void generateTraversal(const CypherAST* ast);
 
-    // Translate a connectected component of @ref _vdg, fills @param outVars
+    // Translate a connected component of @ref _vdg, fills @param outVars
     void translateComponent(const VariableDependency* root,
                             std::unordered_set<const VariableDependency*>& defined,
                             std::vector<const VariableDependency*>& outVars);
