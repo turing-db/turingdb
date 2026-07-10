@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "mlir/IR/Block.h"
+#include "mlir/IR/Types.h"
 #include "mlir/IR/Verifier.h"
 
 #include "NLOps.h"
@@ -133,6 +134,15 @@ NumericOperand numericOperand(mlir::Type chunkType) {
     }
 
     return {.numeric = element, .nullable = nullable};
+}
+
+bool isNullableChunk(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        throw IRException("Tried to check nullity of non-chunk.");
+    }
+
+    return mlir::isa<storage::NullableType>(chunk.getElementType());
 }
 
 mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
@@ -332,6 +342,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerConstant(constant);
     } else if (mlir::db::AddOp add = mlir::dyn_cast<mlir::db::AddOp>(operation)) {
         lowerAdd(add);
+    } else if (mlir::db::EqOp eq = mlir::dyn_cast<mlir::db::EqOp>(operation)) {
+        lowerEq(eq);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
     } else if (mlir::isa<mlir::func::ReturnOp>(operation)) {
@@ -1172,6 +1184,31 @@ void DBLowering::lowerAdd(mlir::db::AddOp add) {
     const mlir::Location uloc = _builder.getUnknownLoc();
     nl::Add addOp = _builder.create<nl::Add>(uloc, resultType, lhsChunk, rhsChunk);
     _valueMap[add.getResult()] = addOp.getResult();
+}
+
+void DBLowering::lowerEq(mlir::db::EqOp eq) {
+    const mlir::Value lhsChunk = mapValue(eq.getLhs());
+    const mlir::Value rhsChunk = mapValue(eq.getRhs());
+
+    const mlir::Type lhsType = lhsChunk.getType();
+    const mlir::Type rhsType = rhsChunk.getType();
+
+    const bool resultNull = isNullableChunk(lhsType) || isNullableChunk(rhsType);
+
+    const mlir::Type boolElement = _builder.getI1Type();
+    mlir::Type resultElement = boolElement;
+    mlir::MLIRContext* bldCtxt = _builder.getContext();
+    if (resultNull) {
+        resultElement = storage::NullableType::get(bldCtxt, boolElement);
+    }
+
+    const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
+
+    // Insert into the first point where both operands are available
+    setInsertionInto(deeperBlock(lhsChunk, rhsChunk));
+
+    nl::Eq eqOp = _builder.create<nl::Eq>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
+    _valueMap[eq.getResult()] = eqOp.getResult();
 }
 
 mlir::Block* DBLowering::deeperBlock(mlir::Value first, mlir::Value second) {
