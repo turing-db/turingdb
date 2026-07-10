@@ -344,6 +344,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerAdd(add);
     } else if (mlir::db::SubOp sub = mlir::dyn_cast<mlir::db::SubOp>(operation)) {
         lowerSub(sub);
+    } else if (mlir::db::MulOp mul = mlir::dyn_cast<mlir::db::MulOp>(operation)) {
+        lowerMul(mul);
     } else if (mlir::db::EqOp eq = mlir::dyn_cast<mlir::db::EqOp>(operation)) {
         lowerEq(eq);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
@@ -1210,6 +1212,30 @@ void DBLowering::lowerSub(mlir::db::SubOp sub) {
     const mlir::Location uloc = _builder.getUnknownLoc();
     nl::Sub subOp = _builder.create<nl::Sub>(uloc, resultType, lhsChunk, rhsChunk);
     _valueMap[sub.getResult()] = subOp.getResult();
+}
+
+void DBLowering::lowerMul(mlir::db::MulOp mul) {
+    const mlir::Value lhsChunk = mapValue(mul.getLhs());
+    const mlir::Value rhsChunk = mapValue(mul.getRhs());
+
+    const NumericOperand lhs = numericOperand(lhsChunk.getType());
+    const NumericOperand rhs = numericOperand(rhsChunk.getType());
+
+    const mlir::Type promoted = promoteNumeric(_builder, lhs.numeric, rhs.numeric);
+    const bool resultNullable = lhs.nullable || rhs.nullable;
+
+    mlir::Type resultElement = promoted;
+    if (resultNullable) {
+        resultElement = storage::NullableType::get(_builder.getContext(), promoted);
+    }
+
+    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
+
+    setInsertionInto(deeperBlock(lhsChunk, rhsChunk));
+
+    const mlir::Location uloc = _builder.getUnknownLoc();
+    nl::Mul mulOp = _builder.create<nl::Mul>(uloc, resultType, lhsChunk, rhsChunk);
+    _valueMap[mul.getResult()] = mulOp.getResult();
 }
 
 void DBLowering::lowerEq(mlir::db::EqOp eq) {
