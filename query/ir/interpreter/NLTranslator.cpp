@@ -492,7 +492,8 @@ void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
 
 void NLTranslator::translateConstant(nl::Constant constant) {
     const mlir::TypedAttr value = mlir::cast<mlir::TypedAttr>(constant.getValue());
-    const auto chunkType = mlir::cast<nl::ChunkType>(constant.getResult().getType());
+    const mlir::TypedValue<mlir::nl::ChunkType> res = constant.getResult();
+    const auto chunkType = mlir::cast<nl::ChunkType>(res.getType());
     const ValueType valueType = valueTypeFromElementType(chunkType.getElementType());
 
     Column* column = nullptr;
@@ -504,7 +505,7 @@ void NLTranslator::translateConstant(nl::Constant constant) {
     ValueTypeDispatcher(valueType).execute(materialize);
     bioassert(column, "Failed to allocate column.");
 
-    _valueSlots[constant.getResult()] = column;
+    _valueSlots[res] = column;
 }
 
 void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
