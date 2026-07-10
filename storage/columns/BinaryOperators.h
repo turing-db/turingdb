@@ -8,7 +8,7 @@
 #include "TypeUtils.h"
 
 #include "BioAssert.h"
-#include "PipelineException.h"
+#include "TuringException.h"
 
 namespace db {
 
@@ -132,7 +132,7 @@ struct SafeDivides {
     template <typename T, typename U>
     inline auto operator()(T&& a, U&& b) {
         if (b == 0) {
-            throw PipelineException("Attempted to divide by zero.");
+            throw TuringException("Attempted to divide by zero.");
         }
         return std::divides<> {}(std::forward<T>(a), std::forward<U>(b));
     }
