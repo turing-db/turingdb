@@ -28,17 +28,6 @@ namespace storage = mlir::storage;
 
 namespace {
 
-static bool isDefinedInOuterScope(mlir::Operation* definingOp, mlir::Block* outputBlock) {
-    mlir::Block* current = outputBlock;
-    while (mlir::Operation* parentOp = current->getParentOp()) {
-        current = parentOp->getBlock();
-        if (current == definingOp->getBlock()) {
-            return true;
-        }
-    }
-    return false;
-}
-
 // The with-null fetch handler for a property's value type, on the node side
 // when isNode is true and the edge side otherwise. Selecting it here keeps the
 // value-type dispatch with the rest of translation; the handler bodies live in
@@ -477,10 +466,12 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
 
     // Output is either the per-step sink inside an nl.for body, or - for an
     // aggregate like COUNT that collapses to one row - a one-shot emit at function
-    // scope. Either way its columns must be bound in the output's own block, which
-    // the per-column check below enforces: a loop variable of this loop, or a chunk
-    // materialized in this block (a property fetch, or nl.count_result at function
-    // scope). A chunk from an outer or sibling loop fails that check.
+    // scope. Either way its per-row columns must be bound in the output's own block,
+    // which the per-column check below enforces: a loop variable of this loop, or a
+    // chunk materialized in this block (a property fetch, or nl.count_result at
+    // function scope). The sole cross-scope exception is a constant, which is
+    // loop-invariant and broadcasts; any other chunk from an outer or sibling loop
+    // fails the check.
     mlir::Block* outputBlock = output->getBlock();
 
     NLOutputData* outputData = _program->allocFunctionData<NLOutputData>();
@@ -494,11 +485,13 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
         // produced in this same loop body; it is equally available to output.
         mlir::Operation* definingOp = column.getDefiningOp();
         const bool isProducedInThisBlock = definingOp && definingOp->getBlock() == outputBlock;
-        const bool isFromOuterScope = definingOp && isDefinedInOuterScope(definingOp, outputBlock);
 
-        if (!isInnermostLoopVariable && !isProducedInThisBlock && !isFromOuterScope) {
-            throw IRException("nl.output columns must belong to the innermost enclosing "
-                              "nl.for body or an outer scope");
+        // Constants are invariant of any loop so they can be referenced anywhere
+        const bool isBroadcastConstant = definingOp && mlir::isa<nl::Constant>(definingOp);
+
+        if (!isInnermostLoopVariable && !isProducedInThisBlock && !isBroadcastConstant) {
+            throw IRException("nl.output columns must be a loop variable of the enclosing "
+                              "nl.for, produced in this block, or a constant");
         }
 
         outputData->addOutputColumn(getColumn(column));
