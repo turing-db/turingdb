@@ -216,6 +216,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateMul(mul, body);
         } else if (nl::Eq eq = mlir::dyn_cast<nl::Eq>(operation)) {
             translateEq(eq, body);
+        } else if (nl::And andOp = mlir::dyn_cast<nl::And>(operation)) {
+            translateAnd(andOp, body);
+        } else if (nl::Or orOp = mlir::dyn_cast<nl::Or>(operation)) {
+            translateOr(orOp, body);
         } else if (nl::GetNodeProperties getNodeProperties = mlir::dyn_cast<nl::GetNodeProperties>(operation)) {
             translatePropertyFetch(getNodeProperties.getInputNodes(),
                                    getNodeProperties.getPropertyType(),
@@ -565,6 +569,34 @@ void NLTranslator::translateEq(nl::Eq eq, NLStmtContainer* body) {
     bioassert(result, "Failed to translate EQ result.");
 
     _valueSlots[eq.getResult()] = result;
+
+    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
+    body->emplaceStmt(&NLExecutor::runBinary, data);
+}
+
+void NLTranslator::translateAnd(nl::And andOp, NLStmtContainer* body) {
+    const Column* lhs = getColumn(andOp.getLhs());
+    const Column* rhs = getColumn(andOp.getRhs());
+
+    Column* result = nullptr;
+    const NLBinaryFn fn = NLExecutor::selectBinary<OP_AND>(lhs, rhs, _memory, result);
+    bioassert(result, "Failed to translate AND result.");
+
+    _valueSlots[andOp.getResult()] = result;
+
+    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
+    body->emplaceStmt(&NLExecutor::runBinary, data);
+}
+
+void NLTranslator::translateOr(nl::Or orOp, NLStmtContainer* body) {
+    const Column* lhs = getColumn(orOp.getLhs());
+    const Column* rhs = getColumn(orOp.getRhs());
+
+    Column* result = nullptr;
+    const NLBinaryFn fn = NLExecutor::selectBinary<OP_OR>(lhs, rhs, _memory, result);
+    bioassert(result, "Failed to translate OR result.");
+
+    _valueSlots[orOp.getResult()] = result;
 
     NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
     body->emplaceStmt(&NLExecutor::runBinary, data);

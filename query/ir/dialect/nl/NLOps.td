@@ -1057,4 +1057,34 @@ def Eq : NLOp<"eq", [Pure]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
+def And : NLOp<"and", [Pure]> {
+  let summary = "Row-wise logical AND of two boolean chunks";
+  let description = [{
+      Three-valued (Kleene) logic: null AND false is false, null AND true is
+      null, so the result is nullable when either operand is.
+
+      %r = nl.and %x, %y : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<i1>) -> !nl.chunk<!storage.nullable<i1>>
+  }];
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
+def Or : NLOp<"or", [Pure]> {
+  let summary = "Row-wise logical OR of two boolean chunks";
+  let description = [{
+      Three-valued (Kleene) logic: null OR true is true, null OR false is
+      null, so the result is nullable when either operand is.
+
+      %r = nl.or %x, %y : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<i1>) -> !nl.chunk<!storage.nullable<i1>>
+  }];
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
 #endif //TURINGDB_NL_OPS
