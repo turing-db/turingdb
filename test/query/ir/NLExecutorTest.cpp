@@ -509,6 +509,126 @@ func.func @main() {
 }
 )mlir";
 
+// RETURN (10 = 10) AND (10 = 20)
+constexpr const char* andConstantsFalseProgram = R"mlir(
+func.func @main() {
+  %x = nl.constant(10 : i64)
+  %y = nl.constant(20 : i64)
+  %t = nl.eq %x, %x : (!nl.chunk<i64>, !nl.chunk<i64>) -> !nl.chunk<i1>
+  %f = nl.eq %x, %y : (!nl.chunk<i64>, !nl.chunk<i64>) -> !nl.chunk<i1>
+  %r = nl.and %t, %f : (!nl.chunk<i1>, !nl.chunk<i1>) -> !nl.chunk<i1>
+  nl.output(%r) : !nl.chunk<i1>
+  func.return
+}
+)mlir";
+
+// RETURN (10 = 10) AND (20 = 20)
+constexpr const char* andConstantsTrueProgram = R"mlir(
+func.func @main() {
+  %x = nl.constant(10 : i64)
+  %y = nl.constant(20 : i64)
+  %t1 = nl.eq %x, %x : (!nl.chunk<i64>, !nl.chunk<i64>) -> !nl.chunk<i1>
+  %t2 = nl.eq %y, %y : (!nl.chunk<i64>, !nl.chunk<i64>) -> !nl.chunk<i1>
+  %r = nl.and %t1, %t2 : (!nl.chunk<i1>, !nl.chunk<i1>) -> !nl.chunk<i1>
+  nl.output(%r) : !nl.chunk<i1>
+  func.return
+}
+)mlir";
+
+// MATCH (n) RETURN (n.score = 200) AND (n.score = 200)
+constexpr const char* andPropertySelfProgram = R"mlir(
+func.func @main() {
+  %score = nl.get_property_type("score")
+  %k = nl.constant(200 : i64)
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %v = nl.get_node_properties(%a, %score) : !nl.chunk<!storage.nullable<i64>>
+    %p = nl.eq %v, %k : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+    %r = nl.and %p, %p : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<!storage.nullable<i1>>) -> !nl.chunk<!storage.nullable<i1>>
+    nl.output(%a, %r) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i1>>
+  }
+  func.return
+}
+)mlir";
+
+// MATCH (n) RETURN (n.score = 200) AND (n = 1)
+constexpr const char* andNullShortCircuitProgram = R"mlir(
+func.func @main() {
+  %score = nl.get_property_type("score")
+  %k200 = nl.constant(200 : i64)
+  %k1 = nl.constant(1 : i64)
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %v = nl.get_node_properties(%a, %score) : !nl.chunk<!storage.nullable<i64>>
+    %p = nl.eq %v, %k200 : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+    %q = nl.eq %a, %k1 : (!nl.chunk<!storage.node_id>, !nl.chunk<i64>) -> !nl.chunk<i1>
+    %r = nl.and %p, %q : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<i1>) -> !nl.chunk<!storage.nullable<i1>>
+    nl.output(%a, %r) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i1>>
+  }
+  func.return
+}
+)mlir";
+
+// RETURN (10 = 10) OR (10 = 20)
+constexpr const char* orConstantsTrueProgram = R"mlir(
+func.func @main() {
+  %x = nl.constant(10 : i64)
+  %y = nl.constant(20 : i64)
+  %t = nl.eq %x, %x : (!nl.chunk<i64>, !nl.chunk<i64>) -> !nl.chunk<i1>
+  %f = nl.eq %x, %y : (!nl.chunk<i64>, !nl.chunk<i64>) -> !nl.chunk<i1>
+  %r = nl.or %t, %f : (!nl.chunk<i1>, !nl.chunk<i1>) -> !nl.chunk<i1>
+  nl.output(%r) : !nl.chunk<i1>
+  func.return
+}
+)mlir";
+
+// RETURN (10 = 20) OR (20 = 10)
+constexpr const char* orConstantsFalseProgram = R"mlir(
+func.func @main() {
+  %x = nl.constant(10 : i64)
+  %y = nl.constant(20 : i64)
+  %f1 = nl.eq %x, %y : (!nl.chunk<i64>, !nl.chunk<i64>) -> !nl.chunk<i1>
+  %f2 = nl.eq %y, %x : (!nl.chunk<i64>, !nl.chunk<i64>) -> !nl.chunk<i1>
+  %r = nl.or %f1, %f2 : (!nl.chunk<i1>, !nl.chunk<i1>) -> !nl.chunk<i1>
+  nl.output(%r) : !nl.chunk<i1>
+  func.return
+}
+)mlir";
+
+// MATCH (n) RETURN (n.score = 200) OR (n.score = 200)
+constexpr const char* orPropertySelfProgram = R"mlir(
+func.func @main() {
+  %score = nl.get_property_type("score")
+  %k = nl.constant(200 : i64)
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %v = nl.get_node_properties(%a, %score) : !nl.chunk<!storage.nullable<i64>>
+    %p = nl.eq %v, %k : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+    %r = nl.or %p, %p : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<!storage.nullable<i1>>) -> !nl.chunk<!storage.nullable<i1>>
+    nl.output(%a, %r) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i1>>
+  }
+  func.return
+}
+)mlir";
+
+// MATCH (n) RETURN (n.score = 200) OR (n = 2)
+constexpr const char* orNullShortCircuitProgram = R"mlir(
+func.func @main() {
+  %score = nl.get_property_type("score")
+  %k200 = nl.constant(200 : i64)
+  %k2 = nl.constant(2 : i64)
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %v = nl.get_node_properties(%a, %score) : !nl.chunk<!storage.nullable<i64>>
+    %p = nl.eq %v, %k200 : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+    %q = nl.eq %a, %k2 : (!nl.chunk<!storage.node_id>, !nl.chunk<i64>) -> !nl.chunk<i1>
+    %r = nl.or %p, %q : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<i1>) -> !nl.chunk<!storage.nullable<i1>>
+    nl.output(%a, %r) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i1>>
+  }
+  func.return
+}
+)mlir";
+
 // A non-constant value bound in the OUTER scan loop (a per-node property fetch),
 // output from inside the INNER edge loop. This is malformed: %score has node
 // cardinality, is not a broadcast constant, and is not row-aligned with the inner
@@ -1319,6 +1439,124 @@ TEST_F(NLExecutorTest, eqNodePropertyToConstantBroadcasting) {
     // score is 100 / 200 / null, compared against 200: false / true / null.
     const std::vector<std::pair<uint64_t, std::optional<bool>>> expected {
         {0, false}, {1, true}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<bool>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(NLExecutorTest, andConstantsFalse) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingMaskSink sink;
+    runProgram(andConstantsFalseProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<bool> expected {false};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+TEST_F(NLExecutorTest, andConstantsTrue) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingMaskSink sink;
+    runProgram(andConstantsTrueProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<bool> expected {true};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+TEST_F(NLExecutorTest, andNullablePropertySelf) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeBoolSink sink;
+    runProgram(andPropertySelfProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    // (score = 200) is false / true / null; AND with itself preserves each.
+    const std::vector<std::pair<uint64_t, std::optional<bool>>> expected {
+        {0, false}, {1, true}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<bool>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(NLExecutorTest, andNullWithFalseIsFalse) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeBoolSink sink;
+    runProgram(andNullShortCircuitProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    // (score = 200) is false / true / null; (n = 1) is false / true / false.
+    // Node 2's null AND false short-circuits to false rather than null.
+    const std::vector<std::pair<uint64_t, std::optional<bool>>> expected {
+        {0, false}, {1, true}, {2, false}
+    };
+    std::vector<std::pair<uint64_t, std::optional<bool>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(NLExecutorTest, orConstantsTrue) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingMaskSink sink;
+    runProgram(orConstantsTrueProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<bool> expected {true};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+TEST_F(NLExecutorTest, orConstantsFalse) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingMaskSink sink;
+    runProgram(orConstantsFalseProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<bool> expected {false};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+TEST_F(NLExecutorTest, orNullablePropertySelf) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeBoolSink sink;
+    runProgram(orPropertySelfProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    // (score = 200) is false / true / null; OR with itself preserves each.
+    const std::vector<std::pair<uint64_t, std::optional<bool>>> expected {
+        {0, false}, {1, true}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<bool>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(NLExecutorTest, orNullWithTrueIsTrue) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeBoolSink sink;
+    runProgram(orNullShortCircuitProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    // (score = 200) is false / true / null; (n = 2) is false / false / true.
+    // Node 2's null OR true short-circuits to true rather than null.
+    const std::vector<std::pair<uint64_t, std::optional<bool>>> expected {
+        {0, false}, {1, true}, {2, true}
     };
     std::vector<std::pair<uint64_t, std::optional<bool>>> rows;
     sink.sortedRows(rows);

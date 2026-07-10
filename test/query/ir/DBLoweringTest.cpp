@@ -657,6 +657,114 @@ func.func @main() {
 }
 )mlir";
 
+// RETURN (10 = 10) AND (10 = 20)
+constexpr const char* andConstantsFalseProgram = R"mlir(
+func.func @main() {
+  %x = db.constant(10 : i64)
+  %y = db.constant(20 : i64)
+  %t = db.eq %x, %x : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %f = db.eq %x, %y : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %r = db.and %t, %f : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  db.output(%r) : !db.column<!storage.bool>
+  return
+}
+)mlir";
+
+// RETURN (10 = 10) AND (20 = 20)
+constexpr const char* andConstantsTrueProgram = R"mlir(
+func.func @main() {
+  %x = db.constant(10 : i64)
+  %y = db.constant(20 : i64)
+  %t1 = db.eq %x, %x : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %t2 = db.eq %y, %y : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %r = db.and %t1, %t2 : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  db.output(%r) : !db.column<!storage.bool>
+  return
+}
+)mlir";
+
+// MATCH (a) RETURN a, (a.score = 200) AND (a.score = 200)
+constexpr const char* andPropertySelfProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %k = db.constant(200 : i64)
+  %p = db.eq %score, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %r = db.and %p, %p : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  db.output(%a, %r) : !db.column<!storage.node_id>, !db.column<!storage.bool>
+  return
+}
+)mlir";
+
+// MATCH (a) RETURN a, (a.score = 200) AND (a = 1)
+constexpr const char* andNullShortCircuitProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %k200 = db.constant(200 : i64)
+  %p = db.eq %score, %k200 : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %k1 = db.constant(1 : i64)
+  %q = db.eq %a, %k1 : (!db.column<!storage.node_id>, !db.column<i64>) -> !db.column<!storage.bool>
+  %r = db.and %p, %q : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  db.output(%a, %r) : !db.column<!storage.node_id>, !db.column<!storage.bool>
+  return
+}
+)mlir";
+
+// RETURN (10 = 10) OR (10 = 20)
+constexpr const char* orConstantsTrueProgram = R"mlir(
+func.func @main() {
+  %x = db.constant(10 : i64)
+  %y = db.constant(20 : i64)
+  %t = db.eq %x, %x : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %f = db.eq %x, %y : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %r = db.or %t, %f : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  db.output(%r) : !db.column<!storage.bool>
+  return
+}
+)mlir";
+
+// RETURN (10 = 20) OR (20 = 10)
+constexpr const char* orConstantsFalseProgram = R"mlir(
+func.func @main() {
+  %x = db.constant(10 : i64)
+  %y = db.constant(20 : i64)
+  %f1 = db.eq %x, %y : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %f2 = db.eq %y, %x : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %r = db.or %f1, %f2 : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  db.output(%r) : !db.column<!storage.bool>
+  return
+}
+)mlir";
+
+// MATCH (a) RETURN a, (a.score = 200) OR (a.score = 200)
+constexpr const char* orPropertySelfProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %k = db.constant(200 : i64)
+  %p = db.eq %score, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %r = db.or %p, %p : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  db.output(%a, %r) : !db.column<!storage.node_id>, !db.column<!storage.bool>
+  return
+}
+)mlir";
+
+// MATCH (a) RETURN a, (a.score = 200) OR (a = 2)
+constexpr const char* orNullShortCircuitProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %k200 = db.constant(200 : i64)
+  %p = db.eq %score, %k200 : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %k2 = db.constant(2 : i64)
+  %q = db.eq %a, %k2 : (!db.column<!storage.node_id>, !db.column<i64>) -> !db.column<!storage.bool>
+  %r = db.or %p, %q : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  db.output(%a, %r) : !db.column<!storage.node_id>, !db.column<!storage.bool>
+  return
+}
+)mlir";
+
 // Scan all nodes and output them
 constexpr const char* scanProgram = R"mlir(
 func.func @main() {
@@ -1901,6 +2009,124 @@ TEST_F(DBLoweringTest, eqNodePropertyToConstantBroadcasting) {
     // score is 100 / 200 / null, compared against 200: false / true / null.
     const std::vector<std::pair<uint64_t, std::optional<bool>>> expected {
         {0, false}, {1, true}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<bool>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, andConstantsFalse) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingMaskSink sink;
+    runLoweredProgram(andConstantsFalseProgram, reader.getView(), sink);
+
+    const std::vector<bool> expected {false};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+TEST_F(DBLoweringTest, andConstantsTrue) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingMaskSink sink;
+    runLoweredProgram(andConstantsTrueProgram, reader.getView(), sink);
+
+    const std::vector<bool> expected {true};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+TEST_F(DBLoweringTest, andNullablePropertySelf) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeBoolSink sink;
+    runLoweredProgram(andPropertySelfProgram, reader.getView(), sink);
+
+    // (score = 200) is false / true / null; AND with itself preserves each.
+    const std::vector<std::pair<uint64_t, std::optional<bool>>> expected {
+        {0, false}, {1, true}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<bool>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, andNullWithFalseIsFalse) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeBoolSink sink;
+    runLoweredProgram(andNullShortCircuitProgram, reader.getView(), sink);
+
+    // (score = 200) is false / true / null; (a = 1) is false / true / false.
+    // Node 2's null AND false short-circuits to false rather than null.
+    const std::vector<std::pair<uint64_t, std::optional<bool>>> expected {
+        {0, false}, {1, true}, {2, false}
+    };
+    std::vector<std::pair<uint64_t, std::optional<bool>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, orConstantsTrue) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingMaskSink sink;
+    runLoweredProgram(orConstantsTrueProgram, reader.getView(), sink);
+
+    const std::vector<bool> expected {true};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+TEST_F(DBLoweringTest, orConstantsFalse) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingMaskSink sink;
+    runLoweredProgram(orConstantsFalseProgram, reader.getView(), sink);
+
+    const std::vector<bool> expected {false};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+TEST_F(DBLoweringTest, orNullablePropertySelf) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeBoolSink sink;
+    runLoweredProgram(orPropertySelfProgram, reader.getView(), sink);
+
+    // (score = 200) is false / true / null; OR with itself preserves each.
+    const std::vector<std::pair<uint64_t, std::optional<bool>>> expected {
+        {0, false}, {1, true}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<bool>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, orNullWithTrueIsTrue) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeBoolSink sink;
+    runLoweredProgram(orNullShortCircuitProgram, reader.getView(), sink);
+
+    // (score = 200) is false / true / null; (a = 2) is false / false / true.
+    // Node 2's null OR true short-circuits to true rather than null.
+    const std::vector<std::pair<uint64_t, std::optional<bool>>> expected {
+        {0, false}, {1, true}, {2, true}
     };
     std::vector<std::pair<uint64_t, std::optional<bool>>> rows;
     sink.sortedRows(rows);

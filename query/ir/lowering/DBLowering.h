@@ -225,6 +225,12 @@ private:
     // Handles nullity of its output depending on operands
     void lowerEq(mlir::db::EqOp eq);
 
+    // Handles nullity of its output depending on operands
+    void lowerAnd(mlir::db::AndOp andOp);
+
+    // Handles nullity of its output depending on operands
+    void lowerOr(mlir::db::OrOp orOp);
+
     void lowerOutput(mlir::db::Output output);
 
     // Lower one factor region of a db.cross_product into a loop nest rooted at

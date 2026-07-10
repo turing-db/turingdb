@@ -339,6 +339,10 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerMul(mul);
     } else if (mlir::db::EqOp eq = mlir::dyn_cast<mlir::db::EqOp>(operation)) {
         lowerEq(eq);
+    } else if (mlir::db::AndOp andOp = mlir::dyn_cast<mlir::db::AndOp>(operation)) {
+        lowerAnd(andOp);
+    } else if (mlir::db::OrOp orOp = mlir::dyn_cast<mlir::db::OrOp>(operation)) {
+        lowerOr(orOp);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
     } else if (mlir::isa<mlir::func::ReturnOp>(operation)) {
@@ -1160,6 +1164,60 @@ void DBLowering::lowerEq(mlir::db::EqOp eq) {
 
     nl::Eq eqOp = _builder.create<nl::Eq>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
     _valueMap[eq.getResult()] = eqOp.getResult();
+}
+
+void DBLowering::lowerAnd(mlir::db::AndOp andOp) {
+    const mlir::Value lhsChunk = mapValue(andOp.getLhs());
+    const mlir::Value rhsChunk = mapValue(andOp.getRhs());
+
+    const mlir::Type lhsType = lhsChunk.getType();
+    const mlir::Type rhsType = rhsChunk.getType();
+
+    // Kleene logic can still yield null (e.g. null AND true), so the result is
+    // nullable whenever either operand is.
+    const bool resultNull = isNullableChunk(lhsType) || isNullableChunk(rhsType);
+
+    const mlir::Type boolElement = _builder.getI1Type();
+    mlir::Type resultElement = boolElement;
+    mlir::MLIRContext* bldCtxt = _builder.getContext();
+    if (resultNull) {
+        resultElement = storage::NullableType::get(bldCtxt, boolElement);
+    }
+
+    const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
+
+    // Insert into the first point where both operands are available
+    setInsertionInto(deeperBlock(lhsChunk, rhsChunk));
+
+    nl::And nlAndOp = _builder.create<nl::And>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
+    _valueMap[andOp.getResult()] = nlAndOp.getResult();
+}
+
+void DBLowering::lowerOr(mlir::db::OrOp orOp) {
+    const mlir::Value lhsChunk = mapValue(orOp.getLhs());
+    const mlir::Value rhsChunk = mapValue(orOp.getRhs());
+
+    const mlir::Type lhsType = lhsChunk.getType();
+    const mlir::Type rhsType = rhsChunk.getType();
+
+    // Kleene logic can still yield null (e.g. null OR false), so the result is
+    // nullable whenever either operand is.
+    const bool resultNull = isNullableChunk(lhsType) || isNullableChunk(rhsType);
+
+    const mlir::Type boolElement = _builder.getI1Type();
+    mlir::Type resultElement = boolElement;
+    mlir::MLIRContext* bldCtxt = _builder.getContext();
+    if (resultNull) {
+        resultElement = storage::NullableType::get(bldCtxt, boolElement);
+    }
+
+    const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
+
+    // Insert into the first point where both operands are available
+    setInsertionInto(deeperBlock(lhsChunk, rhsChunk));
+
+    nl::Or nlOrOp = _builder.create<nl::Or>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
+    _valueMap[orOp.getResult()] = nlOrOp.getResult();
 }
 
 mlir::Block* DBLowering::deeperBlock(mlir::Value first, mlir::Value second) {
