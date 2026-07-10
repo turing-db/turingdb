@@ -44,6 +44,16 @@ struct BinaryOpTraits<OP_ADD> {
 };
 
 template <>
+struct BinaryOpTraits<OP_SUB> {
+    using Functor = Sub;
+
+    template <typename ResCol, typename LhsCol, typename RhsCol>
+    static void exec(ResCol* result, const LhsCol* lhs, const RhsCol* rhs) {
+        BinaryOperators::exec<Functor>(result, lhs, rhs);
+    }
+};
+
+template <>
 struct BinaryOpTraits<OP_EQUAL> {
     using Functor = Eq;
 
@@ -1348,4 +1358,5 @@ template void NLExecutor::runPropertyFetch<EdgeID, types::String>(NLExecutionCon
 template void NLExecutor::runPropertyFetch<EdgeID, types::Embedding>(NLExecutionContext*, NLFunctionData*);
 
 template NLBinaryFn NLExecutor::selectBinary<OP_ADD>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
+template NLBinaryFn NLExecutor::selectBinary<OP_SUB>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_EQUAL>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);

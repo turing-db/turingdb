@@ -521,6 +521,52 @@ func.func @main() {
 }
 )mlir";
 
+// RETURN 30 - 20: two constants subtracted, a single-row result at function scope.
+constexpr const char* subConstantsProgram = R"mlir(
+func.func @main() {
+  %x = db.constant(30 : i64)
+  %y = db.constant(20 : i64)
+  %s = db.sub %x, %y : (!db.column<i64>, !db.column<i64>) -> !db.column<i64>
+  db.output(%s) : !db.column<i64>
+  return
+}
+)mlir";
+
+// RETURN 10 - 2.5: a mixed-type sub promoting to a double result.
+constexpr const char* subPromotesProgram = R"mlir(
+func.func @main() {
+  %x = db.constant(10 : i64)
+  %y = db.constant(2.5 : f64)
+  %s = db.sub %x, %y : (!db.column<i64>, !db.column<f64>) -> !db.column<f64>
+  db.output(%s) : !db.column<f64>
+  return
+}
+)mlir";
+
+// MATCH (a) RETURN a, a.score - 10 to ensure nulls are propagated
+constexpr const char* subPropertyConstantProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %k = db.constant(10 : i64)
+  %diff = db.sub %score, %k : (!db.column<none>, !db.column<i64>) -> !db.column<none>
+  db.output(%a, %diff) : !db.column<!storage.node_id>, !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a) RETURN a, a.score - a.score
+constexpr const char* subTwoPropertiesProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %score2 = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %diff = db.sub %score, %score2 : (!db.column<none>, !db.column<none>) -> !db.column<none>
+  db.output(%a, %diff) : !db.column<!storage.node_id>, !db.column<none>
+  return
+}
+)mlir";
+
 // RETURN 10 = 20
 constexpr const char* eqConstantsFalseProgram = R"mlir(
 func.func @main() {
@@ -1639,6 +1685,64 @@ TEST_F(DBLoweringTest, addsTwoNodeProperties) {
 
     const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {
         {0, 200}, {1, 400}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, subsTwoConstants) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingConstSink<int64_t> sink;
+    runLoweredProgram(subConstantsProgram, reader.getView(), sink);
+
+    const std::vector<std::vector<int64_t>> expected {{10}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(DBLoweringTest, subPromotesMixedTypesToDouble) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingConstSink<double> sink;
+    runLoweredProgram(subPromotesProgram, reader.getView(), sink);
+
+    const std::vector<std::vector<double>> expected {{7.5}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(DBLoweringTest, subsConstantFromNodePropertyBroadcasting) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeIntPropSink sink;
+    runLoweredProgram(subPropertyConstantProgram, reader.getView(), sink);
+
+    // The constant 10 is broadcast against each node's score; node 2 has no score,
+    // so null - 10 stays null.
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {
+        {0, 90}, {1, 190}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, subsTwoNodeProperties) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeIntPropSink sink;
+    runLoweredProgram(subTwoPropertiesProgram, reader.getView(), sink);
+
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {
+        {0, 0}, {1, 0}, {2, std::nullopt}
     };
     std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
     sink.sortedRows(rows);

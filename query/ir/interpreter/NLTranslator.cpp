@@ -183,6 +183,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateConstant(constant);
         } else if (nl::Add add = mlir::dyn_cast<nl::Add>(operation)) {
             translateAdd(add, body);
+        } else if (nl::Sub sub = mlir::dyn_cast<nl::Sub>(operation)) {
+            translateSub(sub, body);
         } else if (nl::Eq eq = mlir::dyn_cast<nl::Eq>(operation)) {
             translateEq(eq, body);
         } else if (nl::GetNodeProperties getNodeProperties = mlir::dyn_cast<nl::GetNodeProperties>(operation)) {
@@ -437,6 +439,20 @@ void NLTranslator::translateAdd(nl::Add add, NLStmtContainer* body) {
     bioassert(result, "Failed to translate ADD result.");
 
     _valueSlots[add.getResult()] = result;
+
+    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
+    body->emplaceStmt(&NLExecutor::runBinary, data);
+}
+
+void NLTranslator::translateSub(nl::Sub sub, NLStmtContainer* body) {
+    const Column* lhs = getColumn(sub.getLhs());
+    const Column* rhs = getColumn(sub.getRhs());
+
+    Column* result = nullptr;
+    const NLBinaryFn fn = NLExecutor::selectBinary<OP_SUB>(lhs, rhs, _memory, result);
+    bioassert(result, "Failed to translate SUB result.");
+
+    _valueSlots[sub.getResult()] = result;
 
     NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
     body->emplaceStmt(&NLExecutor::runBinary, data);
