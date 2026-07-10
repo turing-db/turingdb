@@ -24,39 +24,41 @@ class LocalMemory;
 class PipelineV2;
 
 template <SupportedType T>
-class ShortestPathProcessor final : public Processor {
+class MultiSourceShortestPathProcessor final : public Processor {
 public:
     using EdgePropType = T::Primitive;
 
-    static ShortestPathProcessor<T>* create(PipelineV2* pipeline,
-                                            LocalMemory* mem,
-                                            ColumnTag sourceTag,
-                                            ColumnTag targetTag,
-                                            const PropertyType& edgeType);
+    static MultiSourceShortestPathProcessor<T>* create(PipelineV2* pipeline,
+                                                       LocalMemory* mem,
+                                                       ColumnTag sourceTag,
+                                                       ColumnTag targetTag,
+                                                       const PropertyType& edgeType);
 
     void prepare(ExecutionContext* ctxt) final;
     void reset() final;
     void execute() final;
 
     std::string describe() const final {
-        return "ShortestPathProcessor";
+        return "MultiSourceShortestPathProcessor";
     }
 
     PipelineBlockInputInterface& leftHandSide() { return _source; }
     PipelineBlockInputInterface& rightHandSide() { return _target; }
     PipelineBlockOutputInterface& output() { return _out; }
 
+    void addSourceOutputTag(ColumnTag tag) { _sourceOutputTag = tag; }
+    void addTargetOutputTag(ColumnTag tag) { _targetOutputTag = tag; }
     void addDistVarTag(ColumnTag distTag) { _distTag = distTag; }
     void addPathVarTag(ColumnTag pathTag) { _pathTag = pathTag; }
 
 private:
     LocalMemory* _mem {nullptr};
 
-    ShortestPathProcessor(LocalMemory* mem,
-                          ColumnTag sourceTag,
-                          ColumnTag targetTag,
-                          const PropertyType& edgeType);
-    ~ShortestPathProcessor();
+    MultiSourceShortestPathProcessor(LocalMemory* mem,
+                                     ColumnTag sourceTag,
+                                     ColumnTag targetTag,
+                                     const PropertyType& edgeType);
+    ~MultiSourceShortestPathProcessor();
 
     PipelineBlockInputInterface _source;
     PipelineBlockInputInterface _target;
@@ -64,6 +66,8 @@ private:
 
     ColumnTag _sourceColumn;
     ColumnTag _targetColumn;
+    ColumnTag _sourceOutputTag;
+    ColumnTag _targetOutputTag;
     ColumnTag _distTag;
     ColumnTag _pathTag;
     PropertyType _edgeType;
@@ -78,9 +82,8 @@ private:
     ColumnVector<EdgePropType>* _properties {nullptr};
     std::unique_ptr<GetPropertiesChunkWriter<EdgeID, T>> _getPropertiesWriter;
 
+    std::vector<NodeID> _sourceNodes;
     std::unordered_set<NodeID> _targetNodes;
-    DijkstraHeap<EdgePropType> _heap;
-    DijkstraValueMap<EdgePropType> _heapValueMap;
 
     DijkstraRunner<T> _runner;
 };

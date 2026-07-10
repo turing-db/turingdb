@@ -54,6 +54,7 @@
 #include "processors/ExprEvalProcessor.h"
 #include "processors/FilterProcessor.h"
 #include "processors/ShortestPathProcessor.h"
+#include "processors/MultiSourceShortestPathProcessor.h"
 #include "processors/CreateVectorIndexProcessor.h"
 #include "processors/LoadVectorProcessor.h"
 #include "processors/LoadEmbeddingProcessor.h"
@@ -306,6 +307,48 @@ PipelineBlockOutputInterface& PipelineBuilder::addShortestPath(PipelineOutputInt
     _pendingOutput.updateInterface(&output);
 
     _lastProc = shortestPath;
+    return output;
+}
+
+template <SupportedType T>
+PipelineBlockOutputInterface& PipelineBuilder::addMultiSourceShortestPath(PipelineOutputInterface* rhs,
+                                                                          ColumnTag sourceKey,
+                                                                          ColumnTag targetKey,
+                                                                          const PropertyType& edgeType,
+                                                                          NamedColumn*& sourceOutputCol,
+                                                                          NamedColumn*& targetOutputCol,
+                                                                          NamedColumn*& distCol,
+                                                                          NamedColumn*& pathCol) {
+
+    MultiSourceShortestPathProcessor<T>* processor = MultiSourceShortestPathProcessor<T>::create(_pipeline,
+                                                                                                 _mem,
+                                                                                                 sourceKey,
+                                                                                                 targetKey,
+                                                                                                 edgeType);
+
+    if (_pendingOutput.getDataframe()->hasColumn(sourceKey)) {
+        _pendingOutput.connectTo(processor->leftHandSide());
+        rhs->connectTo(processor->rightHandSide());
+    } else {
+        _pendingOutput.connectTo(processor->rightHandSide());
+        rhs->connectTo(processor->leftHandSide());
+    }
+
+    PipelineBlockOutputInterface& output = processor->output();
+    Dataframe* outDf = output.getDataframe();
+    sourceOutputCol = allocColumn<ColumnVector<NodeID>>(outDf);
+    targetOutputCol = allocColumn<ColumnVector<NodeID>>(outDf);
+    distCol = allocColumn<ColumnVector<typename T::Primitive>>(outDf);
+    pathCol = allocColumn<ColumnVector<Path>>(outDf);
+
+    processor->addSourceOutputTag(sourceOutputCol->getTag());
+    processor->addTargetOutputTag(targetOutputCol->getTag());
+    processor->addDistVarTag(distCol->getTag());
+    processor->addPathVarTag(pathCol->getTag());
+
+    _pendingOutput.updateInterface(&output);
+
+    _lastProc = processor;
     return output;
 }
 
@@ -1578,6 +1621,31 @@ template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNul
 template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::Bool>(ColumnTag, PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::Embedding>(ColumnTag, PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::Embedding>(ColumnTag, PropertyType);
+
+template PipelineBlockOutputInterface& PipelineBuilder::addMultiSourceShortestPath<db::types::Double>(PipelineOutputInterface*,
+                                                                                                     ColumnTag,
+                                                                                                     ColumnTag,
+                                                                                                     const PropertyType&,
+                                                                                                     NamedColumn*&,
+                                                                                                     NamedColumn*&,
+                                                                                                     NamedColumn*&,
+                                                                                                     NamedColumn*&);
+template PipelineBlockOutputInterface& PipelineBuilder::addMultiSourceShortestPath<db::types::UInt64>(PipelineOutputInterface*,
+                                                                                                      ColumnTag,
+                                                                                                      ColumnTag,
+                                                                                                      const PropertyType&,
+                                                                                                      NamedColumn*&,
+                                                                                                      NamedColumn*&,
+                                                                                                      NamedColumn*&,
+                                                                                                      NamedColumn*&);
+template PipelineBlockOutputInterface& PipelineBuilder::addMultiSourceShortestPath<db::types::Int64>(PipelineOutputInterface*,
+                                                                                                     ColumnTag,
+                                                                                                     ColumnTag,
+                                                                                                     const PropertyType&,
+                                                                                                     NamedColumn*&,
+                                                                                                     NamedColumn*&,
+                                                                                                     NamedColumn*&,
+                                                                                                     NamedColumn*&);
 
 template PipelineBlockOutputInterface& PipelineBuilder::addShortestPath<db::types::Double>(PipelineOutputInterface*,
                                                                                            ColumnTag,

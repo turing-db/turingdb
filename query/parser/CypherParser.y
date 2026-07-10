@@ -30,6 +30,7 @@
     #include "stmt/ReturnStmt.h"
     #include "stmt/MatchStmt.h"
     #include "stmt/ShortestPathStmt.h"
+    #include "stmt/MultiSourceShortestPathStmt.h"
     #include "stmt/CallStmt.h"
     #include "stmt/CreateStmt.h"
     #include "stmt/SetStmt.h"
@@ -142,6 +143,7 @@
 
 // Keywords
 %token<std::string_view> PROCEDURES
+%token<std::string_view> MULTISOURCESHORTESTPATH
 %token<std::string_view> SHORTESTPATH 
 %token<std::string_view> DESCENDING
 %token<std::string_view> CONSTRAINT
@@ -358,6 +360,7 @@
 %type<db::ChangeOp> changeOp
 %type<db::MatchStmt*> matchSt
 %type<db::ShortestPathStmt*> shortestPathSt
+%type<db::MultiSourceShortestPathStmt*> multiSourceShortestPathSt
 %type<db::CallStmt*> callSt
 %type<db::CreateStmt*> createSt
 %type<db::SetStmt*> setSt
@@ -713,6 +716,12 @@ singlePartQuery
         $$->addReadStmt($2);
         $$->setReturnStmt($3);
         LOC($$, @$); }
+    | readingStatements multiSourceShortestPathSt returnSt {
+        $$ = SinglePartQuery::create(ast);
+        $$->setReadStmts($1);
+        $$->addReadStmt($2);
+        $$->setReturnStmt($3);
+        LOC($$, @$); }
     ;
 
 changeQuery
@@ -777,6 +786,13 @@ matchSt
 shortestPathSt
     : SHORTESTPATH OPAREN symbol COMMA symbol COMMA name COMMA symbol COMMA symbol CPAREN {
         $$ = ShortestPathStmt::create(ast,$3,$5,$7,$9,$11);
+        LOC($$, @$);
+      }
+    ;
+
+multiSourceShortestPathSt
+    : MULTISOURCESHORTESTPATH OPAREN symbol COMMA symbol COMMA name COMMA symbol COMMA symbol COMMA symbol COMMA symbol CPAREN {
+        $$ = MultiSourceShortestPathStmt::create(ast,$3,$5,$7,$9,$11,$13,$15);
         LOC($$, @$);
       }
     ;

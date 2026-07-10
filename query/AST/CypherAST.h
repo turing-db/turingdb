@@ -55,6 +55,7 @@ class OrderByItem;
 class StmtContainer;
 class MatchStmt;
 class ShortestPathStmt;
+class MultiSourceShortestPathStmt;
 class CallStmt;
 class CreateStmt;
 class SetStmt;
@@ -145,6 +146,7 @@ public:
     friend StmtContainer;
     friend MatchStmt;
     friend ShortestPathStmt;
+    friend MultiSourceShortestPathStmt;
     friend CallStmt;
     friend CreateStmt;
     friend SetStmt;
