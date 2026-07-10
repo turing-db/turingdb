@@ -216,6 +216,9 @@ private:
     // Performs null- and type- promotions
     void lowerAdd(mlir::db::AddOp add);
 
+    // Handles nullity of its output depending on operands
+    void lowerEq(mlir::db::EqOp eq);
+
     void lowerOutput(mlir::db::Output output);
 
     // Lower one factor region of a db.cross_product into a loop nest rooted at
