@@ -24,6 +24,8 @@ class Region;
 namespace db {
 
 class CypherAST;
+class Expr;
+class PropertyExpr;
 class VariableDependency;
 class DependencyEdge;
 
@@ -32,6 +34,7 @@ public:
     using VariableIdentities = std::vector<mlir::TypedValue<mlir::Type>>;
     using VariableIdentityMap = std::unordered_map<const VariableDependency*, VariableIdentities>;
     using DefinedVars = std::unordered_set<const VariableDependency*>;
+    using ExprValueMap = std::unordered_map<const Expr*, mlir::Value>;
 
     explicit DBProgramGenerator(mlir::ModuleOp* mainModule);
     ~DBProgramGenerator();
@@ -45,6 +48,9 @@ private:
 
     // Maps a Cypher variable to all of its MLIR variable defs, in order of appearance
     VariableIdentityMap _varMap;
+
+    // Maps each WHERE clause expression to the MLIR value it produces
+    ExprValueMap _exprMap;
 
     VariableDependencyGraph _vdg;
 
@@ -73,6 +79,9 @@ private:
     void generateOutput(const CypherAST* ast);
 
     void generateFilters(const CypherAST* ast);
+
+    void translateExpr(const Expr* expr);
+    mlir::Value translatePropertyExpr(const PropertyExpr* propExpr);
 
     void addScanNodes(const VariableDependency* var);
 

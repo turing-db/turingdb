@@ -28,11 +28,17 @@
 #include "VariableDependencyGraph.h"
 
 #include "CypherAST.h"
+#include "Pattern.h"
 #include "Projection.h"
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
+#include "WhereClause.h"
 #include "decl/VarDecl.h"
+#include "expr/BinaryExpr.h"
 #include "expr/Expr.h"
+#include "expr/PropertyExpr.h"
+#include "expr/UnaryExpr.h"
+#include "stmt/MatchStmt.h"
 #include "stmt/ReturnStmt.h"
 #include "stmt/StmtContainer.h"
 
@@ -559,7 +565,7 @@ void DBProgramGenerator::generateFilters(const CypherAST* ast) {
     const CypherAST::QueryCommands& queries = ast->queries();
     if (queries.size() != 1) {
         throw TuringException("Multiple queries not yet supported.");
-    };
+    }
 
     const QueryCommand* query = queries.front();
 
@@ -569,5 +575,87 @@ void DBProgramGenerator::generateFilters(const CypherAST* ast) {
     }
 
     const StmtContainer* stmtsContainer = sglPart->getReadStmts();
-    [[maybe_unused]] const StmtContainer::Stmts& stmts = stmtsContainer->stmts();
+    for (const Stmt* stmt : stmtsContainer->stmts()) {
+        if (stmt->getKind() != Stmt::Kind::MATCH) {
+            continue;
+        }
+
+        const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt);
+        const Pattern* pattern = matchStmt->getPattern();
+        const WhereClause* where = pattern->getWhere();
+        if (!where) {
+            continue;
+        }
+
+        translateExpr(where->getExpr());
+    }
+}
+
+void DBProgramGenerator::translateExpr(const Expr* expr) {
+    if (_exprMap.contains(expr)) {
+        return;
+    }
+
+    switch (expr->getKind()) {
+        case Expr::Kind::PROPERTY: {
+            const PropertyExpr* propExpr = static_cast<const PropertyExpr*>(expr);
+            _exprMap[expr] = translatePropertyExpr(propExpr);
+        }
+        break;
+
+        case Expr::Kind::BINARY: {
+            const BinaryExpr* binExpr = static_cast<const BinaryExpr*>(expr);
+            translateExpr(binExpr->getLHS());
+            translateExpr(binExpr->getRHS());
+        }
+        break;
+
+        case Expr::Kind::LITERAL:
+        case Expr::Kind::SYMBOL:
+        case Expr::Kind::UNARY:
+        case Expr::Kind::FUNCTION_INVOCATION:
+        case Expr::Kind::INDEX:
+        case Expr::Kind::LIST:
+        case Expr::Kind::STRING:
+        case Expr::Kind::ENTITY_TYPES:
+        case Expr::Kind::PATH:
+            break;
+
+        case Expr::Kind::_SIZE:
+            throw FatalException("Invalid expression kind.");
+        break;
+    }
+}
+
+mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propExpr) {
+    const VarDecl* entityDecl = propExpr->getEntityVarDecl();
+    const std::string_view varName = entityDecl->getName();
+    const std::string_view propName = propExpr->getPropName();
+
+    mlir::Value entityColumn;
+    for (const auto& [var, values] : _varMap) {
+        if (var->getName() == varName) {
+            entityColumn = values.back();
+            break;
+        }
+    }
+    bioassert(entityColumn, "WHERE clause property access on unknown variable: {}", varName);
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    // Use None for property type and infer during lowering
+    const mlir::db::ColumnType resultType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+    const mlir::StringAttr propAttr = _opBuilder.getStringAttr(propName);
+    const EvaluatedType entityType = entityDecl->getType();
+
+    const bool isNode = entityType == EvaluatedType::NodePattern;
+    const bool isEdge = entityType == EvaluatedType::EdgePattern;
+    bioassert(isNode || isEdge, "Property access on non-entity variable: {}", varName);
+
+    if (isNode) {
+        auto op = _opBuilder.create<mlir::db::GetNodeProperties>(loc, resultType, entityColumn, propAttr);
+        return op.getResult();
+    } else {
+        auto op = _opBuilder.create<mlir::db::GetEdgeProperties>(loc, resultType, entityColumn, propAttr);
+        return op.getResult();
+    }
 }
