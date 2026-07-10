@@ -212,6 +212,47 @@ private:
     bool _matchable {true};
 };
 
+// nl.scan_edges loop data: the edge sibling of NLScanLoopData. A source loop
+// (no input column, no carry set), so - unlike NLEdgeLoopData - it holds only
+// the four fixed output chunks a step fills (sources, edge IDs, edge type IDs,
+// targets), plus the limit and body a scan loop carries.
+class NLScanEdgesLoopData : public NLFunctionData {
+public:
+    NLScanEdgesLoopData(ColumnNodeIDs* sources,
+                        ColumnEdgeIDs* edgeIDs,
+                        ColumnEdgeTypes* edgeTypes,
+                        ColumnNodeIDs* targets)
+        : _sources(sources),
+        _edgeIDs(edgeIDs),
+        _edgeTypes(edgeTypes),
+        _targets(targets)
+    {
+    }
+
+    ColumnNodeIDs* getSources() const { return _sources; }
+    ColumnEdgeIDs* getEdgeIDs() const { return _edgeIDs; }
+    ColumnEdgeTypes* getEdgeTypes() const { return _edgeTypes; }
+    ColumnNodeIDs* getTargets() const { return _targets; }
+
+    // The governing limit counter, or null for an unbounded loop. The loop
+    // driver stops once it reaches zero.
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
+    // The four fixed chunks of an edge iterator step, in loop-variable order
+    ColumnNodeIDs* _sources {nullptr};
+    ColumnEdgeIDs* _edgeIDs {nullptr};
+    ColumnEdgeTypes* _edgeTypes {nullptr};
+    ColumnNodeIDs* _targets {nullptr};
+
+    NLLimitState* _limit {nullptr};
+    NLStmtContainer _stmts;
+};
+
 // nl.get_out_edges and nl.get_in_edges loop data
 // The state is the same for get_out_edges/get_in_edges
 class NLEdgeLoopData : public NLFunctionData {

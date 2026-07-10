@@ -883,6 +883,16 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH ()-[e]->() RETURN a, b: scan every edge, exposing the four edge columns
+// (source node, edge, edge type, target node); the output keeps the endpoints.
+const char* const scanEdgesProgram = R"mlir(
+func.func @main() {
+  %srcs, %eids, %etypes, %tgts = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  db.output(%srcs, %tgts) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 TEST_F(DBDialectTest, parsesScanNodesByLabel) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(scanByLabelProgram);
     ASSERT_TRUE(module);
@@ -966,6 +976,42 @@ TEST_F(DBDialectTest, edgesByTypeRoundTripThroughTextualForm) {
 
     // Printing then re-parsing yields a module that still verifies, so the
     // by-type edge op printers and parsers are inverses.
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, parsesScanEdges) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(scanEdgesProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::ScanEdges scan;
+    module.get().walk([&](mlir::db::ScanEdges op) {
+        scan = op;
+    });
+    ASSERT_TRUE(scan);
+
+    // The four results are the source node, the edge, its type and the target
+    // node - the same shape and order db.get_out_edges exposes.
+    const mlir::Type nodeIDColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    const mlir::Type edgeIDColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::EdgeIDType::get(&_context));
+    const mlir::Type edgeTypeColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::EdgeTypeIDType::get(&_context));
+    EXPECT_EQ(scan.getSrcids().getType(), nodeIDColumnType);
+    EXPECT_EQ(scan.getEids().getType(), edgeIDColumnType);
+    EXPECT_EQ(scan.getEtypes().getType(), edgeTypeColumnType);
+    EXPECT_EQ(scan.getTgtids().getType(), nodeIDColumnType);
+}
+
+TEST_F(DBDialectTest, scanEdgesRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(scanEdgesProgram);
+    ASSERT_TRUE(module);
+
+    // Printing then re-parsing yields a module that still verifies, so the
+    // db.scan_edges printer and parser are inverses.
     std::string printed;
     llvm::raw_string_ostream stream(printed);
     module.get().print(stream);

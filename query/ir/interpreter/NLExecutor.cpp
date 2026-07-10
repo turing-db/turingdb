@@ -10,6 +10,7 @@
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/GetOutEdgesByTypeIterator.h"
 #include "iterators/GetPropertiesWithNullIterator.h"
+#include "iterators/ScanEdgesIterator.h"
 #include "iterators/ScanNodesIterator.h"
 #include "iterators/ScanNodesByLabelIterator.h"
 #include "columns/ColumnOptVector.h"
@@ -578,6 +579,45 @@ void NLExecutor::runScanNodesByLabelLoop(NLExecutionContext* context, NLFunction
         chunkWriter.fill(chunkSize);
 
         if (nodeIDs->empty()) {
+            return;
+        }
+
+        runBody(context, loopBody);
+    };
+
+    if (limit) {
+        while (chunkWriter.isValid() && limit->getRemaining() > 0) {
+            runIteration();
+        }
+    } else {
+        while (chunkWriter.isValid()) {
+            runIteration();
+        }
+    }
+}
+
+void NLExecutor::runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLScanEdgesLoopData* loopData = static_cast<NLScanEdgesLoopData*>(data);
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    ColumnNodeIDs* sources = loopData->getSources();
+    const size_t chunkSize = context->getChunkSize();
+
+    // A null limit leaves the loop unbounded; otherwise it stops once the budget
+    // is spent, exactly as in runScanNodesLoop.
+    const NLLimitState* limit = loopData->getLimit();
+
+    ScanEdgesChunkWriter chunkWriter(*context->getView());
+    chunkWriter.setSrcIDs(sources);
+    chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
+    chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
+    chunkWriter.setTgtIDs(loopData->getTargets());
+
+    const auto runIteration = [&]() {
+        chunkWriter.fill(chunkSize);
+
+        // The four columns are row-aligned, so the source column measures the
+        // step; an empty fill means the scan is drained and there is nothing to emit.
+        if (sources->empty()) {
             return;
         }
 

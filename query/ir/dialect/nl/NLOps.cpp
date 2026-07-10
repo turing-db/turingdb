@@ -91,6 +91,17 @@ LogicalResult ScanNodesByLabel::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+// An edge scan produces the same four fixed edge chunks per step as an
+// out-edges fetch, but reads no input and carries nothing, so the iterator has
+// exactly those four chunks and no carried tail.
+LogicalResult ScanEdges::inferReturnTypes(MLIRContext* context,
+                                         std::optional<Location> location,
+                                         ScanEdges::Adaptor adaptor,
+                                         SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(getEdgeIteratorType(context, {}));
+    return success();
+}
+
 // An out-edges fetch produces one row of edge chunks per step, then one
 // filtered chunk per carried column, mirroring db.get_out_edges
 LogicalResult GetOutEdges::inferReturnTypes(MLIRContext* context,

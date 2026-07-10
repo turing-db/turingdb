@@ -383,6 +383,17 @@ func.func @main() {
 }
 )mlir";
 
+// Scan every edge in the graph and output (source, target) pairs. Unlike the
+// one-hop program there is no scan_nodes then get_out_edges: db.scan_edges
+// yields the whole edge set directly, so the pairs are exactly the graph's edges.
+constexpr const char* scanEdgesProgram = R"mlir(
+func.func @main() {
+  %srcs, %eids, %etypes, %tgts = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  db.output(%srcs, %tgts) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // Two hops a->b->c carrying a through the second hop, outputting (a, c) pairs
 constexpr const char* twoHopProgram = R"mlir(
 func.func @main() {
@@ -1459,6 +1470,22 @@ TEST_F(DBLoweringTest, executesGetOutEdgesByTypeAcrossChunks) {
     runLoweredProgram(oneHopOutByTypeKnowsProgram, reader.getView(), sink, /*chunkSize=*/1);
 
     const std::vector<std::vector<uint64_t>> expected {{0, 1}, {1, 2}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, lowersScanEdges) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runLoweredProgram(scanEdgesProgram, reader.getView(), sink);
+
+    // db.scan_edges yields every edge, so the (source, target) pairs are exactly
+    // the diamond's four edges - the same set the one-hop out-edges program finds.
+    const std::vector<std::vector<uint64_t>> expected {{0, 1}, {0, 2}, {1, 3}, {2, 3}};
     std::vector<std::vector<uint64_t>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows, expected);

@@ -435,4 +435,28 @@ TEST_F(NLDialectTest, getOutEdgesByTypeInfersEdgeIterator) {
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
 }
 
+// nl.scan_edges infers a four-chunk edge iterator - source node IDs, edge IDs,
+// edge type IDs and target node IDs - the same chunk shape nl.get_out_edges
+// produces, since a full edge scan opens the dataflow with no input or carry set.
+TEST_F(NLDialectTest, scanEdgesInfersEdgeIterator) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    mlir::nl::ScanEdges scan = builder.create<mlir::nl::ScanEdges>(loc);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    const mlir::Type nodeChunk = mlir::nl::ChunkType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    const mlir::Type edgeChunk = mlir::nl::ChunkType::get(&_context, mlir::storage::EdgeIDType::get(&_context));
+    const mlir::Type edgeTypeChunk = mlir::nl::ChunkType::get(&_context, mlir::storage::EdgeTypeIDType::get(&_context));
+    const mlir::Type iteratorType = mlir::nl::IteratorType::get(&_context, {nodeChunk, edgeChunk, edgeTypeChunk, nodeChunk});
+
+    EXPECT_EQ(scan.getResult().getType(), iteratorType);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+}
+
 }

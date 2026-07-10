@@ -47,6 +47,24 @@ def ScanNodesByLabel : NLOp<"scan_nodes_by_label", [Pure, InferTypeOpAdaptor]> {
 }
 
 /**
+* ScanEdges
+*/
+def ScanEdges : NLOp<"scan_edges", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create a database iterator over all edges in the graph";
+  let description = [{
+    Imperative counterpart of db.scan_edges. Each step of an enclosing nl.for
+    fills one row of edge chunks - source node IDs, edge IDs, edge type IDs and
+    target node IDs - the same chunk shape nl.get_out_edges produces, so a loop
+    body written for a hop works unchanged over a full edge scan. Unlike
+    nl.get_out_edges it reads no input chunk and carries nothing: it opens the
+    dataflow. The result type is always the four-chunk edge iterator and is
+    inferred, not spelled out.
+  }];
+  let results   = (outs NLIterator:$result);
+  let assemblyFormat = "`(`operands`)` attr-dict";
+}
+
+/**
 * GetOutEdges
 */
 def GetOutEdges : NLOp<"get_out_edges", [Pure, InferTypeOpAdaptor]> {

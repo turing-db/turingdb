@@ -29,6 +29,7 @@ private:
     enum class IteratorKind {
         ScanNodes,
         ScanNodesByLabel,
+        ScanEdges,
         GetOutEdges,
         GetInEdges,
         GetOutEdgesByType,
@@ -102,6 +103,13 @@ private:
                                   mlir::Block& loopBody,
                                   NLLimitState* limit,
                                   NLStmtContainer* body);
+
+    // Translate the nl.for over an nl.scan_edges iterator: allocate the four
+    // fixed edge loop variables (sources, edge IDs, edge type IDs, targets) and
+    // record the edge-scan loop statement in body. The edge sibling of
+    // translateScanLoop - a source loop with no input chunk and no carry set.
+    void translateScanEdgesLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
+
     void translateEdgeLoop(const IteratorConfig& config,
                            mlir::Block& loopBody,
                            NLLimitState* limit,

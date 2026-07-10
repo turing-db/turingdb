@@ -159,6 +159,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
                 config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
             }
             _iteratorConfigs[scanNodesByLabel.getResult()] = config;
+        } else if (nl::ScanEdges scanEdges = mlir::dyn_cast<nl::ScanEdges>(operation)) {
+            _iteratorConfigs[scanEdges.getResult()] = IteratorConfig {IteratorKind::ScanEdges, {}, {}};
         } else if (nl::GetOutEdges getOutEdges = mlir::dyn_cast<nl::GetOutEdges>(operation)) {
             IteratorConfig config {IteratorKind::GetOutEdges, getOutEdges.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getOutEdges.getColumnsToFilter();
@@ -264,6 +266,8 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         translateScanLoop(loopBody, limit, body);
     } else if (config._kind == IteratorKind::ScanNodesByLabel) {
         translateScanByLabelLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::ScanEdges) {
+        translateScanEdgesLoop(loopBody, limit, body);
     } else if (config._kind == IteratorKind::Sort) {
         // A sort emit loop is never limit-bounded: ORDER BY must see every row.
         translateSortLoop(config, loopBody, body);
@@ -316,6 +320,26 @@ void NLTranslator::translateScanByLabelLoop(const IteratorConfig& config,
     loopData->setLimit(limit);
 
     body->addStmt(NLFunctionDescriptor {&NLExecutor::runScanNodesByLabelLoop, loopData});
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateScanEdgesLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body) {
+    // For::verify guarantees one block argument per iterator chunk, and an edge
+    // scan iterator has exactly four chunks in the order getEdgeIteratorType
+    // establishes: sources, edge IDs, edge type IDs, targets.
+    ColumnNodeIDs* sources = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(0)));
+    ColumnEdgeIDs* edgeIDs = static_cast<ColumnEdgeIDs*>(allocColumn(loopBody.getArgument(1)));
+    ColumnEdgeTypes* edgeTypes = static_cast<ColumnEdgeTypes*>(allocColumn(loopBody.getArgument(2)));
+    ColumnNodeIDs* targets = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(3)));
+
+    NLScanEdgesLoopData* loopData = _program->allocFunctionData<NLScanEdgesLoopData>(sources,
+                                                                                     edgeIDs,
+                                                                                     edgeTypes,
+                                                                                     targets);
+    loopData->setLimit(limit);
+
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runScanEdgesLoop, loopData});
 
     translateBlock(loopBody, loopData->getStmts());
 }
