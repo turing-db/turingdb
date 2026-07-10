@@ -131,7 +131,7 @@ void DBProgramGenerator::addEdgeTraversal(const VariableDependency* src,
     llvm::SmallVector<mlir::Value> operands {input};
     llvm::SmallVector<mlir::Type> results {srcs, eids, etypes, tgts};
     for (const VariableDependency* var : carrySet) {
-        // source variable is expliclty filtered by the edge op
+        // source variable is explicitly filtered by the edge op
         if (var == src) {
             continue;
         }
@@ -424,8 +424,8 @@ void DBProgramGenerator::translateComponent(const VariableDependency* root,
 void DBProgramGenerator::buildCrossProductCascade(std::vector<TranslatedComponent>& components,
                                                   mlir::Block* targetBlock,
                                                   llvm::SmallVectorImpl<mlir::Value>& results) {
-    const size_t count = components.size();
-    bioassert(count >= 2, "Cross product cascade needs at least two components");
+    const size_t numComponents = components.size();
+    bioassert(numComponents >= 2, "Cross product cascade needs at least two components");
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
 
@@ -433,23 +433,32 @@ void DBProgramGenerator::buildCrossProductCascade(std::vector<TranslatedComponen
 
     mlir::Block* pendingYieldBlock = nullptr;
 
-    for (size_t i = 0; i + 1 < count; i++) {
+    // Fold over all components, applying a CrossProduct between them
+    // comp1 x (comp2 x (comp3 x ...))
+    for (size_t i = 0; i + 1 < numComponents; i++) {
+        // Component i crossed with the cross of all subsequent component js
+        // The result of this cross is result of i x i + 1 x i + 2 x ... x j
         llvm::SmallVector<mlir::Type> resultTypes;
-        for (size_t j = i; j < count; j++) {
+        for (size_t j = i; j < numComponents; j++) {
             for (const mlir::Value column : components[j]._columns) {
                 resultTypes.push_back(column.getType());
             }
         }
 
+        // Starts as main block, then updated to the RHS of the previous factor
         _opBuilder.setInsertionPointToEnd(currentTarget);
+        // Create a cross for i x j
         auto crossProduct = _opBuilder.create<mlir::db::CrossProduct>(loc, resultTypes);
 
         mlir::Block* const leftBlock = &crossProduct.getLeftFactor().front();
         mlir::Block* const rightBlock = &crossProduct.getRightFactor().front();
 
+        // Component i occupies the LHS of this cross prod
         moveComponentToFactor(components[i], leftBlock);
 
         const mlir::ResultRange crossResults = crossProduct.getResults();
+        // There is no pending yield iff we have a single cross product between 2
+        // components
         if (pendingYieldBlock) {
             _opBuilder.setInsertionPointToEnd(pendingYieldBlock);
             _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {crossResults});
@@ -457,10 +466,12 @@ void DBProgramGenerator::buildCrossProductCascade(std::vector<TranslatedComponen
             results.assign(crossResults.begin(), crossResults.end());
         }
 
-        const bool lastPair = i + 2 == count;
+        // If this is the final cross prod, move this component to the right hand side
+        const bool lastPair = i + 2 == numComponents;
         if (lastPair) {
             moveComponentToFactor(components[i + 1], rightBlock);
         } else {
+            // Otherwise the next component will be assigned to the right block
             currentTarget = rightBlock;
             pendingYieldBlock = rightBlock;
         }
