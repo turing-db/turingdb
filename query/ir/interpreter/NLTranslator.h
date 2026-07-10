@@ -262,6 +262,7 @@ private:
     /// Expression operations: alloc result column and resolve function pointer to execute
     void translateAdd(mlir::nl::Add add, NLStmtContainer* body);
     void translateSub(mlir::nl::Sub sub, NLStmtContainer* body);
+    void translateMul(mlir::nl::Mul mul, NLStmtContainer* body);
     void translateEq(mlir::nl::Eq eq, NLStmtContainer* body);
 
     void translateOutput(mlir::nl::Output output, NLStmtContainer* body);
