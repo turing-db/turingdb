@@ -34,6 +34,7 @@
 #include "decl/VarDecl.h"
 #include "expr/Expr.h"
 #include "stmt/ReturnStmt.h"
+#include "stmt/StmtContainer.h"
 
 #include "BioAssert.h"
 #include "FatalException.h"
@@ -184,6 +185,7 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
     }
 
     generateTraversal(ast);
+    generateFilters(ast);
     generateOutput(ast);
 
     _opBuilder.create<mlir::func::ReturnOp>(uloc);
@@ -551,4 +553,21 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     _opBuilder.create<mlir::db::Output>(loc, mlir::ValueRange{outputted});
+}
+
+void DBProgramGenerator::generateFilters(const CypherAST* ast) {
+    const CypherAST::QueryCommands& queries = ast->queries();
+    if (queries.size() != 1) {
+        throw TuringException("Multiple queries not yet supported.");
+    };
+
+    const QueryCommand* query = queries.front();
+
+    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
+    if (!sglPart) {
+        return;
+    }
+
+    const StmtContainer* stmtsContainer = sglPart->getReadStmts();
+    [[maybe_unused]] const StmtContainer::Stmts& stmts = stmtsContainer->stmts();
 }

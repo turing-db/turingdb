@@ -72,6 +72,8 @@ private:
 
     void generateOutput(const CypherAST* ast);
 
+    void generateFilters(const CypherAST* ast);
+
     void addScanNodes(const VariableDependency* var);
 
     template<typename EdgeOp>
