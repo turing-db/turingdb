@@ -289,6 +289,22 @@ func.func @main() {
 }
 )mlir";
 
+// Malformed (%score is of the wrong dimension in the output), should error
+constexpr const char* outerScopeOutputColumnProgram = R"mlir(
+func.func @main() {
+  %p = nl.get_property_type("score")
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %score = nl.get_node_properties(%a, %p) : !nl.chunk<!storage.nullable<i64>>
+    %edges = nl.get_out_edges(%a, {})
+    nl.for %srcs, %eids, %etypes, %b in %edges : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
+      nl.output(%score) : !nl.chunk<!storage.nullable<i64>>
+    }
+  }
+  func.return
+}
+)mlir";
+
 // Scan all nodes and output them
 constexpr const char* scanProgram = R"mlir(
 func.func @main() {
@@ -902,6 +918,17 @@ TEST_F(NLExecutorTest, constantAllSupportedTypes) {
     EXPECT_EQ(sink.getUint(), 7u);
     EXPECT_DOUBLE_EQ(sink.getDouble(), 2.5);
     EXPECT_TRUE(sink.getBool());
+}
+
+TEST_F(NLExecutorTest, outputRejectsNonConstantOuterScopeColumn) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingOptInt64Sink sink;
+    EXPECT_THROW(
+        runProgram(outerScopeOutputColumnProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink),
+        IRException);
 }
 
 TEST_F(NLExecutorTest, getNodeProperties) {
