@@ -265,6 +265,9 @@ private:
     void translateMul(mlir::nl::Mul mul, NLStmtContainer* body);
     void translateEq(mlir::nl::Eq eq, NLStmtContainer* body);
 
+    void translateAnd(mlir::nl::And andOp, NLStmtContainer* body);
+    void translateOr(mlir::nl::Or orOp, NLStmtContainer* body);
+
     void translateOutput(mlir::nl::Output output, NLStmtContainer* body);
 
     // Translate an nl.cross_product: allocate an output column per crossed
