@@ -17,6 +17,8 @@
 #include "JobSystem.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnIDs.h"
+#include "columns/ColumnMask.h"
+#include "columns/ColumnOptMask.h"
 #include "columns/ColumnOptVector.h"
 #include "datapart/EdgeRecord.h"
 #include "iterators/ChunkConfig.h"
@@ -410,6 +412,56 @@ private:
     bool _bool {false};
 };
 
+class CollectingMaskSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* mask = dynamic_cast<const ColumnMask*>(chunks[0]);
+        ASSERT_NE(mask, nullptr);
+
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _values.push_back((*mask)[rowIndex]);
+        }
+    }
+
+    const std::vector<bool>& values() const { return _values; }
+
+private:
+    std::vector<bool> _values;
+};
+
+class CollectingNodeBoolSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
+        const auto* values = dynamic_cast<const ColumnOptMask*>(chunks[1]);
+        ASSERT_NE(nodeIDs, nullptr);
+        ASSERT_NE(values, nullptr);
+        ASSERT_EQ(nodeIDs->size(), values->size());
+
+        const auto& idRaw = nodeIDs->getRaw();
+        const auto& valueRaw = values->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            std::optional<bool> value;
+            if (valueRaw[rowIndex].has_value()) {
+                value = static_cast<bool>(*valueRaw[rowIndex]);
+            }
+            _rows.push_back({idRaw[rowIndex].getValue(), value});
+        }
+    }
+
+    void sortedRows(std::vector<std::pair<uint64_t, std::optional<bool>>>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<std::pair<uint64_t, std::optional<bool>>> _rows;
+};
+
 class CollectingNodeWithConstantSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
@@ -579,6 +631,50 @@ func.func @main() {
   %score2 = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
   %sum = db.add %score, %score2 : (!db.column<none>, !db.column<none>) -> !db.column<none>
   db.output(%a, %sum) : !db.column<!storage.node_id>, !db.column<none>
+  return
+}
+)mlir";
+
+// RETURN 10 = 20
+constexpr const char* eqConstantsFalseProgram = R"mlir(
+func.func @main() {
+  %x = db.constant(10 : i64)
+  %y = db.constant(20 : i64)
+  %r = db.eq %x, %y : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  db.output(%r) : !db.column<!storage.bool>
+  return
+}
+)mlir";
+
+// RETURN 10 = 10
+constexpr const char* eqConstantsTrueProgram = R"mlir(
+func.func @main() {
+  %x = db.constant(10 : i64)
+  %y = db.constant(10 : i64)
+  %r = db.eq %x, %y : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  db.output(%r) : !db.column<!storage.bool>
+  return
+}
+)mlir";
+
+// MATCH (a) RETURN a = a
+constexpr const char* eqSelfProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %r = db.eq %a, %a : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> !db.column<!storage.bool>
+  db.output(%r) : !db.column<!storage.bool>
+  return
+}
+)mlir";
+
+// MATCH (a) RETURN a, a.score = 200
+constexpr const char* eqPropertyConstantProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %k = db.constant(200 : i64)
+  %r = db.eq %score, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  db.output(%a, %r) : !db.column<!storage.node_id>, !db.column<!storage.bool>
   return
 }
 )mlir";
@@ -1837,6 +1933,60 @@ TEST_F(DBLoweringTest, addsTwoNodeProperties) {
         {0, 200}, {1, 400}, {2, std::nullopt}
     };
     std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, eqConstantsFalse) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingMaskSink sink;
+    runLoweredProgram(eqConstantsFalseProgram, reader.getView(), sink);
+
+    const std::vector<bool> expected {false};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+TEST_F(DBLoweringTest, eqConstantsTrue) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingMaskSink sink;
+    runLoweredProgram(eqConstantsTrueProgram, reader.getView(), sink);
+
+    const std::vector<bool> expected {true};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+TEST_F(DBLoweringTest, eqNodeToItselfIsAllTrue) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingMaskSink sink;
+    runLoweredProgram(eqSelfProgram, reader.getView(), sink);
+
+    // The diamond has four nodes, and every node equals itself.
+    const std::vector<bool> expected {true, true, true, true};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+TEST_F(DBLoweringTest, eqNodePropertyToConstantBroadcasting) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeBoolSink sink;
+    runLoweredProgram(eqPropertyConstantProgram, reader.getView(), sink);
+
+    // score is 100 / 200 / null, compared against 200: false / true / null.
+    const std::vector<std::pair<uint64_t, std::optional<bool>>> expected {
+        {0, false}, {1, true}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<bool>>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows, expected);
 }

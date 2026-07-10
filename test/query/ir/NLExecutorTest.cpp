@@ -16,6 +16,8 @@
 #include "JobSystem.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnIDs.h"
+#include "columns/ColumnMask.h"
+#include "columns/ColumnOptMask.h"
 #include "columns/ColumnOptVector.h"
 #include "iterators/ChunkConfig.h"
 #include "metadata/PropertyType.h"
@@ -277,6 +279,61 @@ private:
     bool _bool {false};
 };
 
+// Collects a single boolean mask column - the non-null result of a comparison, a
+// ColumnMask (not a value vector) - as one bool per row.
+class CollectingMaskSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* mask = dynamic_cast<const ColumnMask*>(chunks[0]);
+        ASSERT_NE(mask, nullptr);
+
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _values.push_back((*mask)[rowIndex]);
+        }
+    }
+
+    const std::vector<bool>& values() const { return _values; }
+
+private:
+    std::vector<bool> _values;
+};
+
+// Collects (node ID, nullable bool) rows: a node ID chunk paired with a
+// ColumnOptMask (ColumnOptVector<CustomBool>), the nullable result of a comparison.
+// A null (a comparison against a null operand) comes back as an empty optional.
+class CollectingNodeBoolSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
+        const auto* values = dynamic_cast<const ColumnOptMask*>(chunks[1]);
+        ASSERT_NE(nodeIDs, nullptr);
+        ASSERT_NE(values, nullptr);
+        ASSERT_EQ(nodeIDs->size(), values->size());
+
+        const auto& idRaw = nodeIDs->getRaw();
+        const auto& valueRaw = values->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            std::optional<bool> value;
+            if (valueRaw[rowIndex].has_value()) {
+                value = static_cast<bool>(*valueRaw[rowIndex]);
+            }
+            _rows.push_back({idRaw[rowIndex].getValue(), value});
+        }
+    }
+
+    void sortedRows(std::vector<std::pair<uint64_t, std::optional<bool>>>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<std::pair<uint64_t, std::optional<bool>>> _rows;
+};
+
 // One constant of each supported value type projected together as a single row.
 constexpr const char* allTypesConstantsProgram = R"mlir(
 func.func @main() {
@@ -352,6 +409,55 @@ func.func @main() {
     %v = nl.get_node_properties(%a, %score) : !nl.chunk<!storage.nullable<i64>>
     %sum = nl.add %v, %k : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i64>>
     nl.output(%a, %sum) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i64>>
+  }
+  func.return
+}
+)mlir";
+
+// RETURN 10 = 20
+constexpr const char* eqConstantsFalseProgram = R"mlir(
+func.func @main() {
+  %x = nl.constant(10 : i64)
+  %y = nl.constant(20 : i64)
+  %r = nl.eq %x, %y : (!nl.chunk<i64>, !nl.chunk<i64>) -> !nl.chunk<i1>
+  nl.output(%r) : !nl.chunk<i1>
+  func.return
+}
+)mlir";
+
+// RETURN 10 = 10
+constexpr const char* eqConstantsTrueProgram = R"mlir(
+func.func @main() {
+  %x = nl.constant(10 : i64)
+  %y = nl.constant(10 : i64)
+  %r = nl.eq %x, %y : (!nl.chunk<i64>, !nl.chunk<i64>) -> !nl.chunk<i1>
+  nl.output(%r) : !nl.chunk<i1>
+  func.return
+}
+)mlir";
+
+// MATCH (n) RETURN n = n
+constexpr const char* eqSelfProgram = R"mlir(
+func.func @main() {
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %r = nl.eq %a, %a : (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>) -> !nl.chunk<i1>
+    nl.output(%r) : !nl.chunk<i1>
+  }
+  func.return
+}
+)mlir";
+
+// MATCH (n) RETURN n.score = 200
+constexpr const char* eqPropertyConstantProgram = R"mlir(
+func.func @main() {
+  %score = nl.get_property_type("score")
+  %k = nl.constant(200 : i64)
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %v = nl.get_node_properties(%a, %score) : !nl.chunk<!storage.nullable<i64>>
+    %r = nl.eq %v, %k : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+    nl.output(%a, %r) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i1>>
   }
   func.return
 }
@@ -1035,6 +1141,60 @@ TEST_F(NLExecutorTest, addConstantToNodePropertyBroadcasting) {
         {0, 110}, {1, 210}, {2, std::nullopt}
     };
     std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(NLExecutorTest, eqConstantsFalse) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingMaskSink sink;
+    runProgram(eqConstantsFalseProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<bool> expected {false};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+TEST_F(NLExecutorTest, eqConstantsTrue) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingMaskSink sink;
+    runProgram(eqConstantsTrueProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<bool> expected {true};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+TEST_F(NLExecutorTest, eqNodeToItselfIsAllTrue) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingMaskSink sink;
+    runProgram(eqSelfProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    // The diamond has four nodes, and every node equals itself.
+    const std::vector<bool> expected {true, true, true, true};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+TEST_F(NLExecutorTest, eqNodePropertyToConstantBroadcasting) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeBoolSink sink;
+    runProgram(eqPropertyConstantProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    // score is 100 / 200 / null, compared against 200: false / true / null.
+    const std::vector<std::pair<uint64_t, std::optional<bool>>> expected {
+        {0, false}, {1, true}, {2, std::nullopt}
+    };
+    std::vector<std::pair<uint64_t, std::optional<bool>>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows, expected);
 }
