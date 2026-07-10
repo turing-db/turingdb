@@ -31,18 +31,33 @@ using namespace db;
 namespace {
 
 template <ColumnOperator Op>
-struct BinaryOpFunctor;
+struct BinaryOpTraits;
 
 template <>
-struct BinaryOpFunctor<OP_ADD> {
-    using Type = Add;
+struct BinaryOpTraits<OP_ADD> {
+    using Functor = Add;
+
+    template <typename ResCol, typename LhsCol, typename RhsCol>
+    static void exec(ResCol* result, const LhsCol* lhs, const RhsCol* rhs) {
+        BinaryOperators::exec<Functor>(result, lhs, rhs);
+    }
+};
+
+template <>
+struct BinaryOpTraits<OP_EQUAL> {
+    using Functor = Eq;
+
+    template <typename ResCol, typename LhsCol, typename RhsCol>
+    static void exec(ResCol* result, const LhsCol* lhs, const RhsCol* rhs) {
+        BinaryPredicates::exec<Functor>(result, lhs, rhs);
+    }
 };
 
 template <ColumnOperator Op, typename ResCol, typename LhsCol, typename RhsCol>
 void applyBinaryOp(Column* result, const Column* lhs, const Column* rhs) {
-    BinaryOperators::exec<typename BinaryOpFunctor<Op>::Type>(static_cast<ResCol*>(result),
-                                                              static_cast<const LhsCol*>(lhs),
-                                                              static_cast<const RhsCol*>(rhs));
+    BinaryOpTraits<Op>::exec(static_cast<ResCol*>(result),
+                             static_cast<const LhsCol*>(lhs),
+                             static_cast<const RhsCol*>(rhs));
 }
 
 template <ColumnOperator Op>
@@ -53,7 +68,7 @@ struct BinaryOpSelector {
 
     template <typename LhsCol, typename RhsCol>
     void operator()(const LhsCol*, const RhsCol*) {
-        using OpType = typename BinaryOpFunctor<Op>::Type;
+        using OpType = typename BinaryOpTraits<Op>::Functor;
         using ResCol = ColumnCombination<OpType, LhsCol, RhsCol>;
         using ResColType = ResCol::ResultColumnType;
 
@@ -1330,3 +1345,4 @@ template void NLExecutor::runPropertyFetch<EdgeID, types::String>(NLExecutionCon
 template void NLExecutor::runPropertyFetch<EdgeID, types::Embedding>(NLExecutionContext*, NLFunctionData*);
 
 template NLBinaryFn NLExecutor::selectBinary<OP_ADD>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
+template NLBinaryFn NLExecutor::selectBinary<OP_EQUAL>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);

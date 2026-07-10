@@ -242,8 +242,9 @@ private:
     // Allocates singleton column for the constant and assigns MLIR value
     void translateConstant(mlir::nl::Constant constant);
 
-    // Allocate result column, find function pointer to execute
+    /// Expression operations: alloc result column and resolve function pointer to execute
     void translateAdd(mlir::nl::Add add, NLStmtContainer* body);
+    void translateEq(mlir::nl::Eq eq, NLStmtContainer* body);
 
     void translateOutput(mlir::nl::Output output, NLStmtContainer* body);
 
