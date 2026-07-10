@@ -41,6 +41,17 @@ llvm::StringRef edgeTypeName(mlir::Value handle) {
     return handleOp.getName();
 }
 
+static bool isDefinedInOuterScope(mlir::Operation* definingOp, mlir::Block* outputBlock) {
+    mlir::Block* current = outputBlock;
+    while (mlir::Operation* parentOp = current->getParentOp()) {
+        current = parentOp->getBlock();
+        if (current == definingOp->getBlock()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // The with-null fetch handler for a property's value type, on the node side
 // when isNode is true and the edge side otherwise. Selecting it here keeps the
 // value-type dispatch with the rest of translation; the handler bodies live in
@@ -511,9 +522,11 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
         // produced in this same loop body; it is equally available to output.
         mlir::Operation* definingOp = column.getDefiningOp();
         const bool isProducedInThisBlock = definingOp && definingOp->getBlock() == outputBlock;
+        const bool isFromOuterScope = definingOp && isDefinedInOuterScope(definingOp, outputBlock);
 
-        if (!isInnermostLoopVariable && !isProducedInThisBlock) {
-            throw IRException("nl.output columns must belong to the innermost enclosing nl.for body");
+        if (!isInnermostLoopVariable && !isProducedInThisBlock && !isFromOuterScope) {
+            throw IRException("nl.output columns must belong to the innermost enclosing "
+                              "nl.for body or an outer scope");
         }
 
         outputData->addOutputColumn(getColumn(column));
