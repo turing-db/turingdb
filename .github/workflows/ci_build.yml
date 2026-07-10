@@ -48,8 +48,16 @@ jobs:
       CMAKE_BUILD_PARALLEL_LEVEL: 4
 
     steps:
+    # Only the disk-constrained GitHub-hosted Linux runners (the -arm labels)
+    # need this. The self-hosted -turing containers are lean images that never
+    # shipped the android/dotnet/haskell bloat this action strips, so it frees
+    # nothing there; its df|awk savings sum also mis-parses the large host
+    # filesystem ("invalid arithmetic operator"). The -turing containers reclaim
+    # disk via the clean-self-hosted-runner step at the end of the job instead.
+    # docker-images is off: the -arm runners don't need it, and on -turing the
+    # mounted host docker.sock means it would prune the *shared host* daemon.
     - name: Free disk space
-      if: runner.os == 'Linux'
+      if: runner.os == 'Linux' && !contains(matrix.os, 'turing')
       uses: jlumbroso/free-disk-space@main
       with:
         tool-cache: false
@@ -57,7 +65,7 @@ jobs:
         dotnet: true
         haskell: true
         large-packages: false
-        docker-images: true
+        docker-images: false
         swap-storage: false
 
     # jlumbroso/free-disk-space only supports Ubuntu. The macOS image ships
@@ -271,3 +279,14 @@ jobs:
       with:
         name: turingdb-wheel-${{ matrix.os }}-py${{ matrix.python_version }}
         path: wheel/*.whl
+
+    # The self-hosted -turing runners are persistent: their workspace and
+    # container filesystem are reused between jobs, so build trees (build/, the
+    # test venvs, the wheel) and per-job writable-layer growth ($HOME/.local,
+    # .cache, .turing and /tmp) accumulate until the host disk fills. Reclaim
+    # them at the end of every job, as if the container had been recreated.
+    # Runs before the cache actions' post-steps, so it must never touch
+    # external/ (corca-ai/local-cache and actions/cache save it there).
+    - name: Reclaim disk (self-hosted)
+      if: always() && runner.os == 'Linux' && contains(matrix.os, 'turing')
+      uses: ./.github/actions/clean-self-hosted-runner

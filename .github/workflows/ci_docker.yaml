@@ -27,7 +27,13 @@ jobs:
             platform: linux/arm64
     runs-on: ${{ matrix.os }}
     steps:
+      # Only the GitHub-hosted -arm runner needs this; the self-hosted -turing
+      # container is a lean image without the bloat this action strips. Skip it
+      # there (see ci_build.yml for the full rationale). docker-images is off:
+      # on -turing the mounted host docker.sock would make it prune the *shared
+      # host* daemon, evicting images other runners are using.
       - name: Free disk space
+        if: ${{ !contains(matrix.os, 'turing') }}
         uses: jlumbroso/free-disk-space@main
         with:
           tool-cache: false
@@ -35,7 +41,7 @@ jobs:
           dotnet: true
           haskell: true
           large-packages: false
-          docker-images: true
+          docker-images: false
           swap-storage: false
 
       - name: Disk usage (initial)
@@ -87,6 +93,12 @@ jobs:
         with:
           name: turingdb-docker-image-${{ env.IMAGE_TAG }}-${{ matrix.arch }}
           path: turingdb-image-${{ env.IMAGE_TAG }}-${{ matrix.arch }}.tar
+
+      # The self-hosted -turing runner is persistent; the saved image tarball
+      # and writable-layer growth would otherwise accumulate between nightlies.
+      - name: Reclaim disk (self-hosted)
+        if: always() && contains(matrix.os, 'turing')
+        uses: ./.github/actions/clean-self-hosted-runner
 
   manifest:
     needs: docker
