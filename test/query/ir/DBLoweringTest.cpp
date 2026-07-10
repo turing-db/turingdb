@@ -410,6 +410,52 @@ private:
     bool _bool {false};
 };
 
+class CollectingNodeWithConstantSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* nodeIDs = static_cast<const ColumnNodeIDs*>(chunks[0]);
+        const auto* constant = static_cast<const ColumnConst<int64_t>*>(chunks[1]);
+
+        const auto& idRaw = nodeIDs->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.push_back({idRaw[rowIndex].getValue(), (*constant)[rowIndex]});
+        }
+    }
+
+    void sortedRows(std::vector<std::pair<uint64_t, int64_t>>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<std::pair<uint64_t, int64_t>> _rows;
+};
+
+class CollectingConstantWithNodeSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* constant = static_cast<const ColumnConst<int64_t>*>(chunks[0]);
+        const auto* nodeIDs = static_cast<const ColumnNodeIDs*>(chunks[1]);
+
+        const auto& idRaw = nodeIDs->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.push_back({(*constant)[rowIndex], idRaw[rowIndex].getValue()});
+        }
+    }
+
+    void sortedRows(std::vector<std::pair<int64_t, uint64_t>>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<std::pair<int64_t, uint64_t>> _rows;
+};
+
 // RETURN 30, 7, 2.5, true: one constant of each supported value type projected
 // together as a single row.
 constexpr const char* allTypesConstantsProgram = R"mlir(
@@ -419,6 +465,24 @@ func.func @main() {
   %f = db.constant(2.5 : f64)
   %b = db.constant(true)
   db.output(%i, %u, %f, %b) : !db.column<i64>, !db.column<ui64>, !db.column<f64>, !db.column<i1>
+  return
+}
+)mlir";
+
+constexpr const char* scanThenConstantProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %c = db.constant(42 : i64)
+  db.output(%n, %c) : !db.column<!storage.node_id>, !db.column<i64>
+  return
+}
+)mlir";
+
+constexpr const char* constantThenScanProgram = R"mlir(
+func.func @main() {
+  %c = db.constant(42 : i64)
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  db.output(%c, %n) : !db.column<i64>, !db.column<!storage.node_id>
   return
 }
 )mlir";
@@ -1522,6 +1586,34 @@ TEST_F(DBLoweringTest, lowersConstantsOfAllSupportedTypes) {
     EXPECT_EQ(sink.getUint(), 7u);
     EXPECT_DOUBLE_EQ(sink.getDouble(), 2.5);
     EXPECT_TRUE(sink.getBool());
+}
+
+TEST_F(DBLoweringTest, lowersScanWithTrailingConstant) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeWithConstantSink sink;
+    runLoweredProgram(scanThenConstantProgram, reader.getView(), sink);
+
+    std::vector<std::pair<uint64_t, int64_t>> rows;
+    sink.sortedRows(rows);
+    const std::vector<std::pair<uint64_t, int64_t>> expected {{0, 42}, {1, 42}, {2, 42}, {3, 42}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, lowersScanWithLeadingConstant) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingConstantWithNodeSink sink;
+    runLoweredProgram(constantThenScanProgram, reader.getView(), sink);
+
+    std::vector<std::pair<int64_t, uint64_t>> rows;
+    sink.sortedRows(rows);
+    const std::vector<std::pair<int64_t, uint64_t>> expected {{42, 0}, {42, 1}, {42, 2}, {42, 3}};
+    EXPECT_EQ(rows, expected);
 }
 
 TEST_F(DBLoweringTest, lowersOneHopOutEdges) {
