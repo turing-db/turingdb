@@ -161,6 +161,36 @@ mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type r
     return builder.getIntegerType(64);
 }
 
+// The value-reduction AggregateKind matching a grouped aggregate's kind, so the
+// grouped result-type resolution reuses aggregateResultElementType. count tallies
+// rows rather than reducing values, so it has no value-reduction kind and never
+// reaches here (the caller resolves its result type - a ui64 - directly).
+storage::AggregateKind groupKindToAggregateKind(storage::GroupAggregateKind kind) {
+    switch (kind) {
+        case storage::GroupAggregateKind::Sum:
+            return storage::AggregateKind::Sum;
+        break;
+
+        case storage::GroupAggregateKind::Min:
+            return storage::AggregateKind::Min;
+        break;
+
+        case storage::GroupAggregateKind::Max:
+            return storage::AggregateKind::Max;
+        break;
+
+        case storage::GroupAggregateKind::Avg:
+            return storage::AggregateKind::Avg;
+        break;
+
+        case storage::GroupAggregateKind::Count:
+            throw IRException("count has no value-reduction kind");
+        break;
+    }
+
+    throw IRException("Unhandled group aggregate kind");
+}
+
 // The single nl.output that solely consumes every result in the range, or a null
 // op if any result has more than one use, a non-nl.output user, or a different
 // output than its siblings. Read the direction as "one shared output user => the
@@ -356,6 +386,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerNot(notOp);
     } else if (mlir::db::FilterOp filter = mlir::dyn_cast<mlir::db::FilterOp>(operation)) {
         lowerFilter(filter);
+    } else if (mlir::db::GroupAggregate groupAggregate = mlir::dyn_cast<mlir::db::GroupAggregate>(operation)) {
+        lowerGroupAggregate(groupAggregate);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
     } else if (mlir::isa<mlir::func::ReturnOp>(operation)) {
@@ -1004,6 +1036,98 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
     // The db aggregate's result maps to that chunk, so the db.output that follows
     // lowers into a function-scope nl.output reading it, exactly as db.count does.
     _valueMap[result] = aggregateResult.getResult();
+}
+
+void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
+    const mlir::OperandRange columns = groupAggregate.getColumns();
+    const uint64_t keyCount = groupAggregate.getKeyCount();
+    const llvm::ArrayRef<int64_t> kinds = groupAggregate.getKinds();
+
+    // The nl chunks the columns lowered to: the grouping keys first, then the
+    // aggregate inputs. nl.group_aggregate_update appends these to the per-group
+    // state, and the emit loop yields the group rows back.
+    llvm::SmallVector<mlir::Value, 4> chunks;
+    for (const mlir::Value column : columns) {
+        chunks.push_back(mapValue(column));
+    }
+
+    // GroupAggregate::verify guarantees keyCount >= 1, kinds.size() >= 1 and
+    // columns.size() == keyCount + kinds.size(), so reaching an empty column set
+    // here means unverified IR - a defensive backstop, as in lowerSort.
+    if (chunks.empty()) {
+        throw IRException("db.group_aggregate requires at least one column");
+    }
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    // The accumulator - with its keyCount / aggregate-kind spec - is hoisted to the
+    // top of the entry block, above every loop, so the group table exists before the
+    // producing loop fills it and the handle dominates the update and the emit loop.
+    // The grouped sibling of lowerSort's nl.sort_buffer.
+    _builder.setInsertionPointToStart(_entryBlock);
+    nl::GroupAggregateBuffer bufferOp = _builder.create<nl::GroupAggregateBuffer>(loc,
+                                                                                 keyCount,
+                                                                                 groupAggregate.getKindsAttr());
+    const mlir::Value state = bufferOp.getState();
+
+    // The update folds each step's chunk of every column into the per-group state.
+    // It sits in the innermost producing loop body, where all columns are bound
+    // together (the same block db.output would emit from), so the group assignment
+    // and the per-group folds stay row-aligned.
+    const mlir::Value representative = chunks.front();
+    setInsertionInto(ownerBlock(representative));
+    _builder.create<nl::GroupAggregateUpdate>(loc, state, chunks);
+
+    // The emit iterator yields one chunk per output column: the grouping-key columns
+    // (same chunk types as the key inputs) followed by the aggregate results. A count
+    // result is a single non-null unsigned i64 per group; sum/min/max keep the
+    // input's value type and avg widens to f64 - all resolved here from each kind and
+    // its input chunk.
+    llvm::SmallVector<mlir::Type, 4> chunkTypes;
+    for (size_t keyIndex = 0; keyIndex < keyCount; keyIndex++) {
+        chunkTypes.push_back(chunks[keyIndex].getType());
+    }
+
+    const mlir::Type ui64Element = _builder.getIntegerType(64, /*isSigned=*/false);
+    const nl::ChunkType countChunkType = nl::ChunkType::get(context, ui64Element);
+
+    for (size_t aggregateIndex = 0; aggregateIndex < kinds.size(); aggregateIndex++) {
+        const auto kind = static_cast<storage::GroupAggregateKind>(kinds[aggregateIndex]);
+        const mlir::Value inputChunk = chunks[keyCount + aggregateIndex];
+
+        if (kind == storage::GroupAggregateKind::Count) {
+            // count tallies rows regardless of value, so its input may be an ID
+            // column (count(*)) or a property value column (count(x)); either way the
+            // result is a single non-null unsigned i64 per group.
+            chunkTypes.push_back(countChunkType);
+        } else {
+            // sum/min/max/avg reduce the values themselves, so the input must be a
+            // property value column - a nullable value chunk - as in lowerAggregate.
+            const nl::ChunkType inputChunkType = mlir::cast<nl::ChunkType>(inputChunk.getType());
+            const auto inputNullable = mlir::dyn_cast<storage::NullableType>(inputChunkType.getElementType());
+            if (!inputNullable) {
+                throw IRException("db.group_aggregate sum/min/max/avg requires a property value column");
+            }
+
+            const mlir::Type resultElement = aggregateResultElementType(_builder,
+                                                                        groupKindToAggregateKind(kind),
+                                                                        inputNullable.getValueType());
+            const storage::NullableType resultNullable = storage::NullableType::get(context, resultElement);
+            chunkTypes.push_back(nl::ChunkType::get(context, resultNullable));
+        }
+    }
+
+    const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunkTypes);
+
+    // The emit phase is an nl.group_aggregate source iterator plus its nl.for, placed
+    // after the producing loop (before the func.return) so every row has been folded
+    // when the loop first steps. buildLoopForSource binds one loop variable per
+    // output column and maps db.group_aggregate's results to them, so the db.output
+    // that follows lowers into the emit loop body reading the group rows.
+    setInsertionInto(_entryBlock);
+    nl::GroupAggregate groupOp = _builder.create<nl::GroupAggregate>(loc, iteratorType, state);
+    buildLoopForSource(groupOp.getResult(), groupAggregate.getOperation());
 }
 
 void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {

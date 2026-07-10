@@ -734,4 +734,66 @@ def FilterOp : TuringOp<"filter", [Pure]> {
   }];
 }
 
+/**
+* GroupAggregate
+*/
+def GroupAggregate : TuringOp<"group_aggregate", [Pure]> {
+  let summary = "Group rows by a key tuple and reduce each group to one row";
+  let description = [{
+    The declarative counterpart of a Cypher aggregating RETURN / WITH with
+    grouping keys - `MATCH ... RETURN k1, k2, agg(x), ...`. It consumes the whole
+    dataflow of its columns and emits one row per distinct grouping-key tuple: the
+    key values followed by each aggregate's reduction over the rows of that group.
+
+    The operands are the grouping-key columns first, then the aggregate-input
+    columns; `keys` is how many leading operands are keys (so the rest are the
+    aggregate inputs, one per aggregate). `aggregates` names the reduction of each
+    aggregate input, as GroupAggregateKind integers (0 = count, 1 = sum, 2 = min,
+    3 = max, 4 = avg), so its length is the number of aggregate inputs.
+
+      %a     = db.scan_nodes() : !db.column<!storage.node_id>
+      %city  = db.get_node_properties(%a, "city")  : (!db.column<!storage.node_id>) -> !db.column<none>
+      %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+      %gcity, %total = db.group_aggregate(%city, %score) keys 1 aggregates [1]
+                         : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>)
+      db.output(%gcity, %total) : !db.column<none>, !db.column<none>
+
+    The results are the grouping-key columns (in operand order, same types) then
+    one column per aggregate: count is a ui64 count, sum/min/max keep the input's
+    value type and avg widens to f64 - all resolved during lowering, so - like
+    db.count - the aggregate result types are unconstrained here. count(*) is
+    expressed by a count over a never-null column (node IDs).
+
+    Grouped aggregation is a pipeline breaker: it must see every row before it can
+    emit any, so - like db.sort - it lowers to a hoisted accumulator
+    (nl.group_aggregate_buffer), an nl.group_aggregate_update in the producing loop
+    that folds each chunk into the per-group state, and an nl.group_aggregate source
+    iterator after the loop whose nl.for emits the group rows in chunks. Reducing a
+    deterministic read of the graph is itself deterministic, so the op is Pure.
+  }];
+
+  // The grouping-key columns then the aggregate-input columns. keyCount is how
+  // many leading columns are keys; kinds names each aggregate's reduction, one per
+  // trailing column. Both counts are unsigned - never negative - so a negative
+  // literal fails to parse rather than reaching the verifier.
+  let arguments = (ins Variadic<Column>:$columns,
+                       UI64Attr:$keyCount,
+                       DenseI64ArrayAttr:$kinds);
+  let results   = (outs Variadic<Column>:$results);
+
+  // One result per key column (same type) then one per aggregate; functional-type
+  // prints the `(operandTypes) -> resultTypes` form. keyCount prints after `keys`
+  // and the kinds array after `aggregates`, ahead of the colon and elided from
+  // attr-dict since the format names them - the same shape as db.sort.
+  let assemblyFormat = [{
+    `(` $columns `)` `keys` $keyCount `aggregates` $kinds attr-dict `:`
+    functional-type(operands, results)
+  }];
+
+  // keyCount and kinds must partition the columns, at least one of each, the key
+  // results must pass their key columns through, and every kind must be a valid
+  // GroupAggregateKind.
+  let hasVerifier = 1;
+}
+
 #endif //TURINGDB_OPS

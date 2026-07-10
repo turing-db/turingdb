@@ -4,6 +4,8 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
+#include "StorageEnums.h"
+
 using namespace mlir;
 using namespace mlir::nl;
 
@@ -492,6 +494,41 @@ LogicalResult AggregateResult::verify() {
         if (producer.getKind() != kind) {
             return emitOpError("kind must match the nl.aggregate that produced the state");
         }
+    }
+
+    return success();
+}
+
+// A grouped accumulator needs at least one grouping key and one aggregate (with
+// no key it is a whole-stream aggregate, with no aggregate a projection), and
+// every kind must be a valid GroupAggregateKind. The column count is not known
+// here (the types live on the feeding nl.group_aggregate_update), so keyCount vs
+// column count is reconciled during translation rather than at the buffer op.
+LogicalResult GroupAggregateBuffer::verify() {
+    if (getKeyCount() == 0) {
+        return emitOpError("requires at least one grouping key");
+    }
+
+    const ArrayRef<int64_t> kinds = getKinds();
+    if (kinds.empty()) {
+        return emitOpError("requires at least one aggregate");
+    }
+
+    for (const int64_t kind : kinds) {
+        if (!storage::symbolizeGroupAggregateKind(kind)) {
+            return emitOpError("has an unknown aggregate kind ") << kind;
+        }
+    }
+
+    return success();
+}
+
+// A grouped update must collect at least one column - the grouping keys and
+// aggregate inputs together - since an empty collect could neither size the row
+// set nor build a group key.
+LogicalResult GroupAggregateUpdate::verify() {
+    if (getColumns().empty()) {
+        return emitOpError("requires at least one column to collect");
     }
 
     return success();

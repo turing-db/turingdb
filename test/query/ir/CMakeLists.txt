@@ -15,6 +15,7 @@ add_ir_tests(test_query_ir_nlexecutor NLExecutorTest.cpp)
 add_ir_tests(test_query_ir_dblowering DBLoweringTest.cpp)
 # The nested cross product execution tests run against the shared SimpleGraph fixture.
 target_link_libraries(test_query_ir_dblowering PRIVATE turing_db_examples_s)
+add_ir_tests(test_query_ir_group_aggregate GroupAggregateTest.cpp)
 add_ir_tests(test_query_ir_dbdialect DBDialectTest.cpp)
 add_ir_tests(test_query_ir_nldialect NLDialectTest.cpp)
 

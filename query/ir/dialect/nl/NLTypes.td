@@ -93,6 +93,21 @@ def NLAggregateState : NLType<"AggregateState", "aggregate_state"> {
     let assemblyFormat = "`<` $elementType `>`";
 }
 
+def NLGroupAggregateState : NLType<"GroupAggregateState", "group_aggregate_state"> {
+    let summary = "A grouped-aggregate accumulator handle";
+    let description = [{
+        Stands for one grouped aggregation's per-group state: a hash table from the
+        serialized grouping-key tuple to a group index, the distinct key values per
+        group, and one accumulator per aggregate. Produced by
+        nl.group_aggregate_buffer, folded into by nl.group_aggregate_update once per
+        producing-loop step, and drained by the nl.for over the nl.group_aggregate
+        source iterator, which emits one row per group. The grouped sibling of
+        !nl.sort_state: it accumulates rows keyed by the grouping tuple rather than
+        buffering every row for a global reorder, so it owns the group table and the
+        accumulators, not a single chunk of values.
+    }];
+}
+
 def NLChunk : NLType<"Chunk", "chunk"> {
     let summary = "A bounded batch of values";
     let description = "One column chunk filled by a single database iterator step";
@@ -230,5 +245,15 @@ def NLCountStateHandle : Type<
         CPred<"::llvm::isa<::mlir::nl::CountStateType>($_self)">,
         "count state handle", "::mlir::nl::CountStateType">,
     BuildableType<"::mlir::nl::CountStateType::get($_builder.getContext())">;
+
+// Constrains an operand to an !nl.group_aggregate_state handle, the same way
+// NLSortStateHandle constrains the sort handle. The single concrete type - there
+// is only ever !nl.group_aggregate_state - is what lets nl.group_aggregate_update
+// and nl.group_aggregate omit the handle's type in their assembly, building it
+// from this recipe instead.
+def NLGroupAggregateStateHandle : Type<
+        CPred<"::llvm::isa<::mlir::nl::GroupAggregateStateType>($_self)">,
+        "group aggregate state handle", "::mlir::nl::GroupAggregateStateType">,
+    BuildableType<"::mlir::nl::GroupAggregateStateType::get($_builder.getContext())">;
 
 #endif // TURINGDB_NL_TYPES

@@ -130,6 +130,21 @@ public:
     // nl.output emits the chunk at function scope.
     static void runAggregateResult(NLExecutionContext* context, NLFunctionData* data);
 
+    // Empty a grouped accumulator's group table, key buffers and per-group state;
+    // runs each time its block runs.
+    static void runGroupAggregateReset(NLExecutionContext* context, NLFunctionData* data);
+
+    // Assign this step's rows to their groups (creating groups on first sight) and
+    // fold each aggregate input into the per-group state. The sole mutator of the
+    // group table.
+    static void runGroupAggregateUpdate(NLExecutionContext* context, NLFunctionData* data);
+
+    // The emit phase of a grouped aggregation: re-chunk the accumulated groups -
+    // each step materializes a chunk of group rows (the key values sliced from the
+    // buffers, the aggregates finalized from the per-group state) into the loop
+    // variables and runs the body (the nl.output) per chunk.
+    static void runGroupAggregateLoop(NLExecutionContext* context, NLFunctionData* data);
+
     static void runOutput(NLExecutionContext* context, NLFunctionData* data);
 
     // Run a row-wise binary op (nl.add): invoke the typed kernel bound at
@@ -203,6 +218,25 @@ public:
     static NLAggregateResetFunction selectAggregateReset(AggregateKind kind, ValueType accumulatorType);
     static NLAggregateUpdateFunction selectAggregateUpdate(AggregateKind kind, ValueType inputType);
     static NLAggregateResultFunction selectAggregateResult(AggregateKind kind, ValueType resultType);
+
+    // The grouped counterparts, selected for one aggregate of a grouped
+    // aggregation. grow initializes a new group to the reduction's identity; fold
+    // reduces a chunk's rows into their groups; emit materializes a slice of groups.
+    // They throw for a value type the reduction cannot handle, exactly as the scalar
+    // selectors do (sum/avg need numeric, min/max orderable). count uses only the
+    // per-group tally, so its grow/emit ignore the value type, and its fold has an
+    // all-rows form (count(*) over an ID chunk) and a present-values form (count(x)
+    // over a nullable value chunk).
+    static NLGroupAggregateGrowFunction selectGroupAggregateGrow(GroupAggregateKind kind, ValueType accumulatorType);
+    static NLGroupAggregateFoldFunction selectGroupAggregateFold(GroupAggregateKind kind, ValueType inputType);
+    static NLGroupAggregateFoldFunction selectGroupCountAllFold();
+    static NLGroupAggregateEmitFunction selectGroupAggregateEmit(GroupAggregateKind kind, ValueType resultType);
+
+    // The append (onto a key buffer's tail) for an ID chunk of this kind / a
+    // nullable value chunk of this value type. Used by nl.group_aggregate_update to
+    // grow the key buffers with each new group's key values.
+    static NLGroupKeyGatherFunction selectGroupKeyGather(NLChunkKind kind);
+    static NLGroupKeyGatherFunction selectOptGroupKeyGather(ValueType valueType);
 
     // The with-null property fetch handler for an ID type (NodeID/EdgeID) and a
     // value type (types::Double, ...). The translator picks the specialization

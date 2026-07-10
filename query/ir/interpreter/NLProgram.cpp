@@ -21,6 +21,25 @@ void NLSortState::reset() {
     _sorted = false;
 }
 
+void NLGroupAggregateState::reset() {
+    _groups.clear();
+    _groupCount = 0;
+
+    for (KeyColumn& key : _keyColumns) {
+        key._buffer->clear();
+    }
+
+    // count has no accumulator column (only a tally); the others carry the reduced
+    // value per group. Clear whichever the aggregate holds.
+    for (Aggregate& aggregate : _aggregates) {
+        if (aggregate._accumulator) {
+            aggregate._accumulator->clear();
+        }
+
+        aggregate._counts.clear();
+    }
+}
+
 bool NLSortState::rowLess(size_t leftRow, size_t rightRow) const {
     // The first key that breaks the tie decides, most significant first; its
     // direction flips the comparator's sign.

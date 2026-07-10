@@ -127,6 +127,35 @@ AggregateKind toRuntimeAggregateKind(storage::AggregateKind kind) {
     throw IRException("Unhandled aggregate kind");
 }
 
+// The runtime grouped reduction the interpreter dispatches on, from the MLIR one
+// the op carries. Like toRuntimeAggregateKind, this is the one place the two enums
+// meet, keeping the runtime free of the MLIR dialect headers.
+GroupAggregateKind toRuntimeGroupAggregateKind(storage::GroupAggregateKind kind) {
+    switch (kind) {
+        case storage::GroupAggregateKind::Count:
+            return GroupAggregateKind::Count;
+        break;
+
+        case storage::GroupAggregateKind::Sum:
+            return GroupAggregateKind::Sum;
+        break;
+
+        case storage::GroupAggregateKind::Min:
+            return GroupAggregateKind::Min;
+        break;
+
+        case storage::GroupAggregateKind::Max:
+            return GroupAggregateKind::Max;
+        break;
+
+        case storage::GroupAggregateKind::Avg:
+            return GroupAggregateKind::Avg;
+        break;
+    }
+
+    throw IRException("Unhandled group aggregate kind");
+}
+
 // The value type wrapped by a nullable value chunk (!nl.chunk<!storage.nullable<T>>).
 // An aggregate reduces property values, so its input and result are always such
 // chunks; a chunk that is not a nullable value chunk (an ID chunk) is rejected.
@@ -226,6 +255,11 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             _iteratorConfigs[getInEdgesByType.getResult()] = config;
         } else if (nl::Sort sort = mlir::dyn_cast<nl::Sort>(operation)) {
             _iteratorConfigs[sort.getResult()] = IteratorConfig {IteratorKind::Sort, {}, {}, sortStateFor(sort.getState())};
+        } else if (nl::GroupAggregate groupAggregate = mlir::dyn_cast<nl::GroupAggregate>(operation)) {
+            IteratorConfig config;
+            config._kind = IteratorKind::GroupAggregate;
+            config._groupAggregateState = groupAggregateStateFor(groupAggregate.getState());
+            _iteratorConfigs[groupAggregate.getResult()] = config;
         } else if (nl::For forLoop = mlir::dyn_cast<nl::For>(operation)) {
             translateFor(forLoop, body);
         } else if (mlir::isa<nl::GetPropertyType, nl::GetEdgeType>(operation)) {
@@ -294,6 +328,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateAggregateUpdate(aggregateUpdate, body);
         } else if (nl::AggregateResult aggregateResult = mlir::dyn_cast<nl::AggregateResult>(operation)) {
             translateAggregateResult(aggregateResult, body);
+        } else if (nl::GroupAggregateBuffer groupBuffer = mlir::dyn_cast<nl::GroupAggregateBuffer>(operation)) {
+            translateGroupAggregateBuffer(groupBuffer, body);
+        } else if (nl::GroupAggregateUpdate groupUpdate = mlir::dyn_cast<nl::GroupAggregateUpdate>(operation)) {
+            translateGroupAggregateUpdate(groupUpdate, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
@@ -330,6 +368,10 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
     } else if (config._kind == IteratorKind::Sort) {
         // A sort emit loop is never limit-bounded: ORDER BY must see every row.
         translateSortLoop(config, loopBody, body);
+    } else if (config._kind == IteratorKind::GroupAggregate) {
+        // A grouped-aggregate emit loop is never limit-bounded: every row must be
+        // folded before the first group is emitted.
+        translateGroupAggregateLoop(config, loopBody, body);
     } else {
         translateEdgeLoop(config, loopBody, limit, body);
     }
@@ -1216,6 +1258,170 @@ NLAggregateState* NLTranslator::aggregateStateFor(mlir::Value handle) const {
     return stateIt->second;
 }
 
+void NLTranslator::translateGroupAggregateBuffer(nl::GroupAggregateBuffer buffer, NLStmtContainer* body) {
+    // Allocate the runtime accumulator and map the handle to it, so the update and
+    // the emit loop that name the handle share the same group table and per-group
+    // state. The key buffers and accumulators themselves are allocated by the
+    // update, which knows their types - the grouped sibling of translateSortBuffer.
+    NLGroupAggregateState* state = _program->allocGroupAggregateState();
+    _groupAggregateStates[buffer.getState()] = state;
+
+    // The reset empties the group table and per-group state each time the block
+    // holding this nl.group_aggregate_buffer runs: once at function scope for a
+    // top-level grouped RETURN.
+    NLGroupAggregateResetData* resetData = _program->allocFunctionData<NLGroupAggregateResetData>(state);
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runGroupAggregateReset, resetData});
+}
+
+void NLTranslator::translateGroupAggregateUpdate(nl::GroupAggregateUpdate update, NLStmtContainer* body) {
+    const mlir::Value updateState = update.getState();
+    NLGroupAggregateState* state = groupAggregateStateFor(updateState);
+
+    // The keyCount / aggregate-kind spec lives on the nl.group_aggregate_buffer that
+    // produced the handle.
+    nl::GroupAggregateBuffer buffer = updateState.getDefiningOp<nl::GroupAggregateBuffer>();
+    if (!buffer) {
+        throw IRException("group_aggregate_update state must come from nl.group_aggregate_buffer");
+    }
+
+    // The key buffers and accumulators are allocated once, by the single update
+    // feeding an accumulator. Generated IR has exactly one update per accumulator; a
+    // second would fold the same rows twice, so it is rejected here.
+    if (!state->keyColumns().empty() || !state->aggregates().empty()) {
+        throw IRException("an nl.group_aggregate_buffer must be fed by a single nl.group_aggregate_update");
+    }
+
+    const mlir::OperandRange columns = update.getColumns();
+    const size_t keyCount = buffer.getKeyCount();
+    const llvm::ArrayRef<int64_t> kinds = buffer.getKinds();
+
+    // The collected columns are the grouping keys followed by the aggregate inputs,
+    // one per aggregate; the two counts must partition them exactly.
+    if (columns.size() != keyCount + kinds.size()) {
+        throw IRException("group_aggregate collects one column per grouping key and aggregate");
+    }
+
+    NLGroupAggregateUpdateData* data = _program->allocFunctionData<NLGroupAggregateUpdateData>(state);
+
+    // One growing key buffer per grouping key, holding its distinct value per group.
+    // The buffer keeps the key column's element type; the key-append serializes a row
+    // into the group key (the DISTINCT serializer), the gather-append grows the
+    // buffer with each new group's key values, and the range copy slices it at emit.
+    for (size_t keyIndex = 0; keyIndex < keyCount; keyIndex++) {
+        const mlir::Value column = columns[keyIndex];
+
+        NLGroupAggregateState::KeyColumn key;
+        key._input = getColumn(column);
+        key._buffer = allocColumnForChunkType(column.getType());
+        key._keyAppend = selectKeyAppendForChunkType(column.getType());
+        key._gatherAppend = selectGroupKeyGatherForChunkType(column.getType());
+        key._emitCopy = selectCopyForChunkType(column.getType());
+
+        state->addKeyColumn(key);
+    }
+
+    // One per-group accumulator per aggregate, with the grow/fold/emit handlers baked
+    // from the kind and the input value type.
+    for (size_t aggregateIndex = 0; aggregateIndex < kinds.size(); aggregateIndex++) {
+        const storage::GroupAggregateKind mlirKind = static_cast<storage::GroupAggregateKind>(kinds[aggregateIndex]);
+        const GroupAggregateKind kind = toRuntimeGroupAggregateKind(mlirKind);
+        const mlir::Value column = columns[keyCount + aggregateIndex];
+        const mlir::Type chunkType = column.getType();
+
+        NLGroupAggregateState::Aggregate aggregate;
+        aggregate._input = getColumn(column);
+
+        if (kind == GroupAggregateKind::Count) {
+            // count tallies rows, so it keeps no reduced value (a null accumulator,
+            // only the per-group tally). count(*) over an ID chunk charges every row;
+            // count(x) over a nullable value chunk charges only the present values.
+            aggregate._accumulator = nullptr;
+            aggregate._grow = NLExecutor::selectGroupAggregateGrow(kind, ValueType::Int64);
+            aggregate._emit = NLExecutor::selectGroupAggregateEmit(kind, ValueType::Int64);
+
+            const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+            const auto nullable = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
+            if (nullable) {
+                const ValueType valueType = valueTypeFromElementType(nullable.getValueType());
+                aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, valueType);
+            } else {
+                // A non-nullable count input must be an ID chunk (count(*));
+                // getChunkKind rejects any other element type.
+                getChunkKind(chunkType);
+                aggregate._fold = NLExecutor::selectGroupCountAllFold();
+            }
+        } else {
+            // sum/min/max/avg reduce the values themselves, so the input must be a
+            // nullable value chunk; avg accumulates as f64, the rest in the input's
+            // own type. nullableChunkValueType rejects an ID chunk here.
+            const ValueType inputType = nullableChunkValueType(chunkType);
+            const ValueType accumulatorType = (kind == GroupAggregateKind::Avg) ? ValueType::Double : inputType;
+
+            aggregate._accumulator = allocOptColumnForValueType(accumulatorType);
+            aggregate._grow = NLExecutor::selectGroupAggregateGrow(kind, accumulatorType);
+            aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, inputType);
+            aggregate._emit = NLExecutor::selectGroupAggregateEmit(kind, accumulatorType);
+        }
+
+        state->addAggregate(aggregate);
+    }
+
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runGroupAggregateUpdate, data});
+}
+
+void NLTranslator::translateGroupAggregateLoop(const IteratorConfig& config,
+                                               mlir::Block& loopBody,
+                                               NLStmtContainer* body) {
+    NLGroupAggregateState* state = config._groupAggregateState;
+    if (!state) {
+        throw IRException("nl.group_aggregate iterator must carry a group accumulator");
+    }
+
+    // For::verify binds one loop variable per iterator chunk, and the group
+    // iterator's chunks are the grouping-key columns followed by the aggregate
+    // results, so the loop must take exactly one variable per output column.
+    const size_t keyCount = state->keyColumns().size();
+    const size_t aggregateCount = state->aggregates().size();
+    if (loopBody.getNumArguments() != keyCount + aggregateCount) {
+        throw IRException("nl.group_aggregate loop must bind one variable per output column");
+    }
+
+    NLGroupAggregateLoopData* loopData = _program->allocFunctionData<NLGroupAggregateLoopData>(state);
+
+    // Each loop variable is the emit output of one column: the first keyCount are the
+    // grouping keys (filled by slicing their key buffers), the rest the aggregate
+    // results (filled from the per-group state). Wire each into its column's slot on
+    // the shared state, so runGroupAggregateLoop fills the loop variables directly.
+    for (size_t keyIndex = 0; keyIndex < keyCount; keyIndex++) {
+        const mlir::Value loopVariable = loopBody.getArgument(static_cast<unsigned>(keyIndex));
+
+        Column* output = allocColumnForResultChunkType(loopVariable.getType());
+        _valueSlots[loopVariable] = output;
+        state->keyColumns()[keyIndex]._output = output;
+    }
+
+    for (size_t aggregateIndex = 0; aggregateIndex < aggregateCount; aggregateIndex++) {
+        const mlir::Value loopVariable = loopBody.getArgument(static_cast<unsigned>(keyCount + aggregateIndex));
+
+        Column* output = allocColumnForResultChunkType(loopVariable.getType());
+        _valueSlots[loopVariable] = output;
+        state->aggregates()[aggregateIndex]._output = output;
+    }
+
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runGroupAggregateLoop, loopData});
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+NLGroupAggregateState* NLTranslator::groupAggregateStateFor(mlir::Value handle) const {
+    const auto stateIt = _groupAggregateStates.find(handle);
+    if (stateIt == _groupAggregateStates.end()) {
+        throw IRException("group aggregate handle must be produced by an nl.group_aggregate_buffer");
+    }
+
+    return stateIt->second;
+}
+
 // An ID chunk allocates an ID column on its kind; a !storage.nullable<...> chunk
 // allocates a ColumnOptVector on its value type. Mirrors addCrossColumn's split.
 Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
@@ -1292,6 +1498,54 @@ NLCountFunction NLTranslator::selectCountForChunkType(mlir::Type chunkType) {
     // element type, so its result is discarded - it validates, nothing more.
     chunkKindFromElementType(elementType);
     return &NLExecutor::countAllRows;
+}
+
+NLGroupKeyGatherFunction NLTranslator::selectGroupKeyGatherForChunkType(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+    const mlir::Type elementType = chunk.getElementType();
+
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        return NLExecutor::selectOptGroupKeyGather(valueType);
+    }
+
+    return NLExecutor::selectGroupKeyGather(chunkKindFromElementType(elementType));
+}
+
+NLCopyFunction NLTranslator::selectCopyForChunkType(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+    const mlir::Type elementType = chunk.getElementType();
+
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        return NLExecutor::selectOptCopyFunction(valueType);
+    }
+
+    return NLExecutor::selectCopyFunction(chunkKindFromElementType(elementType));
+}
+
+// An ID chunk (a grouping key) allocates an ID column on its kind; a
+// !storage.nullable<...> chunk (a key or a sum/min/max/avg result) a
+// ColumnOptVector on its value type; a ui64 chunk (a count result) a
+// ColumnVector<uint64_t> directly, as nl.count_result's output is allocated.
+Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+    const mlir::Type elementType = chunk.getElementType();
+
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        return allocOptColumnForValueType(valueType);
+    }
+
+    if (const auto intType = mlir::dyn_cast<mlir::IntegerType>(elementType)) {
+        if (intType.getWidth() == 64 && intType.isUnsigned()) {
+            ColumnVector<uint64_t>* output = _memory->alloc<ColumnVector<uint64_t>>();
+            output->reserve(_program->getChunkSize());
+            return output;
+        }
+    }
+
+    return allocColumnForKind(chunkKindFromElementType(elementType));
 }
 
 void NLTranslator::translateCrossProduct(nl::CrossProduct cross, NLStmtContainer* body) {

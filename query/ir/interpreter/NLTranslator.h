@@ -35,6 +35,7 @@ private:
         GetOutEdgesByType,
         GetInEdgesByType,
         Sort,
+        GroupAggregate,
     };
 
     // Settings of the iterators passed to each for loop
@@ -45,6 +46,9 @@ private:
 
         // The accumulator a Sort iterator drains; null for the other kinds.
         NLSortState* _sortState {nullptr};
+
+        // The accumulator a GroupAggregate iterator drains; null for the other kinds.
+        NLGroupAggregateState* _groupAggregateState {nullptr};
 
         // The label names a ScanNodesByLabel iterator filters by; empty for the
         // other kinds. These are views into the op's interned StringAttr storage,
@@ -90,6 +94,11 @@ private:
     // nl.aggregate_update and nl.aggregate_result that name the handle find the same
     // accumulator
     llvm::DenseMap<mlir::Value, NLAggregateState*> _aggregateStates;
+
+    // nl.group_aggregate_buffer handle SSA value -> the runtime accumulator it
+    // produces, so nl.group_aggregate_update and the nl.for over nl.group_aggregate
+    // find the same group table and per-group state
+    llvm::DenseMap<mlir::Value, NLGroupAggregateState*> _groupAggregateStates;
 
     void translateBlock(mlir::Block& block, NLStmtContainer* body);
     void translateFor(mlir::nl::For forLoop, NLStmtContainer* body);
@@ -230,6 +239,44 @@ private:
     // operand of nl.aggregate_update and nl.aggregate_result, so this throws if it
     // was not produced by an nl.aggregate.
     NLAggregateState* aggregateStateFor(mlir::Value handle) const;
+
+    // Translate an nl.group_aggregate_buffer: allocate its runtime accumulator, map
+    // the handle to it, and record the reset statement (run each time the block
+    // runs). The key buffers and per-aggregate state are allocated by the update,
+    // which knows their types, the same way nl.sort_collect allocates the sort
+    // buffers.
+    void translateGroupAggregateBuffer(mlir::nl::GroupAggregateBuffer buffer, NLStmtContainer* body);
+
+    // Translate an nl.group_aggregate_update: look up the accumulator the handle
+    // names, split the collected columns into grouping keys and aggregate inputs
+    // (by the keyCount / kinds on the producing nl.group_aggregate_buffer), allocate
+    // each key buffer and each aggregate's per-group state with its grow/fold/emit
+    // handlers, and record the per-step fold statement.
+    void translateGroupAggregateUpdate(mlir::nl::GroupAggregateUpdate update, NLStmtContainer* body);
+
+    // Translate the nl.for over an nl.group_aggregate iterator: allocate one loop
+    // variable per output column (a grouping key or an aggregate result), wire it as
+    // that column's emit output, and record the emit-loop statement (re-chunk the
+    // groups).
+    void translateGroupAggregateLoop(const IteratorConfig& config,
+                                     mlir::Block& loopBody,
+                                     NLStmtContainer* body);
+
+    // The runtime accumulator a group-aggregate handle names. Throws if the handle
+    // was not produced by an nl.group_aggregate_buffer translated earlier.
+    NLGroupAggregateState* groupAggregateStateFor(mlir::Value handle) const;
+
+    // Allocate an emit output column for a group-aggregate output chunk type: an ID
+    // column for an ID chunk (a grouping key), a nullable value column for a
+    // !storage.nullable<...> chunk (a key or a sum/min/max/avg result), or a
+    // ColumnVector<uint64_t> for a ui64 chunk (a count result).
+    Column* allocColumnForResultChunkType(mlir::Type chunkType);
+
+    // The key gather-append / range emit-copy for a group-aggregate key column of
+    // this chunk type - by chunk kind for an ID chunk, by value type for a nullable
+    // value chunk. Used to grow the key buffers and to slice them at emit.
+    static NLGroupKeyGatherFunction selectGroupKeyGatherForChunkType(mlir::Type chunkType);
+    static NLCopyFunction selectCopyForChunkType(mlir::Type chunkType);
 
     // Pool-allocate a buffer/loop column matching a chunk type - an ID column for
     // an ID chunk, a nullable value column for a !storage.nullable<...> chunk - and the

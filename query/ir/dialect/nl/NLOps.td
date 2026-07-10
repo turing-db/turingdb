@@ -1118,4 +1118,104 @@ def Filter : NLOp<"filter", [Pure]> {
   }];
 }
 
+/**
+* GroupAggregateBuffer
+*/
+// NOT Pure: each nl.group_aggregate_buffer is a distinct accumulator, so two must
+// never be CSE'd into one, and an unread one must not be DCE'd - resetting its
+// group table is a side effect (like nl.sort_buffer).
+def GroupAggregateBuffer : NLOp<"group_aggregate_buffer", []> {
+  let summary = "Create (and reset) a per-group accumulator for one grouped aggregation";
+  let description = [{
+    Sits at the top of the scope it governs - function scope for a top-level
+    grouped RETURN - where it re-initializes the group table once per enclosing
+    step. Produces the !nl.group_aggregate_state handle that nl.group_aggregate_update
+    folds into and the nl.for over nl.group_aggregate drains.
+
+    `keys` is how many of the columns nl.group_aggregate_update collects are the
+    grouping keys (the rest are the aggregate inputs, one per aggregate), and
+    `aggregates` names each aggregate's reduction as GroupAggregateKind integers
+    (0 = count, 1 = sum, 2 = min, 3 = max, 4 = avg). The column types are not spelled
+    here - they are recovered from the nl.group_aggregate_update that feeds the same
+    handle - so only the shape appears. The result type is buildable and omitted.
+
+      %state = nl.group_aggregate_buffer keys 1 aggregates [1]
+  }];
+
+  // keyCount is how many collected columns are grouping keys; kinds names each
+  // aggregate's reduction, one per aggregate input. The two together must
+  // partition the collected columns (checked during translation, where the column
+  // count is known).
+  let arguments = (ins UI64Attr:$keyCount, DenseI64ArrayAttr:$kinds);
+  let results   = (outs NLGroupAggregateState:$state);
+
+  let assemblyFormat = "`keys` $keyCount `aggregates` $kinds attr-dict";
+  let hasVerifier = 1;
+}
+
+/**
+* GroupAggregateUpdate
+*/
+// NOT Pure: it folds the current chunk into the handle's group table, so it must
+// run exactly where it sits, once per producing-loop step, and must not be
+// hoisted, CSE'd or eliminated. The grouped sibling of nl.sort_collect.
+def GroupAggregateUpdate : NLOp<"group_aggregate_update", []> {
+  let summary = "Fold this step's chunk of every column into a grouped accumulator";
+  let description = [{
+    Runs in the producing loop body, once per step. Assigns each row to its group
+    (by the serialized tuple of the grouping-key columns, creating a new group the
+    first time a tuple is seen), then folds each aggregate-input column's row into
+    that group's accumulator. The columns are taken together so the group
+    assignment and the per-group folds stay row-aligned.
+
+    The columns are the grouping keys first, then the aggregate inputs, in the
+    order nl.group_aggregate_buffer's `keys` / `aggregates` describe; the split and
+    the reductions are recovered from that buffer op (which produced the handle),
+    so only the column chunk types are spelled here, after the colon.
+
+      nl.group_aggregate_update %state, (%city, %score) : !nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<i64>>
+  }];
+
+  let arguments = (ins NLGroupAggregateStateHandle:$state, Variadic<NLChunk>:$columns);
+
+  let assemblyFormat = [{
+    $state `,` `(` $columns `)` attr-dict `:` qualified(type($columns))
+  }];
+  let hasVerifier = 1;
+}
+
+/**
+* GroupAggregate
+*/
+// Pure: given a filled accumulator it deterministically yields the same group
+// rows, and it produces no side effect of its own - the emission happens in the
+// driving nl.for. Mirrors nl.sort: a source op whose nl.for does the work.
+def GroupAggregate : NLOp<"group_aggregate", [Pure]> {
+  let summary = "Create a database iterator over the rows of a grouped accumulator";
+  let description = [{
+    The source op for the emit phase of a grouped aggregation, the grouped
+    counterpart of nl.sort. It consumes a filled nl.group_aggregate_state and
+    produces an iterator whose steps yield one row per group - the grouping-key
+    values followed by each aggregate's reduction - one chunk per output column per
+    step, so an enclosing nl.for binds one loop variable per column:
+
+      %groups = nl.group_aggregate(%state) : !nl.iter<!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<i64>>>
+      nl.for %city, %total in %groups : !nl.iter<...> {
+        nl.output(%city, %total) : !nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<i64>>
+      }
+
+    The iterator chunk types are the grouping-key column types followed by the
+    aggregate result types (a ui64 for count, the input's value type for
+    sum/min/max, f64 for avg), but cannot be inferred from the parameterless state
+    handle, so they are spelled after the colon (as the nl.for iterator type is).
+    Placing nl.group_aggregate after the producing loop guarantees every row has
+    been folded before the first group is emitted.
+  }];
+
+  let arguments = (ins NLGroupAggregateStateHandle:$state);
+  let results   = (outs NLIterator:$result);
+
+  let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
+}
+
 #endif //TURINGDB_NL_OPS
