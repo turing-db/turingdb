@@ -811,7 +811,10 @@ void NLExecutor::runOutput(NLExecutionContext* context, NLFunctionData* data) {
     } else if (limit) {
         rowCount = limit->getEmitThisStep();
     } else {
-        rowCount = cols.front()->size();
+        // Logical row count, assumes all columns are either const or same dimension
+        for (const Column* column : cols) {
+            rowCount = std::max(rowCount, column->size());
+        }
     }
 
     context->getSink()->appendChunks(cols, offset, rowCount);
