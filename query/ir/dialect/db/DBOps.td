@@ -553,6 +553,15 @@ def OrOp : PredicateOp<"or", [Pure]> {
   let arguments = (ins ColumnBools : $lhs, ColumnBools : $rhs);
 }
 
+def EqOp : PredicateOp<"eq", [Pure]> {
+  let summary = "Row-wise equality of two value columns";
+  let description = [{
+      Result is always an abstraction over a (possibly nullable) mask (bool vector).
+
+      %r = db.eq %x, %y : (!db.column<i64>, !db.column<i64>) -> !db.column<bool>
+  }];
+}
+
 def AddOp : BinaryOp<"add", [Pure]> {
   let summary = "Row-wise addition of two value columns";
 
