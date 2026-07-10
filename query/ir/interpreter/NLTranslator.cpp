@@ -210,6 +210,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateConstant(constant);
         } else if (nl::Add add = mlir::dyn_cast<nl::Add>(operation)) {
             translateAdd(add, body);
+        } else if (nl::Eq eq = mlir::dyn_cast<nl::Eq>(operation)) {
+            translateEq(eq, body);
         } else if (nl::GetNodeProperties getNodeProperties = mlir::dyn_cast<nl::GetNodeProperties>(operation)) {
             translatePropertyFetch(getNodeProperties.getInputNodes(),
                                    getNodeProperties.getPropertyType(),
@@ -305,7 +307,7 @@ void NLTranslator::translateScanLoop(mlir::Block& loopBody, NLLimitState* limit,
     NLScanLoopData* loopData = _program->allocFunctionData<NLScanLoopData>(nodeIDs);
     loopData->setLimit(limit);
 
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runScanNodesLoop, loopData});
+    body->emplaceStmt(&NLExecutor::runScanNodesLoop, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
 }
@@ -340,7 +342,7 @@ void NLTranslator::translateScanByLabelLoop(const IteratorConfig& config,
     NLScanByLabelLoopData* loopData = _program->allocFunctionData<NLScanByLabelLoopData>(nodeIDs, labelset, matchable);
     loopData->setLimit(limit);
 
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runScanNodesByLabelLoop, loopData});
+    body->emplaceStmt(&NLExecutor::runScanNodesByLabelLoop, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
 }
@@ -487,7 +489,7 @@ void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
                                                                                       propertyType->_id);
 
     const NLHandlerFunction handler = selectPropertyFetchHandler(isNode, valueType);
-    body->addStmt(NLFunctionDescriptor {handler, fetchData});
+    body->emplaceStmt(handler, fetchData);
 }
 
 void NLTranslator::translateConstant(nl::Constant constant) {
@@ -519,7 +521,21 @@ void NLTranslator::translateAdd(nl::Add add, NLStmtContainer* body) {
     _valueSlots[add.getResult()] = result;
 
     NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runBinary, data});
+    body->emplaceStmt(&NLExecutor::runBinary, data);
+}
+
+void NLTranslator::translateEq(nl::Eq eq, NLStmtContainer* body) {
+    const Column* lhs = getColumn(eq.getLhs());
+    const Column* rhs = getColumn(eq.getRhs());
+
+    Column* result = nullptr;
+    const NLBinaryFn fn = NLExecutor::selectBinary<OP_EQUAL>(lhs, rhs, _memory, result);
+    bioassert(result, "Failed to translate EQ result.");
+
+    _valueSlots[eq.getResult()] = result;
+
+    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
+    body->emplaceStmt(&NLExecutor::runBinary, data);
 }
 
 void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
@@ -568,7 +584,7 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
         outputData->addOutputColumn(getColumn(column));
     }
 
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runOutput, outputData});
+    body->emplaceStmt(&NLExecutor::runOutput, outputData);
 }
 
 void NLTranslator::translateLimit(nl::Limit limit, NLStmtContainer* body) {
@@ -582,7 +598,7 @@ void NLTranslator::translateLimit(nl::Limit limit, NLStmtContainer* body) {
     const size_t count = limit.getCount();
     NLLimitInitData* initData = _program->allocFunctionData<NLLimitInitData>(state, count);
 
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runLimitInit, initData});
+    body->emplaceStmt(&NLExecutor::runLimitInit, initData);
 }
 
 void NLTranslator::translateLimitUpdate(nl::LimitUpdate update, NLStmtContainer* body) {
@@ -593,7 +609,7 @@ void NLTranslator::translateLimitUpdate(nl::LimitUpdate update, NLStmtContainer*
     const Column* representative = getColumn(update.getRows());
     NLLimitUpdateData* updateData = _program->allocFunctionData<NLLimitUpdateData>(state, representative);
 
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runLimitUpdate, updateData});
+    body->emplaceStmt(&NLExecutor::runLimitUpdate, updateData);
 }
 
 void NLTranslator::translateLimitTruncate(nl::LimitTruncate truncate, NLStmtContainer* body) {
@@ -611,7 +627,7 @@ void NLTranslator::translateLimitTruncate(nl::LimitTruncate truncate, NLStmtCont
         addTruncateColumn(columns[columnIndex], results[columnIndex], data);
     }
 
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runLimitTruncate, data});
+    body->emplaceStmt(&NLExecutor::runLimitTruncate, data);
 }
 
 void NLTranslator::addTruncateColumn(mlir::Value inputValue,
@@ -670,7 +686,7 @@ void NLTranslator::translateSkip(nl::Skip skip, NLStmtContainer* body) {
     const size_t count = skip.getCount();
     NLSkipInitData* initData = _program->allocFunctionData<NLSkipInitData>(state, count);
 
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runSkipInit, initData});
+    body->emplaceStmt(&NLExecutor::runSkipInit, initData);
 }
 
 void NLTranslator::translateSkipUpdate(nl::SkipUpdate update, NLStmtContainer* body) {
@@ -681,7 +697,7 @@ void NLTranslator::translateSkipUpdate(nl::SkipUpdate update, NLStmtContainer* b
     const Column* representative = getColumn(update.getRows());
     NLSkipUpdateData* updateData = _program->allocFunctionData<NLSkipUpdateData>(state, representative);
 
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runSkipUpdate, updateData});
+    body->emplaceStmt(&NLExecutor::runSkipUpdate, updateData);
 }
 
 void NLTranslator::translateSkipTruncate(nl::SkipTruncate truncate, NLStmtContainer* body) {
@@ -699,7 +715,7 @@ void NLTranslator::translateSkipTruncate(nl::SkipTruncate truncate, NLStmtContai
         addSkipColumn(columns[columnIndex], results[columnIndex], data);
     }
 
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runSkipTruncate, data});
+    body->emplaceStmt(&NLExecutor::runSkipTruncate, data);
 }
 
 void NLTranslator::addSkipColumn(mlir::Value inputValue,
@@ -762,7 +778,7 @@ void NLTranslator::translateSortBuffer(nl::SortBuffer buffer, NLStmtContainer* b
     // The reset empties the buffers each time the block holding this nl.sort_buffer
     // runs: once at function scope for a top-level ORDER BY.
     NLSortResetData* resetData = _program->allocFunctionData<NLSortResetData>(state);
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runSortReset, resetData});
+    body->emplaceStmt(&NLExecutor::runSortReset, resetData);
 }
 
 void NLTranslator::translateSortCollect(nl::SortCollect collect, NLStmtContainer* body) {
@@ -823,7 +839,7 @@ void NLTranslator::translateSortCollect(nl::SortCollect collect, NLStmtContainer
         state->addKey(key);
     }
 
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runSortCollect, data});
+    body->emplaceStmt(&NLExecutor::runSortCollect, data);
 }
 
 void NLTranslator::translateSortLoop(const IteratorConfig& config,
@@ -864,7 +880,7 @@ void NLTranslator::translateSortLoop(const IteratorConfig& config,
         loopData->addColumn(column);
     }
 
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runSortLoop, loopData});
+    body->emplaceStmt(&NLExecutor::runSortLoop, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
 }
@@ -887,7 +903,7 @@ void NLTranslator::translateDistinctState(nl::Distinct distinct, NLStmtContainer
     // The reset empties the set each time the block holding this nl.distinct runs:
     // once at function scope for a top-level / mid-query DISTINCT.
     NLDistinctResetData* resetData = _program->allocFunctionData<NLDistinctResetData>(state);
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runDistinctReset, resetData});
+    body->emplaceStmt(&NLExecutor::runDistinctReset, resetData);
 }
 
 void NLTranslator::translateDistinctFilter(nl::DistinctFilter filter, NLStmtContainer* body) {
@@ -909,7 +925,7 @@ void NLTranslator::translateDistinctFilter(nl::DistinctFilter filter, NLStmtCont
         addDistinctColumn(columns[columnIndex], results[columnIndex], data);
     }
 
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runDistinctFilter, data});
+    body->emplaceStmt(&NLExecutor::runDistinctFilter, data);
 }
 
 void NLTranslator::addDistinctColumn(mlir::Value inputValue,
@@ -949,7 +965,7 @@ void NLTranslator::translateCountState(nl::Count count, NLStmtContainer* body) {
     // The reset zeroes the tally each time the block holding this nl.count runs:
     // once at function scope for a top-level / mid-query COUNT.
     NLCountResetData* resetData = _program->allocFunctionData<NLCountResetData>(state);
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runCountReset, resetData});
+    body->emplaceStmt(&NLExecutor::runCountReset, resetData);
 }
 
 void NLTranslator::translateCountUpdate(nl::CountUpdate update, NLStmtContainer* body) {
@@ -964,7 +980,7 @@ void NLTranslator::translateCountUpdate(nl::CountUpdate update, NLStmtContainer*
     const NLCountFunction count = selectCountForChunkType(rows.getType());
 
     NLCountUpdateData* data = _program->allocFunctionData<NLCountUpdateData>(state, input, count);
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runCountUpdate, data});
+    body->emplaceStmt(&NLExecutor::runCountUpdate, data);
 }
 
 void NLTranslator::translateCountResult(nl::CountResult result, NLStmtContainer* body) {
@@ -981,7 +997,7 @@ void NLTranslator::translateCountResult(nl::CountResult result, NLStmtContainer*
     _valueSlots[result.getResult()] = output;
 
     NLCountResultData* data = _program->allocFunctionData<NLCountResultData>(state, output);
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runCountResult, data});
+    body->emplaceStmt(&NLExecutor::runCountResult, data);
 }
 
 NLCountState* NLTranslator::countStateFor(mlir::Value handle) const {
@@ -1014,7 +1030,7 @@ void NLTranslator::translateAggregateState(nl::Aggregate aggregate, NLStmtContai
     const NLAggregateResetFunction reset = NLExecutor::selectAggregateReset(kind, accumulatorType);
 
     NLAggregateResetData* resetData = _program->allocFunctionData<NLAggregateResetData>(state, reset);
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runAggregateReset, resetData});
+    body->emplaceStmt(&NLExecutor::runAggregateReset, resetData);
 }
 
 void NLTranslator::translateAggregateUpdate(nl::AggregateUpdate update, NLStmtContainer* body) {
@@ -1032,7 +1048,7 @@ void NLTranslator::translateAggregateUpdate(nl::AggregateUpdate update, NLStmtCo
     const NLAggregateUpdateFunction fold = NLExecutor::selectAggregateUpdate(kind, inputType);
 
     NLAggregateUpdateData* data = _program->allocFunctionData<NLAggregateUpdateData>(state, input, fold);
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runAggregateUpdate, data});
+    body->emplaceStmt(&NLExecutor::runAggregateUpdate, data);
 }
 
 void NLTranslator::translateAggregateResult(nl::AggregateResult result, NLStmtContainer* body) {
@@ -1052,7 +1068,7 @@ void NLTranslator::translateAggregateResult(nl::AggregateResult result, NLStmtCo
     const NLAggregateResultFunction emit = NLExecutor::selectAggregateResult(kind, resultType);
 
     NLAggregateResultData* data = _program->allocFunctionData<NLAggregateResultData>(state, output, emit);
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runAggregateResult, data});
+    body->emplaceStmt(&NLExecutor::runAggregateResult, data);
 }
 
 NLAggregateState* NLTranslator::aggregateStateFor(mlir::Value handle) const {
@@ -1174,7 +1190,7 @@ void NLTranslator::translateCrossProduct(nl::CrossProduct cross, NLStmtContainer
         resultIndex++;
     }
 
-    body->addStmt(NLFunctionDescriptor {&NLExecutor::runCrossProduct, data});
+    body->emplaceStmt(&NLExecutor::runCrossProduct, data);
 }
 
 void NLTranslator::addCrossColumn(mlir::Value inputValue,

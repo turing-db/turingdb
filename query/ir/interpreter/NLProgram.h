@@ -126,6 +126,11 @@ public:
         _stmts.push_back(stmt);
     }
 
+    template <typename... Args>
+    void emplaceStmt(Args&&... args) {
+        _stmts.emplace_back(std::forward<Args>(args)...);
+    }
+
 private:
     Stmts _stmts;
 };
