@@ -31,6 +31,7 @@ class DBProgramGenerator {
 public:
     using VariableIdentities = std::vector<mlir::TypedValue<mlir::Type>>;
     using VariableIdentityMap = std::unordered_map<const VariableDependency*, VariableIdentities>;
+    using DefinedVars = std::unordered_set<const VariableDependency*>;
 
     explicit DBProgramGenerator(mlir::ModuleOp* mainModule);
     ~DBProgramGenerator();
