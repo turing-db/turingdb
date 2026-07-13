@@ -140,6 +140,30 @@ ValueType nullableChunkValueType(mlir::Type chunkType) {
     return valueTypeFromElementType(nullableType.getValueType());
 }
 
+bool isConstantLike(mlir::Value value) {
+    mlir::Operation* definingOp = value.getDefiningOp();
+    if (!definingOp) {
+        return false;
+    }
+
+    if (mlir::isa<nl::Constant>(definingOp)) {
+        return true;
+    }
+
+    const bool isArith = mlir::isa<nl::Add, nl::Sub, nl::Mul>(definingOp);
+    if (!isArith) {
+        return false;
+    }
+
+    for (const mlir::Value operand : definingOp->getOperands()) {
+        if (!isConstantLike(operand)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 }
 
 NLTranslator::NLTranslator(NLProgram* program, LocalMemory* memory, const GraphView* view)
@@ -690,8 +714,7 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
         mlir::Operation* definingOp = column.getDefiningOp();
         const bool isProducedInThisBlock = definingOp && definingOp->getBlock() == outputBlock;
 
-        // Constants are invariant of any loop so they can be referenced anywhere
-        const bool isBroadcastConstant = definingOp && mlir::isa<nl::Constant>(definingOp);
+        const bool isBroadcastConstant = isConstantLike(column);
 
         if (!isInnermostLoopVariable && !isProducedInThisBlock && !isBroadcastConstant) {
             throw IRException("nl.output columns must be a loop variable of the enclosing "
