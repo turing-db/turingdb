@@ -10,6 +10,7 @@
 #include "versioning/CommitHash.h"
 #include "versioning/ChangeResult.h"
 #include "dump/DumpResult.h"
+#include "dump/LoadGraphResult.h"
 #include "mergers/DataPartMergeResult.h"
 
 #include "EmbeddingsSpec.h"
@@ -62,7 +63,7 @@ public:
     void setDefaultGraph(std::string_view name);
 
     // Load graph
-    Graph* loadGraph(std::string_view name);
+    LoadGraphResult<Graph*> loadGraph(std::string_view name);
     bool isGraphLoading(std::string_view name) const;
     DumpResult<void> loadCommit(std::string_view name, CommitHash hash);
 

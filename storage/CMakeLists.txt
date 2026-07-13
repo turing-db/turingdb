@@ -1,4 +1,3 @@
-
 set(storage_sources
         Graph.cpp
         ChangeManager.cpp
@@ -122,6 +121,7 @@ set(storage_sources
         dump/CommitLoader.cpp
         dump/DataPartDumper.cpp
         dump/DumpResult.cpp
+        dump/LoadGraphResult.cpp
         dump/DumpUtils.cpp
         dump/LoadUtils.cpp
         dump/StringIndexerDumper.cpp

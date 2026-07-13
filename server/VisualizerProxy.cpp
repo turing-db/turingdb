@@ -80,7 +80,7 @@ void VisualizerProxy::start() {
     const std::string dbBaseUrl = "http://" + _address + ":" + std::to_string(_dbPort);
 
     const char* visEnv = getenv("TURINGDB_VIS_URL");
-    const std::string visBaseUrl = visEnv ? visEnv : "https://vis.turingdb.org";
+    const std::string visBaseUrl = visEnv ? visEnv : "http://vis2.turingdb.ai";
 
     net::TCPServer::Functions functions;
     functions._processor =

@@ -11,6 +11,7 @@
 #include "GraphLoadStatus.h"
 #include "ObjectMap.h"
 #include "Path.h"
+#include "dump/LoadGraphResult.h"
 
 namespace db {
 
@@ -34,7 +35,7 @@ public:
 
     // Graph operations
     Graph* createGraph(std::string_view name);
-    Graph* loadGraph(std::string_view name);
+    LoadGraphResult<Graph*> loadGraph(std::string_view name);
     void setDefaultGraph(std::string_view name);
     void listGraphs(std::vector<std::string_view>& names) const;
 

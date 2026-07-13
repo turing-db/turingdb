@@ -110,7 +110,7 @@ private:
     // Loading a graph
     bool isGraphLoading(std::string_view graphName) const;
     DumpResult<void> loadCommit(std::string_view graphName, CommitHash hash);
-    Graph* loadGraph(std::string_view graphName);
+    LoadGraphResult<Graph*> loadGraph(std::string_view graphName);
 
     // Dump an entire graph
     DumpResult<void> dumpGraph(std::string_view graphName);
