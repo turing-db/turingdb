@@ -40,6 +40,7 @@
 #include "expr/Expr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/PropertyExpr.h"
+#include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/ReturnStmt.h"
@@ -652,65 +653,25 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
 
         case Expr::Kind::BINARY: {
             const BinaryExpr* binExpr = static_cast<const BinaryExpr*>(expr);
-            const Expr* lhs = binExpr->getLHS();
-            const Expr* rhs = binExpr->getRHS();
-
-            translateExpr(lhs);
-            translateExpr(rhs);
-
-            if (!_exprMap.contains(lhs) || !_exprMap.contains(rhs)) {
-                break;
-            }
-
-            const mlir::Value lhsVal = _exprMap.at(lhs);
-            const mlir::Value rhsVal = _exprMap.at(rhs);
-            const mlir::Location loc = _opBuilder.getUnknownLoc();
-            const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
-            const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
-
-            const BinaryOperator op = binExpr->getOperator();
-
-            switch (op) {
-                case BinaryOperator::Equal:
-                    _exprMap[expr] = _opBuilder.create<mlir::db::EqOp>(loc, boolType, lhsVal, rhsVal).getResult();
-                break;
-                case BinaryOperator::And:
-                    _exprMap[expr] = _opBuilder.create<mlir::db::AndOp>(loc, boolType, lhsVal, rhsVal).getResult();
-                break;
-                case BinaryOperator::Or:
-                    _exprMap[expr] = _opBuilder.create<mlir::db::OrOp>(loc, boolType, lhsVal, rhsVal).getResult();
-                break;
-                case BinaryOperator::Add:
-                    _exprMap[expr] = _opBuilder.create<mlir::db::AddOp>(loc, noneType, lhsVal, rhsVal).getResult();
-                break;
-                case BinaryOperator::Sub:
-                    _exprMap[expr] = _opBuilder.create<mlir::db::SubOp>(loc, noneType, lhsVal, rhsVal).getResult();
-                break;
-                case BinaryOperator::Mult:
-                    _exprMap[expr] = _opBuilder.create<mlir::db::MulOp>(loc, noneType, lhsVal, rhsVal).getResult();
-                break;
-
-                case BinaryOperator::Xor:
-                case BinaryOperator::NotEqual:
-                case BinaryOperator::LessThan:
-                case BinaryOperator::GreaterThan:
-                case BinaryOperator::LessThanOrEqual:
-                case BinaryOperator::GreaterThanOrEqual:
-                case BinaryOperator::Div:
-                case BinaryOperator::Mod:
-                case BinaryOperator::Pow:
-                case BinaryOperator::In:
-                    throw TuringException(fmt::format("Unsupported operation: {}",
-                                    BinaryOperatorDescription::value(op)));
-                break;
-
-                case BinaryOperator::_SIZE:
-                break;
-            }
+            translateBinaryExpr(expr, binExpr);
         }
         break;
 
-        case Expr::Kind::SYMBOL:
+        case Expr::Kind::SYMBOL: {
+            const SymbolExpr* symbolExpr = static_cast<const SymbolExpr*>(expr);
+            const std::string_view varName = symbolExpr->getDecl()->getName();
+
+            for (const auto& [var, values] : _varMap) {
+                if (var->getName() == varName) {
+                    _exprMap[expr] = values.back();
+                    break;
+                }
+            }
+
+            bioassert(_exprMap.contains(expr), "Symbol refers to unknown variable: {}", varName);
+        }
+        break;
+
         case Expr::Kind::UNARY:
         case Expr::Kind::FUNCTION_INVOCATION:
         case Expr::Kind::INDEX:
@@ -724,6 +685,64 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
 
         case Expr::Kind::_SIZE:
             throw FatalException("Invalid expression kind.");
+        break;
+    }
+}
+
+void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr* binExpr) {
+    const Expr* lhs = binExpr->getLHS();
+    const Expr* rhs = binExpr->getRHS();
+
+    translateExpr(lhs);
+    translateExpr(rhs);
+
+    if (!_exprMap.contains(lhs) || !_exprMap.contains(rhs)) {
+        return;
+    }
+
+    const mlir::Value lhsVal = _exprMap.at(lhs);
+    const mlir::Value rhsVal = _exprMap.at(rhs);
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    const BinaryOperator op = binExpr->getOperator();
+
+    switch (op) {
+        case BinaryOperator::Equal:
+            _exprMap[expr] = _opBuilder.create<mlir::db::EqOp>(loc, boolType, lhsVal, rhsVal).getResult();
+        break;
+        case BinaryOperator::And:
+            _exprMap[expr] = _opBuilder.create<mlir::db::AndOp>(loc, boolType, lhsVal, rhsVal).getResult();
+        break;
+        case BinaryOperator::Or:
+            _exprMap[expr] = _opBuilder.create<mlir::db::OrOp>(loc, boolType, lhsVal, rhsVal).getResult();
+        break;
+        case BinaryOperator::Add:
+            _exprMap[expr] = _opBuilder.create<mlir::db::AddOp>(loc, noneType, lhsVal, rhsVal).getResult();
+        break;
+        case BinaryOperator::Sub:
+            _exprMap[expr] = _opBuilder.create<mlir::db::SubOp>(loc, noneType, lhsVal, rhsVal).getResult();
+        break;
+        case BinaryOperator::Mult:
+            _exprMap[expr] = _opBuilder.create<mlir::db::MulOp>(loc, noneType, lhsVal, rhsVal).getResult();
+        break;
+
+        case BinaryOperator::Xor:
+        case BinaryOperator::NotEqual:
+        case BinaryOperator::LessThan:
+        case BinaryOperator::GreaterThan:
+        case BinaryOperator::LessThanOrEqual:
+        case BinaryOperator::GreaterThanOrEqual:
+        case BinaryOperator::Div:
+        case BinaryOperator::Mod:
+        case BinaryOperator::Pow:
+        case BinaryOperator::In:
+            throw TuringException(fmt::format("Unsupported operation: {}",
+                                              BinaryOperatorDescription::value(op)));
+        break;
+
+        case BinaryOperator::_SIZE:
         break;
     }
 }
