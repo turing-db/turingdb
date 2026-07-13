@@ -36,6 +36,7 @@
 #include "SystemAccessor.h"
 #include "SystemManager.h"
 #include "TuringDB.h"
+#include "columns/ColumnConst.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnOptVector.h"
@@ -61,6 +62,16 @@ using Rows = std::vector<Row>;
 
 template <typename T>
 bool renderValueCell(const Column* column, size_t row, std::string& out) {
+    if (const auto* constCol = dynamic_cast<const ColumnConst<T>*>(column)) {
+        const T value = constCol->at(0);
+        if constexpr (std::is_same_v<T, std::string_view>) {
+            out = std::string(value);
+        } else {
+            out = std::to_string(value);
+        }
+        return true;
+    }
+
     const auto* values = dynamic_cast<const ColumnOptVector<T>*>(column);
     if (!values) {
         return false;
@@ -307,4 +318,11 @@ TEST_F(EquivalenceTest, eqFilters) {
     expectEquivalent("MATCH (n) WHERE n.age = 16 * 2 RETURN n");
 
     expectEquivalent("MATCH (n)-[e]->(m) WHERE e.duration = 10 + 10 return m");
+}
+
+TEST_F(EquivalenceTest, constants) {
+    expectEquivalent("RETURN 5");
+    expectEquivalent("RETURN 5 + 10");
+    expectEquivalent("RETURN 5 - 3");
+    expectEquivalent("RETURN 5 * 3");
 }
