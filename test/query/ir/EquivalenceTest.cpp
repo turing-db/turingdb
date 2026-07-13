@@ -276,3 +276,8 @@ TEST_F(EquivalenceTest, crossProd) {
 
     expectEquivalent("MATCH (a)-->(d), (b)-->(e), (c)-->(f) RETURN a, b, c, d, e, f");
 }
+
+TEST_F(EquivalenceTest, eqFilters) {
+    expectEquivalent("MATCH (a) WHERE a.age = 32 RETURN a");
+    expectEquivalent("MATCH (a), (b) WHERE a.age = b.age RETURN a, b");
+}

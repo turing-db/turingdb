@@ -68,6 +68,19 @@ struct BinaryPredicates {
 
         BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(res, lhs, rhs);
     }
+
+    /// Const x Const predicates e.g. 1 = 1
+    // FIXME: Do we need opt version for null-literals ?
+    template <typename Op, typename ColT, typename ColU>
+    static void exec(ColumnConst<CustomBool>* res, const ColT* lhs, const ColU* rhs) {
+        using DecayColT = TypeUtils::decay_col_t<ColT>;
+        using DecayColU = TypeUtils::decay_col_t<ColU>;
+
+        using InternalT = InnerTypeHelper<DecayColT>::type;
+        using InternalU = InnerTypeHelper<DecayColU>::type;
+
+        BinaryPredicateExecutor<Op, InternalT, InternalU>::apply(res, lhs, rhs);
+    }
 };
 
 /// Unary predicates, returning a Bool-like

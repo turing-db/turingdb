@@ -194,6 +194,15 @@ struct BinaryPredicateExecutor {
         }
     }
 
+    // Special case for e.g. WHERE 1 = 1
+    static void apply(ColumnConst<CustomBool>* res,
+                      const ColumnConst<T>* lhs,
+                      const ColumnConst<U>* rhs) {
+        auto op = Op {};
+        const CustomBool val = CustomBool {op(lhs->getRaw(), rhs->getRaw())};
+        res->set(val);
+    }
+
     static void apply(ColumnMask* res,
                       const ColumnConst<T>* lhs,
                       const ColumnConst<U>* rhs) {
