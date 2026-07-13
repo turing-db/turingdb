@@ -12,6 +12,7 @@
 #include "metadata/PropertyType.h"
 
 #include "IRException.h"
+#include "llvm/Support/Casting.h"
 
 using namespace db;
 
@@ -1002,7 +1003,9 @@ void DBLowering::foldTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
         // The preceding nl.limit_update still sets that count. Drop the old output
         // and the now-unused truncate.
         _builder.setInsertionPoint(output);
-        _builder.create<nl::Output>(output.getLoc(), truncate.getColumns(), truncate.getState(), mlir::Value());
+        _builder.create<nl::Output>(output.getLoc(), truncate.getColumns(),
+                                    truncate.getState(), mlir::Value(),
+                                    output.getCardinality());
 
         output.erase();
         truncate.erase();
@@ -1063,7 +1066,8 @@ void DBLowering::foldSkipTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
         // preceding nl.skip_update still sets that offset and count. Drop the old
         // output and the now-unused truncate.
         _builder.setInsertionPoint(output);
-        _builder.create<nl::Output>(output.getLoc(), truncate.getColumns(), mlir::Value(), truncate.getState());
+        _builder.create<nl::Output>(output.getLoc(), truncate.getColumns(), mlir::Value(),
+                                    truncate.getState(), output.getCardinality());
 
         output.erase();
         truncate.erase();
@@ -1107,8 +1111,29 @@ void DBLowering::lowerOutput(mlir::db::Output output) {
             break;
         }
     }
+
+    // Custom cardinality calculation for e.g. MATCH (n) RETURN 5
+    mlir::Value cardinality;
+    // Output would not normally be in a loop body, but toplevel
+    const bool returningNonLooped = anchorBlock == _entryBlock;
+    if (returningNonLooped && _innermostLoopBody) {
+        // but if we have all constants, then it need be moved to the inner most loop to
+        // match cardinality
+        const bool allConstants =
+            std::ranges::all_of(columns, [](const mlir::Value column) {
+                mlir::Operation* const definingOp = column.getDefiningOp();
+                return llvm::isa_and_nonnull<nl::Constant>(definingOp);
+            });
+
+        if (allConstants) {
+            anchorBlock = _innermostLoopBody;
+            cardinality = _innermostLoopBody->getArgument(0);
+        }
+    }
+
     setInsertionInto(anchorBlock);
-    _builder.create<nl::Output>(_builder.getUnknownLoc(), columns, mlir::Value(), mlir::Value());
+    _builder.create<nl::Output>(_builder.getUnknownLoc(), columns, mlir::Value(),
+                                mlir::Value(), cardinality);
 }
 
 void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp) {

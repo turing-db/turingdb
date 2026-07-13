@@ -1052,10 +1052,16 @@ public:
     NLSkipState* getSkip() const { return _skip; }
     void setSkip(NLSkipState* skip) { _skip = skip; }
 
+    const Column* getCardinality() const { return _cardinality; }
+
+    void setCardinality(const Column* cardinality) { _cardinality = cardinality; }
+
 private:
     std::vector<const Column*> _columns;
     NLLimitState* _limit {nullptr};
     NLSkipState* _skip {nullptr};
+    // Column which may define the cardinality of the output
+    const Column* _cardinality {nullptr};
 };
 
 class NLProgram {

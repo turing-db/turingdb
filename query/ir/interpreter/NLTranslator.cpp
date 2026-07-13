@@ -41,17 +41,6 @@ llvm::StringRef edgeTypeName(mlir::Value handle) {
     return handleOp.getName();
 }
 
-static bool isDefinedInOuterScope(mlir::Operation* definingOp, mlir::Block* outputBlock) {
-    mlir::Block* current = outputBlock;
-    while (mlir::Operation* parentOp = current->getParentOp()) {
-        current = parentOp->getBlock();
-        if (current == definingOp->getBlock()) {
-            return true;
-        }
-    }
-    return false;
-}
-
 // The with-null fetch handler for a property's value type, on the node side
 // when isNode is true and the edge side otherwise. Selecting it here keeps the
 // value-type dispatch with the rest of translation; the handler bodies live in
@@ -516,6 +505,11 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
     NLOutputData* outputData = _program->allocFunctionData<NLOutputData>();
     outputData->setLimit(limitStateFor(output.getLimit()));
     outputData->setSkip(skipStateFor(output.getSkip()));
+
+    if (const mlir::Value cardinality = output.getCardinality()) {
+        outputData->setCardinality(getColumn(cardinality));
+    }
+
     for (const mlir::Value column : columns) {
         const auto columnArgument = mlir::dyn_cast<mlir::BlockArgument>(column);
         const bool isInnermostLoopVariable = columnArgument && columnArgument.getOwner() == outputBlock;

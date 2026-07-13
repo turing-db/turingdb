@@ -762,6 +762,8 @@ void NLExecutor::runOutput(NLExecutionContext* context, NLFunctionData* data) {
     // A folded output carries at most one of limit/skip, so the two never combine.
     const NLLimitState* limit = output->getLimit();
     const NLSkipState* skip = output->getSkip();
+    // Column that defines the cardinality of the result
+    const Column* cardinality = output->getCardinality();
 
     size_t offset = 0;
     size_t rowCount = 0;
@@ -770,6 +772,8 @@ void NLExecutor::runOutput(NLExecutionContext* context, NLFunctionData* data) {
         rowCount = skip->getEmitThisStep();
     } else if (limit) {
         rowCount = limit->getEmitThisStep();
+    } else if (cardinality) {
+        rowCount = cardinality->size();
     } else {
         // Logical row count, assumes all columns are either const or same dimension
         for (const Column* column : cols) {
