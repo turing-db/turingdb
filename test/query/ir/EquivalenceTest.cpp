@@ -295,4 +295,10 @@ TEST_F(EquivalenceTest, eqFilters) {
 
     // Disabled due to suspected v2 bug
     // expectEquivalent("MATCH (n)-->(a)-->(m), (a)-->(b) WHERE b = n RETURN n, a, m, b");
+
+    expectEquivalent("MATCH (n) WHERE NOT n.isFrench RETURN n");
+
+    expectEquivalent("MATCH (n) WHERE n.isFrench RETURN n");
+
+    expectEquivalent("MATCH (n)-->(a) WHERE NOT n.isFrench RETURN n, a");
 }

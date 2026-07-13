@@ -220,6 +220,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateAnd(andOp, body);
         } else if (nl::Or orOp = mlir::dyn_cast<nl::Or>(operation)) {
             translateOr(orOp, body);
+        } else if (nl::Not notOp = mlir::dyn_cast<nl::Not>(operation)) {
+            translateNot(notOp, body);
         } else if (nl::Filter filter = mlir::dyn_cast<nl::Filter>(operation)) {
             translateFilter(filter, body);
         } else if (nl::GetNodeProperties getNodeProperties = mlir::dyn_cast<nl::GetNodeProperties>(operation)) {
@@ -602,6 +604,19 @@ void NLTranslator::translateOr(nl::Or orOp, NLStmtContainer* body) {
 
     NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
     body->emplaceStmt(&NLExecutor::runBinary, data);
+}
+
+void NLTranslator::translateNot(nl::Not notOp, NLStmtContainer* body) {
+    const Column* operand = getColumn(notOp.getOperand());
+
+    Column* result = nullptr;
+    const NLUnaryFn fn = NLExecutor::selectNot(operand, _memory, result);
+    bioassert(result, "Failed to allocate NOT result column.");
+
+    _valueSlots[notOp.getResult()] = result;
+
+    NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
+    body->emplaceStmt(&NLExecutor::runUnary, data);
 }
 
 void NLTranslator::translateFilter(nl::Filter filter, NLStmtContainer* body) {

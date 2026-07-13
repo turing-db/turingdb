@@ -672,6 +672,13 @@ def OrOp : PredicateOp<"or", [Pure]> {
   let arguments = (ins ColumnBools : $lhs, ColumnBools : $rhs);
 }
 
+def NotOp : TuringOp<"not", [Pure]> {
+  let summary = "Row-wise logical NOT of a boolean column";
+  let arguments = (ins Column:$operand);
+  let results   = (outs ColumnBools:$result);
+  let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
+}
+
 def EqOp : PredicateOp<"eq", [Pure]> {
   let summary = "Row-wise equality of two value columns";
   let description = [{
@@ -717,7 +724,7 @@ def FilterOp : TuringOp<"filter", [Pure]> {
     %a2, %b2 = db.filter(%mask, {%a, %b})
   }];
 
-  let arguments = (ins ColumnBools:$mask, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$mask, Variadic<Column>:$columns_to_filter);
 
   let results   = (outs Variadic<Column>:$filtered_columns);
 

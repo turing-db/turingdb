@@ -141,6 +141,10 @@ public:
     static NLBinaryFn selectBinary(const Column* lhs, const Column* rhs,
                                    LocalMemory* memory, Column*& result);
 
+    static void runUnary(NLExecutionContext* context, NLFunctionData* data);
+
+    static NLUnaryFn selectNot(const Column* operand, LocalMemory* memory, Column*& result);
+
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
 
     // Gather for a nullable value chunk of this value type (sort emit re-chunk).

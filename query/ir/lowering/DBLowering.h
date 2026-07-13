@@ -239,6 +239,9 @@ private:
     void lowerAnd(mlir::db::AndOp andOp);
     void lowerOr(mlir::db::OrOp orOp);
 
+    // Propagates nullity from operand to result
+    void lowerNot(mlir::db::NotOp notOp);
+
     // Applies a mask to a carry set
     void lowerFilter(mlir::db::FilterOp filter);
 

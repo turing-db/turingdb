@@ -267,6 +267,7 @@ private:
 
     void translateAnd(mlir::nl::And andOp, NLStmtContainer* body);
     void translateOr(mlir::nl::Or orOp, NLStmtContainer* body);
+    void translateNot(mlir::nl::Not notOp, NLStmtContainer* body);
 
     void translateFilter(mlir::nl::Filter filter, NLStmtContainer* body);
 

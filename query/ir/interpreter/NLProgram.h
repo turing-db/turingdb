@@ -1176,6 +1176,29 @@ private:
     NLBinaryFn _fn {nullptr};
 };
 
+// Unary function to execute
+using NLUnaryFn = void (*)(Column* result, const Column* operand);
+
+// Unary function to execute, plus operand and result
+class NLUnaryData : public NLFunctionData {
+public:
+    NLUnaryData(const Column* operand, Column* result, NLUnaryFn fn)
+        : _operand(operand),
+        _result(result),
+        _fn(fn)
+    {
+    }
+
+    const Column* getOperand() const { return _operand; }
+    Column* getResult() const { return _result; }
+    NLUnaryFn getFn() const { return _fn; }
+
+private:
+    const Column* _operand {nullptr};
+    Column* _result {nullptr};
+    NLUnaryFn _fn {nullptr};
+};
+
 class NLProgram {
 public:
     NLProgram();

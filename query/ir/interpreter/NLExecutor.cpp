@@ -21,6 +21,7 @@
 #include "columns/ColumnOperators.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/AllowedKinds.h"
+#include "columns/UnaryPredicates.h"
 #include "metadata/PropertyType.h"
 
 #include "NLProgram.h"
@@ -174,6 +175,23 @@ void collectOptMaskSurvivors(const Column* mask, ColumnVector<size_t>* indices) 
 
 bool isMaskConstant(const Column* mask) {
     return mask->getContainerKind() == ContainerKind::code<ColumnConst<CustomBool>>();
+}
+
+void applyNotOnMask(Column* result, const Column* operand) {
+    UnaryPredicateExecutor<Not, ColumnMask::Bool_t>::apply(static_cast<ColumnMask*>(result),
+                                                          static_cast<const ColumnMask*>(operand));
+}
+
+void applyNotOnOptMask(Column* result, const Column* operand) {
+    using OptBool = std::optional<CustomBool>;
+    UnaryPredicateExecutor<Not, OptBool>::apply(static_cast<ColumnOptMask*>(result),
+                                               static_cast<const ColumnOptMask*>(operand));
+}
+
+void applyNotOnConst(Column* result, const Column* operand) {
+    const ColumnConst<CustomBool>* typedOperand = static_cast<const ColumnConst<CustomBool>*>(operand);
+    ColumnConst<CustomBool>* typedResult = static_cast<ColumnConst<CustomBool>*>(result);
+    UnaryPredicateExecutor<Not, CustomBool>::apply(typedResult, typedOperand);
 }
 
 // Block-repeat: each input row is emitted `factor` times in a row, so input row
@@ -950,6 +968,28 @@ void NLExecutor::runOutput(NLExecutionContext* context, NLFunctionData* data) {
 void NLExecutor::runBinary(NLExecutionContext*, NLFunctionData* data) {
     const NLBinaryData* binary = static_cast<NLBinaryData*>(data);
     binary->getFn()(binary->getResult(), binary->getLhs(), binary->getRhs());
+}
+
+void NLExecutor::runUnary(NLExecutionContext*, NLFunctionData* data) {
+    const NLUnaryData* unary = static_cast<NLUnaryData*>(data);
+    unary->getFn()(unary->getResult(), unary->getOperand());
+}
+
+NLUnaryFn NLExecutor::selectNot(const Column* operand, LocalMemory* memory, Column*& result) {
+    const ContainerKind::Code kind = operand->getContainerKind();
+
+    if (kind == ContainerKind::code<ColumnConst<CustomBool>>()) {
+        result = memory->alloc<ColumnConst<CustomBool>>();
+        return &applyNotOnConst;
+    }
+
+    if (kind == ContainerKind::code<ColumnOptMask>()) {
+        result = memory->alloc<ColumnOptMask>();
+        return &applyNotOnOptMask;
+    }
+
+    result = memory->alloc<ColumnMask>();
+    return &applyNotOnMask;
 }
 
 template <ColumnOperator Op>
