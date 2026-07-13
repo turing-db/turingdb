@@ -161,7 +161,7 @@ void SystemManager::initSystemEvents() {
     });
 }
 
-Graph* SystemManager::loadGraph(std::string_view name) {
+LoadGraphResult<Graph*> SystemManager::loadGraph(std::string_view name) {
     return _graphManager.loadGraph(name);
 }
 

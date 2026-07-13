@@ -71,10 +71,6 @@ class HTTPClient:
             self._client.timeout = prev
 
     def list_available_graphs(self) -> list[str]:
-        # Derived from the graphless LIST AVAILABLE GRAPHS statement rather than
-        # the dedicated /list_avail_graphs endpoint. Sent without a graph param
-        # (the old endpoint was graphless too) so it works regardless of the
-        # configured graph's load state.
         json = self._send_request("query", data="LIST AVAILABLE GRAPHS")
         if not isinstance(json, dict):
             raise TuringDBException("Invalid response from the server")
@@ -84,10 +80,6 @@ class HTTPClient:
         return df["graphName"].tolist()
 
     def list_loaded_graphs(self) -> list[str]:
-        # Derived from the graphless LIST GRAPH statement (like CypherHelpersMixin)
-        # rather than the /list_loaded_graphs endpoint. Sent without a graph param
-        # so it works regardless of the configured graph's load state —
-        # is_graph_loaded() relies on this for graphs that aren't loaded.
         json = self._send_request("query", data="LIST GRAPH")
         if not isinstance(json, dict):
             raise TuringDBException("Invalid response from the server")
@@ -97,17 +89,15 @@ class HTTPClient:
         return df["graphName"].tolist()
 
     def is_graph_loaded(self) -> bool:
-        # Derived from LIST GRAPH (via list_loaded_graphs) rather than the
-        # dedicated /is_graph_loaded endpoint — matches CypherHelpersMixin so the
-        # endpoint can be retired server-side.
         return self.current_graph in self.list_loaded_graphs()
 
     def load_graph(self, graph_name: str, raise_if_loaded: bool = True):
         try:
-            return self._send_request("load_graph", params={"graph": graph_name})
+            return self._send_request("query", data=f"LOAD GRAPH {graph_name}")
         except TuringDBException as e:
-            if raise_if_loaded or e.__str__() != "GRAPH_ALREADY_EXISTS":
-                raise e
+            if not raise_if_loaded and "Graph already loaded" in str(e):
+                return None
+            raise
 
     def create_graph(self, graph_name: str):
         return self.query(f"create graph {graph_name}")

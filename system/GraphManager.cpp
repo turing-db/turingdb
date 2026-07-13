@@ -78,23 +78,19 @@ Graph* GraphManager::createGraph(std::string_view name) {
     return graphPtr;
 }
 
-Graph* GraphManager::loadGraph(std::string_view name) {
+LoadGraphResult<Graph*> GraphManager::loadGraph(std::string_view name) {
     const fs::Path graphPath = _config->getGraphsDir() / name;
 
     ObjectMap<Graph>::SlotReservation reservation = _graphs.reserve(name);
     if (!reservation.isValid()) {
-        spdlog::error("Failed to register graph '{}': "
-                      "a graph with this name is already loaded", name);
-        return nullptr;
+        return LoadGraphError::result(LoadGraphErrorType::GRAPH_EXISTS);
     }
 
     auto graph = Graph::create(std::string(name), graphPath);
     Graph* graphPtr = graph.get();
 
-    if (const auto res = GraphLoader::load(graph.get(), graphPath); !res) {
-        spdlog::error("Failed to load graph '{}' from {}: {}",
-                      name, graphPath.get(), res.error().fmtMessage());
-        return nullptr;
+    if (auto res = GraphLoader::load(graph.get(), graphPath); !res) {
+        return LoadGraphError::result(LoadGraphErrorType::FILE_ERROR, res.error());
     }
 
     reservation.publish(std::move(graph));
@@ -114,11 +110,9 @@ void GraphManager::listGraphs(std::vector<std::string_view>& names) const {
 }
 
 void GraphManager::loadOrCreateDefaultGraph() {
-    Graph* graph = loadGraph("default");
+    const LoadGraphResult<Graph*> loadRes = loadGraph("default");
 
-    if (!graph) {
-        graph = createGraph("default");
-    }
+    Graph* graph = loadRes.has_value() ? loadRes.value() : createGraph("default");
 
     if (!graph) {
         throw FatalException("Could not initialise the default graph");

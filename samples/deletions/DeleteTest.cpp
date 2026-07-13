@@ -145,7 +145,7 @@ bool DeleteTest::run() {
     bool loaded = false;
     {
         SystemAccessor system = sysMan.accessUnique();
-        loaded = system.loadGraph(_graphName);
+        loaded = system.loadGraph(_graphName).has_value();
         if (!loaded) {
             loaded = system.importGraph(fs::Path {_graphName}, _graphName);
         }

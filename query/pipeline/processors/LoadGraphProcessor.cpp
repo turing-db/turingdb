@@ -9,6 +9,8 @@
 #include "SystemManager.h"
 #include "PipelineException.h"
 
+#include "dump/LoadGraphResult.h"
+
 using namespace db;
 
 LoadGraphProcessor::LoadGraphProcessor(std::string_view graphName)
@@ -47,9 +49,10 @@ void LoadGraphProcessor::reset() {
 void LoadGraphProcessor::execute() {
     SystemAccessor* system = _ctxt->getSystemAccessor();
 
-    const bool res = system->loadGraph(_graphName);
+    const LoadGraphResult<Graph*> res = system->loadGraph(_graphName);
     if (!res) {
-        throw PipelineException(fmt::format("Failed to load graph '{}'", _graphName));
+        throw PipelineException(
+            fmt::format("Failed to load graph '{}': {}", _graphName, res.error().fmtMessage()));
     }
 
     using ColumnString = ColumnConst<types::String::Primitive>;

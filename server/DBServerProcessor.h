@@ -48,22 +48,6 @@ private:
     const net::HTTP::Info& getHttpInfo() const;
 
     void query();
-    void load_graph();
-    void get_graph_status();
-    void is_graph_loaded();
-    void is_graph_loading();
-    void list_loaded_graphs();
-    void list_avail_graphs();
-    void list_labels();
-    void list_property_types();
-    void list_edge_types();
-    void list_nodes();
-    void get_node_properties();
-    void get_neighbors();
-    void get_nodes();
-    void get_node_edges();
-    void get_edges();
-    void explore_node_edges();
 
     struct TransactionInfo {
         std::string graphName;

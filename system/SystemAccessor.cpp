@@ -52,7 +52,7 @@ void SystemAccessor::setDefaultGraph(std::string_view name) {
     _sysMan->setDefaultGraph(name);
 }
 
-Graph* SystemAccessor::loadGraph(std::string_view name) {
+LoadGraphResult<Graph*> SystemAccessor::loadGraph(std::string_view name) {
     return _sysMan->loadGraph(name);
 }
 

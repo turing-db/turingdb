@@ -85,43 +85,11 @@ public:
 
 private:
     static constexpr std::string_view STR_QUERY = "/query";
-    static constexpr std::string_view STR_LOAD_GRAPH = "/load_graph";
-    static constexpr std::string_view STR_GET_GRAPH_STATUS = "/get_graph_status";
-    static constexpr std::string_view STR_IS_GRAPH_LOADED = "/is_graph_loaded";
-    static constexpr std::string_view STR_IS_GRAPH_LOADING = "/is_graph_loading";
-    static constexpr std::string_view STR_LIST_LOADED_GRAPHS = "/list_loaded_graphs";
-    static constexpr std::string_view STR_LIST_AVAIL_GRAPHS = "/list_avail_graphs";
-    static constexpr std::string_view STR_LIST_LABELS = "/list_labels";
-    static constexpr std::string_view STR_LIST_PROPERTY_TYPES = "/list_property_types";
-    static constexpr std::string_view STR_LIST_EDGE_TYPES = "/list_edge_types";
-    static constexpr std::string_view STR_LIST_NODES = "/list_nodes";
-    static constexpr std::string_view STR_GET_NODE_PROPERTIES = "/get_node_properties";
-    static constexpr std::string_view STR_GET_NEIGHBORS = "/get_neighbors";
-    static constexpr std::string_view STR_GET_NODES = "/get_nodes";
-    static constexpr std::string_view STR_GET_NODE_EDGES = "/get_node_edges";
-    static constexpr std::string_view STR_GET_EDGES = "/get_edges";
-    static constexpr std::string_view STR_EXPLORE_NODE_EDGES = "/explore_node_edges";
 
     static net::HTTP::Result<net::HTTP::EndpointIndex> getEndpointIndex(std::string_view path) {
         using EndpointMap = std::unordered_map<net::HTTP::Path, net::HTTP::EndpointIndex>;
         static const EndpointMap endpoints = {
-            {STR_QUERY,               (size_t)Endpoint::QUERY              },
-            {STR_LOAD_GRAPH,          (size_t)Endpoint::LOAD_GRAPH         },
-            {STR_GET_GRAPH_STATUS,    (size_t)Endpoint::GET_GRAPH_STATUS   },
-            {STR_IS_GRAPH_LOADED,     (size_t)Endpoint::IS_GRAPH_LOADED    },
-            {STR_IS_GRAPH_LOADING,    (size_t)Endpoint::IS_GRAPH_LOADING   },
-            {STR_LIST_LOADED_GRAPHS,  (size_t)Endpoint::LIST_LOADED_GRAPHS },
-            {STR_LIST_AVAIL_GRAPHS,   (size_t)Endpoint::LIST_AVAIL_GRAPHS  },
-            {STR_LIST_LABELS,         (size_t)Endpoint::LIST_LABELS        },
-            {STR_LIST_PROPERTY_TYPES, (size_t)Endpoint::LIST_PROPERTY_TYPES},
-            {STR_LIST_EDGE_TYPES,     (size_t)Endpoint::LIST_EDGE_TYPES    },
-            {STR_LIST_NODES,          (size_t)Endpoint::LIST_NODES         },
-            {STR_GET_NODE_PROPERTIES, (size_t)Endpoint::GET_NODE_PROPERTIES},
-            {STR_GET_NEIGHBORS,       (size_t)Endpoint::GET_NEIGHBORS      },
-            {STR_GET_NODES,           (size_t)Endpoint::GET_NODES          },
-            {STR_GET_NODE_EDGES,      (size_t)Endpoint::GET_NODE_EDGES     },
-            {STR_GET_EDGES,           (size_t)Endpoint::GET_EDGES          },
-            {STR_EXPLORE_NODE_EDGES,  (size_t)Endpoint::EXPLORE_NODE_EDGES },
+            {STR_QUERY, (size_t)Endpoint::QUERY},
         };
 
         auto endpointIt = endpoints.find(path);
