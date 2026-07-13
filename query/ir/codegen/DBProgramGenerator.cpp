@@ -5,6 +5,7 @@
 #include <string_view>
 #include <type_traits>
 
+#include "expr/Operators.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Block.h"
 #include "mlir/IR/Builders.h"
@@ -34,8 +35,10 @@
 #include "SinglePartQuery.h"
 #include "WhereClause.h"
 #include "decl/VarDecl.h"
+#include "Literal.h"
 #include "expr/BinaryExpr.h"
 #include "expr/Expr.h"
+#include "expr/LiteralExpr.h"
 #include "expr/PropertyExpr.h"
 #include "expr/UnaryExpr.h"
 #include "stmt/MatchStmt.h"
@@ -587,7 +590,44 @@ void DBProgramGenerator::generateFilters(const CypherAST* ast) {
             continue;
         }
 
-        translateExpr(where->getExpr());
+        const Expr* predicateExpr = where->getExpr();
+        translateExpr(predicateExpr);
+
+        if (!_exprMap.contains(predicateExpr)) {
+            continue;
+        }
+
+        const mlir::Value predicate = _exprMap.at(predicateExpr);
+        const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+        // Filter all columns that are defined here
+        llvm::SmallVector<mlir::Value> columnsToFilter;
+        // Track the variables to insert the new filtered values into the map
+        llvm::SmallVector<const VariableDependency*> orderedVars;
+        for (auto& [var, values] : _varMap) {
+            columnsToFilter.push_back(values.back());
+            orderedVars.push_back(var);
+        }
+
+        // FIXME: does this work for WHERE 10 = 10 (i.e. purely-literal predicate)
+        if (columnsToFilter.empty()) {
+            continue;
+        }
+
+        // Result types are the same as the input types
+        llvm::SmallVector<mlir::Type> resultTypes;
+        for (const mlir::Value column : columnsToFilter) {
+            resultTypes.push_back(column.getType());
+        }
+
+        mlir::db::FilterOp filterOp = _opBuilder.create<mlir::db::FilterOp>(
+            loc, resultTypes, predicate, columnsToFilter);
+
+        for (size_t index = 0; index < orderedVars.size(); index++) {
+            const VariableDependency* var = orderedVars[index];
+            const mlir::Value result = filterOp.getResult(index);
+            _varMap.at(var).push_back(result);
+        }
     }
 }
 
@@ -596,21 +636,80 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         return;
     }
 
-    switch (expr->getKind()) {
+    const Expr::Kind kind = expr->getKind();
+    switch (kind) {
         case Expr::Kind::PROPERTY: {
             const PropertyExpr* propExpr = static_cast<const PropertyExpr*>(expr);
             _exprMap[expr] = translatePropertyExpr(propExpr);
         }
         break;
 
-        case Expr::Kind::BINARY: {
-            const BinaryExpr* binExpr = static_cast<const BinaryExpr*>(expr);
-            translateExpr(binExpr->getLHS());
-            translateExpr(binExpr->getRHS());
+        case Expr::Kind::LITERAL: {
+            const LiteralExpr* litExpr = static_cast<const LiteralExpr*>(expr);
+            _exprMap[expr] = translateLiteralExpr(litExpr->getLiteral());
         }
         break;
 
-        case Expr::Kind::LITERAL:
+        case Expr::Kind::BINARY: {
+            const BinaryExpr* binExpr = static_cast<const BinaryExpr*>(expr);
+            const Expr* lhs = binExpr->getLHS();
+            const Expr* rhs = binExpr->getRHS();
+
+            translateExpr(lhs);
+            translateExpr(rhs);
+
+            if (!_exprMap.contains(lhs) || !_exprMap.contains(rhs)) {
+                break;
+            }
+
+            const mlir::Value lhsVal = _exprMap.at(lhs);
+            const mlir::Value rhsVal = _exprMap.at(rhs);
+            const mlir::Location loc = _opBuilder.getUnknownLoc();
+            const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+            const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+            const BinaryOperator op = binExpr->getOperator();
+
+            switch (op) {
+                case BinaryOperator::Equal:
+                    _exprMap[expr] = _opBuilder.create<mlir::db::EqOp>(loc, boolType, lhsVal, rhsVal).getResult();
+                break;
+                case BinaryOperator::And:
+                    _exprMap[expr] = _opBuilder.create<mlir::db::AndOp>(loc, boolType, lhsVal, rhsVal).getResult();
+                break;
+                case BinaryOperator::Or:
+                    _exprMap[expr] = _opBuilder.create<mlir::db::OrOp>(loc, boolType, lhsVal, rhsVal).getResult();
+                break;
+                case BinaryOperator::Add:
+                    _exprMap[expr] = _opBuilder.create<mlir::db::AddOp>(loc, noneType, lhsVal, rhsVal).getResult();
+                break;
+                case BinaryOperator::Sub:
+                    _exprMap[expr] = _opBuilder.create<mlir::db::SubOp>(loc, noneType, lhsVal, rhsVal).getResult();
+                break;
+                case BinaryOperator::Mult:
+                    _exprMap[expr] = _opBuilder.create<mlir::db::MulOp>(loc, noneType, lhsVal, rhsVal).getResult();
+                break;
+
+                case BinaryOperator::Xor:
+                case BinaryOperator::NotEqual:
+                case BinaryOperator::LessThan:
+                case BinaryOperator::GreaterThan:
+                case BinaryOperator::LessThanOrEqual:
+                case BinaryOperator::GreaterThanOrEqual:
+                case BinaryOperator::Div:
+                case BinaryOperator::Mod:
+                case BinaryOperator::Pow:
+                case BinaryOperator::In:
+                    throw TuringException(fmt::format("Unsupported operation: {}",
+                                    BinaryOperatorDescription::value(op)));
+                break;
+
+                case BinaryOperator::_SIZE:
+                break;
+            }
+        }
+        break;
+
         case Expr::Kind::SYMBOL:
         case Expr::Kind::UNARY:
         case Expr::Kind::FUNCTION_INVOCATION:
@@ -619,12 +718,44 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         case Expr::Kind::STRING:
         case Expr::Kind::ENTITY_TYPES:
         case Expr::Kind::PATH:
-            break;
+            throw TuringException(fmt::format("Unsupported expression: {}",
+                                              ExprKindDescription::value(kind)));
+        break;
 
         case Expr::Kind::_SIZE:
             throw FatalException("Invalid expression kind.");
         break;
     }
+}
+
+mlir::Value DBProgramGenerator::translateLiteralExpr(const Literal* literal) {
+    const mlir::Location uloc = _opBuilder.getUnknownLoc();
+
+    mlir::TypedAttr valueAttr;
+
+    switch (literal->getKind()) {
+        case Literal::Kind::BOOL: {
+            const BoolLiteral* boolLiteral = static_cast<const BoolLiteral*>(literal);
+            valueAttr = _opBuilder.getBoolAttr(boolLiteral->getValue());
+        }
+        break;
+        case Literal::Kind::INTEGER: {
+            const IntegerLiteral* intLiteral = static_cast<const IntegerLiteral*>(literal);
+            valueAttr = _opBuilder.getI64IntegerAttr(intLiteral->getValue());
+        }
+        break;
+        case Literal::Kind::DOUBLE: {
+            const DoubleLiteral* doubleLiteral = static_cast<const DoubleLiteral*>(literal);
+            valueAttr = _opBuilder.getF64FloatAttr(doubleLiteral->getValue());
+        }
+        break;
+        default:
+            throw FatalException("Unsupported literal kind in WHERE clause expression.");
+        break;
+    }
+
+    const mlir::db::ColumnType resultType = allocColumnType(valueAttr.getType());
+    return _opBuilder.create<mlir::db::ConstantOp>(uloc, resultType, valueAttr).getResult();
 }
 
 mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propExpr) {

@@ -289,6 +289,9 @@ private:
     // lowered op belongs
     void setInsertionInto(mlir::Block* block);
 
+    // Point the builder at the right place for an op consuming lhs and rhs.
+    void setInsertionForBinaryOp(mlir::Value lhs, mlir::Value rhs);
+
     // The nl chunk a db value lowered to, and the block that holds a chunk
     mlir::Value mapValue(mlir::Value dbValue) const;
     static mlir::Block* ownerBlock(mlir::Value chunkValue);

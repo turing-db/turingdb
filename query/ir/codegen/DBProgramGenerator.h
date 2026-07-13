@@ -25,6 +25,7 @@ namespace db {
 
 class CypherAST;
 class Expr;
+class Literal;
 class PropertyExpr;
 class VariableDependency;
 class DependencyEdge;
@@ -81,6 +82,7 @@ private:
     void generateFilters(const CypherAST* ast);
 
     void translateExpr(const Expr* expr);
+    mlir::Value translateLiteralExpr(const Literal* literal);
     mlir::Value translatePropertyExpr(const PropertyExpr* propExpr);
 
     void addScanNodes(const VariableDependency* var);

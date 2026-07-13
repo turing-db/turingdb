@@ -1189,7 +1189,7 @@ void DBLowering::lowerAdd(mlir::db::AddOp add) {
 
     const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
 
-    setInsertionInto(deeperBlock(lhsChunk, rhsChunk));
+    setInsertionForBinaryOp(lhsChunk, rhsChunk);
 
     const mlir::Location uloc = _builder.getUnknownLoc();
     nl::Add addOp = _builder.create<nl::Add>(uloc, resultType, lhsChunk, rhsChunk);
@@ -1213,7 +1213,7 @@ void DBLowering::lowerSub(mlir::db::SubOp sub) {
 
     const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
 
-    setInsertionInto(deeperBlock(lhsChunk, rhsChunk));
+    setInsertionForBinaryOp(lhsChunk, rhsChunk);
 
     const mlir::Location uloc = _builder.getUnknownLoc();
     nl::Sub subOp = _builder.create<nl::Sub>(uloc, resultType, lhsChunk, rhsChunk);
@@ -1237,7 +1237,7 @@ void DBLowering::lowerMul(mlir::db::MulOp mul) {
 
     const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
 
-    setInsertionInto(deeperBlock(lhsChunk, rhsChunk));
+    setInsertionForBinaryOp(lhsChunk, rhsChunk);
 
     const mlir::Location uloc = _builder.getUnknownLoc();
     nl::Mul mulOp = _builder.create<nl::Mul>(uloc, resultType, lhsChunk, rhsChunk);
@@ -1262,8 +1262,7 @@ void DBLowering::lowerEq(mlir::db::EqOp eq) {
 
     const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
 
-    // Insert into the first point where both operands are available
-    setInsertionInto(deeperBlock(lhsChunk, rhsChunk));
+    setInsertionForBinaryOp(lhsChunk, rhsChunk);
 
     nl::Eq eqOp = _builder.create<nl::Eq>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
     _valueMap[eq.getResult()] = eqOp.getResult();
@@ -1289,8 +1288,7 @@ void DBLowering::lowerAnd(mlir::db::AndOp andOp) {
 
     const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
 
-    // Insert into the first point where both operands are available
-    setInsertionInto(deeperBlock(lhsChunk, rhsChunk));
+    setInsertionForBinaryOp(lhsChunk, rhsChunk);
 
     nl::And nlAndOp = _builder.create<nl::And>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
     _valueMap[andOp.getResult()] = nlAndOp.getResult();
@@ -1316,8 +1314,7 @@ void DBLowering::lowerOr(mlir::db::OrOp orOp) {
 
     const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
 
-    // Insert into the first point where both operands are available
-    setInsertionInto(deeperBlock(lhsChunk, rhsChunk));
+    setInsertionForBinaryOp(lhsChunk, rhsChunk);
 
     nl::Or nlOrOp = _builder.create<nl::Or>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
     _valueMap[orOp.getResult()] = nlOrOp.getResult();
@@ -1465,6 +1462,36 @@ void DBLowering::setInsertionInto(mlir::Block* block) {
     // or a loop body's implicit nl.yield - so the next op goes just before it,
     // after any siblings already lowered here.
     _builder.setInsertionPoint(block->getTerminator());
+}
+
+void DBLowering::setInsertionForBinaryOp(mlir::Value lhs, mlir::Value rhs) {
+    // If both operands are top-level constants (in `_entryBlock`), then place the op
+    // after the latter defined constant. Otherwise place the op in the more deeply nested
+    // block.
+    mlir::Block* const insertBlock = deeperBlock(lhs, rhs);
+
+    if (insertBlock != _entryBlock) {
+        setInsertionInto(insertBlock);
+        return;
+    }
+
+    mlir::Operation* const lhsDef = lhs.getDefiningOp();
+    mlir::Operation* const rhsDef = rhs.getDefiningOp();
+
+    // Walk the entry block to find which of the two defining ops appears later —
+    // the new op must go after that one to stay before any nl.for that follows.
+    mlir::Operation* lastDef = nullptr;
+    for (mlir::Operation& op : *_entryBlock) {
+        if (&op == lhsDef || &op == rhsDef) {
+            lastDef = &op;
+        }
+    }
+
+    if (lastDef) {
+        _builder.setInsertionPointAfter(lastDef);
+    } else {
+        _builder.setInsertionPointToStart(_entryBlock);
+    }
 }
 
 mlir::Value DBLowering::mapValue(mlir::Value dbValue) const {

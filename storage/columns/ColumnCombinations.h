@@ -4,7 +4,9 @@
 
 #include "ColumnVector.h"
 #include "ColumnMask.h"
+#include "ColumnConst.h"
 #include "TypeUtils.h"
+#include "metadata/PropertyType.h"
 
 namespace db {
 
@@ -114,7 +116,7 @@ template <typename Op, typename T, typename U>
     requires TuringPredicate<Op, T, U>
 class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnConst<U>> {
 public:
-    using ResultColumnType = ColumnMask;
+    using ResultColumnType = ColumnConst<CustomBool>;
 };
 
 /*

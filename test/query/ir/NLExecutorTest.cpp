@@ -279,18 +279,27 @@ private:
     bool _bool {false};
 };
 
-// Collects a single boolean mask column - the non-null result of a comparison, a
-// ColumnMask (not a value vector) - as one bool per row.
+// Collects a single boolean mask column - the result of a comparison. The chunk
+// may be a per-row ColumnMask or a scalar ColumnConst<CustomBool> when both
+// operands of the predicate were constants.
 class CollectingMaskSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* mask = dynamic_cast<const ColumnMask*>(chunks[0]);
-        ASSERT_NE(mask, nullptr);
+        const Column* col = chunks[0];
 
-        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _values.push_back((*mask)[rowIndex]);
+        if (col->getContainerKind() == ContainerKind::code<ColumnConst<CustomBool>>()) {
+            const ColumnConst<CustomBool>* constMask = static_cast<const ColumnConst<CustomBool>*>(col);
+            for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+                _values.push_back(static_cast<bool>((*constMask)[rowIndex]));
+            }
+        } else {
+            const auto* mask = dynamic_cast<const ColumnMask*>(col);
+            ASSERT_NE(mask, nullptr);
+            for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+                _values.push_back((*mask)[rowIndex]);
+            }
         }
     }
 

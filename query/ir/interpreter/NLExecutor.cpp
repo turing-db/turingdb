@@ -172,6 +172,10 @@ void collectOptMaskSurvivors(const Column* mask, ColumnVector<size_t>* indices) 
     }
 }
 
+bool isMaskConstant(const Column* mask) {
+    return mask->getContainerKind() == ContainerKind::code<ColumnConst<CustomBool>>();
+}
+
 // Block-repeat: each input row is emitted `factor` times in a row, so input row
 // i lands at output indices [i*factor, (i+1)*factor). This lays out an outer
 // column of a cross product, where each outer row pairs with the whole inner
@@ -1065,12 +1069,28 @@ void NLExecutor::runFilter(NLExecutionContext* context, NLFunctionData* data) {
     const std::vector<NLFilterData::FilterColumn>& columns = filter->columns();
     bioassert(!columns.empty(), "nl.filter needs at least one column");
 
-    // Collect this step's surviving row indices from the mask: a row survives iff
-    // the mask is true at that row (a null drops). The collector is fixed by the
-    // mask's nullability, so it reads the concrete mask column directly.
+    const Column* mask = filter->getMask();
+
+    // Special case for a ColumnConst<Bool> mask where all rows are either kept or
+    // filtered
+    if (isMaskConstant(mask)) {
+        const auto* constMask = static_cast<const ColumnConst<CustomBool>*>(mask);
+        const bool passes = !constMask->empty() && constMask->getRaw()._boolean;
+
+        for (const NLFilterData::FilterColumn& column : columns) {
+            if (passes) {
+                column._output->assign(column._input);
+            } else {
+                column._output->clear();
+            }
+        }
+        return;
+    }
+
+    // General case: Otherwise apply the mask to each column
     ColumnVector<size_t>* indices = filter->getIndices();
     indices->getRaw().clear();
-    filter->getSurvivors()(filter->getMask(), indices);
+    filter->getSurvivors()(mask, indices);
 
     for (const NLFilterData::FilterColumn& column : columns) {
         column._gather(column._input, indices, column._output);
