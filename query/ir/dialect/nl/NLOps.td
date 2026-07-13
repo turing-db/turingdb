@@ -1087,4 +1087,20 @@ def Or : NLOp<"or", [Pure]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
+def Filter : NLOp<"filter", [Pure]> {
+  let summary = "Keep only the rows where the mask chunk is true, as freshly cut chunks";
+  let description = [{
+    Applies a boolean mask to a carry set of chunks.
+
+    %a2 = nl.filter %mask, (%a) : (!nl.chunk<i1>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.node_id>
+  }];
+
+  let arguments = (ins NLChunk:$mask, Variadic<NLChunk>:$columns);
+  let results   = (outs Variadic<NLChunk>:$results);
+
+  let assemblyFormat = [{
+    $mask `,` `(` $columns `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 #endif //TURINGDB_NL_OPS

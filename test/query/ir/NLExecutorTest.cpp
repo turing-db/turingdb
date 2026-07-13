@@ -659,6 +659,89 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n) WHERE n.score = 200 RETURN n
+constexpr const char* filterKeepsMatchingNodeProgram = R"mlir(
+func.func @main() {
+  %score = nl.get_property_type("score")
+  %k = nl.constant(200 : i64)
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %v = nl.get_node_properties(%a, %score) : !nl.chunk<!storage.nullable<i64>>
+    %mask = nl.eq %v, %k : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+    %a2 = nl.filter %mask, (%a) : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.node_id>
+    nl.output(%a2) : !nl.chunk<!storage.node_id>
+  }
+  func.return
+}
+)mlir";
+
+// MATCH (n) WHERE n.score = 200 RETURN n, n.score
+constexpr const char* filterAlignsCarriedColumnsProgram = R"mlir(
+func.func @main() {
+  %score = nl.get_property_type("score")
+  %k = nl.constant(200 : i64)
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %v = nl.get_node_properties(%a, %score) : !nl.chunk<!storage.nullable<i64>>
+    %mask = nl.eq %v, %k : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+    %a2, %v2 = nl.filter %mask, (%a, %v) : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i64>>) -> (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i64>>)
+    nl.output(%a2, %v2) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<i64>>
+  }
+  func.return
+}
+)mlir";
+
+// MATCH (n) WHERE n = 1 RETURN n
+constexpr const char* filterPlainMaskProgram = R"mlir(
+func.func @main() {
+  %k1 = nl.constant(1 : i64)
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %mask = nl.eq %a, %k1 : (!nl.chunk<!storage.node_id>, !nl.chunk<i64>) -> !nl.chunk<i1>
+    %a2 = nl.filter %mask, (%a) : (!nl.chunk<i1>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.node_id>
+    nl.output(%a2) : !nl.chunk<!storage.node_id>
+  }
+  func.return
+}
+)mlir";
+
+// MATCH (n) WHERE n.score = 999 RETURN n
+constexpr const char* filterAllFalseProgram = R"mlir(
+func.func @main() {
+  %score = nl.get_property_type("score")
+  %k = nl.constant(999 : i64)
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %v = nl.get_node_properties(%a, %score) : !nl.chunk<!storage.nullable<i64>>
+    %mask = nl.eq %v, %k : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+    %a2 = nl.filter %mask, (%a) : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.node_id>
+    nl.output(%a2) : !nl.chunk<!storage.node_id>
+  }
+  func.return
+}
+)mlir";
+
+// A non-constant value bound in the OUTER scan loop (a per-node property fetch),
+// output from inside the INNER edge loop. This is malformed: %score has node
+// cardinality, is not a broadcast constant, and is not row-aligned with the inner
+// loop's rows. The db->nl lowering never produces this (it carries such values
+// inward as loop variables), so it can only be hand-written; translateOutput must
+// reject it, since only a constant may be referenced across scopes.
+constexpr const char* outerScopeOutputColumnProgram = R"mlir(
+func.func @main() {
+  %p = nl.get_property_type("score")
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %score = nl.get_node_properties(%a, %p) : !nl.chunk<!storage.nullable<i64>>
+    %edges = nl.get_out_edges(%a, {})
+    nl.for %srcs, %eids, %etypes, %b in %edges : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
+      nl.output(%score) : !nl.chunk<!storage.nullable<i64>>
+    }
+  }
+  func.return
+}
+)mlir";
+
 // Scan all nodes and output them
 constexpr const char* scanProgram = R"mlir(
 func.func @main() {
@@ -1595,6 +1678,89 @@ TEST_F(NLExecutorTest, orNullWithTrueIsTrue) {
     std::vector<std::pair<uint64_t, std::optional<bool>>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows, expected);
+}
+
+<<<<<<< HEAD
+=======
+TEST_F(NLExecutorTest, filterKeepsMatchingNode) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runProgram(filterKeepsMatchingNodeProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    // Only node 1 scores 200; nodes 0 and 2 drop (false and null).
+    const std::vector<std::vector<uint64_t>> expected {{1}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(NLExecutorTest, filterAlignsCarriedColumns) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeIntPropSink sink;
+    runProgram(filterAlignsCarriedColumnsProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    // Only node 1 survives; its node ID and score stay paired through the filter.
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {
+        {1, 200}
+    };
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(NLExecutorTest, filterPlainMaskKeepsMatchingNode) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runProgram(filterPlainMaskProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    // (n = 1) is a non-null mask true only for node 1.
+    const std::vector<std::vector<uint64_t>> expected {{1}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(NLExecutorTest, filterAllFalseYieldsNoRows) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runProgram(filterAllFalseProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    // No node scores 999, so every row drops.
+    const std::vector<std::vector<uint64_t>> expected {};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+// Illustrates review finding #2: translateOutput's isFromOuterScope check accepts
+// ANY op-result from an enclosing block, not just a broadcast constant. Here a
+// per-node property fetch bound in the outer scan loop is output inside the inner
+// edge loop - not row-aligned with the inner loop and not a constant - so the
+// translator must reject it. This test currently FAILS: the malformed program is
+// wrongly accepted (translation does not throw) and runOutput emits the outer
+// column's rows. It passes once the output guard is tightened to admit only a
+// constant (or a loop variable / in-block chunk) across scopes.
+TEST_F(NLExecutorTest, outputRejectsNonConstantOuterScopeColumn) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingOptInt64Sink sink;
+    EXPECT_THROW(
+        runProgram(outerScopeOutputColumnProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink),
+        IRException);
 }
 
 TEST_F(NLExecutorTest, getNodeProperties) {
