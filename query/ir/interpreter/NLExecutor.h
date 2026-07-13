@@ -95,6 +95,9 @@ public:
     // gather the surviving rows into fresh output chunks. The sole seen-set mutator.
     static void runDistinctFilter(NLExecutionContext* context, NLFunctionData* data);
 
+    // Apply a mask to the entire carry set
+    static void runFilter(NLExecutionContext* context, NLFunctionData* data);
+
     // Zero the tally of a COUNT; runs each time its block runs.
     static void runCountReset(NLExecutionContext* context, NLFunctionData* data);
 
@@ -134,6 +137,10 @@ public:
 
     // Gather for a nullable value chunk of this value type (sort emit re-chunk).
     static NLGatherFunction selectOptGatherFunction(ValueType valueType);
+
+    // The mask survivor collector for an nl.filter, chosen by the mask chunk's
+    // nullability: a nullable mask drops null rows as well as false ones.
+    static NLMaskSurvivorFunction selectMaskSurvivorFunction(bool nullable);
 
     // Append (onto a buffer tail) for an ID chunk of this kind / a nullable value
     // chunk of this value type. Used by nl.sort_collect.

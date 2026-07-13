@@ -765,6 +765,57 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (a) WHERE a.score = a.score RETURN a
+constexpr const char* filterKeepsMatchingNodesProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %score2 = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %mask = db.eq %score, %score2 : (!db.column<none>, !db.column<none>) -> !db.column<!storage.bool>
+  %a2 = db.filter(%mask, {%a}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%a2) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// MATCH (a) WHERE a.score = 200 RETURN a, a.score
+constexpr const char* filterAlignsCarriedColumnsProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %k = db.constant(200 : i64)
+  %mask = db.eq %score, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %a2, %score2 = db.filter(%mask, {%a, %score}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<none>) -> (!db.column<!storage.node_id>, !db.column<none>)
+  db.output(%a2, %score2) : !db.column<!storage.node_id>, !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a) WHERE a = 1 RETURN a
+constexpr const char* filterPlainMaskProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %k1 = db.constant(1 : i64)
+  %mask = db.eq %a, %k1 : (!db.column<!storage.node_id>, !db.column<i64>) -> !db.column<!storage.bool>
+  %a2 = db.filter(%mask, {%a}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%a2) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// MATCH (a) WHERE a.score = 999 RETURN a
+constexpr const char* filterAllFalseProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %k = db.constant(999 : i64)
+  %mask = db.eq %score, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %a2 = db.filter(%mask, {%a}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%a2) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // Scan all nodes and output them
 constexpr const char* scanProgram = R"mlir(
 func.func @main() {
@@ -2129,6 +2180,69 @@ TEST_F(DBLoweringTest, orNullWithTrueIsTrue) {
         {0, false}, {1, true}, {2, true}
     };
     std::vector<std::pair<uint64_t, std::optional<bool>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, filterKeepsMatchingNodes) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runLoweredProgram(filterKeepsMatchingNodesProgram, reader.getView(), sink);
+
+    // Nodes 0 and 1 have a score (self-equality is true); node 2 has none (null),
+    // so it drops.
+    const std::vector<std::vector<uint64_t>> expected {{0}, {1}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, filterAlignsCarriedColumns) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeIntPropSink sink;
+    runLoweredProgram(filterAlignsCarriedColumnsProgram, reader.getView(), sink);
+
+    // Only node 1 scores 200; its node ID and score stay paired through the filter.
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {
+        {1, 200}
+    };
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, filterPlainMaskKeepsMatchingNode) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runLoweredProgram(filterPlainMaskProgram, reader.getView(), sink);
+
+    // (a = 1) is a non-null mask true only for node 1.
+    const std::vector<std::vector<uint64_t>> expected {{1}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, filterAllFalseYieldsNoRows) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runLoweredProgram(filterAllFalseProgram, reader.getView(), sink);
+
+    // No node scores 999, so every row drops.
+    const std::vector<std::vector<uint64_t>> expected {};
+    std::vector<std::vector<uint64_t>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows, expected);
 }

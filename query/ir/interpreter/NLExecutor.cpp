@@ -11,6 +11,7 @@
 #include "iterators/ScanNodesIterator.h"
 #include "iterators/ScanNodesByLabelIterator.h"
 #include "columns/ColumnOptVector.h"
+#include "columns/ColumnMask.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnCombinations.h"
 #include "columns/ColumnOperator.h"
@@ -141,6 +142,30 @@ void gatherColumn(const Column* input,
 
     for (const size_t index : indicesRaw) {
         typedOutput->push_back(typedInputRaw[index]);
+    }
+}
+
+void collectMaskSurvivors(const Column* mask, ColumnVector<size_t>* indices) {
+    const ColumnMask* typedMask = static_cast<const ColumnMask*>(mask);
+    const std::vector<ColumnMask::Bool_t>& maskRaw = typedMask->getRaw();
+    std::vector<size_t>& survivingRaw = indices->getRaw();
+
+    for (size_t row = 0; row < maskRaw.size(); row++) {
+        if (maskRaw[row]) {
+            survivingRaw.push_back(row);
+        }
+    }
+}
+
+void collectOptMaskSurvivors(const Column* mask, ColumnVector<size_t>* indices) {
+    const ColumnOptMask* typedMask = static_cast<const ColumnOptMask*>(mask);
+    const std::vector<std::optional<CustomBool>>& maskRaw = typedMask->getRaw();
+    std::vector<size_t>& survivingRaw = indices->getRaw();
+
+    for (size_t row = 0; row < maskRaw.size(); row++) {
+        if (maskRaw[row].has_value() && maskRaw[row].value()) {
+            survivingRaw.push_back(row);
+        }
     }
 }
 
@@ -952,6 +977,24 @@ void NLExecutor::runDistinctFilter(NLExecutionContext* context, NLFunctionData* 
     }
 }
 
+void NLExecutor::runFilter(NLExecutionContext* context, NLFunctionData* data) {
+    NLFilterData* filter = static_cast<NLFilterData*>(data);
+
+    const std::vector<NLFilterData::FilterColumn>& columns = filter->columns();
+    bioassert(!columns.empty(), "nl.filter needs at least one column");
+
+    // Collect this step's surviving row indices from the mask: a row survives iff
+    // the mask is true at that row (a null drops). The collector is fixed by the
+    // mask's nullability, so it reads the concrete mask column directly.
+    ColumnVector<size_t>* indices = filter->getIndices();
+    indices->getRaw().clear();
+    filter->getSurvivors()(filter->getMask(), indices);
+
+    for (const NLFilterData::FilterColumn& column : columns) {
+        column._gather(column._input, indices, column._output);
+    }
+}
+
 void NLExecutor::runCountReset(NLExecutionContext* context, NLFunctionData* data) {
     const NLCountResetData* reset = static_cast<NLCountResetData*>(data);
     reset->getState()->reset();
@@ -1019,6 +1062,14 @@ NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {
 
     bioassert(false, "Unknown NLChunkKind");
     return nullptr;
+}
+
+NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(bool nullable) {
+    if (nullable) {
+        return &collectOptMaskSurvivors;
+    }
+
+    return &collectMaskSurvivors;
 }
 
 NLBroadcastFunction NLExecutor::selectBlockRepeatFunction(NLChunkKind kind) {

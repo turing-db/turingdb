@@ -135,11 +135,17 @@ private:
     Stmts _stmts;
 };
 
-// Type of handles per column type that writes the input rows selected 
+// Type of handles per column type that writes the input rows selected
 // by the indices column into output
 using NLGatherFunction = void (*)(const Column* input,
                                   const ColumnVector<size_t>* indices,
                                   Column* output);
+
+// Type of handle that appends the indices of the rows an nl.filter keeps into the
+// indices column. One per mask nullability: a plain mask keeps every true row, a
+// nullable mask keeps only present-and-true rows (a null drops).
+using NLMaskSurvivorFunction = void (*)(const Column* mask,
+                                        ColumnVector<size_t>* indices);
 
 // Wraps a "carried" column from previous operations
 class NLCarriedColumn {
@@ -805,6 +811,40 @@ private:
 
     // Scratch reused to build each row's key, cleared once per row
     std::string _key;
+};
+
+class NLFilterData : public NLFunctionData {
+public:
+    struct FilterColumn {
+        const Column* _input {nullptr};
+        Column* _output {nullptr};
+        NLGatherFunction _gather {nullptr};
+    };
+
+    NLFilterData(const Column* mask, NLMaskSurvivorFunction survivors)
+        : _mask(mask),
+        _survivors(survivors)
+    {
+    }
+
+    const Column* getMask() const { return _mask; }
+    NLMaskSurvivorFunction getSurvivors() const { return _survivors; }
+
+    const std::vector<FilterColumn>& columns() const { return _columns; }
+
+    void addColumn(const FilterColumn& column) {
+        _columns.push_back(column);
+    }
+
+    ColumnVector<size_t>* getIndices() { return &_indices; }
+
+private:
+    const Column* _mask {nullptr};
+    NLMaskSurvivorFunction _survivors {nullptr}; // handles nullable vs non-nullable masks
+    std::vector<FilterColumn> _columns;
+
+    // Scratch for this step's surviving row indices, fed to gather
+    ColumnVector<size_t> _indices;
 };
 
 // Type of handle that returns how many rows of a column are non-null. One per

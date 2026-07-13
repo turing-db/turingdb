@@ -193,6 +193,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateAnd(andOp, body);
         } else if (nl::Or orOp = mlir::dyn_cast<nl::Or>(operation)) {
             translateOr(orOp, body);
+        } else if (nl::Filter filter = mlir::dyn_cast<nl::Filter>(operation)) {
+            translateFilter(filter, body);
         } else if (nl::GetNodeProperties getNodeProperties = mlir::dyn_cast<nl::GetNodeProperties>(operation)) {
             translatePropertyFetch(getNodeProperties.getInputNodes(),
                                    getNodeProperties.getPropertyType(),
@@ -518,6 +520,42 @@ void NLTranslator::translateOr(nl::Or orOp, NLStmtContainer* body) {
 
     NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
     body->emplaceStmt(&NLExecutor::runBinary, data);
+}
+
+void NLTranslator::translateFilter(nl::Filter filter, NLStmtContainer* body) {
+    const Column* mask = getColumn(filter.getMask());
+
+    const auto maskChunk = mlir::cast<nl::ChunkType>(filter.getMask().getType());
+    const bool maskNullable = mlir::isa<storage::NullableType>(maskChunk.getElementType());
+    const NLMaskSurvivorFunction filterFunction =
+        NLExecutor::selectMaskSurvivorFunction(maskNullable);
+
+
+    NLFilterData* data = _program->allocFunctionData<NLFilterData>(mask, filterFunction);
+
+    // Reserve the surviving-indices scratch so the per-step gather stays
+    // allocation-free, the same as the distinct and sort loops' indices column.
+    data->getIndices()->reserve(_program->getChunkSize());
+
+    // New column for the result output, same types
+    const mlir::OperandRange columns = filter.getColumns();
+    const mlir::ResultRange results = filter.getResults();
+    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        const mlir::Value colVal = columns[columnIndex];
+        const mlir::Type colType = colVal.getType();
+
+        const Column* input = getColumn(colVal);
+        Column* output = allocColumnForChunkType(colType);
+        _valueSlots[results[columnIndex]] = output;
+
+        const NLGatherFunction gatherType = selectGatherForChunkType(colType);
+
+        const NLFilterData::FilterColumn column {input, output, gatherType};
+
+        data->addColumn(column);
+    }
+
+    body->emplaceStmt(&NLExecutor::runFilter, data);
 }
 
 void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
