@@ -1124,6 +1124,10 @@ void DBLowering::lowerOutput(mlir::db::Output output) {
     // (e.g. a loop block), then set the anchor to be that block. Otherwise, we have no
     // loops, i.e. we are in a MATCH (n) RETURN 5 case, where the output can just be in
     // the entry block since it is independent of any loop (over n in this case).
+    // Getting the owner block of the returned column is sufficient because in nested
+    // loops, each Cypher variable is redefined each op due to the carry set implictly
+    // filtering. Otherwise we would need to check for the *deepest* block of all
+    // returned values.
     mlir::Block* anchorBlock = _entryBlock;
     for (const mlir::Value column : columns) {
         mlir::Block* const columnBlock = ownerBlock(column);
