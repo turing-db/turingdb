@@ -583,6 +583,10 @@ void DBProgramGenerator::generateFilters(const CypherAST* ast) {
     }
 
     const StmtContainer* stmtsContainer = sglPart->getReadStmts();
+    if (!stmtsContainer) {
+        return;
+    }
+
     for (const Stmt* stmt : stmtsContainer->stmts()) {
         if (stmt->getKind() != Stmt::Kind::MATCH) {
             continue;

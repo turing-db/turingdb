@@ -70,6 +70,10 @@ void VariableDependencyGraph::buildFromAST(const CypherAST* ast) {
     bioassert(spq, "Non-SinglePartQueries are not yet supported.");
 
     const StmtContainer* stmtsContainer = spq->getReadStmts();
+    if (!stmtsContainer) {
+        return;
+    }
+
     const StmtContainer::Stmts& stmts = stmtsContainer->stmts();
 
     for (const Stmt* stmt : stmts) {
