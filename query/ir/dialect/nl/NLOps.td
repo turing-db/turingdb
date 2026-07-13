@@ -1087,6 +1087,21 @@ def Or : NLOp<"or", [Pure]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
+def Not : NLOp<"not", [Pure]> {
+  let summary = "Row-wise logical NOT of a boolean chunk";
+  let description = [{
+      Three-valued logic: NOT null is null, so the result is nullable when the
+      operand is.
+
+      %r = nl.not %x : (!nl.chunk<i1>) -> !nl.chunk<i1>
+  }];
+
+  let arguments = (ins NLChunk:$operand);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
+}
+
 def Filter : NLOp<"filter", [Pure]> {
   let summary = "Keep only the rows where the mask chunk is true, as freshly cut chunks";
   let description = [{

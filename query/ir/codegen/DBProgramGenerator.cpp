@@ -672,7 +672,12 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         }
         break;
 
-        case Expr::Kind::UNARY:
+        case Expr::Kind::UNARY: {
+            const UnaryExpr* unaryExpr = static_cast<const UnaryExpr*>(expr);
+            translateUnaryExpr(expr, unaryExpr);
+        }
+        break;
+
         case Expr::Kind::FUNCTION_INVOCATION:
         case Expr::Kind::INDEX:
         case Expr::Kind::LIST:
@@ -689,6 +694,36 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
     }
 }
 
+void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* unaryExpr) {
+    const UnaryOperator op = unaryExpr->getOperator();
+    const Expr* subExpr = unaryExpr->getSubExpr();
+    translateExpr(subExpr);
+    bioassert(_exprMap.contains(subExpr), "Unary operation with unknown operand.");
+    const mlir::Value operandVal = _exprMap.at(subExpr);
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+    switch (op) {
+        case UnaryOperator::Not: {
+            const mlir::db::ColumnType boolType =
+                allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+            auto notOp = _opBuilder.create<mlir::db::NotOp>(loc, boolType, operandVal);
+            const mlir::Value result = notOp.getResult();
+            _exprMap[expr] = result;
+        }
+        break;
+
+        case UnaryOperator::Minus:
+        case UnaryOperator::Plus:
+            throw TuringException(fmt::format("Unsupported unary operator: {}",
+                                              UnaryOperatorDescription::value(op)));
+        break;
+
+        case UnaryOperator::_SIZE:
+            throw TuringException("Unknown unary operator.");
+        break;
+    }
+}
+
 void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr* binExpr) {
     const Expr* lhs = binExpr->getLHS();
     const Expr* rhs = binExpr->getRHS();
@@ -696,9 +731,8 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
     translateExpr(lhs);
     translateExpr(rhs);
 
-    if (!_exprMap.contains(lhs) || !_exprMap.contains(rhs)) {
-        return;
-    }
+    bioassert(_exprMap.contains(lhs), "Binary operation with unknown LHS operand.");
+    bioassert(_exprMap.contains(rhs), "Binary operation with unknown RHS operand.");
 
     const mlir::Value lhsVal = _exprMap.at(lhs);
     const mlir::Value rhsVal = _exprMap.at(rhs);

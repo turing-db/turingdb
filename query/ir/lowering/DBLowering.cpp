@@ -352,6 +352,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerAnd(nd);
     } else if (mlir::db::OrOp orOp = mlir::dyn_cast<mlir::db::OrOp>(operation)) {
         lowerOr(orOp);
+    } else if (mlir::db::NotOp notOp = mlir::dyn_cast<mlir::db::NotOp>(operation)) {
+        lowerNot(notOp);
     } else if (mlir::db::FilterOp filter = mlir::dyn_cast<mlir::db::FilterOp>(operation)) {
         lowerFilter(filter);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
@@ -1318,6 +1320,37 @@ void DBLowering::lowerOr(mlir::db::OrOp orOp) {
 
     nl::Or nlOrOp = _builder.create<nl::Or>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
     _valueMap[orOp.getResult()] = nlOrOp.getResult();
+}
+
+void DBLowering::lowerNot(mlir::db::NotOp notOp) {
+    const mlir::Value operandChunk = mapValue(notOp.getOperand());
+
+    const mlir::Type operandType = operandChunk.getType();
+    const bool resultNull = isNullableChunk(operandType);
+
+    const mlir::Type boolElement = _builder.getI1Type();
+    mlir::MLIRContext* bldCtxt = _builder.getContext();
+    mlir::Type resultElement = boolElement;
+    if (resultNull) {
+        resultElement = storage::NullableType::get(bldCtxt, boolElement);
+    }
+
+    const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
+
+    mlir::Block* const insertBlock = ownerBlock(operandChunk);
+    if (insertBlock != _entryBlock) {
+        setInsertionInto(insertBlock);
+    } else {
+        mlir::Operation* const operandDef = operandChunk.getDefiningOp();
+        if (operandDef) {
+            _builder.setInsertionPointAfter(operandDef);
+        } else {
+            _builder.setInsertionPointToStart(_entryBlock);
+        }
+    }
+
+    nl::Not nlNotOp = _builder.create<nl::Not>(_builder.getUnknownLoc(), resultType, operandChunk);
+    _valueMap[notOp.getResult()] = nlNotOp.getResult();
 }
 
 void DBLowering::lowerFilter(mlir::db::FilterOp filter) {

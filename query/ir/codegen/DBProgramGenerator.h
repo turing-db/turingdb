@@ -24,6 +24,7 @@ class Region;
 namespace db {
 
 class BinaryExpr;
+class UnaryExpr;
 class CypherAST;
 class Expr;
 class Literal;
@@ -83,6 +84,7 @@ private:
     void generateFilters(const CypherAST* ast);
 
     void translateExpr(const Expr* expr);
+    void translateUnaryExpr(const Expr* expr, const UnaryExpr* unaryExpr);
     void translateBinaryExpr(const Expr* expr, const BinaryExpr* binExpr);
     mlir::Value translateLiteralExpr(const Literal* literal);
     mlir::Value translatePropertyExpr(const PropertyExpr* propExpr);
