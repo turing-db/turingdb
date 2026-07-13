@@ -206,8 +206,6 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateFor(forLoop, body);
         } else if (mlir::isa<nl::GetPropertyType, nl::GetEdgeType>(operation)) {
             // The handle carries only a name; a fetch/hop resolves it on consumption
-        } else if (mlir::isa<nl::GetPropertyType>(operation)) {
-            // The handle carries only a name; a fetch resolves it on consumption
         } else if (nl::Constant constant = mlir::dyn_cast<nl::Constant>(operation)) {
             translateConstant(constant);
         } else if (nl::GetNodeProperties getNodeProperties = mlir::dyn_cast<nl::GetNodeProperties>(operation)) {
