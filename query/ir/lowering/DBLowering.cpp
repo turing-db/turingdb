@@ -176,6 +176,7 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     _edgeTypes.clear();
     _rootBlock = _entryBlock;
     _innermostLoopBody = nullptr;
+    _innermostCardinality = mlir::Value();
     _limitHandles.clear();
     _loopLimitHandle.clear();
     _sortTopK.clear();
@@ -490,6 +491,9 @@ void DBLowering::lowerCrossProduct(mlir::db::CrossProduct product) {
     // loop, so lowerFactor sees a factor whose innermost "loop" is this product.
     // At top level nothing reads _innermostLoopBody, so this is a no-op there.
     _innermostLoopBody = innerBody;
+
+    // Cross prod result defines cardinality
+    _innermostCardinality = crossResults.front();
 }
 
 mlir::Block* DBLowering::lowerFactor(mlir::Region& factor,
@@ -499,8 +503,10 @@ mlir::Block* DBLowering::lowerFactor(mlir::Region& factor,
     // save and restore the caller's so nested or sibling products are unaffected.
     mlir::Block* const previousRoot = _rootBlock;
     mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    const mlir::Value previousInnermostCardinality = _innermostCardinality;
     _rootBlock = rootBlock;
     _innermostLoopBody = nullptr;
+    _innermostCardinality = mlir::Value();
 
     // A factor is one self-contained block ending in a db.yield. Lower each op
     // as at top level; the yield names the columns this factor contributes, so
@@ -530,6 +536,7 @@ mlir::Block* DBLowering::lowerFactor(mlir::Region& factor,
     mlir::Block* const innermostBody = _innermostLoopBody;
     _rootBlock = previousRoot;
     _innermostLoopBody = previousInnermostLoopBody;
+    _innermostCardinality = previousInnermostCardinality;
 
     return innermostBody;
 }
@@ -1141,7 +1148,7 @@ void DBLowering::lowerOutput(mlir::db::Output output) {
 
         if (allConstants) {
             anchorBlock = _innermostLoopBody;
-            cardinality = _innermostLoopBody->getArgument(0);
+            cardinality = _innermostCardinality;
         }
     }
 
@@ -1168,6 +1175,7 @@ void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp)
     // This is the innermost loop opened so far in the current factor (loops
     // nest in dataflow order), so a cross product nests at this body.
     _innermostLoopBody = loopBody;
+    _innermostCardinality = loopBody->getArguments().front();
 
     const mlir::ResultRange dbResults = dbOp->getResults();
     for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
