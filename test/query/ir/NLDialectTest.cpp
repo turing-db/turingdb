@@ -55,7 +55,7 @@ TEST_F(NLDialectTest, verifierAcceptsLimitTruncate) {
     const mlir::Value handle = builder.create<mlir::nl::Limit>(loc, /*count=*/3u).getState();
     builder.create<mlir::nl::LimitUpdate>(loc, handle, chunk);
     mlir::nl::LimitTruncate truncate = builder.create<mlir::nl::LimitTruncate>(loc, handle, mlir::ValueRange {chunk});
-    builder.create<mlir::nl::Output>(loc, truncate.getResults(), mlir::Value(), mlir::Value());
+    builder.create<mlir::nl::Output>(loc, truncate.getResults(), mlir::Value(), mlir::Value(), mlir::Value());
     builder.create<mlir::func::ReturnOp>(loc);
 
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
@@ -76,7 +76,7 @@ TEST_F(NLDialectTest, verifierAcceptsSkipTruncate) {
     const mlir::Value handle = builder.create<mlir::nl::Skip>(loc, /*count=*/3u).getState();
     builder.create<mlir::nl::SkipUpdate>(loc, handle, chunk);
     mlir::nl::SkipTruncate truncate = builder.create<mlir::nl::SkipTruncate>(loc, handle, mlir::ValueRange {chunk});
-    builder.create<mlir::nl::Output>(loc, truncate.getResults(), mlir::Value(), mlir::Value());
+    builder.create<mlir::nl::Output>(loc, truncate.getResults(), mlir::Value(), mlir::Value(), mlir::Value());
     builder.create<mlir::func::ReturnOp>(loc);
 
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
@@ -93,7 +93,7 @@ TEST_F(NLDialectTest, verifierAcceptsOutput) {
     mlir::Block& entryBlock = function.getBody().front();
     const mlir::Value chunk = entryBlock.getArgument(0);
 
-    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {chunk}, mlir::Value(), mlir::Value());
+    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {chunk}, mlir::Value(), mlir::Value(), mlir::Value());
     builder.create<mlir::func::ReturnOp>(loc);
 
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
@@ -112,7 +112,7 @@ TEST_F(NLDialectTest, verifierAcceptsOutputWithLimit) {
 
     const mlir::Value handle = builder.create<mlir::nl::Limit>(loc, /*count=*/3u).getState();
     builder.create<mlir::nl::LimitUpdate>(loc, handle, chunk);
-    mlir::nl::Output output = builder.create<mlir::nl::Output>(loc, mlir::ValueRange {chunk}, handle, mlir::Value());
+    mlir::nl::Output output = builder.create<mlir::nl::Output>(loc, mlir::ValueRange {chunk}, handle, mlir::Value(), mlir::Value());
     builder.create<mlir::func::ReturnOp>(loc);
 
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
@@ -135,7 +135,7 @@ TEST_F(NLDialectTest, verifierAcceptsOutputWithSkip) {
     builder.create<mlir::nl::SkipUpdate>(loc, handle, chunk);
     // The skip handle goes in the third operand (no limit), so the columns, limit
     // and skip operand segments are all distinct.
-    mlir::nl::Output output = builder.create<mlir::nl::Output>(loc, mlir::ValueRange {chunk}, mlir::Value(), handle);
+    mlir::nl::Output output = builder.create<mlir::nl::Output>(loc, mlir::ValueRange {chunk}, mlir::Value(), handle, mlir::Value());
     builder.create<mlir::func::ReturnOp>(loc);
 
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
@@ -184,7 +184,7 @@ TEST_F(NLDialectTest, verifierAcceptsDistinctChain) {
 
     const mlir::Value handle = builder.create<mlir::nl::Distinct>(loc).getState();
     mlir::nl::DistinctFilter filter = builder.create<mlir::nl::DistinctFilter>(loc, handle, mlir::ValueRange {chunk});
-    builder.create<mlir::nl::Output>(loc, filter.getResults(), mlir::Value(), mlir::Value());
+    builder.create<mlir::nl::Output>(loc, filter.getResults(), mlir::Value(), mlir::Value(), mlir::Value());
     builder.create<mlir::func::ReturnOp>(loc);
 
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
@@ -213,7 +213,7 @@ TEST_F(NLDialectTest, verifierAcceptsCountChain) {
     const mlir::Type countChunkType = mlir::nl::ChunkType::get(&_context,
                                                                mlir::IntegerType::get(&_context, 64, mlir::IntegerType::Unsigned));
     mlir::nl::CountResult result = builder.create<mlir::nl::CountResult>(loc, countChunkType, handle);
-    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {result.getResult()}, mlir::Value(), mlir::Value());
+    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {result.getResult()}, mlir::Value(), mlir::Value(), mlir::Value());
     builder.create<mlir::func::ReturnOp>(loc);
 
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
@@ -252,7 +252,7 @@ TEST_F(NLDialectTest, verifierAcceptsAggregateChain) {
     const mlir::Type resultChunkType = mlir::nl::ChunkType::get(&_context,
                                                                 mlir::storage::NullableType::get(&_context, int64Type));
     mlir::nl::AggregateResult result = builder.create<mlir::nl::AggregateResult>(loc, resultChunkType, handle, mlir::storage::AggregateKind::Sum);
-    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {result.getResult()}, mlir::Value(), mlir::Value());
+    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {result.getResult()}, mlir::Value(), mlir::Value(), mlir::Value());
     builder.create<mlir::func::ReturnOp>(loc);
 
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
@@ -328,7 +328,7 @@ TEST_F(NLDialectTest, verifierRejectsOutputWithBothLimitAndSkip) {
 
     const mlir::Value limitHandle = builder.create<mlir::nl::Limit>(loc, /*count=*/3u).getState();
     const mlir::Value skipHandle = builder.create<mlir::nl::Skip>(loc, /*count=*/3u).getState();
-    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {chunk}, limitHandle, skipHandle);
+    builder.create<mlir::nl::Output>(loc, mlir::ValueRange {chunk}, limitHandle, skipHandle, mlir::Value());
     builder.create<mlir::func::ReturnOp>(loc);
 
     const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {

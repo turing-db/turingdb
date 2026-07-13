@@ -487,6 +487,18 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n) RETURN 5: a constant projected over a scan, with no per-row column in
+// the projection. Projection preserves cardinality, so the result is one row of 5
+// per node - not a single row.
+constexpr const char* constantOverMatchProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %c = db.constant(5 : i64)
+  db.output(%c) : !db.column<i64>
+  return
+}
+)mlir";
+
 // Scan all nodes and output them
 constexpr const char* scanProgram = R"mlir(
 func.func @main() {
@@ -1625,6 +1637,21 @@ TEST_F(DBLoweringTest, lowersScanWithLeadingConstant) {
     sink.sortedRows(rows);
     const std::vector<std::pair<int64_t, uint64_t>> expected {{42, 0}, {42, 1}, {42, 2}, {42, 3}};
     EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, constantProjectionOverMatchHasRelationCardinality) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingConstSink<int64_t> sink;
+    runLoweredProgram(constantOverMatchProgram, reader.getView(), sink);
+
+    // RETURN 5 over the diamond's four nodes: projection preserves cardinality, so
+    // four rows of 5 - not one. (Before the fix the output floated to function scope
+    // and emitted a single row.)
+    const std::vector<std::vector<int64_t>> expected {{5}, {5}, {5}, {5}};
+    EXPECT_EQ(sink.rows(), expected);
 }
 
 TEST_F(DBLoweringTest, lowersOneHopOutEdges) {

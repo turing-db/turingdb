@@ -454,16 +454,27 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
     offset). Like the limit form it never mutates the counter:
 
     nl.output(%targets) skip %h : !nl.chunk<!storage.node_id>
+
+    An optional `cardinality` operand carries a representative chunk of the driving
+    relation (a node-ID loop variable). A projection of only constants - RETURN 5 -
+    has no per-row column to size the emission, yet its cardinality is the driving
+    relation's (projection preserves cardinality), so the output nests in the driving
+    loop and reads its row count from this chunk; the constants broadcast against it.
+    Absent for a per-row projection (its own columns size it) or a single-row emit.
+
+    nl.output(%c) cardinality %n : !nl.chunk<i64>
   }];
 
-  // Three variable-length operand groups - the columns, the optional limit and
-  // the optional skip - so the op carries operand-segment sizes to tell them
-  // apart, the same as nl.cross_product's column groups. A folded output carries
-  // at most one of limit/skip (the truncate adjacent to it); the two are not
-  // produced together (see DBLowering::foldSkipTruncatesIntoOutputs).
+  // Four variable-length operand groups - the columns, the optional limit, the
+  // optional skip and the optional cardinality driver - so the op carries
+  // operand-segment sizes to tell them apart, the same as nl.cross_product's column
+  // groups. A folded output carries at most one of limit/skip (the truncate adjacent
+  // to it); the two are not produced together (see foldSkipTruncatesIntoOutputs).
+  // cardinality's type is buildable (always a node-ID chunk) and so omitted.
   let arguments = (ins Variadic<NLChunk>:$columns,
                        Optional<NLLimitStateHandle>:$limit,
-                       Optional<NLSkipStateHandle>:$skip);
+                       Optional<NLSkipStateHandle>:$skip,
+                       Optional<NLNodeIDChunk>:$cardinality);
 
   // The chunk element types vary from call to call and - unlike the source
   // ops - cannot be inferred, so they are spelled after the colon. This keeps
@@ -475,7 +486,7 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
   // `skip` keyword; both types are buildable and so omitted. Each optional group
   // has its own literal anchor, so the declarative parser tells them apart.
   let assemblyFormat = [{
-    `(` $columns `)` (`limit` $limit^)? (`skip` $skip^)? attr-dict `:` qualified(type($columns))
+    `(` $columns `)` (`limit` $limit^)? (`skip` $skip^)? (`cardinality` $cardinality^)? attr-dict `:` qualified(type($columns))
   }];
 
   // Enforce the "at most one of limit/skip" invariant the description promises:

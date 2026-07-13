@@ -305,6 +305,20 @@ func.func @main() {
 }
 )mlir";
 
+// A constant projected over the scan (the lowered MATCH (n) RETURN 5). The output
+// carries the scan loop variable as an explicit cardinality driver, so it emits one
+// row of 5 per node - the constant broadcasts against the driver's row count.
+constexpr const char* constantOverMatchProgram = R"mlir(
+func.func @main() {
+  %c = nl.constant(5 : i64)
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    nl.output(%c) cardinality %a : !nl.chunk<i64>
+  }
+  func.return
+}
+)mlir";
+
 // Scan all nodes and output them
 constexpr const char* scanProgram = R"mlir(
 func.func @main() {
@@ -929,6 +943,20 @@ TEST_F(NLExecutorTest, outputRejectsNonConstantOuterScopeColumn) {
     EXPECT_THROW(
         runProgram(outerScopeOutputColumnProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink),
         IRException);
+}
+
+TEST_F(NLExecutorTest, outputBroadcastsConstantToCardinality) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingConstSink<int64_t> sink;
+    runProgram(constantOverMatchProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    // The cardinality operand (the scan loop variable) sizes the emission to the
+    // node count, so the constant 5 is emitted once per node - four rows.
+    const std::vector<std::vector<int64_t>> expected {{5}, {5}, {5}, {5}};
+    EXPECT_EQ(sink.rows(), expected);
 }
 
 TEST_F(NLExecutorTest, getNodeProperties) {
