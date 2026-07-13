@@ -536,28 +536,32 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
         finalIdentities[varName] = finalValue;
     }
 
-    const auto lookup = [&](auto&& item) -> mlir::Value {
+    const auto fetch = [&](auto&& item) -> mlir::Value {
         using Type = std::remove_cvref_t<decltype(item)>;
 
-        const VarDecl* var = nullptr;
-        if constexpr (std::is_same_v<Type, Expr* >) {
-            var = item->getExprVarDecl();
+        if constexpr (std::is_same_v<Type, VarDecl*>) {
+            const std::string_view name = item->getName();
+            const auto findIt = finalIdentities.find(name);
+            bioassert(findIt != end(finalIdentities), "Return variable '{}' not found", name);
+            return findIt->second;
         } else {
-            var = item;
+            const VarDecl* var = item->getExprVarDecl();
+            if (var) {
+                const std::string_view name = var->getName();
+                const auto findIt = finalIdentities.find(name);
+                if (findIt != end(finalIdentities)) {
+                    return findIt->second;
+                }
+            }
+
+            translateExpr(item);
+            return _exprMap.at(item);
         }
-        bioassert(var, "Could not determine return variable.");
-
-        const std::string_view name = var->getName();
-        const auto findIt = finalIdentities.find(name);
-        bioassert(findIt != end(finalIdentities), "Return item {} not found.", name);
-
-        const mlir::Value mlirCol = findIt->second;
-        return mlirCol;
     };
 
     llvm::SmallVector<mlir::Value> outputted;
     for (const Projection::ReturnItem item : returned) {
-        const mlir::Value itemCol = std::visit(lookup, item);
+        const mlir::Value itemCol = std::visit(fetch, item);
         outputted.push_back(itemCol);
     }
 
@@ -633,9 +637,7 @@ void DBProgramGenerator::generateFilters(const CypherAST* ast) {
 }
 
 void DBProgramGenerator::translateExpr(const Expr* expr) {
-    if (_exprMap.contains(expr)) {
-        return;
-    }
+    bioassert(!_exprMap.contains(expr), "Attempted to retranslate expr.");
 
     const Expr::Kind kind = expr->getKind();
     switch (kind) {
