@@ -708,4 +708,23 @@ def MulOp : BinaryOp<"mul", [Pure]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
+def FilterOp : TuringOp<"filter", [Pure]> {
+  let summary = "Keep only the rows where the mask is true, filtering carried columns alongside";
+
+  let description = [{
+    Applies a boolean mask to a carry set of columns.
+
+    %a2, %b2 = db.filter(%mask, {%a, %b})
+  }];
+
+  let arguments = (ins ColumnBools:$mask, Variadic<Column>:$columns_to_filter);
+
+  let results   = (outs Variadic<Column>:$filtered_columns);
+
+  let assemblyFormat = [{
+    `(` $mask `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
 #endif //TURINGDB_OPS

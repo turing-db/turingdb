@@ -352,6 +352,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerAnd(nd);
     } else if (mlir::db::OrOp orOp = mlir::dyn_cast<mlir::db::OrOp>(operation)) {
         lowerOr(orOp);
+    } else if (mlir::db::FilterOp filter = mlir::dyn_cast<mlir::db::FilterOp>(operation)) {
+        lowerFilter(filter);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
     } else if (mlir::isa<mlir::func::ReturnOp>(operation)) {
@@ -1319,6 +1321,43 @@ void DBLowering::lowerOr(mlir::db::OrOp orOp) {
 
     nl::Or nlOrOp = _builder.create<nl::Or>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
     _valueMap[orOp.getResult()] = nlOrOp.getResult();
+}
+
+void DBLowering::lowerFilter(mlir::db::FilterOp filter) {
+    // Map mask and carry set -> nl chunks
+    const mlir::Value mask = filter.getMask();
+    const mlir::Value maskChunk = mapValue(mask);
+
+    llvm::SmallVector<mlir::Value, 4> columnChunks;
+    llvm::SmallVector<mlir::Type, 4> resultTypes;
+    for (const mlir::Value column : filter.getColumnsToFilter()) {
+        const mlir::Value columnChunk = mapValue(column);
+        const mlir::Type chunkType = columnChunk.getType();
+
+        columnChunks.push_back(columnChunk);
+        resultTypes.push_back(chunkType);
+    }
+
+    // Inserted into the deepest block, where all operands are defined
+    mlir::Value insertionReference = maskChunk;
+    for (const mlir::Value columnChunk : columnChunks) {
+        mlir::Block* const block = deeperBlock(insertionReference, columnChunk);
+        if (ownerBlock(columnChunk) == block) {
+            insertionReference = columnChunk;
+        }
+    }
+
+    setInsertionInto(ownerBlock(insertionReference));
+
+    const mlir::Location uloc = _builder.getUnknownLoc();
+    nl::Filter nlFilter = _builder.create<nl::Filter>(uloc, resultTypes, maskChunk, columnChunks);
+
+    const mlir::ResultRange filteredColumns = filter.getFilteredColumns();
+    for (size_t columnIndex = 0; columnIndex < filteredColumns.size(); columnIndex++) {
+        const mlir::Value filteredCol = filteredColumns[columnIndex];
+        const mlir::Value outputChunk = nlFilter.getResult(columnIndex);
+        _valueMap[filteredCol] = outputChunk;
+    }
 }
 
 mlir::Block* DBLowering::deeperBlock(mlir::Value first, mlir::Value second) {

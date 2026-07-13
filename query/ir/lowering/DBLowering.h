@@ -239,6 +239,9 @@ private:
     void lowerAnd(mlir::db::AndOp andOp);
     void lowerOr(mlir::db::OrOp orOp);
 
+    // Applies a mask to a carry set
+    void lowerFilter(mlir::db::FilterOp filter);
+
     void lowerOutput(mlir::db::Output output);
 
     // Lower one factor region of a db.cross_product into a loop nest rooted at
