@@ -76,6 +76,7 @@ set(processors_sources
     processors/ApplyMask.cpp
     processors/DropIndexProcessor.cpp
     processors/DataPartMergeProcessor.cpp
+    processors/DataPartLimit.cpp
     processors/UnwindProcessor.cpp
 )
 

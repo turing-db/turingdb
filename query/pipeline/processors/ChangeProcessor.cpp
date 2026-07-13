@@ -7,6 +7,8 @@
 #include "versioning/Change.h"
 #include "versioning/Transaction.h"
 
+#include "DataPartLimit.h"
+
 #include "Profiler.h"
 #include "BioAssert.h"
 
@@ -102,6 +104,10 @@ void ChangeProcessor::submitChange() const {
     bioassert(accessor.isValid(), "ChangeProcessor: Change accessor must be valid");
 
     SystemAccessor* system = _ctxt->getSystemAccessor();
+
+    // Reject the submit if the graph already holds too many data parts, forcing the user
+    // to run MERGE_DATAPARTS before accumulating more.
+    throwIfTooManyDataParts(accessor, system->getConfig());
 
     const ChangeID changeID = accessor.getID();
 

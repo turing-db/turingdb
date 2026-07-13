@@ -43,6 +43,26 @@ void resolveInstallExtensionsDir(fs::Path& result) {
     spdlog::warn("Could not resolve install extensions directory");
 }
 
+void resolveMaxDataParts(size_t& result) {
+    const char* envValue = getenv("TURING_MAX_DATAPARTS");
+    if (!envValue || !*envValue) {
+        return;
+    }
+
+    char* parseEnd = nullptr;
+    const unsigned long long parsed = strtoull(envValue, &parseEnd, 10);
+
+    const bool fullyParsed = parseEnd && *parseEnd == '\0';
+    if (!fullyParsed || parsed == 0) {
+        spdlog::warn("Ignoring invalid TURING_MAX_DATAPARTS value '{}'; keeping default of {}",
+                     envValue,
+                     result);
+        return;
+    }
+
+    result = static_cast<size_t>(parsed);
+}
+
 } // namespace
 
 TuringConfig::TuringConfig()
@@ -53,6 +73,8 @@ TuringConfig::TuringConfig()
     bioassert(homeEnv && *homeEnv, "$HOME is undefined");
 
     setTuringDirectory(fs::Path(homeEnv) / ".turing");
+
+    resolveMaxDataParts(_maxDataParts);
 }
 
 TuringConfig::~TuringConfig() {

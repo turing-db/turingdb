@@ -6,6 +6,8 @@
 #include "versioning/Transaction.h"
 #include "versioning/ChangeAccessor.h"
 
+#include "DataPartLimit.h"
+
 #include "Profiler.h"
 #include "BioAssert.h"
 
@@ -57,6 +59,10 @@ void CommitProcessor::execute() {
     auto& access = writeTx.changeAccessor();
 
     SystemAccessor* system = _ctxt->getSystemAccessor();
+
+    // Reject the commit if the graph already holds too many data parts, forcing the user
+    // to run MERGE_DATAPARTS before accumulating more.
+    throwIfTooManyDataParts(access, system->getConfig());
 
     // Perform the commit (core logic from old CommitStep)
     if (auto res = system->commitChange(access); !res) {

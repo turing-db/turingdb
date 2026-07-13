@@ -27,9 +27,12 @@ public:
     bool isSyncedOnDisk() const { return _syncedOnDisk; }
     bool usingSystemEvents() const { return _systemEvents; }
 
+    size_t getMaxDataParts() const { return _maxDataParts; }
+
     void setTuringDirectory(const fs::Path& turingDir);
     void setSyncedOnDisk(bool syncedOnDisk) { _syncedOnDisk = syncedOnDisk; }
     void useSystemEvents(bool systemEvents) { _systemEvents = systemEvents; }
+    void setMaxDataParts(size_t maxDataParts) { _maxDataParts = maxDataParts; }
 
     const std::function<void()>& getOnStopRequest() const { return _onStopRequest; }
     void setOnStopRequest(const std::function<void()>& onStopRequest) {
@@ -48,6 +51,11 @@ private:
     fs::Path _socketPath;
 
     std::function<void()> _onStopRequest;
+
+    // Maximum number of data parts a graph may hold before COMMIT / CHANGE SUBMIT are
+    // rejected and the user is required to run MERGE_DATAPARTS. Overridable via the
+    // TURING_MAX_DATAPARTS environment variable.
+    size_t _maxDataParts {32};
 
     bool _syncedOnDisk {true};
     bool _systemEvents {true};

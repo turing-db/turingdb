@@ -126,6 +126,10 @@ const ProcedureManager* SystemAccessor::getProcedures() const {
     return _sysMan->getProcedures();
 }
 
+const TuringConfig* SystemAccessor::getConfig() const {
+    return _sysMan->getConfig();
+}
+
 vec::VectorDatabase* SystemAccessor::getVectorDatabase() {
     return _sysMan->getVectorDatabase();
 }

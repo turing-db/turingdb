@@ -36,6 +36,7 @@ class ChangeAccessor;
 class Transaction;
 class ProcedureManager;
 class ExtensionDescriptor;
+class TuringConfig;
 
 class SystemAccessor : public Accessor {
 public:
@@ -100,6 +101,9 @@ public:
 
     // Procedures
     const ProcedureManager* getProcedures() const;
+
+    // Config
+    const TuringConfig* getConfig() const;
 
     // Vector DB
     vec::VectorDatabase* getVectorDatabase();
