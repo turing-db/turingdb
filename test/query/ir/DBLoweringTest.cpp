@@ -499,6 +499,44 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (a), (b) RETURN 5
+constexpr const char* constantOverCrossProductProgram = R"mlir(
+func.func @main() {
+  %0:2 = db.cross_product factor {
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %a : !db.column<!storage.node_id>
+  } factor {
+    %b = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %b : !db.column<!storage.node_id>
+  }
+  %c = db.constant(5 : i64)
+  db.output(%c) : !db.column<i64>
+  return
+}
+)mlir";
+
+// MATCH (a), (b), (c) RETURN 5
+constexpr const char* constantOverNestedCrossProductProgram = R"mlir(
+func.func @main() {
+  %0:3 = db.cross_product factor {
+    %1:2 = db.cross_product factor {
+      %a = db.scan_nodes() : !db.column<!storage.node_id>
+      db.yield %a : !db.column<!storage.node_id>
+    } factor {
+      %b = db.scan_nodes() : !db.column<!storage.node_id>
+      db.yield %b : !db.column<!storage.node_id>
+    }
+    db.yield %1#0, %1#1 : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  } factor {
+    %c = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %c : !db.column<!storage.node_id>
+  }
+  %d = db.constant(5 : i64)
+  db.output(%d) : !db.column<i64>
+  return
+}
+)mlir";
+
 // Scan all nodes and output them
 constexpr const char* scanProgram = R"mlir(
 func.func @main() {
@@ -1640,6 +1678,51 @@ TEST_F(DBLoweringTest, constantProjectionOverMatchHasRelationCardinality) {
     // four rows of 5 - not one. (Before the fix the output floated to function scope
     // and emitted a single row.)
     const std::vector<std::vector<int64_t>> expected {{5}, {5}, {5}, {5}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(DBLoweringTest, constantProjectionOverCrossProductHasProductCardinality) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingConstSink<int64_t> sink;
+    runLoweredProgram(constantOverCrossProductProgram, reader.getView(), sink);
+
+    // RETURN 5 over MATCH (a), (b) on the diamond's four nodes: the cross product
+    // is 4 x 4, so projection preserves that - 16 rows of 5. (Before the fix the
+    // witness was the inner factor's chunk, so it emitted only |b| = 4 rows.)
+    const std::vector<std::vector<int64_t>> expected(16, {5});
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(DBLoweringTest, constantProjectionOverCrossProductSpanningChunks) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // A chunk of three over four nodes splits each scan into two chunks, so the
+    // witness column is block-repeated afresh each step; the accumulated count must
+    // still be the full 16.
+    CollectingConstSink<int64_t> sink;
+    runLoweredProgram(constantOverCrossProductProgram, reader.getView(), sink, /*chunkSize=*/3);
+
+    const std::vector<std::vector<int64_t>> expected(16, {5});
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(DBLoweringTest, constantProjectionOverNestedCrossProductHasProductCardinality) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingConstSink<int64_t> sink;
+    runLoweredProgram(constantOverNestedCrossProductProgram, reader.getView(), sink);
+
+    // RETURN 5 over MATCH (a), (b), (c): a 4 x 4 x 4 nested product, so 64 rows of
+    // 5 - the witness must follow the outer product's realized column through the
+    // nested lowering, not the innermost scan's chunk.
+    const std::vector<std::vector<int64_t>> expected(64, {5});
     EXPECT_EQ(sink.rows(), expected);
 }
 

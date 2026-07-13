@@ -134,6 +134,9 @@ private:
     // not left in the loop body - just a record of which block is innermost.
     mlir::Block* _innermostLoopBody {nullptr};
 
+    // Defines the cardinality of the innermost loop, used for projection
+    mlir::Value _innermostCardinality;
+
     // Each db.limit gets its own hoisted nl.limit handle - N independent budgets.
     // A pre-scan in lower() finds every db.limit before any loop is built, so the
     // handles exist first to be threaded into the loops as they are created. The
