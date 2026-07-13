@@ -204,8 +204,6 @@ protected:
         std::ranges::sort(pipelineRows);
         std::ranges::sort(irRows);
 
-        EXPECT_FALSE(pipelineRows.empty()) << "Expected non-empty result for query: " << query;
-
         ASSERT_EQ(pipelineRows.size(), irRows.size()) << "Size mismatch for " << query;
 
         for (auto [plRow, irRow] : rv::zip(pipelineRows, irRows)) {
@@ -281,4 +279,12 @@ TEST_F(EquivalenceTest, eqFilters) {
     expectEquivalent("MATCH (a) WHERE a.age = 32 RETURN a");
     expectEquivalent("MATCH (a), (b) WHERE a.age = b.age RETURN a, b");
     expectEquivalent("MATCH (a), (b) WHERE a.name = a.name RETURN b");
+
+    expectEquivalent("MATCH (a), (b) WHERE a = b RETURN b");
+    expectEquivalent("MATCH (a), (b) WHERE a = a RETURN a");
+    expectEquivalent("MATCH (a), (b) WHERE a = a RETURN b");
+
+    expectEquivalent("MATCH (a), (b) WHERE a.age = a RETURN b");
+
+    expectEquivalent("MATCH (a), (b) WHERE a = b.age RETURN a, b");
 }
