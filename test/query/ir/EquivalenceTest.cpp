@@ -301,4 +301,10 @@ TEST_F(EquivalenceTest, eqFilters) {
     expectEquivalent("MATCH (n) WHERE n.isFrench RETURN n");
 
     expectEquivalent("MATCH (n)-->(a) WHERE NOT n.isFrench RETURN n, a");
+
+    expectEquivalent("MATCH (n) WHERE n.age = 16 + 16 RETURN n");
+    expectEquivalent("MATCH (n) WHERE n.age = 16 + 16 * 1 RETURN n");
+    expectEquivalent("MATCH (n) WHERE n.age = 16 * 2 RETURN n");
+
+    expectEquivalent("MATCH (n)-[e]->(m) WHERE e.duration = 10 + 10 return m");
 }

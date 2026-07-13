@@ -465,7 +465,7 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
     } else {
         handler = &NLExecutor::runGetInEdgesByTypeLoop;
     }
-    body->addStmt(NLFunctionDescriptor {handler, loopData});
+    body->emplaceStmt(handler, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
 }
