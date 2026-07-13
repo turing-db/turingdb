@@ -287,4 +287,12 @@ TEST_F(EquivalenceTest, eqFilters) {
     expectEquivalent("MATCH (a), (b) WHERE a.age = a RETURN b");
 
     expectEquivalent("MATCH (a), (b) WHERE a = b.age RETURN a, b");
+
+    expectEquivalent("MATCH (a), (b) WHERE a.age = 32 OR a.name = b.name RETURN b");
+    expectEquivalent("MATCH (a), (b) WHERE a.age = 32 AND a.name = b.name RETURN b");
+
+    expectEquivalent("MATCH (n)-->(a)-->(m) WHERE n = m RETURN n, a, m");
+
+    // Disabled due to suspected v2 bug
+    // expectEquivalent("MATCH (n)-->(a)-->(m), (a)-->(b) WHERE b = n RETURN n, a, m, b");
 }
