@@ -1852,28 +1852,43 @@ NLAggregateResultFunction NLExecutor::selectAggregateResult(AggregateKind kind, 
 NLGroupAggregateGrowFunction NLExecutor::selectGroupAggregateGrow(GroupAggregateKind kind, ValueType accumulatorType) {
     // count keeps only a per-group tally, so its grow ignores the accumulator type;
     // avg carries a running f64 sum plus that tally, so its grow is always f64-typed
-    // and is the only value reduction besides count that grows the counts vector.
-    if (kind == GroupAggregateKind::Count) {
-        return &groupGrowCount;
-    } else if (kind == GroupAggregateKind::Avg) {
-        return &groupGrowAvg;
+    // and is the only value reduction besides count that grows the counts vector. A
+    // switch (not an if/else) over every kind so a new one is a compile error here
+    // rather than silently taking the sum/min/max path.
+    switch (kind) {
+        case GroupAggregateKind::Count:
+            return &groupGrowCount;
+        break;
+
+        case GroupAggregateKind::Avg:
+            return &groupGrowAvg;
+        break;
+
+        case GroupAggregateKind::Sum:
+        case GroupAggregateKind::Min:
+        case GroupAggregateKind::Max: {
+            // sum grows each new group to a present zero (its additive identity),
+            // min/max to null (no extreme seen yet); neither carries a per-group
+            // tally. Both compile for any value type, and lowering has already
+            // validated the kind / type pairing (and the fold selector re-checks it),
+            // so one dispatch over the accumulator type suffices - the grouped sibling
+            // of selectAggregateReset.
+            const bool growsToZero = (kind == GroupAggregateKind::Sum);
+
+            NLGroupAggregateGrowFunction grow = nullptr;
+            const auto select = [&]<SupportedType T>() {
+                grow = growsToZero ? &groupGrowZero<typename T::Primitive>
+                                   : &groupGrowNull<typename T::Primitive>;
+            };
+            ValueTypeDispatcher(accumulatorType).execute(select);
+
+            return grow;
+        }
+        break;
     }
 
-    // sum grows each new group to a present zero (its additive identity), min/max to
-    // null (no extreme seen yet); neither carries a per-group tally. Both compile for
-    // any value type, and lowering has already validated the kind / type pairing (and
-    // the fold selector re-checks it), so one dispatch over the accumulator type
-    // suffices - the grouped sibling of selectAggregateReset.
-    const bool growsToZero = (kind == GroupAggregateKind::Sum);
-
-    NLGroupAggregateGrowFunction grow = nullptr;
-    const auto select = [&]<SupportedType T>() {
-        grow = growsToZero ? &groupGrowZero<typename T::Primitive>
-                           : &groupGrowNull<typename T::Primitive>;
-    };
-    ValueTypeDispatcher(accumulatorType).execute(select);
-
-    return grow;
+    bioassert(false, "Unhandled group aggregate kind");
+    return nullptr;
 }
 
 NLGroupAggregateFoldFunction NLExecutor::selectGroupAggregateFold(GroupAggregateKind kind, ValueType inputType) {
@@ -1919,24 +1934,38 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountAllFold() {
 }
 
 NLGroupAggregateEmitFunction NLExecutor::selectGroupAggregateEmit(GroupAggregateKind kind, ValueType resultType) {
-    if (kind == GroupAggregateKind::Count) {
-        // count emits its per-group tally as an unsigned i64, whatever the input was.
-        return &groupEmitCount;
-    } else if (kind == GroupAggregateKind::Avg) {
-        // avg emits the running f64 sum divided by the count, per group.
-        return &groupEmitAvg;
+    // A switch (not an if/else) over every kind so a new one is a compile error here
+    // rather than silently taking the sum/min/max path.
+    switch (kind) {
+        case GroupAggregateKind::Count:
+            // count emits its per-group tally as an unsigned i64, whatever the input was.
+            return &groupEmitCount;
+        break;
+
+        case GroupAggregateKind::Avg:
+            // avg emits the running f64 sum divided by the count, per group.
+            return &groupEmitAvg;
+        break;
+
+        case GroupAggregateKind::Sum:
+        case GroupAggregateKind::Min:
+        case GroupAggregateKind::Max: {
+            // sum/min/max hold each group's reduced value in the result's own type, so
+            // the emit copies the accumulator slice - valid for any value type, the
+            // grouped sibling of selectAggregateResult.
+            NLGroupAggregateEmitFunction emit = nullptr;
+            const auto select = [&]<SupportedType T>() {
+                emit = &groupEmitCopy<typename T::Primitive>;
+            };
+            ValueTypeDispatcher(resultType).execute(select);
+
+            return emit;
+        }
+        break;
     }
 
-    // sum/min/max hold each group's reduced value in the result's own type, so the
-    // emit copies the accumulator slice - valid for any value type, the grouped
-    // sibling of selectAggregateResult.
-    NLGroupAggregateEmitFunction emit = nullptr;
-    const auto select = [&]<SupportedType T>() {
-        emit = &groupEmitCopy<typename T::Primitive>;
-    };
-    ValueTypeDispatcher(resultType).execute(select);
-
-    return emit;
+    bioassert(false, "Unhandled group aggregate kind");
+    return nullptr;
 }
 
 NLGroupKeyGatherFunction NLExecutor::selectGroupKeyGather(NLChunkKind kind) {

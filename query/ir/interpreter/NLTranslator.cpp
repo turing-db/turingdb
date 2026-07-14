@@ -1331,36 +1331,48 @@ void NLTranslator::translateGroupAggregateUpdate(nl::GroupAggregateUpdate update
         NLGroupAggregateState::Aggregate aggregate;
         aggregate._input = getColumn(column);
 
-        if (kind == GroupAggregateKind::Count) {
-            // count tallies rows, so it keeps no reduced value (a null accumulator,
-            // only the per-group tally). count(*) over an ID chunk charges every row;
-            // count(x) over a nullable value chunk charges only the present values.
-            aggregate._accumulator = nullptr;
-            aggregate._grow = NLExecutor::selectGroupAggregateGrow(kind, ValueType::Int64);
-            aggregate._emit = NLExecutor::selectGroupAggregateEmit(kind, ValueType::Int64);
+        // A switch (not an if/else) over every kind so a new one is a compile error
+        // here rather than silently taking the value-reduction path.
+        switch (kind) {
+            case GroupAggregateKind::Count: {
+                // count tallies rows, so it keeps no reduced value (a null
+                // accumulator, only the per-group tally). count(*) over an ID chunk
+                // charges every row; count(x) over a nullable value chunk charges
+                // only the present values.
+                aggregate._accumulator = nullptr;
+                aggregate._grow = NLExecutor::selectGroupAggregateGrow(kind, ValueType::Int64);
+                aggregate._emit = NLExecutor::selectGroupAggregateEmit(kind, ValueType::Int64);
 
-            const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
-            const auto nullable = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
-            if (nullable) {
-                const ValueType valueType = valueTypeFromElementType(nullable.getValueType());
-                aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, valueType);
-            } else {
-                // A non-nullable count input must be an ID chunk (count(*));
-                // getChunkKind rejects any other element type.
-                getChunkKind(chunkType);
-                aggregate._fold = NLExecutor::selectGroupCountAllFold();
+                const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+                const auto nullable = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
+                if (nullable) {
+                    const ValueType valueType = valueTypeFromElementType(nullable.getValueType());
+                    aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, valueType);
+                } else {
+                    // A non-nullable count input must be an ID chunk (count(*));
+                    // getChunkKind rejects any other element type.
+                    getChunkKind(chunkType);
+                    aggregate._fold = NLExecutor::selectGroupCountAllFold();
+                }
             }
-        } else {
-            // sum/min/max/avg reduce the values themselves, so the input must be a
-            // nullable value chunk; avg accumulates as f64, the rest in the input's
-            // own type. nullableChunkValueType rejects an ID chunk here.
-            const ValueType inputType = nullableChunkValueType(chunkType);
-            const ValueType accumulatorType = (kind == GroupAggregateKind::Avg) ? ValueType::Double : inputType;
+            break;
 
-            aggregate._accumulator = allocOptColumnForValueType(accumulatorType);
-            aggregate._grow = NLExecutor::selectGroupAggregateGrow(kind, accumulatorType);
-            aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, inputType);
-            aggregate._emit = NLExecutor::selectGroupAggregateEmit(kind, accumulatorType);
+            case GroupAggregateKind::Sum:
+            case GroupAggregateKind::Min:
+            case GroupAggregateKind::Max:
+            case GroupAggregateKind::Avg: {
+                // sum/min/max/avg reduce the values themselves, so the input must be a
+                // nullable value chunk; avg accumulates as f64, the rest in the input's
+                // own type. nullableChunkValueType rejects an ID chunk here.
+                const ValueType inputType = nullableChunkValueType(chunkType);
+                const ValueType accumulatorType = (kind == GroupAggregateKind::Avg) ? ValueType::Double : inputType;
+
+                aggregate._accumulator = allocOptColumnForValueType(accumulatorType);
+                aggregate._grow = NLExecutor::selectGroupAggregateGrow(kind, accumulatorType);
+                aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, inputType);
+                aggregate._emit = NLExecutor::selectGroupAggregateEmit(kind, accumulatorType);
+            }
+            break;
         }
 
         state->addAggregate(aggregate);

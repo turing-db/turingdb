@@ -191,6 +191,47 @@ storage::AggregateKind groupKindToAggregateKind(storage::GroupAggregateKind kind
     throw IRException("Unhandled group aggregate kind");
 }
 
+// The nl chunk type of one grouped aggregate's result column, resolved from its
+// kind and input chunk. A switch (not an if/else) over every GroupAggregateKind so
+// a new kind is a compile error here rather than silently taking the value-reduction
+// path: count is a single non-null unsigned i64 per group; sum/min/max/avg reduce
+// the input's values, so they require a nullable value column (an ID column is
+// rejected) and follow aggregateResultElementType - sum/min/max keep the value type,
+// avg widens to f64.
+nl::ChunkType groupAggregateResultChunkType(mlir::OpBuilder& builder,
+                                            storage::GroupAggregateKind kind,
+                                            mlir::Value inputChunk,
+                                            nl::ChunkType countChunkType) {
+    mlir::MLIRContext* const context = builder.getContext();
+
+    switch (kind) {
+        case storage::GroupAggregateKind::Count:
+            return countChunkType;
+        break;
+
+        case storage::GroupAggregateKind::Sum:
+        case storage::GroupAggregateKind::Min:
+        case storage::GroupAggregateKind::Max:
+        case storage::GroupAggregateKind::Avg: {
+            const nl::ChunkType inputChunkType = mlir::cast<nl::ChunkType>(inputChunk.getType());
+            const auto inputNullable = mlir::dyn_cast<storage::NullableType>(inputChunkType.getElementType());
+            if (!inputNullable) {
+                throw IRException("db.group_aggregate sum/min/max/avg requires a property value column");
+            }
+
+            const mlir::Type resultElement = aggregateResultElementType(builder,
+                                                                        groupKindToAggregateKind(kind),
+                                                                        inputNullable.getValueType());
+            const storage::NullableType resultNullable = storage::NullableType::get(context, resultElement);
+
+            return nl::ChunkType::get(context, resultNullable);
+        }
+        break;
+    }
+
+    throw IRException("Unhandled group aggregate kind");
+}
+
 // The single nl.output that solely consumes every result in the range, or a null
 // op if any result has more than one use, a non-nl.output user, or a different
 // output than its siblings. Read the direction as "one shared output user => the
@@ -1096,26 +1137,7 @@ void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
         const auto kind = static_cast<storage::GroupAggregateKind>(kinds[aggregateIndex]);
         const mlir::Value inputChunk = chunks[keyCount + aggregateIndex];
 
-        if (kind == storage::GroupAggregateKind::Count) {
-            // count tallies rows regardless of value, so its input may be an ID
-            // column (count(*)) or a property value column (count(x)); either way the
-            // result is a single non-null unsigned i64 per group.
-            chunkTypes.push_back(countChunkType);
-        } else {
-            // sum/min/max/avg reduce the values themselves, so the input must be a
-            // property value column - a nullable value chunk - as in lowerAggregate.
-            const nl::ChunkType inputChunkType = mlir::cast<nl::ChunkType>(inputChunk.getType());
-            const auto inputNullable = mlir::dyn_cast<storage::NullableType>(inputChunkType.getElementType());
-            if (!inputNullable) {
-                throw IRException("db.group_aggregate sum/min/max/avg requires a property value column");
-            }
-
-            const mlir::Type resultElement = aggregateResultElementType(_builder,
-                                                                        groupKindToAggregateKind(kind),
-                                                                        inputNullable.getValueType());
-            const storage::NullableType resultNullable = storage::NullableType::get(context, resultElement);
-            chunkTypes.push_back(nl::ChunkType::get(context, resultNullable));
-        }
+        chunkTypes.push_back(groupAggregateResultChunkType(_builder, kind, inputChunk, countChunkType));
     }
 
     const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunkTypes);
