@@ -1508,15 +1508,23 @@ void DBLowering::setInsertionForBinaryOp(mlir::Value lhs, mlir::Value rhs) {
         return;
     }
 
-    mlir::Operation* const lhsDef = lhs.getDefiningOp();
-    mlir::Operation* const rhsDef = rhs.getDefiningOp();
+    const mlir::Operation* lhsDef = lhs.getDefiningOp();
+    const mlir::Operation* rhsDef = rhs.getDefiningOp();
+    const size_t defsToFind = (lhsDef == rhsDef) ? 1 : 2;
 
     // Walk the entry block to find which of the two defining ops appears later —
     // the new op must go after that one to stay before any nl.for that follows.
+    // Each op appears once in the block, so stop as soon as both defs are seen.
     mlir::Operation* lastDef = nullptr;
+    size_t defsFound = 0;
     for (mlir::Operation& op : *_entryBlock) {
         if (&op == lhsDef || &op == rhsDef) {
             lastDef = &op;
+            defsFound++;
+
+            if (defsFound == defsToFind) {
+                break;
+            }
         }
     }
 
