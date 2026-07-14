@@ -1,6 +1,8 @@
 #include "NLExecutor.h"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -334,6 +336,23 @@ void distinctAppendValueBytes(std::string& key, const Primitive& value) {
     key.append(reinterpret_cast<const char*>(&value), sizeof(Primitive));
 }
 
+// A double is normalized before its bytes are appended so keys compare by Cypher
+// value equality, not bit pattern: -0.0 collapses to +0.0 (0.0 == -0.0 in Cypher)
+// and every NaN payload maps to one canonical NaN, so two distinct bit patterns of
+// the same value never split into separate groups (or survive DISTINCT as two rows).
+void distinctAppendValueBytes(std::string& key, double value) {
+    double normalized = value;
+
+    if (normalized == 0.0) {
+        // -0.0 == +0.0, so assigning +0.0 canonicalizes the sign of zero.
+        normalized = 0.0;
+    } else if (std::isnan(normalized)) {
+        normalized = std::numeric_limits<double>::quiet_NaN();
+    }
+
+    key.append(reinterpret_cast<const char*>(&normalized), sizeof(normalized));
+}
+
 void distinctAppendValueBytes(std::string& key, std::string_view value) {
     const size_t length = value.size();
     key.append(reinterpret_cast<const char*>(&length), sizeof(length));
@@ -606,22 +625,31 @@ void groupGatherAppendColumn(const Column* input, const std::vector<size_t>& row
     }
 }
 
-// Grow a sum/avg accumulator to groupCount groups, initializing each new group to
-// a present zero (the additive identity) and its tally to zero. Existing groups
-// keep their running value.
+// Grow a sum accumulator to groupCount groups, initializing each new group to a
+// present zero (the additive identity). Existing groups keep their running sum. sum
+// keeps no per-group tally, so the counts vector is left untouched.
 template <typename Primitive>
 void groupGrowZero(Column* accumulator, std::vector<uint64_t>& counts, size_t groupCount) {
     auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
     raw.resize(groupCount, std::optional<Primitive>(Primitive {}));
-    counts.resize(groupCount, 0);
 }
 
 // Grow a min/max accumulator to groupCount groups, initializing each new group to
-// null (no extreme seen yet). Existing groups keep their running extreme.
+// null (no extreme seen yet). Existing groups keep their running extreme. min/max
+// keeps no per-group tally, so the counts vector is left untouched.
 template <typename Primitive>
 void groupGrowNull(Column* accumulator, std::vector<uint64_t>& counts, size_t groupCount) {
     auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
     raw.resize(groupCount);
+}
+
+// Grow an avg accumulator to groupCount groups: a running f64 sum initialized to a
+// present zero plus the per-group non-null tally zeroed for new groups. avg is the
+// only value reduction carried as (sum, count), so it is the only one that grows the
+// counts vector besides count itself.
+void groupGrowAvg(Column* accumulator, std::vector<uint64_t>& counts, size_t groupCount) {
+    auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
+    raw.resize(groupCount, std::optional<double>(0.0));
     counts.resize(groupCount, 0);
 }
 
@@ -1462,9 +1490,10 @@ void NLExecutor::runGroupAggregateUpdate(NLExecutionContext* context, NLFunction
             keyColumn._keyAppend(keyColumn._input, row, key);
         }
 
-        const auto [slot, inserted] = groups.try_emplace(key, state->getGroupCount());
+        const size_t nextGroup = state->getGroupCount();
+        const auto [slot, inserted] = groups.try_emplace(key, nextGroup);
         if (inserted) {
-            state->setGroupCount(state->getGroupCount() + 1);
+            state->setGroupCount(nextGroup + 1);
             newGroupRows.push_back(row);
         }
 
@@ -1821,16 +1850,21 @@ NLAggregateResultFunction NLExecutor::selectAggregateResult(AggregateKind kind, 
 }
 
 NLGroupAggregateGrowFunction NLExecutor::selectGroupAggregateGrow(GroupAggregateKind kind, ValueType accumulatorType) {
-    // count keeps only a per-group tally, so its grow ignores the accumulator type.
+    // count keeps only a per-group tally, so its grow ignores the accumulator type;
+    // avg carries a running f64 sum plus that tally, so its grow is always f64-typed
+    // and is the only value reduction besides count that grows the counts vector.
     if (kind == GroupAggregateKind::Count) {
         return &groupGrowCount;
+    } else if (kind == GroupAggregateKind::Avg) {
+        return &groupGrowAvg;
     }
 
-    // sum/avg grow to a present zero (their identity), min/max to null. Both compile
-    // for any value type, and lowering has already validated the kind / type pairing
-    // (and the fold selector re-checks it), so one dispatch over the accumulator type
+    // sum grows each new group to a present zero (its additive identity), min/max to
+    // null (no extreme seen yet); neither carries a per-group tally. Both compile for
+    // any value type, and lowering has already validated the kind / type pairing (and
+    // the fold selector re-checks it), so one dispatch over the accumulator type
     // suffices - the grouped sibling of selectAggregateReset.
-    const bool growsToZero = (kind == GroupAggregateKind::Sum || kind == GroupAggregateKind::Avg);
+    const bool growsToZero = (kind == GroupAggregateKind::Sum);
 
     NLGroupAggregateGrowFunction grow = nullptr;
     const auto select = [&]<SupportedType T>() {

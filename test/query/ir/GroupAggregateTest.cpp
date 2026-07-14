@@ -6,6 +6,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -154,6 +155,79 @@ private:
     std::vector<Row> _rows;
 };
 
+// Collects the (team, count, sum) rows a two-aggregate group_aggregate emits: a
+// nullable string key, a non-null ui64 count and a nullable int64 sum. Exercises the
+// multi-aggregate path where each group binds two accumulators and two outputs.
+class GroupCountSumSink : public NLOutputSink {
+public:
+    using Row = std::tuple<std::optional<std::string>, uint64_t, std::optional<int64_t>>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 3u);
+
+        const auto* teams = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
+        const auto* sums = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[2]);
+        ASSERT_NE(teams, nullptr);
+        ASSERT_NE(counts, nullptr);
+        ASSERT_NE(sums, nullptr);
+        ASSERT_EQ(teams->size(), counts->size());
+        ASSERT_EQ(teams->size(), sums->size());
+
+        const auto& teamRaw = teams->getRaw();
+        const auto& countRaw = counts->getRaw();
+        const auto& sumRaw = sums->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            std::optional<std::string> team;
+            if (teamRaw[rowIndex]) {
+                team = std::string(*teamRaw[rowIndex]);
+            }
+
+            _rows.emplace_back(team, countRaw[rowIndex], sumRaw[rowIndex]);
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
+// Collects the (weight, count) rows a group_aggregate keyed on a Double emits: a
+// nullable f64 key and a non-null ui64 count. Lets a test assert how many groups a
+// set of double keys collapses into (e.g. +0.0 and -0.0 must share one group).
+class GroupDoubleKeyCountSink : public NLOutputSink {
+public:
+    using Row = std::pair<std::optional<double>, uint64_t>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* weights = dynamic_cast<const ColumnOptVector<double>*>(chunks[0]);
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
+        ASSERT_NE(weights, nullptr);
+        ASSERT_NE(counts, nullptr);
+        ASSERT_EQ(weights->size(), counts->size());
+
+        const auto& weightRaw = weights->getRaw();
+        const auto& countRaw = counts->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.push_back({weightRaw[rowIndex], countRaw[rowIndex]});
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
 // Counts appendChunks calls and total rows without materializing them, so an empty
 // grouped aggregation can be shown to emit nothing.
 class CountingSink : public NLOutputSink {
@@ -212,6 +286,34 @@ std::string groupScoreProgram(int64_t kind) {
              "  return\n"
              "}\n";
 }
+
+// MATCH (a) RETURN a.team, count(*), sum(a.score): group by team and reduce each
+// group two ways at once - a count (kind 0) over the node IDs and a sum (kind 1)
+// over the scores - so the op takes one key column and two aggregate-input columns
+// and each group binds two accumulators and two outputs.
+constexpr const char* groupCountSumProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %gteam, %n, %s = db.group_aggregate(%team, %a, %score) keys 1 aggregates [0, 1] : (!db.column<none>, !db.column<!storage.node_id>, !db.column<none>) -> (!db.column<none>, !db.column<ui64>, !db.column<none>)
+  db.output(%gteam, %n, %s) : !db.column<none>, !db.column<ui64>, !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a) RETURN a.weight, count(*): group by a Double property and count each
+// group. The grouping key is a nullable f64, so it exercises key serialization of a
+// floating-point value.
+constexpr const char* groupWeightCountProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %weight = db.get_node_properties(%a, "weight") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %gweight, %n = db.group_aggregate(%weight, %a) keys 1 aggregates [0] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<ui64>)
+  db.output(%gweight, %n) : !db.column<none>, !db.column<ui64>
+  return
+}
+)mlir";
 
 }
 
@@ -278,6 +380,101 @@ protected:
         metadata.getOrCreateLabel("0");
         metadata.getOrCreatePropertyType("team", ValueType::String);
         metadata.getOrCreatePropertyType("score", ValueType::Int64);
+
+        const auto submitResult = change->access().submit(*_jobSystem);
+        EXPECT_TRUE(submitResult);
+
+        return graph;
+    }
+
+    // buildTeamGraph plus a node with no "team" property, so its grouping key is
+    // null. Two "red" nodes and one team-less node let a test assert that all
+    // null-key rows collapse into a single group whose emitted key is null.
+    std::unique_ptr<Graph> buildPartialTeamGraph() {
+        auto graph = Graph::create();
+
+        auto change = graph->newChange();
+        auto* commitBuilder = change->access().getTip();
+        auto& builder = commitBuilder->newBuilder();
+        auto& metadata = builder.getMetadata();
+
+        metadata.getOrCreateLabel("0");
+        const PropertyTypeID teamID = metadata.getOrCreatePropertyType("team", ValueType::String)._id;
+
+        const LabelSet labelset = LabelSet::fromList({0});
+        const NodeID red1 = builder.addNode(labelset);
+        const NodeID red2 = builder.addNode(labelset);
+        builder.addNode(labelset); // a team-less node, so its grouping key is null
+
+        builder.addNodeProperty<types::String>(red1, teamID, "red");
+        builder.addNodeProperty<types::String>(red2, teamID, "red");
+
+        const auto submitResult = change->access().submit(*_jobSystem);
+        EXPECT_TRUE(submitResult);
+
+        return graph;
+    }
+
+    // Four nodes each in their own single-node "team" (a, b, c, d) with scores 1..4,
+    // so a grouped aggregate produces four groups. Run at a chunk size below four,
+    // the emit loop must iterate more than once, slicing the later groups at a
+    // non-zero begin offset.
+    std::unique_ptr<Graph> buildManyTeamGraph() {
+        auto graph = Graph::create();
+
+        auto change = graph->newChange();
+        auto* commitBuilder = change->access().getTip();
+        auto& builder = commitBuilder->newBuilder();
+        auto& metadata = builder.getMetadata();
+
+        metadata.getOrCreateLabel("0");
+        const PropertyTypeID teamID = metadata.getOrCreatePropertyType("team", ValueType::String)._id;
+        const PropertyTypeID scoreID = metadata.getOrCreatePropertyType("score", ValueType::Int64)._id;
+
+        const LabelSet labelset = LabelSet::fromList({0});
+        const NodeID nodeA = builder.addNode(labelset);
+        const NodeID nodeB = builder.addNode(labelset);
+        const NodeID nodeC = builder.addNode(labelset);
+        const NodeID nodeD = builder.addNode(labelset);
+
+        builder.addNodeProperty<types::String>(nodeA, teamID, "a");
+        builder.addNodeProperty<types::String>(nodeB, teamID, "b");
+        builder.addNodeProperty<types::String>(nodeC, teamID, "c");
+        builder.addNodeProperty<types::String>(nodeD, teamID, "d");
+
+        builder.addNodeProperty<types::Int64>(nodeA, scoreID, 1);
+        builder.addNodeProperty<types::Int64>(nodeB, scoreID, 2);
+        builder.addNodeProperty<types::Int64>(nodeC, scoreID, 3);
+        builder.addNodeProperty<types::Int64>(nodeD, scoreID, 4);
+
+        const auto submitResult = change->access().submit(*_jobSystem);
+        EXPECT_TRUE(submitResult);
+
+        return graph;
+    }
+
+    // Three nodes with a Double "weight": +0.0, -0.0 and 1.5. The two zeros differ
+    // only in the sign bit but are equal under Cypher value equality, so a correct
+    // grouping collapses them into one group - two groups total, not three.
+    std::unique_ptr<Graph> buildWeightGraph() {
+        auto graph = Graph::create();
+
+        auto change = graph->newChange();
+        auto* commitBuilder = change->access().getTip();
+        auto& builder = commitBuilder->newBuilder();
+        auto& metadata = builder.getMetadata();
+
+        metadata.getOrCreateLabel("0");
+        const PropertyTypeID weightID = metadata.getOrCreatePropertyType("weight", ValueType::Double)._id;
+
+        const LabelSet labelset = LabelSet::fromList({0});
+        const NodeID positiveZero = builder.addNode(labelset);
+        const NodeID negativeZero = builder.addNode(labelset);
+        const NodeID other = builder.addNode(labelset);
+
+        builder.addNodeProperty<types::Double>(positiveZero, weightID, 0.0);
+        builder.addNodeProperty<types::Double>(negativeZero, weightID, -0.0);
+        builder.addNodeProperty<types::Double>(other, weightID, 1.5);
 
         const auto submitResult = change->access().submit(*_jobSystem);
         EXPECT_TRUE(submitResult);
@@ -428,6 +625,90 @@ TEST_F(GroupAggregateTest, emptyGraphEmitsNoGroup) {
 
     EXPECT_EQ(sink.getCalls(), 0u);
     EXPECT_EQ(sink.getTotalRows(), 0u);
+}
+
+TEST_F(GroupAggregateTest, multipleAggregatesPerGroup) {
+    auto graph = buildTeamGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // RETURN a.team, count(*), sum(a.score): two aggregates over the same groups, so
+    // each group binds two accumulators and two outputs. count(*) charges every node,
+    // so both teams count 2; sum ignores the null score, so red sums 30 and blue 100.
+    GroupCountSumSink sink;
+    runLoweredProgram(groupCountSumProgram, reader.getView(), sink);
+
+    std::vector<GroupCountSumSink::Row> rows;
+    sink.sortedRows(rows);
+
+    std::vector<GroupCountSumSink::Row> expected;
+    expected.emplace_back(std::optional<std::string>("blue"), 2u, std::optional<int64_t>(100));
+    expected.emplace_back(std::optional<std::string>("red"), 2u, std::optional<int64_t>(30));
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(GroupAggregateTest, nullGroupingKeyFormsOneGroup) {
+    auto graph = buildPartialTeamGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The team-less node groups under a null key: all null-key rows collapse into one
+    // group whose emitted key is null (nullopt). Two "red" nodes and one team-less
+    // node give (null -> 1) and (red -> 2).
+    GroupCountSink sink;
+    runLoweredProgram(groupCountStarProgram, reader.getView(), sink);
+
+    std::vector<GroupCountSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<GroupCountSink::Row> expected {{std::nullopt, 1}, {"red", 2}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(GroupAggregateTest, emitsMoreGroupsThanChunkSize) {
+    auto graph = buildManyTeamGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Four groups with a chunk size of two, so the emit loop runs twice and its
+    // second iteration slices groups [2, 4) at a non-zero begin offset - exercising
+    // the count emit, the sum copy, the avg emit and the key copy each with begin > 0.
+    GroupCountSink countSink;
+    runLoweredProgram(groupCountStarProgram, reader.getView(), countSink, /*chunkSize=*/2);
+    std::vector<GroupCountSink::Row> countRows;
+    countSink.sortedRows(countRows);
+    EXPECT_EQ(countRows, (std::vector<GroupCountSink::Row> {{"a", 1}, {"b", 1}, {"c", 1}, {"d", 1}}));
+
+    GroupInt64Sink sumSink;
+    runLoweredProgram(groupScoreProgram(1).c_str(), reader.getView(), sumSink, /*chunkSize=*/2);
+    std::vector<GroupInt64Sink::Row> sumRows;
+    sumSink.sortedRows(sumRows);
+    EXPECT_EQ(sumRows, (std::vector<GroupInt64Sink::Row> {{"a", 1}, {"b", 2}, {"c", 3}, {"d", 4}}));
+
+    GroupDoubleSink avgSink;
+    runLoweredProgram(groupScoreProgram(4).c_str(), reader.getView(), avgSink, /*chunkSize=*/2);
+    std::vector<GroupDoubleSink::Row> avgRows;
+    avgSink.sortedRows(avgRows);
+    EXPECT_EQ(avgRows, (std::vector<GroupDoubleSink::Row> {{"a", 1.0}, {"b", 2.0}, {"c", 3.0}, {"d", 4.0}}));
+}
+
+TEST_F(GroupAggregateTest, negativeZeroGroupsWithPositiveZero) {
+    auto graph = buildWeightGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Grouping on a Double key must use Cypher value equality, not raw IEEE-754 bytes:
+    // +0.0 and -0.0 differ only in the sign bit but are equal, so the two zero-weight
+    // nodes collapse into one group (count 2) while 1.5 forms its own. A bitwise key
+    // would wrongly split the zeros into two groups.
+    GroupDoubleKeyCountSink sink;
+    runLoweredProgram(groupWeightCountProgram, reader.getView(), sink);
+
+    std::vector<GroupDoubleKeyCountSink::Row> rows;
+    sink.sortedRows(rows);
+
+    ASSERT_EQ(rows.size(), 2u);
+    const std::vector<GroupDoubleKeyCountSink::Row> expected {{0.0, 2}, {1.5, 1}};
+    EXPECT_EQ(rows, expected);
 }
 
 // db.group_aggregate lowers to the pipeline-breaker shape, like db.sort: a hoisted
