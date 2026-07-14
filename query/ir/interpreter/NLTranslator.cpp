@@ -651,7 +651,6 @@ void NLTranslator::translateFilter(nl::Filter filter, NLStmtContainer* body) {
     const NLMaskSurvivorFunction filterFunction =
         NLExecutor::selectMaskSurvivorFunction(maskNullable);
 
-
     NLFilterData* data = _program->allocFunctionData<NLFilterData>(mask, filterFunction);
 
     // Reserve to avoid execution time allocations
