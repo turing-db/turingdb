@@ -329,12 +329,16 @@ LogicalResult GroupAggregate::verify() {
         return emitOpError("requires at least one aggregate");
     }
 
-    // Every column is either a grouping key or one aggregate's input, so the two
-    // counts must sum to the column count exactly.
-    if (columns.size() != keyCount + kinds.size()) {
-        return emitOpError("expects ") << (keyCount + kinds.size())
-                                       << " columns, one per grouping key and aggregate, but has "
-                                       << columns.size();
+    // Every column is either a grouping key or one aggregate's input, so the key and
+    // aggregate counts must partition the columns exactly. keyCount is an unbounded
+    // attribute, so bound it by the real column count first and compare the remainder
+    // to kinds.size(): summing keyCount + kinds.size() would wrap in unsigned 64-bit
+    // and let a pathological keyCount slip past the check into out-of-bounds lowering.
+    const size_t columnCount = columns.size();
+    if (keyCount > columnCount || columnCount - keyCount != kinds.size()) {
+        return emitOpError("expects ") << keyCount
+                                       << " grouping-key columns and " << kinds.size()
+                                       << " aggregate columns, but has " << columnCount;
     }
 
     // One result per grouping key then one per aggregate.

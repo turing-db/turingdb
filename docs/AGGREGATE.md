@@ -2,9 +2,8 @@
 
 Background research for implementing **grouped (`GROUP BY`) aggregation** in TuringDB.
 This document is the literature / systems study: how the operator works, the design
-space, and what ClickHouse, Kùzu, and Neo4j actually do. The concrete plan for *our*
-engine lives in [`/PLAN.md`](../PLAN.md); the closest existing analog (a multi-row
-pipeline breaker) is [`ORDER_BY.md`](ORDER_BY.md).
+space, and what ClickHouse, Kùzu, and Neo4j actually do. The closest existing analog
+in our engine (a multi-row pipeline breaker) is [`ORDER_BY.md`](ORDER_BY.md).
 
 Scope: in-memory, column-oriented, chunk-at-a-time execution — the regime TuringDB
 operates in.
