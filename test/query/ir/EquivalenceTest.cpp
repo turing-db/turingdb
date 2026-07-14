@@ -356,6 +356,48 @@ TEST_F(EquivalenceTest, eqFilters) {
     expectEquivalent("MATCH (n)-[e]->(m) WHERE e.duration = 10 + 10 return m");
 }
 
+// FIXME: Enable commented tests below once string literals are supported
+TEST_F(EquivalenceTest, inlineNodePropertyConstraints) {
+    // Single string constraint — exactly one person named Remy.
+    // expectEquivalent("MATCH (n {name: 'Remy'}) RETURN n");
+
+    // Integer constraint — both Remy and Adam have age 32.
+    expectEquivalent("MATCH (n {age: 32}) RETURN n");
+
+    // Bool constraint — several Person nodes have isFrench = true.
+    expectEquivalent("MATCH (n {isFrench: true}) RETURN n");
+
+    // Multiple constraints ANDed — only Maxime is French with no PhD.
+    expectEquivalent("MATCH (n {isFrench: true, hasPhD: false}) RETURN n");
+
+    // Constraint that matches no node in the graph.
+    // expectEquivalent("MATCH (n {name: 'Nobody'}) RETURN n");
+
+    // Constraint on the source of a traversal.
+    // expectEquivalent("MATCH (a {name: 'Remy'})-->(b) RETURN b");
+
+    // Constraint on the target of a traversal.
+    // expectEquivalent("MATCH (a)-->(b {name: 'Bio'}) RETURN a");
+
+    // Constraints on both endpoints of a traversal.
+    // expectEquivalent("MATCH (a {isFrench: true})-->(b {name: 'Bio'}) RETURN a");
+}
+
+// FIXME: Enable commented tests below once string literals are supported
+TEST_F(EquivalenceTest, inlineEdgePropertyConstraints) {
+    // Integer edge property constraint.
+    expectEquivalent("MATCH (a)-[e {duration: 20}]->(b) RETURN a, b");
+
+    // String edge property constraint — only expert edges.
+    // expectEquivalent("MATCH (a)-[e {proficiency: 'expert'}]->(b) RETURN a, b");
+
+    // Edge constraint that matches no edge in the graph.
+    expectEquivalent("MATCH (a)-[e {duration: 999}]->(b) RETURN a, b");
+
+    // Combined node and edge constraints.
+    // expectEquivalent("MATCH (a {name: 'Remy'})-[e {duration: 20}]->(b) RETURN b");
+}
+
 TEST_F(EquivalenceTest, constants) {
     expectEquivalent("RETURN 5");
     expectEquivalent("RETURN 5 + 10");
