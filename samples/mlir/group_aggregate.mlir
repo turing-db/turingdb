@@ -3,10 +3,10 @@ module {
     // MATCH (a) RETURN a.team, sum(a.score), avg(a.score): scan every node, read
     // its "team" and "score", group the nodes by team and reduce each group's
     // scores two ways at once - a sum and an average. keys 1 marks the leading
-    // column (team) as the grouping key; aggregates [1, 4] names the two reductions
-    // over the trailing columns (1 = sum, 4 = avg), so the op takes one key column
-    // and two aggregate-input columns (both the score column) and emits one row per
-    // team: the team, its score sum, and its score average.
+    // column (team) as the grouping key; aggregates [sum, avg] names the two
+    // reductions over the trailing columns, so the op takes one key column and two
+    // aggregate-input columns (both the score column) and emits one row per team:
+    // the team, its score sum, and its score average.
     //
     // Like a bare aggregate, Cypher aggregates ignore nulls within a group; sum
     // keeps the input's value type and avg always widens to a float. The db result
@@ -26,7 +26,7 @@ module {
 
     %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
 
-    %gteam, %total, %mean = db.group_aggregate(%team, %score, %score) keys 1 aggregates [1, 4] : (!db.column<none>, !db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>, !db.column<none>)
+    %gteam, %total, %mean = db.group_aggregate(%team, %score, %score) keys 1 aggregates [sum, avg] : (!db.column<none>, !db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>, !db.column<none>)
 
     db.output(%gteam, %total, %mean) : !db.column<none>, !db.column<none>, !db.column<none>
 

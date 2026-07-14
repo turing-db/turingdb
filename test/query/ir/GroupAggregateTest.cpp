@@ -311,7 +311,7 @@ constexpr const char* groupCountStarProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gteam, %n = db.group_aggregate(%team, %a) keys 1 aggregates [0] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<ui64>)
+  %gteam, %n = db.group_aggregate(%team, %a) keys 1 aggregates [count] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<ui64>)
   db.output(%gteam, %n) : !db.column<none>, !db.column<ui64>
   return
 }
@@ -324,22 +324,23 @@ func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
   %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gteam, %n = db.group_aggregate(%team, %score) keys 1 aggregates [0] : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<ui64>)
+  %gteam, %n = db.group_aggregate(%team, %score) keys 1 aggregates [count] : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<ui64>)
   db.output(%gteam, %n) : !db.column<none>, !db.column<ui64>
   return
 }
 )mlir";
 
 // MATCH (a) RETURN a.team, <agg>(a.score): group by team and reduce each group's
-// scores with one value reduction. kind is 1 = sum, 2 = min, 3 = max, 4 = avg; the
-// db result value type is resolved during lowering, so the db column is left none.
-std::string groupScoreProgram(int64_t kind) {
+// scores with one value reduction. kind is the GroupAggregateKind keyword - "sum",
+// "min", "max" or "avg"; the db result value type is resolved during lowering, so
+// the db column is left none.
+std::string groupScoreProgram(const char* kind) {
     return std::string("func.func @main() {\n"
                        "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
                        "  %team = db.get_node_properties(%a, \"team\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
                        "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
                        "  %gteam, %r = db.group_aggregate(%team, %score) keys 1 aggregates [")
-           + std::to_string(kind)
+           + kind
            + "] : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>)\n"
              "  db.output(%gteam, %r) : !db.column<none>, !db.column<none>\n"
              "  return\n"
@@ -355,7 +356,7 @@ func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
   %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gteam, %n, %s = db.group_aggregate(%team, %a, %score) keys 1 aggregates [0, 1] : (!db.column<none>, !db.column<!storage.node_id>, !db.column<none>) -> (!db.column<none>, !db.column<ui64>, !db.column<none>)
+  %gteam, %n, %s = db.group_aggregate(%team, %a, %score) keys 1 aggregates [count, sum] : (!db.column<none>, !db.column<!storage.node_id>, !db.column<none>) -> (!db.column<none>, !db.column<ui64>, !db.column<none>)
   db.output(%gteam, %n, %s) : !db.column<none>, !db.column<ui64>, !db.column<none>
   return
 }
@@ -373,7 +374,7 @@ func.func @main() {
   %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
   %city = db.get_node_properties(%a, "city") : (!db.column<!storage.node_id>) -> !db.column<none>
   %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gteam, %gcity, %n, %s, %m = db.group_aggregate(%team, %city, %a, %score, %score) keys 2 aggregates [0, 1, 3] : (!db.column<none>, !db.column<none>, !db.column<!storage.node_id>, !db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>, !db.column<ui64>, !db.column<none>, !db.column<none>)
+  %gteam, %gcity, %n, %s, %m = db.group_aggregate(%team, %city, %a, %score, %score) keys 2 aggregates [count, sum, max] : (!db.column<none>, !db.column<none>, !db.column<!storage.node_id>, !db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>, !db.column<ui64>, !db.column<none>, !db.column<none>)
   db.output(%gteam, %gcity, %n, %s, %m) : !db.column<none>, !db.column<none>, !db.column<ui64>, !db.column<none>, !db.column<none>
   return
 }
@@ -386,7 +387,7 @@ constexpr const char* groupWeightCountProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %weight = db.get_node_properties(%a, "weight") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %gweight, %n = db.group_aggregate(%weight, %a) keys 1 aggregates [0] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<ui64>)
+  %gweight, %n = db.group_aggregate(%weight, %a) keys 1 aggregates [count] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<ui64>)
   db.output(%gweight, %n) : !db.column<none>, !db.column<ui64>
   return
 }
@@ -679,7 +680,7 @@ TEST_F(GroupAggregateTest, sumsScoresPerGroup) {
 
     // red sums 10 + 20 = 30; blue sums 100 (+ null, ignored) = 100.
     GroupInt64Sink sink;
-    runLoweredProgram(groupScoreProgram(1).c_str(), reader.getView(), sink);
+    runLoweredProgram(groupScoreProgram("sum").c_str(), reader.getView(), sink);
 
     std::vector<GroupInt64Sink::Row> rows;
     sink.sortedRows(rows);
@@ -694,13 +695,13 @@ TEST_F(GroupAggregateTest, minsAndMaxsScoresPerGroup) {
 
     // red min 10 / max 20; blue has one non-null score (100), so min = max = 100.
     GroupInt64Sink minSink;
-    runLoweredProgram(groupScoreProgram(2).c_str(), reader.getView(), minSink);
+    runLoweredProgram(groupScoreProgram("min").c_str(), reader.getView(), minSink);
     std::vector<GroupInt64Sink::Row> minRows;
     minSink.sortedRows(minRows);
     EXPECT_EQ(minRows, (std::vector<GroupInt64Sink::Row> {{"blue", 100}, {"red", 10}}));
 
     GroupInt64Sink maxSink;
-    runLoweredProgram(groupScoreProgram(3).c_str(), reader.getView(), maxSink);
+    runLoweredProgram(groupScoreProgram("max").c_str(), reader.getView(), maxSink);
     std::vector<GroupInt64Sink::Row> maxRows;
     maxSink.sortedRows(maxRows);
     EXPECT_EQ(maxRows, (std::vector<GroupInt64Sink::Row> {{"blue", 100}, {"red", 20}}));
@@ -714,7 +715,7 @@ TEST_F(GroupAggregateTest, averagesScoresPerGroup) {
     // red averages (10 + 20) / 2 = 15.0; blue averages its single non-null score
     // 100 / 1 = 100.0 (the null score is not counted).
     GroupDoubleSink sink;
-    runLoweredProgram(groupScoreProgram(4).c_str(), reader.getView(), sink);
+    runLoweredProgram(groupScoreProgram("avg").c_str(), reader.getView(), sink);
 
     std::vector<GroupDoubleSink::Row> rows;
     sink.sortedRows(rows);
@@ -731,7 +732,7 @@ TEST_F(GroupAggregateTest, groupsAcrossChunkBoundaries) {
     // chunks, so a group's rows can arrive in different chunks; the group table is
     // reset once at function scope, not per chunk, so the sums still total per team.
     GroupInt64Sink sink;
-    runLoweredProgram(groupScoreProgram(1).c_str(), reader.getView(), sink, /*chunkSize=*/2);
+    runLoweredProgram(groupScoreProgram("sum").c_str(), reader.getView(), sink, /*chunkSize=*/2);
 
     std::vector<GroupInt64Sink::Row> rows;
     sink.sortedRows(rows);
@@ -748,7 +749,7 @@ TEST_F(GroupAggregateTest, emptyGraphEmitsNoGroup) {
     // grouped aggregate over an empty input emits nothing (unlike a bare aggregate,
     // which emits one default row).
     CountingSink sink;
-    runLoweredProgram(groupScoreProgram(1).c_str(), reader.getView(), sink);
+    runLoweredProgram(groupScoreProgram("sum").c_str(), reader.getView(), sink);
 
     EXPECT_EQ(sink.getCalls(), 0u);
     EXPECT_EQ(sink.getTotalRows(), 0u);
@@ -829,13 +830,13 @@ TEST_F(GroupAggregateTest, emitsMoreGroupsThanChunkSize) {
     EXPECT_EQ(countRows, (std::vector<GroupCountSink::Row> {{"a", 1}, {"b", 1}, {"c", 1}, {"d", 1}}));
 
     GroupInt64Sink sumSink;
-    runLoweredProgram(groupScoreProgram(1).c_str(), reader.getView(), sumSink, /*chunkSize=*/2);
+    runLoweredProgram(groupScoreProgram("sum").c_str(), reader.getView(), sumSink, /*chunkSize=*/2);
     std::vector<GroupInt64Sink::Row> sumRows;
     sumSink.sortedRows(sumRows);
     EXPECT_EQ(sumRows, (std::vector<GroupInt64Sink::Row> {{"a", 1}, {"b", 2}, {"c", 3}, {"d", 4}}));
 
     GroupDoubleSink avgSink;
-    runLoweredProgram(groupScoreProgram(4).c_str(), reader.getView(), avgSink, /*chunkSize=*/2);
+    runLoweredProgram(groupScoreProgram("avg").c_str(), reader.getView(), avgSink, /*chunkSize=*/2);
     std::vector<GroupDoubleSink::Row> avgRows;
     avgSink.sortedRows(avgRows);
     EXPECT_EQ(avgRows, (std::vector<GroupDoubleSink::Row> {{"a", 1.0}, {"b", 2.0}, {"c", 3.0}, {"d", 4.0}}));
@@ -878,7 +879,7 @@ TEST_F(GroupAggregateTest, lowersToBufferUpdateAndEmitLoop) {
     context.getOrLoadDialect<mlir::nl::NL>();
 
     const mlir::ParserConfig parserConfig(&context);
-    const std::string programText = groupScoreProgram(1);
+    const std::string programText = groupScoreProgram("sum");
     mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(programText, parserConfig);
     ASSERT_TRUE(dbModule);
 

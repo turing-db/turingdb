@@ -6,8 +6,8 @@ module {
     // same never-null-column trick db.count uses to express count(*).
     //
     // db.group_aggregate is the grouped counterpart of a bare aggregate. keys 1
-    // says the first column (team) is the grouping key; aggregates [0] names one
-    // count reduction (kind 0) over the trailing column. It is a pipeline breaker
+    // says the first column (team) is the grouping key; aggregates [count] names one
+    // count reduction over the trailing column. It is a pipeline breaker
     // like db.sort - it must see every row before it can emit any - so it lowers to
     // a hoisted nl.group_aggregate_buffer accumulator, an nl.group_aggregate_update
     // inside the scan loop that folds each chunk into the per-group state, and -
@@ -22,7 +22,7 @@ module {
 
     %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
 
-    %gteam, %n = db.group_aggregate(%team, %a) keys 1 aggregates [0] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<ui64>)
+    %gteam, %n = db.group_aggregate(%team, %a) keys 1 aggregates [count] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<ui64>)
 
     db.output(%gteam, %n) : !db.column<none>, !db.column<ui64>
 

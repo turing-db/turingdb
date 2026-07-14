@@ -1134,22 +1134,23 @@ def GroupAggregateBuffer : NLOp<"group_aggregate_buffer", []> {
 
     `keys` is how many of the columns nl.group_aggregate_update collects are the
     grouping keys (the rest are the aggregate inputs, one per aggregate), and
-    `aggregates` names each aggregate's reduction as GroupAggregateKind integers
-    (0 = count, 1 = sum, 2 = min, 3 = max, 4 = avg). The column types are not spelled
-    here - they are recovered from the nl.group_aggregate_update that feeds the same
-    handle - so only the shape appears. The result type is buildable and omitted.
+    `aggregates` names each aggregate's reduction as GroupAggregateKind keywords
+    (count, sum, min, max, avg). The column types are not spelled here - they are
+    recovered from the nl.group_aggregate_update that feeds the same handle - so only
+    the shape appears. The result type is buildable and omitted.
 
-      %state = nl.group_aggregate_buffer keys 1 aggregates [1]
+      %state = nl.group_aggregate_buffer keys 1 aggregates [sum]
   }];
 
   // keyCount is how many collected columns are grouping keys; kinds names each
   // aggregate's reduction, one per aggregate input. The two together must
   // partition the collected columns (checked during translation, where the column
-  // count is known).
+  // count is known). kinds prints as its GroupAggregateKind keywords through the
+  // shared custom<GroupAggregateKinds> directive (`[sum]`, not `[1]`).
   let arguments = (ins UI64Attr:$keyCount, DenseI64ArrayAttr:$kinds);
   let results   = (outs NLGroupAggregateState:$state);
 
-  let assemblyFormat = "`keys` $keyCount `aggregates` $kinds attr-dict";
+  let assemblyFormat = "`keys` $keyCount `aggregates` custom<GroupAggregateKinds>($kinds) attr-dict";
   let hasVerifier = 1;
 }
 

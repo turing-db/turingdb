@@ -14,7 +14,7 @@
 // !storage.nullable<!storage.string> chunk.
 module {
   func.func @main() {
-    %0 = nl.group_aggregate_buffer keys 1 aggregates [0]
+    %0 = nl.group_aggregate_buffer keys 1 aggregates [count]
     %1 = nl.get_property_type("team")
     %2 = nl.scan_nodes()
     nl.for %arg0 in %2 : !nl.iter<!nl.chunk<!storage.node_id>> {

@@ -748,13 +748,13 @@ def GroupAggregate : TuringOp<"group_aggregate", [Pure]> {
     The operands are the grouping-key columns first, then the aggregate-input
     columns; `keys` is how many leading operands are keys (so the rest are the
     aggregate inputs, one per aggregate). `aggregates` names the reduction of each
-    aggregate input, as GroupAggregateKind integers (0 = count, 1 = sum, 2 = min,
-    3 = max, 4 = avg), so its length is the number of aggregate inputs.
+    aggregate input as GroupAggregateKind keywords (count, sum, min, max, avg), so
+    its length is the number of aggregate inputs.
 
       %a     = db.scan_nodes() : !db.column<!storage.node_id>
       %city  = db.get_node_properties(%a, "city")  : (!db.column<!storage.node_id>) -> !db.column<none>
       %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
-      %gcity, %total = db.group_aggregate(%city, %score) keys 1 aggregates [1]
+      %gcity, %total = db.group_aggregate(%city, %score) keys 1 aggregates [sum]
                          : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>)
       db.output(%gcity, %total) : !db.column<none>, !db.column<none>
 
@@ -783,10 +783,12 @@ def GroupAggregate : TuringOp<"group_aggregate", [Pure]> {
 
   // One result per key column (same type) then one per aggregate; functional-type
   // prints the `(operandTypes) -> resultTypes` form. keyCount prints after `keys`
-  // and the kinds array after `aggregates`, ahead of the colon and elided from
-  // attr-dict since the format names them - the same shape as db.sort.
+  // and the kinds after `aggregates`, ahead of the colon and elided from attr-dict
+  // since the format names them - the same shape as db.sort. The kinds print as
+  // their GroupAggregateKind keywords (`[count, sum, max]`, not `[0, 1, 3]`) through
+  // the shared custom<GroupAggregateKinds> directive.
   let assemblyFormat = [{
-    `(` $columns `)` `keys` $keyCount `aggregates` $kinds attr-dict `:`
+    `(` $columns `)` `keys` $keyCount `aggregates` custom<GroupAggregateKinds>($kinds) attr-dict `:`
     functional-type(operands, results)
   }];
 

@@ -15,7 +15,7 @@
 // widens to an f64.
 module {
   func.func @main() {
-    %0 = nl.group_aggregate_buffer keys 1 aggregates [1, 4]
+    %0 = nl.group_aggregate_buffer keys 1 aggregates [sum, avg]
     %1 = nl.get_property_type("score")
     %2 = nl.get_property_type("team")
     %3 = nl.scan_nodes()

@@ -15,7 +15,7 @@
 // min and max keep score's i64.
 module {
   func.func @main() {
-    %0 = nl.group_aggregate_buffer keys 1 aggregates [2, 3]
+    %0 = nl.group_aggregate_buffer keys 1 aggregates [min, max]
     %1 = nl.get_property_type("score")
     %2 = nl.get_property_type("team")
     %3 = nl.scan_nodes()

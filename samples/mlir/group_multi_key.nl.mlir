@@ -16,7 +16,7 @@
 // keeps score's i64.
 module {
   func.func @main() {
-    %0 = nl.group_aggregate_buffer keys 2 aggregates [1]
+    %0 = nl.group_aggregate_buffer keys 2 aggregates [sum]
     %1 = nl.get_property_type("score")
     %2 = nl.get_property_type("city")
     %3 = nl.get_property_type("team")
