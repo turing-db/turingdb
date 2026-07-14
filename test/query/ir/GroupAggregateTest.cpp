@@ -196,6 +196,65 @@ private:
     std::vector<Row> _rows;
 };
 
+// Collects the (team, city, count, sum, max) rows a multi-key, multi-aggregate
+// group_aggregate emits: two nullable string keys, a non-null ui64 count and two
+// nullable int64 value reductions. Exercises a composite grouping key together with
+// three aggregates (count, sum, max) sharing the same groups.
+class GroupTeamCitySink : public NLOutputSink {
+public:
+    using Row = std::tuple<std::optional<std::string>,
+                           std::optional<std::string>,
+                           uint64_t,
+                           std::optional<int64_t>,
+                           std::optional<int64_t>>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 5u);
+
+        const auto* teams = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* cities = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[1]);
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[2]);
+        const auto* sums = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[3]);
+        const auto* maxes = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[4]);
+        ASSERT_NE(teams, nullptr);
+        ASSERT_NE(cities, nullptr);
+        ASSERT_NE(counts, nullptr);
+        ASSERT_NE(sums, nullptr);
+        ASSERT_NE(maxes, nullptr);
+        ASSERT_EQ(teams->size(), cities->size());
+        ASSERT_EQ(teams->size(), counts->size());
+        ASSERT_EQ(teams->size(), sums->size());
+        ASSERT_EQ(teams->size(), maxes->size());
+
+        const auto& teamRaw = teams->getRaw();
+        const auto& cityRaw = cities->getRaw();
+        const auto& countRaw = counts->getRaw();
+        const auto& sumRaw = sums->getRaw();
+        const auto& maxRaw = maxes->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            std::optional<std::string> team;
+            if (teamRaw[rowIndex]) {
+                team = std::string(*teamRaw[rowIndex]);
+            }
+
+            std::optional<std::string> city;
+            if (cityRaw[rowIndex]) {
+                city = std::string(*cityRaw[rowIndex]);
+            }
+
+            _rows.emplace_back(team, city, countRaw[rowIndex], sumRaw[rowIndex], maxRaw[rowIndex]);
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
 // Collects the (weight, count) rows a group_aggregate keyed on a Double emits: a
 // nullable f64 key and a non-null ui64 count. Lets a test assert how many groups a
 // set of double keys collapses into (e.g. +0.0 and -0.0 must share one group).
@@ -298,6 +357,24 @@ func.func @main() {
   %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
   %gteam, %n, %s = db.group_aggregate(%team, %a, %score) keys 1 aggregates [0, 1] : (!db.column<none>, !db.column<!storage.node_id>, !db.column<none>) -> (!db.column<none>, !db.column<ui64>, !db.column<none>)
   db.output(%gteam, %n, %s) : !db.column<none>, !db.column<ui64>, !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a) RETURN a.team, a.city, count(*), sum(a.score), max(a.score): group by
+// the (team, city) pair and reduce each group three ways at once - a count (kind 0)
+// over the node IDs, a sum (kind 1) and a max (kind 3) over the scores. keys 2 makes
+// the group identity the whole (team, city) tuple, so the op takes two key columns
+// and three aggregate-input columns and binds one accumulator and one output per
+// aggregate on top of the two passed-through keys.
+constexpr const char* groupTeamCityProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %city = db.get_node_properties(%a, "city") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %gteam, %gcity, %n, %s, %m = db.group_aggregate(%team, %city, %a, %score, %score) keys 2 aggregates [0, 1, 3] : (!db.column<none>, !db.column<none>, !db.column<!storage.node_id>, !db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>, !db.column<ui64>, !db.column<none>, !db.column<none>)
+  db.output(%gteam, %gcity, %n, %s, %m) : !db.column<none>, !db.column<none>, !db.column<ui64>, !db.column<none>, !db.column<none>
   return
 }
 )mlir";
@@ -482,6 +559,56 @@ protected:
         return graph;
     }
 
+    // Five nodes grouped by a (team, city) pair (both String) with a "score"
+    // (Int64), so a composite key forms three groups: (red, paris) with scores 10
+    // and 20, (red, lyon) with score 5, and (blue, paris) with score 100 plus a node
+    // with no score (a null value inside the group). Lets a test hand-derive a
+    // multi-key, multi-aggregate reduction where count(*) charges the null-score row
+    // but sum and max ignore it.
+    std::unique_ptr<Graph> buildTeamCityGraph() {
+        auto graph = Graph::create();
+
+        auto change = graph->newChange();
+        auto* commitBuilder = change->access().getTip();
+        auto& builder = commitBuilder->newBuilder();
+        auto& metadata = builder.getMetadata();
+
+        metadata.getOrCreateLabel("0");
+        const PropertyTypeID teamID = metadata.getOrCreatePropertyType("team", ValueType::String)._id;
+        const PropertyTypeID cityID = metadata.getOrCreatePropertyType("city", ValueType::String)._id;
+        const PropertyTypeID scoreID = metadata.getOrCreatePropertyType("score", ValueType::Int64)._id;
+
+        const LabelSet labelset = LabelSet::fromList({0});
+        const NodeID redParis1 = builder.addNode(labelset);
+        const NodeID redParis2 = builder.addNode(labelset);
+        const NodeID redLyon = builder.addNode(labelset);
+        const NodeID blueParis1 = builder.addNode(labelset);
+        const NodeID blueParis2 = builder.addNode(labelset);
+
+        builder.addNodeProperty<types::String>(redParis1, teamID, "red");
+        builder.addNodeProperty<types::String>(redParis2, teamID, "red");
+        builder.addNodeProperty<types::String>(redLyon, teamID, "red");
+        builder.addNodeProperty<types::String>(blueParis1, teamID, "blue");
+        builder.addNodeProperty<types::String>(blueParis2, teamID, "blue");
+
+        builder.addNodeProperty<types::String>(redParis1, cityID, "paris");
+        builder.addNodeProperty<types::String>(redParis2, cityID, "paris");
+        builder.addNodeProperty<types::String>(redLyon, cityID, "lyon");
+        builder.addNodeProperty<types::String>(blueParis1, cityID, "paris");
+        builder.addNodeProperty<types::String>(blueParis2, cityID, "paris");
+
+        builder.addNodeProperty<types::Int64>(redParis1, scoreID, 10);
+        builder.addNodeProperty<types::Int64>(redParis2, scoreID, 20);
+        builder.addNodeProperty<types::Int64>(redLyon, scoreID, 5);
+        builder.addNodeProperty<types::Int64>(blueParis1, scoreID, 100);
+        // blueParis2 carries no score, so its group has a null score value
+
+        const auto submitResult = change->access().submit(*_jobSystem);
+        EXPECT_TRUE(submitResult);
+
+        return graph;
+    }
+
     // Parses a db-dialect program, lowers it to nl with DBLowering, and runs the
     // lowered nl function against the graph view. The chunk size is exposed so a
     // test can force the group emit and the collect to span chunk boundaries.
@@ -644,6 +771,29 @@ TEST_F(GroupAggregateTest, multipleAggregatesPerGroup) {
     std::vector<GroupCountSumSink::Row> expected;
     expected.emplace_back(std::optional<std::string>("blue"), 2u, std::optional<int64_t>(100));
     expected.emplace_back(std::optional<std::string>("red"), 2u, std::optional<int64_t>(30));
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(GroupAggregateTest, multiKeyMultipleAggregates) {
+    auto graph = buildTeamCityGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // RETURN a.team, a.city, count(*), sum(a.score), max(a.score): a composite
+    // (team, city) key with three aggregates over the same groups. count(*) charges
+    // every node, so (blue, paris) counts 2 even though one score is null, while sum
+    // and max ignore that null. (red, paris) sums 30 / maxes 20; (red, lyon) has the
+    // lone score 5; (blue, paris) sums and maxes 100.
+    GroupTeamCitySink sink;
+    runLoweredProgram(groupTeamCityProgram, reader.getView(), sink);
+
+    std::vector<GroupTeamCitySink::Row> rows;
+    sink.sortedRows(rows);
+
+    std::vector<GroupTeamCitySink::Row> expected;
+    expected.emplace_back(std::optional<std::string>("blue"), std::optional<std::string>("paris"), 2u, std::optional<int64_t>(100), std::optional<int64_t>(100));
+    expected.emplace_back(std::optional<std::string>("red"), std::optional<std::string>("lyon"), 1u, std::optional<int64_t>(5), std::optional<int64_t>(5));
+    expected.emplace_back(std::optional<std::string>("red"), std::optional<std::string>("paris"), 2u, std::optional<int64_t>(30), std::optional<int64_t>(20));
     EXPECT_EQ(rows, expected);
 }
 
