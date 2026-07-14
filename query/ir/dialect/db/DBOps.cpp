@@ -4,6 +4,7 @@
 #include "llvm/ADT/SmallVector.h"
 
 #include "StorageEnums.h"
+#include "GroupAggregateKindsFormat.h"
 
 using namespace mlir;
 using namespace mlir::db;

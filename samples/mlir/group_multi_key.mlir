@@ -3,8 +3,8 @@ module {
     // MATCH (a) RETURN a.team, a.city, sum(a.score): scan every node, read its
     // "team", "city" and "score", group the nodes by the (team, city) pair and sum
     // each group's scores. keys 2 marks the two leading columns (team, city) as the
-    // grouping keys, so a group is one distinct (team, city) tuple; aggregates [1]
-    // names one sum reduction (1 = sum) over the trailing column. The op takes two
+    // grouping keys, so a group is one distinct (team, city) tuple; aggregates [sum]
+    // names one sum reduction over the trailing column. The op takes two
     // key columns and one aggregate-input column and emits one row per (team, city)
     // pair: the team, the city, and that pair's score sum.
     //
@@ -32,7 +32,7 @@ module {
 
     %score = db.get_node_properties(%a, "score") : (!db.column<!storage.node_id>) -> !db.column<none>
 
-    %gteam, %gcity, %total = db.group_aggregate(%team, %city, %score) keys 2 aggregates [1] : (!db.column<none>, !db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>, !db.column<none>)
+    %gteam, %gcity, %total = db.group_aggregate(%team, %city, %score) keys 2 aggregates [sum] : (!db.column<none>, !db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>, !db.column<none>)
 
     db.output(%gteam, %gcity, %total) : !db.column<none>, !db.column<none>, !db.column<none>
 
