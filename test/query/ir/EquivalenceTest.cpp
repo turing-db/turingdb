@@ -42,6 +42,7 @@
 #include "columns/ColumnOptVector.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
+#include "metadata/PropertyNull.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
@@ -92,6 +93,38 @@ bool renderValueCell(const Column* column, size_t row, std::string& out) {
     return true;
 }
 
+bool renderEmbeddingCell(const Column* column, size_t row, std::string& out) {
+    const auto renderSpan = [](std::span<const float> floats, std::string& target) {
+        target = "[";
+        for (size_t i = 0; i < floats.size(); i++) {
+            if (i > 0) {
+                target += ", ";
+            }
+            target += std::to_string(floats[i]);
+        }
+        target += "]";
+    };
+
+    if (const auto* constCol = dynamic_cast<const ColumnConst<std::span<const float>>*>(column)) {
+        renderSpan(constCol->at(0), out);
+        return true;
+    }
+
+    const auto* values = dynamic_cast<const ColumnOptVector<std::span<const float>>*>(column);
+    if (!values) {
+        return false;
+    }
+
+    const std::optional<std::span<const float>> value = (*values)[row];
+    if (!value) {
+        out = "null";
+        return true;
+    }
+
+    renderSpan(*value, out);
+    return true;
+}
+
 void renderCell(const Column* column, size_t row, std::string& out) {
     if (const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(column)) {
         out = std::to_string((*nodeIDs)[row].getValue());
@@ -99,11 +132,14 @@ void renderCell(const Column* column, size_t row, std::string& out) {
         out = std::to_string((*edgeIDs)[row].getValue());
     } else if (const auto* edgeTypes = dynamic_cast<const ColumnEdgeTypes*>(column)) {
         out = std::to_string((*edgeTypes)[row].getValue());
+    } else if (dynamic_cast<const ColumnConst<PropertyNull>*>(column)) {
+        out = "null";
     } else if (renderValueCell<int64_t>(column, row, out)
                || renderValueCell<uint64_t>(column, row, out)
                || renderValueCell<double>(column, row, out)
-               || renderValueCell<std::string_view>(column, row, out)) {
-        // Rendered by the helper for whichever nullable value type matched
+               || renderValueCell<std::string_view>(column, row, out)
+               || renderEmbeddingCell(column, row, out)) {
+        // Rendered by the helper for whichever value type matched
     } else {
         throw std::runtime_error("EquivalenceTest: unsupported output column type");
     }
