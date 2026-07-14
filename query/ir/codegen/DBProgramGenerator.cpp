@@ -618,7 +618,6 @@ void DBProgramGenerator::generateFilters(const CypherAST* ast) {
             orderedVars.push_back(var);
         }
 
-        // FIXME: does this work for WHERE 10 = 10 (i.e. purely-literal predicate)
         if (columnsToFilter.empty()) {
             continue;
         }

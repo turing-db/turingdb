@@ -654,11 +654,10 @@ void NLTranslator::translateFilter(nl::Filter filter, NLStmtContainer* body) {
 
     NLFilterData* data = _program->allocFunctionData<NLFilterData>(mask, filterFunction);
 
-    // Reserve the surviving-indices scratch so the per-step gather stays
-    // allocation-free, the same as the distinct and sort loops' indices column.
+    // Reserve to avoid execution time allocations
     data->getIndices()->reserve(_program->getChunkSize());
 
-    // New column for the result output, same types
+    // New column for each result output, same types
     const mlir::OperandRange columns = filter.getColumns();
     const mlir::ResultRange results = filter.getResults();
     for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
@@ -714,9 +713,7 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
         mlir::Operation* definingOp = column.getDefiningOp();
         const bool isProducedInThisBlock = definingOp && definingOp->getBlock() == outputBlock;
 
-        const bool isBroadcastConstant = isConstantLike(column);
-
-        if (!isInnermostLoopVariable && !isProducedInThisBlock && !isBroadcastConstant) {
+        if (!isInnermostLoopVariable && !isProducedInThisBlock && !isConstantLike(column)) {
             throw IRException("nl.output columns must be a loop variable of the enclosing "
                               "nl.for, produced in this block, or a constant");
         }
