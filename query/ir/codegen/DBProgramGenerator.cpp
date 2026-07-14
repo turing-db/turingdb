@@ -536,7 +536,7 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
         finalIdentities[varName] = finalValue;
     }
 
-    const auto fetch = [&](auto&& item) -> mlir::Value {
+    const auto getVarForItem = [&](auto&& item) -> mlir::Value {
         using Type = std::remove_cvref_t<decltype(item)>;
 
         if constexpr (std::is_same_v<Type, VarDecl*>) {
@@ -561,7 +561,7 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
 
     llvm::SmallVector<mlir::Value> outputted;
     for (const Projection::ReturnItem item : returned) {
-        const mlir::Value itemCol = std::visit(fetch, item);
+        const mlir::Value itemCol = std::visit(getVarForItem, item);
         outputted.push_back(itemCol);
     }
 
@@ -587,6 +587,13 @@ void DBProgramGenerator::generateFilters(const CypherAST* ast) {
         return;
     }
 
+    // All three below reused over iterations
+    // Filter all columns that are defined here
+    llvm::SmallVector<mlir::Value> columnsToFilter;
+    // Track the variables to insert the new filtered values into the map
+    llvm::SmallVector<const VariableDependency*> orderedVars;
+    // Result types are the same as the input types
+    llvm::SmallVector<mlir::Type> resultTypes;
     for (const Stmt* stmt : stmtsContainer->stmts()) {
         if (stmt->getKind() != Stmt::Kind::MATCH) {
             continue;
@@ -602,17 +609,14 @@ void DBProgramGenerator::generateFilters(const CypherAST* ast) {
         const Expr* predicateExpr = where->getExpr();
         translateExpr(predicateExpr);
 
-        if (!_exprMap.contains(predicateExpr)) {
-            continue;
-        }
+        const auto findIt = _exprMap.find(predicateExpr);
+        bioassert(findIt != end(_exprMap), "Failed to get value for expr");
 
-        const mlir::Value predicate = _exprMap.at(predicateExpr);
+        const mlir::Value predicate = findIt->second;
         const mlir::Location loc = _opBuilder.getUnknownLoc();
 
-        // Filter all columns that are defined here
-        llvm::SmallVector<mlir::Value> columnsToFilter;
-        // Track the variables to insert the new filtered values into the map
-        llvm::SmallVector<const VariableDependency*> orderedVars;
+        columnsToFilter.clear();
+        orderedVars.clear();
         for (auto& [var, values] : _varMap) {
             columnsToFilter.push_back(values.back());
             orderedVars.push_back(var);
@@ -622,8 +626,7 @@ void DBProgramGenerator::generateFilters(const CypherAST* ast) {
             continue;
         }
 
-        // Result types are the same as the input types
-        llvm::SmallVector<mlir::Type> resultTypes;
+        resultTypes.clear();
         for (const mlir::Value column : columnsToFilter) {
             resultTypes.push_back(column.getType());
         }
