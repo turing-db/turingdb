@@ -17,6 +17,7 @@
 #include "iterators/ScanNodesByLabelIterator.h"
 #include "iterators/ScanNodesIterator.h"
 #include "iterators/ScanOutEdgesByLabelIterator.h"
+#include "iterators/GetNodeLabelSetIterator.h"
 #include "iterators/MatchLabelSetIterator.h"
 
 namespace db {
@@ -80,6 +81,7 @@ public:
     [[nodiscard]] NodeView getNodeView(NodeID id) const;
     [[nodiscard]] EdgeView getEdgeView(EdgeID id) const;
     [[nodiscard]] EdgeTypeID getEdgeTypeID(EdgeID edgeID) const;
+    [[nodiscard]] GetNodeLabelSetRange getNodeLabelSets(const ColumnNodeIDs* inputNodeIDs) const;
     [[nodiscard]] GetNodeViewsRange getNodeViews(const ColumnNodeIDs* inputNodeIDs) const;
     [[nodiscard]] GetOutEdgesRange getOutEdges(const ColumnNodeIDs* inputNodeIDs) const;
     [[nodiscard]] GetInEdgesRange getInEdges(const ColumnNodeIDs* inputNodeIDs) const;

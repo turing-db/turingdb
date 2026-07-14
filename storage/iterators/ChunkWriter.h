@@ -59,4 +59,9 @@ concept NodeViewChunkWriter = requires(T it) {
     { it.setNodeViewsColumn(new ColumnVector<NodeView>) };
 };
 
+template <typename T>
+concept LabelSetIDsChunkWriter = requires(T it) {
+    { it.setLabelSetIDs(new ColumnVector<LabelSetID>) };
+};
+
 }
