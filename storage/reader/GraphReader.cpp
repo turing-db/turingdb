@@ -104,6 +104,10 @@ size_t GraphReader::getDatapartCount() const {
     return _view.dataparts().size();
 }
 
+GetNodeLabelSetRange GraphReader::getNodeLabelSets(const ColumnNodeIDs* inputNodeIDs) const {
+    return {_view, inputNodeIDs};
+}
+
 size_t GraphReader::getNodePropertyCount(PropertyTypeID ptID) const {
     size_t count = 0;
     for (const auto& part : _view.dataparts()) {

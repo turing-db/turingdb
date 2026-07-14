@@ -10,5 +10,6 @@ using ColumnNodeIDs = ColumnVector<NodeID>;
 using ColumnNodeID = ColumnConst<NodeID>;
 using ColumnEdgeIDs = ColumnVector<EdgeID>;
 using ColumnEdgeID = ColumnConst<EdgeID>;
+using ColumnLabelSetIDs = ColumnVector<LabelSetID>;
 
 }
