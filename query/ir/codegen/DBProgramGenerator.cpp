@@ -30,10 +30,12 @@
 
 #include "CypherAST.h"
 #include "Pattern.h"
+#include "PatternElement.h"
 #include "Projection.h"
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
 #include "WhereClause.h"
+#include "decl/PatternData.h"
 #include "decl/VarDecl.h"
 #include "Literal.h"
 #include "expr/BinaryExpr.h"
@@ -195,6 +197,7 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
     }
 
     generateTraversal(ast);
+    generatePropertyConstraints(ast);
     generateFilters(ast);
     generateOutput(ast);
 
@@ -567,6 +570,110 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     _opBuilder.create<mlir::db::Output>(loc, mlir::ValueRange{outputted});
+}
+
+void DBProgramGenerator::generatePropertyConstraints(const CypherAST* ast) {
+    const CypherAST::QueryCommands& queries = ast->queries();
+    if (queries.size() != 1) {
+        throw TuringException("Multiple queries not yet supported.");
+    }
+
+    const QueryCommand* query = queries.front();
+
+    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
+    if (!sglPart) {
+        return;
+    }
+
+    const StmtContainer* stmtsContainer = sglPart->getReadStmts();
+    if (!stmtsContainer) {
+        return;
+    }
+
+    for (const Stmt* stmt : stmtsContainer->stmts()) {
+        if (stmt->getKind() != Stmt::Kind::MATCH) {
+            continue;
+        }
+
+        const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt);
+        const Pattern* pattern = matchStmt->getPattern();
+
+        // Collect all property constraint expressions from every entity pattern
+        // in this MATCH. Each EntityPropertyConstraint._expr is a synthesized
+        // equality BinaryExpr (e.g. n.name = "Alice") produced by the analyzer.
+        std::vector<const Expr*> constraintExprs;
+
+        for (const PatternElement* element : pattern->elements()) {
+            const NodePattern* rootNode = static_cast<const NodePattern*>(element->getRootEntity());
+            const NodePatternData* rootData = rootNode->getData();
+
+            if (rootData) {
+                for (const EntityPropertyConstraint& constraint : rootData->exprConstraints()) {
+                    constraintExprs.push_back(constraint._expr);
+                }
+            }
+
+            for (auto [edgePattern, nodePattern] : element->getElementChain()) {
+                const EdgePatternData* edgeData = edgePattern->getData();
+                if (edgeData) {
+                    for (const EntityPropertyConstraint& constraint : edgeData->exprConstraints()) {
+                        constraintExprs.push_back(constraint._expr);
+                    }
+                }
+
+                const NodePatternData* nodeData = nodePattern->getData();
+                if (nodeData) {
+                    for (const EntityPropertyConstraint& constraint : nodeData->exprConstraints()) {
+                        constraintExprs.push_back(constraint._expr);
+                    }
+                }
+            }
+        }
+
+        if (constraintExprs.empty()) {
+            continue;
+        }
+
+        const mlir::Location loc = _opBuilder.getUnknownLoc();
+        const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+
+        // Fold left on all expressions, combining with AND
+        mlir::Value combinedPredicate;
+        for (const Expr* constraintExpr : constraintExprs) {
+            translateExpr(constraintExpr);
+            const mlir::Value predicate = _exprMap.at(constraintExpr);
+
+            if (!combinedPredicate) {
+                combinedPredicate = predicate;
+            } else {
+                combinedPredicate = _opBuilder.create<mlir::db::AndOp>(loc, boolType, combinedPredicate, predicate).getResult();
+            }
+        }
+
+        llvm::SmallVector<mlir::Value> columnsToFilter;
+        llvm::SmallVector<const VariableDependency*> orderedVars;
+        for (auto& [var, values] : _varMap) {
+            columnsToFilter.push_back(values.back());
+            orderedVars.push_back(var);
+        }
+
+        if (columnsToFilter.empty()) {
+            continue;
+        }
+
+        llvm::SmallVector<mlir::Type> resultTypes;
+        for (const mlir::Value column : columnsToFilter) {
+            resultTypes.push_back(column.getType());
+        }
+
+        auto filterOp = _opBuilder.create<mlir::db::FilterOp>(
+            loc, resultTypes, combinedPredicate, columnsToFilter);
+
+        for (size_t index = 0; index < orderedVars.size(); index++) {
+            const VariableDependency* var = orderedVars[index];
+            _varMap.at(var).push_back(filterOp.getResult(index));
+        }
+    }
 }
 
 void DBProgramGenerator::generateFilters(const CypherAST* ast) {
