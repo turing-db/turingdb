@@ -11,8 +11,6 @@
 
 #include "BioAssert.h"
 
-using namespace db;
-
 void db::throwIfTooManyDataParts(const ChangeAccessor& access, const TuringConfig* config) {
     bioassert(config, "throwIfTooManyDataParts: config must be set");
 
