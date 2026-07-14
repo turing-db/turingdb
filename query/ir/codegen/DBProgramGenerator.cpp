@@ -810,6 +810,43 @@ mlir::Value DBProgramGenerator::translateLiteralExpr(const Literal* literal) {
             valueAttr = _opBuilder.getF64FloatAttr(doubleLiteral->getValue());
         }
         break;
+
+        case Literal::Kind::STRING: {
+            const StringLiteral* stringLiteral = static_cast<const StringLiteral*>(literal);
+            const mlir::Type stringType = mlir::storage::StringType::get(_mlirCtxt);
+            valueAttr = mlir::StringAttr::get(stringLiteral->getValue(), stringType);
+        }
+        break;
+
+        case Literal::Kind::EMBEDDING: {
+            const EmbeddingLiteral* embeddingLiteral = static_cast<const EmbeddingLiteral*>(literal);
+            const std::span<const float> floats = embeddingLiteral->getValue();
+            const mlir::FloatType f32Type = _opBuilder.getF32Type();
+            const size_t size = floats.size();
+
+            const mlir::RankedTensorType tensorType = mlir::RankedTensorType::get(size, f32Type);
+
+            const auto* bytes = reinterpret_cast<const char*>(floats.data());
+            const size_t numBytes = size * sizeof(float);
+
+            const llvm::ArrayRef<char> rawBytes {bytes, numBytes};
+
+            const mlir::TypedAttr embAttr = mlir::DenseElementsAttr::getFromRawBuffer(tensorType, rawBytes);
+            const mlir::db::ColumnType embResultType = allocColumnType(mlir::storage::EmbeddingType::get(_mlirCtxt));
+            return _opBuilder.create<mlir::db::ConstantOp>(uloc, embResultType, embAttr).getResult();
+        }
+        break;
+
+        case Literal::Kind::NULL_LITERAL: {
+            const mlir::Type nullableType = mlir::storage::NullableType::get(
+                _mlirCtxt, mlir::NoneType::get(_mlirCtxt));
+            valueAttr = mlir::StringAttr::get("", nullableType);
+        }
+        break;
+        case Literal::Kind::LIST:
+            throw FatalException("List literals are not yet supported in MLIR codegen.");
+        break;
+
         default:
             throw FatalException("Unsupported literal kind in WHERE clause expression.");
         break;

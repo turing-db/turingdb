@@ -325,4 +325,8 @@ TEST_F(EquivalenceTest, constants) {
     expectEquivalent("RETURN 5 + 10");
     expectEquivalent("RETURN 5 - 3");
     expectEquivalent("RETURN 5 * 3");
+
+    expectEquivalent("RETURN 'hello'");
+    expectEquivalent("RETURN (1, 2, 3)");
+    expectEquivalent("RETURN null");
 }
