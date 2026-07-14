@@ -168,7 +168,19 @@ LogicalResult Constant::inferReturnTypes(MLIRContext* context,
                                          Constant::Adaptor adaptor,
                                          SmallVectorImpl<Type>& inferredReturnTypes) {
     const TypedAttr value = cast<TypedAttr>(adaptor.getValue());
-    inferredReturnTypes.push_back(ChunkType::get(context, value.getType()));
+
+    Type elementType;
+    if (const auto elements = dyn_cast<DenseElementsAttr>(value)) {
+        const auto shapedType = cast<ShapedType>(elements.getType());
+        const bool isEmbedding = shapedType.getElementType().isF32()
+                                 && shapedType.hasRank()
+                                 && shapedType.getRank() == 1;
+        elementType = isEmbedding ? storage::EmbeddingType::get(context) : value.getType();
+    } else {
+        elementType = value.getType();
+    }
+
+    inferredReturnTypes.push_back(ChunkType::get(context, elementType));
     return success();
 }
 

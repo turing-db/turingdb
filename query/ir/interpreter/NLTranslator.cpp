@@ -12,6 +12,7 @@
 #include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
 #include "metadata/GraphMetadata.h"
+#include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "views/GraphView.h"
 
@@ -97,7 +98,16 @@ typename T::Primitive constantValueAs(mlir::TypedAttr value) {
         return mlir::cast<mlir::FloatAttr>(value).getValueAsDouble();
     } else if constexpr (std::same_as<T, types::Bool>) {
         return CustomBool(mlir::cast<mlir::IntegerAttr>(value).getInt() != 0);
-    } else { // string and embedding not yet supported
+    } else if constexpr (std::same_as<T, types::String>) {
+        return mlir::cast<mlir::StringAttr>(value).getValue();
+    } else if constexpr (std::same_as<T, types::Embedding>) {
+        const auto elements = mlir::cast<mlir::DenseElementsAttr>(value);
+        const llvm::ArrayRef<char> rawData = elements.getRawData();
+        return std::span<const float>{
+            reinterpret_cast<const float*>(rawData.data()),
+            rawData.size() / sizeof(float)
+        };
+    } else {
         throw IRException("Unsupported constant value type");
     }
 }
@@ -574,7 +584,16 @@ void NLTranslator::translateConstant(nl::Constant constant) {
     const mlir::TypedAttr value = mlir::cast<mlir::TypedAttr>(constant.getValue());
     const mlir::TypedValue<mlir::nl::ChunkType> res = constant.getResult();
     const auto chunkType = mlir::cast<nl::ChunkType>(res.getType());
-    const ValueType valueType = valueTypeFromElementType(chunkType.getElementType());
+    const mlir::Type elementType = chunkType.getElementType();
+
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        if (mlir::isa<mlir::NoneType>(nullableType.getValueType())) {
+            _valueSlots[res] = _memory->alloc<ColumnConst<PropertyNull>>();
+            return;
+        }
+    }
+
+    const ValueType valueType = valueTypeFromElementType(elementType);
 
     Column* column = nullptr;
     const auto materialize = [&]<SupportedType T>() {

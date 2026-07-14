@@ -303,8 +303,19 @@ LogicalResult ConstantOp::inferReturnTypes(MLIRContext* context,
                                            SmallVectorImpl<Type>& inferredReturnTypes) {
     ConstantOpGenericAdaptor adaptor(operands, attributes, properties, regions);
     const mlir::TypedAttr typedValue = mlir::cast<mlir::TypedAttr>(adaptor.getValue());
-    inferredReturnTypes.emplace_back(
-        mlir::db::ColumnType::get(context, typedValue.getType()));
+
+    mlir::Type elementType;
+    if (const auto elements = mlir::dyn_cast<mlir::DenseElementsAttr>(typedValue)) {
+        const auto shapedType = mlir::cast<mlir::ShapedType>(elements.getType());
+        const bool isEmbedding = shapedType.getElementType().isF32()
+                                 && shapedType.hasRank()
+                                 && shapedType.getRank() == 1;
+        elementType = isEmbedding ? storage::EmbeddingType::get(context) : typedValue.getType();
+    } else {
+        elementType = typedValue.getType();
+    }
+
+    inferredReturnTypes.emplace_back(mlir::db::ColumnType::get(context, elementType));
     return mlir::success();
 }
 
