@@ -1187,7 +1187,7 @@ mlir::Block* DBLowering::deeperBlock(mlir::Value first, mlir::Value second) {
         return firstBlock;
     }
 
-    throw IRException("db.add operands must be bound in the same loop");
+    throw IRException("db operands to deeperBlock must be bound in the same loop");
 }
 
 void DBLowering::lowerOutput(mlir::db::Output output) {
