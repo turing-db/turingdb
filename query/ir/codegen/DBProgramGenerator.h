@@ -92,6 +92,9 @@ private:
 
     void addScanNodes(const VariableDependency* var);
 
+    void addMergeFilter(const VariableDependency* var,
+                        std::vector<const VariableDependency*>& carriedSet);
+
     template<typename EdgeOp>
     void addEdgeTraversal(const VariableDependency* src,
                           const VariableDependency* edge,

@@ -294,6 +294,56 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
     _opBuilder.setInsertionPointToEnd(mainBlock);
 }
 
+void DBProgramGenerator::addMergeFilter(const VariableDependency* mergeVar,
+                                        std::vector<const VariableDependency*>& carriedSet) {
+    const VariableDependency* fstMergeSource = nullptr;
+    const VariableDependency* sndMergeSource = nullptr;
+    for (const DependencyEdge* inEdge : mergeVar->incoming()) {
+        if (!inEdge->isMetaEdge()) {
+            continue;
+        }
+        if (!fstMergeSource) {
+            fstMergeSource = inEdge->src();
+        } else {
+            sndMergeSource = inEdge->src();
+        }
+    }
+    bioassert(fstMergeSource && sndMergeSource, "MERGE target without two sources");
+
+    const mlir::Location uloc = _opBuilder.getUnknownLoc();
+    const mlir::Value fstSourceCol = _varMap.at(fstMergeSource).back();
+    const mlir::Value sndSourceCol = _varMap.at(sndMergeSource).back();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+    // Create an EQ op to keep only rows where both sources are the same
+    auto eq =
+        _opBuilder.create<mlir::db::EqOp>(uloc, boolType, fstSourceCol, sndSourceCol);
+    const mlir::Value eqRes = eq.getResult();
+
+    llvm::SmallVector<mlir::Value> columnsToFilter;
+    llvm::SmallVector<const VariableDependency*> orderedVars;
+    for (auto& [mapVar, values] : _varMap) {
+        columnsToFilter.push_back(values.back());
+        orderedVars.push_back(mapVar);
+    }
+    // Use the filtered column of the first source (arbitrary) as the value for the merged
+    // variable
+    columnsToFilter.push_back(fstSourceCol);
+    orderedVars.push_back(mergeVar);
+
+    llvm::SmallVector<mlir::Type> resultTypes;
+    for (const mlir::Value column : columnsToFilter) {
+        resultTypes.push_back(column.getType());
+    }
+
+    auto fOp =
+        _opBuilder.create<mlir::db::FilterOp>(uloc, resultTypes, eqRes, columnsToFilter);
+
+    for (size_t index = 0; index < orderedVars.size(); index++) {
+        registerValue(orderedVars[index], fOp.getResult(index));
+    }
+    carriedSet.push_back(mergeVar);
+}
+
 void DBProgramGenerator::translateComponent(const VariableDependency* root,
                                             DefinedVars& defined,
                                             std::vector<const VariableDependency*>& outVars) {
@@ -356,7 +406,11 @@ void DBProgramGenerator::translateComponent(const VariableDependency* root,
 
         // Only translate when we have a full triple
         if (!haveTriple) {
-            markDefined(var); // Mark as defined to avoid retraversal
+            if (pred && pred->isMetaEdge()) {
+                addMergeFilter(var, carriedSet);
+            }
+
+            markDefined(var);
             continue;
         }
 
