@@ -398,6 +398,35 @@ TEST_F(EquivalenceTest, inlineEdgePropertyConstraints) {
     // expectEquivalent("MATCH (a {name: 'Remy'})-[e {duration: 20}]->(b) RETURN b");
 }
 
+TEST_F(EquivalenceTest, arbitraryFilters) {
+    expectEquivalent("MATCH (a{age:32})-->(b{age:32}) WHERE a.isFrench RETURN a, b");
+
+    expectEquivalent("MATCH (a {age: 32})-->(b) WHERE a.hasPhD RETURN a, b");
+    expectEquivalent("MATCH (a {isFrench: true})-->(b) WHERE a.hasPhD RETURN a, b");
+    expectEquivalent("MATCH (a {isFrench: false})-->(b) WHERE NOT a.hasPhD RETURN a, b");
+
+    expectEquivalent("MATCH (a)-[e {duration: 20}]->(b) WHERE a.isFrench RETURN a, b");
+    expectEquivalent("MATCH (a)-[e {duration: 20}]->(b) WHERE a.hasPhD RETURN a, b");
+
+    expectEquivalent("MATCH (a {hasPhD: true})-[e {duration: 20}]->(b) WHERE a.isFrench RETURN a, b");
+    expectEquivalent("MATCH (a {age: 32})-[e {duration: 20}]->(b) WHERE a.isFrench RETURN a, b");
+
+    expectEquivalent("MATCH (a)-->(b {isReal: true}) WHERE a.isFrench RETURN a, b");
+    expectEquivalent("MATCH (a)-->(b {isReal: false}) WHERE a.hasPhD RETURN a, b");
+
+    expectEquivalent("MATCH (a {isFrench: true})-->(b)-->(c) WHERE a.hasPhD RETURN a, c");
+    expectEquivalent("MATCH (a {age: 32})-->(b)-->(c) WHERE a.isFrench RETURN a, b, c");
+
+    expectEquivalent("MATCH (a {isFrench: true}), (b {isFrench: false}) RETURN a, b");
+    expectEquivalent("MATCH (a {isFrench: true}), (b {hasPhD: false}) RETURN a, b");
+
+    expectEquivalent("MATCH (a {isFrench: true}), (b {isFrench: false}) WHERE a.hasPhD RETURN a, b");
+    expectEquivalent("MATCH (a {age: 32}), (b {isFrench: false}) WHERE b.hasPhD RETURN a, b");
+
+    expectEquivalent("MATCH (a {isFrench: true})-->(b), (c {hasPhD: false}) WHERE a.hasPhD RETURN a, b, c");
+    expectEquivalent("MATCH (a {age: 32})-->(b), (c {isFrench: false}) WHERE a.isFrench RETURN a, c");
+}
+
 TEST_F(EquivalenceTest, constants) {
     expectEquivalent("RETURN 5");
     expectEquivalent("RETURN 5 + 10");
