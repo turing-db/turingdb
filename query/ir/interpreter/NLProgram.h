@@ -228,17 +228,23 @@ private:
 // nl.const_scan_nodes loop data: a node scan over a fixed, explicitly listed set
 // of node IDs rather than a walk of the graph. Reuses the plain scan's node chunk,
 // limit and body; adds the owned list of node IDs the loop emits, one chunk-sized
-// slice per step. The list is owned here so it outlives the op's attribute storage
-// (this data lives for the whole program).
+// slice per step. The translator fills the list in place through addNodeID after
+// allocating the data, so the resolved IDs are never staged in a temporary; the
+// list is owned here so it outlives the op's attribute storage (this data lives
+// for the whole program).
 class NLConstScanLoopData : public NLScanLoopData {
 public:
-    NLConstScanLoopData(ColumnNodeIDs* nodeIDs, const std::vector<NodeID>& constNodeIDs)
-        : NLScanLoopData(nodeIDs),
-        _constNodeIDs(constNodeIDs)
+    NLConstScanLoopData(ColumnNodeIDs* nodeIDs)
+        : NLScanLoopData(nodeIDs)
     {
     }
 
     std::span<const NodeID> getConstNodeIDs() const { return _constNodeIDs; }
+
+    // Reserve room for the resolved list, then append each valid ID in turn: the
+    // translator fills the list here directly rather than building and copying one.
+    void reserveNodeIDs(size_t count) { _constNodeIDs.reserve(count); }
+    void addNodeID(NodeID nodeID) { _constNodeIDs.push_back(nodeID); }
 
 private:
     std::vector<NodeID> _constNodeIDs;

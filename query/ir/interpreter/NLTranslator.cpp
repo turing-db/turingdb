@@ -450,27 +450,26 @@ void NLTranslator::translateConstScanLoop(const IteratorConfig& config,
     const mlir::Value nodeChunk = loopBody.getArgument(0);
     ColumnNodeIDs* nodeIDs = static_cast<ColumnNodeIDs*>(allocColumn(nodeChunk));
 
-    // Resolve the constant i64 list into the NodeIDs the loop emits. A node ID is a
-    // non-negative handle stored signless, so each entry maps straight to a NodeID.
-    // A listed ID that names no node in the graph matches nothing, so it is dropped
-    // here rather than emitted - the same set-membership semantics as the pipeline's
+    NLConstScanLoopData* loopData = _program->allocFunctionData<NLConstScanLoopData>(nodeIDs);
+    loopData->setLimit(limit);
+
+    // Resolve the constant i64 list into the NodeIDs the loop emits, appending each
+    // straight into the loop data's owned list. A node ID is a non-negative handle
+    // stored signless, so each entry maps straight to a NodeID. A listed ID that
+    // names no node in the graph matches nothing, so it is dropped here rather than
+    // emitted - the same set-membership semantics as the pipeline's
     // ConstScanProcessor, and resolved once against the graph view (fixed for the
-    // whole run) the way the label scan resolves its LabelSet. The surviving IDs keep
-    // their listed order. The list is copied into the loop data so it outlives the
-    // op's attribute storage (the data lives for the whole program).
+    // whole run) the way the label scan resolves its LabelSet. The surviving IDs
+    // keep their listed order.
     const GraphReader reader = _view->read();
 
-    std::vector<NodeID> constNodeIDs;
-    constNodeIDs.reserve(config._nodeIDs.size());
+    loopData->reserveNodeIDs(config._nodeIDs.size());
     for (const int64_t nodeID : config._nodeIDs) {
         const NodeID candidate(static_cast<uint64_t>(nodeID));
         if (reader.graphHasNode(candidate)) {
-            constNodeIDs.emplace_back(candidate);
+            loopData->addNodeID(candidate);
         }
     }
-
-    NLConstScanLoopData* loopData = _program->allocFunctionData<NLConstScanLoopData>(nodeIDs, constNodeIDs);
-    loopData->setLimit(limit);
 
     body->emplaceStmt(&NLExecutor::runConstScanNodesLoop, loopData);
 
