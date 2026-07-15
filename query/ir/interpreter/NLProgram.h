@@ -1166,7 +1166,45 @@ using NLGroupAggregateEmitFunction = void (*)(const Column* accumulator,
                                               size_t count,
                                               Column* output);
 
-// Runtime state of one grouped aggregation: a hash table from the serialized
+// The group table of one grouped aggregation: it maps a serialized grouping-key
+// tuple to a dense group index (0, 1, 2, ... in first-seen order). Each distinct
+// key tuple takes the next index the first time it is seen through assign(); that
+// index is the row the group occupies in every key buffer and accumulator.
+// nl.group_aggregate_update drives it one row at a time and nl.group_aggregate_buffer
+// clears it.
+//
+// This is the single global open-addressing table conceptually; it is a
+// std::unordered_map here (the "simplest correct thing" first cut), reified behind
+// assign() / getGroupCount() so callers never poke the map and a separate group
+// counter in lockstep - and so a future open-addressing rewrite stays local to
+// this class.
+class NLGroupTable {
+public:
+    // The outcome of assigning one row's grouping-key tuple to a group: the dense
+    // group index, and whether this call created the group (the tuple was seen for
+    // the first time). The update gathers a new group's key values from the row
+    // that created it, so it keys off _created.
+    struct Assignment {
+        size_t _index {0};
+        bool _created {false};
+    };
+
+    // Map a serialized grouping-key tuple to its dense group index, creating the
+    // group with the next index the first time the tuple is seen.
+    Assignment assign(const std::string& key);
+
+    // The number of distinct groups seen so far - the dense index the next new
+    // group would take.
+    size_t getGroupCount() const { return _groups.size(); }
+
+    // Drop every group, so the next assign() numbers groups from zero again.
+    void clear();
+
+private:
+    std::unordered_map<std::string, size_t> _groups;
+};
+
+// Runtime state of one grouped aggregation: an NLGroupTable from the serialized
 // grouping-key tuple to a dense group index, the distinct key values per group,
 // and one accumulator per aggregate function. nl.group_aggregate_buffer resets it,
 // nl.group_aggregate_update assigns each row to its group and folds the aggregate
@@ -1174,10 +1212,8 @@ using NLGroupAggregateEmitFunction = void (*)(const Column* accumulator,
 // grouped sibling of NLSortState: it keys rows by the grouping tuple and reduces
 // within each group rather than buffering every row for a global reorder.
 //
-// This is the single global open-addressing... conceptually; the group table is a
-// std::unordered_map here (the "simplest correct thing" first cut). The
-// accumulators are designed row-per-group so a future two-phase merge can combine
-// two tables group by group.
+// The accumulators are designed row-per-group so a future two-phase merge can
+// combine two tables group by group.
 class NLGroupAggregateState {
 public:
     // One grouping-key column. The distinct key value per group accumulates in
@@ -1218,10 +1254,7 @@ public:
     std::vector<KeyColumn>& keyColumns() { return _keyColumns; }
     std::vector<Aggregate>& aggregates() { return _aggregates; }
 
-    std::unordered_map<std::string, size_t>& groups() { return _groups; }
-
-    size_t getGroupCount() const { return _groupCount; }
-    void setGroupCount(size_t count) { _groupCount = count; }
+    NLGroupTable& groupTable() { return _groupTable; }
 
     // Scratch reused per update step: the row key being built, the per-row group
     // index map, and the incoming rows that created a new group this step.
@@ -1238,10 +1271,7 @@ private:
     std::vector<KeyColumn> _keyColumns;
     std::vector<Aggregate> _aggregates;
 
-    // The serialized grouping-key tuple -> its dense group index. The group index
-    // is the row a group occupies in every key buffer and accumulator.
-    std::unordered_map<std::string, size_t> _groups;
-    size_t _groupCount {0};
+    NLGroupTable _groupTable;
 
     std::string _key;
     std::vector<size_t> _groupIndices;

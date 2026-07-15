@@ -616,7 +616,9 @@ NLAggregateUpdateFunction selectMinMaxUpdate(ValueType inputType) {
 // created a new group this step, so the buffer grows one key value per group in
 // creation order.
 template <typename ElementType>
-void groupGatherAppendColumn(const Column* input, const std::vector<size_t>& rows, Column* buffer) {
+void groupGatherAppendColumn(const Column* input,
+                             const std::vector<size_t>& rows,
+                             Column* buffer) {
     const auto& inputRaw = static_cast<const ColumnVector<ElementType>*>(input)->getRaw();
     auto& bufferRaw = static_cast<ColumnVector<ElementType>*>(buffer)->getRaw();
 
@@ -629,7 +631,9 @@ void groupGatherAppendColumn(const Column* input, const std::vector<size_t>& row
 // present zero (the additive identity). Existing groups keep their running sum. sum
 // keeps no per-group tally, so the counts vector is left untouched.
 template <typename Primitive>
-void groupGrowZero(Column* accumulator, std::vector<uint64_t>& counts, size_t groupCount) {
+void groupGrowZero(Column* accumulator,
+                   std::vector<uint64_t>& counts,
+                   size_t groupCount) {
     auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
     raw.resize(groupCount, std::optional<Primitive>(Primitive {}));
 }
@@ -638,7 +642,9 @@ void groupGrowZero(Column* accumulator, std::vector<uint64_t>& counts, size_t gr
 // null (no extreme seen yet). Existing groups keep their running extreme. min/max
 // keeps no per-group tally, so the counts vector is left untouched.
 template <typename Primitive>
-void groupGrowNull(Column* accumulator, std::vector<uint64_t>& counts, size_t groupCount) {
+void groupGrowNull(Column* accumulator,
+                   std::vector<uint64_t>& counts,
+                   size_t groupCount) {
     auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
     raw.resize(groupCount);
 }
@@ -647,7 +653,9 @@ void groupGrowNull(Column* accumulator, std::vector<uint64_t>& counts, size_t gr
 // present zero plus the per-group non-null tally zeroed for new groups. avg is the
 // only value reduction carried as (sum, count), so it is the only one that grows the
 // counts vector besides count itself.
-void groupGrowAvg(Column* accumulator, std::vector<uint64_t>& counts, size_t groupCount) {
+void groupGrowAvg(Column* accumulator,
+                  std::vector<uint64_t>& counts,
+                  size_t groupCount) {
     auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
     raw.resize(groupCount, std::optional<double>(0.0));
     counts.resize(groupCount, 0);
@@ -655,14 +663,19 @@ void groupGrowAvg(Column* accumulator, std::vector<uint64_t>& counts, size_t gro
 
 // Grow a count accumulator: only the per-group tally, zeroed for new groups. count
 // keeps no reduced value, so there is no accumulator column to grow.
-void groupGrowCount(Column* accumulator, std::vector<uint64_t>& counts, size_t groupCount) {
+void groupGrowCount(Column* accumulator,
+                    std::vector<uint64_t>& counts,
+                    size_t groupCount) {
     counts.resize(groupCount, 0);
 }
 
 // Fold a chunk's present values into per-group sum accumulators. Each new group was
 // grown to a present zero, so read-modify-write its running sum.
 template <typename Primitive>
-void groupFoldSum(Column* accumulator, std::vector<uint64_t>& counts, const Column* input, const std::vector<size_t>& groups) {
+void groupFoldSum(Column* accumulator,
+                  std::vector<uint64_t>& counts,
+                  const Column* input,
+                  const std::vector<size_t>& groups) {
     auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
@@ -679,7 +692,10 @@ void groupFoldSum(Column* accumulator, std::vector<uint64_t>& counts, const Colu
 // true) accumulators. The first present value of a group seeds it; a later value
 // replaces it when more extreme. A group with no present value stays null.
 template <typename Primitive, bool IsMax>
-void groupFoldMinMax(Column* accumulator, std::vector<uint64_t>& counts, const Column* input, const std::vector<size_t>& groups) {
+void groupFoldMinMax(Column* accumulator,
+                     std::vector<uint64_t>& counts,
+                     const Column* input,
+                     const std::vector<size_t>& groups) {
     auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
@@ -708,7 +724,10 @@ void groupFoldMinMax(Column* accumulator, std::vector<uint64_t>& counts, const C
 // (the accumulator, widened from the input) plus the per-group non-null count. avg
 // divides the two at the emit step.
 template <typename Primitive>
-void groupFoldAvg(Column* accumulator, std::vector<uint64_t>& counts, const Column* input, const std::vector<size_t>& groups) {
+void groupFoldAvg(Column* accumulator,
+                  std::vector<uint64_t>& counts,
+                  const Column* input,
+                  const std::vector<size_t>& groups) {
     auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
@@ -725,7 +744,10 @@ void groupFoldAvg(Column* accumulator, std::vector<uint64_t>& counts, const Colu
 
 // Tally every row into its group (count(*) over a never-null column): each row
 // charges its group regardless of value, so the input values are never read.
-void groupFoldCountAll(Column* accumulator, std::vector<uint64_t>& counts, const Column* input, const std::vector<size_t>& groups) {
+void groupFoldCountAll(Column* accumulator,
+                       std::vector<uint64_t>& counts,
+                       const Column* input,
+                       const std::vector<size_t>& groups) {
     for (const size_t group : groups) {
         counts[group]++;
     }
@@ -734,7 +756,10 @@ void groupFoldCountAll(Column* accumulator, std::vector<uint64_t>& counts, const
 // Tally each group's present (non-null) rows (count(x)): a null row is not charged,
 // matching Cypher's count(x).
 template <typename Primitive>
-void groupFoldCountPresent(Column* accumulator, std::vector<uint64_t>& counts, const Column* input, const std::vector<size_t>& groups) {
+void groupFoldCountPresent(Column* accumulator,
+                           std::vector<uint64_t>& counts,
+                           const Column* input,
+                           const std::vector<size_t>& groups) {
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
@@ -747,7 +772,11 @@ void groupFoldCountPresent(Column* accumulator, std::vector<uint64_t>& counts, c
 // Emit a sum/min/max slice: the accumulator holds each group's reduced value in the
 // result's own type, so copy groups [begin, begin + count) into the output.
 template <typename Primitive>
-void groupEmitCopy(const Column* accumulator, const std::vector<uint64_t>& counts, size_t begin, size_t count, Column* output) {
+void groupEmitCopy(const Column* accumulator,
+                   const std::vector<uint64_t>& counts,
+                   size_t begin,
+                   size_t count,
+                   Column* output) {
     const auto& raw = static_cast<const ColumnOptVector<Primitive>*>(accumulator)->getRaw();
     auto& outputRaw = static_cast<ColumnOptVector<Primitive>*>(output)->getRaw();
     outputRaw.assign(raw.begin() + begin, raw.begin() + begin + count);
@@ -755,7 +784,11 @@ void groupEmitCopy(const Column* accumulator, const std::vector<uint64_t>& count
 
 // Emit an avg slice: divide each group's running f64 sum by its non-null count. A
 // group with no non-null row (count zero) averages to null, matching Cypher.
-void groupEmitAvg(const Column* accumulator, const std::vector<uint64_t>& counts, size_t begin, size_t count, Column* output) {
+void groupEmitAvg(const Column* accumulator,
+                  const std::vector<uint64_t>& counts,
+                  size_t begin,
+                  size_t count,
+                  Column* output) {
     const auto& raw = static_cast<const ColumnOptVector<double>*>(accumulator)->getRaw();
     auto& outputRaw = static_cast<ColumnOptVector<double>*>(output)->getRaw();
     outputRaw.resize(count);
@@ -772,7 +805,11 @@ void groupEmitAvg(const Column* accumulator, const std::vector<uint64_t>& counts
 
 // Emit a count slice: each group's tally is a present unsigned i64, so copy the
 // tallies of groups [begin, begin + count) into the ui64 output.
-void groupEmitCount(const Column* accumulator, const std::vector<uint64_t>& counts, size_t begin, size_t count, Column* output) {
+void groupEmitCount(const Column* accumulator,
+                    const std::vector<uint64_t>& counts,
+                    size_t begin,
+                    size_t count,
+                    Column* output) {
     auto& outputRaw = static_cast<ColumnVector<uint64_t>*>(output)->getRaw();
     outputRaw.assign(counts.begin() + begin, counts.begin() + begin + count);
 }
@@ -1476,7 +1513,7 @@ void NLExecutor::runGroupAggregateUpdate(NLExecutionContext* context, NLFunction
     // Assign each row to its group: serialize the grouping-key tuple, look it up,
     // and on first sight create a new group (its index is the next group count) and
     // record the row that created it, so the key buffers can take that row's values.
-    std::unordered_map<std::string, size_t>& groups = state->groups();
+    NLGroupTable& groupTable = state->groupTable();
     std::vector<size_t>& groupIndices = state->groupIndicesScratch();
     std::vector<size_t>& newGroupRows = state->newGroupRowsScratch();
     std::string& key = state->keyScratch();
@@ -1490,17 +1527,15 @@ void NLExecutor::runGroupAggregateUpdate(NLExecutionContext* context, NLFunction
             keyColumn._keyAppend(keyColumn._input, row, key);
         }
 
-        const size_t nextGroup = state->getGroupCount();
-        const auto [slot, inserted] = groups.try_emplace(key, nextGroup);
-        if (inserted) {
-            state->setGroupCount(nextGroup + 1);
+        const NLGroupTable::Assignment assignment = groupTable.assign(key);
+        if (assignment._created) {
             newGroupRows.push_back(row);
         }
 
-        groupIndices[row] = slot->second;
+        groupIndices[row] = assignment._index;
     }
 
-    const size_t groupCount = state->getGroupCount();
+    const size_t groupCount = groupTable.getGroupCount();
 
     // Grow the key buffers with the new groups' key values, then grow every
     // accumulator to the new group count - initializing the new groups to their
@@ -1522,7 +1557,7 @@ void NLExecutor::runGroupAggregateLoop(NLExecutionContext* context, NLFunctionDa
     NLGroupAggregateLoopData* loopData = static_cast<NLGroupAggregateLoopData*>(data);
     NLGroupAggregateState* state = loopData->getState();
 
-    const size_t totalGroups = state->getGroupCount();
+    const size_t totalGroups = state->groupTable().getGroupCount();
     const size_t chunkSize = context->getChunkSize();
     const NLStmtContainer* loopBody = loopData->getStmts();
 

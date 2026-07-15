@@ -21,9 +21,23 @@ void NLSortState::reset() {
     _sorted = false;
 }
 
-void NLGroupAggregateState::reset() {
+NLGroupTable::Assignment NLGroupTable::assign(const std::string& key) {
+    const size_t nextGroup = _groups.size();
+    const auto [slot, inserted] = _groups.try_emplace(key, nextGroup);
+
+    Assignment assignment;
+    assignment._index = slot->second;
+    assignment._created = inserted;
+
+    return assignment;
+}
+
+void NLGroupTable::clear() {
     _groups.clear();
-    _groupCount = 0;
+}
+
+void NLGroupAggregateState::reset() {
+    _groupTable.clear();
 
     for (KeyColumn& key : _keyColumns) {
         key._buffer->clear();
