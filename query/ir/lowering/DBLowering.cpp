@@ -375,6 +375,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerScanNodes(scanNodes);
     } else if (mlir::db::ScanNodesByLabel scanNodesByLabel = mlir::dyn_cast<mlir::db::ScanNodesByLabel>(operation)) {
         lowerScanNodesByLabel(scanNodesByLabel);
+    } else if (mlir::db::ConstScanNodes constScanNodes = mlir::dyn_cast<mlir::db::ConstScanNodes>(operation)) {
+        lowerConstScanNodes(constScanNodes);
     } else if (mlir::db::ScanEdges scanEdges = mlir::dyn_cast<mlir::db::ScanEdges>(operation)) {
         lowerScanEdges(scanEdges);
     } else if (mlir::db::GetOutEdges getOutEdges = mlir::dyn_cast<mlir::db::GetOutEdges>(operation)) {
@@ -460,6 +462,18 @@ void DBLowering::lowerScanNodesByLabel(mlir::db::ScanNodesByLabel scanNodesByLab
     nl::ScanNodesByLabel nodes = _builder.create<nl::ScanNodesByLabel>(_builder.getUnknownLoc(),
                                                                        scanNodesByLabel.getLabelsAttr());
     buildLoopForSource(nodes.getResult(), scanNodesByLabel.getOperation());
+}
+
+void DBLowering::lowerConstScanNodes(mlir::db::ConstScanNodes constScanNodes) {
+    // The constant-set sibling of lowerScanNodes: a scan reads no column, so its
+    // loop sits at the top of the current root block. The node ID list is the set
+    // of rows to emit, not a column input, so it is forwarded as-is to the nl op -
+    // translation resolves each entry to a storage NodeID.
+    setInsertionInto(_rootBlock);
+
+    nl::ConstScanNodes nodes = _builder.create<nl::ConstScanNodes>(_builder.getUnknownLoc(),
+                                                                   constScanNodes.getNodeIDsAttr());
+    buildLoopForSource(nodes.getResult(), constScanNodes.getOperation());
 }
 
 void DBLowering::lowerScanEdges(mlir::db::ScanEdges scanEdges) {
@@ -1162,6 +1176,7 @@ void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {
     }
 
     const bool opensLoop = mlir::isa<mlir::db::ScanNodes,
+                                     mlir::db::ConstScanNodes,
                                      mlir::db::ScanNodesByLabel,
                                      mlir::db::ScanEdges,
                                      mlir::db::GetOutEdges,

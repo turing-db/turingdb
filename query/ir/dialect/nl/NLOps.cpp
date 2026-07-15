@@ -94,6 +94,17 @@ LogicalResult ScanNodesByLabel::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+// A const scan emits a fixed set of node IDs, but its row shape is a plain node
+// scan's, so it produces the same single chunk of node IDs per step - the ID list
+// is which rows are emitted, not a result type.
+LogicalResult ConstScanNodes::inferReturnTypes(MLIRContext* context,
+                                               std::optional<Location> location,
+                                               ConstScanNodes::Adaptor adaptor,
+                                               SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(IteratorType::get(context, {getNodeIDChunkType(context)}));
+    return success();
+}
+
 // An edge scan produces the same four fixed edge chunks per step as an
 // out-edges fetch, but reads no input and carries nothing, so the iterator has
 // exactly those four chunks and no carried tail.

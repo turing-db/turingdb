@@ -60,6 +60,45 @@ def ScanNodesByLabel : TuringOp<"scan_nodes_by_label", [Pure]> {
 }
 
 /**
+* ConstScanNodes
+*/
+def ConstScanNodes : TuringOp<"const_scan_nodes", [Pure]> {
+  let summary = "Produce a fixed, explicitly listed set of nodes";
+
+  let description = [{
+    The constant-set counterpart of db.scan_nodes: where that produces every node
+    in the graph, this produces exactly the nodes whose IDs are listed on the op -
+    a set known at plan time rather than discovered by walking the graph:
+
+      %a = db.const_scan_nodes([0, 3, 7]) : !db.column<!storage.node_id>
+
+    It seeds a dataflow from a known set of nodes - the declarative counterpart of
+    the plan's ConstScanNode, which turns a node-ID membership predicate
+    (MATCH (n) WHERE id(n) IN [0, 3, 7]) into a direct scan of those IDs rather
+    than a full scan followed by a filter. Like db.scan_nodes it reads no column
+    and takes no input, so it opens a dataflow rather than consuming one; the IDs
+    are emitted in the order listed. Producing a fixed list is deterministic, so
+    the op is Pure.
+
+    A node ID is a non-negative handle, so the signless i64 dense array matches
+    the index list db.sort carries; each entry is a storage NodeID once lowered.
+    The list must not be empty: an empty set opens no dataflow, so a scan that can
+    never produce a row is malformed IR here rather than a silent no-op.
+  }];
+
+  // `nodeIDs` is the constant set of node IDs to emit. Being an attribute and not
+  // an SSA value, it is absent from `operands`; lowering forwards it as-is.
+  let arguments = (ins DenseI64ArrayAttr:$nodeIDs);
+  let results   = (outs ColumnNodeIDs:$result);
+  let hasVerifier = 1;
+
+  // The node ID list prints inside the parens as `[0, 3, 7]`, ahead of the colon,
+  // the same place db.scan_nodes_by_label prints its labels; the result type
+  // follows, qualified, as db.scan_nodes prints it.
+  let assemblyFormat = "`(` $nodeIDs `)` attr-dict `:` qualified(type($result))";
+}
+
+/**
 * ScanEdges
 */
 def ScanEdges : TuringOp<"scan_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {

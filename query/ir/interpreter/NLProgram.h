@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <algorithm>
 #include <memory>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -222,6 +223,25 @@ public:
 private:
     LabelSet _labelset;
     bool _matchable {true};
+};
+
+// nl.const_scan_nodes loop data: a node scan over a fixed, explicitly listed set
+// of node IDs rather than a walk of the graph. Reuses the plain scan's node chunk,
+// limit and body; adds the owned list of node IDs the loop emits, one chunk-sized
+// slice per step. The list is owned here so it outlives the op's attribute storage
+// (this data lives for the whole program).
+class NLConstScanLoopData : public NLScanLoopData {
+public:
+    NLConstScanLoopData(ColumnNodeIDs* nodeIDs, const std::vector<NodeID>& constNodeIDs)
+        : NLScanLoopData(nodeIDs),
+        _constNodeIDs(constNodeIDs)
+    {
+    }
+
+    std::span<const NodeID> getConstNodeIDs() const { return _constNodeIDs; }
+
+private:
+    std::vector<NodeID> _constNodeIDs;
 };
 
 // nl.scan_edges loop data: the edge sibling of NLScanLoopData. A source loop

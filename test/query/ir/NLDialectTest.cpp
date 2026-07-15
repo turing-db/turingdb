@@ -403,6 +403,29 @@ TEST_F(NLDialectTest, scanNodesByLabelInfersNodeIDIterator) {
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
 }
 
+// nl.const_scan_nodes infers a single node-ID chunk iterator - the same result
+// shape as nl.scan_nodes - since the ID list picks which rows are emitted, not
+// their columns. The listed IDs are carried on the op verbatim.
+TEST_F(NLDialectTest, constScanNodesInfersNodeIDIterator) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    const mlir::DenseI64ArrayAttr nodeIDs = builder.getDenseI64ArrayAttr({0, 3, 7});
+    mlir::nl::ConstScanNodes scan = builder.create<mlir::nl::ConstScanNodes>(loc, nodeIDs);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    const mlir::Type chunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    const mlir::Type iteratorType = mlir::nl::IteratorType::get(&_context, {chunkType});
+    EXPECT_EQ(scan.getResult().getType(), iteratorType);
+    EXPECT_EQ(scan.getNodeIDs().size(), 3u);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+}
+
 // nl.get_out_edges_by_type infers the same four-chunk edge iterator as
 // nl.get_out_edges - sources, edge IDs, edge type IDs, targets - since the edge
 // type filters rows, not columns. The type is a resolved nl.get_edge_type handle,
