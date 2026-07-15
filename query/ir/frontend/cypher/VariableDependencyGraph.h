@@ -34,6 +34,7 @@ class PatternElement;
 class VariableDependencyGraph {
 public:
     using Cycle = std::vector<VariableDependency*>;
+    using EdgeIdentityMap = std::unordered_map<std::string, std::vector<VariableDependency*>>;
 
     VariableDependencyGraph();
     ~VariableDependencyGraph();
@@ -46,6 +47,7 @@ public:
     /// Iteration order has no semantic meaning
     const auto& vars() const { return _vars; }
     const auto& edges() const { return _edges; }
+    const EdgeIdentityMap& edgeIdentities() const { return _edgeIdentities; }
 
     bool empty() const { return _vars.empty() && _edges.empty(); }
 
@@ -62,6 +64,9 @@ private:
 
     // Tracks how many times a variable has been anonimised
     std::unordered_map<VariableDependency*, int> _anonymised;
+
+    // Maps each Cypher edge variable name to all anonymous VDG variables created for it
+    EdgeIdentityMap _edgeIdentities;
 
     VariableDependency* getOrCreateVariable(const EntityPattern* entity);
     VariableDependency* newVariable(const EntityPattern* entity);

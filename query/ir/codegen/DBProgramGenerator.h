@@ -64,6 +64,7 @@ private:
     };
 
     void generateTraversal(const CypherAST* ast);
+    void generateEdgeIdentityFilters();
 
     // Translate a connected component of @ref _vdg, fills @param outVars
     void translateComponent(const VariableDependency* root,
@@ -91,6 +92,7 @@ private:
     mlir::Value translatePropertyExpr(const PropertyExpr* propExpr);
 
     void addScanNodes(const VariableDependency* var);
+    void filterAllColumns(mlir::Value predicate);
 
     void addMergeFilter(const VariableDependency* var,
                         std::vector<const VariableDependency*>& carriedSet);
