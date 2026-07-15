@@ -59,9 +59,9 @@ def ConstScanNodes : NLOp<"const_scan_nodes", [Pure, InferTypeOpAdaptor]> {
       %nodes = nl.const_scan_nodes([0, 3, 7])
 
     `nodeIDs` is the same constant list db.const_scan_nodes carried; translation
-    resolves each entry to a storage NodeID. Emitting a known set needs no graph
-    walk, but it narrows only which rows are produced, never their shape, so -
-    like nl.scan_nodes - the result is always
+    resolves each entry to a storage NodeID, dropping any that name no node in the
+    graph. Emitting a known set needs no graph walk, but it narrows only which rows
+    are produced, never their shape, so - like nl.scan_nodes - the result is always
     !nl.iter<!nl.chunk<!storage.node_id>> and is inferred, not spelled out.
   }];
   let arguments = (ins DenseI64ArrayAttr:$nodeIDs);
