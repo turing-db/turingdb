@@ -141,7 +141,16 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
         src = prev;
         tgt = tgtVar;
 
-        VariableDependency* edgeVar = getOrCreateVariable(edge);
+        bioassert(edge->getDecl(), "Edge pattern without declaration.");
+        const std::string_view cypherEdgeName = edge->getDecl()->getName();
+        std::vector<VariableDependency*>& edgeOccurrences = _edgeIdentities[std::string(cypherEdgeName)];
+        std::string anonymousName;
+        anonymousName += cypherEdgeName;
+        anonymousName += '\'';
+        anonymousName += std::to_string(edgeOccurrences.size());
+        VariableDependency* edgeVar = newVariable(anonymousName);
+        edgeOccurrences.push_back(edgeVar);
+
         addDirected(src, edgeVar, EdgeMetadata {edgeType});
         addDirected(edgeVar, tgt, EdgeMetadata {otherType});
 

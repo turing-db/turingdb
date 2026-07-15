@@ -197,6 +197,7 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
     }
 
     generateTraversal(ast);
+    generateEdgeIdentityFilters();
     generatePropertyConstraints(ast);
     generateFilters(ast);
     generateOutput(ast);
@@ -294,6 +295,31 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
     _opBuilder.setInsertionPointToEnd(mainBlock);
 }
 
+void DBProgramGenerator::filterAllColumns(mlir::Value predicate) {
+    if (_varMap.empty()) {
+        return;
+    }
+
+    llvm::SmallVector<mlir::Value> columnsToFilter;
+    llvm::SmallVector<const VariableDependency*> orderedVars;
+    for (auto& [var, values] : _varMap) {
+        columnsToFilter.push_back(values.back());
+        orderedVars.push_back(var);
+    }
+
+    llvm::SmallVector<mlir::Type> resultTypes;
+    for (const mlir::Value column : columnsToFilter) {
+        resultTypes.push_back(column.getType());
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    auto filterOp = _opBuilder.create<mlir::db::FilterOp>(loc, resultTypes, predicate, columnsToFilter);
+
+    for (size_t index = 0; index < orderedVars.size(); index++) {
+        registerValue(orderedVars[index], filterOp.getResult(index));
+    }
+}
+
 void DBProgramGenerator::addMergeFilter(const VariableDependency* mergeVar,
                                         std::vector<const VariableDependency*>& carriedSet) {
     const VariableDependency* fstMergeSource = nullptr;
@@ -319,29 +345,40 @@ void DBProgramGenerator::addMergeFilter(const VariableDependency* mergeVar,
         _opBuilder.create<mlir::db::EqOp>(uloc, boolType, fstSourceCol, sndSourceCol);
     const mlir::Value eqRes = eq.getResult();
 
-    llvm::SmallVector<mlir::Value> columnsToFilter;
-    llvm::SmallVector<const VariableDependency*> orderedVars;
-    for (auto& [mapVar, values] : _varMap) {
-        columnsToFilter.push_back(values.back());
-        orderedVars.push_back(mapVar);
-    }
-    // Use the filtered column of the first source (arbitrary) as the value for the merged
-    // variable
-    columnsToFilter.push_back(fstSourceCol);
-    orderedVars.push_back(mergeVar);
-
-    llvm::SmallVector<mlir::Type> resultTypes;
-    for (const mlir::Value column : columnsToFilter) {
-        resultTypes.push_back(column.getType());
-    }
-
-    auto fOp =
-        _opBuilder.create<mlir::db::FilterOp>(uloc, resultTypes, eqRes, columnsToFilter);
-
-    for (size_t index = 0; index < orderedVars.size(); index++) {
-        registerValue(orderedVars[index], fOp.getResult(index));
-    }
+    // Register mergeVar's initial value (first source, arbitrary) so filterAllColumns
+    // picks it up along with the rest of _varMap.
+    registerValue(mergeVar, fstSourceCol);
+    filterAllColumns(eqRes);
     carriedSet.push_back(mergeVar);
+}
+
+void DBProgramGenerator::generateEdgeIdentityFilters() {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+
+    for (const auto& [name, vars] : _vdg.edgeIdentities()) {
+        const bool needsFilter = vars.size() > 1;
+        if (!needsFilter) {
+            continue;
+        }
+
+        mlir::Value predicate;
+        for (size_t index = 0; index + 1 < vars.size(); index++) {
+            bioassert(_varMap.contains(vars[index]), "Edge '{}' var '{}' not in varMap", name, vars[index]->getName());
+            bioassert(_varMap.contains(vars[index + 1]), "Edge '{}' var '{}' not in varMap", name, vars[index + 1]->getName());
+            const mlir::Value firstColumn = _varMap.at(vars[index]).back();
+            const mlir::Value nextColumn = _varMap.at(vars[index + 1]).back();
+            const mlir::Value equality = _opBuilder.create<mlir::db::EqOp>(loc, boolType, firstColumn, nextColumn).getResult();
+
+            if (!predicate) {
+                predicate = equality;
+            } else {
+                predicate = _opBuilder.create<mlir::db::AndOp>(loc, boolType, predicate, equality).getResult();
+            }
+        }
+
+        filterAllColumns(predicate);
+    }
 }
 
 void DBProgramGenerator::translateComponent(const VariableDependency* root,
@@ -593,6 +630,13 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
         finalIdentities[varName] = finalValue;
     }
 
+    for (const auto& [name, vars] : _vdg.edgeIdentities()) {
+        bioassert(!vars.empty(), "Empty edge identity for '{}'", name);
+        const VariableDependency* representative = vars.front();
+        bioassert(_varMap.contains(representative), "Edge identity representative not in varMap");
+        finalIdentities[name] = _varMap.at(representative).back();
+    }
+
     const auto getVarForItem = [&](auto&& item) -> mlir::Value {
         using Type = std::remove_cvref_t<decltype(item)>;
 
@@ -710,31 +754,7 @@ void DBProgramGenerator::generatePropertyConstraints(const CypherAST* ast) {
             }
         }
 
-        columnsToFilter.clear();
-        orderedVars.clear();
-        for (auto& [var, values] : _varMap) {
-            columnsToFilter.push_back(values.back());
-            orderedVars.push_back(var);
-        }
-
-        if (columnsToFilter.empty()) {
-            continue;
-        }
-
-        resultTypes.clear();
-        for (const mlir::Value column : columnsToFilter) {
-            resultTypes.push_back(column.getType());
-        }
-
-        auto filterOp = _opBuilder.create<mlir::db::FilterOp>(loc,
-                                                              resultTypes,
-                                                              combinedPredicate,
-                                                              columnsToFilter);
-
-        for (size_t index = 0; index < orderedVars.size(); index++) {
-            const VariableDependency* var = orderedVars[index];
-            _varMap.at(var).push_back(filterOp.getResult(index));
-        }
+        filterAllColumns(combinedPredicate);
     }
 }
 
@@ -756,13 +776,6 @@ void DBProgramGenerator::generateFilters(const CypherAST* ast) {
         return;
     }
 
-    // All three below reused over iterations
-    // Filter all columns that are defined here
-    llvm::SmallVector<mlir::Value> columnsToFilter;
-    // Track the variables to insert the new filtered values into the map
-    llvm::SmallVector<const VariableDependency*> orderedVars;
-    // Result types are the same as the input types
-    llvm::SmallVector<mlir::Type> resultTypes;
     for (const Stmt* stmt : stmtsContainer->stmts()) {
         if (stmt->getKind() != Stmt::Kind::MATCH) {
             continue;
@@ -781,33 +794,7 @@ void DBProgramGenerator::generateFilters(const CypherAST* ast) {
         const auto findIt = _exprMap.find(predicateExpr);
         bioassert(findIt != end(_exprMap), "Failed to get value for expr");
 
-        const mlir::Value predicate = findIt->second;
-        const mlir::Location loc = _opBuilder.getUnknownLoc();
-
-        columnsToFilter.clear();
-        orderedVars.clear();
-        for (auto& [var, values] : _varMap) {
-            columnsToFilter.push_back(values.back());
-            orderedVars.push_back(var);
-        }
-
-        if (columnsToFilter.empty()) {
-            continue;
-        }
-
-        resultTypes.clear();
-        for (const mlir::Value column : columnsToFilter) {
-            resultTypes.push_back(column.getType());
-        }
-
-        mlir::db::FilterOp filterOp = _opBuilder.create<mlir::db::FilterOp>(
-            loc, resultTypes, predicate, columnsToFilter);
-
-        for (size_t index = 0; index < orderedVars.size(); index++) {
-            const VariableDependency* var = orderedVars[index];
-            const mlir::Value result = filterOp.getResult(index);
-            _varMap.at(var).push_back(result);
-        }
+        filterAllColumns(findIt->second);
     }
 }
 
@@ -1047,6 +1034,17 @@ mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propEx
             break;
         }
     }
+
+    if (!entityColumn) {
+        const VariableDependencyGraph::EdgeIdentityMap& edgeIdentities = _vdg.edgeIdentities();
+        const auto findIt = edgeIdentities.find(std::string(varName));
+        const bool foundEdgeIdentity = findIt != edgeIdentities.end() && !findIt->second.empty();
+        if (foundEdgeIdentity) {
+            const VariableDependency* representative = findIt->second.front();
+            entityColumn = _varMap.at(representative).back();
+        }
+    }
+
     bioassert(entityColumn, "WHERE clause property access on unknown variable: {}", varName);
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
