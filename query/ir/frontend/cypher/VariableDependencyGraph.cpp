@@ -364,11 +364,29 @@ void VariableDependencyGraph::getNextAnonymisation(VariableDependency* v, std::s
 }
 
 void VariableDependencyGraph::canonicaliseCycle(Cycle& cyc) {
+    const auto isEdgeVariable = [](const VariableDependency* v) {
+        return std::ranges::any_of(v->incoming(), [](const DependencyEdge* e) {
+            const EdgeMetadata::EdgeType type = e->data().type();
+            return type == EdgeMetadata::EdgeType::GET_OUT_EDGES
+                || type == EdgeMetadata::EdgeType::GET_IN_EDGES;
+        });
+    };
     const auto inDegree = [](const VariableDependency* v) {
         return v->incoming().size();
     };
+
+    // Node variables must always rank above edge variables as the merge target.
+    // Within the same category, prefer higher in-degree.
     const auto pivot = std::ranges::max_element(
-        cyc, [inDegree](auto&& a, auto&& b) { return inDegree(a) < inDegree(b); });
+        cyc,
+        [&isEdgeVariable, &inDegree](auto&& a, auto&& b) {
+            const bool aIsEdge = isEdgeVariable(a);
+            const bool bIsEdge = isEdgeVariable(b);
+            if (aIsEdge != bIsEdge) {
+                return aIsEdge; // edge < node, so node wins max_element
+            }
+            return inDegree(a) < inDegree(b);
+        });
 
     std::ranges::rotate(cyc, pivot);
 }
