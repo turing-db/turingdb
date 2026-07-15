@@ -1002,6 +1002,16 @@ func.func @main() {
 }
 )mlir";
 
+// Const scan mixing an ID no node carries (99) with a real diamond node (1); the
+// unknown ID is dropped, leaving only the real one.
+constexpr const char* constScanNodesUnknownProgram = R"mlir(
+func.func @main() {
+  %a = db.const_scan_nodes([99, 1]) : !db.column<!storage.node_id>
+  db.output(%a) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // One hop along out-edges, outputting (source, target) pairs
 constexpr const char* oneHopOutProgram = R"mlir(
 func.func @main() {
@@ -2040,6 +2050,22 @@ TEST_F(DBLoweringTest, executesConstScanNodes) {
 
     // The scan emits exactly the two listed nodes, nothing else.
     const std::vector<std::vector<uint64_t>> expected {{0}, {2}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, constScanNodesDropsIDsWithNoNode) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The diamond graph has nodes 0..3; the listed 99 names no node, so it is
+    // dropped and only the real node 1 survives.
+    CollectingNodeSink sink;
+    runLoweredProgram(constScanNodesUnknownProgram, reader.getView(), sink);
+
+    const std::vector<std::vector<uint64_t>> expected {{1}};
     std::vector<std::vector<uint64_t>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows, expected);

@@ -82,8 +82,11 @@ def ConstScanNodes : TuringOp<"const_scan_nodes", [Pure]> {
 
     A node ID is a non-negative handle, so the signless i64 dense array matches
     the index list db.sort carries; each entry is a storage NodeID once lowered.
-    The list must not be empty: an empty set opens no dataflow, so a scan that can
-    never produce a row is malformed IR here rather than a silent no-op.
+    A listed ID that names no node in the graph matches nothing, so it is dropped
+    during lowering and the scan yields only the nodes that exist - the same
+    set-membership semantics as the WHERE id(n) IN ... it models. The list must
+    not be empty: an empty set opens no dataflow, so a scan that can never produce
+    a row is malformed IR here rather than a silent no-op.
   }];
 
   // `nodeIDs` is the constant set of node IDs to emit. Being an attribute and not

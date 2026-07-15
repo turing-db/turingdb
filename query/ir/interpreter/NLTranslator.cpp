@@ -14,6 +14,7 @@
 #include "metadata/GraphMetadata.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
+#include "reader/GraphReader.h"
 #include "views/GraphView.h"
 
 #include "NLExecutor.h"
@@ -451,12 +452,21 @@ void NLTranslator::translateConstScanLoop(const IteratorConfig& config,
 
     // Resolve the constant i64 list into the NodeIDs the loop emits. A node ID is a
     // non-negative handle stored signless, so each entry maps straight to a NodeID.
-    // The list is copied into the loop data so it outlives the op's attribute
-    // storage (the data lives for the whole program).
+    // A listed ID that names no node in the graph matches nothing, so it is dropped
+    // here rather than emitted - the same set-membership semantics as the pipeline's
+    // ConstScanProcessor, and resolved once against the graph view (fixed for the
+    // whole run) the way the label scan resolves its LabelSet. The surviving IDs keep
+    // their listed order. The list is copied into the loop data so it outlives the
+    // op's attribute storage (the data lives for the whole program).
+    const GraphReader reader = _view->read();
+
     std::vector<NodeID> constNodeIDs;
     constNodeIDs.reserve(config._nodeIDs.size());
     for (const int64_t nodeID : config._nodeIDs) {
-        constNodeIDs.emplace_back(static_cast<uint64_t>(nodeID));
+        const NodeID candidate(static_cast<uint64_t>(nodeID));
+        if (reader.graphHasNode(candidate)) {
+            constNodeIDs.emplace_back(candidate);
+        }
     }
 
     NLConstScanLoopData* loopData = _program->allocFunctionData<NLConstScanLoopData>(nodeIDs, constNodeIDs);
