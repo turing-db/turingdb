@@ -453,14 +453,6 @@ void NLTranslator::translateConstScanLoop(const IteratorConfig& config,
     NLConstScanLoopData* loopData = _program->allocFunctionData<NLConstScanLoopData>(nodeIDs);
     loopData->setLimit(limit);
 
-    // Resolve the constant i64 list into the NodeIDs the loop emits, appending each
-    // straight into the loop data's owned list. A node ID is a non-negative handle
-    // stored signless, so each entry maps straight to a NodeID. A listed ID that
-    // names no node in the graph matches nothing, so it is dropped here rather than
-    // emitted - the same set-membership semantics as the pipeline's
-    // ConstScanProcessor, and resolved once against the graph view (fixed for the
-    // whole run) the way the label scan resolves its LabelSet. The surviving IDs
-    // keep their listed order.
     const GraphReader reader = _view->read();
 
     loopData->reserveNodeIDs(config._nodeIDs.size());
