@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <span>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -1036,6 +1037,47 @@ void NLExecutor::runScanNodesByLabelLoop(NLExecutionContext* context, NLFunction
         }
     } else {
         while (chunkWriter.isValid()) {
+            runIteration();
+        }
+    }
+}
+
+void NLExecutor::runConstScanNodesLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLConstScanLoopData* loopData = static_cast<NLConstScanLoopData*>(data);
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    ColumnNodeIDs* nodeIDs = loopData->getNodeIDs();
+    const std::span<const NodeID> constNodeIDs = loopData->getConstNodeIDs();
+    const size_t chunkSize = context->getChunkSize();
+    const size_t totalCount = constNodeIDs.size();
+
+    // A null limit leaves the loop unbounded, exactly as in runScanNodesLoop.
+    const NLLimitState* limit = loopData->getLimit();
+
+    // Emit the fixed node ID list one chunk at a time: each step copies the next
+    // slice into the loop's node chunk and runs the body over it. The cursor is
+    // local to this call, so a const scan nested in a cross product restarts from
+    // the first ID on every outer step, the same way runScanNodesLoop opens a
+    // fresh chunk writer each call.
+    size_t cursor = 0;
+
+    const auto runIteration = [&]() {
+        const size_t remaining = totalCount - cursor;
+        const size_t rows = std::min(chunkSize, remaining);
+
+        std::vector<NodeID>& raw = nodeIDs->getRaw();
+        raw.assign(constNodeIDs.begin() + cursor, constNodeIDs.begin() + cursor + rows);
+
+        cursor += rows;
+
+        runBody(context, loopBody);
+    };
+
+    if (limit) {
+        while (cursor < totalCount && limit->getRemaining() > 0) {
+            runIteration();
+        }
+    } else {
+        while (cursor < totalCount) {
             runIteration();
         }
     }

@@ -983,6 +983,25 @@ func.func @main() {
 }
 )mlir";
 
+// Scan exactly the nodes 2 and 0, in that order: a fixed set, not a graph walk
+constexpr const char* constScanNodesProgram = R"mlir(
+func.func @main() {
+  %a = db.const_scan_nodes([2, 0]) : !db.column<!storage.node_id>
+  db.output(%a) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// Const scan of all four diamond nodes in a scrambled order, so a test can assert
+// the listed order is preserved (and, at a small chunk size, that it spans chunks)
+constexpr const char* constScanNodesOrderedProgram = R"mlir(
+func.func @main() {
+  %a = db.const_scan_nodes([3, 1, 2, 0]) : !db.column<!storage.node_id>
+  db.output(%a) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // One hop along out-edges, outputting (source, target) pairs
 constexpr const char* oneHopOutProgram = R"mlir(
 func.func @main() {
@@ -1261,6 +1280,19 @@ private:
 std::string limitScanProgram(uint64_t count) {
     return std::string("func.func @main() {\n"
                        "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "  %la = db.limit(%a) count ")
+           + std::to_string(count)
+           + " : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
+             "  db.output(%la) : !db.column<!storage.node_id>\n"
+             "  return\n"
+             "}\n";
+}
+
+// MATCH (n) WHERE id(n) IN [3, 1, 2, 0] RETURN n LIMIT count: a const scan capped
+// by db.limit, so the same early-exit that bounds a plain scan bounds it too.
+std::string limitConstScanProgram(uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %a = db.const_scan_nodes([3, 1, 2, 0]) : !db.column<!storage.node_id>\n"
                        "  %la = db.limit(%a) count ")
            + std::to_string(count)
            + " : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
@@ -1996,6 +2028,69 @@ TEST_F(DBLoweringTest, executesScanNodesByLabelUnknownIsEmpty) {
     std::vector<uint64_t> robots;
     collectScan(scanByLabelUnknownProgram, reader.getView(), robots);
     EXPECT_TRUE(robots.empty());
+}
+
+TEST_F(DBLoweringTest, executesConstScanNodes) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runLoweredProgram(constScanNodesProgram, reader.getView(), sink);
+
+    // The scan emits exactly the two listed nodes, nothing else.
+    const std::vector<std::vector<uint64_t>> expected {{0}, {2}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, constScanNodesPreservesListedOrder) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runLoweredProgram(constScanNodesOrderedProgram, reader.getView(), sink);
+
+    // A const scan emits its IDs in the order listed, not the storage scan order.
+    const std::vector<std::vector<uint64_t>> expected {{3}, {1}, {2}, {0}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.orderedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, constScanNodesSpansChunkBoundary) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Four IDs in chunks of two: the list is emitted across two steps, and every
+    // ID still comes out exactly once and in the listed order.
+    CollectingNodeSink sink;
+    runLoweredProgram(constScanNodesOrderedProgram, reader.getView(), sink, /*chunkSize=*/2);
+
+    const std::vector<std::vector<uint64_t>> expected {{3}, {1}, {2}, {0}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.orderedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, limitsConstScanToFewerThanListSize) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // A const scan opens a loop like a plain scan, so a chained LIMIT bounds it:
+    // four listed IDs in chunks of two, LIMIT 2, so exactly the first two survive.
+    CollectingNodeSink sink;
+    const std::string program = limitConstScanProgram(2);
+    runLoweredProgram(program.c_str(), reader.getView(), sink, /*chunkSize=*/2);
+
+    const std::vector<std::vector<uint64_t>> expected {{3}, {1}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.orderedRows(rows);
+    EXPECT_EQ(rows, expected);
 }
 
 TEST_F(DBLoweringTest, lowersSingleConstant) {

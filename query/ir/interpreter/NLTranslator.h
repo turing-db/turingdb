@@ -29,6 +29,7 @@ private:
     enum class IteratorKind {
         ScanNodes,
         ScanNodesByLabel,
+        ConstScanNodes,
         ScanEdges,
         GetOutEdges,
         GetInEdges,
@@ -62,6 +63,12 @@ private:
         // the whole translation; resolved to an EdgeTypeID when the loop is
         // translated.
         llvm::StringRef _edgeType;
+
+        // The node IDs a ConstScanNodes iterator emits; empty for the other kinds.
+        // A view into the op's DenseI64ArrayAttr storage, which the MLIRContext
+        // keeps alive for the whole translation; resolved to owned NodeIDs when the
+        // loop is translated.
+        llvm::ArrayRef<int64_t> _nodeIDs;
     };
 
     NLProgram* _program {nullptr};
@@ -112,6 +119,16 @@ private:
                                   mlir::Block& loopBody,
                                   NLLimitState* limit,
                                   NLStmtContainer* body);
+
+    // Translate the nl.for over an nl.const_scan_nodes iterator: allocate the node
+    // loop variable, resolve the config's constant i64 list into the owned NodeIDs
+    // the loop emits, and record the const-scan loop statement in body. The fixed
+    // sibling of translateScanLoop - a source loop that emits a known set of node
+    // IDs rather than walking the graph.
+    void translateConstScanLoop(const IteratorConfig& config,
+                                mlir::Block& loopBody,
+                                NLLimitState* limit,
+                                NLStmtContainer* body);
 
     // Translate the nl.for over an nl.scan_edges iterator: allocate the four
     // fixed edge loop variables (sources, edge IDs, edge type IDs, targets) and

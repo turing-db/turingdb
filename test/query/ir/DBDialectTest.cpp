@@ -883,6 +883,25 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n) WHERE id(n) IN [0, 3, 7] RETURN n: a scan of a fixed, listed set of
+// node IDs.
+const char* const constScanNodesProgram = R"mlir(
+func.func @main() {
+  %a = db.const_scan_nodes([0, 3, 7]) : !db.column<!storage.node_id>
+  db.output(%a) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// A const scan with no node IDs: rejected by the verifier.
+const char* const emptyConstScanNodesProgram = R"mlir(
+func.func @main() {
+  %a = db.const_scan_nodes([]) : !db.column<!storage.node_id>
+  db.output(%a) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // MATCH ()-[e]->() RETURN a, b: scan every edge, exposing the four edge columns
 // (source node, edge, edge type, target node); the output keeps the endpoints.
 const char* const scanEdgesProgram = R"mlir(
@@ -933,6 +952,50 @@ TEST_F(DBDialectTest, verifierRejectsScanNodesByLabelWithoutLabels) {
     // The op parses - an empty array is well-formed syntax - but the verifier
     // rejects a label-free label scan, so the module fails to build.
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyLabelScanProgram);
+    EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, parsesConstScanNodes) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(constScanNodesProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::ConstScanNodes scan;
+    module.get().walk([&](mlir::db::ConstScanNodes op) {
+        scan = op;
+    });
+    ASSERT_TRUE(scan);
+
+    // The three listed node IDs come back in order, and the result is a single
+    // node ID column.
+    const llvm::ArrayRef<int64_t> nodeIDs = scan.getNodeIDs();
+    ASSERT_EQ(nodeIDs.size(), 3u);
+    EXPECT_EQ(nodeIDs[0], 0);
+    EXPECT_EQ(nodeIDs[1], 3);
+    EXPECT_EQ(nodeIDs[2], 7);
+
+    const mlir::Type nodeIDColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    EXPECT_EQ(scan.getResult().getType(), nodeIDColumnType);
+}
+
+TEST_F(DBDialectTest, constScanNodesRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(constScanNodesProgram);
+    ASSERT_TRUE(module);
+
+    // Printing then re-parsing yields a module that still verifies, so the
+    // db.const_scan_nodes printer and parser are inverses.
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, verifierRejectsConstScanNodesWithoutNodeIDs) {
+    // The op parses - an empty array is well-formed syntax - but the verifier
+    // rejects a const scan with no node IDs, so the module fails to build.
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyConstScanNodesProgram);
     EXPECT_FALSE(module);
 }
 

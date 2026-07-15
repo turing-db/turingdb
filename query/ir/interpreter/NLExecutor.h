@@ -46,6 +46,11 @@ public:
 
     static void runScanNodesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runScanNodesByLabelLoop(NLExecutionContext* context, NLFunctionData* data);
+
+    // The fixed sibling of runScanNodesLoop: emit the loop data's constant node ID
+    // list one chunk at a time - no graph walk - running the body over each slice.
+    static void runConstScanNodesLoop(NLExecutionContext* context, NLFunctionData* data);
+
     static void runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* data);

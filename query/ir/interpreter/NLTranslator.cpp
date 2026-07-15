@@ -239,6 +239,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
                 config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
             }
             _iteratorConfigs[scanNodesByLabel.getResult()] = config;
+        } else if (nl::ConstScanNodes constScanNodes = mlir::dyn_cast<nl::ConstScanNodes>(operation)) {
+            IteratorConfig config {IteratorKind::ConstScanNodes, {}, {}};
+            config._nodeIDs = constScanNodes.getNodeIDs();
+            _iteratorConfigs[constScanNodes.getResult()] = config;
         } else if (nl::ScanEdges scanEdges = mlir::dyn_cast<nl::ScanEdges>(operation)) {
             _iteratorConfigs[scanEdges.getResult()] = IteratorConfig {IteratorKind::ScanEdges, {}, {}};
         } else if (nl::GetOutEdges getOutEdges = mlir::dyn_cast<nl::GetOutEdges>(operation)) {
@@ -373,6 +377,8 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         translateScanLoop(loopBody, limit, body);
     } else if (config._kind == IteratorKind::ScanNodesByLabel) {
         translateScanByLabelLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::ConstScanNodes) {
+        translateConstScanLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::ScanEdges) {
         translateScanEdgesLoop(loopBody, limit, body);
     } else if (config._kind == IteratorKind::Sort) {
@@ -431,6 +437,32 @@ void NLTranslator::translateScanByLabelLoop(const IteratorConfig& config,
     loopData->setLimit(limit);
 
     body->emplaceStmt(&NLExecutor::runScanNodesByLabelLoop, loopData);
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateConstScanLoop(const IteratorConfig& config,
+                                          mlir::Block& loopBody,
+                                          NLLimitState* limit,
+                                          NLStmtContainer* body) {
+    // A const scan binds the same single node ID chunk as a plain scan.
+    const mlir::Value nodeChunk = loopBody.getArgument(0);
+    ColumnNodeIDs* nodeIDs = static_cast<ColumnNodeIDs*>(allocColumn(nodeChunk));
+
+    // Resolve the constant i64 list into the NodeIDs the loop emits. A node ID is a
+    // non-negative handle stored signless, so each entry maps straight to a NodeID.
+    // The list is copied into the loop data so it outlives the op's attribute
+    // storage (the data lives for the whole program).
+    std::vector<NodeID> constNodeIDs;
+    constNodeIDs.reserve(config._nodeIDs.size());
+    for (const int64_t nodeID : config._nodeIDs) {
+        constNodeIDs.emplace_back(static_cast<uint64_t>(nodeID));
+    }
+
+    NLConstScanLoopData* loopData = _program->allocFunctionData<NLConstScanLoopData>(nodeIDs, constNodeIDs);
+    loopData->setLimit(limit);
+
+    body->emplaceStmt(&NLExecutor::runConstScanNodesLoop, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
 }

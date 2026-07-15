@@ -48,6 +48,28 @@ def ScanNodesByLabel : NLOp<"scan_nodes_by_label", [Pure, InferTypeOpAdaptor]> {
 }
 
 /**
+* ConstScanNodes
+*/
+def ConstScanNodes : NLOp<"const_scan_nodes", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create a database iterator over a fixed, explicitly listed set of nodes";
+  let description = [{
+    Imperative counterpart of db.const_scan_nodes. Each step of an enclosing
+    nl.for fills one chunk of the node IDs listed in `nodeIDs`:
+
+      %nodes = nl.const_scan_nodes([0, 3, 7])
+
+    `nodeIDs` is the same constant list db.const_scan_nodes carried; translation
+    resolves each entry to a storage NodeID. Emitting a known set needs no graph
+    walk, but it narrows only which rows are produced, never their shape, so -
+    like nl.scan_nodes - the result is always
+    !nl.iter<!nl.chunk<!storage.node_id>> and is inferred, not spelled out.
+  }];
+  let arguments = (ins DenseI64ArrayAttr:$nodeIDs);
+  let results   = (outs NLIterator:$result);
+  let assemblyFormat = "`(` $nodeIDs `)` attr-dict";
+}
+
+/**
 * ScanEdges
 */
 def ScanEdges : NLOp<"scan_edges", [Pure, InferTypeOpAdaptor]> {
