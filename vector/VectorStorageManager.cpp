@@ -49,7 +49,6 @@ VectorResult<void> VectorStorageManager::createLibraryStorage(const VecLib& lib)
 
     const fs::Path libRoot = getLibraryPath(meta->_id);
     const fs::Path metadataPath = getMetadataPath(meta->_id);
-    const fs::Path shardRouterPath = getShardRouterPath(meta->_id);
 
     std::unique_lock lock(_mutex);
 
@@ -72,17 +71,29 @@ VectorResult<void> VectorStorageManager::createLibraryStorage(const VecLib& lib)
         return VectorError::result(VectorErrorCode::CouldNotCreateMetadataStorage, res.error());
     }
 
-    // Create shard router file
-    if (auto res = fs::File::createAndOpen(shardRouterPath)) {
-        storage->_shardRouterFile = std::move(res.value());
-        storage->_shardRouterWriter.setFile(&storage->_shardRouterFile);
-    } else {
-        return VectorError::result(VectorErrorCode::CouldNotCreateShardRouterStorage, res.error());
-    }
+    switch (meta->_indexType) {
+        case IndexType::BRUTE_FORCE: {
+            const fs::Path shardRouterPath = getShardRouterPath(meta->_id);
 
-    // Write shard router file
-    if (auto res = storage->_shardRouterWriter.write(lib.shardRouter()); !res) {
-        return nonstd::make_unexpected(res.error());
+            // Create shard router file
+            if (auto res = fs::File::createAndOpen(shardRouterPath)) {
+                storage->_shardRouterFile = std::move(res.value());
+                storage->_shardRouterWriter.setFile(&storage->_shardRouterFile);
+            } else {
+                return VectorError::result(VectorErrorCode::CouldNotCreateShardRouterStorage, res.error());
+            }
+
+            // Write initial (empty) shard router
+            if (auto res = storage->_shardRouterWriter.write(lib.shardRouter()); !res) {
+                return nonstd::make_unexpected(res.error());
+            }
+        }
+        break;
+        case IndexType::HNSW:
+        break;
+        case IndexType::_SIZE:
+            return VectorError::result(VectorErrorCode::InvalidIndexType);
+        break;
     }
 
     // Write metadata file
@@ -162,6 +173,19 @@ fs::Path VectorStorageManager::getShardPath(const VecLibID& libID, LSHSignature 
     return getLibraryPath(libID) / "embeddings-" + std::to_string(sig) + ".index";
 }
 
+fs::Path VectorStorageManager::getHNSWIndexPath(const VecLibID& libID) const {
+    return getLibraryPath(libID) / "embeddings.hnsw.index";
+}
+
+VectorResult<void> VectorStorageManager::persistHNSWIndex(const VecLib& lib) {
+    const auto* meta = lib.metadata();
+    const fs::Path hnswPath = getHNSWIndexPath(meta->_id);
+
+    faiss::write_index(lib.getHNSWIndex(), hnswPath.c_str());
+
+    return {};
+}
+
 VectorResult<void> VectorStorageManager::initialize() {
     auto listRes = _rootPath.listDir();
     if (!listRes) {
@@ -208,11 +232,13 @@ VectorResult<void> VectorStorageManager::initialize() {
             storage->_metadataWriter.setFile(&storage->_metadataFile);
         }
 
-        // Read shard router
+        // Read shard router (only exists for BRUTE_FORCE libraries; HNSW libraries omit it)
         const fs::Path shardRouterPath = getShardRouterPath(id);
-        if (auto res = fs::File::open(shardRouterPath); !res) {
-            return VectorError::result(VectorErrorCode::CouldNotOpenShardRouterFile);
-        } else {
+        if (shardRouterPath.exists()) {
+            auto res = fs::File::open(shardRouterPath);
+            if (!res) {
+                return VectorError::result(VectorErrorCode::CouldNotOpenShardRouterFile);
+            }
             storage->_shardRouterFile = std::move(res.value());
             storage->_shardRouterWriter.setFile(&storage->_shardRouterFile);
         }

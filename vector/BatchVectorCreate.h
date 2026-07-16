@@ -46,7 +46,7 @@ public:
             throw VectorException("Vector dimension mismatch");
         }
 
-        const LSHSignature signature = _router->getSignature(newPoint);
+        const LSHSignature signature = _router ? _router->getSignature(newPoint) : 0;
 
         if (signature >= _data.size()) {
             _data.resize(signature + 1);

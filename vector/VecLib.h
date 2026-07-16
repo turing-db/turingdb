@@ -67,6 +67,11 @@ public:
             return *this;
         }
 
+        Builder& setIndexType(IndexType indexType) {
+            _vecLib->_metadata._indexType = indexType;
+            return *this;
+        }
+
         [[nodiscard]] VectorResult<std::unique_ptr<VecLib>> build();
 
     private:
@@ -111,6 +116,8 @@ public:
 
     [[nodiscard]] const LSHShardRouter* shardRouter() const { return _shardRouter.get(); }
 
+    [[nodiscard]] const faiss::Index* getHNSWIndex() const { return _hnswIndex.get(); }
+
     [[nodiscard]] const VecLibStorage* getStorage() const;
 
     [[nodiscard]] VecLibAccessor access();
@@ -128,8 +135,12 @@ private:
 
     VecLibMetadata _metadata;
     std::unique_ptr<LSHShardRouter> _shardRouter;
+    std::unique_ptr<faiss::Index> _hnswIndex;
 
     VecLib();
+
+    VectorResult<void> addEmbeddingsBruteForce(const BatchVectorCreate* batch);
+    VectorResult<void> addEmbeddingsHNSW(const BatchVectorCreate* batch);
 };
 
 };

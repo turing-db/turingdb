@@ -43,7 +43,8 @@ VectorResult<void> VectorDatabase::init(const fs::Path& rootPath) {
 
 VectorResult<VecLibID> VectorDatabase::createLibrary(std::string_view libName,
                                                      Dimension dim,
-                                                     DistanceMetric metric) {
+                                                     DistanceMetric metric,
+                                                     IndexType indexType) {
     if (libName.empty()) {
         return VectorError::result(VectorErrorCode::EmptyLibName);
     }
@@ -65,6 +66,7 @@ VectorResult<VecLibID> VectorDatabase::createLibrary(std::string_view libName,
                    .setName(libName)
                    .setDimension(dim)
                    .setMetric(metric)
+                   .setIndexType(indexType)
                    .build();
 
     if (!lib) {
