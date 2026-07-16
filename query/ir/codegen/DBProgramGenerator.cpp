@@ -89,6 +89,15 @@ EdgeMetadata::EdgeType reverseEdge(EdgeMetadata::EdgeType type) {
 
 }
 
+mlir::Value findOrThrow(const DBProgramGenerator::VariableIdentityMap& map,
+                        const VariableDependency* var) {
+    const auto findIt = map.find(var);
+    bioassert(findIt != end(map), "Missing value for {}.", var->getName());
+    const DBProgramGenerator::VariableIdentities& identities = findIt->second;
+    bioassert(!identities.empty(), "Missing identity for {}.", var->getName());
+    return identities.back();
+}
+
 }
 
 DBProgramGenerator::DBProgramGenerator(mlir::ModuleOp* mainModule)
@@ -197,7 +206,7 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
     }
 
     generateTraversal(ast);
-    generateEdgeIdentityFilters();
+    resolveEdgeIdentities();
     generatePropertyConstraints(ast);
     generateFilters(ast);
     generateOutput(ast);
@@ -352,10 +361,12 @@ void DBProgramGenerator::addMergeFilter(const VariableDependency* mergeVar,
     carriedSet.push_back(mergeVar);
 }
 
-void DBProgramGenerator::generateEdgeIdentityFilters() {
-    const mlir::Location loc = _opBuilder.getUnknownLoc();
-    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+void DBProgramGenerator::resolveEdgeIdentities() {
+    const mlir::Location uloc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType =
+        allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
 
+    // Join Cypher edge variables which had multiple VariableDependency*s in @ref _vdg
     for (const auto& [name, vars] : _vdg.edgeIdentities()) {
         const bool needsFilter = vars.size() > 1;
         if (!needsFilter) {
@@ -364,16 +375,19 @@ void DBProgramGenerator::generateEdgeIdentityFilters() {
 
         mlir::Value predicate;
         for (size_t index = 0; index + 1 < vars.size(); index++) {
-            bioassert(_varMap.contains(vars[index]), "Edge '{}' var '{}' not in varMap", name, vars[index]->getName());
-            bioassert(_varMap.contains(vars[index + 1]), "Edge '{}' var '{}' not in varMap", name, vars[index + 1]->getName());
-            const mlir::Value firstColumn = _varMap.at(vars[index]).back();
-            const mlir::Value nextColumn = _varMap.at(vars[index + 1]).back();
-            const mlir::Value equality = _opBuilder.create<mlir::db::EqOp>(loc, boolType, firstColumn, nextColumn).getResult();
+            const VariableDependency* fstVar = vars[index];
+            const VariableDependency* sndVar = vars[index + 1];
+            const mlir::Value fstCol = findOrThrow(_varMap, fstVar);
+            const mlir::Value sndCol = findOrThrow(_varMap, sndVar);
+
+            auto eqOp = _opBuilder.create<mlir::db::EqOp>(uloc, boolType, fstCol, sndCol);
+            const mlir::Value eq = eqOp.getResult();
 
             if (!predicate) {
-                predicate = equality;
+                predicate = eq;
             } else {
-                predicate = _opBuilder.create<mlir::db::AndOp>(loc, boolType, predicate, equality).getResult();
+                auto andOp = _opBuilder.create<mlir::db::AndOp>(uloc, boolType, predicate, eq);
+                predicate = andOp.getResult();
             }
         }
 
@@ -582,7 +596,8 @@ void DBProgramGenerator::buildCrossProductCascade(std::vector<TranslatedComponen
     }
 }
 
-void DBProgramGenerator::moveComponentToFactor(TranslatedComponent& component, mlir::Block* factorBlock) {
+void DBProgramGenerator::moveComponentToFactor(TranslatedComponent& component,
+                                               mlir::Block* factorBlock) {
     // Insertion point into the factor
     auto factorEnd = factorBlock->end();
 
@@ -793,8 +808,9 @@ void DBProgramGenerator::generateFilters(const CypherAST* ast) {
 
         const auto findIt = _exprMap.find(predicateExpr);
         bioassert(findIt != end(_exprMap), "Failed to get value for expr");
+        const mlir::Value predicateVal = findIt->second;
 
-        filterAllColumns(findIt->second);
+        filterAllColumns(predicateVal);
     }
 }
 
