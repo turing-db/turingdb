@@ -64,7 +64,9 @@ private:
     };
 
     void generateTraversal(const CypherAST* ast);
-    void generateEdgeIdentityFilters();
+
+    // Adds filters for edges which should be equivalent (joined on)
+    void resolveEdgeIdentities();
 
     // Translate a connected component of @ref _vdg, fills @param outVars
     void translateComponent(const VariableDependency* root,
