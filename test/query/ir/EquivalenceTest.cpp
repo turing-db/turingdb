@@ -93,6 +93,28 @@ bool renderValueCell(const Column* column, size_t row, std::string& out) {
     return true;
 }
 
+template <>
+bool renderValueCell<CustomBool>(const Column* column, size_t row, std::string& out) {
+    if (const auto* constCol = dynamic_cast<const ColumnConst<CustomBool>*>(column)) {
+        out = constCol->at(0)._boolean ? "true" : "false";
+        return true;
+    }
+
+    const auto* values = dynamic_cast<const ColumnOptVector<CustomBool>*>(column);
+    if (!values) {
+        return false;
+    }
+
+    const std::optional<CustomBool> value = (*values)[row];
+    if (!value) {
+        out = "null";
+        return true;
+    }
+
+    out = value->_boolean ? "true" : "false";
+    return true;
+}
+
 bool renderEmbeddingCell(const Column* column, size_t row, std::string& out) {
     const auto renderSpan = [](std::span<const float> floats, std::string& target) {
         target = "[";
@@ -138,6 +160,7 @@ void renderCell(const Column* column, size_t row, std::string& out) {
                || renderValueCell<uint64_t>(column, row, out)
                || renderValueCell<double>(column, row, out)
                || renderValueCell<std::string_view>(column, row, out)
+               || renderValueCell<CustomBool>(column, row, out)
                || renderEmbeddingCell(column, row, out)) {
         // Rendered by the helper for whichever value type matched
     } else {
@@ -438,6 +461,78 @@ TEST_F(EquivalenceTest, constants) {
     expectEquivalent("RETURN 'hello'");
     expectEquivalent("RETURN (1, 2, 3)");
     expectEquivalent("RETURN null");
+
+    expectEquivalent("RETURN NOT FALSE");
+    expectEquivalent("RETURN NOT TRUE");
+}
+
+TEST_F(EquivalenceTest, returnProperties) {
+    expectEquivalent("MATCH (n) RETURN n.name");
+    expectEquivalent("MATCH (n) RETURN n.age + 1");
+    expectEquivalent("MATCH (n) RETURN n.duration + 5");
+
+    expectEquivalent("MATCH (n) WHERE n.age > 30 RETURN n, n.age, n.name");
+
+    expectEquivalent("MATCH (n)-[e]->(m) RETURN n, e, m, 2 + 1");
+}
+
+TEST_F(EquivalenceTest, nodeIdComparisons) {
+    expectEquivalent("MATCH (n) WHERE n = 10 RETURN n.name");
+    expectEquivalent("MATCH (n) WHERE n = 10 OR n = 11 RETURN n.name");
+
+    expectEquivalent("MATCH (n)-[e]->(m) WHERE m = n.age / 16 RETURN n, e, m, n.name, e.name, m.name");
+}
+
+TEST_F(EquivalenceTest, edgeIdComparisons) {
+    expectEquivalent("MATCH ()-[e]->() WHERE e = 3 RETURN e.name");
+    expectEquivalent("MATCH ()-[e]->() WHERE e = 2 OR e = 4 RETURN e.name");
+}
+
+TEST_F(EquivalenceTest, integerArithmetic) {
+    expectEquivalent("MATCH (n) WHERE n.age = 16 + 16 RETURN n.name");
+    expectEquivalent("MATCH (n) WHERE n.age = 32 + 1 RETURN n.name");
+    expectEquivalent("MATCH (n) WHERE n.age = 32 + 0 RETURN n.name");
+    expectEquivalent("MATCH (n) WHERE n.age = 42 - 10 RETURN n.name");
+    expectEquivalent("MATCH (n) WHERE n.age = 32 - 1 RETURN n.name");
+    expectEquivalent("MATCH (n) WHERE n.age = 32 - 0 RETURN n.name");
+
+    expectEquivalent("MATCH (n) WHERE n.age = (2 * 2 * 2 * 2 * 2 * 2) + 10 - 42 RETURN n.name");
+    expectEquivalent("MATCH (n) WHERE ((8+4) * (10 - 2))/4 - 6/3 + (5*2) - 8/4 + 2 = n.age RETURN n.name");
+}
+
+TEST_F(EquivalenceTest, joinPatterns) {
+    expectEquivalent("MATCH (x)-->(a), (x)-->(b) RETURN x.name, a.name, a.age, b.name, b.age");
+    expectEquivalent("MATCH (x)-->(a), (x)-->(b) WHERE a.age = b.age RETURN x.name, a.name, a.age, b.name, b.age");
+
+    expectEquivalent("MATCH (a)-->(x), (b)-->(x) RETURN a.name, b.name, x.name");
+    expectEquivalent("MATCH (a)-->(x), (b)-->(x) WHERE a.age = b.age RETURN x.name, a.name, a.age, b.name, b.age");
+
+    expectEquivalent("MATCH (a)-->(x), (b)-->(x), (c)-->(x), (d)-->(x) RETURN a.name, b.name, c.name, d.name, x.name");
+    expectEquivalent("MATCH (a)-->(x), (b)-->(x), (c)-->(x), (d)-->(x), (e)-->(x) RETURN a.name, b.name, c.name, d.name, e.name, x.name");
+    expectEquivalent("MATCH (a)-->(x), (b)-->(x), (x)-->(c)-->(e), (x)-->(d)-->(e) RETURN a");
+
+    expectEquivalent("MATCH (a)-->(b),(c)-->(d)-->(e),(a)-->(f)-->(g),(c)-->(g) RETURN a");
+    expectEquivalent("MATCH (y)-->(z)-->(m),(n), (l)-->(m), (n)-->(p)-->(q) WHERE m.age < p.age RETURN n,m,z,p");
+}
+
+TEST_F(EquivalenceTest, crossVariableFilters) {
+    expectEquivalent("MATCH (a), (b) WHERE a.name = b.name RETURN a, b");
+    expectEquivalent("MATCH (a)-->(x), (b)-->(x) WHERE a.name = b.name RETURN a");
+
+    expectEquivalent("MATCH (a)-->(x), (b)-->(x), (c)-->(x) WHERE (a.name = b.name) OR (b.name = c.name) RETURN a.name, b.name, c.name, x.name");
+    expectEquivalent("MATCH (a)-->(x), (b)-->(x), (c)-->(x) WHERE (a.name = b.name) OR (b.name = c.name) OR (b.name = x.name) RETURN a.name, b.name, c.name");
+
+    expectEquivalent("MATCH (a)-->(x), (b { duration: a.duration })-->(x), (c)-->(x) WHERE (a.name = b.name) OR (b.name = c.name) OR (b.name = x.name) RETURN a");
+
+    expectEquivalent("MATCH (n), (m) WHERE m.isFrench AND NOT (n.isFrench = m.isFrench) RETURN n.name, m.name");
+}
+
+TEST_F(EquivalenceTest, crossVariableInlineConstraints) {
+    expectEquivalent("MATCH (a), (b { name: a.name }) RETURN a, b");
+
+    expectEquivalent("MATCH (a)-->(x), (b { name: a.name})-->(x) RETURN a");
+    expectEquivalent("MATCH (a)-->(x), (b { name: a.name})-->(x), (c {name: b.name})-->(x) RETURN a");
+    expectEquivalent("MATCH (a)-->(x), (b { name: a.name})-->(x), (c {name: b.name})-->(x { name: a.name }) RETURN a");
 }
 
 TEST_F(EquivalenceTest, divideFilters) {
