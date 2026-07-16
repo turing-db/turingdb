@@ -233,8 +233,15 @@ private:
     // Performs null- and type- promotions
     void lowerMul(mlir::db::MulOp mul);
 
+    // Performs null- and type- promotions; division by zero yields null
+    void lowerDiv(mlir::db::DivOp div);
+
     // Handles nullity of its output depending on operands
     void lowerEq(mlir::db::EqOp eq);
+    void lowerGt(mlir::db::GtOp gt);
+    void lowerLt(mlir::db::LtOp lt);
+    void lowerGte(mlir::db::GteOp gte);
+    void lowerLte(mlir::db::LteOp lte);
 
     void lowerAnd(mlir::db::AndOp andOp);
     void lowerOr(mlir::db::OrOp orOp);

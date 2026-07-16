@@ -733,17 +733,17 @@ void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* u
 }
 
 void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr* binExpr) {
-    const Expr* lhs = binExpr->getLHS();
-    const Expr* rhs = binExpr->getRHS();
+    const Expr* lhsExpr = binExpr->getLHS();
+    const Expr* rhsExpr = binExpr->getRHS();
 
-    translateExpr(lhs);
-    translateExpr(rhs);
+    translateExpr(lhsExpr);
+    translateExpr(rhsExpr);
 
-    bioassert(_exprMap.contains(lhs), "Binary operation with unknown LHS operand.");
-    bioassert(_exprMap.contains(rhs), "Binary operation with unknown RHS operand.");
+    bioassert(_exprMap.contains(lhsExpr), "Binary operation with unknown LHS operand.");
+    bioassert(_exprMap.contains(rhsExpr), "Binary operation with unknown RHS operand.");
 
-    const mlir::Value lhsVal = _exprMap.at(lhs);
-    const mlir::Value rhsVal = _exprMap.at(rhs);
+    const mlir::Value lhs = _exprMap.at(lhsExpr);
+    const mlir::Value rhs = _exprMap.at(rhsExpr);
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
@@ -752,31 +752,41 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
 
     switch (op) {
         case BinaryOperator::Equal:
-            _exprMap[expr] = _opBuilder.create<mlir::db::EqOp>(loc, boolType, lhsVal, rhsVal).getResult();
+            _exprMap[expr] = _opBuilder.create<mlir::db::EqOp>(loc, boolType, lhs, rhs).getResult();
         break;
         case BinaryOperator::And:
-            _exprMap[expr] = _opBuilder.create<mlir::db::AndOp>(loc, boolType, lhsVal, rhsVal).getResult();
+            _exprMap[expr] = _opBuilder.create<mlir::db::AndOp>(loc, boolType, lhs, rhs).getResult();
         break;
         case BinaryOperator::Or:
-            _exprMap[expr] = _opBuilder.create<mlir::db::OrOp>(loc, boolType, lhsVal, rhsVal).getResult();
+            _exprMap[expr] = _opBuilder.create<mlir::db::OrOp>(loc, boolType, lhs, rhs).getResult();
         break;
         case BinaryOperator::Add:
-            _exprMap[expr] = _opBuilder.create<mlir::db::AddOp>(loc, noneType, lhsVal, rhsVal).getResult();
+            _exprMap[expr] = _opBuilder.create<mlir::db::AddOp>(loc, noneType, lhs, rhs).getResult();
         break;
         case BinaryOperator::Sub:
-            _exprMap[expr] = _opBuilder.create<mlir::db::SubOp>(loc, noneType, lhsVal, rhsVal).getResult();
+            _exprMap[expr] = _opBuilder.create<mlir::db::SubOp>(loc, noneType, lhs, rhs).getResult();
         break;
         case BinaryOperator::Mult:
-            _exprMap[expr] = _opBuilder.create<mlir::db::MulOp>(loc, noneType, lhsVal, rhsVal).getResult();
+            _exprMap[expr] = _opBuilder.create<mlir::db::MulOp>(loc, noneType, lhs, rhs).getResult();
+        break;
+        case BinaryOperator::Div:
+            _exprMap[expr] = _opBuilder.create<mlir::db::DivOp>(loc, noneType, lhs, rhs).getResult();
+        break;
+        case BinaryOperator::GreaterThan:
+            _exprMap[expr] = _opBuilder.create<mlir::db::GtOp>(loc, boolType, lhs, rhs).getResult();
+        break;
+        case BinaryOperator::LessThan:
+            _exprMap[expr] = _opBuilder.create<mlir::db::LtOp>(loc, boolType, lhs, rhs).getResult();
+        break;
+        case BinaryOperator::GreaterThanOrEqual:
+            _exprMap[expr] = _opBuilder.create<mlir::db::GteOp>(loc, boolType, lhs, rhs).getResult();
+        break;
+        case BinaryOperator::LessThanOrEqual:
+            _exprMap[expr] = _opBuilder.create<mlir::db::LteOp>(loc, boolType, lhs, rhs).getResult();
         break;
 
         case BinaryOperator::Xor:
         case BinaryOperator::NotEqual:
-        case BinaryOperator::LessThan:
-        case BinaryOperator::GreaterThan:
-        case BinaryOperator::LessThanOrEqual:
-        case BinaryOperator::GreaterThanOrEqual:
-        case BinaryOperator::Div:
         case BinaryOperator::Mod:
         case BinaryOperator::Pow:
         case BinaryOperator::In:

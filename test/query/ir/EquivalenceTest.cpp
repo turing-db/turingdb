@@ -361,8 +361,52 @@ TEST_F(EquivalenceTest, constants) {
     expectEquivalent("RETURN 5 + 10");
     expectEquivalent("RETURN 5 - 3");
     expectEquivalent("RETURN 5 * 3");
+    expectEquivalent("RETURN 10 / 2");
+    expectEquivalent("RETURN 9 / 3");
 
     expectEquivalent("RETURN 'hello'");
     expectEquivalent("RETURN (1, 2, 3)");
     expectEquivalent("RETURN null");
+}
+
+TEST_F(EquivalenceTest, divideFilters) {
+    expectEquivalent("MATCH (n) WHERE n.age / 2 = 16 RETURN n");
+
+    expectEquivalent("MATCH (n) WHERE n.age / 32 = 1 RETURN n");
+
+    expectEquivalent("MATCH (n)-[e]->(m) WHERE e.duration / 10 = 2 RETURN m");
+
+    expectEquivalent("MATCH (n) WHERE n.age / 4 = 8 RETURN n");
+
+    expectEquivalent("MATCH (n) WHERE n.age / 2 = 8 RETURN n");
+}
+
+TEST_F(EquivalenceTest, comparisonFilters) {
+    expectEquivalent("MATCH (n) WHERE n.age > 20 RETURN n");
+
+    expectEquivalent("MATCH (n) WHERE n.age > 32 RETURN n");
+
+    expectEquivalent("MATCH (n) WHERE n.age < 50 RETURN n");
+
+    expectEquivalent("MATCH (n) WHERE n.age < 32 RETURN n");
+
+    expectEquivalent("MATCH (n) WHERE n.age >= 32 RETURN n");
+
+    expectEquivalent("MATCH (n) WHERE n.age >= 33 RETURN n");
+
+    expectEquivalent("MATCH (n) WHERE n.age <= 32 RETURN n");
+
+    expectEquivalent("MATCH (n) WHERE n.age <= 31 RETURN n");
+
+    expectEquivalent("MATCH (n) WHERE n.age > 20 AND n.age < 50 RETURN n");
+
+    expectEquivalent("MATCH (n) WHERE n.age / 2 > 10 RETURN n");
+
+    expectEquivalent("MATCH (a), (b) WHERE a.age > b.age RETURN a, b");
+    expectEquivalent("MATCH (a), (b) WHERE a.age >= b.age RETURN a, b");
+
+    expectEquivalent("MATCH (n)-[e]->(m) WHERE e.duration > 10 RETURN m");
+    expectEquivalent("MATCH (n)-[e]->(m) WHERE e.duration < 100 RETURN m");
+    expectEquivalent("MATCH (n)-[e]->(m) WHERE e.duration >= 20 RETURN m");
+    expectEquivalent("MATCH (n)-[e]->(m) WHERE e.duration <= 20 RETURN m");
 }
