@@ -1012,6 +1012,16 @@ func.func @main() {
 }
 )mlir";
 
+// Const scan with an empty ID list: nothing to emit, so the scan yields no row -
+// the same zero-row outcome as a list whose IDs are all absent from the graph.
+constexpr const char* constScanNodesEmptyProgram = R"mlir(
+func.func @main() {
+  %a = db.const_scan_nodes([]) : !db.column<!storage.node_id>
+  db.output(%a) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // One hop along out-edges, outputting (source, target) pairs
 constexpr const char* oneHopOutProgram = R"mlir(
 func.func @main() {
@@ -2069,6 +2079,21 @@ TEST_F(DBLoweringTest, constScanNodesDropsIDsWithNoNode) {
     std::vector<std::vector<uint64_t>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, constScanNodesEmptyYieldsNoRow) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // An empty ID list has nothing to emit, so the scan runs cleanly and produces
+    // no row at all.
+    CollectingNodeSink sink;
+    runLoweredProgram(constScanNodesEmptyProgram, reader.getView(), sink);
+
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_TRUE(rows.empty());
 }
 
 TEST_F(DBLoweringTest, constScanNodesPreservesListedOrder) {

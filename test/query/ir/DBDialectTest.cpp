@@ -893,7 +893,7 @@ func.func @main() {
 }
 )mlir";
 
-// A const scan with no node IDs: rejected by the verifier.
+// A const scan with no node IDs: a valid, empty (zero-row) scan.
 const char* const emptyConstScanNodesProgram = R"mlir(
 func.func @main() {
   %a = db.const_scan_nodes([]) : !db.column<!storage.node_id>
@@ -992,11 +992,13 @@ TEST_F(DBDialectTest, constScanNodesRoundTripsThroughTextualForm) {
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
 }
 
-TEST_F(DBDialectTest, verifierRejectsConstScanNodesWithoutNodeIDs) {
-    // The op parses - an empty array is well-formed syntax - but the verifier
-    // rejects a const scan with no node IDs, so the module fails to build.
+TEST_F(DBDialectTest, constScanNodesWithoutNodeIDsIsValid) {
+    // An empty node ID list is a valid const scan - it simply yields no row, the
+    // same set-membership semantics as a list whose IDs are all absent - so the
+    // module builds and verifies.
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyConstScanNodesProgram);
-    EXPECT_FALSE(module);
+    ASSERT_TRUE(module);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
 }
 
 // MATCH (a)-[:KNOWS]->(b)<-[:LIKES]-(c): one by-type out-edge hop and one by-type

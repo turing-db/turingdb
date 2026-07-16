@@ -84,16 +84,15 @@ def ConstScanNodes : TuringOp<"const_scan_nodes", [Pure]> {
     the index list db.sort carries; each entry is a storage NodeID once lowered.
     A listed ID that names no node in the graph matches nothing, so it is dropped
     during lowering and the scan yields only the nodes that exist - the same
-    set-membership semantics as the WHERE id(n) IN ... it models. The list must
-    not be empty: an empty set opens no dataflow, so a scan that can never produce
-    a row is malformed IR here rather than a silent no-op.
+    set-membership semantics as the WHERE id(n) IN ... it models. A list whose IDs
+    are all absent, or an empty list, simply yields no row - not an error, matching
+    that same set-membership.
   }];
 
   // `nodeIDs` is the constant set of node IDs to emit. Being an attribute and not
   // an SSA value, it is absent from `operands`; lowering forwards it as-is.
   let arguments = (ins DenseI64ArrayAttr:$nodeIDs);
   let results   = (outs ColumnNodeIDs:$result);
-  let hasVerifier = 1;
 
   // The node ID list prints inside the parens as `[0, 3, 7]`, ahead of the colon,
   // the same place db.scan_nodes_by_label prints its labels; the result type
