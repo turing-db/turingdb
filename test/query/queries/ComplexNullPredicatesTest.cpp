@@ -161,7 +161,7 @@ protected:
 TEST_F(ComplexNullPredicatesTest, complexMatchWithIsNotNull) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (pub)
-        WHERE pub.type = 'publication'
+        WHERE pub.`type` = 'publication'
         AND pub.country = 'United States'
         AND pub.institution IS NOT NULL
         RETURN pub.institution, pub.published_year, pub.cited_by_count
@@ -216,7 +216,7 @@ TEST_F(ComplexNullPredicatesTest, complexMatchWithIsNotNull) {
 TEST_F(ComplexNullPredicatesTest, complexMatchWithIsNull) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (pub)
-        WHERE pub.type = 'publication'
+        WHERE pub.`type` = 'publication'
         AND pub.country = 'United States'
         AND pub.institution IS NULL
         RETURN pub, pub.published_year
@@ -267,7 +267,7 @@ TEST_F(ComplexNullPredicatesTest, complexMatchWithIsNull) {
 TEST_F(ComplexNullPredicatesTest, mixedNullPredicates) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (pub)
-        WHERE pub.type = 'publication'
+        WHERE pub.`type` = 'publication'
         AND pub.country = 'United States'
         AND pub.institution IS NULL
         AND pub.published_year IS NOT NULL
@@ -309,7 +309,7 @@ TEST_F(ComplexNullPredicatesTest, mixedNullPredicates) {
                 actual.add({*years->at(row)});
             }
         });
-        ASSERT_TRUE(res);
+        ASSERT_TRUE(res) << res.getError();
     }
     EXPECT_TRUE(expected.equals(actual));
 }
@@ -318,10 +318,10 @@ TEST_F(ComplexNullPredicatesTest, mixedNullPredicates) {
 TEST_F(ComplexNullPredicatesTest, isNotNullWithOrLogic) {
     constexpr std::string_view MATCH_QUERY = R"(
         MATCH (n)
-        WHERE (n.type = 'publication' OR n.type = 'article')
+        WHERE (n.`type` = 'publication' OR n.`type` = 'article')
         AND n.country = 'United States'
         AND n.institution IS NOT NULL
-        RETURN n, n.type, n.institution
+        RETURN n, n.`type`, n.institution
     )";
 
     using String = types::String::Primitive;
@@ -352,14 +352,14 @@ TEST_F(ComplexNullPredicatesTest, isNotNullWithOrLogic) {
         auto res = query(MATCH_QUERY, [&](const Dataframe* df) -> void {
             ASSERT_TRUE(df);
             auto* ns = findColumn(df, "n")->as<ColumnNodeIDs>();
-            auto* types = findColumn(df, "n.type")->as<ColumnOptVector<String>>();
+            auto* types = findColumn(df, "n.`type`")->as<ColumnOptVector<String>>();
             auto* institutions = findColumn(df, "n.institution")->as<ColumnOptVector<String>>();
             ASSERT_TRUE(ns && types && institutions);
             for (size_t row = 0; row < ns->size(); row++) {
                 actual.add({ns->at(row), *types->at(row), *institutions->at(row)});
             }
         });
-        ASSERT_TRUE(res);
+        ASSERT_TRUE(res) << res.getError();
     }
     EXPECT_TRUE(expected.equals(actual));
 }
