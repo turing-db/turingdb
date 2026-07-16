@@ -1366,12 +1366,14 @@ PipelineBlockOutputInterface& PipelineBuilder::addShowExtensions() {
 
 PipelineValueOutputInterface& PipelineBuilder::addCreateVectorIndex(std::string_view indexName,
                                                                     vec::Dimension dimension,
-                                                                    vec::DistanceMetric metric) {
+                                                                    vec::DistanceMetric metric,
+                                                                    vec::IndexType indexType) {
     CreateVectorIndexProcessor* proc =
         CreateVectorIndexProcessor::create(_pipeline,
                                            indexName,
                                            dimension,
-                                           metric);
+                                           metric,
+                                           indexType);
 
     PipelineValueOutputInterface& output = proc->output();
     Dataframe* df = output.getDataframe();

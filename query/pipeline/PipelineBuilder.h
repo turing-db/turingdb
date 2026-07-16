@@ -229,7 +229,8 @@ public:
     // Vector operations
     PipelineValueOutputInterface& addCreateVectorIndex(std::string_view indexName,
                                                        vec::Dimension dimension,
-                                                       vec::DistanceMetric metric);
+                                                       vec::DistanceMetric metric,
+                                                       vec::IndexType indexType);
     PipelineValueOutputInterface& addLoadVector(std::string_view filePath,
                                                 std::string_view indexName);
     PipelineValueOutputInterface& addLoadEmbedding(std::string_view filePath,

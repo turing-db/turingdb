@@ -1754,7 +1754,7 @@ PipelineOutputInterface* PipelineGenerator::translateLoadCSVNode(LoadCSVNode* no
 }
 
 PipelineOutputInterface* PipelineGenerator::translateCreateVectorIndexNode(CreateVectorIndexNode* node) {
-    _builder.addCreateVectorIndex(node->getIndexName(), node->getDimension(), node->getMetric());
+    _builder.addCreateVectorIndex(node->getIndexName(), node->getDimension(), node->getMetric(), node->getIndexType());
     return _builder.getPendingOutputInterface();
 }
 
