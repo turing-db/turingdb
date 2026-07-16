@@ -419,8 +419,18 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerSub(sub);
     } else if (mlir::db::MulOp mul = mlir::dyn_cast<mlir::db::MulOp>(operation)) {
         lowerMul(mul);
+    } else if (mlir::db::DivOp div = mlir::dyn_cast<mlir::db::DivOp>(operation)) {
+        lowerDiv(div);
     } else if (mlir::db::EqOp eq = mlir::dyn_cast<mlir::db::EqOp>(operation)) {
         lowerEq(eq);
+    } else if (mlir::db::GtOp gt = mlir::dyn_cast<mlir::db::GtOp>(operation)) {
+        lowerGt(gt);
+    } else if (mlir::db::LtOp lt = mlir::dyn_cast<mlir::db::LtOp>(operation)) {
+        lowerLt(lt);
+    } else if (mlir::db::GteOp gte = mlir::dyn_cast<mlir::db::GteOp>(operation)) {
+        lowerGte(gte);
+    } else if (mlir::db::LteOp lte = mlir::dyn_cast<mlir::db::LteOp>(operation)) {
+        lowerLte(lte);
     } else if (mlir::db::AndOp nd = mlir::dyn_cast<mlir::db::AndOp>(operation)) {
         lowerAnd(nd);
     } else if (mlir::db::OrOp orOp = mlir::dyn_cast<mlir::db::OrOp>(operation)) {
@@ -1407,6 +1417,26 @@ void DBLowering::lowerMul(mlir::db::MulOp mul) {
     _valueMap[mul.getResult()] = mulOp.getResult();
 }
 
+void DBLowering::lowerDiv(mlir::db::DivOp div) {
+    const mlir::Value lhsChunk = mapValue(div.getLhs());
+    const mlir::Value rhsChunk = mapValue(div.getRhs());
+
+    const NumericOperand lhs = numericOperand(lhsChunk.getType());
+    const NumericOperand rhs = numericOperand(rhsChunk.getType());
+
+    const mlir::Type promoted = promoteNumeric(_builder, lhs.numeric, rhs.numeric);
+
+    // Division by zero yields null, so the result is always nullable.
+    const mlir::Type resultElement = storage::NullableType::get(_builder.getContext(), promoted);
+    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
+
+    setInsertionForBinaryOp(lhsChunk, rhsChunk);
+
+    const mlir::Location uloc = _builder.getUnknownLoc();
+    nl::Div divOp = _builder.create<nl::Div>(uloc, resultType, lhsChunk, rhsChunk);
+    _valueMap[div.getResult()] = divOp.getResult();
+}
+
 void DBLowering::lowerEq(mlir::db::EqOp eq) {
     const mlir::Value lhsChunk = mapValue(eq.getLhs());
     const mlir::Value rhsChunk = mapValue(eq.getRhs());
@@ -1429,6 +1459,90 @@ void DBLowering::lowerEq(mlir::db::EqOp eq) {
 
     nl::Eq eqOp = _builder.create<nl::Eq>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
     _valueMap[eq.getResult()] = eqOp.getResult();
+}
+
+void DBLowering::lowerGt(mlir::db::GtOp gt) {
+    const mlir::Value lhsChunk = mapValue(gt.getLhs());
+    const mlir::Value rhsChunk = mapValue(gt.getRhs());
+
+    const bool resultNull = isNullableChunk(lhsChunk.getType()) || isNullableChunk(rhsChunk.getType());
+
+    const mlir::Type boolElement = _builder.getI1Type();
+    mlir::MLIRContext* bldCtxt = _builder.getContext();
+    mlir::Type resultElement = boolElement;
+    if (resultNull) {
+        resultElement = storage::NullableType::get(bldCtxt, boolElement);
+    }
+
+    const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
+
+    setInsertionForBinaryOp(lhsChunk, rhsChunk);
+
+    nl::Gt gtOp = _builder.create<nl::Gt>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
+    _valueMap[gt.getResult()] = gtOp.getResult();
+}
+
+void DBLowering::lowerLt(mlir::db::LtOp lt) {
+    const mlir::Value lhsChunk = mapValue(lt.getLhs());
+    const mlir::Value rhsChunk = mapValue(lt.getRhs());
+
+    const bool resultNull = isNullableChunk(lhsChunk.getType()) || isNullableChunk(rhsChunk.getType());
+
+    const mlir::Type boolElement = _builder.getI1Type();
+    mlir::MLIRContext* bldCtxt = _builder.getContext();
+    mlir::Type resultElement = boolElement;
+    if (resultNull) {
+        resultElement = storage::NullableType::get(bldCtxt, boolElement);
+    }
+
+    const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
+
+    setInsertionForBinaryOp(lhsChunk, rhsChunk);
+
+    nl::Lt ltOp = _builder.create<nl::Lt>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
+    _valueMap[lt.getResult()] = ltOp.getResult();
+}
+
+void DBLowering::lowerGte(mlir::db::GteOp gte) {
+    const mlir::Value lhsChunk = mapValue(gte.getLhs());
+    const mlir::Value rhsChunk = mapValue(gte.getRhs());
+
+    const bool resultNull = isNullableChunk(lhsChunk.getType()) || isNullableChunk(rhsChunk.getType());
+
+    const mlir::Type boolElement = _builder.getI1Type();
+    mlir::MLIRContext* bldCtxt = _builder.getContext();
+    mlir::Type resultElement = boolElement;
+    if (resultNull) {
+        resultElement = storage::NullableType::get(bldCtxt, boolElement);
+    }
+
+    const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
+
+    setInsertionForBinaryOp(lhsChunk, rhsChunk);
+
+    nl::Gte gteOp = _builder.create<nl::Gte>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
+    _valueMap[gte.getResult()] = gteOp.getResult();
+}
+
+void DBLowering::lowerLte(mlir::db::LteOp lte) {
+    const mlir::Value lhsChunk = mapValue(lte.getLhs());
+    const mlir::Value rhsChunk = mapValue(lte.getRhs());
+
+    const bool resultNull = isNullableChunk(lhsChunk.getType()) || isNullableChunk(rhsChunk.getType());
+
+    const mlir::Type boolElement = _builder.getI1Type();
+    mlir::MLIRContext* bldCtxt = _builder.getContext();
+    mlir::Type resultElement = boolElement;
+    if (resultNull) {
+        resultElement = storage::NullableType::get(bldCtxt, boolElement);
+    }
+
+    const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
+
+    setInsertionForBinaryOp(lhsChunk, rhsChunk);
+
+    nl::Lte lteOp = _builder.create<nl::Lte>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
+    _valueMap[lte.getResult()] = lteOp.getResult();
 }
 
 void DBLowering::lowerAnd(mlir::db::AndOp andOp) {

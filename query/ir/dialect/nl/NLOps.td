@@ -1067,10 +1067,74 @@ def Mul : NLOp<"mul", [Pure]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
+def Div : NLOp<"div", [Pure]> {
+  let summary = "Row-wise division of two value chunks";
+  let description = [{
+      Result type is determined by the types (e.g. int -> double promotion
+      on double / double), and nullability (e.g. null / non-null = null).
+      Division by zero yields null.
+
+      %r = nl.div %x, %y : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i64>>
+  }];
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
 def Eq : NLOp<"eq", [Pure]> {
   let summary = "Row-wise equality of two value chunks";
   let description = [{
       %r = nl.eq %x, %y : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+  }];
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
+def Gt : NLOp<"gt", [Pure]> {
+  let summary = "Row-wise greater-than comparison of two value chunks";
+  let description = [{
+      %r = nl.gt %x, %y : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+  }];
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
+def Lt : NLOp<"lt", [Pure]> {
+  let summary = "Row-wise less-than comparison of two value chunks";
+  let description = [{
+      %r = nl.lt %x, %y : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+  }];
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
+def Gte : NLOp<"gte", [Pure]> {
+  let summary = "Row-wise greater-than-or-equal comparison of two value chunks";
+  let description = [{
+      %r = nl.gte %x, %y : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+  }];
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
+def Lte : NLOp<"lte", [Pure]> {
+  let summary = "Row-wise less-than-or-equal comparison of two value chunks";
+  let description = [{
+      %r = nl.lte %x, %y : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
   }];
 
   let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);

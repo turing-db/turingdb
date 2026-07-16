@@ -756,6 +756,31 @@ def MulOp : BinaryOp<"mul", [Pure]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
+def DivOp : BinaryOp<"div", [Pure]> {
+  let summary = "Row-wise division of two value columns";
+
+  let arguments = (ins Column:$lhs, Column:$rhs);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
+def GtOp : PredicateOp<"gt", [Pure]> {
+  let summary = "Row-wise greater-than comparison of two value columns";
+}
+
+def LtOp : PredicateOp<"lt", [Pure]> {
+  let summary = "Row-wise less-than comparison of two value columns";
+}
+
+def GteOp : PredicateOp<"gte", [Pure]> {
+  let summary = "Row-wise greater-than-or-equal comparison of two value columns";
+}
+
+def LteOp : PredicateOp<"lte", [Pure]> {
+  let summary = "Row-wise less-than-or-equal comparison of two value columns";
+}
+
 def FilterOp : TuringOp<"filter", [Pure]> {
   let summary = "Keep only the rows where the mask is true, filtering carried columns alongside";
 
