@@ -101,12 +101,12 @@ typename T::Primitive constantValueAs(mlir::TypedAttr value) {
     } else if constexpr (std::same_as<T, types::String>) {
         return mlir::cast<mlir::StringAttr>(value).getValue();
     } else if constexpr (std::same_as<T, types::Embedding>) {
-        const auto elements = mlir::cast<mlir::DenseElementsAttr>(value);
-        const llvm::ArrayRef<char> rawData = elements.getRawData();
-        return std::span<const float>{
-            reinterpret_cast<const float*>(rawData.data()),
-            rawData.size() / sizeof(float)
-        };
+        const mlir::DenseElementsAttr elements =
+            mlir::cast<mlir::DenseElementsAttr>(value);
+        const llvm::ArrayRef<char> rawBytes = elements.getRawData();
+        const float* floats = reinterpret_cast<const float*>(rawBytes.data());
+        const size_t size = rawBytes.size() / sizeof(float);
+        return std::span<const float>{floats, size};
     } else {
         throw IRException("Unsupported constant value type");
     }
