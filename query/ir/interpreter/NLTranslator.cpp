@@ -5,6 +5,8 @@
 
 #include <spdlog/fmt/bundled/format.h>
 
+#include "llvm/Support/Casting.h"
+
 #include "mlir/IR/Block.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -546,19 +548,32 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
 
     // Allocate carried columns in the carried set
     const auto inputArgument = mlir::dyn_cast<mlir::BlockArgument>(config._inputNodes);
+
+    // When the input is itself an nl.filter result (not a loop variable), carried
+    // columns from the same filter op are still aligned — they were all masked by
+    // the same indices — so the gather is safe. Record the defining op once here.
+    mlir::Operation* const inputFilterOp = inputArgument
+        ? nullptr
+        : config._inputNodes.getDefiningOp();
+    const bool inputFromFilter = llvm::isa_and_nonnull<nl::Filter>(inputFilterOp);
+
     const size_t carriedCount = config._carriedColumns.size();
     for (size_t carriedIndex = 0; carriedIndex < carriedCount; carriedIndex++) {
         const mlir::Value carriedValue = config._carriedColumns[carriedIndex];
 
         // A carried chunk is filtered through the same indices as the input,
-        // so its rows must belong to the same loop step: it must be a loop
-        // variable of the nl.for that binds input_nodes. The ops constrain
-        // only types, so a cross-loop carry passes MLIR verification and has
-        // to be rejected here, before it can misalign the gathers at runtime.
+        // so its rows must belong to the same loop step. Two cases are valid:
+        //   1. Both are loop variables of the same nl.for (the common case).
+        //   2. Both are results of the same nl.filter op (same mask => aligned).
+        // The ops constrain only types, so a cross-loop carry passes MLIR
+        // verification and has to be rejected here, before it can misalign
+        // the gathers at runtime.
         const auto carriedArgument = mlir::dyn_cast<mlir::BlockArgument>(carriedValue);
         const bool boundBySameLoop = inputArgument && carriedArgument
                                      && carriedArgument.getOwner() == inputArgument.getOwner();
-        if (!boundBySameLoop) {
+        const bool fromSameFilter = inputFromFilter
+                                    && carriedValue.getDefiningOp() == inputFilterOp;
+        if (!boundBySameLoop && !fromSameFilter) {
             throw IRException("Carried columns must be loop variables of the same nl.for as the input chunk");
         }
 
