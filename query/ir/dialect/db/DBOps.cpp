@@ -222,17 +222,6 @@ LogicalResult ScanNodesByLabel::verify() {
     return success();
 }
 
-// A const scan must name at least one node ID. An empty set opens no dataflow and
-// yields no row, so - like an empty db.scan_nodes_by_label - it is malformed IR
-// here rather than a scan that silently produces nothing.
-LogicalResult ConstScanNodes::verify() {
-    if (getNodeIDs().empty()) {
-        return emitOpError("requires at least one node ID");
-    }
-
-    return success();
-}
-
 // db.limit passes its columns straight through, so the results must be exactly
 // the input columns - same count, same types and in the same order.
 LogicalResult Limit::verify() {
