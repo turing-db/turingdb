@@ -72,7 +72,7 @@ VectorResult<void> VectorStorageManager::createLibraryStorage(const VecLib& lib)
     }
 
     switch (meta->_indexType) {
-        case IndexType::BRUTE_FORCE: {
+        case IndexType::FLAT: {
             const fs::Path shardRouterPath = getShardRouterPath(meta->_id);
 
             // Create shard router file
@@ -232,7 +232,7 @@ VectorResult<void> VectorStorageManager::initialize() {
             storage->_metadataWriter.setFile(&storage->_metadataFile);
         }
 
-        // Read shard router (only exists for BRUTE_FORCE libraries; HNSW libraries omit it)
+        // Read shard router (only exists for FLAT libraries; HNSW libraries omit it)
         const fs::Path shardRouterPath = getShardRouterPath(id);
         if (shardRouterPath.exists()) {
             auto res = fs::File::open(shardRouterPath);

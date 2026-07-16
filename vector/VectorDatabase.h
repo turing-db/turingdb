@@ -32,7 +32,7 @@ public:
     VectorResult<VecLibID> createLibrary(std::string_view libName,
                                          Dimension dim,
                                          DistanceMetric metric = DistanceMetric::INNER_PRODUCT,
-                                         IndexType indexType = IndexType::BRUTE_FORCE);
+                                         IndexType indexType = IndexType::FLAT);
 
     VectorResult<void> deleteLibrary(std::string_view libName);
 

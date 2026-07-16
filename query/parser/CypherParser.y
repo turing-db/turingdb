@@ -243,6 +243,9 @@
 %token<std::string_view> METRIC
 %token<std::string_view> EUCLID
 %token<std::string_view> COSINE
+%token<std::string_view> HNSW
+%token<std::string_view> FLAT
+%token<std::string_view> TYPE
 %token<std::string_view> INDEXES
 %token<std::string_view> SEARCH
 
@@ -342,6 +345,7 @@
 %type<db::ShowVectorIndexesQuery*> showVectorIndexesQuery
 %type<db::VectorSearchStmt*> vectorSearchSt
 %type<vec::DistanceMetric> distanceMetric
+%type<vec::IndexType> indexType
 %type<db::EmbeddingLiteral*> embeddingLit
 %type<db::EmbeddingLiteral*> embeddingLitItems
 %type<double> embeddingLitItem
@@ -504,12 +508,22 @@ installExtensionQuery
     : INSTALL ID { $$ = InstallExtensionQuery::create(ast, $2); LOC($$, @$); }
     ;
 
-// CREATE VECTOR INDEX vector1 WITH DIMENSION 4 METRIC EUCLID
+// CREATE VECTOR INDEX vector1 WITH DIMENSION 4 METRIC EUCLID [TYPE HNSW|FLAT]
 createVectorIndexQuery
+    // no type provided => default to flat
     : CREATE VECTOR INDEX ID WITH DIMENSION DIGIT METRIC distanceMetric {
-        $$ = CreateVectorIndexQuery::create(ast, $4, static_cast<uint64_t>($7), $9);
+        $$ = CreateVectorIndexQuery::create(ast, $4, static_cast<uint64_t>($7), $9, vec::IndexType::FLAT);
         LOC($$, @$);
       }
+    | CREATE VECTOR INDEX ID WITH DIMENSION DIGIT METRIC distanceMetric TYPE indexType {
+        $$ = CreateVectorIndexQuery::create(ast, $4, static_cast<uint64_t>($7), $9, $11);
+        LOC($$, @$);
+      }
+    ;
+
+indexType
+    : HNSW { $$ = vec::IndexType::HNSW; }
+    | FLAT { $$ = vec::IndexType::FLAT; }
     ;
 
 createNodePropertyIndexQuery

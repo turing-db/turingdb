@@ -382,7 +382,8 @@ void PlanGraphGenerator::generateCreateVectorIndexQuery(const CreateVectorIndexQ
     CreateVectorIndexNode* node = _tree.create<CreateVectorIndexNode>(
         query->getIndexName(),
         query->getDimension(),
-        query->getMetric());
+        query->getMetric(),
+        query->getIndexType());
     _tree.newOut<ProduceResultsNode>(node);
 }
 

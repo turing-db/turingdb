@@ -23,14 +23,14 @@ using DistanceMetricName = EnumToString<DistanceMetric>::Create<
     EnumStringPair<DistanceMetric::INNER_PRODUCT, "INNER_PRODUCT">>;
 
 enum class IndexType : uint8_t {
-    BRUTE_FORCE = 0,
+    FLAT = 0,
     HNSW,
 
     _SIZE
 };
 
 using IndexTypeName = EnumToString<IndexType>::Create<
-    EnumStringPair<IndexType::BRUTE_FORCE, "BRUTE_FORCE">,
+    EnumStringPair<IndexType::FLAT, "FLAT">,
     EnumStringPair<IndexType::HNSW, "HNSW">>;
 
 struct VecLibMetadata {
@@ -38,7 +38,7 @@ struct VecLibMetadata {
     std::string _name;
     Dimension _dimension {0};
     DistanceMetric _metric {DistanceMetric::EUCLIDEAN_DIST};
-    IndexType _indexType {IndexType::BRUTE_FORCE};
+    IndexType _indexType {IndexType::FLAT};
     std::atomic<uint64_t> _createdAt {0};
     std::atomic<uint64_t> _modifiedAt {0};
 };

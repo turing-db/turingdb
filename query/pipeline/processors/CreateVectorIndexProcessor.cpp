@@ -15,10 +15,12 @@ using namespace db;
 
 CreateVectorIndexProcessor::CreateVectorIndexProcessor(std::string_view indexName,
                                                        vec::Dimension dimension,
-                                                       vec::DistanceMetric metric)
+                                                       vec::DistanceMetric metric,
+                                                       vec::IndexType indexType)
     : _indexName(indexName),
     _dimension(dimension),
-    _metric(metric)
+    _metric(metric),
+    _indexType(indexType)
 {
 }
 
@@ -28,8 +30,9 @@ CreateVectorIndexProcessor::~CreateVectorIndexProcessor() {
 CreateVectorIndexProcessor* CreateVectorIndexProcessor::create(PipelineV2* pipeline,
                                                                std::string_view indexName,
                                                                vec::Dimension dimension,
-                                                               vec::DistanceMetric metric) {
-    CreateVectorIndexProcessor* proc = new CreateVectorIndexProcessor(indexName, dimension, metric);
+                                                               vec::DistanceMetric metric,
+                                                               vec::IndexType indexType) {
+    CreateVectorIndexProcessor* proc = new CreateVectorIndexProcessor(indexName, dimension, metric, indexType);
 
     PipelineOutputPort* outName = PipelineOutputPort::create(pipeline, proc);
     proc->_outName.setPort(outName);
@@ -61,7 +64,8 @@ void CreateVectorIndexProcessor::execute() {
     const vec::VectorResult<vec::VecLibID> result =
         vectorDb->createLibrary(std::string(_indexName),
                                 _dimension,
-                                _metric);
+                                _metric,
+                                _indexType);
 
     if (!result.has_value()) {
         throw PipelineException(fmt::format("Failed to create vector index '{}': {}",

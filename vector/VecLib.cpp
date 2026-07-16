@@ -66,7 +66,7 @@ VectorResult<std::unique_ptr<VecLib>> VecLib::Builder::build() {
     bioassert(meta._dimension > 0, "VecLib dimension must be set");
 
     switch (meta._indexType) {
-        case IndexType::BRUTE_FORCE: {
+        case IndexType::FLAT: {
             constexpr uint8_t nbits = 11;
             _vecLib->_shardRouter = std::make_unique<LSHShardRouter>(meta._dimension, nbits);
             _vecLib->_shardRouter->initialize();
@@ -112,7 +112,7 @@ VectorResult<std::unique_ptr<VecLib>> VecLib::Loader::load(VecLibStorage& storag
     }
 
     switch (meta._indexType) {
-        case IndexType::BRUTE_FORCE: {
+        case IndexType::FLAT: {
             _vecLib->_shardRouter = std::make_unique<LSHShardRouter>(0, 0);
 
             LSHShardRouterLoader routerLoader;
@@ -195,7 +195,7 @@ VectorResult<void> VecLib::addEmbeddingsHNSW(const BatchVectorCreate* batch) {
 
 VectorResult<void> VecLib::addEmbeddings(const BatchVectorCreate* batch) {
     switch (_metadata._indexType) {
-        case IndexType::BRUTE_FORCE:
+        case IndexType::FLAT:
             return addEmbeddingsBruteForce(batch);
         break;
         case IndexType::HNSW:
@@ -219,7 +219,7 @@ VectorResult<void> VecLib::search(const VectorSearchQuery* query, VectorSearchRe
     std::vector<faiss::idx_t> indices(maxResultCount);
 
     switch (_metadata._indexType) {
-        case IndexType::BRUTE_FORCE: {
+        case IndexType::FLAT: {
             const std::set<LSHSignature>& searchSignatures = _shardRouter->getInstantiatedShardSignatures();
 
             for (const LSHSignature& signature : searchSignatures) {
@@ -270,7 +270,7 @@ VectorResult<void> VecLib::search(const VectorSearchQuery* query, VectorSearchRe
 
 void VecLib::evictAllShards() {
     switch (_metadata._indexType) {
-        case IndexType::BRUTE_FORCE: {
+        case IndexType::FLAT: {
             const auto& shardSignatures = _shardRouter->getInstantiatedShardSignatures();
 
             for (const LSHSignature sig : shardSignatures) {
@@ -291,7 +291,7 @@ void VecLib::evictAllShards() {
 
 void VecLib::prepareCreateBatch(BatchVectorCreate* batch) {
     switch (_metadata._indexType) {
-        case IndexType::BRUTE_FORCE:
+        case IndexType::FLAT:
             batch->init(_shardRouter.get(), _metadata._dimension);
             return;
         break;

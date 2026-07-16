@@ -57,8 +57,8 @@ VectorResult<void> VecLibMetadataLoader::load(VecLibMetadata& metadata) {
         // Library index type
         const std::string& indexType = json["index_type"].get<std::string>();
 
-        if (indexType == "BRUTE_FORCE") {
-            metadata._indexType = IndexType::BRUTE_FORCE;
+        if (indexType == "FLAT") {
+            metadata._indexType = IndexType::FLAT;
         } else if (indexType == "HNSW") {
             metadata._indexType = IndexType::HNSW;
         } else {

@@ -15,7 +15,8 @@ public:
     static CreateVectorIndexProcessor* create(PipelineV2* pipeline,
                                               std::string_view indexName,
                                               vec::Dimension dimension,
-                                              vec::DistanceMetric metric);
+                                              vec::DistanceMetric metric,
+                                              vec::IndexType indexType);
 
     std::string describe() const override;
 
@@ -29,11 +30,13 @@ protected:
     std::string_view _indexName;
     vec::Dimension _dimension {0};
     vec::DistanceMetric _metric {vec::DistanceMetric::EUCLIDEAN_DIST};
+    vec::IndexType _indexType {vec::IndexType::FLAT};
     PipelineValueOutputInterface _outName;
 
     CreateVectorIndexProcessor(std::string_view indexName,
                                vec::Dimension dimension,
-                               vec::DistanceMetric metric);
+                               vec::DistanceMetric metric,
+                               vec::IndexType indexType);
     ~CreateVectorIndexProcessor();
 };
 
