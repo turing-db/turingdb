@@ -32,6 +32,7 @@ public:
 
     [[nodiscard]] VectorResult<void> createLibraryStorage(const VecLib& lib);
     [[nodiscard]] VectorResult<void> persistShardRouter(const VecLib& lib);
+    [[nodiscard]] VectorResult<void> persistHNSWIndex(const VecLib& lib);
     [[nodiscard]] bool libraryExists(const VecLibID& libID) const;
     [[nodiscard]] VectorResult<void> deleteLibraryStorage(const VecLibID& libID);
 
@@ -42,6 +43,7 @@ public:
     [[nodiscard]] fs::Path getMetadataPath(const VecLibID& libID) const;
     [[nodiscard]] fs::Path getShardRouterPath(const VecLibID& libID) const;
     [[nodiscard]] fs::Path getShardPath(const VecLibID& libID, LSHSignature sig) const;
+    [[nodiscard]] fs::Path getHNSWIndexPath(const VecLibID& libID) const;
 
     [[nodiscard]] StorageMap::const_iterator begin() const {
         return _storages.begin();
