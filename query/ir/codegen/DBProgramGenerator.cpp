@@ -590,6 +590,12 @@ void DBProgramGenerator::generatePropertyConstraints(const CypherAST* ast) {
         return;
     }
 
+    // Reused across iterations
+    std::vector<const Expr*> constraintExprs;
+    llvm::SmallVector<mlir::Value> columnsToFilter;
+    llvm::SmallVector<const VariableDependency*> orderedVars;
+    llvm::SmallVector<mlir::Type> resultTypes;
+
     for (const Stmt* stmt : stmtsContainer->stmts()) {
         if (stmt->getKind() != Stmt::Kind::MATCH) {
             continue;
@@ -601,7 +607,7 @@ void DBProgramGenerator::generatePropertyConstraints(const CypherAST* ast) {
         // Collect all property constraint expressions from every entity pattern
         // in this MATCH. Each EntityPropertyConstraint._expr is a synthesized
         // equality BinaryExpr (e.g. n.name = "Alice") produced by the analyzer.
-        std::vector<const Expr*> constraintExprs;
+        constraintExprs.clear();
 
         for (const PatternElement* element : pattern->elements()) {
             const NodePattern* rootNode = static_cast<const NodePattern*>(element->getRootEntity());
@@ -650,8 +656,8 @@ void DBProgramGenerator::generatePropertyConstraints(const CypherAST* ast) {
             }
         }
 
-        llvm::SmallVector<mlir::Value> columnsToFilter;
-        llvm::SmallVector<const VariableDependency*> orderedVars;
+        columnsToFilter.clear();
+        orderedVars.clear();
         for (auto& [var, values] : _varMap) {
             columnsToFilter.push_back(values.back());
             orderedVars.push_back(var);
@@ -661,13 +667,15 @@ void DBProgramGenerator::generatePropertyConstraints(const CypherAST* ast) {
             continue;
         }
 
-        llvm::SmallVector<mlir::Type> resultTypes;
+        resultTypes.clear();
         for (const mlir::Value column : columnsToFilter) {
             resultTypes.push_back(column.getType());
         }
 
-        auto filterOp = _opBuilder.create<mlir::db::FilterOp>(
-            loc, resultTypes, combinedPredicate, columnsToFilter);
+        auto filterOp = _opBuilder.create<mlir::db::FilterOp>(loc,
+                                                              resultTypes,
+                                                              combinedPredicate,
+                                                              columnsToFilter);
 
         for (size_t index = 0; index < orderedVars.size(); index++) {
             const VariableDependency* var = orderedVars[index];
