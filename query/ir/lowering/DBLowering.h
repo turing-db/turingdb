@@ -271,6 +271,16 @@ private:
     // is caught here.
     void lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate);
 
+    // Lower a db.collect: hoist an nl.collect_buffer above the loops, emit an
+    // nl.collect_update in the producing loop, and drain the filled accumulator with an
+    // nl.collect source (one row per group, a list cell) plus its nl.for.
+    void lowerCollect(mlir::db::Collect collect);
+
+    // Lower a db.unwind_collect (the fused collect-then-unwind): the same accumulate
+    // phase as lowerCollect, but drained by an nl.unwind source (one row per collected
+    // element) plus its nl.for - the list never materializes.
+    void lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect);
+
     void lowerOutput(mlir::db::Output output);
 
     // Lower one factor region of a db.cross_product into a loop nest rooted at

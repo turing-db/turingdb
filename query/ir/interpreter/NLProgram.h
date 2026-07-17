@@ -15,6 +15,8 @@
 #include "columns/ColumnMask.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
+#include "list/ListBuffer.h"
+#include "list/ListView.h"
 #include "metadata/LabelSet.h"
 
 namespace db {
@@ -1415,6 +1417,215 @@ private:
     NLStmtContainer _stmts;
 };
 
+// Append this step's present values to a collect accumulator's flat value buffer,
+// recording each element's position in its group's list. nl.collect_update calls this
+// after assigning rows to groups; a null value is skipped (Cypher collect ignores
+// nulls). One per value type, selected during translation the way the fold families
+// are.
+using NLCollectFoldFunction = void (*)(Column* values,
+                                       const Column* input,
+                                       const std::vector<size_t>& groups,
+                                       std::vector<std::vector<size_t>>& groupPositions);
+
+// Emit a chunk of unwound values (the nl.unwind drain): for each flat-buffer position
+// this chunk covers, write the present value into the nullable value output. One per
+// value type, selected during translation.
+using NLUnwindValueEmitFunction = void (*)(const Column* values,
+                                           const ColumnVector<size_t>* positions,
+                                           Column* output);
+
+// Emit a chunk of per-group lists (the nl.collect drain): for each group in
+// [begin, begin + count), gather its elements from the flat buffer (by its position
+// list) into the list buffer as one contiguous run and store the resulting ListView in
+// the list output. One per value type, selected during translation.
+using NLCollectListEmitFunction = void (*)(const Column* values,
+                                           const std::vector<std::vector<size_t>>& groupPositions,
+                                           size_t begin,
+                                           size_t count,
+                                           ListBuffer<>& listBuffer,
+                                           Column* output);
+
+// Runtime state of one collect: an NLGroupTable from the serialized grouping-key tuple
+// to a dense group index, the distinct key values per group, and - the accumulator - a
+// single flat buffer of collected values plus, per group, the positions of its
+// elements in that buffer. nl.collect_buffer resets it, nl.collect_update assigns each
+// row to its group and appends its value, and the drain (nl.unwind per element, or
+// nl.collect per group) reads it. The list-valued sibling of NLGroupAggregateState: it
+// keeps every value per group rather than reducing them to one.
+//
+// The flat buffer keeps values in global append order; a group's elements are the
+// buffer entries its position list names (not contiguous, since groups interleave). A
+// future drain that needs a contiguous per-group run gathers those positions into a
+// ListBuffer - the stage-then-insert path of docs/UNWIND.md.
+class NLCollectState {
+public:
+    // One grouping-key column - identical to NLGroupAggregateState's: the distinct key
+    // value per group accumulates in _buffer (grown as groups appear), the update reads
+    // the incoming chunk _input, _keyAppend serializes a row into the group key,
+    // _gatherAppend copies new-group rows into _buffer, and the drain fills _output
+    // through _emitCopy.
+    struct KeyColumn {
+        const Column* _input {nullptr};
+        Column* _buffer {nullptr};
+        Column* _output {nullptr};
+        NLKeyAppendFunction _keyAppend {nullptr};
+        NLGroupKeyGatherFunction _gatherAppend {nullptr};
+        NLCopyFunction _emitCopy {nullptr};
+        // Used only by the nl.unwind drain: gather the key buffer by a per-emitted-row
+        // group index, so a group's key value repeats once per collected element.
+        NLGatherFunction _gather {nullptr};
+    };
+
+    void addKeyColumn(const KeyColumn& key) { _keyColumns.push_back(key); }
+    std::vector<KeyColumn>& keyColumns() { return _keyColumns; }
+
+    NLGroupTable& groupTable() { return _groupTable; }
+
+    // The incoming value chunk (a loop variable, refilled each step), the flat buffer
+    // its present values accumulate into, and the fold that appends them. Set once by
+    // the update translation.
+    const Column* getValueInput() const { return _valueInput; }
+    void setValueInput(const Column* input) { _valueInput = input; }
+    Column* getValues() { return _values; }
+    const Column* getValues() const { return _values; }
+    void setValues(Column* values) { _values = values; }
+    NLCollectFoldFunction getFold() const { return _fold; }
+    void setFold(NLCollectFoldFunction fold) { _fold = fold; }
+
+    // The drain's output loop variable: the unwound value column (nl.unwind) or the
+    // per-group list column (nl.collect). Set at loop translation. A state feeds one
+    // drain, so a single slot holds whichever it is.
+    Column* getValueOutput() const { return _valueOutput; }
+    void setValueOutput(Column* output) { _valueOutput = output; }
+
+    // The per-element (unwind) and per-group (collect) emit handlers, both baked from
+    // the value type at update time; the drain loop uses whichever it needs.
+    NLUnwindValueEmitFunction getUnwindEmit() const { return _unwindEmit; }
+    void setUnwindEmit(NLUnwindValueEmitFunction emit) { _unwindEmit = emit; }
+    NLCollectListEmitFunction getListEmit() const { return _listEmit; }
+    void setListEmit(NLCollectListEmitFunction emit) { _listEmit = emit; }
+
+    // The query-scoped list buffer the nl.collect drain materializes per-group runs
+    // into; the ListViews it hands out span it and stay valid for the whole run.
+    ListBuffer<>& listBuffer() { return _listBuffer; }
+
+    // Per group, the positions of its elements in the flat value buffer, in append
+    // order. Grown to the group count each update step.
+    std::vector<std::vector<size_t>>& groupPositions() { return _groupPositions; }
+
+    // Scratch reused per update step: the row key being built, the per-row group index
+    // map, and the incoming rows that created a new group this step.
+    std::string& keyScratch() { return _key; }
+    std::vector<size_t>& groupIndicesScratch() { return _groupIndices; }
+    std::vector<size_t>& newGroupRowsScratch() { return _newGroupRows; }
+
+    // Empty the group table, key buffers, value buffer and per-group positions, so the
+    // collect starts fresh. Runs each time nl.collect_buffer's block runs.
+    void reset();
+
+private:
+    std::vector<KeyColumn> _keyColumns;
+
+    const Column* _valueInput {nullptr};
+    Column* _values {nullptr};
+    NLCollectFoldFunction _fold {nullptr};
+    std::vector<std::vector<size_t>> _groupPositions;
+
+    Column* _valueOutput {nullptr};
+    NLUnwindValueEmitFunction _unwindEmit {nullptr};
+    NLCollectListEmitFunction _listEmit {nullptr};
+    ListBuffer<> _listBuffer;
+
+    NLGroupTable _groupTable;
+
+    std::string _key;
+    std::vector<size_t> _groupIndices;
+    std::vector<size_t> _newGroupRows;
+};
+
+// nl.collect_buffer data: resets a collect accumulator to empty each time the block it
+// lives in runs - once at function scope for a top-level collect. The list-valued
+// sibling of NLGroupAggregateResetData.
+class NLCollectResetData : public NLFunctionData {
+public:
+    NLCollectResetData(NLCollectState* state)
+        : _state(state)
+    {
+    }
+
+    NLCollectState* getState() const { return _state; }
+
+private:
+    NLCollectState* _state {nullptr};
+};
+
+// nl.collect_update data: the accumulator to append this step's chunk to. The key
+// columns and the value column it reads live on the shared state (their _input chunks
+// are the loop variables refilled each step), so this only names the state. The
+// list-valued sibling of NLGroupAggregateUpdateData.
+class NLCollectUpdateData : public NLFunctionData {
+public:
+    NLCollectUpdateData(NLCollectState* state)
+        : _state(state)
+    {
+    }
+
+    NLCollectState* getState() const { return _state; }
+
+private:
+    NLCollectState* _state {nullptr};
+};
+
+// nl.for over nl.unwind data: the per-element drain of a collect. The state (fully
+// filled by now) holds the key buffers, flat value buffer, per-group positions and the
+// emit outputs; this holds the state, the loop body, and per-chunk scratch for the
+// group index and value position of each emitted row.
+class NLUnwindLoopData : public NLFunctionData {
+public:
+    NLUnwindLoopData(NLCollectState* state)
+        : _state(state)
+    {
+    }
+
+    NLCollectState* getState() const { return _state; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+    ColumnVector<size_t>* getGroupIndices() { return &_groupIndices; }
+    ColumnVector<size_t>* getPositions() { return &_positions; }
+
+private:
+    NLCollectState* _state {nullptr};
+    NLStmtContainer _stmts;
+
+    // This step's per-row group index (to gather the repeated key values) and value
+    // position (to emit the element), one entry per emitted row.
+    ColumnVector<size_t> _groupIndices;
+    ColumnVector<size_t> _positions;
+};
+
+// nl.for over nl.collect data: the per-group drain of a collect. The key/list outputs
+// and the list buffer live on the shared state, so this holds the state (fully filled
+// by now) and the loop body to run per emit chunk. The list-valued sibling of
+// NLGroupAggregateLoopData.
+class NLCollectLoopData : public NLFunctionData {
+public:
+    NLCollectLoopData(NLCollectState* state)
+        : _state(state)
+    {
+    }
+
+    NLCollectState* getState() const { return _state; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
+    NLCollectState* _state {nullptr};
+    NLStmtContainer _stmts;
+};
+
 // nl.output data
 class NLOutputData : public NLFunctionData {
 public:
@@ -1584,6 +1795,16 @@ public:
         return statePtr;
     }
 
+    // Allocate one collect's runtime accumulator, owned by the program; the reset,
+    // update and drain statements that share it hold a borrowed pointer. The
+    // list-valued sibling of allocGroupAggregateState.
+    NLCollectState* allocCollectState() {
+        auto state = std::make_unique<NLCollectState>();
+        NLCollectState* statePtr = state.get();
+        _collectStates.push_back(std::move(state));
+        return statePtr;
+    }
+
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
@@ -1600,6 +1821,7 @@ private:
     std::vector<std::unique_ptr<NLCountState>> _countStates;
     std::vector<std::unique_ptr<NLAggregateState>> _aggregateStates;
     std::vector<std::unique_ptr<NLGroupAggregateState>> _groupAggregateStates;
+    std::vector<std::unique_ptr<NLCollectState>> _collectStates;
     NLStmtContainer _stmts;
 };
 

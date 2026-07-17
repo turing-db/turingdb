@@ -54,6 +54,21 @@ void NLGroupAggregateState::reset() {
     }
 }
 
+void NLCollectState::reset() {
+    _groupTable.clear();
+
+    for (KeyColumn& key : _keyColumns) {
+        key._buffer->clear();
+    }
+
+    if (_values) {
+        _values->clear();
+    }
+
+    _groupPositions.clear();
+    _listBuffer.clear();
+}
+
 bool NLSortState::rowLess(size_t leftRow, size_t rightRow) const {
     // The first key that breaks the tie decides, most significant first; its
     // direction flips the comparator's sign.

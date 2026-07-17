@@ -1365,4 +1365,91 @@ def GroupAggregate : NLOp<"group_aggregate", [Pure]> {
   let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
 }
 
+/**
+* CollectBuffer
+*/
+// NOT Pure: a distinct accumulator (no CSE); resetting its group table is a side effect.
+def CollectBuffer : NLOp<"collect_buffer", []> {
+  let summary = "Create (and reset) a per-group value-list accumulator for one collect";
+  let description = [{
+    Hoisted above the loops; produces the !nl.collect_state handle nl.collect_update
+    appends to and the drain reads. `keys` is how many collected columns are grouping
+    keys (0 = one global list); the column types are recovered from the update.
+
+      %buf = nl.collect_buffer keys 1
+  }];
+
+  // keyCount is unsigned; 0 is a valid ungrouped collect, so nothing to verify here
+  // (the one-value-column split is checked during translation).
+  let arguments = (ins UI64Attr:$keyCount);
+  let results   = (outs NLCollectState:$state);
+
+  let assemblyFormat = "`keys` $keyCount attr-dict";
+}
+
+/**
+* CollectUpdate
+*/
+// NOT Pure: appends to the per-group lists; must run where it sits, once per step.
+def CollectUpdate : NLOp<"collect_update", []> {
+  let summary = "Append this step's rows to the per-group value lists";
+  let description = [{
+    Assigns each row to its group by the grouping-key tuple and appends its value to
+    that group's list. Columns are the grouping keys then the single value column, per
+    the buffer's `keys`; nulls are dropped (Cypher collect ignores them).
+
+      nl.collect_update %buf, (%city, %name) : !nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<!storage.string>>
+  }];
+
+  let arguments = (ins NLCollectStateHandle:$state, Variadic<NLChunk>:$columns);
+
+  let assemblyFormat = [{
+    $state `,` `(` $columns `)` attr-dict `:` qualified(type($columns))
+  }];
+
+  let hasVerifier = 1;
+}
+
+/**
+* Unwind
+*/
+// Pure: deterministically drains a filled accumulator; the fan-out is in the nl.for.
+def Unwind : NLOp<"unwind", [Pure]> {
+  let summary = "Create a database iterator that drains a collect accumulator, one row per collected element";
+  let description = [{
+    Per-element drain of an nl.collect_state: one row per element - the group's key
+    values (repeated) then one element. An empty group yields no row (UNWIND of an
+    empty list). The iterator chunk types (keys then the value chunk) are spelled after
+    the colon, and it is placed after the producing loop.
+
+      %rows = nl.unwind(%buf) : !nl.iter<!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<!storage.string>>>
+  }];
+
+  let arguments = (ins NLCollectStateHandle:$state);
+  let results   = (outs NLIterator:$result);
+
+  let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
+}
+
+/**
+* Collect
+*/
+// Pure: the per-group sibling of nl.unwind - one row per group, not per element.
+def Collect : NLOp<"collect", [Pure]> {
+  let summary = "Create a database iterator that drains a collect accumulator, one row per group carrying the whole list";
+  let description = [{
+    Per-group drain of an nl.collect_state: one row per group - the key values then a
+    list cell (a ListView over the group's elements). An empty group yields an empty
+    list (unlike nl.unwind). The iterator chunk types (keys then the list cell) are
+    spelled after the colon, and it is placed after the producing loop.
+
+      %rows = nl.collect(%buf) : !nl.iter<!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.list<!storage.string>>>
+  }];
+
+  let arguments = (ins NLCollectStateHandle:$state);
+  let results   = (outs NLIterator:$result);
+
+  let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
+}
+
 #endif //TURINGDB_NL_OPS

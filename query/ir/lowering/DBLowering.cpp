@@ -452,6 +452,10 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerFilter(filter);
     } else if (mlir::db::GroupAggregate groupAggregate = mlir::dyn_cast<mlir::db::GroupAggregate>(operation)) {
         lowerGroupAggregate(groupAggregate);
+    } else if (mlir::db::Collect collect = mlir::dyn_cast<mlir::db::Collect>(operation)) {
+        lowerCollect(collect);
+    } else if (mlir::db::UnwindCollect unwindCollect = mlir::dyn_cast<mlir::db::UnwindCollect>(operation)) {
+        lowerUnwindCollect(unwindCollect);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
     } else if (mlir::isa<mlir::func::ReturnOp>(operation)) {
@@ -1273,6 +1277,115 @@ void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
     setInsertionInto(_entryBlock);
     nl::GroupAggregate groupOp = _builder.create<nl::GroupAggregate>(loc, iteratorType, state);
     buildLoopForSource(groupOp.getResult(), groupAggregate.getOperation());
+}
+
+void DBLowering::lowerCollect(mlir::db::Collect collect) {
+    const mlir::OperandRange columns = collect.getColumns();
+    const uint64_t keyCount = collect.getKeyCount();
+
+    // The nl chunks the columns lowered to: the grouping keys first, then the single
+    // collected value column. nl.collect_update appends these to the per-group lists.
+    llvm::SmallVector<mlir::Value, 4> chunks;
+    for (const mlir::Value column : columns) {
+        chunks.push_back(mapValue(column));
+    }
+
+    // Collect::verify guarantees columns.size() == keyCount + 1, so an empty column set
+    // here means unverified IR - a defensive backstop, as in lowerGroupAggregate.
+    if (chunks.empty()) {
+        throw IRException("db.collect requires at least one column");
+    }
+
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    // The accumulator is hoisted to the top of the entry block, above every loop, so
+    // the group table exists before the producing loop fills it and the handle
+    // dominates the update. The collect sibling of lowerGroupAggregate's buffer.
+    _builder.setInsertionPointToStart(_entryBlock);
+    nl::CollectBuffer bufferOp = _builder.create<nl::CollectBuffer>(loc, keyCount);
+    const mlir::Value state = bufferOp.getState();
+
+    // The update folds each step's chunk of every column into the per-group lists. It
+    // sits in the innermost producing loop body, where all columns are bound together
+    // (the same block db.output would emit from), so the group assignment and the
+    // per-group appends stay row-aligned.
+    const mlir::Value representative = chunks.front();
+    setInsertionInto(ownerBlock(representative));
+    _builder.create<nl::CollectUpdate>(loc, state, chunks);
+
+    // The emit phase: an nl.collect source iterator yielding one row per group - the
+    // key columns then the per-group list cell - drained by an nl.for after the
+    // producing loop. The list chunk's element is the resolved value type (unwrapped
+    // from the collected column's nullable) wrapped in a storage list; the key chunks
+    // keep their input types.
+    mlir::MLIRContext* const context = _builder.getContext();
+
+    llvm::SmallVector<mlir::Type, 4> chunkTypes;
+    for (uint64_t keyIndex = 0; keyIndex < keyCount; keyIndex++) {
+        chunkTypes.push_back(chunks[keyIndex].getType());
+    }
+
+    const mlir::Type valueElement = mlir::cast<nl::ChunkType>(chunks[keyCount].getType()).getElementType();
+    mlir::Type listElement = valueElement;
+    if (const auto nullable = mlir::dyn_cast<storage::NullableType>(valueElement)) {
+        listElement = nullable.getValueType();
+    }
+
+    const nl::ChunkType listChunk = nl::ChunkType::get(context, storage::ListType::get(context, listElement));
+    chunkTypes.push_back(listChunk);
+
+    const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunkTypes);
+
+    setInsertionInto(_entryBlock);
+    nl::Collect collectOp = _builder.create<nl::Collect>(loc, iteratorType, state);
+    buildLoopForSource(collectOp.getResult(), collect.getOperation());
+}
+
+void DBLowering::lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect) {
+    const mlir::OperandRange columns = unwindCollect.getColumns();
+    const uint64_t keyCount = unwindCollect.getKeyCount();
+
+    // The nl chunks the columns lowered to: the grouping keys first, then the single
+    // collected value column.
+    llvm::SmallVector<mlir::Value, 4> chunks;
+    for (const mlir::Value column : columns) {
+        chunks.push_back(mapValue(column));
+    }
+
+    // UnwindCollect::verify guarantees columns.size() == keyCount + 1, so an empty
+    // column set here means unverified IR - a defensive backstop.
+    if (chunks.empty()) {
+        throw IRException("db.unwind_collect requires at least one column");
+    }
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    // The accumulate phase is identical to lowerCollect: a hoisted nl.collect_buffer
+    // and an nl.collect_update in the producing loop body.
+    _builder.setInsertionPointToStart(_entryBlock);
+    nl::CollectBuffer bufferOp = _builder.create<nl::CollectBuffer>(loc, keyCount);
+    const mlir::Value state = bufferOp.getState();
+
+    const mlir::Value representative = chunks.front();
+    setInsertionInto(ownerBlock(representative));
+    _builder.create<nl::CollectUpdate>(loc, state, chunks);
+
+    // The emit phase: an nl.unwind source iterator yielding one row per element - the
+    // key columns then the unwound value - drained by an nl.for. The value chunk keeps
+    // the collected column's type (a nullable value chunk); the keys keep theirs.
+    llvm::SmallVector<mlir::Type, 4> chunkTypes;
+    for (uint64_t keyIndex = 0; keyIndex < keyCount; keyIndex++) {
+        chunkTypes.push_back(chunks[keyIndex].getType());
+    }
+
+    chunkTypes.push_back(chunks[keyCount].getType());
+
+    const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunkTypes);
+
+    setInsertionInto(_entryBlock);
+    nl::Unwind unwindOp = _builder.create<nl::Unwind>(loc, iteratorType, state);
+    buildLoopForSource(unwindOp.getResult(), unwindCollect.getOperation());
 }
 
 void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {

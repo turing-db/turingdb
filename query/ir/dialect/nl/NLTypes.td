@@ -108,6 +108,21 @@ def NLGroupAggregateState : NLType<"GroupAggregateState", "group_aggregate_state
     }];
 }
 
+def NLCollectState : NLType<"CollectState", "collect_state"> {
+    let summary = "A per-group value-list accumulator handle for one collect";
+    let description = [{
+        Stands for one collect's per-group state: a hash table from the serialized
+        grouping-key tuple to a group index, the distinct key values per group, and -
+        the accumulator - a flat buffer of collected values plus, per group, the
+        positions of its elements in that buffer. Produced by nl.collect_buffer,
+        appended to by nl.collect_update once per producing-loop step, and (later)
+        drained one row per element (nl.unwind) or one row per group (nl.collect).
+        The list-valued sibling of !nl.group_aggregate_state: where a grouped
+        aggregate folds each group's rows to one scalar per aggregate, this keeps
+        every value, because the drain will re-expand them.
+    }];
+}
+
 def NLChunk : NLType<"Chunk", "chunk"> {
     let summary = "A bounded batch of values";
     let description = "One column chunk filled by a single database iterator step";
@@ -269,5 +284,15 @@ def NLGroupAggregateStateHandle : Type<
         CPred<"::llvm::isa<::mlir::nl::GroupAggregateStateType>($_self)">,
         "group aggregate state handle", "::mlir::nl::GroupAggregateStateType">,
     BuildableType<"::mlir::nl::GroupAggregateStateType::get($_builder.getContext())">;
+
+// Constrains an operand to an !nl.collect_state handle, the same way
+// NLGroupAggregateStateHandle constrains the grouped accumulator. The single
+// concrete type - there is only ever !nl.collect_state - is what lets
+// nl.collect_update omit the handle's type in its assembly, building it from this
+// recipe instead.
+def NLCollectStateHandle : Type<
+        CPred<"::llvm::isa<::mlir::nl::CollectStateType>($_self)">,
+        "collect state handle", "::mlir::nl::CollectStateType">,
+    BuildableType<"::mlir::nl::CollectStateType::get($_builder.getContext())">;
 
 #endif // TURINGDB_NL_TYPES
