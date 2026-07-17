@@ -89,7 +89,7 @@ EdgeMetadata::EdgeType reverseEdge(EdgeMetadata::EdgeType type) {
 
 }
 
-mlir::Value findOrThrow(const DBProgramGenerator::VariableIdentityMap& map,
+mlir::Value findVarOrThrow(const DBProgramGenerator::VariableIdentityMap& map,
                         const VariableDependency* var) {
     const auto findIt = map.find(var);
     bioassert(findIt != end(map), "Missing value for {}.", var->getName());
@@ -377,8 +377,8 @@ void DBProgramGenerator::resolveEdgeIdentities() {
         for (size_t index = 0; index + 1 < vars.size(); index++) {
             const VariableDependency* fstVar = vars[index];
             const VariableDependency* sndVar = vars[index + 1];
-            const mlir::Value fstCol = findOrThrow(_varMap, fstVar);
-            const mlir::Value sndCol = findOrThrow(_varMap, sndVar);
+            const mlir::Value fstCol = findVarOrThrow(_varMap, fstVar);
+            const mlir::Value sndCol = findVarOrThrow(_varMap, sndVar);
 
             auto eqOp = _opBuilder.create<mlir::db::EqOp>(uloc, boolType, fstCol, sndCol);
             const mlir::Value eq = eqOp.getResult();
