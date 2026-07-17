@@ -41,6 +41,10 @@
 #include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
 
+#include "list/ListView.h"
+#include "list/ListElementView.h"
+#include "list/ListBufferTypeTag.h"
+
 #include "DBProgramGenerator.h"
 #include "StorageDialect.h"
 #include "columns/ColumnConst.h"
@@ -323,6 +327,8 @@ private:
                    || printConstValueCell<double>(column, row)
                    || printConstValueCell<CustomBool>(column, row)) {
             // ColumnConst
+        } else if (printListCell(column, row)) {
+            // A per-group list cell from an nl.collect drain
         } else {
             std::cout << "?";
         }
@@ -382,6 +388,68 @@ private:
                 std::cout << ", ";
             }
             std::cout << (*value)[component];
+        }
+        std::cout << "]";
+
+        return true;
+    }
+
+    // Print one element of a collected list, dispatching on its type tag. collect
+    // produces homogeneous scalar lists, so Int/UInt/Double/Bool/String are the tags
+    // that occur; the rest are rendered as placeholders for completeness.
+    static void printListElement(const ListElementView& element) {
+        switch (element.getTag()) {
+            case ListBufferTypeTag::Int:
+                std::cout << element.getAs<int64_t>();
+            break;
+
+            case ListBufferTypeTag::UInt:
+                std::cout << element.getAs<uint64_t>();
+            break;
+
+            case ListBufferTypeTag::Double:
+                std::cout << element.getAs<double>();
+            break;
+
+            case ListBufferTypeTag::Bool:
+                std::cout << (static_cast<bool>(element.getAs<CustomBool>()) ? "true" : "false");
+            break;
+
+            case ListBufferTypeTag::String:
+                std::cout << element.getAs<std::string_view>();
+            break;
+
+            case ListBufferTypeTag::Embedding:
+                std::cout << "<embedding>";
+            break;
+
+            case ListBufferTypeTag::ListView:
+                std::cout << "<list>";
+            break;
+
+            case ListBufferTypeTag::INVALID:
+                std::cout << "?";
+            break;
+        }
+    }
+
+    // Print one cell of a list column (a ColumnVector<ListView> from an nl.collect
+    // drain) as [a, b, c]; returns whether the column matched.
+    static bool printListCell(const Column* column, size_t row) {
+        const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(column);
+        if (!lists) {
+            return false;
+        }
+
+        const ListView list = (*lists)[row];
+        std::cout << "[";
+        for (size_t index = 0; const ListElementView& element : list) {
+            if (index > 0) {
+                std::cout << ", ";
+            }
+
+            printListElement(element);
+            index++;
         }
         std::cout << "]";
 
