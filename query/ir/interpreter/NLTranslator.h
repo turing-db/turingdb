@@ -37,6 +37,8 @@ private:
         GetInEdgesByType,
         Sort,
         GroupAggregate,
+        Unwind,
+        Collect,
     };
 
     // Settings of the iterators passed to each for loop
@@ -50,6 +52,9 @@ private:
 
         // The accumulator a GroupAggregate iterator drains; null for the other kinds.
         NLGroupAggregateState* _groupAggregateState {nullptr};
+
+        // The accumulator an Unwind / Collect iterator drains; null for the other kinds.
+        NLCollectState* _collectState {nullptr};
 
         // The label names a ScanNodesByLabel iterator filters by; empty for the
         // other kinds. These are views into the op's interned StringAttr storage,
@@ -106,6 +111,11 @@ private:
     // produces, so nl.group_aggregate_update and the nl.for over nl.group_aggregate
     // find the same group table and per-group state
     llvm::DenseMap<mlir::Value, NLGroupAggregateState*> _groupAggregateStates;
+
+    // nl.collect_buffer handle SSA value -> the runtime accumulator it produces, so
+    // nl.collect_update (and later the drain) that name the handle find the same group
+    // table and per-group lists
+    llvm::DenseMap<mlir::Value, NLCollectState*> _collectStates;
 
     void translateBlock(mlir::Block& block, NLStmtContainer* body);
     void translateFor(mlir::nl::For forLoop, NLStmtContainer* body);
@@ -282,6 +292,42 @@ private:
     // The runtime accumulator a group-aggregate handle names. Throws if the handle
     // was not produced by an nl.group_aggregate_buffer translated earlier.
     NLGroupAggregateState* groupAggregateStateFor(mlir::Value handle) const;
+
+    // Translate an nl.collect_buffer: allocate its runtime accumulator, map the handle
+    // to it, and record the reset statement (run each time the block runs). The key
+    // buffers and the value buffer are allocated by the update, which knows their
+    // types, the same way nl.group_aggregate_update allocates the group state.
+    void translateCollectBuffer(mlir::nl::CollectBuffer buffer, NLStmtContainer* body);
+
+    // Translate an nl.collect_update: look up the accumulator the handle names, split
+    // the collected columns into grouping keys and the single value column (by the
+    // keyCount on the producing nl.collect_buffer), allocate each key buffer and the
+    // flat value buffer with its fold handler, and record the per-step append
+    // statement.
+    void translateCollectUpdate(mlir::nl::CollectUpdate update, NLStmtContainer* body);
+
+    // The runtime accumulator a collect handle names. Throws if the handle was not
+    // produced by an nl.collect_buffer translated earlier.
+    NLCollectState* collectStateFor(mlir::Value handle) const;
+
+    // Translate the nl.for over an nl.unwind iterator: allocate one loop variable per
+    // grouping key plus the element value, wire the key outputs and value output onto
+    // the shared state, and record the per-element emit-loop statement.
+    void translateUnwindLoop(const IteratorConfig& config,
+                             mlir::Block& loopBody,
+                             NLStmtContainer* body);
+
+    // Translate the nl.for over an nl.collect iterator: allocate one loop variable per
+    // grouping key plus the list cell, wire the outputs onto the shared state, and
+    // record the per-group emit-loop statement.
+    void translateCollectLoop(const IteratorConfig& config,
+                              mlir::Block& loopBody,
+                              NLStmtContainer* body);
+
+    // Pool-allocate the flat value buffer for a collected value type: a plain
+    // ColumnVector<Primitive> (not nullable - collect drops nulls) that grows as
+    // present values are appended across steps.
+    Column* allocValueColumnForValueType(ValueType valueType);
 
     // Allocate an emit output column for a group-aggregate output chunk type: an ID
     // column for an ID chunk (a grouping key), a nullable value column for a

@@ -396,3 +396,80 @@ LogicalResult GroupAggregate::verify() {
 
     return success();
 }
+
+// db.collect splits its columns into keyCount grouping keys followed by exactly one
+// collected value column, so operands are keyCount + 1. Its results are the key
+// columns (passed through) then one list column holding the collected values.
+LogicalResult Collect::verify() {
+    const OperandRange columns = getColumns();
+    const Operation::result_range results = getResults();
+    const uint64_t keyCount = getKeyCount();
+
+    // Exactly one collected column follows the grouping keys. Bound keyCount by the
+    // real column count first: summing keyCount + 1 could wrap in unsigned 64-bit and
+    // let a pathological keyCount slip past into out-of-bounds lowering.
+    const size_t columnCount = columns.size();
+    if (keyCount >= columnCount || columnCount - keyCount != 1) {
+        return emitOpError("expects ") << keyCount
+                                       << " grouping-key columns and one collected column, but has "
+                                       << columnCount;
+    }
+
+    // One result per grouping key then the collected list.
+    if (results.size() != columnCount) {
+        return emitOpError("expects ") << columnCount
+                                       << " results, one per grouping key plus the collected list, but has "
+                                       << results.size();
+    }
+
+    // The grouping keys pass through unchanged, so each key result keeps its key
+    // column's type.
+    for (size_t keyIndex = 0; keyIndex < keyCount; keyIndex++) {
+        if (columns[keyIndex].getType() != results[keyIndex].getType()) {
+            return emitOpError("grouping-key result ") << keyIndex
+                                                       << " must have the same type as key column "
+                                                       << keyIndex;
+        }
+    }
+
+    // The trailing result is the collected list: a column whose element type is a
+    // storage list.
+    const ColumnType listColumn = llvm::dyn_cast<ColumnType>(results[keyCount].getType());
+    if (!listColumn || !llvm::isa<storage::ListType>(listColumn.getType())) {
+        return emitOpError("collected result must be a list column");
+    }
+
+    return success();
+}
+
+// db.unwind_collect has the same column shape as db.collect - keyCount grouping keys
+// then one collected value column - but re-emits one scalar row per element, so its
+// results are the key columns (passed through) then one value column.
+LogicalResult UnwindCollect::verify() {
+    const OperandRange columns = getColumns();
+    const Operation::result_range results = getResults();
+    const uint64_t keyCount = getKeyCount();
+
+    const size_t columnCount = columns.size();
+    if (keyCount >= columnCount || columnCount - keyCount != 1) {
+        return emitOpError("expects ") << keyCount
+                                       << " grouping-key columns and one collected column, but has "
+                                       << columnCount;
+    }
+
+    if (results.size() != columnCount) {
+        return emitOpError("expects ") << columnCount
+                                       << " results, one per grouping key plus the unwound value, but has "
+                                       << results.size();
+    }
+
+    for (size_t keyIndex = 0; keyIndex < keyCount; keyIndex++) {
+        if (columns[keyIndex].getType() != results[keyIndex].getType()) {
+            return emitOpError("grouping-key result ") << keyIndex
+                                                       << " must have the same type as key column "
+                                                       << keyIndex;
+        }
+    }
+
+    return success();
+}

@@ -924,4 +924,60 @@ def GroupAggregate : TuringOp<"group_aggregate", [Pure]> {
   let hasVerifier = 1;
 }
 
+/**
+* Collect
+*/
+def Collect : TuringOp<"collect", [Pure]> {
+  let summary = "Group rows by a key tuple and collect one column per group into a list";
+  let description = [{
+    Cypher `WITH k..., collect(x) AS xs`. Emits one row per distinct grouping-key
+    tuple: the key values then a list of the group's non-null collected values.
+
+      %gcity, %names = db.collect(%city, %name) keys 1
+                         : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<!storage.list<none>>)
+
+    keyCount is how many leading columns are keys (0 = ungrouped); exactly one value
+    column follows. Results are the keys (unchanged) then one list column.
+  }];
+
+  // keyCount grouping-key columns then one collected column; unsigned (never negative).
+  let arguments = (ins Variadic<Column>:$columns, UI64Attr:$keyCount);
+  let results   = (outs Variadic<Column>:$results);
+
+  let assemblyFormat = [{
+    `(` $columns `)` `keys` $keyCount attr-dict `:` functional-type(operands, results)
+  }];
+
+  // keyCount + 1 columns; key results pass through; trailing result is a list column.
+  let hasVerifier = 1;
+}
+
+/**
+* UnwindCollect
+*/
+def UnwindCollect : TuringOp<"unwind_collect", [Pure]> {
+  let summary = "Group rows by a key tuple, collect one column per group, and re-emit one row per collected element";
+  let description = [{
+    Cypher `WITH k..., collect(x) AS xs UNWIND xs AS y` where xs feeds only the unwind -
+    the fused form, so the list never materializes. Emits one row per collected value:
+    the key values (repeated) then that value.
+
+      %gcity, %y = db.unwind_collect(%city, %name) keys 1
+                     : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<none>)
+
+    Same operands as db.collect (keyCount keys, one value column); results are the keys
+    (unchanged) then one scalar value column of the unwound elements.
+  }];
+
+  let arguments = (ins Variadic<Column>:$columns, UI64Attr:$keyCount);
+  let results   = (outs Variadic<Column>:$results);
+
+  let assemblyFormat = [{
+    `(` $columns `)` `keys` $keyCount attr-dict `:` functional-type(operands, results)
+  }];
+
+  // keyCount + 1 columns; key results pass through; trailing result is the value column.
+  let hasVerifier = 1;
+}
+
 #endif //TURINGDB_OPS

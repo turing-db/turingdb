@@ -821,6 +821,77 @@ void groupFoldCountPresent(Column* accumulator,
     }
 }
 
+// Append a chunk's present values to the flat value buffer, recording each element's
+// position in its group's list. A null value is skipped (Cypher collect ignores
+// nulls). The flat buffer holds the collected type's primitive; the input is its
+// nullable value chunk.
+template <typename Primitive>
+void collectFold(Column* values,
+                 const Column* input,
+                 const std::vector<size_t>& groups,
+                 std::vector<std::vector<size_t>>& groupPositions) {
+    auto& valuesRaw = static_cast<ColumnVector<Primitive>*>(values)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const std::optional<Primitive>& value = inputRaw[row];
+        if (value.has_value()) {
+            const size_t position = valuesRaw.size();
+            valuesRaw.push_back(*value);
+            groupPositions[groups[row]].push_back(position);
+        }
+    }
+}
+
+// Emit a chunk of unwound values (nl.unwind): for each flat-buffer position this chunk
+// covers, write the present value into the nullable value output. collect dropped
+// nulls, so every emitted element is present.
+template <typename Primitive>
+void unwindValueEmit(const Column* values,
+                     const ColumnVector<size_t>* positions,
+                     Column* output) {
+    const auto& valuesRaw = static_cast<const ColumnVector<Primitive>*>(values)->getRaw();
+    auto& outputRaw = static_cast<ColumnOptVector<Primitive>*>(output)->getRaw();
+    const auto& positionsRaw = positions->getRaw();
+
+    outputRaw.clear();
+    outputRaw.reserve(positionsRaw.size());
+
+    for (const size_t position : positionsRaw) {
+        outputRaw.push_back(std::optional<Primitive>(valuesRaw[position]));
+    }
+}
+
+// Emit a chunk of per-group lists (nl.collect): for each group in [begin, begin+count),
+// gather its elements from the flat buffer into the list buffer as one contiguous run
+// and store the resulting ListView in the list output.
+template <typename Primitive>
+void collectListEmit(const Column* values,
+                     const std::vector<std::vector<size_t>>& groupPositions,
+                     size_t begin,
+                     size_t count,
+                     ListBuffer<>& listBuffer,
+                     Column* output) {
+    const auto& valuesRaw = static_cast<const ColumnVector<Primitive>*>(values)->getRaw();
+    auto& outputRaw = static_cast<ColumnVector<ListView>*>(output)->getRaw();
+
+    outputRaw.clear();
+    outputRaw.reserve(count);
+
+    std::vector<ListBuffer<>::ListItemVariant> elements;
+    for (size_t index = 0; index < count; index++) {
+        const std::vector<size_t>& positions = groupPositions[begin + index];
+
+        elements.clear();
+        elements.reserve(positions.size());
+        for (const size_t position : positions) {
+            elements.push_back(ListBuffer<>::ListItemVariant {valuesRaw[position]});
+        }
+
+        outputRaw.push_back(listBuffer.insert(elements));
+    }
+}
+
 // Emit a sum/min/max slice: the accumulator holds each group's reduced value in the
 // result's own type, so copy groups [begin, begin + count) into the output.
 template <typename Primitive>
@@ -1672,6 +1743,249 @@ void NLExecutor::runGroupAggregateLoop(NLExecutionContext* context, NLFunctionDa
         for (const NLGroupAggregateState::Aggregate& aggregate : aggregates) {
             aggregate._emit(aggregate._accumulator, aggregate._counts, offset, stepGroups, aggregate._output);
         }
+
+        runBody(context, loopBody);
+    }
+}
+
+void NLExecutor::runCollectReset(NLExecutionContext* context, NLFunctionData* data) {
+    const NLCollectResetData* reset = static_cast<NLCollectResetData*>(data);
+    reset->getState()->reset();
+}
+
+void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* data) {
+    NLCollectUpdateData* update = static_cast<NLCollectUpdateData*>(data);
+    NLCollectState* state = update->getState();
+
+    std::vector<NLCollectState::KeyColumn>& keyColumns = state->keyColumns();
+
+    // Every column is row-aligned. With grouping keys the first key sizes this step's
+    // rows; ungrouped (no key), the collected value column sizes it.
+    const Column* valueInput = state->getValueInput();
+    const size_t rowCount = keyColumns.empty() ? valueInput->size() : keyColumns.front()._input->size();
+    if (rowCount == 0) {
+        return;
+    }
+
+    // Assign each row to its group: serialize the grouping-key tuple, look it up, and
+    // on first sight create a new group (its index is the next group count) and record
+    // the row that created it, so the key buffers can take that row's values. With no
+    // grouping key the tuple is empty, so every row falls into the single group 0.
+    NLGroupTable& groupTable = state->groupTable();
+    std::vector<size_t>& groupIndices = state->groupIndicesScratch();
+    std::vector<size_t>& newGroupRows = state->newGroupRowsScratch();
+    std::string& key = state->keyScratch();
+
+    groupIndices.resize(rowCount);
+    newGroupRows.clear();
+
+    for (size_t row = 0; row < rowCount; row++) {
+        key.clear();
+        for (const NLCollectState::KeyColumn& keyColumn : keyColumns) {
+            keyColumn._keyAppend(keyColumn._input, row, key);
+        }
+
+        const NLGroupTable::Assignment assignment = groupTable.assign(key);
+        if (assignment._created) {
+            newGroupRows.push_back(row);
+        }
+
+        groupIndices[row] = assignment._index;
+    }
+
+    const size_t groupCount = groupTable.getGroupCount();
+
+    // Grow the key buffers with the new groups' key values, and the per-group position
+    // lists to the new group count, then append this step's present values to their
+    // groups' lists.
+    for (NLCollectState::KeyColumn& keyColumn : keyColumns) {
+        keyColumn._gatherAppend(keyColumn._input, newGroupRows, keyColumn._buffer);
+    }
+
+    std::vector<std::vector<size_t>>& groupPositions = state->groupPositions();
+    groupPositions.resize(groupCount);
+
+    state->getFold()(state->getValues(), valueInput, groupIndices, groupPositions);
+}
+
+// Only the scalar value types are collectable for now; an embedding column (a span of
+// floats per row) has no owned primitive to buffer, so it is rejected here rather than
+// silently mishandled.
+NLCollectFoldFunction NLExecutor::selectCollectFold(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &collectFold<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &collectFold<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &collectFold<types::Double::Primitive>;
+        break;
+
+        case ValueType::Bool:
+            return &collectFold<types::Bool::Primitive>;
+        break;
+
+        case ValueType::String:
+            return &collectFold<types::String::Primitive>;
+        break;
+
+        default:
+            throw IRException("collect does not support this value type");
+        break;
+    }
+
+    return nullptr;
+}
+
+NLUnwindValueEmitFunction NLExecutor::selectUnwindValueEmit(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &unwindValueEmit<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &unwindValueEmit<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &unwindValueEmit<types::Double::Primitive>;
+        break;
+
+        case ValueType::Bool:
+            return &unwindValueEmit<types::Bool::Primitive>;
+        break;
+
+        case ValueType::String:
+            return &unwindValueEmit<types::String::Primitive>;
+        break;
+
+        default:
+            throw IRException("unwind does not support this value type");
+        break;
+    }
+
+    return nullptr;
+}
+
+NLCollectListEmitFunction NLExecutor::selectCollectListEmit(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &collectListEmit<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &collectListEmit<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &collectListEmit<types::Double::Primitive>;
+        break;
+
+        case ValueType::Bool:
+            return &collectListEmit<types::Bool::Primitive>;
+        break;
+
+        case ValueType::String:
+            return &collectListEmit<types::String::Primitive>;
+        break;
+
+        default:
+            throw IRException("collect does not support this value type");
+        break;
+    }
+
+    return nullptr;
+}
+
+void NLExecutor::runUnwindLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLUnwindLoopData* loopData = static_cast<NLUnwindLoopData*>(data);
+    NLCollectState* state = loopData->getState();
+
+    const size_t chunkSize = context->getChunkSize();
+    const NLStmtContainer* loopBody = loopData->getStmts();
+
+    std::vector<NLCollectState::KeyColumn>& keyColumns = state->keyColumns();
+    const std::vector<std::vector<size_t>>& groupPositions = state->groupPositions();
+    const size_t totalGroups = groupPositions.size();
+
+    ColumnVector<size_t>* groupIndices = loopData->getGroupIndices();
+    ColumnVector<size_t>* positions = loopData->getPositions();
+
+    // Walk every (group, element) pair in group order. currentGroup / indexInGroup is
+    // the cursor into that flattened sequence; empty groups (all values null) are
+    // skipped, so they contribute no row - matching UNWIND of an empty list.
+    size_t currentGroup = 0;
+    size_t indexInGroup = 0;
+    while (currentGroup < totalGroups && groupPositions[currentGroup].empty()) {
+        currentGroup++;
+    }
+
+    while (currentGroup < totalGroups) {
+        std::vector<size_t>& groupIndicesRaw = groupIndices->getRaw();
+        std::vector<size_t>& positionsRaw = positions->getRaw();
+        groupIndicesRaw.clear();
+        positionsRaw.clear();
+
+        // Fill up to chunkSize rows, each the next (group, element) pair.
+        while (groupIndicesRaw.size() < chunkSize && currentGroup < totalGroups) {
+            const std::vector<size_t>& groupPos = groupPositions[currentGroup];
+
+            groupIndicesRaw.push_back(currentGroup);
+            positionsRaw.push_back(groupPos[indexInGroup]);
+            indexInGroup++;
+
+            if (indexInGroup == groupPos.size()) {
+                indexInGroup = 0;
+                currentGroup++;
+                while (currentGroup < totalGroups && groupPositions[currentGroup].empty()) {
+                    currentGroup++;
+                }
+            }
+        }
+
+        // The key values repeat once per element (gather by the per-row group index);
+        // the element values come from the flat buffer at this chunk's positions.
+        for (const NLCollectState::KeyColumn& keyColumn : keyColumns) {
+            keyColumn._gather(keyColumn._buffer, groupIndices, keyColumn._output);
+        }
+
+        state->getUnwindEmit()(state->getValues(), positions, state->getValueOutput());
+
+        runBody(context, loopBody);
+    }
+}
+
+void NLExecutor::runCollectLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLCollectLoopData* loopData = static_cast<NLCollectLoopData*>(data);
+    NLCollectState* state = loopData->getState();
+
+    const size_t totalGroups = state->groupTable().getGroupCount();
+    const size_t chunkSize = context->getChunkSize();
+    const NLStmtContainer* loopBody = loopData->getStmts();
+
+    std::vector<NLCollectState::KeyColumn>& keyColumns = state->keyColumns();
+
+    // Re-chunk the groups: each step slices the next chunk of key values from the key
+    // buffers and materializes one list cell per group (a ListView over that group's
+    // run in the list buffer), then runs the body. An empty result runs the body zero
+    // times, so a collect over no row emits nothing.
+    for (size_t offset = 0; offset < totalGroups; offset += chunkSize) {
+        const size_t stepGroups = std::min(chunkSize, totalGroups - offset);
+
+        for (const NLCollectState::KeyColumn& keyColumn : keyColumns) {
+            keyColumn._emitCopy(keyColumn._buffer, offset, stepGroups, keyColumn._output);
+        }
+
+        state->getListEmit()(state->getValues(),
+                             state->groupPositions(),
+                             offset,
+                             stepGroups,
+                             state->listBuffer(),
+                             state->getValueOutput());
 
         runBody(context, loopBody);
     }

@@ -156,6 +156,25 @@ public:
     // variables and runs the body (the nl.output) per chunk.
     static void runGroupAggregateLoop(NLExecutionContext* context, NLFunctionData* data);
 
+    // Empty a collect accumulator's group table, key buffers, value buffer and
+    // per-group positions; runs each time its block runs.
+    static void runCollectReset(NLExecutionContext* context, NLFunctionData* data);
+
+    // Assign this step's rows to their groups (creating groups on first sight) and
+    // append each present value to its group's list. The sole mutator of a collect
+    // accumulator.
+    static void runCollectUpdate(NLExecutionContext* context, NLFunctionData* data);
+
+    // The per-element drain of a collect: walk every (group, element) pair in group
+    // order, emitting one row per element (the group's key values repeated, then the
+    // element value) chunk by chunk and running the body over each.
+    static void runUnwindLoop(NLExecutionContext* context, NLFunctionData* data);
+
+    // The per-group drain of a collect: walk the groups, emitting one row per group
+    // (the key values sliced, then a list cell spanning the group's elements) chunk by
+    // chunk and running the body over each.
+    static void runCollectLoop(NLExecutionContext* context, NLFunctionData* data);
+
     static void runOutput(NLExecutionContext* context, NLFunctionData* data);
 
     // Run a row-wise binary op (nl.add): invoke the typed kernel bound at
@@ -248,6 +267,16 @@ public:
     // grow the key buffers with each new group's key values.
     static NLGroupKeyGatherFunction selectGroupKeyGather(NLChunkKind kind);
     static NLGroupKeyGatherFunction selectOptGroupKeyGather(ValueType valueType);
+
+    // The collect fold for a column of this value type: appends each present value to
+    // its group's list in the flat value buffer. Only the scalar value types are
+    // supported (collect of embeddings is unsupported for now).
+    static NLCollectFoldFunction selectCollectFold(ValueType valueType);
+
+    // The unwind value-emit / collect list-emit for a column of this value type: the
+    // drain-side siblings of selectCollectFold, baked from the same value type.
+    static NLUnwindValueEmitFunction selectUnwindValueEmit(ValueType valueType);
+    static NLCollectListEmitFunction selectCollectListEmit(ValueType valueType);
 
     // The with-null property fetch handler for an ID type (NodeID/EdgeID) and a
     // value type (types::Double, ...). The translator picks the specialization

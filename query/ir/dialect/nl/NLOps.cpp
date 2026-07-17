@@ -558,3 +558,15 @@ LogicalResult GroupAggregateUpdate::verify() {
     return success();
 }
 
+// A collect update must carry at least one column - the grouping keys (if any) and
+// the single value column - since with no column it could neither size the row set
+// nor build a group key. The one-value-column split against the buffer's keyCount is
+// reconciled during translation, where that count is known.
+LogicalResult CollectUpdate::verify() {
+    if (getColumns().empty()) {
+        return emitOpError("requires at least one column to collect");
+    }
+
+    return success();
+}
+

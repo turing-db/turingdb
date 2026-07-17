@@ -66,4 +66,18 @@ def Nullable : StorageType<"Nullable", "nullable"> {
     let assemblyFormat = "`<` $valueType `>`";
 }
 
+def List : StorageType<"List", "list"> {
+    let summary = "A list value";
+    let description = [{
+        The element type of a chunk holding one list per row - storage's
+        ColumnVector<ListView>, per docs/lists.md. Each cell is a ListView: a span
+        over the list's elements in the query-scoped ListBuffer, so a row copies in
+        O(1) regardless of list length. The wrapped type is the (homogeneous) element
+        type - `!storage.list<none>` until the element primitive is resolved. It is
+        produced by a collect and drained element-by-element by an unwind.
+    }];
+    let parameters = (ins "::mlir::Type":$elementType);
+    let assemblyFormat = "`<` $elementType `>`";
+}
+
 #endif // STORAGE_TYPES
