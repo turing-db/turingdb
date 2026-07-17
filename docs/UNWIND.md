@@ -141,7 +141,7 @@ returning `xs` to the client. Those are list-*expression* features, orthogonal t
 This is the `group_aggregate` triple (`buffer` → `update` → drain-source), except the
 buffer has **two** possible drains over the same keyed per-group storage:
 
-- `nl.unwind` — one row per collected *element* (scalar value column). No list type.
+- `nl.unwind_collect` — one row per collected *element* (scalar value column). No list type.
 - `nl.collect` — one row per *group* (value column = a list-typed cell). Needs
   `!storage.list<T>`.
 
@@ -163,7 +163,7 @@ def NLCollectState : NLType<"CollectState", "collect_state"> {
         grouping-key tuple to a group index, the distinct key values per group, and
         one growing value list per group. Produced by nl.collect_buffer, appended to
         by nl.collect_update once per producing-loop step, and drained by the nl.for
-        over the nl.unwind source, which emits one row per collected element. The
+        over the nl.unwind_collect source, which emits one row per collected element. The
         list-valued sibling of !nl.group_aggregate_state: where a grouped aggregate
         folds each group's rows to one scalar per aggregate, this keeps every value,
         because unwind will re-expand them.
@@ -224,7 +224,7 @@ def CollectUpdate : NLOp<"collect_update", []> {
 
 // Pure: given a filled accumulator it deterministically yields the same rows; the
 // per-element fan-out happens in the driving nl.for. Mirrors nl.group_aggregate.
-def Unwind : NLOp<"unwind", [Pure]> {
+def UnwindCollect : NLOp<"unwind_collect", [Pure]> {
   let summary = "Create a database iterator that drains a collect accumulator, one row per collected element";
   let description = [{
     The source op for the emit phase of a collect-then-unwind. It consumes a filled
@@ -234,14 +234,14 @@ def Unwind : NLOp<"unwind", [Pure]> {
     empty group yields none, matching UNWIND of an empty list. One chunk per output
     column per step, so an enclosing nl.for binds one loop variable per column:
 
-      %rows = nl.unwind(%buf) : !nl.iter<!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<!storage.string>>>
+      %rows = nl.unwind_collect(%buf) : !nl.iter<!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<!storage.string>>>
       nl.for %city, %name in %rows : !nl.iter<...> {
         nl.output(%city, %name) : !nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<!storage.string>>
       }
 
     The iterator chunk types - the grouping-key columns then the element column -
     cannot be inferred from the parameterless handle, so they are spelled after the
-    colon (as nl.group_aggregate's are). Placing nl.unwind after the producing loop
+    colon (as nl.group_aggregate's are). Placing nl.unwind_collect after the producing loop
     guarantees the buffer is full before the first element is emitted.
   }];
 
@@ -251,7 +251,7 @@ def Unwind : NLOp<"unwind", [Pure]> {
 }
 ```
 
-`nl.unwind` is a **source**, exactly like `nl.group_aggregate`. The per-element fan-out
+`nl.unwind_collect` is a **source**, exactly like `nl.group_aggregate`. The per-element fan-out
 (repeating the group's key values across its elements, flattening the list) lives inside
 the drain's chunk-fill — so there is no list column and no new broadcast kernel, and the
 value column it emits is a plain scalar chunk.
@@ -278,7 +278,7 @@ def List : StorageType<"List", "list"> {
 }
 ```
 
-This is exactly `lists.md`'s `types::List::Primitive = ListView`. `nl.unwind` never
+This is exactly `lists.md`'s `types::List::Primitive = ListView`. `nl.unwind_collect` never
 spells it; it is the price of the list *escaping*.
 
 ### 5.4 `nl.collect` — the per-group list drain
@@ -287,7 +287,7 @@ spells it; it is the price of the list *escaping*.
 // NLOps.td
 
 // Pure: given a filled accumulator it deterministically yields the same group rows -
-// mirrors nl.group_aggregate. The per-group sibling of nl.unwind: same buffer, one row
+// mirrors nl.group_aggregate. The per-group sibling of nl.unwind_collect: same buffer, one row
 // per group instead of one per element.
 def Collect : NLOp<"collect", [Pure]> {
   let summary = "Create a database iterator that drains a collect accumulator, one row per group carrying the whole list";
@@ -296,7 +296,7 @@ def Collect : NLOp<"collect", [Pure]> {
     is consumed as a list rather than unwound. It produces an iterator whose steps yield
     one row per group: the grouping-key values, then a list cell spanning that group's
     contiguous run in the accumulator (a ListView into the query ListBuffer). An empty
-    group yields an empty list, not zero rows (unlike nl.unwind).
+    group yields an empty list, not zero rows (unlike nl.unwind_collect).
 
       %rows = nl.collect(%buf) : !nl.iter<!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.list<!storage.string>>>
       nl.for %city, %names in %rows : !nl.iter<...> {
@@ -316,8 +316,8 @@ def Collect : NLOp<"collect", [Pure]> {
 }
 ```
 
-So `nl.collect` and `nl.unwind` are two iterators over one accumulator: `nl.collect`
-spans each group's run into a `ListView` cell, `nl.unwind` walks it element by element.
+So `nl.collect` and `nl.unwind_collect` are two iterators over one accumulator: `nl.collect`
+spans each group's run into a `ListView` cell, `nl.unwind_collect` walks it element by element.
 
 ### 5.5 The db ops
 
@@ -349,7 +349,7 @@ def UnwindCollect : TuringOp<"unwind_collect", [Pure]> {
 
     A pipeline breaker: it must see every row before it can emit any, so it lowers
     to a hoisted nl.collect_buffer, an nl.collect_update in the producing loop, and
-    an nl.unwind source drained by an nl.for after that loop.
+    an nl.unwind_collect source drained by an nl.for after that loop.
   }];
 
   let arguments = (ins Variadic<Column>:$columns, UI64Attr:$keyCount);
@@ -401,7 +401,7 @@ difference is the drain source:
 2. In the producing loop body, map the key/value columns to their nl chunks and emit
    `nl.collect_update %buf, (keys…, value)`.
 3. After the producing loop, create the drain and `buildLoopForSource` it:
-   - `lowerUnwindCollect` → `nl.unwind(%buf) : !nl.iter<keyChunks…, valueChunk>`; the
+   - `lowerUnwindCollect` → `nl.unwind_collect(%buf) : !nl.iter<keyChunks…, valueChunk>`; the
      wrapping `nl.for` binds `(keys…, element)`.
    - `lowerCollect` → `nl.collect(%buf) : !nl.iter<keyChunks…, listChunk>`; the wrapping
      `nl.for` binds `(keys…, list)`.
@@ -425,7 +425,7 @@ difference is the drain source:
     staging** (`collect_update` is a tight typed append; `nl.collect` pays one
     `ListBuffer::insert` per group at drain to lay down the contiguous tagged run and take
     the span). Given the barrier, the stage-then-insert default keeps the update loop
-    cheap; the per-group-run form wins if `collect` results are common. `nl.unwind` needs
+    cheap; the per-group-run form wins if `collect` results are common. `nl.unwind_collect` needs
     neither — it reads values straight from the runs.
 - **`runCollectUpdate`**: per row, serialize the key tuple, find-or-create the group,
   append the value to that group's run (skip nulls, per Cypher). Mirrors
@@ -453,7 +453,7 @@ nl.for %a in %scan : !nl.iter<!nl.chunk<!storage.node_id>> {
   %name = nl.get_node_properties(%a, %pt) : !nl.chunk<!storage.nullable<!storage.string>>
   nl.collect_update %buf, (%name) : !nl.chunk<!storage.nullable<!storage.string>>
 }
-%rows = nl.unwind(%buf) : !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>>
+%rows = nl.unwind_collect(%buf) : !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>>
 nl.for %name in %rows : !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>> {
   nl.output(%name) : !nl.chunk<!storage.nullable<!storage.string>>
 }
@@ -461,9 +461,9 @@ nl.for %name in %rows : !nl.iter<!nl.chunk<!storage.nullable<!storage.string>>> 
 
 Grouped — `WITH n.city AS city, collect(n.name) AS names UNWIND names AS name RETURN city, name`:
 `nl.collect_buffer keys 1`, `nl.collect_update %buf, (%city, %name)`, then
-`nl.unwind(%buf) : !nl.iter<cityChunk, nameChunk>` drained by an `nl.for %city2, %name in %rows`.
+`nl.unwind_collect(%buf) : !nl.iter<cityChunk, nameChunk>` drained by an `nl.for %city2, %name in %rows`.
 
-List escapes (the drain is `nl.collect`, not `nl.unwind`) —
+List escapes (the drain is `nl.collect`, not `nl.unwind_collect`) —
 `WITH n.city AS city, collect(n.name) AS names RETURN city, names`:
 
 ```mlir
@@ -483,7 +483,7 @@ nl.for %city, %names in %rows : !nl.iter<...> {
 ```
 
 Same buffer and update as the grouped unwind above — only the drain differs (`nl.collect`
-yields a list cell per group; `nl.unwind` yields a scalar per element).
+yields a list cell per group; `nl.unwind_collect` yields a scalar per element).
 
 ---
 
@@ -491,7 +491,7 @@ yields a list cell per group; `nl.unwind` yields a scalar per element).
 
 Add `Collect` to `GroupAggregateKind` (`query/ir/dialect/storage/StorageEnums.td`) so the
 existing `nl.group_aggregate_buffer` / `nl.group_aggregate_update` accumulate the list for
-that aggregate, and add **only** `nl.unwind` as a second drain of
+that aggregate, and add **only** `nl.unwind_collect` as a second drain of
 `!nl.group_aggregate_state`. Attractive if you also want `collect` as a first-class
 aggregate (to RETURN a list later). It gets awkward when other aggregates sit in the same
 horizon as the unwound one — their per-group scalars would have to broadcast per element

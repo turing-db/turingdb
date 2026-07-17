@@ -37,7 +37,7 @@ private:
         GetInEdgesByType,
         Sort,
         GroupAggregate,
-        Unwind,
+        UnwindCollect,
         Collect,
     };
 
@@ -53,7 +53,7 @@ private:
         // The accumulator a GroupAggregate iterator drains; null for the other kinds.
         NLGroupAggregateState* _groupAggregateState {nullptr};
 
-        // The accumulator an Unwind / Collect iterator drains; null for the other kinds.
+        // The accumulator an UnwindCollect / Collect iterator drains; null otherwise.
         NLCollectState* _collectState {nullptr};
 
         // The label names a ScanNodesByLabel iterator filters by; empty for the
@@ -310,10 +310,10 @@ private:
     // produced by an nl.collect_buffer translated earlier.
     NLCollectState* collectStateFor(mlir::Value handle) const;
 
-    // Translate the nl.for over an nl.unwind iterator: allocate one loop variable per
+    // Translate the nl.for over an nl.unwind_collect iterator: allocate one loop variable per
     // grouping key plus the element value, wire the key outputs and value output onto
     // the shared state, and record the per-element emit-loop statement.
-    void translateUnwindLoop(const IteratorConfig& config,
+    void translateUnwindCollectLoop(const IteratorConfig& config,
                              mlir::Block& loopBody,
                              NLStmtContainer* body);
 

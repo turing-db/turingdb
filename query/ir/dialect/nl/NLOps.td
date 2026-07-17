@@ -1411,10 +1411,10 @@ def CollectUpdate : NLOp<"collect_update", []> {
 }
 
 /**
-* Unwind
+* UnwindCollect
 */
 // Pure: deterministically drains a filled accumulator; the fan-out is in the nl.for.
-def Unwind : NLOp<"unwind", [Pure]> {
+def UnwindCollect : NLOp<"unwind_collect", [Pure]> {
   let summary = "Create a database iterator that drains a collect accumulator, one row per collected element";
   let description = [{
     Per-element drain of an nl.collect_state: one row per element - the group's key
@@ -1422,7 +1422,7 @@ def Unwind : NLOp<"unwind", [Pure]> {
     empty list). The iterator chunk types (keys then the value chunk) are spelled after
     the colon, and it is placed after the producing loop.
 
-      %rows = nl.unwind(%buf) : !nl.iter<!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<!storage.string>>>
+      %rows = nl.unwind_collect(%buf) : !nl.iter<!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<!storage.string>>>
   }];
 
   let arguments = (ins NLCollectStateHandle:$state);
@@ -1434,13 +1434,13 @@ def Unwind : NLOp<"unwind", [Pure]> {
 /**
 * Collect
 */
-// Pure: the per-group sibling of nl.unwind - one row per group, not per element.
+// Pure: the per-group sibling of nl.unwind_collect - one row per group, not per element.
 def Collect : NLOp<"collect", [Pure]> {
   let summary = "Create a database iterator that drains a collect accumulator, one row per group carrying the whole list";
   let description = [{
     Per-group drain of an nl.collect_state: one row per group - the key values then a
     list cell (a ListView over the group's elements). An empty group yields an empty
-    list (unlike nl.unwind). The iterator chunk types (keys then the list cell) are
+    list (unlike nl.unwind_collect). The iterator chunk types (keys then the list cell) are
     spelled after the colon, and it is placed after the producing loop.
 
       %rows = nl.collect(%buf) : !nl.iter<!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.list<!storage.string>>>

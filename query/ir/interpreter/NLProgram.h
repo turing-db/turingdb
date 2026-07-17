@@ -1427,10 +1427,10 @@ using NLCollectFoldFunction = void (*)(Column* values,
                                        const std::vector<size_t>& groups,
                                        std::vector<std::vector<size_t>>& groupPositions);
 
-// Emit a chunk of unwound values (the nl.unwind drain): for each flat-buffer position
+// Emit a chunk of unwound values (the nl.unwind_collect drain): for each flat-buffer position
 // this chunk covers, write the present value into the nullable value output. One per
 // value type, selected during translation.
-using NLUnwindValueEmitFunction = void (*)(const Column* values,
+using NLUnwindCollectValueEmitFunction = void (*)(const Column* values,
                                            const ColumnVector<size_t>* positions,
                                            Column* output);
 
@@ -1449,7 +1449,7 @@ using NLCollectListEmitFunction = void (*)(const Column* values,
 // to a dense group index, the distinct key values per group, and - the accumulator - a
 // single flat buffer of collected values plus, per group, the positions of its
 // elements in that buffer. nl.collect_buffer resets it, nl.collect_update assigns each
-// row to its group and appends its value, and the drain (nl.unwind per element, or
+// row to its group and appends its value, and the drain (nl.unwind_collect per element, or
 // nl.collect per group) reads it. The list-valued sibling of NLGroupAggregateState: it
 // keeps every value per group rather than reducing them to one.
 //
@@ -1471,7 +1471,7 @@ public:
         NLKeyAppendFunction _keyAppend {nullptr};
         NLGroupKeyGatherFunction _gatherAppend {nullptr};
         NLCopyFunction _emitCopy {nullptr};
-        // Used only by the nl.unwind drain: gather the key buffer by a per-emitted-row
+        // Used only by the nl.unwind_collect drain: gather the key buffer by a per-emitted-row
         // group index, so a group's key value repeats once per collected element.
         NLGatherFunction _gather {nullptr};
     };
@@ -1492,7 +1492,7 @@ public:
     NLCollectFoldFunction getFold() const { return _fold; }
     void setFold(NLCollectFoldFunction fold) { _fold = fold; }
 
-    // The drain's output loop variable: the unwound value column (nl.unwind) or the
+    // The drain's output loop variable: the unwound value column (nl.unwind_collect) or the
     // per-group list column (nl.collect). Set at loop translation. A state feeds one
     // drain, so a single slot holds whichever it is.
     Column* getValueOutput() const { return _valueOutput; }
@@ -1500,8 +1500,8 @@ public:
 
     // The per-element (unwind) and per-group (collect) emit handlers, both baked from
     // the value type at update time; the drain loop uses whichever it needs.
-    NLUnwindValueEmitFunction getUnwindEmit() const { return _unwindEmit; }
-    void setUnwindEmit(NLUnwindValueEmitFunction emit) { _unwindEmit = emit; }
+    NLUnwindCollectValueEmitFunction getUnwindCollectEmit() const { return _unwindCollectEmit; }
+    void setUnwindCollectEmit(NLUnwindCollectValueEmitFunction emit) { _unwindCollectEmit = emit; }
     NLCollectListEmitFunction getListEmit() const { return _listEmit; }
     void setListEmit(NLCollectListEmitFunction emit) { _listEmit = emit; }
 
@@ -1532,7 +1532,7 @@ private:
     std::vector<std::vector<size_t>> _groupPositions;
 
     Column* _valueOutput {nullptr};
-    NLUnwindValueEmitFunction _unwindEmit {nullptr};
+    NLUnwindCollectValueEmitFunction _unwindCollectEmit {nullptr};
     NLCollectListEmitFunction _listEmit {nullptr};
     ListBuffer<> _listBuffer;
 
@@ -1576,13 +1576,13 @@ private:
     NLCollectState* _state {nullptr};
 };
 
-// nl.for over nl.unwind data: the per-element drain of a collect. The state (fully
+// nl.for over nl.unwind_collect data: the per-element drain of a collect. The state (fully
 // filled by now) holds the key buffers, flat value buffer, per-group positions and the
 // emit outputs; this holds the state, the loop body, and per-chunk scratch for the
 // group index and value position of each emitted row.
-class NLUnwindLoopData : public NLFunctionData {
+class NLUnwindCollectLoopData : public NLFunctionData {
 public:
-    NLUnwindLoopData(NLCollectState* state)
+    NLUnwindCollectLoopData(NLCollectState* state)
         : _state(state)
     {
     }

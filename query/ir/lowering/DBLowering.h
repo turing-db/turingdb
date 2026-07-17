@@ -277,7 +277,7 @@ private:
     void lowerCollect(mlir::db::Collect collect);
 
     // Lower a db.unwind_collect (the fused collect-then-unwind): the same accumulate
-    // phase as lowerCollect, but drained by an nl.unwind source (one row per collected
+    // phase as lowerCollect, but drained by an nl.unwind_collect source (one row per collected
     // element) plus its nl.for - the list never materializes.
     void lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect);
 
