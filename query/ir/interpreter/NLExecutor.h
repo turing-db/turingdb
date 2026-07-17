@@ -168,7 +168,7 @@ public:
     // The per-element drain of a collect: walk every (group, element) pair in group
     // order, emitting one row per element (the group's key values repeated, then the
     // element value) chunk by chunk and running the body over each.
-    static void runUnwindLoop(NLExecutionContext* context, NLFunctionData* data);
+    static void runUnwindCollectLoop(NLExecutionContext* context, NLFunctionData* data);
 
     // The per-group drain of a collect: walk the groups, emitting one row per group
     // (the key values sliced, then a list cell spanning the group's elements) chunk by
@@ -275,7 +275,7 @@ public:
 
     // The unwind value-emit / collect list-emit for a column of this value type: the
     // drain-side siblings of selectCollectFold, baked from the same value type.
-    static NLUnwindValueEmitFunction selectUnwindValueEmit(ValueType valueType);
+    static NLUnwindCollectValueEmitFunction selectUnwindCollectValueEmit(ValueType valueType);
     static NLCollectListEmitFunction selectCollectListEmit(ValueType valueType);
 
     // The with-null property fetch handler for an ID type (NodeID/EdgeID) and a

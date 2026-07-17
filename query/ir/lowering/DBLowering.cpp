@@ -1371,7 +1371,7 @@ void DBLowering::lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect) {
     setInsertionInto(ownerBlock(representative));
     _builder.create<nl::CollectUpdate>(loc, state, chunks);
 
-    // The emit phase: an nl.unwind source iterator yielding one row per element - the
+    // The emit phase: an nl.unwind_collect source iterator yielding one row per element - the
     // key columns then the unwound value - drained by an nl.for. The value chunk keeps
     // the collected column's type (a nullable value chunk); the keys keep theirs.
     llvm::SmallVector<mlir::Type, 4> chunkTypes;
@@ -1384,8 +1384,8 @@ void DBLowering::lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect) {
     const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunkTypes);
 
     setInsertionInto(_entryBlock);
-    nl::Unwind unwindOp = _builder.create<nl::Unwind>(loc, iteratorType, state);
-    buildLoopForSource(unwindOp.getResult(), unwindCollect.getOperation());
+    nl::UnwindCollect unwindCollectOp = _builder.create<nl::UnwindCollect>(loc, iteratorType, state);
+    buildLoopForSource(unwindCollectOp.getResult(), unwindCollect.getOperation());
 }
 
 void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {

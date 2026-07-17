@@ -273,9 +273,9 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._kind = IteratorKind::GroupAggregate;
             config._groupAggregateState = groupAggregateStateFor(groupAggregate.getState());
             _iteratorConfigs[groupAggregate.getResult()] = config;
-        } else if (nl::Unwind unwind = mlir::dyn_cast<nl::Unwind>(operation)) {
+        } else if (nl::UnwindCollect unwind = mlir::dyn_cast<nl::UnwindCollect>(operation)) {
             IteratorConfig config;
-            config._kind = IteratorKind::Unwind;
+            config._kind = IteratorKind::UnwindCollect;
             config._collectState = collectStateFor(unwind.getState());
             _iteratorConfigs[unwind.getResult()] = config;
         } else if (nl::Collect collect = mlir::dyn_cast<nl::Collect>(operation)) {
@@ -417,10 +417,10 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         // A grouped-aggregate emit loop is never limit-bounded: every row must be
         // folded before the first group is emitted.
         translateGroupAggregateLoop(config, loopBody, body);
-    } else if (config._kind == IteratorKind::Unwind) {
+    } else if (config._kind == IteratorKind::UnwindCollect) {
         // A collect drain emit loop is never limit-bounded: every row must be folded
         // before the first element is emitted.
-        translateUnwindLoop(config, loopBody, body);
+        translateUnwindCollectLoop(config, loopBody, body);
     } else if (config._kind == IteratorKind::Collect) {
         translateCollectLoop(config, loopBody, body);
     } else {
@@ -1706,7 +1706,7 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
     state->setValueInput(getColumn(valueColumn));
     state->setValues(allocValueColumnForValueType(valueType));
     state->setFold(NLExecutor::selectCollectFold(valueType));
-    state->setUnwindEmit(NLExecutor::selectUnwindValueEmit(valueType));
+    state->setUnwindCollectEmit(NLExecutor::selectUnwindCollectValueEmit(valueType));
     state->setListEmit(NLExecutor::selectCollectListEmit(valueType));
 
     body->emplaceStmt(&NLExecutor::runCollectUpdate, data);
@@ -1721,12 +1721,12 @@ NLCollectState* NLTranslator::collectStateFor(mlir::Value handle) const {
     return stateIt->second;
 }
 
-void NLTranslator::translateUnwindLoop(const IteratorConfig& config,
+void NLTranslator::translateUnwindCollectLoop(const IteratorConfig& config,
                                        mlir::Block& loopBody,
                                        NLStmtContainer* body) {
     NLCollectState* state = config._collectState;
     if (!state) {
-        throw IRException("nl.unwind iterator must carry a collect accumulator");
+        throw IRException("nl.unwind_collect iterator must carry a collect accumulator");
     }
 
     // For::verify binds one loop variable per iterator chunk; the unwind iterator's
@@ -1734,10 +1734,10 @@ void NLTranslator::translateUnwindLoop(const IteratorConfig& config,
     // variable per grouping key plus one for the value.
     const size_t keyCount = state->keyColumns().size();
     if (loopBody.getNumArguments() != keyCount + 1) {
-        throw IRException("nl.unwind loop must bind one variable per grouping key plus the element");
+        throw IRException("nl.unwind_collect loop must bind one variable per grouping key plus the element");
     }
 
-    NLUnwindLoopData* loopData = _program->allocFunctionData<NLUnwindLoopData>(state);
+    NLUnwindCollectLoopData* loopData = _program->allocFunctionData<NLUnwindCollectLoopData>(state);
     loopData->getGroupIndices()->reserve(_program->getChunkSize());
     loopData->getPositions()->reserve(_program->getChunkSize());
 
@@ -1758,7 +1758,7 @@ void NLTranslator::translateUnwindLoop(const IteratorConfig& config,
     _valueSlots[valueVariable] = valueOutput;
     state->setValueOutput(valueOutput);
 
-    body->emplaceStmt(&NLExecutor::runUnwindLoop, loopData);
+    body->emplaceStmt(&NLExecutor::runUnwindCollectLoop, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
 }

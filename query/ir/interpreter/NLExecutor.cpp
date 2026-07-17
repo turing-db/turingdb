@@ -843,11 +843,11 @@ void collectFold(Column* values,
     }
 }
 
-// Emit a chunk of unwound values (nl.unwind): for each flat-buffer position this chunk
+// Emit a chunk of unwound values (nl.unwind_collect): for each flat-buffer position this chunk
 // covers, write the present value into the nullable value output. collect dropped
 // nulls, so every emitted element is present.
 template <typename Primitive>
-void unwindValueEmit(const Column* values,
+void unwindCollectValueEmit(const Column* values,
                      const ColumnVector<size_t>* positions,
                      Column* output) {
     const auto& valuesRaw = static_cast<const ColumnVector<Primitive>*>(values)->getRaw();
@@ -1841,26 +1841,26 @@ NLCollectFoldFunction NLExecutor::selectCollectFold(ValueType valueType) {
     return nullptr;
 }
 
-NLUnwindValueEmitFunction NLExecutor::selectUnwindValueEmit(ValueType valueType) {
+NLUnwindCollectValueEmitFunction NLExecutor::selectUnwindCollectValueEmit(ValueType valueType) {
     switch (valueType) {
         case ValueType::Int64:
-            return &unwindValueEmit<types::Int64::Primitive>;
+            return &unwindCollectValueEmit<types::Int64::Primitive>;
         break;
 
         case ValueType::UInt64:
-            return &unwindValueEmit<types::UInt64::Primitive>;
+            return &unwindCollectValueEmit<types::UInt64::Primitive>;
         break;
 
         case ValueType::Double:
-            return &unwindValueEmit<types::Double::Primitive>;
+            return &unwindCollectValueEmit<types::Double::Primitive>;
         break;
 
         case ValueType::Bool:
-            return &unwindValueEmit<types::Bool::Primitive>;
+            return &unwindCollectValueEmit<types::Bool::Primitive>;
         break;
 
         case ValueType::String:
-            return &unwindValueEmit<types::String::Primitive>;
+            return &unwindCollectValueEmit<types::String::Primitive>;
         break;
 
         default:
@@ -1901,8 +1901,8 @@ NLCollectListEmitFunction NLExecutor::selectCollectListEmit(ValueType valueType)
     return nullptr;
 }
 
-void NLExecutor::runUnwindLoop(NLExecutionContext* context, NLFunctionData* data) {
-    NLUnwindLoopData* loopData = static_cast<NLUnwindLoopData*>(data);
+void NLExecutor::runUnwindCollectLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLUnwindCollectLoopData* loopData = static_cast<NLUnwindCollectLoopData*>(data);
     NLCollectState* state = loopData->getState();
 
     const size_t chunkSize = context->getChunkSize();
@@ -1953,7 +1953,7 @@ void NLExecutor::runUnwindLoop(NLExecutionContext* context, NLFunctionData* data
             keyColumn._gather(keyColumn._buffer, groupIndices, keyColumn._output);
         }
 
-        state->getUnwindEmit()(state->getValues(), positions, state->getValueOutput());
+        state->getUnwindCollectEmit()(state->getValues(), positions, state->getValueOutput());
 
         runBody(context, loopBody);
     }

@@ -116,7 +116,7 @@ def NLCollectState : NLType<"CollectState", "collect_state"> {
         the accumulator - a flat buffer of collected values plus, per group, the
         positions of its elements in that buffer. Produced by nl.collect_buffer,
         appended to by nl.collect_update once per producing-loop step, and (later)
-        drained one row per element (nl.unwind) or one row per group (nl.collect).
+        drained one row per element (nl.unwind_collect) or one row per group (nl.collect).
         The list-valued sibling of !nl.group_aggregate_state: where a grouped
         aggregate folds each group's rows to one scalar per aggregate, this keeps
         every value, because the drain will re-expand them.

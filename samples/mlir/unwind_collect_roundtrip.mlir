@@ -11,7 +11,7 @@ module {
     // unwound value type is resolved during lowering (hence -graph); name is a String.
     //
     // db.unwind_collect lowers to a hoisted nl.collect_buffer, an nl.collect_update
-    // inside the scan loop, and an nl.unwind source draining the single group's
+    // inside the scan loop, and an nl.unwind_collect source draining the single group's
     // elements after the loop.
     //
     // "name" is a simpledb property; swap it for a property your graph has.
