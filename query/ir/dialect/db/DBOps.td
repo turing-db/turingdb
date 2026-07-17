@@ -705,12 +705,12 @@ class PredicateOp<string mnemonic, list<Trait> traits = []>
 
 def AndOp : PredicateOp<"and", [Pure]> {
   let summary = "Performs row-wise logical AND on its two input columns";
-  let arguments = (ins ColumnBools : $lhs, ColumnBools : $rhs);
+  let arguments = (ins Column : $lhs, Column : $rhs);
 }
 
 def OrOp : PredicateOp<"or", [Pure]> {
   let summary = "Performs row-wise logical OR on its two input columns";
-  let arguments = (ins ColumnBools : $lhs, ColumnBools : $rhs);
+  let arguments = (ins Column : $lhs, Column : $rhs);
 }
 
 def NotOp : TuringOp<"not", [Pure]> {
