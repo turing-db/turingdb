@@ -309,11 +309,26 @@ void DBProgramGenerator::filterAllColumns(mlir::Value predicate) {
         return;
     }
 
+    // Only filter columns defined in the current insertion block
+    mlir::Block* const insertionBlock = _opBuilder.getInsertionBlock();
+
     llvm::SmallVector<mlir::Value> columnsToFilter;
     llvm::SmallVector<const VariableDependency*> orderedVars;
     for (auto& [var, values] : _varMap) {
-        columnsToFilter.push_back(values.back());
+        const mlir::Value column = values.back();
+        mlir::Operation* const definingOp = column.getDefiningOp();
+        mlir::Block* const definingBlock = definingOp
+            ? definingOp->getBlock()
+            : mlir::cast<mlir::BlockArgument>(column).getOwner();
+        if (definingBlock != insertionBlock) {
+            continue;
+        }
+        columnsToFilter.push_back(column);
         orderedVars.push_back(var);
+    }
+
+    if (columnsToFilter.empty()) {
+        return;
     }
 
     llvm::SmallVector<mlir::Type> resultTypes;
