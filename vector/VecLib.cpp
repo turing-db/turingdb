@@ -24,19 +24,24 @@
 
 using namespace vec;
 
+// HNSW index parameters. FAISS defaults efSearch to 16, which collapses recall on
+// large indexes; HNSW_EF_SEARCH widens the beam both at index construction and at
+// query time (upgrading indexes built before efSearch was set at construction).
+constexpr int HNSW_M = 32;
+constexpr int HNSW_EF_CONSTRUCTION = 40;
+constexpr int HNSW_EF_SEARCH = 128;
+
 namespace {
 
 // Builds a new empty HNSW flat index wrapped in an ID map for the given metadata.
 std::unique_ptr<faiss::Index> buildHNSWIndex(const VecLibMetadata& meta) {
-    constexpr int M = 32;
-    constexpr int efConstruction = 40;
-
     const faiss::MetricType faissMetric = (meta._metric == DistanceMetric::EUCLIDEAN_DIST)
                                               ? faiss::METRIC_L2
                                               : faiss::METRIC_INNER_PRODUCT;
 
-    auto* hnsw = new faiss::IndexHNSWFlat(static_cast<int>(meta._dimension), M, faissMetric);
-    hnsw->hnsw.efConstruction = efConstruction;
+    auto* hnsw = new faiss::IndexHNSWFlat(static_cast<int>(meta._dimension), HNSW_M, faissMetric);
+    hnsw->hnsw.efConstruction = HNSW_EF_CONSTRUCTION;
+    hnsw->hnsw.efSearch = HNSW_EF_SEARCH;
 
     auto* idMap = new faiss::IndexIDMap(hnsw);
     idMap->own_fields = true;
@@ -245,6 +250,15 @@ VectorResult<void> VecLib::search(const VectorSearchQuery* query, VectorSearchRe
         break;
         case IndexType::HNSW: {
             if (_hnswIndex && _hnswIndex->ntotal > 0) {
+                // Widen the search beam to HNSW_EF_SEARCH, also upgrading indexes that
+                // were built before efSearch was set at construction time.
+                if (auto* idmap = dynamic_cast<faiss::IndexIDMap*>(_hnswIndex.get())) {
+                    if (auto* hnswIdx = dynamic_cast<faiss::IndexHNSW*>(idmap->index)) {
+                        if (hnswIdx->hnsw.efSearch != HNSW_EF_SEARCH) {
+                            hnswIdx->hnsw.efSearch = HNSW_EF_SEARCH;
+                        }
+                    }
+                }
                 const size_t k = std::min(maxResultCount, (size_t)_hnswIndex->ntotal);
                 _hnswIndex->search(1, embeddings.data(), k, distances.data(), indices.data());
 
