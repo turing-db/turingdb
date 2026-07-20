@@ -7,3 +7,5 @@ endfunction()
 
 add_vector_tests(test_jsonimporter JsonImporterTest.cpp)
 add_vector_tests(test_vector_reload VectorReloadTest.cpp)
+add_vector_tests(test_veclib_index VecLibIndexTest.cpp)
+add_vector_tests(test_veclib_hnsw_recall VecLibHNSWRecallTest.cpp)
