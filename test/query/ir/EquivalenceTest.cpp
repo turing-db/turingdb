@@ -443,6 +443,25 @@ TEST_F(EquivalenceTest, labelConstraints) {
     expectEquivalent("MATCH (n:Person) WHERE n.hasPhD RETURN n");
 }
 
+TEST_F(EquivalenceTest, edgeTypeConstraints) {
+    expectEquivalent("MATCH (a)-[:KNOWS_WELL]->(b) RETURN a, b");
+    expectEquivalent("MATCH (a)-[:INTERESTED_IN]->(b) RETURN a, b");
+
+    // v2 does not support multiple edge types
+    // expectEquivalent("MATCH (a)-[:KNOWS_WELL|INTERESTED_IN]->(b) RETURN a, b");
+
+    expectEquivalent("MATCH (a)-[e:KNOWS_WELL]->(b) RETURN a, b");
+    expectEquivalent("MATCH (a)-[e:INTERESTED_IN]->(b) RETURN a, b");
+
+    expectEquivalent("MATCH (a {isFrench: true})-[:INTERESTED_IN]->(b) RETURN a, b");
+
+    expectEquivalent("MATCH (a)-[:KNOWS_WELL]->(b)-[:INTERESTED_IN]->(c) RETURN a, b, c");
+
+    expectEquivalent("MATCH (a)-[:INTERESTED_IN]->(b) WHERE a.isFrench RETURN a, b");
+
+    expectEquivalent("MATCH (a)<-[:KNOWS_WELL]-(b) RETURN a, b");
+}
+
 TEST_F(EquivalenceTest, constants) {
     expectEquivalent("RETURN 5");
     expectEquivalent("RETURN 5 + 10");

@@ -396,6 +396,27 @@ def CheckLabelConstraint : TuringOp<"check_label_constraint", [Pure]> {
   }];
 }
 
+def CheckEdgeTypeConstraint : TuringOp<"check_edge_type_constraint", [Pure]> {
+  let summary = "Test each edge type ID against a required-type constraint";
+
+  let description = [{
+    For each EdgeTypeID in the input column, emits true if the edge's type
+    matches any of the types in `edge_types` (OR semantics), false otherwise.
+
+      %ok = db.check_edge_type_constraint(%et, ["KNOWS", "LIKES"])
+              : (!db.column<!storage.edge_type_id>) -> !db.column<!storage.bool>
+  }];
+
+  let arguments = (ins Column:$edge_type_ids, StrArrayAttr:$edge_types);
+  let results   = (outs Column:$result);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $edge_type_ids `,` $edge_types `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 /**
 * CrossProduct
 */

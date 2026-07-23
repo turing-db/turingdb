@@ -52,6 +52,9 @@ private:
     // Maps a Cypher variable to all of its MLIR variable defs, in order of appearance
     VariableIdentityMap _varMap;
 
+    // Maps each edge VDG var to its MLIR type column
+    std::unordered_map<const VariableDependency*, mlir::Value> _edgeTypeMap;
+
     // Maps each WHERE clause expression to the MLIR value it produces
     ExprValueMap _exprMap;
 
@@ -86,6 +89,7 @@ private:
 
     void generatePropertyConstraints(const CypherAST* ast);
     void generateLabelConstraints(const CypherAST* ast);
+    void generateEdgeTypeConstraints(const CypherAST* ast);
     void generateFilters(const CypherAST* ast);
 
     void translateExpr(const Expr* expr);

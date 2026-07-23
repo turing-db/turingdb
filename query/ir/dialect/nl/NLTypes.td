@@ -188,6 +188,13 @@ def NLLabelSetIDChunk : Type<
     BuildableType<"::mlir::nl::ChunkType::get($_builder.getContext(), "
                   "::mlir::storage::LabelSetIDType::get($_builder.getContext()))">;
 
+def NLEdgeTypeIDChunk : Type<
+        CPred<"::llvm::isa<::mlir::nl::ChunkType>($_self) && "
+              "::llvm::isa<::mlir::storage::EdgeTypeIDType>(::llvm::cast<::mlir::nl::ChunkType>($_self).getElementType())">,
+        "chunk of edge type IDs", "::mlir::nl::ChunkType">,
+    BuildableType<"::mlir::nl::ChunkType::get($_builder.getContext(), "
+                  "::mlir::storage::EdgeTypeIDType::get($_builder.getContext()))">;
+
 // Constrains an operand to a resolved !nl.property_type handle, the same way
 // NLNodeIDChunk constrains a chunk operand. The single concrete type - there is
 // only ever !nl.property_type - is what lets the property fetches omit the
