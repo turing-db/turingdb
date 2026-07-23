@@ -11,6 +11,11 @@
 #include "NLOps.h"
 
 #include "views/GraphView.h"
+#include "metadata/GraphMetadata.h"
+#include "metadata/LabelSet.h"
+#include "metadata/LabelSetHandle.h"
+#include "metadata/LabelSetMap.h"
+#include "metadata/LabelMap.h"
 #include "metadata/PropertyType.h"
 
 #include "IRException.h"
@@ -391,6 +396,10 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerGetNodeProperties(getNodeProperties);
     } else if (mlir::db::GetEdgeProperties getEdgeProperties = mlir::dyn_cast<mlir::db::GetEdgeProperties>(operation)) {
         lowerGetEdgeProperties(getEdgeProperties);
+    } else if (mlir::db::GetNodeLabelSet getNodeLabelSet = mlir::dyn_cast<mlir::db::GetNodeLabelSet>(operation)) {
+        lowerGetNodeLabelSet(getNodeLabelSet);
+    } else if (mlir::db::CheckLabelConstraint checkLabelConstraint = mlir::dyn_cast<mlir::db::CheckLabelConstraint>(operation)) {
+        lowerCheckLabelConstraint(checkLabelConstraint);
     } else if (mlir::db::CrossProduct crossProduct = mlir::dyn_cast<mlir::db::CrossProduct>(operation)) {
         lowerCrossProduct(crossProduct);
     } else if (mlir::db::Limit limit = mlir::dyn_cast<mlir::db::Limit>(operation)) {
@@ -614,6 +623,63 @@ void DBLowering::lowerGetEdgeProperties(mlir::db::GetEdgeProperties getEdgePrope
                                                                          inputChunk,
                                                                          handle);
     _valueMap[getEdgeProperties.getResult()] = fetch.getValues();
+}
+
+void DBLowering::lowerGetNodeLabelSet(mlir::db::GetNodeLabelSet getNodeLabelSet) {
+    const mlir::Value inputChunk = mapValue(getNodeLabelSet.getInputNodes());
+
+    setInsertionInto(ownerBlock(inputChunk));
+
+    const mlir::Type labelSetIDChunkType = nl::ChunkType::get(
+        _builder.getContext(),
+        storage::LabelSetIDType::get(_builder.getContext()));
+
+    nl::GetNodeLabelSet fetch = _builder.create<nl::GetNodeLabelSet>(
+        _builder.getUnknownLoc(),
+        labelSetIDChunkType,
+        inputChunk);
+
+    _valueMap[getNodeLabelSet.getResult()] = fetch.getLabelSetIds();
+}
+
+void DBLowering::lowerCheckLabelConstraint(mlir::db::CheckLabelConstraint checkLabelConstraint) {
+    const LabelMap& labelMap = _view->metadata().labels();
+
+    LabelSet constraintLabelSet;
+    for (const mlir::Attribute labelAttr : checkLabelConstraint.getLabels()) {
+        const llvm::StringRef labelName = mlir::cast<mlir::StringAttr>(labelAttr).getValue();
+        const std::optional<LabelID> labelID = labelMap.get(
+            std::string_view(labelName.data(), labelName.size()));
+
+        bioassert(labelID.has_value(), "Invalid label passed analyzer.");
+
+        constraintLabelSet.set(*labelID);
+    }
+
+    llvm::SmallVector<int64_t> matchingIDs;
+    const LabelSetHandle constraintHandle(constraintLabelSet);
+    for (const LabelSetMap::Pair& pair : _view->metadata().labelsets()) {
+        const LabelSetHandle candidate(*pair._value);
+        if (candidate.hasAtLeastLabels(constraintHandle)) {
+            matchingIDs.push_back(static_cast<int64_t>(pair._id.getValue()));
+        }
+    }
+
+    const mlir::Value inputChunk = mapValue(checkLabelConstraint.getLabelsetIds());
+
+    setInsertionInto(ownerBlock(inputChunk));
+
+    const mlir::Type boolChunkType = nl::ChunkType::get(
+        _builder.getContext(),
+        storage::BoolType::get(_builder.getContext()));
+
+    nl::CheckLabelConstraint check = _builder.create<nl::CheckLabelConstraint>(
+        _builder.getUnknownLoc(),
+        boolChunkType,
+        inputChunk,
+        _builder.getDenseI64ArrayAttr(matchingIDs));
+
+    _valueMap[checkLabelConstraint.getResult()] = check.getResult();
 }
 
 void DBLowering::lowerCrossProduct(mlir::db::CrossProduct product) {

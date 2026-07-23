@@ -357,6 +357,45 @@ def GetEdgeProperties : TuringOp<"get_edge_properties", [Pure]> {
   }];
 }
 
+def GetNodeLabelSet : TuringOp<"get_node_label_set", [Pure]> {
+  let summary = "Read the label-set ID of each node as a column";
+
+  let description = [{
+    For each node in the input column, fetches its LabelSetID.
+
+      %ls = db.get_node_label_set(%a) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+      %ok = db.check_label_constraint(%ls, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  }];
+
+  let arguments = (ins Column:$input_nodes);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = [{
+    `(` $input_nodes `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+def CheckLabelConstraint : TuringOp<"check_label_constraint", [Pure]> {
+  let summary = "Test each label-set ID against a required-label constraint";
+
+  let description = [{
+    For each LabelSetID in the input column, emits true if the node's label set
+    contains every label in `labels` (a superset match), false otherwise.
+
+      %ok = db.check_label_constraint(%ls, ["Person", "Employee"])
+              : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  }];
+
+  let arguments = (ins Column:$labelset_ids, StrArrayAttr:$labels);
+  let results   = (outs Column:$result);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $labelset_ids `,` $labels `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 /**
 * CrossProduct
 */

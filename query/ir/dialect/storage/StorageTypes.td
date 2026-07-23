@@ -39,6 +39,11 @@ def Bool : StorageType<"Bool", "bool"> {
     let summary = "TuringDB Boolean type";
 }
 
+def LabelSetID : StorageType<"LabelSetID", "labelset_id"> {
+    let summary = "A label-set identifier";
+    let description = "The element type of a chunk holding label set IDs";
+}
+
 def Embedding : StorageType<"Embedding", "embedding"> {
     let summary = "An embedding property value";
     let description = [{

@@ -427,6 +427,22 @@ TEST_F(EquivalenceTest, arbitraryFilters) {
     expectEquivalent("MATCH (a {age: 32})-->(b), (c {isFrench: false}) WHERE a.isFrench RETURN a, c");
 }
 
+TEST_F(EquivalenceTest, labelConstraints) {
+    expectEquivalent("MATCH (n:Person) RETURN n");
+    expectEquivalent("MATCH (n:Interest) RETURN n");
+    expectEquivalent("MATCH (n:Founder) RETURN n");
+
+    expectEquivalent("MATCH (n:Person:Founder) RETURN n");
+    expectEquivalent("MATCH (n:Interest:SleepDisturber) RETURN n");
+
+    expectEquivalent("MATCH (n:Person)-->(m) RETURN n");
+    expectEquivalent("MATCH (n:Person)-->(m:Interest) RETURN n, m");
+    expectEquivalent("MATCH (n)-->(m:Interest) RETURN n, m");
+
+    expectEquivalent("MATCH (n:Person) WHERE n.isFrench RETURN n");
+    expectEquivalent("MATCH (n:Person) WHERE n.hasPhD RETURN n");
+}
+
 TEST_F(EquivalenceTest, constants) {
     expectEquivalent("RETURN 5");
     expectEquivalent("RETURN 5 + 10");

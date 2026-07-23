@@ -10,6 +10,7 @@
 
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetInEdgesByTypeIterator.h"
+#include "iterators/GetNodeLabelSetIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/GetOutEdgesByTypeIterator.h"
 #include "iterators/GetPropertiesWithNullIterator.h"
@@ -2218,6 +2219,33 @@ template void NLExecutor::runPropertyFetch<EdgeID, types::Double>(NLExecutionCon
 template void NLExecutor::runPropertyFetch<EdgeID, types::Bool>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::String>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::Embedding>(NLExecutionContext*, NLFunctionData*);
+
+void NLExecutor::runGetNodeLabelSet(NLExecutionContext* context, NLFunctionData* data) {
+    NLGetNodeLabelSetData* fetchData = static_cast<NLGetNodeLabelSetData*>(data);
+
+    const GraphView& view = *context->getView();
+    const ColumnNodeIDs* input = fetchData->getInput();
+    ColumnLabelSetIDs* output = fetchData->getOutput();
+
+    GetNodeLabelSetChunkWriter writer(view, input);
+    writer.setLabelSetIDs(output);
+    writer.fill(input->size());
+}
+
+void NLExecutor::runCheckLabelConstraint(NLExecutionContext* context, NLFunctionData* data) {
+    NLCheckLabelConstraintData* checkData = static_cast<NLCheckLabelConstraintData*>(data);
+
+    const ColumnLabelSetIDs* input = checkData->getInput();
+    ColumnMask* output = checkData->getOutput();
+
+    const size_t rowCount = input->size();
+    output->resize(rowCount);
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        const LabelSetID id = (*input)[rowIndex];
+        (*output)[rowIndex] = checkData->isMatching(id);
+    }
+}
 
 template NLBinaryFn NLExecutor::selectBinary<OP_ADD>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_SUB>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
