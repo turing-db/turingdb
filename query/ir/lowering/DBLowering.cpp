@@ -400,6 +400,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerGetNodeLabelSet(getNodeLabelSet);
     } else if (mlir::db::CheckLabelConstraint checkLabelConstraint = mlir::dyn_cast<mlir::db::CheckLabelConstraint>(operation)) {
         lowerCheckLabelConstraint(checkLabelConstraint);
+    } else if (mlir::db::CheckEdgeTypeConstraint checkEdgeTypeConstraint = mlir::dyn_cast<mlir::db::CheckEdgeTypeConstraint>(operation)) {
+        lowerCheckEdgeTypeConstraint(checkEdgeTypeConstraint);
     } else if (mlir::db::CrossProduct crossProduct = mlir::dyn_cast<mlir::db::CrossProduct>(operation)) {
         lowerCrossProduct(crossProduct);
     } else if (mlir::db::Limit limit = mlir::dyn_cast<mlir::db::Limit>(operation)) {
@@ -680,6 +682,37 @@ void DBLowering::lowerCheckLabelConstraint(mlir::db::CheckLabelConstraint checkL
         _builder.getDenseI64ArrayAttr(matchingIDs));
 
     _valueMap[checkLabelConstraint.getResult()] = check.getResult();
+}
+
+void DBLowering::lowerCheckEdgeTypeConstraint(mlir::db::CheckEdgeTypeConstraint checkEdgeTypeConstraint) {
+    const EdgeTypeMap& edgeTypeMap = _view->metadata().edgeTypes();
+
+    llvm::SmallVector<int64_t> matchingIDs;
+    for (const mlir::Attribute typeAttr : checkEdgeTypeConstraint.getEdgeTypes()) {
+        const llvm::StringRef typeName = mlir::cast<mlir::StringAttr>(typeAttr).getValue();
+        const std::optional<EdgeTypeID> edgeTypeID = edgeTypeMap.get(
+            std::string_view(typeName.data(), typeName.size()));
+
+        bioassert(edgeTypeID.has_value(), "Invalid edge type passed analyzer.");
+
+        matchingIDs.push_back(static_cast<int64_t>(edgeTypeID->getValue()));
+    }
+
+    const mlir::Value inputChunk = mapValue(checkEdgeTypeConstraint.getEdgeTypeIds());
+
+    setInsertionInto(ownerBlock(inputChunk));
+
+    const mlir::Type boolChunkType = nl::ChunkType::get(
+        _builder.getContext(),
+        storage::BoolType::get(_builder.getContext()));
+
+    nl::CheckEdgeTypeConstraint check = _builder.create<nl::CheckEdgeTypeConstraint>(
+        _builder.getUnknownLoc(),
+        boolChunkType,
+        inputChunk,
+        _builder.getDenseI64ArrayAttr(matchingIDs));
+
+    _valueMap[checkEdgeTypeConstraint.getResult()] = check.getResult();
 }
 
 void DBLowering::lowerCrossProduct(mlir::db::CrossProduct product) {

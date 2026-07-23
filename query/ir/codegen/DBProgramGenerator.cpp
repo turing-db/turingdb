@@ -163,13 +163,24 @@ void DBProgramGenerator::addEdgeTraversal(const VariableDependency* src,
         results.push_back(column.getType());
     }
 
+    // Carry all previously-defined edge type columns through this traversal so they
+    // remain in scope at the level where the edge type constraint filter lands.
+    llvm::SmallVector<const VariableDependency*> carriedEdgeTypes;
+    for (auto& [edgeVar, column] : _edgeTypeMap) {
+        carriedEdgeTypes.push_back(edgeVar);
+        operands.push_back(column);
+        results.push_back(column.getType());
+    }
+
     const auto loc = _opBuilder.getUnknownLoc();
     auto op = _opBuilder.create<EdgeOp>(loc, results, operands);
 
     const mlir::Value newSrcs = op.getResult(0);
     const mlir::Value newEdges = op.getResult(1);
-    // TODO: Register opResult(2): the edge types
+    const mlir::Value newEtypes = op.getResult(2);
     const mlir::Value newTgts = op.getResult(3);
+
+    _edgeTypeMap[edge] = newEtypes;
 
     if constexpr (std::is_same_v<EdgeOp, mlir::db::GetOutEdges>) {
         registerValue(src, newSrcs);
@@ -186,6 +197,12 @@ void DBProgramGenerator::addEdgeTraversal(const VariableDependency* src,
     for (size_t i = 0; i < carried.size(); i++) {
         const size_t resultIndex = GET_X_EDGES_RES_SIZE + i;
         registerValue(carried[i], op.getResult(resultIndex));
+    }
+
+    // Update the new edge type vars for carried edges
+    const size_t edgeTypeOffset = GET_X_EDGES_RES_SIZE + carried.size();
+    for (size_t i = 0; i < carriedEdgeTypes.size(); i++) {
+        _edgeTypeMap[carriedEdgeTypes[i]] = op.getResult(edgeTypeOffset + i);
     }
 }
 
@@ -210,6 +227,7 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
     resolveEdgeIdentities();
     generatePropertyConstraints(ast);
     generateLabelConstraints(ast);
+    generateEdgeTypeConstraints(ast);
     generateFilters(ast);
     generateOutput(ast);
 
@@ -329,6 +347,19 @@ void DBProgramGenerator::filterAllColumns(mlir::Value predicate) {
         orderedVars.push_back(var);
     }
 
+    llvm::SmallVector<const VariableDependency*> orderedEdgeTypeVars;
+    for (auto& [var, column] : _edgeTypeMap) {
+        mlir::Operation* const definingOp = column.getDefiningOp();
+        mlir::Block* const definingBlock = definingOp
+            ? definingOp->getBlock()
+            : mlir::cast<mlir::BlockArgument>(column).getOwner();
+        if (definingBlock != insertionBlock) {
+            continue;
+        }
+        columnsToFilter.push_back(column);
+        orderedEdgeTypeVars.push_back(var);
+    }
+
     if (columnsToFilter.empty()) {
         return;
     }
@@ -343,6 +374,11 @@ void DBProgramGenerator::filterAllColumns(mlir::Value predicate) {
 
     for (size_t index = 0; index < orderedVars.size(); index++) {
         registerValue(orderedVars[index], filterOp.getResult(index));
+    }
+
+    const size_t edgeTypeOffset = orderedVars.size();
+    for (size_t index = 0; index < orderedEdgeTypeVars.size(); index++) {
+        _edgeTypeMap[orderedEdgeTypeVars[index]] = filterOp.getResult(edgeTypeOffset + index);
     }
 }
 
@@ -901,6 +937,82 @@ void DBProgramGenerator::generateLabelConstraints(const CypherAST* ast) {
         }
 
         filterAllColumns(combinedPredicate);
+    }
+}
+
+void DBProgramGenerator::generateEdgeTypeConstraints(const CypherAST* ast) {
+    const CypherAST::QueryCommands& queries = ast->queries();
+    if (queries.size() != 1) {
+        throw TuringException("Multiple queries not yet supported.");
+    }
+
+    const QueryCommand* query = queries.front();
+
+    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
+    if (!sglPart) {
+        return;
+    }
+
+    const StmtContainer* stmtsContainer = sglPart->getReadStmts();
+    if (!stmtsContainer) {
+        return;
+    }
+
+    const VariableDependencyGraph::EdgeIdentityMap& edgeIdentities = _vdg.edgeIdentities();
+
+    for (const Stmt* stmt : stmtsContainer->stmts()) {
+        if (stmt->getKind() != Stmt::Kind::MATCH) {
+            continue;
+        }
+
+        const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt);
+        const Pattern* pattern = matchStmt->getPattern();
+
+        mlir::Value combinedPredicate;
+
+        for (const PatternElement* element : pattern->elements()) {
+            for (auto [edgePattern, nodePattern] : element->getElementChain()) {
+                const EdgePatternData* edgeData = edgePattern->getData();
+                if (!edgeData || edgeData->edgeTypeConstraints().empty()) {
+                    continue;
+                }
+
+                const std::string_view cypherName = edgePattern->getDecl()->getName();
+                const auto identityIt = edgeIdentities.find(std::string(cypherName));
+                bioassert(identityIt != edgeIdentities.end(),
+                          "Edge variable not found in identity map: {}", cypherName);
+
+                const VariableDependency* edgeVar = identityIt->second.front();
+                const auto edgeTypeIt = _edgeTypeMap.find(edgeVar);
+                bioassert(edgeTypeIt != _edgeTypeMap.end(),
+                          "Edge type column not found for variable: {}", cypherName);
+
+                const mlir::Value edgeTypeColumn = edgeTypeIt->second;
+
+                const mlir::Location loc = _opBuilder.getUnknownLoc();
+                const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+
+                llvm::SmallVector<llvm::StringRef> typeNames;
+                for (const std::string_view typeName : edgeData->edgeTypeConstraints()) {
+                    typeNames.push_back(llvm::StringRef(typeName.data(), typeName.size()));
+                }
+
+                const mlir::ArrayAttr edgeTypesAttr = _opBuilder.getStrArrayAttr(typeNames);
+                const mlir::Value edgeTypeMask = _opBuilder.create<mlir::db::CheckEdgeTypeConstraint>(
+                    loc, boolType, edgeTypeColumn, edgeTypesAttr).getResult();
+
+                if (!combinedPredicate) {
+                    combinedPredicate = edgeTypeMask;
+                } else {
+                    combinedPredicate = _opBuilder.create<mlir::db::AndOp>(
+                        loc, boolType, combinedPredicate, edgeTypeMask).getResult();
+                }
+            }
+        }
+
+        if (combinedPredicate) {
+            filterAllColumns(combinedPredicate);
+        }
     }
 }
 

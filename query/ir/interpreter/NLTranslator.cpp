@@ -321,6 +321,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateGetNodeLabelSet(getNodeLabelSet, body);
         } else if (nl::CheckLabelConstraint checkLabelConstraint = mlir::dyn_cast<nl::CheckLabelConstraint>(operation)) {
             translateCheckLabelConstraint(checkLabelConstraint, body);
+        } else if (nl::CheckEdgeTypeConstraint checkEdgeTypeConstraint = mlir::dyn_cast<nl::CheckEdgeTypeConstraint>(operation)) {
+            translateCheckEdgeTypeConstraint(checkEdgeTypeConstraint, body);
         } else if (nl::CrossProduct crossProduct = mlir::dyn_cast<nl::CrossProduct>(operation)) {
             translateCrossProduct(crossProduct, body);
         } else if (nl::Limit limit = mlir::dyn_cast<nl::Limit>(operation)) {
@@ -653,6 +655,23 @@ void NLTranslator::translateCheckLabelConstraint(nl::CheckLabelConstraint op, NL
     }
 
     body->emplaceStmt(&NLExecutor::runCheckLabelConstraint, data);
+}
+
+void NLTranslator::translateCheckEdgeTypeConstraint(nl::CheckEdgeTypeConstraint op, NLStmtContainer* body) {
+    const mlir::TypedValue<::mlir::nl::ChunkType> etypes = op.getEdgeTypeIds();
+    const Column* etypesCol = getColumn(etypes);
+    const ColumnEdgeTypes* input = static_cast<const ColumnEdgeTypes*>(etypesCol);
+
+    ColumnMask* output = _memory->alloc<ColumnMask>();
+    output->reserve(_program->getChunkSize());
+    _valueSlots[op.getResult()] = output;
+
+    NLCheckEdgeTypeConstraintData* data = _program->allocFunctionData<NLCheckEdgeTypeConstraintData>(input, output);
+    for (const int64_t rawID : op.getMatchingIds()) {
+        data->addMatchingID(EdgeTypeID(static_cast<uint64_t>(rawID)));
+    }
+
+    body->emplaceStmt(&NLExecutor::runCheckEdgeTypeConstraint, data);
 }
 
 void NLTranslator::translateConstant(nl::Constant constant) {

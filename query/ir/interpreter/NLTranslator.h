@@ -323,6 +323,7 @@ private:
     void translateGetNodeLabelSet(mlir::nl::GetNodeLabelSet op, NLStmtContainer* body);
 
     void translateCheckLabelConstraint(mlir::nl::CheckLabelConstraint op, NLStmtContainer* body);
+    void translateCheckEdgeTypeConstraint(mlir::nl::CheckEdgeTypeConstraint op, NLStmtContainer* body);
 
     // Allocates singleton column for the constant and assigns MLIR value
     void translateConstant(mlir::nl::Constant constant);

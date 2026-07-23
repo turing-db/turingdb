@@ -2247,6 +2247,21 @@ void NLExecutor::runCheckLabelConstraint(NLExecutionContext* context, NLFunction
     }
 }
 
+void NLExecutor::runCheckEdgeTypeConstraint(NLExecutionContext* context, NLFunctionData* data) {
+    NLCheckEdgeTypeConstraintData* checkData = static_cast<NLCheckEdgeTypeConstraintData*>(data);
+
+    const ColumnEdgeTypes* input = checkData->getInput();
+    ColumnMask* output = checkData->getOutput();
+
+    const size_t rowCount = input->size();
+    output->resize(rowCount);
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        const EdgeTypeID id = (*input)[rowIndex];
+        (*output)[rowIndex] = checkData->isMatching(id);
+    }
+}
+
 template NLBinaryFn NLExecutor::selectBinary<OP_ADD>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_SUB>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_MUL>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);

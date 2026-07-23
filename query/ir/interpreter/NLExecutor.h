@@ -65,6 +65,7 @@ public:
 
     // Fills a boolean mask
     static void runCheckLabelConstraint(NLExecutionContext* context, NLFunctionData* data);
+    static void runCheckEdgeTypeConstraint(NLExecutionContext* context, NLFunctionData* data);
 
     static void runCrossProduct(NLExecutionContext* context, NLFunctionData* data);
 

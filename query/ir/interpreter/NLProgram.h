@@ -440,6 +440,26 @@ private:
     std::unordered_set<uint32_t> _matchingIDs;
 };
 
+class NLCheckEdgeTypeConstraintData : public NLFunctionData {
+public:
+    NLCheckEdgeTypeConstraintData(const ColumnEdgeTypes* input, ColumnMask* output)
+        : _input(input),
+        _output(output)
+    {
+    }
+
+    const ColumnEdgeTypes* getInput() const { return _input; }
+    ColumnMask* getOutput() const { return _output; }
+
+    void addMatchingID(EdgeTypeID id) { _matchingIDs.insert(id.getValue()); }
+    bool isMatching(EdgeTypeID id) const { return _matchingIDs.count(id.getValue()) > 0; }
+
+private:
+    const ColumnEdgeTypes* _input {nullptr};
+    ColumnMask* _output {nullptr};
+    std::unordered_set<uint64_t> _matchingIDs;
+};
+
 // A cross product emits N*M rows (every outer row paired with every inner row),
 // but an input column holds only its N or M values, so its values must be
 // repeated to fill an N*M-row output column. That repetition is the broadcast.

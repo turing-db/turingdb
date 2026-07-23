@@ -372,6 +372,26 @@ def CheckLabelConstraint : NLOp<"check_label_constraint", [Pure]> {
   }];
 }
 
+def CheckEdgeTypeConstraint : NLOp<"check_edge_type_constraint", [Pure]> {
+  let summary = "Test each edge type ID against a precomputed allowed set";
+  let description = [{
+    For each EdgeTypeID in the input chunk, emits true if the ID appears in
+    `matching_ids` (OR semantics: any match passes).
+
+      nl.for %etypes in %scan {
+        %ok = nl.check_edge_type_constraint(%etypes, [2, 5]) : !nl.chunk<!storage.bool>
+        ...
+      }
+  }];
+
+  let arguments = (ins NLEdgeTypeIDChunk:$edge_type_ids, DenseI64ArrayAttr:$matching_ids);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = [{
+    `(` $edge_type_ids `,` $matching_ids `)` attr-dict `:` qualified(type($result))
+  }];
+}
+
 /**
 * For
 */

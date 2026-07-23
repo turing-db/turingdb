@@ -230,6 +230,14 @@ LogicalResult CheckLabelConstraint::verify() {
     return success();
 }
 
+LogicalResult CheckEdgeTypeConstraint::verify() {
+    if (getEdgeTypes().empty()) {
+        return emitOpError("requires at least one edge type");
+    }
+
+    return success();
+}
+
 // db.limit passes its columns straight through, so the results must be exactly
 // the input columns - same count, same types and in the same order.
 LogicalResult Limit::verify() {
