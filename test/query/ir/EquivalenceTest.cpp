@@ -242,19 +242,24 @@ protected:
     }
 
     void expectEquivalent(std::string_view query) {
-        Rows pipelineRows;
-        runViaPipeline(query, pipelineRows);
+        try {
+            Rows pipelineRows;
+            runViaPipeline(query, pipelineRows);
 
-        Rows irRows;
-        runViaIR(query, irRows);
+            Rows irRows;
+            runViaIR(query, irRows);
 
-        std::ranges::sort(pipelineRows);
-        std::ranges::sort(irRows);
+            std::ranges::sort(pipelineRows);
+            std::ranges::sort(irRows);
 
-        ASSERT_EQ(pipelineRows.size(), irRows.size()) << "Size mismatch for " << query;
+            ASSERT_EQ(pipelineRows.size(), irRows.size()) << "Size mismatch for " << query;
 
-        for (auto [plRow, irRow] : rv::zip(pipelineRows, irRows)) {
-            EXPECT_EQ(plRow, irRow) << "Row mismatch for " << query;
+            for (auto [plRow, irRow] : rv::zip(pipelineRows, irRows)) {
+                EXPECT_EQ(plRow, irRow) << "Row mismatch for " << query;
+            }
+        } catch (...) {
+            spdlog::error("Exception thrown for query: {}.", query);
+            throw;
         }
     }
 
