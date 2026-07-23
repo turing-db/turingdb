@@ -163,10 +163,17 @@ void DBProgramGenerator::addEdgeTraversal(const VariableDependency* src,
         results.push_back(column.getType());
     }
 
-    // Carry all previously-defined edge type columns through this traversal so they
-    // remain in scope at the level where the edge type constraint filter lands.
+    // Find the edge types to carry which were defined in this block
+    mlir::Block* const insertionBlock = _opBuilder.getInsertionBlock();
     llvm::SmallVector<const VariableDependency*> carriedEdgeTypes;
     for (auto& [edgeVar, column] : _edgeTypeMap) {
+        mlir::Operation* const definingOp = column.getDefiningOp();
+        mlir::Block* const definingBlock = definingOp
+            ? definingOp->getBlock()
+            : mlir::cast<mlir::BlockArgument>(column).getOwner();
+        if (definingBlock != insertionBlock) {
+            continue;
+        }
         carriedEdgeTypes.push_back(edgeVar);
         operands.push_back(column);
         results.push_back(column.getType());
