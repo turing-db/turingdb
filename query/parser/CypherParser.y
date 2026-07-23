@@ -1246,6 +1246,7 @@ edgeDetail
 
 edgeTypes
     : COLON name { $$ = SymbolChain::create(ast); $$->add($2); }
+    // TODO: Enable the below two cases once we move from v2 -> MLIR
     | edgeTypes PIPE name { scanner.notImplemented(@$, "EdgeType | EdgeType | ..."); }
     | edgeTypes PIPE COLON name { scanner.notImplemented(@$, "EdgeType | EdgeType | ..."); }
     ;
