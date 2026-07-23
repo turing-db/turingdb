@@ -85,6 +85,7 @@ private:
     void generateOutput(const CypherAST* ast);
 
     void generatePropertyConstraints(const CypherAST* ast);
+    void generateLabelConstraints(const CypherAST* ast);
     void generateFilters(const CypherAST* ast);
 
     void translateExpr(const Expr* expr);
