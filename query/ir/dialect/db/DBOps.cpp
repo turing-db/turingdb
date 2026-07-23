@@ -222,6 +222,14 @@ LogicalResult ScanNodesByLabel::verify() {
     return success();
 }
 
+LogicalResult CheckLabelConstraint::verify() {
+    if (getLabels().empty()) {
+        return emitOpError("requires at least one label");
+    }
+
+    return success();
+}
+
 // db.limit passes its columns straight through, so the results must be exactly
 // the input columns - same count, same types and in the same order.
 LogicalResult Limit::verify() {

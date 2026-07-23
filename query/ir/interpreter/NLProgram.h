@@ -12,6 +12,7 @@
 #include "ID.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
+#include "columns/ColumnMask.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
 #include "metadata/LabelSet.h"
@@ -401,6 +402,42 @@ private:
     const Column* _input {nullptr};
     Column* _output {nullptr};
     PropertyTypeID _propertyTypeID;
+};
+
+class NLGetNodeLabelSetData : public NLFunctionData {
+public:
+    NLGetNodeLabelSetData(const ColumnNodeIDs* input, ColumnLabelSetIDs* output)
+        : _input(input),
+        _output(output)
+    {
+    }
+
+    const ColumnNodeIDs* getInput() const { return _input; }
+    ColumnLabelSetIDs* getOutput() const { return _output; }
+
+private:
+    const ColumnNodeIDs* _input {nullptr};
+    ColumnLabelSetIDs* _output {nullptr};
+};
+
+class NLCheckLabelConstraintData : public NLFunctionData {
+public:
+    NLCheckLabelConstraintData(const ColumnLabelSetIDs* input, ColumnMask* output)
+        : _input(input),
+        _output(output)
+    {
+    }
+
+    const ColumnLabelSetIDs* getInput() const { return _input; }
+    ColumnMask* getOutput() const { return _output; }
+
+    void addMatchingID(LabelSetID id) { _matchingIDs.insert(id.getValue()); }
+    bool isMatching(LabelSetID id) const { return _matchingIDs.count(id.getValue()) > 0; }
+
+private:
+    const ColumnLabelSetIDs* _input {nullptr};
+    ColumnMask* _output {nullptr};
+    std::unordered_set<uint32_t> _matchingIDs;
 };
 
 // A cross product emits N*M rows (every outer row paired with every inner row),

@@ -11,6 +11,7 @@
 #include "mlir/IR/Verifier.h"
 
 #include "columns/ColumnConst.h"
+#include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 #include "metadata/GraphMetadata.h"
 #include "metadata/PropertyNull.h"
@@ -316,6 +317,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
                                    getEdgeProperties.getValues(),
                                    /*isNode=*/false,
                                    body);
+        } else if (nl::GetNodeLabelSet getNodeLabelSet = mlir::dyn_cast<nl::GetNodeLabelSet>(operation)) {
+            translateGetNodeLabelSet(getNodeLabelSet, body);
+        } else if (nl::CheckLabelConstraint checkLabelConstraint = mlir::dyn_cast<nl::CheckLabelConstraint>(operation)) {
+            translateCheckLabelConstraint(checkLabelConstraint, body);
         } else if (nl::CrossProduct crossProduct = mlir::dyn_cast<nl::CrossProduct>(operation)) {
             translateCrossProduct(crossProduct, body);
         } else if (nl::Limit limit = mlir::dyn_cast<nl::Limit>(operation)) {
@@ -618,6 +623,36 @@ void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
 
     const NLHandlerFunction handler = selectPropertyFetchHandler(isNode, valueType);
     body->emplaceStmt(handler, fetchData);
+}
+
+void NLTranslator::translateGetNodeLabelSet(nl::GetNodeLabelSet op, NLStmtContainer* body) {
+    const mlir::TypedValue<::mlir::nl::ChunkType> nodes = op.getInputNodes();
+    const Column* nodeCol = getColumn(nodes);
+    const ColumnNodeIDs* input = static_cast<const ColumnNodeIDs*>(nodeCol);
+
+    ColumnLabelSetIDs* output = _memory->alloc<ColumnLabelSetIDs>();
+    output->reserve(_program->getChunkSize());
+    _valueSlots[op.getLabelSetIds()] = output;
+
+    NLGetNodeLabelSetData* data = _program->allocFunctionData<NLGetNodeLabelSetData>(input, output);
+    body->emplaceStmt(&NLExecutor::runGetNodeLabelSet, data);
+}
+
+void NLTranslator::translateCheckLabelConstraint(nl::CheckLabelConstraint op, NLStmtContainer* body) {
+    const mlir::TypedValue<::mlir::nl::ChunkType> lbls = op.getLabelsetIds();
+    const Column* lblsCol = getColumn(lbls);
+    const ColumnLabelSetIDs* input = static_cast<const ColumnLabelSetIDs*>(lblsCol);
+
+    ColumnMask* output = _memory->alloc<ColumnMask>();
+    output->reserve(_program->getChunkSize());
+    _valueSlots[op.getResult()] = output;
+
+    NLCheckLabelConstraintData* data = _program->allocFunctionData<NLCheckLabelConstraintData>(input, output);
+    for (const int64_t rawID : op.getMatchingIds()) {
+        data->addMatchingID(LabelSetID(static_cast<uint32_t>(rawID)));
+    }
+
+    body->emplaceStmt(&NLExecutor::runCheckLabelConstraint, data);
 }
 
 void NLTranslator::translateConstant(nl::Constant constant) {

@@ -720,6 +720,8 @@ void DBProgramGenerator::generatePropertyConstraints(const CypherAST* ast) {
 
     // Reused across iterations
     std::vector<const Expr*> constraintExprs;
+    using NodeDataPair = std::pair<const NodePattern*, const NodePatternData*>;
+    std::vector<NodeDataPair> labelConstrainedNodes;
     llvm::SmallVector<mlir::Value> columnsToFilter;
     llvm::SmallVector<const VariableDependency*> orderedVars;
     llvm::SmallVector<mlir::Type> resultTypes;
@@ -732,10 +734,9 @@ void DBProgramGenerator::generatePropertyConstraints(const CypherAST* ast) {
         const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt);
         const Pattern* pattern = matchStmt->getPattern();
 
-        // Collect all property constraint expressions from every entity pattern
-        // in this MATCH. Each EntityPropertyConstraint._expr is a synthesized
-        // equality BinaryExpr (e.g. n.name = "Alice") produced by the analyzer.
+        // Collect all property and label constraints
         constraintExprs.clear();
+        labelConstrainedNodes.clear();
 
         for (const PatternElement* element : pattern->elements()) {
             const NodePattern* rootNode = static_cast<const NodePattern*>(element->getRootEntity());
@@ -744,6 +745,10 @@ void DBProgramGenerator::generatePropertyConstraints(const CypherAST* ast) {
             if (rootData) {
                 for (const EntityPropertyConstraint& constraint : rootData->exprConstraints()) {
                     constraintExprs.push_back(constraint._expr);
+                }
+
+                if (!rootData->labelConstraints().empty()) {
+                    labelConstrainedNodes.emplace_back(rootNode, rootData);
                 }
             }
 
@@ -760,19 +765,27 @@ void DBProgramGenerator::generatePropertyConstraints(const CypherAST* ast) {
                     for (const EntityPropertyConstraint& constraint : nodeData->exprConstraints()) {
                         constraintExprs.push_back(constraint._expr);
                     }
+
+                    if (!nodeData->labelConstraints().empty()) {
+                        labelConstrainedNodes.emplace_back(nodePattern, nodeData);
+                    }
                 }
             }
         }
 
-        if (constraintExprs.empty()) {
+        const bool hasConstraints = !constraintExprs.empty() || !labelConstrainedNodes.empty();
+        if (!hasConstraints) {
             continue;
         }
 
         const mlir::Location loc = _opBuilder.getUnknownLoc();
         const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+        const mlir::db::ColumnType labelSetIDType = allocColumnType(
+            mlir::storage::LabelSetIDType::get(_mlirCtxt));
 
         // Fold left on all expressions, combining with AND
         mlir::Value combinedPredicate;
+
         for (const Expr* constraintExpr : constraintExprs) {
             translateExpr(constraintExpr);
             const mlir::Value predicate = _exprMap.at(constraintExpr);
@@ -780,7 +793,53 @@ void DBProgramGenerator::generatePropertyConstraints(const CypherAST* ast) {
             if (!combinedPredicate) {
                 combinedPredicate = predicate;
             } else {
-                combinedPredicate = _opBuilder.create<mlir::db::AndOp>(loc, boolType, combinedPredicate, predicate).getResult();
+                combinedPredicate = _opBuilder
+                                        .create<mlir::db::AndOp>(
+                                            loc, boolType, combinedPredicate, predicate)
+                                        .getResult();
+            }
+        }
+
+        // NOTE: currently produces separate filters for properties and nodes,
+        // TODO: consider combining in optimisation pass
+        for (auto [nodePattern, nodeData] : labelConstrainedNodes) {
+            const VarDecl* vardecl = nodePattern->getDecl();
+            bioassert(vardecl, "Null variable declaration.");
+            const std::string_view nodeName = vardecl->getName();
+
+            mlir::Value nodeColumn;
+            for (const auto& [var, values] : _varMap) {
+                if (var->getName() == nodeName) {
+                    nodeColumn = values.back();
+                    break;
+                }
+            }
+
+            bioassert(nodeColumn, "Label-constrained node not found in variable map: {}", nodeName);
+
+            const mlir::Value labelSetIDColumn = _opBuilder.create<mlir::db::GetNodeLabelSet>(
+                loc,
+                labelSetIDType,
+                nodeColumn).getResult();
+
+            llvm::SmallVector<llvm::StringRef> labelNames;
+            for (const std::string_view label : nodeData->labelConstraints()) {
+                labelNames.push_back(llvm::StringRef(label.data(), label.size()));
+            }
+
+            const mlir::ArrayAttr labelsAttr = _opBuilder.getStrArrayAttr(labelNames);
+            const mlir::Value labelMask = _opBuilder.create<mlir::db::CheckLabelConstraint>(
+                loc,
+                boolType,
+                labelSetIDColumn,
+                labelsAttr).getResult();
+
+            if (!combinedPredicate) {
+                combinedPredicate = labelMask;
+            } else {
+                auto andop = _opBuilder.create<mlir::db::AndOp>(
+                    loc, boolType, combinedPredicate, labelMask);
+                combinedPredicate = andop.getResult();
             }
         }
 

@@ -332,6 +332,46 @@ def GetEdgeProperties : NLOp<"get_edge_properties", [Pure]> {
   }];
 }
 
+def GetNodeLabelSet : NLOp<"get_node_label_set", [Pure]> {
+  let summary = "Read the label-set ID of each node in a chunk";
+  let description = [{
+    For each node ID in the input chunk, fetches its LabelSetID.
+
+      nl.for %nodes in %scan {
+        %ls = nl.get_node_label_set(%nodes) : !nl.chunk<!storage.labelset_id>
+        ...
+      }
+  }];
+
+  let arguments = (ins NLNodeIDChunk:$input_nodes);
+  let results   = (outs NLChunk:$label_set_ids);
+
+  let assemblyFormat = [{
+    `(` $input_nodes `)` attr-dict `:` qualified(type($label_set_ids))
+  }];
+}
+
+def CheckLabelConstraint : NLOp<"check_label_constraint", [Pure]> {
+  let summary = "Test each label-set ID against a precomputed matching set";
+  let description = [{
+    For each LabelSetID in the input chunk, emits true if the ID appears in
+    `matching_ids`.
+
+      nl.for %nodes in %scan {
+        %ls  = nl.get_node_label_set(%nodes) : !nl.chunk<!storage.labelset_id>
+        %ok  = nl.check_label_constraint(%ls, [3, 7]) : !nl.chunk<!storage.bool>
+        ...
+      }
+  }];
+
+  let arguments = (ins NLLabelSetIDChunk:$labelset_ids, DenseI64ArrayAttr:$matching_ids);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = [{
+    `(` $labelset_ids `,` $matching_ids `)` attr-dict `:` qualified(type($result))
+  }];
+}
+
 /**
 * For
 */

@@ -61,6 +61,11 @@ public:
     static void runGetOutEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetInEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data);
 
+    static void runGetNodeLabelSet(NLExecutionContext* context, NLFunctionData* data);
+
+    // Fills a boolean mask
+    static void runCheckLabelConstraint(NLExecutionContext* context, NLFunctionData* data);
+
     static void runCrossProduct(NLExecutionContext* context, NLFunctionData* data);
 
     // Reset a limit counter to its budget; runs each time its block runs.
