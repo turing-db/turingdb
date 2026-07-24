@@ -36,6 +36,13 @@ else
         # repo setup below to resolve the distro codename.
         # patchelf is required by auditwheel repair (build.sh) to rewrite the
         # wheel's ELF rpaths when bundling the Linux wheel.
+        #
+        # Refresh the package index first. The self-hosted runner containers
+        # carry a stale apt index; when a security update supersedes a
+        # dependency (e.g. libarchive13, pulled in by cmake) the mirror drops
+        # the old .deb, so the cached index 404s at install. apt-get update
+        # re-syncs it.
+        sudo apt-get update
         sudo apt-get install -y cmake build-essential m4 lsb-release patchelf
 
         # Apache Arrow requires CMake >= 3.25, but Ubuntu 22.04 (jammy) ships
@@ -55,7 +62,25 @@ else
             echo "deb [signed-by=${KITWARE_KEYRING}] https://apt.kitware.com/ubuntu/ ${CODENAME} main" \
                 | sudo tee /etc/apt/sources.list.d/kitware.list >/dev/null
             sudo apt-get update
-            sudo apt-get install -y cmake
+
+            # Pin to the latest CMake 3.x that Kitware serves rather than its
+            # default (now 4.x). CMake 4 is strict enough to break some pinned
+            # third-party dependency builds: OpenBLAS's ctest/CMakeLists.txt has
+            # an unquoted if() on the (empty, because NOFORTRAN) CMAKE_Fortran_COMPILER_ID
+            # that CMake 4 rejects outright. Staying on the 3.x line keeps the
+            # dependency toolchain on the CMake these submodules were validated against.
+            CMAKE_PIN_VERSION=$(apt-cache madison cmake \
+                | grep 'apt.kitware.com' \
+                | awk '{print $3}' \
+                | grep -E '^3\.' \
+                | sort -V \
+                | tail -1)
+            if [ -z "${CMAKE_PIN_VERSION}" ]; then
+                echo "No CMake 3.x package available from Kitware for ${CODENAME}" >&2
+                exit 1
+            fi
+            echo "Installing cmake ${CMAKE_PIN_VERSION} from Kitware (capped below 4.0)..."
+            sudo apt-get install -y cmake=${CMAKE_PIN_VERSION} cmake-data=${CMAKE_PIN_VERSION}
         fi
     elif command -v dnf &> /dev/null; then
         sudo dnf install -y cmake
