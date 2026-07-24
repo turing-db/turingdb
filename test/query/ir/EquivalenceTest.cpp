@@ -468,6 +468,21 @@ TEST_F(EquivalenceTest, divideFilters) {
     expectEquivalent("MATCH (n) WHERE n.age / 2 = 8 RETURN n");
 }
 
+TEST_F(EquivalenceTest, skip) {
+    expectEquivalent("MATCH (n) RETURN n SKIP 100");
+
+    expectEquivalent("MATCH (n) RETURN n SKIP 18");
+
+    expectEquivalent("MATCH (n) RETURN n SKIP 5");
+    expectEquivalent("MATCH (n) RETURN n SKIP 1");
+
+    expectEquivalent("MATCH (n) RETURN n SKIP 0");
+
+    expectEquivalent("MATCH (a)-->(b) RETURN a, b SKIP 3");
+
+    expectEquivalent("MATCH (a), (b), (c), (d) RETURN a SKIP 10000");
+}
+
 TEST_F(EquivalenceTest, comparisonFilters) {
     expectEquivalent("MATCH (n) WHERE n.age > 20 RETURN n");
 
