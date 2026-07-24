@@ -993,6 +993,7 @@ void DBProgramGenerator::generateEdgeTypeConstraints(const CypherAST* ast) {
 
         mlir::Value combinedPredicate;
 
+        llvm::SmallVector<llvm::StringRef> typeNames;
         for (const PatternElement* element : pattern->elements()) {
             for (auto [edgePattern, nodePattern] : element->getElementChain()) {
                 const EdgePatternData* edgeData = edgePattern->getData();
@@ -1015,7 +1016,7 @@ void DBProgramGenerator::generateEdgeTypeConstraints(const CypherAST* ast) {
                 const mlir::Location loc = _opBuilder.getUnknownLoc();
                 const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
 
-                llvm::SmallVector<llvm::StringRef> typeNames;
+                typeNames.clear();
                 for (const std::string_view typeName : edgeData->edgeTypeConstraints()) {
                     typeNames.push_back(llvm::StringRef(typeName.data(), typeName.size()));
                 }
