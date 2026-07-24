@@ -212,6 +212,32 @@ LogicalResult CrossProduct::verify() {
     return success();
 }
 
+LogicalResult CreateNode::verify() {
+    if (getLabels().empty()) {
+        return emitOpError("requires at least one label");
+    }
+
+    if (getPropNames().size() != getPropValues().size()) {
+        return emitOpError("prop_names and prop_values must have the same count, but has ")
+               << getPropNames().size() << " names and " << getPropValues().size() << " values";
+    }
+
+    return success();
+}
+
+LogicalResult CreateEdge::verify() {
+    if (getEdgeType().empty()) {
+        return emitOpError("requires a non-empty edge type");
+    }
+
+    if (getPropNames().size() != getPropValues().size()) {
+        return emitOpError("prop_names and prop_values must have the same count, but has ")
+               << getPropNames().size() << " names and " << getPropValues().size() << " values";
+    }
+
+    return success();
+}
+
 // A label scan must name at least one label to filter by; a label-free scan of
 // every node is db.scan_nodes, so an empty label list is malformed IR here.
 LogicalResult ScanNodesByLabel::verify() {
