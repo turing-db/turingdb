@@ -46,6 +46,7 @@
 #include "expr/UnaryExpr.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/ReturnStmt.h"
+#include "stmt/Skip.h"
 #include "stmt/StmtContainer.h"
 
 #include "BioAssert.h"
@@ -697,6 +698,22 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
     }
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+    if (proj->hasSkip()) {
+        const Expr* skipExpr = proj->getSkip()->getExpr();
+        const LiteralExpr* litExpr = static_cast<const LiteralExpr*>(skipExpr);
+        const IntegerLiteral* intLit = static_cast<const IntegerLiteral*>(litExpr->getLiteral());
+        const uint64_t skipCount = static_cast<uint64_t>(intLit->getValue());
+
+        llvm::SmallVector<mlir::Type> skipResultTypes;
+        for (const mlir::Value column : outputted) {
+            skipResultTypes.push_back(column.getType());
+        }
+
+        auto skipOp = _opBuilder.create<mlir::db::Skip>(loc, skipResultTypes, mlir::ValueRange{outputted}, skipCount);
+        outputted.assign(skipOp.getResults().begin(), skipOp.getResults().end());
+    }
+
     _opBuilder.create<mlir::db::Output>(loc, mlir::ValueRange{outputted});
 }
 
