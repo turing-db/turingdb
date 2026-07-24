@@ -494,6 +494,8 @@ TEST_F(EquivalenceTest, limit) {
     expectEquivalent("MATCH (n) RETURN n LIMIT 0");
 
     expectEquivalent("MATCH (a)-->(b) RETURN a, b LIMIT 3");
+
+    expectEquivalent("MATCH (a), (b), (c), (d) RETURN a LIMIT 10");
 }
 
 TEST_F(EquivalenceTest, comparisonFilters) {
