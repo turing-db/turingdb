@@ -18,6 +18,7 @@
 #include "list/ListBuffer.h"
 #include "list/ListView.h"
 #include "metadata/LabelSet.h"
+#include "metadata/LabelSetHandle.h"
 
 namespace db {
 
@@ -1624,6 +1625,87 @@ public:
 private:
     NLCollectState* _state {nullptr};
     NLStmtContainer _stmts;
+};
+
+class NLCreateNodeData : public NLFunctionData {
+public:
+    struct Property {
+        PropertyTypeID _propertyTypeID;
+        const Column* _values {nullptr};
+    };
+
+    NLCreateNodeData(LabelSetHandle labelsetHandle, ColumnNodeIDs* result)
+        : _result(result),
+        _labelsetHandle(labelsetHandle)
+    {
+    }
+
+    LabelSetHandle getLabelSetHandle() const { return _labelsetHandle; }
+    ColumnNodeIDs* getResult() const { return _result; }
+    const std::vector<Property>& properties() const { return _properties; }
+
+    size_t getRowCount() const {
+        return _properties.empty() ? 1 : _properties.front()._values->size();
+    }
+
+    void addProperty(const Property& property) {
+        _properties.push_back(property);
+    }
+
+private:
+    std::vector<Property> _properties;
+    ColumnNodeIDs* _result {nullptr};
+    LabelSetHandle _labelsetHandle;
+};
+
+class NLCreateEdgeData : public NLFunctionData {
+public:
+    struct Property {
+        PropertyTypeID _propertyTypeID;
+        const Column* _values {nullptr};
+    };
+
+    NLCreateEdgeData(EdgeTypeID edgeTypeID,
+                     const ColumnNodeIDs* src,
+                     bool srcIsPending,
+                     const ColumnNodeIDs* tgt,
+                     bool tgtIsPending,
+                     ColumnEdgeIDs* result)
+        : _edgeTypeID(edgeTypeID),
+        _src(src),
+        _tgt(tgt),
+        _result(result),
+        _srcIsPending(srcIsPending),
+        _tgtIsPending(tgtIsPending)
+    {
+    }
+
+    EdgeTypeID getEdgeTypeID() const { return _edgeTypeID; }
+
+    const ColumnNodeIDs* getSrc() const { return _src; }
+
+    bool isSrcPending() const { return _srcIsPending; }
+
+    const ColumnNodeIDs* getTgt() const { return _tgt; }
+
+    bool isTgtPending() const { return _tgtIsPending; }
+
+    ColumnEdgeIDs* getResult() const { return _result; }
+
+    const std::vector<Property>& properties() const { return _properties; }
+
+    void addProperty(const Property& property) {
+        _properties.push_back(property);
+    }
+
+private:
+    std::vector<Property> _properties;
+    EdgeTypeID _edgeTypeID;
+    const ColumnNodeIDs* _src {nullptr};
+    const ColumnNodeIDs* _tgt {nullptr};
+    ColumnEdgeIDs* _result {nullptr};
+    bool _srcIsPending {false};
+    bool _tgtIsPending {false};
 };
 
 // nl.output data

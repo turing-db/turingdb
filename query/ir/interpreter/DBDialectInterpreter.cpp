@@ -17,12 +17,16 @@ DBDialectInterpreter::DBDialectInterpreter(const mlir::ModuleOp& module,
                                            const GraphView* view,
                                            NLOutputSink* sink,
                                            LocalMemory* memory,
-                                           size_t chunkSize)
+                                           size_t chunkSize,
+                                           CommitWriteBuffer* writeBuffer,
+                                           MetadataBuilder* metadataBuilder)
     : _module(module),
     _view(view),
     _sink(sink),
     _memory(memory),
-    _chunkSize(chunkSize)
+    _chunkSize(chunkSize),
+    _writeBuffer(writeBuffer),
+    _metadataBuilder(metadataBuilder)
 {
 }
 
@@ -62,7 +66,7 @@ DBDialectInterpreter::Status DBDialectInterpreter::run() {
     {
         const TimePoint start = Clock::now();
 
-        NLTranslator translator(&program, _memory, _view);
+        NLTranslator translator(&program, _memory, _view, _metadataBuilder);
         translator.translate(nlFunction);
 
         const TimePoint end = Clock::now();
@@ -73,7 +77,7 @@ DBDialectInterpreter::Status DBDialectInterpreter::run() {
     {
         const TimePoint start = Clock::now();
 
-        NLExecutor executor(_view, &program, _sink);
+        NLExecutor executor(_view, &program, _sink, _writeBuffer);
         executor.run();
 
         const TimePoint end = Clock::now();

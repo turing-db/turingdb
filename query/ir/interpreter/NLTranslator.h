@@ -2,6 +2,7 @@
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 
@@ -15,11 +16,15 @@ namespace db {
 
 class LocalMemory;
 class GraphView;
+class MetadataBuilder;
 
 // Translates an MLIR func.func in the nl dialect into an NLProgram
 class NLTranslator {
 public:
-    NLTranslator(NLProgram* program, LocalMemory* memory, const GraphView* view);
+    NLTranslator(NLProgram* program,
+                 LocalMemory* memory,
+                 const GraphView* view,
+                 MetadataBuilder* metadataBuilder = nullptr);
     ~NLTranslator();
 
     void translate(const mlir::func::FuncOp& function);
@@ -79,8 +84,12 @@ private:
     NLProgram* _program {nullptr};
     LocalMemory* _memory {nullptr};
     const GraphView* _view {nullptr};
+    MetadataBuilder* _metadataBuilder {nullptr};
     llvm::DenseMap<mlir::Value, Column*> _valueSlots;
     llvm::DenseMap<mlir::Value, IteratorConfig> _iteratorConfigs;
+
+    // Set of nl.create_node result SSA values
+    llvm::DenseSet<mlir::Value> _pendingNodeValues;
 
     // nl.limit handle SSA value -> the runtime counter it produces, so the loops,
     // nl.limit_update and nl.output that name the handle find the same counter
@@ -370,6 +379,10 @@ private:
 
     void translateCheckLabelConstraint(mlir::nl::CheckLabelConstraint op, NLStmtContainer* body);
     void translateCheckEdgeTypeConstraint(mlir::nl::CheckEdgeTypeConstraint op, NLStmtContainer* body);
+
+    void translateCreateNode(mlir::nl::CreateNode createNode, NLStmtContainer* body);
+
+    void translateCreateEdge(mlir::nl::CreateEdge createEdge, NLStmtContainer* body);
 
     // Allocates singleton column for the constant and assigns MLIR value
     void translateConstant(mlir::nl::Constant constant);

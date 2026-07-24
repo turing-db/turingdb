@@ -172,6 +172,8 @@ private:
     void lowerGetNodeLabelSet(mlir::db::GetNodeLabelSet getNodeLabelSet);
     void lowerCheckLabelConstraint(mlir::db::CheckLabelConstraint checkLabelConstraint);
     void lowerCheckEdgeTypeConstraint(mlir::db::CheckEdgeTypeConstraint checkEdgeTypeConstraint);
+    void lowerCreateNode(mlir::db::CreateNode createNode);
+    void lowerCreateEdge(mlir::db::CreateEdge createEdge);
     void lowerCrossProduct(mlir::db::CrossProduct product);
     void lowerLimit(mlir::db::Limit limit);
     void lowerSkip(mlir::db::Skip skip);

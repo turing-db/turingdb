@@ -523,6 +523,32 @@ LogicalResult AggregateResult::verify() {
     return success();
 }
 
+LogicalResult CreateNode::verify() {
+    if (getLabels().empty()) {
+        return emitOpError("requires at least one label");
+    }
+
+    if (getPropNames().size() != getPropValues().size()) {
+        return emitOpError("prop_names and prop_values must have the same count, but has ")
+               << getPropNames().size() << " names and " << getPropValues().size() << " values";
+    }
+
+    return success();
+}
+
+LogicalResult CreateEdge::verify() {
+    if (getEdgeType().empty()) {
+        return emitOpError("requires a non-empty edge type");
+    }
+
+    if (getPropNames().size() != getPropValues().size()) {
+        return emitOpError("prop_names and prop_values must have the same count, but has ")
+               << getPropNames().size() << " names and " << getPropValues().size() << " values";
+    }
+
+    return success();
+}
+
 // A grouped accumulator needs at least one grouping key and one aggregate (with
 // no key it is a whole-stream aggregate, with no aggregate a projection), and
 // every kind must be a valid GroupAggregateKind. The column count is not known

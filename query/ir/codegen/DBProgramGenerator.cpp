@@ -5,6 +5,8 @@
 #include <string_view>
 #include <type_traits>
 
+#include "EntityPattern.h"
+#include "NodePattern.h"
 #include "expr/Operators.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Block.h"
@@ -44,11 +46,14 @@
 #include "expr/PropertyExpr.h"
 #include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
+#include "stmt/CreateStmt.h"
 #include "stmt/Limit.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/ReturnStmt.h"
 #include "stmt/Skip.h"
 #include "stmt/StmtContainer.h"
+#include "Symbol.h"
+#include "SymbolChain.h"
 
 #include "BioAssert.h"
 #include "FatalException.h"
@@ -237,6 +242,7 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
     generateLabelConstraints(ast);
     generateEdgeTypeConstraints(ast);
     generateFilters(ast);
+    generateCreate(ast);
     generateOutput(ast);
 
     _opBuilder.create<mlir::func::ReturnOp>(uloc);
@@ -674,6 +680,137 @@ void DBProgramGenerator::moveComponentToFactor(TranslatedComponent& component,
     _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {component._columns});
 }
 
+void DBProgramGenerator::generateCreate(const CypherAST* ast) {
+    const CypherAST::QueryCommands& queries = ast->queries();
+    if (queries.size() != 1) {
+        throw TuringException("Multiple queries not yet supported.");
+    }
+
+    const QueryCommand* query = queries.front();
+    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
+    if (!sglPart) {
+        throw TuringException("Non-single part queries are not yet supported.");
+    }
+
+    const StmtContainer* updateStmts = sglPart->getUpdateStmts();
+    if (!updateStmts) {
+        return;
+    }
+
+    // Collect MATCH-bound columns by variable name so CREATE patterns can reference them.
+    std::unordered_map<std::string_view, mlir::Value> knownVars;
+    for (const auto& [var, identities] : _varMap) {
+        if (!identities.empty()) {
+            knownVars[var->getName()] = identities.back();
+        }
+    }
+
+    const mlir::db::ColumnType nodeIDType = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
+    const mlir::db::ColumnType edgeIDType = allocColumnType(mlir::storage::EdgeIDType::get(_mlirCtxt));
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+    // Emit db.create_node for a node that is not already in knownVars, then register
+    // the result under the node's variable name so later patterns can reference it.
+    const auto resolveOrCreateNode = [&](const NodePattern* node) -> mlir::Value {
+        const VarDecl* decl = node->getDecl();
+        const std::string_view name = decl ? decl->getName() : "";
+
+        if (!name.empty() && knownVars.contains(name)) {
+            return knownVars.at(name);
+        }
+
+        llvm::SmallVector<llvm::StringRef> labelNames;
+        const SymbolChain* labels = node->labels();
+        if (labels) {
+            for (const Symbol* sym : *labels) {
+                const std::string_view symName = sym->getName();
+                labelNames.push_back(llvm::StringRef(symName.data(), symName.size()));
+            }
+        }
+
+        llvm::SmallVector<llvm::StringRef> propNames;
+        llvm::SmallVector<mlir::Value> propValues;
+        const NodePatternData* data = node->getData();
+        if (data) {
+            for (const EntityPropertyConstraint& constraint : data->exprConstraints()) {
+                translateExpr(constraint._expr);
+                const std::string_view propName = constraint._propTypeName;
+                propNames.push_back(llvm::StringRef(propName.data(), propName.size()));
+                propValues.push_back(_exprMap.at(constraint._expr));
+            }
+        }
+
+        mlir::db::CreateNode createNode = _opBuilder.create<mlir::db::CreateNode>(
+            loc,
+            nodeIDType,
+            _opBuilder.getStrArrayAttr(labelNames),
+            _opBuilder.getStrArrayAttr(propNames),
+            mlir::ValueRange{propValues});
+        const mlir::Value nodeValue = createNode.getResult();
+
+        if (!name.empty()) {
+            knownVars[name] = nodeValue;
+        }
+
+        return nodeValue;
+    };
+
+    llvm::SmallVector<llvm::StringRef> propNames;
+    llvm::SmallVector<mlir::Value> propValues;
+
+    for (const Stmt* stmt : updateStmts->stmts()) {
+        if (stmt->getKind() != Stmt::Kind::CREATE) {
+            continue;
+        }
+        const CreateStmt* createStmt = static_cast<const CreateStmt*>(stmt);
+        const Pattern* pattern = createStmt->getPattern();
+
+        for (const PatternElement* element : pattern->elements()) {
+            const EntityPattern* entPtn = element->getRootEntity();
+            const auto* nodePtn = dynamic_cast<const NodePattern*>(entPtn);
+            bioassert(nodePtn, "Unknown root entity");
+
+            mlir::Value lhsValue = resolveOrCreateNode(nodePtn);
+
+            for (auto [edge, targetNode] : element->getElementChain()) {
+                const mlir::Value rhsValue = resolveOrCreateNode(targetNode);
+
+                propNames.clear();
+                propValues.clear();
+                const EdgePatternData* edgeData = edge->getData();
+                if (edgeData) {
+                    for (const EntityPropertyConstraint& constraint : edgeData->exprConstraints()) {
+                        translateExpr(constraint._expr);
+                        const std::string_view propName = constraint._propTypeName;
+                        propNames.push_back(llvm::StringRef(propName.data(), propName.size()));
+                        propValues.push_back(_exprMap.at(constraint._expr));
+                    }
+                }
+
+                bioassert(edgeData && !edgeData->edgeTypeConstraints().empty(),
+                          "CREATE edge must have an edge type");
+                const std::string_view edgeType = edgeData->edgeTypeConstraints().front();
+
+                const mlir::Value srcValue =
+                    edge->getDirection() == EdgePattern::Direction::Backward ? rhsValue : lhsValue;
+                const mlir::Value tgtValue =
+                    edge->getDirection() == EdgePattern::Direction::Backward ? lhsValue : rhsValue;
+
+                _opBuilder.create<mlir::db::CreateEdge>(
+                    loc,
+                    edgeIDType,
+                    srcValue,
+                    tgtValue,
+                    _opBuilder.getStringAttr(edgeType),
+                    _opBuilder.getStrArrayAttr(propNames),
+                    mlir::ValueRange{propValues});
+
+                lhsValue = rhsValue;
+            }
+        }
+    }
+}
+
 void DBProgramGenerator::generateOutput(const CypherAST* ast) {
     const CypherAST::QueryCommands& queries = ast->queries();
     if (queries.size() != 1) {
@@ -688,6 +825,10 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
     }
 
     const ReturnStmt* rtn = sglPart->getReturnStmt();
+    if (!rtn) {
+        return;
+    }
+
     const Projection* proj = rtn->getProjection();
 
     const bool all = proj->isReturningAll();

@@ -85,6 +85,7 @@ private:
     // Moves a translated connected component into a CrossProduct factor
     void moveComponentToFactor(TranslatedComponent& component, mlir::Block* factorBlock);
 
+    void generateCreate(const CypherAST* ast);
     void generateOutput(const CypherAST* ast);
 
     void generatePropertyConstraints(const CypherAST* ast);
