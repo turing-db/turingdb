@@ -44,6 +44,7 @@
 #include "expr/PropertyExpr.h"
 #include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
+#include "stmt/Limit.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/ReturnStmt.h"
 #include "stmt/Skip.h"
@@ -713,6 +714,21 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
 
         auto skipOp = _opBuilder.create<mlir::db::Skip>(loc, skipResultTypes, mlir::ValueRange{outputted}, skipCount);
         outputted.assign(skipOp.getResults().begin(), skipOp.getResults().end());
+    }
+
+    if (proj->hasLimit()) {
+        const Expr* limitExpr = proj->getLimit()->getExpr();
+        const LiteralExpr* litExpr = static_cast<const LiteralExpr*>(limitExpr);
+        const IntegerLiteral* intLit = static_cast<const IntegerLiteral*>(litExpr->getLiteral());
+        const uint64_t limitCount = static_cast<uint64_t>(intLit->getValue());
+
+        llvm::SmallVector<mlir::Type> limitResultTypes;
+        for (const mlir::Value column : outputted) {
+            limitResultTypes.push_back(column.getType());
+        }
+
+        auto limitOp = _opBuilder.create<mlir::db::Limit>(loc, limitResultTypes, mlir::ValueRange{outputted}, limitCount);
+        outputted.assign(limitOp.getResults().begin(), limitOp.getResults().end());
     }
 
     _opBuilder.create<mlir::db::Output>(loc, mlir::ValueRange{outputted});
