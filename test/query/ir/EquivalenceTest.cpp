@@ -483,6 +483,19 @@ TEST_F(EquivalenceTest, skip) {
     expectEquivalent("MATCH (a), (b), (c), (d) RETURN a SKIP 10000");
 }
 
+TEST_F(EquivalenceTest, limit) {
+    expectEquivalent("MATCH (n) RETURN n LIMIT 100");
+
+    expectEquivalent("MATCH (n) RETURN n LIMIT 18");
+
+    expectEquivalent("MATCH (n) RETURN n LIMIT 5");
+    expectEquivalent("MATCH (n) RETURN n LIMIT 1");
+
+    expectEquivalent("MATCH (n) RETURN n LIMIT 0");
+
+    expectEquivalent("MATCH (a)-->(b) RETURN a, b LIMIT 3");
+}
+
 TEST_F(EquivalenceTest, comparisonFilters) {
     expectEquivalent("MATCH (n) WHERE n.age > 20 RETURN n");
 
