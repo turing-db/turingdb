@@ -860,6 +860,67 @@ def FilterOp : TuringOp<"filter", [Pure]> {
   }];
 }
 
+def CreateNode : TuringOp<"create_node"> {
+  let summary = "Create one node per input row, with given labels and property values";
+
+  let description = [{
+    `CREATE (n:Person{name:"Alice"})`
+      %name = db.constant("Alice" : !db.column<...>)
+      %n    = db.create_node (["Person"], ["name"], {%name})
+                : (!db.column<none>) -> !db.column<!storage.node_id>
+
+    `MATCH ... CREATE`,
+      %a    = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+      %name = db.get_node_properties(%a, "name") : ... -> !db.column<none>
+      %b    = db.create_node (["Bot"], ["name"], {%name})
+                : (!db.column<none>) -> !db.column<!storage.node_id>
+  }];
+
+  let arguments = (ins StrArrayAttr:$labels,
+                       StrArrayAttr:$prop_names,
+                       Variadic<Column>:$prop_values);
+  let results   = (outs ColumnNodeIDs:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $labels `,` $prop_names `,` `{` $prop_values `}` `)` attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+def CreateEdge : TuringOp<"create_edge"> {
+  let summary = "Create one edge per input row between corresponding source and target nodes";
+
+  let description = [{
+    `CREATE (a:Person)-[e:KNOWS]->(b:Person)`
+      %n_a = db.create_node (["Person"], [], {}) : () -> !db.column<!storage.node_id>
+      %n_b = db.create_node (["Person"], [], {}) : () -> !db.column<!storage.node_id>
+      %e   = db.create_edge (%n_a, %n_b, "KNOWS", [], {})
+               : (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+               -> !db.column<!storage.edge_id>
+
+    `MATCH (a) CREATE (a)-[:KNOWS]->(b:Bot)`
+      %a   = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+      %b   = db.create_node (["Bot"], [], {}) : () -> !db.column<!storage.node_id>
+      %e   = db.create_edge (%a, %b, "KNOWS", [], {})
+               : (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+               -> !db.column<!storage.edge_id>
+  }];
+
+  let arguments = (ins Column:$src_ids,
+                       Column:$tgt_ids,
+                       StrAttr:$edge_type,
+                       StrArrayAttr:$prop_names,
+                       Variadic<Column>:$prop_values);
+  let results   = (outs ColumnEdgeIDs:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $src_ids `,` $tgt_ids `,` $edge_type `,` $prop_names `,` `{` $prop_values `}` `)` attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
 /**
 * GroupAggregate
 */
