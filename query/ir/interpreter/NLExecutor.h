@@ -12,26 +12,31 @@ namespace db {
 class GraphView;
 class NLOutputSink;
 class LocalMemory;
+class CommitWriteBuffer;
 
 class NLExecutionContext {
 public:
     NLExecutionContext(const GraphView* view,
                        NLOutputSink* sink,
-                       size_t chunkSize)
+                       size_t chunkSize,
+                       CommitWriteBuffer* writeBuffer = nullptr)
         : _view(view),
         _sink(sink),
-        _chunkSize(chunkSize)
+        _chunkSize(chunkSize),
+        _writeBuffer(writeBuffer)
     {
     }
 
     const GraphView* getView() const { return _view; }
     NLOutputSink* getSink() const { return _sink; }
     size_t getChunkSize() const { return _chunkSize; }
+    CommitWriteBuffer* getWriteBuffer() const { return _writeBuffer; }
 
 private:
     const GraphView* _view {nullptr};
     NLOutputSink* _sink {nullptr};
     size_t _chunkSize {0};
+    CommitWriteBuffer* _writeBuffer {nullptr};
 };
 
 // Executes a translated NLProgram against a graph view
@@ -39,7 +44,8 @@ class NLExecutor {
 public:
     NLExecutor(const GraphView* view,
                   const NLProgram* prog,
-                  NLOutputSink* sink);
+                  NLOutputSink* sink,
+                  CommitWriteBuffer* writeBuffer = nullptr);
     ~NLExecutor();
 
     void run();
@@ -174,6 +180,10 @@ public:
     // (the key values sliced, then a list cell spanning the group's elements) chunk by
     // chunk and running the body over each.
     static void runCollectLoop(NLExecutionContext* context, NLFunctionData* data);
+
+    static void runCreateNode(NLExecutionContext* context, NLFunctionData* data);
+
+    static void runCreateEdge(NLExecutionContext* context, NLFunctionData* data);
 
     static void runOutput(NLExecutionContext* context, NLFunctionData* data);
 

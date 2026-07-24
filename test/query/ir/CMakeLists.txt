@@ -12,6 +12,7 @@ function(add_ir_tests exe_name cpp_file)
 endfunction()
 
 add_ir_tests(test_query_ir_nlexecutor NLExecutorTest.cpp)
+add_ir_tests(test_query_ir_create_node_edge CreateNodeEdgeTest.cpp)
 add_ir_tests(test_query_ir_dblowering DBLoweringTest.cpp)
 # The nested cross product execution tests run against the shared SimpleGraph fixture.
 target_link_libraries(test_query_ir_dblowering PRIVATE turing_db_examples_s)

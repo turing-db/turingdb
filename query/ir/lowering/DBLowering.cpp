@@ -402,6 +402,10 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerCheckLabelConstraint(checkLabelConstraint);
     } else if (mlir::db::CheckEdgeTypeConstraint checkEdgeTypeConstraint = mlir::dyn_cast<mlir::db::CheckEdgeTypeConstraint>(operation)) {
         lowerCheckEdgeTypeConstraint(checkEdgeTypeConstraint);
+    } else if (mlir::db::CreateNode createNode = mlir::dyn_cast<mlir::db::CreateNode>(operation)) {
+        lowerCreateNode(createNode);
+    } else if (mlir::db::CreateEdge createEdge = mlir::dyn_cast<mlir::db::CreateEdge>(operation)) {
+        lowerCreateEdge(createEdge);
     } else if (mlir::db::CrossProduct crossProduct = mlir::dyn_cast<mlir::db::CrossProduct>(operation)) {
         lowerCrossProduct(crossProduct);
     } else if (mlir::db::Limit limit = mlir::dyn_cast<mlir::db::Limit>(operation)) {
@@ -1547,6 +1551,70 @@ void DBLowering::foldSkipTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
         output.erase();
         truncate.erase();
     }
+}
+
+void DBLowering::lowerCreateNode(mlir::db::CreateNode createNode) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    llvm::SmallVector<mlir::Value, 4> propChunks;
+    for (const mlir::Value propValue : createNode.getPropValues()) {
+        propChunks.push_back(mapValue(propValue));
+    }
+
+    if (propChunks.empty()) {
+        setInsertionInto(_rootBlock);
+    } else {
+        mlir::Value reference = propChunks[0];
+        for (size_t i = 1; i < propChunks.size(); i++) {
+            mlir::Block* const block = deeperBlock(reference, propChunks[i]);
+            if (ownerBlock(propChunks[i]) == block) {
+                reference = propChunks[i];
+            }
+        }
+        setInsertionInto(ownerBlock(reference));
+    }
+
+    nl::CreateNode create = _builder.create<nl::CreateNode>(
+        loc,
+        createNode.getLabelsAttr(),
+        createNode.getPropNamesAttr(),
+        propChunks);
+    _valueMap[createNode.getResult()] = create.getResult();
+}
+
+void DBLowering::lowerCreateEdge(mlir::db::CreateEdge createEdge) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+    const mlir::Value srcChunk = mapValue(createEdge.getSrcIds());
+    const mlir::Value tgtChunk = mapValue(createEdge.getTgtIds());
+
+    llvm::SmallVector<mlir::Value, 4> propChunks;
+    for (const mlir::Value propValue : createEdge.getPropValues()) {
+        propChunks.push_back(mapValue(propValue));
+    }
+
+    mlir::Value reference = srcChunk;
+    {
+        mlir::Block* const block = deeperBlock(reference, tgtChunk);
+        if (ownerBlock(tgtChunk) == block) {
+            reference = tgtChunk;
+        }
+    }
+    for (const mlir::Value propChunk : propChunks) {
+        mlir::Block* const block = deeperBlock(reference, propChunk);
+        if (ownerBlock(propChunk) == block) {
+            reference = propChunk;
+        }
+    }
+    setInsertionInto(ownerBlock(reference));
+
+    nl::CreateEdge create = _builder.create<nl::CreateEdge>(
+        loc,
+        srcChunk,
+        tgtChunk,
+        createEdge.getEdgeTypeAttr(),
+        createEdge.getPropNamesAttr(),
+        propChunks);
+    _valueMap[createEdge.getResult()] = create.getResult();
 }
 
 void DBLowering::lowerConstant(mlir::db::ConstantOp constant) {

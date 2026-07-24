@@ -1452,4 +1452,54 @@ def Collect : NLOp<"collect", [Pure]> {
   let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
 }
 
+def CreateNode : NLOp<"create_node"> {
+  let summary = "Write one node per input row into the open transaction's write buffer";
+  let description = [{
+    Adds one pending node per row to the transaction's CommitWriteBuffer.
+    Returns a chunk of provisional nodeIDs that a following nl.create_edge can use as
+    source or target.
+
+      nl.for %nodes in %scan {
+        %n = nl.create_node ["Person"], ["name"], {%name_chunk}
+      }
+  }];
+
+  let arguments = (ins StrArrayAttr:$labels,
+                       StrArrayAttr:$prop_names,
+                       Variadic<NLChunk>:$prop_values);
+  let results   = (outs NLNodeIDChunk:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    $labels `,` $prop_names `,` `{` $prop_values `}` attr-dict
+    ( `:` qualified(type($prop_values))^ )?
+  }];
+}
+
+def CreateEdge : NLOp<"create_edge"> {
+  let summary = "Write one edge per input row into the open transaction's write buffer";
+  let description = [{
+    Adds one pending edge per row to the transaction's CommitWriteBuffer.
+    `src_ids` and `tgt_ids` are zipped pairwise
+
+      nl.for %nodes in %scan {
+        %n = nl.create_node ["Bot"], [], {}
+        %e = nl.create_edge %nodes, %n, "KNOWS", [], {}
+      }
+  }];
+
+  let arguments = (ins NLNodeIDChunk:$src_ids,
+                       NLNodeIDChunk:$tgt_ids,
+                       StrAttr:$edge_type,
+                       StrArrayAttr:$prop_names,
+                       Variadic<NLChunk>:$prop_values);
+  let results   = (outs NLEdgeIDChunk:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    $src_ids `,` $tgt_ids `,` $edge_type `,` $prop_names `,` `{` $prop_values `}` attr-dict
+    ( `:` qualified(type($prop_values))^ )?
+  }];
+}
+
 #endif //TURINGDB_NL_OPS

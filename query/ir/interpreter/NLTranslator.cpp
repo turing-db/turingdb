@@ -14,10 +14,13 @@
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 #include "metadata/GraphMetadata.h"
+#include "metadata/LabelSet.h"
+#include "metadata/LabelSetHandle.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
 #include "views/GraphView.h"
+#include "writers/MetadataBuilder.h"
 
 #include "NLExecutor.h"
 
@@ -182,6 +185,17 @@ ValueType nullableChunkValueType(mlir::Type chunkType) {
     return valueTypeFromElementType(nullableType.getValueType());
 }
 
+ValueType valueTypeFromChunkType(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+    const mlir::Type elementType = chunk.getElementType();
+
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        return valueTypeFromElementType(nullableType.getValueType());
+    }
+
+    return valueTypeFromElementType(elementType);
+}
+
 bool isConstantLike(mlir::Value value) {
     mlir::Operation* definingOp = value.getDefiningOp();
     if (!definingOp) {
@@ -204,10 +218,14 @@ bool isConstantLike(mlir::Value value) {
 
 }
 
-NLTranslator::NLTranslator(NLProgram* program, LocalMemory* memory, const GraphView* view)
+NLTranslator::NLTranslator(NLProgram* program,
+                           LocalMemory* memory,
+                           const GraphView* view,
+                           MetadataBuilder* metadataBuilder)
     : _program(program),
     _memory(memory),
-    _view(view)
+    _view(view),
+    _metadataBuilder(metadataBuilder)
 {
 }
 
@@ -375,6 +393,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateCollectBuffer(collectBuffer, body);
         } else if (nl::CollectUpdate collectUpdate = mlir::dyn_cast<nl::CollectUpdate>(operation)) {
             translateCollectUpdate(collectUpdate, body);
+        } else if (nl::CreateNode createNode = mlir::dyn_cast<nl::CreateNode>(operation)) {
+            translateCreateNode(createNode, body);
+        } else if (nl::CreateEdge createEdge = mlir::dyn_cast<nl::CreateEdge>(operation)) {
+            translateCreateEdge(createEdge, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
@@ -692,6 +714,87 @@ void NLTranslator::translateCheckEdgeTypeConstraint(nl::CheckEdgeTypeConstraint 
     }
 
     body->emplaceStmt(&NLExecutor::runCheckEdgeTypeConstraint, data);
+}
+
+void NLTranslator::translateCreateNode(nl::CreateNode createNode, NLStmtContainer* body) {
+    if (!_metadataBuilder) {
+        throw IRException("nl.create_node requires a MetadataBuilder (write transaction)");
+    }
+
+    LabelSet labelset;
+    for (const mlir::Attribute attr : createNode.getLabels()) {
+        const llvm::StringRef labelName = mlir::cast<mlir::StringAttr>(attr).getValue();
+        const LabelID labelID = _metadataBuilder->getOrCreateLabel(labelName);
+        labelset.set(labelID);
+    }
+
+    const LabelSetHandle labelsetHandle = _metadataBuilder->getOrCreateLabelSet(labelset);
+
+    ColumnNodeIDs* result = _memory->alloc<ColumnNodeIDs>();
+    _valueSlots[createNode.getResult()] = result;
+    _pendingNodeValues.insert(createNode.getResult());
+
+    NLCreateNodeData* data = _program->allocFunctionData<NLCreateNodeData>(labelsetHandle, result);
+
+    const mlir::OperandRange propValues = createNode.getPropValues();
+    const mlir::ArrayAttr propNames = createNode.getPropNames();
+
+    for (size_t propIndex = 0; propIndex < propNames.size(); propIndex++) {
+        const llvm::StringRef propName = mlir::cast<mlir::StringAttr>(propNames[propIndex]).getValue();
+        const mlir::Value propValue = propValues[propIndex];
+        const ValueType valueType = valueTypeFromChunkType(propValue.getType());
+
+        const PropertyType propType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
+        const Column* propColumn = getColumn(propValue);
+
+        data->addProperty({._propertyTypeID=propType._id, ._values=propColumn});
+    }
+
+    body->emplaceStmt(&NLExecutor::runCreateNode, data);
+}
+
+void NLTranslator::translateCreateEdge(nl::CreateEdge createEdge, NLStmtContainer* body) {
+    if (!_metadataBuilder) {
+        throw IRException("nl.create_edge requires a MetadataBuilder (write transaction)");
+    }
+
+    const llvm::StringRef edgeTypeName = createEdge.getEdgeType();
+    const EdgeTypeID edgeTypeID = _metadataBuilder->getOrCreateEdgeType(edgeTypeName);
+
+    const mlir::Value srcValue = createEdge.getSrcIds();
+    const mlir::Value tgtValue = createEdge.getTgtIds();
+    const bool srcIsPending = _pendingNodeValues.contains(srcValue);
+    const bool tgtIsPending = _pendingNodeValues.contains(tgtValue);
+
+    const ColumnNodeIDs* srcColumn = static_cast<const ColumnNodeIDs*>(getColumn(srcValue));
+    const ColumnNodeIDs* tgtColumn = static_cast<const ColumnNodeIDs*>(getColumn(tgtValue));
+
+    ColumnEdgeIDs* result = _memory->alloc<ColumnEdgeIDs>();
+    _valueSlots[createEdge.getResult()] = result;
+
+    NLCreateEdgeData* data = _program->allocFunctionData<NLCreateEdgeData>(
+        edgeTypeID,
+        srcColumn,
+        srcIsPending,
+        tgtColumn,
+        tgtIsPending,
+        result);
+
+    const mlir::OperandRange propValues = createEdge.getPropValues();
+    const mlir::ArrayAttr propNames = createEdge.getPropNames();
+
+    for (size_t propIndex = 0; propIndex < propNames.size(); propIndex++) {
+        const llvm::StringRef propName = mlir::cast<mlir::StringAttr>(propNames[propIndex]).getValue();
+        const mlir::Value propValue = propValues[propIndex];
+        const ValueType valueType = valueTypeFromChunkType(propValue.getType());
+
+        const PropertyType propType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
+        const Column* propColumn = getColumn(propValue);
+
+        data->addProperty({._propertyTypeID=propType._id, ._values=propColumn});
+    }
+
+    body->emplaceStmt(&NLExecutor::runCreateEdge, data);
 }
 
 void NLTranslator::translateConstant(nl::Constant constant) {

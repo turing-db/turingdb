@@ -28,6 +28,8 @@
 #include "columns/UnaryPredicates.h"
 #include "metadata/PropertyType.h"
 
+#include "versioning/CommitWriteBuffer.h"
+
 #include "NLProgram.h"
 #include "NLOutputSink.h"
 
@@ -1064,12 +1066,161 @@ void runEdgeLoopSteps(NLExecutionContext* context,
     }
 }
 
+class ConstPropertyExtractor {
+public:
+    ConstPropertyExtractor(CommitWriteBuffer::UntypedProperties& buf,
+                           PropertyTypeID propID,
+                           size_t rowCount)
+        : _buf(buf),
+        _propID(propID),
+        _rowCount(rowCount)
+    {
+    }
+
+    template <typename T>
+    void operator()(const ColumnConst<T>* typed) {
+        _buf.clear();
+        _buf.reserve(_rowCount);
+        for (size_t i = 0; i < _rowCount; i++) {
+            _buf.emplace_back(_propID, typed->getRaw());
+        }
+    }
+
+    void operator()(const ColumnConst<types::String::Primitive>* typed) {
+        _buf.clear();
+        _buf.reserve(_rowCount);
+        for (size_t i = 0; i < _rowCount; i++) {
+            _buf.emplace_back(_propID, std::string(typed->getRaw()));
+        }
+    }
+
+    void operator()(const ColumnConst<types::Embedding::Primitive>* typed) {
+        _buf.clear();
+        _buf.reserve(_rowCount);
+        const types::Embedding::Primitive span = typed->getRaw();
+        for (size_t i = 0; i < _rowCount; i++) {
+            _buf.emplace_back(_propID, types::Embedding::OwningPrimitive(span.begin(), span.end()));
+        }
+    }
+
+private:
+    CommitWriteBuffer::UntypedProperties& _buf;
+    PropertyTypeID _propID;
+    size_t _rowCount;
+};
+
+class VectorPropertyExtractor {
+public:
+    VectorPropertyExtractor(CommitWriteBuffer::UntypedProperties& buf,
+                            PropertyTypeID propID)
+        : _buf(buf),
+        _propID(propID)
+    {
+    }
+
+    template <typename T>
+    void operator()(const ColumnVector<T>* typed) {
+        _buf.clear();
+        _buf.reserve(typed->size());
+        for (const T& val : *typed) {
+            _buf.emplace_back(_propID, val);
+        }
+    }
+
+    void operator()(const ColumnVector<types::String::Primitive>* typed) {
+        _buf.clear();
+        _buf.reserve(typed->size());
+        for (const types::String::Primitive val : *typed) {
+            _buf.emplace_back(_propID, std::string(val));
+        }
+    }
+
+    void operator()(const ColumnVector<types::Embedding::Primitive>* typed) {
+        _buf.clear();
+        _buf.reserve(typed->size());
+        for (const types::Embedding::Primitive val : *typed) {
+            _buf.emplace_back(_propID, types::Embedding::OwningPrimitive(val.begin(), val.end()));
+        }
+    }
+
+    template <typename T>
+    void operator()(const ColumnVector<std::optional<T>>* typed) {
+        _buf.clear();
+        _buf.reserve(typed->size());
+        for (const std::optional<T>& val : *typed) {
+            if (!val) {
+                throw IRException("Cannot set a property to NULL in CREATE.");
+            }
+            _buf.emplace_back(_propID, *val);
+        }
+    }
+
+    void operator()(const ColumnVector<std::optional<types::String::Primitive>>* typed) {
+        _buf.clear();
+        _buf.reserve(typed->size());
+        for (const std::optional<types::String::Primitive>& val : *typed) {
+            if (!val) {
+                throw IRException("Cannot set a property to NULL in CREATE.");
+            }
+            _buf.emplace_back(_propID, std::string(*val));
+        }
+    }
+
+    void operator()(const ColumnVector<std::optional<types::Embedding::Primitive>>* typed) {
+        _buf.clear();
+        _buf.reserve(typed->size());
+        for (const std::optional<types::Embedding::Primitive>& val : *typed) {
+            if (!val) {
+                throw IRException("Cannot set a property to NULL in CREATE.");
+            }
+            _buf.emplace_back(_propID, types::Embedding::OwningPrimitive(val->begin(), val->end()));
+        }
+    }
+
+private:
+    CommitWriteBuffer::UntypedProperties& _buf;
+    PropertyTypeID _propID;
+};
+
+void extractColumnProperties(const Column* column,
+                             size_t rowCount,
+                             PropertyTypeID propID,
+                             CommitWriteBuffer::UntypedProperties& buf) {
+    using Types = WriteProcessorPropertyTypes;
+
+    const ContainerKind::Code containerKind = ColumnKind::extractContainerKind(column->getKind());
+
+    if (containerKind == ContainerKind::code<ColumnConst>()) {
+        ConstPropertyExtractor extractor(buf, propID, rowCount);
+        ColumnSingleDispatcher<Types::AllowedConst,
+                               ConstPropertyExtractor,
+                               Types::ExcludedConst>::dispatch(column, extractor);
+    } else {
+        VectorPropertyExtractor extractor(buf, propID);
+        ColumnSingleDispatcher<Types::AllowedVector,
+                               VectorPropertyExtractor,
+                               Types::ExcludedVector>::dispatch(column, extractor);
+    }
+}
+
+CommitWriteBuffer::ExistingOrPendingNode resolveNode(const ColumnNodeIDs* column,
+                                                     size_t row,
+                                                     bool isPending) {
+    const NodeID nodeID = (*column)[row];
+    if (isPending) {
+        return CommitWriteBuffer::PendingNodeOffset(nodeID.getValue());
+    } else {
+        return nodeID;
+    }
+}
+
 }
 
 NLExecutor::NLExecutor(const GraphView* view,
                              const NLProgram* prog,
-                             NLOutputSink* sink)
-    : _ctxt(view, sink, prog->getChunkSize()),
+                             NLOutputSink* sink,
+                             CommitWriteBuffer* writeBuffer)
+    : _ctxt(view, sink, prog->getChunkSize(), writeBuffer),
     _prog(prog)
 {
 }
@@ -1079,6 +1230,75 @@ NLExecutor::~NLExecutor() {
 
 void NLExecutor::run() {
     runBody(&_ctxt, _prog->getStmts());
+}
+
+void NLExecutor::runCreateNode(NLExecutionContext* context, NLFunctionData* data) {
+    NLCreateNodeData* createData = static_cast<NLCreateNodeData*>(data);
+    CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
+    bioassert(writeBuffer, "nl.create_node requires an active write transaction");
+
+    const size_t rowCount = createData->getRowCount();
+    const size_t firstOffset = writeBuffer->numPendingNodes();
+    const LabelSetHandle labelsetHandle = createData->getLabelSetHandle();
+
+    for (size_t row = 0; row < rowCount; row++) {
+        CommitWriteBuffer::PendingNode& node = writeBuffer->newPendingNode();
+        node.labelsetHandle = labelsetHandle;
+    }
+
+    CommitWriteBuffer::UntypedProperties propsBuffer;
+
+    for (const NLCreateNodeData::Property& prop : createData->properties()) {
+        extractColumnProperties(prop._values, rowCount, prop._propertyTypeID, propsBuffer);
+
+        for (size_t row = 0; row < rowCount; row++) {
+            writeBuffer->getPendingNode(firstOffset + row).properties.push_back(propsBuffer[row]);
+        }
+    }
+
+    ColumnNodeIDs* result = createData->getResult();
+    result->resize(rowCount);
+    for (size_t row = 0; row < rowCount; row++) {
+        (*result)[row] = NodeID(firstOffset + row);
+    }
+}
+
+void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data) {
+    NLCreateEdgeData* createData = static_cast<NLCreateEdgeData*>(data);
+    CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
+    bioassert(writeBuffer, "nl.create_edge requires an active write transaction");
+
+    const ColumnNodeIDs* src = createData->getSrc();
+    const ColumnNodeIDs* tgt = createData->getTgt();
+    const bool srcIsPending = createData->isSrcPending();
+    const bool tgtIsPending = createData->isTgtPending();
+    const size_t rowCount = src->size();
+    const EdgeTypeID edgeTypeID = createData->getEdgeTypeID();
+
+    for (size_t row = 0; row < rowCount; row++) {
+        const CommitWriteBuffer::ExistingOrPendingNode srcNode = resolveNode(src, row, srcIsPending);
+        const CommitWriteBuffer::ExistingOrPendingNode tgtNode = resolveNode(tgt, row, tgtIsPending);
+
+        CommitWriteBuffer::PendingEdge& edge = writeBuffer->newPendingEdge(srcNode, tgtNode);
+        edge.edgeType = edgeTypeID;
+    }
+
+    CommitWriteBuffer::UntypedProperties propsBuffer;
+    const size_t firstEdgeOffset = writeBuffer->numPendingEdges() - rowCount;
+
+    for (const NLCreateEdgeData::Property& prop : createData->properties()) {
+        extractColumnProperties(prop._values, rowCount, prop._propertyTypeID, propsBuffer);
+
+        for (size_t row = 0; row < rowCount; row++) {
+            writeBuffer->getPendingEdge(firstEdgeOffset + row).properties.push_back(propsBuffer[row]);
+        }
+    }
+
+    ColumnEdgeIDs* result = createData->getResult();
+    result->resize(rowCount);
+    for (size_t row = 0; row < rowCount; row++) {
+        (*result)[row] = EdgeID(firstEdgeOffset + row);
+    }
 }
 
 void NLExecutor::runScanNodesLoop(NLExecutionContext* context, NLFunctionData* data) {

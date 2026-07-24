@@ -11,6 +11,8 @@ namespace db {
 class GraphView;
 class NLOutputSink;
 class LocalMemory;
+class CommitWriteBuffer;
+class MetadataBuilder;
 
 // Executes an nl-dialect MLIR module against a GraphView
 class NLInterpreter {
@@ -38,7 +40,9 @@ public:
                   const GraphView* view,
                   NLOutputSink* sink,
                   LocalMemory* memory,
-                  size_t chunkSize = ChunkConfig::CHUNK_SIZE);
+                  size_t chunkSize = ChunkConfig::CHUNK_SIZE,
+                  CommitWriteBuffer* writeBuffer = nullptr,
+                  MetadataBuilder* metadataBuilder = nullptr);
     ~NLInterpreter();
 
     Status run();
@@ -49,6 +53,8 @@ private:
     NLOutputSink* _sink {nullptr};
     LocalMemory* _memory {nullptr};
     size_t _chunkSize {ChunkConfig::CHUNK_SIZE};
+    CommitWriteBuffer* _writeBuffer {nullptr};
+    MetadataBuilder* _metadataBuilder {nullptr};
 };
 
 }
