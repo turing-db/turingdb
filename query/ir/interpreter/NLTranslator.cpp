@@ -727,6 +727,7 @@ void NLTranslator::translateCreateNode(nl::CreateNode createNode, NLStmtContaine
         const LabelID labelID = _metadataBuilder->getOrCreateLabel(labelName);
         labelset.set(labelID);
     }
+    bioassert(not labelset.empty(), "Node must have at least one label.");
 
     const LabelSetHandle labelsetHandle = _metadataBuilder->getOrCreateLabelSet(labelset);
 
