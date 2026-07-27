@@ -228,7 +228,14 @@ jobs:
       run: |
         uv venv .venv-test --python ${{ matrix.python_version }}
         uv pip install wheel/*.whl --python .venv-test/bin/python
-        .venv-test/bin/turingdb --help
+        # Run the smoke test under the same host lock the regress step uses. The
+        # regress suite does a host-wide `pkill -9 turingdb`, and the self-hosted
+        # macOS minis share one host with no PID isolation, so an unlocked
+        # `turingdb --help` here can be SIGKILLed (exit 137) by a sibling job's
+        # regress. Holding the lock serializes it against regress so it is never
+        # caught in that pkill. The contract is: anything that runs turingdb on
+        # the shared host takes this lock.
+        python3 scripts/with_host_lock.py /tmp/turingdb-regress.lock .venv-test/bin/turingdb --help
 
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v4
