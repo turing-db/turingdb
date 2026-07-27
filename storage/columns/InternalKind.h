@@ -7,11 +7,13 @@
 
 #include "EntityList.h"
 #include "columns/KindTypes.h"
+#include "map/MapEntryView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "versioning/ChangeID.h"
 #include "GraphPath.h"
 #include "list/ListView.h"
+#include "map/MapView.h"
 
 namespace db {
 
@@ -95,7 +97,9 @@ public:
         const Change*,
         Column*,
         ListView,
-        ListElementView
+        ListElementView,
+        MapView,
+        MapEntryView
     >;
 
     using Code = uint8_t;

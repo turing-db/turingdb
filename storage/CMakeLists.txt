@@ -17,6 +17,10 @@ set(storage_sources
         list/ListElementViewBuffer.cpp
         list/ListWriteCursor.cpp
 
+        map/MapByteBuffer.cpp
+        map/MapBuffer.cpp
+        map/MapEntryViewBuffer.cpp
+
         metadata/EdgeTypeMap.cpp
         metadata/PropertyTypeMap.cpp
         metadata/LabelMap.cpp
