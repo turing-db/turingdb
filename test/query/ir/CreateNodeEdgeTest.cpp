@@ -104,11 +104,11 @@ protected:
 // CREATE (n:Person)
 TEST_F(CreateNodeEdgeTest, createSingleNode) {
     constexpr const char* program = R"mlir(
-func.func @main() {
-  %n = db.create_node (["Person"], [], {}) : () -> !db.column<!storage.node_id>
-  return
-}
-)mlir";
+        func.func @main() {
+          %n = db.create_node (["Person"], [], {}) : () -> !db.column<!storage.node_id>
+          return
+        }
+        )mlir";
 
     runCreateProgram(program);
 
@@ -124,15 +124,15 @@ func.func @main() {
 // CREATE (a:Person)-[:KNOWS]->(b:Person)
 TEST_F(CreateNodeEdgeTest, createEdgeBetweenNewNodes) {
     constexpr const char* program = R"mlir(
-func.func @main() {
-  %a = db.create_node (["Person"], [], {}) : () -> !db.column<!storage.node_id>
-  %b = db.create_node (["Person"], [], {}) : () -> !db.column<!storage.node_id>
-  %e = db.create_edge (%a, %b, "KNOWS", [], {})
-         : (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
-         -> !db.column<!storage.edge_id>
-  return
-}
-)mlir";
+        func.func @main() {
+          %a = db.create_node (["Person"], [], {}) : () -> !db.column<!storage.node_id>
+          %b = db.create_node (["Person"], [], {}) : () -> !db.column<!storage.node_id>
+          %e = db.create_edge (%a, %b, "KNOWS", [], {})
+                 : (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+                 -> !db.column<!storage.edge_id>
+          return
+        }
+        )mlir";
 
     runCreateProgram(program);
 
@@ -158,13 +158,13 @@ func.func @main() {
 // CREATE (n:Person {name: "Alice"})
 TEST_F(CreateNodeEdgeTest, createNodeWithStringProperty) {
     constexpr const char* program = R"mlir(
-func.func @main() {
-  %name = db.constant("Alice" : !storage.string)
-  %n = db.create_node (["Person"], ["name"], {%name})
-         : (!db.column<!storage.string>) -> !db.column<!storage.node_id>
-  return
-}
-)mlir";
+        func.func @main() {
+          %name = db.constant("Alice" : !storage.string)
+          %n = db.create_node (["Person"], ["name"], {%name})
+                 : (!db.column<!storage.string>) -> !db.column<!storage.node_id>
+          return
+        }
+        )mlir";
 
     runCreateProgram(program);
 
