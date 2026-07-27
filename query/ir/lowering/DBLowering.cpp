@@ -1562,11 +1562,8 @@ void DBLowering::lowerCreateNode(mlir::db::CreateNode createNode) {
     }
 
     if (propChunks.empty()) {
-        // No props to anchor block selection. Scan create_edge uses of this
-        // result: if the edge's other endpoint is already mapped to a loop body
-        // chunk, this create_node must live in that block so its result dominates
-        // the edge emission. Fall back to the entry block for pure CREATE with no
-        // MATCH context.
+        // Try find a block where the result of this create_node is used to create an edge
+        // Otherwise: entry block
         mlir::Block* targetBlock = _entryBlock;
         for (const mlir::OpOperand& use : createNode.getResult().getUses()) {
             auto createEdge = mlir::dyn_cast<mlir::db::CreateEdge>(use.getOwner());
@@ -1584,9 +1581,14 @@ void DBLowering::lowerCreateNode(mlir::db::CreateNode createNode) {
                 mlir::Block* const candidateBlock = ownerBlock(it->second);
                 if (candidateBlock != _entryBlock) {
                     targetBlock = candidateBlock;
+                    break;
                 }
             }
+            if (targetBlock != _entryBlock) {
+                break;
+            }
         }
+
         setInsertionInto(targetBlock);
     } else {
         mlir::Value reference = propChunks[0];

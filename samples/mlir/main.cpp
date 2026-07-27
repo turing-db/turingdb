@@ -51,6 +51,11 @@
 #include "columns/ColumnOptVector.h"
 
 #include "LocalMemory.h"
+#include "JobSystem.h"
+#include "versioning/Change.h"
+#include "versioning/CommitBuilder.h"
+#include "versioning/CommitWriteBuffer.h"
+#include "writers/MetadataBuilder.h"
 
 using namespace db;
 
@@ -510,20 +515,46 @@ QueryDialect classifyDialect(mlir::func::FuncOp function) {
     return *dialect;
 }
 
+// Returns true if the module's main function contains any db.create_node or
+// db.create_edge ops — i.e. the query has write effects.
+bool moduleHasCreateOps(mlir::ModuleOp& module) {
+    const mlir::func::FuncOp mainFunction = module.lookupSymbol<mlir::func::FuncOp>("main");
+    if (!mainFunction) {
+        return false;
+    }
+
+    bool found = false;
+    mainFunction->walk([&](mlir::Operation* operation) {
+        if (mlir::isa<mlir::db::CreateNode, mlir::db::CreateEdge>(operation)) {
+            found = true;
+            return mlir::WalkResult::interrupt();
+        }
+        return mlir::WalkResult::advance();
+    });
+
+    return found;
+}
+
 // Runs the module's main function against the view, pushing output into sink.
 // A db-dialect "main" runs through DBDialectInterpreter, which lowers it to the
 // nl dialect first; an nl-dialect "main" runs straight through NLInterpreter.
+// writeBuffer and metadataBuilder are non-null only for write queries.
 void runModuleMain(mlir::ModuleOp& module,
                    const GraphView& view,
                    LocalMemory& memory,
-                   NLOutputSink& sink) {
+                   NLOutputSink& sink,
+                   CommitWriteBuffer* writeBuffer,
+                   MetadataBuilder* metadataBuilder) {
     const mlir::func::FuncOp mainFunction = module.lookupSymbol<mlir::func::FuncOp>("main");
     if (!mainFunction) {
         throw std::runtime_error("-exec requires a 'main' function in the module");
     }
 
     if (classifyDialect(mainFunction) == QueryDialect::DB) {
-        DBDialectInterpreter interpreter(module, &view, &sink, &memory);
+        DBDialectInterpreter interpreter(module, &view, &sink, &memory,
+                                        ChunkConfig::CHUNK_SIZE,
+                                        writeBuffer,
+                                        metadataBuilder);
         const DBDialectInterpreter::Status status = interpreter.run();
         std::cout << "[DBDialectInterpreter] lowering: " << status.getLowerMilliseconds() << " ms, "
                   << "translation: " << status.getTranslateMilliseconds() << " ms, "
@@ -550,21 +581,48 @@ void executeModule(mlir::ModuleOp& module, const std::string& graphDir, bool qui
         throw std::runtime_error(loadResult.error().fmtMessage());
     }
 
+    const bool isWrite = moduleHasCreateOps(module);
+
+    // Write queries open a change and grab the write buffer and metadata builder
+    // from the tip commit. Read queries use a read-only snapshot.
+    std::unique_ptr<Change> change;
+    CommitWriteBuffer* writeBuffer = nullptr;
+    MetadataBuilder* metadataBuilder = nullptr;
+    JobSystem jobSystem;
+
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
     const GraphView& view = reader.getView();
+
+    if (isWrite) {
+        jobSystem.init();
+        change = graph->newChange();
+        CommitBuilder* commitBuilder = change->access().getTip();
+        writeBuffer = &commitBuilder->writeBuffer();
+        metadataBuilder = &commitBuilder->metadata();
+    }
 
     LocalMemory memory;
 
     size_t rowCount = 0;
     if (quiet) {
         CountingSink sink;
-        runModuleMain(module, view, memory, sink);
+        runModuleMain(module, view, memory, sink, writeBuffer, metadataBuilder);
         rowCount = sink.getRowCount();
     } else {
         PrintingSink sink;
-        runModuleMain(module, view, memory, sink);
+        runModuleMain(module, view, memory, sink, writeBuffer, metadataBuilder);
         rowCount = sink.getRowCount();
+    }
+
+    if (isWrite) {
+        if (auto res = change->access().commit(jobSystem); !res) {
+            throw std::runtime_error("commit failed: " + res.error().fmtMessage());
+        }
+        if (auto res = change->access().submit(jobSystem); !res) {
+            throw std::runtime_error("submit failed: " + res.error().fmtMessage());
+        }
+        std::cout << "change committed and submitted\n";
     }
 
     std::cout << rowCount << " rows\n";
