@@ -43,7 +43,7 @@ else
         # the old .deb, so the cached index 404s at install. apt-get update
         # re-syncs it.
         sudo apt-get update
-        sudo apt-get install -y cmake build-essential m4 lsb-release patchelf
+        sudo apt-get install -y build-essential m4 lsb-release patchelf
 
         # Apache Arrow requires CMake >= 3.25, but Ubuntu 22.04 (jammy) ships
         # 3.22.x. When the distro's cmake is too old, pull a newer one from
@@ -51,7 +51,7 @@ else
         # LLVM repo below). Newer distros already satisfy the requirement and
         # are left on their distro package.
         REQUIRED_CMAKE_VERSION=3.25
-        INSTALLED_CMAKE_VERSION=$(cmake --version | head -1 | awk '{print $3}')
+        INSTALLED_CMAKE_VERSION=$(cmake --version 2>/dev/null | head -1 | awk '{print $3}')
         OLDEST_CMAKE_VERSION=$(printf '%s\n%s\n' "$REQUIRED_CMAKE_VERSION" "$INSTALLED_CMAKE_VERSION" | sort -V | head -1)
         if [ "$OLDEST_CMAKE_VERSION" != "$REQUIRED_CMAKE_VERSION" ]; then
             echo "cmake ${INSTALLED_CMAKE_VERSION} is older than ${REQUIRED_CMAKE_VERSION}; installing a newer cmake from Kitware..."
