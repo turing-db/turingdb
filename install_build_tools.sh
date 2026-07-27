@@ -43,6 +43,7 @@ else
         # the old .deb, so the cached index 404s at install. apt-get update
         # re-syncs it.
         sudo apt-get update
+        sudo apt-get purge -y cmake cmake-data 2>/dev/null || true
         sudo apt-get install -y build-essential m4 lsb-release patchelf
 
         # Apache Arrow requires CMake >= 3.25, but Ubuntu 22.04 (jammy) ships
