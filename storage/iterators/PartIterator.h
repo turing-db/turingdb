@@ -32,6 +32,10 @@ public:
         return _it != _itEnd;
     }
 
+    bool isEnd() const {
+        return _it == _itEnd;
+    }
+
     bool isNotStart() const {
         return _it != _itStart;
     }
@@ -54,6 +58,10 @@ public:
 
     void skipToEnd() {
         _it = _itEnd;
+    }
+
+    void goToStart() {
+        _it = _itStart;
     }
 
 private:
