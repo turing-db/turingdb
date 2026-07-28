@@ -64,6 +64,7 @@ private:
     std::unordered_map<std::string_view, Command> _localCommands;
 
     void processLine(std::string& line);
+    void runMLIRQuery(std::string_view query);
     void formatMessage(std::string& msg);
     std::string composePrompt();
     void checkShellContext();
