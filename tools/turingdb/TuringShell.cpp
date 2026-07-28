@@ -23,6 +23,25 @@
 #include "LineNoiseHandle.h"
 #include "LocalMemory.h"
 
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/OwningOpRef.h"
+
+#include "DBDialect.h"
+#include "DBDialectInterpreter.h"
+#include "DBProgramGenerator.h"
+#include "NLDialect.h"
+#include "NLOutputSink.h"
+#include "StorageDialect.h"
+
+#include "CypherAST.h"
+#include "CypherAnalyzer.h"
+#include "CypherParser.h"
+
+#include "views/GraphView.h"
+
 #include "columns/Block.h"
 #include "columns/Column.h"
 #include "columns/ColumnVector.h"
@@ -331,7 +350,7 @@ void shCommand(const TuringShell::Command::Words& args, TuringShell& shell, std:
     }
 }
 
-} // namespace
+}
 
 TuringShell::TuringShell(TuringDB& turingDB,
                          LocalMemory* mem,
@@ -681,6 +700,131 @@ void queryCallback(size_t execCount, const Dataframe* df, tabulate::Table& table
     }
 }
 
+namespace {
+
+class TuringShellNLSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        if (_execCount == 0) {
+            tabulate::RowStream headerRow;
+            for (size_t columnIndex = 0; columnIndex < chunks.size(); columnIndex++) {
+                headerRow << ("$" + std::to_string(columnIndex));
+            }
+            _table.add_row(std::move(headerRow));
+        }
+
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            tabulate::RowStream rs;
+            for (const Column* col : chunks) {
+                switch (col->getKind()) {
+                    TABULATE_COL_CASE(ColumnVector<NodeID>, rowIndex)
+                    TABULATE_COL_CASE(ColumnVector<EdgeID>, rowIndex)
+                    TABULATE_COL_CASE(ColumnVector<EdgeTypeID>, rowIndex)
+                    TABULATE_COL_CASE(ColumnVector<types::UInt64::Primitive>, rowIndex)
+                    TABULATE_COL_CASE(ColumnOptVector<types::Int64::Primitive>, rowIndex)
+                    TABULATE_COL_CASE(ColumnOptVector<types::Double::Primitive>, rowIndex)
+                    TABULATE_COL_CASE(ColumnOptVector<types::Bool::Primitive>, rowIndex)
+                    TABULATE_COL_CASE(ColumnOptVector<types::String::Primitive>, rowIndex)
+                    default: {
+                        rs << "?";
+                    } break;
+                }
+            }
+            _table.add_row(std::move(rs));
+            _rowCount++;
+        }
+
+        _execCount++;
+    }
+
+    tabulate::Table& getTable() { return _table; }
+    size_t getRowCount() const { return _rowCount; }
+
+private:
+    tabulate::Table _table;
+    size_t _execCount {0};
+    size_t _rowCount {0};
+};
+
+}
+
+void TuringShell::runMLIRQuery(std::string_view query) {
+    if (_remoteConnected) {
+        spdlog::error("#v3 is only available in local mode");
+        return;
+    }
+
+    const TimePoint start = Clock::now();
+
+    SystemAccessor system = _turingDB.getSystemManager().accessShared();
+
+    auto txRes = system.openTransaction(_graphName, _hash, _changeID);
+    if (!txRes) {
+        spdlog::error("Could not open transaction: {}", txRes.error().fmtMessage());
+        return;
+    }
+
+    const GraphView view = txRes->viewGraph();
+
+    CypherAST ast(system.getProcedures(), query);
+    CypherParser parser(&ast);
+    try {
+        parser.parse(query);
+    } catch (const TuringException& e) {
+        spdlog::error("Parse error: {}", e.what());
+        return;
+    }
+
+    CypherAnalyzer analyzer(&ast, view);
+    try {
+        analyzer.analyze();
+    } catch (const TuringException& e) {
+        spdlog::error("Analyze error: {}", e.what());
+        return;
+    }
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    mlir::OpBuilder builder(&context);
+    mlir::OwningOpRef<mlir::ModuleOp> owningModule = mlir::ModuleOp::create(builder.getUnknownLoc());
+    mlir::ModuleOp module = owningModule.get();
+
+    DBProgramGenerator generator(&module);
+    try {
+        generator.generate(&ast);
+    } catch (const TuringException& e) {
+        spdlog::error("IR generation error: {}", e.what());
+        return;
+    }
+
+    TuringShellNLSink sink;
+    DBDialectInterpreter interpreter(module, &view, &sink, _mem);
+    try {
+        interpreter.run();
+    } catch (const TuringException& e) {
+        spdlog::error("MLIR execution error: {}", e.what());
+        return;
+    }
+
+    const TimePoint end = Clock::now();
+    const Milliseconds elapsed = end - start;
+
+    if (_mem) {
+        _mem->clear();
+    }
+
+    if (!_quiet) {
+        std::cout << sink.getTable() << "\n";
+    }
+
+    std::cout << "Query returned " << sink.getRowCount() << " rows.\n";
+    std::cout << "Query executed in " << elapsed.count() << " ms.\n";
+}
+
 // Cleans double-escaped characters to single-escaped characters
 void TuringShell::formatMessage(std::string& msg) {
     const std::regex newLine(R"(\\n)");
@@ -720,6 +864,16 @@ void TuringShell::processLine(std::string& line) {
         if (line.empty()) {
             return;
         }
+    }
+
+    // Check for #v3 prefix to route through the MLIR executor
+    constexpr std::string_view v3Prefix = "#v3 ";
+    const bool useMLIR = line.size() >= v3Prefix.size() && line.substr(0, v3Prefix.size()) == v3Prefix;
+    if (useMLIR) {
+        line = line.substr(v3Prefix.size());
+        trim(line);
+        runMLIRQuery(line);
+        return;
     }
 
     // Execute query
