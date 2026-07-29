@@ -1046,13 +1046,25 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
         outputted.push_back(itemCol);
     }
 
-    // ORDER BY reorders the whole projection, so it comes first: SKIP and LIMIT cut
-    // the sorted rows
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+    // DISTINCT dedups the projection, and everything after it works on the rows that
+    // survive: the sort orders the distinct rows, and SKIP and LIMIT cut them
+    if (proj->isDistinct()) {
+        llvm::SmallVector<mlir::Type> distinctResultTypes;
+        for (const mlir::Value column : outputted) {
+            distinctResultTypes.push_back(column.getType());
+        }
+
+        auto distinctOp = _opBuilder.create<mlir::db::RemoveDuplicates>(loc, distinctResultTypes, mlir::ValueRange{outputted});
+        outputted.assign(distinctOp.getResults().begin(), distinctOp.getResults().end());
+    }
+
+    // ORDER BY reorders the whole projection, so it comes before them too: SKIP and
+    // LIMIT cut the sorted rows
     if (proj->hasOrderBy()) {
         translateOrderBy(proj, finalIdentities, outputted);
     }
-
-    const mlir::Location loc = _opBuilder.getUnknownLoc();
 
     if (proj->hasSkip()) {
         const Expr* skipExpr = proj->getSkip()->getExpr();
@@ -1095,6 +1107,7 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
     bioassert(!items.empty(), "ORDER BY without a key");
 
     const Projection::Items& projectedItems = projection->items();
+    const bool distinct = projection->isDistinct();
 
     // A sort reorders the rows of every column it is given at once, so it is given the
     // whole projection and the projected columns stay row-aligned. A key the projection
@@ -1118,6 +1131,14 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
         if (isProjected) {
             keyColumns.push_back(static_cast<int64_t>(projectedIndex));
         } else {
+            // The dedup replaced the projection with its surviving rows, and a key it
+            // does not carry was read before that - one row per pre-dedup row, so it
+            // cannot be sorted alongside the survivors. Cypher forbids the query for
+            // the same reason: after DISTINCT, only the returned columns exist
+            if (distinct) {
+                throw TuringException("ORDER BY with DISTINCT may only order by returned columns.");
+            }
+
             sorted.push_back(resolveExprColumn(identities, keyExpr));
             keyColumns.push_back(static_cast<int64_t>(sorted.size() - 1));
         }
