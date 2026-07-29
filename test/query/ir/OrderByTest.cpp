@@ -268,6 +268,23 @@ TEST_F(OrderByTest, orderByThenLimit) {
     expectNodeRows("MATCH (n) RETURN n ORDER BY n DESC LIMIT 3", expected);
 }
 
+// ORDER BY a property ... LIMIT k: the three earliest dobs. Only four nodes carry a
+// dob, and a null sorts after every value, so however many null-dob nodes the scan
+// runs into first, none of them displaces a real dob from the top three.
+TEST_F(OrderByTest, topKByPropertyAscending) {
+    Rows expected;
+    nodeRowsFor({"Remy", "Adam", "Maxime"}, expected);
+
+    expectNodeRows("MATCH (n) RETURN n ORDER BY n.dob LIMIT 3", expected);
+}
+
+// The same shape with the key projected and the order reversed: the last three names.
+TEST_F(OrderByTest, topKByProjectedPropertyDescending) {
+    const Names expected = {"Travel", "Suhas", "Remy"};
+
+    expectNames("MATCH (n) RETURN n.name ORDER BY n.name DESC LIMIT 3", expected);
+}
+
 // ORDER BY ... SKIP m drops the first m rows of the order, not of the scan.
 TEST_F(OrderByTest, orderByThenSkip) {
     const Rows expected = {{15}, {16}, {17}};
