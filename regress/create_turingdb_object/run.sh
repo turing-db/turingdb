@@ -26,7 +26,7 @@ fi
 uv init
 uv add $PYTURINGDB
 
-uv run main.py
+uv run create_turingdb.py
 testres=$?
 
 turingdb stop -turing-dir $SCRIPT_DIR/.turing
