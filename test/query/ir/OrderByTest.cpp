@@ -1,0 +1,282 @@
+#include <gtest/gtest.h>
+
+#include <stdint.h>
+
+#include <algorithm>
+#include <memory>
+#include <ranges>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/OwningOpRef.h"
+
+#include "DBDialect.h"
+#include "DBDialectInterpreter.h"
+#include "DBProgramGenerator.h"
+#include "LocalMemory.h"
+#include "NLDialect.h"
+#include "NLOutputSink.h"
+#include "StorageDialect.h"
+
+#include "CypherAST.h"
+#include "CypherAnalyzer.h"
+#include "CypherParser.h"
+
+#include "Graph.h"
+#include "SimpleGraph.h"
+#include "SystemAccessor.h"
+#include "SystemManager.h"
+#include "columns/ColumnIDs.h"
+#include "columns/ColumnOptVector.h"
+#include "versioning/Transaction.h"
+#include "views/GraphView.h"
+
+#include "TuringTest.h"
+#include "TuringTestEnv.h"
+
+using namespace db;
+using namespace turing::test;
+
+namespace {
+
+using Row = std::vector<uint64_t>;
+using Rows = std::vector<Row>;
+using Names = std::vector<std::string>;
+
+// Every node of simpledb by name, in ascending byte order - the order an
+// ORDER BY n.name must produce. Every node has a name, so no key is null here.
+const Names nodeNamesAscending = {
+    "Adam", "Animals", "Bio", "Computers", "Cooking", "Cyrus",
+    "Doruk", "Eighties", "Ghosts", "Gym", "JiuJitsu", "Luc",
+    "Martina", "Maxime", "Padel", "Remy", "Suhas", "Travel",
+};
+
+uint64_t readNodeID(const Column* column, size_t row) {
+    const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(column);
+    if (!nodeIDs) {
+        throw std::runtime_error("OrderByTest: expected a node ID output column");
+    }
+
+    return (*nodeIDs)[row].getValue();
+}
+
+void describeRows(const Rows& rows, std::string& out) {
+    out.clear();
+    for (const Row& row : rows) {
+        out += "        {";
+        for (size_t index = 0; index < row.size(); index++) {
+            if (index > 0) {
+                out += ", ";
+            }
+
+            out += std::to_string(row[index]);
+        }
+
+        out += "},\n";
+    }
+}
+
+// Collects the node ID rows a projection emits, in the order the sink sees them. An
+// ORDER BY is only correct if that order survives to the output, so - unlike the
+// other Cypher output tests - nothing here sorts the rows.
+class OrderedNodeSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            Row& row = _rows.emplace_back();
+            for (const Column* const column : chunks) {
+                row.push_back(readNodeID(column, rowIndex));
+            }
+        }
+    }
+
+    const Rows& rows() const { return _rows; }
+
+private:
+    Rows _rows;
+};
+
+// The string sibling of OrderedNodeSink: collects a single projected string property
+// column, in sink order.
+class OrderedNameSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* names = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        ASSERT_NE(names, nullptr);
+
+        const auto& nameRaw = names->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            ASSERT_TRUE(nameRaw[rowIndex].has_value());
+            _names.push_back(std::string(*nameRaw[rowIndex]));
+        }
+    }
+
+    const Names& names() const { return _names; }
+
+private:
+    Names _names;
+};
+
+}
+
+// End-to-end ORDER BY through the MLIR frontend: each query is parsed, analyzed,
+// generated into the db dialect by DBProgramGenerator, then lowered and interpreted.
+// The assertions are on the row order, which is what the generated db.sort decides.
+class OrderByTest : public TuringTest {
+protected:
+    void initialize() override {
+        _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
+
+        SystemAccessor system = _env->getSystemManager().accessUnique();
+        _graph = system.createGraph(_graphName);
+        SimpleGraph::createSimpleGraph(_graph);
+    }
+
+    void runQuery(std::string_view query, NLOutputSink* sink) {
+        SystemAccessor system = _env->getSystemManager().accessUnique();
+        const ProcedureManager* procedures = system.getProcedures();
+
+        const FrozenCommitTx transaction = _graph->openTransaction();
+        const GraphView view = transaction.viewGraph();
+
+        CypherAST ast(procedures, query);
+
+        CypherParser parser(&ast);
+        parser.parse(query);
+
+        CypherAnalyzer analyzer(&ast, view);
+        analyzer.analyze();
+
+        mlir::MLIRContext context;
+        context.getOrLoadDialect<mlir::func::FuncDialect>();
+        context.getOrLoadDialect<mlir::storage::Storage>();
+        context.getOrLoadDialect<mlir::db::DB>();
+        context.getOrLoadDialect<mlir::nl::NL>();
+
+        mlir::OpBuilder builder(&context);
+        mlir::OwningOpRef<mlir::ModuleOp> owningModule = mlir::ModuleOp::create(builder.getUnknownLoc());
+        mlir::ModuleOp module = owningModule.get();
+
+        DBProgramGenerator generator(&module);
+        generator.generate(&ast);
+
+        LocalMemory memory;
+        DBDialectInterpreter interpreter(module, &view, sink, &memory);
+        interpreter.run();
+    }
+
+    void expectNodeRows(std::string_view query, const Rows& expected) {
+        OrderedNodeSink sink;
+        runQuery(query, &sink);
+
+        std::string description;
+        describeRows(sink.rows(), description);
+
+        EXPECT_EQ(sink.rows(), expected)
+            << "query: " << query << "\nactual rows:\n" << description;
+    }
+
+    void expectNames(std::string_view query, const Names& expected) {
+        OrderedNameSink sink;
+        runQuery(query, &sink);
+
+        EXPECT_EQ(sink.names(), expected) << "query: " << query;
+    }
+
+    // One single-column row per name, holding the ID of the node with that name, so a
+    // name order can be expressed as the node order it stands for
+    void nodeRowsFor(const Names& names, Rows& rows) {
+        rows.clear();
+        for (const std::string& name : names) {
+            rows.push_back({SimpleGraph::findNodeID(_graph, name).getValue()});
+        }
+    }
+
+    const std::string _graphName = "simpledb";
+    std::unique_ptr<TuringTestEnv> _env;
+    Graph* _graph {nullptr};
+};
+
+// The key is the projected column itself, so the sort reorders the projection in
+// place: simpledb has 18 nodes, IDs 0 to 17.
+TEST_F(OrderByTest, nodesByIDAscending) {
+    const Rows expected = {{0}, {1},  {2},  {3},  {4},  {5},  {6},  {7},  {8},
+                           {9}, {10}, {11}, {12}, {13}, {14}, {15}, {16}, {17}};
+    expectNodeRows("MATCH (n) RETURN n ORDER BY n", expected);
+}
+
+TEST_F(OrderByTest, nodesByIDDescending) {
+    const Rows expected = {{17}, {16}, {15}, {14}, {13}, {12}, {11}, {10}, {9},
+                           {8},  {7},  {6},  {5},  {4},  {3},  {2},  {1},  {0}};
+    expectNodeRows("MATCH (n) RETURN n ORDER BY n DESC", expected);
+}
+
+// The key is a property the projection does not carry, so it is sorted as an extra
+// column and dropped from the output: only the node IDs come back, in name order.
+TEST_F(OrderByTest, nodesByUnprojectedNameAscending) {
+    Rows expected;
+    nodeRowsFor(nodeNamesAscending, expected);
+
+    expectNodeRows("MATCH (n) RETURN n ORDER BY n.name", expected);
+}
+
+TEST_F(OrderByTest, nodesByUnprojectedNameDescending) {
+    Names names = nodeNamesAscending;
+    std::ranges::reverse(names);
+
+    Rows expected;
+    nodeRowsFor(names, expected);
+
+    expectNodeRows("MATCH (n) RETURN n ORDER BY n.name DESC", expected);
+}
+
+// A projected property, sorted by itself: the sorted rows carry the string values.
+TEST_F(OrderByTest, projectedNamesAscending) {
+    expectNames("MATCH (n) RETURN n.name ORDER BY n.name", nodeNamesAscending);
+}
+
+// Two keys, the first with real ties: every out-edge row sorted by source ascending
+// and - within one source - target descending.
+TEST_F(OrderByTest, edgesBySourceThenTargetDescending) {
+    const Rows expected = {
+        {0, 6}, {0, 3}, {0, 2}, {0, 1},
+        {1, 5}, {1, 4}, {1, 0},
+        {6, 0},
+        {8, 7}, {8, 4},
+        {9, 10}, {9, 2},
+        {11, 5},
+        {12, 16}, {12, 13},
+        {15, 14}, {15, 13},
+        {17, 13},
+    };
+    expectNodeRows("MATCH (a)-->(b) RETURN a, b ORDER BY a, b DESC", expected);
+}
+
+// ORDER BY ... LIMIT k: the k best rows of the whole order, not of an arbitrary
+// prefix - the shape lowering fuses into a bounded top-K.
+TEST_F(OrderByTest, orderByThenLimit) {
+    const Rows expected = {{17}, {16}, {15}};
+    expectNodeRows("MATCH (n) RETURN n ORDER BY n DESC LIMIT 3", expected);
+}
+
+// ORDER BY ... SKIP m drops the first m rows of the order, not of the scan.
+TEST_F(OrderByTest, orderByThenSkip) {
+    const Rows expected = {{15}, {16}, {17}};
+    expectNodeRows("MATCH (n) RETURN n ORDER BY n SKIP 15", expected);
+}
+
+// ORDER BY ... SKIP m LIMIT k: the sort sees every row, then the skip and the limit
+// cut a window out of the sorted rows.
+TEST_F(OrderByTest, orderByThenSkipLimit) {
+    const Rows expected = {{15}, {14}, {13}};
+    expectNodeRows("MATCH (n) RETURN n ORDER BY n DESC SKIP 2 LIMIT 3", expected);
+}

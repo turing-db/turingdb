@@ -1,6 +1,7 @@
 #include "DBProgramGenerator.h"
 
 #include <algorithm>
+#include <iterator>
 #include <memory>
 #include <string_view>
 #include <type_traits>
@@ -46,6 +47,8 @@
 #include "expr/UnaryExpr.h"
 #include "stmt/Limit.h"
 #include "stmt/MatchStmt.h"
+#include "stmt/OrderBy.h"
+#include "stmt/OrderByItem.h"
 #include "stmt/ReturnStmt.h"
 #include "stmt/Skip.h"
 #include "stmt/StmtContainer.h"
@@ -696,7 +699,7 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
 
     const Projection::Items& returned = proj->items();
 
-    std::unordered_map<std::string_view, mlir::Value> finalIdentities;
+    FinalIdentityMap finalIdentities;
     for (auto& [cypherVar, mlirCol] : _varMap) {
         const std::string_view varName = cypherVar->getName();
 
@@ -722,17 +725,7 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
             bioassert(findIt != end(finalIdentities), "Return variable '{}' not found", name);
             return findIt->second;
         } else {
-            const VarDecl* var = item->getExprVarDecl();
-            if (var) {
-                const std::string_view name = var->getName();
-                const auto findIt = finalIdentities.find(name);
-                if (findIt != end(finalIdentities)) {
-                    return findIt->second;
-                }
-            }
-
-            translateExpr(item);
-            return _exprMap.at(item);
+            return resolveExprColumn(finalIdentities, item);
         }
     };
 
@@ -740,6 +733,12 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
     for (const Projection::ReturnItem item : returned) {
         const mlir::Value itemCol = std::visit(getVarForItem, item);
         outputted.push_back(itemCol);
+    }
+
+    // ORDER BY reorders the whole projection, so it comes first: SKIP and LIMIT cut
+    // the sorted rows
+    if (proj->hasOrderBy()) {
+        translateOrderBy(proj->getOrderBy(), finalIdentities, outputted);
     }
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
@@ -775,6 +774,71 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
     }
 
     _opBuilder.create<mlir::db::Output>(loc, mlir::ValueRange{outputted});
+}
+
+void DBProgramGenerator::translateOrderBy(const OrderBy* orderBy,
+                                          const FinalIdentityMap& identities,
+                                          llvm::SmallVectorImpl<mlir::Value>& projected) {
+    const OrderBy::ItemVector& items = orderBy->getItems();
+    bioassert(!items.empty(), "ORDER BY without a key");
+
+    // Every projected column is sorted, so the projection stays row-aligned. A key the
+    // projection does not carry - the a.age of RETURN a ORDER BY a.age - is sorted as an
+    // extra column: it moves with its row but is never output
+    llvm::SmallVector<mlir::Value> sorted {projected.begin(), projected.end()};
+
+    llvm::SmallVector<int64_t> keyColumns;
+    llvm::SmallVector<bool> keyAscending;
+
+    // Keys are given most significant first, the order the Sort expects
+    for (const OrderByItem* item : items) {
+        const mlir::Value keyColumn = resolveExprColumn(identities, item->getExpr());
+
+        // A key the sorted columns already carry is sorted in place; any other key is
+        // appended, so its index is one past the columns collected so far
+        const auto findIt = std::ranges::find(sorted, keyColumn);
+        const size_t keyIndex = static_cast<size_t>(std::distance(sorted.begin(), findIt));
+        if (findIt == sorted.end()) {
+            sorted.push_back(keyColumn);
+        }
+
+        keyColumns.push_back(static_cast<int64_t>(keyIndex));
+        keyAscending.push_back(item->getType() == OrderByType::ASC);
+    }
+
+    llvm::SmallVector<mlir::Type> sortResultTypes;
+    for (const mlir::Value column : sorted) {
+        sortResultTypes.push_back(column.getType());
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    auto sortOp = _opBuilder.create<mlir::db::Sort>(loc,
+                                                    sortResultTypes,
+                                                    mlir::ValueRange {sorted},
+                                                    keyColumns,
+                                                    keyAscending);
+
+    // The columns pass through the sort in place, so each projected column becomes its
+    // own result; the extra key columns end the result range and are left unread
+    const mlir::ResultRange results = sortOp.getResults();
+    for (size_t index = 0; index < projected.size(); index++) {
+        projected[index] = results[index];
+    }
+}
+
+mlir::Value DBProgramGenerator::resolveExprColumn(const FinalIdentityMap& identities,
+                                                  const Expr* expr) {
+    const VarDecl* var = expr->getExprVarDecl();
+    if (var) {
+        const std::string_view name = var->getName();
+        const auto findIt = identities.find(name);
+        if (findIt != end(identities)) {
+            return findIt->second;
+        }
+    }
+
+    translateExpr(expr);
+    return _exprMap.at(expr);
 }
 
 void DBProgramGenerator::generatePropertyConstraints(const CypherAST* ast) {
