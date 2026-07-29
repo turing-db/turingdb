@@ -1596,6 +1596,25 @@ std::string topKByScoreAscProgram(uint64_t count) {
              "}\n";
 }
 
+// MATCH (a) RETURN a ORDER BY a DESC SKIP skipCount LIMIT limitCount: a window cut
+// out of a sorted result. The db.skip between the sort and the limit blocks the top-K
+// fusion, so the limit stays a streaming one - over the sort's emit loop, never over
+// the scan that fills the accumulator.
+std::string sortSkipLimitNodesDescProgram(uint64_t skipCount, uint64_t limitCount) {
+    return std::string("func.func @main() {\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "  %sa = db.sort(%a) keys [0] ascending [false] : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
+                       "  %ka = db.skip(%sa) count ")
+           + std::to_string(skipCount)
+           + " : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
+             "  %la = db.limit(%ka) count "
+           + std::to_string(limitCount)
+           + " : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>\n"
+             "  db.output(%la) : !db.column<!storage.node_id>\n"
+             "  return\n"
+             "}\n";
+}
+
 // MATCH (a)-[]->(b) RETURN DISTINCT b: one hop, then dedup the target column.
 // Several sources can point at the same target, so b has duplicates DISTINCT drops.
 const char* const removeDuplicatesTargetsProgram = R"mlir(
@@ -1689,6 +1708,38 @@ func.func @main() {
   return
 }
 )mlir";
+
+// MATCH (a) RETURN count(a) LIMIT count: a limit over a tally. The count collapses to
+// a single row and opens no emit loop, so the limit has no loop of its own to budget -
+// and the loop that charges the tally must still see every node, or the count is wrong.
+std::string countNodesLimitProgram(uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "  %n = db.count(%a) : (!db.column<!storage.node_id>) -> !db.column<ui64>\n"
+                       "  %ln = db.limit(%n) count ")
+           + std::to_string(count)
+           + " : (!db.column<ui64>) -> !db.column<ui64>\n"
+             "  db.output(%ln) : !db.column<ui64>\n"
+             "  return\n"
+             "}\n";
+}
+
+// MATCH (a) RETURN <agg>(a.score) LIMIT count: the value-reducing sibling of
+// countNodesLimitProgram, over db.sum / db.min / db.max / db.avg.
+std::string aggregateScoreLimitProgram(const char* op, uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "  %score = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
+                       "  %r = db.")
+           + op
+           + "(%score) : (!db.column<none>) -> !db.column<none>\n"
+             "  %lr = db.limit(%r) count "
+           + std::to_string(count)
+           + " : (!db.column<none>) -> !db.column<none>\n"
+             "  db.output(%lr) : !db.column<none>\n"
+             "  return\n"
+             "}\n";
+}
 
 // MATCH (a) RETURN <agg>(a.score): reduce the non-null scores with the given
 // aggregate op (db.sum / db.min / db.max / db.avg). The db result value type is
@@ -4386,6 +4437,108 @@ TEST_F(DBLoweringTest, lowersTopKToBoundedSortBufferWithoutLimitOps) {
     EXPECT_EQ(*bufferOp.getTopK(), 2u);
 }
 
+TEST_F(DBLoweringTest, sortSkipLimitPagesTheSortedRows) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Four nodes descending is 3, 2, 1, 0; SKIP 1 LIMIT 2 cuts the window 2, 1 out of
+    // that order - a page of the sorted rows, not of the scan.
+    CollectingNodeSink sink;
+    const std::string program = sortSkipLimitNodesDescProgram(1, 2);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    const std::vector<std::vector<uint64_t>> expected {{2}, {1}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.orderedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, sortSkipLimitPagesTheSortedRowsAcrossChunks) {
+    auto graph = buildDiamondGraph();
+    addSecondPart(*graph);
+
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Six nodes at chunk size 1: the window is cut from the global descending order
+    // (5, 4, 3, 2, 1, 0), so it must be 4, 3 no matter how the scan is chunked.
+    CollectingNodeSink sink;
+    const std::string program = sortSkipLimitNodesDescProgram(1, 2);
+    runLoweredProgram(program.c_str(), reader.getView(), sink, /*chunkSize=*/1);
+
+    const std::vector<std::vector<uint64_t>> expected {{4}, {3}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.orderedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, lowersSortSkipLimitToALimitOnTheEmitLoopOnly) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    const std::string programText = sortSkipLimitNodesDescProgram(1, 2);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(programText, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &reader.getView());
+    lowering.lower(dbFunction, *nlModule);
+
+    // The skip blocks the top-K fusion, so this is the streaming limit path: an
+    // unbounded nl.sort_buffer and one nl.limit handle.
+    size_t limitCount = 0;
+    mlir::nl::SortBuffer bufferOp;
+    mlir::nl::SortCollect collectOp;
+    mlir::nl::Sort sortOp;
+    mlir::Value handle;
+
+    nlModule->walk([&](mlir::Operation* operation) {
+        if (mlir::nl::SortBuffer found = mlir::dyn_cast<mlir::nl::SortBuffer>(operation)) {
+            bufferOp = found;
+        } else if (mlir::nl::SortCollect found = mlir::dyn_cast<mlir::nl::SortCollect>(operation)) {
+            collectOp = found;
+        } else if (mlir::nl::Sort found = mlir::dyn_cast<mlir::nl::Sort>(operation)) {
+            sortOp = found;
+        } else if (mlir::nl::Limit found = mlir::dyn_cast<mlir::nl::Limit>(operation)) {
+            handle = found.getState();
+            limitCount++;
+        }
+    });
+
+    ASSERT_TRUE(bufferOp);
+    ASSERT_TRUE(collectOp);
+    ASSERT_TRUE(sortOp);
+    ASSERT_TRUE(handle);
+    EXPECT_EQ(limitCount, 1u);
+    EXPECT_FALSE(bufferOp.getTopK().has_value());
+
+    // The producing loop is the one holding the collect: it fills the accumulator, so
+    // it must run to completion - a limit operand there would sort a prefix of the
+    // scan rather than the whole input.
+    auto producingLoop = mlir::dyn_cast<mlir::nl::For>(collectOp->getParentOp());
+    ASSERT_TRUE(producingLoop);
+    EXPECT_FALSE(producingLoop.getLimit());
+
+    // The emit loop drains the sorted rows, and it is what the limit budgets: it
+    // carries the handle, so it stops once the window has been emitted.
+    ASSERT_TRUE(sortOp.getResult().hasOneUse());
+    auto emitLoop = mlir::dyn_cast<mlir::nl::For>(*sortOp.getResult().user_begin());
+    ASSERT_TRUE(emitLoop);
+    EXPECT_EQ(emitLoop.getLimit(), handle);
+}
+
 TEST_F(DBLoweringTest, removesDuplicateTargets) {
     auto graph = buildDiamondGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
@@ -4756,6 +4909,128 @@ TEST_F(DBLoweringTest, lowersAggregateToPipelineBreaker) {
     EXPECT_EQ(resultCount, 1u);
     EXPECT_EQ(forCount, 1u);
     EXPECT_EQ(sortBufferCount, 0u);
+}
+
+TEST_F(DBLoweringTest, countLimitStillTalliesEveryRow) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The tally is one row, so LIMIT 1 keeps it - and it must be the count of all four
+    // diamond nodes: a limit cannot cut the rows a count is charged from.
+    CollectingCountSink sink;
+    const std::string program = countNodesLimitProgram(1);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    const std::vector<uint64_t> expected {4};
+    EXPECT_EQ(sink.getValues(), expected);
+}
+
+TEST_F(DBLoweringTest, lowersCountLimitWithoutBoundingTheCountingLoop) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    const std::string programText = countNodesLimitProgram(1);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(programText, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &reader.getView());
+    lowering.lower(dbFunction, *nlModule);
+
+    size_t forsWithLimit = 0;
+    mlir::nl::CountUpdate updateOp;
+
+    nlModule->walk([&](mlir::Operation* operation) {
+        if (mlir::nl::CountUpdate found = mlir::dyn_cast<mlir::nl::CountUpdate>(operation)) {
+            updateOp = found;
+        } else if (mlir::nl::For forOp = mlir::dyn_cast<mlir::nl::For>(operation)) {
+            if (forOp.getLimit()) {
+                forsWithLimit++;
+            }
+        }
+    });
+
+    // The counting loop must run to completion, and a count opens no emit loop for the
+    // limit to budget instead, so no loop in the function carries the handle.
+    ASSERT_TRUE(updateOp);
+    auto countingLoop = mlir::dyn_cast<mlir::nl::For>(updateOp->getParentOp());
+    ASSERT_TRUE(countingLoop);
+    EXPECT_FALSE(countingLoop.getLimit());
+    EXPECT_EQ(forsWithLimit, 0u);
+}
+
+TEST_F(DBLoweringTest, sumLimitStillReducesEveryRow) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Scores 100, 200 and null: the reduction is one row, so LIMIT 1 keeps it, and it
+    // must still be the sum of every present score.
+    CollectingOptInt64Sink sink;
+    const std::string program = aggregateScoreLimitProgram("sum", 1);
+    runLoweredProgram(program.c_str(), reader.getView(), sink);
+
+    const std::vector<std::optional<int64_t>> expected {300};
+    EXPECT_EQ(sink.getValues(), expected);
+}
+
+TEST_F(DBLoweringTest, lowersAggregateLimitWithoutBoundingTheFoldingLoop) {
+    auto graph = buildPropertyGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Every value reduction is its own db op, so each is checked: a limit over any of
+    // them must leave the folding loop unbounded.
+    for (const char* const op : {"sum", "min", "max", "avg"}) {
+        mlir::MLIRContext context;
+        context.getOrLoadDialect<mlir::func::FuncDialect>();
+        context.getOrLoadDialect<mlir::storage::Storage>();
+        context.getOrLoadDialect<mlir::db::DB>();
+        context.getOrLoadDialect<mlir::nl::NL>();
+
+        const mlir::ParserConfig parserConfig(&context);
+        const std::string programText = aggregateScoreLimitProgram(op, 1);
+        mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(programText, parserConfig);
+        ASSERT_TRUE(dbModule) << "op: " << op;
+
+        const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+        ASSERT_TRUE(dbFunction) << "op: " << op;
+
+        mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+        DBLowering lowering(&context, &reader.getView());
+        lowering.lower(dbFunction, *nlModule);
+
+        size_t forsWithLimit = 0;
+        mlir::nl::AggregateUpdate updateOp;
+
+        nlModule->walk([&](mlir::Operation* operation) {
+            if (mlir::nl::AggregateUpdate found = mlir::dyn_cast<mlir::nl::AggregateUpdate>(operation)) {
+                updateOp = found;
+            } else if (mlir::nl::For forOp = mlir::dyn_cast<mlir::nl::For>(operation)) {
+                if (forOp.getLimit()) {
+                    forsWithLimit++;
+                }
+            }
+        });
+
+        ASSERT_TRUE(updateOp) << "op: " << op;
+        auto foldingLoop = mlir::dyn_cast<mlir::nl::For>(updateOp->getParentOp());
+        ASSERT_TRUE(foldingLoop) << "op: " << op;
+        EXPECT_FALSE(foldingLoop.getLimit()) << "op: " << op;
+        EXPECT_EQ(forsWithLimit, 0u) << "op: " << op;
+    }
 }
 
 int main(int argc, char** argv) {
