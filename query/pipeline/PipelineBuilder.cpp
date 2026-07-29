@@ -2,6 +2,7 @@
 
 #include "EmbeddingsSpec.h"
 #include "PipelinePort.h"
+#include "TuringException.h"
 #include "columns/AllowedKinds.h"
 #include "columns/Column.h"
 #include "columns/ColumnOperatorDispatcher.h"
@@ -701,6 +702,60 @@ PipelineBlockOutputInterface& PipelineBuilder::addCallProcedure(const Procedure*
 
     proc->setInputValues(args);
     proc->allocReturnValues(_mem, _dfMan, yield);
+
+    if (_matProc) {
+        MaterializeData& matData = _matProc->getMaterializeData();
+
+        for (const Procedure::YieldItem& item : yield) {
+            if (!item._col) { // Items that are not yielded
+                continue;
+            }
+
+            const size_t colIndex = procedure->getReturnValueIndex(item._baseName);
+            const ProcedureType colType = procedure->getReturnValueType(colIndex);
+
+            switch (colType) {
+                case ProcedureType::NODE:
+                    matData.addToStep<ColumnVector<NodeID>>(item._col);
+                break;
+                case ProcedureType::EDGE:
+                    matData.addToStep<ColumnVector<EdgeID>>(item._col);
+                break;
+                case ProcedureType::EDGE_TYPE_ID:
+                    matData.addToStep<ColumnVector<EdgeTypeID>>(item._col);
+                break;
+                case ProcedureType::LABEL_ID:
+                    matData.addToStep<ColumnVector<LabelID>>(item._col);
+                break;
+                case ProcedureType::PROPERTY_TYPE_ID:
+                    matData.addToStep<ColumnVector<PropertyTypeID>>(item._col);
+                break;
+                case ProcedureType::UINT_64:
+                    matData.addToStep<ColumnVector<types::UInt64::Primitive>>(item._col);
+                break;
+                case ProcedureType::INT64:
+                    matData.addToStep<ColumnVector<types::Int64::Primitive>>(item._col);
+                break;
+                case ProcedureType::DOUBLE:
+                    matData.addToStep<ColumnVector<types::Double::Primitive>>(item._col);
+                break;
+                case ProcedureType::BOOL:
+                    matData.addToStep<ColumnVector<types::Bool::Primitive>>(item._col);
+                break;
+                case ProcedureType::STRING_VIEW:
+                    matData.addToStep<ColumnVector<types::String::Primitive>>(item._col);
+                break;
+
+                case ProcedureType::INVALID:
+                case ProcedureType::VALUE_TYPE:
+                case ProcedureType::STRING:
+                case ProcedureType::LIST:
+                case ProcedureType::_SIZE:
+                    throw TuringException("Unsupported materialise type.");
+                break;
+            }
+        }
+    }
 
     _lastProc = proc;
     return output;

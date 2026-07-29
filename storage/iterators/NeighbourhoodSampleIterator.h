@@ -30,7 +30,6 @@ protected:
     std::span<const EdgeRecord>::iterator _edgeIt;
 
     void init();
-    void nextValid();
     void nextValidForCurrentNode();
     void syncEdges();
 };
