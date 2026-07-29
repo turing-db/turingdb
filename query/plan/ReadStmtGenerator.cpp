@@ -770,7 +770,7 @@ void ReadStmtGenerator::placeJoinsOnProcedures() {
                         break;
 
                         case PlanGraphTopology::PathToDependency::BackwardPath: {
-                            return;
+                            continue;
                         }
                         break;
 
@@ -782,14 +782,14 @@ void ReadStmtGenerator::placeJoinsOnProcedures() {
                                                                      JoinType::COMMON_ANCESTOR);
                             PlanGraphNode* depBranchTip = _topology->getBranchTip(dep._producerNode);
                             depBranchTip->connectOut(join);
-                            return;
+                            continue;
                         }
                         break;
 
                         case PlanGraphTopology::PathToDependency::NoPath: {
                             PlanGraphNode* depBranchTip = _topology->getBranchTip(dep._producerNode);
                             depBranchTip->connectOut(n);
-                            return;
+                            continue;
                         }
                         break;
                     }
