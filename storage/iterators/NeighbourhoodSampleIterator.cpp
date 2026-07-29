@@ -25,8 +25,8 @@ void NeighbourhoodSampleIterator::init() {
             const DataPart* part = _partIt.get();
             const EdgeIndexer& indexer = part->edgeIndexer();
             _edges = indexer.getNodeOutEdges(nodeID);
+            _edgeIt = _edges.begin();
             if (!_edges.empty()) {
-                _edgeIt = _edges.begin();
                 return;
             }
         }
@@ -40,30 +40,20 @@ void NeighbourhoodSampleIterator::reset() {
 }
 
 void NeighbourhoodSampleIterator::next() {
-    _edgeIt++;
-    nextValid();
+    nextValidForCurrentNode();
 }
 
-void NeighbourhoodSampleIterator::nextValid() {
-    while (_edgeIt == _edges.cend()) {
-        while (_nodeIt != _inputNodeIDs->cend()) {
-            _partIt.next();
-            if (_partIt.isEnd()) {
-                _nodeIt++;
-
-                if (_nodeIt == _inputNodeIDs->cend()) {
-                    return;
-                }
-                _partIt.goToStart();
-            }
-
-            const DataPart* part = _partIt.get();
-            const EdgeIndexer& indexer = part->edgeIndexer();
-            const NodeID curNode = *_nodeIt;
-
-            _edges = indexer.getNodeOutEdges(curNode);
-            _edgeIt = _edges.begin();
+void NeighbourhoodSampleIterator::syncEdges() {
+    _partIt.goToStart();
+    while (_partIt.isNotEnd()) {
+        const DataPart* part = _partIt.get();
+        const EdgeIndexer& indexer = part->edgeIndexer();
+        _edges = indexer.getNodeOutEdges(*_nodeIt);
+        _edgeIt = _edges.begin();
+        if (!_edges.empty()) {
+            return;
         }
+        _partIt.next();
     }
 }
 
@@ -84,8 +74,9 @@ void NeighbourhoodSampleIterator::nextValidForCurrentNode() {
         const NodeID curNode = *_nodeIt;
 
         _edges = indexer.getNodeOutEdges(curNode);
+        _edgeIt = _edges.begin();
+
         if (!_edges.empty()) {
-            _edgeIt = _edges.begin();
             return;
         }
 
@@ -101,6 +92,16 @@ NeighbourhoodSampleChunkWriter::NeighbourhoodSampleChunkWriter(const GraphView& 
     _sampleRatio(1.0 / _sampleSize),
     _replacementGenerator(0, _sampleSize - 1)
 {
+}
+
+void NeighbourhoodSampleChunkWriter::setOutputColumns(ColumnNodeIDs* srcIDs,
+                                                      ColumnEdgeIDs* edgeIDs,
+                                                      ColumnEdgeTypes* edgeTypes,
+                                                      ColumnNodeIDs* otherIDs) {
+    _srcIDs = srcIDs;
+    _edgeIDs = edgeIDs;
+    _edgeTypes = edgeTypes;
+    _otherIDs = otherIDs;
 }
 
 size_t NeighbourhoodSampleChunkWriter::geometricSample(double W) {
@@ -120,10 +121,10 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
     const size_t nodesToSample = std::min(nodesRemaining, samplesPerChunk);
     const size_t thisSize = nodesToSample * _sampleSize;
 
-    _srcIDs->resize(thisSize);
-    _edgeIDs->resize(thisSize);
-    _edgeTypes->resize(thisSize);
-    _otherIDs->resize(thisSize);
+    if (_srcIDs) _srcIDs->resize(thisSize);
+    if (_edgeIDs) _edgeIDs->resize(thisSize);
+    if (_edgeTypes) _edgeTypes->resize(thisSize);
+    if (_otherIDs) _otherIDs->resize(thisSize);
 
     if (thisSize == 0) {
         return;
@@ -148,10 +149,10 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
             // Unconditionally take the first k elements
             if (i <= _sampleSize) {
                 const EdgeRecord& e = *_edgeIt;
-                _srcIDs->operator[](writeIndex) = e._nodeID;
-                _edgeIDs->operator[](writeIndex) = e._edgeID;
-                _edgeTypes->operator[](writeIndex) = e._edgeTypeID;
-                _otherIDs->operator[](writeIndex) = e._otherID;
+                if (_srcIDs)_srcIDs->operator[](writeIndex) = e._nodeID;
+                if (_edgeIDs)_edgeIDs->operator[](writeIndex) = e._edgeID;
+                if (_edgeTypes)_edgeTypes->operator[](writeIndex) = e._edgeTypeID;
+                if (_otherIDs)_otherIDs->operator[](writeIndex) = e._otherID;
                 writeIndex++;
                 nextValidForCurrentNode();
                 continue;
@@ -174,21 +175,24 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
             const size_t replacedIndex = sampleStart + randomSampleOffset();
 
             const EdgeRecord& sample = *_edgeIt;
-            _srcIDs->operator[](replacedIndex) = sample._nodeID;
-            _edgeIDs->operator[](replacedIndex) = sample._edgeID;
-            _edgeTypes->operator[](replacedIndex) = sample._edgeTypeID;
-            _otherIDs->operator[](replacedIndex) = sample._otherID;
+            if (_srcIDs)_srcIDs->operator[](replacedIndex) = sample._nodeID;
+            if (_edgeIDs)_edgeIDs->operator[](replacedIndex) = sample._edgeID;
+            if (_edgeTypes)_edgeTypes->operator[](replacedIndex) = sample._edgeTypeID;
+            if (_otherIDs)_otherIDs->operator[](replacedIndex) = sample._otherID;
             nextValidForCurrentNode();
 
             W *= std::pow(rand01(), _sampleRatio);
         }
         _nodeIt++;
+        if (_nodeIt != _inputNodeIDs->cend()) {
+            syncEdges();
+        }
     }
 
     // writeIndex ensures that we wrote to the first writeIndex contiguous elements. If
     // any node had out degree < _sampleSize, we truncate the arrays
-    _srcIDs->resize(writeIndex);
-    _edgeIDs->resize(writeIndex);
-    _edgeTypes->resize(writeIndex);
-    _otherIDs->resize(writeIndex);
+   if (_srcIDs)_srcIDs->resize(writeIndex);
+   if (_edgeIDs)_edgeIDs->resize(writeIndex);
+   if (_edgeTypes)_edgeTypes->resize(writeIndex);
+   if (_otherIDs)_otherIDs->resize(writeIndex);
 }

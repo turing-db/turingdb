@@ -17,6 +17,7 @@ set(procedures_sources
     GetEdgesProcedure.cpp
     GetNodesProcedure.cpp
     GetNodeEdgesProcedure.cpp
+    GnnNeighbourhoodSampleProcedure.cpp
     ProcUtils.cpp)
 
 add_library(turing_db_procedures_s STATIC ${procedures_sources})

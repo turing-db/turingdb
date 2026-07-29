@@ -1238,7 +1238,7 @@ PipelineOutputInterface* PipelineGenerator::translateAggregateEvalNode(Aggregate
 }
 
 PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(ProcedureEvalNode* node) {
-    if (!_builder.isSingleMaterializeStep()) {
+    if (_builder.getMaterializeProc() && !_builder.isSingleMaterializeStep()) {
         _builder.addMaterialize();
     }
 
@@ -1249,15 +1249,15 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
     const ExprChain* argExprs = invocation->getArguments();
     const FunctionSignature* signature = invocation->getSignature();
 
-    if (!invocation) [[unlikely]] {
+    if (!invocation) {
         throw PlannerException("FunctionInvocationExpr does not have a FunctionInvocation");
     }
 
-    if (!argExprs) [[unlikely]] {
+    if (!argExprs) {
         throw PlannerException("FunctionInvocation does not have arguments");
     }
 
-    if (!signature) [[unlikely]] {
+    if (!signature) {
         throw PlannerException("FunctionInvocation does not have a FunctionSignature");
     }
 
@@ -1293,7 +1293,7 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
 
         const VarDecl* argDecl = argExpr->getExprVarDecl();
 
-        if (!argDecl) {
+        if (!argDecl || argExpr->getKind() == Expr::Kind::LITERAL) {
             if (argExpr->getKind() != Expr::Kind::LITERAL && argExpr->getKind() != Expr::Kind::SYMBOL
                 && argExpr->getKind() != Expr::Kind::LIST) {
                 // TODO: replace this with an expression evaluation processor
@@ -1309,7 +1309,7 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
             const ColumnTag tag = it->second;
             const NamedColumn* namedCol = inDf->getColumn(tag);
 
-            if (!namedCol) [[unlikely]] {
+            if (!namedCol) {
                 throw PlannerException("Column not found");
             }
 
