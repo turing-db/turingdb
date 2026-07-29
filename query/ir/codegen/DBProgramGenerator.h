@@ -97,7 +97,8 @@ private:
     void generateOutput(const CypherAST* ast);
 
     // Reorders the projection with a Sort over @param projected, replacing each
-    // projected column with its sorted counterpart
+    // projected column with its sorted counterpart. A DISTINCT projection is deduped
+    // by then, so its sort keys must be columns it returns
     void translateOrderBy(const Projection* projection,
                           const FinalIdentityMap& identities,
                           llvm::SmallVectorImpl<mlir::Value>& projected);
