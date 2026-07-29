@@ -198,10 +198,6 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
 void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
     Projection* projection = returnSt->getProjection();
 
-    if (projection->isDistinct()) {
-        throwError("DISTINCT not supported", returnSt);
-    }
-
     if (projection->hasOrderBy()) {
         analyze(projection->getOrderBy());
     }
