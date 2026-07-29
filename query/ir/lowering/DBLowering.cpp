@@ -1416,17 +1416,8 @@ void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {
                                      mlir::db::GetInEdgesByType>(definingOp);
     const bool isCrossProduct = mlir::isa<mlir::db::CrossProduct>(definingOp);
 
-    // A pipeline breaker accumulates every row before it emits any, so the loops that
-    // fill its accumulator must run to completion and the walk stops here rather than
-    // reaching them - bounding them would sort, group or tally a prefix of the scan
-    // instead of the whole input.
-    //
-    // db.sort and db.group_aggregate drain their accumulator through an emit loop of
-    // their own, which buildLoopForSource opens from this op: that loop is what the
-    // limit really budgets, so the handle lands on it and it stops as soon as the
-    // budget is spent. db.count and the value reductions collapse to a single row and
-    // open no loop at all, so they take no handle - the limit then does its whole job
-    // through the truncate on the one materialized row.
+    // A pipeline breaker accumulates every row before emitting any, so the walk stops
+    // here; the limit budgets its emit loop instead, when it opens one.
     const bool emitsThroughLoop = mlir::isa<mlir::db::Sort, mlir::db::GroupAggregate>(definingOp);
     const bool breaksPipeline = emitsThroughLoop
         || mlir::isa<mlir::db::Count, mlir::db::Sum, mlir::db::Min, mlir::db::Max, mlir::db::Avg>(definingOp);
