@@ -1,0 +1,151 @@
+#include "QueryInterpreterV3.h"
+
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/OwningOpRef.h"
+
+#include "DBDialect.h"
+#include "DBDialectInterpreter.h"
+#include "DBProgramGenerator.h"
+#include "NLDialect.h"
+#include "StorageDialect.h"
+
+#include "CypherAST.h"
+#include "CypherAnalyzer.h"
+#include "CypherParser.h"
+
+#include "SystemManager.h"
+#include "SystemAccessor.h"
+#include "versioning/Transaction.h"
+#include "views/GraphView.h"
+
+#include "CompilerException.h"
+#include "TuringTime.h"
+
+using namespace db;
+
+QueryInterpreterV3::QueryInterpreterV3(SystemManager* sysMan)
+    : _sysMan(sysMan)
+{
+}
+
+QueryInterpreterV3::~QueryInterpreterV3() {
+}
+
+void QueryInterpreterV3::execute(QueryStatus& status,
+                                 std::string_view query,
+                                 std::string_view graphName,
+                                 CommitHash hash,
+                                 ChangeID changeID,
+                                 LocalMemory* mem,
+                                 NLOutputSink* sink) {
+    const TimePoint start = Clock::now();
+    executeImpl(status, query, graphName, hash, changeID, mem, sink);
+    const TimePoint end = Clock::now();
+
+    status.setTotalTime(end - start);
+}
+
+void QueryInterpreterV3::executeImpl(QueryStatus& status,
+                                     std::string_view query,
+                                     std::string_view graphName,
+                                     CommitHash hash,
+                                     ChangeID changeID,
+                                     LocalMemory* mem,
+                                     NLOutputSink* sink) {
+    SystemAccessor system = _sysMan->accessShared();
+
+    auto txRes = system.openTransaction(graphName, hash, changeID);
+    if (!txRes) {
+        switch (txRes.error().getType()) {
+            case ChangeErrorType::GRAPH_NOT_FOUND: {
+                status.setStatus(QueryStatus::Status::GRAPH_NOT_FOUND);
+                return;
+            }
+            break;
+            case ChangeErrorType::CHANGE_NOT_FOUND: {
+                status.setStatus(QueryStatus::Status::CHANGE_NOT_FOUND);
+                return;
+            }
+            break;
+            case ChangeErrorType::COMMIT_NOT_LOADED: {
+                status.setStatus(QueryStatus::Status::COMMIT_NOT_LOADED);
+                status.setMessage(txRes.error().fmtMessage());
+                return;
+            }
+            break;
+            default: {
+                status.setStatus(QueryStatus::Status::COMMIT_NOT_FOUND);
+                return;
+            }
+            break;
+        }
+    }
+
+    const GraphView view = txRes->viewGraph();
+
+    CypherAST ast(system.getProcedures(), query);
+    CypherParser parser(&ast);
+    try {
+        parser.parse(query);
+    } catch (const CompilerException& e) {
+        status.setStatus(QueryStatus::Status::PARSE_ERROR);
+        status.setMessage(e.what());
+        return;
+    } catch (const std::exception& e) {
+        status.setStatus(QueryStatus::Status::PARSE_ERROR);
+        status.setMessage(std::string("Unexpected exception: ") + e.what());
+        return;
+    }
+
+    CypherAnalyzer analyzer(&ast, view);
+    try {
+        analyzer.analyze();
+    } catch (const CompilerException& e) {
+        status.setStatus(QueryStatus::Status::ANALYZE_ERROR);
+        status.setMessage(e.what());
+        return;
+    } catch (const std::exception& e) {
+        status.setStatus(QueryStatus::Status::ANALYZE_ERROR);
+        status.setMessage(std::string("Unexpected exception: ") + e.what());
+        return;
+    }
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    mlir::OpBuilder builder(&context);
+    mlir::OwningOpRef<mlir::ModuleOp> owningModule = mlir::ModuleOp::create(builder.getUnknownLoc());
+    mlir::ModuleOp module = owningModule.get();
+
+    DBProgramGenerator generator(&module);
+    try {
+        generator.generate(&ast);
+    } catch (const CompilerException& e) {
+        status.setStatus(QueryStatus::Status::PLAN_ERROR);
+        status.setMessage(e.what());
+        return;
+    } catch (const std::exception& e) {
+        status.setStatus(QueryStatus::Status::PLAN_ERROR);
+        status.setMessage(std::string("Unexpected exception: ") + e.what());
+        return;
+    }
+
+    DBDialectInterpreter interpreter(module, &view, sink, mem);
+    try {
+        interpreter.run();
+    } catch (const CompilerException& e) {
+        status.setStatus(QueryStatus::Status::EXEC_ERROR);
+        status.setMessage(e.what());
+        return;
+    } catch (const std::exception& e) {
+        status.setStatus(QueryStatus::Status::EXEC_ERROR);
+        status.setMessage(std::string("Unexpected exception: ") + e.what());
+        return;
+    }
+}

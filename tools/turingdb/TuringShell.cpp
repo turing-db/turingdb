@@ -23,24 +23,8 @@
 #include "LineNoiseHandle.h"
 #include "LocalMemory.h"
 
-#include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/IR/Builders.h"
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/MLIRContext.h"
-#include "mlir/IR/OwningOpRef.h"
-
-#include "DBDialect.h"
-#include "DBDialectInterpreter.h"
-#include "DBProgramGenerator.h"
-#include "NLDialect.h"
 #include "NLOutputSink.h"
-#include "StorageDialect.h"
-
-#include "CypherAST.h"
-#include "CypherAnalyzer.h"
-#include "CypherParser.h"
-
-#include "views/GraphView.h"
+#include "QueryInterpreterV3.h"
 
 #include "columns/Block.h"
 #include "columns/Column.h"
@@ -754,67 +738,24 @@ void TuringShell::runMLIRQuery(std::string_view query) {
         return;
     }
 
-    const TimePoint start = Clock::now();
-
-    SystemAccessor system = _turingDB.getSystemManager().accessShared();
-
-    auto txRes = system.openTransaction(_graphName, _hash, _changeID);
-    if (!txRes) {
-        spdlog::error("Could not open transaction: {}", txRes.error().fmtMessage());
-        return;
-    }
-
-    const GraphView view = txRes->viewGraph();
-
-    CypherAST ast(system.getProcedures(), query);
-    CypherParser parser(&ast);
-    try {
-        parser.parse(query);
-    } catch (const TuringException& e) {
-        spdlog::error("Parse error: {}", e.what());
-        return;
-    }
-
-    CypherAnalyzer analyzer(&ast, view);
-    try {
-        analyzer.analyze();
-    } catch (const TuringException& e) {
-        spdlog::error("Analyze error: {}", e.what());
-        return;
-    }
-
-    mlir::MLIRContext context;
-    context.getOrLoadDialect<mlir::func::FuncDialect>();
-    context.getOrLoadDialect<mlir::storage::Storage>();
-    context.getOrLoadDialect<mlir::db::DB>();
-    context.getOrLoadDialect<mlir::nl::NL>();
-
-    mlir::OpBuilder builder(&context);
-    mlir::OwningOpRef<mlir::ModuleOp> owningModule = mlir::ModuleOp::create(builder.getUnknownLoc());
-    mlir::ModuleOp module = owningModule.get();
-
-    DBProgramGenerator generator(&module);
-    try {
-        generator.generate(&ast);
-    } catch (const TuringException& e) {
-        spdlog::error("IR generation error: {}", e.what());
-        return;
-    }
-
     TuringShellNLSink sink;
-    DBDialectInterpreter interpreter(module, &view, &sink, _mem);
-    try {
-        interpreter.run();
-    } catch (const TuringException& e) {
-        spdlog::error("MLIR execution error: {}", e.what());
-        return;
-    }
-
-    const TimePoint end = Clock::now();
-    const Milliseconds elapsed = end - start;
+    QueryStatus status;
+    QueryInterpreterV3 interp(&_turingDB.getSystemManager());
+    interp.execute(status, query, _graphName, _hash, _changeID, _mem, &sink);
 
     if (_mem) {
         _mem->clear();
+    }
+
+    if (!status.isOk()) {
+        if (status.hasErrorMessage()) {
+            std::string errorMsg = status.getError();
+            formatMessage(errorMsg);
+            spdlog::error("{}: {}", QueryStatusDescription::value(status.getStatus()), errorMsg);
+        } else {
+            spdlog::error("{}", QueryStatusDescription::value(status.getStatus()));
+        }
+        return;
     }
 
     if (!_quiet) {
@@ -822,7 +763,7 @@ void TuringShell::runMLIRQuery(std::string_view query) {
     }
 
     std::cout << "Query returned " << sink.getRowCount() << " rows.\n";
-    std::cout << "Query executed in " << elapsed.count() << " ms.\n";
+    std::cout << "Query executed in " << status.getTotalTime().count() << " ms.\n";
 }
 
 // Cleans double-escaped characters to single-escaped characters

@@ -16,13 +16,7 @@ target_link_libraries(turingdb PUBLIC
     turing_db_auth_s
     turing_db_memory_s
     turing_db_proto_client_s
-    turing_db_ir_interpreter_s
-    turing_db_ir_dbdialect_s
-    turing_db_ir_codegen_s
-    turing_db_frontend_cypher_s
-    turing_db_parser_s
-    turing_db_analyzer_s
-    turing_db_ast_s
+    turing_db_interpreter_v3_s
     argparse
     tabulate
     linenoise_s
