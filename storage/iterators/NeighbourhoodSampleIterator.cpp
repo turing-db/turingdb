@@ -10,8 +10,6 @@
 
 using namespace db;
 
-
-
 NeighbourhoodSampleIterator::NeighbourhoodSampleIterator(const GraphView& view,
                                                          const ColumnNodeIDs* inputNodeIDs)
     : Iterator(view),
@@ -87,12 +85,12 @@ void NeighbourhoodSampleIterator::nextValidForCurrentNode() {
         const NodeID curNode = *_nodeIt;
 
         _edges = indexer.getNodeOutEdges(curNode);
-        if (_edges.empty()) {
-            _partIt.next();
-            continue;
+        if (!_edges.empty()) {
+            _edgeIt = _edges.begin();
+            return;
         }
-        _edgeIt = _edges.begin();
-        return;
+
+        _partIt.next();
     }
 }
 
@@ -100,7 +98,9 @@ NeighbourhoodSampleChunkWriter::NeighbourhoodSampleChunkWriter(const GraphView& 
                                                                const ColumnNodeIDs* input,
                                                                size_t sampleSize)
     : NeighbourhoodSampleIterator(view, input),
-    _sampleSize(sampleSize)
+    _sampleSize(sampleSize),
+    _sampleRatio(1.0 / _sampleSize),
+    _replacementGenerator(0, _sampleSize - 1)
 {
 }
 
@@ -108,7 +108,6 @@ size_t NeighbourhoodSampleChunkWriter::geometricSample(double W) {
     const double u = rand01();
     return std::floor(std::log(u) / std::log(1 - W));
 }
-
 
 void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
     bioassert(_sampleSize <= maxCount, "Invalid sample size.");
@@ -129,16 +128,11 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
 
     size_t writeIndex = 0;
 
-    const double sampleRatio = 1.0 / _sampleSize;
-    std::uniform_int_distribution<> replacementGenerator(0, _sampleSize - 1);
-
-
-
     for (size_t sampleNumber = 0; sampleNumber < nodesToSample; sampleNumber++) {
         // Sample range [start, end)
-        const size_t sampleStart = sampleNumber * _sampleSize;
+        const size_t sampleStart = writeIndex;
         // Expected value of the largest u_j of the first k samples
-        double W = std::pow(rand01(), sampleRatio);
+        double W = std::pow(rand01(), _sampleRatio);
 
         size_t i = 0;
         while (_edgeIt != _edges.end()) {
@@ -174,7 +168,7 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
 
             // Otherwise replace with a random probability
             // We know that [sampleStart, sampleEnd) is populated with this node's samples
-            const size_t replacedIndex = sampleStart + replacementGenerator(_generator);
+            const size_t replacedIndex = sampleStart + _replacementGenerator(_generator);
 
             const EdgeRecord& sample = *_edgeIt;
             _srcIDs->operator[](replacedIndex) = sample._nodeID;
@@ -183,9 +177,8 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
             _otherIDs->operator[](replacedIndex) = sample._otherID;
             nextValidForCurrentNode();
 
-            W *= std::pow(rand01(), sampleRatio);
+            W *= std::pow(rand01(), _sampleRatio);
         }
-
         _nodeIt++;
     }
 
