@@ -20,15 +20,9 @@ NeighbourhoodSampleIterator::NeighbourhoodSampleIterator(const GraphView& view,
 
 void NeighbourhoodSampleIterator::init() {
     for (_nodeIt = _inputNodeIDs->begin(); _nodeIt != _inputNodeIDs->cend(); _nodeIt++) {
-        const NodeID nodeID = *_nodeIt;
-        for (; _partIt.isNotEnd(); _partIt.next()) {
-            const DataPart* part = _partIt.get();
-            const EdgeIndexer& indexer = part->edgeIndexer();
-            _edges = indexer.getNodeOutEdges(nodeID);
-            _edgeIt = _edges.begin();
-            if (!_edges.empty()) {
-                return;
-            }
+        syncEdges();
+        if (!_edges.empty()) {
+            return;
         }
     }
 }
