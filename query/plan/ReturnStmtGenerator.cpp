@@ -389,7 +389,8 @@ void ReturnStmtGenerator::fetchOrGenerateProperty(PropertyExpr* prop) {
                        prop);
         }
 
-        const bool isFromVar = code == PlanGraphOpcode::VAR;
+        const bool isFromVar =
+            code == PlanGraphOpcode::VAR || code == PlanGraphOpcode::PROCEDURE_EVAL;
         if (!isFromVar) {
             throwError("Could not return properties from variable with ambiguous source.",
                        prop);
