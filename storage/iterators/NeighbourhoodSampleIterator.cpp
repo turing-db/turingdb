@@ -6,7 +6,6 @@
 #include "datapart/EdgeRecord.h"
 #include "indexers/EdgeIndexer.h"
 #include "iterators/PartIterator.h"
-#include <random>
 
 using namespace db;
 
@@ -109,6 +108,10 @@ size_t NeighbourhoodSampleChunkWriter::geometricSample(double W) {
     return std::floor(std::log(u) / std::log(1 - W));
 }
 
+size_t NeighbourhoodSampleChunkWriter::randomSampleOffset() {
+    return _replacementGenerator(_generator);
+}
+
 void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
     bioassert(_sampleSize <= maxCount, "Invalid sample size.");
 
@@ -168,7 +171,7 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
 
             // Otherwise replace with a random probability
             // We know that [sampleStart, sampleEnd) is populated with this node's samples
-            const size_t replacedIndex = sampleStart + _replacementGenerator(_generator);
+            const size_t replacedIndex = sampleStart + randomSampleOffset();
 
             const EdgeRecord& sample = *_edgeIt;
             _srcIDs->operator[](replacedIndex) = sample._nodeID;

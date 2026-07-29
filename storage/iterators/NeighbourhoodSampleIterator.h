@@ -1,12 +1,13 @@
 #pragma once
 
+#include <random>
+
 #include "iterators/Iterator.h"
 
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
 
 #include "datapart/EdgeRecord.h"
-#include <random>
 
 namespace db {
 
@@ -60,6 +61,8 @@ private:
     }
 
     size_t geometricSample(double W);
+
+    size_t randomSampleOffset();
 };
 
 }
