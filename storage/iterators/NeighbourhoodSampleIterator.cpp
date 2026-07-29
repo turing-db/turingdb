@@ -121,10 +121,18 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
     const size_t nodesToSample = std::min(nodesRemaining, samplesPerChunk);
     const size_t thisSize = nodesToSample * _sampleSize;
 
-    if (_srcIDs) _srcIDs->resize(thisSize);
-    if (_edgeIDs) _edgeIDs->resize(thisSize);
-    if (_edgeTypes) _edgeTypes->resize(thisSize);
-    if (_otherIDs) _otherIDs->resize(thisSize);
+    if (_srcIDs) {
+        _srcIDs->resize(thisSize);
+    }
+    if (_edgeIDs) {
+        _edgeIDs->resize(thisSize);
+    }
+    if (_edgeTypes) {
+        _edgeTypes->resize(thisSize);
+    }
+    if (_otherIDs) {
+        _otherIDs->resize(thisSize);
+    }
 
     if (thisSize == 0) {
         return;
@@ -132,6 +140,8 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
 
     size_t writeIndex = 0;
 
+    // Algorithm L (improvement on Reservoir sampling)
+    // https://en.wikipedia.org/wiki/Reservoir_sampling
     for (size_t sampleNumber = 0; sampleNumber < nodesToSample; sampleNumber++) {
         // Sample range [start, end)
         const size_t sampleStart = writeIndex;
@@ -149,10 +159,18 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
             // Unconditionally take the first k elements
             if (i <= _sampleSize) {
                 const EdgeRecord& e = *_edgeIt;
-                if (_srcIDs)_srcIDs->operator[](writeIndex) = e._nodeID;
-                if (_edgeIDs)_edgeIDs->operator[](writeIndex) = e._edgeID;
-                if (_edgeTypes)_edgeTypes->operator[](writeIndex) = e._edgeTypeID;
-                if (_otherIDs)_otherIDs->operator[](writeIndex) = e._otherID;
+                if (_srcIDs) {
+                    _srcIDs->operator[](writeIndex) = e._nodeID;
+                }
+                if (_edgeIDs) {
+                    _edgeIDs->operator[](writeIndex) = e._edgeID;
+                }
+                if (_edgeTypes) {
+                    _edgeTypes->operator[](writeIndex) = e._edgeTypeID;
+                }
+                if (_otherIDs) {
+                    _otherIDs->operator[](writeIndex) = e._otherID;
+                }
                 writeIndex++;
                 nextValidForCurrentNode();
                 continue;
@@ -175,10 +193,18 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
             const size_t replacedIndex = sampleStart + randomSampleOffset();
 
             const EdgeRecord& sample = *_edgeIt;
-            if (_srcIDs)_srcIDs->operator[](replacedIndex) = sample._nodeID;
-            if (_edgeIDs)_edgeIDs->operator[](replacedIndex) = sample._edgeID;
-            if (_edgeTypes)_edgeTypes->operator[](replacedIndex) = sample._edgeTypeID;
-            if (_otherIDs)_otherIDs->operator[](replacedIndex) = sample._otherID;
+            if (_srcIDs) {
+                _srcIDs->operator[](replacedIndex) = sample._nodeID;
+            }
+            if (_edgeIDs) {
+                _edgeIDs->operator[](replacedIndex) = sample._edgeID;
+            }
+            if (_edgeTypes) {
+                _edgeTypes->operator[](replacedIndex) = sample._edgeTypeID;
+            }
+            if (_otherIDs) {
+                _otherIDs->operator[](replacedIndex) = sample._otherID;
+            }
             nextValidForCurrentNode();
 
             W *= std::pow(rand01(), _sampleRatio);
@@ -191,8 +217,16 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
 
     // writeIndex ensures that we wrote to the first writeIndex contiguous elements. If
     // any node had out degree < _sampleSize, we truncate the arrays
-   if (_srcIDs)_srcIDs->resize(writeIndex);
-   if (_edgeIDs)_edgeIDs->resize(writeIndex);
-   if (_edgeTypes)_edgeTypes->resize(writeIndex);
-   if (_otherIDs)_otherIDs->resize(writeIndex);
+    if (_srcIDs) {
+        _srcIDs->resize(writeIndex);
+    }
+    if (_edgeIDs) {
+        _edgeIDs->resize(writeIndex);
+    }
+    if (_edgeTypes) {
+        _edgeTypes->resize(writeIndex);
+    }
+    if (_otherIDs) {
+        _otherIDs->resize(writeIndex);
+    }
 }
