@@ -380,6 +380,23 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (a) RETURN a.team, count(*) LIMIT count: a limit over the emitted groups. The
+// limit caps how many group rows come out, never how many input rows are folded, so it
+// budgets the emit loop alone - the producing loop must still see every node for the
+// counts to be right.
+std::string groupCountStarLimitProgram(uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "  %team = db.get_node_properties(%a, \"team\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
+                       "  %gteam, %n = db.group_aggregate(%team, %a) keys 1 aggregates [count] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<ui64>)\n"
+                       "  %lteam, %ln = db.limit(%gteam, %n) count ")
+           + std::to_string(count)
+           + " : (!db.column<none>, !db.column<ui64>) -> (!db.column<none>, !db.column<ui64>)\n"
+             "  db.output(%lteam, %ln) : !db.column<none>, !db.column<ui64>\n"
+             "  return\n"
+             "}\n";
+}
+
 // MATCH (a) RETURN a.weight, count(*): group by a Double property and count each
 // group. The grouping key is a nullable f64, so it exercises key serialization of a
 // floating-point value.
@@ -940,6 +957,86 @@ TEST_F(GroupAggregateTest, lowersToBufferUpdateAndEmitLoop) {
     EXPECT_TRUE(mlir::isa<mlir::nl::For>(updateOp->getParentOp()));
     EXPECT_TRUE(groupOp.getResult().hasOneUse());
     EXPECT_TRUE(mlir::isa<mlir::nl::For>(*groupOp.getResult().user_begin()));
+}
+
+TEST_F(GroupAggregateTest, limitCapsTheEmittedGroups) {
+    auto graph = buildTeamGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Two groups (red and blue); LIMIT 1 emits one of them. Which one is the emit
+    // order of the accumulator, so only the row count is asserted here.
+    CountingSink oneSink;
+    const std::string oneProgram = groupCountStarLimitProgram(1);
+    runLoweredProgram(oneProgram.c_str(), reader.getView(), oneSink);
+
+    EXPECT_EQ(oneSink.getTotalRows(), 1u);
+
+    // A bound above the group count emits every group.
+    CountingSink allSink;
+    const std::string allProgram = groupCountStarLimitProgram(5);
+    runLoweredProgram(allProgram.c_str(), reader.getView(), allSink);
+
+    EXPECT_EQ(allSink.getTotalRows(), 2u);
+}
+
+TEST_F(GroupAggregateTest, lowersGroupAggregateLimitToALimitOnTheEmitLoopOnly) {
+    auto graph = buildTeamGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    const std::string programText = groupCountStarLimitProgram(1);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(programText, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &reader.getView());
+    lowering.lower(dbFunction, *nlModule);
+
+    size_t limitCount = 0;
+    mlir::nl::GroupAggregateUpdate updateOp;
+    mlir::nl::GroupAggregate groupOp;
+    mlir::Value handle;
+
+    nlModule->walk([&](mlir::Operation* operation) {
+        if (mlir::nl::GroupAggregateUpdate found = mlir::dyn_cast<mlir::nl::GroupAggregateUpdate>(operation)) {
+            updateOp = found;
+        } else if (mlir::nl::GroupAggregate found = mlir::dyn_cast<mlir::nl::GroupAggregate>(operation)) {
+            groupOp = found;
+        } else if (mlir::nl::Limit found = mlir::dyn_cast<mlir::nl::Limit>(operation)) {
+            handle = found.getState();
+            limitCount++;
+        }
+    });
+
+    ASSERT_TRUE(updateOp);
+    ASSERT_TRUE(groupOp);
+    ASSERT_TRUE(handle);
+    EXPECT_EQ(limitCount, 1u);
+
+    // The producing loop is the one holding the update: it folds the rows into the
+    // per-group state, so it must run to completion - a limit operand there would
+    // group a prefix of the scan and undercount every group.
+    auto producingLoop = mlir::dyn_cast<mlir::nl::For>(updateOp->getParentOp());
+    ASSERT_TRUE(producingLoop);
+    EXPECT_FALSE(producingLoop.getLimit());
+
+    // The emit loop drains the finished groups, and it is what the limit budgets: it
+    // carries the handle, so it stops once the budgeted groups have been emitted.
+    ASSERT_TRUE(groupOp.getResult().hasOneUse());
+    auto emitLoop = mlir::dyn_cast<mlir::nl::For>(*groupOp.getResult().user_begin());
+    ASSERT_TRUE(emitLoop);
+    EXPECT_EQ(emitLoop.getLimit(), handle);
 }
 
 int main(int argc, char** argv) {

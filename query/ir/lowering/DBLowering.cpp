@@ -1064,11 +1064,13 @@ void DBLowering::lowerSort(mlir::db::Sort sort) {
     setInsertionInto(_entryBlock);
     nl::Sort sortOp = _builder.create<nl::Sort>(loc, iteratorType, state);
 
-    // The emit loop binds one variable per sorted column and is never bounded by
-    // a limit (sort must see every row), so the iterator-only loop builder is
-    // used. buildLoopForSource maps db.sort's results to the loop variables, so
-    // the db.output that follows lowers into the emit loop body reading the
-    // sorted chunks.
+    // The emit loop binds one variable per sorted column. It is the only loop of this
+    // sort a limit may bound - assignProducerLoops stops at the sort and hands the
+    // handle to it, never to the producing loops, which had to see every row - so it
+    // stops re-chunking once a downstream streaming limit is spent. A limit fused into
+    // the top-K bounds nothing here: the accumulator already holds at most k rows.
+    // buildLoopForSource maps db.sort's results to the loop variables, so the
+    // db.output that follows lowers into the emit loop body reading the sorted chunks.
     buildLoopForSource(sortOp.getResult(), sort.getOperation());
 }
 
@@ -1277,7 +1279,10 @@ void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
     // after the producing loop (before the func.return) so every row has been folded
     // when the loop first steps. buildLoopForSource binds one loop variable per
     // output column and maps db.group_aggregate's results to them, so the db.output
-    // that follows lowers into the emit loop body reading the group rows.
+    // that follows lowers into the emit loop body reading the group rows. As for a
+    // sort, this emit loop is the only loop of this aggregation a limit may bound -
+    // assignProducerLoops stops at the breaker and hands the handle to it, never to
+    // the producing loops, which had to fold every row.
     setInsertionInto(_entryBlock);
     nl::GroupAggregate groupOp = _builder.create<nl::GroupAggregate>(loc, iteratorType, state);
     buildLoopForSource(groupOp.getResult(), groupAggregate.getOperation());
@@ -1411,10 +1416,29 @@ void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {
                                      mlir::db::GetInEdgesByType>(definingOp);
     const bool isCrossProduct = mlir::isa<mlir::db::CrossProduct>(definingOp);
 
+    // A pipeline breaker accumulates every row before it emits any, so the loops that
+    // fill its accumulator must run to completion and the walk stops here rather than
+    // reaching them - bounding them would sort, group or tally a prefix of the scan
+    // instead of the whole input.
+    //
+    // db.sort and db.group_aggregate drain their accumulator through an emit loop of
+    // their own, which buildLoopForSource opens from this op: that loop is what the
+    // limit really budgets, so the handle lands on it and it stops as soon as the
+    // budget is spent. db.count and the value reductions collapse to a single row and
+    // open no loop at all, so they take no handle - the limit then does its whole job
+    // through the truncate on the one materialized row.
+    const bool emitsThroughLoop = mlir::isa<mlir::db::Sort, mlir::db::GroupAggregate>(definingOp);
+    const bool breaksPipeline = emitsThroughLoop
+        || mlir::isa<mlir::db::Count, mlir::db::Sum, mlir::db::Min, mlir::db::Max, mlir::db::Avg>(definingOp);
+
     // The first limit, in program order, to claim a producer wins, so a loop
     // shared by two limits' nests carries the outer one and never two handles.
-    if ((opensLoop || isCrossProduct) && !_loopLimitHandle.count(definingOp)) {
+    if ((opensLoop || isCrossProduct || emitsThroughLoop) && !_loopLimitHandle.count(definingOp)) {
         _loopLimitHandle[definingOp] = handle;
+    }
+
+    if (breaksPipeline) {
+        return;
     }
 
     if (isCrossProduct) {
