@@ -28,6 +28,7 @@ class UnaryExpr;
 class CypherAST;
 class Expr;
 class Literal;
+class OrderBy;
 class PropertyExpr;
 class VariableDependency;
 class DependencyEdge;
@@ -38,6 +39,10 @@ public:
     using VariableIdentityMap = std::unordered_map<const VariableDependency*, VariableIdentities>;
     using DefinedVars = std::unordered_set<const VariableDependency*>;
     using ExprValueMap = std::unordered_map<const Expr*, mlir::Value>;
+
+    // Maps a Cypher variable name to the last column defined for it, the one the
+    // projection and its ORDER BY read
+    using FinalIdentityMap = std::unordered_map<std::string_view, mlir::Value>;
 
     explicit DBProgramGenerator(mlir::ModuleOp* mainModule);
     ~DBProgramGenerator();
@@ -87,6 +92,16 @@ private:
 
     void generateCreate(const CypherAST* ast);
     void generateOutput(const CypherAST* ast);
+
+    // Reorders the projection with a Sort over @param projected, replacing each
+    // projected column with its sorted counterpart
+    void translateOrderBy(const OrderBy* orderBy,
+                          const FinalIdentityMap& identities,
+                          llvm::SmallVectorImpl<mlir::Value>& projected);
+
+    // The column an expression reads: the traversal variable it names, when it names
+    // one, otherwise the column its translation produces
+    mlir::Value resolveExprColumn(const FinalIdentityMap& identities, const Expr* expr);
 
     void generatePropertyConstraints(const CypherAST* ast);
     void generateLabelConstraints(const CypherAST* ast);
