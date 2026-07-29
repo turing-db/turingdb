@@ -52,9 +52,12 @@ private:
 
     std::mt19937 _generator {std::random_device {}()};
 
+    // Uniform random sample from (0, 1)
     double rand01() {
         return ((_generator() >> 11U) + 0.5) * 0x1p-53;
     }
+
+    size_t geometricSample(double W);
 };
 
 }
