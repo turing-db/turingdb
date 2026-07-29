@@ -59,7 +59,7 @@ private:
     size_t _sampleSize {0};
     double _sampleRatio {1.0};
 
-    std::mt19937 _generator {std::random_device {}()};
+    std::mt19937_64 _generator {std::random_device {}()};
     std::uniform_int_distribution<> _replacementGenerator;
 
     // Uniform random sample from (0, 1)
