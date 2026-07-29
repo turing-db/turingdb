@@ -49,6 +49,7 @@ set(storage_sources
         iterators/ScanPropertyTypesIterator.cpp
         iterators/ScanOutEdgesByLabelIterator.cpp
         iterators/MatchLabelSetIterator.cpp
+        iterators/NeighbourhoodSampleIterator.cpp
 
         iterators/TombstoneFilter.cpp
 

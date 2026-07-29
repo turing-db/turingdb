@@ -16,6 +16,7 @@ class GraphView;
 class NeighbourhoodSampleIterator : public Iterator {
 public:
     NeighbourhoodSampleIterator(const GraphView& view, const ColumnNodeIDs* inputNodeIDs);
+    ~NeighbourhoodSampleIterator() override = default;
 
     void next() final;
 
@@ -40,8 +41,15 @@ public:
                                    const ColumnNodeIDs* input,
                                    size_t sampleSize);
 
+    ~NeighbourhoodSampleChunkWriter() final = default;
+
 
     void fill(size_t maxCount);
+
+    void setOutputColumns(ColumnNodeIDs* srcIDs,
+                          ColumnEdgeIDs* edgeIDs,
+                          ColumnEdgeTypes* edgeTypes,
+                          ColumnNodeIDs* otherIDs);
 
 private:
     ColumnNodeIDs* _srcIDs {nullptr};

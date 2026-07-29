@@ -189,6 +189,11 @@ void ReadStmtGenerator::generateCallStmt(const CallStmt* callStmt) {
             continue;
         }
 
+        // Literals are evaluated inline in translateProcedureEvalNode
+        if (arg->getKind() == Expr::Kind::LITERAL) {
+            continue;
+        }
+
         // Arg needs evaluation: ensure we have an ExprEvalNode
         if (!exprEval) {
             exprEval = _tree->insertBefore<ExprEvalNode>(procNode);
@@ -762,10 +767,12 @@ void ReadStmtGenerator::placeJoinsOnProcedures() {
                         case PlanGraphTopology::PathToDependency::SameVar: {
                             throwError("Unknown error. Cannot place procedure call on the same var", args);
                         }
+                        break;
 
                         case PlanGraphTopology::PathToDependency::BackwardPath: {
                             return;
                         }
+                        break;
 
                         case PlanGraphTopology::PathToDependency::UndirectedPath: {
                             // Join
@@ -777,12 +784,14 @@ void ReadStmtGenerator::placeJoinsOnProcedures() {
                             depBranchTip->connectOut(join);
                             return;
                         }
+                        break;
 
                         case PlanGraphTopology::PathToDependency::NoPath: {
                             PlanGraphNode* depBranchTip = _topology->getBranchTip(dep._producerNode);
                             depBranchTip->connectOut(n);
                             return;
                         }
+                        break;
                     }
                 }
             }
