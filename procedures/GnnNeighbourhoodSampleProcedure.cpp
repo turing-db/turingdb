@@ -39,7 +39,7 @@ void executeImpl(ProcedureState* proc) {
     auto* srcCol = static_cast<ColumnNodeIDs*>(data.getReturnColumn(0));
     auto* edgeCol = static_cast<ColumnEdgeIDs*>(data.getReturnColumn(1));
     auto* edgeTypeCol = static_cast<ColumnEdgeTypes*>(data.getReturnColumn(2));
-    auto* dstCol = static_cast<ColumnNodeIDs*>(data.getReturnColumn(3));
+    auto* tgtCol = static_cast<ColumnNodeIDs*>(data.getReturnColumn(3));
     ColumnIndices* indices = data.indices();
 
     const GraphView& view = *ctxt->getGraphView();
@@ -64,7 +64,7 @@ void executeImpl(ProcedureState* proc) {
     }
 
     NeighbourhoodSampleChunkWriter writer(view, inputNodeIDs, sampleSize, seed);
-    writer.setOutputColumns(srcCol, edgeCol, edgeTypeCol, dstCol);
+    writer.setOutputColumns(srcCol, edgeCol, edgeTypeCol, tgtCol);
     writer.setIndices(indices);
     writer.fill(ChunkConfig::CHUNK_SIZE);
 
@@ -94,7 +94,7 @@ void GnnNeighbourhoodSampleProcedure::registerProcedure(ProcedureNamespace* ns) 
     proc->addReturnValue("src", ProcedureType::NODE);
     proc->addReturnValue("edge", ProcedureType::EDGE);
     proc->addReturnValue("edgeType", ProcedureType::EDGE_TYPE_ID);
-    proc->addReturnValue("dst", ProcedureType::NODE);
+    proc->addReturnValue("tgt", ProcedureType::NODE);
 
     proc->setHasIndices(true);
 
