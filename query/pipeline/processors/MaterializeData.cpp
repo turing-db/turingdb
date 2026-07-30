@@ -97,6 +97,10 @@ INSTANTIATE(ColumnVector<PropertyTypeID>);
 INSTANTIATE(ColumnVector<LabelSetID>);
 INSTANTIATE(ColumnVector<EdgeTypeID>);
 
+INSTANTIATE(ColumnVector<ValueType>);
+INSTANTIATE(ColumnVector<std::string>);
+INSTANTIATE(ColumnVector<ListView>);
+
 INSTANTIATE(ColumnVector<types::UInt64::Primitive>);
 INSTANTIATE(ColumnVector<types::Int64::Primitive>);
 INSTANTIATE(ColumnVector<types::Double::Primitive>);
