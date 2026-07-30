@@ -11,6 +11,7 @@
 #include "DBProgramGenerator.h"
 #include "NLDialect.h"
 #include "StorageDialect.h"
+#include "iterators/ChunkConfig.h"
 
 #include "CypherAST.h"
 #include "CypherAnalyzer.h"
@@ -18,6 +19,7 @@
 
 #include "SystemManager.h"
 #include "SystemAccessor.h"
+#include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
@@ -86,6 +88,14 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
 
     const GraphView view = txRes->viewGraph();
 
+    CommitWriteBuffer* writeBuffer = nullptr;
+    MetadataBuilder* metadataBuilder = nullptr;
+    if (txRes->writingPendingCommit()) {
+        CommitBuilder* commitBuilder = txRes->get<PendingCommitWriteTx>().commitBuilder();
+        writeBuffer = &commitBuilder->writeBuffer();
+        metadataBuilder = &commitBuilder->metadata();
+    }
+
     CypherAST ast(system.getProcedures(), query);
     CypherParser parser(&ast);
     try {
@@ -136,7 +146,7 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
         return;
     }
 
-    DBDialectInterpreter interpreter(module, &view, sink, mem);
+    DBDialectInterpreter interpreter(module, &view, sink, mem, ChunkConfig::CHUNK_SIZE, writeBuffer, metadataBuilder);
     try {
         interpreter.run();
     } catch (const CompilerException& e) {
