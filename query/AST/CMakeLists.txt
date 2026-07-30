@@ -23,6 +23,7 @@ set(ast_sources
     expr/UnaryExpr.cpp
     expr/FunctionInvocationExpr.cpp
     expr/IndexExpr.cpp
+    expr/StructuralExpressionComparator.cpp
 
     stmt/Stmt.cpp
     stmt/StmtContainer.cpp
