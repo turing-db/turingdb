@@ -43,7 +43,7 @@ TEST_F(ShowProceduresTest, showProcedures) {
     const auto res = query("SHOW PROCEDURES", "default", [&](const Dataframe* df) -> void {
         ASSERT_TRUE(df != nullptr);
         ASSERT_EQ(df->cols().size(), 2);
-        ASSERT_EQ(df->getLogicalRowCount(), 13);
+        ASSERT_EQ(df->getLogicalRowCount(), 14);
 
         const auto& cols = df->cols();
         const auto* colName = cols.at(0)->as<ColumnVector<types::String::Primitive>>();
@@ -65,7 +65,8 @@ TEST_F(ShowProceduresTest, showProcedures) {
         ASSERT_EQ(colName->at(9), "db.getEdges");
         ASSERT_EQ(colName->at(10), "db.getNodes");
         ASSERT_EQ(colName->at(11), "db.getNodeEdges");
-        ASSERT_EQ(colName->at(12), "greeter.hello");
+        ASSERT_EQ(colName->at(12), "gnn.neighbourhoodSample");
+        ASSERT_EQ(colName->at(13), "greeter.hello");
 
         // Check exact signatures
         ASSERT_EQ(colSignature->at(0), "db.labels() :: (id :: INTEGER, label :: STRING)");
@@ -94,7 +95,10 @@ TEST_F(ShowProceduresTest, showProcedures) {
                   "outLimitValues :: LIST, inLimitTypes :: LIST, inLimitValues :: LIST, "
                   "returnOnlyIDs :: BOOLEAN) :: (id :: NODE, outgoingEdges :: LIST, "
                   "incomingEdges :: LIST, outEdgeCounts :: STRING, inEdgeCounts :: STRING)");
-        ASSERT_EQ(colSignature->at(12), "greeter.hello() :: (message :: STRING)");
+        ASSERT_EQ(colSignature->at(12),
+                  "gnn.neighbourhoodSample(node :: NODE, sampleSize :: INTEGER)"
+                  " :: (src :: NODE, edge :: EDGE, edgeType :: INTEGER, dst :: NODE)");
+        ASSERT_EQ(colSignature->at(13), "greeter.hello() :: (message :: STRING)");
 
         executed = true;
     });
