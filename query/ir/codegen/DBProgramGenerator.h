@@ -28,7 +28,7 @@ class UnaryExpr;
 class CypherAST;
 class Expr;
 class Literal;
-class OrderBy;
+class Projection;
 class PropertyExpr;
 class VariableDependency;
 class DependencyEdge;
@@ -94,7 +94,7 @@ private:
 
     // Reorders the projection with a Sort over @param projected, replacing each
     // projected column with its sorted counterpart
-    void translateOrderBy(const OrderBy* orderBy,
+    void translateOrderBy(const Projection* projection,
                           const FinalIdentityMap& identities,
                           llvm::SmallVectorImpl<mlir::Value>& projected);
 
