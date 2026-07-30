@@ -241,6 +241,14 @@ protected:
         interpreter.run();
     }
 
+    void expectRowsEqual(std::string_view query, const Rows& pipelineRows, const Rows& irRows) {
+        ASSERT_EQ(pipelineRows.size(), irRows.size()) << "Size mismatch for " << query;
+
+        for (auto [plRow, irRow] : rv::zip(pipelineRows, irRows)) {
+            EXPECT_EQ(plRow, irRow) << "Row mismatch for " << query;
+        }
+    }
+
     void expectEquivalent(std::string_view query) {
         try {
             Rows pipelineRows;
@@ -252,11 +260,26 @@ protected:
             std::ranges::sort(pipelineRows);
             std::ranges::sort(irRows);
 
-            ASSERT_EQ(pipelineRows.size(), irRows.size()) << "Size mismatch for " << query;
+            expectRowsEqual(query, pipelineRows, irRows);
+        } catch (...) {
+            spdlog::error("Exception thrown for query: {}.", query);
+            throw;
+        }
+    }
 
-            for (auto [plRow, irRow] : rv::zip(pipelineRows, irRows)) {
-                EXPECT_EQ(plRow, irRow) << "Row mismatch for " << query;
-            }
+    // The ORDER BY sibling of expectEquivalent: the row order is itself the result being
+    // checked, so the rows are compared as the two engines emitted them and neither side
+    // is sorted first. The query has to order by a key with no ties, or the engines may
+    // break them differently and both still be right
+    void expectEquivalentOrdered(std::string_view query) {
+        try {
+            Rows pipelineRows;
+            runViaPipeline(query, pipelineRows);
+
+            Rows irRows;
+            runViaIR(query, irRows);
+
+            expectRowsEqual(query, pipelineRows, irRows);
         } catch (...) {
             spdlog::error("Exception thrown for query: {}.", query);
             throw;
@@ -520,6 +543,41 @@ TEST_F(EquivalenceTest, limit) {
     expectEquivalent("MATCH (a)-->(b) RETURN a, b LIMIT 3");
 
     expectEquivalent("MATCH (a), (b), (c), (d) RETURN a LIMIT 10");
+}
+
+// Every node of simpledb has a name and no two share one, so a name key is a total
+// order: the engines have no tie to break and must emit the very same sequence
+TEST_F(EquivalenceTest, orderBy) {
+    expectEquivalentOrdered("MATCH (n) RETURN n.name ORDER BY n.name");
+    expectEquivalentOrdered("MATCH (n) RETURN n.name ORDER BY n.name ASC");
+    expectEquivalentOrdered("MATCH (n) RETURN n.name ORDER BY n.name DESC");
+
+    expectEquivalentOrdered("MATCH (n:Person) RETURN n.name ORDER BY n.name");
+    expectEquivalentOrdered("MATCH (n:Interest) RETURN n.name ORDER BY n.name DESC");
+
+    expectEquivalentOrdered("MATCH (n) WHERE n.age = 32 RETURN n.name ORDER BY n.name");
+    expectEquivalentOrdered("MATCH (n) WHERE n.isFrench RETURN n.name ORDER BY n.name DESC");
+
+    // No two edges of simpledb share a source and a target, so the two names order the
+    // traversal fully
+    expectEquivalentOrdered("MATCH (a)-->(b) RETURN a.name, b.name ORDER BY a.name, b.name");
+    expectEquivalentOrdered("MATCH (a)-->(b) RETURN a.name, b.name ORDER BY a.name DESC, b.name");
+    expectEquivalentOrdered("MATCH (a)-[:INTERESTED_IN]->(b) RETURN a.name, b.name ORDER BY b.name, a.name");
+}
+
+TEST_F(EquivalenceTest, orderBySkipLimit) {
+    expectEquivalentOrdered("MATCH (n) RETURN n.name ORDER BY n.name LIMIT 5");
+    expectEquivalentOrdered("MATCH (n) RETURN n.name ORDER BY n.name DESC LIMIT 3");
+    expectEquivalentOrdered("MATCH (n) RETURN n.name ORDER BY n.name LIMIT 1");
+    expectEquivalentOrdered("MATCH (n) RETURN n.name ORDER BY n.name LIMIT 0");
+    expectEquivalentOrdered("MATCH (n) RETURN n.name ORDER BY n.name LIMIT 100");
+
+    expectEquivalentOrdered("MATCH (n) RETURN n.name ORDER BY n.name SKIP 5");
+    expectEquivalentOrdered("MATCH (n) RETURN n.name ORDER BY n.name DESC SKIP 17");
+    expectEquivalentOrdered("MATCH (n) RETURN n.name ORDER BY n.name SKIP 100");
+
+    expectEquivalentOrdered("MATCH (n) RETURN n.name ORDER BY n.name SKIP 2 LIMIT 4");
+    expectEquivalentOrdered("MATCH (a)-->(b) RETURN a.name, b.name ORDER BY a.name, b.name SKIP 3 LIMIT 5");
 }
 
 TEST_F(EquivalenceTest, comparisonFilters) {
