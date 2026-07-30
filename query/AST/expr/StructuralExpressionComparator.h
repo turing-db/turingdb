@@ -10,6 +10,9 @@ class Literal;
 
 class StructuralExpressionComparator {
 public:
+    StructuralExpressionComparator() = delete;
+    ~StructuralExpressionComparator() = delete;
+
     static bool equal(const Expr* lhs, const Expr* rhs);
 
 private:
