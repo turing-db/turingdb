@@ -377,3 +377,17 @@ TEST_F(OrderByTest, nodesByUnprojectedAgeDescending) {
                            {11}, {12}, {13}, {14}, {15}, {16}, {17}, {0}, {1}};
     expectNodeRows("MATCH (n) RETURN n ORDER BY n.age DESC", expected);
 }
+
+// The key belongs to the other end of the traversal: the projection returns n, so m.age
+// is a column the sort carries only to order by, never to output. Just three of the
+// eighteen edges point at a node that has an age - Remy -> Adam, Adam -> Remy and
+// Ghosts -> Remy, all keyed 32 - so their sources lead, and the fifteen null-keyed rows
+// follow in the order the traversal collected them. A source repeats once per out-edge:
+// ORDER BY reorders rows, it does not merge them.
+TEST_F(OrderByTest, nodesByTargetAgeAscending) {
+    const Rows expected = {{0},  {1},  {6},                     // m is Adam or Remy, 32
+                           {0},  {0},  {0},  {1},  {1},  {8},   // m has no age from here
+                           {8},  {9},  {9},  {11}, {15}, {15},
+                           {12}, {12}, {17}};
+    expectNodeRows("MATCH (n)-->(m) RETURN n ORDER BY m.age", expected);
+}
