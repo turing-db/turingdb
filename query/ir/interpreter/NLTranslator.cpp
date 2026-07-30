@@ -76,12 +76,11 @@ NLBinaryFunctionSelector lookupBinaryFunctionSelector(mlir::Operation& operation
     return it == binaryFunctionSelectors.end() ? nullptr : it->second;
 }
 
-// Pool-allocate one procedure result column of the given element type, reserving a
-// full chunk so the calls stay allocation-free once the drive is under way. Every
-// procedure return type is written through a plain ColumnVector, so the element type
-// is all that varies.
+// Pool-allocate a plain (never-null) chunk column of the given element type, reserving a
+// full chunk so execution stays allocation-free. Every such column - an ID chunk, or one a
+// procedure yielded - is a ColumnVector, so the element type is all that varies.
 template <typename T>
-Column* allocProcedureColumn(LocalMemory* memory, size_t chunkSize) {
+Column* allocPlainChunkColumn(LocalMemory* memory, size_t chunkSize) {
     ColumnVector<T>* column = memory->alloc<ColumnVector<T>>();
     column->reserve(chunkSize);
     return column;
@@ -2573,55 +2572,55 @@ Column* NLTranslator::allocColumnForProcedureType(ProcedureType procedureType) {
     // column to exactly this type, so the two must not drift.
     switch (procedureType) {
         case ProcedureType::NODE:
-            return allocProcedureColumn<NodeID>(_memory, chunkSize);
+            return allocPlainChunkColumn<NodeID>(_memory, chunkSize);
         break;
 
         case ProcedureType::EDGE:
-            return allocProcedureColumn<EdgeID>(_memory, chunkSize);
+            return allocPlainChunkColumn<EdgeID>(_memory, chunkSize);
         break;
 
         case ProcedureType::LABEL_ID:
-            return allocProcedureColumn<LabelID>(_memory, chunkSize);
+            return allocPlainChunkColumn<LabelID>(_memory, chunkSize);
         break;
 
         case ProcedureType::EDGE_TYPE_ID:
-            return allocProcedureColumn<EdgeTypeID>(_memory, chunkSize);
+            return allocPlainChunkColumn<EdgeTypeID>(_memory, chunkSize);
         break;
 
         case ProcedureType::PROPERTY_TYPE_ID:
-            return allocProcedureColumn<PropertyTypeID>(_memory, chunkSize);
+            return allocPlainChunkColumn<PropertyTypeID>(_memory, chunkSize);
         break;
 
         case ProcedureType::VALUE_TYPE:
-            return allocProcedureColumn<ValueType>(_memory, chunkSize);
+            return allocPlainChunkColumn<ValueType>(_memory, chunkSize);
         break;
 
         case ProcedureType::UINT_64:
-            return allocProcedureColumn<types::UInt64::Primitive>(_memory, chunkSize);
+            return allocPlainChunkColumn<types::UInt64::Primitive>(_memory, chunkSize);
         break;
 
         case ProcedureType::INT64:
-            return allocProcedureColumn<types::Int64::Primitive>(_memory, chunkSize);
+            return allocPlainChunkColumn<types::Int64::Primitive>(_memory, chunkSize);
         break;
 
         case ProcedureType::DOUBLE:
-            return allocProcedureColumn<types::Double::Primitive>(_memory, chunkSize);
+            return allocPlainChunkColumn<types::Double::Primitive>(_memory, chunkSize);
         break;
 
         case ProcedureType::BOOL:
-            return allocProcedureColumn<types::Bool::Primitive>(_memory, chunkSize);
+            return allocPlainChunkColumn<types::Bool::Primitive>(_memory, chunkSize);
         break;
 
         case ProcedureType::STRING_VIEW:
-            return allocProcedureColumn<types::String::Primitive>(_memory, chunkSize);
+            return allocPlainChunkColumn<types::String::Primitive>(_memory, chunkSize);
         break;
 
         case ProcedureType::STRING:
-            return allocProcedureColumn<std::string>(_memory, chunkSize);
+            return allocPlainChunkColumn<std::string>(_memory, chunkSize);
         break;
 
         case ProcedureType::LIST:
-            return allocProcedureColumn<ListView>(_memory, chunkSize);
+            return allocPlainChunkColumn<ListView>(_memory, chunkSize);
         break;
 
         case ProcedureType::INVALID:
@@ -2851,7 +2850,12 @@ void NLTranslator::addCrossColumn(mlir::Value inputValue,
     Column* output = nullptr;
     NLBroadcastFunction broadcast = nullptr;
 
-    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+    // A constant column holds one value standing for every row, so repeating it block-wise
+    // and tiling it give the same column: the one broadcast serves both sides.
+    if (isConstantColumn(input)) {
+        output = _memory->allocSame(input);
+        broadcast = NLExecutor::selectConstBlockRepeatFunction();
+    } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         output = allocOptColumnForValueType(valueType);
         broadcast = isOuter ? NLExecutor::selectOptBlockRepeatFunction(valueType)
@@ -2898,31 +2902,12 @@ Column* NLTranslator::allocColumnIfUsed(mlir::Value chunkValue) {
 Column* NLTranslator::allocColumnForKind(NLChunkKind kind) {
     const size_t chunkSize = _program->getChunkSize();
 
-    switch (kind) {
-        case NLChunkKind::NodeID: {
-            ColumnNodeIDs* column = _memory->alloc<ColumnNodeIDs>();
-            column->reserve(chunkSize);
-            return column;
-        }
-        break;
+    Column* column = nullptr;
+    dispatchChunkKind(kind, [&]<typename ElementType>() {
+        column = allocPlainChunkColumn<ElementType>(_memory, chunkSize);
+    });
 
-        case NLChunkKind::EdgeID: {
-            ColumnEdgeIDs* column = _memory->alloc<ColumnEdgeIDs>();
-            column->reserve(chunkSize);
-            return column;
-        }
-        break;
-
-        case NLChunkKind::EdgeTypeID: {
-            ColumnEdgeTypes* column = _memory->alloc<ColumnEdgeTypes>();
-            column->reserve(chunkSize);
-            return column;
-        }
-        break;
-    }
-
-    bioassert(false, "Unknown NLChunkKind");
-    return nullptr;
+    return column;
 }
 
 // Pool-allocate a nullable value column (ColumnOptVector) of the right primitive
@@ -3040,12 +3025,40 @@ NLChunkKind NLTranslator::getChunkKind(mlir::Type chunkType) {
 }
 
 NLChunkKind NLTranslator::chunkKindFromElementType(mlir::Type elementType) {
+    // The ID chunks a scan or a hop binds, then the element types a CALL's yielded
+    // columns carry - so a yielded column is crossed and carried like any other. The
+    // integer widths are read the way a nullable value chunk's are: unsigned for a ui64,
+    // one bit for a bool.
     if (mlir::isa<storage::NodeIDType>(elementType)) {
         return NLChunkKind::NodeID;
     } else if (mlir::isa<storage::EdgeIDType>(elementType)) {
         return NLChunkKind::EdgeID;
     } else if (mlir::isa<storage::EdgeTypeIDType>(elementType)) {
         return NLChunkKind::EdgeTypeID;
+    } else if (mlir::isa<storage::LabelIDType>(elementType)) {
+        return NLChunkKind::LabelID;
+    } else if (mlir::isa<storage::PropertyTypeIDType>(elementType)) {
+        return NLChunkKind::PropertyTypeID;
+    } else if (mlir::isa<storage::ValueTypeType>(elementType)) {
+        return NLChunkKind::ValueTypeCode;
+    } else if (mlir::isa<storage::StringType>(elementType)) {
+        return NLChunkKind::String;
+    } else if (mlir::isa<storage::OwnedStringType>(elementType)) {
+        return NLChunkKind::OwnedString;
+    } else if (mlir::isa<storage::ListType>(elementType)) {
+        return NLChunkKind::List;
+    } else if (mlir::isa<storage::BoolType>(elementType)) {
+        return NLChunkKind::Bool;
+    } else if (mlir::isa<mlir::Float64Type>(elementType)) {
+        return NLChunkKind::Double;
+    } else if (const auto intType = mlir::dyn_cast<mlir::IntegerType>(elementType)) {
+        if (intType.getWidth() == 1) {
+            return NLChunkKind::Bool;
+        } else if (intType.isUnsigned()) {
+            return NLChunkKind::UInt64;
+        }
+
+        return NLChunkKind::Int64;
     }
 
     throw IRException("Unsupported chunk element type");

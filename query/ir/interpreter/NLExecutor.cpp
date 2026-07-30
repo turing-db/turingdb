@@ -3290,22 +3290,10 @@ void NLExecutor::runProcedureFinalizeLoop(NLExecutionContext* context, NLFunctio
 }
 
 NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {
-    switch (kind) {
-        case NLChunkKind::NodeID:
-            return &gatherColumn<NodeID>;
-        break;
+    NLGatherFunction selected = nullptr;
+    dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &gatherColumn<ElementType>; });
 
-        case NLChunkKind::EdgeID:
-            return &gatherColumn<EdgeID>;
-        break;
-
-        case NLChunkKind::EdgeTypeID:
-            return &gatherColumn<EdgeTypeID>;
-        break;
-    }
-
-    bioassert(false, "Unknown NLChunkKind");
-    return nullptr;
+    return selected;
 }
 
 NLGatherFunction NLExecutor::selectCountGatherFunction() {
@@ -3321,22 +3309,10 @@ NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(bool nullable) {
 }
 
 NLBroadcastFunction NLExecutor::selectBlockRepeatFunction(NLChunkKind kind) {
-    switch (kind) {
-        case NLChunkKind::NodeID:
-            return &blockRepeatColumn<NodeID>;
-        break;
+    NLBroadcastFunction selected = nullptr;
+    dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &blockRepeatColumn<ElementType>; });
 
-        case NLChunkKind::EdgeID:
-            return &blockRepeatColumn<EdgeID>;
-        break;
-
-        case NLChunkKind::EdgeTypeID:
-            return &blockRepeatColumn<EdgeTypeID>;
-        break;
-    }
-
-    bioassert(false, "Unknown NLChunkKind");
-    return nullptr;
+    return selected;
 }
 
 NLBroadcastFunction NLExecutor::selectCountBlockRepeatFunction() {
@@ -3348,22 +3324,10 @@ NLBroadcastFunction NLExecutor::selectConstBlockRepeatFunction() {
 }
 
 NLBroadcastFunction NLExecutor::selectTileFunction(NLChunkKind kind) {
-    switch (kind) {
-        case NLChunkKind::NodeID:
-            return &tileColumn<NodeID>;
-        break;
+    NLBroadcastFunction selected = nullptr;
+    dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &tileColumn<ElementType>; });
 
-        case NLChunkKind::EdgeID:
-            return &tileColumn<EdgeID>;
-        break;
-
-        case NLChunkKind::EdgeTypeID:
-            return &tileColumn<EdgeTypeID>;
-        break;
-    }
-
-    bioassert(false, "Unknown NLChunkKind");
-    return nullptr;
+    return selected;
 }
 
 // A nullable value chunk is a ColumnOptVector<Primitive> - that is,
@@ -3454,22 +3418,10 @@ NLCopyFunction NLExecutor::selectListCopyFunction() {
 }
 
 NLCopyFunction NLExecutor::selectCopyFunction(NLChunkKind kind) {
-    switch (kind) {
-        case NLChunkKind::NodeID:
-            return &copyRangeColumn<NodeID>;
-        break;
+    NLCopyFunction selected = nullptr;
+    dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &copyRangeColumn<ElementType>; });
 
-        case NLChunkKind::EdgeID:
-            return &copyRangeColumn<EdgeID>;
-        break;
-
-        case NLChunkKind::EdgeTypeID:
-            return &copyRangeColumn<EdgeTypeID>;
-        break;
-    }
-
-    bioassert(false, "Unknown NLChunkKind");
-    return nullptr;
+    return selected;
 }
 
 NLCopyFunction NLExecutor::selectCountCopyFunction() {
@@ -3493,22 +3445,10 @@ NLGatherFunction NLExecutor::selectOptGatherFunction(ValueType valueType) {
 }
 
 NLAppendFunction NLExecutor::selectAppendFunction(NLChunkKind kind) {
-    switch (kind) {
-        case NLChunkKind::NodeID:
-            return &appendColumn<NodeID>;
-        break;
+    NLAppendFunction selected = nullptr;
+    dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &appendColumn<ElementType>; });
 
-        case NLChunkKind::EdgeID:
-            return &appendColumn<EdgeID>;
-        break;
-
-        case NLChunkKind::EdgeTypeID:
-            return &appendColumn<EdgeTypeID>;
-        break;
-    }
-
-    bioassert(false, "Unknown NLChunkKind");
-    return nullptr;
+    return selected;
 }
 
 NLAppendFunction NLExecutor::selectCountAppendFunction() {
@@ -3550,6 +3490,19 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
 
         case NLChunkKind::EdgeTypeID:
             return &distinctKeyAppendColumn<EdgeTypeID>;
+        break;
+
+        case NLChunkKind::LabelID:
+        case NLChunkKind::PropertyTypeID:
+        case NLChunkKind::ValueTypeCode:
+        case NLChunkKind::UInt64:
+        case NLChunkKind::Int64:
+        case NLChunkKind::Double:
+        case NLChunkKind::Bool:
+        case NLChunkKind::String:
+        case NLChunkKind::OwnedString:
+        case NLChunkKind::List:
+            throw IRException("A column a procedure yielded cannot be a DISTINCT or grouping key yet: only an ID column has a serializer here");
         break;
     }
 
@@ -3839,6 +3792,19 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctIDFold(NLChunkK
         case NLChunkKind::EdgeTypeID:
             return &groupFoldCountDistinctID<EdgeTypeID>;
         break;
+
+        case NLChunkKind::LabelID:
+        case NLChunkKind::PropertyTypeID:
+        case NLChunkKind::ValueTypeCode:
+        case NLChunkKind::UInt64:
+        case NLChunkKind::Int64:
+        case NLChunkKind::Double:
+        case NLChunkKind::Bool:
+        case NLChunkKind::String:
+        case NLChunkKind::OwnedString:
+        case NLChunkKind::List:
+            throw IRException("A column a procedure yielded cannot be counted with DISTINCT yet: only an ID column has a fold here");
+        break;
     }
 
     bioassert(false, "Unknown NLChunkKind");
@@ -3884,22 +3850,10 @@ NLGroupAggregateEmitFunction NLExecutor::selectGroupAggregateEmit(GroupAggregate
 }
 
 NLGroupKeyGatherFunction NLExecutor::selectGroupKeyGather(NLChunkKind kind) {
-    switch (kind) {
-        case NLChunkKind::NodeID:
-            return &groupGatherAppendColumn<NodeID>;
-        break;
+    NLGroupKeyGatherFunction selected = nullptr;
+    dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &groupGatherAppendColumn<ElementType>; });
 
-        case NLChunkKind::EdgeID:
-            return &groupGatherAppendColumn<EdgeID>;
-        break;
-
-        case NLChunkKind::EdgeTypeID:
-            return &groupGatherAppendColumn<EdgeTypeID>;
-        break;
-    }
-
-    bioassert(false, "Unknown NLChunkKind");
-    return nullptr;
+    return selected;
 }
 
 // A nullable key column appends the same way an ID key does - copy the chosen rows -
@@ -4026,6 +3980,19 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
 
         case NLChunkKind::EdgeTypeID:
             return &compareColumn<EdgeTypeID>;
+        break;
+
+        case NLChunkKind::LabelID:
+        case NLChunkKind::PropertyTypeID:
+        case NLChunkKind::ValueTypeCode:
+        case NLChunkKind::UInt64:
+        case NLChunkKind::Int64:
+        case NLChunkKind::Double:
+        case NLChunkKind::Bool:
+        case NLChunkKind::String:
+        case NLChunkKind::OwnedString:
+        case NLChunkKind::List:
+            throw IRException("A column a procedure yielded cannot be a sort key yet: only an ID column has a comparator here");
         break;
     }
 
