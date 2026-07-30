@@ -15,7 +15,7 @@ uint64_t makeSeed(std::optional<uint64_t> seed) {
     if (seed.has_value()) {
         return *seed;
     }
-    return std::random_device{}();
+    return std::random_device {}();
 }
 
 }
@@ -95,7 +95,7 @@ NeighbourhoodSampleChunkWriter::NeighbourhoodSampleChunkWriter(const GraphView& 
                                                                std::optional<uint64_t> seed)
     : NeighbourhoodSampleIterator(view, input),
     _sampleSize(sampleSize),
-    _sampleRatio(1.0 / _sampleSize),
+    _sampleRatio(_sampleSize == 0 ? 1 :  1.0 / _sampleSize),
     _generator(makeSeed(seed)),
     _replacementGenerator(0, _sampleSize == 0 ? 0 : _sampleSize - 1)
 {
