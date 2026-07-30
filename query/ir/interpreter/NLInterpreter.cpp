@@ -18,14 +18,16 @@ NLInterpreter::NLInterpreter(const mlir::ModuleOp& module,
                              LocalMemory* memory,
                              size_t chunkSize,
                              CommitWriteBuffer* writeBuffer,
-                             MetadataBuilder* metadataBuilder)
+                             MetadataBuilder* metadataBuilder,
+                             const ProcedureContext* procedureContext)
     : _module(module),
     _view(view),
     _sink(sink),
     _memory(memory),
     _chunkSize(chunkSize),
     _writeBuffer(writeBuffer),
-    _metadataBuilder(metadataBuilder)
+    _metadataBuilder(metadataBuilder),
+    _procedureContext(procedureContext)
 {
 }
 
@@ -49,7 +51,7 @@ NLInterpreter::Status NLInterpreter::run() {
     {
         const TimePoint start = Clock::now();
 
-        NLTranslator translator(&program, _memory, _view, _metadataBuilder);
+        NLTranslator translator(&program, _memory, _view, _metadataBuilder, _procedureContext);
         translator.translate(function);
 
         const TimePoint end = Clock::now();

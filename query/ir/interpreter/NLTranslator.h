@@ -7,6 +7,7 @@
 #include "llvm/ADT/StringRef.h"
 
 #include "columns/ColumnOperator.h"
+#include "ProcedureTypeVector.h"
 #include "metadata/PropertyType.h"
 
 #include "NLOps.h"
@@ -18,6 +19,8 @@ namespace db {
 class LocalMemory;
 class GraphView;
 class MetadataBuilder;
+class Procedure;
+class ProcedureContext;
 
 // Translates an MLIR func.func in the nl dialect into an NLProgram
 class NLTranslator {
@@ -25,7 +28,8 @@ public:
     NLTranslator(NLProgram* program,
                  LocalMemory* memory,
                  const GraphView* view,
-                 MetadataBuilder* metadataBuilder = nullptr);
+                 MetadataBuilder* metadataBuilder = nullptr,
+                 const ProcedureContext* procedureContext = nullptr);
     ~NLTranslator();
 
     void translate(const mlir::func::FuncOp& function);
@@ -47,6 +51,8 @@ private:
         UnwindCollect,
         Collect,
         UnwindConst,
+        ProcedureInit,
+        ProcedureFinalize,
     };
 
     // Settings of the iterators passed to each for loop
@@ -63,6 +69,13 @@ private:
 
         // The accumulator an UnwindCollect / Collect iterator drains; null otherwise.
         NLCollectState* _collectState {nullptr};
+
+        // The call a ProcedureInit iterator drives; null for the other kinds.
+        NLProcedureState* _procedureState {nullptr};
+
+        // The argument chunks a ProcedureInit iterator hands the procedure, in its
+        // declaration order; empty for the other kinds (and for a source call).
+        llvm::SmallVector<mlir::Value, 4> _procedureInputs;
 
         // The label names a ScanNodesByLabel iterator filters by; empty for the
         // other kinds. These are views into the op's interned StringAttr storage,
@@ -93,6 +106,12 @@ private:
     LocalMemory* _memory {nullptr};
     const GraphView* _view {nullptr};
     MetadataBuilder* _metadataBuilder {nullptr};
+
+    // The execution context a procedure reads the graph and the request through,
+    // borrowed from the caller: it also carries the registry an nl.procedure's name
+    // is resolved against. Null when the caller runs without procedures, which only
+    // a function containing an nl.procedure notices.
+    const ProcedureContext* _procedureContext {nullptr};
     llvm::DenseMap<mlir::Value, Column*> _valueSlots;
     llvm::DenseMap<mlir::Value, IteratorConfig> _iteratorConfigs;
 
@@ -133,6 +152,11 @@ private:
     // nl.collect_update (and later the drain) that name the handle find the same group
     // table and per-group lists
     llvm::DenseMap<mlir::Value, NLCollectState*> _collectStates;
+
+    // nl.procedure handle SSA value -> the runtime call it produces, so the
+    // nl.procedure_fold, the nl.for over nl.procedure_init and the
+    // nl.procedure_finalize that name the handle drive the same procedure
+    llvm::DenseMap<mlir::Value, NLProcedureState*> _procedureStates;
 
     void translateBlock(mlir::Block& block, NLStmtContainer* body);
     void translateFor(mlir::nl::For forLoop, NLStmtContainer* body);
@@ -372,6 +396,71 @@ private:
     // ColumnVector<Primitive> (not nullable - collect drops nulls) that grows as
     // present values are appended across steps.
     Column* allocValueColumnForValueType(ValueType valueType);
+
+    // Translate an nl.procedure: resolve the name against the procedure registry,
+    // allocate the procedure's data through its alloc callback, map the handle to the
+    // runtime call, and record the prepare/reset statement (run each time the block
+    // holding the nl.procedure runs). The input and result columns are bound by the
+    // ops that name the handle, which know the chunks - the way nl.sort_collect
+    // allocates the sort buffers rather than nl.sort_buffer.
+    void translateProcedure(mlir::nl::Procedure procedureOp, NLStmtContainer* body);
+
+    // Translate an nl.procedure_fold: look up the call the handle names, bind this
+    // step's argument chunks as the procedure's input columns, and record the per-step
+    // fold statement. Only an aggregating procedure is folded this way - one that emits
+    // rows is driven by the nl.for over nl.procedure_init - so it binds no result.
+    void translateProcedureFold(mlir::nl::ProcedureFold fold, NLStmtContainer* body);
+
+    // Bind the argument chunks of a call as the procedure's input columns, one per
+    // declared argument in declaration order. The chunks are loop variables refilled in
+    // place, so binding them once holds for every step.
+    void bindProcedureInputs(NLProcedureState* state, mlir::ValueRange inputs);
+
+    // Allocate the output column for each column carried past a call - the drive loop's
+    // trailing variables, after the yields - and record each with the gather that
+    // rebuilds it from the input rows the procedure reports, repeating a row the call
+    // expanded and dropping one it filtered out. Hands the procedure the row map it
+    // reports into when anything is carried.
+    void addProcedureCarriedColumns(const IteratorConfig& config,
+                                    mlir::Block& loopBody,
+                                    size_t yieldCount,
+                                    NLProcedureLoopData* loopData);
+
+    // Translate the nl.for over an nl.procedure_finalize iterator: bind one loop
+    // variable per yielded return value as the procedure's result columns, and record
+    // the emit-loop statement (run the finalize callback per step until the procedure
+    // has emitted its last row, so an aggregation of many rows spans chunks). It takes
+    // no argument and carries nothing, so - unlike the init loop - there is nothing to
+    // bind but the yields.
+    void translateProcedureFinalizeLoop(const IteratorConfig& config,
+                                        mlir::Block& loopBody,
+                                        NLLimitState* limit,
+                                        NLStmtContainer* body);
+
+    // Translate the nl.for over an nl.procedure_init iterator: bind one loop variable
+    // per yielded return value as the procedure's result columns, and record the
+    // drive-loop statement (run the procedure once per step until it finishes).
+    void translateProcedureInitLoop(const IteratorConfig& config,
+                                    mlir::Block& loopBody,
+                                    NLLimitState* limit,
+                                    NLStmtContainer* body);
+
+    // The runtime call a procedure handle names. The handle is a required operand of
+    // its consumers, so this throws if it was not produced by an nl.procedure.
+    NLProcedureState* procedureStateFor(mlir::Value handle) const;
+
+    // Allocate one result column per yielded return value of the call, bind it to
+    // that return value's slot in the procedure's data - so the procedure writes
+    // where the engine reads - and map the matching chunk value to it. The chunks are
+    // an op's results, or a drive loop's variables; either way there is one per
+    // yielded name, in yield order.
+    void bindProcedureResults(NLProcedureState* state, mlir::ValueRange chunks);
+
+    // Pool-allocate a result column for one of a procedure's declared return types -
+    // an ID column, a value column or a list column - reserving a full chunk so
+    // execution stays allocation-free. This is what fixes the column type a procedure
+    // writes through, so it mirrors the pipeline engine's allocReturnValues exactly.
+    Column* allocColumnForProcedureType(ProcedureType procedureType);
 
     // Allocate an emit output column for a group-aggregate output chunk type: an ID
     // column for an ID chunk (a grouping key), a nullable value column for a

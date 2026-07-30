@@ -8,6 +8,8 @@
 #include <string_view>
 #include <type_traits>
 
+#include <spdlog/fmt/bundled/format.h>
+
 #include "TypeUtils.h"
 #include "iterators/GetEdgesIterator.h"
 #include "ID.h"
@@ -1872,6 +1874,105 @@ void throwIfNodesHaveEdges(const GraphView& view, const ColumnNodeIDs* nodes) {
     }
 }
 
+// Rebuild every column carried past a call from the input rows the procedure reported
+// for the rows it just emitted: an input row it emitted several rows for is repeated,
+// one it emitted none for is dropped - the gather an edge hop replicates its carry set
+// with, over a row map a callback filled rather than a chunk writer.
+//
+// Throws when the procedure reported no row for every row it emitted, or one outside
+// the chunk it was handed: either would leave the carried columns misaligned, silently
+// pairing the wrong rows in the projection, so it is caught at the step that did it.
+void gatherProcedureCarriedColumns(NLProcedureLoopData* loopData) {
+    NLProcedureState* state = loopData->getState();
+    ColumnVector<size_t>* inputRowIndices = loopData->getInputRowIndices();
+
+    const size_t emittedRows = state->getRowCount();
+    const std::vector<size_t>& indicesRaw = inputRowIndices->getRaw();
+    if (indicesRaw.size() != emittedRows) {
+        throw IRException(fmt::format("Procedure '{}' emitted {} rows but reported the input row of "
+                                      "{} of them, so the columns carried past the call cannot be "
+                                      "aligned with its result",
+                                      state->getProcedure()->getFullName(),
+                                      emittedRows,
+                                      indicesRaw.size()));
+    }
+
+    // Each index selects the input row a carried value is replicated from, so one out
+    // of range would read past the chunk the procedure was handed.
+    const size_t inputRows = state->getInputRowCount();
+    for (const size_t inputRow : indicesRaw) {
+        if (inputRow >= inputRows) {
+            throw IRException(fmt::format("Procedure '{}' reported input row {} for a chunk of {} "
+                                          "rows",
+                                          state->getProcedure()->getFullName(),
+                                          inputRow,
+                                          inputRows));
+        }
+    }
+
+    for (const NLCarriedColumn& carriedColumn : loopData->carriedColumns()) {
+        const NLGatherFunction gather = carriedColumn.getGatherFunc();
+        gather(carriedColumn.getInput(), inputRowIndices, carriedColumn.getOutput());
+    }
+}
+
+// Drive a procedure through one loop: each step runs it once through runStep - its
+// execute callback when the loop emits rows as they come, its finalize callback when the
+// loop emits what an aggregation held back - refilling the loop variables in place, then
+// rebuilds any carried column and runs the body. The loop ends when the procedure
+// declares itself finished, so one entry may cover as many chunks as it needs.
+//
+// The body sees only the steps that produced rows. A procedure declares itself finished
+// on the step that exhausts it - which may still carry rows - so the flag is read after
+// the call, not tested before it.
+template <typename StepFunction>
+void runProcedureDrive(NLExecutionContext* context,
+                       NLProcedureLoopData* loopData,
+                       StepFunction runStep) {
+    NLProcedureState* state = loopData->getState();
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    const NLProcedureLoopData::CarriedColumns& carriedColumns = loopData->carriedColumns();
+
+    // A null limit leaves the drive unbounded; otherwise it stops once the budget is
+    // spent, so a LIMIT ends the drive rather than running the procedure out. The limit
+    // is fixed for the whole loop, so the null check is hoisted out of the per-iteration
+    // condition, as the scan loops do.
+    const NLLimitState* limit = loopData->getLimit();
+
+    bool finished = false;
+    const auto runIteration = [&]() {
+        // The procedure reports the input row behind each row it emits, so clear the
+        // map before the call: what it appends is this step's mapping alone, as its
+        // result columns are.
+        if (!carriedColumns.empty()) {
+            loopData->getInputRowIndices()->clear();
+        }
+
+        runStep();
+        finished = state->isFinished();
+
+        if (state->getRowCount() == 0) {
+            return;
+        }
+
+        if (!carriedColumns.empty()) {
+            gatherProcedureCarriedColumns(loopData);
+        }
+
+        runBody(context, loopBody);
+    };
+
+    if (limit) {
+        while (!finished && limit->getRemaining() > 0) {
+            runIteration();
+        }
+    } else {
+        while (!finished) {
+            runIteration();
+        }
+    }
+}
+
 }
 
 NLExecutor::NLExecutor(const GraphView* view,
@@ -3150,6 +3251,42 @@ void NLExecutor::runCollectLoop(NLExecutionContext* context, NLFunctionData* dat
 
         runBody(context, loopBody);
     }
+}
+
+void NLExecutor::runProcedureReset(NLExecutionContext* context, NLFunctionData* data) {
+    const NLProcedureCallData* call = static_cast<NLProcedureCallData*>(data);
+    call->getState()->prepareOrReset();
+}
+
+void NLExecutor::runProcedureFold(NLExecutionContext* context, NLFunctionData* data) {
+    const NLProcedureCallData* call = static_cast<NLProcedureCallData*>(data);
+
+    // One call per step, over whatever the argument chunks hold now. An aggregating
+    // procedure folds the chunk into its own state and emits nothing, so there is
+    // nothing to read here; nl.procedure_finalize materializes the rows after the loop.
+    call->getState()->execute();
+}
+
+void NLExecutor::runProcedureInitLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLProcedureLoopData* loopData = static_cast<NLProcedureLoopData*>(data);
+    NLProcedureState* state = loopData->getState();
+
+    // This loop drives the procedure over one chunk of its arguments and is re-entered
+    // for the next chunk, so rewind it here: a procedure that finished the previous
+    // chunk starts afresh on this one, and its own per-drive state goes with it.
+    state->resetForNewDrive();
+
+    runProcedureDrive(context, loopData, [state]() { state->execute(); });
+}
+
+void NLExecutor::runProcedureFinalizeLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLProcedureLoopData* loopData = static_cast<NLProcedureLoopData*>(data);
+    NLProcedureState* state = loopData->getState();
+
+    // No rewind: the folded state this loop emits from is exactly what a rewind would
+    // discard. It runs once, after the producing loop, so there is no earlier drive to
+    // rewind from either.
+    runProcedureDrive(context, loopData, [state]() { state->finalize(); });
 }
 
 NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {

@@ -631,6 +631,30 @@ LogicalResult GroupAggregateBuffer::verify() {
     return success();
 }
 
+// A call must bind at least one return value: the columns a procedure writes into
+// are allocated from `yields`, so a call yielding nothing would drive the procedure
+// with nowhere to put its rows. The names themselves are checked against the
+// procedure's declared return values during translation, which is where the registry
+// is available.
+LogicalResult Procedure::verify() {
+    if (getYields().empty()) {
+        return emitOpError("requires at least one yielded return value");
+    }
+
+    return success();
+}
+
+// A finalize emits the procedure's result rows, so its iterator must produce at least
+// one chunk per step - an empty one would run the callback and drop whatever it filled.
+LogicalResult ProcedureFinalize::verify() {
+    const auto iteratorType = cast<IteratorType>(getResult().getType());
+    if (iteratorType.getChunkTypes().empty()) {
+        return emitOpError("requires an iterator of at least one chunk");
+    }
+
+    return success();
+}
+
 // A grouped update must collect at least one column - the grouping keys and
 // aggregate inputs together - since an empty collect could neither size the row
 // set nor build a group key.

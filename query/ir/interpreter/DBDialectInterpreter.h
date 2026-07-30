@@ -13,6 +13,7 @@ class NLOutputSink;
 class LocalMemory;
 class CommitWriteBuffer;
 class MetadataBuilder;
+class ProcedureContext;
 
 class DBDialectInterpreter {
 public:
@@ -38,13 +39,18 @@ public:
         double _executeMilliseconds {0.0};
     };
 
+    // procedureContext is what a CALL in the module needs: its registry resolves the
+    // procedure during lowering, and its graph, transaction and request state are what
+    // the procedure's callbacks read during execution. The caller owns it; a module
+    // with no CALL never touches it.
     DBDialectInterpreter(const mlir::ModuleOp& module,
                          const GraphView* view,
                          NLOutputSink* sink,
                          LocalMemory* memory,
                          size_t chunkSize = ChunkConfig::CHUNK_SIZE,
                          CommitWriteBuffer* writeBuffer = nullptr,
-                         MetadataBuilder* metadataBuilder = nullptr);
+                         MetadataBuilder* metadataBuilder = nullptr,
+                         const ProcedureContext* procedureContext = nullptr);
 
     ~DBDialectInterpreter();
 
@@ -58,6 +64,7 @@ private:
     size_t _chunkSize {ChunkConfig::CHUNK_SIZE};
     CommitWriteBuffer* _writeBuffer {nullptr};
     MetadataBuilder* _metadataBuilder {nullptr};
+    const ProcedureContext* _procedureContext {nullptr};
 };
 
 }

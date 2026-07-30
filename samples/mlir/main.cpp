@@ -29,6 +29,8 @@
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
 #include "Graph.h"
+#include "ProcedureContext.h"
+#include "ProcedureManager.h"
 #include "SimpleGraph.h"
 #include "SystemManager.h"
 #include "TuringConfig.h"
@@ -591,6 +593,19 @@ bool moduleHasCreateOps(mlir::ModuleOp& module) {
     return found;
 }
 
+// Fills the context a CALL needs - the registry its name is resolved against, and
+// the graph view, chunk size and list buffer its callbacks read - so a module
+// containing a db.call_procedure runs here the way it would in the server.
+void setupProcedureContext(const GraphView& view,
+                           LocalMemory& memory,
+                           const ProcedureManager& procedures,
+                           ProcedureContext& context) {
+    context.setGraphView(&view);
+    context.setProcedures(&procedures);
+    context.setChunkSize(ChunkConfig::CHUNK_SIZE);
+    context.setListBuffer(&memory.listBuffer());
+}
+
 // Runs the module's main function against the view, pushing output into sink.
 // A db-dialect "main" runs through DBDialectInterpreter, which lowers it to the
 // nl dialect first; an nl-dialect "main" runs straight through NLInterpreter.
@@ -606,17 +621,31 @@ void runModuleMain(mlir::ModuleOp& module,
         throw std::runtime_error("-exec requires a 'main' function in the module");
     }
 
+    ProcedureManager procedures;
+    procedures.init();
+
+    ProcedureContext procedureContext;
+    setupProcedureContext(view, memory, procedures, procedureContext);
+
     if (classifyDialect(mainFunction) == QueryDialect::DB) {
         DBDialectInterpreter interpreter(module, &view, &sink, &memory,
                                         ChunkConfig::CHUNK_SIZE,
                                         writeBuffer,
-                                        metadataBuilder);
+                                        metadataBuilder,
+                                        &procedureContext);
         const DBDialectInterpreter::Status status = interpreter.run();
         std::cout << "[DBDialectInterpreter] lowering: " << status.getLowerMilliseconds() << " ms, "
                   << "translation: " << status.getTranslateMilliseconds() << " ms, "
                   << "execution: " << status.getExecuteMilliseconds() << " ms\n";
     } else {
-        NLInterpreter interpreter(module, &view, &sink, &memory);
+        NLInterpreter interpreter(module,
+                                  &view,
+                                  &sink,
+                                  &memory,
+                                  ChunkConfig::CHUNK_SIZE,
+                                  /*writeBuffer=*/nullptr,
+                                  /*metadataBuilder=*/nullptr,
+                                  &procedureContext);
         const NLInterpreter::Status status = interpreter.run();
         std::cout << "[NLInterpreter] translation: " << status.getTranslateMilliseconds() << " ms, "
                   << "execution: " << status.getExecuteMilliseconds() << " ms\n";
@@ -707,7 +736,12 @@ void dumpLoweredModule(mlir::ModuleOp& module, const std::string& graphDir) {
     mlir::MLIRContext* context = module.getContext();
     mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(context));
 
-    DBLowering lowering(context, view);
+    // A db.call_procedure resolves its name and its return types against the registry
+    // during lowering, the way a property fetch resolves against the schema.
+    ProcedureManager procedures;
+    procedures.init();
+
+    DBLowering lowering(context, view, &procedures);
     lowering.lower(mainFunction, *nlModule);
 
     mlir::ModuleOp loweredModule = nlModule.get();
