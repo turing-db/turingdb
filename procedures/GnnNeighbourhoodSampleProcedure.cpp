@@ -68,7 +68,7 @@ void GnnNeighbourhoodSampleProcedure::deallocData(ProcedureData* data) {
 }
 
 void GnnNeighbourhoodSampleProcedure::registerProcedure(ProcedureNamespace* ns) {
-    Procedure* proc = new Procedure("neighbourhood_sample");
+    Procedure* proc = new Procedure("neighbourhoodSample");
     proc->setExecuteCallback(&execute);
     proc->setAllocCallback(&allocData);
     proc->setDeallocCallback(&deallocData);
