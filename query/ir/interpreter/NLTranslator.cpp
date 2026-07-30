@@ -419,11 +419,6 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
 
             _iteratorConfigs[procedureInit.getResult()] = config;
-        } else if (nl::ProcedureFinalize procedureFinalize = mlir::dyn_cast<nl::ProcedureFinalize>(operation)) {
-            IteratorConfig config;
-            config._kind = IteratorKind::ProcedureFinalize;
-            config._procedureState = procedureStateFor(procedureFinalize.getState());
-            _iteratorConfigs[procedureFinalize.getResult()] = config;
         } else if (nl::For forLoop = mlir::dyn_cast<nl::For>(operation)) {
             translateFor(forLoop, body);
         } else if (mlir::isa<nl::GetPropertyType, nl::GetEdgeType>(operation)) {
@@ -544,8 +539,6 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateDeleteEdge(deleteEdge, body);
         } else if (nl::Procedure procedureOp = mlir::dyn_cast<nl::Procedure>(operation)) {
             translateProcedure(procedureOp, body);
-        } else if (nl::ProcedureFold procedureFold = mlir::dyn_cast<nl::ProcedureFold>(operation)) {
-            translateProcedureFold(procedureFold, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
@@ -597,8 +590,6 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         translateUnwindConstLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::ProcedureInit) {
         translateProcedureInitLoop(config, loopBody, limit, body);
-    } else if (config._kind == IteratorKind::ProcedureFinalize) {
-        translateProcedureFinalizeLoop(config, loopBody, limit, body);
     } else {
         translateEdgeLoop(config, loopBody, limit, body);
     }
@@ -2336,8 +2327,8 @@ void NLTranslator::translateProcedure(nl::Procedure procedureOp, NLStmtContainer
     procedureData->resizeReturnColumns(procedure->returnValues().size());
 
     // The runtime call owns that data from here on - its dealloc callback releases it
-    // - and is mapped to the handle, so the execute, the drive loop and the finalize
-    // that name the handle all drive the same procedure.
+    // - and is mapped to the handle, so every op that names the handle drives the same
+    // procedure.
     NLProcedureState* state = _program->allocProcedureState(procedure, procedureData, _procedureContext);
     _procedureStates[procedureOp.getState()] = state;
 
@@ -2353,24 +2344,6 @@ void NLTranslator::translateProcedure(nl::Procedure procedureOp, NLStmtContainer
     // at function scope for a top-level CALL.
     NLProcedureCallData* callData = _program->allocFunctionData<NLProcedureCallData>(state);
     body->emplaceStmt(&NLExecutor::runProcedureReset, callData);
-}
-
-void NLTranslator::translateProcedureFold(nl::ProcedureFold execute, NLStmtContainer* body) {
-    // The handle is a required operand, so procedureStateFor returns its call or
-    // throws if it was not produced by an nl.procedure.
-    NLProcedureState* state = procedureStateFor(execute.getState());
-
-    // The fold form only ever runs an aggregating procedure: a procedure that emits
-    // rows is driven by the nl.for over nl.procedure_init, whose steps read them.
-    if (!state->getProcedure()->getFinalizeCallback()) {
-        throw IRException("nl.procedure_fold names a procedure with no finalize callback, so it "
-                          "emits rows nothing would read; drive it with nl.procedure_init");
-    }
-
-    bindProcedureInputs(state, execute.getInputs());
-
-    NLProcedureCallData* callData = _program->allocFunctionData<NLProcedureCallData>(state);
-    body->emplaceStmt(&NLExecutor::runProcedureFold, callData);
 }
 
 void NLTranslator::bindProcedureInputs(NLProcedureState* state, mlir::ValueRange inputs) {
@@ -2446,43 +2419,6 @@ void NLTranslator::addProcedureCarriedColumns(const IteratorConfig& config,
     loopData->getState()->getData()->setInputRowIndices(inputRowIndices);
 }
 
-void NLTranslator::translateProcedureFinalizeLoop(const IteratorConfig& config,
-                                                 mlir::Block& loopBody,
-                                                 NLLimitState* limit,
-                                                 NLStmtContainer* body) {
-    NLProcedureState* state = config._procedureState;
-    if (!state) {
-        throw IRException("nl.procedure_finalize iterator must carry a procedure call");
-    }
-
-    // Only a procedure that holds its rows back until it has seen every chunk carries a
-    // finalize callback; without one there is nothing for this loop to drive.
-    if (!state->getProcedure()->getFinalizeCallback()) {
-        throw IRException("nl.procedure_finalize names a procedure with no finalize callback");
-    }
-
-    // For::verify binds one loop variable per iterator chunk, and a finalize iterator's
-    // chunks are the yielded return values - the columns the callback fills, which each
-    // step rewrites in place. It takes no argument and carries nothing, so there is no
-    // trailing carry set here, unlike an nl.procedure_init loop.
-    const size_t yieldCount = state->yieldIndices().size();
-    if (loopBody.getNumArguments() != yieldCount) {
-        throw IRException(fmt::format("An nl.procedure_finalize loop binds {} variables, but its "
-                                      "call yields {} return values",
-                                      loopBody.getNumArguments(),
-                                      yieldCount));
-    }
-
-    bindProcedureResults(state, loopBody.getArguments());
-
-    NLProcedureLoopData* loopData = _program->allocFunctionData<NLProcedureLoopData>(state);
-    loopData->setLimit(limit);
-
-    body->emplaceStmt(&NLExecutor::runProcedureFinalizeLoop, loopData);
-
-    translateBlock(loopBody, loopData->getStmts());
-}
-
 void NLTranslator::translateProcedureInitLoop(const IteratorConfig& config,
                                               mlir::Block& loopBody,
                                               NLLimitState* limit,
@@ -2532,9 +2468,8 @@ NLProcedureState* NLTranslator::procedureStateFor(mlir::Value handle) const {
 }
 
 void NLTranslator::bindProcedureResults(NLProcedureState* state, mlir::ValueRange chunks) {
-    // One op binds the call's result columns - the drive loop, the streaming execute
-    // or the finalize - so a second one would allocate a rival set of columns the
-    // procedure no longer writes into.
+    // One op binds the call's result columns - the drive loop - so a second one would
+    // allocate a rival set of columns the procedure no longer writes into.
     if (!state->resultColumns().empty()) {
         throw IRException("A procedure call binds its result chunks once, but a second operation "
                           "names the same handle");

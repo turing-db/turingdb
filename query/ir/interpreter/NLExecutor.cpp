@@ -1916,11 +1916,10 @@ void gatherProcedureCarriedColumns(NLProcedureLoopData* loopData) {
     }
 }
 
-// Drive a procedure through one loop: each step runs it once through runStep - its
-// execute callback when the loop emits rows as they come, its finalize callback when the
-// loop emits what an aggregation held back - refilling the loop variables in place, then
-// rebuilds any carried column and runs the body. The loop ends when the procedure
-// declares itself finished, so one entry may cover as many chunks as it needs.
+// Drive a procedure through one loop: each step runs its execute callback once through
+// runStep, refilling the loop variables in place, then rebuilds any carried column and
+// runs the body. The loop ends when the procedure declares itself finished, so one entry
+// may cover as many chunks as it needs.
 //
 // The body sees only the steps that produced rows. A procedure declares itself finished
 // on the step that exhausts it - which may still carry rows - so the flag is read after
@@ -3258,15 +3257,6 @@ void NLExecutor::runProcedureReset(NLExecutionContext* context, NLFunctionData* 
     call->getState()->prepareOrReset();
 }
 
-void NLExecutor::runProcedureFold(NLExecutionContext* context, NLFunctionData* data) {
-    const NLProcedureCallData* call = static_cast<NLProcedureCallData*>(data);
-
-    // One call per step, over whatever the argument chunks hold now. An aggregating
-    // procedure folds the chunk into its own state and emits nothing, so there is
-    // nothing to read here; nl.procedure_finalize materializes the rows after the loop.
-    call->getState()->execute();
-}
-
 void NLExecutor::runProcedureInitLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLProcedureLoopData* loopData = static_cast<NLProcedureLoopData*>(data);
     NLProcedureState* state = loopData->getState();
@@ -3277,16 +3267,6 @@ void NLExecutor::runProcedureInitLoop(NLExecutionContext* context, NLFunctionDat
     state->resetForNewDrive();
 
     runProcedureDrive(context, loopData, [state]() { state->execute(); });
-}
-
-void NLExecutor::runProcedureFinalizeLoop(NLExecutionContext* context, NLFunctionData* data) {
-    NLProcedureLoopData* loopData = static_cast<NLProcedureLoopData*>(data);
-    NLProcedureState* state = loopData->getState();
-
-    // No rewind: the folded state this loop emits from is exactly what a rewind would
-    // discard. It runs once, after the producing loop, so there is no earlier drive to
-    // rewind from either.
-    runProcedureDrive(context, loopData, [state]() { state->finalize(); });
 }
 
 NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {

@@ -30,21 +30,6 @@ public:
     using AllocCallback = ProcedureData* (*)();
     using DeallocCallback = void (*)(ProcedureData*);
 
-    // Called after the last execute callback, by a procedure that must see every input
-    // chunk before it can produce its result - a counting, reducing or grouping
-    // procedure. Each execute folds its chunk into the procedure's own state and leaves
-    // the result columns empty; this callback fills them with the final rows.
-    //
-    // Like execute it is called repeatedly, and for the same reason: the result may not
-    // fit one chunk (a grouped aggregation has a row per group), so it fills at most a
-    // chunk's worth per call and declares itself finished - ProcedureState::finish() -
-    // on the call that emits its last row. A single-row aggregate finishes on its first
-    // call.
-    //
-    // A streaming procedure produces its rows chunk by chunk in execute and leaves this
-    // callback null, which is how a caller tells the two apart.
-    using FinalizeCallback = void (*)(ProcedureState*);
-
     Procedure(std::string_view name);
     ~Procedure();
 
@@ -55,13 +40,11 @@ public:
     ExecuteCallback getExecCallback() const { return _execCallback; }
     AllocCallback getAllocCallback() const { return _allocCallback; }
     DeallocCallback getDeallocCallback() const { return _deallocCallback; }
-    FinalizeCallback getFinalizeCallback() const { return _finalizeCallback; }
 
     // Set callbacks
     void setExecuteCallback(ExecuteCallback cb);
     void setAllocCallback(AllocCallback cb);
     void setDeallocCallback(DeallocCallback cb);
-    void setFinalizeCallback(FinalizeCallback cb);
     void addReturnValue(std::string_view name, ProcedureType type);
     void addArgument(std::string_view name, ProcedureType type);
     void addOptionalArgument(std::string_view name, ProcedureType type);
@@ -107,7 +90,6 @@ private:
     ExecuteCallback _execCallback {nullptr};
     AllocCallback _allocCallback {nullptr};
     DeallocCallback _deallocCallback {nullptr};
-    FinalizeCallback _finalizeCallback {nullptr};
     bool _reportsInputRows {false};
     ProcedureTypeVector _returnValues;
     ProcedureTypeVector _argumentTypes;

@@ -1675,19 +1675,13 @@ public:
     //
     // The first entry needs no rewind: preparing the call already left the procedure at
     // its first row, and a procedure whose rows cannot be re-read at all (a scan of the
-    // label map) rejects a rewind it never needed. An aggregating procedure is not
-    // driven this way, so its fold state survives every chunk until the finalize.
+    // label map) rejects a rewind it never needed.
     void resetForNewDrive();
 
     // Run the procedure's execute callback once, over whatever its input columns
     // currently hold. Clears the finished flag first, so a procedure that marks
     // itself finished once it has produced a chunk's rows is still driven again.
     void execute();
-
-    // Run the procedure's finalize callback, which fills the result columns with the
-    // rows an aggregating procedure held back until it had seen every chunk. Only
-    // called for a procedure that carries one.
-    void finalize();
 
     // True once the procedure has declared it has no more rows to produce, which is
     // what ends a drive loop.
@@ -1719,11 +1713,9 @@ private:
     void reset();
 };
 
-// nl.procedure / nl.procedure_fold / nl.procedure_finalize data: the call the
-// statement drives. None of the three carries anything else - the procedure's input and
-// result columns are bound once on the state, and the procedure's own state lives
-// inside it - so they share one data class and differ only in the handler that runs
-// them.
+// nl.procedure data: the call the statement drives. It carries nothing else - the
+// procedure's input and result columns are bound once on the state, and the procedure's
+// own state lives inside it.
 class NLProcedureCallData : public NLFunctionData {
 public:
     NLProcedureCallData(NLProcedureState* state)
@@ -2372,7 +2364,7 @@ public:
     }
 
     // Allocate one CALL's runtime state, owned by the program; the statements that
-    // prepare, drive and finalize the call hold a borrowed pointer. Releasing the
+    // prepare and drive the call hold a borrowed pointer. Releasing the
     // procedure's data is this state's business, so it outlives every statement
     // naming it.
     NLProcedureState* allocProcedureState(const Procedure* procedure,

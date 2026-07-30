@@ -311,30 +311,15 @@ private:
     // Lower a db.call_procedure: resolve the name against the procedure registry,
     // hoist an nl.procedure handle (carrying the name and the yielded return values)
     // to the top of the entry block - where it prepares the call once, above the
-    // loops - then place the call itself in one of two shapes, chosen by the
-    // procedure:
-    //   emits rows        -> an nl.procedure_init iterator and its nl.for, the shape a
-    //                        scan or a hop lowers to. The iterator opens where the
-    //                        arguments are bound (the entry block for an argument-less
-    //                        source), and each step of the loop runs the procedure once
-    //                        until it has answered that chunk of arguments in full, so
-    //                        one chunk in may give many chunks out.
-    //                        db.call_procedure's results map to that loop's variables:
-    //                        the yields, then the carry set rebuilt against the rows
-    //                        the procedure emitted
-    //   finalize callback -> an nl.procedure_fold in the innermost producing loop body
-    //                        that folds each chunk (no results), then - after the loop -
-    //                        an nl.procedure_finalize iterator and its nl.for at
-    //                        function scope, whose steps run the finalize callback until
-    //                        the procedure has emitted its last row. db.sort's
-    //                        collect-then-emit-loop shape, and an emit loop for the same
-    //                        reason: the result need not fit one chunk
+    // loops - then place the call itself as an nl.procedure_init iterator and its
+    // nl.for, the shape a scan or a hop lowers to. The iterator opens where the
+    // arguments are bound (the entry block for an argument-less source), and each step
+    // of the loop runs the procedure once until it has answered that chunk of arguments
+    // in full, so one chunk in may give many chunks out. db.call_procedure's results map
+    // to that loop's variables: the yields, then the carry set rebuilt against the rows
+    // the procedure emitted.
     // The result chunk types come from the procedure's declared return types, so the
     // db result columns' own element types are ignored (as for a property fetch).
-    //
-    // An aggregating call keeps no row of its input, so a carry set on one is rejected
-    // here, as is a finalize callback on a procedure taking no argument (nothing would
-    // ever be folded).
     void lowerCallProcedure(mlir::db::CallProcedure call);
 
     void lowerOutput(mlir::db::Output output);

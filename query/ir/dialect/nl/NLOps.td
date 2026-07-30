@@ -1554,8 +1554,7 @@ def Procedure : NLOp<"procedure", []> {
   let description = [{
     Sits at the top of the scope it governs - function scope for a top-level CALL -
     where it prepares the procedure once and re-initializes it each further time
-    that block runs. Produces the !nl.procedure_state handle nl.procedure_fold,
-    nl.procedure_init and nl.procedure_finalize read.
+    that block runs. Produces the !nl.procedure_state handle nl.procedure_init reads.
 
       %call = nl.procedure("db.labels") yields ["id", "label"]
 
@@ -1860,89 +1859,6 @@ def ProcedureInit : NLOp<"procedure_init", [AttrSizedOperandSegments]> {
     `(` $state `,` `(` $inputs `)` `,` `{` $columns_to_filter `}` `)` attr-dict `:`
     functional-type(operands, results)
   }];
-}
-
-/**
-* ProcedureFold
-*/
-// NOT Pure: it runs the procedure's execute callback, which rewrites the result
-// columns and may fold the chunk into the procedure's own state, so it must run
-// exactly where it sits, once per producing-loop step, and must not be hoisted,
-// CSE'd or eliminated.
-def ProcedureFold : NLOp<"procedure_fold", []> {
-  let summary = "Fold one chunk of arguments into an aggregating procedure";
-  let description = [{
-    The folding form of a CALL, for a procedure that must see every chunk before it can
-    produce its result. Runs in the producing loop body, once per step: binds this
-    step's chunk of each argument column to the procedure's inputs and calls its execute
-    callback, which folds the chunk into the procedure's own state and emits nothing.
-
-      nl.procedure_fold %call, (%nodes) : !nl.chunk<!storage.node_id>
-
-    It therefore has no results - the nl.for over nl.procedure_finalize emits the rows,
-    after this loop - and carries nothing: an aggregating call keeps no row of its input
-    for a carried column to be replicated against. A procedure that emits its rows as it
-    goes is driven by the nl.for over nl.procedure_init instead.
-
-    The count family's nl.count_update, for procedures: one statement per producing-loop
-    step, folding into state that a later op reads.
-
-    The operand order is the procedure's argument declaration order, so operand i is
-    argument i. The finished flag is cleared before each call, so an aggregating
-    procedure that marks itself finished once it has consumed a chunk is still called
-    for the next one.
-  }];
-
-  let arguments = (ins NLProcedureStateHandle:$state, Variadic<NLChunk>:$inputs);
-
-  // The handle prints first, then the parenthesized argument chunks, as nl.filter
-  // prints its mask and columns. Only the argument chunk types are spelled - the op has
-  // no result and the handle's type is buildable and so omitted.
-  let assemblyFormat = [{
-    $state `,` `(` $inputs `)` attr-dict `:` qualified(type($inputs))
-  }];
-}
-
-/**
-* ProcedureFinalize
-*/
-// NOT Pure: driving the iterator runs the procedure's finalize callback, which reads
-// state the preceding nl.procedure_folds accumulated, so it must run exactly where it
-// sits - after that loop - and two iterators over one call must never be CSE'd into one.
-def ProcedureFinalize : NLOp<"procedure_finalize", []> {
-  let summary = "Create a database iterator over an aggregating procedure's result rows";
-  let description = [{
-    The emit phase of a CALL of an aggregating procedure - one that must see every chunk
-    before it can produce its result. It opens an iterator over the rows the procedure
-    held back, and each step of the enclosing nl.for runs its finalize callback once,
-    until the procedure declares itself finished:
-
-      %rows  = nl.procedure_finalize(%call) : !nl.iter<!nl.chunk<i64>>
-      nl.for %total in %rows : !nl.iter<!nl.chunk<i64>> {
-        nl.output(%total) : !nl.chunk<i64>
-      }
-
-    A loop rather than a single chunk because an aggregation need not collapse to one
-    row: a grouped one has a row per group, so the procedure fills at most a chunk's
-    worth per call and finishes on the call that emits its last row. A single-row
-    aggregate finishes on its first, and its loop runs once.
-
-    It sits at function scope, after the producing loop, so every chunk has been folded
-    before the first row is emitted - the placement db.sort's emit loop has. Unlike
-    nl.procedure_init it takes no argument and no carry set: the fold consumed the input
-    rows, so there is none left to hand the procedure or to replicate a carried row
-    against.
-
-    The iterator's chunk types are the yielded return values' column types, which the
-    parameterless handle cannot carry, so they are spelled after the colon (as the nl.for
-    iterator type is).
-  }];
-
-  let arguments = (ins NLProcedureStateHandle:$state);
-  let results   = (outs NLIterator:$result);
-
-  let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
-  let hasVerifier = 1;
 }
 
 #endif //TURINGDB_NL_OPS

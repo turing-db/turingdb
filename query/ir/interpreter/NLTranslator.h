@@ -52,7 +52,6 @@ private:
         Collect,
         UnwindConst,
         ProcedureInit,
-        ProcedureFinalize,
     };
 
     // Settings of the iterators passed to each for loop
@@ -153,9 +152,8 @@ private:
     // table and per-group lists
     llvm::DenseMap<mlir::Value, NLCollectState*> _collectStates;
 
-    // nl.procedure handle SSA value -> the runtime call it produces, so the
-    // nl.procedure_fold, the nl.for over nl.procedure_init and the
-    // nl.procedure_finalize that name the handle drive the same procedure
+    // nl.procedure handle SSA value -> the runtime call it produces, so every op that
+    // names the handle - the nl.for over nl.procedure_init - drives the same procedure
     llvm::DenseMap<mlir::Value, NLProcedureState*> _procedureStates;
 
     void translateBlock(mlir::Block& block, NLStmtContainer* body);
@@ -405,12 +403,6 @@ private:
     // allocates the sort buffers rather than nl.sort_buffer.
     void translateProcedure(mlir::nl::Procedure procedureOp, NLStmtContainer* body);
 
-    // Translate an nl.procedure_fold: look up the call the handle names, bind this
-    // step's argument chunks as the procedure's input columns, and record the per-step
-    // fold statement. Only an aggregating procedure is folded this way - one that emits
-    // rows is driven by the nl.for over nl.procedure_init - so it binds no result.
-    void translateProcedureFold(mlir::nl::ProcedureFold fold, NLStmtContainer* body);
-
     // Bind the argument chunks of a call as the procedure's input columns, one per
     // declared argument in declaration order. The chunks are loop variables refilled in
     // place, so binding them once holds for every step.
@@ -425,17 +417,6 @@ private:
                                     mlir::Block& loopBody,
                                     size_t yieldCount,
                                     NLProcedureLoopData* loopData);
-
-    // Translate the nl.for over an nl.procedure_finalize iterator: bind one loop
-    // variable per yielded return value as the procedure's result columns, and record
-    // the emit-loop statement (run the finalize callback per step until the procedure
-    // has emitted its last row, so an aggregation of many rows spans chunks). It takes
-    // no argument and carries nothing, so - unlike the init loop - there is nothing to
-    // bind but the yields.
-    void translateProcedureFinalizeLoop(const IteratorConfig& config,
-                                        mlir::Block& loopBody,
-                                        NLLimitState* limit,
-                                        NLStmtContainer* body);
 
     // Translate the nl.for over an nl.procedure_init iterator: bind one loop variable
     // per yielded return value as the procedure's result columns, and record the
