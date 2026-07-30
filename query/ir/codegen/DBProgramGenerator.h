@@ -28,6 +28,7 @@ class BinaryExpr;
 class FunctionInvocationExpr;
 class FunctionInvocation;
 class UnaryExpr;
+class CallStmt;
 class CypherAST;
 class Expr;
 class Literal;
@@ -79,6 +80,12 @@ private:
     // alias of that item shares with it
     ProjectedColumnMap _projectedColumns;
 
+    // Maps the name a CALL's yielded return value is known by - its alias when the YIELD
+    // renamed it - to the column the call produced for it. A yielded variable appears in
+    // no pattern, so it is not a VDG variable and cannot live in _varMap; the projection
+    // and symbol translation consult both.
+    std::unordered_map<std::string_view, mlir::Value> _yieldedColumns;
+
     VariableDependencyGraph _vdg;
 
     struct TranslatedComponent {
@@ -109,6 +116,31 @@ private:
     void generateCreate(const CypherAST* ast);
     void generateSet(const CypherAST* ast);
     void generateDelete(const CypherAST* ast);
+
+    // Generate a db.call_procedure for each CALL of the query, after the traversal and
+    // its filters, so a call reads the rows the MATCH has narrowed to. The call's
+    // arguments are its argument expressions' columns, its yielded return values become
+    // the columns the projection reads, and the rows already in flight ride through its
+    // carry set so they stay aligned with what the procedure emitted.
+    void generateCalls(const CypherAST* ast);
+    void generateCall(const CallStmt* callStmt);
+
+    // The live columns of the current insertion block - the latest value of every Cypher
+    // variable, then every edge-type column - together with the variables they belong to,
+    // so the results of an op taking them all can be rebound. A column bound in another
+    // block is skipped: an op here can only take what this block binds.
+    void collectLiveColumns(llvm::SmallVectorImpl<mlir::Value>& columns,
+                            llvm::SmallVectorImpl<const VariableDependency*>& variables,
+                            llvm::SmallVectorImpl<const VariableDependency*>& edgeTypeVariables);
+
+    // Rebind the live columns to an op's results, so later ops read what it produced.
+    // firstResult is where its pass-through results start - zero for an op that only
+    // takes them (a filter), past its own results for one that adds some (a call).
+    void rebindLiveColumns(mlir::Operation::result_range results,
+                           size_t firstResult,
+                           const llvm::SmallVectorImpl<const VariableDependency*>& variables,
+                           const llvm::SmallVectorImpl<const VariableDependency*>& edgeTypeVariables);
+
     void generateOutput(const CypherAST* ast);
 
     // Dedups the projection with a RemoveDuplicates over the varying columns of
