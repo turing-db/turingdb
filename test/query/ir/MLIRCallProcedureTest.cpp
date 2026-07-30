@@ -1353,6 +1353,36 @@ TEST_F(MLIRCallProcedureTest, cypherCallCarriesAColumnALaterCallReads) {
     EXPECT_EQ(sink.rows(), expected);
 }
 
+TEST_F(MLIRCallProcedureTest, cypherTwoCallsOverAHopProjectingBothYields) {
+    auto graph = buildHopGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // MATCH (n)-->(m) CALL f(n) YIELD x CALL g(m) YIELD y RETURN x + y: each call carries
+    // what the other end of the query still needs. The first must carry `m` - only the
+    // second call reads it - and drop `n`, which nothing reads again; the second must carry
+    // `x`, a column the first call yielded, because the projection adds it to `y`.
+    //
+    // Over the hop pairs (0,1), (0,2), (1,4) and (2,3): test.expandNodeID emits `n % 3`
+    // rows, so the pairs with n=0 drop out and (1,4) gives x=100 while (2,3) gives x=200 and
+    // x=201. test.fanOutNodeID then emits three rows per surviving `m` - 10*m, 10*m+1,
+    // 10*m+2 - so m=4 pairs 100 with 40, 41 and 42, and each x from m=3 pairs with 30, 31
+    // and 32.
+    Int64Sink sink;
+    runQuery("MATCH (n)-->(m) "
+             "CALL test.expandNodeID(n) YIELD copy AS x "
+             "CALL test.fanOutNodeID(m) YIELD value AS y "
+             "RETURN x + y",
+             graph.get(),
+             reader.getView(),
+             sink);
+
+    std::vector<types::Int64::Primitive> rows = sink.rows();
+    std::sort(rows.begin(), rows.end());
+    const std::vector<types::Int64::Primitive> expected {140, 141, 142, 230, 231, 231, 232, 232, 233};
+    EXPECT_EQ(rows, expected);
+}
+
 TEST_F(MLIRCallProcedureTest, cypherCallStillRejectsCarryingPastANonReportingProcedure) {
     auto graph = buildLabelledGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
