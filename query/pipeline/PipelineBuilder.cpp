@@ -745,13 +745,19 @@ PipelineBlockOutputInterface& PipelineBuilder::addCallProcedure(const Procedure*
                 case ProcedureType::STRING_VIEW:
                     matData.addToStep<ColumnVector<types::String::Primitive>>(item._col);
                 break;
-
-                case ProcedureType::INVALID:
                 case ProcedureType::VALUE_TYPE:
+                    matData.addToStep<ColumnVector<ValueType>>(item._col);
+                break;
                 case ProcedureType::STRING:
+                    matData.addToStep<ColumnVector<std::string>>(item._col);
+                break;
                 case ProcedureType::LIST:
+                    matData.addToStep<ColumnVector<ListView>>(item._col);
+                break;
+
                 case ProcedureType::_SIZE:
-                    throw TuringException("Unsupported materialise type.");
+                case ProcedureType::INVALID:
+                    throw TuringException("Unknown materialise type.");
                 break;
             }
         }
