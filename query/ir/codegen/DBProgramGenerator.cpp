@@ -680,9 +680,7 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
     _opBuilder.setInsertionPointToEnd(mainBlock);
 }
 
-void DBProgramGenerator::collectLiveColumns(llvm::SmallVectorImpl<mlir::Value>& columns,
-                                            llvm::SmallVectorImpl<const VariableDependency*>& variables,
-                                            llvm::SmallVectorImpl<const VariableDependency*>& edgeTypeVariables) {
+void DBProgramGenerator::collectLiveColumns(LiveColumns& live) {
     // Only columns defined in the current insertion block are live to an op placed here
     mlir::Block* const insertionBlock = _opBuilder.getInsertionBlock();
 
@@ -701,8 +699,8 @@ void DBProgramGenerator::collectLiveColumns(llvm::SmallVectorImpl<mlir::Value>& 
             continue;
         }
 
-        columns.push_back(column);
-        variables.push_back(var);
+        live._columns.push_back(column);
+        live._variables.push_back(var);
     }
 
     for (auto& [var, column] : _edgeTypeMap) {
@@ -710,23 +708,52 @@ void DBProgramGenerator::collectLiveColumns(llvm::SmallVectorImpl<mlir::Value>& 
             continue;
         }
 
-        columns.push_back(column);
-        edgeTypeVariables.push_back(var);
+        live._columns.push_back(column);
+        live._edgeTypeVariables.push_back(var);
+    }
+
+    // A column an earlier CALL yielded is live too: a later op taking the whole row set
+    // must take it along, or the rows it holds would stop matching the ones beside it.
+    for (size_t yieldedIndex = 0; yieldedIndex < _yieldedColumns.size(); yieldedIndex++) {
+        const mlir::Value column = _yieldedColumns[yieldedIndex].second;
+        if (!isLive(column)) {
+            continue;
+        }
+
+        live._columns.push_back(column);
+        live._yieldedIndices.push_back(yieldedIndex);
     }
 }
 
 void DBProgramGenerator::rebindLiveColumns(mlir::Operation::result_range results,
                                            size_t firstResult,
-                                           const llvm::SmallVectorImpl<const VariableDependency*>& variables,
-                                           const llvm::SmallVectorImpl<const VariableDependency*>& edgeTypeVariables) {
-    for (size_t index = 0; index < variables.size(); index++) {
-        registerValue(variables[index], results[firstResult + index]);
+                                           const LiveColumns& live) {
+    size_t resultIndex = firstResult;
+
+    for (const VariableDependency* variable : live._variables) {
+        registerValue(variable, results[resultIndex]);
+        resultIndex++;
     }
 
-    const size_t edgeTypeOffset = firstResult + variables.size();
-    for (size_t index = 0; index < edgeTypeVariables.size(); index++) {
-        _edgeTypeMap[edgeTypeVariables[index]] = results[edgeTypeOffset + index];
+    for (const VariableDependency* variable : live._edgeTypeVariables) {
+        _edgeTypeMap[variable] = results[resultIndex];
+        resultIndex++;
     }
+
+    for (const size_t yieldedIndex : live._yieldedIndices) {
+        _yieldedColumns[yieldedIndex].second = results[resultIndex];
+        resultIndex++;
+    }
+}
+
+mlir::Value DBProgramGenerator::findYieldedColumn(std::string_view name) const {
+    for (const YieldedColumn& yielded : _yieldedColumns) {
+        if (yielded.first == name) {
+            return yielded.second;
+        }
+    }
+
+    return mlir::Value();
 }
 
 void DBProgramGenerator::filterAllColumns(mlir::Value predicate) {
@@ -734,24 +761,22 @@ void DBProgramGenerator::filterAllColumns(mlir::Value predicate) {
         return;
     }
 
-    llvm::SmallVector<mlir::Value> columnsToFilter;
-    llvm::SmallVector<const VariableDependency*> orderedVars;
-    llvm::SmallVector<const VariableDependency*> orderedEdgeTypeVars;
-    collectLiveColumns(columnsToFilter, orderedVars, orderedEdgeTypeVars);
+    LiveColumns live;
+    collectLiveColumns(live);
 
-    if (columnsToFilter.empty()) {
+    if (live._columns.empty()) {
         return;
     }
 
     llvm::SmallVector<mlir::Type> resultTypes;
-    for (const mlir::Value column : columnsToFilter) {
+    for (const mlir::Value column : live._columns) {
         resultTypes.push_back(column.getType());
     }
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    auto filterOp = _opBuilder.create<mlir::db::FilterOp>(loc, resultTypes, predicate, columnsToFilter);
+    auto filterOp = _opBuilder.create<mlir::db::FilterOp>(loc, resultTypes, predicate, live._columns);
 
-    rebindLiveColumns(filterOp.getResults(), /*firstResult=*/0, orderedVars, orderedEdgeTypeVars);
+    rebindLiveColumns(filterOp.getResults(), /*firstResult=*/0, live);
 }
 
 void DBProgramGenerator::addMergeFilter(const VariableDependency* mergeVar,
@@ -1106,27 +1131,31 @@ void DBProgramGenerator::generateCall(const CallStmt* callStmt) {
 
     const std::string_view procedureName = signature->getFullName();
 
-    // The yielded return values name the columns the call produces. Without a YIELD the
-    // query names none of them, so there is nothing for the projection to read: a bare
-    // CALL emitting every return value is a projection of its own, which this generator
-    // does not build yet.
+    // The yielded return values name the columns the call produces.
     const YieldClause* yield = callStmt->getYield();
     const YieldItems* yieldItems = yield ? yield->getItems() : nullptr;
-    if (!yieldItems || yieldItems->getItems().empty()) {
-        throw TuringException(fmt::format("CALL {} without a YIELD is not supported yet.",
-                                          procedureName));
-    }
 
     llvm::SmallVector<mlir::Attribute> yieldedNames;
     llvm::SmallVector<std::string_view> yieldedVariables;
-    for (const SymbolExpr* item : *yieldItems) {
-        const Symbol* symbol = item->getSymbol();
+    if (yieldItems && !yieldItems->getItems().empty()) {
+        for (const SymbolExpr* item : *yieldItems) {
+            const Symbol* symbol = item->getSymbol();
 
-        // The original name is the procedure's own name for the return value, which is
-        // what the call op names; the symbol's name is what the query calls it, which is
-        // the alias when the YIELD renamed it.
-        yieldedNames.push_back(_opBuilder.getStringAttr(symbol->getOriginalName()));
-        yieldedVariables.push_back(symbol->getName());
+            // The original name is the procedure's own name for the return value, which
+            // is what the call op names; the symbol's name is what the query calls it,
+            // which is the alias when the YIELD renamed it.
+            yieldedNames.push_back(_opBuilder.getStringAttr(symbol->getOriginalName()));
+            yieldedVariables.push_back(symbol->getName());
+        }
+    } else {
+        // A call naming no return value produces every one the procedure declares, under
+        // the procedure's own names - and none at all for a procedure declaring none,
+        // which is called for what it does rather than for rows. Only a standalone call
+        // gets here: the analyzer requires a YIELD of any call inside a query.
+        for (const FunctionReturnType& returnType : signature->returnTypes()) {
+            yieldedNames.push_back(_opBuilder.getStringAttr(returnType.getName()));
+            yieldedVariables.push_back(returnType.getName());
+        }
     }
 
     // One argument column per declared procedure argument, in the order written: a
@@ -1143,19 +1172,14 @@ void DBProgramGenerator::generateCall(const CallStmt* callStmt) {
     // Everything already in flight rides through the carry set, so the projection can
     // still read it after the call: the procedure need not emit one row per row it was
     // given, and the call replicates a carried row once per row it emitted for it.
-    llvm::SmallVector<mlir::Value> carriedColumns;
-    llvm::SmallVector<const VariableDependency*> carriedVariables;
-    llvm::SmallVector<const VariableDependency*> carriedEdgeTypeVariables;
-    collectLiveColumns(carriedColumns, carriedVariables, carriedEdgeTypeVariables);
+    LiveColumns live;
+    collectLiveColumns(live);
 
-    // A call reading none of those rows produces the same rows for every one of them -
-    // a cartesian product, which db.cross_product expresses and a carry set cannot. The
-    // traversal is already generated flat here, so it cannot be moved into a factor.
-    if (!carriedColumns.empty() && inputs.empty()) {
-        throw TuringException(fmt::format("CALL {} takes no argument from the query, so pairing its "
-                                          "rows with the ones already matched needs a cartesian "
-                                          "product, which is not supported yet.",
-                                          procedureName));
+    // A call reading none of those rows produces the same rows for every one of them,
+    // which is their cartesian product rather than anything a carry set can express.
+    if (!live._columns.empty() && inputs.empty()) {
+        generateCrossedCall(procedureName, yieldedNames, yieldedVariables, live);
+        return;
     }
 
     // The yielded columns' value types come from the procedure's declared return types,
@@ -1167,7 +1191,7 @@ void DBProgramGenerator::generateCall(const CallStmt* callStmt) {
         resultTypes.push_back(mlir::db::ColumnType::get(_mlirCtxt));
     }
 
-    for (const mlir::Value column : carriedColumns) {
+    for (const mlir::Value column : live._columns) {
         resultTypes.push_back(column.getType());
     }
 
@@ -1176,7 +1200,7 @@ void DBProgramGenerator::generateCall(const CallStmt* callStmt) {
                                                             resultTypes,
                                                             _opBuilder.getStringAttr(procedureName),
                                                             mlir::ValueRange {inputs},
-                                                            mlir::ValueRange {carriedColumns},
+                                                            mlir::ValueRange {live._columns},
                                                             _opBuilder.getArrayAttr(yieldedNames));
 
     // The yielded columns are new variables of the query, known by the name the YIELD
@@ -1184,10 +1208,78 @@ void DBProgramGenerator::generateCall(const CallStmt* callStmt) {
     // the procedure emitted.
     const mlir::Operation::result_range results = callOp.getResults();
     for (size_t yieldIndex = 0; yieldIndex < yieldedVariables.size(); yieldIndex++) {
-        _yieldedColumns[yieldedVariables[yieldIndex]] = results[yieldIndex];
+        _yieldedColumns.emplace_back(yieldedVariables[yieldIndex], results[yieldIndex]);
     }
 
-    rebindLiveColumns(results, yieldedVariables.size(), carriedVariables, carriedEdgeTypeVariables);
+    rebindLiveColumns(results, yieldedVariables.size(), live);
+}
+
+void DBProgramGenerator::generateCrossedCall(std::string_view procedureName,
+                                             llvm::ArrayRef<mlir::Attribute> yieldedNames,
+                                             llvm::ArrayRef<std::string_view> yieldedVariables,
+                                             const LiveColumns& live) {
+    // The call reads none of the rows already in flight, so it produces the same rows for
+    // every one of them: their cartesian product. Each side becomes a factor of a
+    // db.cross_product - what the query has matched so far on the left, the call on the
+    // right - and the product pairs them, which is exactly what it exists for.
+    mlir::Block* const currentBlock = _opBuilder.getInsertionBlock();
+
+    llvm::SmallVector<mlir::Type> resultTypes;
+    for (const mlir::Value column : live._columns) {
+        resultTypes.push_back(column.getType());
+    }
+
+    for (size_t yieldIndex = 0; yieldIndex < yieldedNames.size(); yieldIndex++) {
+        resultTypes.push_back(mlir::db::ColumnType::get(_mlirCtxt));
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    _opBuilder.setInsertionPointToEnd(currentBlock);
+    auto crossProduct = _opBuilder.create<mlir::db::CrossProduct>(loc, resultTypes);
+
+    mlir::Block* const leftBlock = &crossProduct.getLeftFactor().front();
+    mlir::Block* const rightBlock = &crossProduct.getRightFactor().front();
+
+    // Everything generated so far becomes the left factor: it is a self-contained
+    // dataflow already, so it moves wholesale - every op of this block ahead of the
+    // product - and its db.yield names the columns it contributes.
+    mlir::Block::OpListType& blockOps = currentBlock->getOperations();
+    leftBlock->getOperations().splice(leftBlock->end(),
+                                     blockOps,
+                                     blockOps.begin(),
+                                     crossProduct->getIterator());
+
+    _opBuilder.setInsertionPointToEnd(leftBlock);
+    _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {live._columns});
+
+    // The call is the right factor, opening its own dataflow there: it takes no argument
+    // and carries nothing, since the rows it is paired with are the other factor's.
+    llvm::SmallVector<mlir::Type> callResultTypes;
+    for (size_t yieldIndex = 0; yieldIndex < yieldedNames.size(); yieldIndex++) {
+        callResultTypes.push_back(mlir::db::ColumnType::get(_mlirCtxt));
+    }
+
+    _opBuilder.setInsertionPointToEnd(rightBlock);
+    auto callOp = _opBuilder.create<mlir::db::CallProcedure>(loc,
+                                                            callResultTypes,
+                                                            _opBuilder.getStringAttr(procedureName),
+                                                            mlir::ValueRange {},
+                                                            mlir::ValueRange {},
+                                                            _opBuilder.getArrayAttr(yieldedNames));
+    _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {callOp.getResults()});
+
+    // Anything generated from here on reads the product's results, not the factors'.
+    _opBuilder.setInsertionPointToEnd(currentBlock);
+
+    // Its results are the left factor's columns then the right's: the rows already in
+    // flight, now paired, followed by the call's own.
+    const mlir::Operation::result_range results = crossProduct.getResults();
+    rebindLiveColumns(results, /*firstResult=*/0, live);
+
+    for (size_t yieldIndex = 0; yieldIndex < yieldedVariables.size(); yieldIndex++) {
+        _yieldedColumns.emplace_back(yieldedVariables[yieldIndex],
+                                     results[live._columns.size() + yieldIndex]);
+    }
 }
 
 void DBProgramGenerator::generateCreate(const CypherAST* ast) {
@@ -1503,6 +1595,19 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
 
     const ReturnStmt* rtn = sglPart->getReturnStmt();
     if (!rtn) {
+        // A standalone CALL has no projection of its own: what it emits is the columns it
+        // yielded, in the order the procedure declares them. A call yielding none - a
+        // procedure declaring no return value - emits nothing at all, so the query is the
+        // drive and no output op is generated.
+        llvm::SmallVector<mlir::Value> yielded;
+        for (const YieldedColumn& yieldedColumn : _yieldedColumns) {
+            yielded.push_back(yieldedColumn.second);
+        }
+
+        if (!yielded.empty()) {
+            _opBuilder.create<mlir::db::Output>(_opBuilder.getUnknownLoc(), mlir::ValueRange {yielded});
+        }
+
         return;
     }
 
@@ -1521,8 +1626,8 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
     }
 
     // A CALL's yielded columns are variables of the query too, named by the YIELD.
-    for (const auto& [name, column] : _yieldedColumns) {
-        variableColumns[name] = column;
+    for (const YieldedColumn& yieldedColumn : _yieldedColumns) {
+        variableColumns[yieldedColumn.first] = yieldedColumn.second;
     }
 
     for (const auto& [name, vars] : _vdg.edgeIdentities()) {
@@ -2046,9 +2151,8 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
             // A variable a CALL yielded appears in no pattern, so it is no VDG variable;
             // its column is the one the call produced for that return value.
             if (!_exprMap.contains(expr)) {
-                const auto yieldedIt = _yieldedColumns.find(varName);
-                if (yieldedIt != _yieldedColumns.end()) {
-                    _exprMap[expr] = yieldedIt->second;
+                if (const mlir::Value yielded = findYieldedColumn(varName)) {
+                    _exprMap[expr] = yielded;
                 }
             }
 

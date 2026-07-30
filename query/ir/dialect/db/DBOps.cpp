@@ -411,12 +411,16 @@ LogicalResult RemoveDuplicates::verify() {
 // during lowering, which is where the registry is available.
 LogicalResult CallProcedure::verify() {
     const ArrayAttr yields = getYields();
+    const OperandRange carriedColumns = getCarriedColumns();
 
-    if (yields.empty()) {
-        return emitOpError("requires at least one yielded return value");
+    // A call yielding nothing produces no column, so it has no row count for a carried
+    // row to be replicated against - it is called for what it does, not for rows, and
+    // nothing can ride through it.
+    if (yields.empty() && !carriedColumns.empty()) {
+        return emitOpError("yields no return value, so it cannot carry ")
+               << carriedColumns.size() << " columns past it";
     }
 
-    const OperandRange carriedColumns = getCarriedColumns();
     const Operation::result_range results = getResults();
     const size_t expectedResults = yields.size() + carriedColumns.size();
     if (results.size() != expectedResults) {

@@ -1564,7 +1564,9 @@ def Procedure : NLOp<"procedure", []> {
     resolves a property name once above the loops so the consumers below reuse it.
     `yields` names the return values this call binds, in the order the consuming op
     produces them, so the columns the procedure writes into are allocated once here
-    and shared by every step. The result type is buildable and omitted.
+    and shared by every step. It may be empty - a procedure declaring no return value
+    binds no column and is driven for what it does rather than for rows. The result
+    type is buildable and omitted.
   }];
 
   let arguments = (ins StrAttr:$name, StrArrayAttr:$yields);
@@ -1835,7 +1837,10 @@ def ProcedureInit : NLOp<"procedure_init", [AttrSizedOperandSegments]> {
 
     The iterator's chunk types are the yielded return values' column types followed by
     the carried ones. Neither can be recovered from the parameterless state handle, so
-    they are spelled after the colon (as the nl.for iterator type is).
+    they are spelled after the colon (as the nl.for iterator type is). A call binding no
+    return value gives an iterator of no chunk, whose nl.for binds no variable and runs an
+    empty body: the drive is all there is to it, which is what a call made for its side
+    effect wants.
   }];
 
   // Two variadic operand groups - the arguments and the carry set - so the op carries

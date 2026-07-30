@@ -1796,6 +1796,15 @@ void DBLowering::lowerCallProcedure(mlir::db::CallProcedure call) {
     // buildLoopForSource does the result mapping and nothing here reads them directly.
     const Procedure::FinalizeCallback finalizeCallback = procedure->getFinalizeCallback();
 
+    // An aggregating procedure holds its rows back until it has seen every chunk, so one
+    // binding no return value would fold every row and then have nowhere to put the
+    // result - the fold alone is a plain resultless call, without the finalize.
+    if (finalizeCallback && chunkTypes.empty()) {
+        throw IRException("db.call_procedure of '" + call.getProcedure().str()
+                          + "' aggregates its input but binds no return value, so its finalize"
+                            " callback would have no column to fill");
+    }
+
     llvm::SmallVector<mlir::Value, 4> inputChunks;
     for (const mlir::Value input : inputs) {
         inputChunks.push_back(mapValue(input));
@@ -2541,7 +2550,11 @@ void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp)
     // This is the innermost loop opened so far in the current factor (loops
     // nest in dataflow order), so a cross product nests at this body.
     _innermostLoopBody = loopBody;
-    _innermostCardinality = loopBody->getArguments().front();
+
+    // A loop over a call that binds no return value has no variable, so there is no chunk
+    // here for a constant projection to be sized against.
+    _innermostCardinality = loopBody->getNumArguments() > 0 ? loopBody->getArgument(0)
+                                                           : mlir::Value();
 
     const mlir::ResultRange dbResults = dbOp->getResults();
     for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {

@@ -33,6 +33,12 @@
 #include "writers/MetadataBuilder.h"
 
 #include "CypherAST.h"
+#include "FunctionInvocation.h"
+#include "FunctionSignature.h"
+#include "SinglePartQuery.h"
+#include "expr/FunctionInvocationExpr.h"
+#include "stmt/CallStmt.h"
+#include "stmt/StmtContainer.h"
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
 #include "DBDialect.h"
@@ -409,6 +415,36 @@ private:
     size_t _calls {0};
 };
 
+
+// How many times the side-effect procedure ran, so a test can assert a call with no
+// result still drives it.
+size_t sideEffectCalls = 0;
+
+struct SideEffectData : public ProcedureData {};
+
+// test.sideEffect(): declares no return value at all - it is called for what it does, not
+// for rows. Its execute callback emits nothing and finishes immediately.
+void sideEffectExecute(ProcedureState* procedureState) {
+    switch (procedureState->getStep()) {
+        case ProcedureState::Step::PREPARE:
+        case ProcedureState::Step::RESET:
+        break;
+
+        case ProcedureState::Step::EXECUTE:
+        sideEffectCalls++;
+        procedureState->finish();
+        break;
+    }
+}
+
+ProcedureData* sideEffectAlloc() {
+    return new SideEffectData();
+}
+
+void sideEffectDealloc(ProcedureData* data) {
+    delete data;
+}
+
 struct TwoNodesData : public ProcedureData {};
 
 // test.twoNodes() YIELD id: emits node IDs 0 and 1, in one chunk, then finishes. A
@@ -445,6 +481,20 @@ ProcedureData* twoNodesAlloc() {
 void twoNodesDealloc(ProcedureData* data) {
     delete data;
 }
+
+// Counts emissions without materializing them, so a call that produces no column can be
+// shown to emit nothing.
+class CountingSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        _calls++;
+    }
+
+    size_t getCalls() const { return _calls; }
+
+private:
+    size_t _calls {0};
+};
 
 // Collects the single node column a call yielding one NODE return value emits.
 class NodeSink : public NLOutputSink {
@@ -875,6 +925,12 @@ protected:
         brokenProcedure->addArgument("nodeIDs", ProcedureType::NODE);
         brokenProcedure->addReturnValue("doubled", ProcedureType::INT64);
         testNamespace->addProcedure(brokenProcedure);
+
+        Procedure* sideEffectProcedure = new Procedure("sideEffect");
+        sideEffectProcedure->setAllocCallback(&sideEffectAlloc);
+        sideEffectProcedure->setDeallocCallback(&sideEffectDealloc);
+        sideEffectProcedure->setExecuteCallback(&sideEffectExecute);
+        testNamespace->addProcedure(sideEffectProcedure);
 
         Procedure* twoNodesProcedure = new Procedure("twoNodes");
         twoNodesProcedure->setAllocCallback(&twoNodesAlloc);
@@ -1398,19 +1454,64 @@ TEST_F(MLIRCallProcedureTest, cypherCallOverMatchedNodes) {
     EXPECT_EQ(rows, expected);
 }
 
-TEST_F(MLIRCallProcedureTest, cypherRejectsUncorrelatedCallBesideAMatch) {
+TEST_F(MLIRCallProcedureTest, cypherUncorrelatedCallCrossesWithTheMatch) {
     auto graph = buildLabelledGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    // The call reads none of the matched rows, so pairing the two is a cartesian product -
-    // which the generator cannot build around an already-generated traversal yet. Rejected
-    // with that reason rather than asserting on a missing column.
-    CarriedNodeSink sink;
-    EXPECT_THROW(runQuery("MATCH (n) CALL test.twoNodes() YIELD id RETURN n, id",
-                          reader.getView(),
-                          sink),
-                 TuringException);
+    // The call reads none of the matched rows, so it produces the same two rows for every
+    // one of them: the five matched nodes crossed with them, ten pairs. The generator
+    // moves the traversal into one factor of a cross product and the call into the other.
+    NodePairSink sink;
+    runQuery("MATCH (n) CALL test.twoNodes() YIELD id RETURN n, id", reader.getView(), sink);
+
+    std::vector<NodePairSink::Row> rows;
+    sink.sortedRows(rows);
+
+    std::vector<NodePairSink::Row> expected;
+    for (uint64_t node = 0; node < 5; node++) {
+        expected.emplace_back(node, 0);
+        expected.emplace_back(node, 1);
+    }
+
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(MLIRCallProcedureTest, cypherCallWithoutYieldEmitsEveryReturnValue) {
+    auto graph = buildLabelledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // A standalone CALL names no return value, so it emits every one db.labels declares -
+    // its id and its label - in the order the procedure declares them.
+    LabelSink sink;
+    runQuery("CALL db.labels()", reader.getView(), sink);
+
+    std::vector<LabelSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<LabelSink::Row> expected {{0, "Person"},
+                                                {1, "Employee"},
+                                                {2, "Manager"},
+                                                {3, "Contractor"},
+                                                {4, "Intern"}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(MLIRCallProcedureTest, cypherCallOfProcedureWithNoResults) {
+    auto graph = buildLabelledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // A procedure declaring no return value is called for what it does: the query is the
+    // drive and nothing is emitted, so the call binds no column and no output is
+    // generated at all.
+    sideEffectCalls = 0;
+
+    CountingSink sink;
+    runQuery("CALL test.sideEffect()", reader.getView(), sink);
+
+    EXPECT_EQ(sideEffectCalls, 1u);
+    EXPECT_EQ(sink.getCalls(), 0u);
 }
 
 TEST_F(MLIRCallProcedureTest, rejectsUnknownProcedure) {

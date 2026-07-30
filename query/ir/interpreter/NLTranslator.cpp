@@ -2399,6 +2399,15 @@ void NLTranslator::addProcedureCarriedColumns(const IteratorConfig& config,
     const llvm::SmallVector<mlir::Value, 4>& carriedColumns = config._carriedColumns;
     const Procedure* procedure = loopData->getState()->getProcedure();
 
+    // A call binding no return value has no row count for a carried row to be replicated
+    // against, so nothing can ride through it - it is driven for what it does, not for
+    // rows. The db verifier settles this, so reaching it here means hand-written nl IR.
+    if (!carriedColumns.empty() && yieldCount == 0) {
+        throw IRException(fmt::format("nl.procedure_init carries columns past '{}', which binds no "
+                                      "return value, so they could not be aligned with anything",
+                                      procedure->getFullName()));
+    }
+
     // Only a procedure that declares it reports the input row behind each row it emits
     // can be carried past: that report is what the carried columns are rebuilt from.
     // Lowering settles this at plan time, so reaching it here means hand-written nl IR.
