@@ -31,13 +31,95 @@ class Procedure;
 class ProcedureContext;
 class ProcedureData;
 
-// Translation resolves every chunk SSA value 
+// Translation resolves every chunk SSA value
 // to a concrete ColumnVector type through this kind
+//
+// The first three are the ID columns a scan or a hop binds. The rest are what a CALL
+// yields: a procedure's declared return types map onto these, so a yielded column can be
+// crossed and carried like any other. Every one of them is a plain (never-null)
+// ColumnVector of the element type its name says - String is a borrowed string_view,
+// OwnedString a std::string the column owns.
 enum class NLChunkKind {
     NodeID,
     EdgeID,
     EdgeTypeID,
+    LabelID,
+    PropertyTypeID,
+    ValueTypeCode,
+    UInt64,
+    Int64,
+    Double,
+    Bool,
+    String,
+    OwnedString,
+    List,
 };
+
+// Invoke handler with the column element type a chunk kind stands for, so the families of
+// per-element-type handlers are selected in one place rather than through a switch
+// repeated in each selector. handler is a template lambda - [&]<typename ElementType>(){}
+// - which is therefore instantiated for every kind, so only a family defined for all of
+// them dispatches this way: copying values (gather, broadcast, range copy) and allocating
+// the column. Ordering, key serialization and reduction are not defined for every kind, so
+// their selectors spell out the kinds they support and reject the rest.
+template <typename Handler>
+void dispatchChunkKind(NLChunkKind kind, Handler&& handler) {
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return handler.template operator()<NodeID>();
+        break;
+
+        case NLChunkKind::EdgeID:
+            return handler.template operator()<EdgeID>();
+        break;
+
+        case NLChunkKind::EdgeTypeID:
+            return handler.template operator()<EdgeTypeID>();
+        break;
+
+        case NLChunkKind::LabelID:
+            return handler.template operator()<LabelID>();
+        break;
+
+        case NLChunkKind::PropertyTypeID:
+            return handler.template operator()<PropertyTypeID>();
+        break;
+
+        case NLChunkKind::ValueTypeCode:
+            return handler.template operator()<ValueType>();
+        break;
+
+        case NLChunkKind::UInt64:
+            return handler.template operator()<types::UInt64::Primitive>();
+        break;
+
+        case NLChunkKind::Int64:
+            return handler.template operator()<types::Int64::Primitive>();
+        break;
+
+        case NLChunkKind::Double:
+            return handler.template operator()<types::Double::Primitive>();
+        break;
+
+        case NLChunkKind::Bool:
+            return handler.template operator()<types::Bool::Primitive>();
+        break;
+
+        case NLChunkKind::String:
+            return handler.template operator()<types::String::Primitive>();
+        break;
+
+        case NLChunkKind::OwnedString:
+            return handler.template operator()<std::string>();
+        break;
+
+        case NLChunkKind::List:
+            return handler.template operator()<ListView>();
+        break;
+    }
+
+    bioassert(false, "Unknown NLChunkKind");
+}
 
 // Type of function pointers implementing operations
 using NLHandlerFunction = void (*)(NLExecutionContext* context, NLFunctionData* data);
