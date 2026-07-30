@@ -482,6 +482,37 @@ void twoNodesDealloc(ProcedureData* data) {
     delete data;
 }
 
+// Collects the (node, label name) rows a call crossed with a scan emits: a node column
+// and a borrowed-string column, the pair a MATCH crossed with db.labels produces.
+class NodeLabelSink : public NLOutputSink {
+public:
+    using Row = std::pair<uint64_t, std::string>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* nodes = dynamic_cast<const ColumnVector<NodeID>*>(chunks[0]);
+        const auto* labels = dynamic_cast<const ColumnVector<types::String::Primitive>*>(chunks[1]);
+        ASSERT_NE(nodes, nullptr);
+        ASSERT_NE(labels, nullptr);
+        ASSERT_EQ(nodes->size(), labels->size());
+
+        const auto& nodeRaw = nodes->getRaw();
+        const auto& labelRaw = labels->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.emplace_back(nodeRaw[rowIndex].getValue(), std::string(labelRaw[rowIndex]));
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
 // Counts emissions without materializing them, so a call that produces no column can be
 // shown to emit nothing.
 class CountingSink : public NLOutputSink {
@@ -1512,6 +1543,36 @@ TEST_F(MLIRCallProcedureTest, cypherCallOfProcedureWithNoResults) {
 
     EXPECT_EQ(sideEffectCalls, 1u);
     EXPECT_EQ(sink.getCalls(), 0u);
+}
+
+TEST_F(MLIRCallProcedureTest, cypherCrossedCallYieldsNonIdColumns) {
+    auto graph = buildLabelledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // MATCH (n) CALL db.labels() YIELD label RETURN n, label - the call is crossed with the
+    // match, and what it yields is a borrowed-string column rather than an ID one, so the
+    // product has to broadcast a chunk kind only a procedure produces. Five nodes by five
+    // labels: twenty-five rows, each label against each node.
+    // One outer chunk on purpose: the product re-enters the call's drive once per chunk of
+    // the match, and db.labels cannot be rewound (ScanLabelsIterator::reset refuses), so a
+    // narrower chunk would fail on that rather than on anything to do with broadcasting.
+    NodeLabelSink sink;
+    runQuery("MATCH (n) CALL db.labels() YIELD label RETURN n, label", reader.getView(), sink);
+
+    std::vector<NodeLabelSink::Row> rows;
+    sink.sortedRows(rows);
+
+    std::vector<NodeLabelSink::Row> expected;
+    const std::vector<std::string> labels {"Person", "Employee", "Manager", "Contractor", "Intern"};
+    for (uint64_t node = 0; node < 5; node++) {
+        for (const std::string& label : labels) {
+            expected.emplace_back(node, label);
+        }
+    }
+    std::sort(expected.begin(), expected.end());
+
+    EXPECT_EQ(rows, expected);
 }
 
 TEST_F(MLIRCallProcedureTest, rejectsUnknownProcedure) {

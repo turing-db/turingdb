@@ -20,6 +20,8 @@
 #include "columns/ColumnOptMask.h"
 #include "columns/ColumnOptVector.h"
 #include "iterators/ChunkConfig.h"
+#include "list/ListElementView.h"
+#include "list/ListView.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
 #include "versioning/Change.h"
@@ -209,6 +211,40 @@ public:
 
 private:
     std::vector<std::vector<T>> _rows;
+};
+
+// Collects rows of two constant list columns as the integers each list holds.
+class CollectingConstListSink : public NLOutputSink {
+public:
+    using Row = std::pair<std::vector<int64_t>, std::vector<int64_t>>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* left = dynamic_cast<const ColumnConst<ListView>*>(chunks[0]);
+        const auto* right = dynamic_cast<const ColumnConst<ListView>*>(chunks[1]);
+        ASSERT_NE(left, nullptr);
+        ASSERT_NE(right, nullptr);
+
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            Row row;
+            readList((*left)[rowIndex], row.first);
+            readList((*right)[rowIndex], row.second);
+
+            _rows.push_back(row);
+        }
+    }
+
+    const std::vector<Row>& rows() const { return _rows; }
+
+private:
+    std::vector<Row> _rows;
+
+    static void readList(const ListView& list, std::vector<int64_t>& values) {
+        for (const ListElementView& element : list) {
+            values.push_back(element.getAs<int64_t>());
+        }
+    }
 };
 
 // A single constant materialized at function scope and emitted as one row.
@@ -844,8 +880,8 @@ func.func @main() {
 
 // A list chunk on both sides of a cross product. DBLowering never emits it - codegen keeps
 // constant columns out of the product's factors - but the op is meant to survive
-// hand-written IR, and the translator has no broadcast for a list cell. It must say so
-// rather than reach for a chunk kind and read the column as something it is not.
+// hand-written IR: each cell stands for every row of its side, so the product is the one
+// row pairing them.
 constexpr const char* crossListChunkProgram = R"mlir(
 func.func @main() {
   %xs = nl.constant([1, 2])
@@ -2128,10 +2164,16 @@ TEST_F(NLExecutorTest, rejectsCrossLoopCarriedColumns) {
     expectTranslationFailure(crossLoopCarryProgram);
 }
 
-// Pins the rejection, not the limitation: teaching addCrossColumn to broadcast a list cell
-// should turn this into an execution test rather than leave it asserting a throw.
-TEST_F(NLExecutorTest, rejectsCrossProductOverListChunks) {
-    expectTranslationFailure(crossListChunkProgram);
+TEST_F(NLExecutorTest, crossesConstantListChunks) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingConstListSink sink;
+    runProgram(crossListChunkProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<CollectingConstListSink::Row> expected {{{1, 2}, {3, 4}}};
+    EXPECT_EQ(sink.rows(), expected);
 }
 
 TEST_F(NLExecutorTest, sortsScannedNodesDescending) {
