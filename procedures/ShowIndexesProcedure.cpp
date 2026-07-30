@@ -134,7 +134,12 @@ void ShowIndexesProcedure::execute(ProcedureState* proc) {
             prepare(proc);
         }
         break;
-        case ProcedureState::Step::RESET:
+        case ProcedureState::Step::RESET: {
+            // Writing a chunk advances the written count, so a rewind puts it back to
+            // the first index; the commit it reads them from does not change.
+            Data& data = proc->data<Data>();
+            data._written = 0;
+        }
         break;
         case ProcedureState::Step::EXECUTE:
             const ProcedureContext* ctxt = proc->getContext();

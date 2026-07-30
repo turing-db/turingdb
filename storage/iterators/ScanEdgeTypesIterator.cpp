@@ -5,7 +5,8 @@
 namespace db {
 
 ScanEdgeTypesIterator::ScanEdgeTypesIterator(const EdgeTypeMap& edgeTypeMap)
-    : _it(edgeTypeMap.begin()),
+    : _begin(edgeTypeMap.begin()),
+    _it(edgeTypeMap.begin()),
     _end(edgeTypeMap.end())
 {
 }
@@ -15,7 +16,7 @@ ScanEdgeTypesIterator ScanEdgeTypesIterator::end(const EdgeTypeMap& edgeTypeMap)
 }
 
 void ScanEdgeTypesIterator::reset() {
-    bioassert(false, "Cannot reset ScanEdgeTypesIterator");
+    _it = _begin;
 }
 
 void ScanEdgeTypesIterator::next() {
