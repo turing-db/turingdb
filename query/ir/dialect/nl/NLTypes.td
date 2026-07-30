@@ -123,6 +123,22 @@ def NLCollectState : NLType<"CollectState", "collect_state"> {
     }];
 }
 
+def NLProcedureState : NLType<"ProcedureState", "procedure_state"> {
+    let summary = "A live procedure call handle";
+    let description = [{
+        Stands for one CALL's procedure state: the procedure's own data (what its
+        alloc callback produced), the input columns its arguments are bound to and
+        the result columns its yielded return values are bound to. Produced by
+        nl.procedure, which prepares it once above the loops, then read by
+        nl.procedure_fold (once per chunk), by the nl.for over
+        nl.procedure_init (which drives the procedure until it finishes) and by
+        nl.procedure_finalize (which asks an aggregating procedure for its result).
+        It is a handle, not a chunk: it owns the call, not a chunk of values - the
+        sibling of !nl.sort_state, except the state lives inside the procedure
+        rather than in the engine.
+    }];
+}
+
 def NLChunk : NLType<"Chunk", "chunk"> {
     let summary = "A bounded batch of values";
     let description = "One column chunk filled by a single database iterator step";
@@ -294,5 +310,15 @@ def NLCollectStateHandle : Type<
         CPred<"::llvm::isa<::mlir::nl::CollectStateType>($_self)">,
         "collect state handle", "::mlir::nl::CollectStateType">,
     BuildableType<"::mlir::nl::CollectStateType::get($_builder.getContext())">;
+
+// Constrains an operand to an !nl.procedure_state handle, the same way
+// NLSortStateHandle constrains the sort handle. The single concrete type - there
+// is only ever !nl.procedure_state - is what lets nl.procedure_fold,
+// nl.procedure_init and nl.procedure_finalize omit the handle's type in their
+// assembly, building it from this recipe instead.
+def NLProcedureStateHandle : Type<
+        CPred<"::llvm::isa<::mlir::nl::ProcedureStateType>($_self)">,
+        "procedure state handle", "::mlir::nl::ProcedureStateType">,
+    BuildableType<"::mlir::nl::ProcedureStateType::get($_builder.getContext())">;
 
 #endif // TURINGDB_NL_TYPES

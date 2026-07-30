@@ -404,6 +404,44 @@ LogicalResult RemoveDuplicates::verify() {
     return verifyPassThrough(getOperation(), getColumns(), getResults());
 }
 
+// A call produces one column per yielded return value then one per carried column, so
+// `yields`, the carry set and the results must line up. A call yielding nothing has no
+// column to produce and no row count to be read from, so it is rejected here at the db
+// level; the procedure's return values themselves are checked against the registry
+// during lowering, which is where the registry is available.
+LogicalResult CallProcedure::verify() {
+    const ArrayAttr yields = getYields();
+
+    if (yields.empty()) {
+        return emitOpError("requires at least one yielded return value");
+    }
+
+    const OperandRange carriedColumns = getCarriedColumns();
+    const Operation::result_range results = getResults();
+    const size_t expectedResults = yields.size() + carriedColumns.size();
+    if (results.size() != expectedResults) {
+        return emitOpError("expects ") << expectedResults
+                                       << " results, one per yielded return value and carried column, but has "
+                                       << results.size();
+    }
+
+    // A carried column is only replicated by the call, never retyped, so each trailing
+    // result keeps its carried column's type - the pass-through check db.limit shares,
+    // applied to the results after the yields.
+    for (size_t carriedIndex = 0; carriedIndex < carriedColumns.size(); carriedIndex++) {
+        const Value carried = carriedColumns[carriedIndex];
+        const Value result = results[yields.size() + carriedIndex];
+
+        if (carried.getType() != result.getType()) {
+            return emitOpError("carried result ") << carriedIndex
+                                                  << " must have the same type as carried column "
+                                                  << carriedIndex;
+        }
+    }
+
+    return success();
+}
+
 // Allows inline declaration of a constant type
 LogicalResult ConstantOp::inferReturnTypes(MLIRContext* context,
                                            std::optional<Location> location,

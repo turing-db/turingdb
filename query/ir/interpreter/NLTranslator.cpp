@@ -16,10 +16,15 @@
 #include "mlir/IR/Verifier.h"
 #include "llvm/ADT/SmallVector.h"
 
+#include "Procedure.h"
+#include "ProcedureContext.h"
+#include "ProcedureData.h"
+#include "ProcedureManager.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/Functions.h"
+#include "list/ListView.h"
 #include "metadata/GraphMetadata.h"
 #include "metadata/LabelSet.h"
 #include "metadata/LabelSetHandle.h"
@@ -69,6 +74,17 @@ NLBinaryFunctionSelector lookupBinaryFunctionSelector(mlir::Operation& operation
     const llvm::StringRef name = operation.getName().getStringRef();
     const auto it = binaryFunctionSelectors.find(std::string_view(name.data(), name.size()));
     return it == binaryFunctionSelectors.end() ? nullptr : it->second;
+}
+
+// Pool-allocate one procedure result column of the given element type, reserving a
+// full chunk so the calls stay allocation-free once the drive is under way. Every
+// procedure return type is written through a plain ColumnVector, so the element type
+// is all that varies.
+template <typename T>
+Column* allocProcedureColumn(LocalMemory* memory, size_t chunkSize) {
+    ColumnVector<T>* column = memory->alloc<ColumnVector<T>>();
+    column->reserve(chunkSize);
+    return column;
 }
 
 // The edge type name carried by the nl.get_edge_type handle a by-type hop's
@@ -300,11 +316,13 @@ void throwIfAlreadyDrained(const NLCollectState* state) {
 NLTranslator::NLTranslator(NLProgram* program,
                            LocalMemory* memory,
                            const GraphView* view,
-                           MetadataBuilder* metadataBuilder)
+                           MetadataBuilder* metadataBuilder,
+                           const ProcedureContext* procedureContext)
     : _program(program),
     _memory(memory),
     _view(view),
-    _metadataBuilder(metadataBuilder)
+    _metadataBuilder(metadataBuilder),
+    _procedureContext(procedureContext)
 {
 }
 
@@ -390,6 +408,23 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._kind = IteratorKind::UnwindConst;
             config._list = materializeListView(unwindConst.getElements());
             _iteratorConfigs[unwindConst.getResult()] = config;
+        } else if (nl::ProcedureInit procedureInit = mlir::dyn_cast<nl::ProcedureInit>(operation)) {
+            IteratorConfig config;
+            config._kind = IteratorKind::ProcedureInit;
+            config._procedureState = procedureStateFor(procedureInit.getState());
+
+            const mlir::OperandRange procedureInputs = procedureInit.getInputs();
+            config._procedureInputs.assign(procedureInputs.begin(), procedureInputs.end());
+
+            const mlir::OperandRange carriedColumns = procedureInit.getColumnsToFilter();
+            config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
+
+            _iteratorConfigs[procedureInit.getResult()] = config;
+        } else if (nl::ProcedureFinalize procedureFinalize = mlir::dyn_cast<nl::ProcedureFinalize>(operation)) {
+            IteratorConfig config;
+            config._kind = IteratorKind::ProcedureFinalize;
+            config._procedureState = procedureStateFor(procedureFinalize.getState());
+            _iteratorConfigs[procedureFinalize.getResult()] = config;
         } else if (nl::For forLoop = mlir::dyn_cast<nl::For>(operation)) {
             translateFor(forLoop, body);
         } else if (mlir::isa<nl::GetPropertyType, nl::GetEdgeType>(operation)) {
@@ -508,6 +543,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateDeleteNode(deleteNode, body);
         } else if (nl::DeleteEdge deleteEdge = mlir::dyn_cast<nl::DeleteEdge>(operation)) {
             translateDeleteEdge(deleteEdge, body);
+        } else if (nl::Procedure procedureOp = mlir::dyn_cast<nl::Procedure>(operation)) {
+            translateProcedure(procedureOp, body);
+        } else if (nl::ProcedureFold procedureFold = mlir::dyn_cast<nl::ProcedureFold>(operation)) {
+            translateProcedureFold(procedureFold, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
@@ -557,6 +596,10 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         // A const unwind is a plain source, so - like a scan - a downstream LIMIT can
         // bound its loop through the ordinary early-exit.
         translateUnwindConstLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::ProcedureInit) {
+        translateProcedureInitLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::ProcedureFinalize) {
+        translateProcedureFinalizeLoop(config, loopBody, limit, body);
     } else {
         translateEdgeLoop(config, loopBody, limit, body);
     }
@@ -2248,6 +2291,337 @@ Column* NLTranslator::allocValueColumnForValueType(ValueType valueType) {
     }
 
     return nullptr;
+}
+
+void NLTranslator::translateProcedure(nl::Procedure procedureOp, NLStmtContainer* body) {
+    const llvm::StringRef name = procedureOp.getName();
+
+    if (!_procedureContext) {
+        throw IRException(fmt::format("nl.procedure of '{}' requires a procedure context, but the "
+                                      "translator was created without one",
+                                      name.str()));
+    }
+
+    const ProcedureManager* procedures = _procedureContext->getProcedures();
+    if (!procedures) {
+        throw IRException("The procedure context carries no procedure registry to resolve "
+                          "nl.procedure against");
+    }
+
+    // A procedure fills at most a chunk's worth of rows per call, reading that budget
+    // off the context: a zero budget leaves a drive loop asking an exhausted-looking
+    // procedure for rows forever, so reject the unset context here rather than hang.
+    if (_procedureContext->getChunkSize() == 0) {
+        throw IRException("The procedure context carries no chunk size, so a procedure would be "
+                          "asked for chunks of no rows");
+    }
+
+    const Procedure* procedure = procedures->getProcedure(std::string_view(name.data(), name.size()));
+    if (!procedure) {
+        throw IRException(fmt::format("Procedure '{}' does not exist", name.str()));
+    }
+
+    // A procedure keeps its own state - iterators, tallies - in the data its alloc
+    // callback produces, and every callback runs through the execute entry point, so
+    // a procedure missing either cannot be called at all.
+    const Procedure::AllocCallback alloc = procedure->getAllocCallback();
+    if (!alloc || !procedure->getExecCallback()) {
+        throw IRException(fmt::format("Procedure '{}' has no alloc or execute callback", name.str()));
+    }
+
+    // The slots the procedure reads its arguments from and writes its return values
+    // into. Every declared value gets a slot, so a return value this call does not
+    // yield stays null and the procedure skips it.
+    ProcedureData* procedureData = alloc();
+    procedureData->resizeInputColumns(procedure->argumentTypes().size());
+    procedureData->resizeReturnColumns(procedure->returnValues().size());
+
+    // The runtime call owns that data from here on - its dealloc callback releases it
+    // - and is mapped to the handle, so the execute, the drive loop and the finalize
+    // that name the handle all drive the same procedure.
+    NLProcedureState* state = _program->allocProcedureState(procedure, procedureData, _procedureContext);
+    _procedureStates[procedureOp.getState()] = state;
+
+    // Resolve each yielded name to the procedure's own return value index once here,
+    // so the ops that bind columns work off indices rather than names.
+    for (const mlir::Attribute yield : procedureOp.getYields()) {
+        const llvm::StringRef yieldName = mlir::cast<mlir::StringAttr>(yield).getValue();
+
+        state->addYieldIndex(procedure->getReturnValueIndex(std::string_view(yieldName.data(), yieldName.size())));
+    }
+
+    // The prepare/reset runs each time the block holding this nl.procedure runs: once
+    // at function scope for a top-level CALL.
+    NLProcedureCallData* callData = _program->allocFunctionData<NLProcedureCallData>(state);
+    body->emplaceStmt(&NLExecutor::runProcedureReset, callData);
+}
+
+void NLTranslator::translateProcedureFold(nl::ProcedureFold execute, NLStmtContainer* body) {
+    // The handle is a required operand, so procedureStateFor returns its call or
+    // throws if it was not produced by an nl.procedure.
+    NLProcedureState* state = procedureStateFor(execute.getState());
+
+    // The fold form only ever runs an aggregating procedure: a procedure that emits
+    // rows is driven by the nl.for over nl.procedure_init, whose steps read them.
+    if (!state->getProcedure()->getFinalizeCallback()) {
+        throw IRException("nl.procedure_fold names a procedure with no finalize callback, so it "
+                          "emits rows nothing would read; drive it with nl.procedure_init");
+    }
+
+    bindProcedureInputs(state, execute.getInputs());
+
+    NLProcedureCallData* callData = _program->allocFunctionData<NLProcedureCallData>(state);
+    body->emplaceStmt(&NLExecutor::runProcedureFold, callData);
+}
+
+void NLTranslator::bindProcedureInputs(NLProcedureState* state, mlir::ValueRange inputs) {
+    // Operand i is argument i, so each argument chunk lands in the slot the procedure
+    // reads that argument from. The chunks are the enclosing loop's variables, refilled
+    // in place each step, so binding them once here holds for every step.
+    const size_t argumentCount = state->getProcedure()->argumentTypes().size();
+    if (inputs.size() != argumentCount) {
+        throw IRException(fmt::format("A procedure call passes {} arguments, but the procedure "
+                                      "declares {}",
+                                      inputs.size(),
+                                      argumentCount));
+    }
+
+    ProcedureData* procedureData = state->getData();
+    for (size_t inputIndex = 0; inputIndex < inputs.size(); inputIndex++) {
+        procedureData->setInputColumn(inputIndex, getColumn(inputs[inputIndex]));
+    }
+}
+
+void NLTranslator::addProcedureCarriedColumns(const IteratorConfig& config,
+                                              mlir::Block& loopBody,
+                                              size_t yieldCount,
+                                              NLProcedureLoopData* loopData) {
+    const llvm::SmallVector<mlir::Value, 4>& carriedColumns = config._carriedColumns;
+    const Procedure* procedure = loopData->getState()->getProcedure();
+
+    // Only a procedure that declares it reports the input row behind each row it emits
+    // can be carried past: that report is what the carried columns are rebuilt from.
+    // Lowering settles this at plan time, so reaching it here means hand-written nl IR.
+    if (!carriedColumns.empty() && !procedure->reportsInputRows()) {
+        throw IRException(fmt::format("nl.procedure_init carries columns past '{}', but the "
+                                      "procedure does not report the input row of the rows it emits",
+                                      procedure->getFullName()));
+    }
+
+    for (size_t carriedIndex = 0; carriedIndex < carriedColumns.size(); carriedIndex++) {
+        const mlir::Value carried = carriedColumns[carriedIndex];
+
+        // A carried chunk comes back as a loop variable after the yields, and is
+        // rebuilt into it each step - the call may repeat or drop its rows, so it
+        // cannot be passed through in place.
+        const auto loopVariableIndex = static_cast<unsigned>(yieldCount + carriedIndex);
+        const mlir::Value loopVariable = loopBody.getArgument(loopVariableIndex);
+
+        Column* output = allocColumnForChunkType(loopVariable.getType());
+        _valueSlots[loopVariable] = output;
+
+        const NLCarriedColumn column(getColumn(carried),
+                                     output,
+                                     selectGatherForChunkType(loopVariable.getType()));
+        loopData->addCarriedColumn(column);
+    }
+
+    if (carriedColumns.empty()) {
+        return;
+    }
+
+    // The procedure reports the input row behind each row it emits only when something
+    // is carried past the call; hand it the map the loop gathers those columns through,
+    // reserving a chunk so the reporting stays allocation-free.
+    ColumnVector<size_t>* inputRowIndices = loopData->getInputRowIndices();
+    inputRowIndices->reserve(_program->getChunkSize());
+    loopData->getState()->getData()->setInputRowIndices(inputRowIndices);
+}
+
+void NLTranslator::translateProcedureFinalizeLoop(const IteratorConfig& config,
+                                                 mlir::Block& loopBody,
+                                                 NLLimitState* limit,
+                                                 NLStmtContainer* body) {
+    NLProcedureState* state = config._procedureState;
+    if (!state) {
+        throw IRException("nl.procedure_finalize iterator must carry a procedure call");
+    }
+
+    // Only a procedure that holds its rows back until it has seen every chunk carries a
+    // finalize callback; without one there is nothing for this loop to drive.
+    if (!state->getProcedure()->getFinalizeCallback()) {
+        throw IRException("nl.procedure_finalize names a procedure with no finalize callback");
+    }
+
+    // For::verify binds one loop variable per iterator chunk, and a finalize iterator's
+    // chunks are the yielded return values - the columns the callback fills, which each
+    // step rewrites in place. It takes no argument and carries nothing, so there is no
+    // trailing carry set here, unlike an nl.procedure_init loop.
+    const size_t yieldCount = state->yieldIndices().size();
+    if (loopBody.getNumArguments() != yieldCount) {
+        throw IRException(fmt::format("An nl.procedure_finalize loop binds {} variables, but its "
+                                      "call yields {} return values",
+                                      loopBody.getNumArguments(),
+                                      yieldCount));
+    }
+
+    bindProcedureResults(state, loopBody.getArguments());
+
+    NLProcedureLoopData* loopData = _program->allocFunctionData<NLProcedureLoopData>(state);
+    loopData->setLimit(limit);
+
+    body->emplaceStmt(&NLExecutor::runProcedureFinalizeLoop, loopData);
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateProcedureInitLoop(const IteratorConfig& config,
+                                              mlir::Block& loopBody,
+                                              NLLimitState* limit,
+                                              NLStmtContainer* body) {
+    NLProcedureState* state = config._procedureState;
+    if (!state) {
+        throw IRException("nl.procedure_init iterator must carry a procedure call");
+    }
+
+    bindProcedureInputs(state, config._procedureInputs);
+
+    // For::verify binds one loop variable per iterator chunk, and a drive iterator's
+    // chunks are the yielded return values followed by the carried ones. The yields are
+    // the columns the procedure fills, so those loop variables are its result columns -
+    // each step rewrites them in place, with no gather and no copy.
+    const size_t yieldCount = state->yieldIndices().size();
+    const size_t carriedCount = config._carriedColumns.size();
+    if (loopBody.getNumArguments() != yieldCount + carriedCount) {
+        throw IRException(fmt::format("An nl.procedure_init loop binds {} variables, but its call "
+                                      "yields {} return values and carries {} columns",
+                                      loopBody.getNumArguments(),
+                                      yieldCount,
+                                      carriedCount));
+    }
+
+    bindProcedureResults(state, loopBody.getArguments().take_front(yieldCount));
+
+    NLProcedureLoopData* loopData = _program->allocFunctionData<NLProcedureLoopData>(state);
+    loopData->setLimit(limit);
+
+    // The carried columns come back as the trailing loop variables, rebuilt each step
+    // from the input rows the procedure reports.
+    addProcedureCarriedColumns(config, loopBody, yieldCount, loopData);
+
+    body->emplaceStmt(&NLExecutor::runProcedureInitLoop, loopData);
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+NLProcedureState* NLTranslator::procedureStateFor(mlir::Value handle) const {
+    const auto stateIt = _procedureStates.find(handle);
+    if (stateIt == _procedureStates.end()) {
+        throw IRException("procedure handle must be produced by an nl.procedure");
+    }
+
+    return stateIt->second;
+}
+
+void NLTranslator::bindProcedureResults(NLProcedureState* state, mlir::ValueRange chunks) {
+    // One op binds the call's result columns - the drive loop, the streaming execute
+    // or the finalize - so a second one would allocate a rival set of columns the
+    // procedure no longer writes into.
+    if (!state->resultColumns().empty()) {
+        throw IRException("A procedure call binds its result chunks once, but a second operation "
+                          "names the same handle");
+    }
+
+    const std::vector<size_t>& yieldIndices = state->yieldIndices();
+    if (chunks.size() != yieldIndices.size()) {
+        throw IRException(fmt::format("A procedure call produces {} chunks, but its nl.procedure "
+                                      "yields {} return values",
+                                      chunks.size(),
+                                      yieldIndices.size()));
+    }
+
+    const Procedure* procedure = state->getProcedure();
+    ProcedureData* procedureData = state->getData();
+
+    for (size_t yieldIndex = 0; yieldIndex < yieldIndices.size(); yieldIndex++) {
+        const size_t returnIndex = yieldIndices[yieldIndex];
+        Column* column = allocColumnForProcedureType(procedure->getReturnValueType(returnIndex));
+
+        // The procedure writes through the slot its own declaration order names; the
+        // engine reads the same column through the chunk value, and the ordered list
+        // on the call sizes each step's rows.
+        procedureData->setReturnColumn(returnIndex, column);
+        state->addResultColumn(column);
+        _valueSlots[chunks[yieldIndex]] = column;
+    }
+}
+
+Column* NLTranslator::allocColumnForProcedureType(ProcedureType procedureType) {
+    const size_t chunkSize = _program->getChunkSize();
+
+    // The column type each declared return type is written through, matching the
+    // pipeline engine's allocReturnValues: the procedure static_casts its return
+    // column to exactly this type, so the two must not drift.
+    switch (procedureType) {
+        case ProcedureType::NODE:
+            return allocProcedureColumn<NodeID>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::EDGE:
+            return allocProcedureColumn<EdgeID>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::LABEL_ID:
+            return allocProcedureColumn<LabelID>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::EDGE_TYPE_ID:
+            return allocProcedureColumn<EdgeTypeID>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::PROPERTY_TYPE_ID:
+            return allocProcedureColumn<PropertyTypeID>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::VALUE_TYPE:
+            return allocProcedureColumn<ValueType>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::UINT_64:
+            return allocProcedureColumn<types::UInt64::Primitive>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::INT64:
+            return allocProcedureColumn<types::Int64::Primitive>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::DOUBLE:
+            return allocProcedureColumn<types::Double::Primitive>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::BOOL:
+            return allocProcedureColumn<types::Bool::Primitive>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::STRING_VIEW:
+            return allocProcedureColumn<types::String::Primitive>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::STRING:
+            return allocProcedureColumn<std::string>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::LIST:
+            return allocProcedureColumn<ListView>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::INVALID:
+        case ProcedureType::_SIZE:
+            throw IRException("Invalid procedure return type");
+        break;
+    }
+
+    throw IRException("Unhandled procedure return type");
 }
 
 // An ID chunk allocates an ID column on its kind; a !storage.nullable<...> chunk

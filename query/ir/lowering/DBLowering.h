@@ -13,6 +13,8 @@
 namespace db {
 
 class GraphView;
+class Procedure;
+class ProcedureManager;
 
 // Lowers a function in the db dialect into a function in the nl dialect.
 //
@@ -93,7 +95,9 @@ class GraphView;
 //
 class DBLowering {
 public:
-    DBLowering(mlir::MLIRContext* context, const GraphView* view);
+    DBLowering(mlir::MLIRContext* context,
+               const GraphView* view,
+               const ProcedureManager* procedures = nullptr);
     ~DBLowering();
 
     // Translate a FuncOp in db dialect to nl dialect
@@ -104,6 +108,12 @@ private:
 
     // Graph schema, used to resolve a property name to its value type
     const GraphView* _view {nullptr};
+
+    // Procedure registry, used to resolve a db.call_procedure's name to the
+    // procedure and its declared argument and return types - the procedure
+    // counterpart of _view. Null when the caller runs without procedures, which
+    // only a module containing a db.call_procedure notices.
+    const ProcedureManager* _procedures {nullptr};
 
     // db column SSA value -> the nl chunk
     llvm::DenseMap<mlir::Value, mlir::Value> _valueMap;
@@ -298,6 +308,35 @@ private:
     // element) plus its nl.for - the list never materializes.
     void lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect);
 
+    // Lower a db.call_procedure: resolve the name against the procedure registry,
+    // hoist an nl.procedure handle (carrying the name and the yielded return values)
+    // to the top of the entry block - where it prepares the call once, above the
+    // loops - then place the call itself in one of two shapes, chosen by the
+    // procedure:
+    //   emits rows        -> an nl.procedure_init iterator and its nl.for, the shape a
+    //                        scan or a hop lowers to. The iterator opens where the
+    //                        arguments are bound (the entry block for an argument-less
+    //                        source), and each step of the loop runs the procedure once
+    //                        until it has answered that chunk of arguments in full, so
+    //                        one chunk in may give many chunks out.
+    //                        db.call_procedure's results map to that loop's variables:
+    //                        the yields, then the carry set rebuilt against the rows
+    //                        the procedure emitted
+    //   finalize callback -> an nl.procedure_fold in the innermost producing loop body
+    //                        that folds each chunk (no results), then - after the loop -
+    //                        an nl.procedure_finalize iterator and its nl.for at
+    //                        function scope, whose steps run the finalize callback until
+    //                        the procedure has emitted its last row. db.sort's
+    //                        collect-then-emit-loop shape, and an emit loop for the same
+    //                        reason: the result need not fit one chunk
+    // The result chunk types come from the procedure's declared return types, so the
+    // db result columns' own element types are ignored (as for a property fetch).
+    //
+    // An aggregating call keeps no row of its input, so a carry set on one is rejected
+    // here, as is a finalize callback on a procedure taking no argument (nothing would
+    // ever be folded).
+    void lowerCallProcedure(mlir::db::CallProcedure call);
+
     void lowerOutput(mlir::db::Output output);
 
     // Lower one factor region of a db.cross_product into a loop nest rooted at
@@ -336,6 +375,10 @@ private:
     // and mixed cases do not match and keep their truncate.
     void foldTruncatesIntoOutputs(mlir::func::FuncOp nlFunction);
     void foldSkipTruncatesIntoOutputs(mlir::func::FuncOp nlFunction);
+
+    // The procedure registered under this full name, or a clear error when there is
+    // no registry to resolve it against or no procedure of that name
+    const Procedure* procedureFor(llvm::StringRef name) const;
 
     // The nl.get_property_type handle for a property name, inserted once at the
     // top of the entry block (above every loop) and reused on later lookups
