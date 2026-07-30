@@ -76,6 +76,7 @@ void CallProcedureProcessor::prepare(ExecutionContext* ctxt) {
 }
 
 void CallProcedureProcessor::reset() {
+    _procedureState._finished = false;
     _procedureState._step = ProcedureState::Step::RESET;
     _procedure->getExecCallback()(&_procedureState);
 
@@ -92,6 +93,9 @@ void CallProcedureProcessor::execute() {
     _output.getPort()->writeData();
 
     if (_procedureState.isFinished()) {
+        if (_input.has_value()) {
+            _input->getPort()->consume();
+        }
         finish();
     }
 }

@@ -47,6 +47,8 @@ public:
 
     void fill(size_t maxCount);
 
+    bool isDone() const { return _nodeIt == _inputNodeIDs->cend(); }
+
     void setOutputColumns(ColumnNodeIDs* srcIDs,
                           ColumnEdgeIDs* edgeIDs,
                           ColumnEdgeTypes* edgeTypes,
