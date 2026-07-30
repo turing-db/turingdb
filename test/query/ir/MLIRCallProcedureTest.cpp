@@ -32,8 +32,12 @@
 #include "writers/DataPartBuilder.h"
 #include "writers/MetadataBuilder.h"
 
+#include "CypherAST.h"
+#include "CypherAnalyzer.h"
+#include "CypherParser.h"
 #include "DBDialect.h"
 #include "DBLowering.h"
+#include "DBProgramGenerator.h"
 #include "IRException.h"
 #include "LocalMemory.h"
 #include "NLDialect.h"
@@ -441,6 +445,30 @@ ProcedureData* twoNodesAlloc() {
 void twoNodesDealloc(ProcedureData* data) {
     delete data;
 }
+
+// Collects the single node column a call yielding one NODE return value emits.
+class NodeSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* nodes = dynamic_cast<const ColumnVector<NodeID>*>(chunks[0]);
+        ASSERT_NE(nodes, nullptr);
+
+        const auto& raw = nodes->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.push_back(raw[rowIndex].getValue());
+        }
+    }
+
+    void sortedRows(std::vector<uint64_t>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<uint64_t> _rows;
+};
 
 // Collects the (node, node) rows a cross product of a scan and a source call emits.
 class NodePairSink : public NLOutputSink {
@@ -985,6 +1013,61 @@ protected:
         interpreter.run();
     }
 
+    // Runs a Cypher query the whole way down: parsed and analyzed against the test's own
+    // procedure registry, generated into db dialect by DBProgramGenerator, lowered and
+    // executed. This is the path a CALL takes from the query text, so it covers the
+    // frontend as well as the engine.
+    void runQuery(const char* queryText,
+                  const GraphView& view,
+                  NLOutputSink& sink,
+                  size_t chunkSize = ChunkConfig::CHUNK_SIZE) {
+        CypherAST ast(&_procedures, queryText);
+
+        CypherParser parser(&ast);
+        parser.parse(queryText);
+
+        CypherAnalyzer analyzer(&ast, view);
+        analyzer.analyze();
+
+        mlir::MLIRContext context;
+        context.getOrLoadDialect<mlir::func::FuncDialect>();
+        context.getOrLoadDialect<mlir::storage::Storage>();
+        context.getOrLoadDialect<mlir::db::DB>();
+        context.getOrLoadDialect<mlir::nl::NL>();
+
+        mlir::OpBuilder builder(&context);
+        mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::ModuleOp::create(builder.getUnknownLoc());
+        mlir::ModuleOp module = dbModule.get();
+
+        DBProgramGenerator generator(&module);
+        generator.generate(&ast);
+
+        const mlir::func::FuncOp dbFunction = module.lookupSymbol<mlir::func::FuncOp>("main");
+        ASSERT_TRUE(dbFunction);
+
+        mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+        DBLowering lowering(&context, &view, &_procedures);
+        lowering.lower(dbFunction, *nlModule);
+
+        LocalMemory memory;
+
+        ProcedureContext procedureContext;
+        procedureContext.setGraphView(&view);
+        procedureContext.setProcedures(&_procedures);
+        procedureContext.setChunkSize(chunkSize);
+        procedureContext.setListBuffer(&memory.listBuffer());
+
+        NLInterpreter interpreter(*nlModule,
+                                  &view,
+                                  &sink,
+                                  &memory,
+                                  chunkSize,
+                                  /*writeBuffer=*/nullptr,
+                                  /*metadataBuilder=*/nullptr,
+                                  &procedureContext);
+        interpreter.run();
+    }
+
     // Lowers a program the same way but without running it, so a test can assert the
     // errors lowering raises. Takes the whole module by value, as the runner does, so
     // the MLIR context outlives the lowering.
@@ -1276,6 +1359,58 @@ TEST_F(MLIRCallProcedureTest, sourceCallCrossedWithAMultiChunkScan) {
     }
 
     EXPECT_EQ(rows, expected);
+}
+
+TEST_F(MLIRCallProcedureTest, cypherStandaloneCall) {
+    auto graph = buildLabelledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // A CALL with no MATCH: the call is the whole dataflow, so it opens it, and the YIELD
+    // names the column the RETURN projects.
+    NodeSink sink;
+    runQuery("CALL test.twoNodes() YIELD id RETURN id", reader.getView(), sink);
+
+    std::vector<uint64_t> rows;
+    sink.sortedRows(rows);
+    const std::vector<uint64_t> expected {0, 1};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(MLIRCallProcedureTest, cypherCallOverMatchedNodes) {
+    auto graph = buildLabelledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // MATCH (n) CALL test.expandNodeID(n) YIELD copy RETURN n, copy - the whole path from
+    // query text: the call takes the matched nodes as its argument, `n` rides through its
+    // carry set, and the projection reads both. Nodes 1, 2 and 4 emit rows (`id % 3`), so
+    // `n` is dropped for 0 and 3 and repeated for 2.
+    CarriedNodeSink sink;
+    runQuery("MATCH (n) CALL test.expandNodeID(n) YIELD copy RETURN n, copy",
+             reader.getView(),
+             sink,
+             /*chunkSize=*/2);
+
+    std::vector<CarriedNodeSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<CarriedNodeSink::Row> expected {{1, 100}, {2, 200}, {2, 201}, {4, 400}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(MLIRCallProcedureTest, cypherRejectsUncorrelatedCallBesideAMatch) {
+    auto graph = buildLabelledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The call reads none of the matched rows, so pairing the two is a cartesian product -
+    // which the generator cannot build around an already-generated traversal yet. Rejected
+    // with that reason rather than asserting on a missing column.
+    CarriedNodeSink sink;
+    EXPECT_THROW(runQuery("MATCH (n) CALL test.twoNodes() YIELD id RETURN n, id",
+                          reader.getView(),
+                          sink),
+                 TuringException);
 }
 
 TEST_F(MLIRCallProcedureTest, rejectsUnknownProcedure) {
