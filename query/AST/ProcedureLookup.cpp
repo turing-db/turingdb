@@ -97,6 +97,7 @@ FunctionResolver::FunctionSignatureRange ProcedureLookup::lookup(std::string_vie
         argTypes.push_back(procTypeToEvaluatedType(arg._type));
     }
     sig->setArguments(std::move(argTypes));
+    sig->setRequiredArgCount(proc->getRequiredArgumentCount());
 
     // Convert return types
     const ProcedureTypeVector& rets = proc->returnValues();

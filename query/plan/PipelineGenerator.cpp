@@ -1321,6 +1321,11 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
         inputItems.emplace_back(i++, col);
     }
 
+    const size_t totalArgs = procedure->argumentTypes().size();
+    for (size_t i = inputItems.size(); i < totalArgs; i++) {
+        inputItems.emplace_back(i, nullptr);
+    }
+
     _builder.addCallProcedure(procedure, inputItems, yieldItems);
 
     for (size_t i = 0; i < yieldItems.size(); i++) {

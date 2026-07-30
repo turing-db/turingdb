@@ -45,6 +45,7 @@ using ProcedureTypeName = EnumToString<ProcedureType>::Create<
 struct NamedProcedureType {
     std::string_view _name;
     ProcedureType _type {ProcedureType::INVALID};
+    bool _optional {false};
 };
 
 class ProcedureTypeVector {
@@ -63,7 +64,23 @@ public:
     ProcedureTypeVector& operator=(ProcedureTypeVector&&) noexcept = default;
 
     void add(std::string_view name, ProcedureType type) {
-        _values.emplace_back(name, type);
+        constexpr bool optional = false;
+        _values.emplace_back(name, type, optional);
+    }
+
+    void addOptional(std::string_view name, ProcedureType type) {
+        constexpr bool optional = true;
+        _values.emplace_back(name, type, optional);
+    }
+
+    size_t requiredCount() const {
+        size_t count = 0;
+        for (const auto& arg : _values) {
+            if (!arg._optional) {
+                count++;
+            }
+        }
+        return count;
     }
 
     size_t size() const { return _values.size(); }

@@ -43,9 +43,13 @@ public:
 
     bool isProcedure() const { return _isProcedure; }
 
+    size_t getMinArgCount() const { return _requiredArgCount; }
+
     void setArguments(std::vector<EvaluatedType>&& args) {
         _argumentTypes = std::move(args);
     }
+
+    void setRequiredArgCount(size_t count) { _requiredArgCount = count; }
 
     void setReturnTypes(std::vector<FunctionReturnType>&& ret) {
         _returnTypes = std::move(ret);
@@ -59,6 +63,7 @@ private:
     std::string_view _fullName;
     std::vector<EvaluatedType> _argumentTypes;
     std::vector<FunctionReturnType> _returnTypes;
+    size_t _requiredArgCount {0};
     bool _isAggregate {false};
     bool _isProcedure {false};
 };

@@ -31,7 +31,18 @@ void Procedure::addReturnValue(std::string_view name, ProcedureType type) {
 }
 
 void Procedure::addArgument(std::string_view name, ProcedureType type) {
+    if (_argumentTypes.requiredCount() < _argumentTypes.size()) {
+        throw ProcedureException("Required arguments must precede optional arguments");
+    }
     _argumentTypes.add(name, type);
+}
+
+void Procedure::addOptionalArgument(std::string_view name, ProcedureType type) {
+    _argumentTypes.addOptional(name, type);
+}
+
+size_t Procedure::getRequiredArgumentCount() const {
+    return _argumentTypes.requiredCount();
 }
 
 size_t Procedure::getReturnValueIndex(std::string_view name) const {
