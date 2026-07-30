@@ -54,6 +54,8 @@ inline void copyChunkImpl(const Column* srcPtr,
         COPY_CHUNK_CASE(ColumnVector<ListView>)
         COPY_CHUNK_CASE(ColumnVector<ListElementView>)
 
+        COPY_CHUNK_CASE(ColumnVector<std::string>)
+
         default: {
             bioassert(false, "copyChunk operator not handled between columns of kind {} and {}",
                       srcPtr->getKind(), dstPtr->getKind());
@@ -95,8 +97,10 @@ inline void copyTransformedChunkImpl(const ColumnVector<size_t>* transform,
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<EntityList>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<ValueType>)
 
-        COPY_CHUNK_CASE(ColumnVector<ListView>)
-        COPY_CHUNK_CASE(ColumnVector<ListElementView>)
+        COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<ListView>)
+        COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<ListElementView>)
+
+        COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<std::string>)
 
         default: {
             bioassert(false, "copyTransformedChunk operator not handled between columns of kind {} and {}",

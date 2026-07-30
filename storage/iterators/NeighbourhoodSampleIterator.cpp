@@ -84,7 +84,7 @@ NeighbourhoodSampleChunkWriter::NeighbourhoodSampleChunkWriter(const GraphView& 
     : NeighbourhoodSampleIterator(view, input),
     _sampleSize(sampleSize),
     _sampleRatio(1.0 / _sampleSize),
-    _replacementGenerator(0, _sampleSize - 1)
+    _replacementGenerator(0, _sampleSize == 0 ? 0 : _sampleSize - 1)
 {
 }
 
@@ -110,7 +110,7 @@ size_t NeighbourhoodSampleChunkWriter::randomSampleOffset() {
 void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
     bioassert(_sampleSize <= maxCount, "Invalid sample size.");
 
-    const size_t samplesPerChunk = maxCount / _sampleSize;
+    const size_t samplesPerChunk = _sampleSize == 0 ? 0 : maxCount / _sampleSize;
     const size_t nodesRemaining = std::distance(_nodeIt, _inputNodeIDs->cend());
     const size_t nodesToSample = std::min(nodesRemaining, samplesPerChunk);
     const size_t thisSize = nodesToSample * _sampleSize;

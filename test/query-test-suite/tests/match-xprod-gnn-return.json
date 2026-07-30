@@ -1,0 +1,11 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n), (p) CALL gnn.neighbourhoodSample(n, 1) YIELD dst AS m RETURN n, m, p",
+  "expect": {
+    "plan": "",
+    "result": ""
+  },
+  "tags": [],
+  "write-required": false
+}
