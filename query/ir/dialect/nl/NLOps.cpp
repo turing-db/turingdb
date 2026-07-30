@@ -631,16 +631,11 @@ LogicalResult GroupAggregateBuffer::verify() {
     return success();
 }
 
-// A call must bind at least one return value: the columns a procedure writes into
-// are allocated from `yields`, so a call yielding nothing would drive the procedure
-// with nowhere to put its rows. The names themselves are checked against the
-// procedure's declared return values during translation, which is where the registry
-// is available.
+// The names in `yields` are checked against the procedure's declared return values
+// during translation, which is where the registry is available; there is nothing to
+// check here. An empty list is legal and means the call binds no return value at all -
+// a procedure declaring none, driven for what it does rather than for rows.
 LogicalResult Procedure::verify() {
-    if (getYields().empty()) {
-        return emitOpError("requires at least one yielded return value");
-    }
-
     return success();
 }
 

@@ -594,6 +594,11 @@ def CallProcedure : TuringOp<"call_procedure", [AttrSizedOperandSegments]> {
     procedure does not return, or a result count that disagrees with `yields` and
     the carry set, is rejected.
 
+    `yields` may be empty, which is a call that produces no column at all: a procedure
+    declaring no return value is called for what it does, not for rows. Such a call
+    carries nothing either - it has no row count for a carried row to be replicated
+    against - and nothing consumes it, so it is the whole of what the query emits.
+
     The result value types come from the procedure's declared return types, so -
     like db.get_node_properties' value column - they are left typed none here and
     resolved during lowering.

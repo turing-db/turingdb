@@ -80,11 +80,13 @@ private:
     // alias of that item shares with it
     ProjectedColumnMap _projectedColumns;
 
-    // Maps the name a CALL's yielded return value is known by - its alias when the YIELD
-    // renamed it - to the column the call produced for it. A yielded variable appears in
+    // The column a CALL produced for each of its yielded return values, named as the
+    // query knows it - its alias when the YIELD renamed it. A yielded variable appears in
     // no pattern, so it is not a VDG variable and cannot live in _varMap; the projection
-    // and symbol translation consult both.
-    std::unordered_map<std::string_view, mlir::Value> _yieldedColumns;
+    // and symbol translation consult both. Kept in yield order, because a standalone CALL
+    // has no projection of its own and emits its columns in that order.
+    using YieldedColumn = std::pair<std::string_view, mlir::Value>;
+    std::vector<YieldedColumn> _yieldedColumns;
 
     VariableDependencyGraph _vdg;
 
@@ -92,6 +94,16 @@ private:
         std::unique_ptr<mlir::Region> _region;
         std::vector<const VariableDependency*> _vars;
         llvm::SmallVector<mlir::Value> _columns;
+    };
+
+    // The columns live at the current insertion point, and what each belongs to so the
+    // results of an op taking them all can be rebound: the latest value of every Cypher
+    // variable, then every edge-type column, then every column a CALL yielded.
+    struct LiveColumns {
+        llvm::SmallVector<mlir::Value> _columns;
+        llvm::SmallVector<const VariableDependency*> _variables;
+        llvm::SmallVector<const VariableDependency*> _edgeTypeVariables;
+        llvm::SmallVector<size_t> _yieldedIndices;
     };
 
     void generateTraversal(const CypherAST* ast);
@@ -125,21 +137,29 @@ private:
     void generateCalls(const CypherAST* ast);
     void generateCall(const CallStmt* callStmt);
 
-    // The live columns of the current insertion block - the latest value of every Cypher
-    // variable, then every edge-type column - together with the variables they belong to,
-    // so the results of an op taking them all can be rebound. A column bound in another
-    // block is skipped: an op here can only take what this block binds.
-    void collectLiveColumns(llvm::SmallVectorImpl<mlir::Value>& columns,
-                            llvm::SmallVectorImpl<const VariableDependency*>& variables,
-                            llvm::SmallVectorImpl<const VariableDependency*>& edgeTypeVariables);
+    // Generate a call that reads none of the rows already in flight: it produces the same
+    // rows for every one of them, so the two are crossed. What the query has matched so
+    // far moves into one factor of a db.cross_product and the call becomes the other,
+    // which is the shape a disconnected pattern already lowers to.
+    void generateCrossedCall(std::string_view procedureName,
+                             llvm::ArrayRef<mlir::Attribute> yieldedNames,
+                             llvm::ArrayRef<std::string_view> yieldedVariables,
+                             const LiveColumns& live);
 
-    // Rebind the live columns to an op's results, so later ops read what it produced.
-    // firstResult is where its pass-through results start - zero for an op that only
-    // takes them (a filter), past its own results for one that adds some (a call).
+    // Collect those columns. One bound in another block is skipped: an op here can only
+    // take what this block binds.
+    void collectLiveColumns(LiveColumns& live);
+
+    // Rebind them to an op's results, so later ops read what it produced. firstResult is
+    // where its pass-through results start - zero for an op that only takes them (a
+    // filter), past its own results for one that adds some (a call).
     void rebindLiveColumns(mlir::Operation::result_range results,
                            size_t firstResult,
-                           const llvm::SmallVectorImpl<const VariableDependency*>& variables,
-                           const llvm::SmallVectorImpl<const VariableDependency*>& edgeTypeVariables);
+                           const LiveColumns& live);
+
+    // The column a yielded variable of this name holds, or a null Value when no CALL
+    // yielded it.
+    mlir::Value findYieldedColumn(std::string_view name) const;
 
     void generateOutput(const CypherAST* ast);
 
