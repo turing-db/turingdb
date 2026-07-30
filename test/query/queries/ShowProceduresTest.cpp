@@ -97,7 +97,7 @@ TEST_F(ShowProceduresTest, showProcedures) {
                   "incomingEdges :: LIST, outEdgeCounts :: STRING, inEdgeCounts :: STRING)");
         ASSERT_EQ(colSignature->at(12),
                   "gnn.neighbourhoodSample(node :: NODE, sampleSize :: INTEGER, seed :: INTEGER = null)"
-                  " :: (src :: NODE, edge :: EDGE, edgeType :: INTEGER, dst :: NODE)");
+                  " :: (src :: NODE, edge :: EDGE, edgeType :: INTEGER, tgt :: NODE)");
         ASSERT_EQ(colSignature->at(13), "greeter.hello() :: (message :: STRING)");
 
         executed = true;
