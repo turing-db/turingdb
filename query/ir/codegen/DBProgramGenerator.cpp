@@ -45,6 +45,7 @@
 #include "expr/Expr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/PropertyExpr.h"
+#include "expr/StructuralExpressionComparator.h"
 #include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
 #include "stmt/CreateStmt.h"
@@ -99,40 +100,18 @@ EdgeMetadata::EdgeType reverseEdge(EdgeMetadata::EdgeType type) {
 
 }
 
-// Whether two projection-level expressions read the same column: the same variable, or
-// the same property of the same variable. Pointer equality cannot answer that on its own
-// - the n.name of RETURN n.name ORDER BY n.name is a second AST node, equal to the
-// projected one but not the same one - so those two kinds are compared by what they name
-// instead. Any other kind falls back to identity, which can miss a match a deeper
-// comparison would find: the cost is one more column for the sort to carry
-bool readsSameColumn(const Expr* lhs, const Expr* rhs) {
-    const Expr::Kind kind = lhs->getKind();
-
-    if (kind != rhs->getKind()) {
-        return false;
-    } else if (kind == Expr::Kind::SYMBOL) {
-        return lhs->getExprVarDecl() == rhs->getExprVarDecl();
-    } else if (kind == Expr::Kind::PROPERTY) {
-        const PropertyExpr* lhsProperty = static_cast<const PropertyExpr*>(lhs);
-        const PropertyExpr* rhsProperty = static_cast<const PropertyExpr*>(rhs);
-
-        const bool sameEntity = lhsProperty->getEntityVarDecl() == rhsProperty->getEntityVarDecl();
-        const bool sameProperty = lhsProperty->getPropName() == rhsProperty->getPropName();
-
-        return sameEntity && sameProperty;
-    } else {
-        return lhs == rhs;
-    }
-}
-
 // The index of the projected column @param key reads, or the item count when the
 // projection does not carry it. The projection is one column per return item, so the
-// index is the column's index too
+// index is the column's index too.
+//
+// A key and the item it reads are separate AST nodes - the n.name of
+// RETURN n.name ORDER BY n.name is written twice, so it is parsed twice - which is why
+// the two are matched by structure rather than by identity
 size_t findProjectedColumn(const Projection::Items& items, const Expr* key) {
     size_t index = 0;
     for (const Projection::ReturnItem& item : items) {
         const Expr* const* itemExpr = std::get_if<Expr*>(&item);
-        if (itemExpr && readsSameColumn(*itemExpr, key)) {
+        if (itemExpr && StructuralExpressionComparator::equal(*itemExpr, key)) {
             return index;
         }
 

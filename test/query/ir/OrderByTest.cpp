@@ -442,3 +442,31 @@ TEST_F(OrderByTest, personPairsByAgeDifference) {
             << "row {" << row[0] << ", " << row[1] << "} has a key of 0 but sorted after a null";
     }
 }
+
+// The same match one level deeper: the key is computed, so the two occurrences of
+// n.age + 42 are whole trees rather than a single node to recognise. Comparing them
+// structurally still finds the projected column, so the sort takes it and the property
+// behind it is read once.
+TEST_F(OrderByTest, projectedExpressionKeyIsNotDuplicated) {
+    mlir::MLIRContext context;
+    mlir::OwningOpRef<mlir::ModuleOp> module;
+    generateProgram("MATCH (n) RETURN n.age + 42 ORDER BY n.age + 42", context, module);
+
+    size_t propertyReads = 0;
+    size_t sortCount = 0;
+
+    module->walk([&](mlir::Operation* operation) {
+        if (mlir::isa<mlir::db::GetNodeProperties>(operation)) {
+            propertyReads++;
+        } else if (mlir::db::Sort sortOp = mlir::dyn_cast<mlir::db::Sort>(operation)) {
+            sortCount++;
+
+            EXPECT_EQ(sortOp.getColumns().size(), 1u);
+            ASSERT_EQ(sortOp.getKeyColumns().size(), 1u);
+            EXPECT_EQ(sortOp.getKeyColumns()[0], 0);
+        }
+    });
+
+    EXPECT_EQ(sortCount, 1u);
+    EXPECT_EQ(propertyReads, 1u);
+}
