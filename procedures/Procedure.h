@@ -49,15 +49,7 @@ public:
     void addArgument(std::string_view name, ProcedureType type);
     void addOptionalArgument(std::string_view name, ProcedureType type);
 
-    // Whether the procedure reports, for every row it emits, the input row it derives
-    // from - ProcedureData::getInputRowIndices. Only such a procedure may be called with
-    // columns carried past it: the caller has to replicate a carried row once per row
-    // the procedure emitted for it, and that report is the only thing that says which
-    // rows those are. Declared here so a caller can refuse the call while it is being
-    // planned rather than discovering mid-execution that the rows cannot be aligned.
-    //
-    // False by default: a procedure emitting one row per input row still has to report
-    // (there is no identity shortcut), so this is opt-in rather than assumed.
+    // True if a procedure supports indices to report input rows corresponding to its output rows
     bool reportsInputRows() const { return _reportsInputRows; }
     void setReportsInputRows(bool reportsInputRows);
 
