@@ -411,3 +411,34 @@ TEST_F(OrderByTest, crossProductByBothFactorsDescending) {
     expectNodeRows("MATCH (a {age: 32}), (b:SleepDisturber) RETURN a, b ORDER BY a DESC, b DESC",
                    expected);
 }
+
+// An arithmetic expression as the sort key, over the eight Person nodes paired with
+// themselves. Only Remy and Adam have an age, so b.age - a.age is 0 for the four pairs
+// drawn from those two and null for the other sixty, null propagating through the
+// subtraction. No projected column holds that difference, so it is computed into a
+// column of its own and appended to the sort: the four rows keyed 0 lead, in the order
+// the nest collected them, and the sixty null-keyed rows follow.
+TEST_F(OrderByTest, personPairsByAgeDifference) {
+    OrderedNodeSink sink;
+    runQuery("MATCH (a:Person), (b:Person) RETURN a, b ORDER BY b.age - a.age", &sink);
+
+    const uint64_t remy = SimpleGraph::findNodeID(_graph, "Remy").getValue();
+    const uint64_t adam = SimpleGraph::findNodeID(_graph, "Adam").getValue();
+
+    const Rows& rows = sink.rows();
+    ASSERT_EQ(rows.size(), 64u);
+
+    const Rows aged = {{remy, remy}, {remy, adam}, {adam, remy}, {adam, adam}};
+    const Rows leading(rows.begin(), rows.begin() + aged.size());
+    EXPECT_EQ(leading, aged);
+
+    // Every row after them has an endpoint with no age, which is what nulled its key
+    for (size_t rowIndex = aged.size(); rowIndex < rows.size(); rowIndex++) {
+        const Row& row = rows[rowIndex];
+        const bool sourceAged = row[0] == remy || row[0] == adam;
+        const bool targetAged = row[1] == remy || row[1] == adam;
+
+        EXPECT_FALSE(sourceAged && targetAged)
+            << "row {" << row[0] << ", " << row[1] << "} has a key of 0 but sorted after a null";
+    }
+}
