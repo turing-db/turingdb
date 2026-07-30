@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
@@ -35,6 +36,7 @@ class Literal;
 class ListLiteral;
 class Projection;
 class PropertyExpr;
+class ReturnStmt;
 class UnwindStmt;
 class VarDecl;
 class VariableDependency;
@@ -106,6 +108,10 @@ private:
         llvm::SmallVector<size_t> _yieldedIndices;
     };
 
+    // Cypher variable names, as the query writes them - the key the projection resolves a
+    // returned variable by, so it is what a liveness question is asked in.
+    using VariableNames = std::unordered_set<std::string_view>;
+
     void generateTraversal(const CypherAST* ast);
 
     // Adds filters for edges which should be equivalent (joined on)
@@ -135,7 +141,24 @@ private:
     // the columns the projection reads, and the rows already in flight ride through its
     // carry set so they stay aligned with what the procedure emitted.
     void generateCalls(const CypherAST* ast);
-    void generateCall(const CallStmt* callStmt);
+    void generateCall(const CallStmt* callStmt, const VariableNames& usedAfterCall);
+
+    // The variable names the query still reads once a call has run: the arguments of the
+    // calls written after it, and whatever the projection returns. Nothing else can read a
+    // column by then - the traversal, its constraints and its filters are all generated
+    // before the calls - so a name absent here belongs to a column that is dead at the
+    // call and need not be carried past it.
+    void collectNamesUsedAfterCall(llvm::ArrayRef<const CallStmt*> laterCalls,
+                                   const ReturnStmt* returnStmt,
+                                   VariableNames& used) const;
+
+    // Add every variable name an expression reads, walking into its sub-expressions, so a
+    // projection item or a call argument contributes each variable it is built from.
+    void collectExprNames(const Expr* expr, VariableNames& used) const;
+
+    // Drop from a live set the columns no name in `usedAfterCall` claims, leaving the
+    // groups in the order rebindLiveColumns walks them.
+    void dropUnusedLiveColumns(const VariableNames& usedAfterCall, LiveColumns& live) const;
 
     // Generate a call that reads none of the rows already in flight: it produces the same
     // rows for every one of them, so the two are crossed. What the query has matched so
