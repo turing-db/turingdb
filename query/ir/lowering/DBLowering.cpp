@@ -1792,93 +1792,46 @@ void DBLowering::lowerCallProcedure(mlir::db::CallProcedure call) {
     _builder.setInsertionPointToStart(_entryBlock);
     const mlir::Value state = _builder.create<nl::Procedure>(loc, call.getProcedureAttr(), yields).getState();
 
-    // Both shapes below open a loop whose variables are the call's results, so
-    // buildLoopForSource does the result mapping and nothing here reads them directly.
-    const Procedure::FinalizeCallback finalizeCallback = procedure->getFinalizeCallback();
-
-    // An aggregating procedure holds its rows back until it has seen every chunk, so one
-    // binding no return value would fold every row and then have nowhere to put the
-    // result - the fold alone is a plain resultless call, without the finalize.
-    if (finalizeCallback && chunkTypes.empty()) {
-        throw IRException("db.call_procedure of '" + call.getProcedure().str()
-                          + "' aggregates its input but binds no return value, so its finalize"
-                            " callback would have no column to fill");
-    }
-
     llvm::SmallVector<mlir::Value, 4> inputChunks;
     for (const mlir::Value input : inputs) {
         inputChunks.push_back(mapValue(input));
     }
 
-    if (!finalizeCallback) {
-        // A procedure that emits rows is driven by a loop of its own, the way a scan or
-        // a hop is, and each step of that nl.for runs the procedure once until it has
-        // answered that chunk of arguments in full - so one chunk of arguments may yield
-        // many chunks of rows.
-        //
-        // The loop opens where the arguments are bound: the innermost producing loop
-        // body. A call whose arguments are all loop-invariant - constants, or none at all
-        // - has no producing loop to sit in, so it opens its loop where the current
-        // dataflow is rooted, exactly as a scan does: the entry block at top level, or
-        // the outer factor's innermost loop body inside a db.cross_product, so the factor
-        // nests under it. Rooting such a call at the entry block instead would leave it
-        // outside the product's nest, referring to chunks that do not dominate it.
-        mlir::Block* insertionBlock = _rootBlock;
-        if (!inputChunks.empty()) {
-            mlir::Block* const argumentBlock = ownerBlock(inputChunks.front());
+    // A procedure is driven by a loop of its own, the way a scan or a hop is, and each
+    // step of that nl.for runs the procedure once until it has answered that chunk of
+    // arguments in full - so one chunk of arguments may yield many chunks of rows.
+    //
+    // The loop opens where the arguments are bound: the innermost producing loop body. A
+    // call whose arguments are all loop-invariant - constants, or none at all - has no
+    // producing loop to sit in, so it opens its loop where the current dataflow is
+    // rooted, exactly as a scan does: the entry block at top level, or the outer factor's
+    // innermost loop body inside a db.cross_product, so the factor nests under it.
+    // Rooting such a call at the entry block instead would leave it outside the product's
+    // nest, referring to chunks that do not dominate it.
+    mlir::Block* insertionBlock = _rootBlock;
+    if (!inputChunks.empty()) {
+        mlir::Block* const argumentBlock = ownerBlock(inputChunks.front());
 
-            // A factor shares no SSA value with its sibling, so an argument bound
-            // anywhere but function scope is bound inside this factor's own nest.
-            if (argumentBlock != _entryBlock) {
-                insertionBlock = argumentBlock;
-            }
+        // A factor shares no SSA value with its sibling, so an argument bound anywhere
+        // but function scope is bound inside this factor's own nest.
+        if (argumentBlock != _entryBlock) {
+            insertionBlock = argumentBlock;
         }
-
-        setInsertionInto(insertionBlock);
-
-        const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunkTypes);
-        nl::ProcedureInit init = _builder.create<nl::ProcedureInit>(loc,
-                                                                   iteratorType,
-                                                                   state,
-                                                                   inputChunks,
-                                                                   carriedChunks);
-
-        // buildLoopForSource binds one loop variable per yielded return value and then
-        // per carried column, and maps db.call_procedure's results to them, so the
-        // db.output that follows lowers into the drive loop's body reading that step's
-        // rows.
-        buildLoopForSource(init.getResult(), call.getOperation());
-    } else if (inputChunks.empty()) {
-        // There is nothing for an argument-less procedure to aggregate over - no chunk
-        // ever arrives - so a finalize callback could only ever see an empty fold.
-        throw IRException("db.call_procedure of '" + call.getProcedure().str()
-                          + "' takes no argument, so its finalize callback would never see a chunk");
-    } else if (!carriedChunks.empty()) {
-        // An aggregating procedure folds every input row into one result, so there is
-        // no row left to replicate a carried row against - the rows flowing past the
-        // call do not survive it.
-        throw IRException("db.call_procedure of '" + call.getProcedure().str()
-                          + "' aggregates its input, so no column can be carried past it");
-    } else {
-        // An aggregating procedure must see every chunk before it can produce its
-        // result, so the per-chunk call only folds - it takes no results - and the rows
-        // come from an emit loop after the producing loop: an nl.procedure_finalize
-        // iterator at function scope whose nl.for runs the finalize callback until the
-        // procedure has emitted its last row. The pipeline-breaking shape db.sort
-        // lowers to, and an emit loop for the same reason - the result need not fit one
-        // chunk.
-        setInsertionInto(ownerBlock(inputChunks.front()));
-        _builder.create<nl::ProcedureFold>(loc, state, inputChunks);
-
-        setInsertionInto(_entryBlock);
-        const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunkTypes);
-        nl::ProcedureFinalize finalize = _builder.create<nl::ProcedureFinalize>(loc, iteratorType, state);
-
-        // buildLoopForSource binds one loop variable per yielded return value and maps
-        // db.call_procedure's results to them, so the db.output that follows lowers
-        // into the emit loop's body - exactly as it does over a db.sort.
-        buildLoopForSource(finalize.getResult(), call.getOperation());
     }
+
+    setInsertionInto(insertionBlock);
+
+    const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunkTypes);
+    nl::ProcedureInit init = _builder.create<nl::ProcedureInit>(loc,
+                                                               iteratorType,
+                                                               state,
+                                                               inputChunks,
+                                                               carriedChunks);
+
+    // buildLoopForSource binds one loop variable per yielded return value and then per
+    // carried column, and maps db.call_procedure's results to them, so the db.output that
+    // follows lowers into the drive loop's body reading that step's rows.
+    buildLoopForSource(init.getResult(), call.getOperation());
 }
 
 const Procedure* DBLowering::procedureFor(llvm::StringRef name) const {

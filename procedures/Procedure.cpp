@@ -26,10 +26,6 @@ void Procedure::setDeallocCallback(DeallocCallback cb) {
     _deallocCallback = cb;
 }
 
-void Procedure::setFinalizeCallback(FinalizeCallback cb) {
-    _finalizeCallback = cb;
-}
-
 void Procedure::setReportsInputRows(bool reportsInputRows) {
     _reportsInputRows = reportsInputRows;
 }

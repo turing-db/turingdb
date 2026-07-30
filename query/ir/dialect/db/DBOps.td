@@ -607,10 +607,8 @@ def CallProcedure : TuringOp<"call_procedure", [AttrSizedOperandSegments]> {
     driven until it declares itself finished, so it lowers to an nl.procedure_init
     and its own nl.for. With arguments it is a per-chunk call: the procedure's
     execute callback runs once per chunk of its argument columns, inside the loop
-    that produces them, refilling its result columns each step. A procedure that
-    aggregates - one carrying a finalize callback - keeps that per-chunk call for the
-    folding but emits nothing there; its result columns are filled once after the
-    producing loop by an nl.procedure_finalize, the same shape db.count lowers to.
+    that produces them, refilling its result columns each step - the same
+    nl.procedure_init shape, opened where those arguments are bound.
 
     How many rows a call emits is the procedure's business, not the caller's: it may
     emit one row per input row, several (expanding an input row) or none (dropping it).
