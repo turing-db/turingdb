@@ -67,6 +67,9 @@ public:
 
     void returnAll(std::vector<YieldItem>& yieldItems) const;
 
+    bool hasIndices() const { return _hasIndices; }
+    void setHasIndices(bool value) { _hasIndices = value; }
+
 private:
     friend class ProcedureNamespace;
 
@@ -77,6 +80,7 @@ private:
     DeallocCallback _deallocCallback {nullptr};
     ProcedureTypeVector _returnValues;
     ProcedureTypeVector _argumentTypes;
+    bool _hasIndices {false};
 };
 
 }

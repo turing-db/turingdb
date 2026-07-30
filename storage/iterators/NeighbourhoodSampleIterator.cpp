@@ -127,12 +127,16 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
     if (_otherIDs) {
         _otherIDs->resize(thisSize);
     }
+    if (_indices) {
+        _indices->resize(thisSize);
+    }
 
     if (thisSize == 0) {
         return;
     }
 
     size_t writeIndex = 0;
+    size_t nodeIndex = std::distance(_inputNodeIDs->cbegin(), _nodeIt);
 
     // Algorithm L (improvement on Reservoir sampling)
     // https://en.wikipedia.org/wiki/Reservoir_sampling
@@ -164,6 +168,9 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
                 }
                 if (_otherIDs) {
                     _otherIDs->operator[](writeIndex) = e._otherID;
+                }
+                if (_indices) {
+                    _indices->operator[](writeIndex) = nodeIndex;
                 }
                 writeIndex++;
                 nextValidForCurrentNode();
@@ -204,6 +211,7 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
             W *= std::pow(rand01(), _sampleRatio);
         }
         _nodeIt++;
+        nodeIndex++;
         if (_nodeIt != _inputNodeIDs->cend()) {
             syncEdges();
         }
@@ -222,5 +230,8 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
     }
     if (_otherIDs) {
         _otherIDs->resize(writeIndex);
+    }
+    if (_indices) {
+        _indices->resize(writeIndex);
     }
 }
