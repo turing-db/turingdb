@@ -150,6 +150,8 @@ public:
         }
     }
 
+    const OptInt64Values& values() const { return _values; }
+
     void sortedValues(OptInt64Values& values) const {
         values = _values;
         std::sort(values.begin(), values.end());
@@ -412,4 +414,18 @@ TEST_F(DistinctTest, dedupsBeforeSorting) {
 
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
+}
+
+// A DISTINCT projection ordered by the very expression it returns. The key and the
+// returned item are two separate trees, so recognising them as one column is what keeps
+// this query from being turned away - after the dedup, only a column the projection
+// carries can be sorted on. The difference is 0 for the four pairs of aged Person nodes
+// and null for the other sixty, so the dedup leaves two rows and the null sorts last.
+TEST_F(DistinctTest, dedupsAndOrdersAnExpression) {
+    DistinctOptInt64Sink sink;
+    runQuery("MATCH (a:Person), (b:Person) RETURN DISTINCT b.age - a.age ORDER BY b.age - a.age",
+             &sink);
+
+    const OptInt64Values expected = {0, std::nullopt};
+    EXPECT_EQ(sink.values(), expected);
 }
