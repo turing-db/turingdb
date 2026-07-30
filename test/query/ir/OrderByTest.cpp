@@ -357,3 +357,23 @@ TEST_F(OrderByTest, unprojectedKeyIsAppended) {
 
     EXPECT_EQ(sortCount, 1u);
 }
+
+// A key most rows do not have: only Remy (0) and Adam (1) carry an age in simpledb, both
+// 32, and the other sixteen nodes have none. A null sorts after every value, so the two
+// aged nodes come first and the null-keyed rows follow; Remy and Adam tie on 32 and the
+// sixteen nulls tie with each other, and a tie keeps the order the rows were collected
+// in - the scan order - because the sort is stable.
+TEST_F(OrderByTest, nodesByUnprojectedAgeAscending) {
+    const Rows expected = {{0}, {1},  {2},  {3},  {4},  {5},  {6},  {7},  {8},
+                           {9}, {10}, {11}, {12}, {13}, {14}, {15}, {16}, {17}};
+    expectNodeRows("MATCH (n) RETURN n ORDER BY n.age", expected);
+}
+
+// Reversing the order moves the nulls to the front, since they sort after every value.
+// The ties do not reverse with it: a descending sort still keeps tied rows in collected
+// order, so the nulls stay in scan order and Remy precedes Adam.
+TEST_F(OrderByTest, nodesByUnprojectedAgeDescending) {
+    const Rows expected = {{2},  {3},  {4},  {5},  {6},  {7},  {8}, {9}, {10},
+                           {11}, {12}, {13}, {14}, {15}, {16}, {17}, {0}, {1}};
+    expectNodeRows("MATCH (n) RETURN n ORDER BY n.age DESC", expected);
+}
