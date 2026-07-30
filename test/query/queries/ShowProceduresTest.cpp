@@ -96,7 +96,7 @@ TEST_F(ShowProceduresTest, showProcedures) {
                   "returnOnlyIDs :: BOOLEAN) :: (id :: NODE, outgoingEdges :: LIST, "
                   "incomingEdges :: LIST, outEdgeCounts :: STRING, inEdgeCounts :: STRING)");
         ASSERT_EQ(colSignature->at(12),
-                  "gnn.neighbourhoodSample(node :: NODE, sampleSize :: INTEGER)"
+                  "gnn.neighbourhoodSample(node :: NODE, sampleSize :: INTEGER, seed :: INTEGER = null)"
                   " :: (src :: NODE, edge :: EDGE, edgeType :: INTEGER, dst :: NODE)");
         ASSERT_EQ(colSignature->at(13), "greeter.hello() :: (message :: STRING)");
 
