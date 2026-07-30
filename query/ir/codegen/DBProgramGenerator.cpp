@@ -50,8 +50,6 @@
 #include "WhereClause.h"
 #include "YieldClause.h"
 #include "YieldItems.h"
-#include "expr/ExprChain.h"
-#include "expr/FunctionInvocationExpr.h"
 #include "stmt/CallStmt.h"
 #include "stmt/StmtContainer.h"
 #include "decl/EvaluatedType.h"
@@ -61,12 +59,16 @@
 #include "FunctionSignature.h"
 #include "Literal.h"
 #include "expr/BinaryExpr.h"
+#include "expr/EntityTypeExpr.h"
 #include "expr/Expr.h"
 #include "expr/ExprChain.h"
 #include "expr/ExprChildren.h"
 #include "expr/FunctionInvocationExpr.h"
+#include "expr/IndexExpr.h"
+#include "expr/ListExpr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/PropertyExpr.h"
+#include "expr/StringExpr.h"
 #include "expr/StructuralExpressionComparator.h"
 #include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
@@ -1103,17 +1105,237 @@ void DBProgramGenerator::generateCalls(const CypherAST* ast) {
     }
 
     // In statement order, so a call reading what an earlier one yielded sees it - the
-    // reading statements are generated in the order the query writes them.
+    // reading statements are generated in the order the query writes them. Gathered first
+    // because each call is told what the calls after it still read.
+    llvm::SmallVector<const CallStmt*> calls;
     for (const Stmt* stmt : stmtsContainer->stmts()) {
         if (stmt->getKind() != Stmt::Kind::CALL) {
             continue;
         }
 
-        generateCall(static_cast<const CallStmt*>(stmt));
+        calls.push_back(static_cast<const CallStmt*>(stmt));
+    }
+
+    const ReturnStmt* returnStmt = sglPart->getReturnStmt();
+
+    for (size_t callIndex = 0; callIndex < calls.size(); callIndex++) {
+        const llvm::ArrayRef<const CallStmt*> laterCalls = llvm::ArrayRef(calls).drop_front(callIndex + 1);
+
+        VariableNames usedAfterCall;
+        collectNamesUsedAfterCall(laterCalls, returnStmt, usedAfterCall);
+
+        generateCall(calls[callIndex], usedAfterCall);
     }
 }
 
-void DBProgramGenerator::generateCall(const CallStmt* callStmt) {
+void DBProgramGenerator::collectNamesUsedAfterCall(llvm::ArrayRef<const CallStmt*> laterCalls,
+                                                   const ReturnStmt* returnStmt,
+                                                   VariableNames& used) const {
+    // A later call reads the variables its own arguments are built from.
+    for (const CallStmt* laterCall : laterCalls) {
+        const FunctionInvocationExpr* funcExpr = laterCall->getFunc();
+        const FunctionInvocation* invocation = funcExpr ? funcExpr->getFunctionInvocation() : nullptr;
+        const ExprChain* arguments = invocation ? invocation->getArguments() : nullptr;
+        if (!arguments) {
+            continue;
+        }
+
+        for (const Expr* argument : *arguments) {
+            collectExprNames(argument, used);
+        }
+    }
+
+    // With no projection the query emits the columns the calls yielded, in yield order,
+    // and nothing besides - so every yielded variable is read and no pattern variable is.
+    if (!returnStmt) {
+        for (const YieldedColumn& yieldedColumn : _yieldedColumns) {
+            used.insert(yieldedColumn.first);
+        }
+
+        return;
+    }
+
+    const Projection* projection = returnStmt->getProjection();
+    if (!projection) {
+        return;
+    }
+
+    // RETURN * names no variable of its own, so anything in scope may be projected and
+    // none of it can be called dead.
+    if (projection->isReturningAll()) {
+        for (const auto& [variable, columns] : _varMap) {
+            used.insert(variable->getName());
+        }
+
+        for (const YieldedColumn& yieldedColumn : _yieldedColumns) {
+            used.insert(yieldedColumn.first);
+        }
+
+        return;
+    }
+
+    const auto collectItemNames = [&](auto&& item) {
+        using Type = std::remove_cvref_t<decltype(item)>;
+
+        if constexpr (std::is_same_v<Type, VarDecl*>) {
+            used.insert(item->getName());
+        } else {
+            collectExprNames(item, used);
+        }
+    };
+
+    for (const Projection::ReturnItem item : projection->items()) {
+        std::visit(collectItemNames, item);
+    }
+
+    // An ORDER BY reads its keys after the call as much as the projection does.
+    if (projection->hasOrderBy()) {
+        const OrderBy* orderBy = projection->getOrderBy();
+        for (const OrderByItem* item : orderBy->getItems()) {
+            collectExprNames(item->getExpr(), used);
+        }
+    }
+}
+
+void DBProgramGenerator::collectExprNames(const Expr* expr, VariableNames& used) const {
+    if (!expr) {
+        return;
+    }
+
+    // The variable an expression is attached to, which is what the projection resolves it
+    // by before it translates the expression at all.
+    const VarDecl* exprVar = expr->getExprVarDecl();
+    if (exprVar) {
+        used.insert(exprVar->getName());
+    }
+
+    const Expr::Kind kind = expr->getKind();
+    switch (kind) {
+        case Expr::Kind::SYMBOL: {
+            const SymbolExpr* symbolExpr = static_cast<const SymbolExpr*>(expr);
+            const VarDecl* decl = symbolExpr->getDecl();
+            if (decl) {
+                used.insert(decl->getName());
+            }
+        }
+        break;
+
+        case Expr::Kind::PROPERTY: {
+            const PropertyExpr* propertyExpr = static_cast<const PropertyExpr*>(expr);
+            const VarDecl* entityDecl = propertyExpr->getEntityVarDecl();
+            if (entityDecl) {
+                used.insert(entityDecl->getName());
+            }
+        }
+        break;
+
+        case Expr::Kind::ENTITY_TYPES: {
+            const EntityTypeExpr* entityTypeExpr = static_cast<const EntityTypeExpr*>(expr);
+            const VarDecl* entityDecl = entityTypeExpr->getEntityVarDecl();
+            if (entityDecl) {
+                used.insert(entityDecl->getName());
+            }
+        }
+        break;
+
+        case Expr::Kind::BINARY: {
+            const BinaryExpr* binaryExpr = static_cast<const BinaryExpr*>(expr);
+            collectExprNames(binaryExpr->getLHS(), used);
+            collectExprNames(binaryExpr->getRHS(), used);
+        }
+        break;
+
+        case Expr::Kind::STRING: {
+            const StringExpr* stringExpr = static_cast<const StringExpr*>(expr);
+            collectExprNames(stringExpr->getLHS(), used);
+            collectExprNames(stringExpr->getRHS(), used);
+        }
+        break;
+
+        case Expr::Kind::UNARY: {
+            const UnaryExpr* unaryExpr = static_cast<const UnaryExpr*>(expr);
+            collectExprNames(unaryExpr->getSubExpr(), used);
+        }
+        break;
+
+        case Expr::Kind::INDEX: {
+            const IndexExpr* indexExpr = static_cast<const IndexExpr*>(expr);
+            collectExprNames(indexExpr->getBase(), used);
+            collectExprNames(indexExpr->getIndexExpr(), used);
+        }
+        break;
+
+        case Expr::Kind::LIST: {
+            const ListExpr* listExpr = static_cast<const ListExpr*>(expr);
+            for (const Expr* element : *listExpr) {
+                collectExprNames(element, used);
+            }
+        }
+        break;
+
+        case Expr::Kind::FUNCTION_INVOCATION: {
+            const FunctionInvocationExpr* funcExpr = static_cast<const FunctionInvocationExpr*>(expr);
+            const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
+            const ExprChain* arguments = invocation ? invocation->getArguments() : nullptr;
+            if (arguments) {
+                for (const Expr* argument : *arguments) {
+                    collectExprNames(argument, used);
+                }
+            }
+        }
+        break;
+
+        case Expr::Kind::PATH:
+        case Expr::Kind::LITERAL:
+            // A literal reads no variable, and a path is attached to its own through the
+            // declaration read above.
+        break;
+
+        case Expr::Kind::_SIZE:
+            throw FatalException("Invalid expression kind.");
+        break;
+    }
+}
+
+void DBProgramGenerator::dropUnusedLiveColumns(const VariableNames& usedAfterCall, LiveColumns& live) const {
+    LiveColumns usedColumns;
+
+    // The three groups sit back to back in _columns, in this order, which is the order
+    // collectLiveColumns filled them and rebindLiveColumns walks them - so one running
+    // index over _columns tracks all three.
+    size_t columnIndex = 0;
+
+    for (const VariableDependency* variable : live._variables) {
+        if (usedAfterCall.contains(variable->getName())) {
+            usedColumns._columns.push_back(live._columns[columnIndex]);
+            usedColumns._variables.push_back(variable);
+        }
+
+        columnIndex++;
+    }
+
+    for (const VariableDependency* variable : live._edgeTypeVariables) {
+        if (usedAfterCall.contains(variable->getName())) {
+            usedColumns._columns.push_back(live._columns[columnIndex]);
+            usedColumns._edgeTypeVariables.push_back(variable);
+        }
+
+        columnIndex++;
+    }
+
+    for (const size_t yieldedIndex : live._yieldedIndices) {
+        if (usedAfterCall.contains(_yieldedColumns[yieldedIndex].first)) {
+            usedColumns._columns.push_back(live._columns[columnIndex]);
+            usedColumns._yieldedIndices.push_back(yieldedIndex);
+        }
+
+        columnIndex++;
+    }
+
+    live = usedColumns;
+}
+
+void DBProgramGenerator::generateCall(const CallStmt* callStmt, const VariableNames& usedAfterCall) {
     const FunctionInvocationExpr* funcExpr = callStmt->getFunc();
     if (!funcExpr) {
         throw TuringException("CALL statement has no procedure invocation.");
@@ -1176,11 +1398,19 @@ void DBProgramGenerator::generateCall(const CallStmt* callStmt) {
     collectLiveColumns(live);
 
     // A call reading none of those rows produces the same rows for every one of them,
-    // which is their cartesian product rather than anything a carry set can express.
+    // which is their cartesian product rather than anything a carry set can express. The
+    // choice reads the unfiltered set: rows in flight have to be paired with the call's
+    // even when the projection returns none of their columns, or the query would lose
+    // their cardinality.
     if (!live._columns.empty() && inputs.empty()) {
         generateCrossedCall(procedureName, yieldedNames, yieldedVariables, live);
         return;
     }
+
+    // Only what is still read rides through. Carrying a dead column would replicate it
+    // once per emitted row for nothing, and - since only a procedure that reports its
+    // input rows may be carried past at all - would refuse calls that never needed it.
+    dropUnusedLiveColumns(usedAfterCall, live);
 
     // The yielded columns' value types come from the procedure's declared return types,
     // resolved during lowering, so they are left unresolved here - as a property fetch's
