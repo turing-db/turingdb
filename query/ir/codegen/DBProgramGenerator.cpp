@@ -782,9 +782,11 @@ void DBProgramGenerator::translateOrderBy(const OrderBy* orderBy,
     const OrderBy::ItemVector& items = orderBy->getItems();
     bioassert(!items.empty(), "ORDER BY without a key");
 
-    // Every projected column is sorted, so the projection stays row-aligned. A key the
-    // projection does not carry - the a.age of RETURN a ORDER BY a.age - is sorted as an
-    // extra column: it moves with its row but is never output
+    // A sort reorders the rows of every column it is given at once, so it is given the
+    // whole projection and the projected columns stay row-aligned. A key the projection
+    // does not carry - the a.age of RETURN a ORDER BY a.age - is handed over as one more
+    // column, so that it moves with the row it belongs to; its result is then left
+    // unread, which is what keeps it out of the output
     llvm::SmallVector<mlir::Value> sorted {projected.begin(), projected.end()};
 
     llvm::SmallVector<int64_t> keyColumns;
@@ -794,15 +796,17 @@ void DBProgramGenerator::translateOrderBy(const OrderBy* orderBy,
     for (const OrderByItem* item : items) {
         const mlir::Value keyColumn = resolveExprColumn(identities, item->getExpr());
 
-        // A key the sorted columns already carry is sorted in place; any other key is
-        // appended, so its index is one past the columns collected so far
+        // A key names the column to sort by through its position in the columns handed to
+        // the sort: the position the projection already gives it, or the end of the set
+        // when the key has to be appended - so two appended keys never share a position
         const auto findIt = std::ranges::find(sorted, keyColumn);
-        const size_t keyIndex = static_cast<size_t>(std::distance(sorted.begin(), findIt));
         if (findIt == sorted.end()) {
             sorted.push_back(keyColumn);
+            keyColumns.push_back(static_cast<int64_t>(sorted.size() - 1));
+        } else {
+            keyColumns.push_back(static_cast<int64_t>(std::distance(sorted.begin(), findIt)));
         }
 
-        keyColumns.push_back(static_cast<int64_t>(keyIndex));
         keyAscending.push_back(item->getType() == OrderByType::ASC);
     }
 
