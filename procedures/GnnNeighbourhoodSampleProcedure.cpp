@@ -33,54 +33,61 @@ struct Data : public IndexedProcedureData {
 
 void executeImpl(ProcedureState* proc) {
     Data& data = proc->data<Data>();
+
+    std::unique_ptr<NeighbourhoodSampleChunkWriter>& chunkWriter = data.writer;
+    bioassert(chunkWriter, "Null chunk writer.");
+
+    chunkWriter->fill(ChunkConfig::CHUNK_SIZE);
+
+    if (chunkWriter->isDone()) {
+        proc->finish();
+    }
+}
+
+void prepareImpl(ProcedureState* proc) {
+    Data& data = proc->data<Data>();
     const ProcedureContext* ctxt = proc->getContext();
     const GraphView& view = *ctxt->getGraphView();
 
-    if (!data.writer) {
-        const auto* inputNodeIDs = static_cast<const ColumnNodeIDs*>(data.getInputColumn(0));
-        const Column* inputSampleSize = data.getInputColumn(1);
-        const Column* inputSeed = data.getInputColumn(2);
+    const auto* inputNodeIDs = static_cast<const ColumnNodeIDs*>(data.getInputColumn(0));
+    const Column* inputSampleSize = data.getInputColumn(1);
+    const Column* inputSeed = data.getInputColumn(2);
 
-        auto* srcCol = static_cast<ColumnNodeIDs*>(data.getReturnColumn(0));
-        auto* edgeCol = static_cast<ColumnEdgeIDs*>(data.getReturnColumn(1));
-        auto* edgeTypeCol = static_cast<ColumnEdgeTypes*>(data.getReturnColumn(2));
-        auto* tgtCol = static_cast<ColumnNodeIDs*>(data.getReturnColumn(3));
-        ColumnIndices* indices = data.indices();
+    auto* srcCol = static_cast<ColumnNodeIDs*>(data.getReturnColumn(0));
+    auto* edgeCol = static_cast<ColumnEdgeIDs*>(data.getReturnColumn(1));
+    auto* edgeTypeCol = static_cast<ColumnEdgeTypes*>(data.getReturnColumn(2));
+    auto* tgtCol = static_cast<ColumnNodeIDs*>(data.getReturnColumn(3));
+    ColumnIndices* indices = data.indices();
 
-        const int64_t signedSampleSize =
-            ProcUtils::constArg<types::Int64::Primitive>(inputSampleSize, sampleSizeErr);
+    const int64_t signedSampleSize =
+        ProcUtils::constArg<types::Int64::Primitive>(inputSampleSize, sampleSizeErr);
 
-        if (signedSampleSize < 0) {
-            throw ProcedureException("gnn.neighbourhoodSample: sampleSize must be positive");
-        }
-        if (signedSampleSize > static_cast<int64_t>(ChunkConfig::CHUNK_SIZE)) {
-            const std::string chunkSizeString = std::to_string(ChunkConfig::CHUNK_SIZE);
-            throw ProcedureException("gnn.neighbourhoodSample: max sampleSize is " + chunkSizeString);
-        }
-        const size_t sampleSize = signedSampleSize;
-
-        if (!inputNodeIDs || inputNodeIDs->size() == 0) {
-            proc->finish();
-            return;
-        }
-
-        std::optional<uint64_t> seed = std::nullopt;
-        if (inputSeed) {
-            const int64_t signedSeed =
-                ProcUtils::constArg<types::Int64::Primitive>(inputSeed, seedErr);
-            seed = signedSeed;
-        }
-
-        data.writer = std::make_unique<NeighbourhoodSampleChunkWriter>(view, inputNodeIDs, sampleSize, seed);
-        data.writer->setOutputColumns(srcCol, edgeCol, edgeTypeCol, tgtCol);
-        data.writer->setIndices(indices);
+    if (signedSampleSize < 0) {
+        throw ProcedureException("gnn.neighbourhoodSample: sampleSize must be positive");
     }
+    if (signedSampleSize > static_cast<int64_t>(ChunkConfig::CHUNK_SIZE)) {
+        const std::string chunkSizeString = std::to_string(ChunkConfig::CHUNK_SIZE);
+        throw ProcedureException("gnn.neighbourhoodSample: max sampleSize is "
+                                 + chunkSizeString);
+    }
+    const size_t sampleSize = signedSampleSize;
 
-    data.writer->fill(ChunkConfig::CHUNK_SIZE);
-
-    if (data.writer->isDone()) {
+    if (!inputNodeIDs || inputNodeIDs->size() == 0) {
         proc->finish();
+        return;
     }
+
+    std::optional<uint64_t> seed = std::nullopt;
+    if (inputSeed) {
+        const int64_t signedSeed =
+            ProcUtils::constArg<types::Int64::Primitive>(inputSeed, seedErr);
+        seed = signedSeed;
+    }
+
+    data.writer = std::make_unique<NeighbourhoodSampleChunkWriter>(view, inputNodeIDs,
+                                                                   sampleSize, seed);
+    data.writer->setOutputColumns(srcCol, edgeCol, edgeTypeCol, tgtCol);
+    data.writer->setIndices(indices);
 }
 
 }
@@ -116,10 +123,13 @@ void GnnNeighbourhoodSampleProcedure::registerProcedure(ProcedureNamespace* ns) 
 void GnnNeighbourhoodSampleProcedure::execute(ProcedureState* proc) {
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE:
+            prepareImpl(proc);
         break;
+
         case ProcedureState::Step::RESET:
-            proc->data<Data>().writer.reset();
+            proc->data<Data>().writer->reset();
         break;
+
         case ProcedureState::Step::EXECUTE:
             executeImpl(proc);
         break;
