@@ -36,7 +36,15 @@ add_ir_tests(test_query_ir_collect_result_type CollectResultTypeTest.cpp)
 # The CALL procedure tests drive real registered procedures (db.labels) alongside two
 # test-local ones, so they need the procedure registry.
 add_ir_tests(test_query_ir_call_procedure MLIRCallProcedureTest.cpp)
-target_link_libraries(test_query_ir_call_procedure PRIVATE turing_db_procedures_s)
+# The Cypher-level cases run a query through the parser, analyzer and DBProgramGenerator
+# against the test's own registry, so they need the frontend as well as the engine.
+target_link_libraries(test_query_ir_call_procedure PRIVATE
+        turing_db_procedures_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s)
 
 add_ir_tests(test_query_ir_dbdialect DBDialectTest.cpp)
 add_ir_tests(test_query_ir_nldialect NLDialectTest.cpp)
