@@ -1293,7 +1293,7 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
 
         const VarDecl* argDecl = argExpr->getExprVarDecl();
 
-        if (!argDecl || argExpr->getKind() == Expr::Kind::LITERAL) {
+        if (!argDecl) {
             if (argExpr->getKind() != Expr::Kind::LITERAL && argExpr->getKind() != Expr::Kind::SYMBOL
                 && argExpr->getKind() != Expr::Kind::LIST) {
                 // TODO: replace this with an expression evaluation processor

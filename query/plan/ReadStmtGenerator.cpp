@@ -47,6 +47,7 @@
 #include "nodes/GetPropertyNode.h"
 #include "nodes/GetPropertyWithNullNode.h"
 #include "nodes/JoinNode.h"
+#include "nodes/PlanGraphNode.h"
 #include "nodes/ProcedureEvalNode.h"
 #include "nodes/ProduceResultsNode.h"
 #include "nodes/ScanNodesNode.h"
@@ -186,11 +187,6 @@ void ReadStmtGenerator::generateCallStmt(const CallStmt* callStmt) {
     for (const Expr* arg : *args) {
         // Arg does not need evaluation: perhaps supplied from an earlier proc
         if (!ExprEvalNode::needsEvaluation(arg)) {
-            continue;
-        }
-
-        // Literals are evaluated inline in translateProcedureEvalNode
-        if (arg->getKind() == Expr::Kind::LITERAL) {
             continue;
         }
 
@@ -751,48 +747,74 @@ bool ReadStmtGenerator::shouldPlaceValueHashJoin(VarNode* localVar, PlanGraphNod
 
 void ReadStmtGenerator::placeJoinsOnProcedures() {
     for (const auto& node : _tree->nodes()) {
-        if (node->getOpcode() == PlanGraphOpcode::PROCEDURE_EVAL) {
-            ProcedureEvalNode* n = static_cast<ProcedureEvalNode*>(node.get());
-            const ExprChain* args = n->getFuncExpr()->getFunctionInvocation()->getArguments();
+        if (node->getOpcode() != PlanGraphOpcode::PROCEDURE_EVAL) {
+            continue;
+        }
 
-            for (Expr* arg : *args) {
-                ExprDependencies deps;
-                deps.genExprDependencies(*_variables, arg);
+        ProcedureEvalNode* procedureNode = static_cast<ProcedureEvalNode*>(node.get());
+        const ExprChain* args = procedureNode->getFuncExpr()->getFunctionInvocation()->getArguments();
 
-                for (ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
-                    generateDependency(dep._producerNode, dep._expr);
-                    const auto [path, ancestorNode] = _topology->getShortestPath(n, dep._producerNode);
+        for (Expr* arg : *args) {
+            ExprDependencies deps;
+            deps.genExprDependencies(*_variables, arg);
 
-                    switch (path) {
-                        case PlanGraphTopology::PathToDependency::SameVar: {
-                            throwError("Unknown error. Cannot place procedure call on the same var", args);
-                        }
-                        break;
+            for (ExprDependencies::VarDependency& dep : deps.getVarDeps()) {
+                generateDependency(dep._producerNode, dep._expr);
+                const auto [path, ancestorNode] =
+                    _topology->getShortestPath(procedureNode, dep._producerNode);
 
-                        case PlanGraphTopology::PathToDependency::BackwardPath: {
-                            continue;
-                        }
-                        break;
-
-                        case PlanGraphTopology::PathToDependency::UndirectedPath: {
-                            // Join
-                            const auto* varDecl = static_cast<VarNode*>(ancestorNode)->getVarDecl();
-                            JoinNode* join = _tree->create<JoinNode>(varDecl,
-                                                                     varDecl,
-                                                                     JoinType::COMMON_ANCESTOR);
-                            PlanGraphNode* depBranchTip = _topology->getBranchTip(dep._producerNode);
-                            depBranchTip->connectOut(join);
-                            continue;
-                        }
-                        break;
-
-                        case PlanGraphTopology::PathToDependency::NoPath: {
-                            PlanGraphNode* depBranchTip = _topology->getBranchTip(dep._producerNode);
-                            depBranchTip->connectOut(n);
-                            continue;
-                        }
-                        break;
+                switch (path) {
+                    case PlanGraphTopology::PathToDependency::SameVar: {
+                        throwError(
+                            "Unknown error. Cannot place procedure call on the same var",
+                            args);
                     }
+                    break;
+
+                    case PlanGraphTopology::PathToDependency::BackwardPath: {
+                        continue;
+                    }
+                    break;
+
+                    case PlanGraphTopology::PathToDependency::UndirectedPath: {
+                        // Join
+                        const auto* varDecl =
+                            static_cast<VarNode*>(ancestorNode)->getVarDecl();
+                        JoinNode* join = _tree->create<JoinNode>(
+                            varDecl, varDecl, JoinType::COMMON_ANCESTOR);
+                        PlanGraphNode* depBranchTip =
+                            _topology->getBranchTip(dep._producerNode);
+                        depBranchTip->connectOut(join);
+                        continue;
+                    }
+                    break;
+
+                    case PlanGraphTopology::PathToDependency::NoPath: {
+                        // No path => dependency belongs to separate island
+                        // CartesianProduct is not the correct semantics, any CartProd
+                        // should have already been inserted and thus joined islands
+                        // before the evaluation of this procedure
+                        PlanGraphNode* depProd = dep._producerNode;
+                        PlanGraphNode* depBranchTip = _topology->getBranchTip(depProd);
+
+                        // No other inputs, we can just plug the dependency into the proc
+                        const PlanGraphNode::Nodes procInputs = procedureNode->inputs();
+                        if (procInputs.empty()) {
+                            depBranchTip->connectOut(procedureNode);
+                            continue;
+                        }
+
+                        bioassert(procInputs.size() == 1, "Invalid input shape");
+                        // Otherwise we have a single input, we can plug the dependency in
+                        // between
+
+                        PlanGraphNode* input = procInputs.front();
+                        bioassert(input->inputs().empty(), "Ambiguous insertion point.");
+                        depBranchTip->connectOut(input);
+
+                        continue;
+                    }
+                    break;
                 }
             }
         }
