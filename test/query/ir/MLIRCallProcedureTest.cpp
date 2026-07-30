@@ -519,12 +519,15 @@ class CountingSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         _calls++;
+        _rows += rowCount;
     }
 
     size_t getCalls() const { return _calls; }
+    size_t getRows() const { return _rows; }
 
 private:
     size_t _calls {0};
+    size_t _rows {0};
 };
 
 // Collects the single node column a call yielding one NODE return value emits.
@@ -1105,6 +1108,7 @@ protected:
     // executed. This is the path a CALL takes from the query text, so it covers the
     // frontend as well as the engine.
     void runQuery(const char* queryText,
+                  Graph* graph,
                   const GraphView& view,
                   NLOutputSink& sink,
                   size_t chunkSize = ChunkConfig::CHUNK_SIZE) {
@@ -1138,8 +1142,15 @@ protected:
 
         LocalMemory memory;
 
+        // A procedure reads the request through this context, so it carries everything one
+        // may ask for: the graph and the transaction as well as the view, since a
+        // version-control procedure like db.history reads the commit being queried.
+        Transaction transaction(graph->openTransaction());
+
         ProcedureContext procedureContext;
+        procedureContext.setGraph(graph);
         procedureContext.setGraphView(&view);
+        procedureContext.setTransaction(&transaction);
         procedureContext.setProcedures(&_procedures);
         procedureContext.setChunkSize(chunkSize);
         procedureContext.setListBuffer(&memory.listBuffer());
@@ -1456,7 +1467,7 @@ TEST_F(MLIRCallProcedureTest, cypherStandaloneCall) {
     // A CALL with no MATCH: the call is the whole dataflow, so it opens it, and the YIELD
     // names the column the RETURN projects.
     NodeSink sink;
-    runQuery("CALL test.twoNodes() YIELD id RETURN id", reader.getView(), sink);
+    runQuery("CALL test.twoNodes() YIELD id RETURN id", graph.get(), reader.getView(), sink);
 
     std::vector<uint64_t> rows;
     sink.sortedRows(rows);
@@ -1474,7 +1485,7 @@ TEST_F(MLIRCallProcedureTest, cypherCallOverMatchedNodes) {
     // carry set, and the projection reads both. Nodes 1, 2 and 4 emit rows (`id % 3`), so
     // `n` is dropped for 0 and 3 and repeated for 2.
     CarriedNodeSink sink;
-    runQuery("MATCH (n) CALL test.expandNodeID(n) YIELD copy RETURN n, copy",
+    runQuery("MATCH (n) CALL test.expandNodeID(n) YIELD copy RETURN n, copy", graph.get(),
              reader.getView(),
              sink,
              /*chunkSize=*/2);
@@ -1494,7 +1505,7 @@ TEST_F(MLIRCallProcedureTest, cypherUncorrelatedCallCrossesWithTheMatch) {
     // one of them: the five matched nodes crossed with them, ten pairs. The generator
     // moves the traversal into one factor of a cross product and the call into the other.
     NodePairSink sink;
-    runQuery("MATCH (n) CALL test.twoNodes() YIELD id RETURN n, id", reader.getView(), sink);
+    runQuery("MATCH (n) CALL test.twoNodes() YIELD id RETURN n, id", graph.get(), reader.getView(), sink);
 
     std::vector<NodePairSink::Row> rows;
     sink.sortedRows(rows);
@@ -1516,7 +1527,7 @@ TEST_F(MLIRCallProcedureTest, cypherCallWithoutYieldEmitsEveryReturnValue) {
     // A standalone CALL names no return value, so it emits every one db.labels declares -
     // its id and its label - in the order the procedure declares them.
     LabelSink sink;
-    runQuery("CALL db.labels()", reader.getView(), sink);
+    runQuery("CALL db.labels()", graph.get(), reader.getView(), sink);
 
     std::vector<LabelSink::Row> rows;
     sink.sortedRows(rows);
@@ -1539,7 +1550,7 @@ TEST_F(MLIRCallProcedureTest, cypherCallOfProcedureWithNoResults) {
     sideEffectCalls = 0;
 
     CountingSink sink;
-    runQuery("CALL test.sideEffect()", reader.getView(), sink);
+    runQuery("CALL test.sideEffect()", graph.get(), reader.getView(), sink);
 
     EXPECT_EQ(sideEffectCalls, 1u);
     EXPECT_EQ(sink.getCalls(), 0u);
@@ -1554,11 +1565,13 @@ TEST_F(MLIRCallProcedureTest, cypherCrossedCallYieldsNonIdColumns) {
     // match, and what it yields is a borrowed-string column rather than an ID one, so the
     // product has to broadcast a chunk kind only a procedure produces. Five nodes by five
     // labels: twenty-five rows, each label against each node.
-    // One outer chunk on purpose: the product re-enters the call's drive once per chunk of
-    // the match, and db.labels cannot be rewound (ScanLabelsIterator::reset refuses), so a
-    // narrower chunk would fail on that rather than on anything to do with broadcasting.
+    // Three chunks of nodes, so the product re-enters the call's drive twice over and the
+    // label scan is rewound each time - every node still meets every label, exactly once.
     NodeLabelSink sink;
-    runQuery("MATCH (n) CALL db.labels() YIELD label RETURN n, label", reader.getView(), sink);
+    runQuery("MATCH (n) CALL db.labels() YIELD label RETURN n, label", graph.get(),
+             reader.getView(),
+             sink,
+             /*chunkSize=*/2);
 
     std::vector<NodeLabelSink::Row> rows;
     sink.sortedRows(rows);
@@ -1573,6 +1586,30 @@ TEST_F(MLIRCallProcedureTest, cypherCrossedCallYieldsNonIdColumns) {
     std::sort(expected.begin(), expected.end());
 
     EXPECT_EQ(rows, expected);
+}
+
+TEST_F(MLIRCallProcedureTest, cypherCrossedCallRewindsItsCursor) {
+    auto graph = buildLabelledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // db.history walks a cursor down the commit chain, consuming it, so a drive re-entered
+    // by the product only produces rows if the rewind puts the cursor back. Take the
+    // commit count from a standalone call, then require the crossed one to pair every
+    // commit with every node - a stale cursor would leave the later chunks empty.
+    CountingSink standaloneSink;
+    runQuery("CALL db.history() YIELD nodeCount RETURN nodeCount", graph.get(), reader.getView(), standaloneSink);
+
+    const size_t commitCount = standaloneSink.getRows();
+    ASSERT_GT(commitCount, 0u);
+
+    CountingSink crossedSink;
+    runQuery("MATCH (n) CALL db.history() YIELD nodeCount RETURN n, nodeCount", graph.get(),
+             reader.getView(),
+             crossedSink,
+             /*chunkSize=*/2);
+
+    EXPECT_EQ(crossedSink.getRows(), 5 * commitCount);
 }
 
 TEST_F(MLIRCallProcedureTest, rejectsUnknownProcedure) {

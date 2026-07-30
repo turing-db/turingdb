@@ -20,6 +20,21 @@ struct Data : public ProcedureData {
     const Commit* _commit {nullptr};
 };
 
+// The commit the history is walked back from: the one the query reads. Both the first
+// drive and every rewind start there, since the cursor below consumes it.
+void seekToHeadCommit(Data* data, const ProcedureContext* ctxt, const VersionController& controller) {
+    Transaction* tx = ctxt->getTransaction();
+    if (tx->readingFrozenCommit()) {
+        data->_commit = controller.getCommitSafe(tx->get<FrozenCommitTx>().getCommitHash());
+    } else if (tx->readingPendingCommit()) {
+        data->_commit = tx->get<PendingCommitReadTx>().commitBuilder()->commit();
+    } else if (tx->writingPendingCommit()) {
+        data->_commit = tx->get<PendingCommitWriteTx>().commitBuilder()->commit();
+    }
+
+    bioassert(data->_commit, "headCommitHash not found");
+}
+
 void writeChunk(Data* data,
                 ProcedureState* proc,
                 size_t chunkSize) {
@@ -102,20 +117,11 @@ void HistoryProcedure::execute(ProcedureState* proc) {
     const size_t chunkSize = ctxt->getChunkSize();
 
     switch (proc->getStep()) {
-        case ProcedureState::Step::PREPARE: {
-            Transaction* tx = ctxt->getTransaction();
-            if (tx->readingFrozenCommit()) {
-                data._commit = controller.getCommitSafe(tx->get<FrozenCommitTx>().getCommitHash());
-            } else if (tx->readingPendingCommit()) {
-                data._commit = tx->get<PendingCommitReadTx>().commitBuilder()->commit();
-            } else if (tx->writingPendingCommit()) {
-                data._commit = tx->get<PendingCommitWriteTx>().commitBuilder()->commit();
-            }
-            bioassert(data._commit, "headCommitHash not found");
-        }
-        break;
-
+        case ProcedureState::Step::PREPARE:
         case ProcedureState::Step::RESET:
+            // Walking the history consumes the cursor, so a rewind seeks back to the
+            // head commit exactly as the first drive did.
+            seekToHeadCommit(&data, ctxt, controller);
         break;
 
         case ProcedureState::Step::EXECUTE:

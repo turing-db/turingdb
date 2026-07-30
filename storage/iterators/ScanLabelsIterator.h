@@ -28,12 +28,16 @@ public:
     }
 
 protected:
+    // The first entry is kept alongside the last so the scan can start over: reset()
+    // seeks back to it, which is all an iterator over a metadata map has to undo.
+    LabelMap::Container::const_iterator _begin;
     LabelMap::Container::const_iterator _it;
     LabelMap::Container::const_iterator _end;
 
     ScanLabelsIterator(LabelMap::Container::const_iterator begin,
                        LabelMap::Container::const_iterator end)
-        : _it(begin),
+        : _begin(begin),
+        _it(begin),
         _end(end)
     {
     }

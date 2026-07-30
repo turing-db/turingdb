@@ -5,7 +5,8 @@
 namespace db {
 
 ScanPropertyTypesIterator::ScanPropertyTypesIterator(const PropertyTypeMap& propertyTypeMap)
-    : _it(propertyTypeMap.begin()),
+    : _begin(propertyTypeMap.begin()),
+    _it(propertyTypeMap.begin()),
     _end(propertyTypeMap.end())
 {
 }
@@ -15,7 +16,7 @@ ScanPropertyTypesIterator ScanPropertyTypesIterator::end(const PropertyTypeMap& 
 }
 
 void ScanPropertyTypesIterator::reset() {
-    bioassert(false, "Cannot reset ScanPropertyTypesIterator");
+    _it = _begin;
 }
 
 void ScanPropertyTypesIterator::next() {
