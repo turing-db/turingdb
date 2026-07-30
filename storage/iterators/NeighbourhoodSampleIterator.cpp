@@ -9,6 +9,17 @@
 
 using namespace db;
 
+namespace {
+
+uint64_t makeSeed(std::optional<uint64_t> seed) {
+    if (seed.has_value()) {
+        return *seed;
+    }
+    return std::random_device{}();
+}
+
+}
+
 NeighbourhoodSampleIterator::NeighbourhoodSampleIterator(const GraphView& view,
                                                          const ColumnNodeIDs* inputNodeIDs)
     : Iterator(view),
@@ -80,10 +91,12 @@ void NeighbourhoodSampleIterator::nextValidForCurrentNode() {
 
 NeighbourhoodSampleChunkWriter::NeighbourhoodSampleChunkWriter(const GraphView& view,
                                                                const ColumnNodeIDs* input,
-                                                               size_t sampleSize)
+                                                               size_t sampleSize,
+                                                               std::optional<uint64_t> seed)
     : NeighbourhoodSampleIterator(view, input),
     _sampleSize(sampleSize),
     _sampleRatio(1.0 / _sampleSize),
+    _generator(makeSeed(seed)),
     _replacementGenerator(0, _sampleSize == 0 ? 0 : _sampleSize - 1)
 {
 }

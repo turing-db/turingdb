@@ -28,6 +28,9 @@ void buildSignature(std::string& result, const Procedure* proc) {
         result += arg._name;
         result += " :: ";
         result += ProcedureTypeName::value(arg._type);
+        if (arg._optional) {
+            result += " = null";
+        }
         first = false;
     }
 

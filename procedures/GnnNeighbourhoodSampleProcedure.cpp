@@ -1,6 +1,7 @@
 #include "GnnNeighbourhoodSampleProcedure.h"
 
 #include <cstdint>
+#include <optional>
 
 #include "ProcUtils.h"
 #include "Procedure.h"
@@ -23,6 +24,7 @@ using namespace db;
 namespace {
 
 constexpr std::string_view sampleSizeErr = "gnn.neighbourhood_sample: sampleSize must be a constant int";
+constexpr std::string_view seedErr = "gnn.neighbourhoodSample: seed must be a constant int";
 
 struct Data : public IndexedProcedureData {};
 
@@ -32,6 +34,7 @@ void executeImpl(ProcedureState* proc) {
 
     const auto* inputNodeIDs = static_cast<const ColumnNodeIDs*>(data.getInputColumn(0));
     const Column* inputSampleSize = data.getInputColumn(1);
+    const Column* inputSeed = data.getInputColumn(2);
 
     auto* srcCol = static_cast<ColumnNodeIDs*>(data.getReturnColumn(0));
     auto* edgeCol = static_cast<ColumnEdgeIDs*>(data.getReturnColumn(1));
@@ -53,7 +56,14 @@ void executeImpl(ProcedureState* proc) {
         return;
     }
 
-    NeighbourhoodSampleChunkWriter writer(view, inputNodeIDs, sampleSize);
+    std::optional<uint64_t> seed = std::nullopt;
+    if (inputSeed) {
+        const int64_t signedSeed =
+            ProcUtils::constArg<types::Int64::Primitive>(inputSeed, seedErr);
+        seed = signedSeed;
+    }
+
+    NeighbourhoodSampleChunkWriter writer(view, inputNodeIDs, sampleSize, seed);
     writer.setOutputColumns(srcCol, edgeCol, edgeTypeCol, dstCol);
     writer.setIndices(indices);
     writer.fill(ChunkConfig::CHUNK_SIZE);
@@ -76,13 +86,18 @@ void GnnNeighbourhoodSampleProcedure::registerProcedure(ProcedureNamespace* ns) 
     proc->setExecuteCallback(&execute);
     proc->setAllocCallback(&allocData);
     proc->setDeallocCallback(&deallocData);
+
     proc->addArgument("node", ProcedureType::NODE);
     proc->addArgument("sampleSize", ProcedureType::INT64);
+    proc->addOptionalArgument("seed", ProcedureType::INT64);
+
     proc->addReturnValue("src", ProcedureType::NODE);
     proc->addReturnValue("edge", ProcedureType::EDGE);
     proc->addReturnValue("edgeType", ProcedureType::EDGE_TYPE_ID);
     proc->addReturnValue("dst", ProcedureType::NODE);
+
     proc->setHasIndices(true);
+
     ns->addProcedure(proc);
 }
 
