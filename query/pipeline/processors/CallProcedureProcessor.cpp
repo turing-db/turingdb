@@ -2,13 +2,19 @@
 
 #include <spdlog/fmt/fmt.h>
 
+#include "ExecutionContext.h"
+#include "LocalMemory.h"
+#include "SystemManager.h"
+
+#include "Procedure.h"
+#include "ProcedureData.h"
+
+#include "columns/Column.h"
+#include "columns/ColumnIndices.h"
+
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
 #include "dataframe/NamedColumn.h"
-#include "Procedure.h"
-#include "ExecutionContext.h"
-#include "SystemManager.h"
-#include "LocalMemory.h"
 
 #include "PipelineException.h"
 
@@ -197,6 +203,19 @@ void CallProcedureProcessor::allocReturnValues(LocalMemory* mem,
         outDf->addColumn(namedCol);
         item._col = namedCol;
     }
+}
+
+NamedColumn* CallProcedureProcessor::allocIndices(LocalMemory* mem, DataframeManager* dfMan) {
+    ColumnIndices* col = mem->alloc<ColumnIndices>();
+    NamedColumn* namedCol = NamedColumn::create(dfMan, col, dfMan->allocTag());
+
+    _output.getDataframe()->addColumn(namedCol);
+    ProcedureData* data = _procedureState._data;
+    IndexedProcedureData* indexedData = dynamic_cast<IndexedProcedureData*>(data);
+
+    bioassert(indexedData, "Non indexed procedure.");
+    indexedData->setIndices(col);
+    return namedCol;
 }
 
 PipelineBlockInputInterface& CallProcedureProcessor::input() {

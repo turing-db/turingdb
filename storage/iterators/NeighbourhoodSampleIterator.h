@@ -6,6 +6,7 @@
 
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
+#include "columns/ColumnIndices.h"
 
 #include "datapart/EdgeRecord.h"
 
@@ -50,11 +51,14 @@ public:
                           ColumnEdgeTypes* edgeTypes,
                           ColumnNodeIDs* otherIDs);
 
+    void setIndices(ColumnIndices* indices) { _indices = indices; }
+
 private:
     ColumnNodeIDs* _srcIDs {nullptr};
     ColumnEdgeIDs* _edgeIDs {nullptr};
     ColumnEdgeTypes* _edgeTypes {nullptr};
     ColumnNodeIDs* _otherIDs {nullptr};
+    ColumnIndices* _indices {nullptr};
 
     size_t _sampleSize {0};
     double _sampleRatio {1.0};

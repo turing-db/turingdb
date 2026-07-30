@@ -2,13 +2,14 @@
 
 #include <optional>
 #include <span>
-#include <stdint.h>
 
 #include "Processor.h"
-#include "interfaces/PipelineBlockInputInterface.h"
-#include "interfaces/PipelineBlockOutputInterface.h"
+
 #include "ProcedureContext.h"
 #include "ProcedureState.h"
+
+#include "interfaces/PipelineBlockInputInterface.h"
+#include "interfaces/PipelineBlockOutputInterface.h"
 
 namespace db {
 
@@ -17,7 +18,7 @@ class DataframeManager;
 class PipelineV2;
 class Procedure;
 
-class CallProcedureProcessor : public Processor {
+class CallProcedureProcessor final : public Processor {
 public:
     static CallProcedureProcessor* create(PipelineV2* pipeline,
                                           const Procedure* procedure,
@@ -36,6 +37,8 @@ public:
                            DataframeManager* dfMan,
                            std::span<Procedure::YieldItem> yieldItems);
 
+    NamedColumn* allocIndices(LocalMemory* mem, DataframeManager* dfMan);
+
     PipelineBlockInputInterface& input();
     PipelineBlockOutputInterface& output() { return _output; }
 
@@ -49,7 +52,7 @@ private:
     PipelineBlockOutputInterface _output;
 
     CallProcedureProcessor();
-    ~CallProcedureProcessor();
+    ~CallProcedureProcessor() final;
 };
 
 }

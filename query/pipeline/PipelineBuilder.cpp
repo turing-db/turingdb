@@ -86,6 +86,56 @@ using namespace db;
 
 namespace {
 
+void addProcedureColumnToStep(MaterializeData& matData,
+                              ProcedureType colType,
+                              NamedColumn* col) {
+    switch (colType) {
+        case ProcedureType::NODE:
+            matData.addToStep<ColumnVector<NodeID>>(col);
+        break;
+        case ProcedureType::EDGE:
+            matData.addToStep<ColumnVector<EdgeID>>(col);
+        break;
+        case ProcedureType::EDGE_TYPE_ID:
+            matData.addToStep<ColumnVector<EdgeTypeID>>(col);
+        break;
+        case ProcedureType::LABEL_ID:
+            matData.addToStep<ColumnVector<LabelID>>(col);
+        break;
+        case ProcedureType::PROPERTY_TYPE_ID:
+            matData.addToStep<ColumnVector<PropertyTypeID>>(col);
+        break;
+        case ProcedureType::UINT_64:
+            matData.addToStep<ColumnVector<types::UInt64::Primitive>>(col);
+        break;
+        case ProcedureType::INT64:
+            matData.addToStep<ColumnVector<types::Int64::Primitive>>(col);
+        break;
+        case ProcedureType::DOUBLE:
+            matData.addToStep<ColumnVector<types::Double::Primitive>>(col);
+        break;
+        case ProcedureType::BOOL:
+            matData.addToStep<ColumnVector<types::Bool::Primitive>>(col);
+        break;
+        case ProcedureType::STRING_VIEW:
+            matData.addToStep<ColumnVector<types::String::Primitive>>(col);
+        break;
+        case ProcedureType::VALUE_TYPE:
+            matData.addToStep<ColumnVector<ValueType>>(col);
+        break;
+        case ProcedureType::STRING:
+            matData.addToStep<ColumnVector<std::string>>(col);
+        break;
+        case ProcedureType::LIST:
+            matData.addToStep<ColumnVector<ListView>>(col);
+        break;
+        case ProcedureType::_SIZE:
+        case ProcedureType::INVALID:
+            throw TuringException("Unknown materialise type.");
+        break;
+    }
+}
+
 void populateStringTableShape(LocalMemory* mem,
                               Column* dest,
                               const Column* src) {
@@ -689,81 +739,42 @@ PipelineBlockOutputInterface& PipelineBuilder::addCallProcedure(const Procedure*
                                                                 std::span<Procedure::YieldItem> yield) {
     const bool hasInput = _pendingOutput.getInterface() != nullptr;
 
-    CallProcedureProcessor* proc = CallProcedureProcessor::create(_pipeline, procedure, hasInput);
-    auto& output = proc->output();
+    CallProcedureProcessor* processor = CallProcedureProcessor::create(_pipeline, procedure, hasInput);
+    auto& output = processor->output();
 
     if (hasInput) {
-        auto& input = proc->input();
+        PipelineBlockInputInterface& input = processor->input();
         _pendingOutput.connectTo(input);
         input.propagateColumns(output);
     }
 
     _pendingOutput.updateInterface(&output);
 
-    proc->setInputValues(args);
-    proc->allocReturnValues(_mem, _dfMan, yield);
+    processor->setInputValues(args);
+    processor->allocReturnValues(_mem, _dfMan, yield);
 
-    if (_matProc) {
-        MaterializeData& matData = _matProc->getMaterializeData();
+    bioassert(_matProc, "Null matproc");
+    MaterializeData& matData = _matProc->getMaterializeData();
 
-        for (const Procedure::YieldItem& item : yield) {
-            if (!item._col) { // Items that are not yielded
-                continue;
-            }
-
-            const size_t colIndex = procedure->getReturnValueIndex(item._baseName);
-            const ProcedureType colType = procedure->getReturnValueType(colIndex);
-
-            switch (colType) {
-                case ProcedureType::NODE:
-                    matData.addToStep<ColumnVector<NodeID>>(item._col);
-                break;
-                case ProcedureType::EDGE:
-                    matData.addToStep<ColumnVector<EdgeID>>(item._col);
-                break;
-                case ProcedureType::EDGE_TYPE_ID:
-                    matData.addToStep<ColumnVector<EdgeTypeID>>(item._col);
-                break;
-                case ProcedureType::LABEL_ID:
-                    matData.addToStep<ColumnVector<LabelID>>(item._col);
-                break;
-                case ProcedureType::PROPERTY_TYPE_ID:
-                    matData.addToStep<ColumnVector<PropertyTypeID>>(item._col);
-                break;
-                case ProcedureType::UINT_64:
-                    matData.addToStep<ColumnVector<types::UInt64::Primitive>>(item._col);
-                break;
-                case ProcedureType::INT64:
-                    matData.addToStep<ColumnVector<types::Int64::Primitive>>(item._col);
-                break;
-                case ProcedureType::DOUBLE:
-                    matData.addToStep<ColumnVector<types::Double::Primitive>>(item._col);
-                break;
-                case ProcedureType::BOOL:
-                    matData.addToStep<ColumnVector<types::Bool::Primitive>>(item._col);
-                break;
-                case ProcedureType::STRING_VIEW:
-                    matData.addToStep<ColumnVector<types::String::Primitive>>(item._col);
-                break;
-                case ProcedureType::VALUE_TYPE:
-                    matData.addToStep<ColumnVector<ValueType>>(item._col);
-                break;
-                case ProcedureType::STRING:
-                    matData.addToStep<ColumnVector<std::string>>(item._col);
-                break;
-                case ProcedureType::LIST:
-                    matData.addToStep<ColumnVector<ListView>>(item._col);
-                break;
-
-                case ProcedureType::_SIZE:
-                case ProcedureType::INVALID:
-                    throw TuringException("Unknown materialise type.");
-                break;
-            }
-        }
+    if (procedure->hasIndices()) {
+        NamedColumn* indicesCol = processor->allocIndices(_mem, _dfMan);
+        matData.createStep(indicesCol);
     }
 
-    _lastProc = proc;
+    for (const Procedure::YieldItem& item : yield) {
+        if (!item._col) { // Items that are not yielded
+            continue;
+        }
+
+        const size_t colIndex = procedure->getReturnValueIndex(item._baseName);
+        const ProcedureType colType = procedure->getReturnValueType(colIndex);
+
+        addProcedureColumnToStep(matData, colType, item._col);
+    }
+
+    addMaterialize(); // force a materialize
+
+    _lastProc = processor;
     return output;
 }
 
