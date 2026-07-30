@@ -4,6 +4,11 @@
 #include <limits>
 #include <numeric>
 
+#include "Procedure.h"
+#include "ProcedureData.h"
+
+#include "IRException.h"
+
 using namespace db;
 
 NLProgram::NLProgram() {
@@ -14,6 +19,103 @@ NLProgram::~NLProgram() {
 
 void NLProgram::setColumnNames(std::span<const std::string_view> names) {
     _columnNames.assign(names.begin(), names.end());
+}
+
+NLProcedureState::NLProcedureState(const Procedure* procedure,
+                                   ProcedureData* data,
+                                   const ProcedureContext* context)
+    : _procedure(procedure),
+    _data(data)
+{
+    _procedureState.setProcedure(procedure);
+    _procedureState.setData(data);
+    _procedureState.setContext(context);
+}
+
+NLProcedureState::~NLProcedureState() {
+    const Procedure::DeallocCallback dealloc = _procedure->getDeallocCallback();
+    if (dealloc) {
+        dealloc(_data);
+    }
+}
+
+void NLProcedureState::prepareOrReset() {
+    // The first run prepares the call - a procedure typically builds its iterators
+    // over the result columns there - and every later run of the same block rewinds
+    // it, matching the prepare/reset split the pipeline engine drives.
+    if (_prepared) {
+        reset();
+        return;
+    }
+
+    _procedureState.setStep(ProcedureState::Step::PREPARE);
+    _procedureState.clearFinished();
+    _procedure->getExecCallback()(&_procedureState);
+
+    if (_procedureState.isFinished()) {
+        throw IRException("A procedure cannot finish in its prepare step");
+    }
+
+    _prepared = true;
+    _driven = false;
+}
+
+void NLProcedureState::resetForNewDrive() {
+    // Preparing the call already left the procedure at its first row, so the first
+    // drive needs no rewind - and a procedure whose rows cannot be re-read would
+    // refuse one it never needed.
+    if (!_driven) {
+        return;
+    }
+
+    reset();
+}
+
+void NLProcedureState::reset() {
+    _procedureState.setStep(ProcedureState::Step::RESET);
+    _procedureState.clearFinished();
+    _procedure->getExecCallback()(&_procedureState);
+
+    if (_procedureState.isFinished()) {
+        throw IRException("A procedure cannot finish in its reset step");
+    }
+
+    _driven = false;
+}
+
+void NLProcedureState::execute() {
+    _procedureState.setStep(ProcedureState::Step::EXECUTE);
+    _procedureState.clearFinished();
+    _procedure->getExecCallback()(&_procedureState);
+
+    _driven = true;
+}
+
+void NLProcedureState::finalize() {
+    _procedure->getFinalizeCallback()(&_procedureState);
+}
+
+size_t NLProcedureState::getRowCount() const {
+    if (_resultColumns.empty()) {
+        return 0;
+    }
+
+    return _resultColumns.front()->size();
+}
+
+size_t NLProcedureState::getInputRowCount() const {
+    // Every argument chunk is row-aligned, so the first one sizes the input the
+    // procedure was handed; a procedure taking none was handed no row at all.
+    if (_procedure->argumentTypes().size() == 0) {
+        return 0;
+    }
+
+    const Column* firstArgument = _data->getInputColumn(0);
+    if (!firstArgument) {
+        return 0;
+    }
+
+    return firstArgument->size();
 }
 
 void NLSortState::reset() {

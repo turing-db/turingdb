@@ -44,6 +44,48 @@ def LabelSetID : StorageType<"LabelSetID", "labelset_id"> {
     let description = "The element type of a chunk holding label set IDs";
 }
 
+def LabelID : StorageType<"LabelID", "label_id"> {
+    let summary = "A single label identifier";
+    let description = [{
+        The element type of a chunk holding label IDs - one label, where
+        !storage.labelset_id names a whole set. A CALL of a procedure yielding a
+        LABEL_ID column (db.labels' `id`) produces such a chunk.
+    }];
+}
+
+def PropertyTypeID : StorageType<"PropertyTypeID", "property_type_id"> {
+    let summary = "A property type identifier";
+    let description = [{
+        The element type of a chunk holding property type IDs - the schema handle
+        an !nl.property_type resolves a name to, here as a column value rather
+        than a resolved handle. A CALL of a procedure yielding a PROPERTY_TYPE_ID
+        column (db.propertyTypes' `id`) produces such a chunk.
+    }];
+}
+
+def ValueType : StorageType<"ValueType", "value_type"> {
+    let summary = "The kind of a property value";
+    let description = [{
+        The element type of a chunk holding value-type codes - storage's
+        ValueType enum (String, Int64, Double, ...), the *kind* of a value rather
+        than a value of that kind. A CALL of a procedure yielding a VALUE_TYPE
+        column (db.propertyTypes' `valueType`) produces such a chunk.
+    }];
+}
+
+def OwnedString : StorageType<"OwnedString", "owned_string"> {
+    let summary = "A string value owned by the column";
+    let description = [{
+        The owning counterpart of !storage.string. A !storage.string row is a
+        string_view borrowed from the graph, so it may only name characters that
+        live in storage; a row of this type owns its characters, which is what a
+        producer that formats its own text needs (a procedure yielding a STRING
+        column, e.g. db.procedures' `signature`). The two are distinct types
+        because they are distinct columns - a view column and an owning one - and
+        a chunk must say which one it is.
+    }];
+}
+
 def Embedding : StorageType<"Embedding", "embedding"> {
     let summary = "An embedding property value";
     let description = [{
@@ -88,7 +130,8 @@ def List : StorageType<"List", "list"> {
         over the list's elements in the query-scoped ListBuffer, so a row copies in
         O(1) regardless of list length. The wrapped type is the (homogeneous) element
         type - `!storage.list<none>` until the element primitive is resolved. It is
-        produced by a collect and drained element-by-element by an unwind.
+        produced by a collect and drained element-by-element by an unwind, and by a
+        CALL of a procedure yielding a LIST return value.
     }];
     let parameters = (ins "::mlir::Type":$elementType);
     let assemblyFormat = "`<` $elementType `>`";

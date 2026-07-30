@@ -26,6 +26,14 @@ void Procedure::setDeallocCallback(DeallocCallback cb) {
     _deallocCallback = cb;
 }
 
+void Procedure::setFinalizeCallback(FinalizeCallback cb) {
+    _finalizeCallback = cb;
+}
+
+void Procedure::setReportsInputRows(bool reportsInputRows) {
+    _reportsInputRows = reportsInputRows;
+}
+
 void Procedure::addReturnValue(std::string_view name, ProcedureType type) {
     _returnValues.add(name, type);
 }
@@ -52,7 +60,8 @@ size_t Procedure::getReturnValueIndex(std::string_view name) const {
         }
     }
 
-    throw ProcedureException("Column is not returned by the procedure");
+    throw ProcedureException("Procedure '" + _fullName + "' does not return a value named '"
+                             + std::string(name) + "'");
 }
 
 size_t Procedure::getArgumentIndex(std::string_view name) const {
