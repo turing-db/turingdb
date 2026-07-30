@@ -91,10 +91,6 @@ void NLProcedureState::execute() {
     _driven = true;
 }
 
-void NLProcedureState::finalize() {
-    _procedure->getFinalizeCallback()(&_procedureState);
-}
-
 size_t NLProcedureState::getRowCount() const {
     if (_resultColumns.empty()) {
         return 0;

@@ -129,10 +129,9 @@ def NLProcedureState : NLType<"ProcedureState", "procedure_state"> {
         Stands for one CALL's procedure state: the procedure's own data (what its
         alloc callback produced), the input columns its arguments are bound to and
         the result columns its yielded return values are bound to. Produced by
-        nl.procedure, which prepares it once above the loops, then read by
-        nl.procedure_fold (once per chunk), by the nl.for over
-        nl.procedure_init (which drives the procedure until it finishes) and by
-        nl.procedure_finalize (which asks an aggregating procedure for its result).
+        nl.procedure, which prepares it once above the loops, then read by the
+        nl.for over nl.procedure_init, which drives the procedure until it
+        finishes.
         It is a handle, not a chunk: it owns the call, not a chunk of values - the
         sibling of !nl.sort_state, except the state lives inside the procedure
         rather than in the engine.
@@ -313,9 +312,8 @@ def NLCollectStateHandle : Type<
 
 // Constrains an operand to an !nl.procedure_state handle, the same way
 // NLSortStateHandle constrains the sort handle. The single concrete type - there
-// is only ever !nl.procedure_state - is what lets nl.procedure_fold,
-// nl.procedure_init and nl.procedure_finalize omit the handle's type in their
-// assembly, building it from this recipe instead.
+// is only ever !nl.procedure_state - is what lets nl.procedure_init omit the
+// handle's type in its assembly, building it from this recipe instead.
 def NLProcedureStateHandle : Type<
         CPred<"::llvm::isa<::mlir::nl::ProcedureStateType>($_self)">,
         "procedure state handle", "::mlir::nl::ProcedureStateType">,

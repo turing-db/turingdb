@@ -237,122 +237,6 @@ void fanOutDealloc(ProcedureData* data) {
     delete data;
 }
 
-struct SumData : public ProcedureData {
-    types::Int64::Primitive _total {0};
-};
-
-// test.sumNodeIDs(nodeIDs) YIELD total: the sum of every input node ID as a single
-// row. An aggregating procedure - each execute folds its chunk into the running total
-// and emits nothing, and the finalize callback produces the one result row once every
-// chunk has been seen - so it exercises the finalize form.
-void sumExecuteImpl(ProcedureState* procedureState) {
-    SumData& data = procedureState->data<SumData>();
-
-    const auto* nodeIDs = static_cast<const ColumnVector<NodeID>*>(data.getInputColumn(0));
-    for (const NodeID nodeID : nodeIDs->getRaw()) {
-        data._total += static_cast<types::Int64::Primitive>(nodeID.getValue());
-    }
-}
-
-void sumExecute(ProcedureState* procedureState) {
-    switch (procedureState->getStep()) {
-        case ProcedureState::Step::PREPARE:
-        break;
-
-        case ProcedureState::Step::RESET:
-        procedureState->data<SumData>()._total = 0;
-        break;
-
-        case ProcedureState::Step::EXECUTE:
-        sumExecuteImpl(procedureState);
-        break;
-    }
-}
-
-void sumFinalize(ProcedureState* procedureState) {
-    SumData& data = procedureState->data<SumData>();
-
-    auto* total = static_cast<ColumnVector<types::Int64::Primitive>*>(data.getReturnColumn(0));
-    total->clear();
-    total->push_back(data._total);
-
-    // A single-row aggregate is done on its first finalize call, so the emit loop runs
-    // exactly once.
-    procedureState->finish();
-}
-
-ProcedureData* sumAlloc() {
-    return new SumData();
-}
-
-void sumDealloc(ProcedureData* data) {
-    delete data;
-}
-
-// What test.collectNodeIDs folded, and how much of it the finalize has emitted. Reset
-// clears both.
-struct CollectData : public ProcedureData {
-    std::vector<types::Int64::Primitive> _collected;
-    size_t _nextEmitted {0};
-};
-
-// test.collectNodeIDs(nodeIDs) YIELD value: collects every input node ID across the
-// chunks it is folded, then emits them all back - one row per node, so its result does
-// not collapse to a single row and does not fit one chunk. Each finalize call emits at
-// most a chunk's worth and finishes on the one that emits the last, which is why the
-// emit phase is a loop rather than a single chunk.
-void collectExecuteImpl(ProcedureState* procedureState) {
-    CollectData& data = procedureState->data<CollectData>();
-
-    const auto* nodeIDs = static_cast<const ColumnVector<NodeID>*>(data.getInputColumn(0));
-    for (const NodeID nodeID : nodeIDs->getRaw()) {
-        data._collected.push_back(static_cast<types::Int64::Primitive>(nodeID.getValue()));
-    }
-}
-
-void collectExecute(ProcedureState* procedureState) {
-    switch (procedureState->getStep()) {
-        case ProcedureState::Step::PREPARE:
-        break;
-
-        case ProcedureState::Step::RESET: {
-            CollectData& data = procedureState->data<CollectData>();
-            data._collected.clear();
-            data._nextEmitted = 0;
-        }
-        break;
-
-        case ProcedureState::Step::EXECUTE:
-        collectExecuteImpl(procedureState);
-        break;
-    }
-}
-
-void collectFinalize(ProcedureState* procedureState) {
-    CollectData& data = procedureState->data<CollectData>();
-
-    auto* values = static_cast<ColumnVector<types::Int64::Primitive>*>(data.getReturnColumn(0));
-    const size_t chunkSize = procedureState->getContext()->getChunkSize();
-
-    values->clear();
-    while (values->size() < chunkSize && data._nextEmitted < data._collected.size()) {
-        values->push_back(data._collected[data._nextEmitted]);
-        data._nextEmitted++;
-    }
-
-    if (data._nextEmitted >= data._collected.size()) {
-        procedureState->finish();
-    }
-}
-
-ProcedureData* collectAlloc() {
-    return new CollectData();
-}
-
-void collectDealloc(ProcedureData* data) {
-    delete data;
-}
-
 // Collects the single int64 column a call emits, plus how many chunks it arrived in,
 // so a test can assert both the rows and the chunking.
 class Int64Sink : public NLOutputSink {
@@ -753,18 +637,6 @@ func.func @main() {
 }
 )mlir";
 
-// MATCH (n) CALL test.sumNodeIDs(n) YIELD total RETURN total: the aggregating form.
-// The procedure carries a finalize callback, so the per-chunk call only folds and the
-// single result row is materialized after the scan loop.
-constexpr const char* sumNodeIDsProgram = R"mlir(
-func.func @main() {
-  %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %total = db.call_procedure("test.sumNodeIDs", {%a}, {}) yields ["total"] : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%total) : !db.column<none>
-  return
-}
-)mlir";
-
 // MATCH (n) CALL test.expandNodeID(n) YIELD copy RETURN n, copy: the carry set on its
 // own. The procedure emits a different number of rows than it was given, so `n` cannot
 // flow around the call - it rides through the carry set and comes back replicated once
@@ -837,28 +709,6 @@ func.func @main() {
 }
 )mlir";
 
-// A carry set on an aggregating procedure: it folds every input row into one result, so
-// no row survives to carry.
-constexpr const char* aggregatingCarryProgram = R"mlir(
-func.func @main() {
-  %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %total, %a2 = db.call_procedure("test.sumNodeIDs", {%a}, {%a}) yields ["total"] : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<!storage.node_id>)
-  db.output(%a2, %total) : !db.column<!storage.node_id>, !db.column<none>
-  return
-}
-)mlir";
-
-// MATCH (n) CALL test.collectNodeIDs(n) YIELD value RETURN value: an aggregation whose
-// result is a row per input node, so the finalize emits it over several chunks.
-constexpr const char* collectProgram = R"mlir(
-func.func @main() {
-  %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %value = db.call_procedure("test.collectNodeIDs", {%a}, {}) yields ["value"] : (!db.column<!storage.node_id>) -> !db.column<none>
-  db.output(%value) : !db.column<none>
-  return
-}
-)mlir";
-
 // MATCH (n), CALL test.twoNodes() YIELD id RETURN n, id: a call whose rows do not depend
 // on the outer row, paired with it by a cross product. The call is a factor of the
 // product, so its loop must open inside the other factor's nest - not at function scope,
@@ -915,9 +765,8 @@ protected:
         _jobSystem->init();
 
         // The db namespace, so a test can call a real registered procedure, plus a
-        // test namespace holding the two procedures that exercise the per-chunk and
-        // the aggregating forms - no registered procedure takes a per-row column
-        // argument or carries a finalize callback.
+        // test namespace holding the procedures that exercise the per-chunk form - no
+        // registered procedure takes a per-row column argument.
         _procedures.init();
 
         ProcedureNamespace* testNamespace = _procedures.createNamespace("test");
@@ -973,23 +822,6 @@ protected:
         twoNodesProcedure->addReturnValue("id", ProcedureType::NODE);
         testNamespace->addProcedure(twoNodesProcedure);
 
-        Procedure* collectProcedure = new Procedure("collectNodeIDs");
-        collectProcedure->setAllocCallback(&collectAlloc);
-        collectProcedure->setDeallocCallback(&collectDealloc);
-        collectProcedure->setExecuteCallback(&collectExecute);
-        collectProcedure->setFinalizeCallback(&collectFinalize);
-        collectProcedure->addArgument("nodeIDs", ProcedureType::NODE);
-        collectProcedure->addReturnValue("value", ProcedureType::INT64);
-        testNamespace->addProcedure(collectProcedure);
-
-        Procedure* sumProcedure = new Procedure("sumNodeIDs");
-        sumProcedure->setAllocCallback(&sumAlloc);
-        sumProcedure->setDeallocCallback(&sumDealloc);
-        sumProcedure->setExecuteCallback(&sumExecute);
-        sumProcedure->setFinalizeCallback(&sumFinalize);
-        sumProcedure->addArgument("nodeIDs", ProcedureType::NODE);
-        sumProcedure->addReturnValue("total", ProcedureType::INT64);
-        testNamespace->addProcedure(sumProcedure);
     }
 
     void terminate() override {
@@ -1277,22 +1109,6 @@ TEST_F(MLIRCallProcedureTest, perChunkCallRunsOncePerChunk) {
     EXPECT_EQ(doubleExecuteCalls, 3u);
 }
 
-TEST_F(MLIRCallProcedureTest, aggregatingCallEmitsOnceAfterEveryChunk) {
-    auto graph = buildLabelledGraph();
-    const FrozenCommitTx transaction = graph->openTransaction();
-    const GraphReader reader = transaction.readGraph();
-
-    // Node IDs 0..4 sum to 10. The per-chunk calls only fold, so the single row comes
-    // from the finalize callback after the scan loop - one chunk, one row, whatever
-    // the chunk size.
-    Int64Sink sink;
-    runLoweredProgram(sumNodeIDsProgram, reader.getView(), sink, /*chunkSize=*/2);
-
-    const std::vector<types::Int64::Primitive> expected {10};
-    EXPECT_EQ(sink.rows(), expected);
-    EXPECT_EQ(sink.getCalls(), 1u);
-}
-
 TEST_F(MLIRCallProcedureTest, carriedColumnIsReplicatedPerEmittedRow) {
     auto graph = buildLabelledGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
@@ -1386,30 +1202,6 @@ TEST_F(MLIRCallProcedureTest, rejectsCarrySetOnSourceCall) {
     const GraphReader reader = transaction.readGraph();
 
     EXPECT_THROW(lowerProgram(sourceCarryProgram, reader.getView()), IRException);
-}
-
-TEST_F(MLIRCallProcedureTest, rejectsCarrySetOnAggregatingCall) {
-    auto graph = buildLabelledGraph();
-    const FrozenCommitTx transaction = graph->openTransaction();
-    const GraphReader reader = transaction.readGraph();
-
-    EXPECT_THROW(lowerProgram(aggregatingCarryProgram, reader.getView()), IRException);
-}
-
-TEST_F(MLIRCallProcedureTest, aggregatingCallEmitsSeveralChunks) {
-    auto graph = buildLabelledGraph();
-    const FrozenCommitTx transaction = graph->openTransaction();
-    const GraphReader reader = transaction.readGraph();
-
-    // The procedure folds all five node IDs, then emits one row each - five rows, at
-    // most two per finalize call, so the emit loop runs three times. An aggregation is
-    // not obliged to collapse to a single row.
-    Int64Sink sink;
-    runLoweredProgram(collectProgram, reader.getView(), sink, /*chunkSize=*/2);
-
-    const std::vector<types::Int64::Primitive> expected {0, 1, 2, 3, 4};
-    EXPECT_EQ(sink.rows(), expected);
-    EXPECT_EQ(sink.getCalls(), 3u);
 }
 
 TEST_F(MLIRCallProcedureTest, sourceCallCrossedWithAScan) {
@@ -1691,50 +1483,4 @@ func.func @main() {
 
     EXPECT_EQ(procedureOp.getName(), "db.labels");
     EXPECT_EQ(procedureOp.getYields().size(), 2u);
-}
-
-TEST_F(MLIRCallProcedureTest, nlProcedureFoldAndFinalizeRoundTrip) {
-    // The aggregating shape: a fold per chunk of the producing loop, then an emit loop
-    // over the finalize iterator at function scope.
-    constexpr const char* nlProgram = R"mlir(
-func.func @main() {
-  %call = nl.procedure("test.sumNodeIDs") yields ["total"]
-  %nodes = nl.scan_nodes()
-  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
-    nl.procedure_fold %call, (%a) : !nl.chunk<!storage.node_id>
-  }
-  %rows = nl.procedure_finalize(%call) : !nl.iter<!nl.chunk<i64>>
-  nl.for %total in %rows : !nl.iter<!nl.chunk<i64>> {
-    nl.output(%total) : !nl.chunk<i64>
-  }
-  return
-}
-)mlir";
-
-    mlir::MLIRContext context;
-    context.getOrLoadDialect<mlir::func::FuncDialect>();
-    context.getOrLoadDialect<mlir::storage::Storage>();
-    context.getOrLoadDialect<mlir::nl::NL>();
-
-    const mlir::ParserConfig parserConfig(&context);
-    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::parseSourceString<mlir::ModuleOp>(nlProgram, parserConfig);
-    ASSERT_TRUE(module);
-
-    mlir::func::FuncOp function = module->lookupSymbol<mlir::func::FuncOp>("main");
-    ASSERT_TRUE(function);
-
-    mlir::nl::ProcedureFold fold;
-    function.walk([&](mlir::nl::ProcedureFold parsed) { fold = parsed; });
-    ASSERT_TRUE(fold);
-    EXPECT_EQ(fold.getInputs().size(), 1u);
-    EXPECT_EQ(fold->getNumResults(), 0u);
-
-    mlir::nl::ProcedureFinalize finalize;
-    function.walk([&](mlir::nl::ProcedureFinalize parsed) { finalize = parsed; });
-    ASSERT_TRUE(finalize);
-
-    // The finalize produces an iterator of one chunk per yielded return value, which is
-    // what lets its nl.for run the callback until the last row is emitted.
-    const auto iteratorType = mlir::cast<mlir::nl::IteratorType>(finalize.getResult().getType());
-    EXPECT_EQ(iteratorType.getChunkTypes().size(), 1u);
 }

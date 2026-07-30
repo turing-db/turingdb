@@ -205,24 +205,12 @@ public:
     // later run, so a re-entered block restarts the call from its first row.
     static void runProcedureReset(NLExecutionContext* context, NLFunctionData* data);
 
-    // Call a procedure once over this step's argument chunks. The callback clears and
-    // refills its result columns, so each step emits its own rows and nothing
-    // accumulates; an aggregating procedure instead folds the chunk and emits nothing.
-    static void runProcedureFold(NLExecutionContext* context, NLFunctionData* data);
-
     // The drive loop of a row-producing procedure: rewind it, then run it once per step
     // - each call refilling the loop variables in place - rebuild any carried column,
     // and run the body over every step that produced rows, until the procedure declares
     // itself finished. One entry covers one chunk of arguments, however many chunks of
     // rows the procedure answers it with.
     static void runProcedureInitLoop(NLExecutionContext* context, NLFunctionData* data);
-
-    // The emit loop of an aggregating procedure: run its finalize callback once per step
-    // until it has emitted the last of the rows it held back, so an aggregation of many
-    // rows spans chunks. Runs after the producing loop, so every chunk has been folded;
-    // unlike the drive loop it never rewinds the procedure, since the folded state is
-    // what it emits from.
-    static void runProcedureFinalizeLoop(NLExecutionContext* context, NLFunctionData* data);
 
     static void runOutput(NLExecutionContext* context, NLFunctionData* data);
 
