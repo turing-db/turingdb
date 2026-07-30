@@ -615,15 +615,19 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
     for (FunctionSignature* signature : signatures) {
         const auto& expectedArgs = signature->argumentTypes();
 
-        if (providedArgs.size() != expectedArgs.size()) {
+        const size_t minArgs = signature->getMinArgCount();
+        const size_t maxArgs = expectedArgs.size();
+
+        if (providedArgs.size() < minArgs || providedArgs.size() > maxArgs) {
             // Number of arguments does not match
             continue;
         }
 
-        const bool matchingArgs = std::ranges::equal(expectedArgs, providedArgs,
-                               [](const EvaluatedType& expected, const Expr* arg) {
-                                   return arg->getType() == expected;
-                               });
+        const bool matchingArgs = std::equal(
+            expectedArgs.begin(), expectedArgs.begin() + providedArgs.size(),
+            providedArgs.begin(), [](const EvaluatedType& expected, const Expr* arg) {
+                return arg->getType() == expected;
+            });
 
         if (!matchingArgs) {
             // Argument types do not match

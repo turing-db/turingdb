@@ -47,6 +47,7 @@ public:
     void setDeallocCallback(DeallocCallback cb);
     void addReturnValue(std::string_view name, ProcedureType type);
     void addArgument(std::string_view name, ProcedureType type);
+    void addOptionalArgument(std::string_view name, ProcedureType type);
 
     // Arguments and return values
     const ProcedureTypeVector& returnValues() const { return _returnValues; }
@@ -54,6 +55,7 @@ public:
 
     size_t getReturnValueIndex(std::string_view name) const;
     size_t getArgumentIndex(std::string_view name) const;
+    size_t getRequiredArgumentCount() const;
 
     ProcedureType getReturnValueType(size_t index) const {
         return _returnValues[index]._type;
