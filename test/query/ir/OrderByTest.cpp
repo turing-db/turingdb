@@ -391,3 +391,23 @@ TEST_F(OrderByTest, nodesByTargetAgeAscending) {
                            {12}, {12}, {17}};
     expectNodeRows("MATCH (n)-->(m) RETURN n ORDER BY m.age", expected);
 }
+
+// A sort over a cross product, keyed on the inner factor alone. The product pairs the
+// two nodes aged 32 - Remy (0) and Adam (1) - with the two SleepDisturbers - Ghosts (6)
+// and Animals (10) - and the nest produces them outer-first: (0,6), (0,10), (1,6),
+// (1,10). Ordering by b alone interleaves those iterations, putting both rows keyed on
+// Ghosts ahead of both keyed on Animals, which only a sort that has seen the whole nest
+// can do - a sort that ordered each chunk or each outer step on its own could not. The
+// two rows sharing a b tie, so they keep the order the nest collected them in.
+TEST_F(OrderByTest, crossProductByInnerFactorAscending) {
+    const Rows expected = {{0, 6}, {1, 6}, {0, 10}, {1, 10}};
+    expectNodeRows("MATCH (a {age: 32}), (b:SleepDisturber) RETURN a, b ORDER BY b", expected);
+}
+
+// Keying on both factors leaves no tie, and reversing both turns the nest's output
+// inside out: the last row produced is the first emitted.
+TEST_F(OrderByTest, crossProductByBothFactorsDescending) {
+    const Rows expected = {{1, 10}, {1, 6}, {0, 10}, {0, 6}};
+    expectNodeRows("MATCH (a {age: 32}), (b:SleepDisturber) RETURN a, b ORDER BY a DESC, b DESC",
+                   expected);
+}
