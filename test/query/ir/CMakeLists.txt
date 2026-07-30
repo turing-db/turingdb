@@ -46,6 +46,18 @@ target_link_libraries(test_query_ir_call_procedure PRIVATE
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s)
 
+# The db.* procedure tests drive the registered schema and version-control procedures from
+# the query text alone, so they need the procedure registry and the frontend as well as the
+# engine.
+add_ir_tests(test_query_ir_db_procedures MLIRDBProceduresTest.cpp)
+target_link_libraries(test_query_ir_db_procedures PRIVATE
+        turing_db_procedures_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s)
+
 add_ir_tests(test_query_ir_dbdialect DBDialectTest.cpp)
 add_ir_tests(test_query_ir_nldialect NLDialectTest.cpp)
 
