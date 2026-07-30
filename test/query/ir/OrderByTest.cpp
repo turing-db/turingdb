@@ -19,6 +19,7 @@
 
 #include "DBDialect.h"
 #include "DBDialectInterpreter.h"
+#include "DBOps.h"
 #include "DBProgramGenerator.h"
 #include "LocalMemory.h"
 #include "NLDialect.h"
@@ -141,7 +142,10 @@ protected:
         SimpleGraph::createSimpleGraph(_graph);
     }
 
-    void runQuery(std::string_view query, NLOutputSink* sink) {
+    // Generates the db dialect program of a query into @param module, without running it
+    void generateProgram(std::string_view query,
+                         mlir::MLIRContext& context,
+                         mlir::OwningOpRef<mlir::ModuleOp>& module) {
         SystemAccessor system = _env->getSystemManager().accessUnique();
         const ProcedureManager* procedures = system.getProcedures();
 
@@ -156,21 +160,29 @@ protected:
         CypherAnalyzer analyzer(&ast, view);
         analyzer.analyze();
 
-        mlir::MLIRContext context;
         context.getOrLoadDialect<mlir::func::FuncDialect>();
         context.getOrLoadDialect<mlir::storage::Storage>();
         context.getOrLoadDialect<mlir::db::DB>();
         context.getOrLoadDialect<mlir::nl::NL>();
 
         mlir::OpBuilder builder(&context);
-        mlir::OwningOpRef<mlir::ModuleOp> owningModule = mlir::ModuleOp::create(builder.getUnknownLoc());
-        mlir::ModuleOp module = owningModule.get();
+        module = mlir::ModuleOp::create(builder.getUnknownLoc());
+        mlir::ModuleOp moduleOp = module.get();
 
-        DBProgramGenerator generator(&module);
+        DBProgramGenerator generator(&moduleOp);
         generator.generate(&ast);
+    }
+
+    void runQuery(std::string_view query, NLOutputSink* sink) {
+        mlir::MLIRContext context;
+        mlir::OwningOpRef<mlir::ModuleOp> module;
+        generateProgram(query, context, module);
+
+        const FrozenCommitTx transaction = _graph->openTransaction();
+        const GraphView view = transaction.viewGraph();
 
         LocalMemory memory;
-        DBDialectInterpreter interpreter(module, &view, sink, &memory);
+        DBDialectInterpreter interpreter(module.get(), &view, sink, &memory);
         interpreter.run();
     }
 
@@ -296,4 +308,52 @@ TEST_F(OrderByTest, orderByThenSkip) {
 TEST_F(OrderByTest, orderByThenSkipLimit) {
     const Rows expected = {{15}, {14}, {13}};
     expectNodeRows("MATCH (n) RETURN n ORDER BY n DESC SKIP 2 LIMIT 3", expected);
+}
+
+// The two n.name of RETURN n.name ORDER BY n.name are separate AST nodes, so matching
+// the key to the projection by identity would miss and hand the sort a second, equal
+// column - one more property read, and one more column buffered for every row. Matching
+// by what the expression names keeps the projection the sort's only column.
+TEST_F(OrderByTest, projectedPropertyKeyIsNotDuplicated) {
+    mlir::MLIRContext context;
+    mlir::OwningOpRef<mlir::ModuleOp> module;
+    generateProgram("MATCH (n) RETURN n.name ORDER BY n.name", context, module);
+
+    size_t propertyReads = 0;
+    size_t sortCount = 0;
+
+    module->walk([&](mlir::Operation* operation) {
+        if (mlir::isa<mlir::db::GetNodeProperties>(operation)) {
+            propertyReads++;
+        } else if (mlir::db::Sort sortOp = mlir::dyn_cast<mlir::db::Sort>(operation)) {
+            sortCount++;
+
+            EXPECT_EQ(sortOp.getColumns().size(), 1u);
+            ASSERT_EQ(sortOp.getKeyColumns().size(), 1u);
+            EXPECT_EQ(sortOp.getKeyColumns()[0], 0);
+        }
+    });
+
+    EXPECT_EQ(sortCount, 1u);
+    EXPECT_EQ(propertyReads, 1u);
+}
+
+// The mirror case: a key the projection does not carry has no column to be matched to,
+// so it is appended and the sort receives one column more than the projection.
+TEST_F(OrderByTest, unprojectedKeyIsAppended) {
+    mlir::MLIRContext context;
+    mlir::OwningOpRef<mlir::ModuleOp> module;
+    generateProgram("MATCH (n) RETURN n ORDER BY n.name", context, module);
+
+    size_t sortCount = 0;
+
+    module->walk([&](mlir::db::Sort sortOp) {
+        sortCount++;
+
+        EXPECT_EQ(sortOp.getColumns().size(), 2u);
+        ASSERT_EQ(sortOp.getKeyColumns().size(), 1u);
+        EXPECT_EQ(sortOp.getKeyColumns()[0], 1);
+    });
+
+    EXPECT_EQ(sortCount, 1u);
 }

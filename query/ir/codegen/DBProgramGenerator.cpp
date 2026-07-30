@@ -1,10 +1,10 @@
 #include "DBProgramGenerator.h"
 
 #include <algorithm>
-#include <iterator>
 #include <memory>
 #include <string_view>
 #include <type_traits>
+#include <variant>
 
 #include "EntityPattern.h"
 #include "NodePattern.h"
@@ -97,6 +97,49 @@ EdgeMetadata::EdgeType reverseEdge(EdgeMetadata::EdgeType type) {
 
     throw FatalException("Uncaught edge type.");
 
+}
+
+// Whether two projection-level expressions read the same column: the same variable, or
+// the same property of the same variable. Pointer equality cannot answer that on its own
+// - the n.name of RETURN n.name ORDER BY n.name is a second AST node, equal to the
+// projected one but not the same one - so those two kinds are compared by what they name
+// instead. Any other kind falls back to identity, which can miss a match a deeper
+// comparison would find: the cost is one more column for the sort to carry
+bool readsSameColumn(const Expr* lhs, const Expr* rhs) {
+    const Expr::Kind kind = lhs->getKind();
+
+    if (kind != rhs->getKind()) {
+        return false;
+    } else if (kind == Expr::Kind::SYMBOL) {
+        return lhs->getExprVarDecl() == rhs->getExprVarDecl();
+    } else if (kind == Expr::Kind::PROPERTY) {
+        const PropertyExpr* lhsProperty = static_cast<const PropertyExpr*>(lhs);
+        const PropertyExpr* rhsProperty = static_cast<const PropertyExpr*>(rhs);
+
+        const bool sameEntity = lhsProperty->getEntityVarDecl() == rhsProperty->getEntityVarDecl();
+        const bool sameProperty = lhsProperty->getPropName() == rhsProperty->getPropName();
+
+        return sameEntity && sameProperty;
+    } else {
+        return lhs == rhs;
+    }
+}
+
+// The index of the projected column @param key reads, or the item count when the
+// projection does not carry it. The projection is one column per return item, so the
+// index is the column's index too
+size_t findProjectedColumn(const Projection::Items& items, const Expr* key) {
+    size_t index = 0;
+    for (const Projection::ReturnItem& item : items) {
+        const Expr* const* itemExpr = std::get_if<Expr*>(&item);
+        if (itemExpr && readsSameColumn(*itemExpr, key)) {
+            return index;
+        }
+
+        index++;
+    }
+
+    return index;
 }
 
 mlir::Value findVarOrThrow(const DBProgramGenerator::VariableIdentityMap& map,
@@ -879,7 +922,7 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
     // ORDER BY reorders the whole projection, so it comes first: SKIP and LIMIT cut
     // the sorted rows
     if (proj->hasOrderBy()) {
-        translateOrderBy(proj->getOrderBy(), finalIdentities, outputted);
+        translateOrderBy(proj, finalIdentities, outputted);
     }
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
@@ -917,11 +960,14 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
     _opBuilder.create<mlir::db::Output>(loc, mlir::ValueRange{outputted});
 }
 
-void DBProgramGenerator::translateOrderBy(const OrderBy* orderBy,
+void DBProgramGenerator::translateOrderBy(const Projection* projection,
                                           const FinalIdentityMap& identities,
                                           llvm::SmallVectorImpl<mlir::Value>& projected) {
+    const OrderBy* orderBy = projection->getOrderBy();
     const OrderBy::ItemVector& items = orderBy->getItems();
     bioassert(!items.empty(), "ORDER BY without a key");
+
+    const Projection::Items& projectedItems = projection->items();
 
     // A sort reorders the rows of every column it is given at once, so it is given the
     // whole projection and the projected columns stay row-aligned. A key the projection
@@ -935,17 +981,18 @@ void DBProgramGenerator::translateOrderBy(const OrderBy* orderBy,
 
     // Keys are given most significant first, the order the Sort expects
     for (const OrderByItem* item : items) {
-        const mlir::Value keyColumn = resolveExprColumn(identities, item->getExpr());
+        const Expr* keyExpr = item->getExpr();
+        const size_t projectedIndex = findProjectedColumn(projectedItems, keyExpr);
+        const bool isProjected = projectedIndex < projectedItems.size();
 
         // A key names the column to sort by through its position in the columns handed to
         // the sort: the position the projection already gives it, or the end of the set
         // when the key has to be appended - so two appended keys never share a position
-        const auto findIt = std::ranges::find(sorted, keyColumn);
-        if (findIt == sorted.end()) {
-            sorted.push_back(keyColumn);
-            keyColumns.push_back(static_cast<int64_t>(sorted.size() - 1));
+        if (isProjected) {
+            keyColumns.push_back(static_cast<int64_t>(projectedIndex));
         } else {
-            keyColumns.push_back(static_cast<int64_t>(std::distance(sorted.begin(), findIt)));
+            sorted.push_back(resolveExprColumn(identities, keyExpr));
+            keyColumns.push_back(static_cast<int64_t>(sorted.size() - 1));
         }
 
         keyAscending.push_back(item->getType() == OrderByType::ASC);
