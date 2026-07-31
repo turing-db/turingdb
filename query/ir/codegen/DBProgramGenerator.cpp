@@ -1010,21 +1010,21 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
 
     const Projection::Items& returned = proj->items();
 
-    FinalIdentityMap finalIdentities;
+    VariableColumnMap variableColumns;
     for (auto& [cypherVar, mlirCol] : _varMap) {
         const std::string_view varName = cypherVar->getName();
 
         bioassert(not mlirCol.empty(), "No definitions for {}", varName);
         const mlir::Value finalValue = mlirCol.back();
 
-        finalIdentities[varName] = finalValue;
+        variableColumns[varName] = finalValue;
     }
 
     for (const auto& [name, vars] : _vdg.edgeIdentities()) {
         bioassert(!vars.empty(), "Empty edge identity for '{}'", name);
         const VariableDependency* representative = vars.front();
         bioassert(_varMap.contains(representative), "Edge identity representative not in varMap");
-        finalIdentities[name] = _varMap.at(representative).back();
+        variableColumns[name] = _varMap.at(representative).back();
     }
 
     const auto getVarForItem = [&](auto&& item) -> mlir::Value {
@@ -1032,11 +1032,11 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
 
         if constexpr (std::is_same_v<Type, VarDecl*>) {
             const std::string_view name = item->getName();
-            const auto findIt = finalIdentities.find(name);
-            bioassert(findIt != end(finalIdentities), "Return variable '{}' not found", name);
+            const auto findIt = variableColumns.find(name);
+            bioassert(findIt != end(variableColumns), "Return variable '{}' not found", name);
             return findIt->second;
         } else {
-            return resolveExprColumn(finalIdentities, item);
+            return getOrTranslateExprColumn(variableColumns, item);
         }
     };
 
@@ -1063,7 +1063,7 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
     // ORDER BY reorders the whole projection, so it comes before them too: SKIP and
     // LIMIT cut the sorted rows
     if (proj->hasOrderBy()) {
-        translateOrderBy(proj, finalIdentities, outputted);
+        translateOrderBy(proj, variableColumns, outputted);
     }
 
     if (proj->hasSkip()) {
@@ -1100,7 +1100,7 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
 }
 
 void DBProgramGenerator::translateOrderBy(const Projection* projection,
-                                          const FinalIdentityMap& identities,
+                                          const VariableColumnMap& variableColumns,
                                           llvm::SmallVectorImpl<mlir::Value>& projected) {
     const OrderBy* orderBy = projection->getOrderBy();
     const OrderBy::ItemVector& items = orderBy->getItems();
@@ -1139,7 +1139,7 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
                 throw TuringException("ORDER BY with DISTINCT may only order by returned columns.");
             }
 
-            sorted.push_back(resolveExprColumn(identities, keyExpr));
+            sorted.push_back(getOrTranslateExprColumn(variableColumns, keyExpr));
             keyColumns.push_back(static_cast<int64_t>(sorted.size() - 1));
         }
 
@@ -1166,14 +1166,19 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
     }
 }
 
-mlir::Value DBProgramGenerator::resolveExprColumn(const FinalIdentityMap& identities,
-                                                  const Expr* expr) {
-    const VarDecl* var = expr->getExprVarDecl();
-    if (var) {
-        const std::string_view name = var->getName();
-        const auto findIt = identities.find(name);
-        if (findIt != end(identities)) {
-            return findIt->second;
+mlir::Value DBProgramGenerator::getOrTranslateExprColumn(const VariableColumnMap& variableColumns,
+                                                         const Expr* expr) {
+    // One column is held per variable, under the name of that variable, so an expression
+    // only has a column to be found there when it is a variable and nothing else.
+    // Anything more is a computation over columns, and has to be translated
+    if (expr->getKind() == Expr::Kind::SYMBOL) {
+        const VarDecl* var = expr->getExprVarDecl();
+        if (var) {
+            const std::string_view name = var->getName();
+            const auto findIt = variableColumns.find(name);
+            if (findIt != end(variableColumns)) {
+                return findIt->second;
+            }
         }
     }
 

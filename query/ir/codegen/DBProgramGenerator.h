@@ -43,7 +43,7 @@ public:
 
     // Maps a Cypher variable name to the last column defined for it, the one the
     // projection and its ORDER BY read
-    using FinalIdentityMap = std::unordered_map<std::string_view, mlir::Value>;
+    using VariableColumnMap = std::unordered_map<std::string_view, mlir::Value>;
 
     explicit DBProgramGenerator(mlir::ModuleOp* mainModule);
     ~DBProgramGenerator();
@@ -100,12 +100,13 @@ private:
     // projected column with its sorted counterpart. A DISTINCT projection is deduped
     // by then, so its sort keys must be columns it returns
     void translateOrderBy(const Projection* projection,
-                          const FinalIdentityMap& identities,
+                          const VariableColumnMap& variableColumns,
                           llvm::SmallVectorImpl<mlir::Value>& projected);
 
-    // The column an expression reads: the traversal variable it names, when it names
-    // one, otherwise the column its translation produces
-    mlir::Value resolveExprColumn(const FinalIdentityMap& identities, const Expr* expr);
+    // The column holding the values of an expression: the column already published for
+    // the traversal variable it names, when the expression is nothing but that variable,
+    // otherwise the column its translation computes
+    mlir::Value getOrTranslateExprColumn(const VariableColumnMap& variableColumns, const Expr* expr);
 
     mlir::Value resolveEntityColumn(std::string_view varName);
 

@@ -251,6 +251,19 @@ TEST_F(OrderByTest, nodesByUnprojectedNameDescending) {
     expectNodeRows("MATCH (n) RETURN n ORDER BY n.name DESC", expected);
 }
 
+// The same query with the pattern variable spelled v0, the name the analyzer gives the
+// first variable it has to invent - here the one standing for the ORDER BY key n.name.
+// A key column resolved by the name of its declaration finds the user's v0 instead of
+// the key's own, and the sort is then keyed on the node column it is meant to reorder,
+// so the rows come back in node ID order with no error. Nothing about the query changed
+// but the spelling of a variable, so the row order must not change either.
+TEST_F(OrderByTest, unprojectedKeyIsNotShadowedByAUserVariable) {
+    Rows expected;
+    nodeRowsFor(nodeNamesAscending, expected);
+
+    expectNodeRows("MATCH (v0) RETURN v0 ORDER BY v0.name", expected);
+}
+
 // A projected property, sorted by itself: the sorted rows carry the string values.
 TEST_F(OrderByTest, projectedNamesAscending) {
     expectNames("MATCH (n) RETURN n.name ORDER BY n.name", nodeNamesAscending);
