@@ -29,10 +29,14 @@ NeighbourhoodSampleIterator::NeighbourhoodSampleIterator(const GraphView& view,
     init();
 }
 
+bool NeighbourhoodSampleIterator::deleted(const EdgeRecord& e) const {
+    return _view.tombstones().containsEdge(e._edgeID);
+}
+
 void NeighbourhoodSampleIterator::init() {
     for (_nodeIt = _inputNodeIDs->begin(); _nodeIt != _inputNodeIDs->cend(); _nodeIt++) {
         syncEdges();
-        if (!_edges.empty()) {
+        if (_edgeIt != _edges.end()) {
             return;
         }
     }
@@ -55,15 +59,24 @@ void NeighbourhoodSampleIterator::syncEdges() {
         const EdgeIndexer& indexer = part->edgeIndexer();
         _edges = indexer.getNodeOutEdges(*_nodeIt);
         _edgeIt = _edges.begin();
-        if (!_edges.empty()) {
+
+        while (_edgeIt != _edges.end() and deleted(*_edgeIt)) {
+            _edgeIt++;
+        }
+        if (_edgeIt != _edges.end()) {
             return;
         }
+
         _partIt.next();
     }
 }
 
 void NeighbourhoodSampleIterator::nextValidForCurrentNode() {
     _edgeIt++;
+
+    while (_edgeIt != _edges.end() and deleted(*_edgeIt)) {
+        _edgeIt++;
+    }
     if (_edgeIt != _edges.end()) {
         return;
     }
@@ -81,7 +94,10 @@ void NeighbourhoodSampleIterator::nextValidForCurrentNode() {
         _edges = indexer.getNodeOutEdges(curNode);
         _edgeIt = _edges.begin();
 
-        if (!_edges.empty()) {
+        while (_edgeIt != _edges.end() and deleted(*_edgeIt)) {
+            _edgeIt++;
+        }
+        if (_edgeIt != _edges.end()) {
             return;
         }
 
@@ -248,6 +264,10 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
         if (_nodeIt != _inputNodeIDs->cend()) {
             syncEdges();
         }
+    }
+
+    if (writeIndex == thisSize) {
+        return;
     }
 
     // writeIndex ensures that we wrote to the first writeIndex contiguous elements. If
