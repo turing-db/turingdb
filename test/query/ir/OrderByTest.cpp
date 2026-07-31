@@ -351,6 +351,81 @@ TEST_F(OrderByTest, projectedPropertyKeyIsNotDuplicated) {
     EXPECT_EQ(propertyReads, 1u);
 }
 
+// A key that reads no row holds the same value in every one of them, so it ties them
+// all and orders nothing: the eighteen nodes come back as the scan produced them,
+// IDs 0 to 17.
+TEST_F(OrderByTest, constantKeyLeavesTheRowsAlone) {
+    const Rows expected = {{0}, {1},  {2},  {3},  {4},  {5},  {6},  {7},  {8},
+                           {9}, {10}, {11}, {12}, {13}, {14}, {15}, {16}, {17}};
+    expectNodeRows("MATCH (n) RETURN n ORDER BY 1", expected);
+}
+
+// However it is written, a constant key is dropped, and a sort left with no key at all
+// is not generated: an integer, a boolean, a string, an expression over literals and
+// null all order the same nothing. Generating the sort would key it on a column holding
+// the one row the constant is read into, against the many rows of the projection.
+TEST_F(OrderByTest, constantKeysGenerateNoSort) {
+    const std::vector<std::string> keys = {"1", "true", "'x'", "1 + 1", "-1", "null"};
+
+    for (const std::string& key : keys) {
+        const std::string query = "MATCH (n) RETURN n ORDER BY " + key;
+
+        mlir::MLIRContext context;
+        mlir::OwningOpRef<mlir::ModuleOp> module;
+        generateProgram(query, context, module);
+
+        size_t sortCount = 0;
+        module->walk([&](mlir::db::Sort) { sortCount++; });
+
+        EXPECT_EQ(sortCount, 0u) << "query: " << query;
+    }
+}
+
+// A constant among real keys decides nothing either, so it is dropped and the keys
+// around it keep their order of significance: this is ORDER BY n.name DESC.
+TEST_F(OrderByTest, constantKeyIsDroppedFromAMultiKeySort) {
+    Names expected = nodeNamesAscending;
+    std::ranges::reverse(expected);
+
+    expectNames("MATCH (n) RETURN n.name ORDER BY 1, n.name DESC, true", expected);
+}
+
+// The same query seen in the generated program: the sort is keyed on the projection's
+// only column, once, rather than on three columns of which two never differ.
+TEST_F(OrderByTest, constantKeyIsNotGivenToTheSort) {
+    mlir::MLIRContext context;
+    mlir::OwningOpRef<mlir::ModuleOp> module;
+    generateProgram("MATCH (n) RETURN n.name ORDER BY 1, n.name DESC, true", context, module);
+
+    size_t sortCount = 0;
+
+    module->walk([&](mlir::db::Sort sortOp) {
+        sortCount++;
+
+        EXPECT_EQ(sortOp.getColumns().size(), 1u);
+        ASSERT_EQ(sortOp.getKeyColumns().size(), 1u);
+        EXPECT_EQ(sortOp.getKeyColumns()[0], 0);
+    });
+
+    EXPECT_EQ(sortCount, 1u);
+}
+
+// A key the projection does not carry is rejected after a DISTINCT, but a constant one
+// is carried by nothing and asks for nothing: it names no column the dedup dropped, so
+// the query stands and returns the distinct rows.
+TEST_F(OrderByTest, constantKeyIsAllowedAfterDistinct) {
+    OrderedNodeSink sink;
+    runQuery("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY 1", &sink);
+
+    // The twelve nodes an edge points at, deduped; their order is the dedup's, which the
+    // dropped key leaves untouched and the language does not promise
+    Rows rows = sink.rows();
+    ASSERT_EQ(rows.size(), 12u);
+
+    std::sort(rows.begin(), rows.end());
+    EXPECT_EQ(std::unique(rows.begin(), rows.end()), rows.end());
+}
+
 // The mirror case: a key the projection does not carry has no column to be matched to,
 // so it is appended and the sort receives one column more than the projection.
 TEST_F(OrderByTest, unprojectedKeyIsAppended) {

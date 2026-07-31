@@ -45,6 +45,7 @@
 #include "FunctionSignature.h"
 #include "Literal.h"
 #include "expr/BinaryExpr.h"
+#include "expr/ConstantExpressionDetector.h"
 #include "expr/Expr.h"
 #include "expr/ExprChain.h"
 #include "expr/FunctionInvocationExpr.h"
@@ -1122,6 +1123,16 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
     // Keys are given most significant first, the order the Sort expects
     for (const OrderByItem* item : items) {
         const Expr* keyExpr = item->getExpr();
+
+        // A key that reads no row holds the same value in every one of them, so it ties
+        // them all and decides nothing: ORDER BY 1, n.name orders by n.name alone.
+        // Cypher promises nothing of the order tied rows come back in, so dropping the
+        // key is the whole of its meaning - and it never reaches the sort, which has no
+        // use for a column holding the one row a constant is read into
+        if (ConstantExpressionDetector::isConstant(keyExpr)) {
+            continue;
+        }
+
         const size_t projectedIndex = findProjectedColumn(projectedItems, keyExpr);
         const bool isProjected = projectedIndex < projectedItems.size();
 
@@ -1144,6 +1155,12 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
         }
 
         keyAscending.push_back(item->getType() == OrderByType::ASC);
+    }
+
+    // Every key was constant, so a sort would hand back the rows it was given in the
+    // order it was given them: the projection is already what the ORDER BY asks for
+    if (keyColumns.empty()) {
+        return;
     }
 
     llvm::SmallVector<mlir::Type> sortResultTypes;
