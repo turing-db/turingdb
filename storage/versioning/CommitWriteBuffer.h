@@ -189,6 +189,7 @@ private:
     friend DataPartBuilder;
     friend CommitWriteBufferRebaser;
     friend MetadataRebaser;
+    friend class NLExecutor;
 
     bool _flushed {false};
 

@@ -1251,15 +1251,17 @@ void NLExecutor::runCreateNode(NLExecutionContext* context, NLFunctionData* data
     for (const NLCreateNodeData::Property& prop : createData->properties()) {
         extractColumnProperties(prop._values, rowCount, prop._propertyTypeID, propsBuffer);
 
+        auto& pendingNodes = writeBuffer->pendingNodes();
         for (size_t row = 0; row < rowCount; row++) {
-            writeBuffer->getPendingNode(firstOffset + row).properties.push_back(propsBuffer[row]);
+            pendingNodes[firstOffset + row].properties.push_back(propsBuffer[row]);
         }
     }
 
     ColumnNodeIDs* result = createData->getResult();
     result->resize(rowCount);
+    auto& raw = result->getRaw();
     for (size_t row = 0; row < rowCount; row++) {
-        (*result)[row] = NodeID(firstOffset + row);
+        raw[row] = NodeID(firstOffset + row);
     }
 }
 
