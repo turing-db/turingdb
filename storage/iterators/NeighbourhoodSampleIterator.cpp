@@ -123,7 +123,27 @@ size_t NeighbourhoodSampleChunkWriter::randomSampleOffset() {
 void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
     bioassert(_sampleSize <= maxCount, "Invalid sample size.");
 
-    const size_t samplesPerChunk = _sampleSize == 0 ? 0 : maxCount / _sampleSize;
+	if (_sampleSize == 0) {
+		if (_srcIDs) {
+			_srcIDs->clear();
+		}
+		if (_edgeIDs) {
+			_edgeIDs->clear();
+		}
+		if (_edgeTypes) {
+			_edgeTypes->clear();
+		}
+		if (_otherIDs) {
+			_otherIDs->clear();
+		}
+		if (_indices) {
+			_indices->clear();
+		}
+		_nodeIt = _inputNodeIDs->cend();
+		return;
+    }
+
+    const size_t samplesPerChunk = maxCount / _sampleSize;
     const size_t nodesRemaining = std::distance(_nodeIt, _inputNodeIDs->cend());
     const size_t nodesToSample = std::min(nodesRemaining, samplesPerChunk);
     const size_t thisSize = nodesToSample * _sampleSize;
