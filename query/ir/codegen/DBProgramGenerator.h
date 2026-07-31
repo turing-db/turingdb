@@ -41,6 +41,7 @@ class UnwindStmt;
 class VarDecl;
 class VariableDependency;
 class DependencyEdge;
+class YieldItems;
 
 class DBProgramGenerator {
 public:
@@ -89,6 +90,14 @@ private:
     // has no projection of its own and emits its columns in that order.
     using YieldedColumn = std::pair<std::string_view, mlir::Value>;
     std::vector<YieldedColumn> _yieldedColumns;
+
+    // What a CALL left behind: dropped from its carry set because nothing read it again, so
+    // it no longer flows with the rows. Its last value is still in _varMap / _yieldedColumns,
+    // but that value belongs to a loop the dataflow has left, so collectLiveColumns must not
+    // offer it to a later op - a filter taking "everything in flight" would otherwise mix
+    // columns from two different loops.
+    std::unordered_set<const VariableDependency*> _deadVariables;
+    std::unordered_set<size_t> _deadYieldedColumns;
 
     VariableDependencyGraph _vdg;
 
@@ -143,22 +152,32 @@ private:
     void generateCalls(const CypherAST* ast);
     void generateCall(const CallStmt* callStmt, const VariableNames& usedAfterCall);
 
+    // Generate the filter a CALL's YIELD ... WHERE asks for, over everything in flight once
+    // the call has run - so the predicate reads the rows the procedure emitted.
+    void generateYieldFilter(const YieldItems* yieldItems);
+
     // The variable names the query still reads once a call has run: the arguments of the
     // calls written after it, and whatever the projection returns. Nothing else can read a
     // column by then - the traversal, its constraints and its filters are all generated
     // before the calls - so a name absent here belongs to a column that is dead at the
     // call and need not be carried past it.
-    void collectNamesUsedAfterCall(llvm::ArrayRef<const CallStmt*> laterCalls,
+    void collectNamesUsedAfterCall(const CallStmt* call,
+                                   llvm::ArrayRef<const CallStmt*> laterCalls,
                                    const ReturnStmt* returnStmt,
                                    VariableNames& used) const;
+
+    // Add the variable names a call's YIELD ... WHERE reads. That filter runs after the
+    // call, so those names outlive it even when nothing else reads them.
+    void collectYieldWhereNames(const CallStmt* call, VariableNames& used) const;
 
     // Add every variable name an expression reads, walking into its sub-expressions, so a
     // projection item or a call argument contributes each variable it is built from.
     void collectExprNames(const Expr* expr, VariableNames& used) const;
 
     // Drop from a live set the columns no name in `usedAfterCall` claims, leaving the
-    // groups in the order rebindLiveColumns walks them.
-    void dropUnusedLiveColumns(const VariableNames& usedAfterCall, LiveColumns& live) const;
+    // groups in the order rebindLiveColumns walks them. Each one dropped is recorded as
+    // dead, so it stops being in flight for every later op too.
+    void dropUnusedLiveColumns(const VariableNames& usedAfterCall, LiveColumns& live);
 
     // Generate a call that reads none of the rows already in flight: it produces the same
     // rows for every one of them, so the two are crossed. What the query has matched so
