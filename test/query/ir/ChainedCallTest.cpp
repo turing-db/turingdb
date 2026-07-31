@@ -65,7 +65,7 @@ protected:
 TEST_F(ChainedCallTest, singleCallYieldsRows) {
     const size_t rowCount = run(
         "MATCH (n) "
-        "CALL gnn.neighbourhoodSample(n, 2) YIELD dst AS m "
+        "CALL gnn.neighbourhoodSample(n, 2) YIELD tgt AS m "
         "RETURN m");
 
     EXPECT_GT(rowCount, 0u);
@@ -74,8 +74,8 @@ TEST_F(ChainedCallTest, singleCallYieldsRows) {
 TEST_F(ChainedCallTest, chainedCallNeverCrashes) {
     constexpr std::string_view query =
         "MATCH (n) "
-        "CALL gnn.neighbourhoodSample(n, 2) YIELD dst AS m "
-        "CALL gnn.neighbourhoodSample(m, 2) YIELD dst AS o "
+        "CALL gnn.neighbourhoodSample(n, 2) YIELD tgt AS m "
+        "CALL gnn.neighbourhoodSample(m, 2) YIELD tgt AS o "
         "RETURN o";
 
     for (size_t run = 0; run < 5; run++) {
@@ -89,8 +89,8 @@ TEST_F(ChainedCallTest, chainedCallNeverCrashes) {
 TEST_F(ChainedCallTest, chainedCallYieldsRowsWithPersonNodes) {
     const size_t rowCount = run(
         "MATCH (n) WHERE n.age = 32 "
-        "CALL gnn.neighbourhoodSample(n, 4) YIELD dst AS m "
-        "CALL gnn.neighbourhoodSample(m, 2) YIELD dst AS o "
+        "CALL gnn.neighbourhoodSample(n, 4) YIELD tgt AS m "
+        "CALL gnn.neighbourhoodSample(m, 2) YIELD tgt AS o "
         "RETURN o");
 
     EXPECT_EQ(rowCount, 5u);
