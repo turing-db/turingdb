@@ -1251,9 +1251,11 @@ void NLExecutor::runCreateNode(NLExecutionContext* context, NLFunctionData* data
     for (const NLCreateNodeData::Property& prop : createData->properties()) {
         extractColumnProperties(prop._values, rowCount, prop._propertyTypeID, propsBuffer);
 
-        auto& pendingNodes = writeBuffer->pendingNodes();
         for (size_t row = 0; row < rowCount; row++) {
-            pendingNodes[firstOffset + row].properties.push_back(propsBuffer[row]);
+            CommitWriteBuffer::PendingNode& pendingNode =
+                writeBuffer->getPendingNode(firstOffset + row);
+            CommitWriteBuffer::UntypedProperties& properties = pendingNode.properties;
+            properties.push_back(propsBuffer[row]);
         }
     }
 
