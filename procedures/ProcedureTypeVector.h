@@ -66,6 +66,7 @@ public:
     void add(std::string_view name, ProcedureType type) {
         constexpr bool optional = false;
         _values.emplace_back(name, type, optional);
+        _requiredCount++;
     }
 
     void addOptional(std::string_view name, ProcedureType type) {
@@ -73,15 +74,7 @@ public:
         _values.emplace_back(name, type, optional);
     }
 
-    size_t requiredCount() const {
-        size_t count = 0;
-        for (const auto& arg : _values) {
-            if (!arg._optional) {
-                count++;
-            }
-        }
-        return count;
-    }
+    size_t requiredCount() const { return _requiredCount; }
 
     size_t size() const { return _values.size(); }
 
@@ -93,6 +86,7 @@ public:
 
 private:
     Vector _values;
+    size_t _requiredCount {0};
 };
 
 }
