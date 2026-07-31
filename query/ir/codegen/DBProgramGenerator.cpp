@@ -567,7 +567,7 @@ void DBProgramGenerator::collectLiveColumns(LiveColumns& live) {
 
     for (auto& [var, values] : _varMap) {
         const mlir::Value column = values.back();
-        if (!isLive(column)) {
+        if (!isLive(column) || _deadVariables.contains(var)) {
             continue;
         }
 
@@ -576,7 +576,7 @@ void DBProgramGenerator::collectLiveColumns(LiveColumns& live) {
     }
 
     for (auto& [var, column] : _edgeTypeMap) {
-        if (!isLive(column)) {
+        if (!isLive(column) || _deadVariables.contains(var)) {
             continue;
         }
 
@@ -588,7 +588,7 @@ void DBProgramGenerator::collectLiveColumns(LiveColumns& live) {
     // must take it along, or the rows it holds would stop matching the ones beside it.
     for (size_t yieldedIndex = 0; yieldedIndex < _yieldedColumns.size(); yieldedIndex++) {
         const mlir::Value column = _yieldedColumns[yieldedIndex].second;
-        if (!isLive(column)) {
+        if (!isLive(column) || _deadYieldedColumns.contains(yieldedIndex)) {
             continue;
         }
 
@@ -629,10 +629,6 @@ mlir::Value DBProgramGenerator::findYieldedColumn(std::string_view name) const {
 }
 
 void DBProgramGenerator::filterAllColumns(mlir::Value predicate) {
-    if (_varMap.empty()) {
-        return;
-    }
-
     LiveColumns live;
     collectLiveColumns(live);
 
@@ -983,20 +979,30 @@ void DBProgramGenerator::generateCalls(const CypherAST* ast) {
     const ReturnStmt* returnStmt = sglPart->getReturnStmt();
 
     for (size_t callIndex = 0; callIndex < calls.size(); callIndex++) {
+        const CallStmt* call = calls[callIndex];
         const llvm::ArrayRef<const CallStmt*> laterCalls = llvm::ArrayRef(calls).drop_front(callIndex + 1);
 
         VariableNames usedAfterCall;
-        collectNamesUsedAfterCall(laterCalls, returnStmt, usedAfterCall);
+        collectNamesUsedAfterCall(call, laterCalls, returnStmt, usedAfterCall);
 
-        generateCall(calls[callIndex], usedAfterCall);
+        generateCall(call, usedAfterCall);
     }
 }
 
-void DBProgramGenerator::collectNamesUsedAfterCall(llvm::ArrayRef<const CallStmt*> laterCalls,
+void DBProgramGenerator::collectNamesUsedAfterCall(const CallStmt* call,
+                                                   llvm::ArrayRef<const CallStmt*> laterCalls,
                                                    const ReturnStmt* returnStmt,
                                                    VariableNames& used) const {
-    // A later call reads the variables its own arguments are built from.
+    // This call's own YIELD ... WHERE filters the rows it emitted, so it runs after the
+    // call and its variables have to survive it. Its arguments do not: they are operands of
+    // the call, read where it sits rather than past it.
+    collectYieldWhereNames(call, used);
+
+    // A later call reads the variables its own arguments are built from, and the ones its
+    // YIELD ... WHERE filters on.
     for (const CallStmt* laterCall : laterCalls) {
+        collectYieldWhereNames(laterCall, used);
+
         const FunctionInvocationExpr* funcExpr = laterCall->getFunc();
         const FunctionInvocation* invocation = funcExpr ? funcExpr->getFunctionInvocation() : nullptr;
         const ExprChain* arguments = invocation ? invocation->getArguments() : nullptr;
@@ -1059,6 +1065,17 @@ void DBProgramGenerator::collectNamesUsedAfterCall(llvm::ArrayRef<const CallStmt
             collectExprNames(item->getExpr(), used);
         }
     }
+}
+
+void DBProgramGenerator::collectYieldWhereNames(const CallStmt* call, VariableNames& used) const {
+    const YieldClause* yield = call->getYield();
+    const YieldItems* yieldItems = yield ? yield->getItems() : nullptr;
+    const WhereClause* where = yieldItems ? yieldItems->getWhereClause() : nullptr;
+    if (!where) {
+        return;
+    }
+
+    collectExprNames(where->getExpr(), used);
 }
 
 void DBProgramGenerator::collectExprNames(const Expr* expr, VariableNames& used) const {
@@ -1161,7 +1178,7 @@ void DBProgramGenerator::collectExprNames(const Expr* expr, VariableNames& used)
     }
 }
 
-void DBProgramGenerator::dropUnusedLiveColumns(const VariableNames& usedAfterCall, LiveColumns& live) const {
+void DBProgramGenerator::dropUnusedLiveColumns(const VariableNames& usedAfterCall, LiveColumns& live) {
     LiveColumns usedColumns;
 
     // The three groups sit back to back in _columns, in this order, which is the order
@@ -1169,10 +1186,15 @@ void DBProgramGenerator::dropUnusedLiveColumns(const VariableNames& usedAfterCal
     // index over _columns tracks all three.
     size_t columnIndex = 0;
 
+    // A column left out here stops flowing with the rows, so it is marked dead: its last
+    // value still sits in _varMap or _yieldedColumns but belongs to the loop the call is
+    // about to leave, and a later op collecting everything in flight must not pick it up.
     for (const VariableDependency* variable : live._variables) {
         if (usedAfterCall.contains(variable->getName())) {
             usedColumns._columns.push_back(live._columns[columnIndex]);
             usedColumns._variables.push_back(variable);
+        } else {
+            _deadVariables.insert(variable);
         }
 
         columnIndex++;
@@ -1182,6 +1204,8 @@ void DBProgramGenerator::dropUnusedLiveColumns(const VariableNames& usedAfterCal
         if (usedAfterCall.contains(variable->getName())) {
             usedColumns._columns.push_back(live._columns[columnIndex]);
             usedColumns._edgeTypeVariables.push_back(variable);
+        } else {
+            _deadVariables.insert(variable);
         }
 
         columnIndex++;
@@ -1191,6 +1215,8 @@ void DBProgramGenerator::dropUnusedLiveColumns(const VariableNames& usedAfterCal
         if (usedAfterCall.contains(_yieldedColumns[yieldedIndex].first)) {
             usedColumns._columns.push_back(live._columns[columnIndex]);
             usedColumns._yieldedIndices.push_back(yieldedIndex);
+        } else {
+            _deadYieldedColumns.insert(yieldedIndex);
         }
 
         columnIndex++;
@@ -1268,6 +1294,7 @@ void DBProgramGenerator::generateCall(const CallStmt* callStmt, const VariableNa
     // their cardinality.
     if (!live._columns.empty() && inputs.empty()) {
         generateCrossedCall(procedureName, yieldedNames, yieldedVariables, live);
+        generateYieldFilter(yieldItems);
         return;
     }
 
@@ -1306,6 +1333,27 @@ void DBProgramGenerator::generateCall(const CallStmt* callStmt, const VariableNa
     }
 
     rebindLiveColumns(results, yieldedVariables.size(), live);
+
+    generateYieldFilter(yieldItems);
+}
+
+void DBProgramGenerator::generateYieldFilter(const YieldItems* yieldItems) {
+    const WhereClause* where = yieldItems ? yieldItems->getWhereClause() : nullptr;
+    if (!where) {
+        return;
+    }
+
+    // The predicate reads what the call produced, so it filters the rows the call emitted
+    // rather than the ones it was given - the MATCH's WHERE, applied one stage later. Every
+    // column in flight goes through the filter, the yields among them, so they stay
+    // row-aligned with each other.
+    const Expr* predicateExpr = where->getExpr();
+    translateExpr(predicateExpr);
+
+    const auto findIt = _exprMap.find(predicateExpr);
+    bioassert(findIt != end(_exprMap), "Failed to get value for YIELD WHERE expr");
+
+    filterAllColumns(findIt->second);
 }
 
 void DBProgramGenerator::generateCrossedCall(std::string_view procedureName,

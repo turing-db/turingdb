@@ -539,6 +539,59 @@ TEST_F(MLIRDBProceduresTest, cypherHistorySpansChunks) {
     EXPECT_EQ(rows[2]._nodeCount, 0u);
 }
 
+TEST_F(MLIRDBProceduresTest, cypherYieldWhereFiltersTheCallsRows) {
+    auto graph = buildSchemaGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // CALL db.labels() YIELD label WHERE label = 'Person': the predicate reads what the call
+    // emitted, so it filters the call's own rows - three labels in, one out.
+    NameSink sink;
+    runQuery("CALL db.labels() YIELD label WHERE label = 'Person' RETURN label", graph.get(),
+             reader.getView(),
+             sink);
+
+    std::vector<std::string> rows;
+    sink.sortedRows(rows);
+    const std::vector<std::string> expected {"Person"};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(MLIRDBProceduresTest, cypherYieldWhereFiltersAcrossChunks) {
+    auto graph = buildSchemaGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The same filter at a chunk size of two, so the drive loop runs the procedure twice and
+    // the predicate is applied to each chunk: the match is in the first chunk here, and the
+    // rows it rejects do not leak from either.
+    NameSink sink;
+    runQuery("CALL db.labels() YIELD label WHERE label = 'Manager' RETURN label", graph.get(),
+             reader.getView(),
+             sink,
+             /*chunkSize=*/2);
+
+    std::vector<std::string> rows;
+    sink.sortedRows(rows);
+    const std::vector<std::string> expected {"Manager"};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(MLIRDBProceduresTest, cypherYieldWhereRejectingEveryRowEmitsNothing) {
+    auto graph = buildSchemaGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // A predicate no row satisfies: the call still runs, and every row it emits is filtered
+    // out, so the query emits nothing rather than the unfiltered rows.
+    CountingSink sink;
+    runQuery("CALL db.labels() YIELD label WHERE label = 'NoSuchLabel' RETURN label", graph.get(),
+             reader.getView(),
+             sink);
+
+    EXPECT_EQ(sink.getRows(), 0u);
+}
+
 TEST_F(MLIRDBProceduresTest, cypherEmptySchemasYieldNothing) {
     auto graph = buildBareGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
