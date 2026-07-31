@@ -34,6 +34,7 @@ protected:
     void init();
     void nextValidForCurrentNode();
     void syncEdges();
+    bool deleted(const EdgeRecord& e) const;
 };
 
 class NeighbourhoodSampleChunkWriter final : public NeighbourhoodSampleIterator {
