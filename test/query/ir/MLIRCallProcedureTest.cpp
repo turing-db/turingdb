@@ -1383,6 +1383,29 @@ TEST_F(MLIRCallProcedureTest, cypherTwoCallsOverAHopProjectingBothYields) {
     EXPECT_EQ(rows, expected);
 }
 
+TEST_F(MLIRCallProcedureTest, cypherYieldWhereKeepsAliveWhatOnlyItReads) {
+    auto graph = buildLabelledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The second call's YIELD ... WHERE is the only reader of `copy` - the projection returns
+    // `value` alone - so `copy` has to survive the second call for the filter to see it.
+    // test.expandNodeID leaves rows with copy 100, 200, 201 and 400 (for n = 1, 2, 2, 4);
+    // test.fanOutNodeID then emits 10*n, 10*n+1 and 10*n+2 for each, and the filter drops the
+    // three rows carrying copy=100.
+    Int64Sink sink;
+    runQuery("MATCH (n) CALL test.expandNodeID(n) YIELD copy "
+             "CALL test.fanOutNodeID(n) YIELD value WHERE copy > 100 RETURN value",
+             graph.get(),
+             reader.getView(),
+             sink);
+
+    std::vector<types::Int64::Primitive> rows = sink.rows();
+    std::sort(rows.begin(), rows.end());
+    const std::vector<types::Int64::Primitive> expected {20, 20, 21, 21, 22, 22, 40, 41, 42};
+    EXPECT_EQ(rows, expected);
+}
+
 TEST_F(MLIRCallProcedureTest, cypherCallStillRejectsCarryingPastANonReportingProcedure) {
     auto graph = buildLabelledGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
