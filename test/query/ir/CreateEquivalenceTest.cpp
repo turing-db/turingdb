@@ -241,6 +241,24 @@ TEST_F(CreateEquivalenceTest, edgeCreate) {
         "MATCH (a:City)-[:LOCATED_IN]->(b:Country) RETURN a.name, b.name");
 }
 
+TEST_F(CreateEquivalenceTest, multiplePatternsInOneClause) {
+    expectCreateEquivalent(
+        R"(CREATE (a:Person {name: "Alice"}), (b:Person {name: "Bob"}))",
+        "MATCH (n:Person) RETURN n.name");
+}
+
+TEST_F(CreateEquivalenceTest, multiplePatternsWithEdgeInOneClause) {
+    expectCreateEquivalent(
+        R"(CREATE (a:City {name: "Paris"}), (b:Country {name: "France"})-[:HAS_CAPITAL]->(c:City {name: "Lyon"}))",
+        "MATCH (a:Country)-[:HAS_CAPITAL]->(b:City) RETURN a.name, b.name");
+}
+
+TEST_F(CreateEquivalenceTest, nodeWithMultipleLabels) {
+    expectCreateEquivalent(
+        R"(CREATE (n:Person:Employee {name: "Alice"}))",
+        "MATCH (n:Employee) RETURN n.name");
+}
+
 TEST_F(CreateEquivalenceTest, multipleSequentialCreates) {
     applyV2(_v2GraphName, R"(CREATE (n:Person {name: "Alice"}))");
     applyV2(_v2GraphName, R"(CREATE (n:Person {name: "Bob"}))");
