@@ -1812,8 +1812,10 @@ PipelineOutputInterface* PipelineGenerator::translatePathExplorerNode(PathExplor
     const auto makeProcessor = [&]<PathExplorationDir Dir>() {
         _builder.addPathExplorer<Dir>(minHops, maxHops);
 
-        const auto* proc = dynamic_cast<PathExplorerProcessor<Dir>*>(_builder.getLastProc());
+        auto* proc = dynamic_cast<PathExplorerProcessor<Dir>*>(_builder.getLastProc());
         bioassert(proc, "Failed to cast last proc to PathExplorerProcessor");
+
+        proc->setEdgeTypeConstraint(node->getEdgeTypeConstraint());
 
         const VarDecl* edgeDecl = node->getEdgeDecl();
         const VarDecl* targetDecl = node->getTargetDecl();

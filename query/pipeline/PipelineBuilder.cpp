@@ -426,6 +426,7 @@ PipelineBlockOutputInterface& PipelineBuilder::addPathExplorer(uint64_t minHops,
     proc->setBfsEdgesColumn(_mem->alloc<ColumnEdgeIDs>());
     proc->setBfsIntermediatesColumn(_mem->alloc<ColumnNodeIDs>());
     proc->setBfsSourcesColumn(_mem->alloc<ColumnNodeIDs>());
+    proc->setBfsEdgeTypesColumn(_mem->alloc<ColumnEdgeTypes>());
 
     output.setStream(EntityOutputStream::createNodeStream(targetNodes->getTag()));
 

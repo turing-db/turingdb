@@ -1,7 +1,9 @@
 #pragma once
 
+#include <optional>
 #include <stdint.h>
 
+#include "ID.h"
 #include "PathExplorationDir.h"
 #include "PlanGraphNode.h"
 
@@ -25,12 +27,14 @@ public:
     }
 
     void setDir(PathExplorationDir dir) { _dir = dir; }
+    void setEdgeTypeConstraint(EdgeTypeID edgeType) { _edgeTypeConstraint = edgeType; }
 
     PathExplorationDir getDir() const { return _dir; }
     uint64_t getMinHops() const { return _minHops; }
     uint64_t getMaxHops() const { return _maxHops; }
     const VarDecl* getEdgeDecl() const { return _edgeDecl; }
     const VarDecl* getTargetDecl() const { return _targetDecl; }
+    const std::optional<EdgeTypeID>& getEdgeTypeConstraint() const { return _edgeTypeConstraint; }
 
 private:
     PathExplorationDir _dir {PathExplorationDir::BOTH};
@@ -38,6 +42,7 @@ private:
     const VarDecl* _targetDecl {nullptr};
     uint64_t _minHops {0};
     uint64_t _maxHops {0};
+    std::optional<EdgeTypeID> _edgeTypeConstraint {};
 };
 
 }

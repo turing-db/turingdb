@@ -1,7 +1,10 @@
 #pragma once
 
+#include <limits>
 #include <memory>
+#include <optional>
 #include <stdint.h>
+#include <type_traits>
 #include <vector>
 
 #include "Processor.h"
@@ -9,11 +12,13 @@
 #include "interfaces/PipelineNodeInputInterface.h"
 #include "interfaces/PipelineBlockOutputInterface.h"
 
+#include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnIndices.h"
 
 #include "PathExplorationDir.h"
 #include "EntityList.h"
+#include "ID.h"
 
 namespace db {
 
@@ -66,6 +71,12 @@ public:
     void setBfsSourcesColumn(ColumnNodeIDs* sources) {
         _bfsSources = sources;
     }
+    void setBfsEdgeTypesColumn(ColumnEdgeTypes* types) {
+        _bfsEdgeTypes = types;
+    }
+    void setEdgeTypeConstraint(const std::optional<EdgeTypeID>& edgeType) {
+        _edgeTypeConstraint = edgeType;
+    }
 
     NamedColumn* getOutputTargetsColumn() const {
         return _outputTargets;
@@ -79,9 +90,9 @@ private:
 
     struct FrontierEntry {
         NodeID node;
-        EdgeID edge;             // single edge that led to this node
-        size_t parentIdx {ROOT}; // index into _allEntries, -1 for root
-        size_t sourceIdx {ROOT}; // original input source index
+        EdgeID edge;
+        size_t parentIdx {ROOT};
+        size_t sourceIdx {ROOT};
     };
 
     PathExplorerProcessor(uint64_t minHops,
@@ -94,33 +105,32 @@ private:
     PipelineNodeInputInterface _input;
     PipelineBlockOutputInterface _output;
 
-    // Processor input/outputs
     ColumnNodeIDs* _inputSources {nullptr};
     NamedColumn* _outputTargets {nullptr};
     NamedColumn* _outputPaths {nullptr};
     ColumnIndices* _outputIndices {nullptr};
 
-    // BFS chunk writer internals
     ColumnNodeIDs* _bfsSources {nullptr};
     ColumnEdgeIDs* _bfsEdges {nullptr};
     ColumnNodeIDs* _bfsIntermediates {nullptr};
     ColumnIndices* _bfsIndices {nullptr};
+    ColumnEdgeTypes* _bfsEdgeTypes {nullptr};
     std::unique_ptr<BFSChunkWriter> _bfsWriter;
+    std::optional<EdgeTypeID> _edgeTypeConstraint {};
 
     bool _bfsInitialized {false};
     bool _depthNeedsSetup {true};
 
-    /** @brief Current depth of the exploration */
     uint64_t _depth {0};
 
-    /** @brief Persistent tree, never shrunk until new input chunk received */
     std::vector<FrontierEntry> _allEntries;
 
-    /** @brief Index of first entry at current depth */
     size_t _depthStart {0};
 
-    /** @brief Index one past last entry at current depth */
     size_t _depthEnd {0};
+
+    size_t _candidateEdges {0};
+    size_t _emittedRows {0};
 
     bool edgeUsedInPath(size_t entryIdx, EdgeID edge) const;
     void reconstructPath(size_t entryIdx, EntityList& path) const;

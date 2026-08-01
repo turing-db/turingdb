@@ -8,6 +8,7 @@
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnIndices.h"
+#include "columns/ColumnEdgeTypes.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetEdgesIterator.h"
@@ -32,8 +33,12 @@ PathExplorerProcessor<Dir>::~PathExplorerProcessor() {
 
 template <PathExplorationDir Dir>
 std::string PathExplorerProcessor<Dir>::describe() const {
-    return fmt::format("PathExplorerProcessor @={} hops=[{},{}]",
-                       fmt::ptr(this), _minHops, _maxHops);
+    return fmt::format("PathExplorerProcessor @={} hops=[{},{}] candidates={} emitted={}",
+                       fmt::ptr(this),
+                       _minHops,
+                       _maxHops,
+                       _candidateEdges,
+                       _emittedRows);
 }
 
 template <PathExplorationDir Dir>
@@ -61,11 +66,9 @@ void PathExplorerProcessor<Dir>::prepare(ExecutionContext* ctxt) {
     _ctxt = ctxt;
     const GraphView& view = ctxt->getGraphView();
 
-    // Input
     _inputSources = _input.getNodeIDs()->as<ColumnNodeIDs>();
     bioassert(_inputSources, "Input nodes column is null");
 
-    // Output
     bioassert(_outputTargets, "Output target nodes column is null");
     bioassert(_outputPaths, "Output paths column is null");
     bioassert(_outputIndices, "Output indices column is null");
@@ -79,16 +82,25 @@ void PathExplorerProcessor<Dir>::prepare(ExecutionContext* ctxt) {
         _bfsWriter->setIndices(_bfsIndices);
         _bfsWriter->setEdgeIDs(_bfsEdges);
         _bfsWriter->setOtherIDs(_bfsIntermediates);
+        if (_edgeTypeConstraint) {
+            _bfsWriter->setEdgeTypes(_bfsEdgeTypes);
+        }
     } else if constexpr (Dir == PathExplorationDir::FORWARD) {
         _bfsWriter = std::make_unique<BFSChunkWriter>(view, _bfsSources);
         _bfsWriter->setIndices(_bfsIndices);
         _bfsWriter->setEdgeIDs(_bfsEdges);
         _bfsWriter->setTgtIDs(_bfsIntermediates);
+        if (_edgeTypeConstraint) {
+            _bfsWriter->setEdgeTypes(_bfsEdgeTypes);
+        }
     } else if constexpr (Dir == PathExplorationDir::BACKWARD) {
         _bfsWriter = std::make_unique<BFSChunkWriter>(view, _bfsSources);
         _bfsWriter->setIndices(_bfsIndices);
         _bfsWriter->setEdgeIDs(_bfsEdges);
         _bfsWriter->setSrcIDs(_bfsIntermediates);
+        if (_edgeTypeConstraint) {
+            _bfsWriter->setEdgeTypes(_bfsEdgeTypes);
+        }
     } else {
         COMPILE_ERROR("Invalid PathExplorationDir");
     }
@@ -104,6 +116,8 @@ void PathExplorerProcessor<Dir>::reset() {
     _allEntries.clear();
     _depthStart = 0;
     _depthEnd = 0;
+    _candidateEdges = 0;
+    _emittedRows = 0;
     markAsReset();
 }
 
@@ -111,19 +125,14 @@ template <PathExplorationDir Dir>
 void PathExplorerProcessor<Dir>::reconstructPath(size_t entryIdx, EntityList& path) const {
     path.resize(_depth);
 
-    // Current index into the _allEntries array
     size_t idx = entryIdx;
 
-    // Current position into the outputed path array
     size_t pathCursor = _depth - 1;
 
-    // Walk up the parent chain to fill the path until we reach the root
     while (idx != ROOT) {
         const FrontierEntry& e = _allEntries[idx];
 
         if (e.parentIdx == ROOT) {
-            // The "root edge" entry is a special case,
-            // it is not part of the path, do not output it
             break;
         }
 
@@ -135,7 +144,6 @@ void PathExplorerProcessor<Dir>::reconstructPath(size_t entryIdx, EntityList& pa
     }
 }
 
-/// Walk up the parent chain to check if edge is already used in the current row.
 template <PathExplorationDir Dir>
 bool PathExplorerProcessor<Dir>::edgeUsedInPath(size_t entryIdx, EdgeID edge) const {
     size_t idx = entryIdx;
@@ -165,15 +173,11 @@ void PathExplorerProcessor<Dir>::execute() {
     size_t remaining = _ctxt->getChunkSize();
 
     if (!_bfsInitialized) {
-        // Step 1. This is the first time execute() is called on the input chunk.
-        //         It initializes the breadth-first exploration on it.
         _bfsInitialized = true;
 
         const ColumnNodeIDs& inputNodes = *_inputSources;
         const size_t inputSize = inputNodes.size();
 
-        // Seed _allEntries with root entries (one per input source node).
-        // Root entries have parentIdx = -1 and no edge.
         _allEntries.resize(inputSize);
         for (size_t i = 0; i < inputSize; i++) {
             _allEntries[i] = FrontierEntry {
@@ -185,12 +189,13 @@ void PathExplorerProcessor<Dir>::execute() {
         }
 
         if (_minHops == 0) {
-            // Write all paths corresponding to no hops
             for (size_t i = 0; i < inputSize; i++) {
                 _outputIndices->push_back(i);
                 outputTargets->push_back(inputNodes[i]);
                 outputPaths->emplace_back();
             }
+
+            _emittedRows += inputSize;
 
             remaining = remaining >= inputSize
                           ? remaining - inputSize
@@ -207,17 +212,6 @@ void PathExplorerProcessor<Dir>::execute() {
               "Initialization error, depth should always be greater than 0 at this point");
 
     if (_depthNeedsSetup) {
-        // Step 2. This is the first time execute() is called on the current depth.
-        //         It sets up the current depth window and feeds it to the BFS writer.
-        //         It prepares a chunk of size `windowSize` to be fed to the ChunkWriter.
-        //
-        //         > [!WARNING]
-        //         > `windowSize` can exceed the maximum ChunkSize
-        //         >   -> the memory usage is unbounded.
-
-        // If:
-        //  - _depth > _maxHops -> We have reached the maximum hops
-        //  - _depthStart == _depthEnd -> No more edges to expand
         if (_depth > _maxHops || _depthStart == _depthEnd) {
             _input.getPort()->consume();
             _output.getPort()->writeData();
@@ -237,33 +231,30 @@ void PathExplorerProcessor<Dir>::execute() {
         _depthNeedsSetup = false;
     }
 
-    // Step 3. Fill one chunk of edges from the current depth set of sources.
     _bfsWriter->fill(remaining);
 
     ColumnEdgeIDs& bfsEdges = *_bfsEdges;
     ColumnNodeIDs& bfsIntermediates = *_bfsIntermediates;
     ColumnIndices& bfsIndices = *_bfsIndices;
 
-    for (size_t i = 0; i < bfsEdges.size(); i++) {
-        // Step 4. For each edges at this depth:
-        //           - Check if the edge is already used in the current path.
-        //           - If not, add it to the entries (to be used by deeper levels).
-        //           - Reconstruct and write the path in the output if minHops is met.
+    _candidateEdges += bfsEdges.size();
 
+    for (size_t i = 0; i < bfsEdges.size(); i++) {
         const NodeID intermediate = bfsIntermediates[i];
         const EdgeID edge = bfsEdges[i];
 
-        // `parentIdx` references the parent of the current edge in the
-        // frontier entries array
+        if (_edgeTypeConstraint) {
+            if ((*_bfsEdgeTypes)[i] != *_edgeTypeConstraint) {
+                continue;
+            }
+        }
+
         const size_t parentIdx = _depthStart + bfsIndices[i];
 
-        // Per-path edge uniqueness check - O(depth) walk up parent chain
-        // To check if the edge was already encountered in the current path
         if (edgeUsedInPath(parentIdx, edge)) {
             continue;
         }
 
-        // Append new entry to the persistent frontier entries store
         const size_t newIdx = _allEntries.size();
         _allEntries.push_back(FrontierEntry {
             .node = intermediate,
@@ -272,18 +263,15 @@ void PathExplorerProcessor<Dir>::execute() {
             .sourceIdx = _allEntries[parentIdx].sourceIdx,
         });
 
-        // If the current depth is at least minHops, write the path to the output
-        // The path is reconstructed by walking up the parent chain
         if (_depth >= _minHops) {
             _outputIndices->push_back(_allEntries[parentIdx].sourceIdx);
             outputTargets->push_back(intermediate);
             EntityList& p = outputPaths->emplace_back();
             reconstructPath(newIdx, p);
+            _emittedRows++;
         }
     }
 
-    // Current depth fully expanded - advance to next depth. Next execute()
-    // call will trigger Step 2, as well as Step 1 if the input chunk is exhausted
     if (!_bfsWriter->isValid()) {
         _depthStart = _depthEnd;
         _depthEnd = _allEntries.size();

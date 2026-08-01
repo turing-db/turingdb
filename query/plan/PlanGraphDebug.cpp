@@ -1,5 +1,6 @@
 #include "PlanGraphDebug.h"
 
+#include <optional>
 #include <range/v3/view/enumerate.hpp>
 
 #include "expr/Expr.h"
@@ -13,6 +14,7 @@
 #include "nodes/JoinNode.h"
 #include "nodes/LoadJsonlNode.h"
 #include "nodes/OrderByNode.h"
+#include "nodes/PathExplorerNode.h"
 #include "nodes/ProcedureEvalNode.h"
 #include "nodes/UnwindNode.h"
 #include "nodes/VarNode.h"
@@ -586,13 +588,20 @@ void PlanGraphDebug::dumpMermaidContent(std::ostream& output, const GraphView& v
             case PlanGraphOpcode::LOAD_COMMIT:
             case PlanGraphOpcode::INSTALL_EXTENSION:
             case PlanGraphOpcode::SHOW_EXTENSIONS:
-            case PlanGraphOpcode::PATH_EXPLORER:
             case PlanGraphOpcode::CREATE_PROPERTY_INDEX:
             case PlanGraphOpcode::INDEX_LOOKUP:
             case PlanGraphOpcode::DROP_INDEX:
             case PlanGraphOpcode::MERGE_DATAPARTS:
             // No extra info required
             break;
+
+            case PlanGraphOpcode::PATH_EXPLORER: {
+                const auto* n = dynamic_cast<PathExplorerNode*>(node.get());
+                const std::optional<EdgeTypeID>& edgeType = n->getEdgeTypeConstraint();
+                if (edgeType) {
+                    output << "        __edge_type__: " << edgeTypeMap.getName(*edgeType).value() << "\n";
+                }
+            } break;
 
             case PlanGraphOpcode::_SIZE:
             case PlanGraphOpcode::UNKNOWN:

@@ -518,6 +518,18 @@ PlanGraphNode* ReadStmtGenerator::generatePatternElementVariableLengthPath(PlanG
         } break;
     }
 
+    const std::span edgeTypes = edge->getData()->edgeTypeConstraints();
+    if (edgeTypes.size() > 1) {
+        throwError("Only one edge type constraint is supported for now", edge);
+    } else if (!edgeTypes.empty()) {
+        const std::optional edgeType = _graphMetadata.edgeTypes().get(edgeTypes.front());
+        if (!edgeType) {
+            throwError(fmt::format("Unknown edge type: {}", edgeTypes.front()), edge);
+        }
+
+        expandNode->setEdgeTypeConstraint(edgeType.value());
+    }
+
     _variables->setProducer(edgeDecl, expandNode);
     return expandNode;
 }
