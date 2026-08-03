@@ -26,8 +26,8 @@ void Procedure::setDeallocCallback(DeallocCallback cb) {
     _deallocCallback = cb;
 }
 
-void Procedure::setReportsInputRows(bool reportsInputRows) {
-    _reportsInputRows = reportsInputRows;
+void Procedure::setIndices(bool indices) {
+    _indices = indices;
 }
 
 void Procedure::addReturnValue(std::string_view name, ProcedureType type) {
