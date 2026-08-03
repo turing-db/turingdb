@@ -102,6 +102,17 @@ void FunctionDecls::initDefault() {
     avgDouble->setReturnTypes({{EvaluatedType::Double}});
     avgDouble->setIsAggregate(true);
 
+    // sum() enabled for v3 analyzer 
+    FunctionSignature* sumInt = createFunction("sum");
+    sumInt->setArguments({EvaluatedType::Integer});
+    sumInt->setReturnTypes({{EvaluatedType::Integer}});
+    sumInt->setIsAggregate(true);
+
+    FunctionSignature* sumDouble = createFunction("sum");
+    sumDouble->setArguments({EvaluatedType::Double});
+    sumDouble->setReturnTypes({{EvaluatedType::Double}});
+    sumDouble->setIsAggregate(true);
+
     // Conversion functions
     FunctionSignature* toInteger = createFunction("toInteger");
     toInteger->setArguments({EvaluatedType::String});
