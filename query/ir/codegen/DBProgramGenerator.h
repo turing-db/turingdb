@@ -91,11 +91,8 @@ private:
     using YieldedColumn = std::pair<std::string_view, mlir::Value>;
     std::vector<YieldedColumn> _yieldedColumns;
 
-    // What a CALL left behind: dropped from its carry set because nothing read it again, so
-    // it no longer flows with the rows. Its last value is still in _varMap / _yieldedColumns,
-    // but that value belongs to a loop the dataflow has left, so collectLiveColumns must not
-    // offer it to a later op - a filter taking "everything in flight" would otherwise mix
-    // columns from two different loops.
+    // Columns a CALL dropped from its carry set because nothing read them again. Their last
+    // value belongs to a loop the dataflow has left, so collectLiveColumns must skip them.
     std::unordered_set<const VariableDependency*> _deadVariables;
     std::unordered_set<size_t> _deadYieldedColumns;
 
