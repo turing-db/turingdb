@@ -198,10 +198,6 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
 void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
     Projection* projection = returnSt->getProjection();
 
-    if (projection->hasOrderBy()) {
-        analyze(projection->getOrderBy());
-    }
-
     if (projection->hasSkip()) {
         analyze(projection->getSkip());
     }
@@ -266,6 +262,13 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
 
         isAggregate |= item->isAggregate();
         hasGroupingKeys |= !item->isAggregate();
+    }
+
+    // An ORDER BY key may name an alias the projection declares - the x of
+    // RETURN n.name AS x ORDER BY x - so the items are analyzed first, and the key finds
+    // the alias among the variables of the query
+    if (projection->hasOrderBy()) {
+        analyze(projection->getOrderBy());
     }
 
     if (!_isV3) { // only supported by MLIR v3
