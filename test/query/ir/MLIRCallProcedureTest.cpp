@@ -853,6 +853,42 @@ private:
     std::vector<Row> _rows;
 };
 
+// Collects the (id, copy, value) rows of a chain of calls: the first call's node yield
+// followed by one Int64 yield from each of the two calls after it, so a test can assert
+// what survived being carried past several calls rather than one.
+class ChainedCallSink : public NLOutputSink {
+public:
+    using Row = std::tuple<uint64_t, types::Int64::Primitive, types::Int64::Primitive>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 3u);
+
+        const auto* ids = dynamic_cast<const ColumnVector<NodeID>*>(chunks[0]);
+        const auto* copies = dynamic_cast<const ColumnVector<types::Int64::Primitive>*>(chunks[1]);
+        const auto* values = dynamic_cast<const ColumnVector<types::Int64::Primitive>*>(chunks[2]);
+        ASSERT_NE(ids, nullptr);
+        ASSERT_NE(copies, nullptr);
+        ASSERT_NE(values, nullptr);
+        ASSERT_EQ(ids->size(), copies->size());
+        ASSERT_EQ(ids->size(), values->size());
+
+        const auto& idRaw = ids->getRaw();
+        const auto& copyRaw = copies->getRaw();
+        const auto& valueRaw = values->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.emplace_back(idRaw[rowIndex].getValue(), copyRaw[rowIndex], valueRaw[rowIndex]);
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
 // Collects the rows of a projection of only constants, which are emitted from a
 // ColumnConst broadcast against the driving loop's row count rather than a per-row
 // column.
@@ -1756,6 +1792,35 @@ TEST_F(MLIRCallProcedureTest, cypherCallReturnsAStringListAndAnEmbedding) {
         {3, {}, {4.5f, 7.5f}},
         {4, {"alpha"}, {6.0f, 10.0f}},
     };
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(MLIRCallProcedureTest, cypherThreeChainedCallsWithoutMatch) {
+    auto graph = buildLabelledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Three calls and no MATCH, so the first call opens the dataflow and each one after it
+    // reads what an earlier call yielded rather than what a traversal matched:
+    //   test.twoNodes emits nodes 0 and 1
+    //   test.expandNodeID(id) emits `id % 3` rows - nothing for 0, one row (copy 100) for 1
+    //   test.fanOutNodeID(id) emits three rows per node - 10, 11, 12 for node 1
+    // `id` therefore has to survive being carried past the second call to be the third's
+    // argument, and `copy` past the third to be projected, so this is the one case where a
+    // yielded column is carried through more than one call.
+    ChainedCallSink sink;
+    runQuery("CALL test.twoNodes() YIELD id "
+             "CALL test.expandNodeID(id) YIELD copy "
+             "CALL test.fanOutNodeID(id) YIELD value "
+             "RETURN id, copy, value",
+             graph.get(),
+             reader.getView(),
+             sink,
+             /*chunkSize=*/2);
+
+    std::vector<ChainedCallSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<ChainedCallSink::Row> expected {{1, 100, 10}, {1, 100, 11}, {1, 100, 12}};
     EXPECT_EQ(rows, expected);
 }
 
