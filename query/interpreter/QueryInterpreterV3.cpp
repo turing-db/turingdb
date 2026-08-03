@@ -24,6 +24,8 @@
 #include "views/GraphView.h"
 
 #include "CompilerException.h"
+#include "FatalException.h"
+#include "TuringException.h"
 #include "TuringTime.h"
 
 using namespace db;
@@ -137,6 +139,16 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
     try {
         generator.generate(&ast);
     } catch (const CompilerException& e) {
+        status.setStatus(QueryStatus::Status::PLAN_ERROR);
+        status.setMessage(e.what());
+        return;
+    } catch (const FatalException& e) {
+        status.setStatus(QueryStatus::Status::PLAN_ERROR);
+        status.setMessage(std::string("Unexpected exception: ") + e.what());
+        return;
+    } catch (const TuringException& e) {
+        // The generator rejects unsupported constructs with a plain TuringException:
+        // those are deliberate user-input rejections, not internal errors
         status.setStatus(QueryStatus::Status::PLAN_ERROR);
         status.setMessage(e.what());
         return;
