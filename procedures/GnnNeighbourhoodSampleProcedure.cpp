@@ -84,8 +84,10 @@ void prepareImpl(ProcedureState* proc) {
         seed = signedSeed;
     }
 
-    data.writer = std::make_unique<NeighbourhoodSampleChunkWriter>(view, inputNodeIDs,
-                                                                   sampleSize, seed);
+    data.writer = std::make_unique<NeighbourhoodSampleChunkWriter>(view,
+                                                                   inputNodeIDs,
+                                                                   sampleSize,
+                                                                   seed);
     data.writer->setOutputColumns(srcCol, edgeCol, edgeTypeCol, tgtCol);
     data.writer->setIndices(indices);
 }
