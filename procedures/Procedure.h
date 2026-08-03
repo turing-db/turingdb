@@ -49,9 +49,9 @@ public:
     void addArgument(std::string_view name, ProcedureType type);
     void addOptionalArgument(std::string_view name, ProcedureType type);
 
-    // True if a procedure supports indices to report input rows corresponding to its output rows
-    bool reportsInputRows() const { return _reportsInputRows; }
-    void setReportsInputRows(bool reportsInputRows);
+    // True if a procedure reports the input row behind each row it emits
+    bool getIndices() const { return _indices; }
+    void setIndices(bool indices);
 
     // Arguments and return values
     const ProcedureTypeVector& returnValues() const { return _returnValues; }
@@ -82,7 +82,7 @@ private:
     ExecuteCallback _execCallback {nullptr};
     AllocCallback _allocCallback {nullptr};
     DeallocCallback _deallocCallback {nullptr};
-    bool _reportsInputRows {false};
+    bool _indices {false};
     ProcedureTypeVector _returnValues;
     ProcedureTypeVector _argumentTypes;
     bool _hasIndices {false};
