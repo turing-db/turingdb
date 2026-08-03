@@ -32,6 +32,7 @@
 
 #include "Graph.h"
 #include "SimpleGraph.h"
+#include "TuringException.h"
 #include "SystemAccessor.h"
 #include "SystemManager.h"
 #include "columns/ColumnIDs.h"
@@ -456,6 +457,77 @@ TEST_F(OrderByTest, constantKeyIsAllowedAfterDistinct) {
 
     std::sort(rows.begin(), rows.end());
     EXPECT_EQ(std::unique(rows.begin(), rows.end()), rows.end());
+}
+
+// A container is constant when every element it is written out of is: the map and the
+// list here hold literals only, so each of them holds one value in every row and orders
+// nothing, exactly as the scalar constants do.
+TEST_F(OrderByTest, constantContainerKeysGenerateNoSort) {
+    const std::vector<std::string> keys = {"{a: 1}", "{a: 1, b: 'x'}", "[1, 2]", "[]"};
+
+    for (const std::string& key : keys) {
+        const std::string query = "MATCH (n) RETURN n.name ORDER BY " + key;
+
+        mlir::MLIRContext context;
+        mlir::OwningOpRef<mlir::ModuleOp> module;
+        generateProgram(query, context, module);
+
+        size_t sortCount = 0;
+        module->walk([&](mlir::db::Sort) { sortCount++; });
+
+        EXPECT_EQ(sortCount, 0u) << "query: " << query;
+    }
+}
+
+// A map holding a property reads a row through it, so it is not constant and the key is
+// not dropped. The generator has no column to read a map into, so the query is rejected
+// - which is the point: a key that varies must never be silently discarded, and the
+// error names the unsupported map rather than answering in an order nothing decided
+TEST_F(OrderByTest, mapKeyReadingARowIsNotDropped) {
+    mlir::MLIRContext context;
+    mlir::OwningOpRef<mlir::ModuleOp> module;
+
+    EXPECT_THROW(generateProgram("MATCH (n) RETURN n.name ORDER BY {a: n.age}", context, module),
+                 TuringException);
+}
+
+// The list mirror of the case above, rejected one step earlier: the analyzer does not
+// accept a non-literal list element yet, so a list key cannot read a row today. The
+// element flags are propagated all the same, so the day it does, the key varies with
+// them instead of being taken for a constant
+TEST_F(OrderByTest, listKeyReadingARowIsRejected) {
+    mlir::MLIRContext context;
+    mlir::OwningOpRef<mlir::ModuleOp> module;
+
+    EXPECT_THROW(generateProgram("MATCH (n) RETURN n.name ORDER BY [1, n.age]", context, module),
+                 TuringException);
+}
+
+// A call over constant arguments answers the same in every row, so it ties them all and
+// is dropped like any other constant: this is ORDER BY n.name, keyed once
+TEST_F(OrderByTest, constantCallKeyIsDropped) {
+    mlir::MLIRContext context;
+    mlir::OwningOpRef<mlir::ModuleOp> module;
+    generateProgram("MATCH (n) RETURN n.name ORDER BY toInteger('42'), n.name", context, module);
+
+    size_t sortCount = 0;
+
+    module->walk([&](mlir::db::Sort sortOp) {
+        sortCount++;
+
+        EXPECT_EQ(sortOp.getColumns().size(), 1u);
+        ASSERT_EQ(sortOp.getKeyColumns().size(), 1u);
+        EXPECT_EQ(sortOp.getKeyColumns()[0], 0);
+    });
+
+    EXPECT_EQ(sortCount, 1u);
+}
+
+// A map written in a pattern is pulled out of the expression it was parsed as and
+// analyzed as the pattern's properties, so the property equality it stands for is
+// unaffected by the map literal analysis the ORDER BY cases above rest on
+TEST_F(OrderByTest, patternPropertyMapIsUnaffected) {
+    expectNames("MATCH (n {name: 'Remy'}) RETURN n.name", Names {"Remy"});
 }
 
 // The mirror case: a key the projection does not carry has no column to be matched to,

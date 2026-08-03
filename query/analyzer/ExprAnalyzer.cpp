@@ -356,20 +356,27 @@ void ExprAnalyzer::analyzeLiteralExpr(LiteralExpr* expr) {
         } break;
         case Literal::Kind::LIST: {
             expr->setType(EvaluatedType::List);
-            auto* list = static_cast<ListLiteral*>(expr->getLiteral());
-            for (Expr* item : list->items()) {
-                const Expr::Kind itemKind = item->getKind();
-                const bool itemLiteral = itemKind == Expr::Kind::LITERAL;
-
-                if (!itemLiteral) {
-                    throwError("Non-literal list elements are not yet supported", item);
-                }
-
-                analyzeExpr(item);
-            }
+            ListLiteral* list = static_cast<ListLiteral*>(expr->getLiteral());
+            analyzeListElements(expr, list->items());
         } break;
         case Literal::Kind::MAP: {
             expr->setType(EvaluatedType::Map);
+
+            const MapLiteral* map = static_cast<const MapLiteral*>(literal);
+
+            // The keys of a map are symbols written in the query, so only its values can
+            // make it vary or aggregate
+            for (const auto& [propName, value] : *map) {
+                analyzeExpr(value);
+
+                if (value->isDynamic()) {
+                    expr->setDynamic();
+                }
+
+                if (value->isAggregate()) {
+                    expr->setAggregate();
+                }
+            }
         } break;
         case Literal::Kind::EMBEDDING: {
             const auto* embLit = static_cast<const EmbeddingLiteral*>(literal);
@@ -773,15 +780,29 @@ void ExprAnalyzer::registerEdgePatternDeclaration(const EdgePattern* edge) {
 }
 
 void ExprAnalyzer::analyzeListExpr(ListExpr* expr) {
-    for (Expr* item : *expr) {
-        const Expr::Kind itemKind = item->getKind();
-        const bool itemLiteral = itemKind == Expr::Kind::LITERAL;
+    analyzeListElements(expr, expr->getElements());
+}
 
-        if (!itemLiteral) {
-            throwError("Non-literal list elements are not yet supported", item);
+void ExprAnalyzer::analyzeListElements(Expr* expr, std::span<Expr* const> elements) {
+    for (Expr* element : elements) {
+        const Expr::Kind elementKind = element->getKind();
+        const bool elementLiteral = elementKind == Expr::Kind::LITERAL;
+
+        if (!elementLiteral) {
+            throwError("Non-literal list elements are not yet supported", element);
         }
 
-        analyzeExpr(item);
+        analyzeExpr(element);
+
+        // A list is written element by element, and an element is an expression of its
+        // own: the [1, n.age] of ORDER BY [1, n.age] reads a row through its second
+        if (element->isDynamic()) {
+            expr->setDynamic();
+        }
+
+        if (element->isAggregate()) {
+            expr->setAggregate();
+        }
     }
 }
 
