@@ -30,6 +30,8 @@ target_link_libraries(test_query_ir_collect_row_alignment PRIVATE turing_db_exam
 
 add_ir_tests(test_query_ir_collect_drain CollectDrainTest.cpp)
 target_link_libraries(test_query_ir_collect_drain PRIVATE turing_db_examples_s)
+
+add_ir_tests(test_query_ir_collect_result_type CollectResultTypeTest.cpp)
 add_ir_tests(test_query_ir_dbdialect DBDialectTest.cpp)
 add_ir_tests(test_query_ir_nldialect NLDialectTest.cpp)
 
