@@ -269,6 +269,38 @@ TEST_F(OrderByTest, projectedNamesAscending) {
     expectNames("MATCH (n) RETURN n.name ORDER BY n.name", nodeNamesAscending);
 }
 
+// A key naming the alias the projection gives an item: the alias stands for the column
+// that item returns, so ordering by it orders by that column.
+TEST_F(OrderByTest, projectedAliasAsKey) {
+    expectNames("MATCH (n) RETURN n.name AS personName ORDER BY personName", nodeNamesAscending);
+}
+
+// The alias names the column the projection already carries, so the sort takes it rather
+// than reading the property a second time into a column of its own.
+TEST_F(OrderByTest, projectedAliasKeyIsNotDuplicated) {
+    mlir::MLIRContext context;
+    mlir::OwningOpRef<mlir::ModuleOp> module;
+    generateProgram("MATCH (n) RETURN n.name AS personName ORDER BY personName", context, module);
+
+    size_t propertyReads = 0;
+    size_t sortCount = 0;
+
+    module->walk([&](mlir::Operation* operation) {
+        if (mlir::isa<mlir::db::GetNodeProperties>(operation)) {
+            propertyReads++;
+        } else if (mlir::db::Sort sortOp = mlir::dyn_cast<mlir::db::Sort>(operation)) {
+            sortCount++;
+
+            EXPECT_EQ(sortOp.getColumns().size(), 1u);
+            ASSERT_EQ(sortOp.getKeyColumns().size(), 1u);
+            EXPECT_EQ(sortOp.getKeyColumns()[0], 0);
+        }
+    });
+
+    EXPECT_EQ(sortCount, 1u);
+    EXPECT_EQ(propertyReads, 1u);
+}
+
 // Two keys, the first with real ties: every out-edge row sorted by source ascending
 // and - within one source - target descending.
 TEST_F(OrderByTest, edgesBySourceThenTargetDescending) {

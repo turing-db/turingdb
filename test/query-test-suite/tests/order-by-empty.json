@@ -3,7 +3,7 @@
   "graph": "simpledb",
   "query": "MATCH (n) WHERE n <> n RETURN n, n.name ORDER BY n.name",
   "expect": {
-    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n        __predicate__ n NOTEQUAL n\n    `\"]\n    3[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    4[\"`\n        __ORDER_BY__\n        __item__: v2, ASC\n    `\"]\n    5[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->4\n    4-->5",
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n        __predicate__ n NOTEQUAL n\n    `\"]\n    3[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    4[\"`\n        __ORDER_BY__\n        __item__: v1, ASC\n    `\"]\n    5[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->4\n    4-->5",
     "result": "n,n.name",
     "resultJson": "{\"header\":{\"column_names\":[\"n\",\"n.name\"],\"column_types\":[\"UInt64\",\"String\"]},\"data\":[[[],[]]]}"
   },

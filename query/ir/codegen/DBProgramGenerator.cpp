@@ -123,11 +123,25 @@ EdgeMetadata::EdgeType reverseEdge(EdgeMetadata::EdgeType type) {
 // RETURN n.name ORDER BY n.name is written twice, so it is parsed twice - which is why
 // the two are matched by structure rather than by identity
 size_t findProjectedColumn(const Projection::Items& items, const Expr* key) {
+    const VarDecl* keyDecl = key->getExprVarDecl();
+
+    // A key may also name the alias an item was given - the x of
+    // RETURN n.name AS x ORDER BY x - and the alias is one variable, declared once, so
+    // the key and the item it reads share its declaration. Every other expression is
+    // given a declaration of its own, which is why an unnamed one never matches
+    const bool keyNamesAVariable = keyDecl && !keyDecl->isUnnamed();
+
     size_t index = 0;
     for (const Projection::ReturnItem& item : items) {
-        const Expr* const* itemExpr = std::get_if<Expr*>(&item);
-        if (itemExpr && StructuralExpressionComparator::equal(*itemExpr, key)) {
-            return index;
+        if (const Expr* const* itemExpr = std::get_if<Expr*>(&item)) {
+            const Expr* projectedExpr = *itemExpr;
+
+            const bool namesTheItem = keyNamesAVariable && projectedExpr->getExprVarDecl() == keyDecl;
+            const bool readsTheItem = StructuralExpressionComparator::equal(projectedExpr, key);
+
+            if (namesTheItem || readsTheItem) {
+                return index;
+            }
         }
 
         index++;

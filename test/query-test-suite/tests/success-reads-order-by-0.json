@@ -3,7 +3,7 @@
   "graph": "simpledb",
   "query": "MATCH (n) RETURN n, n.name ORDER BY n.name",
   "expect": {
-    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    4[\"`\n        __ORDER_BY__\n        __item__: v1, ASC\n    `\"]\n    5[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->4\n    4-->5",
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    4[\"`\n        __ORDER_BY__\n        __item__: v0, ASC\n    `\"]\n    5[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->3\n    2-->1\n    3-->4\n    4-->5",
     "result": "n,n.name\n1,Adam\n10,Animals\n4,Bio\n2,Computers\n5,Cooking\n15,Cyrus\n17,Doruk\n3,Eighties\n6,Ghosts\n13,Gym\n16,JiuJitsu\n9,Luc\n11,Martina\n8,Maxime\n7,Padel\n0,Remy\n12,Suhas\n14,Travel",
     "resultJson": "{\"header\":{\"column_names\":[\"n\",\"n.name\"],\"column_types\":[\"UInt64\",\"String\"]},\"data\":[[[1,10,4,2,5,15,17,3,6,13,16,9,11,8,7,0,12,14],[\"Adam\",\"Animals\",\"Bio\",\"Computers\",\"Cooking\",\"Cyrus\",\"Doruk\",\"Eighties\",\"Ghosts\",\"Gym\",\"JiuJitsu\",\"Luc\",\"Martina\",\"Maxime\",\"Padel\",\"Remy\",\"Suhas\",\"Travel\"]]]}"
   },
