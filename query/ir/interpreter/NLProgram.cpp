@@ -67,6 +67,17 @@ void NLCollectState::reset() {
 
     _groupPositions.clear();
     _listBuffer.clear();
+
+    // An ungrouped collect has exactly one group - the empty key tuple - and that group
+    // exists whether or not a row ever arrives: collect() over no row is the empty list,
+    // not the absence of a row. Creating it here rather than on the first update keeps
+    // the group count right for a producer that yields nothing, so the drain still emits
+    // that one row.
+    if (_keyColumns.empty()) {
+        _key.clear();
+        _groupTable.assign(_key);
+        _groupPositions.resize(1);
+    }
 }
 
 bool NLSortState::rowLess(size_t leftRow, size_t rightRow) const {

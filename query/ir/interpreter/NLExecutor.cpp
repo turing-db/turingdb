@@ -2375,8 +2375,10 @@ void NLExecutor::runCollectLoop(NLExecutionContext* context, NLFunctionData* dat
 
     // Re-chunk the groups: each step slices the next chunk of key values from the key
     // buffers and materializes one list cell per group (a ListView over that group's
-    // run in the list buffer), then runs the body. An empty result runs the body zero
-    // times, so a collect over no row emits nothing.
+    // run in the list buffer), then runs the body. A grouped collect over no row has no
+    // group, so the body runs zero times and it emits nothing; an ungrouped collect
+    // always carries the single group the reset created, so it emits exactly one row -
+    // holding the empty list when no value was folded.
     for (size_t offset = 0; offset < totalGroups; offset += chunkSize) {
         const size_t stepGroups = std::min(chunkSize, totalGroups - offset);
 
