@@ -1785,10 +1785,8 @@ def DeleteEdge : NLOp<"delete_edge"> {
 /**
 * ProcedureInit
 */
-// NOT Pure: driving the iterator runs the procedure's execute callback, so two
-// iterators over one call must never be CSE'd into one and an unread one must not
-// be DCE'd. Unlike nl.sort - whose accumulator is already full, making the emit a
-// deterministic read - the rows here are produced by the callback itself.
+// NOT Pure: driving the iterator runs the procedure's execute callback, so no CSE of two
+// iterators over one call and no DCE of an unread one.
 def ProcedureInit : NLOp<"procedure_init", [AttrSizedOperandSegments]> {
   let summary = "Create a database iterator driving a procedure over its arguments";
   let description = [{

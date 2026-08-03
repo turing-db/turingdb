@@ -141,11 +141,6 @@ private:
     void generateSet(const CypherAST* ast);
     void generateDelete(const CypherAST* ast);
 
-    // Generate a db.call_procedure for each CALL of the query, after the traversal and
-    // its filters, so a call reads the rows the MATCH has narrowed to. The call's
-    // arguments are its argument expressions' columns, its yielded return values become
-    // the columns the projection reads, and the rows already in flight ride through its
-    // carry set so they stay aligned with what the procedure emitted.
     void generateCalls(const CypherAST* ast);
     void generateCall(const CallStmt* callStmt, const VariableNames& usedAfterCall);
 
@@ -153,11 +148,6 @@ private:
     // the call has run - so the predicate reads the rows the procedure emitted.
     void generateYieldFilter(const YieldItems* yieldItems);
 
-    // The variable names the query still reads once a call has run: the arguments of the
-    // calls written after it, and whatever the projection returns. Nothing else can read a
-    // column by then - the traversal, its constraints and its filters are all generated
-    // before the calls - so a name absent here belongs to a column that is dead at the
-    // call and need not be carried past it.
     void collectNamesUsedAfterCall(const CallStmt* call,
                                    llvm::ArrayRef<const CallStmt*> laterCalls,
                                    const ReturnStmt* returnStmt,
@@ -176,10 +166,6 @@ private:
     // dead, so it stops being in flight for every later op too.
     void dropUnusedLiveColumns(const VariableNames& usedAfterCall, LiveColumns& live);
 
-    // Generate a call that reads none of the rows already in flight: it produces the same
-    // rows for every one of them, so the two are crossed. What the query has matched so
-    // far moves into one factor of a db.cross_product and the call becomes the other,
-    // which is the shape a disconnected pattern already lowers to.
     void generateCrossedCall(std::string_view procedureName,
                              llvm::ArrayRef<mlir::Attribute> yieldedNames,
                              llvm::ArrayRef<std::string_view> yieldedVariables,
