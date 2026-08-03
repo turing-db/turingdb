@@ -1755,10 +1755,12 @@ void NLExecutor::runSortLoop(NLExecutionContext* context, NLFunctionData* data) 
     const size_t chunkSize = context->getChunkSize();
     ColumnVector<size_t>* indices = loopData->getIndices();
 
+    const NLLimitState* limit = loopData->getLimit();
+
     // Re-chunk the sorted rows: each step gathers the next chunkSize rows, in
     // permutation order, into the loop variables, then runs the body (nl.output).
     // The last chunk may be partial; an empty result runs the body zero times.
-    for (size_t offset = 0; offset < totalRows; offset += chunkSize) {
+    const auto runIteration = [&](size_t offset) {
         const size_t stepRows = std::min(chunkSize, totalRows - offset);
 
         std::vector<size_t>& indicesRaw = indices->getRaw();
@@ -1770,6 +1772,16 @@ void NLExecutor::runSortLoop(NLExecutionContext* context, NLFunctionData* data) 
         }
 
         runBody(context, loopBody);
+    };
+
+    if (limit) {
+        for (size_t offset = 0; offset < totalRows && limit->getRemaining() > 0; offset += chunkSize) {
+            runIteration(offset);
+        }
+    } else {
+        for (size_t offset = 0; offset < totalRows; offset += chunkSize) {
+            runIteration(offset);
+        }
     }
 }
 
@@ -1972,12 +1984,14 @@ void NLExecutor::runGroupAggregateLoop(NLExecutionContext* context, NLFunctionDa
     std::vector<NLGroupAggregateState::KeyColumn>& keyColumns = state->keyColumns();
     std::vector<NLGroupAggregateState::Aggregate>& aggregates = state->aggregates();
 
+    const NLLimitState* limit = loopData->getLimit();
+
     // Re-chunk the accumulated groups: each step materializes the next chunk of
     // group rows - the key values sliced from the buffers and each aggregate
     // finalized from the per-group state - into the loop variables, then runs the
     // body (the nl.output) per chunk. An empty result (no group) runs the body zero
     // times, so a grouped aggregate over no row emits nothing.
-    for (size_t offset = 0; offset < totalGroups; offset += chunkSize) {
+    const auto runIteration = [&](size_t offset) {
         const size_t stepGroups = std::min(chunkSize, totalGroups - offset);
 
         for (const NLGroupAggregateState::KeyColumn& keyColumn : keyColumns) {
@@ -1989,6 +2003,16 @@ void NLExecutor::runGroupAggregateLoop(NLExecutionContext* context, NLFunctionDa
         }
 
         runBody(context, loopBody);
+    };
+
+    if (limit) {
+        for (size_t offset = 0; offset < totalGroups && limit->getRemaining() > 0; offset += chunkSize) {
+            runIteration(offset);
+        }
+    } else {
+        for (size_t offset = 0; offset < totalGroups; offset += chunkSize) {
+            runIteration(offset);
+        }
     }
 }
 

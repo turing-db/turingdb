@@ -980,6 +980,23 @@ TEST_F(GroupAggregateTest, limitCapsTheEmittedGroups) {
     EXPECT_EQ(allSink.getTotalRows(), 2u);
 }
 
+TEST_F(GroupAggregateTest, limitStopsTheEmitLoopEarly) {
+    auto graph = buildManyTeamGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Four single-node groups at chunk size 1: the emit loop materializes one group
+    // per step, so an unbudgeted drain would materialize all four and hand the sink
+    // three empty windows once the budget is spent. LIMIT 1 budgets the emit loop, so
+    // it must stop after the first group - one call, not four.
+    CountingSink sink;
+    const std::string program = groupCountStarLimitProgram(1);
+    runLoweredProgram(program.c_str(), reader.getView(), sink, /*chunkSize=*/1);
+
+    EXPECT_EQ(sink.getTotalRows(), 1u);
+    EXPECT_EQ(sink.getCalls(), 1u);
+}
+
 TEST_F(GroupAggregateTest, lowersGroupAggregateLimitToALimitOnTheEmitLoopOnly) {
     auto graph = buildTeamGraph();
     const FrozenCommitTx transaction = graph->openTransaction();

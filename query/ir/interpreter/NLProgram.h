@@ -868,11 +868,15 @@ public:
 
     ColumnVector<size_t>* getIndices() { return &_indices; }
 
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
 private:
     NLSortState* _state {nullptr};
+    NLLimitState* _limit {nullptr};
     std::vector<NLCarriedColumn> _columns;
     ColumnVector<size_t> _indices;
     NLStmtContainer _stmts;
@@ -1410,11 +1414,15 @@ public:
 
     NLGroupAggregateState* getState() const { return _state; }
 
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
 private:
     NLGroupAggregateState* _state {nullptr};
+    NLLimitState* _limit {nullptr};
     NLStmtContainer _stmts;
 };
 

@@ -4473,6 +4473,25 @@ TEST_F(DBLoweringTest, sortSkipLimitPagesTheSortedRowsAcrossChunks) {
     EXPECT_EQ(rows, expected);
 }
 
+TEST_F(DBLoweringTest, sortSkipLimitStopsTheEmitLoopEarly) {
+    auto graph = buildDiamondGraph();
+    addSecondPart(*graph);
+
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Six sorted rows at chunk size 1: the emit loop gathers one row per step, so an
+    // unbudgeted drain would re-chunk all six and hand the sink three empty windows
+    // once the budget is spent. SKIP 1 LIMIT 2 spends it on the second and third
+    // steps, so the drain must stop there - three calls, not six.
+    CountingSink sink;
+    const std::string program = sortSkipLimitNodesDescProgram(1, 2);
+    runLoweredProgram(program.c_str(), reader.getView(), sink, /*chunkSize=*/1);
+
+    EXPECT_EQ(sink.getTotalRows(), 2u);
+    EXPECT_EQ(sink.getCalls(), 3u);
+}
+
 TEST_F(DBLoweringTest, lowersSortSkipLimitToALimitOnTheEmitLoopOnly) {
     auto graph = buildDiamondGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
