@@ -38,8 +38,17 @@
 #include "NLInterpreter.h"
 #include "NLOps.h"
 #include "NLOutputSink.h"
+#include "QueryConfig.h"
+#include "QueryInterpreterV3.h"
+#include "SystemAccessor.h"
+#include "SystemManager.h"
+#include "TuringDB.h"
+#include "dataframe/Dataframe.h"
+#include "versioning/ChangeID.h"
+#include "versioning/CommitHash.h"
 
 #include "TuringTest.h"
+#include "TuringTestEnv.h"
 
 using namespace db;
 using namespace turing::test;
@@ -302,6 +311,26 @@ public:
 private:
     size_t _calls {0};
     size_t _totalRows {0};
+};
+
+// Collects a single-column uint64 output (scalar aggregate like count(*)).
+class ScalarUInt64Sink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* values = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[0]);
+        ASSERT_NE(values, nullptr);
+
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _values.push_back(values->getRaw()[rowIndex]);
+        }
+    }
+
+    const std::vector<uint64_t>& getValues() const { return _values; }
+
+private:
+    std::vector<uint64_t> _values;
 };
 
 // MATCH (a) RETURN a.team, count(*): group the scanned nodes by their team and
@@ -1054,6 +1083,135 @@ TEST_F(GroupAggregateTest, lowersGroupAggregateLimitToALimitOnTheEmitLoopOnly) {
     auto emitLoop = mlir::dyn_cast<mlir::nl::For>(*groupOp.getResult().user_begin());
     ASSERT_TRUE(emitLoop);
     EXPECT_EQ(emitLoop.getLimit(), handle);
+}
+
+// End-to-end tests that drive aggregate queries from Cypher text all the way
+// through parsing, analysis, DBProgramGenerator codegen, NL lowering, and
+// NLInterpreter execution via QueryInterpreterV3.
+class GroupAggregateCypherTest : public TuringTest {
+protected:
+    void initialize() override {
+        _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
+        _interp3 = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+
+        SystemAccessor system = _env->getSystemManager().accessUnique();
+        system.createGraph(_graphName);
+    }
+
+    // Runs a CREATE query in its own change and submits it.
+    void create(std::string_view query) {
+        ChangeID changeID;
+        {
+            SystemAccessor system = _env->getSystemManager().accessUnique();
+            const auto res = system.newChange(_graphName);
+            ASSERT_TRUE(res);
+            changeID = res.value()->id();
+        }
+
+        CountingSink discardSink;
+        QueryStatus createStatus;
+        _interp3->execute(createStatus, query, _graphName, CommitHash::head(), changeID, &_env->getMem(), &discardSink);
+        ASSERT_TRUE(createStatus.isOk()) << "CREATE failed: " << createStatus.getError();
+
+        QueryCallbacks callbacks;
+        callbacks.setOnOutputData([](const Dataframe*) {});
+        const QueryState submitState(_graphName, &_env->getMem(), &_queryConfig, &callbacks, CommitHash::head(), changeID);
+        const QueryStatus submitStatus = _env->getDB().query("CHANGE SUBMIT", submitState);
+        ASSERT_TRUE(submitStatus.isOk()) << "CHANGE SUBMIT failed";
+    }
+
+    // Runs a read-only MATCH query against the committed head.
+    void match(std::string_view query, NLOutputSink& sink) {
+        QueryStatus status;
+        _interp3->execute(status, query, _graphName, CommitHash::head(), ChangeID::head(), &_env->getMem(), &sink);
+        ASSERT_TRUE(status.isOk()) << "MATCH failed: " << status.getError();
+    }
+
+    // Inserts 4 nodes: red/10, red/20, blue/100, blue (no score) into the graph.
+    void buildTeamGraph() {
+        create(R"(CREATE (:Node {team: "red", score: 10}), (:Node {team: "red", score: 20}), (:Node {team: "blue", score: 100}))");
+        create(R"(CREATE (:Node {team: "blue"}))");
+    }
+
+    const std::string _graphName = "teamGraph";
+    std::unique_ptr<TuringTestEnv> _env;
+    std::unique_ptr<QueryInterpreterV3> _interp3;
+    QueryConfig _queryConfig;
+};
+
+TEST_F(GroupAggregateCypherTest, scalarCountStar) {
+    buildTeamGraph();
+
+    ScalarUInt64Sink sink;
+    match("MATCH (n:Node) RETURN count(*)", sink);
+
+    // Four nodes, so the scalar count emits one row with value 4.
+    ASSERT_EQ(sink.getValues().size(), 1u);
+    EXPECT_EQ(sink.getValues()[0], 4u);
+}
+
+TEST_F(GroupAggregateCypherTest, groupedCountStar) {
+    buildTeamGraph();
+
+    GroupCountSink sink;
+    match("MATCH (n:Node) RETURN n.team, count(*)", sink);
+
+    std::vector<GroupCountSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<GroupCountSink::Row> expected {{"blue", 2}, {"red", 2}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(GroupAggregateCypherTest, groupedSum) {
+    buildTeamGraph();
+
+    GroupInt64Sink sink;
+    match("MATCH (n:Node) RETURN n.team, sum(n.score)", sink);
+
+    // red: 10+20=30; blue: 100 (the null score is ignored by sum).
+    std::vector<GroupInt64Sink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<GroupInt64Sink::Row> expected {{"blue", 100}, {"red", 30}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(GroupAggregateCypherTest, groupedMin) {
+    buildTeamGraph();
+
+    GroupInt64Sink sink;
+    match("MATCH (n:Node) RETURN n.team, min(n.score)", sink);
+
+    // red: min(10,20)=10; blue: one non-null score 100, so min=100.
+    std::vector<GroupInt64Sink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<GroupInt64Sink::Row> expected {{"blue", 100}, {"red", 10}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(GroupAggregateCypherTest, groupedMax) {
+    buildTeamGraph();
+
+    GroupInt64Sink sink;
+    match("MATCH (n:Node) RETURN n.team, max(n.score)", sink);
+
+    // red: max(10,20)=20; blue: one non-null score 100, so max=100.
+    std::vector<GroupInt64Sink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<GroupInt64Sink::Row> expected {{"blue", 100}, {"red", 20}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(GroupAggregateCypherTest, groupedAvg) {
+    buildTeamGraph();
+
+    GroupDoubleSink sink;
+    match("MATCH (n:Node) RETURN n.team, avg(n.score)", sink);
+
+    // red: (10+20)/2=15.0; blue: 100/1=100.0 (null ignored).
+    std::vector<GroupDoubleSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<GroupDoubleSink::Row> expected {{"blue", 100.0}, {"red", 15.0}};
+    EXPECT_EQ(rows, expected);
 }
 
 int main(int argc, char** argv) {

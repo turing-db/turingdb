@@ -1,4 +1,4 @@
-// MATCH (n) RETURN n, count (n)
+// MATCH (n) RETURN n, count(n)
 
 func.func @main() {
   %0 = db.scan_nodes() : !db.column<!storage.node_id>
