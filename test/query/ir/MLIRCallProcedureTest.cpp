@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -24,11 +26,15 @@
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
 #include "metadata/LabelSet.h"
+#include "metadata/PropertyType.h"
+#include "metadata/PropertyTypeMap.h"
 #include "reader/GraphReader.h"
 #include "versioning/Change.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
+#include "views/EntityPropertyView.h"
 #include "views/GraphView.h"
+#include "views/NodeView.h"
 #include "writers/DataPartBuilder.h"
 #include "writers/MetadataBuilder.h"
 
@@ -159,6 +165,72 @@ ProcedureData* expandAlloc() {
 }
 
 void expandDealloc(ProcedureData* data) {
+    delete data;
+}
+
+struct ScoreData : public ProcedureData {};
+
+// test.nodeScore(nodeIDs) YIELD score: reads each input node's `score` property out of the
+// graph and emits it. Unlike the other test procedures - which compute from the node ID
+// alone - this one goes through the graph view its context carries, so it exercises a
+// procedure that reads the store rather than just its argument column. A node carrying no
+// `score` emits nothing, so the property lookup also drives the filtering carry set.
+void scoreExecuteImpl(ProcedureState* procedureState) {
+    ScoreData& data = procedureState->data<ScoreData>();
+    const ProcedureContext* ctxt = procedureState->getContext();
+
+    const auto* nodeIDs = static_cast<const ColumnVector<NodeID>*>(data.getInputColumn(0));
+    auto* scores = static_cast<ColumnVector<types::Int64::Primitive>*>(data.getReturnColumn(0));
+    ColumnVector<size_t>* inputRowIndices = data.getInputRowIndices();
+
+    scores->clear();
+
+    const GraphReader reader(*ctxt->getGraphView());
+    const PropertyTypeMap& propTypes = reader.getMetadata().propTypes();
+
+    // Resolved by name, as a procedure declaring a property argument would have to: the
+    // schema is what turns "score" into the ID the node's properties are keyed by.
+    const std::optional<PropertyType> scoreType = propTypes.get("score");
+    if (!scoreType) {
+        procedureState->finish();
+        return;
+    }
+
+    const auto& nodeIDsRaw = nodeIDs->getRaw();
+    for (size_t inputRow = 0; inputRow < nodeIDsRaw.size(); inputRow++) {
+        const NodeView node = reader.getNodeView(nodeIDsRaw[inputRow]);
+        const types::Int64::Primitive* score = node.properties().tryGetProperty<types::Int64>(scoreType->_id);
+        if (!score) {
+            continue;
+        }
+
+        scores->push_back(*score);
+
+        if (inputRowIndices) {
+            inputRowIndices->push_back(inputRow);
+        }
+    }
+
+    procedureState->finish();
+}
+
+void scoreExecute(ProcedureState* procedureState) {
+    switch (procedureState->getStep()) {
+        case ProcedureState::Step::PREPARE:
+        case ProcedureState::Step::RESET:
+        break;
+
+        case ProcedureState::Step::EXECUTE:
+        scoreExecuteImpl(procedureState);
+        break;
+    }
+}
+
+ProcedureData* scoreAlloc() {
+    return new ScoreData();
+}
+
+void scoreDealloc(ProcedureData* data) {
     delete data;
 }
 
@@ -797,6 +869,15 @@ protected:
         fanOutProcedure->addReturnValue("value", ProcedureType::INT64);
         testNamespace->addProcedure(fanOutProcedure);
 
+        Procedure* scoreProcedure = new Procedure("nodeScore");
+        scoreProcedure->setAllocCallback(&scoreAlloc);
+        scoreProcedure->setDeallocCallback(&scoreDealloc);
+        scoreProcedure->setExecuteCallback(&scoreExecute);
+        scoreProcedure->setIndices(true);
+        scoreProcedure->addArgument("nodeIDs", ProcedureType::NODE);
+        scoreProcedure->addReturnValue("score", ProcedureType::INT64);
+        testNamespace->addProcedure(scoreProcedure);
+
         // Declares the report but never makes it - the only way to reach the runtime
         // check now that lowering refuses a carry set on a procedure that declares
         // nothing.
@@ -882,6 +963,38 @@ protected:
         builder.addEdge(0, node0, node2);
         builder.addEdge(0, node1, node4);
         builder.addEdge(0, node2, node3);
+
+        const auto submitResult = change->access().submit(*_jobSystem);
+        EXPECT_TRUE(submitResult);
+
+        return graph;
+    }
+
+    // Five nodes carrying an Int64 `score` property, except nodes 2 and 4, which carry
+    // none. test.nodeScore reads that property out of the graph, so the scores are
+    // deliberately unrelated to the node IDs - a procedure echoing its argument column
+    // would produce different rows - and the two nodes without one exercise the drop.
+    std::unique_ptr<Graph> buildScoreGraph() {
+        auto graph = Graph::create();
+
+        auto change = graph->newChange();
+        auto* commitBuilder = change->access().getTip();
+        auto& builder = commitBuilder->newBuilder();
+        auto& metadata = builder.getMetadata();
+
+        metadata.getOrCreateLabel("Player");
+        const PropertyTypeID scoreID = metadata.getOrCreatePropertyType("score", ValueType::Int64)._id;
+
+        const LabelSet labelset = LabelSet::fromList({0});
+        const NodeID node0 = builder.addNode(labelset);
+        const NodeID node1 = builder.addNode(labelset);
+        builder.addNode(labelset);
+        const NodeID node3 = builder.addNode(labelset);
+        builder.addNode(labelset);
+
+        builder.addNodeProperty<types::Int64>(node0, scoreID, 10);
+        builder.addNodeProperty<types::Int64>(node1, scoreID, 20);
+        builder.addNodeProperty<types::Int64>(node3, scoreID, 30);
 
         const auto submitResult = change->access().submit(*_jobSystem);
         EXPECT_TRUE(submitResult);
@@ -1285,6 +1398,47 @@ TEST_F(MLIRCallProcedureTest, cypherCallOverMatchedNodes) {
     std::vector<CarriedNodeSink::Row> rows;
     sink.sortedRows(rows);
     const std::vector<CarriedNodeSink::Row> expected {{1, 100}, {2, 200}, {2, 201}, {4, 400}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(MLIRCallProcedureTest, cypherCallReadsANodeProperty) {
+    auto graph = buildScoreGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // MATCH (n) CALL test.nodeScore(n) YIELD score RETURN n, score - a call whose rows come
+    // out of the graph rather than out of its argument column: it resolves "score" against
+    // the schema and reads the property off each matched node. Nodes 0, 1 and 3 carry one
+    // (10, 20, 30), so those pair with their node; 2 and 4 carry none and are dropped.
+    CarriedNodeSink sink;
+    runQuery("MATCH (n) CALL test.nodeScore(n) YIELD score RETURN n, score", graph.get(),
+             reader.getView(),
+             sink,
+             /*chunkSize=*/2);
+
+    std::vector<CarriedNodeSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<CarriedNodeSink::Row> expected {{0, 10}, {1, 20}, {3, 30}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(MLIRCallProcedureTest, cypherCallReadsANodePropertyWithoutCarryingTheNode) {
+    auto graph = buildScoreGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The same call projecting the property alone, so nothing is carried past it and the
+    // procedure is handed no row map. The scores must still be the ones read from the
+    // graph - the property read does not depend on the carry set.
+    Int64Sink sink;
+    runQuery("MATCH (n) CALL test.nodeScore(n) YIELD score RETURN score", graph.get(),
+             reader.getView(),
+             sink,
+             /*chunkSize=*/2);
+
+    std::vector<types::Int64::Primitive> rows = sink.rows();
+    std::sort(rows.begin(), rows.end());
+    const std::vector<types::Int64::Primitive> expected {10, 20, 30};
     EXPECT_EQ(rows, expected);
 }
 
