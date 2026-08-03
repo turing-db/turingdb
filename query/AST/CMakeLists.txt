@@ -24,7 +24,6 @@ set(ast_sources
     expr/FunctionInvocationExpr.cpp
     expr/IndexExpr.cpp
     expr/StructuralExpressionComparator.cpp
-    expr/ConstantExpressionDetector.cpp
 
     stmt/Stmt.cpp
     stmt/StmtContainer.cpp

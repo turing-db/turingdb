@@ -1,7 +1,3 @@
 add_turing_test(test_query_ast_structural_expression_comparator StructuralExpressionComparatorTest.cpp)
 target_link_libraries(test_query_ast_structural_expression_comparator
     PRIVATE turing_db_ast_s)
-
-add_turing_test(test_query_ast_constant_expression_detector ConstantExpressionDetectorTest.cpp)
-target_link_libraries(test_query_ast_constant_expression_detector
-    PRIVATE turing_db_ast_s)

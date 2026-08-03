@@ -1,5 +1,6 @@
 #pragma once
 
+#include <span>
 #include <string_view>
 #include <unordered_map>
 
@@ -79,6 +80,8 @@ private:
     const GraphMetadata& _graphMetadata;
 
     std::unordered_map<std::string_view, ValueType> _toBeCreatedTypes;
+
+    void analyzeListElements(Expr* expr, std::span<Expr* const> elements);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

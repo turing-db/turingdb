@@ -45,7 +45,6 @@
 #include "FunctionSignature.h"
 #include "Literal.h"
 #include "expr/BinaryExpr.h"
-#include "expr/ConstantExpressionDetector.h"
 #include "expr/Expr.h"
 #include "expr/ExprChain.h"
 #include "expr/FunctionInvocationExpr.h"
@@ -1143,7 +1142,7 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
         // Cypher promises nothing of the order tied rows come back in, so dropping the
         // key is the whole of its meaning - and it never reaches the sort, which has no
         // use for a column holding the one row a constant is read into
-        if (ConstantExpressionDetector::isConstant(keyExpr)) {
+        if (!keyExpr->isDynamic()) {
             continue;
         }
 
