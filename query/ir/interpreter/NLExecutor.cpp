@@ -2030,6 +2030,23 @@ void NLExecutor::runGroupAggregateUpdate(NLExecutionContext* context, NLFunction
 
     // Every column is row-aligned, so the first grouping key sizes this step's rows.
     const size_t rowCount = keyColumns.front()._input->size();
+
+    // That alignment is this step's precondition, not a property of the op's types:
+    // the group assignment is computed once per key row, then indexed by each fold as
+    // it walks its own input, so a column of another length folds rows into the wrong
+    // group - or, when it is the longer one, reads past the assignments entirely.
+    // Generated IR places the update where every column is bound together, so a
+    // mismatch here means malformed IR.
+    for (const NLGroupAggregateState::KeyColumn& keyColumn : keyColumns) {
+        bioassert(keyColumn._input->size() == rowCount,
+                  "nl.group_aggregate_update grouping keys must be row-aligned");
+    }
+
+    for (const NLGroupAggregateState::Aggregate& aggregate : aggregates) {
+        bioassert(aggregate._input->size() == rowCount,
+                  "nl.group_aggregate_update aggregate inputs must be row-aligned with the grouping keys");
+    }
+
     if (rowCount == 0) {
         return;
     }
@@ -2135,6 +2152,21 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
     // rows; ungrouped (no key), the collected value column sizes it.
     const Column* valueInput = state->getValueInput();
     const size_t rowCount = keyColumns.empty() ? valueInput->size() : keyColumns.front()._input->size();
+
+    // That alignment is this step's precondition, not a property of the op's types:
+    // the group assignment is computed once per key row, then indexed by the fold as it
+    // walks the value column, so a column of another length appends values to the wrong
+    // group - or, when the value column is the longer one, reads past the assignments
+    // entirely. Generated IR places the update where every column is bound together, so
+    // a mismatch here means malformed IR.
+    for (const NLCollectState::KeyColumn& keyColumn : keyColumns) {
+        bioassert(keyColumn._input->size() == rowCount,
+                  "nl.collect_update grouping keys must be row-aligned");
+    }
+
+    bioassert(valueInput->size() == rowCount,
+              "nl.collect_update value column must be row-aligned with the grouping keys");
+
     if (rowCount == 0) {
         return;
     }
