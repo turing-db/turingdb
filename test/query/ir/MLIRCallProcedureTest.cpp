@@ -26,6 +26,7 @@
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
 #include "list/ListBuffer.h"
+#include "list/ListBufferTypeTag.h"
 #include "list/ListElementView.h"
 #include "list/ListView.h"
 #include "metadata/LabelSet.h"
@@ -298,6 +299,90 @@ ProcedureData* listAlloc() {
 }
 
 void listDealloc(ProcedureData* data) {
+    delete data;
+}
+
+// The float storage a drive of test.nodeTags hands out spans over. ListBuffer stores the
+// bytes of a span, not the floats behind it, so the values have to outlive the insert; they
+// live here, refilled per step exactly as the result columns are.
+struct TagData : public ProcedureData {
+    std::vector<std::vector<float>> _embeddings;
+};
+
+// The tags test.nodeTags names, borrowed by the string elements it inserts. Literals, so
+// the characters outlive every list that views them - a procedure inserting a
+// types::String::Primitive must point at storage that lives at least as long as the row,
+// which is why db.getNodes borrows its label names from the label map rather than
+// formatting them.
+constexpr std::string_view tagNames[] = {"alpha", "beta", "gamma"};
+
+// test.nodeTags(nodeIDs) YIELD tags, coords: two LIST return values per input node - one a
+// list of strings (`id % 3` of them, so node 0 gets an empty one), the other a list holding
+// a single embedding element, {1.5 * id, 2.5 * id}. An embedding is not a ProcedureType, so
+// a list element is the only way a procedure produces one; this covers both of the listable
+// element types whose payload is borrowed rather than copied into the buffer.
+void tagsExecuteImpl(ProcedureState* procedureState) {
+    TagData& data = procedureState->data<TagData>();
+    const ProcedureContext* ctxt = procedureState->getContext();
+
+    const auto* nodeIDs = static_cast<const ColumnVector<NodeID>*>(data.getInputColumn(0));
+    auto* tags = static_cast<ColumnVector<ListView>*>(data.getReturnColumn(0));
+    auto* coords = static_cast<ColumnVector<ListView>*>(data.getReturnColumn(1));
+    ColumnVector<size_t>* inputRowIndices = data.getInputRowIndices();
+
+    tags->clear();
+    coords->clear();
+
+    ListBuffer<4096>* listBuffer = ctxt->getListBuffer();
+
+    const auto& nodeIDsRaw = nodeIDs->getRaw();
+
+    // Sized once, so filling an entry never relocates one already handed to the buffer.
+    data._embeddings.assign(nodeIDsRaw.size(), {});
+
+    std::vector<ListBuffer<4096>::ListItemVariant> items;
+
+    for (size_t inputRow = 0; inputRow < nodeIDsRaw.size(); inputRow++) {
+        const auto nodeID = static_cast<types::Int64::Primitive>(nodeIDsRaw[inputRow].getValue());
+
+        items.clear();
+        for (types::Int64::Primitive tag = 0; tag < nodeID % 3; tag++) {
+            items.emplace_back(types::String::Primitive {tagNames[tag]});
+        }
+        tags->push_back(listBuffer->insert(items));
+
+        std::vector<float>& embedding = data._embeddings[inputRow];
+        embedding = {1.5f * static_cast<float>(nodeID), 2.5f * static_cast<float>(nodeID)};
+
+        items.clear();
+        items.emplace_back(types::Embedding::Primitive {embedding});
+        coords->push_back(listBuffer->insert(items));
+
+        if (inputRowIndices) {
+            inputRowIndices->push_back(inputRow);
+        }
+    }
+
+    procedureState->finish();
+}
+
+void tagsExecute(ProcedureState* procedureState) {
+    switch (procedureState->getStep()) {
+        case ProcedureState::Step::PREPARE:
+        case ProcedureState::Step::RESET:
+        break;
+
+        case ProcedureState::Step::EXECUTE:
+        tagsExecuteImpl(procedureState);
+        break;
+    }
+}
+
+ProcedureData* tagsAlloc() {
+    return new TagData();
+}
+
+void tagsDealloc(ProcedureData* data) {
     delete data;
 }
 
@@ -680,6 +765,57 @@ private:
     std::vector<Row> _rows;
 };
 
+// Collects the (node, [tags], [coords]) rows of a call returning two LIST columns: one of
+// borrowed strings, one holding a single embedding element. Each element's tag is asserted
+// before it is read, since getAs does not check the type it is handed.
+class CarriedTagsSink : public NLOutputSink {
+public:
+    using Row = std::tuple<uint64_t, std::vector<std::string>, std::vector<float>>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 3u);
+
+        const auto* nodes = dynamic_cast<const ColumnVector<NodeID>*>(chunks[0]);
+        const auto* tagLists = dynamic_cast<const ColumnVector<ListView>*>(chunks[1]);
+        const auto* coordLists = dynamic_cast<const ColumnVector<ListView>*>(chunks[2]);
+        ASSERT_NE(nodes, nullptr);
+        ASSERT_NE(tagLists, nullptr);
+        ASSERT_NE(coordLists, nullptr);
+        ASSERT_EQ(nodes->size(), tagLists->size());
+        ASSERT_EQ(nodes->size(), coordLists->size());
+
+        const auto& nodeRaw = nodes->getRaw();
+        const auto& tagRaw = tagLists->getRaw();
+        const auto& coordRaw = coordLists->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            std::vector<std::string> tags;
+            for (const ListElementView& element : tagRaw[rowIndex]) {
+                ASSERT_EQ(element.getTag(), ListBufferTypeTag::String);
+                tags.push_back(std::string(element.getAs<std::string_view>()));
+            }
+
+            // The embedding rides as the single element of its own list, so the row's
+            // floats are that element's span.
+            std::vector<float> coords;
+            for (const ListElementView& element : coordRaw[rowIndex]) {
+                ASSERT_EQ(element.getTag(), ListBufferTypeTag::Embedding);
+                const std::span<const float> embedding = element.getAs<std::span<const float>>();
+                coords.assign(embedding.begin(), embedding.end());
+            }
+
+            _rows.emplace_back(nodeRaw[rowIndex].getValue(), tags, coords);
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
 // Collects the (n, m, value) rows of a call that carries both sides of a hop past
 // itself - the shape of MATCH (n)-->(m) CALL f(m) YIELD x RETURN n, m, x.
 class CarriedHopSink : public NLOutputSink {
@@ -989,6 +1125,16 @@ protected:
         listProcedure->addArgument("nodeIDs", ProcedureType::NODE);
         listProcedure->addReturnValue("values", ProcedureType::LIST);
         testNamespace->addProcedure(listProcedure);
+
+        Procedure* tagsProcedure = new Procedure("nodeTags");
+        tagsProcedure->setAllocCallback(&tagsAlloc);
+        tagsProcedure->setDeallocCallback(&tagsDealloc);
+        tagsProcedure->setExecuteCallback(&tagsExecute);
+        tagsProcedure->setIndices(true);
+        tagsProcedure->addArgument("nodeIDs", ProcedureType::NODE);
+        tagsProcedure->addReturnValue("tags", ProcedureType::LIST);
+        tagsProcedure->addReturnValue("coords", ProcedureType::LIST);
+        testNamespace->addProcedure(tagsProcedure);
 
         // Declares the report but never makes it - the only way to reach the runtime
         // check now that lowering refuses a carry set on a procedure that declares
@@ -1578,6 +1724,37 @@ TEST_F(MLIRCallProcedureTest, cypherCallReturnsAList) {
         {2, {200, 201}},
         {3, {}},
         {4, {400}},
+    };
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(MLIRCallProcedureTest, cypherCallReturnsAStringListAndAnEmbedding) {
+    auto graph = buildLabelledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // MATCH (n) CALL test.nodeTags(n) YIELD tags, coords RETURN n, tags, coords - two LIST
+    // columns off one call: `tags` a list of strings (`id % 3` of them, empty for node 0 and
+    // 3) and `coords` a list holding one embedding, {1.5 * id, 2.5 * id}. `vector` and
+    // `embedding` are both reserved Cypher keywords, so neither can name a yield. Both element types
+    // are stored in the buffer as a borrowed view - the characters and the floats live
+    // outside it - so this covers the payload lifetime an Int64 element never exercises. An
+    // embedding is not a ProcedureType, so a list element is the only way a call yields one.
+    CarriedTagsSink sink;
+    runQuery("MATCH (n) CALL test.nodeTags(n) YIELD tags, coords RETURN n, tags, coords",
+             graph.get(),
+             reader.getView(),
+             sink,
+             /*chunkSize=*/2);
+
+    std::vector<CarriedTagsSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<CarriedTagsSink::Row> expected {
+        {0, {}, {0.0f, 0.0f}},
+        {1, {"alpha"}, {1.5f, 2.5f}},
+        {2, {"alpha", "beta"}, {3.0f, 5.0f}},
+        {3, {}, {4.5f, 7.5f}},
+        {4, {"alpha"}, {6.0f, 10.0f}},
     };
     EXPECT_EQ(rows, expected);
 }
