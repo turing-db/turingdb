@@ -1758,6 +1758,35 @@ private:
     PropertyTypeID _propertyTypeID;
 };
 
+class NLDeleteNodeData : public NLFunctionData {
+public:
+    NLDeleteNodeData(const ColumnNodeIDs* input, bool detaching)
+        : _input(input),
+        _detaching(detaching)
+    {
+    }
+
+    const ColumnNodeIDs* getInput() const { return _input; }
+    bool isDetaching() const { return _detaching; }
+
+private:
+    const ColumnNodeIDs* _input {nullptr};
+    bool _detaching {false};
+};
+
+class NLDeleteEdgeData : public NLFunctionData {
+public:
+    NLDeleteEdgeData(const ColumnEdgeIDs* input)
+        : _input(input)
+    {
+    }
+
+    const ColumnEdgeIDs* getInput() const { return _input; }
+
+private:
+    const ColumnEdgeIDs* _input {nullptr};
+};
+
 // nl.output data
 class NLOutputData : public NLFunctionData {
 public:

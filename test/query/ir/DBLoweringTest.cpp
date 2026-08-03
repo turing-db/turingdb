@@ -993,6 +993,15 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n:Person) DETACH DELETE n
+constexpr const char* detachDeleteNodeProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+  db.delete_node(%n) detach : (!db.column<!storage.node_id>) -> ()
+  return
+}
+)mlir";
+
 // Scan exactly the nodes 2 and 0, in that order: a fixed set, not a graph walk
 constexpr const char* constScanNodesProgram = R"mlir(
 func.func @main() {
@@ -2145,6 +2154,44 @@ TEST_F(DBLoweringTest, lowersSetNodeProperty) {
     ASSERT_TRUE(loweredSet);
     EXPECT_EQ(loweredSet.getProperty(), "age");
     EXPECT_TRUE(loweredSet->getParentOfType<mlir::nl::For>());
+}
+
+TEST_F(DBLoweringTest, lowersDeleteNode) {
+    auto graph = buildLabeledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(detachDeleteNodeProgram, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &view);
+    lowering.lower(dbFunction, *nlModule);
+
+    // db.delete_node lowered to exactly one nl.delete_node, keeping the detach flag
+    // and sitting inside the scan loop where the node chunk lives.
+    size_t deleteCount = 0;
+    mlir::nl::DeleteNode loweredDelete;
+    nlModule->walk([&](mlir::nl::DeleteNode op) {
+        deleteCount++;
+        loweredDelete = op;
+    });
+
+    EXPECT_EQ(deleteCount, 1U);
+    ASSERT_TRUE(loweredDelete);
+    EXPECT_TRUE(loweredDelete.getDetach());
+    EXPECT_TRUE(loweredDelete->getParentOfType<mlir::nl::For>());
 }
 
 TEST_F(DBLoweringTest, executesConstScanNodes) {
