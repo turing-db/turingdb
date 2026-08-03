@@ -856,10 +856,6 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
 
     const Projection* proj = rtn->getProjection();
 
-    const bool all = proj->isReturningAll();
-    // FIXME: Detect the unused MLIR vars and return those
-    bioassert(!all, "Returning all is not yet supported.");
-
     const Projection::Items& returned = proj->items();
 
     FinalIdentityMap finalIdentities;
