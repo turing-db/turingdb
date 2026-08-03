@@ -1201,13 +1201,9 @@ mlir::Value DBProgramGenerator::getOrTranslateExprColumn(const VariableColumnMap
 
         const std::string_view name = var->getName();
         const auto findIt = variableColumns.find(name);
+        bioassert(findIt != end(variableColumns), "No column for variable '{}'", name);
 
-        // A variable this holds no column for is not resolved here: translateExpr looks
-        // it up among the variables the query traverses, and reports it as unknown if it
-        // is not one of them either
-        if (findIt != end(variableColumns)) {
-            return findIt->second;
-        }
+        return findIt->second;
     }
 
     translateExpr(expr);
