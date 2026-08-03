@@ -25,6 +25,9 @@
 #include "columns/ColumnConst.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
+#include "list/ListBuffer.h"
+#include "list/ListElementView.h"
+#include "list/ListView.h"
 #include "metadata/LabelSet.h"
 #include "metadata/PropertyType.h"
 #include "metadata/PropertyTypeMap.h"
@@ -231,6 +234,70 @@ ProcedureData* scoreAlloc() {
 }
 
 void scoreDealloc(ProcedureData* data) {
+    delete data;
+}
+
+struct ListData : public ProcedureData {};
+
+// test.nodeIDList(nodeIDs) YIELD values: emits one row per input node whose single column
+// is a LIST - `id % 3` elements, `100 * id + k` - so the lists vary in length and nodes 0
+// and 3 get an empty one. The list-valued counterpart of test.expandNodeID: the same
+// fan-out expressed as one row carrying many values rather than many rows carrying one, so
+// this is the row shape a procedure returning a LIST produces. The elements are built into
+// the request-scoped ListBuffer the context carries, which is what the ListView rows point
+// into, exactly as db.getNodes' `labels` does.
+void listExecuteImpl(ProcedureState* procedureState) {
+    ListData& data = procedureState->data<ListData>();
+    const ProcedureContext* ctxt = procedureState->getContext();
+
+    const auto* nodeIDs = static_cast<const ColumnVector<NodeID>*>(data.getInputColumn(0));
+    auto* values = static_cast<ColumnVector<ListView>*>(data.getReturnColumn(0));
+    ColumnVector<size_t>* inputRowIndices = data.getInputRowIndices();
+
+    values->clear();
+
+    ListBuffer<4096>* listBuffer = ctxt->getListBuffer();
+
+    std::vector<ListBuffer<4096>::ListItemVariant> items;
+
+    const auto& nodeIDsRaw = nodeIDs->getRaw();
+    for (size_t inputRow = 0; inputRow < nodeIDsRaw.size(); inputRow++) {
+        const auto nodeID = static_cast<types::Int64::Primitive>(nodeIDsRaw[inputRow].getValue());
+
+        items.clear();
+        for (types::Int64::Primitive element = 0; element < nodeID % 3; element++) {
+            items.emplace_back(static_cast<types::Int64::Primitive>(100 * nodeID + element));
+        }
+
+        // One row per input row, empty list included - a node with nothing to list still
+        // gets a row, which is what separates this from the expanding form.
+        values->push_back(listBuffer->insert(items));
+
+        if (inputRowIndices) {
+            inputRowIndices->push_back(inputRow);
+        }
+    }
+
+    procedureState->finish();
+}
+
+void listExecute(ProcedureState* procedureState) {
+    switch (procedureState->getStep()) {
+        case ProcedureState::Step::PREPARE:
+        case ProcedureState::Step::RESET:
+        break;
+
+        case ProcedureState::Step::EXECUTE:
+        listExecuteImpl(procedureState);
+        break;
+    }
+}
+
+ProcedureData* listAlloc() {
+    return new ListData();
+}
+
+void listDealloc(ProcedureData* data) {
     delete data;
 }
 
@@ -577,6 +644,42 @@ private:
     size_t _calls {0};
 };
 
+// Collects the (node, [values]) rows a call returning a LIST emits: a node ID chunk and a
+// list cell chunk (ColumnVector<ListView>), the column type a LIST return value is read as.
+class CarriedListSink : public NLOutputSink {
+public:
+    using Row = std::pair<uint64_t, std::vector<int64_t>>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* nodes = dynamic_cast<const ColumnVector<NodeID>*>(chunks[0]);
+        const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[1]);
+        ASSERT_NE(nodes, nullptr);
+        ASSERT_NE(lists, nullptr);
+        ASSERT_EQ(nodes->size(), lists->size());
+
+        const auto& nodeRaw = nodes->getRaw();
+        const auto& listRaw = lists->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            std::vector<int64_t> values;
+            for (const ListElementView& element : listRaw[rowIndex]) {
+                values.push_back(element.getAs<int64_t>());
+            }
+
+            _rows.emplace_back(nodeRaw[rowIndex].getValue(), values);
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
 // Collects the (n, m, value) rows of a call that carries both sides of a hop past
 // itself - the shape of MATCH (n)-->(m) CALL f(m) YIELD x RETURN n, m, x.
 class CarriedHopSink : public NLOutputSink {
@@ -877,6 +980,15 @@ protected:
         scoreProcedure->addArgument("nodeIDs", ProcedureType::NODE);
         scoreProcedure->addReturnValue("score", ProcedureType::INT64);
         testNamespace->addProcedure(scoreProcedure);
+
+        Procedure* listProcedure = new Procedure("nodeIDList");
+        listProcedure->setAllocCallback(&listAlloc);
+        listProcedure->setDeallocCallback(&listDealloc);
+        listProcedure->setExecuteCallback(&listExecute);
+        listProcedure->setIndices(true);
+        listProcedure->addArgument("nodeIDs", ProcedureType::NODE);
+        listProcedure->addReturnValue("values", ProcedureType::LIST);
+        testNamespace->addProcedure(listProcedure);
 
         // Declares the report but never makes it - the only way to reach the runtime
         // check now that lowering refuses a carry set on a procedure that declares
@@ -1439,6 +1551,34 @@ TEST_F(MLIRCallProcedureTest, cypherCallReadsANodePropertyWithoutCarryingTheNode
     std::vector<types::Int64::Primitive> rows = sink.rows();
     std::sort(rows.begin(), rows.end());
     const std::vector<types::Int64::Primitive> expected {10, 20, 30};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(MLIRCallProcedureTest, cypherCallReturnsAList) {
+    auto graph = buildLabelledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // MATCH (n) CALL test.nodeIDList(n) YIELD values RETURN n, values - a call whose return
+    // value is a LIST, so each row carries a whole list rather than one scalar. One row per
+    // node, list length `id % 3`: nodes 0 and 3 get an empty list, 1 and 4 a single element,
+    // 2 two of them. Lists exist only in the query language, so this is the one column type
+    // a procedure produces that has no stored counterpart.
+    CarriedListSink sink;
+    runQuery("MATCH (n) CALL test.nodeIDList(n) YIELD values RETURN n, values", graph.get(),
+             reader.getView(),
+             sink,
+             /*chunkSize=*/2);
+
+    std::vector<CarriedListSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<CarriedListSink::Row> expected {
+        {0, {}},
+        {1, {100}},
+        {2, {200, 201}},
+        {3, {}},
+        {4, {400}},
+    };
     EXPECT_EQ(rows, expected);
 }
 
