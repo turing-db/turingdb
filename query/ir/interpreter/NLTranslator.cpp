@@ -437,12 +437,9 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
     } else if (config._kind == IteratorKind::ScanEdges) {
         translateScanEdgesLoop(loopBody, limit, body);
     } else if (config._kind == IteratorKind::Sort) {
-        // A sort emit loop is never limit-bounded: ORDER BY must see every row.
-        translateSortLoop(config, loopBody, body);
+        translateSortLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::GroupAggregate) {
-        // A grouped-aggregate emit loop is never limit-bounded: every row must be
-        // folded before the first group is emitted.
-        translateGroupAggregateLoop(config, loopBody, body);
+        translateGroupAggregateLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::UnwindCollect) {
         // A collect drain emit loop is never limit-bounded: every row must be folded
         // before the first element is emitted.
@@ -1361,6 +1358,7 @@ void NLTranslator::translateSortCollect(nl::SortCollect collect, NLStmtContainer
 
 void NLTranslator::translateSortLoop(const IteratorConfig& config,
                                      mlir::Block& loopBody,
+                                     NLLimitState* limit,
                                      NLStmtContainer* body) {
     NLSortState* state = config._sortState;
     if (!state) {
@@ -1376,6 +1374,7 @@ void NLTranslator::translateSortLoop(const IteratorConfig& config,
     }
 
     NLSortLoopData* loopData = _program->allocFunctionData<NLSortLoopData>(state);
+    loopData->setLimit(limit);
 
     // Reserve the permutation-slice scratch so the per-step gather stays
     // allocation-free, the same as the edge loop's indices column.
@@ -1722,6 +1721,7 @@ void NLTranslator::translateGroupAggregateUpdate(nl::GroupAggregateUpdate update
 
 void NLTranslator::translateGroupAggregateLoop(const IteratorConfig& config,
                                                mlir::Block& loopBody,
+                                               NLLimitState* limit,
                                                NLStmtContainer* body) {
     NLGroupAggregateState* state = config._groupAggregateState;
     if (!state) {
@@ -1738,6 +1738,7 @@ void NLTranslator::translateGroupAggregateLoop(const IteratorConfig& config,
     }
 
     NLGroupAggregateLoopData* loopData = _program->allocFunctionData<NLGroupAggregateLoopData>(state);
+    loopData->setLimit(limit);
 
     // Each loop variable is the emit output of one column: the first keyCount are the
     // grouping keys (filled by slicing their key buffers), the rest the aggregate

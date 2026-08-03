@@ -206,9 +206,11 @@ private:
 
     // Translate the nl.for over an nl.sort iterator: allocate one loop variable
     // per buffer, set up the gather that fills it from the buffer in permutation
-    // order, and record the emit-loop statement (sort once, then re-chunk)
+    // order, and record the emit-loop statement (sort once, then re-chunk). limit is
+    // the counter the drain early-exits on, or null for an unbounded drain.
     void translateSortLoop(const IteratorConfig& config,
                            mlir::Block& loopBody,
+                           NLLimitState* limit,
                            NLStmtContainer* body);
 
     // The runtime accumulator a sort handle names. Throws if the handle was not
@@ -293,9 +295,11 @@ private:
     // Translate the nl.for over an nl.group_aggregate iterator: allocate one loop
     // variable per output column (a grouping key or an aggregate result), wire it as
     // that column's emit output, and record the emit-loop statement (re-chunk the
-    // groups).
+    // groups). limit is the counter the drain early-exits on, or null for an
+    // unbounded drain.
     void translateGroupAggregateLoop(const IteratorConfig& config,
                                      mlir::Block& loopBody,
+                                     NLLimitState* limit,
                                      NLStmtContainer* body);
 
     // The runtime accumulator a group-aggregate handle names. Throws if the handle
