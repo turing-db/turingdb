@@ -216,6 +216,19 @@ bool isConstantLike(mlir::Value value) {
                        [](mlir::Value operand) { return isConstantLike(operand); });
 }
 
+// A drain wires its emit loop's variables into the accumulator's one output slot per
+// column, so an accumulator can serve exactly one nl.collect or nl.unwind_collect. A
+// second drain would rebind the first's outputs to its own, incompatible column types
+// (a per-group list cell against an unwound value), leaving the first to emit through
+// the other's columns. Generated IR names each accumulator from a single drain, so a
+// second one means malformed IR - the accumulate side rejects a second
+// nl.collect_update the same way.
+void throwIfAlreadyDrained(const NLCollectState* state) {
+    if (state->getValueOutput()) {
+        throw IRException("an nl.collect_buffer must be drained by a single nl.collect or nl.unwind_collect");
+    }
+}
+
 }
 
 NLTranslator::NLTranslator(NLProgram* program,
@@ -1953,6 +1966,8 @@ void NLTranslator::translateUnwindCollectLoop(const IteratorConfig& config,
         throw IRException("nl.unwind_collect iterator must carry a collect accumulator");
     }
 
+    throwIfAlreadyDrained(state);
+
     // For::verify binds one loop variable per iterator chunk; the unwind iterator's
     // chunks are the grouping keys then the element value, so the loop takes one
     // variable per grouping key plus one for the value.
@@ -1994,6 +2009,8 @@ void NLTranslator::translateCollectLoop(const IteratorConfig& config,
     if (!state) {
         throw IRException("nl.collect iterator must carry a collect accumulator");
     }
+
+    throwIfAlreadyDrained(state);
 
     // The collect iterator's chunks are the grouping keys then the list cell, so the
     // loop takes one variable per grouping key plus one for the list.

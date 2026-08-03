@@ -24,9 +24,12 @@ target_link_libraries(test_query_ir_group_aggregate PRIVATE
         turing_db_interpreter_v3_s)
 add_ir_tests(test_query_ir_collect CollectTest.cpp)
 
-# The collect row-alignment tests run against the shared SimpleGraph fixture.
+# The collect row-alignment and drain tests run against the shared SimpleGraph fixture.
 add_ir_tests(test_query_ir_collect_row_alignment CollectRowAlignmentTest.cpp)
 target_link_libraries(test_query_ir_collect_row_alignment PRIVATE turing_db_examples_s)
+
+add_ir_tests(test_query_ir_collect_drain CollectDrainTest.cpp)
+target_link_libraries(test_query_ir_collect_drain PRIVATE turing_db_examples_s)
 add_ir_tests(test_query_ir_dbdialect DBDialectTest.cpp)
 add_ir_tests(test_query_ir_nldialect NLDialectTest.cpp)
 
