@@ -187,6 +187,10 @@ public:
 
     static void runCreateEdge(NLExecutionContext* context, NLFunctionData* data);
 
+    static void runSetNodeProperty(NLExecutionContext* context, NLFunctionData* data);
+
+    static void runSetEdgeProperty(NLExecutionContext* context, NLFunctionData* data);
+
     static void runOutput(NLExecutionContext* context, NLFunctionData* data);
 
     // Run a row-wise binary op (nl.add): invoke the typed kernel bound at

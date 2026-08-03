@@ -9,6 +9,7 @@
 #include <type_traits>
 
 #include "iterators/GetEdgesIterator.h"
+#include "ID.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetInEdgesByTypeIterator.h"
 #include "iterators/GetNodeLabelSetIterator.h"
@@ -1323,6 +1324,44 @@ void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data
     result->resize(rowCount);
     for (size_t row = 0; row < rowCount; row++) {
         (*result)[row] = EdgeID(firstEdgeOffset + row);
+    }
+}
+
+void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData* data) {
+    NLSetNodePropertyData* setData = static_cast<NLSetNodePropertyData*>(data);
+    CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
+    bioassert(writeBuffer, "nl.set_node_property requires an active write transaction");
+
+    const ColumnNodeIDs* nodes = setData->getInput();
+    const size_t rowCount = nodes->size();
+
+    CommitWriteBuffer::UntypedProperties propsBuffer;
+    const PropertyTypeID propID = setData->getPropertyTypeID();
+    const Column* nodeCol = setData->getValue();
+    extractColumnProperties(nodeCol, rowCount, propID, propsBuffer);
+
+    const auto& raw = nodes->getRaw();
+    for (size_t row = 0; row < rowCount; row++) {
+        writeBuffer->addNodeUpdate(raw[row], propsBuffer[row]);
+    }
+}
+
+void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData* data) {
+    NLSetEdgePropertyData* setData = static_cast<NLSetEdgePropertyData*>(data);
+    CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
+    bioassert(writeBuffer, "nl.set_edge_property requires an active write transaction");
+
+    const ColumnEdgeIDs* edges = setData->getInput();
+    const size_t rowCount = edges->size();
+    const PropertyTypeID propID = setData->getPropertyTypeID();
+    const Column* edgeCol = setData->getValue();
+
+    CommitWriteBuffer::UntypedProperties propsBuffer;
+    extractColumnProperties(edgeCol, rowCount, propID, propsBuffer);
+
+    const auto& raw = edges->getRaw(); 
+    for (size_t row = 0; row < rowCount; row++) {
+        writeBuffer->addEdgeUpdate(raw[row], propsBuffer[row]);
     }
 }
 

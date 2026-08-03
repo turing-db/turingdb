@@ -1538,4 +1538,38 @@ def CreateEdge : NLOp<"create_edge"> {
   }];
 }
 
+def SetNodeProperty : NLOp<"set_node_property"> {
+  let summary = "Update one named property per input node in the open transaction's write buffer";
+  let description = [{
+      nl.for %nodes in %scan {
+        nl.set_node_property %nodes, "age", %val_chunk : !nl.chunk<i64>
+      }
+  }];
+
+  let arguments = (ins NLNodeIDChunk:$input_nodes, StrAttr:$property, NLChunk:$value);
+
+  let assemblyFormat = [{
+    $input_nodes `,` $property `,` $value attr-dict `:` qualified(type($value))
+  }];
+
+  let hasVerifier = 1;
+}
+
+def SetEdgeProperty : NLOp<"set_edge_property"> {
+  let summary = "Update one named property per input edge in the open transaction's write buffer";
+  let description = [{
+      nl.for %s, %e, %t in %edges {
+        nl.set_edge_property %e, "weight", %val_chunk : !nl.chunk<f64>
+      }
+  }];
+
+  let arguments = (ins NLEdgeIDChunk:$input_edges, StrAttr:$property, NLChunk:$value);
+
+  let assemblyFormat = [{
+    $input_edges `,` $property `,` $value attr-dict `:` qualified(type($value))
+  }];
+
+  let hasVerifier = 1;
+}
+
 #endif //TURINGDB_NL_OPS

@@ -983,6 +983,16 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n:Person) SET n.age = 5
+constexpr const char* setNodePropertyProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+  %v = db.constant(5 : i64)
+  db.set_node_property(%n, "age", %v) : (!db.column<!storage.node_id>, !db.column<i64>) -> ()
+  return
+}
+)mlir";
+
 // Scan exactly the nodes 2 and 0, in that order: a fixed set, not a graph walk
 constexpr const char* constScanNodesProgram = R"mlir(
 func.func @main() {
@@ -2099,6 +2109,42 @@ TEST_F(DBLoweringTest, executesScanNodesByLabelUnknownIsEmpty) {
     std::vector<uint64_t> robots;
     collectScan(scanByLabelUnknownProgram, reader.getView(), robots);
     EXPECT_TRUE(robots.empty());
+}
+
+TEST_F(DBLoweringTest, lowersSetNodeProperty) {
+    auto graph = buildLabeledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule = mlir::parseSourceString<mlir::ModuleOp>(setNodePropertyProgram, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &view);
+    lowering.lower(dbFunction, *nlModule);
+
+    size_t setCount = 0;
+    mlir::nl::SetNodeProperty loweredSet;
+    nlModule->walk([&](mlir::nl::SetNodeProperty op) {
+        setCount++;
+        loweredSet = op;
+    });
+
+    EXPECT_EQ(setCount, 1u);
+    ASSERT_TRUE(loweredSet);
+    EXPECT_EQ(loweredSet.getProperty(), "age");
+    EXPECT_TRUE(loweredSet->getParentOfType<mlir::nl::For>());
 }
 
 TEST_F(DBLoweringTest, executesConstScanNodes) {

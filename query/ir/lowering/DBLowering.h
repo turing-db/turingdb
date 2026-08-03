@@ -175,6 +175,8 @@ private:
     void lowerCheckEdgeTypeConstraint(mlir::db::CheckEdgeTypeConstraint checkEdgeTypeConstraint);
     void lowerCreateNode(mlir::db::CreateNode createNode);
     void lowerCreateEdge(mlir::db::CreateEdge createEdge);
+    void lowerSetNodeProperty(mlir::db::SetNodeProperty setNodeProperty);
+    void lowerSetEdgeProperty(mlir::db::SetEdgeProperty setEdgeProperty);
     void lowerCrossProduct(mlir::db::CrossProduct product);
     void lowerLimit(mlir::db::Limit limit);
     void lowerSkip(mlir::db::Skip skip);

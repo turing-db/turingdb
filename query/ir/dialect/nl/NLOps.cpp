@@ -557,6 +557,22 @@ LogicalResult CreateEdge::verify() {
     return success();
 }
 
+LogicalResult SetNodeProperty::verify() {
+    if (getProperty().empty()) {
+        return emitOpError("requires a non-empty property name");
+    }
+
+    return success();
+}
+
+LogicalResult SetEdgeProperty::verify() {
+    if (getProperty().empty()) {
+        return emitOpError("requires a non-empty property name");
+    }
+
+    return success();
+}
+
 // A grouped accumulator needs at least one grouping key and one aggregate (with
 // no key it is a whole-stream aggregate, with no aggregate a projection), and
 // every kind must be a valid GroupAggregateKind. The column count is not known

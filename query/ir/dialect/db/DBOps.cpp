@@ -244,6 +244,22 @@ LogicalResult CreateEdge::verify() {
     return success();
 }
 
+LogicalResult SetNodeProperty::verify() {
+    if (getProperty().empty()) {
+        return emitOpError("requires a non-empty property name");
+    }
+
+    return success();
+}
+
+LogicalResult SetEdgeProperty::verify() {
+    if (getProperty().empty()) {
+        return emitOpError("requires a non-empty property name");
+    }
+
+    return success();
+}
+
 // A label scan must name at least one label to filter by; a label-free scan of
 // every node is db.scan_nodes, so an empty label list is malformed IR here.
 LogicalResult ScanNodesByLabel::verify() {

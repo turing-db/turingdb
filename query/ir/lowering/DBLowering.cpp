@@ -409,6 +409,10 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerCreateNode(createNode);
     } else if (mlir::db::CreateEdge createEdge = mlir::dyn_cast<mlir::db::CreateEdge>(operation)) {
         lowerCreateEdge(createEdge);
+    } else if (mlir::db::SetNodeProperty setNodeProperty = mlir::dyn_cast<mlir::db::SetNodeProperty>(operation)) {
+        lowerSetNodeProperty(setNodeProperty);
+    } else if (mlir::db::SetEdgeProperty setEdgeProperty = mlir::dyn_cast<mlir::db::SetEdgeProperty>(operation)) {
+        lowerSetEdgeProperty(setEdgeProperty);
     } else if (mlir::db::CrossProduct crossProduct = mlir::dyn_cast<mlir::db::CrossProduct>(operation)) {
         lowerCrossProduct(crossProduct);
     } else if (mlir::db::Limit limit = mlir::dyn_cast<mlir::db::Limit>(operation)) {
@@ -1674,6 +1678,44 @@ void DBLowering::lowerCreateEdge(mlir::db::CreateEdge createEdge) {
         createEdge.getPropNamesAttr(),
         propChunks);
     _valueMap[createEdge.getResult()] = create.getResult();
+}
+
+void DBLowering::lowerSetNodeProperty(mlir::db::SetNodeProperty setNodeProperty) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+    const mlir::Value inputChunk = mapValue(setNodeProperty.getInputNodes());
+    const mlir::Value valueChunk = mapValue(setNodeProperty.getValue());
+
+    mlir::Value reference = inputChunk;
+    mlir::Block* const block = deeperBlock(reference, valueChunk);
+    if (ownerBlock(valueChunk) == block) {
+        reference = valueChunk;
+    }
+    setInsertionInto(ownerBlock(reference));
+
+    _builder.create<nl::SetNodeProperty>(
+        loc,
+        inputChunk,
+        setNodeProperty.getPropertyAttr(),
+        valueChunk);
+}
+
+void DBLowering::lowerSetEdgeProperty(mlir::db::SetEdgeProperty setEdgeProperty) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+    const mlir::Value inputChunk = mapValue(setEdgeProperty.getInputEdges());
+    const mlir::Value valueChunk = mapValue(setEdgeProperty.getValue());
+
+    mlir::Value reference = inputChunk;
+    mlir::Block* const block = deeperBlock(reference, valueChunk);
+    if (ownerBlock(valueChunk) == block) {
+        reference = valueChunk;
+    }
+    setInsertionInto(ownerBlock(reference));
+
+    _builder.create<nl::SetEdgeProperty>(
+        loc,
+        inputChunk,
+        setEdgeProperty.getPropertyAttr(),
+        valueChunk);
 }
 
 void DBLowering::lowerConstant(mlir::db::ConstantOp constant) {

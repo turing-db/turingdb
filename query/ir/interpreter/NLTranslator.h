@@ -389,6 +389,10 @@ private:
 
     void translateCreateEdge(mlir::nl::CreateEdge createEdge, NLStmtContainer* body);
 
+    void translateSetNodeProperty(mlir::nl::SetNodeProperty setNodeProperty, NLStmtContainer* body);
+
+    void translateSetEdgeProperty(mlir::nl::SetEdgeProperty setEdgeProperty, NLStmtContainer* body);
+
     // Allocates singleton column for the constant and assigns MLIR value
     void translateConstant(mlir::nl::Constant constant);
 
