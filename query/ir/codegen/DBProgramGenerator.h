@@ -24,6 +24,7 @@ class Region;
 namespace db {
 
 class BinaryExpr;
+class FunctionInvocationExpr;
 class UnaryExpr;
 class CypherAST;
 class Expr;
@@ -111,9 +112,12 @@ private:
     void generateEdgeTypeConstraints(const CypherAST* ast);
     void generateFilters(const CypherAST* ast);
 
+    void generateGroupAggregate(const CypherAST* ast);
+
     void translateExpr(const Expr* expr);
     void translateUnaryExpr(const Expr* expr, const UnaryExpr* unaryExpr);
     void translateBinaryExpr(const Expr* expr, const BinaryExpr* binExpr);
+    void translateFunctionInvocationExpr(const Expr* expr, const FunctionInvocationExpr* funcExpr);
     mlir::Value translateLiteralExpr(const Literal* literal);
     mlir::Value translatePropertyExpr(const PropertyExpr* propExpr);
 

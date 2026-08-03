@@ -38,11 +38,16 @@
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
 #include "WhereClause.h"
+#include "decl/EvaluatedType.h"
 #include "decl/PatternData.h"
 #include "decl/VarDecl.h"
+#include "FunctionInvocation.h"
+#include "FunctionSignature.h"
 #include "Literal.h"
 #include "expr/BinaryExpr.h"
 #include "expr/Expr.h"
+#include "expr/ExprChain.h"
+#include "expr/FunctionInvocationExpr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/PropertyExpr.h"
 #include "expr/StructuralExpressionComparator.h"
@@ -277,6 +282,7 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
     generateLabelConstraints(ast);
     generateEdgeTypeConstraints(ast);
     generateFilters(ast);
+    generateGroupAggregate(ast);
     generateCreate(ast);
     generateSet(ast);
     generateOutput(ast);
@@ -1399,7 +1405,9 @@ void DBProgramGenerator::generateFilters(const CypherAST* ast) {
 }
 
 void DBProgramGenerator::translateExpr(const Expr* expr) {
-    bioassert(!_exprMap.contains(expr), "Attempted to retranslate expr.");
+    if (_exprMap.contains(expr)) {
+        return;
+    }
 
     const Expr::Kind kind = expr->getKind();
     switch (kind) {
@@ -1442,7 +1450,12 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         }
         break;
 
-        case Expr::Kind::FUNCTION_INVOCATION:
+        case Expr::Kind::FUNCTION_INVOCATION: {
+            const FunctionInvocationExpr* funcExpr = static_cast<const FunctionInvocationExpr*>(expr);
+            translateFunctionInvocationExpr(expr, funcExpr);
+        }
+        break;
+
         case Expr::Kind::INDEX:
         case Expr::Kind::LIST:
         case Expr::Kind::STRING:
@@ -1650,5 +1663,211 @@ mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propEx
     } else {
         auto op = _opBuilder.create<mlir::db::GetEdgeProperties>(loc, resultType, entityColumn, propAttr);
         return op.getResult();
+    }
+}
+
+void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
+                                                         const FunctionInvocationExpr* funcExpr) {
+    const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
+    const std::string_view funcName = invocation->getSignature()->getFullName();
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    const ExprChain* args = invocation->getArguments();
+    bioassert(args && !args->empty(), "Aggregate function invocation with no arguments.");
+
+    const Expr* argExpr = args->front();
+    mlir::Value inputColumn;
+
+    if (argExpr->getType() == EvaluatedType::Wildcard) {
+        bioassert(!_varMap.empty(), "count(*) requires at least one traversal variable.");
+        inputColumn = _varMap.begin()->second.back();
+    } else {
+        translateExpr(argExpr);
+        inputColumn = _exprMap.at(argExpr);
+    }
+
+    if (funcName == "count") {
+        _exprMap[expr] = _opBuilder.create<mlir::db::Count>(loc, noneType, inputColumn).getResult();
+    } else if (funcName == "sum") {
+        _exprMap[expr] = _opBuilder.create<mlir::db::Sum>(loc, noneType, inputColumn).getResult();
+    } else if (funcName == "min") {
+        _exprMap[expr] = _opBuilder.create<mlir::db::Min>(loc, noneType, inputColumn).getResult();
+    } else if (funcName == "max") {
+        _exprMap[expr] = _opBuilder.create<mlir::db::Max>(loc, noneType, inputColumn).getResult();
+    } else if (funcName == "avg") {
+        _exprMap[expr] = _opBuilder.create<mlir::db::Avg>(loc, noneType, inputColumn).getResult();
+    } else {
+        throw TuringException(fmt::format("Unsupported aggregate function: {}", funcName));
+    }
+}
+
+void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
+    const CypherAST::QueryCommands& queries = ast->queries();
+    if (queries.size() != 1) {
+        return;
+    }
+
+    const QueryCommand* query = queries.front();
+    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
+    if (!sglPart) {
+        return;
+    }
+
+    const ReturnStmt* rtn = sglPart->getReturnStmt();
+    if (!rtn) {
+        return;
+    }
+
+    const Projection* proj = rtn->getProjection();
+    if (!proj->isAggregate() || !proj->hasGroupingKeys()) {
+        return;
+    }
+
+    FinalIdentityMap finalIdentities;
+    for (const auto& [cypherVar, mlirCol] : _varMap) {
+        finalIdentities[cypherVar->getName()] = mlirCol.back();
+    }
+
+    for (const auto& [name, vars] : _vdg.edgeIdentities()) {
+        if (!vars.empty() && _varMap.contains(vars.front())) {
+            finalIdentities[name] = _varMap.at(vars.front()).back();
+        }
+    }
+
+    // Parallel: for each key position, exactly one of these is non-null
+    llvm::SmallVector<mlir::Value> keyColumns;
+    llvm::SmallVector<const VariableDependency*> keyVarAtPos;
+    llvm::SmallVector<const Expr*> keyExprAtPos;
+
+    llvm::SmallVector<mlir::Value> aggInputColumns;
+    llvm::SmallVector<int64_t> aggKinds;
+    llvm::SmallVector<const FunctionInvocationExpr*> aggFuncExprs;
+
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+    for (const Projection::ReturnItem& returnItem : proj->items()) {
+        if (const VarDecl* const* varDeclPtr = std::get_if<VarDecl*>(&returnItem)) {
+            const std::string_view name = (*varDeclPtr)->getName();
+            const auto findIt = finalIdentities.find(name);
+            bioassert(findIt != finalIdentities.end(), "Grouping key variable {} not found.", name);
+            keyColumns.push_back(findIt->second);
+
+            const VariableDependency* keyVar = nullptr;
+            for (auto& [var, values] : _varMap) {
+                if (var->getName() == name) {
+                    keyVar = var;
+                    break;
+                }
+            }
+            keyVarAtPos.push_back(keyVar);
+            keyExprAtPos.push_back(nullptr);
+            continue;
+        }
+
+        const Expr* item = std::get<Expr*>(returnItem);
+
+        if (!item->isAggregate()) {
+            keyColumns.push_back(resolveExprColumn(finalIdentities, item));
+            keyVarAtPos.push_back(nullptr);
+            keyExprAtPos.push_back(item);
+            continue;
+        }
+
+        const FunctionInvocationExpr* funcExpr = static_cast<const FunctionInvocationExpr*>(item);
+        const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
+        const std::string_view funcName = invocation->getSignature()->getFullName();
+
+        int64_t kind;
+        if (funcName == "count") {
+            kind = 0;
+        } else if (funcName == "sum") {
+            kind = 1;
+        } else if (funcName == "min") {
+            kind = 2;
+        } else if (funcName == "max") {
+            kind = 3;
+        } else if (funcName == "avg") {
+            kind = 4;
+        } else {
+            throw TuringException(fmt::format("Unsupported aggregate function: {}", funcName));
+        }
+
+        const ExprChain* args = invocation->getArguments();
+        bioassert(args && !args->empty(), "Aggregate function invocation with no arguments.");
+
+        const Expr* argExpr = args->front();
+        mlir::Value inputColumn;
+
+        if (argExpr->getType() == EvaluatedType::Wildcard) {
+            bioassert(!_varMap.empty(), "count(*) requires at least one traversal variable.");
+            inputColumn = _varMap.begin()->second.back();
+        } else {
+            translateExpr(argExpr);
+            inputColumn = _exprMap.at(argExpr);
+        }
+
+        aggInputColumns.push_back(inputColumn);
+        aggKinds.push_back(kind);
+        aggFuncExprs.push_back(funcExpr);
+    }
+
+    const size_t keyCount = keyColumns.size();
+    const size_t aggCount = aggInputColumns.size();
+    bioassert(keyCount > 0, "grouped aggregate with no key columns.");
+    bioassert(aggCount > 0, "grouped aggregate with no aggregate columns.");
+
+    llvm::SmallVector<mlir::Value> allColumns;
+    for (const mlir::Value col : keyColumns) {
+        allColumns.push_back(col);
+    }
+    for (const mlir::Value col : aggInputColumns) {
+        allColumns.push_back(col);
+    }
+
+    llvm::SmallVector<mlir::Type> resultTypes;
+    for (const mlir::Value col : keyColumns) {
+        resultTypes.push_back(col.getType());
+    }
+    for (size_t i = 0; i < aggCount; i++) {
+        resultTypes.push_back(noneType);
+    }
+
+    auto groupAgg = _opBuilder.create<mlir::db::GroupAggregate>(
+        loc,
+        mlir::TypeRange{resultTypes},
+        mlir::ValueRange{allColumns},
+        static_cast<uint64_t>(keyCount),
+        llvm::ArrayRef<int64_t>{aggKinds});
+
+    const mlir::ResultRange results = groupAgg.getResults();
+
+    for (size_t i = 0; i < keyCount; i++) {
+        if (keyVarAtPos[i]) {
+            registerValue(keyVarAtPos[i], results[i]);
+        } else {
+            _exprMap[keyExprAtPos[i]] = results[i];
+
+            const bool isSymbol = keyExprAtPos[i]->getKind() == Expr::Kind::SYMBOL;
+            if (not isSymbol) {
+                continue;
+            }
+
+            // Symbols need their value updated: the aggregate gives them a new value
+            const SymbolExpr* sym = static_cast<const SymbolExpr*>(keyExprAtPos[i]);
+            const std::string_view symName = sym->getDecl()->getName();
+            for (auto& [var, values] : _varMap) {
+                if (var->getName() == symName) {
+                    registerValue(var, results[i]);
+                    break;
+                }
+            }
+        }
+    }
+
+    for (size_t i = 0; i < aggCount; i++) {
+        _exprMap[aggFuncExprs[i]] = results[keyCount + i];
     }
 }

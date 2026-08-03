@@ -68,6 +68,8 @@ public:
     void analyze(Skip* skipSt);
     void analyze(Limit* limitSt);
 
+    void setV3() { _isV3 = true; }
+
 private:
     CypherAST* _ast {nullptr};
     GraphView _graphView;
@@ -77,6 +79,8 @@ private:
     std::unique_ptr<ExprAnalyzer> _exprAnalyzer;
     std::unique_ptr<ReadStmtAnalyzer> _readAnalyzer;
     std::unique_ptr<WriteStmtAnalyzer> _writeAnalyzer;
+
+    bool _isV3 {false};
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
