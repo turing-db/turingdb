@@ -645,3 +645,18 @@ TEST_F(CollectTest, collectGroupedEmptyGraphEmitsNothing) {
     sink.sortedRows(rows);
     EXPECT_TRUE(rows.empty());
 }
+
+// An ungrouped collect has no grouping key to fold, so it must emit exactly one row
+// whose list cell is empty - collect() over no input row is [], not no row at all.
+// Unlike the grouped form above, the row count here does not depend on the input.
+TEST_F(CollectTest, collectKeylessEmptyGraphEmitsOneEmptyList) {
+    auto graph = buildEmptyCollectGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    StringListSink sink;
+    runLoweredProgram(collectNamesKeylessProgram, reader.getView(), sink);
+
+    ASSERT_EQ(sink.rows().size(), 1u);
+    EXPECT_TRUE(sink.rows().front().empty());
+}

@@ -1529,7 +1529,9 @@ public:
     std::vector<size_t>& newGroupRowsScratch() { return _newGroupRows; }
 
     // Empty the group table, key buffers, value buffer and per-group positions, so the
-    // collect starts fresh. Runs each time nl.collect_buffer's block runs.
+    // collect starts fresh. Runs each time nl.collect_buffer's block runs. An ungrouped
+    // collect comes back with its single empty group already created, since that group
+    // does not depend on any row arriving.
     void reset();
 
 private:
