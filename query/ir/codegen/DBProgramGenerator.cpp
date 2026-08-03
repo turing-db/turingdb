@@ -124,18 +124,16 @@ EdgeMetadata::EdgeType reverseEdge(EdgeMetadata::EdgeType type) {
 size_t findProjectedColumn(const Projection::Items& items, const Expr* key) {
     const VarDecl* keyDecl = key->getExprVarDecl();
 
-    // A key may also name the alias an item was given - the x of
-    // RETURN n.name AS x ORDER BY x - and the alias is one variable, declared once, so
-    // the key and the item it reads share its declaration. Every other expression is
-    // given a declaration of its own, which is why an unnamed one never matches
-    const bool keyNamesAVariable = keyDecl && !keyDecl->isUnnamed();
-
     size_t index = 0;
     for (const Projection::ReturnItem& item : items) {
         if (const Expr* const* itemExpr = std::get_if<Expr*>(&item)) {
             const Expr* projectedExpr = *itemExpr;
 
-            const bool namesTheItem = keyNamesAVariable && projectedExpr->getExprVarDecl() == keyDecl;
+            // A key may also name the alias an item was given - the x of
+            // RETURN n.name AS x ORDER BY x - which is one variable declared once, so the
+            // key and the item share its declaration. Every other expression is given a
+            // declaration of its own, so only an alias is ever matched here
+            const bool namesTheItem = keyDecl && projectedExpr->getExprVarDecl() == keyDecl;
             const bool readsTheItem = StructuralExpressionComparator::equal(projectedExpr, key);
 
             if (namesTheItem || readsTheItem) {
@@ -1137,11 +1135,8 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
     for (const OrderByItem* item : items) {
         const Expr* keyExpr = item->getExpr();
 
-        // A key that reads no row holds the same value in every one of them, so it ties
-        // them all and decides nothing: ORDER BY 1, n.name orders by n.name alone.
-        // Cypher promises nothing of the order tied rows come back in, so dropping the
-        // key is the whole of its meaning - and it never reaches the sort, which has no
-        // use for a column holding the one row a constant is read into
+        // A constant key holds the same value in every row, so it changes no order:
+        // ORDER BY 1, n.name orders by n.name alone
         if (!keyExpr->isDynamic()) {
             continue;
         }
@@ -1155,10 +1150,9 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
         if (isProjected) {
             keyColumns.push_back(static_cast<int64_t>(projectedIndex));
         } else {
-            // The dedup replaced the projection with its surviving rows, and a key it
-            // does not carry was read before that - one row per pre-dedup row, so it
-            // cannot be sorted alongside the survivors. Cypher forbids the query for
-            // the same reason: after DISTINCT, only the returned columns exist
+            // After a DISTINCT only the returned columns exist, which is why Cypher
+            // rejects the query. An unprojected key was read before the dedup, so it
+            // holds one row per pre-dedup row and cannot be sorted with the survivors
             if (distinct) {
                 throw TuringException("ORDER BY with DISTINCT may only order by returned columns.");
             }
@@ -1203,12 +1197,16 @@ mlir::Value DBProgramGenerator::getOrTranslateExprColumn(const VariableColumnMap
     // Anything more is a computation over columns, and has to be translated
     if (expr->getKind() == Expr::Kind::SYMBOL) {
         const VarDecl* var = expr->getExprVarDecl();
-        if (var) {
-            const std::string_view name = var->getName();
-            const auto findIt = variableColumns.find(name);
-            if (findIt != end(variableColumns)) {
-                return findIt->second;
-            }
+        bioassert(var, "Symbol expression without a declaration.");
+
+        const std::string_view name = var->getName();
+        const auto findIt = variableColumns.find(name);
+
+        // A variable this holds no column for is not resolved here: translateExpr looks
+        // it up among the variables the query traverses, and reports it as unknown if it
+        // is not one of them either
+        if (findIt != end(variableColumns)) {
+            return findIt->second;
         }
     }
 
