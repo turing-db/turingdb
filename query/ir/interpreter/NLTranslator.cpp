@@ -406,6 +406,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateCreateNode(createNode, body);
         } else if (nl::CreateEdge createEdge = mlir::dyn_cast<nl::CreateEdge>(operation)) {
             translateCreateEdge(createEdge, body);
+        } else if (nl::SetNodeProperty setNodeProperty = mlir::dyn_cast<nl::SetNodeProperty>(operation)) {
+            translateSetNodeProperty(setNodeProperty, body);
+        } else if (nl::SetEdgeProperty setEdgeProperty = mlir::dyn_cast<nl::SetEdgeProperty>(operation)) {
+            translateSetEdgeProperty(setEdgeProperty, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
@@ -804,6 +808,52 @@ void NLTranslator::translateCreateEdge(nl::CreateEdge createEdge, NLStmtContaine
     }
 
     body->emplaceStmt(&NLExecutor::runCreateEdge, data);
+}
+
+void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty, NLStmtContainer* body) {
+    if (!_metadataBuilder) {
+        throw IRException("nl.set_node_property requires a MetadataBuilder (write transaction)");
+    }
+
+    const llvm::StringRef propName = setNodeProperty.getProperty();
+    const mlir::Value inputValue = setNodeProperty.getInputNodes();
+    const mlir::Value propValue = setNodeProperty.getValue();
+
+    const ValueType valueType = valueTypeFromChunkType(propValue.getType());
+    const PropertyType propType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
+
+    const ColumnNodeIDs* inputColumn = static_cast<const ColumnNodeIDs*>(getColumn(inputValue));
+    const Column* valueColumn = getColumn(propValue);
+
+    NLSetNodePropertyData* data = _program->allocFunctionData<NLSetNodePropertyData>(
+        propType._id,
+        inputColumn,
+        valueColumn);
+
+    body->emplaceStmt(&NLExecutor::runSetNodeProperty, data);
+}
+
+void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty, NLStmtContainer* body) {
+    if (!_metadataBuilder) {
+        throw IRException("nl.set_edge_property requires a MetadataBuilder (write transaction)");
+    }
+
+    const llvm::StringRef propName = setEdgeProperty.getProperty();
+    const mlir::Value inputValue = setEdgeProperty.getInputEdges();
+    const mlir::Value propValue = setEdgeProperty.getValue();
+
+    const ValueType valueType = valueTypeFromChunkType(propValue.getType());
+    const PropertyType propType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
+
+    const ColumnEdgeIDs* inputColumn = static_cast<const ColumnEdgeIDs*>(getColumn(inputValue));
+    const Column* valueColumn = getColumn(propValue);
+
+    NLSetEdgePropertyData* data = _program->allocFunctionData<NLSetEdgePropertyData>(
+        propType._id,
+        inputColumn,
+        valueColumn);
+
+    body->emplaceStmt(&NLExecutor::runSetEdgeProperty, data);
 }
 
 void NLTranslator::translateConstant(nl::Constant constant) {

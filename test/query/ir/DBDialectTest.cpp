@@ -187,6 +187,35 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n:Person) SET n.age = n.age
+const char* const setNodePropertyProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+  %v = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  db.set_node_property(%n, "age", %v) : (!db.column<!storage.node_id>, !db.column<none>) -> ()
+  return
+}
+)mlir";
+
+// MATCH ()-[e]->() SET e.weight = e.weight
+const char* const setEdgePropertyProgram = R"mlir(
+func.func @main() {
+  %s, %e, %t, %d = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  %v = db.get_edge_properties(%e, "weight") : (!db.column<!storage.edge_id>) -> !db.column<none>
+  db.set_edge_property(%e, "weight", %v) : (!db.column<!storage.edge_id>, !db.column<none>) -> ()
+  return
+}
+)mlir";
+
+const char* const emptyPropertySetProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %v = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  db.set_node_property(%n, "", %v) : (!db.column<!storage.node_id>, !db.column<none>) -> ()
+  return
+}
+)mlir";
+
 // MATCH (a) RETURN a, a.score ORDER BY a.score DESC: two columns passed through,
 // sorted by the second one (the score), descending.
 const char* const sortProgram = R"mlir(
@@ -1084,6 +1113,69 @@ TEST_F(DBDialectTest, scanEdgesRoundTripsThroughTextualForm) {
     const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
     ASSERT_TRUE(reparsed);
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, parsesSetNodeProperty) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(setNodePropertyProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::SetNodeProperty setNode;
+    module.get().walk([&](mlir::db::SetNodeProperty op) {
+        setNode = op;
+    });
+    ASSERT_TRUE(setNode);
+
+    EXPECT_EQ(setNode.getProperty(), "age");
+    const mlir::Type nodeIDColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    EXPECT_EQ(setNode.getInputNodes().getType(), nodeIDColumnType);
+    EXPECT_EQ(setNode->getNumResults(), 0U);
+}
+
+TEST_F(DBDialectTest, setNodePropertyRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(setNodePropertyProgram);
+    ASSERT_TRUE(module);
+
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, parsesSetEdgeProperty) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(setEdgePropertyProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::SetEdgeProperty setEdge;
+    module.get().walk([&](mlir::db::SetEdgeProperty op) {
+        setEdge = op;
+    });
+    ASSERT_TRUE(setEdge);
+
+    EXPECT_EQ(setEdge.getProperty(), "weight");
+    const mlir::Type edgeIDColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::EdgeIDType::get(&_context));
+    EXPECT_EQ(setEdge.getInputEdges().getType(), edgeIDColumnType);
+    EXPECT_EQ(setEdge->getNumResults(), 0U);
+}
+
+TEST_F(DBDialectTest, setEdgePropertyRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(setEdgePropertyProgram);
+    ASSERT_TRUE(module);
+
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, verifierRejectsEmptySetProperty) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyPropertySetProgram);
+    EXPECT_FALSE(module);
 }
 
 }

@@ -91,6 +91,7 @@ private:
     void moveComponentToFactor(TranslatedComponent& component, mlir::Block* factorBlock);
 
     void generateCreate(const CypherAST* ast);
+    void generateSet(const CypherAST* ast);
     void generateOutput(const CypherAST* ast);
 
     // Reorders the projection with a Sort over @param projected, replacing each
@@ -102,6 +103,8 @@ private:
     // The column an expression reads: the traversal variable it names, when it names
     // one, otherwise the column its translation produces
     mlir::Value resolveExprColumn(const FinalIdentityMap& identities, const Expr* expr);
+
+    mlir::Value resolveEntityColumn(std::string_view varName);
 
     void generatePropertyConstraints(const CypherAST* ast);
     void generateLabelConstraints(const CypherAST* ast);

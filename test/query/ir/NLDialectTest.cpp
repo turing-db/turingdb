@@ -482,4 +482,87 @@ TEST_F(NLDialectTest, scanEdgesInfersEdgeIterator) {
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
 }
 
+// nl.set_node_property takes a node-ID chunk, a property name and a value chunk,
+// has no result, and verifies with a non-empty property name.
+TEST_F(NLDialectTest, verifierAcceptsSetNodeProperty) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+
+    const mlir::Type nodeChunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    const mlir::Type valueChunkType = mlir::nl::ChunkType::get(&_context, builder.getI64Type());
+
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {nodeChunkType, valueChunkType}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+    mlir::Block& entryBlock = function.getBody().front();
+    const mlir::Value nodeChunk = entryBlock.getArgument(0);
+    const mlir::Value valueChunk = entryBlock.getArgument(1);
+
+    mlir::nl::SetNodeProperty setNode = builder.create<mlir::nl::SetNodeProperty>(loc, nodeChunk, builder.getStringAttr("age"), valueChunk);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+    EXPECT_EQ(setNode.getProperty(), "age");
+    EXPECT_EQ(setNode.getInputNodes().getType(), nodeChunkType);
+    EXPECT_EQ(setNode.getValue().getType(), valueChunkType);
+    EXPECT_EQ(setNode->getNumResults(), 0U);
+}
+
+// The edge counterpart: an edge-ID chunk, a property name and a value chunk.
+TEST_F(NLDialectTest, verifierAcceptsSetEdgeProperty) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+
+    const mlir::Type edgeChunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::EdgeIDType::get(&_context));
+    const mlir::Type valueChunkType = mlir::nl::ChunkType::get(&_context, builder.getF64Type());
+
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {edgeChunkType, valueChunkType}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+    mlir::Block& entryBlock = function.getBody().front();
+    const mlir::Value edgeChunk = entryBlock.getArgument(0);
+    const mlir::Value valueChunk = entryBlock.getArgument(1);
+
+    mlir::nl::SetEdgeProperty setEdge = builder.create<mlir::nl::SetEdgeProperty>(loc, edgeChunk, builder.getStringAttr("weight"), valueChunk);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+    EXPECT_EQ(setEdge.getProperty(), "weight");
+    EXPECT_EQ(setEdge.getInputEdges().getType(), edgeChunkType);
+    EXPECT_EQ(setEdge.getValue().getType(), valueChunkType);
+    EXPECT_EQ(setEdge->getNumResults(), 0u);
+}
+
+// An empty property name is malformed, so the nl.set_node_property verifier fails.
+TEST_F(NLDialectTest, verifierRejectsEmptySetProperty) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+
+    const mlir::Type nodeChunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    const mlir::Type valueChunkType = mlir::nl::ChunkType::get(&_context, builder.getI64Type());
+
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {nodeChunkType, valueChunkType}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+    mlir::Block& entryBlock = function.getBody().front();
+    const mlir::Value nodeChunk = entryBlock.getArgument(0);
+    const mlir::Value valueChunk = entryBlock.getArgument(1);
+
+    builder.create<mlir::nl::SetNodeProperty>(loc, nodeChunk, builder.getStringAttr(""), valueChunk);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    // The diagnostics are swallowed so the deliberate verifier failure does not
+    // print to the test log.
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+    EXPECT_TRUE(mlir::failed(mlir::verify(function)));
+}
+
 }

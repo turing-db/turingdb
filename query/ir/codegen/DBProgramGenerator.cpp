@@ -54,6 +54,8 @@
 #include "stmt/OrderBy.h"
 #include "stmt/OrderByItem.h"
 #include "stmt/ReturnStmt.h"
+#include "stmt/SetItem.h"
+#include "stmt/SetStmt.h"
 #include "stmt/Skip.h"
 #include "stmt/StmtContainer.h"
 #include "Symbol.h"
@@ -276,6 +278,7 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
     generateEdgeTypeConstraints(ast);
     generateFilters(ast);
     generateCreate(ast);
+    generateSet(ast);
     generateOutput(ast);
 
     _opBuilder.create<mlir::func::ReturnOp>(uloc);
@@ -839,6 +842,81 @@ void DBProgramGenerator::generateCreate(const CypherAST* ast) {
                     mlir::ValueRange{propValues});
 
                 lhsValue = rhsValue;
+            }
+        }
+    }
+}
+
+mlir::Value DBProgramGenerator::resolveEntityColumn(std::string_view varName) {
+    for (const auto& [var, values] : _varMap) {
+        if (var->getName() == varName && !values.empty()) {
+            return values.back();
+        }
+    }
+
+    const VariableDependencyGraph::EdgeIdentityMap& edgeIdentities = _vdg.edgeIdentities();
+    const auto findIt = edgeIdentities.find(std::string(varName));
+    const bool foundEdgeIdentity = findIt != edgeIdentities.end() && !findIt->second.empty();
+    if (foundEdgeIdentity) {
+        const VariableDependency* representative = findIt->second.front();
+        return _varMap.at(representative).back();
+    }
+
+    return mlir::Value {};
+}
+
+void DBProgramGenerator::generateSet(const CypherAST* ast) {
+    const CypherAST::QueryCommands& queries = ast->queries();
+    if (queries.size() != 1) {
+        throw TuringException("Multiple queries not yet supported.");
+    }
+
+    const QueryCommand* query = queries.front();
+    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
+    if (!sglPart) {
+        throw TuringException("Non-single part queries are not yet supported.");
+    }
+
+    const StmtContainer* updateStmts = sglPart->getUpdateStmts();
+    if (!updateStmts) {
+        return;
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+    for (const Stmt* stmt : updateStmts->stmts()) {
+        if (stmt->getKind() != Stmt::Kind::SET) {
+            continue;
+        }
+
+        const SetStmt* setStmt = static_cast<const SetStmt*>(stmt);
+
+        for (const SetItem* item : setStmt->getItems()) {
+            const SetItem::PropertyExprAssign* assign =
+                std::get_if<SetItem::PropertyExprAssign>(&item->item());
+            bioassert(assign, "Only property-assignment SET items are supported");
+
+            const PropertyExpr* propertyExpr = assign->_propTypeExpr;
+            const VarDecl* entityDecl = propertyExpr->getEntityVarDecl();
+            const std::string_view varName = entityDecl->getName();
+            const std::string_view propName = propertyExpr->getPropName();
+
+            const mlir::Value entityColumn = resolveEntityColumn(varName);
+            bioassert(entityColumn, "SET on unknown variable: {}", varName);
+
+            translateExpr(assign->_propValueExpr);
+            const mlir::Value valueColumn = _exprMap.at(assign->_propValueExpr);
+
+            const mlir::StringAttr propAttr = _opBuilder.getStringAttr(propName);
+            const EvaluatedType entityType = entityDecl->getType();
+            const bool isNode = entityType == EvaluatedType::NodePattern;
+            const bool isEdge = entityType == EvaluatedType::EdgePattern;
+            bioassert(isNode || isEdge, "SET on non-entity variable: {}", varName);
+
+            if (isNode) {
+                _opBuilder.create<mlir::db::SetNodeProperty>(loc, entityColumn, propAttr, valueColumn);
+            } else /* (isEdge) */ {
+                _opBuilder.create<mlir::db::SetEdgeProperty>(loc, entityColumn, propAttr, valueColumn);
             }
         }
     }
@@ -1552,23 +1630,7 @@ mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propEx
     const std::string_view varName = entityDecl->getName();
     const std::string_view propName = propExpr->getPropName();
 
-    mlir::Value entityColumn;
-    for (const auto& [var, values] : _varMap) {
-        if (var->getName() == varName) {
-            entityColumn = values.back();
-            break;
-        }
-    }
-
-    if (!entityColumn) {
-        const VariableDependencyGraph::EdgeIdentityMap& edgeIdentities = _vdg.edgeIdentities();
-        const auto findIt = edgeIdentities.find(std::string(varName));
-        const bool foundEdgeIdentity = findIt != edgeIdentities.end() && !findIt->second.empty();
-        if (foundEdgeIdentity) {
-            const VariableDependency* representative = findIt->second.front();
-            entityColumn = _varMap.at(representative).back();
-        }
-    }
+    const mlir::Value entityColumn = resolveEntityColumn(varName);
 
     bioassert(entityColumn, "WHERE clause property access on unknown variable: {}", varName);
 

@@ -955,6 +955,48 @@ def CreateEdge : TuringOp<"create_edge"> {
   }];
 }
 
+def SetNodeProperty : TuringOp<"set_node_property"> {
+  let summary = "Set one named property on each input node to a row-aligned value";
+
+  let description = [{
+      %n   = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+      %val = db.constant(5 : i64)
+      db.set_node_property(%n, "age", %val)
+        : (!db.column<!storage.node_id>, !db.column<i64>) -> ()
+
+    Node variable keeps its existing column.
+  }];
+
+  let arguments = (ins Column:$input_nodes, StrAttr:$property, Column:$value);
+
+  let assemblyFormat = [{
+    `(` $input_nodes `,` $property `,` $value `)` attr-dict `:`
+    functional-type(operands, results)
+  }];
+
+  let hasVerifier = 1;
+}
+
+def SetEdgeProperty : TuringOp<"set_edge_property"> {
+  let summary = "Set one named property on each input edge to a row-aligned value";
+
+  let description = [{
+      db.set_edge_property(%e, "weight", %val)
+        : (!db.column<!storage.edge_id>, !db.column<f64>) -> ()
+
+    Edge variable keeps its existing column.
+  }];
+
+  let arguments = (ins Column:$input_edges, StrAttr:$property, Column:$value);
+
+  let assemblyFormat = [{
+    `(` $input_edges `,` $property `,` $value `)` attr-dict `:`
+    functional-type(operands, results)
+  }];
+
+  let hasVerifier = 1;
+}
+
 /**
 * GroupAggregate
 */
