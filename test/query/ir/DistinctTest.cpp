@@ -298,6 +298,25 @@ TEST_F(DistinctTest, dedupsAcrossACrossProduct) {
     expectNodeRowSet("MATCH (a)-->(b), (a)-->(c) RETURN DISTINCT a", expected);
 }
 
+// The same cross product, projecting both columns of its first arm: every (a, b) pair is
+// already distinct - one per out-edge - and only the unreturned second arm repeats it,
+// once per out-edge of a. So the 44 rows carry all 18 pairs and DISTINCT drops nothing
+// but that repetition, where dedupsAcrossACrossProduct cut the same 44 rows down to 9.
+TEST_F(DistinctTest, dedupsCrossProductRepeatsOfAProjectedPair) {
+    const Rows expected = {
+        {0, 1}, {0, 2}, {0, 3}, {0, 6},
+        {1, 0}, {1, 4}, {1, 5},
+        {6, 0},
+        {8, 4}, {8, 7},
+        {9, 2}, {9, 10},
+        {11, 5},
+        {12, 13}, {12, 16},
+        {15, 13}, {15, 14},
+        {17, 13},
+    };
+    expectNodeRowSet("MATCH (a)-->(b), (a)-->(c) RETURN DISTINCT a, b", expected);
+}
+
 // A row's identity is the whole projection, not one column: the two-hop pairs hold
 // (0, 0) twice - Remy reaches himself through Adam and through Ghosts - and that is the
 // only pair DISTINCT drops. Each column keeps its own repeats, so a is still 0 three
@@ -381,6 +400,55 @@ TEST_F(DistinctTest, rejectsOrderByOnUnreturnedKey) {
                  TuringException);
 }
 
+// A DISTINCT projection ordered by the very expression it returns. The key and the
+// returned item are two separate trees, so recognising them as one column is what keeps
+// this query from being turned away - after the dedup, only a column the projection
+// carries can be sorted on. The difference is 0 for the four pairs of aged Person nodes
+// and null for the other sixty, so the dedup leaves two rows and the null sorts last.
+TEST_F(DistinctTest, dedupsAndOrdersAnExpression) {
+    DistinctOptInt64Sink sink;
+    runQuery("MATCH (a:Person), (b:Person) RETURN DISTINCT b.age - a.age ORDER BY b.age - a.age",
+             &sink);
+
+    const OptInt64Values expected = {0, std::nullopt};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+// DISTINCT then ORDER BY over a cross product: the sort sees the 9 rows the dedup left,
+// not the 44 the product built, so the order is over distinct sources. Sorting first
+// would order 44 rows and dedup a sorted stream - the same row set, but the sort would
+// carry five times the rows.
+TEST_F(DistinctTest, ordersDistinctSourcesAcrossACrossProduct) {
+    const Rows expected = {{0}, {1}, {6}, {8}, {9}, {11}, {12}, {15}, {17}};
+    expectNodeRows("MATCH (a)-->(b), (a)-->(c) RETURN DISTINCT a ORDER BY a", expected);
+}
+
+// Both columns of the product's first arm, deduped and then ordered on both: the sort
+// keys are the two columns the projection carries, so the 18 surviving pairs come back
+// in lexicographic order - b ascending within each a.
+TEST_F(DistinctTest, ordersDistinctCrossProductPairs) {
+    const Rows expected = {
+        {0, 1}, {0, 2}, {0, 3}, {0, 6},
+        {1, 0}, {1, 4}, {1, 5},
+        {6, 0},
+        {8, 4}, {8, 7},
+        {9, 2}, {9, 10},
+        {11, 5},
+        {12, 13}, {12, 16},
+        {15, 13}, {15, 14},
+        {17, 13},
+    };
+    expectNodeRows("MATCH (a)-->(b), (a)-->(c) RETURN DISTINCT a, b ORDER BY a, b", expected);
+}
+
+// Top-k over a deduped cross product: the limit is charged to the distinct rows, so this
+// is the three highest sources. Charged to the product's rows instead it would return
+// 17, 15, 15 - node 15 has two out-edges, so the product repeats it four times.
+TEST_F(DistinctTest, ordersDistinctSourcesThenLimitsAcrossACrossProduct) {
+    const Rows expected = {{17}, {15}, {12}};
+    expectNodeRows("MATCH (a)-->(b), (a)-->(c) RETURN DISTINCT a ORDER BY a DESC LIMIT 3", expected);
+}
+
 // The generated program dedups before it sorts - the sort's column is the dedup's
 // result - which is what makes the sort order the distinct rows rather than the raw
 // ones. The reverse order would sort every duplicate and dedup the sorted rows.
@@ -414,18 +482,4 @@ TEST_F(DistinctTest, dedupsBeforeSorting) {
 
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
-}
-
-// A DISTINCT projection ordered by the very expression it returns. The key and the
-// returned item are two separate trees, so recognising them as one column is what keeps
-// this query from being turned away - after the dedup, only a column the projection
-// carries can be sorted on. The difference is 0 for the four pairs of aged Person nodes
-// and null for the other sixty, so the dedup leaves two rows and the null sorts last.
-TEST_F(DistinctTest, dedupsAndOrdersAnExpression) {
-    DistinctOptInt64Sink sink;
-    runQuery("MATCH (a:Person), (b:Person) RETURN DISTINCT b.age - a.age ORDER BY b.age - a.age",
-             &sink);
-
-    const OptInt64Values expected = {0, std::nullopt};
-    EXPECT_EQ(sink.values(), expected);
 }
