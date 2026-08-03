@@ -52,7 +52,10 @@ void NeighbourhoodSampleIterator::next() {
     nextValidForCurrentNode();
 }
 
+// Point @ref _edgeIt to the first edge for the current value of @ref _nodeIt
 void NeighbourhoodSampleIterator::syncEdges() {
+    bioassert(_nodeIt != _inputNodeIDs->end(), "Null node iterator.");
+
     _partIt.goToStart();
     while (_partIt.isNotEnd()) {
         const DataPart* part = _partIt.get();
