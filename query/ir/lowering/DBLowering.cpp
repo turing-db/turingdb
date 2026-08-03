@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "mlir/IR/Block.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Verifier.h"
 
@@ -388,6 +389,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerGetOutEdges(getOutEdges);
     } else if (mlir::db::GetInEdges getInEdges = mlir::dyn_cast<mlir::db::GetInEdges>(operation)) {
         lowerGetInEdges(getInEdges);
+    } else if (mlir::db::GetEdges getEdges = mlir::dyn_cast<mlir::db::GetEdges>(operation)) {
+        lowerGetEdges(getEdges);
     } else if (mlir::db::GetOutEdgesByType getOutEdgesByType = mlir::dyn_cast<mlir::db::GetOutEdgesByType>(operation)) {
         lowerGetOutEdgesByType(getOutEdgesByType);
     } else if (mlir::db::GetInEdgesByType getInEdgesByType = mlir::dyn_cast<mlir::db::GetInEdgesByType>(operation)) {
@@ -557,12 +560,23 @@ void DBLowering::lowerGetInEdges(mlir::db::GetInEdges getInEdges) {
     buildLoopForSource(edges.getResult(), getInEdges.getOperation());
 }
 
+void DBLowering::lowerGetEdges(mlir::db::GetEdges getEdges) {
+    const mlir::Value inputChunk = mapValue(getEdges.getInputNodes());
+
+    llvm::SmallVector<mlir::Value, 4> carriedChunks;
+    for (const mlir::Value carriedColumn : getEdges.getColumnsToFilter()) {
+        carriedChunks.push_back(mapValue(carriedColumn));
+    }
+
+    setInsertionInto(ownerBlock(inputChunk));
+
+
+    const mlir::Location uloc = _builder.getUnknownLoc();
+    nl::GetEdges edges = _builder.create<nl::GetEdges>(uloc, inputChunk, carriedChunks);
+    buildLoopForSource(edges.getResult(), getEdges.getOperation());
+}
+
 void DBLowering::lowerGetOutEdgesByType(mlir::db::GetOutEdgesByType getOutEdgesByType) {
-    // The by-type sibling of lowerGetOutEdges: identical shape, plus the edge type.
-    // The name is hoisted into an nl.get_edge_type handle at the top of the entry
-    // block, so it is resolved once above the loops rather than carried on the hop
-    // (the same split lowerGetNodeProperties uses for a property name). The handle
-    // is created before the loop's insertion point is set below.
     const mlir::Value inputChunk = mapValue(getOutEdgesByType.getInputNodes());
     const mlir::Value edgeTypeHandle = getOrCreateEdgeTypeHandle(getOutEdgesByType.getEdgeType());
 
@@ -573,8 +587,6 @@ void DBLowering::lowerGetOutEdgesByType(mlir::db::GetOutEdgesByType getOutEdgesB
 
     setInsertionInto(ownerBlock(inputChunk));
 
-    // The result iterator type - the four fixed edge chunks plus one per carried
-    // chunk - is inferred from the operands, exactly as for get_out_edges.
     nl::GetOutEdgesByType edges = _builder.create<nl::GetOutEdgesByType>(_builder.getUnknownLoc(),
                                                                          inputChunk,
                                                                          edgeTypeHandle,
@@ -1416,6 +1428,7 @@ void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {
                                      mlir::db::ScanEdges,
                                      mlir::db::GetOutEdges,
                                      mlir::db::GetInEdges,
+                                     mlir::db::GetEdges,
                                      mlir::db::GetOutEdgesByType,
                                      mlir::db::GetInEdgesByType>(definingOp);
     const bool isCrossProduct = mlir::isa<mlir::db::CrossProduct>(definingOp);

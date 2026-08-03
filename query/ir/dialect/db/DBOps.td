@@ -213,6 +213,31 @@ def GetInEdges : TuringOp<"get_in_edges", [Pure, DeclareOpInterfaceMethods<OpAsm
 }
 
 /**
+* GetEdges
+*/
+def GetEdges : TuringOp<"get_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+  let summary = "Fetch the neighbours of input over an edge in either direction, filtering carried columns alongside";
+
+  let description = [{
+      %s, %e, %t, %b = get_edges(%a, {})
+      %c, %b2, %a2 = get_edges(%b, {%a})
+  }];
+
+  let arguments = (ins Column:$input_nodes, Variadic<Column>:$columns_to_filter);
+
+  let results   = (outs ColumnNodeIDs:$srcids,
+                        ColumnEdgeIDs:$eids,
+                        ColumnEdgeTypes:$etypes,
+                        ColumnNodeIDs:$tgtids,
+                        Variadic<Column>:$filtered_columns);
+
+  let assemblyFormat = [{
+    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+/**
 * GetOutEdgesByType
 */
 def GetOutEdgesByType : TuringOp<"get_out_edges_by_type", [Pure]> {

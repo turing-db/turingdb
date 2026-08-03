@@ -136,6 +136,14 @@ LogicalResult GetInEdges::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+LogicalResult GetEdges::inferReturnTypes(MLIRContext* context,
+                                         std::optional<Location> location,
+                                         GetEdges::Adaptor adaptor,
+                                         SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(getEdgeIteratorType(context, adaptor.getColumnsToFilter()));
+    return success();
+}
+
 // Filtering out-edges by type narrows only the rows, never their shape, so a
 // by-type fetch produces the same iterator as GetOutEdges - the edge type name is
 // a filter, not a result type.

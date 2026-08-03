@@ -50,6 +50,8 @@ static EdgeMetadata::EdgeType edgeTypeToNodeType(EdgeMetadata::EdgeType t) {
         return EdgeMetadata::EdgeType::GET_EDGE_TGT;
     } else if (t == EdgeMetadata::EdgeType::GET_IN_EDGES) {
         return EdgeMetadata::EdgeType::GET_EDGE_SRC;
+    } else if (t == EdgeMetadata::EdgeType::GET_EDGES) {
+        return EdgeMetadata::EdgeType::GET_EDGE_TGT;
     }
     throw FatalException(
         fmt::format("Unsure how to get node type for {}", EdgeTypeName::value(t)));

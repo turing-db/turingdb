@@ -8,6 +8,7 @@
 #include <string_view>
 #include <type_traits>
 
+#include "iterators/GetEdgesIterator.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetInEdgesByTypeIterator.h"
 #include "iterators/GetNodeLabelSetIterator.h"
@@ -1520,6 +1521,23 @@ void NLExecutor::runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* 
     chunkWriter.setSrcIDs(loopData->getSources());
 
     runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getTargets());
+}
+
+void NLExecutor::runGetEdgesLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLEdgeLoopData* loopData = static_cast<NLEdgeLoopData*>(data);
+    const ColumnNodeIDs* inputNodeIDs = loopData->getInput();
+
+    if (inputNodeIDs->empty()) {
+        return;
+    }
+
+    GetEdgesChunkWriter chunkWriter(*context->getView(), inputNodeIDs);
+    chunkWriter.setIndices(loopData->getIndices());
+    chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
+    chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
+    chunkWriter.setOtherIDs(loopData->getTargets());
+
+    runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getSources());
 }
 
 void NLExecutor::runGetOutEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data) {

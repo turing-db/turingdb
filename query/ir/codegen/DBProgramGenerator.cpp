@@ -71,7 +71,8 @@ bool producesEdgeVar(const DependencyEdge* e) {
     const EdgeMetadata::EdgeType producedType = e->data().type();
     const bool getOut = producedType == EdgeMetadata::EdgeType::GET_OUT_EDGES;
     const bool getIn = producedType == EdgeMetadata::EdgeType::GET_IN_EDGES;
-    return getOut || getIn;
+    const bool getEdges = producedType == EdgeMetadata::EdgeType::GET_EDGES;
+    return getOut || getIn || getEdges;
 }
 
 bool producesNodeVar(const DependencyEdge* e) {
@@ -89,6 +90,10 @@ EdgeMetadata::EdgeType reverseEdge(EdgeMetadata::EdgeType type) {
 
         case EdgeMetadata::EdgeType::GET_IN_EDGES:
             return db::EdgeMetadata::EdgeType::GET_OUT_EDGES;
+        break;
+
+        case EdgeMetadata::EdgeType::GET_EDGES:
+            return db::EdgeMetadata::EdgeType::GET_EDGES;
         break;
 
         default:
@@ -165,7 +170,8 @@ void DBProgramGenerator::addEdgeTraversal(const VariableDependency* src,
                                           const VariableDependency* tgt,
                                           const std::vector<const VariableDependency*>& carrySet) {
     static_assert(std::is_same_v<EdgeOp, mlir::db::GetOutEdges>
-                      or std::is_same_v<EdgeOp, mlir::db::GetInEdges>, "Invalid op");
+                      or std::is_same_v<EdgeOp, mlir::db::GetInEdges>
+                      or std::is_same_v<EdgeOp, mlir::db::GetEdges>, "Invalid op");
 
     bioassert(src, "Null source");
     bioassert(tgt, "Null target");
@@ -220,7 +226,9 @@ void DBProgramGenerator::addEdgeTraversal(const VariableDependency* src,
 
     _edgeTypeMap[edge] = newEtypes;
 
-    if constexpr (std::is_same_v<EdgeOp, mlir::db::GetOutEdges>) {
+    constexpr bool forwardOrientation = std::is_same_v<EdgeOp, mlir::db::GetOutEdges>
+                                        or std::is_same_v<EdgeOp, mlir::db::GetEdges>;
+    if constexpr (forwardOrientation) {
         registerValue(src, newSrcs);
         registerValue(tgt, newTgts);
     } else {
@@ -607,7 +615,7 @@ void DBProgramGenerator::translateComponent(const VariableDependency* root,
             break;
 
             case EdgeMetadata::EdgeType::GET_EDGES:
-                throw TuringException("Undirected edges not yet supported.");
+                addGetEdges(src, edge, tgt, carriedSet);
             break;
 
             case EdgeMetadata::EdgeType::GET_EDGE_TGT:
