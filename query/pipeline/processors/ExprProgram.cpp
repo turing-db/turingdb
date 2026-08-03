@@ -111,6 +111,10 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
             EvalBinaryExpr::eval<OP_DIV>(res, lhs, rhs);
         break;
 
+        case OP_XOR:
+            EvalBinaryExpr::eval<OP_XOR>(res, lhs, rhs);
+        break;
+
         case OP_MINUS:
         case OP_PLUS:
         case OP_NOT:
@@ -180,6 +184,7 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
         case OP_DIV:
         case OP_PROJECT:
         case OP_IN:
+        case OP_XOR:
             throw FatalException(fmt::format(
                 "Attempted to evalute {} as unary operator.",
                 ColumnOperatorDescription::value(op)));
@@ -244,6 +249,7 @@ void ExprProgram::evalFunction(const Instruction& instr) {
         case OP_MINUS:
         case OP_PLUS:
         case OP_NOT:
+        case OP_XOR:
             throw FatalException(fmt::format("Attempted to evalute {} as function.",
                                              ColumnOperatorDescription::value(op)));
         break;

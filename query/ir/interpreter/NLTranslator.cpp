@@ -317,6 +317,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateDiv(div, body);
         } else if (nl::Eq eq = mlir::dyn_cast<nl::Eq>(operation)) {
             translateEq(eq, body);
+        } else if (nl::Neq neq = mlir::dyn_cast<nl::Neq>(operation)) {
+            translateNeq(neq, body);
         } else if (nl::Gt gt = mlir::dyn_cast<nl::Gt>(operation)) {
             translateGt(gt, body);
         } else if (nl::Lt lt = mlir::dyn_cast<nl::Lt>(operation)) {
@@ -329,6 +331,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateAnd(andOp, body);
         } else if (nl::Or orOp = mlir::dyn_cast<nl::Or>(operation)) {
             translateOr(orOp, body);
+        } else if (nl::Xor xorOp = mlir::dyn_cast<nl::Xor>(operation)) {
+            translateXor(xorOp, body);
         } else if (nl::Not notOp = mlir::dyn_cast<nl::Not>(operation)) {
             translateNot(notOp, body);
         } else if (nl::Filter filter = mlir::dyn_cast<nl::Filter>(operation)) {
@@ -895,6 +899,20 @@ void NLTranslator::translateEq(nl::Eq eq, NLStmtContainer* body) {
     body->emplaceStmt(&NLExecutor::runBinary, data);
 }
 
+void NLTranslator::translateNeq(nl::Neq neq, NLStmtContainer* body) {
+    const Column* lhs = getColumn(neq.getLhs());
+    const Column* rhs = getColumn(neq.getRhs());
+
+    Column* result = nullptr;
+    const NLBinaryFn fn = NLExecutor::selectBinary<OP_NOT_EQUAL>(lhs, rhs, _memory, result);
+    bioassert(result, "Failed to translate NEQ result.");
+
+    _valueSlots[neq.getResult()] = result;
+
+    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
+    body->emplaceStmt(&NLExecutor::runBinary, data);
+}
+
 void NLTranslator::translateGt(nl::Gt gt, NLStmtContainer* body) {
     const Column* lhs = getColumn(gt.getLhs());
     const Column* rhs = getColumn(gt.getRhs());
@@ -974,6 +992,20 @@ void NLTranslator::translateOr(nl::Or orOp, NLStmtContainer* body) {
     bioassert(result, "Failed to translate OR result.");
 
     _valueSlots[orOp.getResult()] = result;
+
+    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
+    body->emplaceStmt(&NLExecutor::runBinary, data);
+}
+
+void NLTranslator::translateXor(nl::Xor xorOp, NLStmtContainer* body) {
+    const Column* lhs = getColumn(xorOp.getLhs());
+    const Column* rhs = getColumn(xorOp.getRhs());
+
+    Column* result = nullptr;
+    const NLBinaryFn fn = NLExecutor::selectBinary<OP_XOR>(lhs, rhs, _memory, result);
+    bioassert(result, "Failed to translate XOR result.");
+
+    _valueSlots[xorOp.getResult()] = result;
 
     NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
     body->emplaceStmt(&NLExecutor::runBinary, data);

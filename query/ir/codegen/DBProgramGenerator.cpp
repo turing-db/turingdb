@@ -1458,9 +1458,12 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
         case BinaryOperator::LessThanOrEqual:
             _exprMap[expr] = _opBuilder.create<mlir::db::LteOp>(loc, boolType, lhs, rhs).getResult();
         break;
-
-        case BinaryOperator::Xor:
         case BinaryOperator::NotEqual:
+            _exprMap[expr] = _opBuilder.create<mlir::db::NeqOp>(loc, boolType, lhs, rhs).getResult();
+        break;
+        case BinaryOperator::Xor:
+            _exprMap[expr] = _opBuilder.create<mlir::db::XorOp>(loc, boolType, lhs, rhs).getResult();
+        break;
         case BinaryOperator::Mod:
         case BinaryOperator::Pow:
         case BinaryOperator::In:

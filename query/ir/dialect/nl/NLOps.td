@@ -1155,6 +1155,18 @@ def Eq : NLOp<"eq", [Pure]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
+def Neq : NLOp<"neq", [Pure]> {
+  let summary = "Row-wise inequality of two value chunks";
+  let description = [{
+      %r = nl.neq %x, %y : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
+  }];
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
 def Gt : NLOp<"gt", [Pure]> {
   let summary = "Row-wise greater-than comparison of two value chunks";
   let description = [{
@@ -1225,6 +1237,18 @@ def Or : NLOp<"or", [Pure]> {
       null, so the result is nullable when either operand is.
 
       %r = nl.or %x, %y : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<i1>) -> !nl.chunk<!storage.nullable<i1>>
+  }];
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
+def Xor : NLOp<"xor", [Pure]> {
+  let summary = "Row-wise logical XOR of two boolean chunks";
+  let description = [{
+      %r = nl.xor %x, %y : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<i1>) -> !nl.chunk<!storage.nullable<i1>>
   }];
 
   let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);

@@ -773,6 +773,11 @@ def OrOp : PredicateOp<"or", [Pure]> {
   let arguments = (ins Column : $lhs, Column : $rhs);
 }
 
+def XorOp : PredicateOp<"xor", [Pure]> {
+  let summary = "Performs row-wise logical XOR on its two input boolean columns";
+  let arguments = (ins Column : $lhs, Column : $rhs);
+}
+
 def NotOp : TuringOp<"not", [Pure]> {
   let summary = "Row-wise logical NOT of a boolean column";
   let arguments = (ins Column:$operand);
@@ -787,6 +792,10 @@ def EqOp : PredicateOp<"eq", [Pure]> {
 
       %r = db.eq %x, %y : (!db.column<i64>, !db.column<i64>) -> !db.column<bool>
   }];
+}
+
+def NeqOp : PredicateOp<"neq", [Pure]> {
+  let summary = "Row-wise inequality of two value columns";
 }
 
 def AddOp : BinaryOp<"add", [Pure]> {

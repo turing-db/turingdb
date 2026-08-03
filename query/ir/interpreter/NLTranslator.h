@@ -393,6 +393,7 @@ private:
     void translateMul(mlir::nl::Mul mul, NLStmtContainer* body);
     void translateDiv(mlir::nl::Div div, NLStmtContainer* body);
     void translateEq(mlir::nl::Eq eq, NLStmtContainer* body);
+    void translateNeq(mlir::nl::Neq neq, NLStmtContainer* body);
     void translateGt(mlir::nl::Gt gt, NLStmtContainer* body);
     void translateLt(mlir::nl::Lt lt, NLStmtContainer* body);
     void translateGte(mlir::nl::Gte gte, NLStmtContainer* body);
@@ -400,6 +401,7 @@ private:
 
     void translateAnd(mlir::nl::And andOp, NLStmtContainer* body);
     void translateOr(mlir::nl::Or orOp, NLStmtContainer* body);
+    void translateXor(mlir::nl::Xor xorOp, NLStmtContainer* body);
     void translateNot(mlir::nl::Not notOp, NLStmtContainer* body);
 
     void translateFilter(mlir::nl::Filter filter, NLStmtContainer* body);

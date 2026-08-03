@@ -85,6 +85,16 @@ struct BinaryOpTraits<OP_EQUAL> {
 };
 
 template <>
+struct BinaryOpTraits<OP_NOT_EQUAL> {
+    using Functor = Ne;
+
+    template <typename ResCol, typename LhsCol, typename RhsCol>
+    static void exec(ResCol* result, const LhsCol* lhs, const RhsCol* rhs) {
+        BinaryPredicates::exec<Functor>(result, lhs, rhs);
+    }
+};
+
+template <>
 struct BinaryOpTraits<OP_DIV> {
     using Functor = Div;
 
@@ -147,6 +157,16 @@ struct BinaryOpTraits<OP_AND> {
 template <>
 struct BinaryOpTraits<OP_OR> {
     using Functor = Or;
+
+    template <typename ResCol, typename LhsCol, typename RhsCol>
+    static void exec(ResCol* result, const LhsCol* lhs, const RhsCol* rhs) {
+        BinaryPredicates::exec<Functor>(result, lhs, rhs);
+    }
+};
+
+template <>
+struct BinaryOpTraits<OP_XOR> {
+    using Functor = Xor;
 
     template <typename ResCol, typename LhsCol, typename RhsCol>
     static void exec(ResCol* result, const LhsCol* lhs, const RhsCol* rhs) {
@@ -2811,3 +2831,5 @@ template NLBinaryFn NLExecutor::selectBinary<OP_GREATER_THAN_OR_EQUAL>(const Col
 template NLBinaryFn NLExecutor::selectBinary<OP_LESS_THAN_OR_EQUAL>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_AND>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_OR>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
+template NLBinaryFn NLExecutor::selectBinary<OP_NOT_EQUAL>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
+template NLBinaryFn NLExecutor::selectBinary<OP_XOR>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
