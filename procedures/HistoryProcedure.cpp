@@ -17,22 +17,26 @@ namespace {
 using UInt64Col = ColumnVector<types::UInt64::Primitive>;
 
 struct Data : public ProcedureData {
+    // The commit the walk starts from - the one the query reads - resolved once when the
+    // call is prepared, so a rewind restarts from it without asking the transaction again.
+    const Commit* _headCommit {nullptr};
+
+    // The walk's cursor, stepped back one commit per emitted row until it runs past the root.
     const Commit* _commit {nullptr};
 };
 
-// The commit the history is walked back from: the one the query reads. Both the first
-// drive and every rewind start there, since the cursor below consumes it.
-void seekToHeadCommit(Data* data, const ProcedureContext* ctxt, const VersionController& controller) {
+// Resolve the commit the history is walked back from: the one the query reads.
+void resolveHeadCommit(Data* data, const ProcedureContext* ctxt, const VersionController& controller) {
     Transaction* tx = ctxt->getTransaction();
     if (tx->readingFrozenCommit()) {
-        data->_commit = controller.getCommitSafe(tx->get<FrozenCommitTx>().getCommitHash());
+        data->_headCommit = controller.getCommitSafe(tx->get<FrozenCommitTx>().getCommitHash());
     } else if (tx->readingPendingCommit()) {
-        data->_commit = tx->get<PendingCommitReadTx>().commitBuilder()->commit();
+        data->_headCommit = tx->get<PendingCommitReadTx>().commitBuilder()->commit();
     } else if (tx->writingPendingCommit()) {
-        data->_commit = tx->get<PendingCommitWriteTx>().commitBuilder()->commit();
+        data->_headCommit = tx->get<PendingCommitWriteTx>().commitBuilder()->commit();
     }
 
-    bioassert(data->_commit, "headCommitHash not found");
+    bioassert(data->_headCommit, "headCommitHash not found");
 }
 
 void writeChunk(Data* data,
@@ -118,10 +122,14 @@ void HistoryProcedure::execute(ProcedureState* proc) {
 
     switch (proc->getStep()) {
         case ProcedureState::Step::PREPARE:
+            resolveHeadCommit(&data, ctxt, controller);
+            data._commit = data._headCommit;
+        break;
+
         case ProcedureState::Step::RESET:
-            // Walking the history consumes the cursor, so a rewind seeks back to the
-            // head commit exactly as the first drive did.
-            seekToHeadCommit(&data, ctxt, controller);
+            // Walking the history consumes the cursor, so a rewind puts it back to the
+            // commit resolved when the call was prepared.
+            data._commit = data._headCommit;
         break;
 
         case ProcedureState::Step::EXECUTE:
