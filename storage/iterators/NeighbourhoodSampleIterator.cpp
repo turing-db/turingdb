@@ -71,9 +71,11 @@ void NeighbourhoodSampleIterator::syncEdges() {
     }
 }
 
+// Traverses each DataPart for every NodeID
 void NeighbourhoodSampleIterator::nextValidForCurrentNode() {
     _edgeIt++;
 
+    // Skip deleted edges
     while (_edgeIt != _edges.end() and deleted(*_edgeIt)) {
         _edgeIt++;
     }
@@ -190,7 +192,6 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
     // Algorithm L (improvement on Reservoir sampling)
     // https://en.wikipedia.org/wiki/Reservoir_sampling
     for (size_t sampleNumber = 0; sampleNumber < nodesToSample; sampleNumber++) {
-        // Sample range [start, end)
         const size_t sampleStart = writeIndex;
         // Expected value of the largest u_j of the first k samples
         double W = std::pow(rand01(), _sampleRatio);
@@ -257,6 +258,7 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
             }
             nextValidForCurrentNode();
 
+            // Update sample threshold to make next sample less likely
             W *= std::pow(rand01(), _sampleRatio);
         }
         _nodeIt++;

@@ -15,6 +15,10 @@ namespace db {
 
 class GraphView;
 
+/**
+ * @brief Tombstone-aware iterator over the out of edges of each NodeID in @ref _inputNodeIDs 
+ * @detail Traverses each DataPart for every NodeID, as opposed to GetOutEdgesIterator 
+ */
 class NeighbourhoodSampleIterator : public Iterator {
 public:
     NeighbourhoodSampleIterator(const GraphView& view, const ColumnNodeIDs* inputNodeIDs);
@@ -37,6 +41,9 @@ protected:
     bool deleted(const EdgeRecord& e) const;
 };
 
+/**
+ * @brief Uniform random sample of the out edges of each NodeID in @ref _inputNodeIDs
+ */
 class NeighbourhoodSampleChunkWriter final : public NeighbourhoodSampleIterator {
 public:
     NeighbourhoodSampleChunkWriter(const GraphView& view,
