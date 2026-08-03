@@ -783,7 +783,7 @@ protected:
         expandProcedure->setAllocCallback(&expandAlloc);
         expandProcedure->setDeallocCallback(&expandDealloc);
         expandProcedure->setExecuteCallback(&expandExecute);
-        expandProcedure->setReportsInputRows(true);
+        expandProcedure->setIndices(true);
         expandProcedure->addArgument("nodeIDs", ProcedureType::NODE);
         expandProcedure->addReturnValue("copy", ProcedureType::INT64);
         testNamespace->addProcedure(expandProcedure);
@@ -792,7 +792,7 @@ protected:
         fanOutProcedure->setAllocCallback(&fanOutAlloc);
         fanOutProcedure->setDeallocCallback(&fanOutDealloc);
         fanOutProcedure->setExecuteCallback(&fanOutExecute);
-        fanOutProcedure->setReportsInputRows(true);
+        fanOutProcedure->setIndices(true);
         fanOutProcedure->addArgument("nodeIDs", ProcedureType::NODE);
         fanOutProcedure->addReturnValue("value", ProcedureType::INT64);
         testNamespace->addProcedure(fanOutProcedure);
@@ -804,7 +804,7 @@ protected:
         brokenProcedure->setAllocCallback(&doubleAlloc);
         brokenProcedure->setDeallocCallback(&doubleDealloc);
         brokenProcedure->setExecuteCallback(&doubleExecute);
-        brokenProcedure->setReportsInputRows(true);
+        brokenProcedure->setIndices(true);
         brokenProcedure->addArgument("nodeIDs", ProcedureType::NODE);
         brokenProcedure->addReturnValue("doubled", ProcedureType::INT64);
         testNamespace->addProcedure(brokenProcedure);

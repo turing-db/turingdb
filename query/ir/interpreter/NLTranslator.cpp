@@ -2383,7 +2383,7 @@ void NLTranslator::addProcedureCarriedColumns(const IteratorConfig& config,
     // Only a procedure that declares it reports the input row behind each row it emits
     // can be carried past: that report is what the carried columns are rebuilt from.
     // Lowering settles this at plan time, so reaching it here means hand-written nl IR.
-    if (!carriedColumns.empty() && !procedure->reportsInputRows()) {
+    if (!carriedColumns.empty() && !procedure->getIndices()) {
         throw IRException(fmt::format("nl.procedure_init carries columns past '{}', but the "
                                       "procedure does not report the input row of the rows it emits",
                                       procedure->getFullName()));

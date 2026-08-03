@@ -1829,7 +1829,7 @@ def ProcedureInit : NLOp<"procedure_init", [AttrSizedOperandSegments]> {
       }
 
     Only a procedure that declares it makes that report can be carried past
-    (Procedure::reportsInputRows), which lowering settles at plan time; hand-written IR
+    (Procedure::getIndices), which lowering settles at plan time; hand-written IR
     is caught during translation. A procedure that declares it and then reports nothing
     is caught at the first step it emits, rather than silently misaligning the
     projection.
