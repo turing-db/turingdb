@@ -395,12 +395,6 @@ private:
     // present values are appended across steps.
     Column* allocValueColumnForValueType(ValueType valueType);
 
-    // Translate an nl.procedure: resolve the name against the procedure registry,
-    // allocate the procedure's data through its alloc callback, map the handle to the
-    // runtime call, and record the prepare/reset statement (run each time the block
-    // holding the nl.procedure runs). The input and result columns are bound by the
-    // ops that name the handle, which know the chunks - the way nl.sort_collect
-    // allocates the sort buffers rather than nl.sort_buffer.
     void translateProcedure(mlir::nl::Procedure procedureOp, NLStmtContainer* body);
 
     // Bind the argument chunks of a call as the procedure's input columns, one per
@@ -408,11 +402,6 @@ private:
     // place, so binding them once holds for every step.
     void bindProcedureInputs(NLProcedureState* state, mlir::ValueRange inputs);
 
-    // Allocate the output column for each column carried past a call - the drive loop's
-    // trailing variables, after the yields - and record each with the gather that
-    // rebuilds it from the input rows the procedure reports, repeating a row the call
-    // expanded and dropping one it filtered out. Hands the procedure the row map it
-    // reports into when anything is carried.
     void addProcedureCarriedColumns(const IteratorConfig& config,
                                     mlir::Block& loopBody,
                                     size_t yieldCount,

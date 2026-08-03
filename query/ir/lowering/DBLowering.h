@@ -308,18 +308,6 @@ private:
     // element) plus its nl.for - the list never materializes.
     void lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect);
 
-    // Lower a db.call_procedure: resolve the name against the procedure registry,
-    // hoist an nl.procedure handle (carrying the name and the yielded return values)
-    // to the top of the entry block - where it prepares the call once, above the
-    // loops - then place the call itself as an nl.procedure_init iterator and its
-    // nl.for, the shape a scan or a hop lowers to. The iterator opens where the
-    // arguments are bound (the entry block for an argument-less source), and each step
-    // of the loop runs the procedure once until it has answered that chunk of arguments
-    // in full, so one chunk in may give many chunks out. db.call_procedure's results map
-    // to that loop's variables: the yields, then the carry set rebuilt against the rows
-    // the procedure emitted.
-    // The result chunk types come from the procedure's declared return types, so the
-    // db result columns' own element types are ignored (as for a property fetch).
     void lowerCallProcedure(mlir::db::CallProcedure call);
 
     void lowerOutput(mlir::db::Output output);
