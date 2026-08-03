@@ -110,6 +110,10 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
         status.setStatus(QueryStatus::Status::PARSE_ERROR);
         status.setMessage(std::string("Unexpected exception: ") + e.what());
         return;
+    } catch (...) {
+        status.setStatus(QueryStatus::Status::PARSE_ERROR);
+        status.setMessage("Unknown exception occurred");
+        return;
     }
 
     CypherAnalyzer analyzer(&ast, view);
@@ -123,6 +127,10 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
     } catch (const std::exception& e) {
         status.setStatus(QueryStatus::Status::ANALYZE_ERROR);
         status.setMessage(std::string("Unexpected exception: ") + e.what());
+        return;
+    } catch (...) {
+        status.setStatus(QueryStatus::Status::ANALYZE_ERROR);
+        status.setMessage("Unknown exception occurred");
         return;
     }
 
@@ -157,6 +165,10 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
         status.setStatus(QueryStatus::Status::PLAN_ERROR);
         status.setMessage(std::string("Unexpected exception: ") + e.what());
         return;
+    } catch (...) {
+        status.setStatus(QueryStatus::Status::PLAN_ERROR);
+        status.setMessage("Unknown exception occurred");
+        return;
     }
 
     DBDialectInterpreter interpreter(module, &view, sink, mem, ChunkConfig::CHUNK_SIZE, writeBuffer, metadataBuilder);
@@ -169,6 +181,10 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
     } catch (const std::exception& e) {
         status.setStatus(QueryStatus::Status::EXEC_ERROR);
         status.setMessage(std::string("Unexpected exception: ") + e.what());
+        return;
+    } catch (...) {
+        status.setStatus(QueryStatus::Status::EXEC_ERROR);
+        status.setMessage("Unknown exception occurred");
         return;
     }
 }
