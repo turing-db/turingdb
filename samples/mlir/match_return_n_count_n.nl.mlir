@@ -1,4 +1,4 @@
-// MATCH (n) RETURN n, count (n)
+// MATCH (n) RETURN n, count(n)
 
 func.func @main() {
   %0 = nl.group_aggregate_buffer keys 1 aggregates [count]
