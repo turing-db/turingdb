@@ -356,6 +356,15 @@ TEST_F(DistinctTest, dedupsAndOrdersProjectedNames) {
     expectNames("MATCH (a)-->(b) RETURN DISTINCT b.name ORDER BY b.name", distinctTargetNames);
 }
 
+// The same query with the returned property aliased, and the alias as the sort key. The
+// key is one variable the projection declares, not a second reading of b.name, so it is
+// matched to its item by that declaration rather than by structure - and the dedup then
+// sorts on a column it carries, exactly as it does without the alias.
+TEST_F(DistinctTest, dedupsAndOrdersAnAliasedProperty) {
+    expectNames("MATCH (a)-->(b) RETURN DISTINCT b.name AS targetName ORDER BY targetName",
+                distinctTargetNames);
+}
+
 // DISTINCT then ORDER BY: the sort sees the deduped rows, so the 12 distinct targets
 // come back once each, ascending.
 TEST_F(DistinctTest, ordersDistinctTargets) {
