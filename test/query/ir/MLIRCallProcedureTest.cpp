@@ -853,6 +853,43 @@ private:
     std::vector<Row> _rows;
 };
 
+// Collects the (a, b, c) rows of three uncorrelated calls crossed together, so a test can
+// assert the full Cartesian product of what each one emitted.
+class NodeTripleSink : public NLOutputSink {
+public:
+    using Row = std::tuple<uint64_t, uint64_t, uint64_t>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 3u);
+
+        const auto* first = dynamic_cast<const ColumnVector<NodeID>*>(chunks[0]);
+        const auto* second = dynamic_cast<const ColumnVector<NodeID>*>(chunks[1]);
+        const auto* third = dynamic_cast<const ColumnVector<NodeID>*>(chunks[2]);
+        ASSERT_NE(first, nullptr);
+        ASSERT_NE(second, nullptr);
+        ASSERT_NE(third, nullptr);
+        ASSERT_EQ(first->size(), second->size());
+        ASSERT_EQ(first->size(), third->size());
+
+        const auto& firstRaw = first->getRaw();
+        const auto& secondRaw = second->getRaw();
+        const auto& thirdRaw = third->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.emplace_back(firstRaw[rowIndex].getValue(),
+                               secondRaw[rowIndex].getValue(),
+                               thirdRaw[rowIndex].getValue());
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
 // Collects the (id, copy, value) rows of a chain of calls: the first call's node yield
 // followed by one Int64 yield from each of the two calls after it, so a test can assert
 // what survived being carried past several calls rather than one.
@@ -1821,6 +1858,42 @@ TEST_F(MLIRCallProcedureTest, cypherThreeChainedCallsWithoutMatch) {
     std::vector<ChainedCallSink::Row> rows;
     sink.sortedRows(rows);
     const std::vector<ChainedCallSink::Row> expected {{1, 100, 10}, {1, 100, 11}, {1, 100, 12}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(MLIRCallProcedureTest, cypherThreeUncorrelatedCallsWithoutMatch) {
+    auto graph = buildLabelledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Three calls, none reading what another produced and none reading a match, so each one
+    // is a source and the three are crossed: two nested db.cross_products rather than the
+    // argument chain. test.twoNodes emits nodes 0 and 1, so the result is the whole 2 x 2 x 2
+    // product. Calling the one procedure three times also pins that each CALL is its own
+    // call - three nl.procedure handles, each with its own state, rather than one CSE'd
+    // handle driven three times, which would emit a single node per row instead.
+    NodeTripleSink sink;
+    runQuery("CALL test.twoNodes() YIELD id AS a "
+             "CALL test.twoNodes() YIELD id AS b "
+             "CALL test.twoNodes() YIELD id AS c "
+             "RETURN a, b, c",
+             graph.get(),
+             reader.getView(),
+             sink,
+             /*chunkSize=*/2);
+
+    std::vector<NodeTripleSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<NodeTripleSink::Row> expected {
+        {0, 0, 0},
+        {0, 0, 1},
+        {0, 1, 0},
+        {0, 1, 1},
+        {1, 0, 0},
+        {1, 0, 1},
+        {1, 1, 0},
+        {1, 1, 1},
+    };
     EXPECT_EQ(rows, expected);
 }
 
