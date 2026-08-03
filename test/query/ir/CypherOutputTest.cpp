@@ -284,6 +284,17 @@ TEST_F(CypherOutputTest, chainThenConverge) {
     expectRows("MATCH (a)-->(b)-->(c), (d)-->(b) RETURN a", expected);
 }
 
+TEST_F(CypherOutputTest, xorFilters) {
+    expectRows("MATCH (n) WHERE n.isFrench XOR n.hasPhD RETURN n",
+               {{8}, {11}});
+
+    expectRows("MATCH (n) WHERE (n.isFrench XOR n.hasPhD) AND n.hasPhD RETURN n",
+               {{11}});
+
+    expectRows("MATCH (n) WHERE (n.isFrench XOR n.hasPhD) OR n.hasPhD RETURN n",
+               {{0}, {1}, {8}, {9}, {11}});
+}
+
 TEST_F(CypherOutputTest, chainThenDiverge) {
     const Rows expected = {
         {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0},
