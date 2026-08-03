@@ -212,7 +212,7 @@ struct PairRestrictions<Op> {
 };
 
 template <ColumnOperator Op>
-    requires (Op == OP_AND) || (Op == OP_OR)
+    requires (Op == OP_AND) || (Op == OP_OR) || (Op == OP_XOR)
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
         // Boolean properties; optional (3-valued logic) and non-optional

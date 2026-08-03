@@ -4,6 +4,7 @@
 #include <concepts>
 #include <functional>
 #include <type_traits>
+#include <utility>
 
 #include "ID.h"
 #include "TypeUtils.h"
@@ -451,6 +452,20 @@ struct TuringNotEqual {
     }
 };
 
+struct TuringXor {
+    bool operator()(bool a, bool b) {
+        return a ^ b;
+    } 
+
+    bool operator()(CustomBool a, CustomBool b) {
+        return a._boolean ^ b._boolean;
+    }
+
+    bool operator()(ColumnMask::Bool_t a, ColumnMask::Bool_t b) {
+        return a._value ^ b._value; 
+    }
+};
+
 }
 
 using Eq = BinaryPredicate<TuringEqual>;
@@ -464,5 +479,6 @@ using Lte = BinaryPredicate<std::less_equal<>>;
 
 using And = BinaryPredicate<std::logical_and<>>;
 using Or = BinaryPredicate<std::logical_or<>>;
+using Xor = BinaryPredicate<TuringXor>;
 
 }

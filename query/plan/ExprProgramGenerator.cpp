@@ -701,10 +701,16 @@ Column* ExprProgramGenerator::allocUnaryResultCol(ColumnOperator op, const Colum
         case OP_DIV:
         case OP_PROJECT:
         case OP_IN:
+        case OP_XOR:
+            throw PlannerException(
+                fmt::format("Attempted to allocate unary result for binary operator {}.",
+                            ColumnOperatorDescription::value(op)));
+        break;
+
         case OP_FUNC_COSINE_SIMILARITY:
         case OP_FUNC_EUCLIDEAN_DISTANCE:
             throw PlannerException(
-                fmt::format("Attempted to allocate unary result for binary operator {}.",
+                fmt::format("Attempted to allocate unary result for function {}.",
                             ColumnOperatorDescription::value(op)));
         break;
 

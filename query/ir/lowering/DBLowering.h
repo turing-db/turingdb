@@ -244,6 +244,7 @@ private:
 
     // Handles nullity of its output depending on operands
     void lowerEq(mlir::db::EqOp eq);
+    void lowerNeq(mlir::db::NeqOp neq);
     void lowerGt(mlir::db::GtOp gt);
     void lowerLt(mlir::db::LtOp lt);
     void lowerGte(mlir::db::GteOp gte);
@@ -251,6 +252,7 @@ private:
 
     void lowerAnd(mlir::db::AndOp andOp);
     void lowerOr(mlir::db::OrOp orOp);
+    void lowerXor(mlir::db::XorOp xorOp);
 
     // Propagates nullity from operand to result
     void lowerNot(mlir::db::NotOp notOp);

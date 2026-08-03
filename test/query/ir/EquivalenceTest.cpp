@@ -384,10 +384,9 @@ TEST_F(EquivalenceTest, eqFilters) {
     expectEquivalent("MATCH (n)-[e]->(m) WHERE e.duration = 10 + 10 return m");
 }
 
-// FIXME: Enable commented tests below once string literals are supported
 TEST_F(EquivalenceTest, inlineNodePropertyConstraints) {
     // Single string constraint — exactly one person named Remy.
-    // expectEquivalent("MATCH (n {name: 'Remy'}) RETURN n");
+    expectEquivalent("MATCH (n {name: 'Remy'}) RETURN n");
 
     // Integer constraint — both Remy and Adam have age 32.
     expectEquivalent("MATCH (n {age: 32}) RETURN n");
@@ -399,31 +398,30 @@ TEST_F(EquivalenceTest, inlineNodePropertyConstraints) {
     expectEquivalent("MATCH (n {isFrench: true, hasPhD: false}) RETURN n");
 
     // Constraint that matches no node in the graph.
-    // expectEquivalent("MATCH (n {name: 'Nobody'}) RETURN n");
+    expectEquivalent("MATCH (n {name: 'Nobody'}) RETURN n");
 
     // Constraint on the source of a traversal.
-    // expectEquivalent("MATCH (a {name: 'Remy'})-->(b) RETURN b");
+    expectEquivalent("MATCH (a {name: 'Remy'})-->(b) RETURN b");
 
     // Constraint on the target of a traversal.
-    // expectEquivalent("MATCH (a)-->(b {name: 'Bio'}) RETURN a");
+    expectEquivalent("MATCH (a)-->(b {name: 'Bio'}) RETURN a");
 
     // Constraints on both endpoints of a traversal.
-    // expectEquivalent("MATCH (a {isFrench: true})-->(b {name: 'Bio'}) RETURN a");
+    expectEquivalent("MATCH (a {isFrench: true})-->(b {name: 'Bio'}) RETURN a");
 }
 
-// FIXME: Enable commented tests below once string literals are supported
 TEST_F(EquivalenceTest, inlineEdgePropertyConstraints) {
     // Integer edge property constraint.
     expectEquivalent("MATCH (a)-[e {duration: 20}]->(b) RETURN a, b");
 
     // String edge property constraint — only expert edges.
-    // expectEquivalent("MATCH (a)-[e {proficiency: 'expert'}]->(b) RETURN a, b");
+    expectEquivalent("MATCH (a)-[e {proficiency: 'expert'}]->(b) RETURN a, b");
 
     // Edge constraint that matches no edge in the graph.
     expectEquivalent("MATCH (a)-[e {duration: 999}]->(b) RETURN a, b");
 
     // Combined node and edge constraints.
-    // expectEquivalent("MATCH (a {name: 'Remy'})-[e {duration: 20}]->(b) RETURN b");
+    expectEquivalent("MATCH (a {name: 'Remy'})-[e {duration: 20}]->(b) RETURN b");
 }
 
 TEST_F(EquivalenceTest, arbitraryFilters) {
@@ -578,6 +576,24 @@ TEST_F(EquivalenceTest, orderBySkipLimit) {
 
     expectEquivalentOrdered("MATCH (n) RETURN n.name ORDER BY n.name SKIP 2 LIMIT 4");
     expectEquivalentOrdered("MATCH (a)-->(b) RETURN a.name, b.name ORDER BY a.name, b.name SKIP 3 LIMIT 5");
+}
+
+TEST_F(EquivalenceTest, neqFilters) {
+    expectEquivalent("MATCH (n) WHERE n.age <> 32 RETURN n");
+    expectEquivalent("MATCH (n) WHERE n.age <> 0 RETURN n");
+
+    expectEquivalent("MATCH (n) WHERE n.isFrench <> true RETURN n");
+    expectEquivalent("MATCH (n) WHERE n.isFrench <> false RETURN n");
+
+    expectEquivalent("MATCH (a), (b) WHERE a <> b RETURN a, b");
+
+    expectEquivalent("MATCH (a), (b) WHERE a.age <> b.age RETURN a, b");
+
+    expectEquivalent("MATCH (n)-[e]->(m) WHERE e.duration <> 20 RETURN m");
+
+    expectEquivalent("MATCH (n) WHERE n.age <> 32 AND n.age > 20 RETURN n");
+
+    expectEquivalent("MATCH (n) WHERE n.age <> 32 OR n.isFrench RETURN n");
 }
 
 TEST_F(EquivalenceTest, comparisonFilters) {

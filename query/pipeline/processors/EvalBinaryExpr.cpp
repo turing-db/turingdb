@@ -1,15 +1,15 @@
 #include "EvalBinaryExpr.h"
 
 #include "columns/AllowedKinds.h"
-#include "columns/ColumnOperatorDispatcher.h"
-#include "columns/ColumnOperators.h"
 #include "columns/BinaryOperators.h"
 #include "columns/BinaryPredicates.h"
 #include "columns/ColumnCombinations.h"
-
-#include "Panic.h"
-#include "BioAssert.h"
 #include "columns/ColumnOperator.h"
+#include "columns/ColumnOperatorDispatcher.h"
+#include "columns/ColumnOperators.h"
+
+#include "BioAssert.h"
+#include "Panic.h"
 
 using namespace db;
 
@@ -63,6 +63,11 @@ struct Eval {
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid to cast for result column for Or.");
             BinaryPredicates::exec<Or>(result, lhs, rhs);
+        } else if constexpr (Op == OP_XOR) {
+            using ResultType = ColumnCombination<Xor, T, U>::ResultColumnType; 
+            auto* result = dynamic_cast<ResultType*>(_res);
+            bioassert(result, "Invalid to cast for result column for Xor.");
+            BinaryPredicates::exec<Xor>(result, lhs, rhs);
         } else if constexpr (Op == OP_ADD) {
             using ResultType = ColumnCombination<Add, T, U>::ResultColumnType;
             auto* result = dynamic_cast<ResultType*>(_res);
@@ -84,7 +89,7 @@ struct Eval {
             bioassert(result, "Invalid to cast for result column for Div.");
             BinaryOperators::exec<Div>(result, lhs, rhs);
         } else {
-            COMPILE_ERROR("Unknown operator");
+            COMPILE_ERROR("Unknown operator, did you forget to add a case above?");
         }
     }
 };
@@ -112,6 +117,7 @@ template void EvalBinaryExpr::eval<OP_LESS_THAN_OR_EQUAL>(Column* res, const Col
 
 template void EvalBinaryExpr::eval<OP_AND>(Column* res, const Column* lhs, const Column* rhs);
 template void EvalBinaryExpr::eval<OP_OR>(Column* res, const Column* lhs, const Column* rhs);
+template void EvalBinaryExpr::eval<OP_XOR>(Column* res, const Column* lhs, const Column* rhs);
 
 template void EvalBinaryExpr::eval<OP_ADD>(Column* res, const Column* lhs, const Column* rhs);
 template void EvalBinaryExpr::eval<OP_SUB>(Column* res, const Column* lhs, const Column* rhs);
