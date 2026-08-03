@@ -413,6 +413,10 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerSetNodeProperty(setNodeProperty);
     } else if (mlir::db::SetEdgeProperty setEdgeProperty = mlir::dyn_cast<mlir::db::SetEdgeProperty>(operation)) {
         lowerSetEdgeProperty(setEdgeProperty);
+    } else if (mlir::db::DeleteNode deleteNode = mlir::dyn_cast<mlir::db::DeleteNode>(operation)) {
+        lowerDeleteNode(deleteNode);
+    } else if (mlir::db::DeleteEdge deleteEdge = mlir::dyn_cast<mlir::db::DeleteEdge>(operation)) {
+        lowerDeleteEdge(deleteEdge);
     } else if (mlir::db::CrossProduct crossProduct = mlir::dyn_cast<mlir::db::CrossProduct>(operation)) {
         lowerCrossProduct(crossProduct);
     } else if (mlir::db::Limit limit = mlir::dyn_cast<mlir::db::Limit>(operation)) {
@@ -1716,6 +1720,25 @@ void DBLowering::lowerSetEdgeProperty(mlir::db::SetEdgeProperty setEdgeProperty)
         inputChunk,
         setEdgeProperty.getPropertyAttr(),
         valueChunk);
+}
+
+void DBLowering::lowerDeleteNode(mlir::db::DeleteNode deleteNode) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+    const mlir::Value inputChunk = mapValue(deleteNode.getInputNodes());
+
+    // The delete runs where its node chunk is live - the block that owns it.
+    setInsertionInto(ownerBlock(inputChunk));
+
+    _builder.create<nl::DeleteNode>(loc, inputChunk, deleteNode.getDetach());
+}
+
+void DBLowering::lowerDeleteEdge(mlir::db::DeleteEdge deleteEdge) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+    const mlir::Value inputChunk = mapValue(deleteEdge.getInputEdges());
+
+    setInsertionInto(ownerBlock(inputChunk));
+
+    _builder.create<nl::DeleteEdge>(loc, inputChunk);
 }
 
 void DBLowering::lowerConstant(mlir::db::ConstantOp constant) {

@@ -54,6 +54,8 @@
 #include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
 #include "stmt/CreateStmt.h"
+#include "stmt/DeleteStmt.h"
+#include "expr/ExprChain.h"
 #include "stmt/Limit.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/OrderBy.h"
@@ -285,6 +287,7 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
     generateGroupAggregate(ast);
     generateCreate(ast);
     generateSet(ast);
+    generateDelete(ast);
     generateOutput(ast);
 
     _opBuilder.create<mlir::func::ReturnOp>(uloc);
@@ -923,6 +926,63 @@ void DBProgramGenerator::generateSet(const CypherAST* ast) {
                 _opBuilder.create<mlir::db::SetNodeProperty>(loc, entityColumn, propAttr, valueColumn);
             } else /* (isEdge) */ {
                 _opBuilder.create<mlir::db::SetEdgeProperty>(loc, entityColumn, propAttr, valueColumn);
+            }
+        }
+    }
+}
+
+void DBProgramGenerator::generateDelete(const CypherAST* ast) {
+    const CypherAST::QueryCommands& queries = ast->queries();
+    if (queries.size() != 1) {
+        throw TuringException("Multiple queries not yet supported.");
+    }
+
+    const QueryCommand* query = queries.front();
+    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
+    if (!sglPart) {
+        throw TuringException("Non-single part queries are not yet supported.");
+    }
+
+    const StmtContainer* updateStmts = sglPart->getUpdateStmts();
+    if (!updateStmts) {
+        return;
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+    for (const Stmt* stmt : updateStmts->stmts()) {
+        if (stmt->getKind() != Stmt::Kind::DELETE) {
+            continue;
+        }
+
+        const DeleteStmt* deleteStmt = static_cast<const DeleteStmt*>(stmt);
+        const bool detach = deleteStmt->isDetaching();
+
+        for (const Expr* expr : *deleteStmt->getExpressions()) {
+            if (expr->getKind() != Expr::Kind::SYMBOL) {
+                throw TuringException("Expressions in DELETE statements can only be symbols");
+            }
+
+            const SymbolExpr* symbolExpr = static_cast<const SymbolExpr*>(expr);
+            const VarDecl* decl = symbolExpr->getDecl();
+            bioassert(decl, "DELETE target symbol has no declaration");
+            const std::string_view varName = decl->getName();
+
+            const mlir::Value entityColumn = resolveEntityColumn(varName);
+            if (!entityColumn) {
+                throw TuringException("Cannot delete unbound variable: " + std::string(varName));
+            }
+
+            const EvaluatedType entityType = decl->getType();
+            const bool isNode = entityType == EvaluatedType::NodePattern;
+            const bool isEdge = entityType == EvaluatedType::EdgePattern;
+
+            if (isNode) {
+                _opBuilder.create<mlir::db::DeleteNode>(loc, entityColumn, detach);
+            } else if (isEdge) {
+                _opBuilder.create<mlir::db::DeleteEdge>(loc, entityColumn);
+            } else {
+                throw TuringException("Can only delete nodes or edges");
             }
         }
     }

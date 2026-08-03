@@ -216,6 +216,33 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n:Person) DETACH DELETE n
+const char* const detachDeleteNodeProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+  db.delete_node(%n) detach : (!db.column<!storage.node_id>) -> ()
+  return
+}
+)mlir";
+
+// MATCH (n:Person) DELETE n
+const char* const deleteNodeProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+  db.delete_node(%n) : (!db.column<!storage.node_id>) -> ()
+  return
+}
+)mlir";
+
+// MATCH ()-[e]->() DELETE e
+const char* const deleteEdgeProgram = R"mlir(
+func.func @main() {
+  %s, %e, %t, %d = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  db.delete_edge(%e) : (!db.column<!storage.edge_id>) -> ()
+  return
+}
+)mlir";
+
 // MATCH (a) RETURN a, a.score ORDER BY a.score DESC: two columns passed through,
 // sorted by the second one (the score), descending.
 const char* const sortProgram = R"mlir(
@@ -1176,6 +1203,79 @@ TEST_F(DBDialectTest, setEdgePropertyRoundTripsThroughTextualForm) {
 TEST_F(DBDialectTest, verifierRejectsEmptySetProperty) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyPropertySetProgram);
     EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, parsesDetachDeleteNode) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(detachDeleteNodeProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::DeleteNode deleteNode;
+    module.get().walk([&](mlir::db::DeleteNode op) {
+        deleteNode = op;
+    });
+    ASSERT_TRUE(deleteNode);
+
+    // The `detach` keyword parsed to a set unit attribute; the input is a node
+    // column and the op has no result.
+    EXPECT_TRUE(deleteNode.getDetach());
+    const mlir::Type nodeIDColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    EXPECT_EQ(deleteNode.getInputNodes().getType(), nodeIDColumnType);
+    EXPECT_EQ(deleteNode->getNumResults(), 0u);
+}
+
+TEST_F(DBDialectTest, parsesDeleteNodeWithoutDetach) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(deleteNodeProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::DeleteNode deleteNode;
+    module.get().walk([&](mlir::db::DeleteNode op) {
+        deleteNode = op;
+    });
+    ASSERT_TRUE(deleteNode);
+
+    // No `detach` keyword, so the unit attribute is absent.
+    EXPECT_FALSE(deleteNode.getDetach());
+}
+
+TEST_F(DBDialectTest, deleteNodeRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(detachDeleteNodeProgram);
+    ASSERT_TRUE(module);
+
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, parsesDeleteEdge) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(deleteEdgeProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::DeleteEdge deleteEdge;
+    module.get().walk([&](mlir::db::DeleteEdge op) {
+        deleteEdge = op;
+    });
+    ASSERT_TRUE(deleteEdge);
+
+    const mlir::Type edgeIDColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::EdgeIDType::get(&_context));
+    EXPECT_EQ(deleteEdge.getInputEdges().getType(), edgeIDColumnType);
+    EXPECT_EQ(deleteEdge->getNumResults(), 0u);
+}
+
+TEST_F(DBDialectTest, deleteEdgeRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(deleteEdgeProgram);
+    ASSERT_TRUE(module);
+
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
 }
 
 }

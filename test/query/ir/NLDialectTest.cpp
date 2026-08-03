@@ -565,4 +565,62 @@ TEST_F(NLDialectTest, verifierRejectsEmptySetProperty) {
     EXPECT_TRUE(mlir::failed(mlir::verify(function)));
 }
 
+// nl.delete_node takes a node-ID chunk and an optional detach flag, has no result,
+// and verifies. With `detach` set it carries the DETACH semantics.
+TEST_F(NLDialectTest, verifierAcceptsDeleteNodeDetach) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    mlir::func::FuncOp function = buildOneChunkFunction(builder, *module);
+    mlir::Block& entryBlock = function.getBody().front();
+    const mlir::Value chunk = entryBlock.getArgument(0);
+
+    mlir::nl::DeleteNode deleteNode = builder.create<mlir::nl::DeleteNode>(loc, chunk, /*detach=*/true);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+    EXPECT_TRUE(deleteNode.getDetach());
+    EXPECT_EQ(deleteNode.getInputNodes().getType(), chunk.getType());
+    EXPECT_EQ(deleteNode->getNumResults(), 0u);
+}
+
+// Without the detach flag the unit attribute is absent.
+TEST_F(NLDialectTest, verifierAcceptsDeleteNodeNoDetach) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    mlir::func::FuncOp function = buildOneChunkFunction(builder, *module);
+    mlir::Block& entryBlock = function.getBody().front();
+    const mlir::Value chunk = entryBlock.getArgument(0);
+
+    mlir::nl::DeleteNode deleteNode = builder.create<mlir::nl::DeleteNode>(loc, chunk, /*detach=*/false);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+    EXPECT_FALSE(deleteNode.getDetach());
+}
+
+// The edge counterpart: an edge-ID chunk, no detach, no result.
+TEST_F(NLDialectTest, verifierAcceptsDeleteEdge) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+
+    const mlir::Type edgeChunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::EdgeIDType::get(&_context));
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {edgeChunkType}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+    const mlir::Value edgeChunk = function.getBody().front().getArgument(0);
+
+    mlir::nl::DeleteEdge deleteEdge = builder.create<mlir::nl::DeleteEdge>(loc, edgeChunk);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+    EXPECT_EQ(deleteEdge.getInputEdges().getType(), edgeChunkType);
+    EXPECT_EQ(deleteEdge->getNumResults(), 0u);
+}
+
 }

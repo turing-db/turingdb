@@ -93,6 +93,7 @@ private:
 
     void generateCreate(const CypherAST* ast);
     void generateSet(const CypherAST* ast);
+    void generateDelete(const CypherAST* ast);
     void generateOutput(const CypherAST* ast);
 
     // Reorders the projection with a Sort over @param projected, replacing each

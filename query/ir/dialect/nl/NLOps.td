@@ -1572,4 +1572,34 @@ def SetEdgeProperty : NLOp<"set_edge_property"> {
   let hasVerifier = 1;
 }
 
+def DeleteNode : NLOp<"delete_node"> {
+  let summary = "Tombstone each input node in the open transaction's write buffer";
+  let description = [{
+      nl.for %nodes in %scan {
+        nl.delete_node %nodes detach
+      }
+  }];
+
+  let arguments = (ins NLNodeIDChunk:$input_nodes, UnitAttr:$detach);
+
+  let assemblyFormat = [{
+    $input_nodes (`detach` $detach^)? attr-dict
+  }];
+}
+
+def DeleteEdge : NLOp<"delete_edge"> {
+  let summary = "Tombstone each input edge in the open transaction's write buffer";
+  let description = [{
+      nl.for %s, %e, %t in %edges {
+        nl.delete_edge %e
+      }
+  }];
+
+  let arguments = (ins NLEdgeIDChunk:$input_edges);
+
+  let assemblyFormat = [{
+    $input_edges attr-dict
+  }];
+}
+
 #endif //TURINGDB_NL_OPS

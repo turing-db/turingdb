@@ -393,6 +393,10 @@ private:
 
     void translateSetEdgeProperty(mlir::nl::SetEdgeProperty setEdgeProperty, NLStmtContainer* body);
 
+    void translateDeleteNode(mlir::nl::DeleteNode deleteNode, NLStmtContainer* body);
+
+    void translateDeleteEdge(mlir::nl::DeleteEdge deleteEdge, NLStmtContainer* body);
+
     // Allocates singleton column for the constant and assigns MLIR value
     void translateConstant(mlir::nl::Constant constant);
 

@@ -410,6 +410,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateSetNodeProperty(setNodeProperty, body);
         } else if (nl::SetEdgeProperty setEdgeProperty = mlir::dyn_cast<nl::SetEdgeProperty>(operation)) {
             translateSetEdgeProperty(setEdgeProperty, body);
+        } else if (nl::DeleteNode deleteNode = mlir::dyn_cast<nl::DeleteNode>(operation)) {
+            translateDeleteNode(deleteNode, body);
+        } else if (nl::DeleteEdge deleteEdge = mlir::dyn_cast<nl::DeleteEdge>(operation)) {
+            translateDeleteEdge(deleteEdge, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
@@ -854,6 +858,26 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
         valueColumn);
 
     body->emplaceStmt(&NLExecutor::runSetEdgeProperty, data);
+}
+
+void NLTranslator::translateDeleteNode(nl::DeleteNode deleteNode, NLStmtContainer* body) {
+    const mlir::Value inputValue = deleteNode.getInputNodes();
+    const ColumnNodeIDs* inputColumn = static_cast<const ColumnNodeIDs*>(getColumn(inputValue));
+
+    NLDeleteNodeData* data = _program->allocFunctionData<NLDeleteNodeData>(
+        inputColumn,
+        deleteNode.getDetach());
+
+    body->emplaceStmt(&NLExecutor::runDeleteNode, data);
+}
+
+void NLTranslator::translateDeleteEdge(nl::DeleteEdge deleteEdge, NLStmtContainer* body) {
+    const mlir::Value inputValue = deleteEdge.getInputEdges();
+    const ColumnEdgeIDs* inputColumn = static_cast<const ColumnEdgeIDs*>(getColumn(inputValue));
+
+    NLDeleteEdgeData* data = _program->allocFunctionData<NLDeleteEdgeData>(inputColumn);
+
+    body->emplaceStmt(&NLExecutor::runDeleteEdge, data);
 }
 
 void NLTranslator::translateConstant(nl::Constant constant) {

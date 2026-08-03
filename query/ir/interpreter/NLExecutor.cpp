@@ -31,6 +31,7 @@
 #include "metadata/PropertyType.h"
 
 #include "versioning/CommitWriteBuffer.h"
+#include "views/GraphView.h"
 
 #include "NLProgram.h"
 #include "NLOutputSink.h"
@@ -1236,6 +1237,24 @@ CommitWriteBuffer::ExistingOrPendingNode resolveNode(const ColumnNodeIDs* column
     }
 }
 
+void throwIfNodesHaveEdges(const GraphView& view, const ColumnNodeIDs* nodes) {
+    const Tombstones& tombstones = view.tombstones();
+
+    const GetOutEdgesRange outEdges(view, nodes);
+    for (const EdgeRecord& record : outEdges) {
+        if (!tombstones.containsEdge(record._edgeID)) {
+            throw IRException("Cannot delete a node with relationships; use DETACH DELETE");
+        }
+    }
+
+    const GetInEdgesRange inEdges(view, nodes);
+    for (const EdgeRecord& record : inEdges) {
+        if (!tombstones.containsEdge(record._edgeID)) {
+            throw IRException("Cannot delete a node with relationships; use DETACH DELETE");
+        }
+    }
+}
+
 }
 
 NLExecutor::NLExecutor(const GraphView* view,
@@ -1359,10 +1378,36 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
     CommitWriteBuffer::UntypedProperties propsBuffer;
     extractColumnProperties(edgeCol, rowCount, propID, propsBuffer);
 
-    const auto& raw = edges->getRaw(); 
+    const auto& raw = edges->getRaw();
     for (size_t row = 0; row < rowCount; row++) {
         writeBuffer->addEdgeUpdate(raw[row], propsBuffer[row]);
     }
+}
+
+void NLExecutor::runDeleteNode(NLExecutionContext* context, NLFunctionData* data) {
+    NLDeleteNodeData* deleteData = static_cast<NLDeleteNodeData*>(data);
+    CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
+    bioassert(writeBuffer, "nl.delete_node requires an active write transaction");
+
+    const ColumnNodeIDs* nodes = deleteData->getInput();
+    const GraphView* view = context->getView();
+
+    if (deleteData->isDetaching()) {
+        writeBuffer->addDeletedNodes(nodes->getRaw());
+        writeBuffer->addHangingEdges(*view);
+    } else {
+        throwIfNodesHaveEdges(*view, nodes);
+        writeBuffer->addDeletedNodes(nodes->getRaw());
+    }
+}
+
+void NLExecutor::runDeleteEdge(NLExecutionContext* context, NLFunctionData* data) {
+    NLDeleteEdgeData* deleteData = static_cast<NLDeleteEdgeData*>(data);
+    CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
+    bioassert(writeBuffer, "nl.delete_edge requires an active write transaction");
+
+    const ColumnEdgeIDs* edges = deleteData->getInput();
+    writeBuffer->addDeletedEdges(edges->getRaw());
 }
 
 void NLExecutor::runScanNodesLoop(NLExecutionContext* context, NLFunctionData* data) {

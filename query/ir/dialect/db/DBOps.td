@@ -997,6 +997,37 @@ def SetEdgeProperty : TuringOp<"set_edge_property"> {
   let hasVerifier = 1;
 }
 
+def DeleteNode : TuringOp<"delete_node"> {
+  let summary = "Delete each input node, optionally detaching its incident edges";
+
+  let description = [{
+    `detach` carries the DETACH keyword
+
+      db.delete_node(%n) detach : (!db.column<!storage.node_id>) -> ()
+  }];
+
+  let arguments = (ins Column:$input_nodes, UnitAttr:$detach);
+
+  let assemblyFormat = [{
+    `(` $input_nodes `)` (`detach` $detach^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+def DeleteEdge : TuringOp<"delete_edge"> {
+  let summary = "Delete each input edge";
+
+  let description = [{
+      db.delete_edge(%e) : (!db.column<!storage.edge_id>) -> ()
+  }];
+
+  let arguments = (ins Column:$input_edges);
+
+  let assemblyFormat = [{
+    `(` $input_edges `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 /**
 * GroupAggregate
 */
