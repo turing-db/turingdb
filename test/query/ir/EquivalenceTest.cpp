@@ -329,6 +329,26 @@ TEST_F(EquivalenceTest, inEdges) {
     expectEquivalent("MATCH (a)<--(b)<--(c)<--(d) RETURN a, d");
 }
 
+TEST_F(EquivalenceTest, undirectedEdges) {
+    expectEquivalent("MATCH (a)--(b) RETURN a");
+    expectEquivalent("MATCH (a)--(b) RETURN b");
+    expectEquivalent("MATCH (a)--(b) RETURN a, b");
+
+    expectEquivalent("MATCH (a)--(b)--(c) RETURN a");
+    expectEquivalent("MATCH (a)--(b)--(c) RETURN b");
+    expectEquivalent("MATCH (a)--(b)--(c) RETURN c");
+    expectEquivalent("MATCH (a)--(b)--(c) RETURN a, b, c");
+    expectEquivalent("MATCH (a)--(b)--(c) RETURN a, c");
+
+    expectEquivalent("MATCH (a)-->(b)--(c) RETURN a, c");
+    expectEquivalent("MATCH (a)--(b)-->(c) RETURN a, c");
+    expectEquivalent("MATCH (a)<--(b)--(c) RETURN a, c");
+
+    expectEquivalent("MATCH (a {name: 'Remy'})--(b) RETURN b");
+    expectEquivalent("MATCH (a:Person)--(b:Interest) RETURN a, b");
+    expectEquivalent("MATCH (a)-[:INTERESTED_IN]-(b) RETURN a, b");
+}
+
 TEST_F(EquivalenceTest, trees) {
     expectEquivalent("MATCH (a)-->(b), (a)-->(c) RETURN a");
     expectEquivalent("MATCH (a)-->(b), (a)-->(c)-->(d) RETURN a");

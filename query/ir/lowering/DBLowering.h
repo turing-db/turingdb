@@ -165,6 +165,7 @@ private:
     void lowerScanEdges(mlir::db::ScanEdges scanEdges);
     void lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges);
     void lowerGetInEdges(mlir::db::GetInEdges getInEdges);
+    void lowerGetEdges(mlir::db::GetEdges getEdges);
     void lowerGetOutEdgesByType(mlir::db::GetOutEdgesByType getOutEdgesByType);
     void lowerGetInEdgesByType(mlir::db::GetInEdgesByType getInEdgesByType);
     void lowerGetNodeProperties(mlir::db::GetNodeProperties getNodeProperties);

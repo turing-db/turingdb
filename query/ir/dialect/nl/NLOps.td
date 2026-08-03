@@ -157,6 +157,18 @@ def GetInEdges : NLOp<"get_in_edges", [Pure, InferTypeOpAdaptor]> {
   }];
 }
 
+def GetEdges : NLOp<"get_edges", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create a database iterator over the edges of a chunk of nodes";
+
+  let arguments = (ins NLNodeIDChunk:$input_nodes, Variadic<NLChunk>:$columns_to_filter);
+  let results   = (outs NLIterator:$result);
+
+  let assemblyFormat = [{
+    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` attr-dict
+    ( `:` qualified(type($columns_to_filter))^ )?
+  }];
+}
+
 /**
 * GetOutEdgesByType
 */

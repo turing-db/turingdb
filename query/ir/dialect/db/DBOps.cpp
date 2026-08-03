@@ -116,6 +116,12 @@ void GetInEdges::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     }
 }
 
+void GetEdges::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    for (Value result : getResults()) {
+        setNameFn(result, "");
+    }
+}
+
 // Builds the op from just the result types - the left factor's yielded columns
 // followed by the right factor's - and creates the two empty factor blocks. The
 // caller fills each region and terminates it with a db.yield whose operands

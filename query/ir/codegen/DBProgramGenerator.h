@@ -136,6 +136,11 @@ private:
         return addEdgeTraversal<mlir::db::GetInEdges>(std::forward<Args>(args)...);
     }
 
+    template <typename... Args>
+    void addGetEdges(Args&&... args) {
+        return addEdgeTraversal<mlir::db::GetEdges>(std::forward<Args>(args)...);
+    }
+
     mlir::db::ColumnType allocColumnType(mlir::Type type);
     void registerValue(const VariableDependency* var, mlir::TypedValue<mlir::Type> val);
 };

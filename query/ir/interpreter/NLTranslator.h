@@ -38,6 +38,7 @@ private:
         ScanEdges,
         GetOutEdges,
         GetInEdges,
+        GetEdges,
         GetOutEdgesByType,
         GetInEdgesByType,
         Sort,

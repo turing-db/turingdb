@@ -272,6 +272,11 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             const mlir::OperandRange carriedColumns = getInEdges.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
             _iteratorConfigs[getInEdges.getResult()] = config;
+        } else if (nl::GetEdges getEdges = mlir::dyn_cast<nl::GetEdges>(operation)) {
+            IteratorConfig config {IteratorKind::GetEdges, getEdges.getInputNodes(), {}};
+            const mlir::OperandRange carriedColumns = getEdges.getColumnsToFilter();
+            config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
+            _iteratorConfigs[getEdges.getResult()] = config;
         } else if (nl::GetOutEdgesByType getOutEdgesByType = mlir::dyn_cast<nl::GetOutEdgesByType>(operation)) {
             IteratorConfig config {IteratorKind::GetOutEdgesByType, getOutEdgesByType.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getOutEdgesByType.getColumnsToFilter();
@@ -626,6 +631,8 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
         handler = &NLExecutor::runGetOutEdgesLoop;
     } else if (config._kind == IteratorKind::GetInEdges) {
         handler = &NLExecutor::runGetInEdgesLoop;
+    } else if (config._kind == IteratorKind::GetEdges) {
+        handler = &NLExecutor::runGetEdgesLoop;
     } else if (config._kind == IteratorKind::GetOutEdgesByType) {
         handler = &NLExecutor::runGetOutEdgesByTypeLoop;
     } else {
