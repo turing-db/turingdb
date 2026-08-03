@@ -568,10 +568,6 @@ def Yield : TuringOp<"yield", [Pure, Terminator, HasParent<"CrossProduct">]> {
 /**
 * CallProcedure
 */
-// NOT Pure: a procedure is an opaque callback into the procedures library. It may
-// read version-control state the graph schema does not describe, allocate into the
-// request's list buffer, or accumulate across the chunks it is handed, so two calls
-// must never be CSE'd into one and an unread call must not be DCE'd.
 def CallProcedure : TuringOp<"call_procedure", [AttrSizedOperandSegments]> {
   let summary = "Call a registered procedure, yielding the return values named";
 
@@ -584,20 +580,11 @@ def CallProcedure : TuringOp<"call_procedure", [AttrSizedOperandSegments]> {
                       : () -> (!db.column<none>, !db.column<none>)
       db.output(%id, %label) : !db.column<none>, !db.column<none>
 
-    `procedure` is the full name - namespace included - spelled the same as in the
-    query, resolved against the procedure registry during lowering (as a property
-    name is resolved against the graph schema). `inputs` are the call's arguments,
-    one column per declared procedure argument in declaration order, so the operand
-    index is the argument index. `yields` names the return values the query asked
-    for, one per leading result and in result order; a procedure's other return
+    `yields` names the return values the query asked
+    for, one per leading result and in result order. A procedure's other return
     values are left unbound and the procedure skips them. A yielded name that the
     procedure does not return, or a result count that disagrees with `yields` and
     the carry set, is rejected.
-
-    `yields` may be empty, which is a call that produces no column at all: a procedure
-    declaring no return value is called for what it does, not for rows. Such a call
-    carries nothing either - it has no row count for a carried row to be replicated
-    against - and nothing consumes it, so it is the whole of what the query emits.
 
     The result value types come from the procedure's declared return types, so -
     like db.get_node_properties' value column - they are left typed none here and
@@ -610,38 +597,13 @@ def CallProcedure : TuringOp<"call_procedure", [AttrSizedOperandSegments]> {
     that produces them, refilling its result columns each step - the same
     nl.procedure_init shape, opened where those arguments are bound.
 
-    How many rows a call emits is the procedure's business, not the caller's: it may
-    emit one row per input row, several (expanding an input row) or none (dropping it).
-    So a column the query carries past the call cannot simply flow around it - it must
-    be replicated once per row the procedure emitted for its row, and dropped where the
-    procedure emitted none. `carried_columns` is that carry set, exactly as on
-    db.get_out_edges, and each one comes back amplified in the trailing results:
-
-      %x, %n2, %m2 = db.call_procedure("somefunc", {%m}, {%n, %m}) yields ["x"]
-                       : (!db.column<none>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
-                          -> (!db.column<none>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
-      db.output(%n2, %m2, %x) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<none>
-
-    which is `MATCH (n)-->(m) CALL somefunc(m) YIELD x RETURN n, m, x`: the call runs
-    over each chunk of `m`, and both `n` and `m` ride through the carry set, so the
-    projection stays row-aligned with what the procedure emitted. A call's own argument
-    is carried like any other column when the query still projects it - being an input
-    does not carry it.
-
     A carried column must be row-aligned with the arguments (both bound by the same
-    loop), since the procedure reports the correspondence as an index into its own input
-    rows. Only a procedure that declares it makes that report can be carried past
-    (Procedure::reportsInputRows), and only where there are input rows to report against:
+    loop), since the procedure reports an indices column as the correspondence as an index into its own input
+    rows. Only a procedure that produces indices can be carried past, and only where there are input rows to report against:
     an argument-less procedure has none (cross its rows in with db.cross_product
-    instead), and an aggregating one folds every input row into a single result. Lowering
-    refuses all three.
+    instead).
   }];
 
-  // `procedure` and `yields` are attributes, not SSA values, so they are absent
-  // from `operands`; lowering resolves the name against the registry and maps each
-  // yielded name to the procedure's return value index. Two variadic operand groups -
-  // the arguments and the carry set - so the op carries operand-segment sizes to tell
-  // them apart, the same as db.cross_product's column groups.
   let arguments = (ins StrAttr:$procedure,
                        Variadic<Column>:$inputs,
                        Variadic<Column>:$carried_columns,
@@ -652,12 +614,6 @@ def CallProcedure : TuringOp<"call_procedure", [AttrSizedOperandSegments]> {
 
   let hasVerifier = 1;
 
-  // The name prints inside the parens ahead of the brace-wrapped argument list and
-  // carry set, so an argument-less call carrying nothing reads
-  // `db.call_procedure("db.labels", {}, {})` - the same brace style
-  // db.get_out_edges uses for its carry set, which keeps the syntax total without an
-  // optional group. The yielded names follow the `yields` keyword, ahead of the
-  // colon, elided from attr-dict because the format names them.
   let assemblyFormat = [{
     `(` $procedure `,` `{` $inputs `}` `,` `{` $carried_columns `}` `)` `yields` $yields
     attr-dict `:` functional-type(operands, results)
