@@ -683,9 +683,14 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
 }
 
 void DBProgramGenerator::collectLiveColumns(LiveColumns& live) {
-    // Only columns defined in the current insertion block are live to an op placed here
     mlir::Block* const insertionBlock = _opBuilder.getInsertionBlock();
 
+    // A chunk holds the rows of the loop whose body binds it, so only a column bound in this
+    // block is row-aligned with the rows flowing past this point. One bound in an enclosing
+    // block - or in a loop the dataflow has already left - holds a different row set, and an
+    // op that consumes the whole row set (a filter, a call's carry set) would pair its rows
+    // with unrelated ones. Note this is stricter than dominance on purpose: an outer block's
+    // value does dominate here, it is just the wrong rows.
     const auto isLive = [&](const mlir::Value column) {
         mlir::Operation* const definingOp = column.getDefiningOp();
         mlir::Block* const definingBlock = definingOp
