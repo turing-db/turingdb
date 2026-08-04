@@ -94,6 +94,8 @@ private:
     void generateSet(const CypherAST* ast);
     void generateOutput(const CypherAST* ast);
 
+    void runPasses();
+
     // Reorders the projection with a Sort over @param projected, replacing each
     // projected column with its sorted counterpart
     void translateOrderBy(const Projection* projection,

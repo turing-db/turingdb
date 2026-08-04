@@ -18,10 +18,12 @@
 #include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
+#include "mlir/Pass/PassManager.h"
 #include "llvm/ADT/SmallVector.h"
 
 #include "DBDialect.h"
 #include "DBOps.h"
+#include "DBPasses.h"
 #include "DBTypes.h"
 #include "StorageDialect.h"
 #include "StorageTypes.h"
@@ -282,6 +284,17 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
     generateOutput(ast);
 
     _opBuilder.create<mlir::func::ReturnOp>(uloc);
+
+    runPasses();
+}
+
+void DBProgramGenerator::runPasses() {
+    mlir::PassManager passManager(_mlirCtxt);
+    passManager.addPass(mlir::db::createGetOutEdgesDCE());
+
+    if (mlir::failed(passManager.run(*_module))) {
+        throw FatalException("DB pass pipeline failed");
+    }
 }
 
 void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
