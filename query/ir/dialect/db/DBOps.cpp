@@ -105,20 +105,47 @@ void ScanEdges::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 // Ensures each variable has a numeric name
 void GetOutEdges::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    size_t nullIndex = 0;
     for (Value result : getResults()) {
-        setNameFn(result, "");
+        const bool isNull = llvm::isa<NullptrType>(result.getType());
+        if (!isNull) {
+            setNameFn(result, "");
+            continue;
+        }
+
+        const std::string name = "null_" + std::to_string(nullIndex);
+        setNameFn(result, name);
+        nullIndex++;
     }
 }
 
 void GetInEdges::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    size_t nullIndex = 0;
     for (Value result : getResults()) {
-        setNameFn(result, "");
+        const bool isNull = llvm::isa<NullptrType>(result.getType());
+        if (!isNull) {
+            setNameFn(result, "");
+            continue;
+        }
+
+        const std::string name = "null_" + std::to_string(nullIndex);
+        setNameFn(result, name);
+        nullIndex++;
     }
 }
 
 void GetEdges::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    size_t nullIndex = 0;
     for (Value result : getResults()) {
-        setNameFn(result, "");
+        const bool isNull = llvm::isa<NullptrType>(result.getType());
+        if (!isNull) {
+            setNameFn(result, "");
+            continue;
+        }
+
+        const std::string name = "null_" + std::to_string(nullIndex);
+        setNameFn(result, name);
+        nullIndex++;
     }
 }
 
