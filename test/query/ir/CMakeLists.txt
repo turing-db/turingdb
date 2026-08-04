@@ -33,6 +33,7 @@ target_link_libraries(test_query_ir_collect_drain PRIVATE turing_db_examples_s)
 
 add_ir_tests(test_query_ir_collect_result_type CollectResultTypeTest.cpp)
 add_ir_tests(test_query_ir_dbdialect DBDialectTest.cpp)
+add_ir_tests(test_query_ir_get_out_edges_dce GetOutEdgesDCETest.cpp)
 add_ir_tests(test_query_ir_nldialect NLDialectTest.cpp)
 
 # The branch two-hop test runs against the shared SimpleGraph fixture.
