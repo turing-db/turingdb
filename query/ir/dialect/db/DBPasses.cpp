@@ -1,6 +1,7 @@
 #include "DBPasses.h"
 
 #include "mlir/IR/Operation.h"
+#include "mlir/IR/ValueRange.h"
 
 #include "DBDialect.h"
 #include "DBOps.h"
@@ -17,7 +18,13 @@ struct GetOutEdgesDCE : public impl::GetOutEdgesDCEBase<GetOutEdgesDCE> {
         Operation* const root = getOperation();
 
         root->walk([&](GetOutEdges op) {
-            // TODO: replace unused GetOutEdges results with null
+            mlir::ValueRange results = op.getResults();
+            for (mlir::Value result : results) {
+                const size_t uses = result.getNumUses();
+                if (uses == 0) {
+                    // TODO replace with null
+                }
+            }
         });
     }
 };
