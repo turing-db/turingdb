@@ -128,6 +128,44 @@ private:
     std::vector<Row> _rows;
 };
 
+class GroupMinMaxSink : public NLOutputSink {
+public:
+    using Row = std::tuple<std::optional<std::string>, std::optional<int64_t>, std::optional<int64_t>>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 3u);
+
+        const auto* teams = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* mins = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[1]);
+        const auto* maxes = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[2]);
+        ASSERT_NE(teams, nullptr);
+        ASSERT_NE(mins, nullptr);
+        ASSERT_NE(maxes, nullptr);
+        ASSERT_EQ(teams->size(), mins->size());
+        ASSERT_EQ(teams->size(), maxes->size());
+
+        const auto& teamRaw = teams->getRaw();
+        const auto& minRaw = mins->getRaw();
+        const auto& maxRaw = maxes->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            std::optional<std::string> team;
+            if (teamRaw[rowIndex]) {
+                team = std::string(*teamRaw[rowIndex]);
+            }
+
+            _rows.emplace_back(team, minRaw[rowIndex], maxRaw[rowIndex]);
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
 // Collects the (team, nullable double) rows a grouped avg emits: a nullable string
 // key chunk and a !nl.chunk<!storage.nullable<f64>> value chunk.
 class GroupDoubleSink : public NLOutputSink {
@@ -252,6 +290,49 @@ public:
             }
 
             _rows.emplace_back(team, city, countRaw[rowIndex], sumRaw[rowIndex], maxRaw[rowIndex]);
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
+class GroupTeamCityCountSink : public NLOutputSink {
+public:
+    using Row = std::tuple<std::optional<std::string>, std::optional<std::string>, uint64_t>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 3u);
+
+        const auto* teams = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* cities = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[1]);
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[2]);
+        ASSERT_NE(teams, nullptr);
+        ASSERT_NE(cities, nullptr);
+        ASSERT_NE(counts, nullptr);
+        ASSERT_EQ(teams->size(), cities->size());
+        ASSERT_EQ(teams->size(), counts->size());
+
+        const auto& teamRaw = teams->getRaw();
+        const auto& cityRaw = cities->getRaw();
+        const auto& countRaw = counts->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            std::optional<std::string> team;
+            if (teamRaw[rowIndex]) {
+                team = std::string(*teamRaw[rowIndex]);
+            }
+
+            std::optional<std::string> city;
+            if (cityRaw[rowIndex]) {
+                city = std::string(*cityRaw[rowIndex]);
+            }
+
+            _rows.emplace_back(team, city, countRaw[rowIndex]);
         }
     }
 
@@ -1133,6 +1214,11 @@ protected:
         create(R"(CREATE (:Node {team: "blue"}))");
     }
 
+    void buildTeamCityGraph() {
+        create(R"(CREATE (:Node {team: "red", city: "paris", score: 10}), (:Node {team: "red", city: "paris", score: 20}), (:Node {team: "red", city: "lyon", score: 5}), (:Node {team: "blue", city: "paris", score: 100}))");
+        create(R"(CREATE (:Node {team: "blue", city: "paris"}))");
+    }
+
     const std::string _graphName = "teamGraph";
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<QueryInterpreterV3> _interp3;
@@ -1211,6 +1297,54 @@ TEST_F(GroupAggregateCypherTest, groupedAvg) {
     std::vector<GroupDoubleSink::Row> rows;
     sink.sortedRows(rows);
     const std::vector<GroupDoubleSink::Row> expected {{"blue", 100.0}, {"red", 15.0}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(GroupAggregateCypherTest, groupedCountByTwoKeys) {
+    buildTeamCityGraph();
+
+    GroupTeamCityCountSink sink;
+    match("MATCH (n:Node) RETURN n.team, n.city, count(*)", sink);
+
+    std::vector<GroupTeamCityCountSink::Row> rows;
+    sink.sortedRows(rows);
+
+    std::vector<GroupTeamCityCountSink::Row> expected;
+    expected.emplace_back(std::optional<std::string>("blue"), std::optional<std::string>("paris"), 2u);
+    expected.emplace_back(std::optional<std::string>("red"), std::optional<std::string>("lyon"), 1u);
+    expected.emplace_back(std::optional<std::string>("red"), std::optional<std::string>("paris"), 2u);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(GroupAggregateCypherTest, groupedMinAndMax) {
+    buildTeamGraph();
+
+    GroupMinMaxSink sink;
+    match("MATCH (n:Node) RETURN n.team, min(n.score), max(n.score)", sink);
+
+    std::vector<GroupMinMaxSink::Row> rows;
+    sink.sortedRows(rows);
+
+    std::vector<GroupMinMaxSink::Row> expected;
+    expected.emplace_back(std::optional<std::string>("blue"), std::optional<int64_t>(100), std::optional<int64_t>(100));
+    expected.emplace_back(std::optional<std::string>("red"), std::optional<int64_t>(10), std::optional<int64_t>(20));
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(GroupAggregateCypherTest, aggregateAfterCartesianProduct) {
+    buildTeamGraph();
+
+    ScalarUInt64Sink scalarSink;
+    match("MATCH (a:Node), (b:Node) RETURN count(*)", scalarSink);
+    ASSERT_EQ(scalarSink.getValues().size(), 1u);
+    EXPECT_EQ(scalarSink.getValues()[0], 16u);
+
+    GroupCountSink groupSink;
+    match("MATCH (a:Node), (b:Node) RETURN a.team, count(*)", groupSink);
+
+    std::vector<GroupCountSink::Row> rows;
+    groupSink.sortedRows(rows);
+    const std::vector<GroupCountSink::Row> expected {{"blue", 8}, {"red", 8}};
     EXPECT_EQ(rows, expected);
 }
 
