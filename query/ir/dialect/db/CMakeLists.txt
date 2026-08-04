@@ -15,6 +15,9 @@ set(LLVM_TARGET_DEFINITIONS DBTypes.td)
 mlir_tablegen(DBTypes.h.inc      -gen-typedef-decls     -dialect db --typedefs-dialect db EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${STORAGE_DIALECT_SOURCE_DIR})
 mlir_tablegen(DBTypes.cpp.inc    -gen-typedef-defs      -dialect db --typedefs-dialect db EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${STORAGE_DIALECT_SOURCE_DIR})
 
+set (LLVM_TARGET_DEFINITIONS DBPasses.td)
+mlir_tablegen(DBPasses.h.inc     -gen-pass-decls    -name DB -dialect db  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
+
 # Creates CMAKE target with all included .inc files, the lib depends on this
 add_public_tablegen_target(DBDialectIncGen)
 
@@ -30,6 +33,7 @@ add_mlir_library(turing_db_ir_dbdialect_s
   DBDialect.cpp
   DBOps.cpp
   DBTypes.cpp
+  DBPasses.cpp
 
   DEPENDS
   DBDialectIncGen
@@ -37,6 +41,7 @@ add_mlir_library(turing_db_ir_dbdialect_s
   LINK_LIBS PUBLIC
   MLIRIR
   MLIRSupport
+  MLIRPass
   MLIRFuncDialect
   MLIRBuiltinToLLVMIRTranslation
   turing_db_ir_storagedialect_s
