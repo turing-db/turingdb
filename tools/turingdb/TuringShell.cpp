@@ -688,7 +688,16 @@ namespace {
 
 class TuringShellNLSink : public NLOutputSink {
 public:
+    explicit TuringShellNLSink(bool quiet)
+        : _quiet(quiet)
+    {
+    }
+
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        if (_quiet) {
+            return;
+        }
+
         if (_execCount == 0) {
             tabulate::RowStream headerRow;
             for (size_t columnIndex = 0; columnIndex < chunks.size(); columnIndex++) {
@@ -728,6 +737,7 @@ private:
     tabulate::Table _table;
     size_t _execCount {0};
     size_t _rowCount {0};
+    bool _quiet {false};
 };
 
 }
@@ -738,7 +748,7 @@ void TuringShell::runMLIRQuery(std::string_view query) {
         return;
     }
 
-    TuringShellNLSink sink;
+    TuringShellNLSink sink(_quiet);
     QueryStatus status;
     QueryInterpreterV3 interp(&_turingDB.getSystemManager());
     interp.execute(status, query, _graphName, _hash, _changeID, _mem, &sink);
