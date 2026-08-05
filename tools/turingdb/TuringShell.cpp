@@ -695,6 +695,7 @@ public:
 
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         if (_quiet) {
+            _rowCount += rowCount;
             return;
         }
 
