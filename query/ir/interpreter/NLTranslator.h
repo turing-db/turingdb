@@ -447,6 +447,7 @@ private:
                        NLSkipTruncateData* data);
 
     Column* allocColumn(mlir::Value chunkValue);
+    Column* allocColumnIfUsed(mlir::Value chunkValue);
     Column* allocColumnForKind(NLChunkKind kind);
 
     // Allocate a nullable value column for the value type's primitive. The

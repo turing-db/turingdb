@@ -1258,10 +1258,15 @@ protected:
         mlir::OwningOpRef<mlir::ModuleOp> module = mlir::parseSourceString<mlir::ModuleOp>(programText, parserConfig);
         ASSERT_TRUE(module);
 
-        // run() reaches the translator before touching the graph view or sink,
-        // so a rejected program surfaces its IRException with neither supplied
+        // Translation runs against a real view in production and may read graph
+        // state (edge-type resolution, tombstone filtering), so supply an empty
+        // one. The sink stays null: a rejected program throws before execution.
+        auto graph = Graph::create();
+        const FrozenCommitTx transaction = graph->openTransaction();
+        const GraphReader reader = transaction.readGraph();
+
         LocalMemory memory;
-        NLInterpreter interpreter(*module, nullptr, nullptr, &memory);
+        NLInterpreter interpreter(*module, &reader.getView(), nullptr, &memory);
         EXPECT_THROW(interpreter.run(), IRException);
     }
 

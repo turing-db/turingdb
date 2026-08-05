@@ -564,11 +564,17 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
                                      NLStmtContainer* body) {
     // The four fixed chunks of an edge iterator step, in the block-argument
     // order established by getEdgeIteratorType: sources, edge IDs, edge type
-    // IDs, targets
-    ColumnNodeIDs* sources = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(0)));
-    ColumnEdgeIDs* edgeIDs = static_cast<ColumnEdgeIDs*>(allocColumn(loopBody.getArgument(1)));
-    ColumnEdgeTypes* edgeTypes = static_cast<ColumnEdgeTypes*>(allocColumn(loopBody.getArgument(2)));
-    ColumnNodeIDs* targets = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(3)));
+    // IDs, targets.
+    ColumnNodeIDs* sources = static_cast<ColumnNodeIDs*>(allocColumnIfUsed(loopBody.getArgument(0)));
+    ColumnEdgeIDs* edgeIDs = static_cast<ColumnEdgeIDs*>(allocColumnIfUsed(loopBody.getArgument(1)));
+    ColumnEdgeTypes* edgeTypes = static_cast<ColumnEdgeTypes*>(allocColumnIfUsed(loopBody.getArgument(2)));
+    ColumnNodeIDs* targets = static_cast<ColumnNodeIDs*>(allocColumnIfUsed(loopBody.getArgument(3)));
+
+    // Allocate for edge IDs even if they aren't read if we have to check tombstones
+    if (!edgeIDs && _view->tombstones().hasEdges()) {
+        edgeIDs = _memory->alloc<ColumnEdgeIDs>();
+        edgeIDs->reserve(_program->getChunkSize());
+    }
 
     const ColumnNodeIDs* inputNodeIDs = static_cast<const ColumnNodeIDs*>(getColumn(config._inputNodes));
 
@@ -2264,6 +2270,14 @@ Column* NLTranslator::allocColumn(mlir::Value chunkValue) {
     Column* column = allocColumnForKind(kind);
     _valueSlots[chunkValue] = column;
     return column;
+}
+
+Column* NLTranslator::allocColumnIfUsed(mlir::Value chunkValue) {
+    if (chunkValue.use_empty()) {
+        return nullptr;
+    }
+
+    return allocColumn(chunkValue);
 }
 
 // Pool-allocate a chunk column of the right concrete type from the external

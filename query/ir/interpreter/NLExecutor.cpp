@@ -1066,8 +1066,10 @@ void runEdgeLoopSteps(NLExecutionContext* context,
             return;
         }
 
-        // Gather either source or target if we are get_out or get_in (the source side)
-        gatherColumn<NodeID>(loopData->getInput(), indices, gatheredNodeIDs);
+        // Column many not have been allocated (=nullptr) if its var wasn't used
+        if (gatheredNodeIDs) {
+            gatherColumn<NodeID>(loopData->getInput(), indices, gatheredNodeIDs);
+        }
 
         // Transform all the columns in the carried set according to indices
         for (const NLCarriedColumn& carriedColumn : loopData->carriedColumns()) {
