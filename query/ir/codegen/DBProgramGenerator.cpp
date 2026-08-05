@@ -1671,6 +1671,10 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
     const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
     const std::string_view funcName = invocation->getSignature()->getFullName();
 
+    if (!funcExpr->isAggregate()) {
+        throw TuringException("Non-aggregate function invocations are not yet supported");
+    }
+
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
