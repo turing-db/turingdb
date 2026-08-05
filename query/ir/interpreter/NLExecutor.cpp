@@ -221,9 +221,10 @@ void gatherColumn(const Column* input,
     typedOutput->resize(indices->size());
     const auto& indicesRaw = indices->getRaw();
     auto& typedInputRaw = typedInput->getRaw();
+    auto& typedOutputRaw = typedOutput->getRaw();
 
-    for (const size_t index : indicesRaw) {
-        typedOutput->operator[](index) = typedInputRaw[index];
+    for (size_t row = 0; row < indicesRaw.size(); row++) {
+        typedOutputRaw[row] = typedInputRaw[indicesRaw[row]];
     }
 }
 
