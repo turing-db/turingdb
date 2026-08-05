@@ -69,7 +69,7 @@ TEST_F(QueryInterpreterV3ErrorTest, reportsGeneratorRejectionAsIs) {
     runQuery("MATCH (n) RETURN labels(n)", status);
 
     EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
-    EXPECT_EQ(status.getError(), "Unsupported expression: FUNCTION_INVOCATION");
+    EXPECT_EQ(status.getError(), "Non-aggregate function invocations are not yet supported");
 }
 
 TEST_F(QueryInterpreterV3ErrorTest, reportsUnaryOperatorRejectionAsIs) {
