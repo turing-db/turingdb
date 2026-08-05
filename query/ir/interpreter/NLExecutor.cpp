@@ -217,13 +217,12 @@ void gatherColumn(const Column* input,
     const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
     ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
 
-    typedOutput->clear();
-    typedOutput->reserve(indices->size());
+    typedOutput->resize(indices->size());
     const auto& indicesRaw = indices->getRaw();
     auto& typedInputRaw = typedInput->getRaw();
 
     for (const size_t index : indicesRaw) {
-        typedOutput->push_back(typedInputRaw[index]);
+        typedOutput->operator[](index) = typedInputRaw[index];
     }
 }
 
