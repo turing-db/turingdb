@@ -73,6 +73,18 @@ bool renderValueCell(const Column* column, size_t row, std::string& out) {
         return true;
     }
 
+    // A never-null value column - the v3 count(*) result is a plain
+    // ColumnVector<uint64_t>, where the v2 pipeline emits a ColumnConst.
+    if (const auto* plainValues = dynamic_cast<const ColumnVector<T>*>(column)) {
+        const T value = (*plainValues)[row];
+        if constexpr (std::is_same_v<T, std::string_view>) {
+            out = std::string(value);
+        } else {
+            out = std::to_string(value);
+        }
+        return true;
+    }
+
     const auto* values = dynamic_cast<const ColumnOptVector<T>*>(column);
     if (!values) {
         return false;
@@ -644,4 +656,51 @@ TEST_F(EquivalenceTest, comparisonFilters) {
     expectEquivalent("MATCH (n)-[e]->(m) WHERE e.duration < 100 RETURN m");
     expectEquivalent("MATCH (n)-[e]->(m) WHERE e.duration >= 20 RETURN m");
     expectEquivalent("MATCH (n)-[e]->(m) WHERE e.duration <= 20 RETURN m");
+}
+
+TEST_F(EquivalenceTest, wildcardReturn) {
+    expectEquivalent("MATCH (n) RETURN *");
+
+    expectEquivalent("MATCH (a)-->(b) RETURN *");
+    expectEquivalent("MATCH (a)-->(b)-->(c) RETURN *");
+    expectEquivalent("MATCH (a)<--(b) RETURN *");
+
+    expectEquivalent("MATCH (a)-[e]->(b) RETURN *");
+
+    expectEquivalent("MATCH (a), (b) RETURN *");
+
+    expectEquivalent("MATCH (n:Person) RETURN *");
+    expectEquivalent("MATCH (n {name: 'Remy'}) RETURN *");
+    expectEquivalent("MATCH (n) WHERE n.age = 32 RETURN *");
+}
+
+TEST_F(EquivalenceTest, countStar) {
+    expectEquivalent("MATCH (n) RETURN count(*)");
+
+    expectEquivalent("MATCH (a)-->(b) RETURN count(*)");
+    expectEquivalent("MATCH (a)-->(b)-->(c) RETURN count(*)");
+    expectEquivalent("MATCH (a)<--(b) RETURN count(*)");
+
+    expectEquivalent("MATCH (a), (b) RETURN count(*)");
+
+    expectEquivalent("MATCH (n:Person) RETURN count(*)");
+    expectEquivalent("MATCH (n {name: 'Remy'}) RETURN count(*)");
+    expectEquivalent("MATCH (n) WHERE n.age = 32 RETURN count(*)");
+
+    expectEquivalent("MATCH (a)-[:INTERESTED_IN]->(b) RETURN count(*)");
+
+    expectEquivalent("MATCH (n {name: 'Nobody'}) RETURN count(*)");
+}
+
+TEST_F(EquivalenceTest, wildcardAndCountCombination) {
+    expectEquivalent("MATCH (a:Person)-->(b:Interest) RETURN *");
+    expectEquivalent("MATCH (a {isFrench: true})-->(b) RETURN *");
+    expectEquivalent("MATCH (a)-[e {duration: 20}]->(b) RETURN *");
+    expectEquivalent("MATCH (a:Person)-->(b), (c:Interest) RETURN *");
+
+    expectEquivalent("MATCH (a:Person)-->(b:Interest) RETURN count(*)");
+    expectEquivalent("MATCH (a {isFrench: true})-->(b) RETURN count(*)");
+    expectEquivalent("MATCH (a)-[:KNOWS_WELL]->(b) WHERE a.hasPhD RETURN count(*)");
+    expectEquivalent("MATCH (a:Person)-->(b)-->(c) WHERE a.isFrench RETURN count(*)");
+    expectEquivalent("MATCH (a), (b), (c) RETURN count(*)");
 }
