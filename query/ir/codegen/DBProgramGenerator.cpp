@@ -291,6 +291,7 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
 void DBProgramGenerator::runPasses() {
     mlir::PassManager passManager(_mlirCtxt);
     passManager.addPass(mlir::db::createGetOutEdgesDCE());
+    passManager.addPass(mlir::db::createPredicatePushdown());
 
     if (mlir::failed(passManager.run(*_module))) {
         throw FatalException("DB pass pipeline failed");

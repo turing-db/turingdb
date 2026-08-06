@@ -9,9 +9,12 @@
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Verifier.h"
 #include "mlir/Parser/Parser.h"
+#include "mlir/Pass/PassManager.h"
+#include "llvm/ADT/SmallVector.h"
 
 #include "DBDialect.h"
 #include "DBOps.h"
+#include "DBPasses.h"
 #include "StorageDialect.h"
 #include "StorageTypes.h"
 
@@ -1176,6 +1179,45 @@ TEST_F(DBDialectTest, setEdgePropertyRoundTripsThroughTextualForm) {
 TEST_F(DBDialectTest, verifierRejectsEmptySetProperty) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyPropertySetProgram);
     EXPECT_FALSE(module);
+}
+
+const char* const leftOnlyFilterProgram = R"mlir(
+func.func @main() {
+  %0:2 = db.cross_product factor {
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %a : !db.column<!storage.node_id>
+  } factor {
+    %b = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %b : !db.column<!storage.node_id>
+  }
+  %mask = db.get_node_properties(%0#0, "flag") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %f:2 = db.filter(%mask, {%0#0, %0#1}) : (!db.column<none>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%f#0, %f#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(DBDialectTest, predicatePushdownSinksLeftOnlyFilter) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(leftOnlyFilterProgram);
+    ASSERT_TRUE(module);
+
+    mlir::PassManager passManager(&_context);
+    passManager.addPass(mlir::db::createPredicatePushdown());
+    ASSERT_TRUE(mlir::succeeded(passManager.run(*module)));
+
+    // Exactly one filter survives, and it now lives inside the cross_product's
+    // left factor - the predicate was pushed below the product.
+    llvm::SmallVector<mlir::db::FilterOp> filters;
+    module.get().walk([&](mlir::db::FilterOp op) {
+        filters.push_back(op);
+    });
+    ASSERT_EQ(filters.size(), 1u);
+
+    mlir::db::CrossProduct product = findCrossProduct(*module);
+    ASSERT_TRUE(product);
+    EXPECT_EQ(filters.front()->getParentRegion(), &product.getLeftFactor());
+
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
 }
 
 }

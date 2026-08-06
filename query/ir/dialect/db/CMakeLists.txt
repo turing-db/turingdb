@@ -8,8 +8,10 @@ mlir_tablegen(DBDialect.h.inc    -gen-dialect-decls -dialect db  EXTRA_INCLUDES 
 mlir_tablegen(DBDialect.cpp.inc  -gen-dialect-defs  -dialect db  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS})
 
 set(LLVM_TARGET_DEFINITIONS DBOps.td)
-mlir_tablegen(DBOps.h.inc        -gen-op-decls      -dialect db  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${STORAGE_DIALECT_SOURCE_DIR})
-mlir_tablegen(DBOps.cpp.inc      -gen-op-defs       -dialect db  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${STORAGE_DIALECT_SOURCE_DIR})
+mlir_tablegen(DBOps.h.inc            -gen-op-decls            -dialect db  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${STORAGE_DIALECT_SOURCE_DIR})
+mlir_tablegen(DBOps.cpp.inc          -gen-op-defs             -dialect db  EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${STORAGE_DIALECT_SOURCE_DIR})
+mlir_tablegen(DBOpsInterfaces.h.inc  -gen-op-interface-decls               EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${STORAGE_DIALECT_SOURCE_DIR})
+mlir_tablegen(DBOpsInterfaces.cpp.inc -gen-op-interface-defs               EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${STORAGE_DIALECT_SOURCE_DIR})
 
 set(LLVM_TARGET_DEFINITIONS DBTypes.td)
 mlir_tablegen(DBTypes.h.inc      -gen-typedef-decls     -dialect db --typedefs-dialect db EXTRA_INCLUDES ${MLIR_INCLUDE_DIRS} ${STORAGE_DIALECT_SOURCE_DIR})
@@ -42,6 +44,7 @@ add_mlir_library(turing_db_ir_dbdialect_s
   MLIRIR
   MLIRSupport
   MLIRPass
+  MLIRTransformUtils
   MLIRFuncDialect
   MLIRBuiltinToLLVMIRTranslation
   turing_db_ir_storagedialect_s

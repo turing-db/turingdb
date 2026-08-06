@@ -12,5 +12,8 @@
 #include "DBDialect.h"
 #include "DBTypes.h"
 
+namespace mlir { class PatternRewriter; }
+#include "DBOpsInterfaces.h.inc"
+
 #define GET_OP_CLASSES
 #include "DBOps.h.inc"

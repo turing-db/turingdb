@@ -8,4 +8,9 @@ def GetOutEdgesDCE : Pass<"get_out_edges_dce"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def PredicatePushdown : Pass<"predicate_pushdown"> {
+    let summary = "Predicate pushdown for filters";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 #endif // TURINGDB_PASSES

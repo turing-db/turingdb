@@ -9,6 +9,26 @@ include "mlir/IR/BuiltinAttributeInterfaces.td"
 include "DBDialect.td"
 include "DBTypes.td"
 
+// A column producer that can absorb a db.filter sitting on its results, pushing
+// the predicate closer to the sources. The generic predicate_pushdown pass hands
+// each filter to the op that produced its columns; that op decides - per its own
+// row model - whether and how to take it. An op that does not implement this
+// interface is a pushdown barrier: the filter stays put.
+def AbsorbFilterInterface : OpInterface<"AbsorbFilterInterface"> {
+  let cppNamespace = "::mlir::db";
+  let methods = [
+    InterfaceMethod<
+      [{
+        Try to absorb `filter` - a db.filter whose columns_to_filter are this op's
+        results - rewriting so the predicate applies earlier. Return success() only
+        if the IR was rewritten; failure() leaves the filter untouched.
+      }],
+      "::mlir::LogicalResult", "absorbFilter",
+      (ins "::mlir::Operation *":$filter, "::mlir::PatternRewriter &":$rewriter)
+    >
+  ];
+}
+
 /**
 * ScanNodes
 */
@@ -445,7 +465,7 @@ def CheckEdgeTypeConstraint : TuringOp<"check_edge_type_constraint", [Pure]> {
 /**
 * CrossProduct
 */
-def CrossProduct : TuringOp<"cross_product", [Pure]> {
+def CrossProduct : TuringOp<"cross_product", [Pure, DeclareOpInterfaceMethods<AbsorbFilterInterface>]> {
   let summary = "Cross every row of one column dataflow with every row of another";
 
   let description = [{

@@ -1,6 +1,12 @@
 #include "DBOps.h"
 #include "DBDialect.h"
 
+#include "mlir/IR/IRMapping.h"
+#include "mlir/IR/PatternMatch.h"
+
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 
 #include "StorageEnums.h"
@@ -13,6 +19,8 @@ namespace storage = mlir::storage;
 
 #define GET_OP_CLASSES
 #include "DBOps.cpp.inc"
+
+#include "DBOpsInterfaces.cpp.inc"
 
 namespace {
 
@@ -92,6 +100,62 @@ LogicalResult verifyPassThrough(Operation* op,
     }
 
     return success();
+}
+
+// The cross_product result indices the mask cone transitively reads. A
+// cross_product result is a leaf of the cone - the predicate computation sits
+// above it - so the walk stops descending there.
+void collectReadResultIndices(Value mask,
+                              CrossProduct crossProduct,
+                              llvm::SmallDenseSet<unsigned>& indices) {
+    llvm::SmallVector<Value> worklist {mask};
+    llvm::SmallPtrSet<Operation*, 8> visited;
+
+    while (!worklist.empty()) {
+        const Value value = worklist.pop_back_val();
+
+        if (const auto result = dyn_cast<OpResult>(value)) {
+            if (result.getOwner() == crossProduct.getOperation()) {
+                indices.insert(result.getResultNumber());
+                continue;
+            }
+        }
+
+        Operation* const definingOp = value.getDefiningOp();
+        if (!definingOp || !visited.insert(definingOp).second) {
+            continue;
+        }
+
+        for (const Value operand : definingOp->getOperands()) {
+            worklist.push_back(operand);
+        }
+    }
+}
+
+// Clone the pure cone computing @param root at the rewriter's insertion point,
+// remapping values already in @param mapping (each cross_product result to the
+// factor's internal column). Cloning pulls the constants and property reads
+// along, so the target region stays self-contained. Returns the cloned root.
+Value cloneConeInto(PatternRewriter& rewriter, Value root, IRMapping& mapping) {
+    if (const Value mapped = mapping.lookupOrNull(root)) {
+        return mapped;
+    }
+
+    Operation* const definingOp = root.getDefiningOp();
+    if (!definingOp) {
+        return root;
+    }
+
+    for (const Value operand : definingOp->getOperands()) {
+        cloneConeInto(rewriter, operand, mapping);
+    }
+
+    Operation* const clone = rewriter.clone(*definingOp, mapping);
+    for (auto [oldResult, newResult] : llvm::zip(definingOp->getResults(), clone->getResults())) {
+        mapping.map(oldResult, newResult);
+    }
+
+    return mapping.lookup(root);
 }
 
 }
@@ -242,6 +306,78 @@ LogicalResult CrossProduct::verify() {
         }
     }
 
+    return success();
+}
+
+// Predicate pushdown (AbsorbFilterInterface): sink a filter whose mask depends on
+// a single factor into that factor, cutting rows before the product multiplies
+// them. A mask straddling both factors, or filtering more than this product's
+// results, is left to the caller (failure()).
+LogicalResult CrossProduct::absorbFilter(Operation* filterOp, PatternRewriter& rewriter) {
+    auto filter = dyn_cast<FilterOp>(filterOp);
+    if (!filter) {
+        return failure();
+    }
+
+    const Operation::operand_range columns = filter.getColumnsToFilter();
+    if (columns.size() != getNumResults()) {
+        return failure();
+    }
+
+    llvm::SmallDenseSet<unsigned> covered;
+    for (const Value column : columns) {
+        const auto result = dyn_cast<OpResult>(column);
+        if (!result || result.getOwner() != getOperation()) {
+            return failure();
+        }
+
+        covered.insert(result.getResultNumber());
+    }
+
+    if (covered.size() != getNumResults()) {
+        return failure();
+    }
+
+    Yield leftYield = cast<Yield>(getLeftFactor().front().getTerminator());
+    const unsigned leftCount = leftYield.getColumns().size();
+
+    llvm::SmallDenseSet<unsigned> readIndices;
+    collectReadResultIndices(filter.getMask(), *this, readIndices);
+    if (readIndices.empty()) {
+        return failure();
+    }
+
+    const bool allLeft = llvm::all_of(readIndices, [&](unsigned index) { return index < leftCount; });
+    const bool allRight = llvm::all_of(readIndices, [&](unsigned index) { return index >= leftCount; });
+    if (!allLeft && !allRight) {
+        return failure();
+    }
+
+    Yield yield = allLeft
+        ? leftYield
+        : cast<Yield>(getRightFactor().front().getTerminator());
+    const unsigned base = allLeft ? 0 : leftCount;
+
+    // Each read result maps to the factor's internal yielded column.
+    IRMapping mapping;
+    for (const unsigned index : readIndices) {
+        mapping.map(getResult(index), yield.getColumns()[index - base]);
+    }
+
+    // factor's own columns by it and yield those.
+    rewriter.setInsertionPoint(yield);
+    const Value mask = cloneConeInto(rewriter, filter.getMask(), mapping);
+
+    auto innerFilter = rewriter.create<FilterOp>(filter.getLoc(),
+                                                 yield.getColumns().getTypes(),
+                                                 mask,
+                                                 yield.getColumns());
+
+    rewriter.modifyOpInPlace(yield, [&] {
+        yield.getColumnsMutable().assign(innerFilter.getResults());
+    });
+
+    rewriter.replaceOp(filter, columns);
     return success();
 }
 
