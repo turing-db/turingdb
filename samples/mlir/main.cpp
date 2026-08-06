@@ -227,10 +227,7 @@ void helloModule(mlir::OpBuilder& builder, mlir::ModuleOp& module) {
     addNestedLoopFunction(builder, module);
 }
 
-void progGen(std::string_view query,
-             mlir::MLIRContext* ctxt,
-             mlir::OpBuilder* bld,
-             mlir::ModuleOp* module) {
+void progGen(std::string_view query, Graph& graph, mlir::ModuleOp* module) {
     TuringConfig config;
     config.setSyncedOnDisk(false);
 
@@ -239,10 +236,7 @@ void progGen(std::string_view query,
 
     SystemAccessor acc = sysman.accessUnique();
 
-    Graph* graph = acc.createGraph("simpledb");
-    SimpleGraph::createSimpleGraph(graph);
-
-    const FrozenCommitTx transaction = graph->openTransaction();
+    const FrozenCommitTx transaction = graph.openTransaction();
     const GraphView view = transaction.viewGraph();
 
     CypherAST ast(acc.getProcedures(), query);
@@ -568,36 +562,21 @@ void runModuleMain(mlir::ModuleOp& module,
     }
 }
 
-// Loads the graph at graphDir and runs the module's main function against it.
-// With quiet set, output rows are only counted, not printed - the mode for
-// benchmarking, where per-row formatting would dominate the timing.
-void executeModule(mlir::ModuleOp& module, const std::string& graphDir, bool quiet) {
-    if (graphDir.empty()) {
-        throw std::runtime_error("-exec requires a graph directory given with -graph");
-    }
-
-    auto graph = Graph::create();
-    const auto loadResult = GraphLoader::load(graph.get(), fs::Path(graphDir));
-    if (!loadResult) {
-        throw std::runtime_error(loadResult.error().fmtMessage());
-    }
-
+void executeModule(mlir::ModuleOp& module, Graph& graph, bool quiet) {
     const bool isWrite = moduleHasCreateOps(module);
 
-    // Write queries open a change and grab the write buffer and metadata builder
-    // from the tip commit. Read queries use a read-only snapshot.
     std::unique_ptr<Change> change;
     CommitWriteBuffer* writeBuffer = nullptr;
     MetadataBuilder* metadataBuilder = nullptr;
     JobSystem jobSystem;
 
-    const FrozenCommitTx transaction = graph->openTransaction();
+    const FrozenCommitTx transaction = graph.openTransaction();
     const GraphReader reader = transaction.readGraph();
     const GraphView& view = reader.getView();
 
     if (isWrite) {
         jobSystem.init();
-        change = graph->newChange();
+        change = graph.newChange();
         CommitBuilder* commitBuilder = change->access().getTip();
         writeBuffer = &commitBuilder->writeBuffer();
         metadataBuilder = &commitBuilder->metadata();
@@ -739,8 +718,26 @@ int main(int argc, char** argv) {
         mlir::OpBuilder builder(&ctxt);
         auto mainMod = mlir::ModuleOp::create(builder.getUnknownLoc());
 
+        std::unique_ptr<Graph> graph;
+
+        const bool needGraph = !query.empty() || execute;
+        if (needGraph) {
+            graph = Graph::create();
+
+            if (!graphDir.empty()) {
+                const auto loadResult = GraphLoader::load(graph.get(), fs::Path(graphDir));
+                if (!loadResult) {
+                    throw std::runtime_error(loadResult.error().fmtMessage());
+                }
+            } else if (execute) {
+                throw std::runtime_error("-exec requires a graph directory given with -graph");
+            } else {
+                SimpleGraph::createSimpleGraph(graph.get());
+            }
+        }
+
         if (!query.empty()) {
-            progGen(query, &ctxt, &builder, &mainMod);
+            progGen(query, *graph, &mainMod);
         } else if (files.empty()) {
             helloModule(builder, mainMod);
         } else {
@@ -759,7 +756,7 @@ int main(int argc, char** argv) {
         }
 
         if (execute) {
-            executeModule(mainMod, graphDir, quiet);
+            executeModule(mainMod, *graph, quiet);
         }
     } catch (const std::exception& e) {
         std::cerr << e.what() << "\n";
