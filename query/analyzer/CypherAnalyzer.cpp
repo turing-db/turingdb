@@ -335,9 +335,6 @@ void CypherAnalyzer::analyzeDistinct(const ReturnStmt* returnSt, const Projectio
             continue;
         }
 
-        // A DISTINCT leaves only the returned columns, so a key the projection does not
-        // carry names a column the dedup dropped: it was read once per pre-dedup row and
-        // no longer lines up with the rows that survived
         if (!projection->hasItem(keyExpr)) {
             throwError("ORDER BY with DISTINCT may only order by returned columns.", keyExpr);
         }
