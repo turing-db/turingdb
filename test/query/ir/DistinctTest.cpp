@@ -193,6 +193,7 @@ protected:
         parser.parse(query);
 
         CypherAnalyzer analyzer(&ast, view);
+        analyzer.setV3();
         analyzer.analyze();
 
         context.getOrLoadDialect<mlir::func::FuncDialect>();

@@ -83,7 +83,7 @@ private:
 
     bool _isV3 {false};
 
-    void analyzeDistinctOrderBy(const Projection* projection) const;
+    void analyzeDistinct(const ReturnStmt* returnSt, const Projection* projection) const;
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

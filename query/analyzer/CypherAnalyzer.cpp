@@ -264,18 +264,15 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         hasGroupingKeys |= !item->isAggregate();
     }
 
-    // An ORDER BY key may name an alias the projection declares - the x of
-    // RETURN n.name AS x ORDER BY x - so the items are analyzed first, and the key finds
-    // the alias among the variables of the query
     if (projection->hasOrderBy()) {
         analyze(projection->getOrderBy());
-
-        if (projection->isDistinct()) {
-            analyzeDistinctOrderBy(projection);
-        }
     }
 
-    if (!_isV3) { // only supported by MLIR v3
+    if (projection->isDistinct()) {
+        analyzeDistinct(returnSt, projection);
+    }
+
+    if (!_isV3) {
         const bool multipleReturns = projection->items().size() != 1;
         if (isAggregate && multipleReturns) {
             throwError("Aggregates may not yet be combined with multiple return items.",
@@ -318,7 +315,15 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
     }
 }
 
-void CypherAnalyzer::analyzeDistinctOrderBy(const Projection* projection) const {
+void CypherAnalyzer::analyzeDistinct(const ReturnStmt* returnSt, const Projection* projection) const {
+    if (!_isV3) { // only supported by MLIR v3
+        throwError("DISTINCT not yet supported.", returnSt);
+    }
+
+    if (!projection->hasOrderBy()) {
+        return;
+    }
+
     const OrderBy* orderBy = projection->getOrderBy();
 
     for (const OrderByItem* item : orderBy->getItems()) {
