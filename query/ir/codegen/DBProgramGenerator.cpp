@@ -1839,14 +1839,14 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
         return;
     }
 
-    FinalIdentityMap finalIdentities;
+    VariableColumnMap variableColumns;
     for (const auto& [cypherVar, mlirCol] : _varMap) {
-        finalIdentities[cypherVar->getName()] = mlirCol.back();
+        variableColumns[cypherVar->getName()] = mlirCol.back();
     }
 
     for (const auto& [name, vars] : _vdg.edgeIdentities()) {
         if (!vars.empty() && _varMap.contains(vars.front())) {
-            finalIdentities[name] = _varMap.at(vars.front()).back();
+            variableColumns[name] = _varMap.at(vars.front()).back();
         }
     }
 
@@ -1865,8 +1865,8 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
     for (const Projection::ReturnItem& returnItem : proj->items()) {
         if (const VarDecl* const* varDeclPtr = std::get_if<VarDecl*>(&returnItem)) {
             const std::string_view name = (*varDeclPtr)->getName();
-            const auto findIt = finalIdentities.find(name);
-            bioassert(findIt != finalIdentities.end(), "Grouping key variable {} not found.", name);
+            const auto findIt = variableColumns.find(name);
+            bioassert(findIt != variableColumns.end(), "Grouping key variable {} not found.", name);
             keyColumns.push_back(findIt->second);
 
             const VariableDependency* keyVar = nullptr;
@@ -1884,7 +1884,7 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
         const Expr* item = std::get<Expr*>(returnItem);
 
         if (!item->isAggregate()) {
-            keyColumns.push_back(resolveExprColumn(finalIdentities, item));
+            keyColumns.push_back(getOrTranslateExprColumn(variableColumns, item));
             keyVarAtPos.push_back(nullptr);
             keyExprAtPos.push_back(item);
             continue;
