@@ -32,6 +32,7 @@ class Symbol;
 class NodePattern;
 class EdgePattern;
 class ListExpr;
+class MapLiteral;
 
 class ExprAnalyzer {
 public:
@@ -82,6 +83,7 @@ private:
     std::unordered_map<std::string_view, ValueType> _toBeCreatedTypes;
 
     void analyzeListElements(Expr* expr, std::span<Expr* const> elements);
+    void analyzeMapEntries(Expr* expr, const MapLiteral* map);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

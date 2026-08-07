@@ -363,20 +363,7 @@ void ExprAnalyzer::analyzeLiteralExpr(LiteralExpr* expr) {
             expr->setType(EvaluatedType::Map);
 
             const MapLiteral* map = static_cast<const MapLiteral*>(literal);
-
-            // The keys of a map are symbols written in the query, so only its values can
-            // make it vary or aggregate
-            for (const auto& [propName, value] : *map) {
-                analyzeExpr(value);
-
-                if (value->isDynamic()) {
-                    expr->setDynamic();
-                }
-
-                if (value->isAggregate()) {
-                    expr->setAggregate();
-                }
-            }
+            analyzeMapEntries(expr, map);
         } break;
         case Literal::Kind::EMBEDDING: {
             const auto* embLit = static_cast<const EmbeddingLiteral*>(literal);
@@ -801,6 +788,22 @@ void ExprAnalyzer::analyzeListElements(Expr* expr, std::span<Expr* const> elemen
         }
 
         if (element->isAggregate()) {
+            expr->setAggregate();
+        }
+    }
+}
+
+void ExprAnalyzer::analyzeMapEntries(Expr* expr, const MapLiteral* map) {
+    // The keys of a map are symbols written in the query, so only its values can make it
+    // vary or aggregate
+    for (const auto& [key, value] : *map) {
+        analyzeExpr(value);
+
+        if (value->isDynamic()) {
+            expr->setDynamic();
+        }
+
+        if (value->isAggregate()) {
             expr->setAggregate();
         }
     }
