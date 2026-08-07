@@ -1111,9 +1111,7 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
 
         // A key names the column to sort by through its position in the columns handed to
         // the sort: the position the projection already gives it, or the end of the set
-        // when the key has to be appended - so two appended keys never share a position.
-        // A DISTINCT leaves only the returned columns to append to, which is why the
-        // analyzer rejects an unprojected key after one
+        // when the key has to be appended - so two appended keys never share a position
         if (isProjected) {
             keyColumns.push_back(static_cast<int64_t>(projectedIndex));
         } else {
