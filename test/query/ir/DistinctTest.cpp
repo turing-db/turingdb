@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -52,6 +53,10 @@ using Row = std::vector<uint64_t>;
 using Rows = std::vector<Row>;
 using Names = std::vector<std::string>;
 using OptInt64Values = std::vector<std::optional<int64_t>>;
+using NodeValueRow = std::pair<uint64_t, std::optional<int64_t>>;
+using NodeValueRows = std::vector<NodeValueRow>;
+using NodeAverageRow = std::pair<uint64_t, std::optional<double>>;
+using NodeAverageRows = std::vector<NodeAverageRow>;
 
 // Every distinct out-edge target of simpledb by name. Eighteen edges point at these
 // twelve nodes - Gym is pointed at three times, Remy, Computers, Bio and Cooking twice
@@ -159,6 +164,53 @@ public:
 
 private:
     OptInt64Values _values;
+};
+
+class DistinctNodeValueSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* values = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[1]);
+        ASSERT_NE(values, nullptr);
+
+        const auto& valueRaw = values->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.emplace_back(readNodeID(chunks[0], rowIndex), valueRaw[rowIndex]);
+        }
+    }
+
+    void sortedRows(NodeValueRows& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    NodeValueRows _rows;
+};
+
+// avg widens to f64 whatever it reduces, so the aggregate column is nullable double.
+class DistinctNodeAverageSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* averages = dynamic_cast<const ColumnOptVector<double>*>(chunks[1]);
+        ASSERT_NE(averages, nullptr);
+
+        const auto& averageRaw = averages->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.emplace_back(readNodeID(chunks[0], rowIndex), averageRaw[rowIndex]);
+        }
+    }
+
+    void sortedRows(NodeAverageRows& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    NodeAverageRows _rows;
 };
 
 }
@@ -347,6 +399,63 @@ TEST_F(DistinctTest, dedupsNullsTogether) {
     const OptInt64Values expected = {std::nullopt, 32};
     OptInt64Values actual;
     sink.sortedValues(actual);
+
+    EXPECT_EQ(actual, expected);
+}
+
+// The addition is a function of a, so it tells two rows apart exactly when a already
+// does: the 18 out-edge rows carry the same 9 sources returning a alone gives.
+TEST_F(DistinctTest, dedupsANodeWithAnExpressionOverIt) {
+    DistinctNodeValueSink sink;
+    runQuery("MATCH (a)-->(b) RETURN DISTINCT a, a.age + 42", &sink);
+
+    const NodeValueRows expected = {
+        {0, 74},
+        {1, 74},
+        {6, std::nullopt},
+        {8, std::nullopt},
+        {9, std::nullopt},
+        {11, std::nullopt},
+        {12, std::nullopt},
+        {15, std::nullopt},
+        {17, std::nullopt},
+    };
+
+    NodeValueRows actual;
+    sink.sortedRows(actual);
+
+    EXPECT_EQ(actual, expected);
+}
+
+// The projection is a grouped aggregate first, so the dedup runs on its results, where a
+// group key is unique by construction: DISTINCT can never drop a row here.
+TEST_F(DistinctTest, keepsEveryGroupOfAnAggregate) {
+    DistinctNodeAverageSink sink;
+    runQuery("MATCH (n) RETURN DISTINCT n, avg(n.age)", &sink);
+
+    const NodeAverageRows expected = {
+        {0, 32.0},
+        {1, 32.0},
+        {2, std::nullopt},
+        {3, std::nullopt},
+        {4, std::nullopt},
+        {5, std::nullopt},
+        {6, std::nullopt},
+        {7, std::nullopt},
+        {8, std::nullopt},
+        {9, std::nullopt},
+        {10, std::nullopt},
+        {11, std::nullopt},
+        {12, std::nullopt},
+        {13, std::nullopt},
+        {14, std::nullopt},
+        {15, std::nullopt},
+        {16, std::nullopt},
+        {17, std::nullopt},
+    };
+
+    NodeAverageRows actual;
+    sink.sortedRows(actual);
 
     EXPECT_EQ(actual, expected);
 }
