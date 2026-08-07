@@ -487,10 +487,6 @@ LogicalResult Collect::verify() {
         return emitOpError("collected result must be a list column");
     }
 
-    // The list holds the values of the collected column, so its element is that
-    // column's type. DBLowering builds the emit chunk from the collected column and
-    // rebinds this result to it, so an element type that disagrees is discarded rather
-    // than honoured - the verifier is the only place it can be caught.
     const ColumnType valueColumn = llvm::cast<ColumnType>(columns[keyCount].getType());
     const storage::ListType collectedList = llvm::cast<storage::ListType>(listColumn.getType());
     if (collectedList.getElementType() != valueColumn.getType()) {
@@ -531,10 +527,6 @@ LogicalResult UnwindCollect::verify() {
         }
     }
 
-    // The unwound value is one element of the collected column, so the trailing result
-    // keeps that column's type. DBLowering builds the emit chunk from the collected
-    // column and rebinds this result to it, so a type that disagrees is discarded rather
-    // than honoured - the verifier is the only place it can be caught.
     if (columns[keyCount].getType() != results[keyCount].getType()) {
         return emitOpError("unwound value result must have the same type as the collected column");
     }
