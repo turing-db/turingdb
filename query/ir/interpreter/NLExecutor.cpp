@@ -1884,10 +1884,10 @@ void throwIfNodesHaveEdges(const GraphView& view, const ColumnNodeIDs* nodes) {
 // pairing the wrong rows in the projection, so it is caught at the step that did it.
 void gatherProcedureCarriedColumns(NLProcedureLoopData* loopData) {
     NLProcedureState* state = loopData->getState();
-    ColumnVector<size_t>* inputRowIndices = loopData->getInputRowIndices();
+    ColumnIndices* indices = loopData->getIndices();
 
     const size_t emittedRows = state->getRowCount();
-    const std::vector<size_t>& indicesRaw = inputRowIndices->getRaw();
+    const std::vector<size_t>& indicesRaw = indices->getRaw();
     if (indicesRaw.size() != emittedRows) {
         throw IRException(fmt::format("Procedure '{}' emitted {} rows but reported the input row of "
                                       "{} of them, so the columns carried past the call cannot be "
@@ -1912,7 +1912,7 @@ void gatherProcedureCarriedColumns(NLProcedureLoopData* loopData) {
 
     for (const NLCarriedColumn& carriedColumn : loopData->carriedColumns()) {
         const NLGatherFunction gather = carriedColumn.getGatherFunc();
-        gather(carriedColumn.getInput(), inputRowIndices, carriedColumn.getOutput());
+        gather(carriedColumn.getInput(), indices, carriedColumn.getOutput());
     }
 }
 
@@ -1944,7 +1944,7 @@ void runProcedureDrive(NLExecutionContext* context,
         // map before the call: what it appends is this step's mapping alone, as its
         // result columns are.
         if (!carriedColumns.empty()) {
-            loopData->getInputRowIndices()->clear();
+            loopData->getIndices()->clear();
         }
 
         runStep();
@@ -3254,7 +3254,7 @@ void NLExecutor::runCollectLoop(NLExecutionContext* context, NLFunctionData* dat
 
 void NLExecutor::runProcedureReset(NLExecutionContext* context, NLFunctionData* data) {
     const NLProcedureCallData* call = static_cast<NLProcedureCallData*>(data);
-    call->getState()->prepareOrReset();
+    call->getState()->rewindBlock();
 }
 
 void NLExecutor::runProcedureInitLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -3264,7 +3264,7 @@ void NLExecutor::runProcedureInitLoop(NLExecutionContext* context, NLFunctionDat
     // This loop drives the procedure over one chunk of its arguments and is re-entered
     // for the next chunk, so rewind it here: a procedure that finished the previous
     // chunk starts afresh on this one, and its own per-drive state goes with it.
-    state->resetForNewDrive();
+    state->prepareOrResetForNewDrive();
 
     runProcedureDrive(context, loopData, [state]() { state->execute(); });
 }

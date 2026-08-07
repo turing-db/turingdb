@@ -26,10 +26,6 @@ void Procedure::setDeallocCallback(DeallocCallback cb) {
     _deallocCallback = cb;
 }
 
-void Procedure::setIndices(bool indices) {
-    _indices = indices;
-}
-
 void Procedure::addReturnValue(std::string_view name, ProcedureType type) {
     _returnValues.add(name, type);
 }
