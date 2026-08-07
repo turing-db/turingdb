@@ -7,15 +7,32 @@ every function. It bloats diffs, goes stale, and buries the rare comment that
 actually carries information. If code needs prose to be understood, the fix is a
 better name or a smaller function — not a paragraph above it.
 
+Reinforced 2026-08-07: with this rule already in CLAUDE.md, moving the
+`analyzeDistinct` call below the wildcard expansion in `CypherAnalyzer.cpp` still
+came with a two-line comment explaining why it now sits there, and the `VarDecl`
+branch added to `Projection::findItemIndex` with one restating the comparison.
+Both were deleted on sight. The rule was not unclear — the escape hatches were.
+
 **How to apply:**
 - Write no comment unless the code genuinely cannot express the point.
 - Never restate the code (`// increment counter`, `// loop over rows`), never
   write section banners (`// ---- helpers ----`), never doc-block every
   public function by reflex.
-- A justified comment explains a **why**: a non-obvious invariant, a subtle
-  ordering constraint, a workaround for an external bug. Max 2-4 lines — longer
-  explanations go in the commit message, the PR, or a design doc. The bar is
-  high; when in doubt, leave it out.
+- A justified comment explains a **why**: a non-obvious invariant, or a
+  workaround for an external bug whose cause is off-screen. Max 2-4 lines —
+  longer explanations go in the commit message, the PR, or a design doc. The bar
+  is high; when in doubt, leave it out.
+- "It explains a why" is not self-justifying — it is the excuse every unwanted
+  comment arrives with. Name the specific wrong conclusion a reader would reach
+  without the comment. If you can't name one, don't write it.
+- **Never explain where a statement sits.** "Runs once the wildcard has
+  populated the projection", "must come before Z" — the order is in the source,
+  and anyone who reorders it learns from the tests. Ordering rationale goes in
+  the commit message. This clause used to read "a subtle ordering constraint
+  justifies a comment"; it was removed because it was the loophole every
+  violation came through.
+- Writing a comment is not a step of making a change. Finishing an edit — and
+  especially *moving* code — is not an occasion to annotate it.
 - Never annotate the project's own conventions. The unreachable `break;` after a
   `case` body's `return`, plainly-named unused parameters, no `= default` in
   headers — these are house style, not oddities needing `// unreachable` or
