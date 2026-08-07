@@ -402,7 +402,7 @@ TEST_F(DistinctTest, limitsDistinctRows) {
 
 // A key the projection does not carry cannot be honoured after the dedup: it was read
 // once per pre-dedup row, so it no longer lines up with the rows that survived. Cypher
-// rejects the query for the same reason, and so does the generator.
+// rejects the query for the same reason, and so does the analyzer.
 TEST_F(DistinctTest, rejectsOrderByOnUnreturnedKey) {
     DistinctNodeSink sink;
     EXPECT_THROW(runQuery("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY b.name", &sink),
