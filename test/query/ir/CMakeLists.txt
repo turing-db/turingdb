@@ -200,6 +200,25 @@ target_link_libraries(test_query_ir_cypher_output PRIVATE
         MLIRParser)
 target_include_directories(test_query_ir_cypher_output PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_turing_test(test_query_ir_nested_aggregate_projection NestedAggregateProjectionTest.cpp)
+target_link_libraries(test_query_ir_nested_aggregate_projection PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s
+        turing_db_ir_dbdialect_s
+        turing_db_ir_nldialect_s
+        turing_db_ir_storagedialect_s
+        turing_db_ir_common_s
+        turing_db_storage_s
+        MLIRParser)
+target_include_directories(test_query_ir_nested_aggregate_projection PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_wildcard_return WildcardReturnTest.cpp)
 target_link_libraries(test_query_ir_wildcard_return PRIVATE
         turing_db_s
