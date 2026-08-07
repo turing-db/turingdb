@@ -682,7 +682,7 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
     _opBuilder.setInsertionPointToEnd(mainBlock);
 }
 
-void DBProgramGenerator::collectLiveColumns(LiveColumns& live) {
+void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight) {
     mlir::Block* const insertionBlock = _opBuilder.getInsertionBlock();
 
     // A chunk holds the rows of the loop whose body binds it, so only a column bound in this
@@ -691,7 +691,7 @@ void DBProgramGenerator::collectLiveColumns(LiveColumns& live) {
     // op that consumes the whole row set (a filter, a call's carry set) would pair its rows
     // with unrelated ones. Note this is stricter than dominance on purpose: an outer block's
     // value does dominate here, it is just the wrong rows.
-    const auto isLive = [&](const mlir::Value column) {
+    const auto isBoundHere = [&](const mlir::Value column) {
         mlir::Operation* const definingOp = column.getDefiningOp();
         mlir::Block* const definingBlock = definingOp
             ? definingOp->getBlock()
@@ -702,52 +702,52 @@ void DBProgramGenerator::collectLiveColumns(LiveColumns& live) {
 
     for (auto& [var, values] : _varMap) {
         const mlir::Value column = values.back();
-        if (!isLive(column) || _deadVariables.contains(var)) {
+        if (!isBoundHere(column)) {
             continue;
         }
 
-        live._columns.push_back(column);
-        live._variables.push_back(var);
+        inFlight._columns.push_back(column);
+        inFlight._variables.push_back(var);
     }
 
     for (auto& [var, column] : _edgeTypeMap) {
-        if (!isLive(column) || _deadVariables.contains(var)) {
+        if (!isBoundHere(column)) {
             continue;
         }
 
-        live._columns.push_back(column);
-        live._edgeTypeVariables.push_back(var);
+        inFlight._columns.push_back(column);
+        inFlight._edgeTypeVariables.push_back(var);
     }
 
-    // A column an earlier CALL yielded is live too: a later op taking the whole row set
-    // must take it along, or the rows it holds would stop matching the ones beside it.
+    // A column an earlier CALL yielded is in flight too: a later op taking the whole row
+    // set must take it along, or the rows it holds would stop matching the ones beside it.
     for (size_t yieldedIndex = 0; yieldedIndex < _yieldedColumns.size(); yieldedIndex++) {
         const mlir::Value column = _yieldedColumns[yieldedIndex].second;
-        if (!isLive(column) || _deadYieldedColumns.contains(yieldedIndex)) {
+        if (!isBoundHere(column)) {
             continue;
         }
 
-        live._columns.push_back(column);
-        live._yieldedIndices.push_back(yieldedIndex);
+        inFlight._columns.push_back(column);
+        inFlight._yieldedIndices.push_back(yieldedIndex);
     }
 }
 
-void DBProgramGenerator::rebindLiveColumns(mlir::Operation::result_range results,
-                                           size_t firstResult,
-                                           const LiveColumns& live) {
+void DBProgramGenerator::rebindInFlightColumns(mlir::Operation::result_range results,
+                                               size_t firstResult,
+                                               const InFlightColumns& inFlight) {
     size_t resultIndex = firstResult;
 
-    for (const VariableDependency* variable : live._variables) {
+    for (const VariableDependency* variable : inFlight._variables) {
         registerValue(variable, results[resultIndex]);
         resultIndex++;
     }
 
-    for (const VariableDependency* variable : live._edgeTypeVariables) {
+    for (const VariableDependency* variable : inFlight._edgeTypeVariables) {
         _edgeTypeMap[variable] = results[resultIndex];
         resultIndex++;
     }
 
-    for (const size_t yieldedIndex : live._yieldedIndices) {
+    for (const size_t yieldedIndex : inFlight._yieldedIndices) {
         _yieldedColumns[yieldedIndex].second = results[resultIndex];
         resultIndex++;
     }
@@ -764,22 +764,22 @@ mlir::Value DBProgramGenerator::findYieldedColumn(std::string_view name) const {
 }
 
 void DBProgramGenerator::filterAllColumns(mlir::Value predicate) {
-    LiveColumns live;
-    collectLiveColumns(live);
+    InFlightColumns inFlight;
+    collectInFlightColumns(inFlight);
 
-    if (live._columns.empty()) {
+    if (inFlight._columns.empty()) {
         return;
     }
 
     llvm::SmallVector<mlir::Type> resultTypes;
-    for (const mlir::Value column : live._columns) {
+    for (const mlir::Value column : inFlight._columns) {
         resultTypes.push_back(column.getType());
     }
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    auto filterOp = _opBuilder.create<mlir::db::FilterOp>(loc, resultTypes, predicate, live._columns);
+    auto filterOp = _opBuilder.create<mlir::db::FilterOp>(loc, resultTypes, predicate, inFlight._columns);
 
-    rebindLiveColumns(filterOp.getResults(), /*firstResult=*/0, live);
+    rebindInFlightColumns(filterOp.getResults(), /*firstResult=*/0, inFlight);
 }
 
 void DBProgramGenerator::addMergeFilter(const VariableDependency* mergeVar,
@@ -1106,267 +1106,17 @@ void DBProgramGenerator::generateCalls(const CypherAST* ast) {
     }
 
     // In statement order, so a call reading what an earlier one yielded sees it - the
-    // reading statements are generated in the order the query writes them. Gathered first
-    // because each call is told what the calls after it still read.
-    llvm::SmallVector<const CallStmt*> calls;
+    // reading statements are generated in the order the query writes them.
     for (const Stmt* stmt : stmtsContainer->stmts()) {
         if (stmt->getKind() != Stmt::Kind::CALL) {
             continue;
         }
 
-        calls.push_back(static_cast<const CallStmt*>(stmt));
-    }
-
-    const ReturnStmt* returnStmt = sglPart->getReturnStmt();
-
-    for (size_t callIndex = 0; callIndex < calls.size(); callIndex++) {
-        const CallStmt* call = calls[callIndex];
-        const llvm::ArrayRef<const CallStmt*> laterCalls = llvm::ArrayRef(calls).drop_front(callIndex + 1);
-
-        VariableNames usedAfterCall;
-        collectNamesUsedAfterCall(call, laterCalls, returnStmt, usedAfterCall);
-
-        generateCall(call, usedAfterCall);
+        generateCall(static_cast<const CallStmt*>(stmt));
     }
 }
 
-void DBProgramGenerator::collectNamesUsedAfterCall(const CallStmt* call,
-                                                   llvm::ArrayRef<const CallStmt*> laterCalls,
-                                                   const ReturnStmt* returnStmt,
-                                                   VariableNames& used) const {
-    // This call's own YIELD ... WHERE filters the rows it emitted, so it runs after the
-    // call and its variables have to survive it. Its arguments do not: they are operands of
-    // the call, read where it sits rather than past it.
-    collectYieldWhereNames(call, used);
-
-    // A later call reads the variables its own arguments are built from, and the ones its
-    // YIELD ... WHERE filters on.
-    for (const CallStmt* laterCall : laterCalls) {
-        collectYieldWhereNames(laterCall, used);
-
-        const FunctionInvocationExpr* funcExpr = laterCall->getFunc();
-        const FunctionInvocation* invocation = funcExpr ? funcExpr->getFunctionInvocation() : nullptr;
-        const ExprChain* arguments = invocation ? invocation->getArguments() : nullptr;
-        if (!arguments) {
-            continue;
-        }
-
-        for (const Expr* argument : *arguments) {
-            collectExprNames(argument, used);
-        }
-    }
-
-    // With no projection the query emits the columns the calls yielded, in yield order,
-    // and nothing besides - so every yielded variable is read and no pattern variable is.
-    if (!returnStmt) {
-        for (const YieldedColumn& yieldedColumn : _yieldedColumns) {
-            used.insert(yieldedColumn.first);
-        }
-
-        return;
-    }
-
-    const Projection* projection = returnStmt->getProjection();
-    if (!projection) {
-        return;
-    }
-
-    // RETURN * names no variable of its own, so anything in scope may be projected and
-    // none of it can be called dead.
-    if (projection->isReturningAll()) {
-        for (const auto& [variable, columns] : _varMap) {
-            used.insert(variable->getName());
-        }
-
-        for (const YieldedColumn& yieldedColumn : _yieldedColumns) {
-            used.insert(yieldedColumn.first);
-        }
-
-        return;
-    }
-
-    const auto collectItemNames = [&](auto&& item) {
-        using Type = std::remove_cvref_t<decltype(item)>;
-
-        if constexpr (std::is_same_v<Type, VarDecl*>) {
-            used.insert(item->getName());
-        } else {
-            collectExprNames(item, used);
-        }
-    };
-
-    for (const Projection::ReturnItem item : projection->items()) {
-        std::visit(collectItemNames, item);
-    }
-
-    // An ORDER BY reads its keys after the call as much as the projection does.
-    if (projection->hasOrderBy()) {
-        const OrderBy* orderBy = projection->getOrderBy();
-        for (const OrderByItem* item : orderBy->getItems()) {
-            collectExprNames(item->getExpr(), used);
-        }
-    }
-}
-
-void DBProgramGenerator::collectYieldWhereNames(const CallStmt* call, VariableNames& used) const {
-    const YieldClause* yield = call->getYield();
-    const YieldItems* yieldItems = yield ? yield->getItems() : nullptr;
-    const WhereClause* where = yieldItems ? yieldItems->getWhereClause() : nullptr;
-    if (!where) {
-        return;
-    }
-
-    collectExprNames(where->getExpr(), used);
-}
-
-void DBProgramGenerator::collectExprNames(const Expr* expr, VariableNames& used) const {
-    if (!expr) {
-        return;
-    }
-
-    // The variable an expression is attached to, which is what the projection resolves it
-    // by before it translates the expression at all.
-    const VarDecl* exprVar = expr->getExprVarDecl();
-    if (exprVar) {
-        used.insert(exprVar->getName());
-    }
-
-    const Expr::Kind kind = expr->getKind();
-    switch (kind) {
-        case Expr::Kind::SYMBOL: {
-            const SymbolExpr* symbolExpr = static_cast<const SymbolExpr*>(expr);
-            const VarDecl* decl = symbolExpr->getDecl();
-            if (decl) {
-                used.insert(decl->getName());
-            }
-        }
-        break;
-
-        case Expr::Kind::PROPERTY: {
-            const PropertyExpr* propertyExpr = static_cast<const PropertyExpr*>(expr);
-            const VarDecl* entityDecl = propertyExpr->getEntityVarDecl();
-            if (entityDecl) {
-                used.insert(entityDecl->getName());
-            }
-        }
-        break;
-
-        case Expr::Kind::ENTITY_TYPES: {
-            const EntityTypeExpr* entityTypeExpr = static_cast<const EntityTypeExpr*>(expr);
-            const VarDecl* entityDecl = entityTypeExpr->getEntityVarDecl();
-            if (entityDecl) {
-                used.insert(entityDecl->getName());
-            }
-        }
-        break;
-
-        case Expr::Kind::BINARY: {
-            const BinaryExpr* binaryExpr = static_cast<const BinaryExpr*>(expr);
-            collectExprNames(binaryExpr->getLHS(), used);
-            collectExprNames(binaryExpr->getRHS(), used);
-        }
-        break;
-
-        case Expr::Kind::STRING: {
-            const StringExpr* stringExpr = static_cast<const StringExpr*>(expr);
-            collectExprNames(stringExpr->getLHS(), used);
-            collectExprNames(stringExpr->getRHS(), used);
-        }
-        break;
-
-        case Expr::Kind::UNARY: {
-            const UnaryExpr* unaryExpr = static_cast<const UnaryExpr*>(expr);
-            collectExprNames(unaryExpr->getSubExpr(), used);
-        }
-        break;
-
-        case Expr::Kind::INDEX: {
-            const IndexExpr* indexExpr = static_cast<const IndexExpr*>(expr);
-            collectExprNames(indexExpr->getBase(), used);
-            collectExprNames(indexExpr->getIndexExpr(), used);
-        }
-        break;
-
-        case Expr::Kind::LIST: {
-            const ListExpr* listExpr = static_cast<const ListExpr*>(expr);
-            for (const Expr* element : *listExpr) {
-                collectExprNames(element, used);
-            }
-        }
-        break;
-
-        case Expr::Kind::FUNCTION_INVOCATION: {
-            const FunctionInvocationExpr* funcExpr = static_cast<const FunctionInvocationExpr*>(expr);
-            const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
-            const ExprChain* arguments = invocation ? invocation->getArguments() : nullptr;
-            if (arguments) {
-                for (const Expr* argument : *arguments) {
-                    collectExprNames(argument, used);
-                }
-            }
-        }
-        break;
-
-        case Expr::Kind::PATH:
-        case Expr::Kind::LITERAL:
-            // A literal reads no variable, and a path is attached to its own through the
-            // declaration read above.
-        break;
-
-        case Expr::Kind::_SIZE:
-            throw FatalException("Invalid expression kind.");
-        break;
-    }
-}
-
-void DBProgramGenerator::dropUnusedLiveColumns(const VariableNames& usedAfterCall, LiveColumns& live) {
-    LiveColumns usedColumns;
-
-    // The three groups sit back to back in _columns, in this order, which is the order
-    // collectLiveColumns filled them and rebindLiveColumns walks them - so one running
-    // index over _columns tracks all three.
-    size_t columnIndex = 0;
-
-    // A column left out here stops flowing with the rows, so it is marked dead: its last
-    // value still sits in _varMap or _yieldedColumns but belongs to the loop the call is
-    // about to leave, and a later op collecting everything in flight must not pick it up.
-    for (const VariableDependency* variable : live._variables) {
-        if (usedAfterCall.contains(variable->getName())) {
-            usedColumns._columns.push_back(live._columns[columnIndex]);
-            usedColumns._variables.push_back(variable);
-        } else {
-            _deadVariables.insert(variable);
-        }
-
-        columnIndex++;
-    }
-
-    for (const VariableDependency* variable : live._edgeTypeVariables) {
-        if (usedAfterCall.contains(variable->getName())) {
-            usedColumns._columns.push_back(live._columns[columnIndex]);
-            usedColumns._edgeTypeVariables.push_back(variable);
-        } else {
-            _deadVariables.insert(variable);
-        }
-
-        columnIndex++;
-    }
-
-    for (const size_t yieldedIndex : live._yieldedIndices) {
-        if (usedAfterCall.contains(_yieldedColumns[yieldedIndex].first)) {
-            usedColumns._columns.push_back(live._columns[columnIndex]);
-            usedColumns._yieldedIndices.push_back(yieldedIndex);
-        } else {
-            _deadYieldedColumns.insert(yieldedIndex);
-        }
-
-        columnIndex++;
-    }
-
-    live = usedColumns;
-}
-
-void DBProgramGenerator::generateCall(const CallStmt* callStmt, const VariableNames& usedAfterCall) {
+void DBProgramGenerator::generateCall(const CallStmt* callStmt) {
     const FunctionInvocationExpr* funcExpr = callStmt->getFunc();
     if (!funcExpr) {
         throw TuringException("CALL statement has no procedure invocation.");
@@ -1425,24 +1175,16 @@ void DBProgramGenerator::generateCall(const CallStmt* callStmt, const VariableNa
     // Everything already in flight rides through the carry set, so the projection can
     // still read it after the call: the procedure need not emit one row per row it was
     // given, and the call replicates a carried row once per row it emitted for it.
-    LiveColumns live;
-    collectLiveColumns(live);
+    InFlightColumns inFlight;
+    collectInFlightColumns(inFlight);
 
     // A call reading none of those rows produces the same rows for every one of them,
-    // which is their cartesian product rather than anything a carry set can express. The
-    // choice reads the unfiltered set: rows in flight have to be paired with the call's
-    // even when the projection returns none of their columns, or the query would lose
-    // their cardinality.
-    if (!live._columns.empty() && inputs.empty()) {
-        generateCrossedCall(procedureName, yieldedNames, yieldedVariables, live);
+    // which is their cartesian product rather than anything a carry set can express.
+    if (!inFlight._columns.empty() && inputs.empty()) {
+        generateCrossedCall(procedureName, yieldedNames, yieldedVariables, inFlight);
         generateYieldFilter(yieldItems);
         return;
     }
-
-    // Only what is still read rides through. Carrying a dead column would replicate it
-    // once per emitted row for nothing, and - since only a procedure that reports its
-    // input rows may be carried past at all - would refuse calls that never needed it.
-    dropUnusedLiveColumns(usedAfterCall, live);
 
     // The yielded columns' value types come from the procedure's declared return types,
     // resolved during lowering, so they are left unresolved here - as a property fetch's
@@ -1453,7 +1195,7 @@ void DBProgramGenerator::generateCall(const CallStmt* callStmt, const VariableNa
         resultTypes.push_back(mlir::db::ColumnType::get(_mlirCtxt));
     }
 
-    for (const mlir::Value column : live._columns) {
+    for (const mlir::Value column : inFlight._columns) {
         resultTypes.push_back(column.getType());
     }
 
@@ -1462,7 +1204,7 @@ void DBProgramGenerator::generateCall(const CallStmt* callStmt, const VariableNa
                                                             resultTypes,
                                                             _opBuilder.getStringAttr(procedureName),
                                                             mlir::ValueRange {inputs},
-                                                            mlir::ValueRange {live._columns},
+                                                            mlir::ValueRange {inFlight._columns},
                                                             _opBuilder.getArrayAttr(yieldedNames));
 
     // The yielded columns are new variables of the query, known by the name the YIELD
@@ -1473,7 +1215,7 @@ void DBProgramGenerator::generateCall(const CallStmt* callStmt, const VariableNa
         _yieldedColumns.emplace_back(yieldedVariables[yieldIndex], results[yieldIndex]);
     }
 
-    rebindLiveColumns(results, yieldedVariables.size(), live);
+    rebindInFlightColumns(results, yieldedVariables.size(), inFlight);
 
     generateYieldFilter(yieldItems);
 }
@@ -1500,7 +1242,7 @@ void DBProgramGenerator::generateYieldFilter(const YieldItems* yieldItems) {
 void DBProgramGenerator::generateCrossedCall(std::string_view procedureName,
                                              llvm::ArrayRef<mlir::Attribute> yieldedNames,
                                              llvm::ArrayRef<std::string_view> yieldedVariables,
-                                             const LiveColumns& live) {
+                                             const InFlightColumns& inFlight) {
     // The call reads none of the rows already in flight, so it produces the same rows for
     // every one of them: their cartesian product. Each side becomes a factor of a
     // db.cross_product - what the query has matched so far on the left, the call on the
@@ -1508,7 +1250,7 @@ void DBProgramGenerator::generateCrossedCall(std::string_view procedureName,
     mlir::Block* const currentBlock = _opBuilder.getInsertionBlock();
 
     llvm::SmallVector<mlir::Type> resultTypes;
-    for (const mlir::Value column : live._columns) {
+    for (const mlir::Value column : inFlight._columns) {
         resultTypes.push_back(column.getType());
     }
 
@@ -1533,7 +1275,7 @@ void DBProgramGenerator::generateCrossedCall(std::string_view procedureName,
                                      crossProduct->getIterator());
 
     _opBuilder.setInsertionPointToEnd(leftBlock);
-    _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {live._columns});
+    _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {inFlight._columns});
 
     // The call is the right factor, opening its own dataflow there: it takes no argument
     // and carries nothing, since the rows it is paired with are the other factor's.
@@ -1557,11 +1299,11 @@ void DBProgramGenerator::generateCrossedCall(std::string_view procedureName,
     // Its results are the left factor's columns then the right's: the rows already in
     // flight, now paired, followed by the call's own.
     const mlir::Operation::result_range results = crossProduct.getResults();
-    rebindLiveColumns(results, /*firstResult=*/0, live);
+    rebindInFlightColumns(results, /*firstResult=*/0, inFlight);
 
     for (size_t yieldIndex = 0; yieldIndex < yieldedVariables.size(); yieldIndex++) {
         _yieldedColumns.emplace_back(yieldedVariables[yieldIndex],
-                                     results[live._columns.size() + yieldIndex]);
+                                     results[inFlight._columns.size() + yieldIndex]);
     }
 }
 
