@@ -75,6 +75,7 @@
 - @feedback_parquet_helpers.md — tools/turing-parquet: multi-step ops on Parquet types get a dedicated ParquetXxx class
 - @feedback_dump_object_bytes.md — bulk-write trivially-copyable object bytes, layouts pinned by central static_asserts; no staging
 - @feedback_doc_utility_functions.md — one-line WHAT comment above each free function in tool .cpp drivers
+- @feedback_minimal_comments.md — write almost no comments; default is none, hard cap 2-4 lines when one is justified
 
 ## Workflow Preferences
 - @feedback_test_first.md — write failing test before fix

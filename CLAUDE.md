@@ -155,6 +155,17 @@ Key points:
 - Use the layer-appropriate exception type: `FatalException` in `storage/` code (available via `common`), `PipelineException` in `query/pipeline/`. Storage cannot include pipeline headers (would create a circular dependency).
 - In `main()`, return `EXIT_SUCCESS` / `EXIT_FAILURE` (from `<stdlib.h>`), not literal `0` / `1`.
 
+**Comments — write as few as possible:**
+- **The default is no comment at all.** Code that needs a comment to be understood usually needs a better name or a smaller function — fix that instead of narrating it.
+- Never restate what the code already says (`// increment the counter`, `// loop over the rows`, `// return the result`), never add section banners (`// ---- helpers ----`), and never add a doc block on top of every function/class/member just because it's public.
+- When a comment is genuinely warranted, it explains a **why** that the code cannot: a non-obvious invariant, a subtle ordering constraint, a workaround for an external bug. **Hard cap: 2-4 lines.** If it doesn't fit, the explanation belongs in the commit message, the PR, or a design doc — not in the source.
+- That bar is high, and "non-obvious invariant" is not a licence to annotate everything. If a teammate reading the function would already know it, it doesn't qualify. **When in doubt, leave it out** — a reviewer asking for one comment is cheap, deleting the ones nobody asked for is not.
+- **Never annotate the conventions in this file.** Several rules here mandate constructs that look odd out of context — the unreachable `break;` after a `return` in a `case`, unused parameters left plainly named, no `= default` in headers, `bioassert` in place of a check. They are house style and every reader knows them; `// unreachable`, `// intentionally unused`, `// see CLAUDE.md` is precisely the noise this section forbids.
+- Don't leave behind change-log narration (`// was previously X`, `// NEW:`, `// fixed bug where...`) — git history holds that.
+- Do not re-add comments a reviewer deleted, and don't add comments to untouched code you happen to be editing near.
+- `CODING_STYLE.md`'s snippets carry `//` markers (`// Good:`, `// Bad:`, `// Do something` bodies) to label the *examples*. They are not a model for how much to comment real code.
+- The one standing exception is the free-function layer at the top of `tools/*` drivers with a `main()`: one single-line description per helper. It does not extend to class methods, to library code under `storage/`, `query/`, `net/`, or to any file outside `tools/`.
+
 **Other rules:**
 - Never `using namespace` in headers
 - Never `using namespace std`
