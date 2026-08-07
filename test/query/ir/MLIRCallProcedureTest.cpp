@@ -1920,57 +1920,14 @@ TEST_F(MLIRCallProcedureTest, cypherUncorrelatedCallCrossesWithTheMatch) {
     EXPECT_EQ(rows, expected);
 }
 
-TEST_F(MLIRCallProcedureTest, cypherCallDoesNotCarryAColumnTheProjectionDropped) {
-    auto graph = buildLabelledGraph();
-    const FrozenCommitTx transaction = graph->openTransaction();
-    const GraphReader reader = transaction.readGraph();
-
-    // MATCH (n) CALL test.doubleNodeID(n) YIELD doubled RETURN doubled: the projection
-    // never reads `n` again, so nothing is carried past the call - which is what lets this
-    // run at all, since test.doubleNodeID reports no input rows and so could not have a
-    // column carried past it. Five nodes at a chunk size of two: three chunks, each
-    // doubling its own rows.
-    Int64Sink sink;
-    runQuery("MATCH (n) CALL test.doubleNodeID(n) YIELD doubled RETURN doubled", graph.get(),
-             reader.getView(),
-             sink,
-             /*chunkSize=*/2);
-
-    const std::vector<types::Int64::Primitive> expected {0, 2, 4, 6, 8};
-    EXPECT_EQ(sink.rows(), expected);
-    EXPECT_EQ(sink.getCalls(), 3u);
-}
-
-TEST_F(MLIRCallProcedureTest, cypherCallCarriesAColumnALaterCallReads) {
-    auto graph = buildLabelledGraph();
-    const FrozenCommitTx transaction = graph->openTransaction();
-    const GraphReader reader = transaction.readGraph();
-
-    // Two calls over one match: the projection returns neither `n` nor `copy`, so the only
-    // reason `n` survives the first call is that the second one takes it as its argument.
-    // test.expandNodeID emits `id % 3` rows per node, so the nodes reaching the second call
-    // are 1, 2, 2 and 4 - doubled to 2, 4, 4 and 8. Drop `n` at the first call and the
-    // second would read a column from before it.
-    Int64Sink sink;
-    runQuery("MATCH (n) CALL test.expandNodeID(n) YIELD copy "
-             "CALL test.doubleNodeID(n) YIELD doubled RETURN doubled",
-             graph.get(),
-             reader.getView(),
-             sink);
-
-    const std::vector<types::Int64::Primitive> expected {2, 4, 4, 8};
-    EXPECT_EQ(sink.rows(), expected);
-}
-
 TEST_F(MLIRCallProcedureTest, cypherTwoCallsOverAHopProjectingBothYields) {
     auto graph = buildHopGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
     // MATCH (n)-->(m) CALL f(n) YIELD x CALL g(m) YIELD y RETURN x + y: each call carries
-    // what the other end of the query still needs. The first must carry `m` - only the
-    // second call reads it - and drop `n`, which nothing reads again; the second must carry
-    // `x`, a column the first call yielded, because the projection adds it to `y`.
+    // everything else in flight, so the second still reads the `m` the hop bound and the
+    // `x` the first call yielded, both replicated against the rows it emits.
     //
     // Over the hop pairs (0,1), (0,2), (1,4) and (2,3): test.expandNodeID emits `n % 3`
     // rows, so the pairs with n=0 drop out and (1,4) gives x=100 while (2,3) gives x=200 and
@@ -2020,10 +1977,8 @@ TEST_F(MLIRCallProcedureTest, cypherCallStillRejectsCarryingPastANonReportingPro
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    // The same call with `n` returned: now the projection does read it, so it must ride
-    // through the carry set - and test.doubleNodeID cannot say which of its rows came from
-    // which input row, so the call is refused. Dropping the dead column is a liveness
-    // question, not a relaxation of what may be carried.
+    // `n` is in flight, so it rides through the carry set - and test.doubleNodeID cannot say
+    // which of its rows came from which input row, so the call is refused.
     CarriedNodeSink sink;
     EXPECT_THROW(runQuery("MATCH (n) CALL test.doubleNodeID(n) YIELD doubled RETURN n, doubled",
                           graph.get(),

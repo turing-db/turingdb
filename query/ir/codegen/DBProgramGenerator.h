@@ -91,11 +91,6 @@ private:
     using YieldedColumn = std::pair<std::string_view, mlir::Value>;
     std::vector<YieldedColumn> _yieldedColumns;
 
-    // Columns a CALL dropped from its carry set because nothing read them again. Their last
-    // value belongs to a loop the dataflow has left, so collectLiveColumns must skip them.
-    std::unordered_set<const VariableDependency*> _deadVariables;
-    std::unordered_set<size_t> _deadYieldedColumns;
-
     VariableDependencyGraph _vdg;
 
     struct TranslatedComponent {
@@ -104,19 +99,15 @@ private:
         llvm::SmallVector<mlir::Value> _columns;
     };
 
-    // The columns live at the current insertion point, and what each belongs to so the
+    // The columns in flight at the current insertion point, and what each belongs to so the
     // results of an op taking them all can be rebound: the latest value of every Cypher
     // variable, then every edge-type column, then every column a CALL yielded.
-    struct LiveColumns {
+    struct InFlightColumns {
         llvm::SmallVector<mlir::Value> _columns;
         llvm::SmallVector<const VariableDependency*> _variables;
         llvm::SmallVector<const VariableDependency*> _edgeTypeVariables;
         llvm::SmallVector<size_t> _yieldedIndices;
     };
-
-    // Cypher variable names, as the query writes them - the key the projection resolves a
-    // returned variable by, so it is what a liveness question is asked in.
-    using VariableNames = std::unordered_set<std::string_view>;
 
     void generateTraversal(const CypherAST* ast);
 
@@ -142,45 +133,27 @@ private:
     void generateDelete(const CypherAST* ast);
 
     void generateCalls(const CypherAST* ast);
-    void generateCall(const CallStmt* callStmt, const VariableNames& usedAfterCall);
+    void generateCall(const CallStmt* callStmt);
 
     // Generate the filter a CALL's YIELD ... WHERE asks for, over everything in flight once
     // the call has run - so the predicate reads the rows the procedure emitted.
     void generateYieldFilter(const YieldItems* yieldItems);
 
-    void collectNamesUsedAfterCall(const CallStmt* call,
-                                   llvm::ArrayRef<const CallStmt*> laterCalls,
-                                   const ReturnStmt* returnStmt,
-                                   VariableNames& used) const;
-
-    // Add the variable names a call's YIELD ... WHERE reads. That filter runs after the
-    // call, so those names outlive it even when nothing else reads them.
-    void collectYieldWhereNames(const CallStmt* call, VariableNames& used) const;
-
-    // Add every variable name an expression reads, walking into its sub-expressions, so a
-    // projection item or a call argument contributes each variable it is built from.
-    void collectExprNames(const Expr* expr, VariableNames& used) const;
-
-    // Drop from a live set the columns no name in `usedAfterCall` claims, leaving the
-    // groups in the order rebindLiveColumns walks them. Each one dropped is recorded as
-    // dead, so it stops being in flight for every later op too.
-    void dropUnusedLiveColumns(const VariableNames& usedAfterCall, LiveColumns& live);
-
     void generateCrossedCall(std::string_view procedureName,
                              llvm::ArrayRef<mlir::Attribute> yieldedNames,
                              llvm::ArrayRef<std::string_view> yieldedVariables,
-                             const LiveColumns& live);
+                             const InFlightColumns& inFlight);
 
     // Collect those columns. One bound in another block is skipped: an op here can only
     // take what this block binds.
-    void collectLiveColumns(LiveColumns& live);
+    void collectInFlightColumns(InFlightColumns& inFlight);
 
     // Rebind them to an op's results, so later ops read what it produced. firstResult is
     // where its pass-through results start - zero for an op that only takes them (a
     // filter), past its own results for one that adds some (a call).
-    void rebindLiveColumns(mlir::Operation::result_range results,
-                           size_t firstResult,
-                           const LiveColumns& live);
+    void rebindInFlightColumns(mlir::Operation::result_range results,
+                               size_t firstResult,
+                               const InFlightColumns& inFlight);
 
     // The column a yielded variable of this name holds, or a null Value when no CALL
     // yielded it.
