@@ -1848,6 +1848,14 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
             continue;
         }
 
+        // An aggregate nested into a map makes the item an expr which is not a function
+        // invocation
+        const bool isInvocation = item->getKind() == Expr::Kind::FUNCTION_INVOCATION;
+        if (!isInvocation) {
+            const std::string_view itemName = item->getName();
+            throw TuringException(fmt::format("Nested aggregates are not supported: {}", itemName));
+        }
+
         const FunctionInvocationExpr* funcExpr = static_cast<const FunctionInvocationExpr*>(item);
         const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
         const std::string_view funcName = invocation->getSignature()->getFullName();
