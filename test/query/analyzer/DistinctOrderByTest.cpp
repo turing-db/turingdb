@@ -84,6 +84,12 @@ TEST_F(DistinctOrderByTest, acceptsProjectedKey) {
     EXPECT_NO_THROW(analyzeQuery("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY b"));
 }
 
+// A wildcard returns every variable the query declares, each one an item of its own, so a
+// key naming one of them names a column the projection carries and the dedup kept
+TEST_F(DistinctOrderByTest, acceptsProjectedKeyFromWildcard) {
+    EXPECT_NO_THROW(analyzeQuery("MATCH (a)-->(b) RETURN DISTINCT * ORDER BY a"));
+}
+
 // A key naming the alias the projection gives an item names that item's column
 TEST_F(DistinctOrderByTest, acceptsProjectedAliasKey) {
     EXPECT_NO_THROW(

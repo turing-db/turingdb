@@ -268,10 +268,6 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         analyze(projection->getOrderBy());
     }
 
-    if (projection->isDistinct()) {
-        analyzeDistinct(returnSt, projection);
-    }
-
     if (!_isV3) {
         const bool multipleReturns = projection->items().size() != 1;
         if (isAggregate && multipleReturns) {
@@ -307,6 +303,10 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
             projection->pushFrontDecl(decl);
             projection->setName(decl, decl->getName());
         }
+    }
+
+    if (projection->isDistinct()) {
+        analyzeDistinct(returnSt, projection);
     }
 
     if (isAggregate) {
