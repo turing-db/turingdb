@@ -15,7 +15,6 @@ namespace {
 
 const std::string_view unprojectedKeyReason =
     "ORDER BY with DISTINCT may only order by returned columns";
-const std::string_view unsupportedDistinctReason = "DISTINCT not yet supported";
 
 }
 
@@ -32,9 +31,7 @@ public:
     }
 
 protected:
-    // DISTINCT is only supported by the MLIR frontend, so the rule these tests are about
-    // is a v3 rule: v2 turns every DISTINCT away before ever reaching it
-    void analyzeQuery(const std::string& query, bool isV3 = true) {
+    void analyzeQuery(const std::string& query) {
         CypherAST ast(_procedures.get(), query);
 
         CypherParser parser(&ast);
@@ -42,19 +39,16 @@ protected:
 
         const FrozenCommitTx transaction = _graph->openTransaction();
         CypherAnalyzer analyzer(&ast, transaction.viewGraph());
-
-        if (isV3) {
-            analyzer.setV3();
-        }
+        analyzer.setV3();
 
         analyzer.analyze();
     }
 
     // The query is turned away, and on @param reason rather than on anything else the
     // analyzer may have to say about it
-    void expectRejected(const std::string& query, std::string_view reason, bool isV3 = true) {
+    void expectRejected(const std::string& query, std::string_view reason) {
         try {
-            analyzeQuery(query, isV3);
+            analyzeQuery(query);
         } catch (const AnalyzeException& error) {
             const std::string message = error.what();
             EXPECT_NE(message.find(reason), std::string::npos)
@@ -81,8 +75,6 @@ TEST_F(DistinctOrderByTest, rejectsUnprojectedKeyAmongProjectedOnes) {
     expectRejected("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY b, b.name", unprojectedKeyReason);
 }
 
-// A DISTINCT stands on its own: with no keys to place against the returned columns,
-// there is nothing to reject
 TEST_F(DistinctOrderByTest, acceptsDistinctWithoutOrderBy) {
     EXPECT_NO_THROW(analyzeQuery("MATCH (a)-->(b) RETURN DISTINCT b"));
 }
@@ -115,13 +107,4 @@ TEST_F(DistinctOrderByTest, acceptsConstantKey) {
 // its own and sorted with the rows it belongs to
 TEST_F(DistinctOrderByTest, acceptsUnprojectedKeyWithoutDistinct) {
     EXPECT_NO_THROW(analyzeQuery("MATCH (a)-->(b) RETURN b ORDER BY b.name"));
-}
-
-// Only the MLIR frontend dedups, so outside v3 a DISTINCT is turned away whatever it
-// orders by - which is why every rule above is only checked in v3
-TEST_F(DistinctOrderByTest, rejectsDistinctOutsideV3) {
-    expectRejected("MATCH (a)-->(b) RETURN DISTINCT b", unsupportedDistinctReason, false);
-    expectRejected("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY b.name",
-                   unsupportedDistinctReason,
-                   false);
 }
