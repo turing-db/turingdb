@@ -1766,7 +1766,7 @@ void DBLowering::lowerCallProcedure(mlir::db::CallProcedure call) {
     // that does not declare that report cannot be carried past at all, and this is where
     // that is settled: at plan time, rather than mid-execution once the rows fail to
     // line up.
-    if (!carriedColumns.empty() && !procedure->getIndices()) {
+    if (!carriedColumns.empty() && !procedure->hasIndices()) {
         throw IRException("db.call_procedure of '" + call.getProcedure().str()
                           + "' carries columns past it, but the procedure does not report the input"
                             " row of the rows it emits, so they could not be aligned with its"

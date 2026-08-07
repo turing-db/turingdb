@@ -1663,20 +1663,18 @@ public:
 
     void addResultColumn(Column* column) { _resultColumns.push_back(column); }
 
-    // Prepare the procedure the first time the block holding its nl.procedure runs,
-    // and reset it on each later run, so a re-entered block restarts the call from
-    // its first row.
-    void prepareOrReset();
+    // Rewind the call each time the block holding its nl.procedure is re-entered, so a
+    // re-entered block restarts it from its first row.
+    void rewindBlock();
 
-    // Rewind the procedure for a fresh drive - the RESET step - unless it has not been
-    // driven since it was prepared. Run at the top of each entry into its drive loop, so
-    // a procedure that finished the previous chunk of arguments starts afresh on the
-    // next one, dropping whatever per-drive state it kept.
+    // Prepare the procedure on its first drive and rewind it - the RESET step - on each
+    // later one, so a procedure that finished the previous chunk of arguments starts
+    // afresh on the next one, dropping whatever per-drive state it kept.
     //
-    // The first entry needs no rewind: preparing the call already left the procedure at
-    // its first row, and a procedure whose rows cannot be re-read at all (a scan of the
-    // label map) rejects a rewind it never needed.
-    void resetForNewDrive();
+    // Preparing here rather than where the handle is bound is what lets a procedure read
+    // its arguments in its prepare step: the producing loop has filled them by the time
+    // its drive loop is entered.
+    void prepareOrResetForNewDrive();
 
     // Run the procedure's execute callback once, over whatever its input columns
     // currently hold. Clears the finished flag first, so a procedure that marks
@@ -1708,6 +1706,9 @@ private:
     // Whether the procedure has run since it was prepared or last rewound, which is
     // what makes a rewind necessary before the next drive
     bool _driven {false};
+
+    // The PREPARE step, which lets the procedure build whatever it produces its rows from
+    void prepare();
 
     // The RESET step, which rewinds the procedure to its first row
     void reset();
@@ -1765,7 +1766,7 @@ public:
         _carriedColumns.push_back(carried);
     }
 
-    ColumnVector<size_t>* getInputRowIndices() { return &_inputRowIndices; }
+    ColumnIndices* getIndices() { return &_indices; }
 
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
@@ -1776,7 +1777,7 @@ private:
     CarriedColumns _carriedColumns;
 
     // One index per row the procedure emitted this step: the input row it came from
-    ColumnVector<size_t> _inputRowIndices;
+    ColumnIndices _indices;
 
     NLStmtContainer _stmts;
 };

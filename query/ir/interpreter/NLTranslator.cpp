@@ -2383,7 +2383,7 @@ void NLTranslator::addProcedureCarriedColumns(const IteratorConfig& config,
     // Only a procedure that declares it reports the input row behind each row it emits
     // can be carried past: that report is what the carried columns are rebuilt from.
     // Lowering settles this at plan time, so reaching it here means hand-written nl IR.
-    if (!carriedColumns.empty() && !procedure->getIndices()) {
+    if (!carriedColumns.empty() && !procedure->hasIndices()) {
         throw IRException(fmt::format("nl.procedure_init carries columns past '{}', but the "
                                       "procedure does not report the input row of the rows it emits",
                                       procedure->getFullName()));
@@ -2414,9 +2414,17 @@ void NLTranslator::addProcedureCarriedColumns(const IteratorConfig& config,
     // The procedure reports the input row behind each row it emits only when something
     // is carried past the call; hand it the map the loop gathers those columns through,
     // reserving a chunk so the reporting stays allocation-free.
-    ColumnVector<size_t>* inputRowIndices = loopData->getInputRowIndices();
-    inputRowIndices->reserve(_program->getChunkSize());
-    loopData->getState()->getData()->setInputRowIndices(inputRowIndices);
+    ColumnIndices* indices = loopData->getIndices();
+    indices->reserve(_program->getChunkSize());
+
+    ProcedureData* data = loopData->getState()->getData();
+    IndexedProcedureData* indexedData = dynamic_cast<IndexedProcedureData*>(data);
+
+    bioassert(indexedData,
+              "Procedure '{}' is expected to have indices but has no indices data",
+              procedure->getFullName());
+
+    indexedData->setIndices(indices);
 }
 
 void NLTranslator::translateProcedureInitLoop(const IteratorConfig& config,
