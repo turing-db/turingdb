@@ -272,6 +272,23 @@ void QueryResultFormatter::appendRows(std::vector<std::vector<std::string>>& row
     }
 }
 
+void QueryResultFormatter::appendChunkRows(std::vector<std::vector<std::string>>& rows,
+                                           std::vector<std::string>& values,
+                                           std::span<const db::Column* const> chunks,
+                                           size_t offset,
+                                           size_t rowCount) {
+    for (size_t row = offset; row < offset + rowCount; ++row) {
+        values.clear();
+        values.reserve(chunks.size());
+
+        for (const db::Column* col : chunks) {
+            values.push_back(columnValueToString(col, row));
+        }
+
+        rows.push_back(values);
+    }
+}
+
 std::string QueryResultFormatter::formatResultOutput(const db::QueryStatus& status,
                                                      const std::vector<std::string>& columnNames,
                                                      const std::vector<std::vector<std::string>>& rows) {

@@ -6,6 +6,7 @@
 
 #include "QueryTestRunner.h"
 #include "RemoteQueryTestRunner.h"
+#include "V3QueryTestRunner.h"
 
 using namespace turing::test;
 
@@ -110,6 +111,18 @@ std::string serializeResult(const QueryTestResult& result, bool includeJsonField
         result._resultJsonValid ? "true" : "false", result._timeUs);
 }
 
+std::string serializeResultV3(const V3QueryTestResult& result) {
+    return fmt::format(
+        "{{\"name\":\"{}\",\"resultV3Output\":\"{}\","
+        "\"mlirProgram\":\"{}\","
+        "\"resultV3Matched\":{},\"mlirMatched\":{},"
+        "\"timeUs\":{}}}",
+        escapeJson(result._name), escapeJson(result._resultOutput),
+        escapeJson(result._mlirOutput),
+        result._resultMatched ? "true" : "false",
+        result._mlirMatched ? "true" : "false", result._timeUs);
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -128,12 +141,20 @@ int main(int argc, char** argv) {
         .help("Run a single test by name through the remote protocol")
         .metavar("name")
         .nargs(1);
+    program.add_argument("--run-v3")
+        .help("Run a single test by name through the v3 MLIR interpreter")
+        .metavar("name")
+        .nargs(1);
     program.add_argument("--run-all")
         .help("Run all enabled tests")
         .default_value(false)
         .implicit_value(true);
     program.add_argument("--run-all-remote")
         .help("Run all enabled tests through the remote protocol")
+        .default_value(false)
+        .implicit_value(true);
+    program.add_argument("--run-all-v3")
+        .help("Run all enabled tests through the v3 MLIR interpreter")
         .default_value(false)
         .implicit_value(true);
 
@@ -148,10 +169,15 @@ int main(int argc, char** argv) {
     const bool doList = program.get<bool>("--list");
     const bool doRunAll = program.get<bool>("--run-all");
     const bool doRunAllRemote = program.get<bool>("--run-all-remote");
+    const bool doRunAllV3 = program.get<bool>("--run-all-v3");
     const bool doRun = program.is_used("--run");
     const bool doRunRemote = program.is_used("--run-remote");
+    const bool doRunV3 = program.is_used("--run-v3");
 
-    if ((doList ? 1 : 0) + (doRun ? 1 : 0) + (doRunRemote ? 1 : 0) + (doRunAll ? 1 : 0) + (doRunAllRemote ? 1 : 0) != 1) {
+    const int selectedModes = (doList ? 1 : 0) + (doRun ? 1 : 0) + (doRunRemote ? 1 : 0)
+                            + (doRunV3 ? 1 : 0) + (doRunAll ? 1 : 0) + (doRunAllRemote ? 1 : 0)
+                            + (doRunAllV3 ? 1 : 0);
+    if (selectedModes != 1) {
         fmt::println("{}", argParserUsage(program));
         return 1;
     }
@@ -181,6 +207,7 @@ int main(int argc, char** argv) {
 
     QueryTestRunner runner;
     RemoteQueryTestRunner remoteRunner;
+    V3QueryTestRunner v3Runner;
 
     if (doRun) {
         const std::string name = program.get<std::string>("--run");
@@ -216,6 +243,46 @@ int main(int argc, char** argv) {
         }
         fmt::println("{}", "{\"error\":\"Unknown test name\"}");
         return 1;
+    }
+
+    if (doRunV3) {
+        const std::string name = program.get<std::string>("--run-v3");
+        for (const auto& test : tests) {
+            if (test._name != name) {
+                continue;
+            }
+            const fs::Path outDir = fs::Path {"query_test_suite_cli_v3"} / test._name;
+            const V3QueryTestResult result = v3Runner.runTest(test, outDir);
+            fmt::println("{}", serializeResultV3(result));
+            return 0;
+        }
+        fmt::println("{}", "{\"error\":\"Unknown test name\"}");
+        return 1;
+    }
+
+    if (doRunAllV3) {
+        fmt::print("[");
+        bool first = true;
+        for (const auto& test : tests) {
+            if (!test._enabled) {
+                continue;
+            }
+            V3QueryTestResult result;
+            try {
+                result = v3Runner.runTest(test, fs::Path {"query_test_suite_cli_v3"} / test._name);
+            } catch (const std::exception& e) {
+                result._name = test._name;
+                result._resultOutput = fmt::format("ERROR: {}", e.what());
+            }
+
+            if (!first) {
+                fmt::print(",");
+            }
+            first = false;
+            fmt::print("{}", serializeResultV3(result));
+        }
+        fmt::println("]");
+        return 0;
     }
 
     fmt::print("[");

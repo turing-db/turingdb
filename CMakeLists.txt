@@ -120,7 +120,7 @@ if (${DEBUG_BUILD})
 else()
     message(STATUS "Optimized build")
     add_definitions(-DNDEBUG)
-    set(OPTIMIZE_FLAGS "-O3 ${CFP_FLAG}")
+    set(OPTIMIZE_FLAGS "-O3 ${CFP_FLAG} -g -fno-omit-frame-pointer -Wno-maybe-uninitialized")
 
     if (${RELDEBUG})
         set(OPTIMIZE_FLAGS "${OPTIMIZE_FLAGS} -g")
