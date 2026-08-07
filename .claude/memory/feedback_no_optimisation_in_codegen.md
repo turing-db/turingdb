@@ -1,0 +1,10 @@
+Do not put optimisation in `DBProgramGenerator` (or any codegen/frontend stage). Codegen emits the straightforward, obviously-correct form; anything that improves it — liveness / dead-column elimination, "is this read later", CSE, reordering, pushdown — belongs in a dedicated MLIR optimisation pass over the db dialect.
+
+**Why:** The user removed a liveness analysis from the CALL path of `DBProgramGenerator` that pruned a call's carry set to the columns the query still read afterwards (`_deadVariables`, `_deadYieldedColumns`, `dropUnusedLiveColumns`, `collectNamesUsedAfterCall`). It worked, but it was the wrong layer: "optimising for use later and dead variables is something that should be done in an optimisation pass, not now in DBProgramGenerator". Codegen answering *forward-looking* questions means walking the AST ahead of the insertion point and carrying a parallel "what is dead now" state alongside the IR — two sources of truth about the same program, and a use-def analysis re-implemented over Cypher names instead of over MLIR values, where it is both easier and reusable.
+
+**How to apply:**
+- In codegen, only ask questions about what has already been built: "what columns are bound and row-aligned at this insertion point" is fine (`collectInFlightColumns`), "will anyone read this later" is not.
+- Emit every column in flight through an op that takes the whole row set. Let a later pass prune.
+- If a straightforward emission is wasteful (a carry set wider than needed), that is acceptable and expected — say so and note the pass that should fix it, rather than fixing it in the generator.
+- Naming follows the same rule: avoid `live`/`dead` vocabulary in codegen, since it implies a liveness analysis that is not there. Prefer "in flight".
+- Accept the behavioural cost this can carry. Dropping the CALL pruning means a `MATCH` followed by a `CALL` of a procedure that does not declare indices is now rejected even when nothing reads the matched variables again — the user chose that over keeping the analysis in the wrong layer.
