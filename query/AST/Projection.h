@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <stddef.h>
 #include <stdint.h>
 #include <list>
 #include <string_view>
@@ -74,6 +75,16 @@ public:
     std::optional<std::string_view> getName(const Expr* item) const;
     std::optional<std::string_view> getName(const VarDecl* item) const;
     bool hasName(const std::string_view& name) const;
+
+    // The index of the item @param key reads, or the item count when the projection does
+    // not carry it. The projection is one column per return item, so the index is the
+    // index of that item's column too.
+    //
+    // A key and the item it reads are separate AST nodes - the n.name of
+    // RETURN n.name ORDER BY n.name is written twice, so it is parsed twice - which is
+    // why the two are matched by structure rather than by identity
+    size_t findItemIndex(const Expr* key) const;
+    bool hasItem(const Expr* key) const;
 
 private:
     Limit* _limit {nullptr};

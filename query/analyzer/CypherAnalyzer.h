@@ -28,6 +28,7 @@ class OrderBy;
 class Skip;
 class Limit;
 class ReturnStmt;
+class Projection;
 class CreateNodePropertyIndexQuery;
 class CreateEdgePropertyIndexQuery;
 class DropIndexQuery;
@@ -81,6 +82,8 @@ private:
     std::unique_ptr<WriteStmtAnalyzer> _writeAnalyzer;
 
     bool _isV3 {false};
+
+    void analyzeDistinctOrderBy(const Projection* projection) const;
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

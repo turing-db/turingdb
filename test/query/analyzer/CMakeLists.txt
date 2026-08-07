@@ -9,3 +9,4 @@ endfunction()
 
 test(test_expression ExpressionTest.cpp)
 test(test_stmt StmtTest.cpp)
+test(test_distinct_order_by DistinctOrderByTest.cpp)

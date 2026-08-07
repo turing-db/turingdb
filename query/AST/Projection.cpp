@@ -1,6 +1,8 @@
 #include "Projection.h"
 
 #include "CypherAST.h"
+#include "expr/Expr.h"
+#include "expr/StructuralExpressionComparator.h"
 
 using namespace db;
 
@@ -55,4 +57,34 @@ std::optional<std::string_view> Projection::getName(const VarDecl* item) const {
 
 bool Projection::hasName(const std::string_view& name) const {
     return _namesSet.contains(name);
+}
+
+size_t Projection::findItemIndex(const Expr* key) const {
+    const VarDecl* keyDecl = key->getExprVarDecl();
+
+    size_t index = 0;
+    for (const ReturnItem& item : _items) {
+        if (const Expr* const* itemExpr = std::get_if<Expr*>(&item)) {
+            const Expr* projectedExpr = *itemExpr;
+
+            // A key may also name the alias an item was given - the x of
+            // RETURN n.name AS x ORDER BY x - which is one variable declared once, so the
+            // key and the item share its declaration. Every other expression is given a
+            // declaration of its own, so only an alias is ever matched here
+            const bool namesTheItem = keyDecl && projectedExpr->getExprVarDecl() == keyDecl;
+            const bool readsTheItem = StructuralExpressionComparator::equal(projectedExpr, key);
+
+            if (namesTheItem || readsTheItem) {
+                return index;
+            }
+        }
+
+        index++;
+    }
+
+    return index;
+}
+
+bool Projection::hasItem(const Expr* key) const {
+    return findItemIndex(key) < _items.size();
 }

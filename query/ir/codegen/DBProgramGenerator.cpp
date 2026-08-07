@@ -50,7 +50,6 @@
 #include "expr/FunctionInvocationExpr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/PropertyExpr.h"
-#include "expr/StructuralExpressionComparator.h"
 #include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
 #include "stmt/CreateStmt.h"
@@ -112,39 +111,6 @@ EdgeMetadata::EdgeType reverseEdge(EdgeMetadata::EdgeType type) {
 
     throw FatalException("Uncaught edge type.");
 
-}
-
-// The index of the projected column @param key reads, or the item count when the
-// projection does not carry it. The projection is one column per return item, so the
-// index is the column's index too.
-//
-// A key and the item it reads are separate AST nodes - the n.name of
-// RETURN n.name ORDER BY n.name is written twice, so it is parsed twice - which is why
-// the two are matched by structure rather than by identity
-size_t findProjectedColumn(const Projection::Items& items, const Expr* key) {
-    const VarDecl* keyDecl = key->getExprVarDecl();
-
-    size_t index = 0;
-    for (const Projection::ReturnItem& item : items) {
-        if (const Expr* const* itemExpr = std::get_if<Expr*>(&item)) {
-            const Expr* projectedExpr = *itemExpr;
-
-            // A key may also name the alias an item was given - the x of
-            // RETURN n.name AS x ORDER BY x - which is one variable declared once, so the
-            // key and the item share its declaration. Every other expression is given a
-            // declaration of its own, so only an alias is ever matched here
-            const bool namesTheItem = keyDecl && projectedExpr->getExprVarDecl() == keyDecl;
-            const bool readsTheItem = StructuralExpressionComparator::equal(projectedExpr, key);
-
-            if (namesTheItem || readsTheItem) {
-                return index;
-            }
-        }
-
-        index++;
-    }
-
-    return index;
 }
 
 mlir::Value findVarOrThrow(const DBProgramGenerator::VariableIdentityMap& map,
@@ -1118,8 +1084,7 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
     const OrderBy::ItemVector& items = orderBy->getItems();
     bioassert(!items.empty(), "ORDER BY without a key");
 
-    const Projection::Items& projectedItems = projection->items();
-    const bool distinct = projection->isDistinct();
+    const size_t projectedCount = projection->items().size();
 
     // A sort reorders the rows of every column it is given at once, so it is given the
     // whole projection and the projected columns stay row-aligned. A key the projection
@@ -1141,22 +1106,17 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
             continue;
         }
 
-        const size_t projectedIndex = findProjectedColumn(projectedItems, keyExpr);
-        const bool isProjected = projectedIndex < projectedItems.size();
+        const size_t projectedIndex = projection->findItemIndex(keyExpr);
+        const bool isProjected = projectedIndex < projectedCount;
 
         // A key names the column to sort by through its position in the columns handed to
         // the sort: the position the projection already gives it, or the end of the set
-        // when the key has to be appended - so two appended keys never share a position
+        // when the key has to be appended - so two appended keys never share a position.
+        // A DISTINCT leaves only the returned columns to append to, which is why the
+        // analyzer rejects an unprojected key after one
         if (isProjected) {
             keyColumns.push_back(static_cast<int64_t>(projectedIndex));
         } else {
-            // After a DISTINCT only the returned columns exist, which is why Cypher
-            // rejects the query. An unprojected key was read before the dedup, so it
-            // holds one row per pre-dedup row and cannot be sorted with the survivors
-            if (distinct) {
-                throw TuringException("ORDER BY with DISTINCT may only order by returned columns.");
-            }
-
             sorted.push_back(getOrTranslateExprColumn(variableColumns, keyExpr));
             keyColumns.push_back(static_cast<int64_t>(sorted.size() - 1));
         }

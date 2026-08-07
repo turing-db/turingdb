@@ -269,6 +269,10 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
     // the alias among the variables of the query
     if (projection->hasOrderBy()) {
         analyze(projection->getOrderBy());
+
+        if (projection->isDistinct()) {
+            analyzeDistinctOrderBy(projection);
+        }
     }
 
     if (!_isV3) { // only supported by MLIR v3
@@ -311,6 +315,27 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
     if (isAggregate) {
         projection->setAggregate();
         projection->setHasGroupingKeys(hasGroupingKeys);
+    }
+}
+
+void CypherAnalyzer::analyzeDistinctOrderBy(const Projection* projection) const {
+    const OrderBy* orderBy = projection->getOrderBy();
+
+    for (const OrderByItem* item : orderBy->getItems()) {
+        const Expr* keyExpr = item->getExpr();
+
+        // A constant key holds the same value in every row, so it orders nothing and
+        // names no column the dedup could have dropped
+        if (!keyExpr->isDynamic()) {
+            continue;
+        }
+
+        // A DISTINCT leaves only the returned columns, so a key the projection does not
+        // carry names a column the dedup dropped: it was read once per pre-dedup row and
+        // no longer lines up with the rows that survived
+        if (!projection->hasItem(keyExpr)) {
+            throwError("ORDER BY with DISTINCT may only order by returned columns.", keyExpr);
+        }
     }
 }
 
