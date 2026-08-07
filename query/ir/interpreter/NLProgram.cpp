@@ -39,15 +39,37 @@ NLProcedureState::~NLProcedureState() {
     }
 }
 
-void NLProcedureState::prepareOrReset() {
-    // The first run prepares the call - a procedure typically builds its iterators
-    // over the result columns there - and every later run of the same block rewinds
-    // it, matching the prepare/reset split the pipeline engine drives.
-    if (_prepared) {
-        reset();
+void NLProcedureState::rewindBlock() {
+    // Preparing is left to the first drive, so a block reached before it has run has
+    // nothing to rewind yet.
+    if (!_prepared) {
         return;
     }
 
+    reset();
+}
+
+void NLProcedureState::prepareOrResetForNewDrive() {
+    // A procedure reads its argument columns in its prepare step - gnn.neighbourhoodSample
+    // builds its sampling iterator over the input nodes there - so the call is prepared
+    // on its first drive, once the producing loop has filled them, rather than when its
+    // handle is bound.
+    if (!_prepared) {
+        prepare();
+        return;
+    }
+
+    // Preparing the call already left the procedure at its first row, so the drive that
+    // prepared it needs no rewind - and a procedure whose rows cannot be re-read would
+    // refuse one it never needed.
+    if (!_driven) {
+        return;
+    }
+
+    reset();
+}
+
+void NLProcedureState::prepare() {
     _procedureState.setStep(ProcedureState::Step::PREPARE);
     _procedureState.clearFinished();
     _procedure->getExecCallback()(&_procedureState);
@@ -58,17 +80,6 @@ void NLProcedureState::prepareOrReset() {
 
     _prepared = true;
     _driven = false;
-}
-
-void NLProcedureState::resetForNewDrive() {
-    // Preparing the call already left the procedure at its first row, so the first
-    // drive needs no rewind - and a procedure whose rows cannot be re-read would
-    // refuse one it never needed.
-    if (!_driven) {
-        return;
-    }
-
-    reset();
 }
 
 void NLProcedureState::reset() {

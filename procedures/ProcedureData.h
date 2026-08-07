@@ -11,15 +11,8 @@ namespace db {
 
 class Column;
 
-template <typename T>
-class ColumnVector;
-
 class ProcedureData {
 public:
-    // Same type as db::ColumnIndices (columns/ColumnIndices.h), aliased here so this
-    // header can keep the forward declaration above instead of including ColumnVector.
-    using ColumnIndices = ColumnVector<size_t>;
-
     ProcedureData();
 
     virtual ~ProcedureData();
@@ -48,19 +41,9 @@ public:
         _returnColumns[i] = col;
     }
 
-    // The column a procedure reports the input row behind each emitted row into.
-    ColumnIndices* getInputRowIndices() const {
-        return _inputRowIndices;
-    }
-
-    void setInputRowIndices(ColumnIndices* indices) {
-        _inputRowIndices = indices;
-    }
-
 private:
     std::vector<const Column*> _inputColumns;
     std::vector<Column*> _returnColumns;
-    ColumnIndices* _inputRowIndices {nullptr};
 };
 
 class IndexedProcedureData : public ProcedureData {

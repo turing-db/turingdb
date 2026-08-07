@@ -74,7 +74,7 @@ namespace {
 // Reset before each run.
 size_t doubleExecuteCalls = 0;
 
-struct DoubleData : public ProcedureData {};
+struct DoubleData : public IndexedProcedureData {};
 
 // test.doubleNodeID(nodeIDs) YIELD doubled: one row per input node, holding the node
 // ID doubled. A streaming procedure - it clears and refills its result column on every
@@ -118,7 +118,7 @@ void doubleDealloc(ProcedureData* data) {
     delete data;
 }
 
-struct ExpandData : public ProcedureData {};
+struct ExpandData : public IndexedProcedureData {};
 
 // test.expandNodeID(nodeIDs) YIELD copy: emits `id % 3` rows for each input node - so
 // it drops some input rows, passes others through and expands others - reporting the
@@ -130,7 +130,7 @@ void expandExecuteImpl(ProcedureState* procedureState) {
 
     const auto* nodeIDs = static_cast<const ColumnVector<NodeID>*>(data.getInputColumn(0));
     auto* copies = static_cast<ColumnVector<types::Int64::Primitive>*>(data.getReturnColumn(0));
-    ColumnVector<size_t>* inputRowIndices = data.getInputRowIndices();
+    ColumnIndices* indices = data.indices();
 
     copies->clear();
 
@@ -143,8 +143,8 @@ void expandExecuteImpl(ProcedureState* procedureState) {
 
             // Only a call carrying columns past this one is given the map to report
             // into, so a procedure checks it as it checks an unyielded return column.
-            if (inputRowIndices) {
-                inputRowIndices->push_back(inputRow);
+            if (indices) {
+                indices->push_back(inputRow);
             }
         }
     }
@@ -172,7 +172,7 @@ void expandDealloc(ProcedureData* data) {
     delete data;
 }
 
-struct ScoreData : public ProcedureData {};
+struct ScoreData : public IndexedProcedureData {};
 
 // test.nodeScore(nodeIDs) YIELD score: reads each input node's `score` property out of the
 // graph and emits it. Unlike the other test procedures - which compute from the node ID
@@ -185,7 +185,7 @@ void scoreExecuteImpl(ProcedureState* procedureState) {
 
     const auto* nodeIDs = static_cast<const ColumnVector<NodeID>*>(data.getInputColumn(0));
     auto* scores = static_cast<ColumnVector<types::Int64::Primitive>*>(data.getReturnColumn(0));
-    ColumnVector<size_t>* inputRowIndices = data.getInputRowIndices();
+    ColumnIndices* indices = data.indices();
 
     scores->clear();
 
@@ -210,8 +210,8 @@ void scoreExecuteImpl(ProcedureState* procedureState) {
 
         scores->push_back(*score);
 
-        if (inputRowIndices) {
-            inputRowIndices->push_back(inputRow);
+        if (indices) {
+            indices->push_back(inputRow);
         }
     }
 
@@ -238,7 +238,7 @@ void scoreDealloc(ProcedureData* data) {
     delete data;
 }
 
-struct ListData : public ProcedureData {};
+struct ListData : public IndexedProcedureData {};
 
 // test.nodeIDList(nodeIDs) YIELD values: emits one row per input node whose single column
 // is a LIST - `id % 3` elements, `100 * id + k` - so the lists vary in length and nodes 0
@@ -253,7 +253,7 @@ void listExecuteImpl(ProcedureState* procedureState) {
 
     const auto* nodeIDs = static_cast<const ColumnVector<NodeID>*>(data.getInputColumn(0));
     auto* values = static_cast<ColumnVector<ListView>*>(data.getReturnColumn(0));
-    ColumnVector<size_t>* inputRowIndices = data.getInputRowIndices();
+    ColumnIndices* indices = data.indices();
 
     values->clear();
 
@@ -274,8 +274,8 @@ void listExecuteImpl(ProcedureState* procedureState) {
         // gets a row, which is what separates this from the expanding form.
         values->push_back(listBuffer->insert(items));
 
-        if (inputRowIndices) {
-            inputRowIndices->push_back(inputRow);
+        if (indices) {
+            indices->push_back(inputRow);
         }
     }
 
@@ -305,7 +305,7 @@ void listDealloc(ProcedureData* data) {
 // The float storage a drive of test.nodeTags hands out spans over. ListBuffer stores the
 // bytes of a span, not the floats behind it, so the values have to outlive the insert; they
 // live here, refilled per step exactly as the result columns are.
-struct TagData : public ProcedureData {
+struct TagData : public IndexedProcedureData {
     std::vector<std::vector<float>> _embeddings;
 };
 
@@ -328,7 +328,7 @@ void tagsExecuteImpl(ProcedureState* procedureState) {
     const auto* nodeIDs = static_cast<const ColumnVector<NodeID>*>(data.getInputColumn(0));
     auto* tags = static_cast<ColumnVector<ListView>*>(data.getReturnColumn(0));
     auto* coords = static_cast<ColumnVector<ListView>*>(data.getReturnColumn(1));
-    ColumnVector<size_t>* inputRowIndices = data.getInputRowIndices();
+    ColumnIndices* indices = data.indices();
 
     tags->clear();
     coords->clear();
@@ -358,8 +358,8 @@ void tagsExecuteImpl(ProcedureState* procedureState) {
         items.emplace_back(types::Embedding::Primitive {embedding});
         coords->push_back(listBuffer->insert(items));
 
-        if (inputRowIndices) {
-            inputRowIndices->push_back(inputRow);
+        if (indices) {
+            indices->push_back(inputRow);
         }
     }
 
@@ -389,7 +389,7 @@ void tagsDealloc(ProcedureData* data) {
 // Where a drive of test.fanOutNodeID stopped: the input row it was on and how many of
 // that row's copies it had emitted, so the next step resumes there. Reset clears both,
 // since a drive starts afresh on each chunk of arguments.
-struct FanOutData : public ProcedureData {
+struct FanOutData : public IndexedProcedureData {
     size_t _nextInputRow {0};
     types::Int64::Primitive _nextCopy {0};
 };
@@ -404,7 +404,7 @@ void fanOutExecuteImpl(ProcedureState* procedureState) {
 
     const auto* nodeIDs = static_cast<const ColumnVector<NodeID>*>(data.getInputColumn(0));
     auto* values = static_cast<ColumnVector<types::Int64::Primitive>*>(data.getReturnColumn(0));
-    ColumnVector<size_t>* inputRowIndices = data.getInputRowIndices();
+    ColumnIndices* indices = data.indices();
 
     constexpr types::Int64::Primitive copiesPerRow = 3;
     const size_t chunkSize = procedureState->getContext()->getChunkSize();
@@ -416,8 +416,8 @@ void fanOutExecuteImpl(ProcedureState* procedureState) {
         const auto nodeID = static_cast<types::Int64::Primitive>(nodeIDsRaw[data._nextInputRow].getValue());
 
         values->push_back(10 * nodeID + data._nextCopy);
-        if (inputRowIndices) {
-            inputRowIndices->push_back(data._nextInputRow);
+        if (indices) {
+            indices->push_back(data._nextInputRow);
         }
 
         data._nextCopy++;
@@ -1167,7 +1167,7 @@ protected:
         expandProcedure->setAllocCallback(&expandAlloc);
         expandProcedure->setDeallocCallback(&expandDealloc);
         expandProcedure->setExecuteCallback(&expandExecute);
-        expandProcedure->setIndices(true);
+        expandProcedure->setHasIndices(true);
         expandProcedure->addArgument("nodeIDs", ProcedureType::NODE);
         expandProcedure->addReturnValue("copy", ProcedureType::INT64);
         testNamespace->addProcedure(expandProcedure);
@@ -1176,7 +1176,7 @@ protected:
         fanOutProcedure->setAllocCallback(&fanOutAlloc);
         fanOutProcedure->setDeallocCallback(&fanOutDealloc);
         fanOutProcedure->setExecuteCallback(&fanOutExecute);
-        fanOutProcedure->setIndices(true);
+        fanOutProcedure->setHasIndices(true);
         fanOutProcedure->addArgument("nodeIDs", ProcedureType::NODE);
         fanOutProcedure->addReturnValue("value", ProcedureType::INT64);
         testNamespace->addProcedure(fanOutProcedure);
@@ -1185,7 +1185,7 @@ protected:
         scoreProcedure->setAllocCallback(&scoreAlloc);
         scoreProcedure->setDeallocCallback(&scoreDealloc);
         scoreProcedure->setExecuteCallback(&scoreExecute);
-        scoreProcedure->setIndices(true);
+        scoreProcedure->setHasIndices(true);
         scoreProcedure->addArgument("nodeIDs", ProcedureType::NODE);
         scoreProcedure->addReturnValue("score", ProcedureType::INT64);
         testNamespace->addProcedure(scoreProcedure);
@@ -1194,7 +1194,7 @@ protected:
         listProcedure->setAllocCallback(&listAlloc);
         listProcedure->setDeallocCallback(&listDealloc);
         listProcedure->setExecuteCallback(&listExecute);
-        listProcedure->setIndices(true);
+        listProcedure->setHasIndices(true);
         listProcedure->addArgument("nodeIDs", ProcedureType::NODE);
         listProcedure->addReturnValue("values", ProcedureType::LIST);
         testNamespace->addProcedure(listProcedure);
@@ -1203,7 +1203,7 @@ protected:
         tagsProcedure->setAllocCallback(&tagsAlloc);
         tagsProcedure->setDeallocCallback(&tagsDealloc);
         tagsProcedure->setExecuteCallback(&tagsExecute);
-        tagsProcedure->setIndices(true);
+        tagsProcedure->setHasIndices(true);
         tagsProcedure->addArgument("nodeIDs", ProcedureType::NODE);
         tagsProcedure->addReturnValue("tags", ProcedureType::LIST);
         tagsProcedure->addReturnValue("coords", ProcedureType::LIST);
@@ -1216,7 +1216,7 @@ protected:
         brokenProcedure->setAllocCallback(&doubleAlloc);
         brokenProcedure->setDeallocCallback(&doubleDealloc);
         brokenProcedure->setExecuteCallback(&doubleExecute);
-        brokenProcedure->setIndices(true);
+        brokenProcedure->setHasIndices(true);
         brokenProcedure->addArgument("nodeIDs", ProcedureType::NODE);
         brokenProcedure->addReturnValue("doubled", ProcedureType::INT64);
         testNamespace->addProcedure(brokenProcedure);
@@ -2204,4 +2204,26 @@ func.func @main() {
 
     EXPECT_EQ(procedureOp.getName(), "db.labels");
     EXPECT_EQ(procedureOp.getYields().size(), 2u);
+}
+
+TEST_F(MLIRCallProcedureTest, cypherCallSamplesANeighbourhood) {
+    auto graph = buildHopGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // gnn.neighbourhoodSample is the registered procedure that reports the input row of
+    // the rows it emits, so this is the carry set over a real one rather than a
+    // test-local stand-in. It also reads its argument column in its prepare step, which
+    // is why the call is prepared on its first drive. A sample size above the out-degree
+    // of every node takes all four edges, making the rows deterministic.
+    NodePairSink sink;
+    runQuery("MATCH (n) CALL gnn.neighbourhoodSample(n, 2, 42) YIELD tgt RETURN n, tgt",
+             graph.get(),
+             reader.getView(),
+             sink);
+
+    std::vector<NodePairSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<NodePairSink::Row> expected {{0, 1}, {0, 2}, {1, 4}, {2, 3}};
+    EXPECT_EQ(rows, expected);
 }
