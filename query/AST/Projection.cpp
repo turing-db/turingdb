@@ -77,6 +77,12 @@ size_t Projection::findItemIndex(const Expr* key) const {
             if (namesTheItem || readsTheItem) {
                 return index;
             }
+        } else if (const VarDecl* const* itemDecl = std::get_if<VarDecl*>(&item)) {
+            const bool namesTheItem = keyDecl && *itemDecl == keyDecl;
+
+            if (namesTheItem) {
+                return index;
+            }
         }
 
         index++;
