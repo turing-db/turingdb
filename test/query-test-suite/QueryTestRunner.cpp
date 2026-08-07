@@ -301,6 +301,7 @@ void QueryTestRunner::loadTestsFromDir(std::vector<QueryTestSpec>& specs,
             spec._expectPlan = expect.value("plan", "");
             spec._expectResult = expect.value("result", "");
             spec._expectResultJson = expect.value("resultJson", "");
+            spec._expectMlir = expect.value("mlir", "");
         }
 
         specs.push_back(std::move(spec));
