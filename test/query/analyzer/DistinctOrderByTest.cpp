@@ -11,6 +11,14 @@
 
 using namespace db;
 
+namespace {
+
+const std::string_view unprojectedKeyReason =
+    "ORDER BY with DISTINCT may only order by returned columns";
+const std::string_view unsupportedDistinctReason = "DISTINCT not yet supported";
+
+}
+
 // After a DISTINCT only the returned columns are left, so an ORDER BY key the projection
 // does not carry names a column the dedup dropped. The rule is a property of the query
 // alone, so the analyzer is what turns those queries away, before any plan is generated.
@@ -24,7 +32,9 @@ public:
     }
 
 protected:
-    void analyzeQuery(const std::string& query) {
+    // DISTINCT is only supported by the MLIR frontend, so the rule these tests are about
+    // is a v3 rule: v2 turns every DISTINCT away before ever reaching it
+    void analyzeQuery(const std::string& query, bool isV3 = true) {
         CypherAST ast(_procedures.get(), query);
 
         CypherParser parser(&ast);
@@ -32,18 +42,22 @@ protected:
 
         const FrozenCommitTx transaction = _graph->openTransaction();
         CypherAnalyzer analyzer(&ast, transaction.viewGraph());
+
+        if (isV3) {
+            analyzer.setV3();
+        }
+
         analyzer.analyze();
     }
 
-    // The query is turned away, and on the DISTINCT rule rather than on anything else the
+    // The query is turned away, and on @param reason rather than on anything else the
     // analyzer may have to say about it
-    void expectRejected(const std::string& query) {
+    void expectRejected(const std::string& query, std::string_view reason, bool isV3 = true) {
         try {
-            analyzeQuery(query);
+            analyzeQuery(query, isV3);
         } catch (const AnalyzeException& error) {
             const std::string message = error.what();
-            EXPECT_NE(message.find("ORDER BY with DISTINCT may only order by returned columns"),
-                      std::string::npos)
+            EXPECT_NE(message.find(reason), std::string::npos)
                 << "query: " << query << "\nerror: " << message;
             return;
         }
@@ -58,13 +72,19 @@ protected:
 // The key is a property of a returned node, which the projection does not carry: it was
 // read once per pre-dedup row, so it no longer lines up with the rows that survived
 TEST_F(DistinctOrderByTest, rejectsUnprojectedKey) {
-    expectRejected("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY b.name");
+    expectRejected("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY b.name", unprojectedKeyReason);
 }
 
 // One projected key does not excuse the other: the query is rejected on the key the
 // dedup dropped, wherever it sits among the keys
 TEST_F(DistinctOrderByTest, rejectsUnprojectedKeyAmongProjectedOnes) {
-    expectRejected("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY b, b.name");
+    expectRejected("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY b, b.name", unprojectedKeyReason);
+}
+
+// A DISTINCT stands on its own: with no keys to place against the returned columns,
+// there is nothing to reject
+TEST_F(DistinctOrderByTest, acceptsDistinctWithoutOrderBy) {
+    EXPECT_NO_THROW(analyzeQuery("MATCH (a)-->(b) RETURN DISTINCT b"));
 }
 
 // The key is the returned column itself, so it survives the dedup and can be sorted on
@@ -95,4 +115,13 @@ TEST_F(DistinctOrderByTest, acceptsConstantKey) {
 // its own and sorted with the rows it belongs to
 TEST_F(DistinctOrderByTest, acceptsUnprojectedKeyWithoutDistinct) {
     EXPECT_NO_THROW(analyzeQuery("MATCH (a)-->(b) RETURN b ORDER BY b.name"));
+}
+
+// Only the MLIR frontend dedups, so outside v3 a DISTINCT is turned away whatever it
+// orders by - which is why every rule above is only checked in v3
+TEST_F(DistinctOrderByTest, rejectsDistinctOutsideV3) {
+    expectRejected("MATCH (a)-->(b) RETURN DISTINCT b", unsupportedDistinctReason, false);
+    expectRejected("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY b.name",
+                   unsupportedDistinctReason,
+                   false);
 }
