@@ -2418,6 +2418,10 @@ NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {
     return nullptr;
 }
 
+NLGatherFunction NLExecutor::selectCountGatherFunction() {
+    return &gatherColumn<uint64_t>;
+}
+
 NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(bool nullable) {
     if (nullable) {
         return &collectOptMaskSurvivors;
@@ -2443,6 +2447,10 @@ NLBroadcastFunction NLExecutor::selectBlockRepeatFunction(NLChunkKind kind) {
 
     bioassert(false, "Unknown NLChunkKind");
     return nullptr;
+}
+
+NLBroadcastFunction NLExecutor::selectCountBlockRepeatFunction() {
+    return &blockRepeatColumn<uint64_t>;
 }
 
 NLBroadcastFunction NLExecutor::selectTileFunction(NLChunkKind kind) {
@@ -2506,6 +2514,10 @@ NLCopyFunction NLExecutor::selectCopyFunction(NLChunkKind kind) {
     return nullptr;
 }
 
+NLCopyFunction NLExecutor::selectCountCopyFunction() {
+    return &copyRangeColumn<uint64_t>;
+}
+
 // A nullable value chunk gathers the same way an ID chunk does - copy the indexed
 // rows - on the ColumnOptVector<Primitive> instantiation of the gather template.
 NLGatherFunction NLExecutor::selectOptGatherFunction(ValueType valueType) {
@@ -2535,6 +2547,10 @@ NLAppendFunction NLExecutor::selectAppendFunction(NLChunkKind kind) {
 
     bioassert(false, "Unknown NLChunkKind");
     return nullptr;
+}
+
+NLAppendFunction NLExecutor::selectCountAppendFunction() {
+    return &appendColumn<uint64_t>;
 }
 
 // A nullable value chunk is a ColumnOptVector<Primitive> - that is,
