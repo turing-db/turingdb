@@ -70,6 +70,36 @@ def ConstScanNodes : NLOp<"const_scan_nodes", [Pure, InferTypeOpAdaptor]> {
 }
 
 /**
+* UnwindConst
+*/
+// Pure: emitting a fixed list is deterministic; the per-element fan-out is in the nl.for.
+def UnwindConst : NLOp<"unwind_const", [Pure]> {
+  let summary = "Create a database iterator over a compile-time-known literal list";
+  let description = [{
+    Imperative counterpart of db.unwind_const. Each step of an enclosing nl.for fills
+    one chunk of the literal list's elements:
+
+      %rows = nl.unwind_const([1, 2, 3]) : !nl.iter<!nl.chunk<!storage.nullable<i64>>>
+      nl.for %x in %rows : !nl.iter<!nl.chunk<!storage.nullable<i64>>> {
+        nl.output(%x) : !nl.chunk<!storage.nullable<i64>>
+      }
+
+    `elements` is the same literal array db.unwind_const carried, each entry a typed
+    attribute keeping its own type. A homogeneous list yields a nullable value chunk of
+    that type - the shape a property fetch and the unwind_collect drain emit, so the
+    unwound column feeds the same consumers, even though a literal is never null; a
+    heterogeneous or empty list yields a type-erased !storage.list_element chunk (a
+    tagged scalar per row). The single chunk element type depends on the elements, so -
+    unlike nl.scan_nodes, whose node-ID iterator is fixed and inferred - it is spelled
+    after the colon, as nl.collect's is. It opens the dataflow: no input, no carry.
+  }];
+
+  let arguments = (ins ArrayAttr:$elements);
+  let results   = (outs NLIterator:$result);
+  let assemblyFormat = "`(` $elements `)` attr-dict `:` qualified(type($result))";
+}
+
+/**
 * ScanEdges
 */
 def ScanEdges : NLOp<"scan_edges", [Pure, InferTypeOpAdaptor]> {

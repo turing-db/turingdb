@@ -101,6 +101,48 @@ def ConstScanNodes : TuringOp<"const_scan_nodes", [Pure]> {
 }
 
 /**
+* UnwindConst
+*/
+def UnwindConst : TuringOp<"unwind_const", [Pure]> {
+  let summary = "Produce one row per element of a compile-time-known literal list";
+
+  let description = [{
+    The source op for `UNWIND [<literals>] AS x` where the list is known at plan
+    time, independent of any input row. It opens a dataflow, one row per element, the
+    way db.const_scan_nodes opens one from a fixed set of node IDs:
+
+      %x = db.unwind_const([1, 2, 3]) : !db.column<i64>
+
+    `elements` carries the literals as an array of typed attributes, so each element
+    keeps its own type. When they share one type the list is homogeneous and the
+    result is that typed column; when they differ - or the list is empty - it is
+    heterogeneous and the result is a type-erased !storage.list_element column, a
+    tagged scalar per row, matching Cypher's LIST OF ANY:
+
+      %row = db.unwind_const([true, "s", 10]) : !db.column<!storage.list_element>
+
+    So the result element type is the homogeneity verdict: a downstream op sees a
+    concrete typed column for a homogeneous list, and a list_element column - which
+    only pass-through ops (a cross_product broadcast, the output) accept - for a
+    heterogeneous one. An empty list yields no row, matching UNWIND of an empty list.
+    Producing a fixed list is deterministic, so the op is Pure. With incoming rows
+    (MATCH (a) UNWIND [...] AS x) it is crossed with the input through
+    db.cross_product; there is no expanding variant of this op.
+  }];
+
+  // `elements` is the literal list, each entry a typed builtin attribute carrying its
+  // own type. Being an attribute and not an SSA value, it is absent from `operands`.
+  let arguments = (ins ArrayAttr:$elements);
+  let results   = (outs Column:$result);
+  let hasVerifier = 1;
+
+  // The literals print inside the parens as `[1, 2, 3]`, ahead of the colon, the same
+  // place db.const_scan_nodes prints its IDs; the result column type follows,
+  // qualified, as db.const_scan_nodes prints it.
+  let assemblyFormat = "`(` $elements `)` attr-dict `:` qualified(type($result))";
+}
+
+/**
 * ScanEdges
 */
 def ScanEdges : TuringOp<"scan_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {

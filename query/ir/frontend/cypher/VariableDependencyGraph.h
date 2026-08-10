@@ -14,6 +14,7 @@ namespace db {
 class CypherAST;
 class EntityPattern;
 class PatternElement;
+class UnwindStmt;
 
 /**
  * @brief Graph representation of the dependencies among variables, generated from
@@ -35,6 +36,7 @@ class VariableDependencyGraph {
 public:
     using Cycle = std::vector<VariableDependency*>;
     using EdgeIdentityMap = std::unordered_map<std::string, std::vector<VariableDependency*>>;
+    using UnwindSourceMap = std::unordered_map<const VariableDependency*, const UnwindStmt*>;
 
     VariableDependencyGraph();
     ~VariableDependencyGraph();
@@ -44,10 +46,15 @@ public:
     /// Given a pattern (e.g. (n)-[e]->(m)), inserts all vars into the dependency graph
     void registerPatternElement(const PatternElement* ptn);
 
+    /// Given an UNWIND (e.g. UNWIND [1, 2, 3] AS x), inserts its variable into the
+    /// dependency graph
+    void registerUnwindStmt(const UnwindStmt* stmt);
+
     /// Iteration order has no semantic meaning
     const auto& vars() const { return _vars; }
     const auto& edges() const { return _edges; }
     const EdgeIdentityMap& edgeIdentities() const { return _edgeIdentities; }
+    const UnwindSourceMap& unwindSources() const { return _unwindSources; }
 
     bool empty() const { return _vars.empty() && _edges.empty(); }
 
@@ -67,6 +74,9 @@ private:
 
     // Maps each Cypher edge variable name to all anonymous VDG variables created for it
     EdgeIdentityMap _edgeIdentities;
+
+    // Maps each UNWIND variable to the statement whose list it is bound to
+    UnwindSourceMap _unwindSources;
 
     VariableDependency* getOrCreateVariable(const EntityPattern* entity);
     VariableDependency* newVariable(const EntityPattern* entity);

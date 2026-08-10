@@ -28,6 +28,7 @@
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/AllowedKinds.h"
 #include "columns/UnaryPredicates.h"
+#include "list/ListUtils.h"
 #include "metadata/PropertyType.h"
 
 #include "versioning/CommitWriteBuffer.h"
@@ -43,6 +44,48 @@
 using namespace db;
 
 namespace {
+
+// Copy a slice of a ListView's tagged scalars straight into a
+// ColumnVector<ListElementView> - the heterogeneous unwind's type-erased column.
+void fillListElementChunk(Column* output, const ListView list, size_t offset, size_t rows) {
+    ColumnVector<ListElementView>* typed = static_cast<ColumnVector<ListElementView>*>(output);
+    const std::span<const ListElementView> elements = list.elements();
+
+    std::vector<ListElementView>& raw = typed->getRaw();
+    raw.assign(elements.begin() + offset, elements.begin() + offset + rows);
+}
+
+// Fill a slice of a ListView into a nullable value column, extracting each element as
+// the homogeneous primitive. The homogeneous unwind's fast path, ported from
+// UnwindProcessor::fillHomogeneous onto the ColumnOptVector every other value-chunk
+// consumer reads; a literal list holds no null, so every cell is present.
+void fillHomogeneousChunk(Column* output, ValueType valueType, const ListView list, size_t offset, size_t rows) {
+    const std::span<const ListElementView> elements = list.elements();
+
+    const auto fill = [&]<SupportedType T>() {
+        using Primitive = typename T::Primitive;
+
+        ColumnOptVector<Primitive>* typed = static_cast<ColumnOptVector<Primitive>*>(output);
+
+        std::vector<std::optional<Primitive>>& raw = typed->getRaw();
+        raw.resize(rows);
+
+        // ListElementView::getAs reinterprets the element's bytes as the primitive
+        // without consulting its type tag, so check the tag against the one the
+        // primitive is stored under: a homogeneous unwind whose column type disagrees
+        // with its literals would otherwise read a value of the wrong type.
+        constexpr ListBufferTypeTag expectedTag = TypeToListBufferTag<Primitive>::Tag;
+
+        for (size_t index = 0; index < rows; index++) {
+            const ListElementView element = elements[offset + index];
+            bioassert(element.getTag() == expectedTag, "Unwound element does not have the unwind's value type.");
+
+            raw[index] = element.getAs<Primitive>();
+        }
+    };
+
+    ValueTypeDispatcher {valueType}.execute(fill);
+}
 
 template <ColumnOperator Op>
 struct BinaryOpTraits;
@@ -1519,6 +1562,51 @@ void NLExecutor::runConstScanNodesLoop(NLExecutionContext* context, NLFunctionDa
 
         std::vector<NodeID>& raw = nodeIDs->getRaw();
         raw.assign(constNodeIDs.begin() + cursor, constNodeIDs.begin() + cursor + rows);
+
+        cursor += rows;
+
+        runBody(context, loopBody);
+    };
+
+    if (limit) {
+        while (cursor < totalCount && limit->getRemaining() > 0) {
+            runIteration();
+        }
+    } else {
+        while (cursor < totalCount) {
+            runIteration();
+        }
+    }
+}
+
+void NLExecutor::runUnwindConstLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLUnwindConstLoopData* loopData = static_cast<NLUnwindConstLoopData*>(data);
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    const ListView list = loopData->getList();
+    Column* output = loopData->getOutput();
+    const bool heterogeneous = loopData->isHeterogeneous();
+    const ValueType valueType = loopData->getValueType();
+    const size_t chunkSize = context->getChunkSize();
+    const size_t totalCount = list.size();
+
+    // A null limit leaves the loop unbounded, exactly as in runConstScanNodesLoop.
+    const NLLimitState* limit = loopData->getLimit();
+
+    // Emit the fixed list one chunk at a time: each step fills the value chunk with the
+    // next slice and runs the body over it. The cursor is local to this call, so an
+    // unwind nested in a cross product restarts from the first element on every outer
+    // step - the same way runConstScanNodesLoop reopens its slice each call.
+    size_t cursor = 0;
+
+    const auto runIteration = [&]() {
+        const size_t remaining = totalCount - cursor;
+        const size_t rows = std::min(chunkSize, remaining);
+
+        if (heterogeneous) {
+            fillListElementChunk(output, list, cursor, rows);
+        } else {
+            fillHomogeneousChunk(output, valueType, list, cursor, rows);
+        }
 
         cursor += rows;
 

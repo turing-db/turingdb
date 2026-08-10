@@ -29,8 +29,10 @@ class UnaryExpr;
 class CypherAST;
 class Expr;
 class Literal;
+class ListLiteral;
 class Projection;
 class PropertyExpr;
+class UnwindStmt;
 class VarDecl;
 class VariableDependency;
 class DependencyEdge;
@@ -134,7 +136,19 @@ private:
     mlir::Value translateLiteralExpr(const Literal* literal);
     mlir::Value translatePropertyExpr(const PropertyExpr* propExpr);
 
+    // The attribute carrying a scalar literal's value and type, or a null attribute for
+    // any other literal kind
+    mlir::TypedAttr scalarLiteralAttr(const Literal* literal);
+
+    // Fills one attribute per element of an UNWIND list, each keeping its literal's type
+    void translateUnwindElements(const ListLiteral* list,
+                                 llvm::SmallVectorImpl<mlir::Attribute>& elements);
+
     void addScanNodes(const VariableDependency* var);
+
+    // Opens a dataflow from an UNWIND's literal list, the way addScanNodes opens one
+    // from the graph's nodes
+    void addUnwindConst(const VariableDependency* var, const UnwindStmt* unwind);
     void filterAllColumns(mlir::Value predicate);
 
     void addMergeFilter(const VariableDependency* var,

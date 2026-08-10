@@ -17,8 +17,10 @@
 #include "SinglePartQuery.h"
 #include "Pattern.h"
 #include "PatternElement.h"
+#include "Symbol.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/StmtContainer.h"
+#include "stmt/UnwindStmt.h"
 #include "decl/VarDecl.h"
 
 #include "DependencyEdge.h"
@@ -79,16 +81,19 @@ void VariableDependencyGraph::buildFromAST(const CypherAST* ast) {
     const StmtContainer::Stmts& stmts = stmtsContainer->stmts();
 
     for (const Stmt* stmt : stmts) {
-        const auto* match = dynamic_cast<const MatchStmt*>(stmt);
-        if (!match) {
-            spdlog::warn("Non-match statement: skipped");
-            continue;
-        }
+        const MatchStmt* match = dynamic_cast<const MatchStmt*>(stmt);
+        const UnwindStmt* unwind = dynamic_cast<const UnwindStmt*>(stmt);
 
-        const Pattern* pattern = match->getPattern();
-        const Pattern::PatternElements& elements = pattern->elements();
-        for (const PatternElement* element : elements) {
-            registerPatternElement(element);
+        if (match) {
+            const Pattern* pattern = match->getPattern();
+            const Pattern::PatternElements& elements = pattern->elements();
+            for (const PatternElement* element : elements) {
+                registerPatternElement(element);
+            }
+        } else if (unwind) {
+            registerUnwindStmt(unwind);
+        } else {
+            spdlog::warn("Non-match statement: skipped");
         }
     }
 
@@ -158,6 +163,17 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
 
         prev = tgt;
     }
+}
+
+void VariableDependencyGraph::registerUnwindStmt(const UnwindStmt* stmt) {
+    const Symbol* symbol = stmt->symbol();
+    bioassert(symbol, "UNWIND without a variable.");
+
+    // An UNWIND variable is bound to a list rather than to a pattern, so it depends on
+    // no other variable and enters the graph isolated - a root of its own connected
+    // component, whose dataflow the code generator opens from the list.
+    VariableDependency* unwindVar = newVariable(symbol->getName());
+    _unwindSources[unwindVar] = stmt;
 }
 
 VariableDependency* VariableDependencyGraph::newVariable(const EntityPattern* entity) {

@@ -6,6 +6,7 @@
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Verifier.h"
+#include "mlir/Parser/Parser.h"
 
 #include "NLDialect.h"
 #include "NLOps.h"
@@ -424,6 +425,64 @@ TEST_F(NLDialectTest, constScanNodesInfersNodeIDIterator) {
     EXPECT_EQ(scan.getResult().getType(), iteratorType);
     EXPECT_EQ(scan.getNodeIDs().size(), 3u);
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+}
+
+// nl.unwind_const spells its iterator type rather than inferring it - the chunk
+// element type depends on the literals, not on a fixed shape - so a homogeneous i64
+// list is a chunk of i64. The literals ride the op as a typed attribute array.
+TEST_F(NLDialectTest, unwindConstBuildsTypedChunkIterator) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    const mlir::Type int64Type = mlir::IntegerType::get(&_context, 64);
+    const mlir::Type chunkType = mlir::nl::ChunkType::get(&_context, int64Type);
+    const mlir::Type iteratorType = mlir::nl::IteratorType::get(&_context, {chunkType});
+
+    const mlir::ArrayAttr elements = builder.getArrayAttr({builder.getI64IntegerAttr(1),
+                                                           builder.getI64IntegerAttr(2),
+                                                           builder.getI64IntegerAttr(3)});
+    mlir::nl::UnwindConst unwind = builder.create<mlir::nl::UnwindConst>(loc, iteratorType, elements);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    EXPECT_EQ(unwind.getResult().getType(), iteratorType);
+    EXPECT_EQ(unwind.getElements().size(), 3u);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+}
+
+// Building an nl.unwind_const, printing the module and re-parsing it yields a module
+// that still verifies, so the nl.unwind_const printer and parser are inverses.
+TEST_F(NLDialectTest, unwindConstRoundTripsThroughTextualForm) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    const mlir::Type int64Type = mlir::IntegerType::get(&_context, 64);
+    const mlir::Type chunkType = mlir::nl::ChunkType::get(&_context, int64Type);
+    const mlir::Type iteratorType = mlir::nl::IteratorType::get(&_context, {chunkType});
+
+    const mlir::ArrayAttr elements = builder.getArrayAttr({builder.getI64IntegerAttr(1),
+                                                           builder.getI64IntegerAttr(2),
+                                                           builder.getI64IntegerAttr(3)});
+    builder.create<mlir::nl::UnwindConst>(loc, iteratorType, elements);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module->print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed =
+        mlir::parseSourceString<mlir::ModuleOp>(printed, mlir::ParserConfig(&_context));
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
 }
 
 // nl.get_out_edges_by_type infers the same four-chunk edge iterator as

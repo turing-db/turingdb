@@ -66,6 +66,20 @@ def Nullable : StorageType<"Nullable", "nullable"> {
     let assemblyFormat = "`<` $valueType `>`";
 }
 
+def ListElement : StorageType<"ListElement", "list_element"> {
+    let summary = "A single type-tagged scalar value";
+    let description = [{
+        The element type of a chunk holding one type-tagged scalar per row - storage's
+        ColumnVector<ListElementView>. Each cell carries its own type tag beside its
+        value, so a heterogeneous list - whose elements share no single type - unwinds
+        into a column of these. Unlike !storage.list it is a fixed-width scalar, not a
+        variable-length list: one value per cell, not a span, so it needs none of the
+        list machinery. Produced by db.unwind_const for a heterogeneous (or empty)
+        literal list, and only ever passed through (a cross_product broadcast) or
+        rendered - never fed to an op that needs a concrete element type.
+    }];
+}
+
 def List : StorageType<"List", "list"> {
     let summary = "A list value";
     let description = [{

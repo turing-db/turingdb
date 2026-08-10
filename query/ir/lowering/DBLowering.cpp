@@ -383,6 +383,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerScanNodesByLabel(scanNodesByLabel);
     } else if (mlir::db::ConstScanNodes constScanNodes = mlir::dyn_cast<mlir::db::ConstScanNodes>(operation)) {
         lowerConstScanNodes(constScanNodes);
+    } else if (mlir::db::UnwindConst unwindConst = mlir::dyn_cast<mlir::db::UnwindConst>(operation)) {
+        lowerUnwindConst(unwindConst);
     } else if (mlir::db::ScanEdges scanEdges = mlir::dyn_cast<mlir::db::ScanEdges>(operation)) {
         lowerScanEdges(scanEdges);
     } else if (mlir::db::GetOutEdges getOutEdges = mlir::dyn_cast<mlir::db::GetOutEdges>(operation)) {
@@ -518,6 +520,39 @@ void DBLowering::lowerConstScanNodes(mlir::db::ConstScanNodes constScanNodes) {
     nl::ConstScanNodes nodes = _builder.create<nl::ConstScanNodes>(_builder.getUnknownLoc(),
                                                                    constScanNodes.getNodeIDsAttr());
     buildLoopForSource(nodes.getResult(), constScanNodes.getOperation());
+}
+
+void DBLowering::lowerUnwindConst(mlir::db::UnwindConst unwindConst) {
+    // The literal-list sibling of lowerConstScanNodes: a source reads no column, so
+    // its loop sits at the top of the current root block. The literals are the rows to
+    // emit, forwarded as-is; translation materializes them into a ListView. Unlike a
+    // node-ID scan the chunk element type varies with the list (a homogeneous value
+    // type, or list_element for a heterogeneous one), so - like nl.collect - the
+    // iterator type is spelled here from the db column's element type rather than
+    // inferred.
+    setInsertionInto(_rootBlock);
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const mlir::db::ColumnType column = mlir::cast<mlir::db::ColumnType>(unwindConst.getResult().getType());
+    const mlir::Type elementType = column.getType();
+
+    // A homogeneous list rides a nullable value chunk, as a property fetch and the
+    // unwind_collect drain do: the elements are never null, but every value-chunk
+    // consumer (a cross product broadcast, a filter, a skip, an aggregate) dispatches
+    // on nullable<T>, so the uniform shape is what makes the unwound column composable.
+    // A heterogeneous list keeps its type-erased list_element chunk, which only
+    // pass-through consumers accept.
+    const bool heterogeneous = mlir::isa<storage::ListElementType>(elementType);
+    const mlir::Type chunkElementType = heterogeneous ? elementType
+                                                      : storage::NullableType::get(context, elementType);
+
+    const nl::ChunkType chunk = nl::ChunkType::get(context, chunkElementType);
+    const nl::IteratorType iteratorType = nl::IteratorType::get(context, {chunk});
+
+    nl::UnwindConst rows = _builder.create<nl::UnwindConst>(_builder.getUnknownLoc(),
+                                                            iteratorType,
+                                                            unwindConst.getElementsAttr());
+    buildLoopForSource(rows.getResult(), unwindConst.getOperation());
 }
 
 void DBLowering::lowerScanEdges(mlir::db::ScanEdges scanEdges) {
@@ -1432,6 +1467,7 @@ void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {
 
     const bool opensLoop = mlir::isa<mlir::db::ScanNodes,
                                      mlir::db::ConstScanNodes,
+                                     mlir::db::UnwindConst,
                                      mlir::db::ScanNodesByLabel,
                                      mlir::db::ScanEdges,
                                      mlir::db::GetOutEdges,

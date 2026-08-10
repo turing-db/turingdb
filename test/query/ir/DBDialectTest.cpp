@@ -958,6 +958,45 @@ func.func @main() {
 }
 )mlir";
 
+// UNWIND [1, 2, 3] AS x RETURN x: a source over a homogeneous literal list, so the
+// elements share one type and the result is a typed i64 column.
+const char* const unwindConstProgram = R"mlir(
+func.func @main() {
+  %x = db.unwind_const([1, 2, 3]) : !db.column<i64>
+  db.output(%x) : !db.column<i64>
+  return
+}
+)mlir";
+
+// UNWIND [true, "string", 10] AS x RETURN x: a heterogeneous list, so the elements
+// share no single type and the result is a type-erased list_element column.
+const char* const heterogeneousUnwindConstProgram = R"mlir(
+func.func @main() {
+  %x = db.unwind_const([true, "string", 10]) : !db.column<!storage.list_element>
+  db.output(%x) : !db.column<!storage.list_element>
+  return
+}
+)mlir";
+
+// UNWIND [] AS x: an empty list is the type-erased form and yields no row - valid.
+const char* const emptyUnwindConstProgram = R"mlir(
+func.func @main() {
+  %x = db.unwind_const([]) : !db.column<!storage.list_element>
+  db.output(%x) : !db.column<!storage.list_element>
+  return
+}
+)mlir";
+
+// A mixed-type list typed as a homogeneous i64 column: the verifier rejects it, since
+// a homogeneous unwind_const requires every element to share one type.
+const char* const mixedHomogeneousUnwindConstProgram = R"mlir(
+func.func @main() {
+  %x = db.unwind_const([1, "string"]) : !db.column<i64>
+  db.output(%x) : !db.column<i64>
+  return
+}
+)mlir";
+
 // MATCH ()-[e]->() RETURN a, b: scan every edge, exposing the four edge columns
 // (source node, edge, edge type, target node); the output keeps the endpoints.
 const char* const scanEdgesProgram = R"mlir(
@@ -1055,6 +1094,89 @@ TEST_F(DBDialectTest, constScanNodesWithoutNodeIDsIsValid) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyConstScanNodesProgram);
     ASSERT_TRUE(module);
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
+}
+
+TEST_F(DBDialectTest, parsesUnwindConst) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(unwindConstProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::UnwindConst unwind;
+    module.get().walk([&](mlir::db::UnwindConst op) {
+        unwind = op;
+    });
+    ASSERT_TRUE(unwind);
+
+    // The three literals come back in order, and a homogeneous list resolves to a
+    // typed i64 column - the result element type carries the homogeneity verdict.
+    const mlir::ArrayAttr elements = unwind.getElements();
+    ASSERT_EQ(elements.size(), 3u);
+
+    const mlir::Type int64ColumnType = mlir::db::ColumnType::get(&_context, mlir::IntegerType::get(&_context, 64));
+    EXPECT_EQ(unwind.getResult().getType(), int64ColumnType);
+}
+
+TEST_F(DBDialectTest, unwindConstRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(unwindConstProgram);
+    ASSERT_TRUE(module);
+
+    // Printing then re-parsing yields a module that still verifies, so the
+    // db.unwind_const printer and parser are inverses.
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, parsesHeterogeneousUnwindConst) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(heterogeneousUnwindConstProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::UnwindConst unwind;
+    module.get().walk([&](mlir::db::UnwindConst op) {
+        unwind = op;
+    });
+    ASSERT_TRUE(unwind);
+
+    // A heterogeneous list keeps every element but resolves to a type-erased
+    // list_element column, since the elements share no single type.
+    const mlir::ArrayAttr elements = unwind.getElements();
+    ASSERT_EQ(elements.size(), 3u);
+
+    const mlir::Type listElementColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::ListElementType::get(&_context));
+    EXPECT_EQ(unwind.getResult().getType(), listElementColumnType);
+}
+
+TEST_F(DBDialectTest, heterogeneousUnwindConstRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(heterogeneousUnwindConstProgram);
+    ASSERT_TRUE(module);
+
+    // Printing then re-parsing a mixed-type list yields a module that still verifies,
+    // so the printer and parser are inverses through the list_element column too.
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, unwindConstWithEmptyListIsValid) {
+    // An empty list is the type-erased list_element form: it simply yields no row, so
+    // the module builds and verifies.
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyUnwindConstProgram);
+    ASSERT_TRUE(module);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
+}
+
+TEST_F(DBDialectTest, verifierRejectsHomogeneousUnwindConstWithMixedElements) {
+    // A mixed-type list typed as a homogeneous i64 column fails the verifier during
+    // parsing, so the module is null.
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(mixedHomogeneousUnwindConstProgram);
+    EXPECT_FALSE(module);
 }
 
 // MATCH (a)-[:KNOWS]->(b)<-[:LIKES]-(c): one by-type out-edge hop and one by-type

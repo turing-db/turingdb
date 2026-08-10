@@ -533,3 +533,49 @@ LogicalResult UnwindCollect::verify() {
 
     return success();
 }
+
+// db.unwind_const carries its literal list as an array of typed attributes and emits
+// one column. The result element type is the homogeneity verdict the frontend derived
+// from the analyzer: a heterogeneous or empty list is a type-erased list_element
+// column, whose cells may differ, so nothing more is checked; a homogeneous list is a
+// typed column, so all its literals must share one attribute type. We check the
+// literals agree with each other rather than with the column's element type - a
+// StringAttr carries no !storage.string to compare against - so a homogeneous verdict
+// paired with the wrong column type is not an op-level error; the runtime fill catches
+// it on the element's type tag rather than reading a value of the wrong type.
+LogicalResult UnwindConst::verify() {
+    const ColumnType resultColumn = llvm::dyn_cast<ColumnType>(getResult().getType());
+    if (!resultColumn) {
+        return emitOpError("result must be a column");
+    }
+
+    const mlir::Type elementType = resultColumn.getType();
+    const bool isTypeErased = llvm::isa<storage::ListElementType>(elementType);
+
+    if (isTypeErased) {
+        return success();
+    }
+
+    const ArrayAttr elements = getElements();
+    if (elements.empty()) {
+        return emitOpError("a homogeneous unwind_const must carry at least one element; "
+                           "an empty list is the list_element form");
+    }
+
+    const TypedAttr firstElement = llvm::dyn_cast<TypedAttr>(elements[0]);
+    if (!firstElement) {
+        return emitOpError("unwind_const element is not a typed attribute");
+    }
+
+    const mlir::Type payloadType = firstElement.getType();
+    for (const Attribute element : elements) {
+        const TypedAttr typedElement = llvm::dyn_cast<TypedAttr>(element);
+        if (!typedElement) {
+            return emitOpError("unwind_const element is not a typed attribute");
+        } else if (typedElement.getType() != payloadType) {
+            return emitOpError("a homogeneous unwind_const requires every element to share one type");
+        }
+    }
+
+    return success();
+}

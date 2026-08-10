@@ -329,6 +329,8 @@ private:
             // ColumnConst
         } else if (printListCell(column, row)) {
             // A per-group list cell from an nl.collect drain
+        } else if (printListElementCell(column, row)) {
+            // A tagged scalar from a heterogeneous unwind
         } else {
             std::cout << "?";
         }
@@ -431,6 +433,20 @@ private:
                 std::cout << "?";
             break;
         }
+    }
+
+    // Print one cell of a type-tagged scalar column (a ColumnVector<ListElementView>
+    // from a heterogeneous nl.unwind_const, whose cells need not share a type) as the
+    // value alone; returns whether the column matched.
+    static bool printListElementCell(const Column* column, size_t row) {
+        const auto* elements = dynamic_cast<const ColumnVector<ListElementView>*>(column);
+        if (!elements) {
+            return false;
+        }
+
+        printListElement((*elements)[row]);
+
+        return true;
     }
 
     // Print one cell of a list column (a ColumnVector<ListView> from an nl.collect

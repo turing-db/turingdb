@@ -57,6 +57,12 @@ public:
     // list one chunk at a time - no graph walk - running the body over each slice.
     static void runConstScanNodesLoop(NLExecutionContext* context, NLFunctionData* data);
 
+    // The literal-list sibling of runConstScanNodesLoop: stream the loop data's
+    // ListView one chunk at a time into its value column - a nullable value column
+    // for a homogeneous list, a ColumnVector<ListElementView> for a heterogeneous one -
+    // running the body over each slice. A null limit leaves it unbounded.
+    static void runUnwindConstLoop(NLExecutionContext* context, NLFunctionData* data);
+
     static void runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
