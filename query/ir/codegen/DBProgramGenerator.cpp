@@ -1086,6 +1086,13 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
 
 void DBProgramGenerator::translateDistinct(const Projection* projection,
                                            llvm::SmallVectorImpl<mlir::Value>& projected) {
+    // An aggregate projection emits one row per group, keyed by the grouping keys, so no
+    // two of its rows can be equal and the dedup would drop nothing. It could not read a
+    // count either: that column is neither an ID nor a nullable value.
+    if (projection->isAggregate()) {
+        return;
+    }
+
     const Projection::Items& returned = projection->items();
 
     // A constant column holds the same value in every row, so it tells no two rows
