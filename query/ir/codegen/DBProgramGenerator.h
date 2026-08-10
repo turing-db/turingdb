@@ -31,6 +31,7 @@ class Expr;
 class Literal;
 class Projection;
 class PropertyExpr;
+class VarDecl;
 class VariableDependency;
 class DependencyEdge;
 
@@ -40,6 +41,7 @@ public:
     using VariableIdentityMap = std::unordered_map<const VariableDependency*, VariableIdentities>;
     using DefinedVars = std::unordered_set<const VariableDependency*>;
     using ExprValueMap = std::unordered_map<const Expr*, mlir::Value>;
+    using ProjectedColumnMap = std::unordered_map<const VarDecl*, mlir::Value>;
 
     // Maps a Cypher variable name to the last column defined for it, the one the
     // projection and its ORDER BY read
@@ -63,6 +65,10 @@ private:
 
     // Maps each WHERE clause expression to the MLIR value it produces
     ExprValueMap _exprMap;
+
+    // Maps each projected item to the column it produced, under the declaration the
+    // alias of that item shares with it
+    ProjectedColumnMap _projectedColumns;
 
     VariableDependencyGraph _vdg;
 
