@@ -102,6 +102,11 @@ private:
     void generateDelete(const CypherAST* ast);
     void generateOutput(const CypherAST* ast);
 
+    // Dedups the projection with a RemoveDuplicates over the varying columns of
+    // @param projected, replacing each of them with its deduped counterpart
+    void translateDistinct(const Projection* projection,
+                           llvm::SmallVectorImpl<mlir::Value>& projected);
+
     // Reorders the projection with a Sort over @param projected, replacing each
     // projected column with its sorted counterpart
     void translateOrderBy(const Projection* projection,

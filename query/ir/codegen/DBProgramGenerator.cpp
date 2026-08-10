@@ -1042,13 +1042,7 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
     // DISTINCT dedups the projection, and everything after it works on the rows that
     // survive: the sort orders the distinct rows, and SKIP and LIMIT cut them
     if (proj->isDistinct()) {
-        llvm::SmallVector<mlir::Type> distinctResultTypes;
-        for (const mlir::Value column : outputted) {
-            distinctResultTypes.push_back(column.getType());
-        }
-
-        auto distinctOp = _opBuilder.create<mlir::db::RemoveDuplicates>(loc, distinctResultTypes, mlir::ValueRange{outputted});
-        outputted.assign(distinctOp.getResults().begin(), distinctOp.getResults().end());
+        translateDistinct(proj, outputted);
     }
 
     // ORDER BY reorders the whole projection, so it comes before them too: SKIP and
@@ -1088,6 +1082,50 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
     }
 
     _opBuilder.create<mlir::db::Output>(loc, mlir::ValueRange{outputted});
+}
+
+void DBProgramGenerator::translateDistinct(const Projection* projection,
+                                           llvm::SmallVectorImpl<mlir::Value>& projected) {
+    const Projection::Items& returned = projection->items();
+
+    // A constant column holds the same value in every row, so it tells no two rows
+    // apart: the dedup reads the columns that vary and a constant one rides along
+    // untouched, as ORDER BY drops a constant key. Reading it would also anchor the
+    // dedup where the constant is bound, above the loop the varying columns are read in
+    llvm::SmallVector<size_t> dedupedItems;
+    llvm::SmallVector<mlir::Value> dedupedColumns;
+    llvm::SmallVector<mlir::Type> dedupedTypes;
+
+    size_t itemIndex = 0;
+    for (const Projection::ReturnItem item : returned) {
+        Expr* const* itemExpr = std::get_if<Expr*>(&item);
+        const bool isConstantItem = itemExpr && !(*itemExpr)->isDynamic();
+
+        if (!isConstantItem) {
+            const mlir::Value column = projected[itemIndex];
+            dedupedItems.push_back(itemIndex);
+            dedupedColumns.push_back(column);
+            dedupedTypes.push_back(column.getType());
+        }
+
+        itemIndex++;
+    }
+
+    // Every column is constant, so the projection is one row repeated as many times as
+    // the query matched: the single row to keep is a row count, not a dedup
+    if (dedupedColumns.empty()) {
+        throw TuringException("DISTINCT over a projection of constants is not yet supported.");
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    auto distinctOp = _opBuilder.create<mlir::db::RemoveDuplicates>(loc, dedupedTypes, mlir::ValueRange{dedupedColumns});
+
+    // The dedup hands back one column per column it read, so its results take the place
+    // of the ones it was given and the constant columns stay as they were
+    const mlir::ResultRange results = distinctOp.getResults();
+    for (size_t resultIndex = 0; resultIndex < dedupedItems.size(); resultIndex++) {
+        projected[dedupedItems[resultIndex]] = results[resultIndex];
+    }
 }
 
 void DBProgramGenerator::translateOrderBy(const Projection* projection,

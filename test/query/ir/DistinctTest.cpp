@@ -35,6 +35,7 @@
 #include "SimpleGraph.h"
 #include "SystemAccessor.h"
 #include "SystemManager.h"
+#include "columns/ColumnConst.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnOptVector.h"
 #include "versioning/Transaction.h"
@@ -52,6 +53,8 @@ namespace {
 using Row = std::vector<uint64_t>;
 using Rows = std::vector<Row>;
 using Names = std::vector<std::string>;
+using ConstantNameRow = std::pair<int64_t, std::string>;
+using ConstantNameRows = std::vector<ConstantNameRow>;
 using OptInt64Values = std::vector<std::optional<int64_t>>;
 using NodeValueRow = std::pair<uint64_t, std::optional<int64_t>>;
 using NodeValueRows = std::vector<NodeValueRow>;
@@ -164,6 +167,44 @@ public:
 
 private:
     OptInt64Values _values;
+};
+
+// Collects a projection that pairs a constant with a name. The constant column is a
+// ColumnConst, which holds one value for every row of the chunk rather than one per row,
+// so it is read through the same subscript at each of them.
+class DistinctConstantNameSink : public NLOutputSink {
+public:
+    DistinctConstantNameSink(size_t constantColumn, size_t nameColumn)
+        : _constantColumn(constantColumn),
+          _nameColumn(nameColumn)
+    {
+    }
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* constants = dynamic_cast<const ColumnConst<int64_t>*>(chunks[_constantColumn]);
+        ASSERT_NE(constants, nullptr);
+
+        const auto* names = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[_nameColumn]);
+        ASSERT_NE(names, nullptr);
+
+        const auto& nameRaw = names->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            ASSERT_TRUE(nameRaw[rowIndex].has_value());
+            _rows.emplace_back((*constants)[rowIndex], std::string(*nameRaw[rowIndex]));
+        }
+    }
+
+    void sortedRows(ConstantNameRows& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    ConstantNameRows _rows;
+    size_t _constantColumn {0};
+    size_t _nameColumn {0};
 };
 
 class DistinctNodeValueSink : public NLOutputSink {
@@ -313,6 +354,15 @@ protected:
         EXPECT_EQ(sink.names(), expected) << "query: " << query;
     }
 
+    // One row per name, each carrying the same constant: the rows a projection of a
+    // constant beside a name emits once the dedup has run
+    void constantNameRowsFor(int64_t constant, const Names& names, ConstantNameRows& rows) {
+        rows.clear();
+        for (const std::string& name : names) {
+            rows.emplace_back(constant, name);
+        }
+    }
+
     // One single-column row per name, holding the ID of the node with that name, so a
     // set of nodes can be spelled out by name
     void nodeRowsFor(const Names& names, Rows& rows) {
@@ -425,6 +475,47 @@ TEST_F(DistinctTest, dedupsANodeWithAnExpressionOverIt) {
     sink.sortedRows(actual);
 
     EXPECT_EQ(actual, expected);
+}
+
+// A constant column holds the same value in every row, so it tells no two rows apart:
+// the 18 out-edge rows carry the same 12 distinct names they do without it, each still
+// paired with the constant. It is also read outside the loop the names are read in, so
+// deduping on it would place the dedup above their definition.
+TEST_F(DistinctTest, dedupsPastALeadingConstant) {
+    DistinctConstantNameSink sink(0, 1);
+    runQuery("MATCH (a)-->(b) RETURN DISTINCT 5, b.name", &sink);
+
+    ConstantNameRows expected;
+    constantNameRowsFor(5, distinctTargetNames, expected);
+
+    ConstantNameRows actual;
+    sink.sortedRows(actual);
+
+    EXPECT_EQ(actual, expected);
+}
+
+// The same projection the other way round: which column the constant is does not change
+// what the rows are, so this is the same 12 rows.
+TEST_F(DistinctTest, dedupsPastATrailingConstant) {
+    DistinctConstantNameSink sink(1, 0);
+    runQuery("MATCH (a)-->(b) RETURN DISTINCT b.name, 5", &sink);
+
+    ConstantNameRows expected;
+    constantNameRowsFor(5, distinctTargetNames, expected);
+
+    ConstantNameRows actual;
+    sink.sortedRows(actual);
+
+    EXPECT_EQ(actual, expected);
+}
+
+// Every column of the projection is constant, so all its rows are one row repeated and
+// the dedup is left with no column to tell them apart: the one row it should keep is a
+// row count, which is not something the dedup expresses. Rejected rather than answered
+// with the repeats.
+TEST_F(DistinctTest, rejectsADistinctOverConstantsAlone) {
+    DistinctNodeSink sink;
+    EXPECT_THROW(runQuery("MATCH (n) RETURN DISTINCT 5", &sink), TuringException);
 }
 
 // The projection is a grouped aggregate first, so the dedup runs on its results, where a
