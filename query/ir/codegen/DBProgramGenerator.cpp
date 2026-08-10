@@ -1022,6 +1022,19 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
     for (const Projection::ReturnItem item : returned) {
         const mlir::Value itemCol = std::visit(getVarForItem, item);
         outputted.push_back(itemCol);
+
+        // An alias is one variable declared once, so a key naming it holds the very
+        // declaration of the item it names: publishing the column under that declaration
+        // is what lets the key read this column instead of computing a second one
+        Expr* const* itemExpr = std::get_if<Expr*>(&item);
+        if (!itemExpr) {
+            continue;
+        }
+
+        const VarDecl* itemDecl = (*itemExpr)->getExprVarDecl();
+        if (itemDecl) {
+            _projectedColumns[itemDecl] = itemCol;
+        }
     }
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
@@ -1499,12 +1512,22 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
 
         case Expr::Kind::SYMBOL: {
             const SymbolExpr* symbolExpr = static_cast<const SymbolExpr*>(expr);
-            const std::string_view varName = symbolExpr->getDecl()->getName();
+            const VarDecl* decl = symbolExpr->getDecl();
+            const std::string_view varName = decl->getName();
 
-            for (const auto& [var, values] : _varMap) {
-                if (var->getName() == varName) {
-                    _exprMap[expr] = values.back();
-                    break;
+            // The symbol names either a traversal variable or the alias of a projected
+            // item, and no traversal ever publishes a column under an alias: the item is
+            // where that column comes from
+            const auto projectedIt = _projectedColumns.find(decl);
+
+            if (projectedIt != end(_projectedColumns)) {
+                _exprMap[expr] = projectedIt->second;
+            } else {
+                for (const auto& [var, values] : _varMap) {
+                    if (var->getName() == varName) {
+                        _exprMap[expr] = values.back();
+                        break;
+                    }
                 }
             }
 
