@@ -38,6 +38,7 @@
 #include "columns/ColumnConst.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnOptVector.h"
+#include "columns/ColumnVector.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
@@ -60,6 +61,9 @@ using NodeValueRow = std::pair<uint64_t, std::optional<int64_t>>;
 using NodeValueRows = std::vector<NodeValueRow>;
 using NodeAverageRow = std::pair<uint64_t, std::optional<double>>;
 using NodeAverageRows = std::vector<NodeAverageRow>;
+using NodeCountRow = std::pair<uint64_t, uint64_t>;
+using NodeCountRows = std::vector<NodeCountRow>;
+using Counts = std::vector<uint64_t>;
 
 // Every distinct out-edge target of simpledb by name. Eighteen edges point at these
 // twelve nodes - Gym is pointed at three times, Remy, Computers, Bio and Cooking twice
@@ -252,6 +256,53 @@ public:
 
 private:
     NodeAverageRows _rows;
+};
+
+// A count is never null and is not an ID, so its column is the pipeline's one
+// non-nullable value column: a plain ColumnVector<uint64_t> rather than a
+// ColumnOptVector like every other aggregate's.
+class DistinctNodeCountSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
+        ASSERT_NE(counts, nullptr);
+
+        const auto& countRaw = counts->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.emplace_back(readNodeID(chunks[0], rowIndex), countRaw[rowIndex]);
+        }
+    }
+
+    void sortedRows(NodeCountRows& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    NodeCountRows _rows;
+};
+
+// The one-column sibling of DistinctNodeCountSink: a count with nothing to group by.
+class DistinctCountSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[0]);
+        ASSERT_NE(counts, nullptr);
+
+        const auto& countRaw = counts->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _counts.push_back(countRaw[rowIndex]);
+        }
+    }
+
+    const Counts& counts() const { return _counts; }
+
+private:
+    Counts _counts;
 };
 
 }
@@ -549,6 +600,42 @@ TEST_F(DistinctTest, keepsEveryGroupOfAnAggregate) {
     sink.sortedRows(actual);
 
     EXPECT_EQ(actual, expected);
+}
+
+// The count sibling of keepsEveryGroupOfAnAggregate: the 18 out-edge rows group into the
+// 9 sources that have one, each carrying its out-degree. A group is its key, so no two of
+// those rows can be equal and there is nothing to dedup - which is what lets a count
+// through, a column the dedup has no way to key a row by.
+TEST_F(DistinctTest, keepsEveryGroupOfACount) {
+    DistinctNodeCountSink sink;
+    runQuery("MATCH (a)-->(b) RETURN DISTINCT a, count(b)", &sink);
+
+    const NodeCountRows expected = {
+        {0, 4},
+        {1, 3},
+        {6, 1},
+        {8, 2},
+        {9, 2},
+        {11, 1},
+        {12, 2},
+        {15, 2},
+        {17, 1},
+    };
+
+    NodeCountRows actual;
+    sink.sortedRows(actual);
+
+    EXPECT_EQ(actual, expected);
+}
+
+// A count with nothing to group by is one row, so there is no second row a dedup could
+// find equal to it: the 18 nodes are counted once and the count comes back as it is.
+TEST_F(DistinctTest, keepsAScalarCount) {
+    DistinctCountSink sink;
+    runQuery("MATCH (n) RETURN DISTINCT count(n)", &sink);
+
+    const Counts expected = {18};
+    EXPECT_EQ(sink.counts(), expected);
 }
 
 // DISTINCT over a projected property, ordered by that same property: the ORDER BY key
