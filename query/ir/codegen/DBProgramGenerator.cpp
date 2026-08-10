@@ -113,6 +113,48 @@ EdgeMetadata::EdgeType reverseEdge(EdgeMetadata::EdgeType type) {
 
 }
 
+// The projected columns that carry rows, and the item each of them is. A constant column
+// holds the same value in every row, so a step shaped by rows - a dedup, a sort, a cut -
+// is not given one: it rides along untouched, and reading it would anchor that step where
+// the constant is bound, above the loop the other columns are read in
+void collectRowColumns(const Projection* projection,
+                       const llvm::SmallVectorImpl<mlir::Value>& projected,
+                       llvm::SmallVectorImpl<size_t>& items,
+                       llvm::SmallVectorImpl<mlir::Value>& columns) {
+    const Projection::Items& returned = projection->items();
+    bioassert(projected.size() == returned.size(), "One projected column per return item expected");
+
+    size_t itemIndex = 0;
+    for (const Projection::ReturnItem item : returned) {
+        Expr* const* itemExpr = std::get_if<Expr*>(&item);
+        const bool isConstantItem = itemExpr && !(*itemExpr)->isDynamic();
+
+        if (!isConstantItem) {
+            items.push_back(itemIndex);
+            columns.push_back(projected[itemIndex]);
+        }
+
+        itemIndex++;
+    }
+}
+
+// The columns a SKIP or a LIMIT is charged to: the ones that carry rows, or the whole
+// projection when it is constants alone - one row repeated, which the cut still cuts
+void collectCutColumns(const Projection* projection,
+                       const llvm::SmallVectorImpl<mlir::Value>& projected,
+                       llvm::SmallVectorImpl<size_t>& items,
+                       llvm::SmallVectorImpl<mlir::Value>& columns) {
+    collectRowColumns(projection, projected, items, columns);
+    if (!columns.empty()) {
+        return;
+    }
+
+    for (size_t itemIndex = 0; itemIndex < projected.size(); itemIndex++) {
+        items.push_back(itemIndex);
+        columns.push_back(projected[itemIndex]);
+    }
+}
+
 mlir::Value findVarOrThrow(const DBProgramGenerator::VariableIdentityMap& map,
                         const VariableDependency* var) {
     const auto findIt = map.find(var);
@@ -1057,13 +1099,21 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
         const IntegerLiteral* intLit = static_cast<const IntegerLiteral*>(litExpr->getLiteral());
         const uint64_t skipCount = static_cast<uint64_t>(intLit->getValue());
 
+        llvm::SmallVector<size_t> skippedItems;
+        llvm::SmallVector<mlir::Value> skipped;
+        collectCutColumns(proj, outputted, skippedItems, skipped);
+
         llvm::SmallVector<mlir::Type> skipResultTypes;
-        for (const mlir::Value column : outputted) {
+        for (const mlir::Value column : skipped) {
             skipResultTypes.push_back(column.getType());
         }
 
-        auto skipOp = _opBuilder.create<mlir::db::Skip>(loc, skipResultTypes, mlir::ValueRange{outputted}, skipCount);
-        outputted.assign(skipOp.getResults().begin(), skipOp.getResults().end());
+        auto skipOp = _opBuilder.create<mlir::db::Skip>(loc, skipResultTypes, mlir::ValueRange{skipped}, skipCount);
+
+        const mlir::ResultRange skipResults = skipOp.getResults();
+        for (size_t resultIndex = 0; resultIndex < skippedItems.size(); resultIndex++) {
+            outputted[skippedItems[resultIndex]] = skipResults[resultIndex];
+        }
     }
 
     if (proj->hasLimit()) {
@@ -1072,13 +1122,21 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
         const IntegerLiteral* intLit = static_cast<const IntegerLiteral*>(litExpr->getLiteral());
         const uint64_t limitCount = static_cast<uint64_t>(intLit->getValue());
 
+        llvm::SmallVector<size_t> limitedItems;
+        llvm::SmallVector<mlir::Value> limited;
+        collectCutColumns(proj, outputted, limitedItems, limited);
+
         llvm::SmallVector<mlir::Type> limitResultTypes;
-        for (const mlir::Value column : outputted) {
+        for (const mlir::Value column : limited) {
             limitResultTypes.push_back(column.getType());
         }
 
-        auto limitOp = _opBuilder.create<mlir::db::Limit>(loc, limitResultTypes, mlir::ValueRange{outputted}, limitCount);
-        outputted.assign(limitOp.getResults().begin(), limitOp.getResults().end());
+        auto limitOp = _opBuilder.create<mlir::db::Limit>(loc, limitResultTypes, mlir::ValueRange{limited}, limitCount);
+
+        const mlir::ResultRange limitResults = limitOp.getResults();
+        for (size_t resultIndex = 0; resultIndex < limitedItems.size(); resultIndex++) {
+            outputted[limitedItems[resultIndex]] = limitResults[resultIndex];
+        }
     }
 
     _opBuilder.create<mlir::db::Output>(loc, mlir::ValueRange{outputted});
@@ -1093,35 +1151,22 @@ void DBProgramGenerator::translateDistinct(const Projection* projection,
         return;
     }
 
-    const Projection::Items& returned = projection->items();
-
-    // A constant column holds the same value in every row, so it tells no two rows
-    // apart: the dedup reads the columns that vary and a constant one rides along
-    // untouched, as ORDER BY drops a constant key. Reading it would also anchor the
-    // dedup where the constant is bound, above the loop the varying columns are read in
+    // A constant column holds the same value in every row, so it tells no two rows apart:
+    // the dedup reads the columns that vary and a constant one rides along untouched, as
+    // ORDER BY drops a constant key
     llvm::SmallVector<size_t> dedupedItems;
     llvm::SmallVector<mlir::Value> dedupedColumns;
-    llvm::SmallVector<mlir::Type> dedupedTypes;
-
-    size_t itemIndex = 0;
-    for (const Projection::ReturnItem item : returned) {
-        Expr* const* itemExpr = std::get_if<Expr*>(&item);
-        const bool isConstantItem = itemExpr && !(*itemExpr)->isDynamic();
-
-        if (!isConstantItem) {
-            const mlir::Value column = projected[itemIndex];
-            dedupedItems.push_back(itemIndex);
-            dedupedColumns.push_back(column);
-            dedupedTypes.push_back(column.getType());
-        }
-
-        itemIndex++;
-    }
+    collectRowColumns(projection, projected, dedupedItems, dedupedColumns);
 
     // Every column is constant, so the projection is one row repeated as many times as
     // the query matched: the single row to keep is a row count, not a dedup
     if (dedupedColumns.empty()) {
         throw TuringException("DISTINCT over a projection of constants is not yet supported.");
+    }
+
+    llvm::SmallVector<mlir::Type> dedupedTypes;
+    for (const mlir::Value column : dedupedColumns) {
+        dedupedTypes.push_back(column.getType());
     }
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
@@ -1145,11 +1190,13 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
     const size_t projectedCount = projection->items().size();
 
     // A sort reorders the rows of every column it is given at once, so it is given the
-    // whole projection and the projected columns stay row-aligned. A key the projection
+    // projected columns that carry rows and they stay row-aligned. A key the projection
     // does not carry - the a.age of RETURN a ORDER BY a.age - is handed over as one more
     // column, so that it moves with the row it belongs to; its result is then left
     // unread, which is what keeps it out of the output
-    llvm::SmallVector<mlir::Value> sorted {projected.begin(), projected.end()};
+    llvm::SmallVector<size_t> sortedItems;
+    llvm::SmallVector<mlir::Value> sorted;
+    collectRowColumns(projection, projected, sortedItems, sorted);
 
     llvm::SmallVector<int64_t> keyColumns;
     llvm::SmallVector<bool> keyAscending;
@@ -1158,20 +1205,26 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
     for (const OrderByItem* item : items) {
         const Expr* keyExpr = item->getExpr();
 
+        const size_t projectedIndex = projection->findItemIndex(keyExpr);
+        const bool isProjected = projectedIndex < projectedCount;
+        const auto sortedItem = std::find(sortedItems.begin(), sortedItems.end(), projectedIndex);
+
         // A constant key holds the same value in every row, so it changes no order:
-        // ORDER BY 1, n.name orders by n.name alone
-        if (!keyExpr->isDynamic()) {
+        // ORDER BY 1, n.name orders by n.name alone. An alias is only another spelling of
+        // the item it was given to, so a key naming the alias of a constant item is that
+        // same constant key - and the sort was handed no column to key it on either
+        const bool isConstantKey = !keyExpr->isDynamic();
+        const bool namesAConstantItem = isProjected && sortedItem == sortedItems.end();
+
+        if (isConstantKey || namesAConstantItem) {
             continue;
         }
 
-        const size_t projectedIndex = projection->findItemIndex(keyExpr);
-        const bool isProjected = projectedIndex < projectedCount;
-
         // A key names the column to sort by through its position in the columns handed to
-        // the sort: the position the projection already gives it, or the end of the set
-        // when the key has to be appended - so two appended keys never share a position
+        // the sort: the position the projected column was given there, or the end of the
+        // set when the key has to be appended - so two appended keys never share a position
         if (isProjected) {
-            keyColumns.push_back(static_cast<int64_t>(projectedIndex));
+            keyColumns.push_back(static_cast<int64_t>(std::distance(sortedItems.begin(), sortedItem)));
         } else {
             sorted.push_back(getOrTranslateExprColumn(variableColumns, keyExpr));
             keyColumns.push_back(static_cast<int64_t>(sorted.size() - 1));
@@ -1198,11 +1251,12 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
                                                     keyColumns,
                                                     keyAscending);
 
-    // The columns pass through the sort in place, so each projected column becomes its
-    // own result; the extra key columns end the result range and are left unread
+    // The columns pass through the sort in place, so each column it was given comes back as
+    // its own result; the extra key columns end the result range and are left unread, and a
+    // constant column was never handed over
     const mlir::ResultRange results = sortOp.getResults();
-    for (size_t index = 0; index < projected.size(); index++) {
-        projected[index] = results[index];
+    for (size_t resultIndex = 0; resultIndex < sortedItems.size(); resultIndex++) {
+        projected[sortedItems[resultIndex]] = results[resultIndex];
     }
 }
 
