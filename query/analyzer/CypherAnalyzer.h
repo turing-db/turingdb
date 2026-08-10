@@ -65,7 +65,7 @@ public:
     void analyze(const CreateEdgePropertyIndexQuery* query);
 
     // Sub-statements
-    void analyze(OrderBy* orderBySt);
+    void analyze(OrderBy* orderBySt, const Projection* projection);
     void analyze(Skip* skipSt);
     void analyze(Limit* limitSt);
 

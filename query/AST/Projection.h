@@ -77,6 +77,7 @@ public:
     bool hasName(const std::string_view& name) const;
 
     size_t findItemIndex(const Expr* key) const;
+    const Expr* findItemExpr(const Expr* key) const;
     bool hasItem(const Expr* key) const;
 
 private:
@@ -93,6 +94,8 @@ private:
     // Maps a VarDecl*/Expr* to its column name
     std::unordered_map<uintptr_t, std::string_view> _names;
     std::unordered_set<std::string_view> _namesSet;
+
+    Items::const_iterator locateItem(const Expr* key) const;
 
     Projection();
     ~Projection();
