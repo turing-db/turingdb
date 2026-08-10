@@ -21,6 +21,7 @@
 #include "mlir/IR/ValueRange.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Pass/PassManager.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 
@@ -138,6 +139,52 @@ const std::unordered_map<std::string_view, BinaryFunctionEmitter> binaryFunction
     {"cosine_similarity", &emitBinaryFunction<mlir::db::CosineSimilarity>},
     {"euclidean_distance", &emitBinaryFunction<mlir::db::EuclideanDistance>},
 };
+
+// True when a value is one of `columns` or is computed from one.
+bool readsAnyColumn(mlir::ValueRange values, llvm::ArrayRef<mlir::Value> columns) {
+    llvm::DenseSet<mlir::Value> columnSet;
+    for (const mlir::Value column : columns) {
+        columnSet.insert(column);
+    }
+
+    llvm::SmallVector<mlir::Value> worklist(values.begin(), values.end());
+    llvm::DenseSet<mlir::Value> visited;
+
+    while (!worklist.empty()) {
+        const mlir::Value value = worklist.pop_back_val();
+        if (!visited.insert(value).second) {
+            continue;
+        }
+
+        if (columnSet.contains(value)) {
+            return true;
+        }
+
+        mlir::Operation* const definingOp = value.getDefiningOp();
+        if (definingOp) {
+            worklist.append(definingOp->operand_begin(), definingOp->operand_end());
+        }
+    }
+
+    return false;
+}
+
+// The ops values are transitively defined by: the chain that has to travel with them for
+// them to stay usable where they land.
+void collectDefiningOps(mlir::ValueRange values, llvm::DenseSet<mlir::Operation*>& ops) {
+    llvm::SmallVector<mlir::Value> worklist(values.begin(), values.end());
+
+    while (!worklist.empty()) {
+        const mlir::Value value = worklist.pop_back_val();
+
+        mlir::Operation* const definingOp = value.getDefiningOp();
+        if (!definingOp || !ops.insert(definingOp).second) {
+            continue;
+        }
+
+        worklist.append(definingOp->operand_begin(), definingOp->operand_end());
+    }
+}
 
 bool producesEdgeVar(const DependencyEdge* e) {
     const EdgeMetadata::EdgeType producedType = e->data().type();
@@ -1178,10 +1225,11 @@ void DBProgramGenerator::generateCall(const CallStmt* callStmt) {
     InFlightColumns inFlight;
     collectInFlightColumns(inFlight);
 
-    // A call reading none of those rows produces the same rows for every one of them,
-    // which is their cartesian product rather than anything a carry set can express.
-    if (!inFlight._columns.empty() && inputs.empty()) {
-        generateCrossedCall(procedureName, yieldedNames, yieldedVariables, inFlight);
+    // A call reading none of those rows produces the same rows for every one of them, which
+    // is their cartesian product rather than anything a carry set can express. Taking no
+    // argument is one way to read none of them; taking only constant ones is another.
+    if (!inFlight._columns.empty() && !readsAnyColumn(inputs, inFlight._columns)) {
+        generateCrossedCall(procedureName, yieldedNames, yieldedVariables, inputs, inFlight);
         generateYieldFilter(yieldItems);
         return;
     }
@@ -1242,6 +1290,7 @@ void DBProgramGenerator::generateYieldFilter(const YieldItems* yieldItems) {
 void DBProgramGenerator::generateCrossedCall(std::string_view procedureName,
                                              llvm::ArrayRef<mlir::Attribute> yieldedNames,
                                              llvm::ArrayRef<std::string_view> yieldedVariables,
+                                             mlir::ValueRange inputs,
                                              const InFlightColumns& inFlight) {
     // The call reads none of the rows already in flight, so it produces the same rows for
     // every one of them: their cartesian product. Each side becomes a factor of a
@@ -1274,11 +1323,29 @@ void DBProgramGenerator::generateCrossedCall(std::string_view procedureName,
                                      blockOps.begin(),
                                      crossProduct->getIterator());
 
+    // The argument columns were built into the block that has just become the left factor,
+    // but the call reading them is the right one and a value cannot cross a region
+    // boundary. None of them reads what the left factor yields - that is what makes this a
+    // product - so the whole chain behind them moves across intact, in its original order.
+    llvm::DenseSet<mlir::Operation*> argumentOps;
+    collectDefiningOps(inputs, argumentOps);
+
+    llvm::SmallVector<mlir::Operation*> argumentOpsInOrder;
+    for (mlir::Operation& op : *leftBlock) {
+        if (argumentOps.contains(&op)) {
+            argumentOpsInOrder.push_back(&op);
+        }
+    }
+
+    for (mlir::Operation* op : argumentOpsInOrder) {
+        op->moveBefore(rightBlock, rightBlock->end());
+    }
+
     _opBuilder.setInsertionPointToEnd(leftBlock);
     _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {inFlight._columns});
 
-    // The call is the right factor, opening its own dataflow there: it takes no argument
-    // and carries nothing, since the rows it is paired with are the other factor's.
+    // The call is the right factor, opening its own dataflow there: it carries nothing,
+    // since the rows it is paired with are the other factor's.
     llvm::SmallVector<mlir::Type> callResultTypes;
     for (size_t yieldIndex = 0; yieldIndex < yieldedNames.size(); yieldIndex++) {
         callResultTypes.push_back(mlir::db::ColumnType::get(_mlirCtxt));
@@ -1288,7 +1355,7 @@ void DBProgramGenerator::generateCrossedCall(std::string_view procedureName,
     auto callOp = _opBuilder.create<mlir::db::CallProcedure>(loc,
                                                             callResultTypes,
                                                             _opBuilder.getStringAttr(procedureName),
-                                                            mlir::ValueRange {},
+                                                            inputs,
                                                             mlir::ValueRange {},
                                                             _opBuilder.getArrayAttr(yieldedNames));
     _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {callOp.getResults()});
