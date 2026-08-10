@@ -32,6 +32,8 @@ public:
     VarDecl* getOrCreateNamedVariable(CypherAST* ast, EvaluatedType type, std::string_view name);
     VarDecl* createUnnamedVariable(CypherAST* ast, EvaluatedType type);
 
+    void declareAlias(std::string_view name, VarDecl* decl);
+
 private:
     DeclContext* _parent {nullptr};
     DeclMap _declMap;
