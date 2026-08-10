@@ -1493,6 +1493,33 @@ protected:
         interpreter.run();
     }
 
+    // Runs the Cypher frontend and the db-dialect generator alone, filling @param module,
+    // so a test can assert the shape of the program a query produces without running it.
+    // The context is the caller's, since the module borrows it.
+    void generateDbModule(const char* queryText,
+                          const GraphView& view,
+                          mlir::MLIRContext& context,
+                          mlir::OwningOpRef<mlir::ModuleOp>& module) {
+        CypherAST ast(&_procedures, queryText);
+
+        CypherParser parser(&ast);
+        parser.parse(queryText);
+
+        CypherAnalyzer analyzer(&ast, view);
+        analyzer.analyze();
+
+        context.getOrLoadDialect<mlir::func::FuncDialect>();
+        context.getOrLoadDialect<mlir::storage::Storage>();
+        context.getOrLoadDialect<mlir::db::DB>();
+
+        mlir::OpBuilder builder(&context);
+        module = mlir::ModuleOp::create(builder.getUnknownLoc());
+
+        mlir::ModuleOp moduleOp = module.get();
+        DBProgramGenerator generator(&moduleOp);
+        generator.generate(&ast);
+    }
+
     // Lowers a program the same way but without running it, so a test can assert the
     // errors lowering raises. Takes the whole module by value, as the runner does, so
     // the MLIR context outlives the lowering.
@@ -2253,4 +2280,69 @@ TEST_F(MLIRCallProcedureTest, cypherCallWithConstantArgumentsCrossesWithTheMatch
     std::sort(rows.begin(), rows.end());
     const std::vector<types::Int64::Primitive> expected {3, 3, 3, 3, 3, 4, 4, 4, 4, 4};
     EXPECT_EQ(rows, expected);
+}
+
+TEST_F(MLIRCallProcedureTest, cypherCallWithConstantArgumentsGeneratesACrossProduct) {
+    auto graph = buildScoreGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    mlir::OwningOpRef<mlir::ModuleOp> module;
+    generateDbModule("MATCH (n) CALL test.constantArg(3) YIELD v RETURN v",
+                     reader.getView(),
+                     context,
+                     module);
+
+    mlir::db::CrossProduct product;
+    module->walk([&](mlir::db::CrossProduct parsed) { product = parsed; });
+    ASSERT_TRUE(product);
+
+    mlir::db::CallProcedure call;
+    module->walk([&](mlir::db::CallProcedure parsed) { call = parsed; });
+    ASSERT_TRUE(call);
+
+    // The argument is a constant, so the call reads none of the matched rows and is the
+    // product's right factor rather than something the match rides through: it carries
+    // nothing, which is what lets a procedure declaring no indices be called here at all.
+    EXPECT_TRUE(call->getParentRegion() == &product.getRightFactor());
+    EXPECT_EQ(call.getInputs().size(), 1u);
+    EXPECT_EQ(call.getCarriedColumns().size(), 0u);
+
+    // The constant travelled into the right factor with the call - a value defined in the
+    // left one could not be read from here.
+    const mlir::Value argument = call.getInputs().front();
+    ASSERT_TRUE(argument.getDefiningOp());
+    EXPECT_TRUE(argument.getDefiningOp()->getParentRegion() == &product.getRightFactor());
+}
+
+TEST_F(MLIRCallProcedureTest, cypherCallReadingAMatchedColumnGeneratesACarrySet) {
+    auto graph = buildScoreGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    mlir::OwningOpRef<mlir::ModuleOp> module;
+    generateDbModule("MATCH (n) CALL test.nodeScore(n) YIELD score RETURN n, score",
+                     reader.getView(),
+                     context,
+                     module);
+
+    // The argument is the matched column itself, so the call's rows follow it: no product,
+    // and `n` rides through the carry set to stay aligned with the scores.
+    size_t productCount = 0;
+    module->walk([&](mlir::db::CrossProduct) { productCount++; });
+    EXPECT_EQ(productCount, 0u);
+
+    mlir::db::CallProcedure call;
+    module->walk([&](mlir::db::CallProcedure parsed) { call = parsed; });
+    ASSERT_TRUE(call);
+
+    ASSERT_EQ(call.getInputs().size(), 1u);
+    ASSERT_EQ(call.getCarriedColumns().size(), 1u);
+    EXPECT_EQ(call.getInputs().front(), call.getCarriedColumns().front());
+
+    // One result per yield, then one per carried column.
+    EXPECT_EQ(call.getYields().size(), 1u);
+    EXPECT_EQ(call.getResults().size(), 2u);
 }
