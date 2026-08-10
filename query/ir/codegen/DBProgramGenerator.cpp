@@ -64,6 +64,7 @@
 #include "stmt/SetStmt.h"
 #include "stmt/Skip.h"
 #include "stmt/StmtContainer.h"
+#include "stmt/UnwindStmt.h"
 #include "Symbol.h"
 #include "SymbolChain.h"
 
@@ -189,6 +190,23 @@ void collectCutColumns(const Projection* projection,
     }
 }
 
+// The one type every element attribute shares, or a null type when they differ or the
+// list is empty - db.unwind_const's homogeneity verdict, which decides whether the
+// unwound column is that type or a type-erased column of tagged scalars.
+mlir::Type sharedAttrType(llvm::ArrayRef<mlir::Attribute> elements) {
+    if (elements.empty()) {
+        return nullptr;
+    }
+
+    const mlir::Type firstType = mlir::cast<mlir::TypedAttr>(elements.front()).getType();
+
+    const auto hasFirstType = [firstType](mlir::Attribute element) {
+        return mlir::cast<mlir::TypedAttr>(element).getType() == firstType;
+    };
+
+    return std::ranges::all_of(elements, hasFirstType) ? firstType : nullptr;
+}
+
 mlir::Value findVarOrThrow(const DBProgramGenerator::VariableIdentityMap& map,
                         const VariableDependency* var) {
     const auto findIt = map.find(var);
@@ -225,6 +243,63 @@ void DBProgramGenerator::addScanNodes(const VariableDependency* var) {
     auto scan = _opBuilder.create<mlir::db::ScanNodes>(_opBuilder.getUnknownLoc(), col);
 
     registerValue(var, scan.getResult());
+}
+
+void DBProgramGenerator::addUnwindConst(const VariableDependency* var, const UnwindStmt* unwind) {
+    bioassert(!_varMap.contains(var), "UnwindConst for registered variable");
+
+    // The analyzer restricts UNWIND to a literal list, so anything else here is a
+    // statement it let through and this path cannot lower.
+    const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(unwind->arg());
+    if (!literalExpr) {
+        throw TuringException("Non-literal UNWIND expressions are not yet supported.");
+    }
+
+    const ListLiteral* list = dynamic_cast<const ListLiteral*>(literalExpr->getLiteral());
+    if (!list) {
+        throw TuringException("Non-list arguments to UNWIND are not yet supported.");
+    }
+
+    llvm::SmallVector<mlir::Attribute> elements;
+    translateUnwindElements(list, elements);
+
+    // The result element type is the homogeneity verdict db.unwind_const reads: elements
+    // sharing one type unwind into a column of that type, and a mixed - or empty - list
+    // into a type-erased column of tagged scalars.
+    const mlir::Type sharedType = sharedAttrType(elements);
+    const mlir::Type elementType = sharedType ? sharedType
+                                              : mlir::storage::ListElementType::get(_mlirCtxt);
+
+    const mlir::db::ColumnType resultType = allocColumnType(elementType);
+    const mlir::ArrayAttr elementsAttr = _opBuilder.getArrayAttr(elements);
+
+    mlir::db::UnwindConst unwindConst = _opBuilder.create<mlir::db::UnwindConst>(_opBuilder.getUnknownLoc(),
+                                                                                resultType,
+                                                                                elementsAttr);
+
+    registerValue(var, unwindConst.getResult());
+}
+
+void DBProgramGenerator::translateUnwindElements(const ListLiteral* list,
+                                                 llvm::SmallVectorImpl<mlir::Attribute>& elements) {
+    const ListLiteral::Items& items = list->items();
+    elements.reserve(items.size());
+
+    for (const Expr* item : items) {
+        const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(item);
+        if (!literalExpr) {
+            throw TuringException("Only literal elements are supported in an UNWIND list.");
+        }
+
+        // Only the scalar literals the runtime can store as a tagged element are
+        // unwindable: a nested list, an embedding or a null has no such form.
+        const mlir::TypedAttr elementAttr = scalarLiteralAttr(literalExpr->getLiteral());
+        if (!elementAttr) {
+            throw TuringException("Only booleans, integers, floats and strings can be unwound.");
+        }
+
+        elements.push_back(elementAttr);
+    }
 }
 
 template<typename EdgeOp>
@@ -577,7 +652,17 @@ void DBProgramGenerator::translateComponent(const VariableDependency* root,
         }
     };
 
-    addScanNodes(root);
+    // A root either is a pattern variable, whose dataflow opens with a node scan, or is
+    // bound by an UNWIND, whose dataflow opens with the literal list itself.
+    const VariableDependencyGraph::UnwindSourceMap& unwindSources = _vdg.unwindSources();
+    const auto unwindIt = unwindSources.find(root);
+
+    if (unwindIt != unwindSources.end()) {
+        addUnwindConst(root, unwindIt->second);
+    } else {
+        addScanNodes(root);
+    }
+
     markDefined(root);
 
     // Forms the "carried set" for this connected component
@@ -1804,33 +1889,50 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
     }
 }
 
-mlir::Value DBProgramGenerator::translateLiteralExpr(const Literal* literal) {
-    const mlir::Location uloc = _opBuilder.getUnknownLoc();
-
-    mlir::TypedAttr valueAttr;
-
+mlir::TypedAttr DBProgramGenerator::scalarLiteralAttr(const Literal* literal) {
     switch (literal->getKind()) {
         case Literal::Kind::BOOL: {
             const BoolLiteral* boolLiteral = static_cast<const BoolLiteral*>(literal);
-            valueAttr = _opBuilder.getBoolAttr(boolLiteral->getValue());
+            return _opBuilder.getBoolAttr(boolLiteral->getValue());
         }
         break;
+
         case Literal::Kind::INTEGER: {
             const IntegerLiteral* intLiteral = static_cast<const IntegerLiteral*>(literal);
-            valueAttr = _opBuilder.getI64IntegerAttr(intLiteral->getValue());
+            return _opBuilder.getI64IntegerAttr(intLiteral->getValue());
         }
         break;
+
         case Literal::Kind::DOUBLE: {
             const DoubleLiteral* doubleLiteral = static_cast<const DoubleLiteral*>(literal);
-            valueAttr = _opBuilder.getF64FloatAttr(doubleLiteral->getValue());
+            return _opBuilder.getF64FloatAttr(doubleLiteral->getValue());
         }
         break;
 
         case Literal::Kind::STRING: {
             const StringLiteral* stringLiteral = static_cast<const StringLiteral*>(literal);
             const mlir::Type stringType = mlir::storage::StringType::get(_mlirCtxt);
-            valueAttr = mlir::StringAttr::get(stringLiteral->getValue(), stringType);
+            return mlir::StringAttr::get(stringLiteral->getValue(), stringType);
         }
+        break;
+
+        default:
+            return {};
+        break;
+    }
+}
+
+mlir::Value DBProgramGenerator::translateLiteralExpr(const Literal* literal) {
+    const mlir::Location uloc = _opBuilder.getUnknownLoc();
+
+    mlir::TypedAttr valueAttr;
+
+    switch (literal->getKind()) {
+        case Literal::Kind::BOOL:
+        case Literal::Kind::INTEGER:
+        case Literal::Kind::DOUBLE:
+        case Literal::Kind::STRING:
+            valueAttr = scalarLiteralAttr(literal);
         break;
 
         case Literal::Kind::EMBEDDING: {

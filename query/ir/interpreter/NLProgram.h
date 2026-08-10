@@ -19,6 +19,7 @@
 #include "list/ListView.h"
 #include "metadata/LabelSet.h"
 #include "metadata/LabelSetHandle.h"
+#include "metadata/PropertyType.h"
 
 namespace db {
 
@@ -252,6 +253,42 @@ public:
 
 private:
     std::vector<NodeID> _constNodeIDs;
+};
+
+// The literal-list sibling of NLConstScanLoopData: streams a fixed ListView one chunk
+// at a time. A homogeneous list fills a nullable value column of _valueType, the shape
+// every value-chunk consumer reads; a heterogeneous list fills a
+// ColumnVector<ListElementView> of tagged scalars, in which case _valueType is unused.
+// The ListView spans the query-scoped ListBuffer, so the elements outlive the loop. A
+// plain source, so a downstream LIMIT can bound it.
+class NLUnwindConstLoopData : public NLFunctionData {
+public:
+    NLUnwindConstLoopData(Column* output, ListView list, bool heterogeneous, ValueType valueType)
+        : _output(output),
+        _list(list),
+        _heterogeneous(heterogeneous),
+        _valueType(valueType)
+    {
+    }
+
+    Column* getOutput() const { return _output; }
+    ListView getList() const { return _list; }
+    bool isHeterogeneous() const { return _heterogeneous; }
+    ValueType getValueType() const { return _valueType; }
+
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
+    Column* _output {nullptr};
+    ListView _list;
+    bool _heterogeneous {false};
+    ValueType _valueType {ValueType::Invalid};
+    NLLimitState* _limit {nullptr};
+    NLStmtContainer _stmts;
 };
 
 // nl.scan_edges loop data: the edge sibling of NLScanLoopData. A source loop

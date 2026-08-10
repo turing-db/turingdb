@@ -173,13 +173,14 @@ GroupAggregateKind toRuntimeGroupAggregateKind(storage::GroupAggregateKind kind)
 }
 
 // The value type wrapped by a nullable value chunk (!nl.chunk<!storage.nullable<T>>).
-// An aggregate reduces property values, so its input and result are always such
-// chunks; a chunk that is not a nullable value chunk (an ID chunk) is rejected.
+// Every chunk carrying scalar values is such a chunk - an aggregate's input and result,
+// a property fetch, a homogeneous unwind - so a chunk that is not one (an ID chunk) is
+// rejected.
 ValueType nullableChunkValueType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const auto nullableType = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
     if (!nullableType) {
-        throw IRException("aggregate requires a nullable value chunk");
+        throw IRException("Expected a nullable value chunk");
     }
 
     return valueTypeFromElementType(nullableType.getValueType());
@@ -319,6 +320,11 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._kind = IteratorKind::Collect;
             config._collectState = collectStateFor(collect.getState());
             _iteratorConfigs[collect.getResult()] = config;
+        } else if (nl::UnwindConst unwindConst = mlir::dyn_cast<nl::UnwindConst>(operation)) {
+            IteratorConfig config;
+            config._kind = IteratorKind::UnwindConst;
+            config._list = materializeListView(unwindConst.getElements());
+            _iteratorConfigs[unwindConst.getResult()] = config;
         } else if (nl::For forLoop = mlir::dyn_cast<nl::For>(operation)) {
             translateFor(forLoop, body);
         } else if (mlir::isa<nl::GetPropertyType, nl::GetEdgeType>(operation)) {
@@ -472,6 +478,10 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         translateUnwindCollectLoop(config, loopBody, body);
     } else if (config._kind == IteratorKind::Collect) {
         translateCollectLoop(config, loopBody, body);
+    } else if (config._kind == IteratorKind::UnwindConst) {
+        // A const unwind is a plain source, so - like a scan - a downstream LIMIT can
+        // bound its loop through the ordinary early-exit.
+        translateUnwindConstLoop(config, loopBody, limit, body);
     } else {
         translateEdgeLoop(config, loopBody, limit, body);
     }
@@ -549,6 +559,69 @@ void NLTranslator::translateConstScanLoop(const IteratorConfig& config,
     body->emplaceStmt(&NLExecutor::runConstScanNodesLoop, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateUnwindConstLoop(const IteratorConfig& config,
+                                            mlir::Block& loopBody,
+                                            NLLimitState* limit,
+                                            NLStmtContainer* body) {
+    // An unwind_const binds a single value chunk: the loop emits one element per row.
+    const mlir::Value valueChunk = loopBody.getArgument(0);
+    const mlir::Type elementType = mlir::cast<nl::ChunkType>(valueChunk.getType()).getElementType();
+
+    // The chunk element type is the homogeneity verdict: a list_element chunk is the
+    // type-erased column of tagged scalars; a nullable value chunk is a homogeneous
+    // column of that one value type, the shape every other value-chunk consumer reads.
+    const bool heterogeneous = llvm::isa<storage::ListElementType>(elementType);
+
+    Column* output {nullptr};
+    ValueType valueType {ValueType::Invalid};
+
+    if (heterogeneous) {
+        ColumnVector<ListElementView>* elements = _memory->alloc<ColumnVector<ListElementView>>();
+        elements->reserve(_program->getChunkSize());
+        output = elements;
+    } else {
+        valueType = nullableChunkValueType(valueChunk.getType());
+        output = allocOptColumnForValueType(valueType);
+    }
+
+    _valueSlots[valueChunk] = output;
+
+    NLUnwindConstLoopData* loopData = _program->allocFunctionData<NLUnwindConstLoopData>(output,
+                                                                                        config._list,
+                                                                                        heterogeneous,
+                                                                                        valueType);
+    loopData->setLimit(limit);
+
+    body->emplaceStmt(&NLExecutor::runUnwindConstLoop, loopData);
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+ListView NLTranslator::materializeListView(mlir::ArrayAttr elements) {
+    std::vector<ListBuffer<>::ListItemVariant> items;
+    items.reserve(elements.size());
+
+    for (const mlir::Attribute element : elements) {
+        // BoolAttr is an i1 IntegerAttr, so it must be tested before IntegerAttr; an
+        // i64 literal falls through to the integer case.
+        if (const auto boolAttr = mlir::dyn_cast<mlir::BoolAttr>(element)) {
+            items.emplace_back(types::Bool::Primitive(boolAttr.getValue()));
+        } else if (const auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(element)) {
+            items.emplace_back(static_cast<types::Int64::Primitive>(intAttr.getInt()));
+        } else if (const auto floatAttr = mlir::dyn_cast<mlir::FloatAttr>(element)) {
+            items.emplace_back(floatAttr.getValueAsDouble());
+        } else if (const auto stringAttr = mlir::dyn_cast<mlir::StringAttr>(element)) {
+            const llvm::StringRef value = stringAttr.getValue();
+            items.emplace_back(types::String::Primitive(value.data(), value.size()));
+        } else {
+            throw IRException("Unsupported literal attribute in nl.unwind_const");
+        }
+    }
+
+    LocalMemory::DefaultListBuffer& buffer = _memory->listBuffer();
+    return buffer.insert(items);
 }
 
 void NLTranslator::translateScanEdgesLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body) {

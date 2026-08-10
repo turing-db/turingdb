@@ -45,6 +45,7 @@ private:
         GroupAggregate,
         UnwindCollect,
         Collect,
+        UnwindConst,
     };
 
     // Settings of the iterators passed to each for loop
@@ -80,6 +81,12 @@ private:
         // keeps alive for the whole translation; resolved to owned NodeIDs when the
         // loop is translated.
         llvm::ArrayRef<int64_t> _nodeIDs;
+
+        // The literal list an UnwindConst iterator emits; a null (empty) ListView
+        // for the other kinds. Materialized from the op's element attributes into
+        // the query-scoped ListBuffer at config setup, so the elements are copied
+        // into stable storage that outlives the loop.
+        ListView _list;
     };
 
     NLProgram* _program {nullptr};
@@ -149,6 +156,24 @@ private:
                                 mlir::Block& loopBody,
                                 NLLimitState* limit,
                                 NLStmtContainer* body);
+
+    // Translate the nl.for over an nl.unwind_const iterator: allocate the single
+    // value loop variable (a nullable value column for a homogeneous list, a
+    // ColumnVector<ListElementView> for a heterogeneous one) and record the
+    // unwind-const loop statement in body. The literal sibling of
+    // translateConstScanLoop - a source loop that streams a fixed ListView one chunk
+    // at a time rather than a set of node IDs.
+    void translateUnwindConstLoop(const IteratorConfig& config,
+                                  mlir::Block& loopBody,
+                                  NLLimitState* limit,
+                                  NLStmtContainer* body);
+
+    // Materialize an nl.unwind_const's literal element attributes into a ListView in
+    // the query-scoped ListBuffer: each typed builtin attribute becomes a tagged
+    // ListItemVariant, so the elements land in stable storage the loop reads chunk by
+    // chunk. String bytes are copied in, so the StringAttr views need only outlive
+    // this call (the MLIRContext keeps them alive through translation).
+    ListView materializeListView(mlir::ArrayAttr elements);
 
     // Translate the nl.for over an nl.scan_edges iterator: allocate the four
     // fixed edge loop variables (sources, edge IDs, edge type IDs, targets) and

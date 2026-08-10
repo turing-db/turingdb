@@ -20,6 +20,9 @@
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOptMask.h"
 #include "columns/ColumnOptVector.h"
+#include "columns/ColumnVector.h"
+#include "list/ListElementView.h"
+#include "list/ListBufferTypeTag.h"
 #include "datapart/EdgeRecord.h"
 #include "iterators/ChunkConfig.h"
 #include "metadata/PropertyType.h"
@@ -97,6 +100,77 @@ public:
 
 private:
     std::vector<std::vector<uint64_t>> _columns;
+};
+
+// Collects a single homogeneous int64 value column: a UNWIND of an all-integer literal
+// list lowers to one nullable ColumnOptVector<int64_t> chunk per step, whose cells are
+// all present - a literal list holds no null.
+class CollectingIntUnwindSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* values = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[0]);
+        ASSERT_NE(values, nullptr);
+
+        const std::vector<std::optional<int64_t>>& raw = values->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            const std::optional<int64_t>& value = raw[rowIndex];
+            ASSERT_TRUE(value.has_value());
+
+            _values.push_back(*value);
+        }
+    }
+
+    const std::vector<int64_t>& values() const { return _values; }
+
+private:
+    std::vector<int64_t> _values;
+};
+
+// Collects a single heterogeneous value column, rendering each type-tagged cell to a
+// string: a UNWIND of a mixed literal list lowers to one ColumnVector<ListElementView>
+// chunk per step, each cell carrying its own tag.
+class CollectingListElementSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* values = dynamic_cast<const ColumnVector<ListElementView>*>(chunks[0]);
+        ASSERT_NE(values, nullptr);
+
+        const std::vector<ListElementView>& raw = values->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _values.push_back(render(raw[rowIndex]));
+        }
+    }
+
+    const std::vector<std::string>& values() const { return _values; }
+
+private:
+    // Render one tagged cell to a string, dispatching on its type tag. The test list
+    // holds an int, a bool and a string, so only those tags occur.
+    static std::string render(const ListElementView& element) {
+        switch (element.getTag()) {
+            case ListBufferTypeTag::Int:
+                return std::to_string(element.getAs<int64_t>());
+            break;
+
+            case ListBufferTypeTag::Bool:
+                return element.getAs<CustomBool>() ? "true" : "false";
+            break;
+
+            case ListBufferTypeTag::String:
+                return std::string(element.getAs<std::string_view>());
+            break;
+
+            default:
+                return "?";
+            break;
+        }
+    }
+
+    std::vector<std::string> _values;
 };
 
 // Collects (node ID, nullable int64 property) rows. Output programs that read
@@ -1007,6 +1081,68 @@ constexpr const char* constScanNodesProgram = R"mlir(
 func.func @main() {
   %a = db.const_scan_nodes([2, 0]) : !db.column<!storage.node_id>
   db.output(%a) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// UNWIND [1, 2, 3] AS x RETURN x: a homogeneous literal list, so the unwound column is
+// a typed i64 column and the source emits one row per element.
+constexpr const char* unwindConstIntProgram = R"mlir(
+func.func @main() {
+  %x = db.unwind_const([1, 2, 3]) : !db.column<i64>
+  db.output(%x) : !db.column<i64>
+  return
+}
+)mlir";
+
+// UNWIND [true, "hello", 10] AS x RETURN x: a heterogeneous list, so the unwound column
+// is a type-erased list_element column of tagged scalars.
+constexpr const char* unwindConstHeteroProgram = R"mlir(
+func.func @main() {
+  %x = db.unwind_const([true, "hello", 10]) : !db.column<!storage.list_element>
+  db.output(%x) : !db.column<!storage.list_element>
+  return
+}
+)mlir";
+
+// UNWIND [] AS x RETURN x: an empty list yields no row.
+constexpr const char* unwindConstEmptyProgram = R"mlir(
+func.func @main() {
+  %x = db.unwind_const([]) : !db.column<!storage.list_element>
+  db.output(%x) : !db.column<!storage.list_element>
+  return
+}
+)mlir";
+
+// MATCH (a) UNWIND [10, 20] AS x RETURN a, x: the unwind source crossed with the
+// incoming rows - the way UNWIND takes input, since there is no expanding variant of
+// the op. Two rows per node, the node ID repeated across the pair. The unwound column
+// rides a nullable value chunk, so the cross product broadcasts it with the same
+// families it uses for a property column.
+constexpr const char* unwindConstCrossProductProgram = R"mlir(
+func.func @main() {
+  %0:2 = db.cross_product factor {
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %a : !db.column<!storage.node_id>
+  } factor {
+    %x = db.unwind_const([10, 20]) : !db.column<i64>
+    db.yield %x : !db.column<i64>
+  }
+  db.output(%0#0, %0#1) : !db.column<!storage.node_id>, !db.column<i64>
+  return
+}
+)mlir";
+
+// UNWIND [1, 2, 3, 4] AS x WITH x WHERE x > 2 RETURN x: a predicate over the unwound
+// column itself, so the filter reads the same nullable value chunk a property filter
+// reads and keeps the two surviving rows.
+constexpr const char* unwindConstFilterProgram = R"mlir(
+func.func @main() {
+  %x = db.unwind_const([1, 2, 3, 4]) : !db.column<i64>
+  %bound = db.constant(2 : i64)
+  %keep = db.gt %x, %bound : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %kept = db.filter(%keep, {%x}) : (!db.column<!storage.bool>, !db.column<i64>) -> !db.column<i64>
+  db.output(%kept) : !db.column<i64>
   return
 }
 )mlir";
@@ -2207,6 +2343,91 @@ TEST_F(DBLoweringTest, executesConstScanNodes) {
     std::vector<std::vector<uint64_t>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, executesUnwindConstHomogeneous) {
+    // A standalone UNWIND reads no graph, but runLoweredProgram needs a view; any
+    // graph does, and the result depends only on the literal list.
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingIntUnwindSink sink;
+    runLoweredProgram(unwindConstIntProgram, reader.getView(), sink);
+
+    // One row per element of the homogeneous list.
+    std::vector<int64_t> values = sink.values();
+    std::sort(values.begin(), values.end());
+    const std::vector<int64_t> expected {1, 2, 3};
+    EXPECT_EQ(values, expected);
+}
+
+TEST_F(DBLoweringTest, executesUnwindConstHeterogeneous) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingListElementSink sink;
+    runLoweredProgram(unwindConstHeteroProgram, reader.getView(), sink);
+
+    // One row per element, each cell keeping its own type (bool, string, int).
+    std::vector<std::string> values = sink.values();
+    std::sort(values.begin(), values.end());
+    const std::vector<std::string> expected {"10", "hello", "true"};
+    EXPECT_EQ(values, expected);
+}
+
+TEST_F(DBLoweringTest, executesUnwindConstEmptyYieldsNoRow) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // An empty list has nothing to emit, so the source runs cleanly and produces no row.
+    CollectingListElementSink sink;
+    runLoweredProgram(unwindConstEmptyProgram, reader.getView(), sink);
+
+    EXPECT_TRUE(sink.values().empty());
+}
+
+TEST_F(DBLoweringTest, executesUnwindConstCrossedWithIncomingRows) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The sink is the one an Int64 property read fills: crossing the unwind against the
+    // scan yields a node ID chunk and a nullable value chunk, the pair a property
+    // program emits - which is the point of the unwound column riding nullable<T>.
+    CollectingNodeIntPropSink sink;
+    runLoweredProgram(unwindConstCrossProductProgram, reader.getView(), sink);
+
+    // Two elements per node over the four diamond nodes: eight pairs, every node
+    // carrying both literals.
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {{0, 10},
+                                                                            {0, 20},
+                                                                            {1, 10},
+                                                                            {1, 20},
+                                                                            {2, 10},
+                                                                            {2, 20},
+                                                                            {3, 10},
+                                                                            {3, 20}};
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, executesFilterOverUnwindConst) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingIntUnwindSink sink;
+    runLoweredProgram(unwindConstFilterProgram, reader.getView(), sink);
+
+    // Only the elements above the bound survive the predicate.
+    std::vector<int64_t> values = sink.values();
+    std::sort(values.begin(), values.end());
+    const std::vector<int64_t> expected {3, 4};
+    EXPECT_EQ(values, expected);
 }
 
 TEST_F(DBLoweringTest, constScanNodesDropsIDsWithNoNode) {
