@@ -34,6 +34,7 @@
 #include "SystemManager.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
+#include "iterators/ChunkConfig.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
@@ -79,6 +80,8 @@ public:
         const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
         ASSERT_NE(counts, nullptr);
 
+        _appendCalls++;
+
         const auto& countRaw = counts->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             _rows.emplace_back((*sources)[rowIndex].getValue(), countRaw[rowIndex]);
@@ -87,8 +90,12 @@ public:
 
     const SourceCountRows& rows() const { return _rows; }
 
+    // How many chunks the emit was cut into, so a test can tell it really saw several
+    size_t getAppendCalls() const { return _appendCalls; }
+
 private:
     SourceCountRows _rows;
+    size_t _appendCalls {0};
 };
 
 }
@@ -107,7 +114,7 @@ protected:
         SimpleGraph::createSimpleGraph(_graph);
     }
 
-    void runQuery(std::string_view query, NLOutputSink* sink) {
+    void runQuery(std::string_view query, NLOutputSink* sink, size_t chunkSize = ChunkConfig::CHUNK_SIZE) {
         SystemAccessor system = _env->getSystemManager().accessUnique();
         const ProcedureManager* procedures = system.getProcedures();
 
@@ -137,7 +144,7 @@ protected:
         generator.generate(&ast);
 
         LocalMemory memory;
-        DBDialectInterpreter interpreter(moduleOp, &view, sink, &memory);
+        DBDialectInterpreter interpreter(moduleOp, &view, sink, &memory, chunkSize);
         interpreter.run();
     }
 
@@ -162,6 +169,19 @@ protected:
 // The count rides along as the sort reorders the groups by their key.
 TEST_F(OrderByCountTest, ordersGroupsCarryingTheirCount) {
     expectRows("MATCH (a)-->(b) RETURN a, count(b) ORDER BY a", sourceOutDegreesAscending);
+}
+
+// The same order over a chunk of two rows: the nine groups now reach the sort in five
+// steps, so the count is appended onto its buffer once per step rather than in a single
+// pass, and gathered back out in permutation order across the chunk boundaries - a row of
+// the emitted chunk reading its count from anywhere but the buffer row the permutation
+// names would pair a group with another group's count.
+TEST_F(OrderByCountTest, ordersGroupsAcrossSeveralChunks) {
+    OrderedSourceCountSink sink;
+    runQuery("MATCH (a)-->(b) RETURN a, count(b) ORDER BY a", &sink, /*chunkSize=*/2);
+
+    EXPECT_GT(sink.getAppendCalls(), 1u);
+    EXPECT_EQ(sink.rows(), sourceOutDegreesAscending);
 }
 
 // A bounded sort keeps only the best k rows, so the count is also carried by the trim
