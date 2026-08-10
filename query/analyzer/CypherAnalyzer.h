@@ -1,10 +1,13 @@
 #pragma once
 
+#include <string_view>
+
 #include "views/GraphView.h"
 
 namespace db {
 
 class CypherAST;
+class Expr;
 class ReadStmtAnalyzer;
 class WriteStmtAnalyzer;
 class ExprAnalyzer;
@@ -83,6 +86,7 @@ private:
 
     bool _isV3 {false};
 
+    void declareItemAlias(Expr* item, std::string_view alias);
     void analyzeDistinct(const ReturnStmt* returnSt, const Projection* projection) const;
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;

@@ -220,42 +220,40 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
 
         Expr* item = *exprPtr;
         std::string_view name;
-        // Explicit aliases via the AS keyword
-        bool hasExplicitAlias = false;
 
-        if (auto* symbolExpr = dynamic_cast<SymbolExpr*>(item)) {
-            Symbol* symbol = symbolExpr->getSymbol();
+        // The parser records an alias given via the AS keyword as the item's name
+        const bool hasExplicitAlias = !item->getName().empty();
+
+        if (hasExplicitAlias) {
+            name = item->getName();
+        } else if (item->getKind() == Expr::Kind::SYMBOL) {
+            const SymbolExpr* symbolExpr = static_cast<const SymbolExpr*>(item);
+            const Symbol* symbol = symbolExpr->getSymbol();
             name = symbol->getName();
         } else {
-            hasExplicitAlias = !item->getName().empty();
-            name = item->getName();
-            if (name.empty()) {
-                const std::string_view name =
-                    srcMan->getStringRepr(std::bit_cast<std::uintptr_t>(item));
-                if (name.empty()) [[unlikely]] {
-                    throwError("Failed to generate name for projection item", item);
-                }
-
-                item->setName(name);
+            const std::string_view generatedName =
+                srcMan->getStringRepr(std::bit_cast<std::uintptr_t>(item));
+            if (generatedName.empty()) [[unlikely]] {
+                throwError("Failed to generate name for projection item", item);
             }
 
-            name = item->getName();
+            item->setName(generatedName);
+            name = generatedName;
         }
 
         _exprAnalyzer->analyzeRootExpr(item);
 
         bioassert(!name.empty(), "All declared variable must have a name.");
 
-        // For exprs with explicit AS aliases, update their decl to be named
-        if (hasExplicitAlias) {
-            const EvaluatedType type = item->getType();
-            const VarDecl* namedDecl = _ctxt->getOrCreateNamedVariable(_ast, type, name);
-            item->setExprVarDecl(namedDecl);
-        }
-
+        // Reported before the alias is declared, so that a duplicate column name is not
+        // masked by the type conflict the second declaration of that name would raise
         if (projection->hasName(name)) {
             throwError(fmt::format("Return items must have unique names; "
                                    "{} was already defined.", name), item);
+        }
+
+        if (hasExplicitAlias) {
+            declareItemAlias(item, name);
         }
 
         projection->setName(item, name);
@@ -313,6 +311,29 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         projection->setAggregate();
         projection->setHasGroupingKeys(hasGroupingKeys);
     }
+}
+
+void CypherAnalyzer::declareItemAlias(Expr* item, std::string_view alias) {
+    // A column is resolved through the declaration of the item that produced it, and the
+    // column of a bare variable is produced by the traversal that declared it: an alias on
+    // it is a second name for that one variable, not a variable of its own
+    if (item->getKind() != Expr::Kind::SYMBOL) {
+        const EvaluatedType type = item->getType();
+        const VarDecl* namedDecl = _ctxt->getOrCreateNamedVariable(_ast, type, alias);
+        item->setExprVarDecl(namedDecl);
+
+        return;
+    }
+
+    SymbolExpr* symbolExpr = static_cast<SymbolExpr*>(item);
+    VarDecl* aliasedDecl = symbolExpr->getDecl();
+    const VarDecl* declared = _ctxt->getDecl(alias);
+
+    if (declared && declared != aliasedDecl) {
+        throwError(fmt::format("Variable '{}' is already declared", alias), item);
+    }
+
+    _ctxt->declareAlias(alias, aliasedDecl);
 }
 
 void CypherAnalyzer::analyzeDistinct(const ReturnStmt* returnSt, const Projection* projection) const {

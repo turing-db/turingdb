@@ -64,6 +64,12 @@ VarDecl* DeclContext::createUnnamedVariable(CypherAST* ast, EvaluatedType type) 
     return decl;
 }
 
+void DeclContext::declareAlias(std::string_view name, VarDecl* decl) {
+    // The alias names no new variable, which is why it is bound to an existing declaration
+    // and not appended to `_decls`: a wildcard must not return the variable twice
+    _declMap[name] = decl;
+}
+
 void DeclContext::addDecl(VarDecl* decl) {
     _declMap[decl->getName()] = decl;
     _decls.push_back(decl);
