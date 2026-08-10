@@ -1796,8 +1796,17 @@ public:
 
     const OutputColumns& outputs() const { return _columns; }
 
-    void addOutputColumn(const Column* col) {
+    // The columns a step's row count is read off. A constant column holds one value
+    // standing for every row of the step, so it cannot say how many there are: only a
+    // projection made of constants alone is sized by them.
+    const OutputColumns& rowCountColumns() const { return _rowCountColumns.empty() ? _columns : _rowCountColumns; }
+
+    void addOutputColumn(const Column* col, bool carriesRows) {
         _columns.push_back(col);
+
+        if (carriesRows) {
+            _rowCountColumns.push_back(col);
+        }
     }
 
     // The governing limit counter, or null for a limit-oblivious output. When
@@ -1819,6 +1828,7 @@ public:
 
 private:
     std::vector<const Column*> _columns;
+    std::vector<const Column*> _rowCountColumns;
     NLLimitState* _limit {nullptr};
     NLSkipState* _skip {nullptr};
     // Column which may define the cardinality of the output
