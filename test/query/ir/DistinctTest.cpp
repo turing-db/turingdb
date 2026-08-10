@@ -482,6 +482,15 @@ TEST_F(DistinctTest, ordersDistinctTargets) {
     expectNodeRows("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY b", expected);
 }
 
+// A wildcard is what declares the projection's columns, so a key naming one of them is
+// only a returned column once the expansion has run. The scan emits each node once, so
+// the dedup drops nothing and all 18 come back in the order the key asks for.
+TEST_F(DistinctTest, ordersDistinctWildcardColumn) {
+    const Rows expected = {{0}, {1},  {2},  {3},  {4},  {5},  {6},  {7},  {8},
+                           {9}, {10}, {11}, {12}, {13}, {14}, {15}, {16}, {17}};
+    expectNodeRows("MATCH (a) RETURN DISTINCT * ORDER BY a", expected);
+}
+
 // ORDER BY ... LIMIT k over a DISTINCT: the k best rows of the distinct order, so the
 // three highest distinct target IDs.
 TEST_F(DistinctTest, ordersDistinctTargetsThenLimits) {
