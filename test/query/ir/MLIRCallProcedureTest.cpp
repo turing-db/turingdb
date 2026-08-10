@@ -2346,3 +2346,42 @@ TEST_F(MLIRCallProcedureTest, cypherCallReadingAMatchedColumnGeneratesACarrySet)
     EXPECT_EQ(call.getYields().size(), 1u);
     EXPECT_EQ(call.getResults().size(), 2u);
 }
+
+TEST_F(MLIRCallProcedureTest, cypherCallMixingConstantAndMatchedArgumentsGeneratesACarrySet) {
+    auto graph = buildHopGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    mlir::OwningOpRef<mlir::ModuleOp> module;
+    generateDbModule("MATCH (n) CALL gnn.neighbourhoodSample(n, 2, 42) YIELD tgt RETURN n, tgt",
+                     reader.getView(),
+                     context,
+                     module);
+
+    // One argument reading the match is enough to correlate the whole call, however many
+    // of the others are constant, so this takes the carry set rather than the product a
+    // wholly constant argument list would.
+    size_t productCount = 0;
+    module->walk([&](mlir::db::CrossProduct) { productCount++; });
+    EXPECT_EQ(productCount, 0u);
+
+    mlir::db::CallProcedure call;
+    module->walk([&](mlir::db::CallProcedure parsed) { call = parsed; });
+    ASSERT_TRUE(call);
+
+    const mlir::OperandRange inputs = call.getInputs();
+    ASSERT_EQ(inputs.size(), 3u);
+    ASSERT_EQ(call.getCarriedColumns().size(), 1u);
+
+    // The matched node is both the correlating argument and the carried column; the
+    // sample size and the seed are constants beside it.
+    EXPECT_EQ(inputs[0], call.getCarriedColumns().front());
+    EXPECT_TRUE(mlir::isa<mlir::db::ConstantOp>(inputs[1].getDefiningOp()));
+    EXPECT_TRUE(mlir::isa<mlir::db::ConstantOp>(inputs[2].getDefiningOp()));
+
+    // Nothing moved into a factor: with no product, the constants stay in the block the
+    // call itself sits in.
+    EXPECT_EQ(inputs[1].getDefiningOp()->getBlock(), call->getBlock());
+    EXPECT_EQ(inputs[2].getDefiningOp()->getBlock(), call->getBlock());
+}
