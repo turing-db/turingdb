@@ -1,5 +1,7 @@
 #include "Projection.h"
 
+#include <iterator>
+
 #include "CypherAST.h"
 #include "expr/Expr.h"
 #include "expr/StructuralExpressionComparator.h"
@@ -59,12 +61,12 @@ bool Projection::hasName(const std::string_view& name) const {
     return _namesSet.contains(name);
 }
 
-size_t Projection::findItemIndex(const Expr* key) const {
+Projection::Items::const_iterator Projection::locateItem(const Expr* key) const {
     const VarDecl* keyDecl = key->getExprVarDecl();
+    const Items::const_iterator itemsEnd = _items.end();
 
-    size_t index = 0;
-    for (const ReturnItem& item : _items) {
-        if (const Expr* const* itemExpr = std::get_if<Expr*>(&item)) {
+    for (Items::const_iterator item = _items.begin(); item != itemsEnd; item++) {
+        if (const Expr* const* itemExpr = std::get_if<Expr*>(&*item)) {
             const Expr* projectedExpr = *itemExpr;
 
             // A key may also name the alias an item was given - the x of
@@ -75,22 +77,38 @@ size_t Projection::findItemIndex(const Expr* key) const {
             const bool readsTheItem = StructuralExpressionComparator::equal(projectedExpr, key);
 
             if (namesTheItem || readsTheItem) {
-                return index;
+                return item;
             }
-        } else if (const VarDecl* const* itemDecl = std::get_if<VarDecl*>(&item)) {
+        } else if (const VarDecl* const* itemDecl = std::get_if<VarDecl*>(&*item)) {
             const bool namesTheItem = keyDecl && *itemDecl == keyDecl;
 
             if (namesTheItem) {
-                return index;
+                return item;
             }
         }
-
-        index++;
     }
 
-    return index;
+    return itemsEnd;
+}
+
+size_t Projection::findItemIndex(const Expr* key) const {
+    return static_cast<size_t>(std::distance(_items.begin(), locateItem(key)));
+}
+
+const Expr* Projection::findItemExpr(const Expr* key) const {
+    const Items::const_iterator item = locateItem(key);
+    if (item == _items.end()) {
+        return nullptr;
+    }
+
+    const Expr* const* itemExpr = std::get_if<Expr*>(&*item);
+    if (!itemExpr) {
+        return nullptr;
+    }
+
+    return *itemExpr;
 }
 
 bool Projection::hasItem(const Expr* key) const {
-    return findItemIndex(key) < _items.size();
+    return locateItem(key) != _items.end();
 }

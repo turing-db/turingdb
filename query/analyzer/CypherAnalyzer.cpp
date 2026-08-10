@@ -265,7 +265,7 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
     }
 
     if (projection->hasOrderBy()) {
-        analyze(projection->getOrderBy());
+        analyze(projection->getOrderBy(), projection);
     }
 
     if (!_isV3) {
@@ -341,12 +341,18 @@ void CypherAnalyzer::analyzeDistinct(const ReturnStmt* returnSt, const Projectio
     }
 }
 
-void CypherAnalyzer::analyze(OrderBy* orderBySt) {
+void CypherAnalyzer::analyze(OrderBy* orderBySt, const Projection* projection) {
     for (OrderByItem* item : orderBySt->getItems()) {
         Expr* expr = item->getExpr();
         _exprAnalyzer->analyzeRootExpr(expr);
 
-        if (expr->isAggregate()) {
+        // A key naming the alias of an aggregate is a symbol, and a symbol is never itself
+        // aggregate: the aggregate is the item the key names
+        const Expr* namedItem = projection->findItemExpr(expr);
+        const bool isAggregateKey = expr->isAggregate();
+        const bool namesAnAggregateItem = namedItem && namedItem->isAggregate();
+
+        if (isAggregateKey || namesAnAggregateItem) {
             throwError("Aggregate expressions in ORDER BY are not supported yet", orderBySt);
         }
     }
