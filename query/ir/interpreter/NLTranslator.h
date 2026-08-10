@@ -356,9 +356,10 @@ private:
     static NLCopyFunction selectCopyForChunkType(mlir::Type chunkType);
 
     // Pool-allocate a buffer/loop column matching a chunk type - an ID column for
-    // an ID chunk, a nullable value column for a !storage.nullable<...> chunk - and the
-    // append/gather/compare handler for that element type. The compare selector
-    // throws for chunk types that have no order (an embedding key).
+    // an ID chunk, a nullable value column for a !storage.nullable<...> chunk, a
+    // ColumnVector<uint64_t> for a count chunk - and the append/gather/compare handler
+    // for that element type. The compare selector throws for chunk types that have no
+    // order (an embedding key).
     Column* allocColumnForChunkType(mlir::Type chunkType);
     static NLAppendFunction selectAppendForChunkType(mlir::Type chunkType);
     static NLGatherFunction selectGatherForChunkType(mlir::Type chunkType);
@@ -457,6 +458,12 @@ private:
     Column* allocOptColumnForValueType(ValueType valueType);
     Column* allocSingleRowOptColumnForValueType(ValueType valueType);
     Column* allocOptColumn(ValueType valueType, size_t reserveSize);
+
+    // A count result is a ui64 tally, the pipeline's one non-nullable value chunk, so
+    // it is neither an ID chunk nor a !storage.nullable<...> one and takes a plain
+    // ColumnVector<uint64_t>.
+    static bool isCountElementType(mlir::Type elementType);
+    ColumnVector<uint64_t>* allocCountColumn();
 
     Column* getColumn(mlir::Value chunkValue) const;
     static NLChunkKind getChunkKind(mlir::Type chunkType);

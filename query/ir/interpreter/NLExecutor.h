@@ -215,6 +215,9 @@ public:
     // Gather for a nullable value chunk of this value type (sort emit re-chunk).
     static NLGatherFunction selectOptGatherFunction(ValueType valueType);
 
+    // Gather for the count result chunk: one non-nullable uint64 tally per row.
+    static NLGatherFunction selectCountGatherFunction();
+
     // The mask survivor collector for an nl.filter, chosen by the mask chunk's
     // nullability: a nullable mask drops null rows as well as false ones.
     static NLMaskSurvivorFunction selectMaskSurvivorFunction(bool nullable);
@@ -223,6 +226,7 @@ public:
     // chunk of this value type. Used by nl.sort_collect.
     static NLAppendFunction selectAppendFunction(NLChunkKind kind);
     static NLAppendFunction selectOptAppendFunction(ValueType valueType);
+    static NLAppendFunction selectCountAppendFunction();
 
     // The 3-way row comparator for an ID key column of this kind / a nullable
     // value key column of this value type. The value-type selector throws for a
@@ -232,6 +236,9 @@ public:
 
     // Block-repeat for an ID chunk of this kind (outer column).
     static NLBroadcastFunction selectBlockRepeatFunction(NLChunkKind kind);
+
+    // Block-repeat for the count result chunk, which a limit truncates with factor 1.
+    static NLBroadcastFunction selectCountBlockRepeatFunction();
 
     // Tile for an ID chunk of this kind (inner column).
     static NLBroadcastFunction selectTileFunction(NLChunkKind kind);
@@ -244,6 +251,9 @@ public:
 
     // Range copy for an ID chunk of this kind (skip suffix copy).
     static NLCopyFunction selectCopyFunction(NLChunkKind kind);
+
+    // Range copy for the count result chunk, which a skip lifts to a chunk front.
+    static NLCopyFunction selectCountCopyFunction();
 
     // Range copy for a nullable value chunk of this value type (skip suffix copy).
     static NLCopyFunction selectOptCopyFunction(ValueType valueType);

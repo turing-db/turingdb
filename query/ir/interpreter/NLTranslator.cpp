@@ -1258,7 +1258,7 @@ void NLTranslator::addTruncateColumn(mlir::Value inputValue,
     // copy is a block-repeat with factor 1 (each input row once, stopping at
     // emitThisStep), so it reuses the block-repeat broadcast families the cross
     // product uses - by value type for a nullable value chunk, by chunk kind for
-    // an ID chunk.
+    // an ID chunk, on uint64 for a count chunk.
     Column* output = nullptr;
     NLBroadcastFunction copyPrefix = nullptr;
 
@@ -1266,6 +1266,9 @@ void NLTranslator::addTruncateColumn(mlir::Value inputValue,
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         output = allocOptColumnForValueType(valueType);
         copyPrefix = NLExecutor::selectOptBlockRepeatFunction(valueType);
+    } else if (isCountElementType(elementType)) {
+        output = allocCountColumn();
+        copyPrefix = NLExecutor::selectCountBlockRepeatFunction();
     } else {
         const NLChunkKind kind = getChunkKind(chunkType);
         output = allocColumnForKind(kind);
@@ -1345,7 +1348,7 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
     // The output keeps the input's element type; only the dropped prefix is
     // removed. The copy is a range copy of the surviving suffix to the front of a
     // fresh chunk, so it uses the copy families - by value type for a nullable
-    // value chunk, by chunk kind for an ID chunk.
+    // value chunk, by chunk kind for an ID chunk, on uint64 for a count chunk.
     Column* output = nullptr;
     NLCopyFunction copySuffix = nullptr;
 
@@ -1353,6 +1356,9 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         output = allocOptColumnForValueType(valueType);
         copySuffix = NLExecutor::selectOptCopyFunction(valueType);
+    } else if (isCountElementType(elementType)) {
+        output = allocCountColumn();
+        copySuffix = NLExecutor::selectCountCopyFunction();
     } else {
         const NLChunkKind kind = getChunkKind(chunkType);
         output = allocColumnForKind(kind);
@@ -1607,11 +1613,8 @@ void NLTranslator::translateCountResult(nl::CountResult result, NLStmtContainer*
     NLCountState* state = countStateFor(result.getState());
 
     // The result is the unsigned i64 count chunk (!nl.chunk<ui64>) runCountResult
-    // fills with the single tally row. It is the one non-nullable value chunk in the
-    // pipeline, so allocate its ColumnVector<uint64_t> directly - the shared
-    // allocColumnForChunkType only knows ID chunks and nullable value chunks.
-    ColumnVector<uint64_t>* output = _memory->alloc<ColumnVector<uint64_t>>();
-    output->reserve(_program->getChunkSize());
+    // fills with the single tally row.
+    ColumnVector<uint64_t>* output = allocCountColumn();
     _valueSlots[result.getResult()] = output;
 
     NLCountResultData* data = _program->allocFunctionData<NLCountResultData>(state, output);
@@ -2078,7 +2081,8 @@ Column* NLTranslator::allocValueColumnForValueType(ValueType valueType) {
 }
 
 // An ID chunk allocates an ID column on its kind; a !storage.nullable<...> chunk
-// allocates a ColumnOptVector on its value type. Mirrors addCrossColumn's split.
+// allocates a ColumnOptVector on its value type; a ui64 count chunk a
+// ColumnVector<uint64_t>. Mirrors addCrossColumn's split.
 Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
@@ -2086,6 +2090,10 @@ Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return allocOptColumnForValueType(valueType);
+    }
+
+    if (isCountElementType(elementType)) {
+        return allocCountColumn();
     }
 
     return allocColumnForKind(chunkKindFromElementType(elementType));
@@ -2100,6 +2108,10 @@ NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
         return NLExecutor::selectOptAppendFunction(valueType);
     }
 
+    if (isCountElementType(elementType)) {
+        return NLExecutor::selectCountAppendFunction();
+    }
+
     return NLExecutor::selectAppendFunction(chunkKindFromElementType(elementType));
 }
 
@@ -2110,6 +2122,10 @@ NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptGatherFunction(valueType);
+    }
+
+    if (isCountElementType(elementType)) {
+        return NLExecutor::selectCountGatherFunction();
     }
 
     return NLExecutor::selectGatherFunction(chunkKindFromElementType(elementType));
@@ -2192,12 +2208,8 @@ Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
         return allocOptColumnForValueType(valueType);
     }
 
-    if (const auto intType = mlir::dyn_cast<mlir::IntegerType>(elementType)) {
-        if (intType.getWidth() == 64 && intType.isUnsigned()) {
-            ColumnVector<uint64_t>* output = _memory->alloc<ColumnVector<uint64_t>>();
-            output->reserve(_program->getChunkSize());
-            return output;
-        }
+    if (isCountElementType(elementType)) {
+        return allocCountColumn();
     }
 
     // A list chunk (the nl.collect drain's per-group cell) is a column of ListViews,
@@ -2346,6 +2358,19 @@ Column* NLTranslator::allocSingleRowOptColumnForValueType(ValueType valueType) {
     // update rewrites .front()), so reserve a single element rather than a chunk
     // it would never fill.
     return allocOptColumn(valueType, 1);
+}
+
+bool NLTranslator::isCountElementType(mlir::Type elementType) {
+    const auto intType = mlir::dyn_cast<mlir::IntegerType>(elementType);
+
+    return intType && intType.getWidth() == 64 && intType.isUnsigned();
+}
+
+ColumnVector<uint64_t>* NLTranslator::allocCountColumn() {
+    ColumnVector<uint64_t>* column = _memory->alloc<ColumnVector<uint64_t>>();
+    column->reserve(_program->getChunkSize());
+
+    return column;
 }
 
 Column* NLTranslator::allocOptColumn(ValueType valueType, size_t reserveSize) {
