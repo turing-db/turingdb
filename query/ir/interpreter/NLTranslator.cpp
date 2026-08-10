@@ -1190,12 +1190,14 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
         mlir::Operation* definingOp = column.getDefiningOp();
         const bool isProducedInThisBlock = definingOp && definingOp->getBlock() == outputBlock;
 
-        if (!isInnermostLoopVariable && !isProducedInThisBlock && !isConstantLike(column)) {
+        const bool isConstant = isConstantLike(column);
+
+        if (!isInnermostLoopVariable && !isProducedInThisBlock && !isConstant) {
             throw IRException("nl.output columns must be a loop variable of the enclosing "
                               "nl.for, produced in this block, or a constant");
         }
 
-        outputData->addOutputColumn(getColumn(column));
+        outputData->addOutputColumn(getColumn(column), !isConstant);
     }
 
     body->emplaceStmt(&NLExecutor::runOutput, outputData);

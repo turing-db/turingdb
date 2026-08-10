@@ -1772,8 +1772,10 @@ void NLExecutor::runOutput(NLExecutionContext* context, NLFunctionData* data) {
     } else if (cardinality) {
         rowCount = cardinality->size();
     } else {
-        // Logical row count, assumes all columns are either const or same dimension
-        for (const Column* column : cols) {
+        // Logical row count, assumes the columns that carry rows share a dimension. A
+        // constant is not one of them: it holds a single value standing for every row of
+        // the step, so a step that kept no row would emit it as a row of its own
+        for (const Column* column : output->rowCountColumns()) {
             rowCount = std::max(rowCount, column->size());
         }
     }
