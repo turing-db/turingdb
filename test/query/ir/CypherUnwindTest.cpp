@@ -265,6 +265,23 @@ TEST_F(CypherUnwindTest, crossesUnwindWithMatchedNodes) {
     expectRows("MATCH (n) UNWIND [10, 20] AS x RETURN n, x", expected);
 }
 
+TEST_F(CypherUnwindTest, filtersOnUnwoundVariableInWhere) {
+    // The unwound variable is one side of the WHERE predicate, so the filter runs over the
+    // cross product of the nodes and the elements: a node survives only against the element
+    // equal to its own age. In SimpleGraph only Remy (0) and Adam (1) carry an age, both
+    // 32, so 99 keeps nobody and every ageless node compares null against both elements.
+    const Rows expected = {{"Remy", "32"}, {"Adam", "32"}};
+    expectRows("UNWIND [32, 99] AS wantedAge MATCH (n) WHERE n.age = wantedAge RETURN n.name, wantedAge", expected);
+}
+
+TEST_F(CypherUnwindTest, filtersOnUnwoundVariableInPropertyConstraint) {
+    // The same filter written as an inline property constraint rather than a WHERE: the
+    // unwound variable is the constraint's value, so the pattern is matched against a
+    // value that varies per row instead of a literal. Same rows as the WHERE form.
+    const Rows expected = {{"Remy", "32"}, {"Adam", "32"}};
+    expectRows("UNWIND [32, 99] AS wantedAge MATCH (n {age: wantedAge}) RETURN n.name, wantedAge", expected);
+}
+
 TEST_F(CypherUnwindTest, rejectsNestedListElements) {
     // A nested list has no tagged scalar form, so codegen refuses it rather than
     // emitting IR the interpreter cannot materialize.
