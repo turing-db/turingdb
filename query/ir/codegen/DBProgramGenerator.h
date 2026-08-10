@@ -135,6 +135,7 @@ private:
     void generateCrossedCall(std::string_view procedureName,
                              llvm::ArrayRef<mlir::Attribute> yieldedNames,
                              llvm::ArrayRef<std::string_view> yieldedVariables,
+                             mlir::ValueRange inputs,
                              const InFlightColumns& inFlight);
 
     // Collect those columns. One bound in another block is skipped: an op here can only

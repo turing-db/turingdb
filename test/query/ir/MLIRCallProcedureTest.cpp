@@ -19,6 +19,7 @@
 #include "Procedure.h"
 #include "ProcedureContext.h"
 #include "ProcedureData.h"
+#include "ProcUtils.h"
 #include "ProcedureManager.h"
 #include "ProcedureNamespace.h"
 #include "ProcedureState.h"
@@ -550,6 +551,48 @@ ProcedureData* sideEffectAlloc() {
 }
 
 void sideEffectDealloc(ProcedureData* data) {
+    delete data;
+}
+
+
+struct ConstantArgData : public ProcedureData {};
+
+// test.constantArg(n) YIELD v: emits two rows, n and n + 1, from a constant argument
+// alone. Its rows do not depend on the rows in flight, so a call of it after a MATCH is a
+// cartesian product - and reading the argument proves the constant travelled into the
+// product's right factor with the call.
+void constantArgExecuteImpl(ProcedureState* procedureState) {
+    ConstantArgData& data = procedureState->data<ConstantArgData>();
+
+    const types::Int64::Primitive base =
+        ProcUtils::constArg<types::Int64::Primitive>(data.getInputColumn(0),
+                                                     "test.constantArg: n must be a constant int");
+
+    auto* values = static_cast<ColumnVector<types::Int64::Primitive>*>(data.getReturnColumn(0));
+    values->clear();
+    values->push_back(base);
+    values->push_back(base + 1);
+
+    procedureState->finish();
+}
+
+void constantArgExecute(ProcedureState* procedureState) {
+    switch (procedureState->getStep()) {
+        case ProcedureState::Step::PREPARE:
+        case ProcedureState::Step::RESET:
+        break;
+
+        case ProcedureState::Step::EXECUTE:
+        constantArgExecuteImpl(procedureState);
+        break;
+    }
+}
+
+ProcedureData* constantArgAlloc() {
+    return new ConstantArgData();
+}
+
+void constantArgDealloc(ProcedureData* data) {
     delete data;
 }
 
@@ -1226,6 +1269,14 @@ protected:
         sideEffectProcedure->setDeallocCallback(&sideEffectDealloc);
         sideEffectProcedure->setExecuteCallback(&sideEffectExecute);
         testNamespace->addProcedure(sideEffectProcedure);
+
+        Procedure* constantArgProcedure = new Procedure("constantArg");
+        constantArgProcedure->setAllocCallback(&constantArgAlloc);
+        constantArgProcedure->setDeallocCallback(&constantArgDealloc);
+        constantArgProcedure->setExecuteCallback(&constantArgExecute);
+        constantArgProcedure->addArgument("n", ProcedureType::INT64);
+        constantArgProcedure->addReturnValue("v", ProcedureType::INT64);
+        testNamespace->addProcedure(constantArgProcedure);
 
         Procedure* twoNodesProcedure = new Procedure("twoNodes");
         twoNodesProcedure->setAllocCallback(&twoNodesAlloc);
@@ -2180,5 +2231,26 @@ TEST_F(MLIRCallProcedureTest, cypherCallSamplesANeighbourhood) {
     std::vector<NodePairSink::Row> rows;
     sink.sortedRows(rows);
     const std::vector<NodePairSink::Row> expected {{0, 1}, {0, 2}, {1, 4}, {2, 3}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(MLIRCallProcedureTest, cypherCallWithConstantArgumentsCrossesWithTheMatch) {
+    auto graph = buildLabelledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // MATCH (n) CALL test.constantArg(3) YIELD v RETURN v: the call takes an argument, but
+    // one built from a literal, so its rows do not follow the matched rows any more than an
+    // argument-less call's do - it is their cartesian product. Five nodes against the two
+    // rows the call emits, and test.constantArg declares no indices, so reaching this
+    // through a carry set instead would both lose the cardinality and be refused.
+    Int64Sink sink;
+    runQuery("MATCH (n) CALL test.constantArg(3) YIELD v RETURN v", graph.get(),
+             reader.getView(),
+             sink);
+
+    std::vector<types::Int64::Primitive> rows = sink.rows();
+    std::sort(rows.begin(), rows.end());
+    const std::vector<types::Int64::Primitive> expected {3, 3, 3, 3, 3, 4, 4, 4, 4, 4};
     EXPECT_EQ(rows, expected);
 }
