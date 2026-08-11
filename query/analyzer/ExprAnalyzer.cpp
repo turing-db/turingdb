@@ -781,8 +781,9 @@ void ExprAnalyzer::analyzeListElements(Expr* expr, std::span<Expr* const> elemen
 
         analyzeExpr(element);
 
-        // A list is written element by element, and an element is an expression of its
-        // own: the [1, n.age] of ORDER BY [1, n.age] reads a row through its second
+        // An element is an expression of its own, so its flags are the list's. Elements
+        // are literals today, and a map literal is one: the {age: n.age} of
+        // ORDER BY [{age: n.age}] reads a row through its value
         if (element->isDynamic()) {
             expr->setDynamic();
         }
