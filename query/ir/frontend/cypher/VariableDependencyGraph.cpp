@@ -81,16 +81,13 @@ void VariableDependencyGraph::buildFromAST(const CypherAST* ast) {
     const StmtContainer::Stmts& stmts = stmtsContainer->stmts();
 
     for (const Stmt* stmt : stmts) {
-        const MatchStmt* match = dynamic_cast<const MatchStmt*>(stmt);
-        const UnwindStmt* unwind = dynamic_cast<const UnwindStmt*>(stmt);
-
-        if (match) {
+        if (const MatchStmt* match = dynamic_cast<const MatchStmt*>(stmt)) {
             const Pattern* pattern = match->getPattern();
             const Pattern::PatternElements& elements = pattern->elements();
             for (const PatternElement* element : elements) {
                 registerPatternElement(element);
             }
-        } else if (unwind) {
+        } else if (const UnwindStmt* unwind = dynamic_cast<const UnwindStmt*>(stmt)) {
             registerUnwindStmt(unwind);
         } else {
             spdlog::warn("Non-match statement: skipped");
