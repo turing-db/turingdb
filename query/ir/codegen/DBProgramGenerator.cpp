@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <type_traits>
 #include <variant>
@@ -19,6 +20,7 @@
 #include "mlir/IR/ValueRange.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 
 #include "DBDialect.h"
 #include "DBOps.h"
@@ -1179,10 +1181,23 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
         }
     };
 
+    // The analyzer names every item it accepts, so an item without one is left for the
+    // sink to label by position rather than being a codegen error.
+    const auto getNameForItem = [&](auto&& item) -> llvm::StringRef {
+        const std::optional<std::string_view> name = proj->getName(item);
+        if (!name) {
+            return llvm::StringRef();
+        }
+
+        return llvm::StringRef(name->data(), name->size());
+    };
+
     llvm::SmallVector<mlir::Value> outputted;
+    llvm::SmallVector<llvm::StringRef> outputNames;
     for (const Projection::ReturnItem item : returned) {
         const mlir::Value itemCol = std::visit(getVarForItem, item);
         outputted.push_back(itemCol);
+        outputNames.push_back(std::visit(getNameForItem, item));
 
         // An alias is one variable declared once, so a key naming it holds the very
         // declaration of the item it names: publishing the column under that declaration
@@ -1258,7 +1273,9 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
         }
     }
 
-    _opBuilder.create<mlir::db::Output>(loc, mlir::ValueRange{outputted});
+    _opBuilder.create<mlir::db::Output>(loc,
+                                        mlir::ValueRange{outputted},
+                                        _opBuilder.getStrArrayAttr(outputNames));
 }
 
 void DBProgramGenerator::translateDistinct(const Projection* projection,

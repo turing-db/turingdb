@@ -700,6 +700,10 @@ public:
     {
     }
 
+    void setColumnNames(std::span<const std::string_view> names) override {
+        _columnNames.assign(names.begin(), names.end());
+    }
+
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         if (_quiet) {
             _rowCount += rowCount;
@@ -709,7 +713,12 @@ public:
         if (_execCount == 0) {
             tabulate::RowStream headerRow;
             for (size_t columnIndex = 0; columnIndex < chunks.size(); columnIndex++) {
-                headerRow << ("$" + std::to_string(columnIndex));
+                const bool isNamed = columnIndex < _columnNames.size() && !_columnNames[columnIndex].empty();
+                if (isNamed) {
+                    headerRow << _columnNames[columnIndex];
+                } else {
+                    headerRow << ("$" + std::to_string(columnIndex));
+                }
             }
             _table.add_row(std::move(headerRow));
         }
@@ -732,6 +741,7 @@ public:
 
 private:
     tabulate::Table _table;
+    std::vector<std::string> _columnNames;
     size_t _execCount {0};
     size_t _rowCount {0};
     bool _quiet {false};

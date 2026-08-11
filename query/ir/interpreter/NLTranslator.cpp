@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <string_view>
 
 #include <spdlog/fmt/bundled/format.h>
 
@@ -9,6 +10,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Verifier.h"
+#include "llvm/ADT/SmallVector.h"
 
 #include "columns/ColumnConst.h"
 #include "columns/ColumnMask.h"
@@ -1269,6 +1271,18 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
         }
 
         outputData->addOutputColumn(getColumn(column), !isConstant);
+    }
+
+    // The names label the result, not one emission of it, so they go on the program
+    // rather than the per-step output data the limit and skip handles sit on.
+    if (const mlir::ArrayAttr columnNames = output.getColumnNamesAttr()) {
+        llvm::SmallVector<std::string_view> names;
+        for (const mlir::Attribute name : columnNames) {
+            const llvm::StringRef nameText = mlir::cast<mlir::StringAttr>(name).getValue();
+            names.emplace_back(nameText.data(), nameText.size());
+        }
+
+        _program->setColumnNames(names);
     }
 
     body->emplaceStmt(&NLExecutor::runOutput, outputData);

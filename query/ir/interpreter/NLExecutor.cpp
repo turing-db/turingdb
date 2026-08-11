@@ -1315,6 +1315,14 @@ NLExecutor::~NLExecutor() {
 }
 
 void NLExecutor::run() {
+    NLOutputSink* const sink = _ctxt.getSink();
+    const std::span<const std::string_view> columnNames = _prog->columnNames();
+
+    const bool hasNamesToPublish = sink && !columnNames.empty();
+    if (hasNamesToPublish) {
+        sink->setColumnNames(columnNames);
+    }
+
     runBody(&_ctxt, _prog->getStmts());
 }
 

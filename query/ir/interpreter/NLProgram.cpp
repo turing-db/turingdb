@@ -12,6 +12,10 @@ NLProgram::NLProgram() {
 NLProgram::~NLProgram() {
 }
 
+void NLProgram::setColumnNames(std::span<const std::string_view> names) {
+    _columnNames.assign(names.begin(), names.end());
+}
+
 void NLSortState::reset() {
     for (Column* buffer : _buffers) {
         buffer->clear();

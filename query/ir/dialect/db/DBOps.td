@@ -576,13 +576,34 @@ def Output : TuringOp<"output"> {
     Variadic<Column> accepts any number of columns of any value. The op has no
     results and is deliberately not Pure: emitting the result is its whole
     purpose, so it must survive dead-code elimination.
+
+    An optional `names` array gives the result columns their query-level names,
+    one per column: the alias a RETURN item was given through AS, or the item
+    spelled as it was written when it has none. A hand-written program that
+    names nothing leaves the array off, and the result columns are unnamed.
+
+      db.output(%a, %b) names ["person", "n.age"] : !db.column<!storage.node_id>, !db.column<i64>
   }];
-  let arguments = (ins Variadic<Column>:$columns);
+  let arguments = (ins Variadic<Column>:$columns,
+                       OptionalAttr<StrArrayAttr>:$column_names);
 
   // The column types vary from query to query and cannot be built from a
   // recipe, so they are spelled after the colon, the same as nl.output.
-  // qualified(...) forces the leading !db. on every printed type.
-  let assemblyFormat = "`(` $columns `)` attr-dict `:` qualified(type($columns))";
+  // qualified(...) forces the leading !db. on every printed type. The names,
+  // when present, print after a `names` keyword, which anchors the optional
+  // group for the declarative parser.
+  let assemblyFormat = [{
+    `(` $columns `)` (`names` $column_names^)? attr-dict `:` qualified(type($columns))
+  }];
+
+  // A hand-written program names nothing, so it gets a builder taking the columns alone.
+  let builders = [
+      OpBuilder<(ins "::mlir::ValueRange":$columns)>
+  ];
+
+  // One name per column or none at all: a shorter array would name the wrong
+  // column, and a longer one names a column that is not emitted.
+  let hasVerifier = 1;
 }
 
 /**
