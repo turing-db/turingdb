@@ -652,6 +652,7 @@ void tabulateCell(tabulate::RowStream& rs, const Column* column, size_t row) {
         TABULATE_COL_CASE(ColumnConst<PropertyNull>, row)
 
         TABULATE_COL_CASE(ColumnConst<ListView>, row)
+        TABULATE_COL_CASE(ColumnVector<ListView>, row)
         TABULATE_COL_CASE(ColumnVector<ListElementView>, row)
 
         default: {
