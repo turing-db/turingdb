@@ -377,6 +377,86 @@ private:
     std::vector<Row> _rows;
 };
 
+// Collects the (edge, count) rows a group over an edge variable emits: an edge id
+// key chunk and a non-null !nl.chunk<ui64> count chunk.
+class GroupEdgeCountSink : public NLOutputSink {
+public:
+    using Row = std::pair<uint64_t, uint64_t>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* edges = dynamic_cast<const ColumnEdgeIDs*>(chunks[0]);
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
+        ASSERT_NE(edges, nullptr);
+        ASSERT_NE(counts, nullptr);
+        ASSERT_EQ(edges->size(), counts->size());
+
+        const auto& edgeRaw = edges->getRaw();
+        const auto& countRaw = counts->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.push_back({edgeRaw[rowIndex].getValue(), countRaw[rowIndex]});
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
+// Collects the (source, edge, target, team, count) rows a group whose keys come from
+// a RETURN * expansion emits: the three entity id chunks the wildcard names, a
+// nullable string key chunk and a non-null !nl.chunk<ui64> count chunk.
+class GroupWildcardEdgeSink : public NLOutputSink {
+public:
+    using Row = std::tuple<uint64_t, uint64_t, uint64_t, std::optional<std::string>, uint64_t>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 5u);
+
+        const auto* sources = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
+        const auto* edges = dynamic_cast<const ColumnEdgeIDs*>(chunks[1]);
+        const auto* targets = dynamic_cast<const ColumnNodeIDs*>(chunks[2]);
+        const auto* teams = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[3]);
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[4]);
+        ASSERT_NE(sources, nullptr);
+        ASSERT_NE(edges, nullptr);
+        ASSERT_NE(targets, nullptr);
+        ASSERT_NE(teams, nullptr);
+        ASSERT_NE(counts, nullptr);
+
+        const auto& sourceRaw = sources->getRaw();
+        const auto& edgeRaw = edges->getRaw();
+        const auto& targetRaw = targets->getRaw();
+        const auto& teamRaw = teams->getRaw();
+        const auto& countRaw = counts->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            std::optional<std::string> team;
+            if (teamRaw[rowIndex]) {
+                team = std::string(*teamRaw[rowIndex]);
+            }
+
+            _rows.emplace_back(sourceRaw[rowIndex].getValue(),
+                               edgeRaw[rowIndex].getValue(),
+                               targetRaw[rowIndex].getValue(),
+                               team,
+                               countRaw[rowIndex]);
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
 // Counts appendChunks calls and total rows without materializing them, so an empty
 // grouped aggregation can be shown to emit nothing.
 // Collects the (team, constant, count) rows a grouped count emits beside a constant item:
@@ -1336,6 +1416,13 @@ protected:
         create(R"(CREATE (:Node {team: "blue"}))");
     }
 
+    // Two KNOWS edges (ids 0 and 1) over four nodes, so a group on the edge variable
+    // has one group per edge.
+    void buildKnowsGraph() {
+        create(R"(CREATE (:Node {team: "red"})-[:KNOWS]->(:Node {team: "blue"}))");
+        create(R"(CREATE (:Node {team: "red"})-[:KNOWS]->(:Node {team: "blue"}))");
+    }
+
     void buildTeamCityGraph() {
         create(R"(CREATE (:Node {team: "red", city: "paris", score: 10}), (:Node {team: "red", city: "paris", score: 20}), (:Node {team: "red", city: "lyon", score: 5}), (:Node {team: "blue", city: "paris", score: 100}))");
         create(R"(CREATE (:Node {team: "blue", city: "paris"}))");
@@ -1483,6 +1570,45 @@ TEST_F(GroupAggregateCypherTest, aggregateAfterCartesianProduct) {
     std::vector<GroupCountSink::Row> rows;
     groupSink.sortedRows(rows);
     const std::vector<GroupCountSink::Row> expected {{"blue", 8}, {"red", 8}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(GroupAggregateCypherTest, groupedCountByEdgeVariable) {
+    buildKnowsGraph();
+
+    GroupEdgeCountSink sink;
+    match("MATCH (a)-[e]->(b) RETURN e, count(*)", sink);
+
+    std::vector<GroupEdgeCountSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<GroupEdgeCountSink::Row> expected {{0, 1}, {1, 1}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(GroupAggregateCypherTest, groupedCountByEdgeVariableOverACartesianProduct) {
+    buildKnowsGraph();
+
+    GroupEdgeCountSink sink;
+    match("MATCH (a)-[e]->(b), (n:Node) RETURN e, count(*)", sink);
+
+    // Each edge is paired with the four nodes, so every edge counts four rows.
+    std::vector<GroupEdgeCountSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<GroupEdgeCountSink::Row> expected {{0, 4}, {1, 4}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(GroupAggregateCypherTest, groupedCountByWildcardNamingAnEdgeVariable) {
+    buildKnowsGraph();
+
+    GroupWildcardEdgeSink sink;
+    match("MATCH (a)-[e]->(b) RETURN *, a.team, count(*)", sink);
+
+    // The wildcard makes a, e and b grouping keys, so each edge is its own group.
+    std::vector<GroupWildcardEdgeSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<GroupWildcardEdgeSink::Row> expected {{0, 0, 1, "red", 1},
+                                                            {2, 1, 3, "red", 1}};
     EXPECT_EQ(rows, expected);
 }
 

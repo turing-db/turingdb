@@ -271,6 +271,7 @@ private:
 
     mlir::db::ColumnType allocColumnType(mlir::Type type);
     void registerValue(const VariableDependency* var, mlir::TypedValue<mlir::Type> val);
+    void rebindVariableColumn(std::string_view name, mlir::TypedValue<mlir::Type> val);
 };
 
 }
