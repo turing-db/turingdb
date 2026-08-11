@@ -313,6 +313,24 @@ void DBProgramGenerator::registerValue(const VariableDependency* var, mlir::Type
     _varMap[var].emplace_back(val);
 }
 
+void DBProgramGenerator::rebindVariableColumn(std::string_view name, mlir::TypedValue<mlir::Type> val) {
+    for (const auto& [var, values] : _varMap) {
+        if (var->getName() == name) {
+            registerValue(var, val);
+        }
+    }
+
+    const VariableDependencyGraph::EdgeIdentityMap& edgeIdentities = _vdg.edgeIdentities();
+    const auto findIt = edgeIdentities.find(std::string(name));
+    if (findIt == edgeIdentities.end()) {
+        return;
+    }
+
+    for (const VariableDependency* occurrence : findIt->second) {
+        registerValue(occurrence, val);
+    }
+}
+
 void DBProgramGenerator::addScanNodes(const VariableDependency* var) {
     bioassert(!_varMap.contains(var), "ScanNodes for registered variable");
 
@@ -2363,9 +2381,10 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
         }
     }
 
-    // Parallel: for each key position, exactly one of these is non-null
+    // Parallel: a key position is either a variable, named by keyVarNameAtPos, or an
+    // expression, held by keyExprAtPos
     llvm::SmallVector<mlir::Value> keyColumns;
-    llvm::SmallVector<const VariableDependency*> keyVarAtPos;
+    llvm::SmallVector<std::string_view> keyVarNameAtPos;
     llvm::SmallVector<const Expr*> keyExprAtPos;
 
     llvm::SmallVector<mlir::Value> aggInputColumns;
@@ -2382,14 +2401,7 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
             bioassert(findIt != variableColumns.end(), "Grouping key variable {} not found.", name);
             keyColumns.push_back(findIt->second);
 
-            const VariableDependency* keyVar = nullptr;
-            for (auto& [var, values] : _varMap) {
-                if (var->getName() == name) {
-                    keyVar = var;
-                    break;
-                }
-            }
-            keyVarAtPos.push_back(keyVar);
+            keyVarNameAtPos.push_back(name);
             keyExprAtPos.push_back(nullptr);
             continue;
         }
@@ -2416,7 +2428,7 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
             }
 
             keyColumns.push_back(keyColumn);
-            keyVarAtPos.push_back(nullptr);
+            keyVarNameAtPos.push_back({});
             keyExprAtPos.push_back(item);
             continue;
         }
@@ -2504,26 +2516,21 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
     const mlir::ResultRange results = groupAgg.getResults();
 
     for (size_t i = 0; i < keyCount; i++) {
-        if (keyVarAtPos[i]) {
-            registerValue(keyVarAtPos[i], results[i]);
-        } else {
-            _exprMap[keyExprAtPos[i]] = results[i];
-
-            const bool isSymbol = keyExprAtPos[i]->getKind() == Expr::Kind::SYMBOL;
-            if (not isSymbol) {
-                continue;
-            }
-
-            // Symbols need their value updated: the aggregate gives them a new value
-            const SymbolExpr* sym = static_cast<const SymbolExpr*>(keyExprAtPos[i]);
-            const std::string_view symName = sym->getDecl()->getName();
-            for (auto& [var, values] : _varMap) {
-                if (var->getName() == symName) {
-                    registerValue(var, results[i]);
-                    break;
-                }
-            }
+        if (!keyVarNameAtPos[i].empty()) {
+            rebindVariableColumn(keyVarNameAtPos[i], results[i]);
+            continue;
         }
+
+        _exprMap[keyExprAtPos[i]] = results[i];
+
+        const bool isSymbol = keyExprAtPos[i]->getKind() == Expr::Kind::SYMBOL;
+        if (not isSymbol) {
+            continue;
+        }
+
+        // Symbols need their value updated: the aggregate gives them a new value
+        const SymbolExpr* sym = static_cast<const SymbolExpr*>(keyExprAtPos[i]);
+        rebindVariableColumn(sym->getDecl()->getName(), results[i]);
     }
 
     for (size_t i = 0; i < aggCount; i++) {
