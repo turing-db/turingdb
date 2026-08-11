@@ -2261,6 +2261,27 @@ TEST_F(MLIRCallProcedureTest, cypherCallSamplesANeighbourhood) {
     EXPECT_EQ(rows, expected);
 }
 
+TEST_F(MLIRCallProcedureTest, cypherCallOmittingAnOptionalArgument) {
+    auto graph = buildHopGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The seed of gnn.neighbourhoodSample is optional, so the call may write the two
+    // required arguments alone and leave the procedure to pick a seed of its own. The
+    // sample size is still above the out-degree of every node, so which seed it picks
+    // does not change the rows: the same four edges as the seeded call.
+    NodePairSink sink;
+    runQuery("MATCH (n) CALL gnn.neighbourhoodSample(n, 2) YIELD tgt RETURN n, tgt",
+             graph.get(),
+             reader.getView(),
+             sink);
+
+    std::vector<NodePairSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<NodePairSink::Row> expected {{0, 1}, {0, 2}, {1, 4}, {2, 3}};
+    EXPECT_EQ(rows, expected);
+}
+
 TEST_F(MLIRCallProcedureTest, cypherCallWithConstantArgumentsCrossesWithTheMatch) {
     auto graph = buildLabelledGraph();
     const FrozenCommitTx transaction = graph->openTransaction();

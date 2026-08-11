@@ -2349,13 +2349,20 @@ void NLTranslator::translateProcedure(nl::Procedure procedureOp, NLStmtContainer
 void NLTranslator::bindProcedureInputs(NLProcedureState* state, mlir::ValueRange inputs) {
     // Operand i is argument i, so each argument chunk lands in the slot the procedure
     // reads that argument from. The chunks are the enclosing loop's variables, refilled
-    // in place each step, so binding them once here holds for every step.
-    const size_t argumentCount = state->getProcedure()->argumentTypes().size();
-    if (inputs.size() != argumentCount) {
+    // in place each step, so binding them once here holds for every step. A call that
+    // stopped short of the trailing optional arguments leaves their slots at the null
+    // the alloc sized them to, which is how the procedure reads an omitted one.
+    const Procedure* procedure = state->getProcedure();
+    const size_t argumentCount = procedure->argumentTypes().size();
+    const size_t requiredCount = procedure->getRequiredArgumentCount();
+    const bool tooFewArguments = inputs.size() < requiredCount;
+    const bool tooManyArguments = inputs.size() > argumentCount;
+    if (tooFewArguments || tooManyArguments) {
         throw IRException(fmt::format("A procedure call passes {} arguments, but the procedure "
-                                      "declares {}",
+                                      "declares {}, {} of them required",
                                       inputs.size(),
-                                      argumentCount));
+                                      argumentCount,
+                                      requiredCount));
     }
 
     ProcedureData* procedureData = state->getData();
