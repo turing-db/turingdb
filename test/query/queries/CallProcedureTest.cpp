@@ -113,6 +113,15 @@ TEST_F(CallProcedureTest, History) {
     ASSERT_TRUE(executed);
 }
 
+TEST_F(CallProcedureTest, NeighbourhoodSampleOverAMatchWithoutARow) {
+    // Nobody is named "nobody", so the call is driven on an empty argument column. An
+    // empty chunk is a normal chunk: the query returns no row rather than failing.
+    const size_t rows = rowCount("MATCH (n:Person) WHERE n.name = \"nobody\" "
+                                 "CALL gnn.neighbourhoodSample(n, 5, 1) YIELD tgt "
+                                 "RETURN n, tgt");
+    EXPECT_EQ(rows, 0);
+}
+
 TEST_F(CallProcedureTest, DescribeCommit) {
     bool executed = false;
     const auto res = query("CALL db.history() YIELD commit AS c "

@@ -2282,6 +2282,25 @@ TEST_F(MLIRCallProcedureTest, cypherCallOmittingAnOptionalArgument) {
     EXPECT_EQ(rows, expected);
 }
 
+TEST_F(MLIRCallProcedureTest, cypherCallOverAMatchWithoutARow) {
+    auto graph = buildScoreGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // No player scores 99, so the call is driven on an empty argument column. An empty
+    // chunk is a normal chunk: the query returns no row rather than failing.
+    NodePairSink sink;
+    runQuery("MATCH (n:Player) WHERE n.score = 99 "
+             "CALL gnn.neighbourhoodSample(n, 2, 42) YIELD tgt RETURN n, tgt",
+             graph.get(),
+             reader.getView(),
+             sink);
+
+    std::vector<NodePairSink::Row> rows;
+    sink.sortedRows(rows);
+    EXPECT_TRUE(rows.empty());
+}
+
 TEST_F(MLIRCallProcedureTest, cypherCallWithConstantArgumentsCrossesWithTheMatch) {
     auto graph = buildLabelledGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
