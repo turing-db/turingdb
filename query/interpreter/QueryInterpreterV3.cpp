@@ -17,6 +17,8 @@
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
 
+#include "LocalMemory.h"
+#include "ProcedureContext.h"
 #include "SystemManager.h"
 #include "SystemAccessor.h"
 #include "versioning/CommitBuilder.h"
@@ -171,7 +173,22 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
         return;
     }
 
-    DBDialectInterpreter interpreter(module, &view, sink, mem, ChunkConfig::CHUNK_SIZE, writeBuffer, metadataBuilder);
+    ProcedureContext procedureContext;
+    procedureContext.setGraph(system.getGraph(graphName));
+    procedureContext.setGraphView(&view);
+    procedureContext.setTransaction(&txRes.value());
+    procedureContext.setProcedures(system.getProcedures());
+    procedureContext.setChunkSize(ChunkConfig::CHUNK_SIZE);
+    procedureContext.setListBuffer(&mem->listBuffer());
+
+    DBDialectInterpreter interpreter(module,
+                                     &view,
+                                     sink,
+                                     mem,
+                                     ChunkConfig::CHUNK_SIZE,
+                                     writeBuffer,
+                                     metadataBuilder,
+                                     &procedureContext);
     try {
         interpreter.run();
     } catch (const CompilerException& e) {
