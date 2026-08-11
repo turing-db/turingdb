@@ -53,6 +53,8 @@ void prepareImpl(ProcedureState* proc) {
     const Column* inputSampleSize = data.getInputColumn(1);
     const Column* inputSeed = data.getInputColumn(2);
 
+    bioassert(inputNodeIDs, "gnn.neighbourhoodSample: must be provided input nodes");
+
     auto* srcCol = static_cast<ColumnNodeIDs*>(data.getReturnColumn(0));
     auto* edgeCol = static_cast<ColumnEdgeIDs*>(data.getReturnColumn(1));
     auto* edgeTypeCol = static_cast<ColumnEdgeTypes*>(data.getReturnColumn(2));
@@ -71,11 +73,6 @@ void prepareImpl(ProcedureState* proc) {
                                  + chunkSizeString);
     }
     const size_t sampleSize = signedSampleSize;
-
-    if (!inputNodeIDs || inputNodeIDs->size() == 0) {
-        proc->finish();
-        return;
-    }
 
     std::optional<uint64_t> seed = std::nullopt;
     if (inputSeed) {
