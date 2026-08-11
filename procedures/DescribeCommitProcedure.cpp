@@ -164,6 +164,7 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
         break;
 
         case ProcedureState::Step::RESET:
+            data._i = 0;
         break;
 
         case ProcedureState::Step::EXECUTE: {
