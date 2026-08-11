@@ -534,15 +534,10 @@ LogicalResult UnwindCollect::verify() {
     return success();
 }
 
-// db.unwind_const carries its literal list as an array of typed attributes and emits
-// one column. The result element type is the homogeneity verdict the frontend derived
-// from the analyzer: a heterogeneous or empty list is a type-erased list_element
-// column, whose cells may differ, so nothing more is checked; a homogeneous list is a
-// typed column, so all its literals must share one attribute type. We check the
-// literals agree with each other rather than with the column's element type - a
-// StringAttr carries no !storage.string to compare against - so a homogeneous verdict
-// paired with the wrong column type is not an op-level error; the runtime fill catches
-// it on the element's type tag rather than reading a value of the wrong type.
+// The literals are checked against each other, not against the column's element type -
+// a StringAttr carries no !storage.string to compare against - so a homogeneous result
+// type paired with literals of another type is not an op-level error; the runtime fill
+// catches that on the element's type tag.
 LogicalResult UnwindConst::verify() {
     const ColumnType resultColumn = llvm::dyn_cast<ColumnType>(getResult().getType());
     if (!resultColumn) {
