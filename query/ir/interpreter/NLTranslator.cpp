@@ -578,9 +578,7 @@ void NLTranslator::translateUnwindConstLoop(const IteratorConfig& config,
     ValueType valueType {ValueType::Invalid};
 
     if (heterogeneous) {
-        ColumnVector<ListElementView>* elements = _memory->alloc<ColumnVector<ListElementView>>();
-        elements->reserve(_program->getChunkSize());
-        output = elements;
+        output = allocListElementColumn();
     } else {
         valueType = nullableChunkValueType(valueChunk.getType());
         output = allocOptColumnForValueType(valueType);
@@ -2342,7 +2340,8 @@ void NLTranslator::addCrossColumn(mlir::Value inputValue,
 
     // The output keeps the input's element type, only the row count changes. A
     // nullable value chunk allocates a ColumnOptVector and broadcasts on its
-    // value type; an ID chunk allocates on its chunk kind.
+    // value type; a list_element chunk allocates a column of tagged scalars, which
+    // carry their own type; an ID chunk allocates on its chunk kind.
     Column* output = nullptr;
     NLBroadcastFunction broadcast = nullptr;
 
@@ -2351,6 +2350,10 @@ void NLTranslator::addCrossColumn(mlir::Value inputValue,
         output = allocOptColumnForValueType(valueType);
         broadcast = isOuter ? NLExecutor::selectOptBlockRepeatFunction(valueType)
                             : NLExecutor::selectOptTileFunction(valueType);
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        output = allocListElementColumn();
+        broadcast = isOuter ? NLExecutor::selectListElementBlockRepeatFunction()
+                            : NLExecutor::selectListElementTileFunction();
     } else {
         const NLChunkKind kind = getChunkKind(chunkType);
         output = allocColumnForKind(kind);
@@ -2441,6 +2444,13 @@ bool NLTranslator::isCountElementType(mlir::Type elementType) {
 
 ColumnVector<uint64_t>* NLTranslator::allocCountColumn() {
     ColumnVector<uint64_t>* column = _memory->alloc<ColumnVector<uint64_t>>();
+    column->reserve(_program->getChunkSize());
+
+    return column;
+}
+
+Column* NLTranslator::allocListElementColumn() {
+    ColumnVector<ListElementView>* column = _memory->alloc<ColumnVector<ListElementView>>();
     column->reserve(_program->getChunkSize());
 
     return column;

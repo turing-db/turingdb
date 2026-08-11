@@ -2583,6 +2583,16 @@ NLBroadcastFunction NLExecutor::selectOptTileFunction(ValueType valueType) {
     return broadcast;
 }
 
+// A list_element chunk is a ColumnVector<ListElementView> of fixed-width tagged
+// scalars, so the same broadcast templates carry the tag along with the value.
+NLBroadcastFunction NLExecutor::selectListElementBlockRepeatFunction() {
+    return &blockRepeatColumn<ListElementView>;
+}
+
+NLBroadcastFunction NLExecutor::selectListElementTileFunction() {
+    return &tileColumn<ListElementView>;
+}
+
 NLCopyFunction NLExecutor::selectCopyFunction(NLChunkKind kind) {
     switch (kind) {
         case NLChunkKind::NodeID:

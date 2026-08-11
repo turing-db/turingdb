@@ -83,9 +83,8 @@ private:
         llvm::ArrayRef<int64_t> _nodeIDs;
 
         // The literal list an UnwindConst iterator emits; a null (empty) ListView
-        // for the other kinds. Materialized from the op's element attributes into
-        // the query-scoped ListBuffer at config setup, so the elements are copied
-        // into stable storage that outlives the loop.
+        // for the other kinds. Materialized by materializeListView into the
+        // query-scoped ListBuffer at config setup.
         ListView _list;
     };
 
@@ -169,10 +168,9 @@ private:
                                   NLStmtContainer* body);
 
     // Materialize an nl.unwind_const's literal element attributes into a ListView in
-    // the query-scoped ListBuffer: each typed builtin attribute becomes a tagged
-    // ListItemVariant, so the elements land in stable storage the loop reads chunk by
-    // chunk. String bytes are copied in, so the StringAttr views need only outlive
-    // this call (the MLIRContext keeps them alive through translation).
+    // the query-scoped ListBuffer, which the loop then reads chunk by chunk. A string
+    // element stores the string_view, not the characters, so the module the literals
+    // came from must outlive execution - not just this call.
     ListView materializeListView(mlir::ArrayAttr elements);
 
     // Translate the nl.for over an nl.scan_edges iterator: allocate the four
@@ -489,6 +487,10 @@ private:
     // ColumnVector<uint64_t>.
     static bool isCountElementType(mlir::Type elementType);
     ColumnVector<uint64_t>* allocCountColumn();
+
+    // Allocate a type-erased column of tagged scalars - the shape a heterogeneous
+    // unwind emits and a cross product broadcasts - reserving a full chunk.
+    Column* allocListElementColumn();
 
     Column* getColumn(mlir::Value chunkValue) const;
     static NLChunkKind getChunkKind(mlir::Type chunkType);

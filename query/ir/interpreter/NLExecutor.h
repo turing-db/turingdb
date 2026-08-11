@@ -255,6 +255,11 @@ public:
     // Tile for a nullable value chunk of this value type (inner column).
     static NLBroadcastFunction selectOptTileFunction(ValueType valueType);
 
+    // Block-repeat (outer column) and tile (inner column) for a list_element chunk: a
+    // tagged scalar carries its own type, so there is no value type to dispatch on.
+    static NLBroadcastFunction selectListElementBlockRepeatFunction();
+    static NLBroadcastFunction selectListElementTileFunction();
+
     // Range copy for an ID chunk of this kind (skip suffix copy).
     static NLCopyFunction selectCopyFunction(NLChunkKind kind);
 
