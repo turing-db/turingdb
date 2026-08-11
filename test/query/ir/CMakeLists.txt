@@ -46,6 +46,12 @@ target_link_libraries(test_query_ir_call_procedure PRIVATE
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s)
 
+# The optional-argument tests drive gnn.neighbourhoodSample from hand-written IR - the
+# analyzer would reject the wrong-arity forms before they reach the lowering's check -
+# so they need only the procedure registry beside the engine.
+add_ir_tests(test_query_ir_call_optional_argument CallOptionalArgumentTest.cpp)
+target_link_libraries(test_query_ir_call_optional_argument PRIVATE turing_db_procedures_s)
+
 # The db.* procedure tests drive the registered schema and version-control procedures from
 # the query text alone, so they need the procedure registry and the frontend as well as the
 # engine.
