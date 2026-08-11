@@ -504,6 +504,17 @@ TEST_F(OrderByTest, listKeyReadingARowIsRejected) {
                  TuringException);
 }
 
+// A map is a literal, so a list may hold one and reach the propagation the case above
+// cannot: the map reads a row, the list varies with it and the key is rejected like the
+// bare map rather than being taken for a constant and dropped
+TEST_F(OrderByTest, listKeyHoldingAMapReadingARowIsNotDropped) {
+    mlir::MLIRContext context;
+    mlir::OwningOpRef<mlir::ModuleOp> module;
+
+    EXPECT_THROW(generateProgram("MATCH (n) RETURN n.name ORDER BY [{age: n.age}]", context, module),
+                 TuringException);
+}
+
 // A call over constant arguments answers the same in every row, so it ties them all and
 // is dropped like any other constant: this is ORDER BY n.name, keyed once
 TEST_F(OrderByTest, constantCallKeyIsDropped) {
