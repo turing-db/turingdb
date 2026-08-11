@@ -1732,15 +1732,20 @@ void DBLowering::lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect) {
 void DBLowering::lowerCallProcedure(mlir::db::CallProcedure call) {
     const Procedure* procedure = procedureFor(call.getProcedure());
 
-    // One column per declared argument, in declaration order, so operand i is
-    // argument i - the call cannot bind an argument by name, and a procedure never
-    // takes an optional one.
+    // One column per written argument, in declaration order, so operand i is argument
+    // i - the call cannot bind an argument by name. The optional arguments come last
+    // and a call may stop short of them, leaving the procedure to read their slots as
+    // unbound, so the required count is the floor rather than the count itself.
     const mlir::OperandRange inputs = call.getInputs();
     const ProcedureTypeVector& argumentTypes = procedure->argumentTypes();
-    if (inputs.size() != argumentTypes.size()) {
+    const size_t requiredCount = procedure->getRequiredArgumentCount();
+    const bool tooFewArguments = inputs.size() < requiredCount;
+    const bool tooManyArguments = inputs.size() > argumentTypes.size();
+    if (tooFewArguments || tooManyArguments) {
         throw IRException("db.call_procedure of '" + call.getProcedure().str() + "' passes "
                           + std::to_string(inputs.size()) + " arguments, but the procedure declares "
-                          + std::to_string(argumentTypes.size()));
+                          + std::to_string(argumentTypes.size()) + ", "
+                          + std::to_string(requiredCount) + " of them required");
     }
 
     // CallProcedure::verify guarantees one result per yielded name plus one per carried
