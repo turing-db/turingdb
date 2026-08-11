@@ -187,6 +187,24 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (a) RETURN a AS person: the projection names the column it emits.
+const char* const namedOutputProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  db.output(%a) names ["person"] : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// Two names for one emitted column: the second names a column that is not there.
+const char* const mismatchedOutputNamesProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  db.output(%a) names ["person", "extra"] : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 // MATCH (n:Person) SET n.age = n.age
 const char* const setNodePropertyProgram = R"mlir(
 func.func @main() {
@@ -622,6 +640,61 @@ TEST_F(DBDialectTest, skipRoundTripsThroughTextualForm) {
     const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
     ASSERT_TRUE(reparsed);
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, parsesOutputColumnNames) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(namedOutputProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::Output output;
+    module.get().walk([&](mlir::db::Output op) {
+        output = op;
+    });
+    ASSERT_TRUE(output);
+
+    const mlir::ArrayAttr columnNames = output.getColumnNamesAttr();
+    ASSERT_TRUE(columnNames);
+    ASSERT_EQ(columnNames.size(), 1u);
+    EXPECT_EQ(mlir::cast<mlir::StringAttr>(columnNames[0]).getValue(), "person");
+}
+
+// The names are optional, so a program that names nothing carries no array at all -
+// which is what every hand-written db.output above relies on.
+TEST_F(DBDialectTest, parsesOutputWithoutColumnNames) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(limitProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::Output output;
+    module.get().walk([&](mlir::db::Output op) {
+        output = op;
+    });
+    ASSERT_TRUE(output);
+
+    EXPECT_FALSE(output.getColumnNamesAttr());
+}
+
+TEST_F(DBDialectTest, outputColumnNamesRoundTripThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(namedOutputProgram);
+    ASSERT_TRUE(module);
+
+    // The names print after the `names` keyword and re-parse into a module that still
+    // verifies, so the printer and parser are inverses over them too.
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    EXPECT_NE(printed.find("names [\"person\"]"), std::string::npos) << printed;
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, rejectsOutputNameCountMismatch) {
+    // One name per emitted column: the verifier rejects the extra name and the module
+    // fails to verify during parsing.
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(mismatchedOutputNamesProgram);
+    EXPECT_FALSE(module);
 }
 
 TEST_F(DBDialectTest, parsesSort) {

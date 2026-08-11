@@ -286,6 +286,20 @@ LogicalResult CheckEdgeTypeConstraint::verify() {
     return success();
 }
 
+void Output::build(OpBuilder& builder, OperationState& state, ValueRange columns) {
+    Output::build(builder, state, columns, ArrayAttr());
+}
+
+LogicalResult Output::verify() {
+    const ArrayAttr columnNames = getColumnNamesAttr();
+    if (columnNames && columnNames.size() != getColumns().size()) {
+        return emitOpError("names must give one name per output column, but has ")
+               << columnNames.size() << " names for " << getColumns().size() << " columns";
+    }
+
+    return success();
+}
+
 // db.limit passes its columns straight through, so the results must be exactly
 // the input columns - same count, same types and in the same order.
 LogicalResult Limit::verify() {

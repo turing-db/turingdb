@@ -1558,9 +1558,12 @@ void DBLowering::foldTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
         // The preceding nl.limit_update still sets that count. Drop the old output
         // and the now-unused truncate.
         _builder.setInsertionPoint(output);
-        _builder.create<nl::Output>(output.getLoc(), truncate.getColumns(),
-                                    truncate.getState(), mlir::Value(),
-                                    output.getCardinality());
+        _builder.create<nl::Output>(output.getLoc(),
+                                    truncate.getColumns(),
+                                    truncate.getState(),
+                                    mlir::Value(),
+                                    output.getCardinality(),
+                                    output.getColumnNamesAttr());
 
         output.erase();
         truncate.erase();
@@ -1621,8 +1624,12 @@ void DBLowering::foldSkipTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
         // preceding nl.skip_update still sets that offset and count. Drop the old
         // output and the now-unused truncate.
         _builder.setInsertionPoint(output);
-        _builder.create<nl::Output>(output.getLoc(), truncate.getColumns(), mlir::Value(),
-                                    truncate.getState(), output.getCardinality());
+        _builder.create<nl::Output>(output.getLoc(),
+                                    truncate.getColumns(),
+                                    mlir::Value(),
+                                    truncate.getState(),
+                                    output.getCardinality(),
+                                    output.getColumnNamesAttr());
 
         output.erase();
         truncate.erase();
@@ -2224,8 +2231,12 @@ void DBLowering::lowerOutput(mlir::db::Output output) {
     }
 
     setInsertionInto(anchorBlock);
-    _builder.create<nl::Output>(_builder.getUnknownLoc(), columns, mlir::Value(),
-                                mlir::Value(), cardinality);
+    _builder.create<nl::Output>(_builder.getUnknownLoc(),
+                                columns,
+                                mlir::Value(),
+                                mlir::Value(),
+                                cardinality,
+                                output.getColumnNamesAttr());
 }
 
 void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp) {

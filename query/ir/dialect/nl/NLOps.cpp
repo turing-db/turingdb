@@ -437,6 +437,15 @@ LogicalResult For::verify() {
     return success();
 }
 
+void Output::build(OpBuilder& builder,
+                   OperationState& state,
+                   ValueRange columns,
+                   Value limit,
+                   Value skip,
+                   Value cardinality) {
+    Output::build(builder, state, columns, limit, skip, cardinality, ArrayAttr());
+}
+
 // A folded output reads the budgeted prefix (limit) or the surviving suffix
 // (skip) off a single handle - the truncate adjacent to it - so at most one may
 // be present. The interpreter reads them as an if(skip)/else if(limit) chain,
@@ -444,6 +453,12 @@ LogicalResult For::verify() {
 LogicalResult Output::verify() {
     if (getLimit() && getSkip()) {
         return emitOpError("carries both a limit and a skip handle; a folded output takes at most one");
+    }
+
+    const ArrayAttr columnNames = getColumnNamesAttr();
+    if (columnNames && columnNames.size() != getColumns().size()) {
+        return emitOpError("names must give one name per output column, but has ")
+               << columnNames.size() << " names for " << getColumns().size() << " columns";
     }
 
     return success();

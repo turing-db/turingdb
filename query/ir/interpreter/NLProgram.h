@@ -5,6 +5,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -2021,8 +2022,15 @@ public:
     size_t getChunkSize() const { return _chunkSize; }
     void setChunkSize(size_t chunkSize) { _chunkSize = chunkSize; }
 
+    std::span<const std::string_view> columnNames() const { return _columnNames; }
+    void setColumnNames(std::span<const std::string_view> names);
+
 private:
     size_t _chunkSize {ChunkConfig::CHUNK_SIZE};
+    // The result column names nl.output carried, one per emitted column, or empty when it
+    // named none. The views point into the MLIRContext's uniqued attribute storage, which
+    // outlives the module the names were read from.
+    std::vector<std::string_view> _columnNames;
     std::vector<std::unique_ptr<NLFunctionData>> _functionData;
     std::vector<std::unique_ptr<NLLimitState>> _limitStates;
     std::vector<std::unique_ptr<NLSkipState>> _skipStates;

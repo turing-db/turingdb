@@ -587,6 +587,13 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
     Absent for a per-row projection (its own columns size it) or a single-row emit.
 
     nl.output(%c) cardinality %n : !nl.chunk<i64>
+
+    An optional `names` array carries the result column names db.output was given,
+    one per column, which the interpreter hands to the sink so it can label the
+    columns it is fed. They name the result and never steer execution, so an output
+    that carries none emits exactly the same rows.
+
+    nl.output(%a) names ["person"] : !nl.chunk<!storage.node_id>
   }];
 
   // Four variable-length operand groups - the columns, the optional limit, the
@@ -598,7 +605,8 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
   let arguments = (ins Variadic<NLChunk>:$columns,
                        Optional<NLLimitStateHandle>:$limit,
                        Optional<NLSkipStateHandle>:$skip,
-                       Optional<NLNodeIDChunk>:$cardinality);
+                       Optional<NLNodeIDChunk>:$cardinality,
+                       OptionalAttr<StrArrayAttr>:$column_names);
 
   // The chunk element types vary from call to call and - unlike the source
   // ops - cannot be inferred, so they are spelled after the colon. This keeps
@@ -610,13 +618,24 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
   // `skip` keyword; both types are buildable and so omitted. Each optional group
   // has its own literal anchor, so the declarative parser tells them apart.
   let assemblyFormat = [{
-    `(` $columns `)` (`limit` $limit^)? (`skip` $skip^)? (`cardinality` $cardinality^)? attr-dict `:` qualified(type($columns))
+    `(` $columns `)` (`names` $column_names^)? (`limit` $limit^)? (`skip` $skip^)? (`cardinality` $cardinality^)? attr-dict `:` qualified(type($columns))
   }];
+
+  // Emitting an unnamed result is the common case - every hand-written program and
+  // every lowering of a db.output that carries no names - so it gets a builder that
+  // takes the operands alone.
+  let builders = [
+      OpBuilder<(ins "::mlir::ValueRange":$columns,
+                     "::mlir::Value":$limit,
+                     "::mlir::Value":$skip,
+                     "::mlir::Value":$cardinality)>
+  ];
 
   // Enforce the "at most one of limit/skip" invariant the description promises:
   // a folded output carries the single handle of the truncate adjacent to it,
   // never both. runOutput reads them as an if(skip)/else if(limit) chain, so a
   // malformed both-handles op would silently drop the limit; reject it here.
+  // One name per column, when the output carries names at all.
   let hasVerifier = 1;
 }
 

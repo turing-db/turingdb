@@ -2,6 +2,7 @@
 
 #include <stddef.h>
 #include <span>
+#include <string_view>
 
 namespace db {
 
@@ -11,6 +12,12 @@ class Column;
 class NLOutputSink {
 public:
     virtual ~NLOutputSink();
+
+    // The name of each column appendChunks is about to receive, in that order. Called
+    // once before the first chunk, and not at all by a program naming no column - so an
+    // implementor labelling its output needs a fallback. The views last only for the
+    // call: an implementor keeping a name copies it.
+    virtual void setColumnNames(std::span<const std::string_view> names);
 
     // One call per chunk emission of the program. Only rows
     // [offset, offset + rowCount) of each chunk are part of the result - the rows
