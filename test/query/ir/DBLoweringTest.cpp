@@ -128,6 +128,28 @@ private:
     std::vector<int64_t> _values;
 };
 
+// Render one tagged cell to a string, dispatching on its type tag. The test lists hold
+// an int, a bool and a string, so only those tags occur.
+std::string renderListElement(const ListElementView& element) {
+    switch (element.getTag()) {
+        case ListBufferTypeTag::Int:
+            return std::to_string(element.getAs<int64_t>());
+        break;
+
+        case ListBufferTypeTag::Bool:
+            return element.getAs<CustomBool>() ? "true" : "false";
+        break;
+
+        case ListBufferTypeTag::String:
+            return std::string(element.getAs<std::string_view>());
+        break;
+
+        default:
+            return "?";
+        break;
+    }
+}
+
 // Collects a single heterogeneous value column, rendering each type-tagged cell to a
 // string: a UNWIND of a mixed literal list lowers to one ColumnVector<ListElementView>
 // chunk per step, each cell carrying its own tag.
@@ -141,36 +163,43 @@ public:
 
         const std::vector<ListElementView>& raw = values->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _values.push_back(render(raw[rowIndex]));
+            _values.push_back(renderListElement(raw[rowIndex]));
         }
     }
 
     const std::vector<std::string>& values() const { return _values; }
 
 private:
-    // Render one tagged cell to a string, dispatching on its type tag. The test list
-    // holds an int, a bool and a string, so only those tags occur.
-    static std::string render(const ListElementView& element) {
-        switch (element.getTag()) {
-            case ListBufferTypeTag::Int:
-                return std::to_string(element.getAs<int64_t>());
-            break;
+    std::vector<std::string> _values;
+};
 
-            case ListBufferTypeTag::Bool:
-                return element.getAs<CustomBool>() ? "true" : "false";
-            break;
+// Collects (node ID, tagged scalar) rows in emission order: the pair a cross product of
+// a node scan with a heterogeneous unwind emits, a node ID chunk beside a
+// ColumnVector<ListElementView>.
+class CollectingNodeListElementSink : public NLOutputSink {
+public:
+    using Rows = std::vector<std::pair<uint64_t, std::string>>;
 
-            case ListBufferTypeTag::String:
-                return std::string(element.getAs<std::string_view>());
-            break;
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
 
-            default:
-                return "?";
-            break;
+        const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
+        const auto* values = dynamic_cast<const ColumnVector<ListElementView>*>(chunks[1]);
+        ASSERT_NE(nodeIDs, nullptr);
+        ASSERT_NE(values, nullptr);
+        ASSERT_EQ(nodeIDs->size(), values->size());
+
+        const std::vector<NodeID>& idRaw = nodeIDs->getRaw();
+        const std::vector<ListElementView>& valueRaw = values->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.push_back({idRaw[rowIndex].getValue(), renderListElement(valueRaw[rowIndex])});
         }
     }
 
-    std::vector<std::string> _values;
+    const Rows& rows() const { return _rows; }
+
+private:
+    Rows _rows;
 };
 
 // Collects (node ID, nullable int64 property) rows. Output programs that read
@@ -1129,6 +1158,39 @@ func.func @main() {
     db.yield %x : !db.column<i64>
   }
   db.output(%0#0, %0#1) : !db.column<!storage.node_id>, !db.column<i64>
+  return
+}
+)mlir";
+
+// MATCH (a) UNWIND [true, "hello", 10] AS x RETURN a, x: the heterogeneous sibling of
+// unwindConstCrossProductProgram. The unwound column is a type-erased list_element
+// chunk, so the cross product broadcasts tagged scalars rather than a value type.
+constexpr const char* unwindConstHeteroCrossProductProgram = R"mlir(
+func.func @main() {
+  %0:2 = db.cross_product factor {
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %a : !db.column<!storage.node_id>
+  } factor {
+    %x = db.unwind_const([true, "hello", 10]) : !db.column<!storage.list_element>
+    db.yield %x : !db.column<!storage.list_element>
+  }
+  db.output(%0#0, %0#1) : !db.column<!storage.node_id>, !db.column<!storage.list_element>
+  return
+}
+)mlir";
+
+// MATCH (a) UNWIND [] AS x RETURN a, x: an empty list is the list_element form too, and
+// it pairs with nothing, so the cross product emits no row rather than failing.
+constexpr const char* unwindConstEmptyCrossProductProgram = R"mlir(
+func.func @main() {
+  %0:2 = db.cross_product factor {
+    %a = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %a : !db.column<!storage.node_id>
+  } factor {
+    %x = db.unwind_const([]) : !db.column<!storage.list_element>
+    db.yield %x : !db.column<!storage.list_element>
+  }
+  db.output(%0#0, %0#1) : !db.column<!storage.node_id>, !db.column<!storage.list_element>
   return
 }
 )mlir";
@@ -2355,11 +2417,9 @@ TEST_F(DBLoweringTest, executesUnwindConstHomogeneous) {
     CollectingIntUnwindSink sink;
     runLoweredProgram(unwindConstIntProgram, reader.getView(), sink);
 
-    // One row per element of the homogeneous list.
-    std::vector<int64_t> values = sink.values();
-    std::sort(values.begin(), values.end());
+    // One row per element of the homogeneous list, in list order.
     const std::vector<int64_t> expected {1, 2, 3};
-    EXPECT_EQ(values, expected);
+    EXPECT_EQ(sink.values(), expected);
 }
 
 TEST_F(DBLoweringTest, executesUnwindConstHeterogeneous) {
@@ -2370,11 +2430,39 @@ TEST_F(DBLoweringTest, executesUnwindConstHeterogeneous) {
     CollectingListElementSink sink;
     runLoweredProgram(unwindConstHeteroProgram, reader.getView(), sink);
 
-    // One row per element, each cell keeping its own type (bool, string, int).
-    std::vector<std::string> values = sink.values();
-    std::sort(values.begin(), values.end());
-    const std::vector<std::string> expected {"10", "hello", "true"};
-    EXPECT_EQ(values, expected);
+    // One row per element in list order, each cell keeping its own type (bool, string,
+    // int).
+    const std::vector<std::string> expected {"true", "hello", "10"};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+TEST_F(DBLoweringTest, executesUnwindConstAcrossChunkBoundary) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // chunkSize 2 splits the three elements into one full chunk and one partial, so the
+    // loop's cursor has to resume where the first slice stopped and emit a short second
+    // slice rather than a whole chunk.
+    CollectingIntUnwindSink sink;
+    runLoweredProgram(unwindConstIntProgram, reader.getView(), sink, /*chunkSize=*/2);
+
+    const std::vector<int64_t> expected {1, 2, 3};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+TEST_F(DBLoweringTest, executesHeterogeneousUnwindConstAcrossChunkBoundary) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The tagged-scalar fill slices the same ListView, so it has to survive the same
+    // partial final chunk.
+    CollectingListElementSink sink;
+    runLoweredProgram(unwindConstHeteroProgram, reader.getView(), sink, /*chunkSize=*/2);
+
+    const std::vector<std::string> expected {"true", "hello", "10"};
+    EXPECT_EQ(sink.values(), expected);
 }
 
 TEST_F(DBLoweringTest, executesUnwindConstEmptyYieldsNoRow) {
@@ -2401,7 +2489,8 @@ TEST_F(DBLoweringTest, executesUnwindConstCrossedWithIncomingRows) {
     runLoweredProgram(unwindConstCrossProductProgram, reader.getView(), sink);
 
     // Two elements per node over the four diamond nodes: eight pairs, every node
-    // carrying both literals.
+    // carrying both literals. The scan is the outer factor, so its rows block-repeat
+    // while the elements tile - node-major, each node's pair in list order.
     const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {{0, 10},
                                                                             {0, 20},
                                                                             {1, 10},
@@ -2411,8 +2500,68 @@ TEST_F(DBLoweringTest, executesUnwindConstCrossedWithIncomingRows) {
                                                                             {3, 10},
                                                                             {3, 20}};
     std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
-    sink.sortedRows(rows);
+    sink.orderedRows(rows);
     EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, unwindConstRestartsPerOuterStep) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // chunkSize 2 splits the scan into two chunks, so the nested unwind loop runs twice.
+    // Its cursor is local to each call, so the second outer chunk sees the list from its
+    // first element again rather than an exhausted one - the same eight pairs.
+    CollectingNodeIntPropSink sink;
+    runLoweredProgram(unwindConstCrossProductProgram, reader.getView(), sink, /*chunkSize=*/2);
+
+    const std::vector<std::pair<uint64_t, std::optional<int64_t>>> expected {{0, 10},
+                                                                            {0, 20},
+                                                                            {1, 10},
+                                                                            {1, 20},
+                                                                            {2, 10},
+                                                                            {2, 20},
+                                                                            {3, 10},
+                                                                            {3, 20}};
+    std::vector<std::pair<uint64_t, std::optional<int64_t>>> rows;
+    sink.orderedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, executesHeterogeneousUnwindConstCrossedWithIncomingRows) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeListElementSink sink;
+    runLoweredProgram(unwindConstHeteroCrossProductProgram, reader.getView(), sink);
+
+    // The scan is the outer factor, so its rows block-repeat while the three tagged
+    // elements tile: every node carries all three, in list order.
+    const CollectingNodeListElementSink::Rows expected {{0, "true"},
+                                                        {0, "hello"},
+                                                        {0, "10"},
+                                                        {1, "true"},
+                                                        {1, "hello"},
+                                                        {1, "10"},
+                                                        {2, "true"},
+                                                        {2, "hello"},
+                                                        {2, "10"},
+                                                        {3, "true"},
+                                                        {3, "hello"},
+                                                        {3, "10"}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(DBLoweringTest, executesEmptyUnwindConstCrossedWithIncomingRowsAsNoRow) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeListElementSink sink;
+    runLoweredProgram(unwindConstEmptyCrossProductProgram, reader.getView(), sink);
+
+    EXPECT_TRUE(sink.rows().empty());
 }
 
 TEST_F(DBLoweringTest, executesFilterOverUnwindConst) {

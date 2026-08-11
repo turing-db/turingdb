@@ -265,6 +265,30 @@ TEST_F(CypherUnwindTest, crossesUnwindWithMatchedNodes) {
     expectRows("MATCH (n) UNWIND [10, 20] AS x RETURN n, x", expected);
 }
 
+TEST_F(CypherUnwindTest, crossesHeterogeneousUnwindWithMatchedNodes) {
+    // The heterogeneous sibling of crossesUnwindWithMatchedNodes: the unwound column is
+    // type-erased, so the cross product broadcasts tagged scalars whose cells differ in
+    // type. Every node pairs with all three elements, in list order.
+    constexpr uint64_t simpleGraphNodeCount = 18;
+    const Row elements = {"true", "mixed", "10"};
+
+    Rows expected;
+    for (uint64_t nodeID = 0; nodeID < simpleGraphNodeCount; nodeID++) {
+        for (const std::string& element : elements) {
+            expected.push_back({std::to_string(nodeID), element});
+        }
+    }
+
+    expectRows("MATCH (n) UNWIND [true, 'mixed', 10] AS x RETURN n, x", expected);
+}
+
+TEST_F(CypherUnwindTest, crossesEmptyUnwindWithMatchedNodesToNoRows) {
+    // An empty list pairs with nothing, so the whole query returns no row - it is not an
+    // unsupported shape.
+    const Rows expected = {};
+    expectRows("MATCH (n) UNWIND [] AS x RETURN n, x", expected);
+}
+
 TEST_F(CypherUnwindTest, filtersOnUnwoundVariableInWhere) {
     // The unwound variable is one side of the WHERE predicate, so the filter runs over the
     // cross product of the nodes and the elements: a node survives only against the element
