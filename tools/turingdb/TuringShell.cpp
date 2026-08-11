@@ -603,17 +603,17 @@ void tabulateWrite(tabulate::RowStream& rs, const T& value) {
     rs << out;
 }
 
-#define TABULATE_COL_CASE(Type, i)                        \
-    case Type::staticKind(): {                            \
-        const Type& src = *static_cast<const Type*>(col); \
-        tabulateWrite(rs, src[i]);                        \
+#define TABULATE_COL_CASE(Type, i)                           \
+    case Type::staticKind(): {                               \
+        const Type& src = *static_cast<const Type*>(column); \
+        tabulateWrite(rs, src[i]);                           \
     } break;
 
 // Writes one column's cell at this row into the table row. Every printable column kind
 // is listed here once, so the dataframe renderer and the nl sink cannot drift apart, and
 // a kind neither can print fails loudly in both rather than showing a placeholder.
-void tabulateCell(tabulate::RowStream& rs, const Column* col, size_t row) {
-    switch (col->getKind()) {
+void tabulateCell(tabulate::RowStream& rs, const Column* column, size_t row) {
+    switch (column->getKind()) {
         TABULATE_COL_CASE(ColumnVector<EntityID>, row)
         TABULATE_COL_CASE(ColumnVector<NodeID>, row)
         TABULATE_COL_CASE(ColumnVector<EdgeID>, row)
@@ -655,7 +655,7 @@ void tabulateCell(tabulate::RowStream& rs, const Column* col, size_t row) {
         TABULATE_COL_CASE(ColumnVector<ListElementView>, row)
 
         default: {
-            panic("can not print columns of kind {}", col->getKind());
+            panic("can not print columns of kind {}", column->getKind());
         }
     }
 }
