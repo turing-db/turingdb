@@ -412,8 +412,6 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
     generateTraversal(ast);
     resolveEdgeIdentities();
     generatePropertyConstraints(ast);
-    generateLabelConstraints(ast);
-    generateEdgeTypeConstraints(ast);
     generateFilters(ast);
     generateGroupAggregate(ast);
     generateCreate(ast);
@@ -666,6 +664,7 @@ void DBProgramGenerator::translateComponent(const VariableDependency* root,
     }
 
     markDefined(root);
+    applyConstraints(root);
 
     // Forms the "carried set" for this connected component
     std::vector<const VariableDependency*> carriedSet;
@@ -712,6 +711,7 @@ void DBProgramGenerator::translateComponent(const VariableDependency* root,
         if (!haveTriple) {
             if (pred && pred->isMetaEdge()) {
                 addMergeFilter(var, carriedSet);
+                applyConstraints(var);
             }
 
             markDefined(var);
@@ -785,6 +785,9 @@ void DBProgramGenerator::translateComponent(const VariableDependency* root,
         markDefined(src);
         markDefined(edge);
         markDefined(tgt);
+
+        applyConstraints(edge);
+        applyConstraints(tgt);
 
         carriedSet.push_back(src);
         carriedSet.push_back(edge);
@@ -1509,183 +1512,73 @@ void DBProgramGenerator::generatePropertyConstraints(const CypherAST* ast) {
     }
 }
 
-void DBProgramGenerator::generateLabelConstraints(const CypherAST* ast) {
-    const CypherAST::QueryCommands& queries = ast->queries();
-    if (queries.size() != 1) {
-        throw TuringException("Multiple queries not yet supported.");
-    }
-
-    const QueryCommand* query = queries.front();
-
-    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
-    if (!sglPart) {
+void DBProgramGenerator::applyConstraints(const VariableDependency* var) {
+    const std::optional<VariableDependency::Constraint>& constraints = var->constraints();
+    if (!constraints) {
         return;
     }
 
-    const StmtContainer* stmtsContainer = sglPart->getReadStmts();
-    if (!stmtsContainer) {
-        return;
-    }
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
 
-    using NodeDataPair = std::pair<const NodePattern*, const NodePatternData*>;
-    std::vector<NodeDataPair> labelConstrainedNodes;
+    const auto applyLabelConstraint = [&](const VariableDependency::LabelNames& labels) {
+        const auto findIt = _varMap.find(var);
+        const bool registered = findIt != _varMap.end() && !findIt->second.empty();
+        bioassert(registered, "Label-constrained node not registered: {}", var->getName());
+        const mlir::Value nodeColumn = findIt->second.back();
 
-    for (const Stmt* stmt : stmtsContainer->stmts()) {
-        if (stmt->getKind() != Stmt::Kind::MATCH) {
-            continue;
+        const mlir::db::ColumnType labelSetIDType =
+            allocColumnType(mlir::storage::LabelSetIDType::get(_mlirCtxt));
+
+        const mlir::Value labelSetIDColumn = _opBuilder.create<mlir::db::GetNodeLabelSet>(
+            loc,
+            labelSetIDType,
+            nodeColumn).getResult();
+
+        llvm::SmallVector<llvm::StringRef> labelNames;
+        for (const std::string_view label : labels) {
+            labelNames.push_back(llvm::StringRef(label.data(), label.size()));
         }
 
-        const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt);
-        const Pattern* pattern = matchStmt->getPattern();
+        const mlir::ArrayAttr labelsAttr = _opBuilder.getStrArrayAttr(labelNames);
+        const mlir::Value labelMask = _opBuilder.create<mlir::db::CheckLabelConstraint>(
+            loc,
+            boolType,
+            labelSetIDColumn,
+            labelsAttr).getResult();
 
-        labelConstrainedNodes.clear();
+        filterAllColumns(labelMask);
+    };
 
-        for (const PatternElement* element : pattern->elements()) {
-            const NodePattern* rootNode = static_cast<const NodePattern*>(element->getRootEntity());
-            const NodePatternData* rootData = rootNode->getData();
-
-            if (rootData && !rootData->labelConstraints().empty()) {
-                labelConstrainedNodes.emplace_back(rootNode, rootData);
-            }
-
-            for (auto [edgePattern, nodePattern] : element->getElementChain()) {
-                const NodePatternData* nodeData = nodePattern->getData();
-                if (nodeData && !nodeData->labelConstraints().empty()) {
-                    labelConstrainedNodes.emplace_back(nodePattern, nodeData);
-                }
-            }
-        }
-
-        if (labelConstrainedNodes.empty()) {
-            continue;
-        }
-
-        const mlir::Location loc = _opBuilder.getUnknownLoc();
-        const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
-        const mlir::db::ColumnType labelSetIDType = allocColumnType(
-            mlir::storage::LabelSetIDType::get(_mlirCtxt));
-
-        mlir::Value combinedPredicate;
-
-        for (auto [nodePattern, nodeData] : labelConstrainedNodes) {
-            const VarDecl* vardecl = nodePattern->getDecl();
-            bioassert(vardecl, "Null variable declaration.");
-            const std::string_view nodeName = vardecl->getName();
-
-            mlir::Value nodeColumn;
-            for (const auto& [var, values] : _varMap) {
-                if (var->getName() == nodeName) {
-                    nodeColumn = values.back();
-                    break;
-                }
-            }
-
-            bioassert(nodeColumn, "Label-constrained node not found in variable map: {}", nodeName);
-
-            const mlir::Value labelSetIDColumn = _opBuilder.create<mlir::db::GetNodeLabelSet>(
-                loc,
-                labelSetIDType,
-                nodeColumn).getResult();
-
-            llvm::SmallVector<llvm::StringRef> labelNames;
-            for (const std::string_view label : nodeData->labelConstraints()) {
-                labelNames.push_back(llvm::StringRef(label.data(), label.size()));
-            }
-
-            const mlir::ArrayAttr labelsAttr = _opBuilder.getStrArrayAttr(labelNames);
-            const mlir::Value labelMask = _opBuilder.create<mlir::db::CheckLabelConstraint>(
-                loc,
-                boolType,
-                labelSetIDColumn,
-                labelsAttr).getResult();
-
-            if (!combinedPredicate) {
-                combinedPredicate = labelMask;
-            } else {
-                combinedPredicate = _opBuilder.create<mlir::db::AndOp>(
-                    loc, boolType, combinedPredicate, labelMask).getResult();
-            }
-        }
-
-        filterAllColumns(combinedPredicate);
-    }
-}
-
-void DBProgramGenerator::generateEdgeTypeConstraints(const CypherAST* ast) {
-    const CypherAST::QueryCommands& queries = ast->queries();
-    if (queries.size() != 1) {
-        throw TuringException("Multiple queries not yet supported.");
-    }
-
-    const QueryCommand* query = queries.front();
-
-    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
-    if (!sglPart) {
-        return;
-    }
-
-    const StmtContainer* stmtsContainer = sglPart->getReadStmts();
-    if (!stmtsContainer) {
-        return;
-    }
-
-    const VariableDependencyGraph::EdgeIdentityMap& edgeIdentities = _vdg.edgeIdentities();
-
-    for (const Stmt* stmt : stmtsContainer->stmts()) {
-        if (stmt->getKind() != Stmt::Kind::MATCH) {
-            continue;
-        }
-
-        const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt);
-        const Pattern* pattern = matchStmt->getPattern();
-
-        mlir::Value combinedPredicate;
+    const auto applyEdgeTypeConstraint = [&](const VariableDependency::EdgeType& type) {
+        const auto findIt = _edgeTypeMap.find(var);
+        bioassert(findIt != _edgeTypeMap.end(),
+                  "Type-constrained edge without a type column: {}", var->getName());
+        const mlir::Value edgeTypeColumn = findIt->second;
 
         llvm::SmallVector<llvm::StringRef> typeNames;
-        for (const PatternElement* element : pattern->elements()) {
-            for (auto [edgePattern, nodePattern] : element->getElementChain()) {
-                const EdgePatternData* edgeData = edgePattern->getData();
-                if (!edgeData || edgeData->edgeTypeConstraints().empty()) {
-                    continue;
-                }
+        typeNames.push_back(llvm::StringRef(type.data(), type.size()));
 
-                const std::string_view cypherName = edgePattern->getDecl()->getName();
-                const auto identityIt = edgeIdentities.find(std::string(cypherName));
-                bioassert(identityIt != edgeIdentities.end(),
-                          "Edge variable not found in identity map: {}", cypherName);
+        const mlir::ArrayAttr edgeTypesAttr = _opBuilder.getStrArrayAttr(typeNames);
+        const mlir::Value edgeTypeMask = _opBuilder.create<mlir::db::CheckEdgeTypeConstraint>(
+            loc,
+            boolType,
+            edgeTypeColumn,
+            edgeTypesAttr).getResult();
 
-                const VariableDependency* edgeVar = identityIt->second.front();
-                const auto edgeTypeIt = _edgeTypeMap.find(edgeVar);
-                bioassert(edgeTypeIt != _edgeTypeMap.end(),
-                          "Edge type column not found for variable: {}", cypherName);
+        filterAllColumns(edgeTypeMask);
+    };
 
-                const mlir::Value edgeTypeColumn = edgeTypeIt->second;
-
-                const mlir::Location loc = _opBuilder.getUnknownLoc();
-                const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
-
-                typeNames.clear();
-                for (const std::string_view typeName : edgeData->edgeTypeConstraints()) {
-                    typeNames.push_back(llvm::StringRef(typeName.data(), typeName.size()));
-                }
-
-                const mlir::ArrayAttr edgeTypesAttr = _opBuilder.getStrArrayAttr(typeNames);
-                const mlir::Value edgeTypeMask = _opBuilder.create<mlir::db::CheckEdgeTypeConstraint>(
-                    loc, boolType, edgeTypeColumn, edgeTypesAttr).getResult();
-
-                if (!combinedPredicate) {
-                    combinedPredicate = edgeTypeMask;
-                } else {
-                    combinedPredicate = _opBuilder.create<mlir::db::AndOp>(
-                        loc, boolType, combinedPredicate, edgeTypeMask).getResult();
-                }
-            }
+    std::visit([&](auto&& constraint) {
+        using T = std::decay_t<decltype(constraint)>;
+        if constexpr (std::is_same_v<T, VariableDependency::LabelNames>) {
+            applyLabelConstraint(constraint);
+        } else if constexpr (std::is_same_v<T, VariableDependency::EdgeType>) {
+            applyEdgeTypeConstraint(constraint);
+        } else {
+            static_assert(false, "Unhandled constraint type.");
         }
-
-        if (combinedPredicate) {
-            filterAllColumns(combinedPredicate);
-        }
-    }
+    }, *constraints);
 }
 
 void DBProgramGenerator::generateFilters(const CypherAST* ast) {
