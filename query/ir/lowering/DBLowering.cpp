@@ -1813,9 +1813,27 @@ void DBLowering::lowerCallProcedure(mlir::db::CallProcedure call) {
     // innermost loop body inside a db.cross_product, so the factor nests under it.
     // Rooting such a call at the entry block instead would leave it outside the product's
     // nest, referring to chunks that do not dominate it.
+    llvm::SmallVector<mlir::Value, 8> operandChunks(inputChunks.begin(), inputChunks.end());
+    operandChunks.append(carriedChunks.begin(), carriedChunks.end());
+
+    // Anchored on the deepest-bound operand, so a loop-bound argument or carried column
+    // is found wherever it sits in the operand list, behind any hoisted constants.
+    mlir::Value anchorChunk;
+    for (const mlir::Value operandChunk : operandChunks) {
+        if (!anchorChunk) {
+            anchorChunk = operandChunk;
+            continue;
+        }
+
+        mlir::Block* const block = deeperBlock(anchorChunk, operandChunk);
+        if (ownerBlock(operandChunk) == block) {
+            anchorChunk = operandChunk;
+        }
+    }
+
     mlir::Block* insertionBlock = _rootBlock;
-    if (!inputChunks.empty()) {
-        mlir::Block* const argumentBlock = ownerBlock(inputChunks.front());
+    if (anchorChunk) {
+        mlir::Block* const argumentBlock = ownerBlock(anchorChunk);
 
         // A factor shares no SSA value with its sibling, so an argument bound anywhere
         // but function scope is bound inside this factor's own nest.

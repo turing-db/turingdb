@@ -1690,9 +1690,9 @@ public:
     size_t getRowCount() const;
 
     // The rows of the chunk the procedure was handed this step, read from its first
-    // argument column. This is the range the input-row indices a carry set is
-    // replicated through must fall in; zero for a procedure taking no argument, which
-    // can carry nothing.
+    // row-aligned argument column. This is the range the input-row indices a carry set
+    // is replicated through must fall in; zero for a procedure handed no row-aligned
+    // argument, which can carry nothing.
     size_t getInputRowCount() const;
 
 private:

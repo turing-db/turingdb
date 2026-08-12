@@ -111,18 +111,23 @@ size_t NLProcedureState::getRowCount() const {
 }
 
 size_t NLProcedureState::getInputRowCount() const {
-    // Every argument chunk is row-aligned, so the first one sizes the input the
-    // procedure was handed; a procedure taking none was handed no row at all.
-    if (_procedure->argumentTypes().size() == 0) {
-        return 0;
+    // A constant argument holds a single value however many rows the chunk has, so
+    // only a row-aligned argument can size the input the procedure was handed; a
+    // call passing constants alone hands it no rows a carry set could align with.
+    const size_t argumentCount = _procedure->argumentTypes().size();
+
+    for (size_t argumentIndex = 0; argumentIndex < argumentCount; argumentIndex++) {
+        const Column* argument = _data->getInputColumn(argumentIndex);
+        if (!argument) {
+            continue;
+        }
+
+        if (argument->getContainerKind() != ContainerKind::code<ColumnConst>()) {
+            return argument->size();
+        }
     }
 
-    const Column* firstArgument = _data->getInputColumn(0);
-    if (!firstArgument) {
-        return 0;
-    }
-
-    return firstArgument->size();
+    return 0;
 }
 
 void NLSortState::reset() {
