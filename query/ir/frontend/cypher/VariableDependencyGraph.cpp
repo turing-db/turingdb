@@ -159,15 +159,15 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
         edgeOccurrences.push_back(edgeVar);
 
         const EdgePatternData* edgeData = edge->getData();
-        std::string_view edgeType;
+        std::string_view edgeTypeConstraint;
         if (edgeData) {
             const std::span<const std::string_view> types = edgeData->edgeTypeConstraints();
             bioassert(types.size() <= 1, "Edge pattern with more than one type; disjunction unsupported");
             if (!types.empty()) {
-                edgeType = types.front();
+                edgeTypeConstraint = types.front();
             }
         }
-        edgeVar->setEdgeTypeConstraint(edgeType);
+        edgeVar->setEdgeTypeConstraint(edgeTypeConstraint);
 
         addDirected(src, edgeVar, EdgeMetadata {edgeType});
         addDirected(edgeVar, tgt, EdgeMetadata {otherType});
