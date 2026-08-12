@@ -1,7 +1,10 @@
 #pragma once
 
+#include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 #include <range/v3/view/concat.hpp>
@@ -23,6 +26,10 @@ class VariableDependency {
 public:
     using Edges = std::vector<DependencyEdge*>;
 
+    using LabelNames = std::vector<std::string_view>;
+    using EdgeType = std::string_view;
+    using Constraint = std::variant<LabelNames, EdgeType>;
+
     explicit VariableDependency(std::string_view name)
         : _name(name)
     {
@@ -34,6 +41,8 @@ public:
 
     std::string_view getName() const { return _name; }
 
+    const std::optional<Constraint>& constraints() const { return _constraints; }
+
     bool isIsolated() const { return edges().empty(); }
 
     void setName(std::string_view name) { _name = name; }
@@ -44,11 +53,16 @@ public:
     void addIncoming(DependencyEdge* newEdge);
     void addOutgoing(DependencyEdge* newEdge);
 
+    void addLabelConstraints(std::span<const std::string_view> labels);
+    void setEdgeTypeConstraint(std::string_view type);
+
 private:
     friend VariableDependencyGraph;
 
     Edges _incoming;
     Edges _outgoing;
+
+    std::optional<Constraint> _constraints;
 
     std::string _name;
 };

@@ -123,8 +123,6 @@ private:
     mlir::Value resolveEntityColumn(std::string_view varName);
 
     void generatePropertyConstraints(const CypherAST* ast);
-    void generateLabelConstraints(const CypherAST* ast);
-    void generateEdgeTypeConstraints(const CypherAST* ast);
     void generateFilters(const CypherAST* ast);
 
     void generateGroupAggregate(const CypherAST* ast);
@@ -150,6 +148,12 @@ private:
     // from the graph's nodes
     void addUnwindConst(const VariableDependency* var, const UnwindStmt* unwind);
     void filterAllColumns(mlir::Value predicate);
+
+    // Filters a freshly produced variable by its own constraint right where it is
+    // scanned or traversed - a label-set filter for a node, an edge-type filter for
+    // an edge - so it narrows before the next hop and before any cross product.
+    // No-op for an unconstrained variable.
+    void applyConstraints(const VariableDependency* var);
 
     void addMergeFilter(const VariableDependency* var,
                         std::vector<const VariableDependency*>& carriedSet);

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <ranges>
 #include <set>
+#include <span>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
@@ -12,6 +13,7 @@
 
 #include "EdgePattern.h"
 #include "EntityPattern.h"
+#include "NodePattern.h"
 #include "VariableDependencyGraphDumper.h"
 #include "CypherAST.h"
 #include "SinglePartQuery.h"
@@ -21,6 +23,7 @@
 #include "stmt/MatchStmt.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/UnwindStmt.h"
+#include "decl/PatternData.h"
 #include "decl/VarDecl.h"
 
 #include "DependencyEdge.h"
@@ -155,6 +158,17 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
         VariableDependency* edgeVar = newVariable(anonymousName);
         edgeOccurrences.push_back(edgeVar);
 
+        const EdgePatternData* edgeData = edge->getData();
+        std::string_view edgeType;
+        if (edgeData) {
+            const std::span<const std::string_view> types = edgeData->edgeTypeConstraints();
+            bioassert(types.size() <= 1, "Edge pattern with more than one type; disjunction unsupported");
+            if (!types.empty()) {
+                edgeType = types.front();
+            }
+        }
+        edgeVar->setEdgeTypeConstraint(edgeType);
+
         addDirected(src, edgeVar, EdgeMetadata {edgeType});
         addDirected(edgeVar, tgt, EdgeMetadata {otherType});
 
@@ -190,7 +204,17 @@ VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPat
     const auto foundIt = std::ranges::find_if(_vars, match);
     const bool exists  = foundIt != _vars.end();
 
-    return exists ? &*foundIt : newVariable(entity);
+    VariableDependency* var = exists ? &*foundIt : newVariable(entity);
+
+    const NodePattern* node = dynamic_cast<const NodePattern*>(entity);
+    if (node) {
+        const NodePatternData* data = node->getData();
+        if (data) {
+            var->addLabelConstraints(data->labelConstraints());
+        }
+    }
+
+    return var;
 }
 
 void VariableDependencyGraph::computeCycleBasis(std::vector<Cycle>& cycles) {
