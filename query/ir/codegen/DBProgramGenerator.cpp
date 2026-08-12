@@ -1514,7 +1514,7 @@ void DBProgramGenerator::generatePropertyConstraints(const CypherAST* ast) {
 
 void DBProgramGenerator::applyConstraints(const VariableDependency* var) {
     const std::optional<VariableDependency::Constraint>& constraints = var->constraints();
-    if (!constraints) {
+    if (!constraints.has_value()) {
         return;
     }
 
