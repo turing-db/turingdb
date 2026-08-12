@@ -9,8 +9,6 @@
 #include <unordered_set>
 #include <utility>
 
-#include <spdlog/spdlog.h>
-
 #include "EdgePattern.h"
 #include "EntityPattern.h"
 #include "NodePattern.h"
@@ -92,8 +90,6 @@ void VariableDependencyGraph::buildFromAST(const CypherAST* ast) {
             }
         } else if (const UnwindStmt* unwind = dynamic_cast<const UnwindStmt*>(stmt)) {
             registerUnwindStmt(unwind);
-        } else {
-            spdlog::warn("Non-match statement: skipped");
         }
     }
 
