@@ -212,15 +212,6 @@ jobs:
         PYTHON_VERSION: ${{ matrix.python_version }}
         VERSION_OVERRIDE: ${{ steps.version.outputs.version }}
 
-    # There is deliberately no "Prepare SimpleDB" step here. Nothing reads a
-    # pre-seeded $HOME/.turing/graphs/simpledb: every test suite builds
-    # simpledb itself (unit/query suites in-memory via TuringTestEnv, each
-    # regress test into its own -turing-dir). The old step's cp -r into
-    # $HOME/.turing merged fresh-hash commits/dataparts on every run, and on
-    # the persistent macOS minis — where nothing cleans $HOME between jobs —
-    # that grew to 194GB and filled the macos15 host disk. Don't reintroduce a
-    # shared on-disk graph; give any future consumer a per-job dir instead
-    # (e.g. under RUNNER_TEMP, which the runner empties between jobs).
     - name: Run unit tests
       run: |
         cd build
