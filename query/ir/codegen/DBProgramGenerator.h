@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <span>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -123,6 +124,8 @@ private:
 
     void generatePropertyConstraints(const CypherAST* ast);
     void generateFilters(const CypherAST* ast);
+
+    void applyPredicateFilters(std::span<const Expr* const> predicates);
 
     void generateGroupAggregate(const CypherAST* ast);
 
