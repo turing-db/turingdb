@@ -1767,11 +1767,9 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
             if (projectedIt != end(_projectedColumns)) {
                 _exprMap[expr] = projectedIt->second;
             } else {
-                for (const auto& [var, values] : _varMap) {
-                    if (var->getName() == varName) {
-                        _exprMap[expr] = values.back();
-                        break;
-                    }
+                const mlir::Value entityColumn = resolveEntityColumn(varName);
+                if (entityColumn) {
+                    _exprMap[expr] = entityColumn;
                 }
             }
 

@@ -65,7 +65,6 @@ private:
     // Maps each edge VDG var to its MLIR type column
     std::unordered_map<const VariableDependency*, mlir::Value> _edgeTypeMap;
 
-    // Maps each WHERE clause expression to the MLIR value it produces
     ExprValueMap _exprMap;
 
     // Maps each projected item to the column it produced, under the declaration the
