@@ -218,6 +218,19 @@ mlir::Value findVarOrThrow(const DBProgramGenerator::VariableIdentityMap& map,
     return identities.back();
 }
 
+void flattenConjuncts(const Expr* expr, std::vector<const Expr*>& conjuncts) {
+    if (expr->getKind() == Expr::Kind::BINARY) {
+        const BinaryExpr* binaryExpr = static_cast<const BinaryExpr*>(expr);
+        if (binaryExpr->getOperator() == BinaryOperator::And) {
+            flattenConjuncts(binaryExpr->getLHS(), conjuncts);
+            flattenConjuncts(binaryExpr->getRHS(), conjuncts);
+            return;
+        }
+    }
+
+    conjuncts.push_back(expr);
+}
+
 }
 
 DBProgramGenerator::DBProgramGenerator(mlir::ModuleOp* mainModule)
@@ -1428,6 +1441,13 @@ mlir::Value DBProgramGenerator::getOrTranslateExprColumn(const VariableColumnMap
     return _exprMap.at(expr);
 }
 
+void DBProgramGenerator::applyPredicateFilters(std::span<const Expr* const> predicates) {
+    for (const Expr* predicate : predicates) {
+        translateExpr(predicate);
+        filterAllColumns(_exprMap.at(predicate));
+    }
+}
+
 void DBProgramGenerator::generatePropertyConstraints(const CypherAST* ast) {
     const CypherAST::QueryCommands& queries = ast->queries();
     if (queries.size() != 1) {
@@ -1485,30 +1505,7 @@ void DBProgramGenerator::generatePropertyConstraints(const CypherAST* ast) {
             }
         }
 
-        if (constraintExprs.empty()) {
-            continue;
-        }
-
-        const mlir::Location loc = _opBuilder.getUnknownLoc();
-        const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
-
-        mlir::Value combinedPredicate;
-
-        for (const Expr* constraintExpr : constraintExprs) {
-            translateExpr(constraintExpr);
-            const mlir::Value predicate = _exprMap.at(constraintExpr);
-
-            if (!combinedPredicate) {
-                combinedPredicate = predicate;
-            } else {
-                combinedPredicate = _opBuilder
-                                        .create<mlir::db::AndOp>(
-                                            loc, boolType, combinedPredicate, predicate)
-                                        .getResult();
-            }
-        }
-
-        filterAllColumns(combinedPredicate);
+        applyPredicateFilters(constraintExprs);
     }
 }
 
@@ -1599,6 +1596,7 @@ void DBProgramGenerator::generateFilters(const CypherAST* ast) {
         return;
     }
 
+    std::vector<const Expr*> conjuncts;
     for (const Stmt* stmt : stmtsContainer->stmts()) {
         if (stmt->getKind() != Stmt::Kind::MATCH) {
             continue;
@@ -1611,14 +1609,10 @@ void DBProgramGenerator::generateFilters(const CypherAST* ast) {
             continue;
         }
 
-        const Expr* predicateExpr = where->getExpr();
-        translateExpr(predicateExpr);
+        conjuncts.clear();
+        flattenConjuncts(where->getExpr(), conjuncts);
 
-        const auto findIt = _exprMap.find(predicateExpr);
-        bioassert(findIt != end(_exprMap), "Failed to get value for expr");
-        const mlir::Value predicateVal = findIt->second;
-
-        filterAllColumns(predicateVal);
+        applyPredicateFilters(conjuncts);
     }
 }
 
