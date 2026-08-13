@@ -409,6 +409,45 @@ int64_t evaluateConstantInteger(const Expr* expr) {
     }
 }
 
+// A collect and a scalar aggregate each lower to an accumulator of their own, drained by
+// an emit loop of their own, and the projection is output from a single loop: two of them
+// in one projection would have to be read from a loop the output is not in. Only top-level
+// items are counted: an aggregate nested into a map is not a function invocation, and is
+// rejected where the grouping keys are read
+void throwIfCollectUnsupported(const Projection* projection) {
+    size_t collectCount = 0;
+    size_t aggregateCount = 0;
+
+    for (const Projection::ReturnItem& returnItem : projection->items()) {
+        Expr* const* itemPtr = std::get_if<Expr*>(&returnItem);
+        if (!itemPtr) {
+            continue;
+        }
+
+        const Expr* item = *itemPtr;
+
+        const bool isInvocation = item->getKind() == Expr::Kind::FUNCTION_INVOCATION;
+        if (!item->isAggregate() || !isInvocation) {
+            continue;
+        }
+
+        aggregateCount++;
+
+        const FunctionInvocationExpr* funcExpr = static_cast<const FunctionInvocationExpr*>(item);
+        const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
+        const std::string_view funcName = invocation->getSignature()->getFullName();
+
+        if (funcName == "collect") {
+            collectCount++;
+        }
+    }
+
+    const bool mixesAggregates = collectCount > 0 && aggregateCount > 1;
+    if (mixesAggregates) {
+        throw TuringException("collect() may not yet be combined with another aggregate.");
+    }
+}
+
 }
 
 DBProgramGenerator::DBProgramGenerator(mlir::ModuleOp* mainModule)
@@ -3278,17 +3317,7 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
     } else if (funcName == "avg") {
         _part._exprMap[expr] = _opBuilder.create<mlir::db::Avg>(loc, noneType, inputColumn, reducesDistinctValues).getResult();
     } else if (funcName == "collect") {
-        // collect gathers values rather than reducing them, so it is db.collect rather
-        // than one of the reductions: with no grouping key it is the keyless form, whose
-        // one row holds the whole match's values as a list
-        const mlir::Type listType = mlir::storage::ListType::get(_mlirCtxt, mlir::NoneType::get(_mlirCtxt));
-        const mlir::db::ColumnType listColumnType = allocColumnType(listType);
-
-        auto collectOp = _opBuilder.create<mlir::db::Collect>(loc,
-                                                             mlir::TypeRange {listColumnType},
-                                                             mlir::ValueRange {inputColumn},
-                                                             /*keyCount=*/0,
-                                                             reducesDistinctValues);
+        mlir::db::Collect collectOp = createCollect({}, inputColumn, reducesDistinctValues);
         _part._exprMap[expr] = collectOp.getResults().front();
     } else {
         throw TuringException(fmt::format("Unsupported aggregate function: {}", funcName));
@@ -3335,8 +3364,43 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     throw TuringException(fmt::format("Unsupported function: {}", funcName));
 }
 
+mlir::db::Collect DBProgramGenerator::createCollect(llvm::ArrayRef<mlir::Value> keyColumns,
+                                                    mlir::Value valueColumn,
+                                                    bool distinctValues) {
+    // A constant column is bound above the scan loop, so the collect would fold its one
+    // value once instead of once per row: the list would hold a single element where
+    // Cypher collects one per matched row.
+    if (yieldsConstantColumn(valueColumn)) {
+        throw TuringException("collect() of a constant expression is not yet supported.");
+    }
+
+    llvm::SmallVector<mlir::Value> columns(keyColumns.begin(), keyColumns.end());
+    columns.push_back(valueColumn);
+
+    llvm::SmallVector<mlir::Type> resultTypes;
+    for (const mlir::Value keyColumn : keyColumns) {
+        resultTypes.push_back(keyColumn.getType());
+    }
+
+    const mlir::db::ColumnType valueType = mlir::cast<mlir::db::ColumnType>(valueColumn.getType());
+    const mlir::Type listType = mlir::storage::ListType::get(_mlirCtxt, valueType.getType());
+    resultTypes.push_back(allocColumnType(listType));
+
+    return _opBuilder.create<mlir::db::Collect>(_opBuilder.getUnknownLoc(),
+                                                mlir::TypeRange {resultTypes},
+                                                mlir::ValueRange {columns},
+                                                static_cast<uint64_t>(keyColumns.size()),
+                                                distinctValues);
+}
+
 void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
-    if (!projection->isAggregate() || !projection->hasGroupingKeys()) {
+    if (!projection->isAggregate()) {
+        return;
+    }
+
+    throwIfCollectUnsupported(projection);
+
+    if (!projection->hasGroupingKeys()) {
         return;
     }
 
@@ -3373,6 +3437,9 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
     llvm::SmallVector<mlir::storage::GroupAggregateKind> aggKinds;
     llvm::SmallVector<const FunctionInvocationExpr*> aggFuncExprs;
     llvm::SmallVector<const FunctionInvocationExpr*> itemInvocations;
+
+    llvm::SmallVector<mlir::Value> collectInputColumns;
+    llvm::SmallVector<const FunctionInvocationExpr*> collectFuncExprs;
 
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
     const mlir::Location loc = _opBuilder.getUnknownLoc();
@@ -3480,11 +3547,17 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
         const std::string_view funcName = invocation->getSignature()->getFullName();
 
+        const ExprChain* args = invocation->getArguments();
+        bioassert(args && !args->empty(), "Aggregate function invocation with no arguments.");
+
+        const Expr* argExpr = args->front();
+
         if (funcName == "collect") {
-            // db.collect groups on its own rather than being one function of a
-            // db.group_aggregate, so a collect beside a grouping key would need the two to
-            // be grouped together - the keyless form is what the frontend generates today
-            throw TuringException("collect() with grouping keys is not supported yet");
+            const mlir::Value collectInput = translateAggregateInput(argExpr);
+
+            collectInputColumns.push_back(collectInput);
+            collectFuncExprs.push_back(funcExpr);
+            continue;
         }
 
         // Dropping repeated values cannot move an extremum, so min(DISTINCT x) is min(x)
@@ -3494,10 +3567,6 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         const bool isExtremum = funcName == "min" || funcName == "max";
         const bool reducesDistinctValues = invocation->isDistinct() && !isExtremum;
 
-        const ExprChain* args = invocation->getArguments();
-        bioassert(args && !args->empty(), "Aggregate function invocation with no arguments.");
-
-        const Expr* argExpr = args->front();
         const bool countsRows = argExpr->getType() == EvaluatedType::Wildcard;
 
         // count(*) reads no value, so a null of the column it is anchored on is a row
@@ -3523,7 +3592,8 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
 
     const size_t keyCount = keyColumns.size();
     const size_t aggCount = aggInputColumns.size();
-    bioassert(aggCount > 0, "grouped aggregate with no aggregate columns.");
+    const size_t collectCount = collectInputColumns.size();
+    bioassert(aggCount + collectCount > 0, "grouped aggregate with no aggregate columns.");
 
     // Every non-aggregate item was constant, so nothing tells the matched rows apart:
     // the projection is one group, which is the scalar aggregate the projection
@@ -3532,35 +3602,58 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         return;
     }
 
-    llvm::SmallVector<mlir::Value> allColumns;
-    for (const mlir::Value col : keyColumns) {
-        allColumns.push_back(col);
-    }
-    for (const mlir::Value col : aggInputColumns) {
-        allColumns.push_back(col);
+    const bool isCollecting = collectCount > 0;
+
+    mlir::Operation* aggregateOp = nullptr;
+
+    if (isCollecting) {
+        // Only the leading collect is built and only the collect items are mapped below, so
+        // a second collect or a scalar aggregate would be dropped here - and reappear in
+        // generateOutput as an ungrouped aggregate of its own, next to this grouped one
+        bioassert(collectCount == 1 && aggCount == 0,
+                  "Collect lowered alongside {} other collects and {} scalar aggregates.",
+                  collectCount - 1,
+                  aggCount);
+
+        const FunctionInvocation* collectInvocation = collectFuncExprs.front()->getFunctionInvocation();
+
+        mlir::db::Collect collectOp = createCollect(keyColumns,
+                                                    collectInputColumns.front(),
+                                                    collectInvocation->isDistinct());
+        aggregateOp = collectOp.getOperation();
+    } else {
+        llvm::SmallVector<mlir::Value> allColumns;
+        for (const mlir::Value col : keyColumns) {
+            allColumns.push_back(col);
+        }
+        for (const mlir::Value col : aggInputColumns) {
+            allColumns.push_back(col);
+        }
+
+        llvm::SmallVector<mlir::Type> resultTypes;
+        for (const mlir::Value col : keyColumns) {
+            resultTypes.push_back(col.getType());
+        }
+        for (size_t i = 0; i < aggCount; i++) {
+            resultTypes.push_back(noneType);
+        }
+
+        llvm::SmallVector<int64_t> aggKindValues;
+        for (const mlir::storage::GroupAggregateKind kind : aggKinds) {
+            aggKindValues.push_back(static_cast<int64_t>(kind));
+        }
+
+        mlir::db::GroupAggregate groupAgg = _opBuilder.create<mlir::db::GroupAggregate>(
+            loc,
+            mlir::TypeRange{resultTypes},
+            mlir::ValueRange{allColumns},
+            static_cast<uint64_t>(keyCount),
+            llvm::ArrayRef<int64_t>{aggKindValues});
+
+        aggregateOp = groupAgg.getOperation();
     }
 
-    llvm::SmallVector<mlir::Type> resultTypes;
-    for (const mlir::Value col : keyColumns) {
-        resultTypes.push_back(col.getType());
-    }
-    for (size_t i = 0; i < aggCount; i++) {
-        resultTypes.push_back(noneType);
-    }
-
-    llvm::SmallVector<int64_t> aggKindValues;
-    for (const mlir::storage::GroupAggregateKind kind : aggKinds) {
-        aggKindValues.push_back(static_cast<int64_t>(kind));
-    }
-
-    auto groupAgg = _opBuilder.create<mlir::db::GroupAggregate>(
-        loc,
-        mlir::TypeRange{resultTypes},
-        mlir::ValueRange{allColumns},
-        static_cast<uint64_t>(keyCount),
-        llvm::ArrayRef<int64_t>{aggKindValues});
-
-    const mlir::ResultRange results = groupAgg.getResults();
+    const mlir::ResultRange results = aggregateOp->getResults();
 
     GroupedColumns groupedColumns;
 
@@ -3608,14 +3701,18 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         }
     }
 
-    for (size_t i = 0; i < aggCount; i++) {
+    const llvm::SmallVector<const FunctionInvocationExpr*>& aggregateItems = isCollecting ? collectFuncExprs : aggFuncExprs;
+
+    for (size_t i = 0; i < aggregateItems.size(); i++) {
+        const FunctionInvocationExpr* aggregateItem = aggregateItems[i];
         const mlir::Value aggregateColumn = results[keyCount + i];
-        _part._exprMap[aggFuncExprs[i]] = aggregateColumn;
-        groupedColumns.emplace_back(aggFuncExprs[i], aggregateColumn);
+
+        _part._exprMap[aggregateItem] = aggregateColumn;
+        groupedColumns.emplace_back(aggregateItem, aggregateColumn);
 
         // The alias of an aggregate names its reduced column, so a key or a later item
         // spelling that alias reads this column instead of computing a second aggregate
-        const VarDecl* aggregateDecl = aggFuncExprs[i]->getExprVarDecl();
+        const VarDecl* aggregateDecl = aggregateItem->getExprVarDecl();
         if (aggregateDecl) {
             _part._projectedColumns[aggregateDecl] = aggregateColumn;
         }

@@ -372,6 +372,10 @@ private:
     bool collectAggregateInvocations(const Expr* expr,
                                      llvm::SmallVectorImpl<const FunctionInvocationExpr*>& found);
 
+    mlir::db::Collect createCollect(llvm::ArrayRef<mlir::Value> keyColumns,
+                                    mlir::Value valueColumn,
+                                    bool distinctValues);
+
     void translateExpr(const Expr* expr);
     void translateUnaryExpr(const Expr* expr, const UnaryExpr* unaryExpr);
     void translateBinaryExpr(const Expr* expr, const BinaryExpr* binExpr);
