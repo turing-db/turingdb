@@ -2639,6 +2639,10 @@ NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
         return NLExecutor::selectPlainAppendFunction(valueTypeFromElementType(elementType));
     }
 
+    if (llvm::isa<storage::ListType>(elementType)) {
+        return NLExecutor::selectListAppendFunction();
+    }
+
     return NLExecutor::selectAppendFunction(chunkKindFromElementType(elementType));
 }
 
@@ -2657,6 +2661,10 @@ NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
         return NLExecutor::selectPlainGatherFunction(valueTypeFromElementType(elementType));
     }
 
+    if (llvm::isa<storage::ListType>(elementType)) {
+        return NLExecutor::selectListGatherFunction();
+    }
+
     return NLExecutor::selectGatherFunction(chunkKindFromElementType(elementType));
 }
 
@@ -2673,6 +2681,12 @@ NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) 
 
     if (isPlainValueElementType(elementType)) {
         return NLExecutor::selectPlainCompareFunction(valueTypeFromElementType(elementType));
+    }
+
+    // A list is carried through the sort row-aligned with the keys, but two lists have no
+    // order between them, so one can never be the key the rows are compared on.
+    if (llvm::isa<storage::ListType>(elementType)) {
+        throw IRException("a list column cannot be a sort key");
     }
 
     return NLExecutor::selectCompareFunction(chunkKindFromElementType(elementType));
