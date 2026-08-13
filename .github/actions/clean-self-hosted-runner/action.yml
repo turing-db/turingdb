@@ -18,8 +18,9 @@ runs:
 
         # 1) Container writable-layer growth. These live inside the container
         #    (not on a bind-mount) and are recreated by the job when needed:
-        #    .local/.cache are uv/pip caches; .turing is the graph output the
-        #    "Prepare SimpleDB" step writes. /tmp is per-container scratch.
+        #    .local/.cache are uv/pip caches; .turing is created (empty) by
+        #    turingdb's default config — the "Prepare SimpleDB" step writes to
+        #    RUNNER_TEMP instead. /tmp is per-container scratch.
         rm -rf "${HOME:?}/.local" "${HOME:?}/.cache" "${HOME:?}/.turing" 2>/dev/null
         sudo rm -rf /tmp/* /tmp/.[!.]* 2>/dev/null
 
