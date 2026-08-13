@@ -400,6 +400,9 @@ TEST_F(EquivalenceTest, eqFilters) {
 
     expectEquivalent("MATCH (n)-->(a)-->(m) WHERE n = m RETURN n, a, m");
 
+    expectEquivalent("MATCH ()-[e]->(n) WHERE e = 0 RETURN n");
+    expectEquivalent("MATCH (n)-[e]->(m) WHERE e = e RETURN n");
+
     // Disabled due to suspected v2 bug
     // expectEquivalent("MATCH (n)-->(a)-->(m), (a)-->(b) WHERE b = n RETURN n, a, m, b");
 
