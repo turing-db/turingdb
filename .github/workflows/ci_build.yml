@@ -212,12 +212,19 @@ jobs:
         PYTHON_VERSION: ${{ matrix.python_version }}
         VERSION_OVERRIDE: ${{ steps.version.outputs.version }}
 
+    # The prepared graph goes under RUNNER_TEMP, not $HOME/.turing: the runner
+    # empties RUNNER_TEMP between jobs, while on the persistent self-hosted
+    # macOS minis $HOME/.turing survives forever and is cleaned by nothing
+    # (clean-self-hosted-runner below is Linux-only). ./simpledb names each
+    # run's commits and dataparts with fresh hashes, so cp -r into a surviving
+    # graph dir merges them without bound — this grew to 194GB and filled the
+    # macos15 host disk.
     - name: Prepare SimpleDB
       run: |
         cd build/samples/simpledb
         ./simpledb
-        mkdir -p $HOME/.turing/graphs
-        cp -r simpledb.out/simpledb $HOME/.turing/graphs
+        mkdir -p "$RUNNER_TEMP/.turing/graphs"
+        cp -r simpledb.out/simpledb "$RUNNER_TEMP/.turing/graphs"
 
     - name: Run unit tests
       run: |
