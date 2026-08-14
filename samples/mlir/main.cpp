@@ -339,6 +339,8 @@ private:
             // A non-nullable value column
         } else if (printListCell(column, row)) {
             // A per-group list cell from an nl.collect drain
+        } else if (printConstListCell(column, row)) {
+            // The one list an nl.const_list holds for every row
         } else if (printListElementCell(column, row)) {
             // A tagged scalar from a heterogeneous unwind
         } else {
@@ -417,9 +419,9 @@ private:
         return true;
     }
 
-    // Print one element of a collected list, dispatching on its type tag. collect
-    // produces homogeneous scalar lists, so Int/UInt/Double/Bool/String are the tags
-    // that occur; the rest are rendered as placeholders for completeness.
+    // Print one element of a list, dispatching on its type tag. A collect produces
+    // homogeneous scalar lists, so Int/UInt/Double/Bool/String are the tags that occur
+    // there; a list literal may also hold a list, which is printed as one.
     static void printListElement(const ListElementView& element) {
         switch (element.getTag()) {
             case ListBufferTypeTag::Int:
@@ -447,7 +449,7 @@ private:
             break;
 
             case ListBufferTypeTag::ListView:
-                std::cout << "<list>";
+                printList(element.getAs<ListView>());
             break;
 
             case ListBufferTypeTag::Null:
@@ -458,6 +460,20 @@ private:
                 std::cout << "?";
             break;
         }
+    }
+
+    // Print a list as [a, b, c].
+    static void printList(const ListView list) {
+        std::cout << "[";
+        for (size_t index = 0; const ListElementView& element : list) {
+            if (index > 0) {
+                std::cout << ", ";
+            }
+
+            printListElement(element);
+            index++;
+        }
+        std::cout << "]";
     }
 
     // Print one cell of a type-tagged scalar column (a ColumnVector<ListElementView>
@@ -482,17 +498,21 @@ private:
             return false;
         }
 
-        const ListView list = (*lists)[row];
-        std::cout << "[";
-        for (size_t index = 0; const ListElementView& element : list) {
-            if (index > 0) {
-                std::cout << ", ";
-            }
+        printList((*lists)[row]);
 
-            printListElement(element);
-            index++;
+        return true;
+    }
+
+    // Print one cell of a constant list column (a ColumnConst<ListView> from an
+    // nl.const_list, which answers the same list at every row); returns whether the
+    // column matched.
+    static bool printConstListCell(const Column* column, size_t row) {
+        const auto* lists = dynamic_cast<const ColumnConst<ListView>*>(column);
+        if (!lists) {
+            return false;
         }
-        std::cout << "]";
+
+        printList((*lists)[row]);
 
         return true;
     }
