@@ -82,10 +82,6 @@ using namespace db;
 
 namespace {
 
-// Every unary scalar function is emitted the same way - one value column in, one
-// out - so a per-op emitter keyed by the function name replaces a hand-written
-// if-chain: adding a function is one table row plus its op and lowering. The result
-// column is left none-typed here; lowering settles the value type.
 using UnaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder,
                                              mlir::Location loc,
                                              mlir::db::ColumnType resultType,
