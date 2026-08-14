@@ -9,9 +9,11 @@
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Verifier.h"
 #include "mlir/Parser/Parser.h"
+#include "mlir/Pass/PassManager.h"
 
 #include "DBDialect.h"
 #include "DBOps.h"
+#include "DBPasses.h"
 #include "StorageDialect.h"
 #include "StorageTypes.h"
 
@@ -1471,6 +1473,62 @@ TEST_F(DBDialectTest, deleteEdgeRoundTripsThroughTextualForm) {
     const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
     ASSERT_TRUE(reparsed);
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+// `MATCH (n:Person) RETURN n` with no optimisation applied
+const char* const labelScanChainProgram = R"mlir(
+func.func @main() {
+  %0 = db.scan_nodes() : !db.column<!storage.node_id>
+  %1 = db.get_node_label_set(%0) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %2 = db.check_label_constraint(%1, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %3 = db.filter(%2, {%0}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%3) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(DBDialectTest, fuseScanByLabelCollapsesLabelFilterChain) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(labelScanChainProgram);
+    ASSERT_TRUE(module);
+
+    mlir::PassManager passManager(&_context);
+    passManager.addPass(mlir::db::createFuseScanByLabel());
+    ASSERT_TRUE(mlir::succeeded(passManager.run(*module)));
+
+    // The chain collapsed to one scan_nodes_by_label carrying the label.
+    mlir::db::ScanNodesByLabel scanByLabel;
+    module.get().walk([&](mlir::db::ScanNodesByLabel op) {
+        scanByLabel = op;
+    });
+    ASSERT_TRUE(scanByLabel);
+
+    const mlir::ArrayAttr labels = scanByLabel.getLabels();
+    ASSERT_EQ(labels.size(), 1u);
+    EXPECT_EQ(mlir::cast<mlir::StringAttr>(labels[0]).getValue(), "Person");
+
+    // None of the original chain survives.
+    size_t scans = 0;
+    size_t labelSets = 0;
+    size_t checks = 0;
+    size_t filters = 0;
+    module.get().walk([&](mlir::Operation* op) {
+        if (mlir::isa<mlir::db::ScanNodes>(op)) {
+            scans++;
+        } else if (mlir::isa<mlir::db::GetNodeLabelSet>(op)) {
+            labelSets++;
+        } else if (mlir::isa<mlir::db::CheckLabelConstraint>(op)) {
+            checks++;
+        } else if (mlir::isa<mlir::db::FilterOp>(op)) {
+            filters++;
+        }
+    });
+
+    EXPECT_EQ(scans, 0u);
+    EXPECT_EQ(labelSets, 0u);
+    EXPECT_EQ(checks, 0u);
+    EXPECT_EQ(filters, 0u);
+
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
 }
 
 }
