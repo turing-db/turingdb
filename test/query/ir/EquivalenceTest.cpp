@@ -65,7 +65,7 @@ template <typename T>
 bool renderValueCell(const Column* column, size_t row, std::string& out) {
     if (const auto* constCol = dynamic_cast<const ColumnConst<T>*>(column)) {
         const T value = constCol->at(0);
-        if constexpr (std::is_same_v<T, std::string_view>) {
+        if constexpr (std::is_same_v<T, std::string_view> || std::is_same_v<T, std::string>) {
             out = std::string(value);
         } else {
             out = std::to_string(value);
@@ -77,7 +77,7 @@ bool renderValueCell(const Column* column, size_t row, std::string& out) {
     // ColumnVector<uint64_t>, where the v2 pipeline emits a ColumnConst.
     if (const auto* plainValues = dynamic_cast<const ColumnVector<T>*>(column)) {
         const T value = (*plainValues)[row];
-        if constexpr (std::is_same_v<T, std::string_view>) {
+        if constexpr (std::is_same_v<T, std::string_view> || std::is_same_v<T, std::string>) {
             out = std::string(value);
         } else {
             out = std::to_string(value);
@@ -96,7 +96,7 @@ bool renderValueCell(const Column* column, size_t row, std::string& out) {
         return true;
     }
 
-    if constexpr (std::is_same_v<T, std::string_view>) {
+    if constexpr (std::is_same_v<T, std::string_view> || std::is_same_v<T, std::string>) {
         out = std::string(*value);
     } else {
         out = std::to_string(*value);
@@ -150,6 +150,7 @@ void renderCell(const Column* column, size_t row, std::string& out) {
                || renderValueCell<uint64_t>(column, row, out)
                || renderValueCell<double>(column, row, out)
                || renderValueCell<std::string_view>(column, row, out)
+               || renderValueCell<std::string>(column, row, out)
                || renderEmbeddingCell(column, row, out)) {
         // Rendered by the helper for whichever value type matched
     } else {
@@ -706,4 +707,38 @@ TEST_F(EquivalenceTest, wildcardAndCountCombination) {
     expectEquivalent("MATCH (a)-[:KNOWS_WELL]->(b) WHERE a.hasPhD RETURN count(*)");
     expectEquivalent("MATCH (a:Person)-->(b)-->(c) WHERE a.isFrench RETURN count(*)");
     expectEquivalent("MATCH (a), (b), (c) RETURN count(*)");
+}
+
+TEST_F(EquivalenceTest, labelsAndTypeFunctions) {
+    expectEquivalent("MATCH (n) RETURN labels(n)");
+    expectEquivalent("MATCH (a:Person) RETURN labels(a)");
+    expectEquivalent("MATCH (a:Interest) RETURN labels(a)");
+    expectEquivalent("MATCH (n) RETURN n, labels(n)");
+
+    expectEquivalent("MATCH (a)-[e]->(b) RETURN edgeType(e)");
+    expectEquivalent("MATCH (a)-[e:INTERESTED_IN]->(b) RETURN edgeType(e)");
+    expectEquivalent("MATCH (a)-[e]->(b) RETURN a, edgeType(e), b");
+}
+
+TEST_F(EquivalenceTest, conversionFunctions) {
+    // Compare a per-row property against a converted constant, so the predicate is a
+    // real per-row mask (not a constant one) and the projection is a string column.
+    expectEquivalent("MATCH (n) WHERE n.age = toInteger('32') RETURN n.name");
+    expectEquivalent("MATCH (n) WHERE n.age > toInteger('30') RETURN n.name");
+    expectEquivalent("MATCH (n) WHERE n.isFrench = toBoolean('true') RETURN n.name");
+
+    // The conversion result projected directly as an integer / float column.
+    expectEquivalent("MATCH (n) RETURN toInteger('42')");
+    expectEquivalent("MATCH (n) RETURN toFloat('2.5')");
+}
+
+TEST_F(EquivalenceTest, functionsWithLimit) {
+    // A LIMIT over a function result: the limit's early-exit threads through the
+    // function op to the producing scan (assignProducerLoops recurses through it as
+    // it does a property fetch), and the truncate caps emission. Both engines scan
+    // in the same node/edge order, so the same rows survive the limit.
+    expectEquivalent("MATCH (n) RETURN labels(n) LIMIT 5");
+    expectEquivalent("MATCH (n) RETURN labels(n) LIMIT 1");
+    expectEquivalent("MATCH (n) RETURN n, labels(n) LIMIT 4");
+    expectEquivalent("MATCH (a)-[e]->(b) RETURN edgeType(e) LIMIT 3");
 }

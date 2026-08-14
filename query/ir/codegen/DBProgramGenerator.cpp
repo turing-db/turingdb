@@ -80,6 +80,31 @@ using namespace db;
 
 namespace {
 
+// Every unary scalar function is emitted the same way - one value column in, one
+// out - so a per-op emitter keyed by the function name replaces a hand-written
+// if-chain: adding a function is one table row plus its op and lowering. The result
+// column is left none-typed here; lowering settles the value type.
+using UnaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder,
+                                             mlir::Location loc,
+                                             mlir::db::ColumnType resultType,
+                                             mlir::Value input);
+
+template <typename Op>
+mlir::Value emitUnaryFunction(mlir::OpBuilder& builder,
+                              mlir::Location loc,
+                              mlir::db::ColumnType resultType,
+                              mlir::Value input) {
+    return builder.create<Op>(loc, resultType, input).getResult();
+}
+
+const std::unordered_map<std::string_view, UnaryFunctionEmitter> unaryFunctionEmitters = {
+    {"labels", &emitUnaryFunction<mlir::db::Labels>},
+    {"edgeType", &emitUnaryFunction<mlir::db::EdgeType>},
+    {"toInteger", &emitUnaryFunction<mlir::db::ToInteger>},
+    {"toFloat", &emitUnaryFunction<mlir::db::ToFloat>},
+    {"toBoolean", &emitUnaryFunction<mlir::db::ToBoolean>},
+};
+
 bool producesEdgeVar(const DependencyEdge* e) {
     const EdgeMetadata::EdgeType producedType = e->data().type();
     const bool getOut = producedType == EdgeMetadata::EdgeType::GET_OUT_EDGES;
@@ -1982,7 +2007,8 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
     const std::string_view funcName = invocation->getSignature()->getFullName();
 
     if (!funcExpr->isAggregate()) {
-        throw TuringException("Non-aggregate function invocations are not yet supported");
+        translateFunctionExpr(expr, invocation);
+        return;
     }
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
@@ -2015,6 +2041,31 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
     } else {
         throw TuringException(fmt::format("Unsupported aggregate function: {}", funcName));
     }
+}
+
+void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
+                                               const FunctionInvocation* invocation) {
+    const std::string_view funcName = invocation->getSignature()->getFullName();
+
+    const auto emitterIt = unaryFunctionEmitters.find(funcName);
+    if (emitterIt == end(unaryFunctionEmitters)) {
+        throw TuringException(fmt::format("Unsupported function: {}", funcName));
+    }
+
+    const ExprChain* args = invocation->getArguments();
+    if (!args || args->size() != 1) {
+        throw TuringException(fmt::format("{}() expects 1 argument.", funcName));
+    }
+
+    const Expr* argExpr = args->front();
+    translateExpr(argExpr);
+    bioassert(_exprMap.contains(argExpr), "Function invocation with unknown argument.");
+    const mlir::Value input = _exprMap.at(argExpr);
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    _exprMap[expr] = emitterIt->second(_opBuilder, loc, noneType, input);
 }
 
 void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {

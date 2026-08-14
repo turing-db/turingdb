@@ -26,6 +26,7 @@ namespace db {
 
 class BinaryExpr;
 class FunctionInvocationExpr;
+class FunctionInvocation;
 class UnaryExpr;
 class CypherAST;
 class Expr;
@@ -140,6 +141,8 @@ private:
     void translateUnaryExpr(const Expr* expr, const UnaryExpr* unaryExpr);
     void translateBinaryExpr(const Expr* expr, const BinaryExpr* binExpr);
     void translateFunctionInvocationExpr(const Expr* expr, const FunctionInvocationExpr* funcExpr);
+
+    void translateFunctionExpr(const Expr* expr, const FunctionInvocation* invocation);
     mlir::Value translateLiteralExpr(const Literal* literal);
     mlir::Value translatePropertyExpr(const PropertyExpr* propExpr);
 

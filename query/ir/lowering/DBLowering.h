@@ -252,6 +252,14 @@ private:
     // Propagates nullity from operand to result
     void lowerNot(mlir::db::NotOp notOp);
 
+    void lowerLabels(mlir::db::Labels labels);
+    void lowerEdgeType(mlir::db::EdgeType edgeType);
+    void lowerToInteger(mlir::db::ToInteger toInteger);
+    void lowerToFloat(mlir::db::ToFloat toFloat);
+    void lowerToBoolean(mlir::db::ToBoolean toBoolean);
+
+    void setInsertionForUnaryOp(mlir::Value operandChunk);
+
     // Applies a mask to a carry set
     void lowerFilter(mlir::db::FilterOp filter);
 
