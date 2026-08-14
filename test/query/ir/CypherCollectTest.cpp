@@ -338,6 +338,48 @@ TEST_F(CypherCollectTest, groupedCollectWithLimit) {
     }
 }
 
+TEST_F(CypherCollectTest, groupedCollectWithSkipAndLimit) {
+    buildTeamGraph();
+
+    KeyedStringListSink sink;
+    match("MATCH (n:Node) RETURN n.team, collect(n.name) SKIP 1 LIMIT 1", sink);
+
+    std::vector<KeyedStringListSink::Row> rows;
+    sink.sortedRows(rows);
+
+    ASSERT_EQ(rows.size(), 1u);
+    const KeyedStringListSink::Row& row = rows.front();
+    ASSERT_TRUE(row.first);
+
+    if (*row.first == "red") {
+        EXPECT_EQ(row.second, std::vector<std::string>({"alice", "carol"}));
+    } else {
+        EXPECT_EQ(*row.first, "blue");
+        EXPECT_EQ(row.second, std::vector<std::string>({"bob", "dan"}));
+    }
+}
+
+TEST_F(CypherCollectTest, groupedCollectWithSkip) {
+    buildTeamGraph();
+
+    KeyedStringListSink sink;
+    match("MATCH (n:Node) RETURN n.team, collect(n.name) SKIP 1", sink);
+
+    std::vector<KeyedStringListSink::Row> rows;
+    sink.sortedRows(rows);
+
+    ASSERT_EQ(rows.size(), 1u);
+    const KeyedStringListSink::Row& row = rows.front();
+    ASSERT_TRUE(row.first);
+
+    if (*row.first == "red") {
+        EXPECT_EQ(row.second, std::vector<std::string>({"alice", "carol"}));
+    } else {
+        EXPECT_EQ(*row.first, "blue");
+        EXPECT_EQ(row.second, std::vector<std::string>({"bob", "dan"}));
+    }
+}
+
 TEST_F(CypherCollectTest, rejectsCollectWithAnotherAggregate) {
     buildTeamGraph();
 
