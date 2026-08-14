@@ -485,6 +485,63 @@ TEST_F(NLDialectTest, unwindConstRoundTripsThroughTextualForm) {
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
 }
 
+// nl.const_list holds a whole list rather than spreading it over rows, so it produces a
+// chunk of that list type - spelled, like nl.unwind_const's iterator, because the element
+// type comes from the literals. A nested list rides one element as an array of its own.
+TEST_F(NLDialectTest, constListBuildsListChunk) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    const mlir::Type int64Type = mlir::IntegerType::get(&_context, 64);
+    const mlir::Type listType = mlir::storage::ListType::get(&_context, int64Type);
+    const mlir::Type chunkType = mlir::nl::ChunkType::get(&_context, listType);
+
+    const mlir::ArrayAttr elements = builder.getArrayAttr({builder.getI64IntegerAttr(1),
+                                                           builder.getI64IntegerAttr(2)});
+    mlir::nl::ConstList constList = builder.create<mlir::nl::ConstList>(loc, chunkType, elements);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    EXPECT_EQ(constList.getResult().getType(), chunkType);
+    EXPECT_EQ(constList.getElements().size(), 2u);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+}
+
+// Building an nl.const_list, printing the module and re-parsing it yields a module that
+// still verifies, so the nl.const_list printer and parser are inverses.
+TEST_F(NLDialectTest, constListRoundTripsThroughTextualForm) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    const mlir::Type listElementType = mlir::storage::ListElementType::get(&_context);
+    const mlir::Type listType = mlir::storage::ListType::get(&_context, listElementType);
+    const mlir::Type chunkType = mlir::nl::ChunkType::get(&_context, listType);
+
+    const mlir::ArrayAttr nested = builder.getArrayAttr({builder.getI64IntegerAttr(2),
+                                                         builder.getI64IntegerAttr(3)});
+    const mlir::ArrayAttr elements = builder.getArrayAttr({builder.getI64IntegerAttr(1), nested});
+    builder.create<mlir::nl::ConstList>(loc, chunkType, elements);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module->print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed =
+        mlir::parseSourceString<mlir::ModuleOp>(printed, mlir::ParserConfig(&_context));
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
 // nl.get_out_edges_by_type infers the same four-chunk edge iterator as
 // nl.get_out_edges - sources, edge IDs, edge type IDs, targets - since the edge
 // type filters rows, not columns. The type is a resolved nl.get_edge_type handle,
