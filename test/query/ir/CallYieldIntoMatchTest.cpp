@@ -4,6 +4,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -72,7 +73,8 @@ private:
     std::vector<std::string> _names;
 };
 
-// Collects the (node, node) rows a yielded node column and a matched one form.
+// Collects the (node, node) rows a yielded node column and a matched one form, in the order
+// the projection names them.
 class NodePairSink : public NLOutputSink {
 public:
     using Row = std::pair<uint64_t, uint64_t>;
@@ -80,16 +82,52 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* yielded = dynamic_cast<const ColumnVector<NodeID>*>(chunks[0]);
-        const auto* matched = dynamic_cast<const ColumnVector<NodeID>*>(chunks[1]);
-        ASSERT_NE(yielded, nullptr);
-        ASSERT_NE(matched, nullptr);
-        ASSERT_EQ(yielded->size(), matched->size());
+        const auto* first = dynamic_cast<const ColumnVector<NodeID>*>(chunks[0]);
+        const auto* second = dynamic_cast<const ColumnVector<NodeID>*>(chunks[1]);
+        ASSERT_NE(first, nullptr);
+        ASSERT_NE(second, nullptr);
+        ASSERT_EQ(first->size(), second->size());
 
-        const auto& yieldedRaw = yielded->getRaw();
+        const auto& firstRaw = first->getRaw();
+        const auto& secondRaw = second->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.emplace_back(firstRaw[rowIndex].getValue(), secondRaw[rowIndex].getValue());
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
+// Collects the (node, rank, node) rows two yields of one call and a matched node form.
+class RankedPairSink : public NLOutputSink {
+public:
+    using Row = std::tuple<uint64_t, types::Int64::Primitive, uint64_t>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 3u);
+
+        const auto* people = dynamic_cast<const ColumnVector<NodeID>*>(chunks[0]);
+        const auto* ranks = dynamic_cast<const ColumnVector<types::Int64::Primitive>*>(chunks[1]);
+        const auto* matched = dynamic_cast<const ColumnVector<NodeID>*>(chunks[2]);
+        ASSERT_NE(people, nullptr);
+        ASSERT_NE(ranks, nullptr);
+        ASSERT_NE(matched, nullptr);
+        ASSERT_EQ(people->size(), ranks->size());
+        ASSERT_EQ(people->size(), matched->size());
+
+        const auto& peopleRaw = people->getRaw();
+        const auto& ranksRaw = ranks->getRaw();
         const auto& matchedRaw = matched->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _rows.emplace_back(yieldedRaw[rowIndex].getValue(), matchedRaw[rowIndex].getValue());
+            _rows.emplace_back(peopleRaw[rowIndex].getValue(),
+                               ranksRaw[rowIndex],
+                               matchedRaw[rowIndex].getValue());
         }
     }
 
@@ -179,6 +217,51 @@ void firstNodesDealloc(ProcedureData* data) {
     delete data;
 }
 
+struct RankedNodesData : public ProcedureData {};
+
+// test.rankedNodes(count) YIELD person, rank: the node IDs below the constant count, each
+// beside a rank that is not its node ID - so a row holding a rank the yielded node never
+// came with is visible.
+void rankedNodesExecuteImpl(ProcedureState* procedureState) {
+    RankedNodesData& data = procedureState->data<RankedNodesData>();
+
+    const types::Int64::Primitive count
+        = ProcUtils::constArg<types::Int64::Primitive>(data.getInputColumn(0),
+                                                      "test.rankedNodes: count must be a constant int");
+
+    auto* people = static_cast<ColumnVector<NodeID>*>(data.getReturnColumn(0));
+    auto* ranks = static_cast<ColumnVector<types::Int64::Primitive>*>(data.getReturnColumn(1));
+    people->clear();
+    ranks->clear();
+
+    for (types::Int64::Primitive nodeIndex = 0; nodeIndex < count; nodeIndex++) {
+        people->push_back(NodeID {static_cast<NodeID::Type>(nodeIndex)});
+        ranks->push_back(100 + nodeIndex);
+    }
+
+    procedureState->finish();
+}
+
+void rankedNodesExecute(ProcedureState* procedureState) {
+    switch (procedureState->getStep()) {
+        case ProcedureState::Step::PREPARE:
+        case ProcedureState::Step::RESET:
+        break;
+
+        case ProcedureState::Step::EXECUTE:
+        rankedNodesExecuteImpl(procedureState);
+        break;
+    }
+}
+
+ProcedureData* rankedNodesAlloc() {
+    return new RankedNodesData();
+}
+
+void rankedNodesDealloc(ProcedureData* data) {
+    delete data;
+}
+
 struct WantedAgeData : public ProcedureData {};
 
 // test.wantedAge() YIELD wanted: emits the single row 32 - the age Remy and Adam carry
@@ -238,6 +321,15 @@ protected:
         firstNodesProcedure->addArgument("count", ProcedureType::INT64);
         firstNodesProcedure->addReturnValue("person", ProcedureType::NODE);
         testNamespace->addProcedure(firstNodesProcedure);
+
+        Procedure* rankedNodesProcedure = new Procedure("rankedNodes");
+        rankedNodesProcedure->setAllocCallback(&rankedNodesAlloc);
+        rankedNodesProcedure->setDeallocCallback(&rankedNodesDealloc);
+        rankedNodesProcedure->setExecuteCallback(&rankedNodesExecute);
+        rankedNodesProcedure->addArgument("count", ProcedureType::INT64);
+        rankedNodesProcedure->addReturnValue("person", ProcedureType::NODE);
+        rankedNodesProcedure->addReturnValue("rank", ProcedureType::INT64);
+        testNamespace->addProcedure(rankedNodesProcedure);
 
         Procedure* wantedAgeProcedure = new Procedure("wantedAge");
         wantedAgeProcedure->setAllocCallback(&wantedAgeAlloc);
@@ -329,6 +421,38 @@ TEST_F(CallYieldIntoMatchTest, projectsTheYieldedNodeBesideTheMatchedOne) {
     sink.sortedRows(rows);
 
     const std::vector<NodePairSink::Row> expected {{0, 1}, {0, 2}, {0, 3}, {0, 6}, {1, 0}, {1, 4}, {1, 5}};
+    EXPECT_EQ(rows, expected);
+}
+
+// CALL test.firstNodes(2) YIELD person MATCH (a)-->(person) RETURN a, person: the yielded
+// variable is the pattern's target rather than the node it starts from, so the traversal
+// binds it and the yield has to hold it to the two nodes it emitted. Only Adam and Ghosts
+// point at Remy, and only Remy points at Adam.
+TEST_F(CallYieldIntoMatchTest, matchReadsTheYieldedNodeAsPatternTarget) {
+    NodePairSink sink;
+    runQuery("CALL test.firstNodes(2) YIELD person MATCH (a)-->(person) RETURN a, person", sink);
+
+    std::vector<NodePairSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<NodePairSink::Row> expected {{0, 1}, {1, 0}, {6, 0}};
+    EXPECT_EQ(rows, expected);
+}
+
+// CALL test.rankedNodes(2) YIELD person, rank MATCH (person)-->(m) RETURN person, rank, m:
+// the MATCH reads one of the two yields and never mentions the other, so rank rides through
+// the expansion - it has to end up beside the person it was yielded with, repeated once per
+// out-edge that person has.
+TEST_F(CallYieldIntoMatchTest, carriesTheYieldTheMatchDoesNotRead) {
+    RankedPairSink sink;
+    runQuery("CALL test.rankedNodes(2) YIELD person, rank MATCH (person)-->(m) RETURN person, rank, m",
+             sink);
+
+    std::vector<RankedPairSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<RankedPairSink::Row> expected {
+        {0, 100, 1}, {0, 100, 2}, {0, 100, 3}, {0, 100, 6}, {1, 101, 0}, {1, 101, 4}, {1, 101, 5}};
     EXPECT_EQ(rows, expected);
 }
 
