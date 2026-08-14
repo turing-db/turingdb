@@ -1158,6 +1158,56 @@ func.func @main() {
 }
 )mlir";
 
+// RETURN [1, 2, 3]: the same literals as a value rather than a source, so the whole list
+// is one cell - a list of the type its elements share.
+const char* const constListProgram = R"mlir(
+func.func @main() {
+  %xs = db.const_list([1, 2, 3]) : !db.column<!storage.list<i64>>
+  db.output(%xs) : !db.column<!storage.list<i64>>
+  return
+}
+)mlir";
+
+// RETURN [10, true, [1, 2]]: elements that share no type - one of them a nested list,
+// which carries none at all - so the list is one of type-erased tagged scalars.
+const char* const nestedConstListProgram = R"mlir(
+func.func @main() {
+  %xs = db.const_list([10, true, [1, 2]]) : !db.column<!storage.list<!storage.list_element>>
+  db.output(%xs) : !db.column<!storage.list<!storage.list_element>>
+  return
+}
+)mlir";
+
+// RETURN []: an empty list is the type-erased form and holds no element - a value all the
+// same, unlike UNWIND of it, which yields no row.
+const char* const emptyConstListProgram = R"mlir(
+func.func @main() {
+  %xs = db.const_list([]) : !db.column<!storage.list<!storage.list_element>>
+  db.output(%xs) : !db.column<!storage.list<!storage.list_element>>
+  return
+}
+)mlir";
+
+// A list typed as its elements' type rather than as a list of it: the verifier rejects it,
+// since a const_list holds the whole list in every row.
+const char* const scalarColumnConstListProgram = R"mlir(
+func.func @main() {
+  %xs = db.const_list([1, 2, 3]) : !db.column<i64>
+  db.output(%xs) : !db.column<i64>
+  return
+}
+)mlir";
+
+// A mixed-type list typed as a homogeneous i64 list: rejected by the same homogeneity
+// check the unwind_const form fails.
+const char* const mixedHomogeneousConstListProgram = R"mlir(
+func.func @main() {
+  %xs = db.const_list([1, "string"]) : !db.column<!storage.list<i64>>
+  db.output(%xs) : !db.column<!storage.list<i64>>
+  return
+}
+)mlir";
+
 // MATCH ()-[e]->() RETURN a, b: scan every edge, exposing the four edge columns
 // (source node, edge, edge type, target node); the output keeps the endpoints.
 const char* const scanEdgesProgram = R"mlir(
@@ -1337,6 +1387,93 @@ TEST_F(DBDialectTest, verifierRejectsHomogeneousUnwindConstWithMixedElements) {
     // A mixed-type list typed as a homogeneous i64 column fails the verifier during
     // parsing, so the module is null.
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(mixedHomogeneousUnwindConstProgram);
+    EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, parsesConstList) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(constListProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::ConstList constList;
+    module.get().walk([&](mlir::db::ConstList op) {
+        constList = op;
+    });
+    ASSERT_TRUE(constList);
+
+    // The three literals come back on the op, and the result is one column of lists of
+    // the type they share.
+    const mlir::ArrayAttr elements = constList.getElements();
+    ASSERT_EQ(elements.size(), 3u);
+
+    const mlir::Type int64ListType = mlir::storage::ListType::get(&_context, mlir::IntegerType::get(&_context, 64));
+    EXPECT_EQ(constList.getResult().getType(), mlir::db::ColumnType::get(&_context, int64ListType));
+}
+
+TEST_F(DBDialectTest, constListRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(constListProgram);
+    ASSERT_TRUE(module);
+
+    // Printing then re-parsing yields a module that still verifies, so the
+    // db.const_list printer and parser are inverses.
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, parsesNestedConstList) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(nestedConstListProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::ConstList constList;
+    module.get().walk([&](mlir::db::ConstList op) {
+        constList = op;
+    });
+    ASSERT_TRUE(constList);
+
+    // The nested list is one element of the outer list, carried as an array of its own
+    // element attributes.
+    const mlir::ArrayAttr elements = constList.getElements();
+    ASSERT_EQ(elements.size(), 3u);
+
+    const auto nested = mlir::dyn_cast<mlir::ArrayAttr>(elements[2]);
+    ASSERT_TRUE(nested);
+    EXPECT_EQ(nested.size(), 2u);
+}
+
+TEST_F(DBDialectTest, nestedConstListRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(nestedConstListProgram);
+    ASSERT_TRUE(module);
+
+    // The nested array prints inside the element list and parses back as one element, so
+    // the printer and parser are inverses through a nested list too.
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, constListWithEmptyListIsValid) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyConstListProgram);
+    ASSERT_TRUE(module);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
+}
+
+TEST_F(DBDialectTest, verifierRejectsConstListWithScalarColumn) {
+    // A const_list holds the whole list in every row, so a column of the elements' type
+    // fails the verifier during parsing and the module is null.
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(scalarColumnConstListProgram);
+    EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, verifierRejectsHomogeneousConstListWithMixedElements) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(mixedHomogeneousConstListProgram);
     EXPECT_FALSE(module);
 }
 
