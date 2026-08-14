@@ -635,8 +635,8 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
     generateTraversal(ast);
     resolveEdgeIdentities();
     generatePropertyConstraints(ast);
-    generateFilters(ast);
-    generateCalls(ast);
+    generateFiltersAndCalls(ast);
+    resolveYieldedIdentities();
     generateGroupAggregate(ast);
     generateCreate(ast);
     generateSet(ast);
@@ -747,27 +747,25 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
     _opBuilder.setInsertionPointToEnd(mainBlock);
 }
 
+// A chunk holds the rows of the loop whose body binds it, so only a column bound in this
+// block is row-aligned with the rows flowing past this point. One bound in an enclosing
+// block - or in a loop the dataflow has already left - holds a different row set, and an op
+// that consumes the whole row set (a filter, a call's carry set) would pair its rows with
+// unrelated ones. Note this is stricter than dominance on purpose: an outer block's value
+// does dominate here, it is just the wrong rows.
+bool DBProgramGenerator::isRowAlignedHere(mlir::Value column) const {
+    mlir::Operation* const definingOp = column.getDefiningOp();
+    mlir::Block* const definingBlock = definingOp
+        ? definingOp->getBlock()
+        : mlir::cast<mlir::BlockArgument>(column).getOwner();
+
+    return definingBlock == _opBuilder.getInsertionBlock();
+}
+
 void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight) {
-    mlir::Block* const insertionBlock = _opBuilder.getInsertionBlock();
-
-    // A chunk holds the rows of the loop whose body binds it, so only a column bound in this
-    // block is row-aligned with the rows flowing past this point. One bound in an enclosing
-    // block - or in a loop the dataflow has already left - holds a different row set, and an
-    // op that consumes the whole row set (a filter, a call's carry set) would pair its rows
-    // with unrelated ones. Note this is stricter than dominance on purpose: an outer block's
-    // value does dominate here, it is just the wrong rows.
-    const auto isBoundHere = [&](const mlir::Value column) {
-        mlir::Operation* const definingOp = column.getDefiningOp();
-        mlir::Block* const definingBlock = definingOp
-            ? definingOp->getBlock()
-            : mlir::cast<mlir::BlockArgument>(column).getOwner();
-
-        return definingBlock == insertionBlock;
-    };
-
     for (auto& [var, values] : _varMap) {
         const mlir::Value column = values.back();
-        if (!isBoundHere(column)) {
+        if (!isRowAlignedHere(column)) {
             continue;
         }
 
@@ -776,7 +774,7 @@ void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight) {
     }
 
     for (auto& [var, column] : _edgeTypeMap) {
-        if (!isBoundHere(column)) {
+        if (!isRowAlignedHere(column)) {
             continue;
         }
 
@@ -788,7 +786,7 @@ void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight) {
     // set must take it along, or the rows it holds would stop matching the ones beside it.
     for (size_t yieldedIndex = 0; yieldedIndex < _yieldedColumns.size(); yieldedIndex++) {
         const mlir::Value column = _yieldedColumns[yieldedIndex].second;
-        if (!isBoundHere(column)) {
+        if (!isRowAlignedHere(column)) {
             continue;
         }
 
@@ -910,6 +908,48 @@ void DBProgramGenerator::resolveEdgeIdentities() {
         }
 
         filterAllColumns(predicate);
+    }
+}
+
+void DBProgramGenerator::resolveYieldedIdentities() {
+    struct YieldedIdentity {
+        const VariableDependency* _variable {nullptr};
+        size_t _yieldedIndex {0};
+    };
+
+    llvm::SmallVector<YieldedIdentity> identities;
+    for (size_t yieldedIndex = 0; yieldedIndex < _yieldedColumns.size(); yieldedIndex++) {
+        const std::string_view yieldedName = _yieldedColumns[yieldedIndex].first;
+
+        for (const auto& [var, values] : _varMap) {
+            if (var->getName() != yieldedName) {
+                continue;
+            }
+
+            identities.push_back({var, yieldedIndex});
+        }
+    }
+
+    if (identities.empty()) {
+        return;
+    }
+
+    const mlir::Location uloc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+
+    for (const YieldedIdentity& identity : identities) {
+        const mlir::Value patternColumn = _varMap.at(identity._variable).back();
+        const mlir::Value yieldedColumn = _yieldedColumns[identity._yieldedIndex].second;
+
+        const bool patternAligned = isRowAlignedHere(patternColumn);
+        const bool yieldedAligned = isRowAlignedHere(yieldedColumn);
+        bioassert(patternAligned && yieldedAligned,
+                  "Yielded variable {} was not paired with its pattern",
+                  identity._variable->getName());
+
+        auto eqOp = _opBuilder.create<mlir::db::EqOp>(uloc, boolType, patternColumn, yieldedColumn);
+
+        filterAllColumns(eqOp.getResult());
     }
 }
 
@@ -1152,7 +1192,7 @@ void DBProgramGenerator::moveComponentToFactor(TranslatedComponent& component,
     _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {component._columns});
 }
 
-void DBProgramGenerator::generateCalls(const CypherAST* ast) {
+void DBProgramGenerator::generateFiltersAndCalls(const CypherAST* ast) {
     const CypherAST::QueryCommands& queries = ast->queries();
     if (queries.size() != 1) {
         throw TuringException("Multiple queries not yet supported.");
@@ -1170,15 +1210,31 @@ void DBProgramGenerator::generateCalls(const CypherAST* ast) {
         return;
     }
 
-    // In statement order, so a call reading what an earlier one yielded sees it - the
+    // In statement order, so a call reading what an earlier one yielded sees it, and a
+    // MATCH's WHERE reading a yielded value is generated once the call has bound it - the
     // reading statements are generated in the order the query writes them.
     for (const Stmt* stmt : stmtsContainer->stmts()) {
-        if (stmt->getKind() != Stmt::Kind::CALL) {
-            continue;
-        }
+        const Stmt::Kind kind = stmt->getKind();
 
-        generateCall(static_cast<const CallStmt*>(stmt));
+        if (kind == Stmt::Kind::MATCH) {
+            generateMatchFilter(static_cast<const MatchStmt*>(stmt));
+        } else if (kind == Stmt::Kind::CALL) {
+            generateCall(static_cast<const CallStmt*>(stmt));
+        }
     }
+}
+
+void DBProgramGenerator::generateMatchFilter(const MatchStmt* matchStmt) {
+    const Pattern* pattern = matchStmt->getPattern();
+    const WhereClause* where = pattern->getWhere();
+    if (!where) {
+        return;
+    }
+
+    std::vector<const Expr*> conjuncts;
+    flattenConjuncts(where->getExpr(), conjuncts);
+
+    applyPredicateFilters(conjuncts);
 }
 
 void DBProgramGenerator::generateCall(const CallStmt* callStmt) {
@@ -1547,15 +1603,6 @@ mlir::Value DBProgramGenerator::resolveEntityColumn(std::string_view varName) {
     }
 
     return mlir::Value {};
-}
-
-bool DBProgramGenerator::isRowAlignedHere(mlir::Value column) const {
-    mlir::Operation* const definingOp = column.getDefiningOp();
-    mlir::Block* const definingBlock = definingOp
-        ? definingOp->getBlock()
-        : mlir::cast<mlir::BlockArgument>(column).getOwner();
-
-    return definingBlock == _opBuilder.getInsertionBlock();
 }
 
 mlir::Value DBProgramGenerator::resolveWildcardColumn() const {
@@ -2174,44 +2221,6 @@ void DBProgramGenerator::applyConstraints(const VariableDependency* var) {
             static_assert(sizeof(T) == 0, "Unhandled constraint type.");
         }
     }, *constraints);
-}
-
-void DBProgramGenerator::generateFilters(const CypherAST* ast) {
-    const CypherAST::QueryCommands& queries = ast->queries();
-    if (queries.size() != 1) {
-        throw TuringException("Multiple queries not yet supported.");
-    }
-
-    const QueryCommand* query = queries.front();
-
-    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
-    if (!sglPart) {
-        return;
-    }
-
-    const StmtContainer* stmtsContainer = sglPart->getReadStmts();
-    if (!stmtsContainer) {
-        return;
-    }
-
-    std::vector<const Expr*> conjuncts;
-    for (const Stmt* stmt : stmtsContainer->stmts()) {
-        if (stmt->getKind() != Stmt::Kind::MATCH) {
-            continue;
-        }
-
-        const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt);
-        const Pattern* pattern = matchStmt->getPattern();
-        const WhereClause* where = pattern->getWhere();
-        if (!where) {
-            continue;
-        }
-
-        conjuncts.clear();
-        flattenConjuncts(where->getExpr(), conjuncts);
-
-        applyPredicateFilters(conjuncts);
-    }
 }
 
 void DBProgramGenerator::translateExpr(const Expr* expr) {
