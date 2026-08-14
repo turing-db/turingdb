@@ -236,29 +236,17 @@ private:
     // Hoists an nl.constant to the top of the entry block
     void lowerConstant(mlir::db::ConstantOp constant);
 
-    // Performs null- and type- promotions
-    void lowerAdd(mlir::db::AddOp add);
+    enum class BinaryResultKind {
+        Numeric,   // add/sub/mul/div: promoted numeric, nullable if either operand is
+        Boolean,   // eq/neq/gt/lt/gte/lte and and/or/xor: i1, nullable if either is
+    };
 
-    // Performs null- and type- promotions
-    void lowerSub(mlir::db::SubOp sub);
+    template <typename NLOp>
+    void lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind);
 
-    // Performs null- and type- promotions
-    void lowerMul(mlir::db::MulOp mul);
-
-    // Performs null- and type- promotions; division by zero yields null
-    void lowerDiv(mlir::db::DivOp div);
-
-    // Handles nullity of its output depending on operands
-    void lowerEq(mlir::db::EqOp eq);
-    void lowerNeq(mlir::db::NeqOp neq);
-    void lowerGt(mlir::db::GtOp gt);
-    void lowerLt(mlir::db::LtOp lt);
-    void lowerGte(mlir::db::GteOp gte);
-    void lowerLte(mlir::db::LteOp lte);
-
-    void lowerAnd(mlir::db::AndOp andOp);
-    void lowerOr(mlir::db::OrOp orOp);
-    void lowerXor(mlir::db::XorOp xorOp);
+    // The result chunk element type for a binary op of this kind over these operand
+    // chunk types: a promoted numeric or an i1, wrapped nullable as the kind dictates.
+    mlir::Type binaryResultElement(BinaryResultKind kind, mlir::Type lhsType, mlir::Type rhsType);
 
     // Propagates nullity from operand to result
     void lowerNot(mlir::db::NotOp notOp);

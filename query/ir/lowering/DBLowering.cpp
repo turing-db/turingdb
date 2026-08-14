@@ -441,32 +441,32 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerAggregate(avg.getInput(), avg.getResult(), storage::AggregateKind::Avg);
     } else if (mlir::db::ConstantOp constant = mlir::dyn_cast<mlir::db::ConstantOp>(operation)) {
         lowerConstant(constant);
-    } else if (mlir::db::AddOp add = mlir::dyn_cast<mlir::db::AddOp>(operation)) {
-        lowerAdd(add);
-    } else if (mlir::db::SubOp sub = mlir::dyn_cast<mlir::db::SubOp>(operation)) {
-        lowerSub(sub);
-    } else if (mlir::db::MulOp mul = mlir::dyn_cast<mlir::db::MulOp>(operation)) {
-        lowerMul(mul);
-    } else if (mlir::db::DivOp div = mlir::dyn_cast<mlir::db::DivOp>(operation)) {
-        lowerDiv(div);
-    } else if (mlir::db::EqOp eq = mlir::dyn_cast<mlir::db::EqOp>(operation)) {
-        lowerEq(eq);
-    } else if (mlir::db::NeqOp neq = mlir::dyn_cast<mlir::db::NeqOp>(operation)) {
-        lowerNeq(neq);
-    } else if (mlir::db::GtOp gt = mlir::dyn_cast<mlir::db::GtOp>(operation)) {
-        lowerGt(gt);
-    } else if (mlir::db::LtOp lt = mlir::dyn_cast<mlir::db::LtOp>(operation)) {
-        lowerLt(lt);
-    } else if (mlir::db::GteOp gte = mlir::dyn_cast<mlir::db::GteOp>(operation)) {
-        lowerGte(gte);
-    } else if (mlir::db::LteOp lte = mlir::dyn_cast<mlir::db::LteOp>(operation)) {
-        lowerLte(lte);
-    } else if (mlir::db::AndOp nd = mlir::dyn_cast<mlir::db::AndOp>(operation)) {
-        lowerAnd(nd);
-    } else if (mlir::db::OrOp orOp = mlir::dyn_cast<mlir::db::OrOp>(operation)) {
-        lowerOr(orOp);
-    } else if (mlir::db::XorOp xorOp = mlir::dyn_cast<mlir::db::XorOp>(operation)) {
-        lowerXor(xorOp);
+    } else if (mlir::isa<mlir::db::AddOp>(operation)) {
+        lowerBinaryOp<nl::Add>(operation, BinaryResultKind::Numeric);
+    } else if (mlir::isa<mlir::db::SubOp>(operation)) {
+        lowerBinaryOp<nl::Sub>(operation, BinaryResultKind::Numeric);
+    } else if (mlir::isa<mlir::db::MulOp>(operation)) {
+        lowerBinaryOp<nl::Mul>(operation, BinaryResultKind::Numeric);
+    } else if (mlir::isa<mlir::db::DivOp>(operation)) {
+        lowerBinaryOp<nl::Div>(operation, BinaryResultKind::Numeric);
+    } else if (mlir::isa<mlir::db::EqOp>(operation)) {
+        lowerBinaryOp<nl::Eq>(operation, BinaryResultKind::Boolean);
+    } else if (mlir::isa<mlir::db::NeqOp>(operation)) {
+        lowerBinaryOp<nl::Neq>(operation, BinaryResultKind::Boolean);
+    } else if (mlir::isa<mlir::db::GtOp>(operation)) {
+        lowerBinaryOp<nl::Gt>(operation, BinaryResultKind::Boolean);
+    } else if (mlir::isa<mlir::db::LtOp>(operation)) {
+        lowerBinaryOp<nl::Lt>(operation, BinaryResultKind::Boolean);
+    } else if (mlir::isa<mlir::db::GteOp>(operation)) {
+        lowerBinaryOp<nl::Gte>(operation, BinaryResultKind::Boolean);
+    } else if (mlir::isa<mlir::db::LteOp>(operation)) {
+        lowerBinaryOp<nl::Lte>(operation, BinaryResultKind::Boolean);
+    } else if (mlir::isa<mlir::db::AndOp>(operation)) {
+        lowerBinaryOp<nl::And>(operation, BinaryResultKind::Boolean);
+    } else if (mlir::isa<mlir::db::OrOp>(operation)) {
+        lowerBinaryOp<nl::Or>(operation, BinaryResultKind::Boolean);
+    } else if (mlir::isa<mlir::db::XorOp>(operation)) {
+        lowerBinaryOp<nl::Xor>(operation, BinaryResultKind::Boolean);
     } else if (mlir::db::NotOp notOp = mlir::dyn_cast<mlir::db::NotOp>(operation)) {
         lowerNot(notOp);
     } else if (mlir::db::FilterOp filter = mlir::dyn_cast<mlir::db::FilterOp>(operation)) {
@@ -1792,305 +1792,43 @@ void DBLowering::lowerConstant(mlir::db::ConstantOp constant) {
     _valueMap[constant.getResult()] = nlConstant.getResult();
 }
 
-void DBLowering::lowerAdd(mlir::db::AddOp add) {
-    const mlir::Value lhsChunk = mapValue(add.getLhs());
-    const mlir::Value rhsChunk = mapValue(add.getRhs());
+mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
+                                           mlir::Type lhsType,
+                                           mlir::Type rhsType) {
+    mlir::MLIRContext* const ctx = _builder.getContext();
+    const bool operandNullable = isNullableChunk(lhsType) || isNullableChunk(rhsType);
 
-    const NumericOperand lhs = numericOperand(lhsChunk.getType());
-    const NumericOperand rhs = numericOperand(rhsChunk.getType());
+    switch (kind) {
+        case BinaryResultKind::Boolean: {
+            const mlir::Type boolElement = _builder.getI1Type();
+            return operandNullable ? storage::NullableType::get(ctx, boolElement) : boolElement;
+        }
+        break;
 
-    const mlir::Type promoted = promoteNumeric(_builder, lhs.numeric, rhs.numeric);
-    const bool resultNullable = lhs.nullable || rhs.nullable;
-
-    mlir::Type resultElement = promoted;
-    if (resultNullable) {
-        resultElement = storage::NullableType::get(_builder.getContext(), promoted);
+        case BinaryResultKind::Numeric: {
+            const NumericOperand lhs = numericOperand(lhsType);
+            const NumericOperand rhs = numericOperand(rhsType);
+            const mlir::Type promoted = promoteNumeric(_builder, lhs.numeric, rhs.numeric);
+            return operandNullable ? storage::NullableType::get(ctx, promoted) : promoted;
+        }
+        break;
     }
 
+    bioassert(false, "Unhandled binary result kind");
+}
+
+template <typename NLOp>
+void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
+    const mlir::Value lhsChunk = mapValue(op.getOperand(0));
+    const mlir::Value rhsChunk = mapValue(op.getOperand(1));
+
+    const mlir::Type resultElement = binaryResultElement(kind, lhsChunk.getType(), rhsChunk.getType());
     const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
 
     setInsertionForBinaryOp(lhsChunk, rhsChunk);
 
-    const mlir::Location uloc = _builder.getUnknownLoc();
-    nl::Add addOp = _builder.create<nl::Add>(uloc, resultType, lhsChunk, rhsChunk);
-    _valueMap[add.getResult()] = addOp.getResult();
-}
-
-void DBLowering::lowerSub(mlir::db::SubOp sub) {
-    const mlir::Value lhsChunk = mapValue(sub.getLhs());
-    const mlir::Value rhsChunk = mapValue(sub.getRhs());
-
-    const NumericOperand lhs = numericOperand(lhsChunk.getType());
-    const NumericOperand rhs = numericOperand(rhsChunk.getType());
-
-    const mlir::Type promoted = promoteNumeric(_builder, lhs.numeric, rhs.numeric);
-    const bool resultNullable = lhs.nullable || rhs.nullable;
-
-    mlir::Type resultElement = promoted;
-    if (resultNullable) {
-        resultElement = storage::NullableType::get(_builder.getContext(), promoted);
-    }
-
-    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
-
-    setInsertionForBinaryOp(lhsChunk, rhsChunk);
-
-    const mlir::Location uloc = _builder.getUnknownLoc();
-    nl::Sub subOp = _builder.create<nl::Sub>(uloc, resultType, lhsChunk, rhsChunk);
-    _valueMap[sub.getResult()] = subOp.getResult();
-}
-
-void DBLowering::lowerMul(mlir::db::MulOp mul) {
-    const mlir::Value lhsChunk = mapValue(mul.getLhs());
-    const mlir::Value rhsChunk = mapValue(mul.getRhs());
-
-    const NumericOperand lhs = numericOperand(lhsChunk.getType());
-    const NumericOperand rhs = numericOperand(rhsChunk.getType());
-
-    const mlir::Type promoted = promoteNumeric(_builder, lhs.numeric, rhs.numeric);
-    const bool resultNullable = lhs.nullable || rhs.nullable;
-
-    mlir::Type resultElement = promoted;
-    if (resultNullable) {
-        resultElement = storage::NullableType::get(_builder.getContext(), promoted);
-    }
-
-    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
-
-    setInsertionForBinaryOp(lhsChunk, rhsChunk);
-
-    const mlir::Location uloc = _builder.getUnknownLoc();
-    nl::Mul mulOp = _builder.create<nl::Mul>(uloc, resultType, lhsChunk, rhsChunk);
-    _valueMap[mul.getResult()] = mulOp.getResult();
-}
-
-void DBLowering::lowerDiv(mlir::db::DivOp div) {
-    const mlir::Value lhsChunk = mapValue(div.getLhs());
-    const mlir::Value rhsChunk = mapValue(div.getRhs());
-
-    const NumericOperand lhs = numericOperand(lhsChunk.getType());
-    const NumericOperand rhs = numericOperand(rhsChunk.getType());
-
-    const mlir::Type promoted = promoteNumeric(_builder, lhs.numeric, rhs.numeric);
-
-    // Division by zero yields null, so the result is always nullable.
-    const mlir::Type resultElement = storage::NullableType::get(_builder.getContext(), promoted);
-    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
-
-    setInsertionForBinaryOp(lhsChunk, rhsChunk);
-
-    const mlir::Location uloc = _builder.getUnknownLoc();
-    nl::Div divOp = _builder.create<nl::Div>(uloc, resultType, lhsChunk, rhsChunk);
-    _valueMap[div.getResult()] = divOp.getResult();
-}
-
-void DBLowering::lowerEq(mlir::db::EqOp eq) {
-    const mlir::Value lhsChunk = mapValue(eq.getLhs());
-    const mlir::Value rhsChunk = mapValue(eq.getRhs());
-
-    const mlir::Type lhsType = lhsChunk.getType();
-    const mlir::Type rhsType = rhsChunk.getType();
-
-    const bool resultNull = isNullableChunk(lhsType) || isNullableChunk(rhsType);
-
-    const mlir::Type boolElement = _builder.getI1Type();
-    mlir::Type resultElement = boolElement;
-    mlir::MLIRContext* bldCtxt = _builder.getContext();
-    if (resultNull) {
-        resultElement = storage::NullableType::get(bldCtxt, boolElement);
-    }
-
-    const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
-
-    setInsertionForBinaryOp(lhsChunk, rhsChunk);
-
-    nl::Eq eqOp = _builder.create<nl::Eq>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
-    _valueMap[eq.getResult()] = eqOp.getResult();
-}
-
-void DBLowering::lowerNeq(mlir::db::NeqOp neq) {
-    const mlir::Value lhsChunk = mapValue(neq.getLhs());
-    const mlir::Value rhsChunk = mapValue(neq.getRhs());
-
-    const mlir::Type lhsType = lhsChunk.getType();
-    const mlir::Type rhsType = rhsChunk.getType();
-
-    const bool resultNull = isNullableChunk(lhsType) || isNullableChunk(rhsType);
-
-    const mlir::Type boolElement = _builder.getI1Type();
-    mlir::Type resultElement = boolElement;
-    mlir::MLIRContext* bldCtxt = _builder.getContext();
-    if (resultNull) {
-        resultElement = storage::NullableType::get(bldCtxt, boolElement);
-    }
-
-    const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
-
-    setInsertionForBinaryOp(lhsChunk, rhsChunk);
-
-    nl::Neq neqOp = _builder.create<nl::Neq>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
-    _valueMap[neq.getResult()] = neqOp.getResult();
-}
-
-void DBLowering::lowerGt(mlir::db::GtOp gt) {
-    const mlir::Value lhsChunk = mapValue(gt.getLhs());
-    const mlir::Value rhsChunk = mapValue(gt.getRhs());
-
-    const bool resultNull = isNullableChunk(lhsChunk.getType()) || isNullableChunk(rhsChunk.getType());
-
-    const mlir::Type boolElement = _builder.getI1Type();
-    mlir::MLIRContext* bldCtxt = _builder.getContext();
-    mlir::Type resultElement = boolElement;
-    if (resultNull) {
-        resultElement = storage::NullableType::get(bldCtxt, boolElement);
-    }
-
-    const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
-
-    setInsertionForBinaryOp(lhsChunk, rhsChunk);
-
-    nl::Gt gtOp = _builder.create<nl::Gt>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
-    _valueMap[gt.getResult()] = gtOp.getResult();
-}
-
-void DBLowering::lowerLt(mlir::db::LtOp lt) {
-    const mlir::Value lhsChunk = mapValue(lt.getLhs());
-    const mlir::Value rhsChunk = mapValue(lt.getRhs());
-
-    const bool resultNull = isNullableChunk(lhsChunk.getType()) || isNullableChunk(rhsChunk.getType());
-
-    const mlir::Type boolElement = _builder.getI1Type();
-    mlir::MLIRContext* bldCtxt = _builder.getContext();
-    mlir::Type resultElement = boolElement;
-    if (resultNull) {
-        resultElement = storage::NullableType::get(bldCtxt, boolElement);
-    }
-
-    const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
-
-    setInsertionForBinaryOp(lhsChunk, rhsChunk);
-
-    nl::Lt ltOp = _builder.create<nl::Lt>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
-    _valueMap[lt.getResult()] = ltOp.getResult();
-}
-
-void DBLowering::lowerGte(mlir::db::GteOp gte) {
-    const mlir::Value lhsChunk = mapValue(gte.getLhs());
-    const mlir::Value rhsChunk = mapValue(gte.getRhs());
-
-    const bool resultNull = isNullableChunk(lhsChunk.getType()) || isNullableChunk(rhsChunk.getType());
-
-    const mlir::Type boolElement = _builder.getI1Type();
-    mlir::MLIRContext* bldCtxt = _builder.getContext();
-    mlir::Type resultElement = boolElement;
-    if (resultNull) {
-        resultElement = storage::NullableType::get(bldCtxt, boolElement);
-    }
-
-    const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
-
-    setInsertionForBinaryOp(lhsChunk, rhsChunk);
-
-    nl::Gte gteOp = _builder.create<nl::Gte>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
-    _valueMap[gte.getResult()] = gteOp.getResult();
-}
-
-void DBLowering::lowerLte(mlir::db::LteOp lte) {
-    const mlir::Value lhsChunk = mapValue(lte.getLhs());
-    const mlir::Value rhsChunk = mapValue(lte.getRhs());
-
-    const bool resultNull = isNullableChunk(lhsChunk.getType()) || isNullableChunk(rhsChunk.getType());
-
-    const mlir::Type boolElement = _builder.getI1Type();
-    mlir::MLIRContext* bldCtxt = _builder.getContext();
-    mlir::Type resultElement = boolElement;
-    if (resultNull) {
-        resultElement = storage::NullableType::get(bldCtxt, boolElement);
-    }
-
-    const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
-
-    setInsertionForBinaryOp(lhsChunk, rhsChunk);
-
-    nl::Lte lteOp = _builder.create<nl::Lte>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
-    _valueMap[lte.getResult()] = lteOp.getResult();
-}
-
-void DBLowering::lowerAnd(mlir::db::AndOp andOp) {
-    const mlir::Value lhsChunk = mapValue(andOp.getLhs());
-    const mlir::Value rhsChunk = mapValue(andOp.getRhs());
-
-    const mlir::Type lhsType = lhsChunk.getType();
-    const mlir::Type rhsType = rhsChunk.getType();
-
-    // Kleene logic can still yield null (e.g. null AND true), so the result is
-    // nullable whenever either operand is.
-    const bool resultNull = isNullableChunk(lhsType) || isNullableChunk(rhsType);
-
-    const mlir::Type boolElement = _builder.getI1Type();
-    mlir::Type resultElement = boolElement;
-    mlir::MLIRContext* bldCtxt = _builder.getContext();
-    if (resultNull) {
-        resultElement = storage::NullableType::get(bldCtxt, boolElement);
-    }
-
-    const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
-
-    setInsertionForBinaryOp(lhsChunk, rhsChunk);
-
-    nl::And nlAndOp = _builder.create<nl::And>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
-    _valueMap[andOp.getResult()] = nlAndOp.getResult();
-}
-
-void DBLowering::lowerOr(mlir::db::OrOp orOp) {
-    const mlir::Value lhsChunk = mapValue(orOp.getLhs());
-    const mlir::Value rhsChunk = mapValue(orOp.getRhs());
-
-    const mlir::Type lhsType = lhsChunk.getType();
-    const mlir::Type rhsType = rhsChunk.getType();
-
-    // Kleene logic can still yield null (e.g. null OR false), so the result is
-    // nullable whenever either operand is.
-    const bool resultNull = isNullableChunk(lhsType) || isNullableChunk(rhsType);
-
-    const mlir::Type boolElement = _builder.getI1Type();
-    mlir::Type resultElement = boolElement;
-    mlir::MLIRContext* bldCtxt = _builder.getContext();
-    if (resultNull) {
-        resultElement = storage::NullableType::get(bldCtxt, boolElement);
-    }
-
-    const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
-
-    setInsertionForBinaryOp(lhsChunk, rhsChunk);
-
-    nl::Or nlOrOp = _builder.create<nl::Or>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
-    _valueMap[orOp.getResult()] = nlOrOp.getResult();
-}
-
-void DBLowering::lowerXor(mlir::db::XorOp xorOp) {
-    const mlir::Value lhsChunk = mapValue(xorOp.getLhs());
-    const mlir::Value rhsChunk = mapValue(xorOp.getRhs());
-
-    const mlir::Type lhsType = lhsChunk.getType();
-    const mlir::Type rhsType = rhsChunk.getType();
-
-    // null XOR anything is null, so the result is nullable whenever either operand is.
-    const bool resultNull = isNullableChunk(lhsType) || isNullableChunk(rhsType);
-
-    const mlir::Type boolElement = _builder.getI1Type();
-    mlir::Type resultElement = boolElement;
-    mlir::MLIRContext* bldCtxt = _builder.getContext();
-    if (resultNull) {
-        resultElement = storage::NullableType::get(bldCtxt, boolElement);
-    }
-
-    const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
-
-    setInsertionForBinaryOp(lhsChunk, rhsChunk);
-
-    nl::Xor nlXorOp = _builder.create<nl::Xor>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
-    _valueMap[xorOp.getResult()] = nlXorOp.getResult();
+    NLOp nlOp = _builder.create<NLOp>(_builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
+    _valueMap[op.getResult(0)] = nlOp.getResult();
 }
 
 void DBLowering::lowerNot(mlir::db::NotOp notOp) {

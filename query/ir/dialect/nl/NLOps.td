@@ -1193,7 +1193,7 @@ def Div : NLOp<"div", [Pure]> {
   let description = [{
       Result type is determined by the types (e.g. int -> double promotion
       on double / double), and nullability (e.g. null / non-null = null).
-      Division by zero yields null.
+      Division by zero throws.
 
       %r = nl.div %x, %y : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i64>>
   }];
