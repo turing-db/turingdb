@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <optional>
 #include <string_view>
+#include <unordered_map>
 
 #include <spdlog/fmt/bundled/format.h>
 
@@ -37,6 +38,22 @@ namespace nl = mlir::nl;
 namespace storage = mlir::storage;
 
 namespace {
+
+using NLUnaryFunctionSelector = NLUnaryFunctionKernel (*)(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+
+const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctionSelectors = {
+    {"nl.labels",     &NLExecutor::selectFunction<LabelsFunction>},
+    {"nl.edge_type",  &NLExecutor::selectFunction<EdgeTypesFunction>},
+    {"nl.to_integer", &NLExecutor::selectFunction<toIntegerFunction>},
+    {"nl.to_float",   &NLExecutor::selectFunction<toFloatFunction>},
+    {"nl.to_boolean", &NLExecutor::selectFunction<toBoolFunction>},
+};
+
+NLUnaryFunctionSelector lookupUnaryFunctionSelector(mlir::Operation& operation) {
+    const llvm::StringRef name = operation.getName().getStringRef();
+    const auto it = unaryFunctionSelectors.find(std::string_view(name.data(), name.size()));
+    return it == unaryFunctionSelectors.end() ? nullptr : it->second;
+}
 
 // The edge type name carried by the nl.get_edge_type handle a by-type hop's
 // edge_type operand names. The name lives on the handle op, not the hop, so it is
@@ -389,16 +406,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateBinaryOp<OP_XOR>(xorOp, body);
         } else if (nl::Not notOp = mlir::dyn_cast<nl::Not>(operation)) {
             translateNot(notOp, body);
-        } else if (nl::Labels labels = mlir::dyn_cast<nl::Labels>(operation)) {
-            translateLabels(labels, body);
-        } else if (nl::EdgeType edgeType = mlir::dyn_cast<nl::EdgeType>(operation)) {
-            translateEdgeType(edgeType, body);
-        } else if (nl::ToInteger toInteger = mlir::dyn_cast<nl::ToInteger>(operation)) {
-            translateToInteger(toInteger, body);
-        } else if (nl::ToFloat toFloat = mlir::dyn_cast<nl::ToFloat>(operation)) {
-            translateToFloat(toFloat, body);
-        } else if (nl::ToBoolean toBoolean = mlir::dyn_cast<nl::ToBoolean>(operation)) {
-            translateToBoolean(toBoolean, body);
+        } else if (lookupUnaryFunctionSelector(operation)) {
+            translateUnaryFunction(&operation, body);
         } else if (nl::Filter filter = mlir::dyn_cast<nl::Filter>(operation)) {
             translateFilter(filter, body);
         } else if (nl::GetNodeProperties getNodeProperties = mlir::dyn_cast<nl::GetNodeProperties>(operation)) {
@@ -1084,66 +1093,26 @@ void NLTranslator::translateNot(nl::Not notOp, NLStmtContainer* body) {
     body->emplaceStmt(&NLExecutor::runUnary, data);
 }
 
-void NLTranslator::translateLabels(nl::Labels labels, NLStmtContainer* body) {
-    const Column* operand = getColumn(labels.getOperand());
+void NLTranslator::translateUnaryFunction(mlir::Operation* op, NLStmtContainer* body) {
+    const NLUnaryFunctionSelector select = lookupUnaryFunctionSelector(*op);
+    if (!select) {
+        throw IRException("translateUnaryFunction called on a non-function op");
+    }
 
-    // String need be owning
-    Column* result = _memory->alloc<ColumnVector<std::string>>();
+    const mlir::Value inputValue = op->getOperand(0);
+    const Column* input = getColumn(inputValue);
 
-    _valueSlots[labels.getResult()] = result;
-
-    NLViewFunctionData* data = _program->allocFunctionData<NLViewFunctionData>(operand, result);
-    body->emplaceStmt(&NLExecutor::runLabels, data);
-}
-
-void NLTranslator::translateEdgeType(nl::EdgeType edgeType, NLStmtContainer* body) {
-    const Column* operand = getColumn(edgeType.getOperand());
-
-    Column* result = _memory->alloc<ColumnVector<std::string>>();
-
-    _valueSlots[edgeType.getResult()] = result;
-
-    NLViewFunctionData* data = _program->allocFunctionData<NLViewFunctionData>(operand, result);
-    body->emplaceStmt(&NLExecutor::runEdgeTypes, data);
-}
-
-void NLTranslator::translateToInteger(nl::ToInteger toInteger, NLStmtContainer* body) {
-    const Column* operand = getColumn(toInteger.getOperand());
+    const auto inputChunk = mlir::cast<nl::ChunkType>(inputValue.getType());
+    const bool inputNullable = mlir::isa<storage::NullableType>(inputChunk.getElementType());
 
     Column* result = nullptr;
-    const NLUnaryFn fn = NLExecutor::selectConversion<toIntegerFunction>(operand, _memory, result);
-    bioassert(result, "Failed to allocate toInteger result column.");
+    const NLUnaryFunctionKernel kernel = select(input, inputNullable, _memory, result);
+    bioassert(result, "Failed to allocate unary function result column.");
 
-    _valueSlots[toInteger.getResult()] = result;
+    _valueSlots[op->getResult(0)] = result;
 
-    NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
-    body->emplaceStmt(&NLExecutor::runUnary, data);
-}
-
-void NLTranslator::translateToFloat(nl::ToFloat toFloat, NLStmtContainer* body) {
-    const Column* operand = getColumn(toFloat.getOperand());
-
-    Column* result = nullptr;
-    const NLUnaryFn fn = NLExecutor::selectConversion<toFloatFunction>(operand, _memory, result);
-    bioassert(result, "Failed to allocate toFloat result column.");
-
-    _valueSlots[toFloat.getResult()] = result;
-
-    NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
-    body->emplaceStmt(&NLExecutor::runUnary, data);
-}
-
-void NLTranslator::translateToBoolean(nl::ToBoolean toBoolean, NLStmtContainer* body) {
-    const Column* operand = getColumn(toBoolean.getOperand());
-
-    Column* result = nullptr;
-    const NLUnaryFn fn = NLExecutor::selectConversion<toBoolFunction>(operand, _memory, result);
-    bioassert(result, "Failed to allocate toBoolean result column.");
-
-    _valueSlots[toBoolean.getResult()] = result;
-
-    NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
-    body->emplaceStmt(&NLExecutor::runUnary, data);
+    NLUnaryFunctionData* data = _program->allocFunctionData<NLUnaryFunctionData>(input, result, kernel);
+    body->emplaceStmt(&NLExecutor::runUnaryFunction, data);
 }
 
 void NLTranslator::translateFilter(nl::Filter filter, NLStmtContainer* body) {

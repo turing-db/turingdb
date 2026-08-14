@@ -224,8 +224,10 @@ public:
     static void runLabels(NLExecutionContext* context, NLFunctionData* data);
     static void runEdgeTypes(NLExecutionContext* context, NLFunctionData* data);
 
+    static void runUnaryFunction(NLExecutionContext* context, NLFunctionData* data);
+
     template <typename Functor>
-    static NLUnaryFn selectConversion(const Column* operand, LocalMemory* memory, Column*& result);
+    static NLUnaryFunctionKernel selectFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
 

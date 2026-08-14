@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <mlir/IR/Location.h>
 #include <optional>
+#include <string_view>
+#include <unordered_map>
 
 #include "mlir/IR/Block.h"
 #include "mlir/IR/Builders.h"
@@ -28,6 +30,56 @@ namespace nl = mlir::nl;
 namespace storage = mlir::storage;
 
 namespace {
+
+using NLUnaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder,
+                                               mlir::Location loc,
+                                               nl::ChunkType resultType,
+                                               mlir::Value input);
+using UnaryFunctionElement = mlir::Type (*)(mlir::OpBuilder& builder);
+
+template <typename NLOp>
+mlir::Value emitNLUnaryFunction(mlir::OpBuilder& builder,
+                                mlir::Location loc,
+                                nl::ChunkType resultType,
+                                mlir::Value input) {
+    return builder.create<NLOp>(loc, resultType, input).getResult();
+}
+
+mlir::Type stringFunctionElement(mlir::OpBuilder& builder) {
+    return storage::StringType::get(builder.getContext());
+}
+
+mlir::Type integerFunctionElement(mlir::OpBuilder& builder) {
+    return builder.getI64Type();
+}
+
+mlir::Type floatFunctionElement(mlir::OpBuilder& builder) {
+    return builder.getF64Type();
+}
+
+mlir::Type booleanFunctionElement(mlir::OpBuilder& builder) {
+    return builder.getI1Type();
+}
+
+struct UnaryFunctionLowering {
+    NLUnaryFunctionEmitter emit {nullptr};
+    UnaryFunctionElement element {nullptr};
+    bool nullableFollowsInput {false};
+};
+
+const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionLowerings = {
+    {"db.labels",     {&emitNLUnaryFunction<nl::Labels>,    &stringFunctionElement,  false}},
+    {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>,  &stringFunctionElement,  false}},
+    {"db.to_integer", {&emitNLUnaryFunction<nl::ToInteger>, &integerFunctionElement, true}},
+    {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,   true}},
+    {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, &booleanFunctionElement, true}},
+};
+
+const UnaryFunctionLowering* lookupUnaryFunctionLowering(mlir::Operation& operation) {
+    const llvm::StringRef name = operation.getName().getStringRef();
+    const auto it = unaryFunctionLowerings.find(std::string_view(name.data(), name.size()));
+    return it == unaryFunctionLowerings.end() ? nullptr : &it->second;
+}
 
 // Map a stored property value type to the MLIR element type baked into the
 // nullable value chunk. The element only has to round-trip back to this value
@@ -534,16 +586,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerBinaryOp<nl::Xor>(operation, BinaryResultKind::Boolean);
     } else if (mlir::db::NotOp notOp = mlir::dyn_cast<mlir::db::NotOp>(operation)) {
         lowerNot(notOp);
-    } else if (mlir::db::Labels labels = mlir::dyn_cast<mlir::db::Labels>(operation)) {
-        lowerLabels(labels);
-    } else if (mlir::db::EdgeType edgeType = mlir::dyn_cast<mlir::db::EdgeType>(operation)) {
-        lowerEdgeType(edgeType);
-    } else if (mlir::db::ToInteger toInteger = mlir::dyn_cast<mlir::db::ToInteger>(operation)) {
-        lowerToInteger(toInteger);
-    } else if (mlir::db::ToFloat toFloat = mlir::dyn_cast<mlir::db::ToFloat>(operation)) {
-        lowerToFloat(toFloat);
-    } else if (mlir::db::ToBoolean toBoolean = mlir::dyn_cast<mlir::db::ToBoolean>(operation)) {
-        lowerToBoolean(toBoolean);
+    } else if (lookupUnaryFunctionLowering(operation)) {
+        lowerUnaryFunction(&operation);
     } else if (mlir::db::FilterOp filter = mlir::dyn_cast<mlir::db::FilterOp>(operation)) {
         lowerFilter(filter);
     } else if (mlir::db::GroupAggregate groupAggregate = mlir::dyn_cast<mlir::db::GroupAggregate>(operation)) {
@@ -1991,83 +2035,28 @@ void DBLowering::setInsertionForUnaryOp(mlir::Value operandChunk) {
     }
 }
 
-void DBLowering::lowerLabels(mlir::db::Labels labels) {
-    const mlir::Value inputChunk = mapValue(labels.getInput());
+void DBLowering::lowerUnaryFunction(mlir::Operation* op) {
+    const UnaryFunctionLowering* spec = lookupUnaryFunctionLowering(*op);
+    if (!spec) {
+        throw IRException("lowerUnaryFunction called on a non-function op");
+    }
 
-    // labels(n) reads each node's label set and joins it into an owned string, so
-    // the result is a non-nullable string chunk (every node has at least one label).
-    const mlir::Type stringElement = storage::StringType::get(_builder.getContext());
-    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), stringElement);
+    const mlir::Value inputChunk = mapValue(op->getOperand(0));
 
-    setInsertionForUnaryOp(inputChunk);
-
-    nl::Labels nlOp = _builder.create<nl::Labels>(_builder.getUnknownLoc(), resultType, inputChunk);
-    _valueMap[labels.getResult()] = nlOp.getResult();
-}
-
-void DBLowering::lowerEdgeType(mlir::db::EdgeType edgeType) {
-    const mlir::Value inputChunk = mapValue(edgeType.getInput());
-
-    // edgeType(e) reads each edge's type name as an owned string; an edge always has
-    // a type, so the result is a non-nullable string chunk (the edge sibling of labels).
-    const mlir::Type stringElement = storage::StringType::get(_builder.getContext());
-    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), stringElement);
-
-    setInsertionForUnaryOp(inputChunk);
-
-    nl::EdgeType nlOp = _builder.create<nl::EdgeType>(_builder.getUnknownLoc(), resultType, inputChunk);
-    _valueMap[edgeType.getResult()] = nlOp.getResult();
-}
-
-void DBLowering::lowerToInteger(mlir::db::ToInteger toInteger) {
-    const mlir::Value inputChunk = mapValue(toInteger.getInput());
-    const bool resultNullable = isNullableChunk(inputChunk.getType());
-
-    mlir::Type resultElement = _builder.getI64Type();
-    if (resultNullable) {
-        resultElement = storage::NullableType::get(_builder.getContext(), resultElement);
+    // labels/edge_type are always present, so their result never gains nullability;
+    // a conversion of a null string stays null, so its result is nullable exactly
+    // when the input chunk is.
+    const mlir::Type baseElement = spec->element(_builder);
+    mlir::Type resultElement = baseElement;
+    if (spec->nullableFollowsInput && isNullableChunk(inputChunk.getType())) {
+        resultElement = storage::NullableType::get(_builder.getContext(), baseElement);
     }
 
     const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
 
     setInsertionForUnaryOp(inputChunk);
 
-    nl::ToInteger nlOp = _builder.create<nl::ToInteger>(_builder.getUnknownLoc(), resultType, inputChunk);
-    _valueMap[toInteger.getResult()] = nlOp.getResult();
-}
-
-void DBLowering::lowerToFloat(mlir::db::ToFloat toFloat) {
-    const mlir::Value inputChunk = mapValue(toFloat.getInput());
-    const bool resultNullable = isNullableChunk(inputChunk.getType());
-
-    mlir::Type resultElement = _builder.getF64Type();
-    if (resultNullable) {
-        resultElement = storage::NullableType::get(_builder.getContext(), resultElement);
-    }
-
-    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
-
-    setInsertionForUnaryOp(inputChunk);
-
-    nl::ToFloat nlOp = _builder.create<nl::ToFloat>(_builder.getUnknownLoc(), resultType, inputChunk);
-    _valueMap[toFloat.getResult()] = nlOp.getResult();
-}
-
-void DBLowering::lowerToBoolean(mlir::db::ToBoolean toBoolean) {
-    const mlir::Value inputChunk = mapValue(toBoolean.getInput());
-    const bool resultNullable = isNullableChunk(inputChunk.getType());
-
-    mlir::Type resultElement = _builder.getI1Type();
-    if (resultNullable) {
-        resultElement = storage::NullableType::get(_builder.getContext(), resultElement);
-    }
-
-    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
-
-    setInsertionForUnaryOp(inputChunk);
-
-    nl::ToBoolean nlOp = _builder.create<nl::ToBoolean>(_builder.getUnknownLoc(), resultType, inputChunk);
-    _valueMap[toBoolean.getResult()] = nlOp.getResult();
+    _valueMap[op->getResult(0)] = spec->emit(_builder, _builder.getUnknownLoc(), resultType, inputChunk);
 }
 
 void DBLowering::lowerFilter(mlir::db::FilterOp filter) {
