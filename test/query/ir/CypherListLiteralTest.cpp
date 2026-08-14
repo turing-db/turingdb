@@ -118,6 +118,11 @@ std::string renderCell(const Column* column, size_t row) {
         return name ? std::string(*name) : "null";
     }
 
+    if (const auto* integers = dynamic_cast<const ColumnOptVector<int64_t>*>(column)) {
+        const std::optional<int64_t>& integer = (*integers)[row];
+        return integer ? std::to_string(*integer) : "null";
+    }
+
     throw TuringException("CypherListLiteralTest: unsupported output column type");
 }
 
@@ -139,6 +144,15 @@ std::string longListElements() {
 
     return elements;
 }
+
+// Every node of simpledb by name, in ascending byte order - the order an ORDER BY n.name
+// must produce. Every node has a name, so no key is null here. Mirrors the shared
+// expectation OrderByTest asserts against the same fixture.
+const std::vector<std::string> nodeNamesAscending = {
+    "Adam", "Animals", "Bio", "Computers", "Cooking", "Cyrus",
+    "Doruk", "Eighties", "Ghosts", "Gym", "JiuJitsu", "Luc",
+    "Martina", "Maxime", "Padel", "Remy", "Suhas", "Travel",
+};
 
 // One row per SimpleGraph node - they are numbered 0 through 17 - each pairing the node ID
 // with the same list cell.
@@ -351,6 +365,71 @@ TEST_F(CypherListLiteralTest, emitsNothingWhenTheMatchIsEmpty) {
     // matched nothing with a row.
     const Rows expected = {};
     expectRows("MATCH (n) WHERE n.name = 'nobody' RETURN [1, 2], n.name", expected);
+}
+
+TEST_F(CypherListLiteralTest, ordersTheRowsBesideTheList) {
+    // A list literal holds one value in every row, so it is no sort key: the order is the
+    // name column's alone and the list rides each sorted row unchanged.
+    Rows expected;
+    for (const std::string& name : nodeNamesAscending) {
+        expected.push_back({name, "[1, 2, 3]"});
+    }
+
+    expectRows("MATCH (n) RETURN n.name, [1, 2, 3] ORDER BY n.name", expected);
+}
+
+TEST_F(CypherListLiteralTest, dedupsTheRowsBesideTheList) {
+    // Remy and Adam are the only nodes carrying an age and both are 32, so the two rows are
+    // one distinct row. The list holds the same value in both, which tells them apart no
+    // better: the dedup keys on the age and the list rides along.
+    const Rows expected = {{"[1, 2]", "32"}};
+    expectRows("MATCH (n) WHERE n.age = 32 RETURN DISTINCT [1, 2], n.age", expected);
+}
+
+TEST_F(CypherListLiteralTest, cutsTheRowsBesideTheList) {
+    // SKIP and LIMIT are charged to the column that carries rows, so they cut a window out
+    // of the scan and the list stands beside each surviving row. SimpleGraph's nodes are
+    // scanned in ID order: Remy (0), Adam (1), Computers (2), Eighties (3), Bio (4).
+    const Rows expected = {{"Computers", "[1, 2]"}, {"Eighties", "[1, 2]"}, {"Bio", "[1, 2]"}};
+    expectRows("MATCH (n) RETURN n.name, [1, 2] SKIP 2 LIMIT 3", expected);
+}
+
+TEST_F(CypherListLiteralTest, limitsTheListToItsOneRow) {
+    // The list alone is one row, so a LIMIT of one keeps it and a SKIP of one drops it -
+    // the cut applies to that row, not to the elements.
+    const Rows expected = {{"[1, 2, 3]"}};
+    expectRows("RETURN [1, 2, 3] LIMIT 1", expected);
+}
+
+TEST_F(CypherListLiteralTest, skipsPastTheListsOneRow) {
+    const Rows expected = {};
+    expectRows("RETURN [1, 2, 3] SKIP 1", expected);
+}
+
+TEST_F(CypherListLiteralTest, rejectsAListBesideAnAggregate) {
+    // A grouped aggregate is handed every projected column, so the list arrives as if it
+    // were a grouping key - and a group key is gathered per row, which a column holding one
+    // value for all of them cannot answer. `RETURN n.name, 5, count(n)` is rejected the same
+    // way, so this is the aggregate path's limit rather than the list literal's.
+    Rows rows;
+    EXPECT_THROW(runQuery("MATCH (n) RETURN n.name, [1, 2, 3, 4], count(n)", rows), TuringException);
+}
+
+TEST_F(CypherListLiteralTest, rejectsDistinctOverTheListAlone) {
+    // Every column of the projection is constant, so there is nothing to tell rows apart:
+    // what DISTINCT asks for here is a row count, not a dedup, and codegen says so rather
+    // than answering one row of whatever the empty dedup read.
+    Rows rows;
+    EXPECT_THROW(runQuery("RETURN DISTINCT [1, 2, 3]", rows), TuringException);
+}
+
+TEST_F(CypherListLiteralTest, rejectsChainedCutsOverTheListAlone) {
+    // A SKIP feeding a LIMIT cannot fold into the output the way a single cut does, so the
+    // surviving rows are copied to a fresh chunk - and there is no such copy for a column
+    // that holds one value for every row. `RETURN 5 SKIP 1 LIMIT 1` is rejected the same
+    // way, so this is the chained-cut limit rather than the list literal's.
+    Rows rows;
+    EXPECT_THROW(runQuery("RETURN [1, 2] SKIP 1 LIMIT 1", rows), TuringException);
 }
 
 TEST_F(CypherListLiteralTest, holdsNullListElements) {
