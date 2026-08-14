@@ -434,6 +434,12 @@ private:
 
     void translateNot(mlir::nl::Not notOp, NLStmtContainer* body);
 
+    void translateLabels(mlir::nl::Labels labels, NLStmtContainer* body);
+    void translateEdgeType(mlir::nl::EdgeType edgeType, NLStmtContainer* body);
+    void translateToInteger(mlir::nl::ToInteger toInteger, NLStmtContainer* body);
+    void translateToFloat(mlir::nl::ToFloat toFloat, NLStmtContainer* body);
+    void translateToBoolean(mlir::nl::ToBoolean toBoolean, NLStmtContainer* body);
+
     void translateFilter(mlir::nl::Filter filter, NLStmtContainer* body);
 
     void translateOutput(mlir::nl::Output output, NLStmtContainer* body);

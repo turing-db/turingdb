@@ -221,6 +221,12 @@ public:
     // rather than the one row a constant column is.
     static void runBroadcastConstant(NLExecutionContext* context, NLFunctionData* data);
 
+    static void runLabels(NLExecutionContext* context, NLFunctionData* data);
+    static void runEdgeTypes(NLExecutionContext* context, NLFunctionData* data);
+
+    template <typename Functor>
+    static NLUnaryFn selectConversion(const Column* operand, LocalMemory* memory, Column*& result);
+
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
 
     // Gather for a nullable value chunk of this value type (sort emit re-chunk).

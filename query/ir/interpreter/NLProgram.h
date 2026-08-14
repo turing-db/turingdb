@@ -1963,6 +1963,22 @@ private:
     NLUnaryFn _fn {nullptr};
 };
 
+class NLViewFunctionData : public NLFunctionData {
+public:
+    NLViewFunctionData(const Column* input, Column* output)
+        : _input(input),
+        _output(output)
+    {
+    }
+
+    const Column* getInput() const { return _input; }
+    Column* getOutput() const { return _output; }
+
+private:
+    const Column* _input {nullptr};
+    Column* _output {nullptr};
+};
+
 class NLProgram {
 public:
     NLProgram();

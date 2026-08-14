@@ -1395,6 +1395,21 @@ def Not : NLOp<"not", [Pure]> {
   let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
 }
 
+class NLUnaryFunctionOp<string mnemonic> : NLOp<mnemonic, [Pure]> {
+  let summary = "Apply a unary scalar function row-wise to a value chunk";
+
+  let arguments = (ins NLChunk:$operand);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
+}
+
+def Labels : NLUnaryFunctionOp<"labels">;
+def EdgeType : NLUnaryFunctionOp<"edge_type">;
+def ToInteger : NLUnaryFunctionOp<"to_integer">;
+def ToFloat : NLUnaryFunctionOp<"to_float">;
+def ToBoolean : NLUnaryFunctionOp<"to_boolean">;
+
 def Filter : NLOp<"filter", [Pure]> {
   let summary = "Keep only the rows where the mask chunk is true, as freshly cut chunks";
   let description = [{

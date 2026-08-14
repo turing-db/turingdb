@@ -27,6 +27,7 @@
 #include "columns/ColumnOperators.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/AllowedKinds.h"
+#include "columns/Functions.h"
 #include "columns/UnaryPredicates.h"
 #include "list/ListElementOrder.h"
 #include "list/ListUtils.h"
@@ -86,6 +87,45 @@ void fillHomogeneousChunk(Column* output, ValueType valueType, const ListView li
     };
 
     ValueTypeDispatcher {valueType}.execute(fill);
+}
+
+template <typename Functor>
+void applyConversionConst(Column* result, const Column* operand) {
+    using ResultPrimitive = typename Functor::ResultType;
+
+    ColumnFunctions::exec<Functor>(static_cast<ColumnConst<ResultPrimitive>*>(result),
+                                   static_cast<const ColumnConst<types::String::Primitive>*>(operand));
+}
+
+template <typename Functor>
+void applyConversionVector(Column* result, const Column* operand) {
+    using ResultPrimitive = typename Functor::ResultType;
+
+    ColumnFunctions::exec<Functor>(static_cast<ColumnVector<ResultPrimitive>*>(result),
+                                   static_cast<const ColumnVector<types::String::Primitive>*>(operand));
+}
+
+template <typename Functor>
+void applyConversionOpt(Column* result, const Column* operand) {
+    using ResultPrimitive = typename Functor::ResultType;
+
+    const auto* input = static_cast<const ColumnOptVector<types::String::Primitive>*>(operand);
+    auto* output = static_cast<ColumnOptVector<ResultPrimitive>*>(result);
+
+    const auto& inputRaw = input->getRaw();
+    const size_t size = inputRaw.size();
+
+    output->resize(size);
+    auto& outputRaw = output->getRaw();
+
+    Functor functor {};
+    for (size_t row = 0; row < size; row++) {
+        if (inputRaw[row].has_value()) {
+            outputRaw[row] = functor(inputRaw[row].value());
+        } else {
+            outputRaw[row] = std::nullopt;
+        }
+    }
 }
 
 template <ColumnOperator Op>
@@ -2121,6 +2161,55 @@ NLBinaryFn NLExecutor::selectBinary(const Column* lhs,
     result = selector._result;
     return selector._fn;
 }
+
+void NLExecutor::runLabels(NLExecutionContext* context, NLFunctionData* data) {
+    const NLViewFunctionData* funcData = static_cast<NLViewFunctionData*>(data);
+
+    const GraphView& view = *context->getView();
+    const auto* input = static_cast<const ColumnNodeIDs*>(funcData->getInput());
+    auto* output = static_cast<ColumnVector<std::string>*>(funcData->getOutput());
+
+    ColumnFunctions::exec<LabelsFunction>(output, input, view);
+}
+
+void NLExecutor::runEdgeTypes(NLExecutionContext* context, NLFunctionData* data) {
+    const NLViewFunctionData* funcData = static_cast<NLViewFunctionData*>(data);
+
+    const GraphView& view = *context->getView();
+    const auto* input = static_cast<const ColumnEdgeIDs*>(funcData->getInput());
+    auto* output = static_cast<ColumnVector<std::string>*>(funcData->getOutput());
+
+    ColumnFunctions::exec<EdgeTypesFunction>(output, input, view);
+}
+
+template <typename Functor>
+NLUnaryFn NLExecutor::selectConversion(const Column* operand, LocalMemory* memory, Column*& result) {
+    using ResultPrimitive = typename Functor::ResultType;
+    using StringPrimitive = types::String::Primitive;
+
+    const ContainerKind::Code kind = operand->getContainerKind();
+
+    if (kind == ContainerKind::code<ColumnConst<StringPrimitive>>()) {
+        result = memory->alloc<ColumnConst<ResultPrimitive>>();
+        return &applyConversionConst<Functor>;
+    }
+
+    if (kind == ContainerKind::code<ColumnOptVector<StringPrimitive>>()) {
+        result = memory->alloc<ColumnOptVector<ResultPrimitive>>();
+        return &applyConversionOpt<Functor>;
+    }
+
+    if (kind == ContainerKind::code<ColumnVector<StringPrimitive>>()) {
+        result = memory->alloc<ColumnVector<ResultPrimitive>>();
+        return &applyConversionVector<Functor>;
+    }
+
+    throw IRException("scalar conversion function expects a string column");
+}
+
+template NLUnaryFn NLExecutor::selectConversion<toIntegerFunction>(const Column* operand, LocalMemory* memory, Column*& result);
+template NLUnaryFn NLExecutor::selectConversion<toFloatFunction>(const Column* operand, LocalMemory* memory, Column*& result);
+template NLUnaryFn NLExecutor::selectConversion<toBoolFunction>(const Column* operand, LocalMemory* memory, Column*& result);
 
 void NLExecutor::runSortReset(NLExecutionContext* context, NLFunctionData* data) {
     const NLSortResetData* reset = static_cast<NLSortResetData*>(data);

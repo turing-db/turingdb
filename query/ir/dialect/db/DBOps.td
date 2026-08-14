@@ -837,6 +837,26 @@ def Min : AggregateOp<"min">;
 def Max : AggregateOp<"max">;
 def Avg : AggregateOp<"avg">;
 
+/**
+* Scalar functions
+*/
+class UnaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure]> {
+  let summary = "Apply a unary scalar function row-wise to a value column";
+
+  let arguments = (ins Column:$input);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = [{
+    `(` $input `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+def Labels : UnaryFunctionOp<"labels">;
+def EdgeType : UnaryFunctionOp<"edge_type">;
+def ToInteger : UnaryFunctionOp<"to_integer">;
+def ToFloat : UnaryFunctionOp<"to_float">;
+def ToBoolean : UnaryFunctionOp<"to_boolean">;
+
 def ConstantOp : TuringOp<"constant", [Pure, ConstantLike, DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
   let summary = "Produces a constant value in a column";
 

@@ -15,6 +15,7 @@
 #include "columns/ColumnConst.h"
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
+#include "columns/Functions.h"
 #include "metadata/GraphMetadata.h"
 #include "metadata/LabelSet.h"
 #include "metadata/LabelSetHandle.h"
@@ -388,6 +389,16 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateBinaryOp<OP_XOR>(xorOp, body);
         } else if (nl::Not notOp = mlir::dyn_cast<nl::Not>(operation)) {
             translateNot(notOp, body);
+        } else if (nl::Labels labels = mlir::dyn_cast<nl::Labels>(operation)) {
+            translateLabels(labels, body);
+        } else if (nl::EdgeType edgeType = mlir::dyn_cast<nl::EdgeType>(operation)) {
+            translateEdgeType(edgeType, body);
+        } else if (nl::ToInteger toInteger = mlir::dyn_cast<nl::ToInteger>(operation)) {
+            translateToInteger(toInteger, body);
+        } else if (nl::ToFloat toFloat = mlir::dyn_cast<nl::ToFloat>(operation)) {
+            translateToFloat(toFloat, body);
+        } else if (nl::ToBoolean toBoolean = mlir::dyn_cast<nl::ToBoolean>(operation)) {
+            translateToBoolean(toBoolean, body);
         } else if (nl::Filter filter = mlir::dyn_cast<nl::Filter>(operation)) {
             translateFilter(filter, body);
         } else if (nl::GetNodeProperties getNodeProperties = mlir::dyn_cast<nl::GetNodeProperties>(operation)) {
@@ -1068,6 +1079,68 @@ void NLTranslator::translateNot(nl::Not notOp, NLStmtContainer* body) {
     bioassert(result, "Failed to allocate NOT result column.");
 
     _valueSlots[notOp.getResult()] = result;
+
+    NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
+    body->emplaceStmt(&NLExecutor::runUnary, data);
+}
+
+void NLTranslator::translateLabels(nl::Labels labels, NLStmtContainer* body) {
+    const Column* operand = getColumn(labels.getOperand());
+
+    // String need be owning
+    Column* result = _memory->alloc<ColumnVector<std::string>>();
+
+    _valueSlots[labels.getResult()] = result;
+
+    NLViewFunctionData* data = _program->allocFunctionData<NLViewFunctionData>(operand, result);
+    body->emplaceStmt(&NLExecutor::runLabels, data);
+}
+
+void NLTranslator::translateEdgeType(nl::EdgeType edgeType, NLStmtContainer* body) {
+    const Column* operand = getColumn(edgeType.getOperand());
+
+    Column* result = _memory->alloc<ColumnVector<std::string>>();
+
+    _valueSlots[edgeType.getResult()] = result;
+
+    NLViewFunctionData* data = _program->allocFunctionData<NLViewFunctionData>(operand, result);
+    body->emplaceStmt(&NLExecutor::runEdgeTypes, data);
+}
+
+void NLTranslator::translateToInteger(nl::ToInteger toInteger, NLStmtContainer* body) {
+    const Column* operand = getColumn(toInteger.getOperand());
+
+    Column* result = nullptr;
+    const NLUnaryFn fn = NLExecutor::selectConversion<toIntegerFunction>(operand, _memory, result);
+    bioassert(result, "Failed to allocate toInteger result column.");
+
+    _valueSlots[toInteger.getResult()] = result;
+
+    NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
+    body->emplaceStmt(&NLExecutor::runUnary, data);
+}
+
+void NLTranslator::translateToFloat(nl::ToFloat toFloat, NLStmtContainer* body) {
+    const Column* operand = getColumn(toFloat.getOperand());
+
+    Column* result = nullptr;
+    const NLUnaryFn fn = NLExecutor::selectConversion<toFloatFunction>(operand, _memory, result);
+    bioassert(result, "Failed to allocate toFloat result column.");
+
+    _valueSlots[toFloat.getResult()] = result;
+
+    NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
+    body->emplaceStmt(&NLExecutor::runUnary, data);
+}
+
+void NLTranslator::translateToBoolean(nl::ToBoolean toBoolean, NLStmtContainer* body) {
+    const Column* operand = getColumn(toBoolean.getOperand());
+
+    Column* result = nullptr;
+    const NLUnaryFn fn = NLExecutor::selectConversion<toBoolFunction>(operand, _memory, result);
+    bioassert(result, "Failed to allocate toBoolean result column.");
+
+    _valueSlots[toBoolean.getResult()] = result;
 
     NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
     body->emplaceStmt(&NLExecutor::runUnary, data);
