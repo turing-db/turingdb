@@ -34,6 +34,7 @@ class CypherAST;
 class Expr;
 class Literal;
 class ListLiteral;
+class MatchStmt;
 class Projection;
 class PropertyExpr;
 class ReturnStmt;
@@ -114,6 +115,11 @@ private:
     // Adds filters for edges which should be equivalent (joined on)
     void resolveEdgeIdentities();
 
+    // Joins each pattern variable to the column a CALL yielded under its name: the two are
+    // one Cypher variable, and the call has already paired its rows with the ones the
+    // pattern matched, so keeping the rows where the two columns agree is that join.
+    void resolveYieldedIdentities();
+
     // Translate a connected component of @ref _vdg, fills @param outVars
     void translateComponent(const VariableDependency* root,
                             std::unordered_set<const VariableDependency*>& defined,
@@ -132,7 +138,10 @@ private:
     void generateSet(const CypherAST* ast);
     void generateDelete(const CypherAST* ast);
 
-    void generateCalls(const CypherAST* ast);
+    // Emits each MATCH's WHERE and each CALL in the order the query writes them, so a
+    // predicate reading what a call yielded is generated once the call has bound it.
+    void generateFiltersAndCalls(const CypherAST* ast);
+    void generateMatchFilter(const MatchStmt* matchStmt);
     void generateCall(const CallStmt* callStmt);
 
     // Generate the filter a CALL's YIELD ... WHERE asks for, over everything in flight once
@@ -144,6 +153,10 @@ private:
                              llvm::ArrayRef<std::string_view> yieldedVariables,
                              mlir::ValueRange inputs,
                              const InFlightColumns& inFlight);
+
+    // Whether a column holds the rows flowing past the current insertion point, which is
+    // what an op consuming a whole row set needs of each of its operands.
+    bool isRowAlignedHere(mlir::Value column) const;
 
     // Collect those columns. One bound in another block is skipped: an op here can only
     // take what this block binds.
@@ -187,15 +200,12 @@ private:
 
     mlir::Value resolveEntityColumn(std::string_view varName);
 
-    bool isRowAlignedHere(mlir::Value column) const;
-
     // The column count(*) counts: the first variable of the pattern bound to a column
     // holding the rows flowing past the insertion point, taken in the order the query
     // declares its variables so the choice is the query's and not the addresses'
     mlir::Value resolveWildcardColumn() const;
 
     void generatePropertyConstraints(const CypherAST* ast);
-    void generateFilters(const CypherAST* ast);
 
     void applyPredicateFilters(std::span<const Expr* const> predicates);
 
