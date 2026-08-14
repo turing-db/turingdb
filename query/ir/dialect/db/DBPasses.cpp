@@ -24,9 +24,6 @@ struct LabelScanChain {
     CheckLabelConstraint check;
 };
 
-// Matches `filter` against that chain, returning the three producing ops, or
-// nullopt when the filter is anything else - a different mask, more than one
-// filtered column, or a source that is not a plain scan.
 std::optional<LabelScanChain> matchLabelScanChain(FilterOp filter) {
     const Operation::operand_range columns = filter.getColumnsToFilter();
     if (columns.size() != 1) {
