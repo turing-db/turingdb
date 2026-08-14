@@ -379,6 +379,44 @@ private:
 
 // Counts appendChunks calls and total rows without materializing them, so an empty
 // grouped aggregation can be shown to emit nothing.
+// Collects the (team, constant, count) rows a grouped count emits beside a constant item:
+// the constant rides a ColumnConst, which answers its one value at every row rather than
+// carrying one per row.
+class GroupConstantCountSink : public NLOutputSink {
+public:
+    using Row = std::tuple<std::optional<std::string>, int64_t, uint64_t>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 3u);
+
+        const auto* teams = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* constants = dynamic_cast<const ColumnConst<int64_t>*>(chunks[1]);
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[2]);
+        ASSERT_NE(teams, nullptr);
+        ASSERT_NE(constants, nullptr);
+        ASSERT_NE(counts, nullptr);
+
+        const auto& teamRaw = teams->getRaw();
+        const auto& countRaw = counts->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            std::optional<std::string> team;
+            if (teamRaw[rowIndex]) {
+                team = std::string(*teamRaw[rowIndex]);
+            }
+
+            _rows.push_back({team, (*constants)[rowIndex], countRaw[rowIndex]});
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
 class CountingSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
@@ -1329,6 +1367,22 @@ TEST_F(GroupAggregateCypherTest, groupedCountStar) {
     std::vector<GroupCountSink::Row> rows;
     sink.sortedRows(rows);
     const std::vector<GroupCountSink::Row> expected {{"blue", 2}, {"red", 2}};
+    EXPECT_EQ(rows, expected);
+}
+
+// A constant item answers the same value in every row, so it groups nothing: the rows are
+// grouped by the team alone and the constant stands beside each group. Handing it to the
+// aggregate instead would make it a grouping key, gathered per row - which a column that
+// carries no rows cannot answer.
+TEST_F(GroupAggregateCypherTest, groupedCountBesideAConstant) {
+    buildTeamGraph();
+
+    GroupConstantCountSink sink;
+    match("MATCH (n:Node) RETURN n.team, 5, count(*)", sink);
+
+    std::vector<GroupConstantCountSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<GroupConstantCountSink::Row> expected {{"blue", 5, 2}, {"red", 5, 2}};
     EXPECT_EQ(rows, expected);
 }
 
