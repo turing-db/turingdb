@@ -62,16 +62,6 @@ protected:
     std::unique_ptr<QueryInterpreterV3> _interpreter;
 };
 
-// The program generator rejects an unsupported construct with a plain
-// TuringException: the user must see that message as-is.
-TEST_F(QueryInterpreterV3ErrorTest, reportsGeneratorRejectionAsIs) {
-    QueryStatus status;
-    runQuery("MATCH (n) RETURN labels(n)", status);
-
-    EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
-    EXPECT_EQ(status.getError(), "Non-aggregate function invocations are not yet supported");
-}
-
 TEST_F(QueryInterpreterV3ErrorTest, reportsUnaryOperatorRejectionAsIs) {
     QueryStatus status;
     runQuery("MATCH (n) WHERE -n.age = 33 RETURN n", status);

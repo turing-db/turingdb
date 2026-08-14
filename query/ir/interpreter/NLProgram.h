@@ -1963,20 +1963,25 @@ private:
     NLUnaryFn _fn {nullptr};
 };
 
-class NLViewFunctionData : public NLFunctionData {
+using NLUnaryFunctionKernel = void (*)(NLExecutionContext* context, Column* result, const Column* input);
+
+class NLUnaryFunctionData : public NLFunctionData {
 public:
-    NLViewFunctionData(const Column* input, Column* output)
+    NLUnaryFunctionData(const Column* input, Column* result, NLUnaryFunctionKernel kernel)
         : _input(input),
-        _output(output)
+        _result(result),
+        _kernel(kernel)
     {
     }
 
     const Column* getInput() const { return _input; }
-    Column* getOutput() const { return _output; }
+    Column* getResult() const { return _result; }
+    NLUnaryFunctionKernel getKernel() const { return _kernel; }
 
 private:
     const Column* _input {nullptr};
-    Column* _output {nullptr};
+    Column* _result {nullptr};
+    NLUnaryFunctionKernel _kernel {nullptr};
 };
 
 class NLProgram {

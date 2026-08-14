@@ -49,6 +49,7 @@ auto optionalGenericFunc(T&& a, U&& b) -> TypeUtils::optional_invoke_result<Func
 
 class LabelsFunction {
 public:
+    using ArgType = NodeID;
     using ResultType = std::string;
 
     explicit LabelsFunction(GraphView view)
@@ -70,6 +71,7 @@ private:
 
 class EdgeTypesFunction {
 public:
+    using ArgType = EdgeID;
     using ResultType = std::string;
 
     explicit EdgeTypesFunction(GraphView view)
@@ -91,6 +93,7 @@ private:
 
 class toIntegerFunction {
 public:
+    using ArgType = types::String::Primitive;
     using ResultType = std::optional<types::Int64::Primitive>;
 
     ResultType operator()(std::string_view sv) {
@@ -115,6 +118,7 @@ public:
 // NOTE: macOS wheel build libc++ doesn't support from_chars on double: use strtod instead
 class toFloatFunction {
 public:
+    using ArgType = types::String::Primitive;
     using ResultType = std::optional<types::Double::Primitive>;
 
     ResultType operator()(std::string_view sv) {
@@ -145,6 +149,7 @@ private:
 
 class toBoolFunction {
 public:
+    using ArgType = types::String::Primitive;
     using ResultType = std::optional<types::Bool::Primitive>;
 
     ResultType operator()(std::string_view sv) {
