@@ -123,6 +123,10 @@ std::string renderCell(const Column* column, size_t row) {
         return integer ? std::to_string(*integer) : "null";
     }
 
+    if (const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(column)) {
+        return std::to_string((*counts)[row]);
+    }
+
     throw TuringException("CypherListLiteralTest: unsupported output column type");
 }
 
@@ -406,13 +410,19 @@ TEST_F(CypherListLiteralTest, skipsPastTheListsOneRow) {
     expectRows("RETURN [1, 2, 3] SKIP 1", expected);
 }
 
-TEST_F(CypherListLiteralTest, rejectsAListBesideAnAggregate) {
-    // A grouped aggregate is handed every projected column, so the list arrives as if it
-    // were a grouping key - and a group key is gathered per row, which a column holding one
-    // value for all of them cannot answer. `RETURN n.name, 5, count(n)` is rejected the same
-    // way, so this is the aggregate path's limit rather than the list literal's.
-    Rows rows;
-    EXPECT_THROW(runQuery("MATCH (n) RETURN n.name, [1, 2, 3, 4], count(n)", rows), TuringException);
+TEST_F(CypherListLiteralTest, returnsTheListBesideAGroupedAggregate) {
+    // The list groups nothing - it holds one value in every row - so it is no grouping key:
+    // the rows are grouped by the age alone and the list stands beside the group. Remy and
+    // Adam are the only nodes carrying an age and both are 32, so that is one group of two.
+    const Rows expected = {{"32", "[1, 2, 3, 4]", "2"}};
+    expectRows("MATCH (n) WHERE n.age = 32 RETURN n.age, [1, 2, 3, 4], count(n)", expected);
+}
+
+TEST_F(CypherListLiteralTest, returnsTheListBesideAnUngroupedAggregate) {
+    // With the list the only non-aggregate item there is no key at all, so the count reduces
+    // the whole scan: one row, the list beside the total. SimpleGraph holds 18 nodes.
+    const Rows expected = {{"[1, 2, 3, 4]", "18"}};
+    expectRows("MATCH (n) RETURN [1, 2, 3, 4], count(n)", expected);
 }
 
 TEST_F(CypherListLiteralTest, rejectsDistinctOverTheListAlone) {
