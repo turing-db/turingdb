@@ -3,8 +3,8 @@
 
 include "mlir/Pass/PassBase.td"
 
-def GetOutEdgesDCE : Pass<"get_out_edges_dce"> {
-    let summary = "Replaces unused variables in GetOutEdges with null";
+def FuseScanByLabel : Pass<"fuse_scan_by_label"> {
+    let summary = "Fuse a scan_nodes and its label-set filter into a scan_nodes_by_label";
     let dependentDialects = ["mlir::db::DB"];
 }
 
