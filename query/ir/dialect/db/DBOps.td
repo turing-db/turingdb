@@ -837,11 +837,8 @@ def Min : AggregateOp<"min">;
 def Max : AggregateOp<"max">;
 def Avg : AggregateOp<"avg">;
 
-/**
-* Scalar functions
-*/
 class UnaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure]> {
-  let summary = "Apply a unary scalar function row-wise to a value column";
+  let summary = "Apply a unary function row-wise to a value column";
 
   let arguments = (ins Column:$input);
   let results   = (outs Column:$result);
@@ -858,7 +855,7 @@ def ToFloat : UnaryFunctionOp<"to_float">;
 def ToBoolean : UnaryFunctionOp<"to_boolean">;
 
 class BinaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure]> {
-  let summary = "Apply a binary scalar function row-wise to two value columns";
+  let summary = "Apply a binary function row-wise to two value columns";
 
   let arguments = (ins Column:$lhs, Column:$rhs);
   let results   = (outs Column:$result);
