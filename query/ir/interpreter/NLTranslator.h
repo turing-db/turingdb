@@ -168,10 +168,12 @@ private:
                                   NLLimitState* limit,
                                   NLStmtContainer* body);
 
-    // Materialize an nl.unwind_const's literal element attributes into a ListView in
-    // the query-scoped ListBuffer, which the loop then reads chunk by chunk. A string
-    // element stores the string_view, not the characters, so the module the literals
-    // came from must outlive execution - not just this call.
+    // Materialize a literal element array - an nl.unwind_const's or an nl.const_list's -
+    // into a ListView in the query-scoped ListBuffer, which the unwind loop then reads
+    // chunk by chunk and a constant list keeps whole. A nested array is materialized
+    // first and kept as one element of the list holding it. A string element stores the
+    // string_view, not the characters, so the module the literals came from must outlive
+    // execution - not just this call.
     ListView materializeListView(mlir::ArrayAttr elements);
 
     // Translate the nl.for over an nl.scan_edges iterator: allocate the four
@@ -428,6 +430,9 @@ private:
     // Allocates the row-aligned column a constant is laid out into, and binds the
     // fill that writes the driving relation's row count of its value each step
     void translateBroadcastConstant(mlir::nl::BroadcastConstant broadcast, NLStmtContainer* body);
+    // The list sibling of translateConstant: materializes the literals into the query's
+    // ListBuffer and allocates a singleton column holding a view of them
+    void translateConstList(mlir::nl::ConstList constList);
 
     template <ColumnOperator Op, typename OpType>
     void translateBinaryOp(OpType op, NLStmtContainer* body);

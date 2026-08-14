@@ -174,13 +174,16 @@ private:
     // any other literal kind
     mlir::TypedAttr scalarLiteralAttr(const Literal* literal);
 
-    // Fills one attribute per element of an UNWIND list, each keeping its literal's type
-    void translateUnwindElements(const ListLiteral* list,
-                                 llvm::SmallVectorImpl<mlir::Attribute>& elements);
+    // Fills one attribute per element of a literal list, each keeping its literal's type
+    void translateListElements(const ListLiteral* list,
+                               llvm::SmallVectorImpl<mlir::Attribute>& elements);
 
-    // The attribute one UNWIND list element unwinds from: a typed attribute for a scalar,
-    // a unit attribute for a null, a nested array attribute for a nested list
-    mlir::Attribute unwindElementAttr(const Literal* literal);
+    // The attribute one list element rides on: a typed attribute for a scalar, a unit
+    // attribute for a null, a nested array attribute for a nested list
+    mlir::Attribute listElementAttr(const Literal* literal);
+
+    // The column holding a list literal's value: the one list, standing for every row
+    mlir::Value translateListLiteral(const ListLiteral* list);
 
     void addScanNodes(const VariableDependency* var);
 

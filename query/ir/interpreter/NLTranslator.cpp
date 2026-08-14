@@ -398,6 +398,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateConstant(constant);
         } else if (nl::BroadcastConstant broadcast = mlir::dyn_cast<nl::BroadcastConstant>(operation)) {
             translateBroadcastConstant(broadcast, body);
+        } else if (nl::ConstList constList = mlir::dyn_cast<nl::ConstList>(operation)) {
+            translateConstList(constList);
         } else if (nl::Add add = mlir::dyn_cast<nl::Add>(operation)) {
             translateBinaryOp<OP_ADD>(add, body);
         } else if (nl::Sub sub = mlir::dyn_cast<nl::Sub>(operation)) {
@@ -693,7 +695,7 @@ ListView NLTranslator::materializeListView(mlir::ArrayAttr elements) {
         } else if (const auto nestedAttr = mlir::dyn_cast<mlir::ArrayAttr>(element)) {
             items.emplace_back(materializeListView(nestedAttr));
         } else {
-            throw IRException("Unsupported literal attribute in nl.unwind_const");
+            throw IRException("Unsupported literal attribute in a constant list");
         }
     }
 
@@ -1094,6 +1096,16 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
 
     NLBroadcastConstantData* data = _program->allocFunctionData<NLBroadcastConstantData>(value, cardinality, output, fill);
     body->emplaceStmt(&NLExecutor::runBroadcastConstant, data);
+}
+
+void NLTranslator::translateConstList(nl::ConstList constList) {
+    // The list is written into the query-scoped list buffer once, here, and the column
+    // holds a view over that run: one list for every row, as a scalar constant holds one
+    // value. The views outlive translation, so the chunk needs no per-step fill.
+    ColumnConst<ListView>* column = _memory->alloc<ColumnConst<ListView>>();
+    column->set(materializeListView(constList.getElements()));
+
+    _valueSlots[constList.getResult()] = column;
 }
 
 template <ColumnOperator Op, typename OpType>
