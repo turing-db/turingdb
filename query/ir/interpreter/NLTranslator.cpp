@@ -55,6 +55,19 @@ NLUnaryFunctionSelector lookupUnaryFunctionSelector(mlir::Operation& operation) 
     return it == unaryFunctionSelectors.end() ? nullptr : it->second;
 }
 
+using NLBinaryFunctionSelector = NLBinaryFn (*)(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
+
+const std::unordered_map<std::string_view, NLBinaryFunctionSelector> binaryFunctionSelectors = {
+    {"nl.cosine_similarity",  &NLExecutor::selectBinary<OP_FUNC_COSINE_SIMILARITY>},
+    {"nl.euclidean_distance", &NLExecutor::selectBinary<OP_FUNC_EUCLIDEAN_DISTANCE>},
+};
+
+NLBinaryFunctionSelector lookupBinaryFunctionSelector(mlir::Operation& operation) {
+    const llvm::StringRef name = operation.getName().getStringRef();
+    const auto it = binaryFunctionSelectors.find(std::string_view(name.data(), name.size()));
+    return it == binaryFunctionSelectors.end() ? nullptr : it->second;
+}
+
 // The edge type name carried by the nl.get_edge_type handle a by-type hop's
 // edge_type operand names. The name lives on the handle op, not the hop, so it is
 // resolved once above the loops; a hop reads it back through its operand here (the
@@ -402,6 +415,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateNot(notOp, body);
         } else if (lookupUnaryFunctionSelector(operation)) {
             translateUnaryFunction(&operation, body);
+        } else if (lookupBinaryFunctionSelector(operation)) {
+            translateBinaryFunction(&operation, body);
         } else if (nl::Filter filter = mlir::dyn_cast<nl::Filter>(operation)) {
             translateFilter(filter, body);
         } else if (nl::GetNodeProperties getNodeProperties = mlir::dyn_cast<nl::GetNodeProperties>(operation)) {
@@ -1107,6 +1122,27 @@ void NLTranslator::translateUnaryFunction(mlir::Operation* op, NLStmtContainer* 
 
     NLUnaryFunctionData* data = _program->allocFunctionData<NLUnaryFunctionData>(input, result, kernel);
     body->emplaceStmt(&NLExecutor::runUnaryFunction, data);
+}
+
+void NLTranslator::translateBinaryFunction(mlir::Operation* op, NLStmtContainer* body) {
+    const NLBinaryFunctionSelector select = lookupBinaryFunctionSelector(*op);
+    if (!select) {
+        throw IRException("translateBinaryFunction called on a non-function op");
+    }
+
+    const Column* lhs = getColumn(op->getOperand(0));
+    const Column* rhs = getColumn(op->getOperand(1));
+
+    // The selector (selectBinary) dispatches on the operand pair and allocates the
+    // result; a binary function needs no view, so it reuses runBinary / NLBinaryData.
+    Column* result = nullptr;
+    const NLBinaryFn fn = select(lhs, rhs, _memory, result);
+    bioassert(result, "Failed to allocate binary function result column.");
+
+    _valueSlots[op->getResult(0)] = result;
+
+    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
+    body->emplaceStmt(&NLExecutor::runBinary, data);
 }
 
 void NLTranslator::translateFilter(nl::Filter filter, NLStmtContainer* body) {

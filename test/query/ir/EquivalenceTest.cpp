@@ -732,6 +732,13 @@ TEST_F(EquivalenceTest, conversionFunctions) {
     expectEquivalent("MATCH (n) RETURN toFloat('2.5')");
 }
 
+TEST_F(EquivalenceTest, embeddingFunctions) {
+    expectEquivalent("MATCH (n) RETURN cosine_similarity((1.0, 2.0, 3.0), (0.4, 0.3, 0.8))");
+    expectEquivalent("MATCH (n) RETURN euclidean_distance((1.0, 2.0, 3.0), (0.4, 0.3, 0.8))");
+    expectEquivalent("MATCH (n) RETURN cosine_similarity((0.5, 0.5), (0.5, 0.5))");
+    expectEquivalent("MATCH (n) RETURN euclidean_distance((0.5, 0.5), (0.5, 0.5))");
+}
+
 TEST_F(EquivalenceTest, functionsWithLimit) {
     // A LIMIT over a function result: the limit's early-exit threads through the
     // function op to the producing scan (assignProducerLoops recurses through it as

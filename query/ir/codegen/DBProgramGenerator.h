@@ -143,6 +143,8 @@ private:
     void translateFunctionInvocationExpr(const Expr* expr, const FunctionInvocationExpr* funcExpr);
 
     void translateFunctionExpr(const Expr* expr, const FunctionInvocation* invocation);
+
+    mlir::Value translateArg(const Expr* argExpr);
     mlir::Value translateLiteralExpr(const Literal* literal);
     mlir::Value translatePropertyExpr(const PropertyExpr* propExpr);
 

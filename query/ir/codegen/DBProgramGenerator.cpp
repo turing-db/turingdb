@@ -101,6 +101,26 @@ const std::unordered_map<std::string_view, UnaryFunctionEmitter> unaryFunctionEm
     {"toBoolean", &emitUnaryFunction<mlir::db::ToBoolean>},
 };
 
+using BinaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder,
+                                              mlir::Location loc,
+                                              mlir::db::ColumnType resultType,
+                                              mlir::Value lhs,
+                                              mlir::Value rhs);
+
+template <typename Op>
+mlir::Value emitBinaryFunction(mlir::OpBuilder& builder,
+                               mlir::Location loc,
+                               mlir::db::ColumnType resultType,
+                               mlir::Value lhs,
+                               mlir::Value rhs) {
+    return builder.create<Op>(loc, resultType, lhs, rhs).getResult();
+}
+
+const std::unordered_map<std::string_view, BinaryFunctionEmitter> binaryFunctionEmitters = {
+    {"cosine_similarity", &emitBinaryFunction<mlir::db::CosineSimilarity>},
+    {"euclidean_distance", &emitBinaryFunction<mlir::db::EuclideanDistance>},
+};
+
 bool producesEdgeVar(const DependencyEdge* e) {
     const EdgeMetadata::EdgeType producedType = e->data().type();
     const bool getOut = producedType == EdgeMetadata::EdgeType::GET_OUT_EDGES;
@@ -2039,29 +2059,44 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
     }
 }
 
+mlir::Value DBProgramGenerator::translateArg(const Expr* argExpr) {
+    translateExpr(argExpr);
+    bioassert(_exprMap.contains(argExpr), "Function invocation with unknown argument.");
+    return _exprMap.at(argExpr);
+}
+
 void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
                                                const FunctionInvocation* invocation) {
     const std::string_view funcName = invocation->getSignature()->getFullName();
-
-    const auto emitterIt = unaryFunctionEmitters.find(funcName);
-    if (emitterIt == end(unaryFunctionEmitters)) {
-        throw TuringException(fmt::format("Unsupported function: {}", funcName));
-    }
-
     const ExprChain* args = invocation->getArguments();
-    if (!args || args->size() != 1) {
-        throw TuringException(fmt::format("{}() expects 1 argument.", funcName));
-    }
-
-    const Expr* argExpr = args->front();
-    translateExpr(argExpr);
-    bioassert(_exprMap.contains(argExpr), "Function invocation with unknown argument.");
-    const mlir::Value input = _exprMap.at(argExpr);
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
-    _exprMap[expr] = emitterIt->second(_opBuilder, loc, noneType, input);
+    const auto unaryIt = unaryFunctionEmitters.find(funcName);
+    if (unaryIt != end(unaryFunctionEmitters)) {
+        if (!args || args->size() != 1) {
+            throw TuringException(fmt::format("{}() expects 1 argument.", funcName));
+        }
+
+        const mlir::Value input = translateArg(args->front());
+        _exprMap[expr] = unaryIt->second(_opBuilder, loc, noneType, input);
+        return;
+    }
+
+    const auto binaryIt = binaryFunctionEmitters.find(funcName);
+    if (binaryIt != end(binaryFunctionEmitters)) {
+        if (!args || args->size() != 2) {
+            throw TuringException(fmt::format("{}() expects 2 arguments.", funcName));
+        }
+
+        const mlir::Value lhs = translateArg(args->getExprs()[0]);
+        const mlir::Value rhs = translateArg(args->getExprs()[1]);
+        _exprMap[expr] = binaryIt->second(_opBuilder, loc, noneType, lhs, rhs);
+        return;
+    }
+
+    throw TuringException(fmt::format("Unsupported function: {}", funcName));
 }
 
 void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {

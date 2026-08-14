@@ -81,6 +81,37 @@ const UnaryFunctionLowering* lookupUnaryFunctionLowering(mlir::Operation& operat
     return it == unaryFunctionLowerings.end() ? nullptr : &it->second;
 }
 
+using NLBinaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder,
+                                                mlir::Location loc,
+                                                nl::ChunkType resultType,
+                                                mlir::Value lhs,
+                                                mlir::Value rhs);
+
+template <typename NLOp>
+mlir::Value emitNLBinaryFunction(mlir::OpBuilder& builder,
+                                 mlir::Location loc,
+                                 nl::ChunkType resultType,
+                                 mlir::Value lhs,
+                                 mlir::Value rhs) {
+    return builder.create<NLOp>(loc, resultType, lhs, rhs).getResult();
+}
+
+struct BinaryFunctionLowering {
+    NLBinaryFunctionEmitter emit {nullptr};
+    UnaryFunctionElement element {nullptr};
+};
+
+const std::unordered_map<std::string_view, BinaryFunctionLowering> binaryFunctionLowerings = {
+    {"db.cosine_similarity",  {&emitNLBinaryFunction<nl::CosineSimilarity>,  &floatFunctionElement}},
+    {"db.euclidean_distance", {&emitNLBinaryFunction<nl::EuclideanDistance>, &floatFunctionElement}},
+};
+
+const BinaryFunctionLowering* lookupBinaryFunctionLowering(mlir::Operation& operation) {
+    const llvm::StringRef name = operation.getName().getStringRef();
+    const auto it = binaryFunctionLowerings.find(std::string_view(name.data(), name.size()));
+    return it == binaryFunctionLowerings.end() ? nullptr : &it->second;
+}
+
 // Map a stored property value type to the MLIR element type baked into the
 // nullable value chunk. The element only has to round-trip back to this value
 // type during translation, so each kind takes a distinct builtin.
@@ -588,6 +619,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerNot(notOp);
     } else if (lookupUnaryFunctionLowering(operation)) {
         lowerUnaryFunction(&operation);
+    } else if (lookupBinaryFunctionLowering(operation)) {
+        lowerBinaryFunction(&operation);
     } else if (mlir::db::FilterOp filter = mlir::dyn_cast<mlir::db::FilterOp>(operation)) {
         lowerFilter(filter);
     } else if (mlir::db::GroupAggregate groupAggregate = mlir::dyn_cast<mlir::db::GroupAggregate>(operation)) {
@@ -2057,6 +2090,28 @@ void DBLowering::lowerUnaryFunction(mlir::Operation* op) {
     setInsertionForUnaryOp(inputChunk);
 
     _valueMap[op->getResult(0)] = spec->emit(_builder, _builder.getUnknownLoc(), resultType, inputChunk);
+}
+
+void DBLowering::lowerBinaryFunction(mlir::Operation* op) {
+    const BinaryFunctionLowering* spec = lookupBinaryFunctionLowering(*op);
+    if (!spec) {
+        throw IRException("lowerBinaryFunction called on a non-function op");
+    }
+
+    const mlir::Value lhsChunk = mapValue(op->getOperand(0));
+    const mlir::Value rhsChunk = mapValue(op->getOperand(1));
+
+    const mlir::Type baseElement = spec->element(_builder);
+    mlir::Type resultElement = baseElement;
+    if (isNullableChunk(lhsChunk.getType()) || isNullableChunk(rhsChunk.getType())) {
+        resultElement = storage::NullableType::get(_builder.getContext(), baseElement);
+    }
+
+    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
+
+    setInsertionForBinaryOp(lhsChunk, rhsChunk);
+
+    _valueMap[op->getResult(0)] = spec->emit(_builder, _builder.getUnknownLoc(), resultType, lhsChunk, rhsChunk);
 }
 
 void DBLowering::lowerFilter(mlir::db::FilterOp filter) {
