@@ -206,23 +206,23 @@ void collectCutColumns(const Projection* projection,
 }
 
 // The one type every element attribute shares, or a null type when they differ or the
-// list is empty - db.unwind_const's homogeneity verdict, which decides whether the
-// unwound column is that type or a type-erased column of tagged scalars. A null and a
-// nested list carry no type, so a list holding one is type-erased.
+// list is empty - the homogeneity verdict db.unwind_const and db.const_list read, which
+// decides whether the elements ride a column of that type or a type-erased one of tagged
+// scalars. A null and a nested list carry no type, so a list holding one is type-erased.
 mlir::Type sharedAttrType(llvm::ArrayRef<mlir::Attribute> elements) {
     if (elements.empty()) {
         return nullptr;
     }
 
-    const auto firstTyped = mlir::dyn_cast<mlir::TypedAttr>(elements.front());
-    if (!firstTyped) {
+    const mlir::TypedAttr firstElement = mlir::dyn_cast<mlir::TypedAttr>(elements.front());
+    if (!firstElement) {
         return nullptr;
     }
 
-    const mlir::Type firstType = firstTyped.getType();
+    const mlir::Type firstType = firstElement.getType();
 
     const auto hasFirstType = [firstType](mlir::Attribute element) {
-        const auto typedElement = mlir::dyn_cast<mlir::TypedAttr>(element);
+        const mlir::TypedAttr typedElement = mlir::dyn_cast<mlir::TypedAttr>(element);
         return typedElement && typedElement.getType() == firstType;
     };
 
@@ -381,7 +381,7 @@ void DBProgramGenerator::addUnwindConst(const VariableDependency* var, const Unw
     }
 
     llvm::SmallVector<mlir::Attribute> elements;
-    translateUnwindElements(list, elements);
+    translateListElements(list, elements);
 
     // The result element type is the homogeneity verdict db.unwind_const reads: elements
     // sharing one type unwind into a column of that type, and a mixed - or empty - list
@@ -400,22 +400,22 @@ void DBProgramGenerator::addUnwindConst(const VariableDependency* var, const Unw
     registerValue(var, unwindConst.getResult());
 }
 
-void DBProgramGenerator::translateUnwindElements(const ListLiteral* list,
-                                                 llvm::SmallVectorImpl<mlir::Attribute>& elements) {
+void DBProgramGenerator::translateListElements(const ListLiteral* list,
+                                               llvm::SmallVectorImpl<mlir::Attribute>& elements) {
     const ListLiteral::Items& items = list->items();
     elements.reserve(items.size());
 
     for (const Expr* item : items) {
         const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(item);
         if (!literalExpr) {
-            throw TuringException("Only literal elements are supported in an UNWIND list.");
+            throw TuringException("Only literal elements are supported in a list.");
         }
 
-        elements.push_back(unwindElementAttr(literalExpr->getLiteral()));
+        elements.push_back(listElementAttr(literalExpr->getLiteral()));
     }
 }
 
-mlir::Attribute DBProgramGenerator::unwindElementAttr(const Literal* literal) {
+mlir::Attribute DBProgramGenerator::listElementAttr(const Literal* literal) {
     const Literal::Kind kind = literal->getKind();
 
     if (kind == Literal::Kind::NULL_LITERAL) {
@@ -424,17 +424,40 @@ mlir::Attribute DBProgramGenerator::unwindElementAttr(const Literal* literal) {
         const ListLiteral* nested = static_cast<const ListLiteral*>(literal);
 
         llvm::SmallVector<mlir::Attribute> nestedElements;
-        translateUnwindElements(nested, nestedElements);
+        translateListElements(nested, nestedElements);
 
         return _opBuilder.getArrayAttr(nestedElements);
     }
 
     const mlir::TypedAttr scalarAttr = scalarLiteralAttr(literal);
     if (!scalarAttr) {
-        throw TuringException("Only booleans, integers, floats, strings, nulls and lists can be unwound.");
+        throw TuringException("Only booleans, integers, floats, strings, nulls and lists are "
+                              "supported as list elements.");
     }
 
     return scalarAttr;
+}
+
+mlir::Value DBProgramGenerator::translateListLiteral(const ListLiteral* list) {
+    llvm::SmallVector<mlir::Attribute> elements;
+    translateListElements(list, elements);
+
+    // The list's element type is the homogeneity verdict db.const_list reads: elements
+    // sharing one type give a list of that type, and anything else - mixed, nested, null
+    // or no element at all - a list of type-erased tagged scalars.
+    const mlir::Type sharedType = sharedAttrType(elements);
+    const mlir::Type elementType = sharedType ? sharedType
+                                              : mlir::storage::ListElementType::get(_mlirCtxt);
+
+    const mlir::Type listType = mlir::storage::ListType::get(_mlirCtxt, elementType);
+    const mlir::db::ColumnType resultType = allocColumnType(listType);
+    const mlir::ArrayAttr elementsAttr = _opBuilder.getArrayAttr(elements);
+
+    mlir::db::ConstList constList = _opBuilder.create<mlir::db::ConstList>(_opBuilder.getUnknownLoc(),
+                                                                          resultType,
+                                                                          elementsAttr);
+
+    return constList.getResult();
 }
 
 template<typename EdgeOp>
@@ -2078,7 +2101,7 @@ mlir::Value DBProgramGenerator::translateLiteralExpr(const Literal* literal) {
         }
         break;
         case Literal::Kind::LIST:
-            throw FatalException("List literals are not yet supported in MLIR codegen.");
+            return translateListLiteral(static_cast<const ListLiteral*>(literal));
         break;
 
         default:

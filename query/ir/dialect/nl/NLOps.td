@@ -101,6 +101,32 @@ def UnwindConst : NLOp<"unwind_const", [Pure]> {
 }
 
 /**
+* ConstList
+*/
+// Pure: materializing a fixed list is deterministic and reads no row.
+def ConstList : NLOp<"const_list", [Pure, ConstantLike]> {
+  let summary = "Materialize a compile-time-known literal list as a single-value list chunk";
+  let description = [{
+    Imperative counterpart of db.const_list. Hoisted above the loops with the other
+    constants: the literals are written once into the query-scoped list buffer and the
+    chunk holds a view over that run, one list standing for every row.
+
+      %xs = nl.const_list([1, 2, 3]) : !nl.chunk<!storage.list<i64>>
+
+    `elements` is the same literal array db.const_list carried, each entry a typed
+    attribute keeping its own type, or an array for a nested list - which is written to the
+    buffer first, so the outer list holds a view of it. The chunk element type depends on
+    the elements, so - like nl.unwind_const's and unlike nl.constant's - it is spelled
+    after the colon rather than inferred.
+  }];
+
+  let arguments = (ins ArrayAttr:$elements);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "`(` $elements `)` attr-dict `:` qualified(type($result))";
+}
+
+/**
 * ScanEdges
 */
 def ScanEdges : NLOp<"scan_edges", [Pure, InferTypeOpAdaptor]> {
