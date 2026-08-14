@@ -34,6 +34,7 @@
 #include "columns/ColumnConst.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnOptVector.h"
+#include "iterators/ChunkConfig.h"
 #include "list/ListBufferTypeTag.h"
 #include "list/ListElementView.h"
 #include "list/ListView.h"
@@ -139,9 +140,21 @@ std::string longListElements() {
     return elements;
 }
 
+// One row per SimpleGraph node - they are numbered 0 through 17 - each pairing the node ID
+// with the same list cell.
+void fillNodeRowsWithList(std::string_view listCell, Rows& rows) {
+    constexpr uint64_t simpleGraphNodeCount = 18;
+
+    for (uint64_t nodeID = 0; nodeID < simpleGraphNodeCount; nodeID++) {
+        rows.push_back({std::to_string(nodeID), std::string(listCell)});
+    }
+}
+
 class CollectingRowSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        _emissionCount++;
+
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             Row& row = _rows.emplace_back();
             for (const Column* column : chunks) {
@@ -151,9 +164,11 @@ public:
     }
 
     const Rows& rows() const { return _rows; }
+    size_t getEmissionCount() const { return _emissionCount; }
 
 private:
     Rows _rows;
+    size_t _emissionCount {0};
 };
 
 }
@@ -173,7 +188,7 @@ protected:
         SimpleGraph::createSimpleGraph(_graph);
     }
 
-    void runQuery(std::string_view query, Rows& rows) {
+    void runQuery(std::string_view query, Rows& rows, size_t chunkSize = ChunkConfig::CHUNK_SIZE) {
         SystemAccessor system = _env->getSystemManager().accessUnique();
         const ProcedureManager* procedures = system.getProcedures();
 
@@ -204,15 +219,18 @@ protected:
 
         CollectingRowSink sink;
         LocalMemory memory;
-        DBDialectInterpreter interpreter(module, &view, &sink, &memory);
+        DBDialectInterpreter interpreter(module, &view, &sink, &memory, chunkSize);
         interpreter.run();
 
         rows = sink.rows();
+        _emissionCount = sink.getEmissionCount();
     }
 
-    void expectRows(std::string_view query, const Rows& expected) {
+    void expectRows(std::string_view query,
+                    const Rows& expected,
+                    size_t chunkSize = ChunkConfig::CHUNK_SIZE) {
         Rows actual;
-        runQuery(query, actual);
+        runQuery(query, actual, chunkSize);
 
         EXPECT_EQ(actual, expected) << "query: " << query;
     }
@@ -220,6 +238,10 @@ protected:
     const std::string _graphName = "simpledb";
     std::unique_ptr<TuringTestEnv> _env;
     Graph* _graph {nullptr};
+
+    // How many times the last query's projection was emitted, so a test can tell one
+    // emission of every row from one per row
+    size_t _emissionCount {0};
 };
 
 TEST_F(CypherListLiteralTest, returnsIntegerList) {
@@ -297,6 +319,30 @@ TEST_F(CypherListLiteralTest, repeatsTheListForEveryMatchedRow) {
     const Rows expected(simpleGraphNodeCount, Row {"[1, 2]"});
 
     expectRows("MATCH (n) RETURN [1, 2]", expected);
+}
+
+TEST_F(CypherListLiteralTest, returnsTheListBesideEveryMatchedNode) {
+    // The node column carries the rows and the list stands beside each of them: the count
+    // is the scan's, and every row reads the one cell. All eighteen nodes fit one chunk,
+    // so this is a single emission - the case below is the same rows one at a time.
+    Rows expected;
+    fillNodeRowsWithList("[1, 2, 3, 4]", expected);
+
+    expectRows("MATCH (n) RETURN n, [1, 2, 3, 4]", expected);
+
+    EXPECT_EQ(_emissionCount, 1u);
+}
+
+TEST_F(CypherListLiteralTest, repeatsTheListAcrossEmitChunks) {
+    // One row per chunk, so the projection is emitted once per node: the list is bound once
+    // above the loop, and every emission has to read it again rather than the first one
+    // consuming it.
+    Rows expected;
+    fillNodeRowsWithList("[1, 2, 3, 4]", expected);
+
+    expectRows("MATCH (n) RETURN n, [1, 2, 3, 4]", expected, /*chunkSize=*/1);
+
+    EXPECT_EQ(_emissionCount, expected.size());
 }
 
 TEST_F(CypherListLiteralTest, emitsNothingWhenTheMatchIsEmpty) {
