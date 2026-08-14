@@ -94,6 +94,16 @@ void FunctionDecls::initDefault() {
     collectBools->setReturnTypes({{EvaluatedType::List}});
     collectBools->setIsAggregate(true);
 
+    FunctionSignature* collectNodes = createFunction("collect");
+    collectNodes->setArguments({EvaluatedType::NodePattern});
+    collectNodes->setReturnTypes({{EvaluatedType::List}});
+    collectNodes->setIsAggregate(true);
+
+    FunctionSignature* collectEdges = createFunction("collect");
+    collectEdges->setArguments({EvaluatedType::EdgePattern});
+    collectEdges->setReturnTypes({{EvaluatedType::List}});
+    collectEdges->setIsAggregate(true);
+
     // count(null) is a query that can be asked: a null is never charged, so the tally is
     // zero, and the overload is what keeps the answer from being an argument error
     FunctionSignature* countNulls = createFunction("count");

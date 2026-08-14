@@ -14,6 +14,8 @@ enum class ListBufferTypeTag : uint8_t {
     Embedding,
     ListView,
     Null,
+    NodeID,
+    EdgeID,
 
     INVALID,
 };

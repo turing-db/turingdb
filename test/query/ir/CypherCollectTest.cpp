@@ -49,6 +49,25 @@ void readInt64List(const ListView& view, std::vector<int64_t>& out) {
     }
 }
 
+// Reads one list cell as a vector of node ids, asserting each element carries the node
+// tag rather than a bare integer.
+void readNodeIDList(const ListView& view, std::vector<uint64_t>& out) {
+    out.clear();
+    for (const ListElementView& element : view) {
+        ASSERT_EQ(element.getTag(), ListBufferTypeTag::NodeID);
+        out.push_back(element.getAs<NodeID>().getValue());
+    }
+}
+
+// Reads one list cell as a vector of edge ids, asserting the edge tag.
+void readEdgeIDList(const ListView& view, std::vector<uint64_t>& out) {
+    out.clear();
+    for (const ListElementView& element : view) {
+        ASSERT_EQ(element.getTag(), ListBufferTypeTag::EdgeID);
+        out.push_back(element.getAs<EdgeID>().getValue());
+    }
+}
+
 // Discards output: used by the CREATE queries building the fixture and by the queries
 // that are rejected before producing rows.
 class NullSink : public NLOutputSink {
@@ -137,6 +156,72 @@ public:
 
 private:
     std::vector<Row> _rows;
+};
+
+// Collects the (key, [ids]) rows a grouped entity collect emits, reading each list cell
+// with the tag-checking reader for the collected entity kind.
+template <void (*Reader)(const ListView&, std::vector<uint64_t>&)>
+class KeyedIDListSink : public NLOutputSink {
+public:
+    using Row = std::pair<std::optional<std::string>, std::vector<uint64_t>>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* keys = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[1]);
+        ASSERT_NE(keys, nullptr);
+        ASSERT_NE(lists, nullptr);
+        ASSERT_EQ(keys->size(), lists->size());
+
+        const auto& keyRaw = keys->getRaw();
+        const auto& listRaw = lists->getRaw();
+        for (size_t row = offset; row < offset + rowCount; row++) {
+            std::optional<std::string> key;
+            if (keyRaw[row]) {
+                key = std::string(*keyRaw[row]);
+            }
+
+            std::vector<uint64_t> ids;
+            Reader(listRaw[row], ids);
+
+            _rows.push_back({key, ids});
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
+using KeyedNodeListSink = KeyedIDListSink<readNodeIDList>;
+using KeyedEdgeListSink = KeyedIDListSink<readEdgeIDList>;
+
+// Collects the ([ids]) rows an ungrouped entity collect emits: a single list cell chunk.
+class NodeListSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[0]);
+        ASSERT_NE(lists, nullptr);
+
+        const auto& listRaw = lists->getRaw();
+        for (size_t row = offset; row < offset + rowCount; row++) {
+            std::vector<uint64_t> ids;
+            readNodeIDList(listRaw[row], ids);
+            _rows.push_back(ids);
+        }
+    }
+
+    const std::vector<std::vector<uint64_t>>& rows() const { return _rows; }
+
+private:
+    std::vector<std::vector<uint64_t>> _rows;
 };
 
 // Collects the ([names]) rows an ungrouped collect emits: a single list cell chunk.
@@ -485,13 +570,94 @@ TEST_F(CypherCollectTest, rejectsCollectOfConstant) {
 
 // An entity has no list element representation, so no collect overload takes one and the
 // analyzer rejects the call.
-TEST_F(CypherCollectTest, rejectsCollectOfEntity) {
+TEST_F(CypherCollectTest, groupedCollectOfNodes) {
     buildTeamGraph();
 
-    QueryStatus status;
-    runQuery("MATCH (n:Node) RETURN collect(n)", status);
+    KeyedNodeListSink sink;
+    match("MATCH (n:Node) RETURN n.team, collect(n)", sink);
 
-    EXPECT_EQ(status.getStatus(), QueryStatus::Status::ANALYZE_ERROR);
+    std::vector<KeyedNodeListSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<KeyedNodeListSink::Row> expected {
+        {"blue", {2, 3}},
+        {"red", {0, 1}},
+    };
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(CypherCollectTest, ungroupedCollectOfNodes) {
+    buildTeamGraph();
+
+    NodeListSink sink;
+    match("MATCH (n:Node) RETURN collect(n)", sink);
+
+    const std::vector<std::vector<uint64_t>> expected {{0, 1, 2, 3}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(CypherCollectTest, collectOfNodesOnUnlabelledMatch) {
+    buildTeamGraph();
+
+    KeyedNodeListSink sink;
+    match("match (n) return n.team, collect(n)", sink);
+
+    std::vector<KeyedNodeListSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<KeyedNodeListSink::Row> expected {
+        {"blue", {2, 3}},
+        {"red", {0, 1}},
+    };
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(CypherCollectTest, groupedCollectOfEdges) {
+    buildKnowsGraph();
+
+    KeyedEdgeListSink sink;
+    match("MATCH (a:Person)-[e:KNOWS]->(b:Person) RETURN a.name, collect(e)", sink);
+
+    std::vector<KeyedEdgeListSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<KeyedEdgeListSink::Row> expected {{"alice", {0, 1}}};
+    EXPECT_EQ(rows, expected);
+}
+
+// The list carries entities through the same buffers a value list does, so the sort and
+// the skip/limit copies need no entity case of their own.
+TEST_F(CypherCollectTest, collectOfNodesWithOrderByAndSkipLimit) {
+    buildTeamGraph();
+
+    KeyedNodeListSink orderedSink;
+    match("MATCH (n:Node) RETURN n.team, collect(n) ORDER BY n.team DESC", orderedSink);
+
+    std::vector<KeyedNodeListSink::Row> orderedRows;
+    orderedSink.sortedRows(orderedRows);
+
+    const std::vector<KeyedNodeListSink::Row> expected {
+        {"blue", {2, 3}},
+        {"red", {0, 1}},
+    };
+    EXPECT_EQ(orderedRows, expected);
+
+    KeyedNodeListSink cutSink;
+    match("MATCH (n:Node) RETURN n.team, collect(n) SKIP 1 LIMIT 1", cutSink);
+
+    std::vector<KeyedNodeListSink::Row> cutRows;
+    cutSink.sortedRows(cutRows);
+
+    ASSERT_EQ(cutRows.size(), 1u);
+    const KeyedNodeListSink::Row& row = cutRows.front();
+    ASSERT_TRUE(row.first);
+
+    if (*row.first == "red") {
+        EXPECT_EQ(row.second, std::vector<uint64_t>({0, 1}));
+    } else {
+        EXPECT_EQ(*row.first, "blue");
+        EXPECT_EQ(row.second, std::vector<uint64_t>({2, 3}));
+    }
 }
 
 TEST_F(CypherCollectTest, rejectsCollectDistinct) {

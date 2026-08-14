@@ -1749,7 +1749,14 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
         throw IRException("db.collect requires at least one column");
     }
 
-    chunks[keyCount] = nullableValueChunk(chunks[keyCount]);
+    // An entity column collects as the IDs it carries, which every row holds: only a
+    // scalar value column is read as nullable, the way a property fetch is.
+    const mlir::Type collectedElement = mlir::cast<nl::ChunkType>(chunks[keyCount].getType()).getElementType();
+    const bool collectsEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(collectedElement);
+
+    if (!collectsEntity) {
+        chunks[keyCount] = nullableValueChunk(chunks[keyCount]);
+    }
 
     const mlir::Location loc = _builder.getUnknownLoc();
 

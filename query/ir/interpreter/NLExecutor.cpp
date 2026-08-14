@@ -860,6 +860,18 @@ void distinctAppendElementBytes(std::string& key, const ListElementView element)
             return;
         break;
 
+        case ListBufferTypeTag::NodeID:
+            key.push_back(static_cast<char>(tag));
+            distinctAppendValueBytes(key, element.getAs<NodeID>().getValue());
+            return;
+        break;
+
+        case ListBufferTypeTag::EdgeID:
+            key.push_back(static_cast<char>(tag));
+            distinctAppendValueBytes(key, element.getAs<EdgeID>().getValue());
+            return;
+        break;
+
         case ListBufferTypeTag::Embedding:
             throw IRException("cannot dedup by an embedding element");
         break;
@@ -1509,6 +1521,51 @@ void collectFoldDistinct(Column* values,
 
         const size_t position = valuesRaw.size();
         valuesRaw.push_back(*value);
+        groupPositions[group].push_back(position);
+    }
+}
+
+// The entity sibling of collectFold: an ID chunk has no null rows, so every row of the
+// input joins its group's list.
+template <typename IDType>
+void collectEntityFold(Column* values,
+                       const Column* input,
+                       const std::vector<size_t>& groups,
+                       std::vector<std::vector<size_t>>& groupPositions,
+                       NLGroupDistinctTally& distinct) {
+    auto& valuesRaw = static_cast<ColumnVector<IDType>*>(values)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnVector<IDType>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const size_t position = valuesRaw.size();
+        valuesRaw.push_back(inputRaw[row]);
+        groupPositions[groups[row]].push_back(position);
+    }
+}
+
+// The entity sibling of collectFoldDistinct: an entity repeated within its group joins
+// the list once, keyed by the ID's underlying integer.
+template <typename IDType>
+void collectEntityFoldDistinct(Column* values,
+                               const Column* input,
+                               const std::vector<size_t>& groups,
+                               std::vector<std::vector<size_t>>& groupPositions,
+                               NLGroupDistinctTally& distinct) {
+    auto& valuesRaw = static_cast<ColumnVector<IDType>*>(values)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnVector<IDType>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendValueBytes(distinct.getKey(), inputRaw[row].getValue());
+
+        if (!distinct.insertIfNew()) {
+            continue;
+        }
+
+        const size_t position = valuesRaw.size();
+        valuesRaw.push_back(inputRaw[row]);
         groupPositions[group].push_back(position);
     }
 }
@@ -3265,6 +3322,54 @@ NLCollectListEmitFunction NLExecutor::selectCollectListEmit(ValueType valueType)
     }
 
     return nullptr;
+}
+
+NLCollectFoldFunction NLExecutor::selectCollectEntityFold(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return &collectEntityFold<NodeID>;
+        break;
+
+        case NLChunkKind::EdgeID:
+            return &collectEntityFold<EdgeID>;
+        break;
+
+        default:
+            throw IRException("collect does not support this chunk kind");
+        break;
+    }
+}
+
+NLCollectFoldFunction NLExecutor::selectCollectEntityDistinctFold(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return &collectEntityFoldDistinct<NodeID>;
+        break;
+
+        case NLChunkKind::EdgeID:
+            return &collectEntityFoldDistinct<EdgeID>;
+        break;
+
+        default:
+            throw IRException("collect does not support this chunk kind");
+        break;
+    }
+}
+
+NLCollectListEmitFunction NLExecutor::selectCollectEntityListEmit(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return &collectListEmit<NodeID>;
+        break;
+
+        case NLChunkKind::EdgeID:
+            return &collectListEmit<EdgeID>;
+        break;
+
+        default:
+            throw IRException("collect does not support this chunk kind");
+        break;
+    }
 }
 
 void NLExecutor::runUnwindCollectLoop(NLExecutionContext* context, NLFunctionData* data) {

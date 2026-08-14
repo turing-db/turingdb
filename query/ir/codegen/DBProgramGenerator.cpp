@@ -2291,7 +2291,15 @@ mlir::Value DBProgramGenerator::resolveColumnInScope(ColumnPredicate accept) con
 }
 
 mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr) {
-    if (argExpr->getType() != EvaluatedType::Wildcard) {
+    const EvaluatedType argType = argExpr->getType();
+    const bool isEntity = argType == EvaluatedType::NodePattern || argType == EvaluatedType::EdgePattern;
+
+    if (isEntity) {
+        VariableColumnMap variableColumns;
+        collectVariableColumns(variableColumns);
+
+        return getOrTranslateExprColumn(variableColumns, argExpr);
+    } else if (argType != EvaluatedType::Wildcard) {
         translateExpr(argExpr);
         return _part._exprMap.at(argExpr);
     }
@@ -3405,13 +3413,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
     }
 
     VariableColumnMap variableColumns;
-    for (const auto& [cypherVar, mlirCol] : _part._varMap) {
-        variableColumns[cypherVar->getName()] = mlirCol.back();
-    }
-
-    for (const YieldedColumn& yieldedColumn : _part._yieldedColumns) {
-        variableColumns[yieldedColumn.first] = yieldedColumn.second;
-    }
+    collectVariableColumns(variableColumns);
 
     // An edge identity is carried by the traversal variable that produced it, under a
     // name of its own: the representative is where its column - and its grouped
@@ -3419,7 +3421,6 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
     llvm::StringMap<const VariableDependency*> edgeIdentityVars;
     for (const auto& [name, vars] : _vdg.edgeIdentities()) {
         if (!vars.empty() && _part._varMap.contains(vars.front())) {
-            variableColumns[name] = _part._varMap.at(vars.front()).back();
             edgeIdentityVars[name] = vars.front();
         }
     }

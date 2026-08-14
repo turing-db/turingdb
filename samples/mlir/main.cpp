@@ -458,6 +458,14 @@ private:
                 std::cout << "null";
             break;
 
+            case ListBufferTypeTag::NodeID:
+                std::cout << element.getAs<NodeID>().getValue();
+            break;
+
+            case ListBufferTypeTag::EdgeID:
+                std::cout << element.getAs<EdgeID>().getValue();
+            break;
+
             case ListBufferTypeTag::INVALID:
                 std::cout << "?";
             break;

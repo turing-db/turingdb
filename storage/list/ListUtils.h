@@ -3,6 +3,8 @@
 #include "ListView.h"
 #include "ListBufferTypeTag.h"
 
+#include "ID.h"
+
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
@@ -37,6 +39,12 @@ struct ListTagDispatcher {
             break;
             case ListBufferTypeTag::Null:
                 return executor.template operator()<PropertyNull>(view);
+            break;
+            case ListBufferTypeTag::NodeID:
+                return executor.template operator()<NodeID>(view);
+            break;
+            case ListBufferTypeTag::EdgeID:
+                return executor.template operator()<EdgeID>(view);
             break;
 
             case ListBufferTypeTag::INVALID:
@@ -88,6 +96,16 @@ struct TypeToListBufferTag<ListView> {
 template <>
 struct TypeToListBufferTag<PropertyNull> {
     static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::Null;
+};
+
+template <>
+struct TypeToListBufferTag<NodeID> {
+    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::NodeID;
+};
+
+template <>
+struct TypeToListBufferTag<EdgeID> {
+    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::EdgeID;
 };
 
 }

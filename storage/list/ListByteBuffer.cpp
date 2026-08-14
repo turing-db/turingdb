@@ -119,4 +119,6 @@ template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types:
 template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::Embedding::Primitive&);
 template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const ListView&);
 template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const PropertyNull&);
+template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const NodeID&);
+template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const EdgeID&);
 }
