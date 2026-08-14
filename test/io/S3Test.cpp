@@ -13,8 +13,11 @@ using namespace turing::test;
 
 class S3Test : public TuringTest {
 protected:
-    std::string _tempTestDir = std::filesystem::current_path().string() + "/" + _testName + ".tmp/";
+    std::string _tempTestDir;
+
     void initialize() override {
+        _tempTestDir = std::filesystem::current_path().string() + "/" + _outDir + "/tmp/";
+
         std::filesystem::create_directory(_tempTestDir);
     }
 
