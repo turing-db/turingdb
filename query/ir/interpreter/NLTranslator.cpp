@@ -2161,20 +2161,34 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
         state->addKeyColumn(key);
     }
 
-    // The collected value column is a nullable value chunk (a property fetch). Its
-    // present values accumulate in a flat buffer of the same primitive; nulls are
-    // dropped, matching Cypher collect. nullableChunkValueType rejects an ID chunk.
-    // The fold (append) and both drain emit handlers are baked from the value type
-    // here, so whichever drain the query uses reads a ready handler off the state.
+    // The collected value column is either a nullable value chunk (a property fetch),
+    // whose present values accumulate in a flat buffer of the same primitive with nulls
+    // dropped to match Cypher collect, or an entity chunk, whose every row carries an
+    // ID. The fold (append) and the drain emit handlers are baked from that type here,
+    // so whichever drain the query uses reads a ready handler off the state.
     const mlir::Value valueColumn = columns[keyCount];
-    const ValueType valueType = nullableChunkValueType(valueColumn.getType());
+    const mlir::Type valueElement = mlir::cast<nl::ChunkType>(valueColumn.getType()).getElementType();
 
     state->setValueInput(getColumn(valueColumn));
-    state->setValues(allocValueColumnForValueType(valueType));
-    state->setFold(buffer.getDistinct() ? NLExecutor::selectCollectDistinctFold(valueType)
-                                       : NLExecutor::selectCollectFold(valueType));
-    state->setUnwindCollectEmit(NLExecutor::selectUnwindCollectValueEmit(valueType));
-    state->setListEmit(NLExecutor::selectCollectListEmit(valueType));
+
+    const bool isDistinct = buffer.getDistinct();
+
+    if (mlir::isa<storage::NullableType>(valueElement)) {
+        const ValueType valueType = nullableChunkValueType(valueColumn.getType());
+
+        state->setValues(allocValueColumnForValueType(valueType));
+        state->setFold(isDistinct ? NLExecutor::selectCollectDistinctFold(valueType)
+                                  : NLExecutor::selectCollectFold(valueType));
+        state->setUnwindCollectEmit(NLExecutor::selectUnwindCollectValueEmit(valueType));
+        state->setListEmit(NLExecutor::selectCollectListEmit(valueType));
+    } else {
+        const NLChunkKind kind = getChunkKind(valueColumn.getType());
+
+        state->setValues(allocColumnForKind(kind));
+        state->setFold(isDistinct ? NLExecutor::selectCollectEntityDistinctFold(kind)
+                                  : NLExecutor::selectCollectEntityFold(kind));
+        state->setListEmit(NLExecutor::selectCollectEntityListEmit(kind));
+    }
 
     body->emplaceStmt(&NLExecutor::runCollectUpdate, data);
 }
@@ -2197,6 +2211,12 @@ void NLTranslator::translateUnwindCollectLoop(const IteratorConfig& config,
     }
 
     throwIfAlreadyDrained(state);
+
+    // Only a value collect bakes an unwind emit handler; an entity collect leaves it
+    // unset, so its list can be returned but not yet unwound element by element.
+    if (!state->getUnwindCollectEmit()) {
+        throw IRException("unwinding a collected entity list is not supported");
+    }
 
     // For::verify binds one loop variable per iterator chunk; the unwind iterator's
     // chunks are the grouping keys then the element value, so the loop takes one

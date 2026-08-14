@@ -7,6 +7,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "ID.h"
 #include "ListBufferTypeTag.h"
 
 #include "metadata/PropertyType.h"
@@ -19,7 +20,9 @@ namespace {
 
 // The class a tagged element sorts in, ascending.
 enum class ListElementOrderClass {
-    List = 0,
+    Node = 0,
+    Edge,
+    List,
     String,
     Bool,
     Number,
@@ -28,6 +31,14 @@ enum class ListElementOrderClass {
 
 ListElementOrderClass orderClassOf(ListBufferTypeTag tag) {
     switch (tag) {
+        case ListBufferTypeTag::NodeID:
+            return ListElementOrderClass::Node;
+        break;
+
+        case ListBufferTypeTag::EdgeID:
+            return ListElementOrderClass::Edge;
+        break;
+
         case ListBufferTypeTag::ListView:
             return ListElementOrderClass::List;
         break;
@@ -176,6 +187,14 @@ std::strong_ordering db::operator<=>(const ListElementView lhs, const ListElemen
     }
 
     switch (lhsClass) {
+        case ListElementOrderClass::Node:
+            return lhs.getAs<NodeID>() <=> rhs.getAs<NodeID>();
+        break;
+
+        case ListElementOrderClass::Edge:
+            return lhs.getAs<EdgeID>() <=> rhs.getAs<EdgeID>();
+        break;
+
         case ListElementOrderClass::List:
             return compareLists(lhs.getAs<ListView>(), rhs.getAs<ListView>());
         break;

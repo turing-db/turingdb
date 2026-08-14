@@ -66,6 +66,14 @@ std::string elementText(const ListElementView& element) {
             return "null";
         break;
 
+        case ListBufferTypeTag::NodeID:
+            return fmt::format("{}", element.getAs<NodeID>().getValue());
+        break;
+
+        case ListBufferTypeTag::EdgeID:
+            return fmt::format("{}", element.getAs<EdgeID>().getValue());
+        break;
+
         case ListBufferTypeTag::Embedding:
         case ListBufferTypeTag::ListView:
         case ListBufferTypeTag::INVALID:

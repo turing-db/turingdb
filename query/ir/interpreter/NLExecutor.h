@@ -417,6 +417,12 @@ public:
     static NLUnwindCollectValueEmitFunction selectUnwindCollectValueEmit(ValueType valueType);
     static NLCollectListEmitFunction selectCollectListEmit(ValueType valueType);
 
+    // The fold and list-emit for an entity chunk of this kind, whose elements carry a
+    // node or edge ID. An edge-type ID is no entity, so both reject that kind.
+    static NLCollectFoldFunction selectCollectEntityFold(NLChunkKind kind);
+    static NLCollectFoldFunction selectCollectEntityDistinctFold(NLChunkKind kind);
+    static NLCollectListEmitFunction selectCollectEntityListEmit(NLChunkKind kind);
+
     // The with-null property fetch handler for an ID type (NodeID/EdgeID) and a
     // value type (types::Double, ...). The translator picks the specialization
     // from the resolved property and stores it as the statement's handler; only
