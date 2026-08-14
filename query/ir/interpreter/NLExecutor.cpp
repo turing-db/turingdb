@@ -307,6 +307,26 @@ struct BinaryOpTraits<OP_XOR> {
     }
 };
 
+template <>
+struct BinaryOpTraits<OP_FUNC_COSINE_SIMILARITY> {
+    using Functor = CosineSimilarityFunction;
+
+    template <typename ResCol, typename LhsCol, typename RhsCol>
+    static void exec(ResCol* result, const LhsCol* lhs, const RhsCol* rhs) {
+        ColumnFunctions::exec<CosineSimilarity>(result, lhs, rhs);
+    }
+};
+
+template <>
+struct BinaryOpTraits<OP_FUNC_EUCLIDEAN_DISTANCE> {
+    using Functor = EuclideanDistanceFunction;
+
+    template <typename ResCol, typename LhsCol, typename RhsCol>
+    static void exec(ResCol* result, const LhsCol* lhs, const RhsCol* rhs) {
+        ColumnFunctions::exec<EuclideanDistance>(result, lhs, rhs);
+    }
+};
+
 template <ColumnOperator Op, typename ResCol, typename LhsCol, typename RhsCol>
 void applyBinaryOp(Column* result, const Column* lhs, const Column* rhs) {
     BinaryOpTraits<Op>::exec(static_cast<ResCol*>(result),
@@ -3453,3 +3473,5 @@ template NLBinaryFn NLExecutor::selectBinary<OP_AND>(const Column* lhs, const Co
 template NLBinaryFn NLExecutor::selectBinary<OP_OR>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_NOT_EQUAL>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_XOR>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
+template NLBinaryFn NLExecutor::selectBinary<OP_FUNC_COSINE_SIMILARITY>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
+template NLBinaryFn NLExecutor::selectBinary<OP_FUNC_EUCLIDEAN_DISTANCE>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);

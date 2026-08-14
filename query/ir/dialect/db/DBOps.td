@@ -857,6 +857,20 @@ def ToInteger : UnaryFunctionOp<"to_integer">;
 def ToFloat : UnaryFunctionOp<"to_float">;
 def ToBoolean : UnaryFunctionOp<"to_boolean">;
 
+class BinaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure]> {
+  let summary = "Apply a binary scalar function row-wise to two value columns";
+
+  let arguments = (ins Column:$lhs, Column:$rhs);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = [{
+    `(` $lhs `,` $rhs `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+def CosineSimilarity : BinaryFunctionOp<"cosine_similarity">;
+def EuclideanDistance : BinaryFunctionOp<"euclidean_distance">;
+
 def ConstantOp : TuringOp<"constant", [Pure, ConstantLike, DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
   let summary = "Produces a constant value in a column";
 

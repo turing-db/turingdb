@@ -1410,6 +1410,18 @@ def ToInteger : NLUnaryFunctionOp<"to_integer">;
 def ToFloat : NLUnaryFunctionOp<"to_float">;
 def ToBoolean : NLUnaryFunctionOp<"to_boolean">;
 
+class NLBinaryFunctionOp<string mnemonic> : NLOp<mnemonic, [Pure]> {
+  let summary = "Apply a binary scalar function row-wise to two value chunks";
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
+def CosineSimilarity : NLBinaryFunctionOp<"cosine_similarity">;
+def EuclideanDistance : NLBinaryFunctionOp<"euclidean_distance">;
+
 def Filter : NLOp<"filter", [Pure]> {
   let summary = "Keep only the rows where the mask chunk is true, as freshly cut chunks";
   let description = [{

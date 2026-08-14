@@ -436,6 +436,8 @@ private:
 
     void translateUnaryFunction(mlir::Operation* op, NLStmtContainer* body);
 
+    void translateBinaryFunction(mlir::Operation* op, NLStmtContainer* body);
+
     void translateFilter(mlir::nl::Filter filter, NLStmtContainer* body);
 
     void translateOutput(mlir::nl::Output output, NLStmtContainer* body);

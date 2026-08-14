@@ -254,6 +254,8 @@ private:
 
     void lowerUnaryFunction(mlir::Operation* op);
 
+    void lowerBinaryFunction(mlir::Operation* op);
+
     void setInsertionForUnaryOp(mlir::Value operandChunk);
 
     // Applies a mask to a carry set
