@@ -2070,15 +2070,10 @@ void DBLowering::setInsertionForUnaryOp(mlir::Value operandChunk) {
 
 void DBLowering::lowerUnaryFunction(mlir::Operation* op) {
     const UnaryFunctionLowering* spec = lookupUnaryFunctionLowering(*op);
-    if (!spec) {
-        throw IRException("lowerUnaryFunction called on a non-function op");
-    }
+    bioassert(spec, "lowerUnaryFunction called on a non-function op");
 
     const mlir::Value inputChunk = mapValue(op->getOperand(0));
 
-    // labels/edge_type are always present, so their result never gains nullability;
-    // a conversion of a null string stays null, so its result is nullable exactly
-    // when the input chunk is.
     const mlir::Type baseElement = spec->element(_builder);
     mlir::Type resultElement = baseElement;
     if (spec->nullableFollowsInput && isNullableChunk(inputChunk.getType())) {
@@ -2094,9 +2089,7 @@ void DBLowering::lowerUnaryFunction(mlir::Operation* op) {
 
 void DBLowering::lowerBinaryFunction(mlir::Operation* op) {
     const BinaryFunctionLowering* spec = lookupBinaryFunctionLowering(*op);
-    if (!spec) {
-        throw IRException("lowerBinaryFunction called on a non-function op");
-    }
+    bioassert(spec, "lowerBinaryFunction called on a non-function op");
 
     const mlir::Value lhsChunk = mapValue(op->getOperand(0));
     const mlir::Value rhsChunk = mapValue(op->getOperand(1));

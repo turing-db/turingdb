@@ -1110,9 +1110,7 @@ void NLTranslator::translateNot(nl::Not notOp, NLStmtContainer* body) {
 
 void NLTranslator::translateUnaryFunction(mlir::Operation* op, NLStmtContainer* body) {
     const NLUnaryFunctionSelector select = lookupUnaryFunctionSelector(*op);
-    if (!select) {
-        throw IRException("translateUnaryFunction called on a non-function op");
-    }
+    bioassert(select, "translateUnaryFunction called on a non-function op");
 
     const mlir::Value inputValue = op->getOperand(0);
     const Column* input = getColumn(inputValue);
@@ -1132,15 +1130,11 @@ void NLTranslator::translateUnaryFunction(mlir::Operation* op, NLStmtContainer* 
 
 void NLTranslator::translateBinaryFunction(mlir::Operation* op, NLStmtContainer* body) {
     const NLBinaryFunctionSelector select = lookupBinaryFunctionSelector(*op);
-    if (!select) {
-        throw IRException("translateBinaryFunction called on a non-function op");
-    }
+    bioassert(select, "translateBinaryFunction called on a non-function op");
 
     const Column* lhs = getColumn(op->getOperand(0));
     const Column* rhs = getColumn(op->getOperand(1));
 
-    // The selector (selectBinary) dispatches on the operand pair and allocates the
-    // result; a binary function needs no view, so it reuses runBinary / NLBinaryData.
     Column* result = nullptr;
     const NLBinaryFn fn = select(lhs, rhs, _memory, result);
     bioassert(result, "Failed to allocate binary function result column.");

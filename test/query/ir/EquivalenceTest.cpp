@@ -740,10 +740,6 @@ TEST_F(EquivalenceTest, embeddingFunctions) {
 }
 
 TEST_F(EquivalenceTest, functionsWithLimit) {
-    // A LIMIT over a function result: the limit's early-exit threads through the
-    // function op to the producing scan (assignProducerLoops recurses through it as
-    // it does a property fetch), and the truncate caps emission. Both engines scan
-    // in the same node/edge order, so the same rows survive the limit.
     expectEquivalent("MATCH (n) RETURN labels(n) LIMIT 5");
     expectEquivalent("MATCH (n) RETURN labels(n) LIMIT 1");
     expectEquivalent("MATCH (n) RETURN n, labels(n) LIMIT 4");
