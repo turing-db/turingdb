@@ -28,19 +28,13 @@ def Column : TuringType<"Column", "column"> {
     }];
 }
 
-def Nullptr : TuringType<"Nullptr", "nullptr"> {
-    let summary = "Token to denote a result not to be allocated";
-}
-
-//                   type name       display name
-class StrictColumnOf<string cppType, string mnemonic> : Type<
+// Helper macro to define a strictly typed column
+//             type name       display name
+class ColumnOf<string cppType, string mnemonic> : Type<
       CPred<"llvm::isa<::mlir::db::ColumnType>($_self) && "
             "llvm::isa<" # cppType # ">("
             "  llvm::cast<::mlir::db::ColumnType>($_self).getType())">,
       "column<" # mnemonic # ">">;
-
-class ColumnOf<string cppType, string mnemonic>
-    : AnyTypeOf<[StrictColumnOf<cppType, mnemonic>, Nullptr]>;
 
 // Internal ID types
 def ColumnNodeIDs : ColumnOf<"::mlir::storage::NodeIDType", "nodeid">;
