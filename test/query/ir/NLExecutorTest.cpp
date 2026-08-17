@@ -1009,6 +1009,23 @@ private:
     size_t _totalRows {0};
 };
 
+// A projection of constants alone, capped by a top-level nl.limit. Codegen charges
+// such a cut to the constants themselves, and the truncate is written out rather
+// than folded into the output, so this drives nl.limit_truncate over a chunk that
+// carries no rows of its own.
+std::string nlLimitConstantProgram(uint64_t count) {
+    return std::string("func.func @main() {\n"
+                       "  %h = nl.limit(")
+           + std::to_string(count)
+           + ")\n"
+             "  %c = nl.constant(30 : i64)\n"
+             "  nl.limit_update %h, %c : !nl.chunk<i64>\n"
+             "  %lc = nl.limit_truncate %h, (%c) : !nl.chunk<i64>\n"
+             "  nl.output(%lc) : !nl.chunk<i64>\n"
+             "  func.return\n"
+             "}\n";
+}
+
 // Scan all nodes and output them, capped by a top-level nl.limit. The handle is
 // hoisted, threaded onto the loop, charged by limit_update, and the truncate cuts
 // each chunk to the prefix the budget allows before the plain output.
@@ -1861,6 +1878,33 @@ TEST_F(NLExecutorTest, limitScanEmitsLimitRows) {
     std::vector<std::vector<uint64_t>> rows;
     sink.sortedRows(rows);
     EXPECT_EQ(rows.size(), 3u);
+}
+
+TEST_F(NLExecutorTest, limitTruncateKeepsTheConstantRow) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingConstSink<int64_t> sink;
+    const std::string program = nlLimitConstantProgram(1);
+    runProgram(program.c_str(), reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<std::vector<int64_t>> expected {{30}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+// The constant stands for the one row the projection has, so a LIMIT 0 leaves the
+// truncated chunk holding no row at all rather than the value it broadcasts.
+TEST_F(NLExecutorTest, limitTruncateZeroDropsTheConstantRow) {
+    auto graph = Graph::create();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CountingSink sink;
+    const std::string program = nlLimitConstantProgram(0);
+    runProgram(program.c_str(), reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    EXPECT_EQ(sink.getTotalRows(), 0u);
 }
 
 TEST_F(NLExecutorTest, limitZeroScansNothing) {
