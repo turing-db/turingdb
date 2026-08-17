@@ -255,8 +255,10 @@ bool isConstantLike(mlir::Value value) {
         return true;
     }
 
-    const bool isArith = mlir::isa<nl::Add, nl::Sub, nl::Mul, nl::Div, nl::Mod, nl::Pow>(definingOp);
-    if (!isArith) {
+    const bool foldsConstantOperands = mlir::isa<nl::Add, nl::Sub, nl::Mul, nl::Div,
+                                                 nl::ToInteger, nl::ToFloat, nl::ToBoolean,
+                                                 nl::CosineSimilarity, nl::EuclideanDistance>(definingOp);
+    if (!foldsConstantOperands) {
         return false;
     }
 
