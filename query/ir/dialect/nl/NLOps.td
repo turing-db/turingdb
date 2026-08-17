@@ -580,13 +580,19 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
     nl.output(%targets) skip %h : !nl.chunk<!storage.node_id>
 
     An optional `cardinality` operand carries a representative chunk of the driving
-    relation (a node-ID loop variable). A projection of only constants - RETURN 5 -
-    has no per-row column to size the emission, yet its cardinality is the driving
-    relation's (projection preserves cardinality), so the output nests in the driving
-    loop and reads its row count from this chunk; the constants broadcast against it.
-    Absent for a per-row projection (its own columns size it) or a single-row emit.
+    relation. A projection of only constants - RETURN 5 - has no per-row column to
+    size the emission, yet its cardinality is the driving relation's (projection
+    preserves cardinality), so the output nests in the driving loop and reads its row
+    count from this chunk; the constants broadcast against it. Absent for a per-row
+    projection (its own columns size it) or a single-row emit.
 
-    nl.output(%c) cardinality %n : !nl.chunk<i64>
+    nl.output(%c) cardinality(%n : !nl.chunk<!storage.node_id>) : !nl.chunk<i64>
+
+    Only that row count is read, never a value, so the driver is a chunk of any
+    element type - the node IDs a scan binds, the values an UNWIND unwinds - as
+    nl.broadcast_constant's own cardinality operand is:
+
+    nl.output(%c) cardinality(%x : !nl.chunk<!storage.nullable<i64>>) : !nl.chunk<i64>
 
     An optional `names` array carries the result column names db.output was given,
     one per column, which the interpreter hands to the sink so it can label the
@@ -601,11 +607,10 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
   // operand-segment sizes to tell them apart, the same as nl.cross_product's column
   // groups. A folded output carries at most one of limit/skip (the truncate adjacent
   // to it); the two are not produced together (see foldSkipTruncatesIntoOutputs).
-  // cardinality's type is buildable (always a node-ID chunk) and so omitted.
   let arguments = (ins Variadic<NLChunk>:$columns,
                        Optional<NLLimitStateHandle>:$limit,
                        Optional<NLSkipStateHandle>:$skip,
-                       Optional<NLNodeIDChunk>:$cardinality,
+                       Optional<NLChunk>:$cardinality,
                        OptionalAttr<StrArrayAttr>:$column_names);
 
   // The chunk element types vary from call to call and - unlike the source
@@ -616,9 +621,11 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
   // annotation. qualified(...) forces the leading !nl. on every printed type.
   // The optional limit and skip handles, when present, print after a `limit` or
   // `skip` keyword; both types are buildable and so omitted. Each optional group
-  // has its own literal anchor, so the declarative parser tells them apart.
+  // has its own literal anchor, so the declarative parser tells them apart. The
+  // cardinality driver is a chunk of any element type, which no recipe can build, so
+  // it is parenthesized with its own type - keeping the trailing colon the columns'.
   let assemblyFormat = [{
-    `(` $columns `)` (`names` $column_names^)? (`limit` $limit^)? (`skip` $skip^)? (`cardinality` $cardinality^)? attr-dict `:` qualified(type($columns))
+    `(` $columns `)` (`names` $column_names^)? (`limit` $limit^)? (`skip` $skip^)? (`cardinality` `(` $cardinality^ `:` qualified(type($cardinality)) `)`)? attr-dict `:` qualified(type($columns))
   }];
 
   // Emitting an unnamed result is the common case - every hand-written program and

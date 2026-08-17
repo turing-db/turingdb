@@ -5,7 +5,7 @@ func.func @main() {
     %2 = nl.scan_nodes()
     nl.for %arg1 in %2 : !nl.iter<!nl.chunk<!storage.node_id>> {
       %3:2 = nl.cross_product{%arg0} {%arg1} : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.node_id>}
-      nl.output(%0) cardinality %3#0 : !nl.chunk<i64>
+      nl.output(%0) cardinality(%3#0 : !nl.chunk<!storage.node_id>) : !nl.chunk<i64>
     }
   }
   return
