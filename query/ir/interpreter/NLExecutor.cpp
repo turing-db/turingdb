@@ -103,7 +103,8 @@ void functionConstKernel(NLExecutionContext* context, Column* result, const Colu
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
 
-    const auto* typedInput = static_cast<const ColumnConst<Arg>*>(input);
+    const auto* typedInput = dynamic_cast<const ColumnConst<Arg>*>(input);
+    bioassert(typedInput, "Function operand has an unexpected column type.");
     auto* output = static_cast<ColumnConst<Res>*>(result);
 
     Functor functor = makeFunctor<Functor>(context);
@@ -115,7 +116,8 @@ void functionVectorKernel(NLExecutionContext* context, Column* result, const Col
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
 
-    const auto* typedInput = static_cast<const ColumnVector<Arg>*>(input);
+    const auto* typedInput = dynamic_cast<const ColumnVector<Arg>*>(input);
+    bioassert(typedInput, "Function operand has an unexpected column type.");
     auto* output = static_cast<ColumnVector<Res>*>(result);
 
     const auto& inputRaw = typedInput->getRaw();
@@ -135,7 +137,8 @@ void functionOptKernel(NLExecutionContext* context, Column* result, const Column
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
 
-    const auto* typedInput = static_cast<const ColumnOptVector<Arg>*>(input);
+    const auto* typedInput = dynamic_cast<const ColumnOptVector<Arg>*>(input);
+    bioassert(typedInput, "Function operand has an unexpected column type.");
     auto* output = static_cast<ColumnOptVector<Res>*>(result);
 
     const auto& inputRaw = typedInput->getRaw();
