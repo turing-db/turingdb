@@ -1465,7 +1465,13 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
     Column* output = nullptr;
     NLCopyFunction copySuffix = nullptr;
 
-    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+    // A projection of constants alone charges its cut to the constants themselves,
+    // and a constant is a ColumnConst whatever its element type says - a nullable
+    // one included - so the defining op tells it from the families below.
+    if (isConstantLike(inputValue)) {
+        output = _memory->allocSame(input);
+        copySuffix = NLExecutor::selectConstCopyFunction();
+    } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         output = allocOptColumnForValueType(valueType);
         copySuffix = NLExecutor::selectOptCopyFunction(valueType);

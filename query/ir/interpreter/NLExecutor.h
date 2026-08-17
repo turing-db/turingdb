@@ -275,6 +275,10 @@ public:
     // Range copy for the count result chunk, which a skip lifts to a chunk front.
     static NLCopyFunction selectCountCopyFunction();
 
+    // Range copy for a constant chunk, which a skip over a projection of constants
+    // alone cuts down to the one row it holds or to no row at all.
+    static NLCopyFunction selectConstCopyFunction();
+
     // Range copy for a nullable value chunk of this value type (skip suffix copy).
     static NLCopyFunction selectOptCopyFunction(ValueType valueType);
 
