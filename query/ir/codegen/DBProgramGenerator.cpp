@@ -409,11 +409,7 @@ int64_t evaluateConstantInteger(const Expr* expr) {
     }
 }
 
-// A collect and a scalar aggregate each lower to an accumulator of their own, drained by
-// an emit loop of their own, and the projection is output from a single loop: two of them
-// in one projection would have to be read from a loop the output is not in. Only top-level
-// items are counted: an aggregate nested into a map is not a function invocation, and is
-// rejected where the grouping keys are read
+// Collect is only supported when it is the only aggregate in a return projection
 void throwIfCollectUnsupported(const Projection* projection) {
     size_t collectCount = 0;
     size_t aggregateCount = 0;
