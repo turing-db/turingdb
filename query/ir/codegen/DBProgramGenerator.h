@@ -92,6 +92,11 @@ private:
     using YieldedColumn = std::pair<std::string_view, mlir::Value>;
     std::vector<YieldedColumn> _yieldedColumns;
 
+    // The traversal root a CALL ahead of the MATCH bound, when the query lets the traversal
+    // expand that column instead of scanning the graph and joining. Null otherwise, which
+    // leaves every call after the traversal and every root opening with a scan.
+    const VariableDependency* _drivenRoot {nullptr};
+
     VariableDependencyGraph _vdg;
 
     struct TranslatedComponent {
@@ -110,7 +115,20 @@ private:
         llvm::SmallVector<size_t> _yieldedIndices;
     };
 
+    // Generates the calls the query writes ahead of its first MATCH, when what they yield
+    // can drive the traversal, and names the root that will expand it. Generates nothing
+    // otherwise: a call whose rows the traversal does not consume has to be paired with it,
+    // which is what generating it after the traversal does.
+    void generateLeadingCalls(const CypherAST* ast);
+
     void generateTraversal(const CypherAST* ast);
+
+    // Whether a variable can open a connected component: a node variable no traversal binds
+    bool isValidRoot(const VariableDependency& var) const;
+
+    // The variable each connected component of the graph opens with - the roots
+    // translateComponent is called with, one per component
+    void collectComponentRoots(llvm::SmallVectorImpl<const VariableDependency*>& roots) const;
 
     // Adds filters for edges which should be equivalent (joined on)
     void resolveEdgeIdentities();
@@ -247,6 +265,10 @@ private:
     mlir::Value translateListLiteral(const ListLiteral* list);
 
     void addScanNodes(const VariableDependency* var);
+
+    // Opens a dataflow from the column a CALL yielded, the way addScanNodes opens one from
+    // the graph's nodes: the variable takes those rows over as its own
+    void addYieldedColumn(const VariableDependency* var, mlir::Value column);
 
     // Opens a dataflow from an UNWIND's literal list, the way addScanNodes opens one
     // from the graph's nodes
