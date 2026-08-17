@@ -98,6 +98,7 @@ struct Double : public PropertyType {
 
 struct String : public PropertyType {
     using Primitive = std::string_view;
+    using OwningPrimitive = std::string;
     using MandatorySpan = std::span<const Primitive>;
     using OptionalSpan = std::span<const std::optional<Primitive>>;
     static constexpr auto _valueType = ValueType::String;

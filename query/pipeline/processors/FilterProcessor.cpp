@@ -12,6 +12,7 @@
 #include "dataframe/NamedColumn.h"
 
 #include "PipelinePort.h"
+#include "ExecutionContext.h"
 
 #include "PipelineException.h"
 #include "processors/PredicateProgram.h"
@@ -49,7 +50,9 @@ FilterProcessor* FilterProcessor::create(PipelineV2* pipeline, PredicateProgram*
     return proc;
 }
 
-void FilterProcessor::prepare(ExecutionContext*) {
+void FilterProcessor::prepare(ExecutionContext* ctxt) {
+    _prog->setView(ctxt->getGraphView());
+
     // Check dataframes have same number of columns
     const Dataframe* srcDF = _input.getDataframe();
     const Dataframe* destDF = _output.getDataframe();

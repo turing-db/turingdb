@@ -718,16 +718,18 @@ TEST_F(EquivalenceTest, labelsAndTypeFunctions) {
     expectEquivalent("MATCH (a)-[e]->(b) RETURN edgeType(e)");
     expectEquivalent("MATCH (a)-[e:INTERESTED_IN]->(b) RETURN edgeType(e)");
     expectEquivalent("MATCH (a)-[e]->(b) RETURN a, edgeType(e), b");
+
+    expectEquivalent("MATCH (n) WHERE labels(n) = 'Interest' RETURN *");
+    expectEquivalent("MATCH (n) WHERE labels(n) = 'Person' RETURN *");
+
+    expectEquivalent("MATCH (n) RETURN n, toInteger('42')");
 }
 
 TEST_F(EquivalenceTest, conversionFunctions) {
-    // Compare a per-row property against a converted constant, so the predicate is a
-    // real per-row mask (not a constant one) and the projection is a string column.
     expectEquivalent("MATCH (n) WHERE n.age = toInteger('32') RETURN n.name");
     expectEquivalent("MATCH (n) WHERE n.age > toInteger('30') RETURN n.name");
     expectEquivalent("MATCH (n) WHERE n.isFrench = toBoolean('true') RETURN n.name");
 
-    // The conversion result projected directly as an integer / float column.
     expectEquivalent("MATCH (n) RETURN toInteger('42')");
     expectEquivalent("MATCH (n) RETURN toFloat('2.5')");
 }
