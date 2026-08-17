@@ -344,9 +344,6 @@ void blockRepeatColumn(const Column* input, size_t factor, size_t outputRowCount
     }
 }
 
-// Block-repeat for a constant chunk. A constant already stands for every row of
-// the step, so there is nothing to repeat: all the cut leaves in question is
-// whether a row survived, and assignFromLine empties the output when none did.
 void blockRepeatConstColumn(const Column* input, size_t factor, size_t outputRowCount, Column* output) {
     output->assignFromLine(input, 0, outputRowCount);
 }
@@ -408,10 +405,6 @@ void copyRangeColumn(const Column* input, size_t inputOffset, size_t rowCount, C
     std::copy(first, first + rowCount, outputRaw.begin());
 }
 
-// Range copy for a constant chunk. A constant holds one value standing for every
-// row of the step, so the window that lands in the output is a row count and not a
-// range: assignFromLine keeps the value when the window kept a row and empties the
-// output when it kept none.
 void copyRangeConstColumn(const Column* input, size_t inputOffset, size_t rowCount, Column* output) {
     output->assignFromLine(input, inputOffset, rowCount);
 }
