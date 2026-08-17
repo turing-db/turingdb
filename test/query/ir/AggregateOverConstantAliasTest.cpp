@@ -37,6 +37,9 @@ using Sums = std::vector<std::optional<int64_t>>;
 // The eight Person nodes of simpledb are what every count below is taken over
 constexpr uint64_t personCount = 8;
 
+// Its eighteen nodes of every label, which MATCH (n) matches
+constexpr uint64_t nodeCount = 18;
+
 // Collects the ui64 column a grouped count emits. The aggregates come behind the
 // grouping keys, so the count is the last chunk whichever key is grouped on.
 class CountSink : public NLOutputSink {
@@ -179,6 +182,18 @@ TEST_F(AggregateOverConstantAliasTest, countsATraversalVariableUnderAConstantKey
 // the count is that one row rather than the graph's.
 TEST_F(AggregateOverConstantAliasTest, countsOverAConstantAliasWithoutAMatch) {
     expectCounts("RETURN 1 AS x, count(x)", {1});
+}
+
+// The alias is only a name for the constant behind it, so the aggregate spelled over the
+// constant itself is the same aggregate: 42 is a value in every matched row, and every
+// node of simpledb is matched.
+TEST_F(AggregateOverConstantAliasTest, countsASpelledOutConstant) {
+    expectCounts("MATCH (n) RETURN count(42)", {nodeCount});
+}
+
+// Both spellings answer the same way with nothing driving them, too
+TEST_F(AggregateOverConstantAliasTest, countsASpelledOutConstantWithoutAMatch) {
+    expectCounts("RETURN count(42)", {1});
 }
 
 int main(int argc, char** argv) {
