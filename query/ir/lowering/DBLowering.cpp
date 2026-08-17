@@ -617,10 +617,6 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerBinaryOp<nl::Xor>(operation, BinaryResultKind::Boolean);
     } else if (mlir::db::NotOp notOp = mlir::dyn_cast<mlir::db::NotOp>(operation)) {
         lowerNot(notOp);
-    } else if (lookupUnaryFunctionLowering(operation)) {
-        lowerUnaryFunction(&operation);
-    } else if (lookupBinaryFunctionLowering(operation)) {
-        lowerBinaryFunction(&operation);
     } else if (mlir::db::FilterOp filter = mlir::dyn_cast<mlir::db::FilterOp>(operation)) {
         lowerFilter(filter);
     } else if (mlir::db::GroupAggregate groupAggregate = mlir::dyn_cast<mlir::db::GroupAggregate>(operation)) {
@@ -631,6 +627,10 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerUnwindCollect(unwindCollect);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
+    } else if (lookupUnaryFunctionLowering(operation)) {
+        lowerUnaryFunction(&operation);
+    } else if (lookupBinaryFunctionLowering(operation)) {
+        lowerBinaryFunction(&operation);
     } else if (mlir::isa<mlir::func::ReturnOp>(operation)) {
         // We already added a ReturnOp to the nl function
     } else {

@@ -147,6 +147,7 @@ struct PairRestrictions<Op> {
         ListElementKindPairs<types::Double::Primitive>::Pairs,
         ListElementKindPairs<types::String::Primitive>::Pairs,
         ListElementKindPairs<types::Bool::Primitive>::Pairs,
+        OptionalKindPairs<types::String::Primitive, types::String::OwningPrimitive>::Pairs,
 
         std::tuple<
             KindPair<ListElementView, ListElementView>,
