@@ -397,6 +397,16 @@ target_link_libraries(test_query_ir_unwind_constant_projection PRIVATE
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_unwind_constant_projection PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_turing_test(test_query_ir_constant_only_projection ConstantOnlyProjectionTest.cpp)
+target_link_libraries(test_query_ir_constant_only_projection PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_constant_only_projection PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_aggregate_over_constant_alias AggregateOverConstantAliasTest.cpp)
 target_link_libraries(test_query_ir_aggregate_over_constant_alias PRIVATE
         turing_db_s

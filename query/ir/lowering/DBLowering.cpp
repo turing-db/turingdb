@@ -1927,6 +1927,18 @@ void DBLowering::lowerFilter(mlir::db::FilterOp filter) {
         const mlir::Value outputChunk = nlFilter.getResult(columnIndex);
         _valueMap[filteredCol] = outputChunk;
     }
+
+    // The cardinality driver stands for the relation a projection of constants alone is a
+    // projection of, and this filter is what narrows that relation: leaving the driver on
+    // the unfiltered chunk would size the emission by the rows the filter dropped.
+    for (size_t columnIndex = 0; columnIndex < columnChunks.size(); columnIndex++) {
+        if (columnChunks[columnIndex] != _innermostCardinality) {
+            continue;
+        }
+
+        _innermostCardinality = nlFilter.getResult(columnIndex);
+        break;
+    }
 }
 
 mlir::Block* DBLowering::deeperBlock(mlir::Value first, mlir::Value second) {
