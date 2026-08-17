@@ -246,6 +246,10 @@ public:
     // Block-repeat for the count result chunk, which a limit truncates with factor 1.
     static NLBroadcastFunction selectCountBlockRepeatFunction();
 
+    // Block-repeat for a constant chunk, which a limit over a projection of
+    // constants alone cuts down to the one row it holds or to no row at all.
+    static NLBroadcastFunction selectConstBlockRepeatFunction();
+
     // Tile for an ID chunk of this kind (inner column).
     static NLBroadcastFunction selectTileFunction(NLChunkKind kind);
 

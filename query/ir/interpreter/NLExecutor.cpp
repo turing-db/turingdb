@@ -344,6 +344,13 @@ void blockRepeatColumn(const Column* input, size_t factor, size_t outputRowCount
     }
 }
 
+// Block-repeat for a constant chunk. A constant already stands for every row of
+// the step, so there is nothing to repeat: all the cut leaves in question is
+// whether a row survived, and assignFromLine empties the output when none did.
+void blockRepeatConstColumn(const Column* input, size_t factor, size_t outputRowCount, Column* output) {
+    output->assignFromLine(input, 0, outputRowCount);
+}
+
 // Tile: the whole input chunk is emitted back to back, so input row j lands at
 // output indices j, j+M, j+2M, ... This lays out an inner column of a cross
 // product, where the inner chunk repeats once per outer row. The fill stops at
@@ -2555,6 +2562,10 @@ NLBroadcastFunction NLExecutor::selectBlockRepeatFunction(NLChunkKind kind) {
 
 NLBroadcastFunction NLExecutor::selectCountBlockRepeatFunction() {
     return &blockRepeatColumn<uint64_t>;
+}
+
+NLBroadcastFunction NLExecutor::selectConstBlockRepeatFunction() {
+    return &blockRepeatConstColumn;
 }
 
 NLBroadcastFunction NLExecutor::selectTileFunction(NLChunkKind kind) {
