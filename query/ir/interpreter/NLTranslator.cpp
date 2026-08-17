@@ -1375,9 +1375,6 @@ void NLTranslator::addTruncateColumn(mlir::Value inputValue,
     Column* output = nullptr;
     NLBroadcastFunction copyPrefix = nullptr;
 
-    // A projection of constants alone charges its cut to the constants themselves,
-    // and a constant is a ColumnConst whatever its element type says - a nullable
-    // one included - so the defining op tells it from the families below.
     if (isConstantLike(inputValue)) {
         output = _memory->allocSame(input);
         copyPrefix = NLExecutor::selectConstBlockRepeatFunction();
@@ -1471,9 +1468,6 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
     Column* output = nullptr;
     NLCopyFunction copySuffix = nullptr;
 
-    // A projection of constants alone charges its cut to the constants themselves,
-    // and a constant is a ColumnConst whatever its element type says - a nullable
-    // one included - so the defining op tells it from the families below.
     if (isConstantLike(inputValue)) {
         output = _memory->allocSame(input);
         copySuffix = NLExecutor::selectConstCopyFunction();
