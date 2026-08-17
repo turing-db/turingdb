@@ -203,13 +203,13 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
         case BinaryOperator::Sub:
         case BinaryOperator::Mult:
         case BinaryOperator::Div:
-        case BinaryOperator::Mod:
-        case BinaryOperator::Pow: {
+        case BinaryOperator::Mod: {
             if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer)) {
                 type = EvaluatedType::Integer;
                 break;
             }
 
+            // OpenCypher defines double x double = double
             if (pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)
                 || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Integer)) {
                 type = EvaluatedType::Double;
@@ -218,6 +218,24 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
 
             const std::string error = fmt::format(
                 "Operands are not valid and compatible numeric types: '{} ' and '{}'",
+                EvaluatedTypeName::value(a),
+                EvaluatedTypeName::value(b));
+
+            throwError(error, expr);
+        } break;
+
+        case BinaryOperator::Pow: {
+            const bool bothInteger = pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer);
+            const bool bothDouble = pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double);
+            const bool mixedNumeric = pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Integer);
+
+            if (bothInteger || bothDouble || mixedNumeric) {
+                type = EvaluatedType::Double;
+                break;
+            }
+
+            const std::string error = fmt::format(
+                "Operands are not valid and compatible numeric types: '{}' and '{}'",
                 EvaluatedTypeName::value(a),
                 EvaluatedTypeName::value(b));
 

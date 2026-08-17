@@ -130,6 +130,8 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
                             ColumnOperatorDescription::value(op)));
         break;
 
+        case OP_MOD:
+        case OP_POW:
         case OP_PROJECT:
         case OP_IN:
             throw FatalException(
@@ -182,6 +184,8 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
         case OP_SUB:
         case OP_MUL:
         case OP_DIV:
+        case OP_MOD:
+        case OP_POW:
         case OP_PROJECT:
         case OP_IN:
         case OP_XOR:
@@ -244,6 +248,8 @@ void ExprProgram::evalFunction(const Instruction& instr) {
         case OP_SUB:
         case OP_MUL:
         case OP_DIV:
+        case OP_MOD:
+        case OP_POW:
         case OP_PROJECT:
         case OP_IN:
         case OP_MINUS:

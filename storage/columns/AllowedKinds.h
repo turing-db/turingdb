@@ -232,6 +232,7 @@ struct PairRestrictions<Op> {
 
 template <ColumnOperator Op>
     requires (Op == OP_ADD) || (Op == OP_SUB) || (Op == OP_MUL) || (Op == OP_DIV)
+          || (Op == OP_MOD) || (Op == OP_POW)
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
         // Homogeneous arithmetic types

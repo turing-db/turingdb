@@ -138,6 +138,8 @@ bool isConstantColumn(mlir::Value column) {
                                                 mlir::db::SubOp,
                                                 mlir::db::MulOp,
                                                 mlir::db::DivOp,
+                                                mlir::db::ModOp,
+                                                mlir::db::PowOp,
                                                 mlir::db::AndOp,
                                                 mlir::db::OrOp,
                                                 mlir::db::XorOp,
@@ -1793,7 +1795,11 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
             _exprMap[expr] = _opBuilder.create<mlir::db::XorOp>(loc, boolType, lhs, rhs).getResult();
         break;
         case BinaryOperator::Mod:
+            _exprMap[expr] = _opBuilder.create<mlir::db::ModOp>(loc, noneType, lhs, rhs).getResult();
+        break;
         case BinaryOperator::Pow:
+            _exprMap[expr] = _opBuilder.create<mlir::db::PowOp>(loc, noneType, lhs, rhs).getResult();
+        break;
         case BinaryOperator::In:
             throw TuringException(fmt::format("Unsupported operation: {}",
                                               BinaryOperatorDescription::value(op)));

@@ -237,8 +237,9 @@ private:
     void lowerConstant(mlir::db::ConstantOp constant);
 
     enum class BinaryResultKind {
-        Numeric,   // add/sub/mul/div: promoted numeric, nullable if either operand is
+        Numeric,   // add/sub/mul/div/mod: promoted numeric, nullable if either operand is
         Boolean,   // eq/neq/gt/lt/gte/lte and and/or/xor: i1, nullable if either is
+        Double,    // pow: always f64 per openCypher, nullable if either operand is
     };
 
     template <typename NLOp>

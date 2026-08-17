@@ -151,6 +151,26 @@ struct BinaryOpTraits<OP_DIV> {
 };
 
 template <>
+struct BinaryOpTraits<OP_MOD> {
+    using Functor = Mod;
+
+    template <typename ResCol, typename LhsCol, typename RhsCol>
+    static void exec(ResCol* result, const LhsCol* lhs, const RhsCol* rhs) {
+        BinaryOperators::exec<Functor>(result, lhs, rhs);
+    }
+};
+
+template <>
+struct BinaryOpTraits<OP_POW> {
+    using Functor = Pow;
+
+    template <typename ResCol, typename LhsCol, typename RhsCol>
+    static void exec(ResCol* result, const LhsCol* lhs, const RhsCol* rhs) {
+        BinaryOperators::exec<Functor>(result, lhs, rhs);
+    }
+};
+
+template <>
 struct BinaryOpTraits<OP_GREATER_THAN> {
     using Functor = Gt;
 
@@ -3163,6 +3183,8 @@ template NLBinaryFn NLExecutor::selectBinary<OP_ADD>(const Column* lhs, const Co
 template NLBinaryFn NLExecutor::selectBinary<OP_SUB>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_MUL>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_DIV>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
+template NLBinaryFn NLExecutor::selectBinary<OP_MOD>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
+template NLBinaryFn NLExecutor::selectBinary<OP_POW>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_EQUAL>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_GREATER_THAN>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_LESS_THAN>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);

@@ -1239,6 +1239,32 @@ def Div : NLOp<"div", [Pure]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
+def Mod : NLOp<"mod", [Pure]> {
+  let summary = "Row-wise modulo of two value chunks";
+  let description = [{
+      Modulo by zero throws.
+
+      %r = nl.mod %x, %y : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i64>>
+  }];
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
+def Pow : NLOp<"pow", [Pure]> {
+  let summary = "Row-wise exponentiation of two value chunks";
+  let description = [{
+      %r = nl.pow %x, %y : (!nl.chunk<i64>, !nl.chunk<i64>) -> !nl.chunk<f64>
+  }];
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
 def Eq : NLOp<"eq", [Pure]> {
   let summary = "Row-wise equality of two value chunks";
   let description = [{

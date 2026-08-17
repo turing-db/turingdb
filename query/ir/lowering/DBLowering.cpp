@@ -470,6 +470,10 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerBinaryOp<nl::Mul>(operation, BinaryResultKind::Numeric);
     } else if (mlir::isa<mlir::db::DivOp>(operation)) {
         lowerBinaryOp<nl::Div>(operation, BinaryResultKind::Numeric);
+    } else if (mlir::isa<mlir::db::ModOp>(operation)) {
+        lowerBinaryOp<nl::Mod>(operation, BinaryResultKind::Numeric);
+    } else if (mlir::isa<mlir::db::PowOp>(operation)) {
+        lowerBinaryOp<nl::Pow>(operation, BinaryResultKind::Double);
     } else if (mlir::isa<mlir::db::EqOp>(operation)) {
         lowerBinaryOp<nl::Eq>(operation, BinaryResultKind::Boolean);
     } else if (mlir::isa<mlir::db::NeqOp>(operation)) {
@@ -1840,6 +1844,15 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
             const NumericOperand rhs = numericOperand(rhsType);
             const mlir::Type promoted = promoteNumeric(_builder, lhs.numeric, rhs.numeric);
             return operandNullable ? storage::NullableType::get(ctx, promoted) : promoted;
+        }
+        break;
+
+        case BinaryResultKind::Double: {
+            numericOperand(lhsType);
+            numericOperand(rhsType);
+
+            const mlir::Type doubleElement = _builder.getF64Type();
+            return operandNullable ? storage::NullableType::get(ctx, doubleElement) : doubleElement;
         }
         break;
     }

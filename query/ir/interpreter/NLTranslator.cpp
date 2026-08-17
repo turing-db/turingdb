@@ -224,7 +224,7 @@ bool isConstantLike(mlir::Value value) {
         return true;
     }
 
-    const bool isArith = mlir::isa<nl::Add, nl::Sub, nl::Mul, nl::Div>(definingOp);
+    const bool isArith = mlir::isa<nl::Add, nl::Sub, nl::Mul, nl::Div, nl::Mod, nl::Pow>(definingOp);
     if (!isArith) {
         return false;
     }
@@ -358,6 +358,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateMul(mul, body);
         } else if (nl::Div div = mlir::dyn_cast<nl::Div>(operation)) {
             translateDiv(div, body);
+        } else if (nl::Mod mod = mlir::dyn_cast<nl::Mod>(operation)) {
+            translateMod(mod, body);
+        } else if (nl::Pow pow = mlir::dyn_cast<nl::Pow>(operation)) {
+            translatePow(pow, body);
         } else if (nl::Eq eq = mlir::dyn_cast<nl::Eq>(operation)) {
             translateEq(eq, body);
         } else if (nl::Neq neq = mlir::dyn_cast<nl::Neq>(operation)) {
@@ -1078,6 +1082,34 @@ void NLTranslator::translateDiv(nl::Div div, NLStmtContainer* body) {
     bioassert(result, "Failed to translate DIV result.");
 
     _valueSlots[div.getResult()] = result;
+
+    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
+    body->emplaceStmt(&NLExecutor::runBinary, data);
+}
+
+void NLTranslator::translateMod(nl::Mod mod, NLStmtContainer* body) {
+    const Column* lhs = getColumn(mod.getLhs());
+    const Column* rhs = getColumn(mod.getRhs());
+
+    Column* result = nullptr;
+    const NLBinaryFn fn = NLExecutor::selectBinary<OP_MOD>(lhs, rhs, _memory, result);
+    bioassert(result, "Failed to translate MOD result.");
+
+    _valueSlots[mod.getResult()] = result;
+
+    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
+    body->emplaceStmt(&NLExecutor::runBinary, data);
+}
+
+void NLTranslator::translatePow(nl::Pow pow, NLStmtContainer* body) {
+    const Column* lhs = getColumn(pow.getLhs());
+    const Column* rhs = getColumn(pow.getRhs());
+
+    Column* result = nullptr;
+    const NLBinaryFn fn = NLExecutor::selectBinary<OP_POW>(lhs, rhs, _memory, result);
+    bioassert(result, "Failed to translate POW result.");
+
+    _valueSlots[pow.getResult()] = result;
 
     NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
     body->emplaceStmt(&NLExecutor::runBinary, data);
