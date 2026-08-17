@@ -699,6 +699,8 @@ Column* ExprProgramGenerator::allocUnaryResultCol(ColumnOperator op, const Colum
         case OP_SUB:
         case OP_MUL:
         case OP_DIV:
+        case OP_MOD:
+        case OP_POW:
         case OP_PROJECT:
         case OP_IN:
         case OP_XOR:

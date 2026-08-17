@@ -433,6 +433,8 @@ private:
     void translateSub(mlir::nl::Sub sub, NLStmtContainer* body);
     void translateMul(mlir::nl::Mul mul, NLStmtContainer* body);
     void translateDiv(mlir::nl::Div div, NLStmtContainer* body);
+    void translateMod(mlir::nl::Mod mod, NLStmtContainer* body);
+    void translatePow(mlir::nl::Pow pow, NLStmtContainer* body);
     void translateEq(mlir::nl::Eq eq, NLStmtContainer* body);
     void translateNeq(mlir::nl::Neq neq, NLStmtContainer* body);
     void translateGt(mlir::nl::Gt gt, NLStmtContainer* body);

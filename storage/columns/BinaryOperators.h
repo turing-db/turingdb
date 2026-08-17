@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <functional>
 #include <optional>
 
@@ -138,12 +139,39 @@ struct SafeDivides {
     }
 };
 
+struct SafeModulo {
+    template <typename T, typename U>
+    inline auto operator()(T&& a, U&& b) {
+        using DecayT = std::decay_t<T>;
+        using DecayU = std::decay_t<U>;
+
+        if (b == 0) {
+            throw TuringException("Attempted modulo by zero.");
+        }
+
+        if constexpr (std::is_integral_v<DecayT> && std::is_integral_v<DecayU>) {
+            return std::modulus<> {}(std::forward<T>(a), std::forward<U>(b));
+        } else {
+            return std::fmod(static_cast<double>(a), static_cast<double>(b));
+        }
+    }
+};
+
+struct Power {
+    template <typename T, typename U>
+    inline double operator()(T&& a, U&& b) {
+        return std::pow(static_cast<double>(a), static_cast<double>(b));
+    }
+};
+
 }
 
 using Add = BinaryOp<std::plus<>>;
 using Sub = BinaryOp<std::minus<>>;
 using Mul = BinaryOp<std::multiplies<>>;
 using Div = BinaryOp<SafeDivides>;
+using Mod = BinaryOp<SafeModulo>;
+using Pow = BinaryOp<Power>;
 
 }
 

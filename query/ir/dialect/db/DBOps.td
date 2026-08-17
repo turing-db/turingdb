@@ -922,6 +922,24 @@ def DivOp : BinaryOp<"div", [Pure]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
+def ModOp : BinaryOp<"mod", [Pure]> {
+  let summary = "Row-wise modulo of two value columns";
+
+  let arguments = (ins Column:$lhs, Column:$rhs);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
+def PowOp : BinaryOp<"pow", [Pure]> {
+  let summary = "Row-wise exponentiation of two value columns";
+
+  let arguments = (ins Column:$lhs, Column:$rhs);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
 def GtOp : PredicateOp<"gt", [Pure]> {
   let summary = "Row-wise greater-than comparison of two value columns";
 }
