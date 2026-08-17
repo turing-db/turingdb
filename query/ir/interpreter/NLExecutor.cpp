@@ -386,6 +386,14 @@ void copyRangeColumn(const Column* input, size_t inputOffset, size_t rowCount, C
     std::copy(first, first + rowCount, outputRaw.begin());
 }
 
+// Range copy for a constant chunk. A constant holds one value standing for every
+// row of the step, so the window that lands in the output is a row count and not a
+// range: assignFromLine keeps the value when the window kept a row and empties the
+// output when it kept none.
+void copyRangeConstColumn(const Column* input, size_t inputOffset, size_t rowCount, Column* output) {
+    output->assignFromLine(input, inputOffset, rowCount);
+}
+
 // Append every row of an input chunk onto the tail of a growing buffer of the
 // same element type. nl.sort_collect calls this once per producing-loop step, so
 // the buffer accumulates every row across all chunks, row-aligned with the other
@@ -2622,6 +2630,10 @@ NLCopyFunction NLExecutor::selectCopyFunction(NLChunkKind kind) {
 
 NLCopyFunction NLExecutor::selectCountCopyFunction() {
     return &copyRangeColumn<uint64_t>;
+}
+
+NLCopyFunction NLExecutor::selectConstCopyFunction() {
+    return &copyRangeConstColumn;
 }
 
 // A nullable value chunk gathers the same way an ID chunk does - copy the indexed
