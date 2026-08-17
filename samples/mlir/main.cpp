@@ -320,13 +320,19 @@ private:
                    || printValueCell<uint64_t>(column, row)
                    || printValueCell<double>(column, row)
                    || printValueCell<std::string_view>(column, row)
+                   || printValueCell<std::string>(column, row)
                    || printEmbeddingCell(column, row)) {
             // Printed by the helper for whichever nullable value type matched
         } else if (printConstValueCell<int64_t>(column, row)
                    || printConstValueCell<uint64_t>(column, row)
                    || printConstValueCell<double>(column, row)
+                   || printConstValueCell<std::string_view>(column, row)
+                   || printConstValueCell<std::string>(column, row)
                    || printConstValueCell<CustomBool>(column, row)) {
             // ColumnConst
+        } else if (printPlainValueCell<std::string>(column, row)
+                   || printPlainValueCell<std::string_view>(column, row)) {
+            // A non-nullable value column
         } else if (printListCell(column, row)) {
             // A per-group list cell from an nl.collect drain
         } else if (printListElementCell(column, row)) {
@@ -367,6 +373,17 @@ private:
         } else {
             std::cout << (*values)[row];
         }
+        return true;
+    }
+
+    template <typename T>
+    static bool printPlainValueCell(const Column* column, size_t row) {
+        const auto* values = dynamic_cast<const ColumnVector<T>*>(column);
+        if (!values) {
+            return false;
+        }
+
+        std::cout << (*values)[row];
         return true;
     }
 
