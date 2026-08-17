@@ -67,12 +67,14 @@ struct UnaryFunctionLowering {
     bool nullableFollowsInput {false};
 };
 
+constexpr bool NULLABLE = true;
+constexpr bool NOT_NULLABLE = false;
 const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionLowerings = {
-    {"db.labels",     {&emitNLUnaryFunction<nl::Labels>,    &stringFunctionElement,  false}},
-    {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>,  &stringFunctionElement,  false}},
-    {"db.to_integer", {&emitNLUnaryFunction<nl::ToInteger>, &integerFunctionElement, true}},
-    {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,   true}},
-    {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, &booleanFunctionElement, true}},
+    {"db.labels",     {&emitNLUnaryFunction<nl::Labels>,    &stringFunctionElement,  NOT_NULLABLE}},
+    {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>,  &stringFunctionElement,  NOT_NULLABLE}},
+    {"db.to_integer", {&emitNLUnaryFunction<nl::ToInteger>, &integerFunctionElement, NULLABLE}},
+    {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,   NULLABLE}},
+    {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, &booleanFunctionElement, NULLABLE}},
 };
 
 const UnaryFunctionLowering* lookupUnaryFunctionLowering(mlir::Operation& operation) {
