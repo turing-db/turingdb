@@ -572,6 +572,44 @@ private:
     NLLimitState* _limit {nullptr};
 };
 
+// Lay a constant column's single value out over rowCount rows of a fresh output
+// chunk, as one present value per row. The cross product's broadcast repeats a
+// chunk's several values; this one repeats the single value a ColumnConst holds,
+// so a fold that walks rows sees the step's rows rather than the one row the
+// constant is. One per value type, selected during translation.
+using NLBroadcastConstantFunction = void (*)(const Column* value,
+                                             size_t rowCount,
+                                             Column* output);
+
+// nl.broadcast_constant data: the constant column to repeat, the driving
+// relation's chunk whose row count says how many times - null when no relation
+// drives the projection, which is a single row - the output chunk to fill and the
+// fill that writes it.
+class NLBroadcastConstantData : public NLFunctionData {
+public:
+    NLBroadcastConstantData(const Column* value,
+                            const Column* cardinality,
+                            Column* output,
+                            NLBroadcastConstantFunction fill)
+        : _value(value),
+        _cardinality(cardinality),
+        _output(output),
+        _fill(fill)
+    {
+    }
+
+    const Column* getValue() const { return _value; }
+    const Column* getCardinality() const { return _cardinality; }
+    Column* getOutput() const { return _output; }
+    NLBroadcastConstantFunction getFill() const { return _fill; }
+
+private:
+    const Column* _value {nullptr};
+    const Column* _cardinality {nullptr};
+    Column* _output {nullptr};
+    NLBroadcastConstantFunction _fill {nullptr};
+};
+
 // nl.limit data: resets a counter to its budget each time the block it lives in
 // runs - once at function scope for a top-level LIMIT, or per enclosing step for
 // a nested one.

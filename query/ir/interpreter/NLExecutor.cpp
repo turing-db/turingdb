@@ -369,6 +369,21 @@ void tileColumn(const Column* input, size_t factor, size_t outputRowCount, Colum
     }
 }
 
+// Constant broadcast: the one value a ColumnConst holds is laid out over every row
+// of the step, as a present value. The two broadcasts above repeat the several
+// values of a chunk; a constant column has no rows of its own to repeat, so its row
+// count comes from the driving relation and its value from the column itself.
+template <typename Primitive>
+void broadcastConstantColumn(const Column* value, size_t rowCount, Column* output) {
+    const ColumnConst<Primitive>* typedValue = static_cast<const ColumnConst<Primitive>*>(value);
+    ColumnOptVector<Primitive>* typedOutput = static_cast<ColumnOptVector<Primitive>*>(output);
+
+    auto& outputRaw = typedOutput->getRaw();
+    outputRaw.resize(rowCount);
+
+    std::fill_n(outputRaw.begin(), rowCount, std::optional<Primitive>(typedValue->getRaw()));
+}
+
 // Range copy: rows [inputOffset, inputOffset + rowCount) of the input land at
 // output indices [0, rowCount). This lifts a skip's surviving suffix to the front
 // of a fresh chunk - nl.skip_truncate passes inputOffset = skipThisStep and
@@ -1879,6 +1894,18 @@ void NLExecutor::runOutput(NLExecutionContext* context, NLFunctionData* data) {
     context->getSink()->appendChunks(cols, offset, rowCount);
 }
 
+void NLExecutor::runBroadcastConstant(NLExecutionContext*, NLFunctionData* data) {
+    const NLBroadcastConstantData* broadcast = static_cast<NLBroadcastConstantData*>(data);
+    const Column* cardinality = broadcast->getCardinality();
+
+    // The driving relation's chunk sizes this step, exactly as it sizes an output of
+    // constants alone; a projection no relation drives is the single row the constant
+    // is. The fill writes that many rows of the constant's value.
+    const size_t rowCount = cardinality ? cardinality->size() : 1;
+
+    broadcast->getFill()(broadcast->getValue(), rowCount, broadcast->getOutput());
+}
+
 void NLExecutor::runBinary(NLExecutionContext*, NLFunctionData* data) {
     const NLBinaryData* binary = static_cast<NLBinaryData*>(data);
     binary->getFn()(binary->getResult(), binary->getLhs(), binary->getRhs());
@@ -2589,6 +2616,16 @@ NLBroadcastFunction NLExecutor::selectOptTileFunction(ValueType valueType) {
     ValueTypeDispatcher(valueType).execute(select);
 
     return broadcast;
+}
+
+NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(ValueType valueType) {
+    NLBroadcastConstantFunction fill = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        fill = &broadcastConstantColumn<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return fill;
 }
 
 // A list_element chunk is a ColumnVector<ListElementView> of fixed-width tagged

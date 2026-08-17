@@ -1140,6 +1140,34 @@ def Constant : NLOp<"constant", [Pure, InferTypeOpAdaptor]> {
   let assemblyFormat = "`(` $value `)` attr-dict";
 }
 
+def BroadcastConstant : NLOp<"broadcast_constant", [Pure]> {
+  let summary = "Repeat a constant chunk's single value over the rows of a step";
+  let description = [{
+      A constant chunk holds one value standing for every row rather than one per
+      row, so a step that walks rows - an aggregate's fold, a grouped fold - cannot
+      read it: it would see the single row the constant is, not the rows the step
+      has. This lays that value out over the rows of the driving relation, whose
+      chunk the cardinality operand is, giving a row-aligned nullable value chunk
+      the folds read like any column. The projection's sibling is nl.output's own
+      cardinality operand, against which its constants broadcast as it emits.
+
+      %r = nl.broadcast_constant %c, %n : (!nl.chunk<i64>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.nullable<i64>>
+
+      The cardinality operand is absent when no relation drives the projection -
+      RETURN 1 AS x, count(x) with no MATCH - which is one row of its own, so the
+      value is laid out over that single row:
+
+      %r = nl.broadcast_constant %c : (!nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i64>>
+  }];
+
+  // The cardinality is the only variable-length operand, so MLIR can tell it apart
+  // from the value without operand-segment sizes (as nl.for's limit handle is).
+  let arguments = (ins NLChunk:$value, Optional<NLChunk>:$cardinality);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$value (`,` $cardinality^)? attr-dict `:` functional-type(operands, results)";
+}
+
 /**
 * Add
 */
