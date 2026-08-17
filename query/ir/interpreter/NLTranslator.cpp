@@ -348,6 +348,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             // The handle carries only a name; a fetch/hop resolves it on consumption
         } else if (nl::Constant constant = mlir::dyn_cast<nl::Constant>(operation)) {
             translateConstant(constant);
+        } else if (nl::BroadcastConstant broadcast = mlir::dyn_cast<nl::BroadcastConstant>(operation)) {
+            translateBroadcastConstant(broadcast, body);
         } else if (nl::Add add = mlir::dyn_cast<nl::Add>(operation)) {
             translateAdd(add, body);
         } else if (nl::Sub sub = mlir::dyn_cast<nl::Sub>(operation)) {
@@ -1003,6 +1005,26 @@ void NLTranslator::translateConstant(nl::Constant constant) {
     bioassert(column, "Failed to allocate column.");
 
     _valueSlots[res] = column;
+}
+
+void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, NLStmtContainer* body) {
+    const Column* value = getColumn(broadcast.getValue());
+
+    // Absent when no relation drives the projection, which is then the single row the
+    // constant is, so there is no chunk to read a row count from
+    const mlir::Value cardinalityChunk = broadcast.getCardinality();
+    const Column* cardinality = cardinalityChunk ? getColumn(cardinalityChunk) : nullptr;
+
+    const mlir::Value result = broadcast.getResult();
+    const mlir::Type resultType = result.getType();
+
+    Column* output = allocColumnForChunkType(resultType);
+    _valueSlots[result] = output;
+
+    const NLBroadcastConstantFunction fill = NLExecutor::selectConstantBroadcast(nullableChunkValueType(resultType));
+
+    NLBroadcastConstantData* data = _program->allocFunctionData<NLBroadcastConstantData>(value, cardinality, output, fill);
+    body->emplaceStmt(&NLExecutor::runBroadcastConstant, data);
 }
 
 void NLTranslator::translateAdd(nl::Add add, NLStmtContainer* body) {

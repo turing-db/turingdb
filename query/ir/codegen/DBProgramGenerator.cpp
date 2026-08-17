@@ -2024,7 +2024,25 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
         const Expr* item = std::get<Expr*>(returnItem);
 
         if (!item->isAggregate()) {
-            keyColumns.push_back(getOrTranslateExprColumn(variableColumns, item));
+            const mlir::Value keyColumn = getOrTranslateExprColumn(variableColumns, item);
+
+            // An aggregate may be taken over the alias of an item declared before it -
+            // count(x) of RETURN 1 AS x, count(x) - and the column that alias names is
+            // this one, so it is published under the item's declaration for the symbol
+            // to be resolved through, as the projection publishes it for an ORDER BY key
+            const VarDecl* itemDecl = item->getExprVarDecl();
+            if (itemDecl) {
+                _projectedColumns[itemDecl] = keyColumn;
+            }
+
+            // A constant column holds the same value in every row, so it tells no two
+            // rows apart: it groups nothing and rides along beside the groups, as it
+            // rides past a dedup or a sort
+            if (isConstantColumn(keyColumn)) {
+                continue;
+            }
+
+            keyColumns.push_back(keyColumn);
             keyVarAtPos.push_back(nullptr);
             keyExprAtPos.push_back(item);
             continue;
@@ -2078,8 +2096,14 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
 
     const size_t keyCount = keyColumns.size();
     const size_t aggCount = aggInputColumns.size();
-    bioassert(keyCount > 0, "grouped aggregate with no key columns.");
     bioassert(aggCount > 0, "grouped aggregate with no aggregate columns.");
+
+    // Every non-aggregate item was constant, so nothing tells the matched rows apart:
+    // the projection is one group, which is the scalar aggregate the projection
+    // translates on its own - RETURN 1 AS x, count(n) counts the whole match
+    if (keyCount == 0) {
+        return;
+    }
 
     llvm::SmallVector<mlir::Value> allColumns;
     for (const mlir::Value col : keyColumns) {

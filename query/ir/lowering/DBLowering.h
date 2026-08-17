@@ -329,6 +329,13 @@ private:
     // Point the builder at the right place for an op consuming lhs and rhs.
     void setInsertionForBinaryOp(mlir::Value lhs, mlir::Value rhs);
 
+    // The chunk a step that walks rows is handed for @param chunk: itself when it
+    // carries rows, and its value laid out over the rows of @param cardinality - the
+    // driving relation's chunk, null when no relation drives the projection - when it
+    // is a constant, which holds one value standing for every row and so has no rows
+    // of its own to walk.
+    mlir::Value rowAlignedChunk(mlir::Value chunk, mlir::Value cardinality);
+
     // The nl chunk a db value lowered to, and the block that holds a chunk
     mlir::Value mapValue(mlir::Value dbValue) const;
     static mlir::Block* ownerBlock(mlir::Value chunkValue);

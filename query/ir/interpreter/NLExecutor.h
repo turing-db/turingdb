@@ -216,6 +216,11 @@ public:
 
     static NLUnaryFn selectNot(const Column* operand, LocalMemory* memory, Column*& result);
 
+    // Lay a constant chunk's single value out over the driving relation's rows
+    // (nl.broadcast_constant), so a fold that walks rows is handed the step's rows
+    // rather than the one row a constant column is.
+    static void runBroadcastConstant(NLExecutionContext* context, NLFunctionData* data);
+
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
 
     // Gather for a nullable value chunk of this value type (sort emit re-chunk).
@@ -254,6 +259,10 @@ public:
 
     // Tile for a nullable value chunk of this value type (inner column).
     static NLBroadcastFunction selectOptTileFunction(ValueType valueType);
+
+    // The fill that lays a constant column's single value out over a step's rows,
+    // for a nullable value chunk of this value type (nl.broadcast_constant).
+    static NLBroadcastConstantFunction selectConstantBroadcast(ValueType valueType);
 
     // Block-repeat (outer column) and tile (inner column) for a list_element chunk: a
     // tagged scalar carries its own type, so there is no value type to dispatch on.

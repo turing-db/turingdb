@@ -424,6 +424,10 @@ private:
     // Allocates singleton column for the constant and assigns MLIR value
     void translateConstant(mlir::nl::Constant constant);
 
+    // Allocates the row-aligned column a constant is laid out into, and binds the
+    // fill that writes the driving relation's row count of its value each step
+    void translateBroadcastConstant(mlir::nl::BroadcastConstant broadcast, NLStmtContainer* body);
+
     /// Expression operations: alloc result column and resolve function pointer to execute
     void translateAdd(mlir::nl::Add add, NLStmtContainer* body);
     void translateSub(mlir::nl::Sub sub, NLStmtContainer* body);

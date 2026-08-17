@@ -266,6 +266,27 @@ nl::Output soleOutputConsumer(mlir::ResultRange results) {
     return sharedByAllResults ? output : nl::Output();
 }
 
+// Whether a chunk holds one value standing for every row rather than one per row.
+// The arithmetic ops listed are bound wherever their operands are, so a chunk
+// computed from constants alone through them is hoisted out of the producing loop
+// with the constants themselves and carries no more rows than they do.
+bool isConstantChunk(mlir::Value chunk) {
+    mlir::Operation* const definingOp = chunk.getDefiningOp();
+    if (!definingOp) {
+        return false;
+    }
+
+    if (mlir::isa<nl::Constant>(definingOp)) {
+        return true;
+    }
+
+    if (!mlir::isa<nl::Add, nl::Sub, nl::Mul, nl::Div>(definingOp)) {
+        return false;
+    }
+
+    return llvm::all_of(definingOp->getOperands(), isConstantChunk);
+}
+
 }
 
 DBLowering::DBLowering(mlir::MLIRContext* context, const GraphView* view)
@@ -1180,8 +1201,9 @@ void DBLowering::lowerRemoveDuplicates(mlir::db::RemoveDuplicates distinct) {
 
 void DBLowering::lowerCount(mlir::db::Count count) {
     // The nl chunk the counted column lowered to; the update reads its per-step
-    // non-null row count.
-    const mlir::Value inputChunk = mapValue(count.getInput());
+    // non-null row count. A constant column counts the rows it stands for, not the
+    // one row it is, so it is laid out over the driving relation first.
+    const mlir::Value inputChunk = rowAlignedChunk(mapValue(count.getInput()), _innermostCardinality);
 
     const mlir::Location loc = _builder.getUnknownLoc();
 
@@ -1221,8 +1243,9 @@ void DBLowering::lowerCount(mlir::db::Count count) {
 
 void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::AggregateKind kind) {
     // The nl chunk the aggregated column lowered to; the update folds its per-step
-    // non-null values into the accumulator.
-    const mlir::Value inputChunk = mapValue(input);
+    // non-null values into the accumulator. A constant column is reduced over the
+    // rows it stands for, so it is laid out over the driving relation first.
+    const mlir::Value inputChunk = rowAlignedChunk(mapValue(input), _innermostCardinality);
 
     mlir::MLIRContext* const context = _builder.getContext();
     const mlir::Location loc = _builder.getUnknownLoc();
@@ -1289,6 +1312,13 @@ void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
     // here means unverified IR - a defensive backstop, as in lowerSort.
     if (chunks.empty()) {
         throw IRException("db.group_aggregate requires at least one column");
+    }
+
+    // A constant aggregate input is reduced over the rows of the group it falls in,
+    // not over the single row it is, so it is laid out over the chunk the grouping
+    // keys are read from - the same rows the group assignment is computed for.
+    for (size_t inputIndex = keyCount; inputIndex < chunks.size(); inputIndex++) {
+        chunks[inputIndex] = rowAlignedChunk(chunks[inputIndex], chunks.front());
     }
 
     mlir::MLIRContext* const context = _builder.getContext();
@@ -2055,6 +2085,33 @@ mlir::Value DBLowering::mapValue(mlir::Value dbValue) const {
     }
 
     return slotIt->second;
+}
+
+mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinality) {
+    // A chunk that carries rows is its own alignment
+    if (!isConstantChunk(chunk)) {
+        return chunk;
+    }
+
+    const auto chunkType = mlir::cast<nl::ChunkType>(chunk.getType());
+    mlir::Type valueElement = chunkType.getElementType();
+    if (const auto nullable = mlir::dyn_cast<storage::NullableType>(valueElement)) {
+        valueElement = nullable.getValueType();
+    }
+
+    // The rows are laid out as a nullable value chunk - present in every row - which is
+    // what every fold, key serialization and reduction reads a value column as.
+    mlir::MLIRContext* const context = _builder.getContext();
+    const nl::ChunkType resultType = nl::ChunkType::get(context, storage::NullableType::get(context, valueElement));
+
+    // With no relation driving the projection the value is laid out where the constant
+    // itself is bound, over the single row that projection is
+    mlir::Block* const homeBlock = cardinality ? ownerBlock(cardinality) : ownerBlock(chunk);
+
+    setInsertionInto(homeBlock);
+    nl::BroadcastConstant broadcast = _builder.create<nl::BroadcastConstant>(_builder.getUnknownLoc(), resultType, chunk, cardinality);
+
+    return broadcast.getResult();
 }
 
 mlir::Block* DBLowering::ownerBlock(mlir::Value chunkValue) {
