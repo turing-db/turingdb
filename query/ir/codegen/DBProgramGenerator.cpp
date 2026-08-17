@@ -169,6 +169,19 @@ bool readsAnyColumn(mlir::ValueRange values, llvm::ArrayRef<mlir::Value> columns
     return false;
 }
 
+// The variables a call's YIELD binds, named as the query knows them.
+void collectYieldVariables(const CallStmt* callStmt, llvm::SmallVectorImpl<std::string_view>& variables) {
+    const YieldClause* yield = callStmt->getYield();
+    const YieldItems* yieldItems = yield ? yield->getItems() : nullptr;
+    if (!yieldItems) {
+        return;
+    }
+
+    for (const SymbolExpr* item : *yieldItems) {
+        variables.push_back(item->getSymbol()->getName());
+    }
+}
+
 // The ops values are transitively defined by: the chain that has to travel with them for
 // them to stay usable where they land.
 void collectDefiningOps(mlir::ValueRange values, llvm::DenseSet<mlir::Operation*>& ops) {
@@ -441,6 +454,20 @@ void DBProgramGenerator::addScanNodes(const VariableDependency* var) {
     registerValue(var, scan.getResult());
 }
 
+void DBProgramGenerator::addYieldedColumn(const VariableDependency* var, mlir::Value column) {
+    bioassert(!_varMap.contains(var), "Yielded column for registered variable");
+
+    registerValue(var, column);
+
+    // The variable owns those rows now. Leaving them among the yields as well would give one
+    // column two names, and only the variable's is rebound as the expansion replicates it.
+    const auto namesVar = [&](const YieldedColumn& yielded) {
+        return yielded.first == var->getName();
+    };
+
+    std::erase_if(_yieldedColumns, namesVar);
+}
+
 void DBProgramGenerator::addUnwindConst(const VariableDependency* var, const UnwindStmt* unwind) {
     bioassert(!_varMap.contains(var), "UnwindConst for registered variable");
 
@@ -564,17 +591,27 @@ void DBProgramGenerator::addEdgeTraversal(const VariableDependency* src,
     }
 
     // Find the edge types to carry which were defined in this block
-    mlir::Block* const insertionBlock = _opBuilder.getInsertionBlock();
     llvm::SmallVector<const VariableDependency*> carriedEdgeTypes;
     for (auto& [edgeVar, column] : _edgeTypeMap) {
-        mlir::Operation* const definingOp = column.getDefiningOp();
-        mlir::Block* const definingBlock = definingOp
-            ? definingOp->getBlock()
-            : mlir::cast<mlir::BlockArgument>(column).getOwner();
-        if (definingBlock != insertionBlock) {
+        if (!isRowAlignedHere(column)) {
             continue;
         }
         carriedEdgeTypes.push_back(edgeVar);
+        operands.push_back(column);
+        results.push_back(column.getType());
+    }
+
+    // A column a CALL driving this traversal yielded is in flight here too: the expansion
+    // replicates a row once per edge, so it comes along or it stops matching the rows beside
+    // it. Nothing yielded is in flight when a call has yet to run, which is every traversal
+    // the calls do not drive.
+    llvm::SmallVector<size_t> carriedYields;
+    for (size_t yieldedIndex = 0; yieldedIndex < _yieldedColumns.size(); yieldedIndex++) {
+        const mlir::Value column = _yieldedColumns[yieldedIndex].second;
+        if (!isRowAlignedHere(column)) {
+            continue;
+        }
+        carriedYields.push_back(yieldedIndex);
         operands.push_back(column);
         results.push_back(column.getType());
     }
@@ -613,6 +650,11 @@ void DBProgramGenerator::addEdgeTraversal(const VariableDependency* src,
     for (size_t i = 0; i < carriedEdgeTypes.size(); i++) {
         _edgeTypeMap[carriedEdgeTypes[i]] = op.getResult(edgeTypeOffset + i);
     }
+
+    const size_t yieldOffset = edgeTypeOffset + carriedEdgeTypes.size();
+    for (size_t i = 0; i < carriedYields.size(); i++) {
+        _yieldedColumns[carriedYields[i]].second = op.getResult(yieldOffset + i);
+    }
 }
 
 void DBProgramGenerator::generate(const CypherAST* ast) {
@@ -632,6 +674,9 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
         _opBuilder.setInsertionPointToStart(&block);
     }
 
+    _vdg.buildFromAST(ast);
+
+    generateLeadingCalls(ast);
     generateTraversal(ast);
     resolveEdgeIdentities();
     generatePropertyConstraints(ast);
@@ -657,9 +702,46 @@ void DBProgramGenerator::runPasses() {
     }
 }
 
-void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
-    _vdg.buildFromAST(ast);
+bool DBProgramGenerator::isValidRoot(const VariableDependency& var) const {
+    const auto isEdgeTgtMetaVar = [](const DependencyEdge* e) -> bool {
+        return e->isMetaEdge();
+    };
 
+    // A valid root is a non-meta Cypher variable which is a node
+    return std::ranges::none_of(var.incoming(), [&](const DependencyEdge* e) {
+        return producesEdgeVar(e) || isEdgeTgtMetaVar(e);
+    });
+}
+
+void DBProgramGenerator::collectComponentRoots(llvm::SmallVectorImpl<const VariableDependency*>& roots) const {
+    // Every variable a component holds can be a valid root of its own - the target of an
+    // expansion has no incoming edge that produces an edge variable either - so a component
+    // is opened by the first of them the graph lists, and the rest are reached from it.
+    std::unordered_set<const VariableDependency*> visited;
+
+    for (const VariableDependency& var : _vdg.vars()) {
+        const bool opensComponent = !visited.contains(&var) && isValidRoot(var);
+        if (!opensComponent) {
+            continue;
+        }
+
+        roots.push_back(&var);
+
+        llvm::SmallVector<const VariableDependency*> worklist {&var};
+        while (!worklist.empty()) {
+            const VariableDependency* const current = worklist.pop_back_val();
+            if (!visited.insert(current).second) {
+                continue;
+            }
+
+            for (const DependencyEdge* edge : current->edges()) {
+                worklist.push_back(edge->src() == current ? edge->tgt() : edge->src());
+            }
+        }
+    }
+}
+
+void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
     if (_vdg.empty()) {
         return;
     }
@@ -668,6 +750,15 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
     mlir::Block* const mainBlock = _opBuilder.getInsertionBlock();
 
     DefinedVars defined;
+
+    // A driven traversal is generated straight into the main block rather than into a
+    // region spliced in afterwards: its root is a column the leading calls bound there, and
+    // a filter over the rows flowing past it can only take the columns this block binds.
+    if (_drivenRoot) {
+        std::vector<const VariableDependency*> vars;
+        translateComponent(_drivenRoot, defined, vars);
+        return;
+    }
 
     // Connected components
     std::vector<TranslatedComponent> components;
@@ -678,17 +769,7 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
             continue;
         }
 
-        const auto isEdgeTgtMetaVar = [](const DependencyEdge* e) -> bool {
-            return e->isMetaEdge();
-        };
-
-        // A valid root is a non-meta Cypher variable which is a node
-        const bool validRoot =
-            std::ranges::none_of(root.incoming(), [&](const DependencyEdge* e) {
-                return producesEdgeVar(e) || isEdgeTgtMetaVar(e);
-            });
-
-        if (!validRoot) {
+        if (!isValidRoot(root)) {
             continue;
         }
 
@@ -969,12 +1050,16 @@ void DBProgramGenerator::translateComponent(const VariableDependency* root,
         }
     };
 
-    // A root either is a pattern variable, whose dataflow opens with a node scan, or is
-    // bound by an UNWIND, whose dataflow opens with the literal list itself.
+    // A root's dataflow opens with whatever already holds its rows: the column a CALL bound
+    // it to, the literal list an UNWIND binds it to, or - a pattern variable nothing has
+    // bound yet - a scan of the graph's nodes.
     const VariableDependencyGraph::UnwindSourceMap& unwindSources = _vdg.unwindSources();
     const auto unwindIt = unwindSources.find(root);
+    const mlir::Value yieldedColumn = findYieldedColumn(root->getName());
 
-    if (unwindIt != unwindSources.end()) {
+    if (yieldedColumn) {
+        addYieldedColumn(root, yieldedColumn);
+    } else if (unwindIt != unwindSources.end()) {
         addUnwindConst(root, unwindIt->second);
     } else {
         addScanNodes(root);
@@ -1192,6 +1277,83 @@ void DBProgramGenerator::moveComponentToFactor(TranslatedComponent& component,
     _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {component._columns});
 }
 
+void DBProgramGenerator::generateLeadingCalls(const CypherAST* ast) {
+    if (_vdg.empty()) {
+        return;
+    }
+
+    const CypherAST::QueryCommands& queries = ast->queries();
+    if (queries.size() != 1) {
+        throw TuringException("Multiple queries not yet supported.");
+    }
+
+    const QueryCommand* query = queries.front();
+
+    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
+    if (!sglPart) {
+        return;
+    }
+
+    const StmtContainer* stmtsContainer = sglPart->getReadStmts();
+    if (!stmtsContainer) {
+        return;
+    }
+
+    llvm::SmallVector<const CallStmt*> leadingCalls;
+    for (const Stmt* stmt : stmtsContainer->stmts()) {
+        const Stmt::Kind kind = stmt->getKind();
+
+        if (kind == Stmt::Kind::MATCH) {
+            break;
+        } else if (kind == Stmt::Kind::CALL) {
+            leadingCalls.push_back(static_cast<const CallStmt*>(stmt));
+        }
+    }
+
+    if (leadingCalls.empty()) {
+        return;
+    }
+
+    llvm::SmallVector<const VariableDependency*> componentRoots;
+    collectComponentRoots(componentRoots);
+
+    // Only a traversal of a single connected component can be driven. A second component
+    // would have to be paired with the first, and what the calls yielded is one row set to
+    // expand rather than a factor of a product.
+    if (componentRoots.size() != 1) {
+        return;
+    }
+
+    llvm::SmallVector<std::string_view> yieldedVariables;
+    for (const CallStmt* callStmt : leadingCalls) {
+        collectYieldVariables(callStmt, yieldedVariables);
+    }
+
+    // Any variable the calls bound can open the component, not only the one the graph lists
+    // first: a pattern that reaches the yielded variable from its other end is walked
+    // backwards from it, which is the traversal a reversed edge already emits.
+    const VariableDependency* drivenRoot = nullptr;
+    for (const VariableDependency& var : _vdg.vars()) {
+        const bool bound = llvm::is_contained(yieldedVariables, var.getName());
+        const bool canDrive = bound && isValidRoot(var);
+
+        if (canDrive) {
+            drivenRoot = &var;
+            break;
+        }
+    }
+
+    if (!drivenRoot) {
+        return;
+    }
+
+    for (const CallStmt* callStmt : leadingCalls) {
+        generateCall(callStmt);
+    }
+
+    _drivenRoot = drivenRoot;
+}
+
 void DBProgramGenerator::generateFiltersAndCalls(const CypherAST* ast) {
     const CypherAST::QueryCommands& queries = ast->queries();
     if (queries.size() != 1) {
@@ -1213,13 +1375,19 @@ void DBProgramGenerator::generateFiltersAndCalls(const CypherAST* ast) {
     // In statement order, so a call reading what an earlier one yielded sees it, and a
     // MATCH's WHERE reading a yielded value is generated once the call has bound it - the
     // reading statements are generated in the order the query writes them.
+    bool matchSeen = false;
     for (const Stmt* stmt : stmtsContainer->stmts()) {
         const Stmt::Kind kind = stmt->getKind();
 
         if (kind == Stmt::Kind::MATCH) {
+            matchSeen = true;
             generateMatchFilter(static_cast<const MatchStmt*>(stmt));
         } else if (kind == Stmt::Kind::CALL) {
-            generateCall(static_cast<const CallStmt*>(stmt));
+            const bool drivesTheTraversal = _drivenRoot && !matchSeen;
+
+            if (!drivesTheTraversal) {
+                generateCall(static_cast<const CallStmt*>(stmt));
+            }
         }
     }
 }
