@@ -2214,10 +2214,6 @@ NLCountFunction NLTranslator::selectCountForChunkType(mlir::Type chunkType) {
         return NLExecutor::selectListElementCountFunction();
     }
 
-    // A non-nullable chunk must be an ID chunk (node/edge/edge-type IDs), which has
-    // no null rows, so every row counts. chunkKindFromElementType rejects any other
-    // element type, so its result is discarded - it validates, nothing more.
-    chunkKindFromElementType(elementType);
     return &NLExecutor::countAllRows;
 }
 

@@ -723,6 +723,7 @@ TEST_F(EquivalenceTest, labelsAndTypeFunctions) {
     expectEquivalent("MATCH (n) WHERE labels(n) = 'Person' RETURN *");
 
     expectEquivalent("MATCH (n) RETURN n, toInteger('42')");
+    expectEquivalent("MATCH (n) RETURN count(labels(n))");
 }
 
 TEST_F(EquivalenceTest, conversionFunctions) {
