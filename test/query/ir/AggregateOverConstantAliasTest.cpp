@@ -196,6 +196,17 @@ TEST_F(AggregateOverConstantAliasTest, countsASpelledOutConstantWithoutAMatch) {
     expectCounts("RETURN count(42)", {1});
 }
 
+// The rows the constant stands for are the rows the match left standing, so a filter is
+// what the aggregate folds over: one node of simpledb is named Remy.
+TEST_F(AggregateOverConstantAliasTest, countsASpelledOutConstantUnderAFilter) {
+    expectCounts("MATCH (n) WHERE n.name = 'Remy' RETURN count(42)", {1});
+}
+
+// The value reduction of that same one row
+TEST_F(AggregateOverConstantAliasTest, sumsOverAConstantAliasUnderAFilter) {
+    expectSums("MATCH (n) WHERE n.name = 'Remy' RETURN 1 AS x, sum(x)", {1});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
