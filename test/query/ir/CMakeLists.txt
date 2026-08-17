@@ -366,6 +366,27 @@ target_link_libraries(test_query_ir_output_column_names PRIVATE
         MLIRParser)
 target_include_directories(test_query_ir_output_column_names PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_turing_test(test_query_ir_limit_skip LimitSkipTest.cpp)
+target_link_libraries(test_query_ir_limit_skip PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s
+        turing_db_ir_interpreter_s
+        turing_db_ir_lowering_s
+        turing_db_ir_dbdialect_s
+        turing_db_ir_nldialect_s
+        turing_db_ir_storagedialect_s
+        turing_db_ir_common_s
+        turing_db_storage_s
+        MLIRParser)
+target_include_directories(test_query_ir_limit_skip PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_wildcard_return WildcardReturnTest.cpp)
 target_link_libraries(test_query_ir_wildcard_return PRIVATE
         turing_db_s
