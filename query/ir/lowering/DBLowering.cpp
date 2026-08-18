@@ -310,7 +310,7 @@ bool isConstantChunk(mlir::Value chunk) {
         return true;
     }
 
-    if (!mlir::isa<nl::Add, nl::Sub, nl::Mul, nl::Div>(definingOp)) {
+    if (!mlir::isa<nl::Add, nl::Sub, nl::Mul, nl::Div, nl::Mod, nl::Pow>(definingOp)) {
         return false;
     }
 
