@@ -30,6 +30,9 @@ namespace {
 
 using Constants = std::vector<int64_t>;
 
+// The eighteen nodes of simpledb, which MATCH (n) matches
+constexpr size_t nodeCount = 18;
+
 // Collects the one constant column of a projection that names nothing else. The column
 // answers the same value at every subscript, so the rows it yields are only the rows the
 // sink is handed - which is what these tests are about.
@@ -100,6 +103,12 @@ TEST_F(ConstantOnlyProjectionTest, emitsTheConstantOncePerMatchedRow) {
 // no row at all - a query that matched nothing must not answer with a row of 5.
 TEST_F(ConstantOnlyProjectionTest, emitsNothingWhenTheMatchIsEmpty) {
     expectConstants("MATCH (n) WHERE n.name = 'nobody' RETURN 5", {});
+}
+
+// An expression over constants alone is a constant column too, so it is sized the same
+// way: one row of 42 per matched node.
+TEST_F(ConstantOnlyProjectionTest, emitsTheComputedConstantOncePerMatchedRow) {
+    expectConstants("MATCH (n) RETURN 40 + 2", Constants(nodeCount, 42));
 }
 
 int main(int argc, char** argv) {

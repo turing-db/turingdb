@@ -662,6 +662,18 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n) RETURN 40 + 2
+constexpr const char* constantExpressionOverMatchProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %x = db.constant(40 : i64)
+  %y = db.constant(2 : i64)
+  %s = db.add %x, %y : (!db.column<i64>, !db.column<i64>) -> !db.column<i64>
+  db.output(%s) : !db.column<i64>
+  return
+}
+)mlir";
+
 // MATCH (a), (b) RETURN 5
 constexpr const char* constantOverCrossProductProgram = R"mlir(
 func.func @main() {
@@ -2750,6 +2762,21 @@ TEST_F(DBLoweringTest, constantProjectionOverMatchHasRelationCardinality) {
     // four rows of 5 - not one. (Before the fix the output floated to function scope
     // and emitted a single row.)
     const std::vector<std::vector<int64_t>> expected {{5}, {5}, {5}, {5}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(DBLoweringTest, constantExpressionProjectionOverMatchHasRelationCardinality) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingConstSink<int64_t> sink;
+    runLoweredProgram(constantExpressionOverMatchProgram, reader.getView(), sink);
+
+    // An expression over constants alone is a constant column too, so it is projected
+    // over the relation's rows as a literal is: four rows of 42, not the single row the
+    // expression is bound as above the loop.
+    const std::vector<std::vector<int64_t>> expected {{42}, {42}, {42}, {42}};
     EXPECT_EQ(sink.rows(), expected);
 }
 
