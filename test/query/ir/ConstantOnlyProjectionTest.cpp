@@ -29,6 +29,7 @@ using namespace turing::test;
 namespace {
 
 using Constants = std::vector<int64_t>;
+using DoubleConstants = std::vector<double>;
 
 // The eighteen nodes of simpledb, which MATCH (n) matches
 constexpr size_t nodeCount = 18;
@@ -53,6 +54,27 @@ public:
 
 private:
     Constants _constants;
+};
+
+// The double sibling of ConstantSink: a power promotes what it computes to f64, so the
+// column standing for every row is one of doubles.
+class DoubleConstantSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const ColumnConst<double>* constants = dynamic_cast<const ColumnConst<double>*>(chunks.front());
+        ASSERT_NE(constants, nullptr);
+
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _constants.push_back((*constants)[rowIndex]);
+        }
+    }
+
+    const DoubleConstants& getConstants() const { return _constants; }
+
+private:
+    DoubleConstants _constants;
 };
 
 }
@@ -88,6 +110,28 @@ protected:
         EXPECT_EQ(sink.getConstants(), expected) << "query: " << query;
     }
 
+    void expectDoubleConstants(std::string_view query, const DoubleConstants& expected) {
+        DoubleConstantSink sink;
+
+        QueryStatus status;
+        _interpreter->execute(status,
+                              query,
+                              _graphName,
+                              CommitHash::head(),
+                              ChangeID::head(),
+                              &_env->getMem(),
+                              &sink);
+
+        ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
+
+        const DoubleConstants& actual = sink.getConstants();
+        ASSERT_EQ(actual.size(), expected.size()) << "query: " << query;
+
+        for (size_t rowIndex = 0; rowIndex < expected.size(); rowIndex++) {
+            EXPECT_DOUBLE_EQ(actual[rowIndex], expected[rowIndex]) << "query: " << query;
+        }
+    }
+
     const std::string _graphName = "simpledb";
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<QueryInterpreterV3> _interpreter;
@@ -109,6 +153,18 @@ TEST_F(ConstantOnlyProjectionTest, emitsNothingWhenTheMatchIsEmpty) {
 // way: one row of 42 per matched node.
 TEST_F(ConstantOnlyProjectionTest, emitsTheComputedConstantOncePerMatchedRow) {
     expectConstants("MATCH (n) RETURN 40 + 2", Constants(nodeCount, 42));
+}
+
+// Every arithmetic operator computes a constant from constants, the ones spelled with a
+// symbol of their own included.
+TEST_F(ConstantOnlyProjectionTest, emitsAComputedModuloOncePerMatchedRow) {
+    expectConstants("MATCH (n) RETURN 40 % 3", Constants(nodeCount, 1));
+}
+
+// A power is a constant of the same kind, promoted to a double by the operator rather than
+// by what it reads.
+TEST_F(ConstantOnlyProjectionTest, emitsAComputedPowerOncePerMatchedRow) {
+    expectDoubleConstants("MATCH (n) RETURN 2 ^ 3", DoubleConstants(nodeCount, 8.0));
 }
 
 int main(int argc, char** argv) {
