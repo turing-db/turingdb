@@ -290,6 +290,9 @@ public:
     // copies of a value the constant holds
     static NLBroadcastConstantFunction selectNullConstantBroadcast();
 
+    // The list sibling: a list constant lays its one view out over the step's rows
+    static NLBroadcastConstantFunction selectConstantListBroadcast();
+
     // Block-repeat (outer column) and tile (inner column) for a list_element chunk: a
     // tagged scalar carries its own type, so there is no value type to dispatch on.
     static NLBroadcastFunction selectListElementBlockRepeatFunction();
@@ -305,6 +308,11 @@ public:
     // unwind can be deduped and counted.
     static NLKeyAppendFunction selectListElementKeyAppendFunction();
     static NLCountFunction selectListElementCountFunction();
+
+    // The cut families for a list chunk: a list cell copies as a view, so a prefix or a
+    // suffix of them is the plain range copy every other cell column uses
+    static NLBroadcastFunction selectListBlockRepeatFunction();
+    static NLCopyFunction selectListCopyFunction();
 
     // Range copy for an ID chunk of this kind (skip suffix copy).
     static NLCopyFunction selectCopyFunction(NLChunkKind kind);

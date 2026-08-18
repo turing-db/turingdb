@@ -493,6 +493,9 @@ private:
 
     // Allocate a type-erased column of tagged scalars - the shape a heterogeneous
     // unwind emits and a cross product broadcasts - reserving a full chunk.
+    // A column of list cells, each a view over the query's list buffer
+    Column* allocListColumn();
+
     Column* allocListElementColumn();
 
     Column* getColumn(mlir::Value chunkValue) const;
