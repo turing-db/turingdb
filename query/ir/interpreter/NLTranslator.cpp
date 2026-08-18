@@ -1088,11 +1088,20 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
     _valueSlots[result] = output;
 
     // The untyped null constant is a ColumnConst<PropertyNull>, which holds no value to
-    // repeat: its rows are absent values rather than copies of one
+    // repeat: its rows are absent values rather than copies of one. A list rides a list
+    // chunk rather than a nullable value one, so its fill repeats the one view the constant
+    // holds instead of dispatching on a value type.
     const bool isUntypedNull = isUntypedNullChunk(broadcast.getValue().getType());
-    const NLBroadcastConstantFunction fill = isUntypedNull
-                                          ? NLExecutor::selectNullConstantBroadcast()
-                                          : NLExecutor::selectConstantBroadcast(nullableChunkValueType(resultType));
+    const bool isList = llvm::isa<storage::ListType>(mlir::cast<nl::ChunkType>(resultType).getElementType());
+
+    NLBroadcastConstantFunction fill = nullptr;
+    if (isUntypedNull) {
+        fill = NLExecutor::selectNullConstantBroadcast();
+    } else if (isList) {
+        fill = NLExecutor::selectConstantListBroadcast();
+    } else {
+        fill = NLExecutor::selectConstantBroadcast(nullableChunkValueType(resultType));
+    }
 
     NLBroadcastConstantData* data = _program->allocFunctionData<NLBroadcastConstantData>(value, cardinality, output, fill);
     body->emplaceStmt(&NLExecutor::runBroadcastConstant, data);
@@ -1337,6 +1346,9 @@ void NLTranslator::addTruncateColumn(mlir::Value inputValue,
         const ValueType valueType = valueTypeFromElementType(elementType);
         output = allocPlainColumn(valueType);
         copyPrefix = NLExecutor::selectPlainBlockRepeatFunction(valueType);
+    } else if (llvm::isa<storage::ListType>(elementType)) {
+        output = allocListColumn();
+        copyPrefix = NLExecutor::selectListBlockRepeatFunction();
     } else {
         const NLChunkKind kind = getChunkKind(chunkType);
         output = allocColumnForKind(kind);
@@ -1431,6 +1443,9 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
         const ValueType valueType = valueTypeFromElementType(elementType);
         output = allocPlainColumn(valueType);
         copySuffix = NLExecutor::selectPlainCopyFunction(valueType);
+    } else if (llvm::isa<storage::ListType>(elementType)) {
+        output = allocListColumn();
+        copySuffix = NLExecutor::selectListCopyFunction();
     } else {
         const NLChunkKind kind = getChunkKind(chunkType);
         output = allocColumnForKind(kind);
@@ -2202,6 +2217,10 @@ Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
         return allocPlainColumn(valueTypeFromElementType(elementType));
     }
 
+    if (llvm::isa<storage::ListType>(elementType)) {
+        return allocListColumn();
+    }
+
     return allocColumnForKind(chunkKindFromElementType(elementType));
 }
 
@@ -2335,9 +2354,7 @@ Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
     // A list chunk (the nl.collect drain's per-group cell) is a column of ListViews,
     // each spanning that group's run in the accumulator's list buffer.
     if (llvm::isa<storage::ListType>(elementType)) {
-        ColumnVector<ListView>* output = _memory->alloc<ColumnVector<ListView>>();
-        output->reserve(_program->getChunkSize());
-        return output;
+        return allocListColumn();
     }
 
     return allocColumnForKind(chunkKindFromElementType(elementType));
@@ -2529,6 +2546,13 @@ Column* NLTranslator::allocPlainColumn(ValueType valueType) {
 
 ColumnVector<uint64_t>* NLTranslator::allocCountColumn() {
     ColumnVector<uint64_t>* column = _memory->alloc<ColumnVector<uint64_t>>();
+    column->reserve(_program->getChunkSize());
+
+    return column;
+}
+
+Column* NLTranslator::allocListColumn() {
+    ColumnVector<ListView>* column = _memory->alloc<ColumnVector<ListView>>();
     column->reserve(_program->getChunkSize());
 
     return column;

@@ -535,6 +535,18 @@ void broadcastNullColumn(const Column* value, size_t rowCount, Column* output) {
     outputRaw.assign(rowCount, std::optional<int64_t> {});
 }
 
+// The list sibling of broadcastConstantColumn: a list cell is a view over the query's
+// list buffer and is never absent, so the rows are a plain column of that one view.
+void broadcastConstantListColumn(const Column* value, size_t rowCount, Column* output) {
+    const ColumnConst<ListView>* typedValue = static_cast<const ColumnConst<ListView>*>(value);
+    ColumnVector<ListView>* typedOutput = static_cast<ColumnVector<ListView>*>(output);
+
+    auto& outputRaw = typedOutput->getRaw();
+    outputRaw.resize(rowCount);
+
+    std::fill_n(outputRaw.begin(), rowCount, typedValue->getRaw());
+}
+
 // Range copy: rows [inputOffset, inputOffset + rowCount) of the input land at
 // output indices [0, rowCount). This lifts a skip's surviving suffix to the front
 // of a fresh chunk - nl.skip_truncate passes inputOffset = skipThisStep and
@@ -3244,6 +3256,10 @@ NLBroadcastConstantFunction NLExecutor::selectNullConstantBroadcast() {
     return &broadcastNullColumn;
 }
 
+NLBroadcastConstantFunction NLExecutor::selectConstantListBroadcast() {
+    return &broadcastConstantListColumn;
+}
+
 NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(ValueType valueType) {
     NLBroadcastConstantFunction fill = nullptr;
     const auto select = [&]<SupportedType T>() {
@@ -3282,6 +3298,14 @@ NLKeyAppendFunction NLExecutor::selectListElementKeyAppendFunction() {
 
 NLCountFunction NLExecutor::selectListElementCountFunction() {
     return &countNonNullElementsColumn;
+}
+
+NLBroadcastFunction NLExecutor::selectListBlockRepeatFunction() {
+    return &blockRepeatColumn<ListView>;
+}
+
+NLCopyFunction NLExecutor::selectListCopyFunction() {
+    return &copyRangeColumn<ListView>;
 }
 
 NLCopyFunction NLExecutor::selectCopyFunction(NLChunkKind kind) {

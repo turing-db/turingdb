@@ -2412,9 +2412,14 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
     }
 
     // The rows are laid out as a nullable value chunk - present in every row - which is
-    // what every fold, key serialization and reduction reads a value column as.
+    // what every fold, key serialization and reduction reads a value column as. A list is
+    // laid out as the list chunk an nl.collect drain emits instead: a cell is a view over
+    // the query's list buffer, which is never absent, and no nullable list column exists.
     mlir::MLIRContext* const context = _builder.getContext();
-    const nl::ChunkType resultType = nl::ChunkType::get(context, storage::NullableType::get(context, valueElement));
+    const bool isList = llvm::isa<storage::ListType>(valueElement);
+    const mlir::Type resultElement = isList ? valueElement
+                                            : storage::NullableType::get(context, valueElement);
+    const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);
 
     // With no relation driving the projection the value is laid out where the constant
     // itself is bound, over the single row that projection is
