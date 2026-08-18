@@ -1743,9 +1743,14 @@ void DBLowering::lowerCreateNode(mlir::db::CreateNode createNode) {
         propChunks.push_back(mapValue(propValue));
     }
 
-    if (propChunks.empty()) {
-        // Try find a block where the result of this create_node is used to create an edge
-        // Otherwise: entry block
+    mlir::Value cardinalityChunk;
+    if (createNode.getCardinality()) {
+        cardinalityChunk = mapValue(createNode.getCardinality());
+    }
+
+    if (cardinalityChunk) {
+        setInsertionInto(ownerBlock(cardinalityChunk));
+    } else {
         mlir::Block* targetBlock = _entryBlock;
         for (const mlir::OpOperand& use : createNode.getResult().getUses()) {
             auto createEdge = mlir::dyn_cast<mlir::db::CreateEdge>(use.getOwner());
@@ -1772,22 +1777,14 @@ void DBLowering::lowerCreateNode(mlir::db::CreateNode createNode) {
         }
 
         setInsertionInto(targetBlock);
-    } else {
-        mlir::Value reference = propChunks[0];
-        for (size_t i = 1; i < propChunks.size(); i++) {
-            mlir::Block* const block = deeperBlock(reference, propChunks[i]);
-            if (ownerBlock(propChunks[i]) == block) {
-                reference = propChunks[i];
-            }
-        }
-        setInsertionInto(ownerBlock(reference));
     }
 
     nl::CreateNode create = _builder.create<nl::CreateNode>(
         loc,
         createNode.getLabelsAttr(),
         createNode.getPropNamesAttr(),
-        propChunks);
+        propChunks,
+        cardinalityChunk);
     _valueMap[createNode.getResult()] = create.getResult();
 }
 

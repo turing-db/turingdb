@@ -1730,17 +1730,20 @@ public:
     ColumnNodeIDs* getResult() const { return _result; }
     const std::vector<Property>& properties() const { return _properties; }
 
-    size_t getRowCount() const {
-        return _properties.empty() ? 1 : _properties.front()._values->size();
-    }
+    size_t getRowCount() const { return _cardinality ? _cardinality->size() : 1; }
 
     void addProperty(const Property& property) {
         _properties.push_back(property);
     }
 
+    void setCardinality(const Column* cardinality) {
+        _cardinality = cardinality;
+    }
+
 private:
     std::vector<Property> _properties;
     ColumnNodeIDs* _result {nullptr};
+    const Column* _cardinality {nullptr};
     LabelSetHandle _labelsetHandle;
 };
 
