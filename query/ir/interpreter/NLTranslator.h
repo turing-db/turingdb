@@ -6,6 +6,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 
+#include "columns/ColumnOperator.h"
 #include "metadata/PropertyType.h"
 
 #include "NLOps.h"
@@ -428,23 +429,9 @@ private:
     // fill that writes the driving relation's row count of its value each step
     void translateBroadcastConstant(mlir::nl::BroadcastConstant broadcast, NLStmtContainer* body);
 
-    /// Expression operations: alloc result column and resolve function pointer to execute
-    void translateAdd(mlir::nl::Add add, NLStmtContainer* body);
-    void translateSub(mlir::nl::Sub sub, NLStmtContainer* body);
-    void translateMul(mlir::nl::Mul mul, NLStmtContainer* body);
-    void translateDiv(mlir::nl::Div div, NLStmtContainer* body);
-    void translateMod(mlir::nl::Mod mod, NLStmtContainer* body);
-    void translatePow(mlir::nl::Pow pow, NLStmtContainer* body);
-    void translateEq(mlir::nl::Eq eq, NLStmtContainer* body);
-    void translateNeq(mlir::nl::Neq neq, NLStmtContainer* body);
-    void translateGt(mlir::nl::Gt gt, NLStmtContainer* body);
-    void translateLt(mlir::nl::Lt lt, NLStmtContainer* body);
-    void translateGte(mlir::nl::Gte gte, NLStmtContainer* body);
-    void translateLte(mlir::nl::Lte lte, NLStmtContainer* body);
+    template <ColumnOperator Op, typename OpType>
+    void translateBinaryOp(OpType op, NLStmtContainer* body);
 
-    void translateAnd(mlir::nl::And andOp, NLStmtContainer* body);
-    void translateOr(mlir::nl::Or orOp, NLStmtContainer* body);
-    void translateXor(mlir::nl::Xor xorOp, NLStmtContainer* body);
     void translateNot(mlir::nl::Not notOp, NLStmtContainer* body);
 
     void translateFilter(mlir::nl::Filter filter, NLStmtContainer* body);
