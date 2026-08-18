@@ -981,6 +981,8 @@ void DBLowering::lowerLimit(mlir::db::Limit limit) {
         throw IRException("db.limit requires at least one column");
     }
 
+    rowAlignCutChunks(chunks);
+
     const mlir::Location loc = _builder.getUnknownLoc();
     const mlir::Value handle = _limitHandles.lookup(limit.getOperation());
 
@@ -1018,6 +1020,8 @@ void DBLowering::lowerSkip(mlir::db::Skip skip) {
     if (chunks.empty()) {
         throw IRException("db.skip requires at least one column");
     }
+
+    rowAlignCutChunks(chunks);
 
     const mlir::Location loc = _builder.getUnknownLoc();
 
@@ -2110,6 +2114,18 @@ mlir::Value DBLowering::mapValue(mlir::Value dbValue) const {
     }
 
     return slotIt->second;
+}
+
+void DBLowering::rowAlignCutChunks(llvm::SmallVectorImpl<mlir::Value>& chunks) {
+    // With no relation driving the projection a constant is the single row that
+    // projection is, and the cut charges it as it stands.
+    if (!_innermostCardinality) {
+        return;
+    }
+
+    for (mlir::Value& chunk : chunks) {
+        chunk = rowAlignedChunk(chunk, _innermostCardinality);
+    }
 }
 
 mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinality) {

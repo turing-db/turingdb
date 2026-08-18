@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -33,6 +34,7 @@
 #include "SystemManager.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnIDs.h"
+#include "columns/ColumnOptVector.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
@@ -47,11 +49,21 @@ namespace {
 using ValueRow = std::vector<int64_t>;
 using ValueRows = std::vector<ValueRow>;
 
+// A constant a cut is charged to is laid out over the rows of the relation driving the
+// projection, so a constant column reaches the sink as a value column wherever a MATCH
+// makes its rows, and as a ColumnConst only when the projection is the one row it is.
 int64_t readValue(const Column* column, size_t row) {
     if (const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(column)) {
         return static_cast<int64_t>((*nodeIDs)[row].getValue());
     } else if (const auto* constants = dynamic_cast<const ColumnConst<int64_t>*>(column)) {
         return (*constants)[row];
+    } else if (const auto* values = dynamic_cast<const ColumnOptVector<int64_t>*>(column)) {
+        const std::optional<int64_t>& value = values->getRaw()[row];
+        if (!value) {
+            throw std::runtime_error("LimitSkipTest: null row in a value output column");
+        }
+
+        return *value;
     }
 
     throw std::runtime_error("LimitSkipTest: unsupported output column type");
@@ -182,6 +194,56 @@ TEST_F(LimitSkipTest, constantLimitOneEmitsTheRow) {
 // The one row is the row SKIP 1 drops, so the LIMIT has nothing left to keep.
 TEST_F(LimitSkipTest, constantSkipOneLimitOneEmitsNothing) {
     expectRows("RETURN 42 SKIP 1 LIMIT 1", {});
+}
+
+// A constant beside a MATCH is one row per matched row, so the 18 nodes make 18 rows of
+// it: the cut is charged to the rows the match makes and not to the single value the
+// constant column holds.
+TEST_F(LimitSkipTest, matchedConstantLimitKeepsTheLimitedRows) {
+    const ValueRows expected = {{5}, {5}, {5}};
+    expectRows("MATCH (n) RETURN 5 LIMIT 3", expected);
+}
+
+// The SKIP sibling: 18 rows minus the first 16 leaves two of them.
+TEST_F(LimitSkipTest, matchedConstantSkipKeepsTheSurvivingRows) {
+    const ValueRows expected = {{5}, {5}};
+    expectRows("MATCH (n) RETURN 5 SKIP 16", expected);
+}
+
+TEST_F(LimitSkipTest, matchedConstantSkipLimitCutsAWindow) {
+    const ValueRows expected = {{5}, {5}};
+    expectRows("MATCH (n) RETURN 5 SKIP 1 LIMIT 2", expected);
+}
+
+// An expression over constants alone is a constant column too, and is cut the same way.
+TEST_F(LimitSkipTest, matchedConstantExpressionLimitKeepsTheLimitedRows) {
+    const ValueRows expected = {{42}, {42}, {42}};
+    expectRows("MATCH (n) RETURN 40 + 2 LIMIT 3", expected);
+}
+
+// Every constant column is cut, not just the first one the cut is charged to.
+TEST_F(LimitSkipTest, matchedConstantsLimitKeepsEveryColumn) {
+    const ValueRows expected = {{5, 7}, {5, 7}, {5, 7}};
+    expectRows("MATCH (n) RETURN 5, 7 LIMIT 3", expected);
+}
+
+// The cross product emits its 44 rows over several steps of a nest, so the budget is
+// charged step by step rather than once for the whole projection.
+TEST_F(LimitSkipTest, matchedConstantLimitAcrossANest) {
+    const ValueRows expected = {{5}, {5}, {5}, {5}, {5}};
+    expectRows("MATCH (a)-->(b), (a)-->(c) RETURN 5 LIMIT 5", expected);
+}
+
+// A limit of more rows than the match makes keeps all 18 of them.
+TEST_F(LimitSkipTest, matchedConstantLimitPastTheMatchedRowsKeepsThemAll) {
+    const ValueRows expected(18, ValueRow {5});
+    expectRows("MATCH (n) RETURN 5 LIMIT 20", expected);
+}
+
+// A skip past every matched row leaves nothing, where charging the cut to the constant
+// column would leave its one value behind.
+TEST_F(LimitSkipTest, matchedConstantSkipPastTheMatchedRowsEmitsNothing) {
+    expectRows("MATCH (n) RETURN 5 SKIP 20", {});
 }
 
 int main(int argc, char** argv) {
