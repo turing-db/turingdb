@@ -828,12 +828,9 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
     _opBuilder.setInsertionPointToEnd(mainBlock);
 }
 
-// A chunk holds the rows of the loop whose body binds it, so only a column bound in this
-// block is row-aligned with the rows flowing past this point. One bound in an enclosing
-// block - or in a loop the dataflow has already left - holds a different row set, and an op
-// that consumes the whole row set (a filter, a call's carry set) would pair its rows with
-// unrelated ones. Note this is stricter than dominance on purpose: an outer block's value
-// does dominate here, it is just the wrong rows.
+// A chunk holds the rows of the loop whose body binds it, so a column bound in an
+// enclosing block holds a different row set. Stricter than dominance on purpose: such
+// a value does dominate here, it is just the wrong rows.
 bool DBProgramGenerator::isRowAlignedHere(mlir::Value column) const {
     mlir::Operation* const definingOp = column.getDefiningOp();
     mlir::Block* const definingBlock = definingOp
@@ -1920,10 +1917,6 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
 
     const ReturnStmt* rtn = sglPart->getReturnStmt();
     if (!rtn) {
-        // A standalone CALL has no projection of its own: what it emits is the columns it
-        // yielded, in the order the procedure declares them. A call yielding none - a
-        // procedure declaring no return value - emits nothing at all, so the query is the
-        // drive and no output op is generated.
         llvm::SmallVector<mlir::Value> yielded;
         for (const YieldedColumn& yieldedColumn : _yieldedColumns) {
             yielded.push_back(yieldedColumn.second);
