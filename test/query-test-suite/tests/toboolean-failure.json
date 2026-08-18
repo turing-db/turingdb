@@ -1,11 +1,11 @@
 {
   "enabled": true,
   "graph": "simpledb",
-  "query": "RETURN toFloat(\"3.51notanumber\")",
+  "query": "RETURN toBoolean(\"notabool\")",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (FUNCTION_INVOCATION): v1\n__expr__ (LITERAL): v0\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
-    "result": "\"toFloat(\"\"3.51notanumber\"\")\"\nnull",
-    "resultJson": "{\"header\":{\"column_names\":[\"toFloat(\\\"3.51notanumber\\\")\"],\"column_types\":[\"Double\"]},\"data\":[[[null]]]}"
+    "result": "\"toBoolean(\"\"notabool\"\")\"\nnull",
+    "resultJson": "{\"header\":{\"column_names\":[\"toBoolean(\\\"notabool\\\")\"],\"column_types\":[\"Bool\"]},\"data\":[[[null]]]}"
   },
   "tags": [
     "conversion",
