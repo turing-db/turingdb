@@ -975,7 +975,7 @@ def FilterOp : TuringOp<"filter", [Pure]> {
   }];
 }
 
-def CreateNode : TuringOp<"create_node"> {
+def CreateNode : TuringOp<"create_node", [AttrSizedOperandSegments]> {
   let summary = "Create one node per input row, with given labels and property values";
 
   let description = [{
@@ -993,13 +993,14 @@ def CreateNode : TuringOp<"create_node"> {
 
   let arguments = (ins StrArrayAttr:$labels,
                        StrArrayAttr:$prop_names,
-                       Variadic<Column>:$prop_values);
+                       Variadic<Column>:$prop_values,
+                       Optional<Column>:$cardinality);
   let results   = (outs ColumnNodeIDs:$result);
   let hasVerifier = 1;
 
   let assemblyFormat = [{
-    `(` $labels `,` $prop_names `,` `{` $prop_values `}` `)` attr-dict `:`
-    functional-type(operands, results)
+    `(` $labels `,` $prop_names `,` `{` $prop_values `}` `)` ( `foreach` $cardinality^ )?
+    attr-dict `:` functional-type(operands, results)
   }];
 }
 

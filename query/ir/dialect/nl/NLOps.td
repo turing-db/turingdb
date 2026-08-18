@@ -1598,7 +1598,7 @@ def Collect : NLOp<"collect", [Pure]> {
   let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
 }
 
-def CreateNode : NLOp<"create_node"> {
+def CreateNode : NLOp<"create_node", [AttrSizedOperandSegments]> {
   let summary = "Write one node per input row into the open transaction's write buffer";
   let description = [{
     Adds one pending node per row to the transaction's CommitWriteBuffer.
@@ -1612,12 +1612,14 @@ def CreateNode : NLOp<"create_node"> {
 
   let arguments = (ins StrArrayAttr:$labels,
                        StrArrayAttr:$prop_names,
-                       Variadic<NLChunk>:$prop_values);
+                       Variadic<NLChunk>:$prop_values,
+                       Optional<NLChunk>:$cardinality);
   let results   = (outs NLNodeIDChunk:$result);
   let hasVerifier = 1;
 
   let assemblyFormat = [{
-    $labels `,` $prop_names `,` `{` $prop_values `}` attr-dict
+    $labels `,` $prop_names `,` `{` $prop_values `}`
+    ( `foreach` $cardinality^ `:` qualified(type($cardinality)) )? attr-dict
     ( `:` qualified(type($prop_values))^ )?
   }];
 }

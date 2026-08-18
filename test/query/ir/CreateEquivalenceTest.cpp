@@ -209,6 +209,31 @@ protected:
         }
     }
 
+    void expectSeededCreateEquivalent(std::string_view seedQuery,
+                                      std::string_view createQuery,
+                                      std::string_view matchQuery) {
+        applyV2(_v2GraphName, seedQuery);
+        applyV2(_v3GraphName, seedQuery);
+
+        applyV2(_v2GraphName, createQuery);
+        applyV3(_v3GraphName, createQuery);
+
+        Rows v2Rows;
+        matchV2(_v2GraphName, matchQuery, v2Rows);
+        Rows v3Rows;
+        matchV2(_v3GraphName, matchQuery, v3Rows);
+
+        std::ranges::sort(v2Rows);
+        std::ranges::sort(v3Rows);
+
+        ASSERT_EQ(v2Rows.size(), v3Rows.size())
+            << "Row count mismatch for CREATE: " << createQuery;
+
+        for (auto [v2Row, v3Row] : rv::zip(v2Rows, v3Rows)) {
+            EXPECT_EQ(v2Row, v3Row) << "Row mismatch for CREATE: " << createQuery;
+        }
+    }
+
     const std::string _v2GraphName = "v2Graph";
     const std::string _v3GraphName = "v3Graph";
     std::unique_ptr<TuringTestEnv> _env;
@@ -257,6 +282,55 @@ TEST_F(CreateEquivalenceTest, nodeWithMultipleLabels) {
     expectCreateEquivalent(
         R"(CREATE (n:Person:Employee {name: "Alice"}))",
         "MATCH (n:Employee) RETURN n.name");
+}
+
+TEST_F(CreateEquivalenceTest, matchCreatePropertyCarriesCardinality) {
+    expectSeededCreateEquivalent(
+        R"(CREATE (:Widget {tag: "a"}), (:Widget {tag: "b"}), (:Widget {tag: "c"}))",
+        R"(MATCH (n:Widget) CREATE (m:Gadget {origin: n.tag}))",
+        "MATCH (m:Gadget) RETURN m.origin");
+}
+
+TEST_F(CreateEquivalenceTest, matchCreateNodeOncePerMatchedRow) {
+    expectSeededCreateEquivalent(
+        "CREATE (:Widget), (:Widget), (:Widget)",
+        "MATCH (n:Widget) CREATE (m:Gadget)",
+        "MATCH (m:Gadget) RETURN count(m)");
+}
+
+TEST_F(CreateEquivalenceTest, matchCreateNodeReadBackAllRows) {
+    expectSeededCreateEquivalent(
+        "CREATE (:Widget), (:Widget)",
+        R"(MATCH (n:Widget) CREATE (m:Gadget {origin: "seed"}))",
+        "MATCH (m:Gadget) RETURN m.origin");
+}
+
+TEST_F(CreateEquivalenceTest, matchCreateEdgeOncePerMatchedRow) {
+    expectSeededCreateEquivalent(
+        "CREATE (:Widget), (:Widget), (:Widget)",
+        "MATCH (n:Widget) CREATE (n)-[e:LINKED]->(m:Gadget)",
+        "MATCH (:Widget)-[e:LINKED]->(:Gadget) RETURN count(e)");
+}
+
+TEST_F(CreateEquivalenceTest, matchCrossProductCreateNodePerBindingRow) {
+    expectSeededCreateEquivalent(
+        "CREATE (:Widget), (:Widget), (:Gizmo), (:Gizmo), (:Gizmo)",
+        "MATCH (a:Widget), (b:Gizmo) CREATE (m:Gadget)",
+        "MATCH (m:Gadget) RETURN count(m)");
+}
+
+TEST_F(CreateEquivalenceTest, matchCrossProductCreateNodeReadBackAllRows) {
+    expectSeededCreateEquivalent(
+        "CREATE (:Widget), (:Widget), (:Gizmo), (:Gizmo), (:Gizmo)",
+        R"(MATCH (a:Widget), (b:Gizmo) CREATE (m:Gadget {origin: "x"}))",
+        "MATCH (m:Gadget) RETURN m.origin");
+}
+
+TEST_F(CreateEquivalenceTest, matchThreeComponentCrossProductCreateNode) {
+    expectSeededCreateEquivalent(
+        "CREATE (:Widget), (:Widget), (:Gizmo), (:Gizmo), (:Gizmo), (:Doohickey)",
+        "MATCH (a:Widget), (b:Gizmo), (c:Doohickey) CREATE (m:Gadget)",
+        "MATCH (m:Gadget) RETURN count(m)");
 }
 
 TEST_F(CreateEquivalenceTest, multipleSequentialCreates) {

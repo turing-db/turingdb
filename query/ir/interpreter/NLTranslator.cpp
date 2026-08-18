@@ -871,6 +871,10 @@ void NLTranslator::translateCreateNode(nl::CreateNode createNode, NLStmtContaine
         data->addProperty({._propertyTypeID=propType._id, ._values=propColumn});
     }
 
+    if (const mlir::Value cardinality = createNode.getCardinality()) {
+        data->setCardinality(getColumn(cardinality));
+    }
+
     body->emplaceStmt(&NLExecutor::runCreateNode, data);
 }
 

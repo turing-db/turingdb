@@ -922,6 +922,11 @@ void DBProgramGenerator::generateCreate(const CypherAST* ast) {
         }
     }
 
+    mlir::Value matchCardinality;
+    if (!knownVars.empty()) {
+        matchCardinality = knownVars.begin()->second;
+    }
+
     const mlir::db::ColumnType nodeIDType = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
     const mlir::db::ColumnType edgeIDType = allocColumnType(mlir::storage::EdgeIDType::get(_mlirCtxt));
     const mlir::Location loc = _opBuilder.getUnknownLoc();
@@ -957,12 +962,15 @@ void DBProgramGenerator::generateCreate(const CypherAST* ast) {
             }
         }
 
+        const mlir::Value cardinality = matchCardinality;
+
         mlir::db::CreateNode createNode = _opBuilder.create<mlir::db::CreateNode>(
             loc,
             nodeIDType,
             _opBuilder.getStrArrayAttr(labelNames),
             _opBuilder.getStrArrayAttr(propNames),
-            mlir::ValueRange{propValues});
+            mlir::ValueRange{propValues},
+            cardinality);
         const mlir::Value nodeValue = createNode.getResult();
 
         if (!name.empty()) {
