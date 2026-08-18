@@ -158,6 +158,39 @@ private:
     std::vector<Row> _rows;
 };
 
+// Collects the (score, [scores]) rows a collect keyed on a nullable Int64 alias emits.
+class Int64KeyedListSink : public NLOutputSink {
+public:
+    using Row = std::pair<std::optional<int64_t>, std::vector<int64_t>>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* keys = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[0]);
+        const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[1]);
+        ASSERT_NE(keys, nullptr);
+        ASSERT_NE(lists, nullptr);
+        ASSERT_EQ(keys->size(), lists->size());
+
+        const auto& keyRaw = keys->getRaw();
+        const auto& listRaw = lists->getRaw();
+        for (size_t row = offset; row < offset + rowCount; row++) {
+            std::vector<int64_t> scores;
+            readInt64List(listRaw[row], scores);
+
+            _rows.push_back({keyRaw[row], scores});
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
 // Collects the (key, [ids]) rows a grouped entity collect emits, reading each list cell
 // with the tag-checking reader for the collected entity kind.
 template <void (*Reader)(const ListView&, std::vector<uint64_t>&)>
@@ -200,6 +233,40 @@ private:
 
 using KeyedNodeListSink = KeyedIDListSink<readNodeIDList>;
 using KeyedEdgeListSink = KeyedIDListSink<readEdgeIDList>;
+
+// Collects the (node, [nodes]) rows a collect keyed on a node alias emits.
+class NodeKeyedListSink : public NLOutputSink {
+public:
+    using Row = std::pair<uint64_t, std::vector<uint64_t>>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* keys = dynamic_cast<const ColumnVector<NodeID>*>(chunks[0]);
+        const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[1]);
+        ASSERT_NE(keys, nullptr);
+        ASSERT_NE(lists, nullptr);
+        ASSERT_EQ(keys->size(), lists->size());
+
+        const auto& keyRaw = keys->getRaw();
+        const auto& listRaw = lists->getRaw();
+        for (size_t row = offset; row < offset + rowCount; row++) {
+            std::vector<uint64_t> ids;
+            readNodeIDList(listRaw[row], ids);
+
+            _rows.push_back({keyRaw[row].getValue(), ids});
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
 
 // Collects the ([ids]) rows an ungrouped entity collect emits: a single list cell chunk.
 class NodeListSink : public NLOutputSink {
@@ -585,6 +652,64 @@ TEST_F(CypherCollectTest, rejectsCollectOfAConstantAlias) {
 
     EXPECT_EQ(ungroupedStatus.getStatus(), QueryStatus::Status::PLAN_ERROR);
     EXPECT_EQ(ungroupedStatus.getError(), "collect() of a constant expression is not yet supported.");
+}
+
+// An aliased item is a non-aggregate item like any other, so it groups the rows too: each
+// list holds the one value its group is, not the values of the whole match.
+TEST_F(CypherCollectTest, collectOverAPropertyAlias) {
+    buildTeamGraph();
+
+    KeyedStringListSink sink;
+    match("MATCH (n:Node) RETURN n.name AS nm, collect(nm)", sink);
+
+    std::vector<KeyedStringListSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<KeyedStringListSink::Row> expected {
+        {"alice", {"alice"}},
+        {"bob", {"bob"}},
+        {"carol", {"carol"}},
+        {"dan", {"dan"}},
+    };
+    EXPECT_EQ(rows, expected);
+}
+
+// dan has no score, so the null keys a group of its own - and collect drops the null it
+// would have collected there, leaving that group's list empty.
+TEST_F(CypherCollectTest, collectOverANullablePropertyAlias) {
+    buildTeamGraph();
+
+    Int64KeyedListSink sink;
+    match("MATCH (n:Node) RETURN n.score AS s, collect(s)", sink);
+
+    std::vector<Int64KeyedListSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<Int64KeyedListSink::Row> expected {
+        {std::nullopt, {}},
+        {10, {10}},
+        {20, {20}},
+        {100, {100}},
+    };
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(CypherCollectTest, collectOverAnEntityAlias) {
+    buildTeamGraph();
+
+    NodeKeyedListSink sink;
+    match("MATCH (n:Node) RETURN n AS m, collect(m)", sink);
+
+    std::vector<NodeKeyedListSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<NodeKeyedListSink::Row> expected {
+        {0, {0}},
+        {1, {1}},
+        {2, {2}},
+        {3, {3}},
+    };
+    EXPECT_EQ(rows, expected);
 }
 
 // An entity has no list element representation, so no collect overload takes one and the
