@@ -46,6 +46,17 @@ target_link_libraries(test_query_ir_call_procedure PRIVATE
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s)
 
+# The three-layer sample test chains three calls of gnn.neighbourhoodSample from the query
+# text over a purpose-built citation graph, so it needs the frontend as well as the registry.
+add_ir_tests(test_query_ir_gnn_sample_layers GnnSampleLayersTest.cpp)
+target_link_libraries(test_query_ir_gnn_sample_layers PRIVATE
+        turing_db_procedures_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s)
+
 # The optional-argument tests drive gnn.neighbourhoodSample from hand-written IR - the
 # analyzer would reject the wrong-arity forms before they reach the lowering's check -
 # so they need only the procedure registry beside the engine.
