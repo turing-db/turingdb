@@ -470,6 +470,63 @@ TEST_F(CypherListLiteralTest, limitsTheMatchedListRows) {
     expectRows("MATCH (n) RETURN [1, 2] LIMIT 3", expected);
 }
 
+TEST_F(CypherListLiteralTest, emitsNothingWhenAFilteredMatchKeepsNoRowBesideTheList) {
+    // The list is the whole projection, so its row count is the relation's - and the rows
+    // that count are the ones the filter kept, not the ones the scan walked.
+    const Rows expected = {};
+    expectRows("MATCH (n) WHERE n.name = 'nobody' RETURN [1, 2]", expected);
+}
+
+TEST_F(CypherListLiteralTest, emitsOneRowPerSurvivingMatchBesideTheList) {
+    const Rows expected = {{"[1, 2]"}};
+    expectRows("MATCH (n) WHERE n.name = 'Remy' RETURN [1, 2]", expected);
+}
+
+TEST_F(CypherListLiteralTest, ordersTheMatchedListRows) {
+    // An ORDER BY key the projection does not carry sizes the emission through the sort's
+    // own rows, so a projection of the list alone is emitted once per sorted row. Every row
+    // holds the same list, so the order decides nothing here - the row count does.
+    constexpr size_t simpleGraphNodeCount = 18;
+    const Rows expected(simpleGraphNodeCount, Row {"[1, 2]"});
+
+    expectRows("MATCH (n) RETURN [1, 2] ORDER BY n.name", expected);
+}
+
+TEST_F(CypherListLiteralTest, skipsTheMatchedListRows) {
+    // A SKIP with no LIMIT after it is emitted in place at an offset rather than copied, so
+    // this is the folded form of the cut over a matched list: 18 rows less the 15 dropped.
+    const Rows expected(3, Row {"[1, 2]"});
+    expectRows("MATCH (n) RETURN [1, 2] SKIP 15", expected);
+}
+
+TEST_F(CypherListLiteralTest, dedupsTheMatchedHeterogeneousListToOneRow) {
+    // The type-erased list rides the same row-aligned cells a homogeneous one does: its
+    // element type says nothing about how the rows are laid out.
+    const Rows expected = {{"[true, mixed, 10]"}};
+    expectRows("MATCH (n) RETURN DISTINCT [true, 'mixed', 10]", expected);
+}
+
+TEST_F(CypherListLiteralTest, cutsTheMatchedNestedListRows) {
+    // A cut copies list cells as views, so a nested list survives it whole rather than
+    // being flattened or re-materialized per row.
+    const Row row = {"[10, [deep, " + std::to_string(2.5) + "]]"};
+    const Rows expected(2, row);
+
+    expectRows("MATCH (n) RETURN [10, ['deep', 2.5]] LIMIT 2", expected);
+}
+
+TEST_F(CypherListLiteralTest, cutsTheMatchedEmptyListRows) {
+    const Rows expected(2, Row {"[]"});
+    expectRows("MATCH (n) RETURN [] LIMIT 2", expected);
+}
+
+TEST_F(CypherListLiteralTest, returnsTheListBesideAnAggregateOverAnEmptyMatch) {
+    // An aggregate answers one row whether or not the match kept any, so the list stands
+    // beside a count of nothing rather than the projection collapsing to no row.
+    const Rows expected = {{"[1, 2]", "0"}};
+    expectRows("MATCH (n) WHERE n.name = 'nobody' RETURN [1, 2], count(n)", expected);
+}
+
 TEST_F(CypherListLiteralTest, holdsNullListElements) {
     const Rows expected = {{"[1, null]"}};
     expectRows("RETURN [1, null]", expected);
