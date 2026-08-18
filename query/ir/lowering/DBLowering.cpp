@@ -1756,9 +1756,11 @@ void DBLowering::lowerCallProcedure(mlir::db::CallProcedure call) {
     llvm::SmallVector<mlir::Type, 4> chunkTypes;
     for (const mlir::Attribute yield : yields) {
         const llvm::StringRef name = mlir::cast<mlir::StringAttr>(yield).getValue();
-        const size_t returnIndex = procedure->getReturnValueIndex(std::string_view(name.data(), name.size()));
+        const std::string_view yieldName(name.data(), name.size());
+        const size_t returnIndex = procedure->getReturnValueIndex(yieldName);
+        const ProcedureType returnType = procedure->getReturnValueType(returnIndex);
 
-        chunkTypes.push_back(procedureChunkType(_builder, procedure->getReturnValueType(returnIndex)));
+        chunkTypes.push_back(procedureChunkType(_builder, returnType));
     }
 
     // Each carried column comes back with its own chunk type - the call replicates its
