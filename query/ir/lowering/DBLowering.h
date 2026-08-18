@@ -300,7 +300,14 @@ private:
     // A cross product's factors are regions, so it recurses through their
     // db.yield operands; a property fetch opens no loop but is traversed to reach
     // its input chunk's loop. The first limit to claim a producer keeps it.
-    void assignProducerLoops(mlir::Value column, mlir::Value handle);
+    // Returns whether the walk reached a loop at all: a column computed from constants
+    // alone is produced by none, which is what sends the handle to the driving relation.
+    bool assignProducerLoops(mlir::Value column, mlir::Value handle);
+
+    // Records that the loops producing the relation which drives @param limit's projection
+    // carry its handle, so a cut charged to constants alone stops its nest as any other
+    // cut does rather than letting it run to the end.
+    void assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value handle);
 
     // Peephole over the lowered nl function: where an nl.limit_truncate's results
     // are consumed exactly by one adjacent nl.output (the terminal-LIMIT shape),
