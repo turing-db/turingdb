@@ -31,6 +31,7 @@
 #include "columns/UnaryPredicates.h"
 #include "list/ListElementOrder.h"
 #include "list/ListUtils.h"
+#include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
 #include "versioning/CommitWriteBuffer.h"
@@ -111,25 +112,49 @@ void functionConstKernel(NLExecutionContext* context, Column* result, const Colu
     output->set(functor(typedInput->getRaw()));
 }
 
-template <typename Functor>
-void functionVectorKernel(NLExecutionContext* context, Column* result, const Column* input) {
-    using Arg = typename Functor::ArgType;
-    using Res = typename Functor::ResultType;
+// A null constant argument converts to a null result whatever the function; the
+// ColumnConst<PropertyNull> result already reads as null, so nothing is computed.
+void functionNullKernel(NLExecutionContext*, Column*, const Column*) {
+}
 
-    const auto* typedInput = dynamic_cast<const ColumnVector<Arg>*>(input);
-    bioassert(typedInput, "Function operand has an unexpected column type.");
-    auto* output = static_cast<ColumnVector<Res>*>(result);
-
-    const auto& inputRaw = typedInput->getRaw();
+template <typename Functor, typename Element>
+void applyFunctionOverVector(Functor& functor,
+                             const ColumnVector<Element>* input,
+                             ColumnVector<typename Functor::ResultType>* output) {
+    const auto& inputRaw = input->getRaw();
     const size_t size = inputRaw.size();
 
     output->resize(size);
     auto& outputRaw = output->getRaw();
 
-    Functor functor = makeFunctor<Functor>(context);
     for (size_t row = 0; row < size; row++) {
         outputRaw[row] = functor(inputRaw[row]);
     }
+}
+
+template <typename Functor>
+void functionVectorKernel(NLExecutionContext* context, Column* result, const Column* input) {
+    using Arg = typename Functor::ArgType;
+    using Res = typename Functor::ResultType;
+
+    auto* output = static_cast<ColumnVector<Res>*>(result);
+    Functor functor = makeFunctor<Functor>(context);
+
+    if (const auto* typedInput = dynamic_cast<const ColumnVector<Arg>*>(input)) {
+        applyFunctionOverVector(functor, typedInput, output);
+        return;
+    }
+
+    // Fallback for functions which take a string, but which may be provdied a column of
+    // std::strings or std::string_views
+    if constexpr (std::is_same_v<Arg, types::String::Primitive>) {
+        if (const auto* ownedInput = dynamic_cast<const ColumnVector<types::String::OwningPrimitive>*>(input)) {
+            applyFunctionOverVector(functor, ownedInput, output);
+            return;
+        }
+    }
+
+    bioassert(false, "Function operand has an unexpected column type.");
 }
 
 template <typename Functor>
@@ -2219,6 +2244,12 @@ void NLExecutor::runUnaryFunction(NLExecutionContext* context, NLFunctionData* d
 template <typename Functor>
 NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
     using Res = typename Functor::ResultType;
+
+    // Early exit noop for NULL literals
+    if (dynamic_cast<const ColumnConst<PropertyNull>*>(input)) {
+        result = memory->alloc<ColumnConst<PropertyNull>>();
+        return &functionNullKernel;
+    }
 
     if (input->getContainerKind() == ContainerKind::code<ColumnConst>()) {
         result = memory->alloc<ColumnConst<Res>>();
