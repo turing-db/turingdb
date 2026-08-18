@@ -198,7 +198,7 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
     EXPECT_BINARY_VALID(fourLiteral, BinaryOperator::Mult, sevenLiteral, EvaluatedType::Integer);
     EXPECT_BINARY_VALID(twentyLiteral, BinaryOperator::Div, fourLiteral, EvaluatedType::Integer);
     EXPECT_BINARY_VALID(seventeenLiteral, BinaryOperator::Mod, fiveLiteral, EvaluatedType::Integer);
-    EXPECT_BINARY_VALID(twoLiteral, BinaryOperator::Pow, eightLiteral, EvaluatedType::Integer);
+    EXPECT_BINARY_VALID(twoLiteral, BinaryOperator::Pow, eightLiteral, EvaluatedType::Double);
     EXPECT_BINARY_VALID(fiveLiteral, BinaryOperator::Add, DoubleLiteral::create(&_ast, 10.2), EvaluatedType::Double);
     EXPECT_BINARY_VALID(fifteenLiteral, BinaryOperator::Sub, DoubleLiteral::create(&_ast, 3.14), EvaluatedType::Double);
     EXPECT_BINARY_VALID(fourLiteral, BinaryOperator::Mult, DoubleLiteral::create(&_ast, 7.5), EvaluatedType::Double);
