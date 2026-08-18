@@ -34,6 +34,7 @@
 #include "columns/ColumnConst.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnOptVector.h"
+#include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
 #include "list/ListBufferTypeTag.h"
 #include "list/ListElementView.h"
@@ -107,6 +108,12 @@ std::string renderList(const ListView list) {
 std::string renderCell(const Column* column, size_t row) {
     if (const auto* lists = dynamic_cast<const ColumnConst<ListView>*>(column)) {
         return renderList((*lists)[row]);
+    }
+
+    // A cut or a dedup reads its rows, so the list is laid out across them as a column of
+    // cells rather than the one value it is when nothing but the projection reads it.
+    if (const auto* listRows = dynamic_cast<const ColumnVector<ListView>*>(column)) {
+        return renderList((*listRows)[row]);
     }
 
     if (const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(column)) {
@@ -425,21 +432,42 @@ TEST_F(CypherListLiteralTest, returnsTheListBesideAnUngroupedAggregate) {
     expectRows("MATCH (n) RETURN [1, 2, 3, 4], count(n)", expected);
 }
 
-TEST_F(CypherListLiteralTest, rejectsDistinctOverTheListAlone) {
-    // Every column of the projection is constant, so there is nothing to tell rows apart:
-    // what DISTINCT asks for here is a row count, not a dedup, and codegen says so rather
-    // than answering one row of whatever the empty dedup read.
-    Rows rows;
-    EXPECT_THROW(runQuery("RETURN DISTINCT [1, 2, 3]", rows), TuringException);
+TEST_F(CypherListLiteralTest, dedupsTheListAloneToOneRow) {
+    // Every row of the projection is the same list, so they are all one distinct row.
+    const Rows expected = {{"[1, 2, 3]"}};
+    expectRows("RETURN DISTINCT [1, 2, 3]", expected);
 }
 
-TEST_F(CypherListLiteralTest, rejectsChainedCutsOverTheListAlone) {
-    // A SKIP feeding a LIMIT cannot fold into the output the way a single cut does, so the
-    // surviving rows are copied to a fresh chunk - and there is no such copy for a column
-    // that holds one value for every row. `RETURN 5 SKIP 1 LIMIT 1` is rejected the same
-    // way, so this is the chained-cut limit rather than the list literal's.
-    Rows rows;
-    EXPECT_THROW(runQuery("RETURN [1, 2] SKIP 1 LIMIT 1", rows), TuringException);
+TEST_F(CypherListLiteralTest, dedupsTheMatchedListToOneRow) {
+    // The match drives eighteen rows and each holds the same list, so the dedup keeps one.
+    const Rows expected = {{"[1, 2]"}};
+    expectRows("MATCH (n) RETURN DISTINCT [1, 2]", expected);
+}
+
+TEST_F(CypherListLiteralTest, dedupsAnEmptyMatchToNoRow) {
+    // Nothing matched, so there is no row to keep: a dedup of no rows is no row, not the
+    // one row the list would be on its own.
+    const Rows expected = {};
+    expectRows("MATCH (n) WHERE n.name = 'nobody' RETURN DISTINCT [1, 2]", expected);
+}
+
+TEST_F(CypherListLiteralTest, cutsTheListAloneToNoRow) {
+    // The list alone is one row, so dropping one leaves nothing for the LIMIT to keep.
+    const Rows expected = {};
+    expectRows("RETURN [1, 2] SKIP 1 LIMIT 1", expected);
+}
+
+TEST_F(CypherListLiteralTest, cutsTheMatchedListRows) {
+    // With a match driving them the rows are the scan's, so the two cuts take a window of
+    // three out of eighteen - each holding the list, which is laid out across those rows
+    // rather than standing as the single row it is on its own.
+    const Rows expected(3, Row {"[1, 2]"});
+    expectRows("MATCH (n) RETURN [1, 2] SKIP 2 LIMIT 3", expected);
+}
+
+TEST_F(CypherListLiteralTest, limitsTheMatchedListRows) {
+    const Rows expected(3, Row {"[1, 2]"});
+    expectRows("MATCH (n) RETURN [1, 2] LIMIT 3", expected);
 }
 
 TEST_F(CypherListLiteralTest, holdsNullListElements) {
