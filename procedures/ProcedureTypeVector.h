@@ -46,6 +46,7 @@ struct NamedProcedureType {
     std::string_view _name;
     ProcedureType _type {ProcedureType::INVALID};
     bool _optional {false};
+    bool _constant {false};
 };
 
 class ProcedureTypeVector {
@@ -65,13 +66,28 @@ public:
 
     void add(std::string_view name, ProcedureType type) {
         constexpr bool optional = false;
-        _values.emplace_back(name, type, optional);
+        constexpr bool constant = false;
+        _values.emplace_back(name, type, optional, constant);
+        _requiredCount++;
+    }
+
+    void addConstant(std::string_view name, ProcedureType type) {
+        constexpr bool optional = false;
+        constexpr bool constant = true;
+        _values.emplace_back(name, type, optional, constant);
         _requiredCount++;
     }
 
     void addOptional(std::string_view name, ProcedureType type) {
         constexpr bool optional = true;
-        _values.emplace_back(name, type, optional);
+        constexpr bool constant = false;
+        _values.emplace_back(name, type, optional, constant);
+    }
+
+    void addOptionalConstant(std::string_view name, ProcedureType type) {
+        constexpr bool optional = true;
+        constexpr bool constant = true;
+        _values.emplace_back(name, type, optional, constant);
     }
 
     size_t requiredCount() const { return _requiredCount; }
