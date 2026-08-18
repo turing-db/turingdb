@@ -568,6 +568,25 @@ TEST_F(CypherCollectTest, rejectsCollectOfConstant) {
     EXPECT_EQ(status.getError(), "collect() of a constant expression is not yet supported.");
 }
 
+// The alias is what makes the collected column look row-carrying: what it names is still
+// the constant, bound above the loop the matched rows are read in, so both spellings must
+// reach the same rejection.
+TEST_F(CypherCollectTest, rejectsCollectOfAConstantAlias) {
+    buildTeamGraph();
+
+    QueryStatus groupedStatus;
+    runQuery("MATCH (n:Node) RETURN n.team, 1 AS x, collect(x)", groupedStatus);
+
+    EXPECT_EQ(groupedStatus.getStatus(), QueryStatus::Status::PLAN_ERROR);
+    EXPECT_EQ(groupedStatus.getError(), "collect() of a constant expression is not yet supported.");
+
+    QueryStatus ungroupedStatus;
+    runQuery("MATCH (n:Node) RETURN 1 AS x, collect(x)", ungroupedStatus);
+
+    EXPECT_EQ(ungroupedStatus.getStatus(), QueryStatus::Status::PLAN_ERROR);
+    EXPECT_EQ(ungroupedStatus.getError(), "collect() of a constant expression is not yet supported.");
+}
+
 // An entity has no list element representation, so no collect overload takes one and the
 // analyzer rejects the call.
 TEST_F(CypherCollectTest, groupedCollectOfNodes) {
