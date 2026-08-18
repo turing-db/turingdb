@@ -106,8 +106,8 @@ void GnnNeighbourhoodSampleProcedure::registerProcedure(ProcedureNamespace* ns) 
     proc->setDeallocCallback(&deallocData);
 
     proc->addArgument("node", ProcedureType::NODE);
-    proc->addArgument("sampleSize", ProcedureType::INT64);
-    proc->addOptionalArgument("seed", ProcedureType::INT64);
+    proc->addConstantArgument("sampleSize", ProcedureType::INT64);
+    proc->addOptionalConstantArgument("seed", ProcedureType::INT64);
 
     proc->addReturnValue("src", ProcedureType::NODE);
     proc->addReturnValue("edge", ProcedureType::EDGE);

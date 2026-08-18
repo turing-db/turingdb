@@ -49,6 +49,12 @@ public:
     void addArgument(std::string_view name, ProcedureType type);
     void addOptionalArgument(std::string_view name, ProcedureType type);
 
+    // A constant argument is read once per call rather than per row - the procedure
+    // takes nothing but a ColumnConst for it. A row-aligned argument makes the
+    // procedure per-row, which obliges it to report the input row of the rows it emits.
+    void addConstantArgument(std::string_view name, ProcedureType type);
+    void addOptionalConstantArgument(std::string_view name, ProcedureType type);
+
     // Arguments and return values
     const ProcedureTypeVector& returnValues() const { return _returnValues; }
     const ProcedureTypeVector& argumentTypes() const { return _argumentTypes; }
@@ -67,6 +73,8 @@ public:
 
     void returnAll(std::vector<YieldItem>& yieldItems) const;
 
+    bool hasRowAlignedArgument() const;
+
     bool hasIndices() const { return _hasIndices; }
     void setHasIndices(bool value) { _hasIndices = value; }
 
@@ -81,6 +89,8 @@ private:
     ProcedureTypeVector _returnValues;
     ProcedureTypeVector _argumentTypes;
     bool _hasIndices {false};
+
+    void throwIfOptionalArgumentDeclared() const;
 };
 
 }

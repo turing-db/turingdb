@@ -1,0 +1,2 @@
+add_turing_test(test_procedures_registration ProcedureRegistrationTest.cpp)
+target_link_libraries(test_procedures_registration PRIVATE turing_db_procedures_s)

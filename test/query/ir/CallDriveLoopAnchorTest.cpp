@@ -151,7 +151,7 @@ protected:
         scaleProcedure->setDeallocCallback(&scaleDealloc);
         scaleProcedure->setExecuteCallback(&scaleExecute);
         scaleProcedure->setHasIndices(true);
-        scaleProcedure->addArgument("factor", ProcedureType::INT64);
+        scaleProcedure->addConstantArgument("factor", ProcedureType::INT64);
         scaleProcedure->addArgument("nodeIDs", ProcedureType::NODE);
         scaleProcedure->addReturnValue("value", ProcedureType::INT64);
         testNamespace->addProcedure(scaleProcedure);

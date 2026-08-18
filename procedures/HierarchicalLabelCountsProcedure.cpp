@@ -111,7 +111,7 @@ void HierarchicalLabelCountsProcedure::registerProcedure(ProcedureNamespace* ns)
     proc->setExecuteCallback(&execute);
     proc->setAllocCallback(&allocData);
     proc->setDeallocCallback(&deallocData);
-    proc->addArgument("currentLabels", ProcedureType::LIST);
+    proc->addConstantArgument("currentLabels", ProcedureType::LIST);
     proc->addReturnValue("label", ProcedureType::STRING_VIEW);
     proc->addReturnValue("nodeCount", ProcedureType::UINT_64);
     ns->addProcedure(proc);

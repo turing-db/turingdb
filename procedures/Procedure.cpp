@@ -31,14 +31,21 @@ void Procedure::addReturnValue(std::string_view name, ProcedureType type) {
 }
 
 void Procedure::addArgument(std::string_view name, ProcedureType type) {
-    if (_argumentTypes.requiredCount() < _argumentTypes.size()) {
-        throw ProcedureException("Required arguments must precede optional arguments");
-    }
+    throwIfOptionalArgumentDeclared();
     _argumentTypes.add(name, type);
 }
 
 void Procedure::addOptionalArgument(std::string_view name, ProcedureType type) {
     _argumentTypes.addOptional(name, type);
+}
+
+void Procedure::addConstantArgument(std::string_view name, ProcedureType type) {
+    throwIfOptionalArgumentDeclared();
+    _argumentTypes.addConstant(name, type);
+}
+
+void Procedure::addOptionalConstantArgument(std::string_view name, ProcedureType type) {
+    _argumentTypes.addOptionalConstant(name, type);
 }
 
 size_t Procedure::getRequiredArgumentCount() const {
@@ -72,5 +79,21 @@ void Procedure::returnAll(std::vector<YieldItem>& yieldItems) const {
                   "Invalid procedure return type");
 
         yieldItems.emplace_back(item._name);
+    }
+}
+
+bool Procedure::hasRowAlignedArgument() const {
+    for (const NamedProcedureType& argument : _argumentTypes) {
+        if (!argument._constant) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void Procedure::throwIfOptionalArgumentDeclared() const {
+    if (_argumentTypes.requiredCount() < _argumentTypes.size()) {
+        throw ProcedureException("Required arguments must precede optional arguments");
     }
 }

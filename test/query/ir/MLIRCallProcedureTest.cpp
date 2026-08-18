@@ -78,22 +78,29 @@ size_t doubleExecuteCalls = 0;
 struct DoubleData : public IndexedProcedureData {};
 
 // test.doubleNodeID(nodeIDs) YIELD doubled: one row per input node, holding the node
-// ID doubled. A streaming procedure - it clears and refills its result column on every
-// call, and marks itself finished once it has produced a chunk's rows - so it
-// exercises the per-chunk execute form (and that the finished flag does not wedge the
-// next chunk).
+// ID doubled, and the input row behind it. A streaming procedure - it clears and refills
+// its result column on every call, and marks itself finished once it has produced a
+// chunk's rows - so it exercises the per-chunk execute form (and that the finished flag
+// does not wedge the next chunk).
 void doubleExecuteImpl(ProcedureState* procedureState) {
     DoubleData& data = procedureState->data<DoubleData>();
 
     const auto* nodeIDs = static_cast<const ColumnVector<NodeID>*>(data.getInputColumn(0));
     auto* doubled = static_cast<ColumnVector<types::Int64::Primitive>*>(data.getReturnColumn(0));
+    ColumnIndices* indices = data.indices();
 
     doubleExecuteCalls++;
 
     // Chunking semantics: the result column holds this chunk's rows alone.
     doubled->clear();
-    for (const NodeID nodeID : nodeIDs->getRaw()) {
-        doubled->push_back(2 * static_cast<types::Int64::Primitive>(nodeID.getValue()));
+
+    const auto& nodeIDsRaw = nodeIDs->getRaw();
+    for (size_t inputRow = 0; inputRow < nodeIDsRaw.size(); inputRow++) {
+        doubled->push_back(2 * static_cast<types::Int64::Primitive>(nodeIDsRaw[inputRow].getValue()));
+
+        if (indices) {
+            indices->push_back(inputRow);
+        }
     }
 
     procedureState->finish();
@@ -116,6 +123,45 @@ ProcedureData* doubleAlloc() {
 }
 
 void doubleDealloc(ProcedureData* data) {
+    delete data;
+}
+
+struct BrokenReportData : public IndexedProcedureData {};
+
+// test.brokenReportNodeID(nodeIDs) YIELD doubled: doubles its input the way
+// test.doubleNodeID does but never reports the input row behind a row it emits, which
+// registration takes the procedure's word for - so the drive is what catches it.
+void brokenReportExecuteImpl(ProcedureState* procedureState) {
+    BrokenReportData& data = procedureState->data<BrokenReportData>();
+
+    const auto* nodeIDs = static_cast<const ColumnVector<NodeID>*>(data.getInputColumn(0));
+    auto* doubled = static_cast<ColumnVector<types::Int64::Primitive>*>(data.getReturnColumn(0));
+
+    doubled->clear();
+    for (const NodeID nodeID : nodeIDs->getRaw()) {
+        doubled->push_back(2 * static_cast<types::Int64::Primitive>(nodeID.getValue()));
+    }
+
+    procedureState->finish();
+}
+
+void brokenReportExecute(ProcedureState* procedureState) {
+    switch (procedureState->getStep()) {
+        case ProcedureState::Step::PREPARE:
+        case ProcedureState::Step::RESET:
+        break;
+
+        case ProcedureState::Step::EXECUTE:
+        brokenReportExecuteImpl(procedureState);
+        break;
+    }
+}
+
+ProcedureData* brokenReportAlloc() {
+    return new BrokenReportData();
+}
+
+void brokenReportDealloc(ProcedureData* data) {
     delete data;
 }
 
@@ -1103,13 +1149,15 @@ func.func @main() {
 }
 )mlir";
 
-// A carry set on a procedure that does not declare it reports input rows: refused while
-// the call is planned, since the carried column could only be rebuilt from that report.
+// A carry set on a procedure whose only argument is a constant: it reads that argument
+// once rather than per row, so it reports no input row and the carried column could only
+// be rebuilt from that report. Refused while the call is planned.
 constexpr const char* undeclaredCarryProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %doubled, %a2 = db.call_procedure("test.doubleNodeID", {%a}, {%a}) yields ["doubled"] : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<!storage.node_id>)
-  db.output(%a2, %doubled) : !db.column<!storage.node_id>, !db.column<none>
+  %n = db.constant(3 : i64)
+  %v, %a2 = db.call_procedure("test.constantArg", {%n}, {%a}) yields ["v"] : (!db.column<i64>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<!storage.node_id>)
+  db.output(%a2, %v) : !db.column<!storage.node_id>, !db.column<none>
   return
 }
 )mlir";
@@ -1192,8 +1240,7 @@ protected:
         _jobSystem->init();
 
         // The db namespace, so a test can call a real registered procedure, plus a
-        // test namespace holding the procedures that exercise the per-chunk form - no
-        // registered procedure takes a per-row column argument.
+        // test namespace holding the procedures that exercise the per-chunk form.
         _procedures.init();
 
         ProcedureNamespace* testNamespace = _procedures.createNamespace("test");
@@ -1202,6 +1249,7 @@ protected:
         doubleProcedure->setAllocCallback(&doubleAlloc);
         doubleProcedure->setDeallocCallback(&doubleDealloc);
         doubleProcedure->setExecuteCallback(&doubleExecute);
+        doubleProcedure->setHasIndices(true);
         doubleProcedure->addArgument("nodeIDs", ProcedureType::NODE);
         doubleProcedure->addReturnValue("doubled", ProcedureType::INT64);
         testNamespace->addProcedure(doubleProcedure);
@@ -1252,13 +1300,12 @@ protected:
         tagsProcedure->addReturnValue("coords", ProcedureType::LIST);
         testNamespace->addProcedure(tagsProcedure);
 
-        // Declares the report but never makes it - the only way to reach the runtime
-        // check now that lowering refuses a carry set on a procedure that declares
-        // nothing.
+        // Declares the report every procedure taking a row-aligned argument owes, and
+        // never makes it - the only way left to reach the runtime check.
         Procedure* brokenProcedure = new Procedure("brokenReportNodeID");
-        brokenProcedure->setAllocCallback(&doubleAlloc);
-        brokenProcedure->setDeallocCallback(&doubleDealloc);
-        brokenProcedure->setExecuteCallback(&doubleExecute);
+        brokenProcedure->setAllocCallback(&brokenReportAlloc);
+        brokenProcedure->setDeallocCallback(&brokenReportDealloc);
+        brokenProcedure->setExecuteCallback(&brokenReportExecute);
         brokenProcedure->setHasIndices(true);
         brokenProcedure->addArgument("nodeIDs", ProcedureType::NODE);
         brokenProcedure->addReturnValue("doubled", ProcedureType::INT64);
@@ -1274,7 +1321,7 @@ protected:
         constantArgProcedure->setAllocCallback(&constantArgAlloc);
         constantArgProcedure->setDeallocCallback(&constantArgDealloc);
         constantArgProcedure->setExecuteCallback(&constantArgExecute);
-        constantArgProcedure->addArgument("n", ProcedureType::INT64);
+        constantArgProcedure->addConstantArgument("n", ProcedureType::INT64);
         constantArgProcedure->addReturnValue("v", ProcedureType::INT64);
         testNamespace->addProcedure(constantArgProcedure);
 
@@ -1700,9 +1747,9 @@ TEST_F(MLIRCallProcedureTest, rejectsCarrySetOnProcedureNotDeclaringInputRowRepo
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    // test.doubleNodeID emits a row per input row but declares no input-row report, so
-    // its carried column could only be rebuilt by guessing. Refused while the call is
-    // planned - nothing runs.
+    // test.constantArg reads its argument once rather than per row, so it reports no
+    // input row and its carried column could only be rebuilt by guessing. Refused while
+    // the call is planned - nothing runs.
     EXPECT_THROW(lowerProgram(undeclaredCarryProgram, reader.getView()), IRException);
 }
 
@@ -2050,19 +2097,46 @@ TEST_F(MLIRCallProcedureTest, cypherYieldWhereKeepsAliveWhatOnlyItReads) {
     EXPECT_EQ(rows, expected);
 }
 
-TEST_F(MLIRCallProcedureTest, cypherCallStillRejectsCarryingPastANonReportingProcedure) {
+TEST_F(MLIRCallProcedureTest, cypherCallCarriesTheMatchedVariablePastAPerRowCall) {
     auto graph = buildLabelledGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    // `n` is in flight, so it rides through the carry set - and test.doubleNodeID cannot say
-    // which of its rows came from which input row, so the call is refused.
+    // `n` is in flight, so it rides through the carry set whether or not the projection
+    // reads it again - which is why the doubled value must come back paired with the node
+    // it was computed from. Five nodes, one row each.
     CarriedNodeSink sink;
-    EXPECT_THROW(runQuery("MATCH (n) CALL test.doubleNodeID(n) YIELD doubled RETURN n, doubled",
-                          graph.get(),
-                          reader.getView(),
-                          sink),
-                 IRException);
+    runQuery("MATCH (n) CALL test.doubleNodeID(n) YIELD doubled RETURN n, doubled",
+             graph.get(),
+             reader.getView(),
+             sink,
+             /*chunkSize=*/2);
+
+    std::vector<CarriedNodeSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<CarriedNodeSink::Row> expected {{0, 0}, {1, 2}, {2, 4}, {3, 6}, {4, 8}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(MLIRCallProcedureTest, cypherCallCarriesAMatchedVariableTheProjectionDrops) {
+    auto graph = buildLabelledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The same call returning the yield alone: `n` is still carried through, since codegen
+    // takes every column in flight along rather than asking whether anything reads it
+    // later, so the call is driven exactly as above.
+    Int64Sink sink;
+    runQuery("MATCH (n) CALL test.doubleNodeID(n) YIELD doubled RETURN doubled",
+             graph.get(),
+             reader.getView(),
+             sink,
+             /*chunkSize=*/2);
+
+    std::vector<types::Int64::Primitive> rows = sink.rows();
+    std::sort(rows.begin(), rows.end());
+    const std::vector<types::Int64::Primitive> expected {0, 2, 4, 6, 8};
+    EXPECT_EQ(rows, expected);
 }
 
 TEST_F(MLIRCallProcedureTest, cypherCallWithoutYieldEmitsEveryReturnValue) {
@@ -2309,8 +2383,9 @@ TEST_F(MLIRCallProcedureTest, cypherCallWithConstantArgumentsCrossesWithTheMatch
     // MATCH (n) CALL test.constantArg(3) YIELD v RETURN v: the call takes an argument, but
     // one built from a literal, so its rows do not follow the matched rows any more than an
     // argument-less call's do - it is their cartesian product. Five nodes against the two
-    // rows the call emits, and test.constantArg declares no indices, so reaching this
-    // through a carry set instead would both lose the cardinality and be refused.
+    // rows the call emits, and test.constantArg declares its argument constant rather than
+    // row-aligned, so it reports no input row: reaching this through a carry set instead
+    // would both lose the cardinality and be refused.
     Int64Sink sink;
     runQuery("MATCH (n) CALL test.constantArg(3) YIELD v RETURN v", graph.get(),
              reader.getView(),
@@ -2344,7 +2419,7 @@ TEST_F(MLIRCallProcedureTest, cypherCallWithConstantArgumentsGeneratesACrossProd
 
     // The argument is a constant, so the call reads none of the matched rows and is the
     // product's right factor rather than something the match rides through: it carries
-    // nothing, which is what lets a procedure declaring no indices be called here at all.
+    // nothing, which is what lets a procedure reporting no input row be called here at all.
     EXPECT_TRUE(call->getParentRegion() == &product.getRightFactor());
     EXPECT_EQ(call.getInputs().size(), 1u);
     EXPECT_EQ(call.getCarriedColumns().size(), 0u);

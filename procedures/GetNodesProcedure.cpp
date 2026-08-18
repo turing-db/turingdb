@@ -144,7 +144,7 @@ void GetNodesProcedure::registerProcedure(ProcedureNamespace* ns) {
     proc->setExecuteCallback(&execute);
     proc->setAllocCallback(&allocData);
     proc->setDeallocCallback(&deallocData);
-    proc->addArgument("nodeIDs", ProcedureType::LIST);
+    proc->addConstantArgument("nodeIDs", ProcedureType::LIST);
     proc->addReturnValue("id", ProcedureType::NODE);
     proc->addReturnValue("labels", ProcedureType::LIST);
     proc->addReturnValue("inEdgeCount", ProcedureType::UINT_64);

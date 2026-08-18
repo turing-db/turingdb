@@ -318,7 +318,7 @@ protected:
         firstNodesProcedure->setAllocCallback(&firstNodesAlloc);
         firstNodesProcedure->setDeallocCallback(&firstNodesDealloc);
         firstNodesProcedure->setExecuteCallback(&firstNodesExecute);
-        firstNodesProcedure->addArgument("count", ProcedureType::INT64);
+        firstNodesProcedure->addConstantArgument("count", ProcedureType::INT64);
         firstNodesProcedure->addReturnValue("person", ProcedureType::NODE);
         testNamespace->addProcedure(firstNodesProcedure);
 
@@ -326,7 +326,7 @@ protected:
         rankedNodesProcedure->setAllocCallback(&rankedNodesAlloc);
         rankedNodesProcedure->setDeallocCallback(&rankedNodesDealloc);
         rankedNodesProcedure->setExecuteCallback(&rankedNodesExecute);
-        rankedNodesProcedure->addArgument("count", ProcedureType::INT64);
+        rankedNodesProcedure->addConstantArgument("count", ProcedureType::INT64);
         rankedNodesProcedure->addReturnValue("person", ProcedureType::NODE);
         rankedNodesProcedure->addReturnValue("rank", ProcedureType::INT64);
         testNamespace->addProcedure(rankedNodesProcedure);

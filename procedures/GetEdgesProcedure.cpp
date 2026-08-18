@@ -127,7 +127,7 @@ void GetEdgesProcedure::registerProcedure(ProcedureNamespace* ns) {
     proc->setExecuteCallback(&execute);
     proc->setAllocCallback(&allocData);
     proc->setDeallocCallback(&deallocData);
-    proc->addArgument("edgeIDs", ProcedureType::LIST);
+    proc->addConstantArgument("edgeIDs", ProcedureType::LIST);
     proc->addReturnValue("id", ProcedureType::EDGE);
     proc->addReturnValue("src", ProcedureType::NODE);
     proc->addReturnValue("tgt", ProcedureType::NODE);
