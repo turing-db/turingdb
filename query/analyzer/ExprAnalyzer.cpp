@@ -209,7 +209,6 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            // OpenCypher defines double x double = double
             if (pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)
                 || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Integer)) {
                 type = EvaluatedType::Double;
@@ -229,6 +228,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             const bool bothDouble = pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double);
             const bool mixedNumeric = pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Integer);
 
+            // As per OpenCypher spec
             if (bothInteger || bothDouble || mixedNumeric) {
                 type = EvaluatedType::Double;
                 break;
