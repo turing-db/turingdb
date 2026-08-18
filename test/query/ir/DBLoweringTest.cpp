@@ -674,6 +674,29 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n) RETURN 5 LIMIT 3
+constexpr const char* constantLimitOverMatchProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %c = db.constant(5 : i64)
+  %lc = db.limit(%c) count 3 : (!db.column<i64>) -> !db.column<i64>
+  db.output(%lc) : !db.column<i64>
+  return
+}
+)mlir";
+
+// The same cut with a reduction over the scan before it, which has to see every node.
+constexpr const char* constantLimitPastACountProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %k = db.count(%n) : (!db.column<!storage.node_id>) -> !db.column<ui64>
+  %c = db.constant(5 : i64)
+  %lc = db.limit(%c) count 3 : (!db.column<i64>) -> !db.column<i64>
+  db.output(%lc) : !db.column<i64>
+  return
+}
+)mlir";
+
 // MATCH (a), (b) RETURN 5
 constexpr const char* constantOverCrossProductProgram = R"mlir(
 func.func @main() {
@@ -3916,6 +3939,102 @@ TEST_F(DBLoweringTest, lowersLimitToHandleUpdateAndLoopOperands) {
     // The update sits in the innermost loop body, the same block as the output.
     EXPECT_EQ(updateOp->getBlock(), outputOp->getBlock());
     EXPECT_TRUE(mlir::isa<mlir::nl::For>(updateOp->getParentOp()));
+}
+
+// A cut over constants alone: the constants are bound above the nest, so no column of
+// the cut walks back to the scan. The handle still has to reach it - the rows the budget
+// cuts are the ones the scan makes - or the scan runs to its end and the budget only
+// stops the output, producing every node to emit three of them.
+TEST_F(DBLoweringTest, boundsTheDrivingLoopOfACutOverConstants) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule =
+        mlir::parseSourceString<mlir::ModuleOp>(constantLimitOverMatchProgram, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &reader.getView());
+    lowering.lower(dbFunction, *nlModule);
+
+    mlir::nl::Limit limitOp;
+    mlir::nl::LimitUpdate updateOp;
+    size_t forCount = 0;
+    size_t forsWithLimit = 0;
+
+    nlModule->walk([&](mlir::Operation* operation) {
+        if (mlir::nl::Limit found = mlir::dyn_cast<mlir::nl::Limit>(operation)) {
+            limitOp = found;
+        } else if (mlir::nl::For forOp = mlir::dyn_cast<mlir::nl::For>(operation)) {
+            forCount++;
+            if (forOp.getLimit()) {
+                forsWithLimit++;
+            }
+        } else if (mlir::nl::LimitUpdate found = mlir::dyn_cast<mlir::nl::LimitUpdate>(operation)) {
+            updateOp = found;
+        }
+    });
+
+    ASSERT_TRUE(limitOp);
+    ASSERT_TRUE(updateOp);
+    EXPECT_EQ(forCount, 1u);
+    EXPECT_EQ(forsWithLimit, 1u);
+
+    // The scan's loop and the update charging it name the one hoisted handle, and the
+    // update sits inside that loop - the constants are laid out over its rows there.
+    const mlir::Value handle = limitOp.getState();
+    nlModule->walk([&](mlir::nl::For forOp) {
+        EXPECT_EQ(forOp.getLimit(), handle);
+    });
+    EXPECT_EQ(updateOp.getState(), handle);
+    EXPECT_TRUE(mlir::isa<mlir::nl::For>(updateOp->getParentOp()));
+}
+
+// The same cut with a reduction between the scan and the cut: the count has to see every
+// node, so the scan is not the loop this budget may stop - a cut over constants finds no
+// driving loop past a reduction.
+TEST_F(DBLoweringTest, leavesTheDrivingLoopUnboundedPastAReduction) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule =
+        mlir::parseSourceString<mlir::ModuleOp>(constantLimitPastACountProgram, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &reader.getView());
+    lowering.lower(dbFunction, *nlModule);
+
+    size_t forsWithLimit = 0;
+    nlModule->walk([&](mlir::nl::For forOp) {
+        if (forOp.getLimit()) {
+            forsWithLimit++;
+        }
+    });
+
+    EXPECT_EQ(forsWithLimit, 0u);
 }
 
 TEST_F(DBLoweringTest, limitsChainedMidQueryFansOutBeyondBudget) {

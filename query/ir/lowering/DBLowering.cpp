@@ -266,6 +266,36 @@ nl::Output soleOutputConsumer(mlir::ResultRange results) {
     return sharedByAllResults ? output : nl::Output();
 }
 
+bool opensSourceLoop(mlir::Operation* operation) {
+    return mlir::isa<mlir::db::ScanNodes,
+                     mlir::db::ConstScanNodes,
+                     mlir::db::UnwindConst,
+                     mlir::db::ScanNodesByLabel,
+                     mlir::db::ScanEdges,
+                     mlir::db::GetOutEdges,
+                     mlir::db::GetInEdges,
+                     mlir::db::GetEdges,
+                     mlir::db::GetOutEdgesByType,
+                     mlir::db::GetInEdgesByType>(operation);
+}
+
+// The db ops whose rows a projection is emitted over: a source, the nest a cross product
+// builds, and the emit loop a pipeline breaker opens over what it accumulated
+bool opensRowLoop(mlir::Operation* operation) {
+    return opensSourceLoop(operation)
+        || mlir::isa<mlir::db::CrossProduct, mlir::db::Sort, mlir::db::GroupAggregate>(operation);
+}
+
+// A reduction emits its one row at function scope, so what follows it walks no rows of the
+// relation it read - and that relation had to be read in full to reduce it
+bool reducesToOneRow(mlir::Operation* operation) {
+    return mlir::isa<mlir::db::Count,
+                     mlir::db::Sum,
+                     mlir::db::Min,
+                     mlir::db::Max,
+                     mlir::db::Avg>(operation);
+}
+
 // Whether a chunk holds one value standing for every row rather than one per row.
 // The arithmetic ops listed are bound wherever their operands are, so a chunk
 // computed from constants alone through them is hoisted out of the producing loop
@@ -369,8 +399,18 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     // shared producer wins, so a loop never needs to carry two handles.
     for (mlir::db::Limit limit : limits) {
         const mlir::Value handle = _limitHandles[limit.getOperation()];
+
+        bool producedByALoop = false;
         for (const mlir::Value column : limit.getColumns()) {
-            assignProducerLoops(column, handle);
+            producedByALoop |= assignProducerLoops(column, handle);
+        }
+
+        // A cut over constants alone walks back to no loop at all - the constants are
+        // bound above the nest - so the handle goes to the relation driving the
+        // projection instead. Without it the nest runs to its end and the budget only
+        // stops the output, producing every row to throw all but k away.
+        if (!producedByALoop) {
+            assignCardinalityDriverLoop(limit, handle);
         }
     }
 
@@ -1494,41 +1534,33 @@ void DBLowering::lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect) {
     buildLoopForSource(unwindCollectOp.getResult(), unwindCollect.getOperation());
 }
 
-void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {
+bool DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {
     mlir::Operation* const definingOp = column.getDefiningOp();
     if (!definingOp) {
         // A cross-product factor's loop variable is a block argument with no
         // defining op; its producing loop is reached through the factor's yield
         // in the cross-product branch below, not from here.
-        return;
+        return false;
     }
 
-    const bool opensLoop = mlir::isa<mlir::db::ScanNodes,
-                                     mlir::db::ConstScanNodes,
-                                     mlir::db::UnwindConst,
-                                     mlir::db::ScanNodesByLabel,
-                                     mlir::db::ScanEdges,
-                                     mlir::db::GetOutEdges,
-                                     mlir::db::GetInEdges,
-                                     mlir::db::GetEdges,
-                                     mlir::db::GetOutEdgesByType,
-                                     mlir::db::GetInEdgesByType>(definingOp);
+    const bool opensLoop = opensSourceLoop(definingOp);
     const bool isCrossProduct = mlir::isa<mlir::db::CrossProduct>(definingOp);
 
     // A pipeline breaker accumulates every row before emitting any, so the walk stops
     // here; the limit budgets its emit loop instead, when it opens one.
     const bool emitsThroughLoop = mlir::isa<mlir::db::Sort, mlir::db::GroupAggregate>(definingOp);
-    const bool breaksPipeline = emitsThroughLoop
-        || mlir::isa<mlir::db::Count, mlir::db::Sum, mlir::db::Min, mlir::db::Max, mlir::db::Avg>(definingOp);
+    const bool breaksPipeline = emitsThroughLoop || reducesToOneRow(definingOp);
+
+    bool reachedALoop = opensLoop || isCrossProduct || emitsThroughLoop;
 
     // The first limit, in program order, to claim a producer wins, so a loop
     // shared by two limits' nests carries the outer one and never two handles.
-    if ((opensLoop || isCrossProduct || emitsThroughLoop) && !_loopLimitHandle.count(definingOp)) {
+    if (reachedALoop && !_loopLimitHandle.count(definingOp)) {
         _loopLimitHandle[definingOp] = handle;
     }
 
     if (breaksPipeline) {
-        return;
+        return reachedALoop;
     }
 
     if (isCrossProduct) {
@@ -1540,16 +1572,45 @@ void DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {
         for (mlir::Region* const factor : factors) {
             mlir::Operation* const yield = factor->front().getTerminator();
             for (const mlir::Value yielded : yield->getOperands()) {
-                assignProducerLoops(yielded, handle);
+                reachedALoop |= assignProducerLoops(yielded, handle);
             }
         }
     } else {
         // A non-loop producer (a property fetch) is traversed but not assigned -
         // it opens no loop - so its input chunk's loop is still reached.
         for (const mlir::Value operand : definingOp->getOperands()) {
-            assignProducerLoops(operand, handle);
+            reachedALoop |= assignProducerLoops(operand, handle);
         }
     }
+
+    return reachedALoop;
+}
+
+void DBLowering::assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value handle) {
+    mlir::Operation* const limitOp = limit.getOperation();
+
+    // The relation driving the projection is the loop opened last before the cut: its rows
+    // are the ones nl.output emits the constants over, so they are the rows this budget
+    // cuts. A reduction in between leaves no such loop - it emits its one row at function
+    // scope, and the relation behind it had to be read in full to reduce it.
+    mlir::Operation* driver = nullptr;
+    for (mlir::Operation& operation : *limitOp->getBlock()) {
+        if (&operation == limitOp) {
+            break;
+        }
+
+        if (opensRowLoop(&operation)) {
+            driver = &operation;
+        } else if (reducesToOneRow(&operation)) {
+            driver = nullptr;
+        }
+    }
+
+    if (!driver) {
+        return;
+    }
+
+    assignProducerLoops(driver->getResult(0), handle);
 }
 
 void DBLowering::foldTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
