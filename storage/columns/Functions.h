@@ -1,6 +1,7 @@
 #pragma once
 
 #include <limits>
+#include <optional>
 #include <string>
 #include <system_error>
 
@@ -90,10 +91,10 @@ private:
 
 class toIntegerFunction {
 public:
-    using ResultType = types::Int64::Primitive;
+    using ResultType = std::optional<types::Int64::Primitive>;
 
     ResultType operator()(std::string_view sv) {
-        ResultType result = std::numeric_limits<ResultType>::max();
+        types::Int64::Primitive result = 0;
 
         const auto* start = sv.data();
         const auto* end = sv.data() + sv.size();
@@ -104,7 +105,7 @@ public:
         const bool parsedAll = ptr == end;
 
         if (!success || !parsedAll) {
-            throw TuringException(fmt::format("toInteger: cannot convert '{}' to integer.", sv));
+            return std::nullopt;
         }
 
         return result;
@@ -114,7 +115,7 @@ public:
 // NOTE: macOS wheel build libc++ doesn't support from_chars on double: use strtod instead
 class toFloatFunction {
 public:
-    using ResultType = types::Double::Primitive;
+    using ResultType = std::optional<types::Double::Primitive>;
 
     ResultType operator()(std::string_view sv) {
         // @ref std::strtod requires a null-terminated std::string: convert the string_view
@@ -122,17 +123,17 @@ public:
         char* end = nullptr;
         errno = 0;
 
-        const ResultType result = std::strtod(_buf.data(), &end);
+        const types::Double::Primitive result = std::strtod(_buf.data(), &end);
 
         // Either empty string, or could not parse all of the string as double
         const bool couldNotConvert = end == _buf.data() || end != _buf.data() + _buf.size();
         if (couldNotConvert) {
-            throw TuringException(fmt::format("toFloat: cannot convert '{}' to float.", sv));
+            return std::nullopt;
         }
 
         const bool outOfRange = errno == ERANGE;
         if (outOfRange) {
-            throw TuringException(fmt::format("toFloat: cannot convert '{}' to float: out of range.", sv));
+            return std::nullopt;
         }
 
         return result;
@@ -144,7 +145,7 @@ private:
 
 class toBoolFunction {
 public:
-    using ResultType = types::Bool::Primitive;
+    using ResultType = std::optional<types::Bool::Primitive>;
 
     ResultType operator()(std::string_view sv) {
         strToLower(_buf, sv);
@@ -156,7 +157,7 @@ public:
             return false;
         }
 
-        throw TuringException(fmt::format("toBoolean: cannot convert '{}' to boolean.", sv));
+        return std::nullopt;
     }
 
 private:

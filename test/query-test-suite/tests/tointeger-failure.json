@@ -4,11 +4,10 @@
   "query": "RETURN toInteger(\"10101notnumber\")",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (FUNCTION_INVOCATION): v1\n__expr__ (LITERAL): v0\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
-    "result": "EXEC ERROR\ntoInteger: cannot convert '10101notnumber' to integer.",
-    "resultJson": "{\"header\":{\"column_names\":[\"toInteger(\\\"10101notnumber\\\")\"],\"column_types\":[\"Int64\"]},\"data\":[],\"error\":\"EXEC_ERROR\",\"error_details\":\"toInteger: cannot convert '10101notnumber' to integer.\"}"
+    "result": "\"toInteger(\"\"10101notnumber\"\")\"\nnull",
+    "resultJson": "{\"header\":{\"column_names\":[\"toInteger(\\\"10101notnumber\\\")\"],\"column_types\":[\"Int64\"]},\"data\":[[[null]]]}"
   },
   "tags": [
-    "errors",
     "conversion",
     "functions",
     "literals"
