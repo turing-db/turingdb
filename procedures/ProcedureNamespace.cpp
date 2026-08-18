@@ -1,6 +1,7 @@
 #include "ProcedureNamespace.h"
 
 #include "Procedure.h"
+#include "ProcedureException.h"
 
 using namespace db;
 
@@ -23,6 +24,15 @@ void ProcedureNamespace::addProcedure(Procedure* procedure) {
     fullName += _name;
     fullName += ".";
     fullName += procedure->getName();
+
+    // Nothing can be carried past a call whose procedure cannot say which of the rows it
+    // was driven with produced each row it emits, so the declaration is refused up front
+    // rather than at the first query that needs the report.
+    if (procedure->hasRowAlignedArgument() && !procedure->hasIndices()) {
+        throw ProcedureException("Procedure '" + fullName + "' takes an argument aligned with the "
+                                 "rows it is driven with, so it must report the input row of the "
+                                 "rows it emits");
+    }
 
     _procedures.push_back(procedure);
     _procedureMap[procedure->getName()] = procedure;

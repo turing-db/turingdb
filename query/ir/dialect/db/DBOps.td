@@ -598,10 +598,11 @@ def CallProcedure : TuringOp<"call_procedure", [AttrSizedOperandSegments]> {
     nl.procedure_init shape, opened where those arguments are bound.
 
     A carried column must be row-aligned with the arguments (both bound by the same
-    loop), since the procedure reports an indices column as the correspondence as an index into its own input
-    rows. Only a procedure that produces indices can be carried past, and only where there are input rows to report against:
-    an argument-less procedure has none (cross its rows in with db.cross_product
-    instead).
+    loop), since the correspondence the procedure reports is an index into its own
+    input rows. Only a procedure reporting those indices can be carried past, which
+    every procedure declaring a row-aligned argument owes: one taking no argument, or
+    only constant ones, has no input row to report against (cross its rows in with
+    db.cross_product instead).
   }];
 
   let arguments = (ins StrAttr:$procedure,
