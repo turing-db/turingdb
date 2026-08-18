@@ -942,8 +942,7 @@ private:
     std::vector<Row> _rows;
 };
 
-// Collects the (a, b, c) rows of three uncorrelated calls crossed together, so a test can
-// assert the full Cartesian product of what each one emitted.
+// Collects the rows of a projection over three node columns.
 class NodeTripleSink : public NLOutputSink {
 public:
     using Row = std::tuple<uint64_t, uint64_t, uint64_t>;
@@ -1392,6 +1391,52 @@ protected:
         builder.addEdge(0, node0, node2);
         builder.addEdge(0, node1, node4);
         builder.addEdge(0, node2, node3);
+
+        const auto submitResult = change->access().submit(*_jobSystem);
+        EXPECT_TRUE(submitResult);
+
+        return graph;
+    }
+
+    // Ten nodes and no cycle, so a three-hop pattern has one root and its rows do not
+    // depend on whether the engine walks an edge twice:
+    //
+    //   0 -> 1 -> 4 -> 6 -> 8
+    //             4 -> 7 -> 9
+    //   0 -> 2 -> 5
+    //   0 -> 3
+    std::unique_ptr<Graph> buildChainGraph() {
+        auto graph = Graph::create();
+
+        auto change = graph->newChange();
+        auto* commitBuilder = change->access().getTip();
+        auto& builder = commitBuilder->newBuilder();
+        auto& metadata = builder.getMetadata();
+
+        metadata.getOrCreateLabel("0");
+        metadata.getOrCreateEdgeType("0");
+
+        const LabelSet labelset = LabelSet::fromList({0});
+        const NodeID node0 = builder.addNode(labelset);
+        const NodeID node1 = builder.addNode(labelset);
+        const NodeID node2 = builder.addNode(labelset);
+        const NodeID node3 = builder.addNode(labelset);
+        const NodeID node4 = builder.addNode(labelset);
+        const NodeID node5 = builder.addNode(labelset);
+        const NodeID node6 = builder.addNode(labelset);
+        const NodeID node7 = builder.addNode(labelset);
+        const NodeID node8 = builder.addNode(labelset);
+        const NodeID node9 = builder.addNode(labelset);
+
+        builder.addEdge(0, node0, node1);
+        builder.addEdge(0, node0, node2);
+        builder.addEdge(0, node0, node3);
+        builder.addEdge(0, node1, node4);
+        builder.addEdge(0, node4, node6);
+        builder.addEdge(0, node4, node7);
+        builder.addEdge(0, node6, node8);
+        builder.addEdge(0, node7, node9);
+        builder.addEdge(0, node2, node5);
 
         const auto submitResult = change->access().submit(*_jobSystem);
         EXPECT_TRUE(submitResult);
@@ -2332,6 +2377,30 @@ TEST_F(MLIRCallProcedureTest, cypherCallSamplesANeighbourhood) {
     std::vector<NodePairSink::Row> rows;
     sink.sortedRows(rows);
     const std::vector<NodePairSink::Row> expected {{0, 1}, {0, 2}, {1, 4}, {2, 3}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(MLIRCallProcedureTest, cypherSampledTargetExpandsThreeHops) {
+    auto graph = buildChainGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // The pattern is rooted at the sampled targets, so its hops run from a column the call
+    // yielded rather than from a scan. A sample size above every out-degree takes all of a
+    // node's edges, so the sample is the whole neighbourhood whatever the seed: node 0
+    // yields 1, 2 and 3. Only node 1 has three hops below it (1 -> 4 -> 6 -> 8 and
+    // 1 -> 4 -> 7 -> 9), so `n` must come back beside the two rows that survive.
+    NodeTripleSink sink;
+    runQuery("MATCH (n) CALL gnn.neighbourhoodSample(n, 3, 42) YIELD tgt "
+             "MATCH (tgt)-->(a)-->(b)-->(c) RETURN n, tgt, c",
+             graph.get(),
+             reader.getView(),
+             sink,
+             /*chunkSize=*/2);
+
+    std::vector<NodeTripleSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<NodeTripleSink::Row> expected {{0, 1, 8}, {0, 1, 9}};
     EXPECT_EQ(rows, expected);
 }
 
