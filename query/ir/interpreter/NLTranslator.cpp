@@ -351,35 +351,35 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
         } else if (nl::BroadcastConstant broadcast = mlir::dyn_cast<nl::BroadcastConstant>(operation)) {
             translateBroadcastConstant(broadcast, body);
         } else if (nl::Add add = mlir::dyn_cast<nl::Add>(operation)) {
-            translateAdd(add, body);
+            translateBinaryOp<OP_ADD>(add, body);
         } else if (nl::Sub sub = mlir::dyn_cast<nl::Sub>(operation)) {
-            translateSub(sub, body);
+            translateBinaryOp<OP_SUB>(sub, body);
         } else if (nl::Mul mul = mlir::dyn_cast<nl::Mul>(operation)) {
-            translateMul(mul, body);
+            translateBinaryOp<OP_MUL>(mul, body);
         } else if (nl::Div div = mlir::dyn_cast<nl::Div>(operation)) {
-            translateDiv(div, body);
+            translateBinaryOp<OP_DIV>(div, body);
         } else if (nl::Mod mod = mlir::dyn_cast<nl::Mod>(operation)) {
-            translateMod(mod, body);
+            translateBinaryOp<OP_MOD>(mod, body);
         } else if (nl::Pow pow = mlir::dyn_cast<nl::Pow>(operation)) {
-            translatePow(pow, body);
+            translateBinaryOp<OP_POW>(pow, body);
         } else if (nl::Eq eq = mlir::dyn_cast<nl::Eq>(operation)) {
-            translateEq(eq, body);
+            translateBinaryOp<OP_EQUAL>(eq, body);
         } else if (nl::Neq neq = mlir::dyn_cast<nl::Neq>(operation)) {
-            translateNeq(neq, body);
+            translateBinaryOp<OP_NOT_EQUAL>(neq, body);
         } else if (nl::Gt gt = mlir::dyn_cast<nl::Gt>(operation)) {
-            translateGt(gt, body);
+            translateBinaryOp<OP_GREATER_THAN>(gt, body);
         } else if (nl::Lt lt = mlir::dyn_cast<nl::Lt>(operation)) {
-            translateLt(lt, body);
+            translateBinaryOp<OP_LESS_THAN>(lt, body);
         } else if (nl::Gte gte = mlir::dyn_cast<nl::Gte>(operation)) {
-            translateGte(gte, body);
+            translateBinaryOp<OP_GREATER_THAN_OR_EQUAL>(gte, body);
         } else if (nl::Lte lte = mlir::dyn_cast<nl::Lte>(operation)) {
-            translateLte(lte, body);
+            translateBinaryOp<OP_LESS_THAN_OR_EQUAL>(lte, body);
         } else if (nl::And andOp = mlir::dyn_cast<nl::And>(operation)) {
-            translateAnd(andOp, body);
+            translateBinaryOp<OP_AND>(andOp, body);
         } else if (nl::Or orOp = mlir::dyn_cast<nl::Or>(operation)) {
-            translateOr(orOp, body);
+            translateBinaryOp<OP_OR>(orOp, body);
         } else if (nl::Xor xorOp = mlir::dyn_cast<nl::Xor>(operation)) {
-            translateXor(xorOp, body);
+            translateBinaryOp<OP_XOR>(xorOp, body);
         } else if (nl::Not notOp = mlir::dyn_cast<nl::Not>(operation)) {
             translateNot(notOp, body);
         } else if (nl::Filter filter = mlir::dyn_cast<nl::Filter>(operation)) {
@@ -1031,211 +1031,16 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
     body->emplaceStmt(&NLExecutor::runBroadcastConstant, data);
 }
 
-void NLTranslator::translateAdd(nl::Add add, NLStmtContainer* body) {
-    const Column* lhs = getColumn(add.getLhs());
-    const Column* rhs = getColumn(add.getRhs());
+template <ColumnOperator Op, typename OpType>
+void NLTranslator::translateBinaryOp(OpType op, NLStmtContainer* body) {
+    const Column* lhs = getColumn(op.getLhs());
+    const Column* rhs = getColumn(op.getRhs());
 
     Column* result = nullptr;
-    const NLBinaryFn fn = NLExecutor::selectBinary<OP_ADD>(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to translate ADD result.");
+    const NLBinaryFn fn = NLExecutor::selectBinary<Op>(lhs, rhs, _memory, result);
+    bioassert(result, "Failed to translate binary operator result.");
 
-    _valueSlots[add.getResult()] = result;
-
-    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
-    body->emplaceStmt(&NLExecutor::runBinary, data);
-}
-
-void NLTranslator::translateSub(nl::Sub sub, NLStmtContainer* body) {
-    const Column* lhs = getColumn(sub.getLhs());
-    const Column* rhs = getColumn(sub.getRhs());
-
-    Column* result = nullptr;
-    const NLBinaryFn fn = NLExecutor::selectBinary<OP_SUB>(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to translate SUB result.");
-
-    _valueSlots[sub.getResult()] = result;
-
-    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
-    body->emplaceStmt(&NLExecutor::runBinary, data);
-}
-
-void NLTranslator::translateMul(nl::Mul mul, NLStmtContainer* body) {
-    const Column* lhs = getColumn(mul.getLhs());
-    const Column* rhs = getColumn(mul.getRhs());
-
-    Column* result = nullptr;
-    const NLBinaryFn fn = NLExecutor::selectBinary<OP_MUL>(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to translate MUL result.");
-
-    _valueSlots[mul.getResult()] = result;
-
-    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
-    body->emplaceStmt(&NLExecutor::runBinary, data);
-}
-
-void NLTranslator::translateDiv(nl::Div div, NLStmtContainer* body) {
-    const Column* lhs = getColumn(div.getLhs());
-    const Column* rhs = getColumn(div.getRhs());
-
-    Column* result = nullptr;
-    const NLBinaryFn fn = NLExecutor::selectBinary<OP_DIV>(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to translate DIV result.");
-
-    _valueSlots[div.getResult()] = result;
-
-    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
-    body->emplaceStmt(&NLExecutor::runBinary, data);
-}
-
-void NLTranslator::translateMod(nl::Mod mod, NLStmtContainer* body) {
-    const Column* lhs = getColumn(mod.getLhs());
-    const Column* rhs = getColumn(mod.getRhs());
-
-    Column* result = nullptr;
-    const NLBinaryFn fn = NLExecutor::selectBinary<OP_MOD>(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to translate MOD result.");
-
-    _valueSlots[mod.getResult()] = result;
-
-    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
-    body->emplaceStmt(&NLExecutor::runBinary, data);
-}
-
-void NLTranslator::translatePow(nl::Pow pow, NLStmtContainer* body) {
-    const Column* lhs = getColumn(pow.getLhs());
-    const Column* rhs = getColumn(pow.getRhs());
-
-    Column* result = nullptr;
-    const NLBinaryFn fn = NLExecutor::selectBinary<OP_POW>(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to translate POW result.");
-
-    _valueSlots[pow.getResult()] = result;
-
-    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
-    body->emplaceStmt(&NLExecutor::runBinary, data);
-}
-
-void NLTranslator::translateEq(nl::Eq eq, NLStmtContainer* body) {
-    const Column* lhs = getColumn(eq.getLhs());
-    const Column* rhs = getColumn(eq.getRhs());
-
-    Column* result = nullptr;
-    const NLBinaryFn fn = NLExecutor::selectBinary<OP_EQUAL>(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to translate EQ result.");
-
-    _valueSlots[eq.getResult()] = result;
-
-    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
-    body->emplaceStmt(&NLExecutor::runBinary, data);
-}
-
-void NLTranslator::translateNeq(nl::Neq neq, NLStmtContainer* body) {
-    const Column* lhs = getColumn(neq.getLhs());
-    const Column* rhs = getColumn(neq.getRhs());
-
-    Column* result = nullptr;
-    const NLBinaryFn fn = NLExecutor::selectBinary<OP_NOT_EQUAL>(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to translate NEQ result.");
-
-    _valueSlots[neq.getResult()] = result;
-
-    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
-    body->emplaceStmt(&NLExecutor::runBinary, data);
-}
-
-void NLTranslator::translateGt(nl::Gt gt, NLStmtContainer* body) {
-    const Column* lhs = getColumn(gt.getLhs());
-    const Column* rhs = getColumn(gt.getRhs());
-
-    Column* result = nullptr;
-    const NLBinaryFn fn = NLExecutor::selectBinary<OP_GREATER_THAN>(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to translate GT result.");
-
-    _valueSlots[gt.getResult()] = result;
-
-    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
-    body->emplaceStmt(&NLExecutor::runBinary, data);
-}
-
-void NLTranslator::translateLt(nl::Lt lt, NLStmtContainer* body) {
-    const Column* lhs = getColumn(lt.getLhs());
-    const Column* rhs = getColumn(lt.getRhs());
-
-    Column* result = nullptr;
-    const NLBinaryFn fn = NLExecutor::selectBinary<OP_LESS_THAN>(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to translate LT result.");
-
-    _valueSlots[lt.getResult()] = result;
-
-    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
-    body->emplaceStmt(&NLExecutor::runBinary, data);
-}
-
-void NLTranslator::translateGte(nl::Gte gte, NLStmtContainer* body) {
-    const Column* lhs = getColumn(gte.getLhs());
-    const Column* rhs = getColumn(gte.getRhs());
-
-    Column* result = nullptr;
-    const NLBinaryFn fn = NLExecutor::selectBinary<OP_GREATER_THAN_OR_EQUAL>(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to translate GTE result.");
-
-    _valueSlots[gte.getResult()] = result;
-
-    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
-    body->emplaceStmt(&NLExecutor::runBinary, data);
-}
-
-void NLTranslator::translateLte(nl::Lte lte, NLStmtContainer* body) {
-    const Column* lhs = getColumn(lte.getLhs());
-    const Column* rhs = getColumn(lte.getRhs());
-
-    Column* result = nullptr;
-    const NLBinaryFn fn = NLExecutor::selectBinary<OP_LESS_THAN_OR_EQUAL>(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to translate LTE result.");
-
-    _valueSlots[lte.getResult()] = result;
-
-    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
-    body->emplaceStmt(&NLExecutor::runBinary, data);
-}
-
-void NLTranslator::translateAnd(nl::And andOp, NLStmtContainer* body) {
-    const Column* lhs = getColumn(andOp.getLhs());
-    const Column* rhs = getColumn(andOp.getRhs());
-
-    Column* result = nullptr;
-    const NLBinaryFn fn = NLExecutor::selectBinary<OP_AND>(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to translate AND result.");
-
-    _valueSlots[andOp.getResult()] = result;
-
-    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
-    body->emplaceStmt(&NLExecutor::runBinary, data);
-}
-
-void NLTranslator::translateOr(nl::Or orOp, NLStmtContainer* body) {
-    const Column* lhs = getColumn(orOp.getLhs());
-    const Column* rhs = getColumn(orOp.getRhs());
-
-    Column* result = nullptr;
-    const NLBinaryFn fn = NLExecutor::selectBinary<OP_OR>(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to translate OR result.");
-
-    _valueSlots[orOp.getResult()] = result;
-
-    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
-    body->emplaceStmt(&NLExecutor::runBinary, data);
-}
-
-void NLTranslator::translateXor(nl::Xor xorOp, NLStmtContainer* body) {
-    const Column* lhs = getColumn(xorOp.getLhs());
-    const Column* rhs = getColumn(xorOp.getRhs());
-
-    Column* result = nullptr;
-    const NLBinaryFn fn = NLExecutor::selectBinary<OP_XOR>(lhs, rhs, _memory, result);
-    bioassert(result, "Failed to translate XOR result.");
-
-    _valueSlots[xorOp.getResult()] = result;
+    _valueSlots[op.getResult()] = result;
 
     NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
     body->emplaceStmt(&NLExecutor::runBinary, data);
