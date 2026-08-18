@@ -56,6 +56,9 @@ using Rows = std::vector<Row>;
 using Names = std::vector<std::string>;
 using ConstantNameRow = std::pair<int64_t, std::string>;
 using ConstantNameRows = std::vector<ConstantNameRow>;
+using Int64Values = std::vector<int64_t>;
+using ConstantPair = std::pair<int64_t, int64_t>;
+using ConstantPairs = std::vector<ConstantPair>;
 using OptInt64Values = std::vector<std::optional<int64_t>>;
 using NodeValueRow = std::pair<uint64_t, std::optional<int64_t>>;
 using NodeValueRows = std::vector<NodeValueRow>;
@@ -303,6 +306,53 @@ public:
 
 private:
     Counts _counts;
+};
+
+// Collects a projection of one constant column, which holds a single value for however
+// many rows the chunk carries rather than one per row. A constant a cut is charged to is
+// laid out over the rows of the driving relation, so the matched cases read their column
+// through DistinctOptInt64Sink instead.
+class DistinctConstantSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* constants = dynamic_cast<const ColumnConst<int64_t>*>(chunks[0]);
+        ASSERT_NE(constants, nullptr);
+
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _values.push_back((*constants)[rowIndex]);
+        }
+    }
+
+    const Int64Values& values() const { return _values; }
+
+private:
+    Int64Values _values;
+};
+
+// The two-column sibling of DistinctConstantSink: a projection of two constants, whose
+// rows are told apart by their count alone.
+class DistinctConstantPairSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* firsts = dynamic_cast<const ColumnConst<int64_t>*>(chunks[0]);
+        ASSERT_NE(firsts, nullptr);
+
+        const auto* seconds = dynamic_cast<const ColumnConst<int64_t>*>(chunks[1]);
+        ASSERT_NE(seconds, nullptr);
+
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.emplace_back((*firsts)[rowIndex], (*seconds)[rowIndex]);
+        }
+    }
+
+    const ConstantPairs& rows() const { return _rows; }
+
+private:
+    ConstantPairs _rows;
 };
 
 }
@@ -560,13 +610,75 @@ TEST_F(DistinctTest, dedupsPastATrailingConstant) {
     EXPECT_EQ(actual, expected);
 }
 
-// Every column of the projection is constant, so all its rows are one row repeated and
-// the dedup is left with no column to tell them apart: the one row it should keep is a
-// row count, which is not something the dedup expresses. Rejected rather than answered
-// with the repeats.
-TEST_F(DistinctTest, rejectsADistinctOverConstantsAlone) {
-    DistinctNodeSink sink;
-    EXPECT_THROW(runQuery("MATCH (n) RETURN DISTINCT 5", &sink), TuringException);
+// Every column of the projection is constant, so its 18 rows are one row repeated and
+// no column tells two of them apart: what the dedup keeps is the first row alone, which
+// codegen charges to the constants as a cap of one row rather than to a dedup keyed on a
+// column that never varies.
+TEST_F(DistinctTest, keepsOneRowOfAMatchedConstantProjection) {
+    DistinctOptInt64Sink sink;
+    runQuery("MATCH (n) RETURN DISTINCT 5", &sink);
+
+    const OptInt64Values expected = {5};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+// The same projection with nothing matched, which is one row to begin with: the cap has
+// no repeat to cut and the row comes back as it is.
+TEST_F(DistinctTest, keepsTheOneRowOfAConstantProjection) {
+    DistinctConstantSink sink;
+    runQuery("RETURN DISTINCT 42", &sink);
+
+    const Int64Values expected = {42};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+// An expression over constants alone is constant too, so it is capped the same way
+// rather than deduped.
+TEST_F(DistinctTest, keepsTheOneRowOfAConstantExpression) {
+    DistinctConstantSink sink;
+    runQuery("RETURN DISTINCT 40 + 2", &sink);
+
+    const Int64Values expected = {42};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+// Every column of the projection is capped, not just the first: two constants are one row
+// of two columns, and the row that survives carries both.
+TEST_F(DistinctTest, keepsOneRowOfEveryConstantColumn) {
+    DistinctConstantPairSink sink;
+    runQuery("RETURN DISTINCT 5, 7", &sink);
+
+    const ConstantPairs expected = {{5, 7}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+// The cross product emits its 44 rows over several steps of a nest, where the cap is
+// charged step by step: the row survives the first of them and every later step is left
+// with none, so the repeats do not come back one per step.
+TEST_F(DistinctTest, keepsOneRowOfAConstantProjectionAcrossANest) {
+    DistinctOptInt64Sink sink;
+    runQuery("MATCH (a)-->(b), (a)-->(c) RETURN DISTINCT 5", &sink);
+
+    const OptInt64Values expected = {5};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+// A LIMIT after the dedup is charged to the row the dedup left, not to the 18 the match
+// made, so a limit of more than one row keeps that single row.
+TEST_F(DistinctTest, limitsTheOneRowOfAConstantProjection) {
+    DistinctOptInt64Sink sink;
+    runQuery("MATCH (n) RETURN DISTINCT 5 LIMIT 3", &sink);
+
+    const OptInt64Values expected = {5};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+// The SKIP sibling: the deduped projection is one row, so skipping a row leaves nothing.
+TEST_F(DistinctTest, skipsTheOneRowOfAConstantProjection) {
+    DistinctOptInt64Sink sink;
+    runQuery("MATCH (n) RETURN DISTINCT 5 SKIP 1", &sink);
+
+    EXPECT_TRUE(sink.values().empty());
 }
 
 // The projection is a grouped aggregate first, so the dedup runs on its results, where a
@@ -784,6 +896,32 @@ TEST_F(DistinctTest, dedupsBeforeSorting) {
     ASSERT_EQ(distinctOp.getResults().size(), 1u);
     ASSERT_EQ(sortOp.getColumns().size(), 1u);
     EXPECT_EQ(sortOp.getColumns().front().getDefiningOp(), distinctOp.getOperation());
+}
+
+// The generated program holds no dedup at all for a projection of constants: the rows
+// are one row repeated, so a db.remove_duplicates would be keyed on columns that never
+// vary. It is a db.limit of one row instead, which is what keeps the first row.
+TEST_F(DistinctTest, capsAConstantProjectionInsteadOfDedupingIt) {
+    mlir::MLIRContext context;
+    mlir::OwningOpRef<mlir::ModuleOp> module;
+    generateProgram("MATCH (n) RETURN DISTINCT 5", context, module);
+
+    mlir::db::Limit limitOp;
+    size_t distinctCount = 0;
+    size_t limitCount = 0;
+
+    module->walk([&](mlir::Operation* operation) {
+        if (mlir::isa<mlir::db::RemoveDuplicates>(operation)) {
+            distinctCount++;
+        } else if (mlir::db::Limit found = mlir::dyn_cast<mlir::db::Limit>(operation)) {
+            limitOp = found;
+            limitCount++;
+        }
+    });
+
+    EXPECT_EQ(distinctCount, 0u);
+    ASSERT_EQ(limitCount, 1u);
+    EXPECT_EQ(limitOp.getCount(), 1u);
 }
 
 int main(int argc, char** argv) {

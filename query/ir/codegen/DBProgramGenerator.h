@@ -109,6 +109,11 @@ private:
     void translateDistinct(const Projection* projection,
                            llvm::SmallVectorImpl<mlir::Value>& projected);
 
+    // Dedups a projection of constants alone, whose rows are one row repeated, by
+    // capping @param projected at the single row the dedup would keep
+    void translateDistinctOverConstants(const Projection* projection,
+                                        llvm::SmallVectorImpl<mlir::Value>& projected);
+
     void runPasses();
 
     // Reorders the projection with a Sort over @param projected, replacing each

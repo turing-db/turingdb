@@ -1326,9 +1326,11 @@ void DBProgramGenerator::translateDistinct(const Projection* projection,
     collectRowColumns(projection, projected, dedupedItems, dedupedColumns);
 
     // Every column is constant, so the projection is one row repeated as many times as
-    // the query matched: the single row to keep is a row count, not a dedup
+    // the query matched: no column tells two of those rows apart, and the one the dedup
+    // keeps is the first of them - the projection capped at a single row
     if (dedupedColumns.empty()) {
-        throw TuringException("DISTINCT over a projection of constants is not yet supported.");
+        translateDistinctOverConstants(projection, projected);
+        return;
     }
 
     llvm::SmallVector<mlir::Type> dedupedTypes;
@@ -1344,6 +1346,28 @@ void DBProgramGenerator::translateDistinct(const Projection* projection,
     const mlir::ResultRange results = distinctOp.getResults();
     for (size_t resultIndex = 0; resultIndex < dedupedItems.size(); resultIndex++) {
         projected[dedupedItems[resultIndex]] = results[resultIndex];
+    }
+}
+
+void DBProgramGenerator::translateDistinctOverConstants(const Projection* projection,
+                                                        llvm::SmallVectorImpl<mlir::Value>& projected) {
+    llvm::SmallVector<size_t> cappedItems;
+    llvm::SmallVector<mlir::Value> capped;
+    collectCutColumns(projection, projected, cappedItems, capped);
+
+    llvm::SmallVector<mlir::Type> cappedTypes;
+    for (const mlir::Value column : capped) {
+        cappedTypes.push_back(column.getType());
+    }
+
+    const uint64_t keptRowCount = 1;
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    auto limitOp = _opBuilder.create<mlir::db::Limit>(loc, cappedTypes, mlir::ValueRange{capped}, keptRowCount);
+
+    const mlir::ResultRange results = limitOp.getResults();
+    for (size_t resultIndex = 0; resultIndex < cappedItems.size(); resultIndex++) {
+        projected[cappedItems[resultIndex]] = results[resultIndex];
     }
 }
 
