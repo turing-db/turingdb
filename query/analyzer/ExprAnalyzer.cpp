@@ -637,13 +637,28 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
 
         const bool matchingArgs = std::equal(
             expectedArgs.begin(), expectedArgs.begin() + providedArgs.size(),
-            providedArgs.begin(), [](const EvaluatedType& expected, const Expr* arg) {
-                return arg->getType() == expected;
+            providedArgs.begin(), [](const FunctionArgumentType& expected, const Expr* arg) {
+                return arg->getType() == expected.getType();
             });
 
         if (!matchingArgs) {
             // Argument types do not match
             continue;
+        }
+
+        // A constant argument is read once per call, so an expression varying with the row
+        // would have to be read again for every one. Turned away here rather than by the
+        // procedure at runtime, once a row has already reached it.
+        for (size_t argIndex = 0; argIndex < providedArgs.size(); argIndex++) {
+            const FunctionArgumentType& expected = expectedArgs[argIndex];
+            const Expr* arg = providedArgs[argIndex];
+
+            if (expected.isConstant() && arg->isDynamic()) {
+                throwError(fmt::format("Argument '{}' of '{}' must be constant, so it cannot read a row",
+                                       expected.getName(),
+                                       name),
+                           arg);
+            }
         }
 
         // Register variables for each argument

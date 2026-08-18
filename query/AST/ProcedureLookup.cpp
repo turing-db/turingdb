@@ -91,10 +91,13 @@ FunctionResolver::FunctionSignatureRange ProcedureLookup::lookup(std::string_vie
 
     // Convert argument types
     const ProcedureTypeVector& args = proc->argumentTypes();
-    std::vector<EvaluatedType> argTypes;
+    std::vector<FunctionArgumentType> argTypes;
     argTypes.reserve(args.size());
     for (const auto& arg : args) {
-        argTypes.push_back(procTypeToEvaluatedType(arg._type));
+        FunctionArgumentType argType = procTypeToEvaluatedType(arg._type);
+        argType.setName(arg._name);
+        argType.setConstant(arg._constant);
+        argTypes.push_back(argType);
     }
     sig->setArguments(std::move(argTypes));
     sig->setRequiredArgCount(proc->getRequiredArgumentCount());
