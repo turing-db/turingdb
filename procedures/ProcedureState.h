@@ -25,8 +25,6 @@ public:
         return *static_cast<T*>(_data);
     }
 
-    const ProcedureData& getData() const { return *_data; }
-
     const ProcedureContext* getContext() const { return _ctxt; }
 
     bool isFinished() const { return _finished; }
