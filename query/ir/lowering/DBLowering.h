@@ -330,6 +330,13 @@ private:
     // Point the builder at the right place for an op consuming lhs and rhs.
     void setInsertionForBinaryOp(mlir::Value lhs, mlir::Value rhs);
 
+    // Lays the constants among the chunks a cut is charged to over the rows of the
+    // driving relation. A cut walks rows and a constant carries none of its own - it
+    // holds one value standing for every row of the step - so the loop's rows are the
+    // count a cut over constants alone charges, and the count every cut chained after it
+    // reads in turn.
+    void rowAlignCutChunks(llvm::SmallVectorImpl<mlir::Value>& chunks);
+
     // The chunk a step that walks rows is handed for @param chunk: itself when it
     // carries rows, and its value laid out over the rows of @param cardinality - the
     // driving relation's chunk, null when no relation drives the projection - when it
