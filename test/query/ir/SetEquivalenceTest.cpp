@@ -286,3 +286,10 @@ TEST_F(SetEquivalenceTest, setEdgeProperty) {
         R"(MATCH (a:Person)-[e:KNOWS]->(b:Person) SET e.since = 1999)",
         "MATCH (a:Person)-[e:KNOWS]->(b:Person) RETURN e.since");
 }
+
+TEST_F(SetEquivalenceTest, setAcrossCrossProduct) {
+    expectSetEquivalent(
+        R"(CREATE (:Person {name: "a"}), (:Person {name: "b"}), (:Robot), (:Robot), (:Robot))",
+        "MATCH (p:Person), (r:Robot) SET p.rank = 7",
+        "MATCH (p:Person) RETURN p.name, p.rank");
+}
