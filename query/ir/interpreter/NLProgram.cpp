@@ -27,7 +27,6 @@ NLProcedureState::NLProcedureState(const Procedure* procedure,
     : _procedure(procedure),
     _data(data)
 {
-    _procedureState.setProcedure(procedure);
     _procedureState.setData(data);
     _procedureState.setContext(context);
 }

@@ -44,8 +44,6 @@ CallProcedureProcessor* CallProcedureProcessor::create(PipelineV2* pipeline,
         processor->_procedureState._data = alloc();
     }
 
-    processor->_procedureState._procedure = procedure;
-
     processor->postCreate(pipeline);
     return processor;
 }

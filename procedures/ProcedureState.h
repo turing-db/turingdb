@@ -36,7 +36,6 @@ public:
     void finish() { _finished = true; }
 
     void setData(ProcedureData* data) { _data = data; }
-    void setProcedure(const Procedure* procedure) { _procedure = procedure; }
     void setContext(const ProcedureContext* ctxt) { _ctxt = ctxt; }
 
     void setStep(Step step) { _step = step; }
@@ -47,7 +46,6 @@ private:
     friend class CallProcedureProcessor;
 
     ProcedureData* _data {nullptr};
-    const Procedure* _procedure {nullptr};
     const ProcedureContext* _ctxt {nullptr};
     bool _finished {false};
     Step _step {Step::PREPARE};
