@@ -389,6 +389,24 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 dtypeName = "Bool";
                 break;
             }
+            case db::ColumnConst<std::optional<db::types::Int64::Primitive>>::staticKind(): {
+                const auto& v = static_cast<const db::ColumnConst<std::optional<db::types::Int64::Primitive>>*>(col)->getRaw();
+                value = repeatValueAsList(v, rowCount);
+                dtypeName = "Int64";
+                break;
+            }
+            case db::ColumnConst<std::optional<db::types::Double::Primitive>>::staticKind(): {
+                const auto& v = static_cast<const db::ColumnConst<std::optional<db::types::Double::Primitive>>*>(col)->getRaw();
+                value = repeatValueAsList(v, rowCount);
+                dtypeName = "Double";
+                break;
+            }
+            case db::ColumnConst<std::optional<db::types::Bool::Primitive>>::staticKind(): {
+                const auto& v = static_cast<const db::ColumnConst<std::optional<db::types::Bool::Primitive>>*>(col)->getRaw();
+                value = repeatValueAsList(v, rowCount);
+                dtypeName = "Bool";
+                break;
+            }
             case db::ColumnConst<db::NodeID>::staticKind(): {
                 const auto& v = static_cast<const db::ColumnConst<db::NodeID>*>(col)->getRaw();
                 value = repeatValueAsNdarray(v.getValue(), rowCount);
