@@ -2014,12 +2014,9 @@ void DBLowering::lowerOutput(mlir::db::Output output) {
     const bool returningNonLooped = anchorBlock == _entryBlock;
     if (returningNonLooped && _innermostLoopBody) {
         // but if we have all constants, then it need be moved to the inner most loop to
-        // match cardinality
-        const bool allConstants =
-            std::ranges::all_of(columns, [](const mlir::Value column) {
-                mlir::Operation* const definingOp = column.getDefiningOp();
-                return llvm::isa_and_nonnull<nl::Constant>(definingOp);
-            });
+        // match cardinality. An expression over constants alone is one of them: it is
+        // bound where its operands are, above the loop whose rows it is projected over
+        const bool allConstants = llvm::all_of(columns, isConstantChunk);
 
         if (allConstants) {
             anchorBlock = _innermostLoopBody;
