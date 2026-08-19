@@ -10,6 +10,7 @@
 #include "TypeUtils.h"
 #include "ColumnMask.h"
 #include "ColumnConst.h"
+#include "list/ListElementOrder.h"
 #include "metadata/PropertyType.h"
 
 #include "TuringException.h"
