@@ -7,6 +7,7 @@
 
 #include <spdlog/fmt/bundled/format.h>
 
+#include "NLOps.h"
 #include "mlir/IR/Block.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -256,7 +257,7 @@ bool isConstantLike(mlir::Value value) {
     }
 
     const bool foldsConstantOperands = mlir::isa<nl::Add, nl::Sub, nl::Mul, nl::Div,
-                                                 nl::ToInteger, nl::ToFloat, nl::ToBoolean,
+                                                 nl::ToInteger, nl::ToFloat, nl::ToBoolean, nl::Pow, nl::Mod,
                                                  nl::CosineSimilarity, nl::EuclideanDistance>(definingOp);
     if (!foldsConstantOperands) {
         return false;
