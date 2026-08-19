@@ -60,6 +60,17 @@ struct OptionalKindPairs {
         KindPair<std::optional<L>, std::optional<R>>>;
 };
 
+// A tagged scalar against a value of a known type, either way round, so a comparison
+// finds the pair whichever side the type-erased column is on.
+template <typename T>
+struct ListElementKindPairs {
+    using Pairs = std::tuple<
+        KindPair<ListElementView, T>,
+        KindPair<T, ListElementView>,
+        KindPair<ListElementView, std::optional<T>>,
+        KindPair<std::optional<T>, ListElementView>>;
+};
+
 template <typename T>
 struct OptionalKinds {
     using Types = std::tuple<
@@ -130,7 +141,16 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
         OptionalKindPairs<types::Embedding::Primitive, types::Embedding::Primitive>::Pairs,
 
+        // Equality against a type-erased cell, which holds its own type
+        ListElementKindPairs<types::Int64::Primitive>::Pairs,
+        ListElementKindPairs<types::UInt64::Primitive>::Pairs,
+        ListElementKindPairs<types::Double::Primitive>::Pairs,
+        ListElementKindPairs<types::String::Primitive>::Pairs,
+        ListElementKindPairs<types::Bool::Primitive>::Pairs,
+
         std::tuple<
+            KindPair<ListElementView, ListElementView>,
+
             // Filtering by ID or labels/edge type
             KindPair<NodeID, NodeID>,
             KindPair<EdgeID, EdgeID>,

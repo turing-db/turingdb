@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <type_traits>
+#include <utility>
 
 #include "ListBufferTypeTag.h"
 
@@ -113,6 +115,39 @@ std::strong_ordering compareNumbers(const ListElementView lhs, const ListElement
     return std::strong_ordering::equal;
 }
 
+// Compares a stored number against a value of another numeric type. Two integers
+// compare through std::cmp_equal, so a mixed-sign pair keeps its value; any pair
+// involving a float compares as doubles.
+template <typename Stored, typename Value>
+bool numericEquals(const Stored stored, const Value value) {
+    if constexpr (std::is_integral_v<Stored> && std::is_integral_v<Value>) {
+        return std::cmp_equal(stored, value);
+    } else {
+        return static_cast<double>(stored) == static_cast<double>(value);
+    }
+}
+
+template <typename Value>
+bool elementEqualsNumber(const ListElementView element, const Value value) {
+    switch (element.getTag()) {
+        case ListBufferTypeTag::Int:
+            return numericEquals(element.getAs<types::Int64::Primitive>(), value);
+        break;
+
+        case ListBufferTypeTag::UInt:
+            return numericEquals(element.getAs<types::UInt64::Primitive>(), value);
+        break;
+
+        case ListBufferTypeTag::Double:
+            return numericEquals(element.getAs<types::Double::Primitive>(), value);
+        break;
+
+        default:
+            return false;
+        break;
+    }
+}
+
 // Two lists compare lexicographically: pairwise from the front, then the shorter list
 // first when one is a prefix of the other.
 std::strong_ordering compareLists(const ListView lhs, const ListView rhs) {
@@ -168,4 +203,26 @@ std::strong_ordering db::operator<=>(const ListElementView lhs, const ListElemen
 
 bool db::operator==(const ListElementView lhs, const ListElementView rhs) {
     return (lhs <=> rhs) == std::strong_ordering::equal;
+}
+
+bool db::operator==(const ListElementView element, const types::Int64::Primitive value) {
+    return elementEqualsNumber(element, value);
+}
+
+bool db::operator==(const ListElementView element, const types::UInt64::Primitive value) {
+    return elementEqualsNumber(element, value);
+}
+
+bool db::operator==(const ListElementView element, const types::Double::Primitive value) {
+    return elementEqualsNumber(element, value);
+}
+
+bool db::operator==(const ListElementView element, const types::String::Primitive value) {
+    return element.getTag() == ListBufferTypeTag::String
+        && element.getAs<types::String::Primitive>() == value;
+}
+
+bool db::operator==(const ListElementView element, const types::Bool::Primitive value) {
+    return element.getTag() == ListBufferTypeTag::Bool
+        && static_cast<bool>(element.getAs<types::Bool::Primitive>()) == static_cast<bool>(value);
 }
