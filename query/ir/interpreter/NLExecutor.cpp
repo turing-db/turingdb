@@ -8,6 +8,7 @@
 #include <string_view>
 #include <type_traits>
 
+#include "TypeUtils.h"
 #include "iterators/GetEdgesIterator.h"
 #include "ID.h"
 #include "iterators/GetInEdgesIterator.h"
@@ -161,10 +162,11 @@ template <typename Functor>
 void functionOptKernel(NLExecutionContext* context, Column* result, const Column* input) {
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
+    using JustRes = TypeUtils::unwrap_optional_t<Res>;
 
     const auto* typedInput = dynamic_cast<const ColumnOptVector<Arg>*>(input);
     bioassert(typedInput, "Function operand has an unexpected column type.");
-    auto* output = static_cast<ColumnOptVector<Res>*>(result);
+    auto* output = static_cast<ColumnOptVector<JustRes>*>(result);
 
     const auto& inputRaw = typedInput->getRaw();
     const size_t size = inputRaw.size();
@@ -2244,6 +2246,7 @@ void NLExecutor::runUnaryFunction(NLExecutionContext* context, NLFunctionData* d
 template <typename Functor>
 NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
     using Res = typename Functor::ResultType;
+    using JustRes = TypeUtils::unwrap_optional_t<Res>;
 
     // Early exit noop for NULL literals
     if (dynamic_cast<const ColumnConst<PropertyNull>*>(input)) {
@@ -2257,7 +2260,7 @@ NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool input
     }
 
     if (inputNullable) {
-        result = memory->alloc<ColumnOptVector<Res>>();
+        result = memory->alloc<ColumnOptVector<JustRes>>();
         return &functionOptKernel<Functor>;
     }
 

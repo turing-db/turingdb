@@ -3,14 +3,14 @@
 #include <algorithm>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <vector>
 
 #include <range/v3/view/zip.hpp>
+#include <spdlog/fmt/bundled/format.h>
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
@@ -30,19 +30,27 @@
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
 
+#include "EntityList.h"
 #include "Graph.h"
+#include "GraphPath.h"
+#include "ID.h"
 #include "QueryConfig.h"
 #include "SimpleGraph.h"
 #include "SystemAccessor.h"
 #include "SystemManager.h"
 #include "TuringDB.h"
+#include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
-#include "columns/ColumnEdgeTypes.h"
-#include "columns/ColumnIDs.h"
-#include "columns/ColumnOptVector.h"
+#include "columns/ColumnOperatorDispatcher.h"
+#include "columns/ColumnVector.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
+#include "list/ListElementView.h"
+#include "list/ListUtils.h"
+#include "list/ListView.h"
 #include "metadata/PropertyNull.h"
+#include "metadata/PropertyType.h"
+#include "versioning/CommitHash.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
@@ -61,101 +69,161 @@ namespace {
 using Row = std::vector<std::string>;
 using Rows = std::vector<Row>;
 
-template <typename T>
-bool renderValueCell(const Column* column, size_t row, std::string& out) {
-    if (const auto* constCol = dynamic_cast<const ColumnConst<T>*>(column)) {
-        const T value = constCol->at(0);
-        if constexpr (std::is_same_v<T, std::string_view> || std::is_same_v<T, std::string>) {
-            out = std::string(value);
-        } else {
-            out = std::to_string(value);
-        }
-        return true;
-    }
-
-    // A never-null value column - the v3 count(*) result is a plain
-    // ColumnVector<uint64_t>, where the v2 pipeline emits a ColumnConst.
-    if (const auto* plainValues = dynamic_cast<const ColumnVector<T>*>(column)) {
-        const T value = (*plainValues)[row];
-        if constexpr (std::is_same_v<T, std::string_view> || std::is_same_v<T, std::string>) {
-            out = std::string(value);
-        } else {
-            out = std::to_string(value);
-        }
-        return true;
-    }
-
-    const auto* values = dynamic_cast<const ColumnOptVector<T>*>(column);
-    if (!values) {
-        return false;
-    }
-
-    const std::optional<T> value = (*values)[row];
-    if (!value) {
-        out = "null";
-        return true;
-    }
-
-    if constexpr (std::is_same_v<T, std::string_view> || std::is_same_v<T, std::string>) {
-        out = std::string(*value);
-    } else {
-        out = std::to_string(*value);
-    }
-
-    return true;
+std::string valueToString(const std::string& value) {
+    return value;
 }
 
-bool renderEmbeddingCell(const Column* column, size_t row, std::string& out) {
-    const auto renderSpan = [](std::span<const float> floats, std::string& target) {
-        target = "[";
-        for (size_t i = 0; i < floats.size(); i++) {
-            if (i > 0) {
-                target += ", ";
-            }
-            target += std::to_string(floats[i]);
+std::string valueToString(const std::string_view value) {
+    return std::string(value);
+}
+
+std::string valueToString(const Path& value) {
+    std::string result;
+
+    size_t index = 0;
+    for (const auto entity : value | std::views::reverse) {
+        if (index % 2 == 0) {
+            result += fmt::format("({})", entity.getValue());
+        } else {
+            result += fmt::format("-[{}]->", entity.getValue());
         }
-        target += "]";
+        index++;
+    }
+
+    return result;
+}
+
+std::string valueToString(const ValueType value) {
+    return std::string(ValueTypeName::value(value));
+}
+
+std::string valueToString(const CustomBool value) {
+    return value ? "true" : "false";
+}
+
+// Fixed 6-decimal rendering so the v2/v3 comparison tolerates float ULP noise
+// (e.g. cosine_similarity of identical vectors yields 1.0000001 on one side, 1 on
+// the other); fmt's default "{}" would print full precision and flag that as a diff.
+std::string valueToString(const double value) {
+    return std::to_string(value);
+}
+
+template <IntegralType T, int tag>
+std::string valueToString(const ID<T, tag> value) {
+    return std::to_string(value.getValue());
+}
+
+template <int I>
+std::string valueToString(const TemplateCommitHash<I> value) {
+    return std::to_string(value.get());
+}
+
+std::string valueToString(const PropertyNull) {
+    return "null";
+}
+
+std::string valueToString(const std::span<const float> value) {
+    std::string result = "[";
+
+    for (size_t i = 0; i < value.size(); i++) {
+        if (i > 0) {
+            result += ", ";
+        }
+        result += std::to_string(value[i]);
+    }
+
+    result += "]";
+    return result;
+}
+
+template <typename T>
+std::string valueToString(const T& value) {
+    return fmt::format("{}", value);
+}
+
+template <typename T>
+std::string valueToString(const std::optional<T>& value) {
+    if (!value.has_value()) {
+        return "null";
+    }
+
+    return valueToString(*value);
+}
+
+std::string valueToString(const EntityList& value) {
+    std::string result = "[";
+    size_t index = 0;
+
+    for (const auto& entity : value) {
+        if (index++ > 0) {
+            result += ", ";
+        }
+
+        if (entity._type == EntityType::Node) {
+            result += fmt::format("({})", entity._id.getValue());
+        } else {
+            result += fmt::format("[{}]", entity._id.getValue());
+        }
+    }
+
+    result += "]";
+    return result;
+}
+
+std::string valueToString(ListView view);
+
+std::string valueToString(const ListElementView element) {
+    const auto writeTyped = []<typename T>(const ListElementView element) -> std::string {
+        return valueToString(element.getAs<T>());
     };
 
-    if (const auto* constCol = dynamic_cast<const ColumnConst<std::span<const float>>*>(column)) {
-        renderSpan(constCol->at(0), out);
-        return true;
-    }
+    const ListBufferTypeTag tag = element.getTag();
+    ListTagDispatcher writer {._tag = tag};
 
-    const auto* values = dynamic_cast<const ColumnOptVector<std::span<const float>>*>(column);
-    if (!values) {
-        return false;
-    }
-
-    const std::optional<std::span<const float>> value = (*values)[row];
-    if (!value) {
-        out = "null";
-        return true;
-    }
-
-    renderSpan(*value, out);
-    return true;
+    return writer.execute(writeTyped, element);
 }
 
-void renderCell(const Column* column, size_t row, std::string& out) {
-    if (const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(column)) {
-        out = std::to_string((*nodeIDs)[row].getValue());
-    } else if (const auto* edgeIDs = dynamic_cast<const ColumnEdgeIDs*>(column)) {
-        out = std::to_string((*edgeIDs)[row].getValue());
-    } else if (const auto* edgeTypes = dynamic_cast<const ColumnEdgeTypes*>(column)) {
-        out = std::to_string((*edgeTypes)[row].getValue());
-    } else if (dynamic_cast<const ColumnConst<PropertyNull>*>(column)) {
-        out = "null";
-    } else if (renderValueCell<int64_t>(column, row, out)
-               || renderValueCell<uint64_t>(column, row, out)
-               || renderValueCell<double>(column, row, out)
-               || renderValueCell<std::string_view>(column, row, out)
-               || renderValueCell<std::string>(column, row, out)
-               || renderEmbeddingCell(column, row, out)) {
-        // Rendered by the helper for whichever value type matched
-    } else {
-        throw std::runtime_error("EquivalenceTest: unsupported output column type");
+std::string valueToString(const ListView view) {
+    if (view.empty()) {
+        return "[]";
     }
+
+    std::string result = "[";
+    size_t index = 0;
+
+    for (const ListElementView element : view.elements()) {
+        if (index++ > 0) {
+            result += ", ";
+        }
+        result += valueToString(element);
+    }
+
+    result += "]";
+    return result;
+}
+
+struct Stringify {
+    std::string& _string;
+    size_t _row {0};
+
+    template <typename T>
+    void operator()(const ColumnVector<T>* typed) {
+        _string = valueToString(typed->at(_row));
+    }
+
+    template <typename T>
+    void operator()(const ColumnConst<T>* typed) {
+        _string = valueToString(typed->at(_row));
+    }
+};
+
+void renderCell(const Column* column, size_t row, std::string& out) {
+    Stringify stringify(out, row);
+
+    using Types = OutputtedTypes;
+    using Dispatcher = ColumnSingleDispatcher<Types::Allowed, Stringify, Types::Excluded>;
+
+    Dispatcher::dispatch(column, stringify);
 }
 
 void collectPipelineRows(const Dataframe* dataframe, Rows& rows) {
