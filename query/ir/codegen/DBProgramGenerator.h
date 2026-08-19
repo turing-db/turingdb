@@ -133,6 +133,13 @@ private:
 
     mlir::Value resolveEntityColumn(std::string_view varName);
 
+    bool isRowAlignedHere(mlir::Value column) const;
+
+    // The column count(*) counts: the first variable of the pattern bound to a column
+    // holding the rows flowing past the insertion point, taken in the order the query
+    // declares its variables so the choice is the query's and not the addresses'
+    mlir::Value resolveWildcardColumn() const;
+
     void generatePropertyConstraints(const CypherAST* ast);
     void generateFilters(const CypherAST* ast);
 
