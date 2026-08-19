@@ -36,6 +36,7 @@
 #include "columns/ColumnVector.h"
 #include "list/ListBufferTypeTag.h"
 #include "list/ListElementView.h"
+#include "list/ListView.h"
 #include "metadata/PropertyType.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
@@ -75,15 +76,23 @@ std::optional<std::string> renderOptCell(const Column* column, size_t row) {
     }
 }
 
-// Render one cell of a type-tagged scalar column - the column a heterogeneous UNWIND
-// emits, whose cells need not share a type.
-std::optional<std::string> renderTaggedCell(const Column* column, size_t row) {
-    const auto* elements = dynamic_cast<const ColumnVector<ListElementView>*>(column);
-    if (!elements) {
-        return std::nullopt;
+std::string renderTaggedElement(const ListElementView element);
+
+std::string renderTaggedList(const ListView list) {
+    std::string rendered = "[";
+    for (size_t index = 0; const ListElementView element : list) {
+        if (index > 0) {
+            rendered += ", ";
+        }
+
+        rendered += renderTaggedElement(element);
+        index++;
     }
 
-    const ListElementView element = (*elements)[row];
+    return rendered + "]";
+}
+
+std::string renderTaggedElement(const ListElementView element) {
     switch (element.getTag()) {
         case ListBufferTypeTag::Int:
             return std::to_string(element.getAs<int64_t>());
@@ -101,10 +110,29 @@ std::optional<std::string> renderTaggedCell(const Column* column, size_t row) {
             return std::string(element.getAs<std::string_view>());
         break;
 
+        case ListBufferTypeTag::ListView:
+            return renderTaggedList(element.getAs<ListView>());
+        break;
+
+        case ListBufferTypeTag::Null:
+            return "null";
+        break;
+
         default:
             return "?";
         break;
     }
+}
+
+// Render one cell of a type-tagged scalar column - the column a heterogeneous UNWIND
+// emits, whose cells need not share a type.
+std::optional<std::string> renderTaggedCell(const Column* column, size_t row) {
+    const auto* elements = dynamic_cast<const ColumnVector<ListElementView>*>(column);
+    if (!elements) {
+        return std::nullopt;
+    }
+
+    return renderTaggedElement((*elements)[row]);
 }
 
 // Render one output cell, whatever column shape the program emitted: a node ID from a
@@ -113,6 +141,10 @@ std::optional<std::string> renderTaggedCell(const Column* column, size_t row) {
 std::string renderCell(const Column* column, size_t row) {
     if (const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(column)) {
         return std::to_string((*nodeIDs)[row].getValue());
+    }
+
+    if (const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(column)) {
+        return std::to_string((*counts)[row]);
     }
 
     if (const std::optional<std::string> integer = renderOptCell<int64_t>(column, row)) {
@@ -306,14 +338,177 @@ TEST_F(CypherUnwindTest, filtersOnUnwoundVariableInPropertyConstraint) {
     expectRows("UNWIND [32, 99] AS wantedAge MATCH (n {age: wantedAge}) RETURN n.name, wantedAge", expected);
 }
 
-TEST_F(CypherUnwindTest, rejectsNestedListElements) {
-    // A nested list has no tagged scalar form, so codegen refuses it rather than
-    // emitting IR the interpreter cannot materialize.
-    Rows rows;
-    EXPECT_THROW(runQuery("UNWIND [[1, 2], [3]] AS x RETURN x", rows), TuringException);
+TEST_F(CypherUnwindTest, sortsUnwoundList) {
+    const Rows expected = {{"1"}, {"2"}, {"3"}};
+    expectRows("UNWIND [3, 1, 2] AS l RETURN l ORDER BY l", expected);
 }
 
-TEST_F(CypherUnwindTest, rejectsNullListElements) {
+TEST_F(CypherUnwindTest, unwindsNestedListElements) {
+    // A nested list keeps its own elements as one cell, so the row is the inner list
+    // itself rather than its elements.
+    const Rows expected = {{"[1, 2]"}, {"[3]"}};
+    expectRows("UNWIND [[1, 2], [3]] AS x RETURN x", expected);
+}
+
+TEST_F(CypherUnwindTest, unwindsNullListElements) {
+    // A null has no type to share, so the list is type-erased and the null rides as a
+    // cell of its own rather than dropping the row.
+    const Rows expected = {{"1"}, {"null"}};
+    expectRows("UNWIND [1, null] AS x RETURN x", expected);
+}
+
+TEST_F(CypherUnwindTest, unwindsListMixingScalarsWithNestedListAndNull) {
+    const Rows expected = {{"1"}, {"true"}, {"hello"}, {std::to_string(3.14)}, {"[2]"}, {"null"}};
+    expectRows("UNWIND [1, true, 'hello', 3.14, [2], null] AS l RETURN l", expected);
+}
+
+TEST_F(CypherUnwindTest, unwindsSingletonNullList) {
+    const Rows expected = {{"null"}};
+    expectRows("UNWIND [null] AS l RETURN l", expected);
+}
+
+TEST_F(CypherUnwindTest, sortsHeterogeneousUnwind) {
+    // Cells of different types compare by the order their types sort in, following
+    // Cypher's orderability: LIST < STRING < BOOLEAN < NUMBER.
+    const Rows expected = {{"hello"}, {"true"}, {"1"}, {std::to_string(3.14)}};
+    expectRows("UNWIND [1, true, 3.14, 'hello'] AS l RETURN l ORDER BY l", expected);
+}
+
+TEST_F(CypherUnwindTest, sortsHeterogeneousUnwindWithNullsLast) {
+    // A null sorts after every value ascending, as it does in a nullable value column.
+    const Rows expected = {{"[2]"}, {"a"}, {"1"}, {"null"}};
+    expectRows("UNWIND [1, null, 'a', [2]] AS l RETURN l ORDER BY l", expected);
+}
+
+TEST_F(CypherUnwindTest, sortsHeterogeneousUnwindDescending) {
+    const Rows expected = {{"null"}, {"1"}, {"true"}, {"hello"}};
+    expectRows("UNWIND [1, true, 'hello', null] AS l RETURN l ORDER BY l DESC", expected);
+}
+
+TEST_F(CypherUnwindTest, limitsHeterogeneousUnwind) {
+    const Rows expected = {{"1"}, {"null"}};
+    expectRows("UNWIND [1, null, 'a'] AS l RETURN l LIMIT 2", expected);
+}
+
+TEST_F(CypherUnwindTest, skipsHeterogeneousUnwind) {
+    const Rows expected = {{"null"}, {"a"}};
+    expectRows("UNWIND [1, null, 'a'] AS l RETURN l SKIP 1", expected);
+}
+
+TEST_F(CypherUnwindTest, skipsSortedHeterogeneousUnwind) {
+    // The skip cuts the sorted rows, not the list order: 'a' sorts first and is the row
+    // dropped, leaving the number and the null.
+    const Rows expected = {{"1"}, {"null"}};
+    expectRows("UNWIND [1, null, 'a'] AS l RETURN l ORDER BY l SKIP 1", expected);
+}
+
+TEST_F(CypherUnwindTest, sortsHeterogeneousUnwindUnderTopK) {
+    // ORDER BY fused with LIMIT keeps only the best k rows in the accumulator, so the
+    // tagged cells are gathered and compacted rather than all held.
+    const Rows expected = {{"[1]"}, {"b"}};
+    expectRows("UNWIND [3, 'b', null, [1]] AS l RETURN l ORDER BY l LIMIT 2", expected);
+}
+
+TEST_F(CypherUnwindTest, sortsHeterogeneousUnwindUnderDescendingTopK) {
+    const Rows expected = {{"null"}, {"3"}};
+    expectRows("UNWIND [3, 'b', null, [1]] AS l RETURN l ORDER BY l DESC LIMIT 2", expected);
+}
+
+TEST_F(CypherUnwindTest, sortsMixedNumericTagsNumerically) {
+    const Rows expected = {{std::to_string(1.5)}, {"2"}};
+    expectRows("UNWIND [2, 1.5] AS l RETURN l ORDER BY l", expected);
+}
+
+TEST_F(CypherUnwindTest, sortsBooleansBeforeNumbers) {
+    const Rows expected = {{"false"}, {"true"}, {"0"}, {"1"}};
+    expectRows("UNWIND [true, 1, false, 0] AS l RETURN l ORDER BY l", expected);
+}
+
+TEST_F(CypherUnwindTest, sortsStringsWithNullLast) {
+    const Rows expected = {{"a"}, {"b"}, {"null"}};
+    expectRows("UNWIND ['b', 'a', null] AS l RETURN l ORDER BY l", expected);
+}
+
+TEST_F(CypherUnwindTest, sortsNestedListsLexicographically) {
+    // Nested lists compare element-wise, and a list that is a prefix of another sorts
+    // before it.
+    const Rows expected = {{"[1]"}, {"[1, 2]"}, {"[1, 2, 3]"}};
+    expectRows("UNWIND [[1, 2], [1], [1, 2, 3]] AS l RETURN l ORDER BY l", expected);
+}
+
+TEST_F(CypherUnwindTest, sortsNestedListsByElementType) {
+    // The type order applies inside a nested list too: the string element sorts before
+    // the number one, so the list holding it comes first.
+    const Rows expected = {{"[1, a]"}, {"[1, 2]"}};
+    expectRows("UNWIND [[1, 'a'], [1, 2]] AS l RETURN l ORDER BY l", expected);
+}
+
+TEST_F(CypherUnwindTest, sortsNestedListsWithNullElements) {
+    const Rows expected = {{"[1, 2]"}, {"[1, null]"}};
+    expectRows("UNWIND [[1, null], [1, 2]] AS l RETURN l ORDER BY l", expected);
+}
+
+TEST_F(CypherUnwindTest, sortsEmptyNestedListFirst) {
+    const Rows expected = {{"[]"}, {"[1]"}, {"z"}};
+    expectRows("UNWIND [[], [1], 'z'] AS l RETURN l ORDER BY l", expected);
+}
+
+TEST_F(CypherUnwindTest, sortsDoublyNestedLists) {
+    const Rows expected = {{"[[1]]"}, {"[[2]]"}};
+    expectRows("UNWIND [[[1]], [[2]]] AS l RETURN l ORDER BY l", expected);
+}
+
+TEST_F(CypherUnwindTest, sortsListsAndScalarsDescending) {
+    const Rows expected = {{"null"}, {"a"}, {"[2]"}, {"[1]"}};
+    expectRows("UNWIND [[2], [1], null, 'a'] AS l RETURN l ORDER BY l DESC", expected);
+}
+
+TEST_F(CypherUnwindTest, crossesUnwindOfNullAndNestedListWithMatchedNodes) {
+    // The null and the nested list broadcast across the cross product like any other
+    // tagged cell. SimpleGraph holds 18 nodes, numbered 0 through 17.
+    constexpr uint64_t simpleGraphNodeCount = 18;
+    const Row elements = {"null", "[1]"};
+
+    Rows expected;
+    for (uint64_t nodeID = 0; nodeID < simpleGraphNodeCount; nodeID++) {
+        for (const std::string& element : elements) {
+            expected.push_back({std::to_string(nodeID), element});
+        }
+    }
+
+    expectRows("MATCH (n) UNWIND [null, [1]] AS l RETURN n, l", expected);
+}
+
+TEST_F(CypherUnwindTest, sortsUnwoundCellsBesideAMatchedProperty) {
+    // The matched name rides along as a payload of the sort, which orders on the tagged
+    // column alone.
+    const Rows expected = {{"Remy", "null"}, {"Remy", "x"}, {"Remy", "[1]"}};
+    expectRows("MATCH (n {name: 'Remy'}) UNWIND [null, [1], 'x'] AS l RETURN n.name, l ORDER BY l DESC", expected);
+}
+
+TEST_F(CypherUnwindTest, countsHomogeneousUnwind) {
+    const Rows expected = {{"2"}};
+    expectRows("UNWIND [1, 2] AS l RETURN count(l)", expected);
+}
+
+TEST_F(CypherUnwindTest, rejectsCountOverHeterogeneousUnwind) {
+    // A type-erased cell has no value type for count to read, so the analyzer rejects the
+    // call - unlike the homogeneous list of countsHomogeneousUnwind.
     Rows rows;
-    EXPECT_THROW(runQuery("UNWIND [1, null] AS x RETURN x", rows), TuringException);
+    EXPECT_THROW(runQuery("UNWIND [1, null, 'a'] AS l RETURN count(l)", rows), TuringException);
+}
+
+TEST_F(CypherUnwindTest, rejectsHeterogeneousUnwoundVariableInWhere) {
+    // Same reason: the predicate has no type to compare the property against, where
+    // filtersOnUnwoundVariableInWhere compares against a homogeneous list's integers.
+    Rows rows;
+    EXPECT_THROW(runQuery("UNWIND [1, null] AS l MATCH (n) WHERE n.age = l RETURN n.name, l", rows), TuringException);
+}
+
+TEST_F(CypherUnwindTest, rejectsDistinctAfterUnwind) {
+    // DISTINCT is unsupported after an UNWIND whatever the list holds, so the tagged
+    // column is not what the rejection is about.
+    Rows rows;
+    EXPECT_THROW(runQuery("UNWIND [1, null, 1, null] AS l RETURN DISTINCT l", rows), TuringException);
+    EXPECT_THROW(runQuery("UNWIND [1, 2, 1] AS l RETURN DISTINCT l", rows), TuringException);
 }

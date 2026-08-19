@@ -198,16 +198,23 @@ void collectCutColumns(const Projection* projection,
 
 // The one type every element attribute shares, or a null type when they differ or the
 // list is empty - db.unwind_const's homogeneity verdict, which decides whether the
-// unwound column is that type or a type-erased column of tagged scalars.
+// unwound column is that type or a type-erased column of tagged scalars. A null and a
+// nested list carry no type, so a list holding one is type-erased.
 mlir::Type sharedAttrType(llvm::ArrayRef<mlir::Attribute> elements) {
     if (elements.empty()) {
         return nullptr;
     }
 
-    const mlir::Type firstType = mlir::cast<mlir::TypedAttr>(elements.front()).getType();
+    const auto firstTyped = mlir::dyn_cast<mlir::TypedAttr>(elements.front());
+    if (!firstTyped) {
+        return nullptr;
+    }
+
+    const mlir::Type firstType = firstTyped.getType();
 
     const auto hasFirstType = [firstType](mlir::Attribute element) {
-        return mlir::cast<mlir::TypedAttr>(element).getType() == firstType;
+        const auto typedElement = mlir::dyn_cast<mlir::TypedAttr>(element);
+        return typedElement && typedElement.getType() == firstType;
     };
 
     return std::ranges::all_of(elements, hasFirstType) ? firstType : nullptr;
@@ -310,15 +317,30 @@ void DBProgramGenerator::translateUnwindElements(const ListLiteral* list,
             throw TuringException("Only literal elements are supported in an UNWIND list.");
         }
 
-        // Only the scalar literals the runtime can store as a tagged element are
-        // unwindable: a nested list, an embedding or a null has no such form.
-        const mlir::TypedAttr elementAttr = scalarLiteralAttr(literalExpr->getLiteral());
-        if (!elementAttr) {
-            throw TuringException("Only booleans, integers, floats and strings can be unwound.");
-        }
-
-        elements.push_back(elementAttr);
+        elements.push_back(unwindElementAttr(literalExpr->getLiteral()));
     }
+}
+
+mlir::Attribute DBProgramGenerator::unwindElementAttr(const Literal* literal) {
+    const Literal::Kind kind = literal->getKind();
+
+    if (kind == Literal::Kind::NULL_LITERAL) {
+        return _opBuilder.getUnitAttr();
+    } else if (kind == Literal::Kind::LIST) {
+        const ListLiteral* nested = static_cast<const ListLiteral*>(literal);
+
+        llvm::SmallVector<mlir::Attribute> nestedElements;
+        translateUnwindElements(nested, nestedElements);
+
+        return _opBuilder.getArrayAttr(nestedElements);
+    }
+
+    const mlir::TypedAttr scalarAttr = scalarLiteralAttr(literal);
+    if (!scalarAttr) {
+        throw TuringException("Only booleans, integers, floats, strings, nulls and lists can be unwound.");
+    }
+
+    return scalarAttr;
 }
 
 template<typename EdgeOp>

@@ -636,6 +636,10 @@ ListView NLTranslator::materializeListView(mlir::ArrayAttr elements) {
         } else if (const auto stringAttr = mlir::dyn_cast<mlir::StringAttr>(element)) {
             const llvm::StringRef value = stringAttr.getValue();
             items.emplace_back(types::String::Primitive(value.data(), value.size()));
+        } else if (mlir::isa<mlir::UnitAttr>(element)) {
+            items.emplace_back(PropertyNull {});
+        } else if (const auto nestedAttr = mlir::dyn_cast<mlir::ArrayAttr>(element)) {
+            items.emplace_back(materializeListView(nestedAttr));
         } else {
             throw IRException("Unsupported literal attribute in nl.unwind_const");
         }
@@ -2241,6 +2245,8 @@ Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return allocOptColumnForValueType(valueType);
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        return allocListElementColumn();
     }
 
     if (isCountElementType(elementType)) {
@@ -2257,6 +2263,8 @@ NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptAppendFunction(valueType);
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        return NLExecutor::selectListElementAppendFunction();
     }
 
     if (isCountElementType(elementType)) {
@@ -2273,6 +2281,8 @@ NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptGatherFunction(valueType);
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        return NLExecutor::selectListElementGatherFunction();
     }
 
     if (isCountElementType(elementType)) {
@@ -2289,6 +2299,8 @@ NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptCompareFunction(valueType);
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        return NLExecutor::selectListElementCompareFunction();
     }
 
     return NLExecutor::selectCompareFunction(chunkKindFromElementType(elementType));
