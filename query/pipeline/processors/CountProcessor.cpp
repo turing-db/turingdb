@@ -1,10 +1,14 @@
 #include "CountProcessor.h"
 
+#include <algorithm>
+
 #include <spdlog/fmt/fmt.h>
 
 #include "metadata/PropertyType.h"
 #include "dataframe/Dataframe.h"
 #include "columns/ColumnConst.h"
+#include "list/ListBufferTypeTag.h"
+#include "list/ListElementView.h"
 #include "dataframe/NamedColumn.h"
 
 #include "columns/AllowedKinds.h"
@@ -105,6 +109,14 @@ public:
     template <typename T>
     void operator()(const ColumnVector<T>* typed) {
         _count = typed->size();
+    }
+
+    // e.g. COUNT(l) over an unwound heterogeneous list: a cell tagged null holds a null
+    // value, so it counts like the empty cell of a nullable column - not at all
+    void operator()(const ColumnVector<ListElementView>* typed) {
+        _count = std::count_if(typed->begin(), typed->end(), [](const ListElementView element) {
+            return element.getTag() != ListBufferTypeTag::Null;
+        });
     }
 
     // NOTE: I think unused, but count if value is non-null
