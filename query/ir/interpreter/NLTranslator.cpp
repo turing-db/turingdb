@@ -234,6 +234,12 @@ bool isConstantLike(mlir::Value value) {
                        [](mlir::Value operand) { return isConstantLike(operand); });
 }
 
+// A predicate or a NOT over constants folds to a ColumnConst just as an arithmetic
+// operation does, which the column answers and isConstantLike, reading the op, does not.
+bool isConstantColumn(const Column* column) {
+    return column->getContainerKind() == ContainerKind::code<ColumnConst>();
+}
+
 // A drain wires its emit loop's variables into the accumulator's one output slot per
 // column, so an accumulator can serve exactly one nl.collect or nl.unwind_collect. A
 // second drain would rebind the first's outputs to its own, incompatible column types
@@ -1220,7 +1226,7 @@ void NLTranslator::addTruncateColumn(mlir::Value inputValue,
     Column* output = nullptr;
     NLBroadcastFunction copyPrefix = nullptr;
 
-    if (isConstantLike(inputValue)) {
+    if (isConstantColumn(input)) {
         output = _memory->allocSame(input);
         copyPrefix = NLExecutor::selectConstBlockRepeatFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -1313,7 +1319,7 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
     Column* output = nullptr;
     NLCopyFunction copySuffix = nullptr;
 
-    if (isConstantLike(inputValue)) {
+    if (isConstantColumn(input)) {
         output = _memory->allocSame(input);
         copySuffix = NLExecutor::selectConstCopyFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
