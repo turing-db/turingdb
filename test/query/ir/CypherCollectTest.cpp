@@ -552,6 +552,26 @@ TEST_F(CypherCollectTest, rejectsUngroupedCollectWithCount) {
     EXPECT_EQ(status.getError(), "collect() may not yet be combined with another aggregate.");
 }
 
+TEST_F(CypherCollectTest, rejectsUngroupedCollectWithAWrappedAggregate) {
+    buildTeamGraph();
+
+    QueryStatus status;
+    runQuery("MATCH (n:Node) RETURN collect(n.name), count(n) + 1", status);
+
+    EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
+    EXPECT_EQ(status.getError(), "collect() may not yet be combined with another aggregate.");
+}
+
+TEST_F(CypherCollectTest, rejectsGroupedCollectWithAWrappedAggregate) {
+    buildTeamGraph();
+
+    QueryStatus status;
+    runQuery("MATCH (n:Node) RETURN n.team, collect(n.name), sum(n.score) + 0", status);
+
+    EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
+    EXPECT_EQ(status.getError(), "collect() may not yet be combined with another aggregate.");
+}
+
 TEST_F(CypherCollectTest, rejectsTwoCollects) {
     buildTeamGraph();
 
@@ -712,8 +732,6 @@ TEST_F(CypherCollectTest, collectOverAnEntityAlias) {
     EXPECT_EQ(rows, expected);
 }
 
-// An entity has no list element representation, so no collect overload takes one and the
-// analyzer rejects the call.
 TEST_F(CypherCollectTest, groupedCollectOfNodes) {
     buildTeamGraph();
 

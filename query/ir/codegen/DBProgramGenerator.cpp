@@ -422,12 +422,16 @@ void throwIfCollectUnsupported(const Projection* projection) {
 
         const Expr* item = *itemPtr;
 
-        const bool isInvocation = item->getKind() == Expr::Kind::FUNCTION_INVOCATION;
-        if (!item->isAggregate() || !isInvocation) {
+        if (!item->isAggregate()) {
             continue;
         }
 
         aggregateCount++;
+
+        const bool isInvocation = item->getKind() == Expr::Kind::FUNCTION_INVOCATION;
+        if (!isInvocation) {
+            continue;
+        }
 
         const FunctionInvocationExpr* funcExpr = static_cast<const FunctionInvocationExpr*>(item);
         const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
@@ -2286,15 +2290,20 @@ mlir::Value DBProgramGenerator::resolveColumnInScope(ColumnPredicate accept) con
     return mlir::Value {};
 }
 
-mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr) {
+mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr,
+                                                        const VariableColumnMap* variableColumns) {
     const EvaluatedType argType = argExpr->getType();
     const bool isEntity = argType == EvaluatedType::NodePattern || argType == EvaluatedType::EdgePattern;
 
     if (isEntity) {
-        VariableColumnMap variableColumns;
-        collectVariableColumns(variableColumns);
+        if (variableColumns) {
+            return getOrTranslateExprColumn(*variableColumns, argExpr);
+        }
 
-        return getOrTranslateExprColumn(variableColumns, argExpr);
+        VariableColumnMap ownColumns;
+        collectVariableColumns(ownColumns);
+
+        return getOrTranslateExprColumn(ownColumns, argExpr);
     } else if (argType != EvaluatedType::Wildcard) {
         translateExpr(argExpr);
         return _part._exprMap.at(argExpr);
@@ -3299,7 +3308,7 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
     bioassert(args && !args->empty(), "Aggregate function invocation with no arguments.");
 
     const Expr* argExpr = args->front();
-    const mlir::Value inputColumn = translateAggregateInput(argExpr);
+    const mlir::Value inputColumn = translateAggregateInput(argExpr, nullptr);
 
     const bool isDistinct = invocation->isDistinct();
 
@@ -3550,7 +3559,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         const Expr* argExpr = args->front();
 
         if (funcName == "collect") {
-            const mlir::Value collectInput = translateAggregateInput(argExpr);
+            const mlir::Value collectInput = translateAggregateInput(argExpr, &variableColumns);
 
             collectInputColumns.push_back(collectInput);
             collectFuncExprs.push_back(funcExpr);
@@ -3580,7 +3589,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
             throw TuringException(fmt::format("Unsupported aggregate function: {}", funcName));
         }
 
-        const mlir::Value inputColumn = translateAggregateInput(argExpr);
+        const mlir::Value inputColumn = translateAggregateInput(argExpr, &variableColumns);
 
         aggInputColumns.push_back(inputColumn);
         aggKinds.push_back(*kind);
