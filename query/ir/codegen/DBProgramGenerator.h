@@ -151,6 +151,10 @@ private:
     void translateUnwindElements(const ListLiteral* list,
                                  llvm::SmallVectorImpl<mlir::Attribute>& elements);
 
+    // The attribute one UNWIND list element unwinds from: a typed attribute for a scalar,
+    // a unit attribute for a null, a nested array attribute for a nested list
+    mlir::Attribute unwindElementAttr(const Literal* literal);
+
     void addScanNodes(const VariableDependency* var);
 
     // Opens a dataflow from an UNWIND's literal list, the way addScanNodes opens one

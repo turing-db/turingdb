@@ -28,6 +28,7 @@
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/AllowedKinds.h"
 #include "columns/UnaryPredicates.h"
+#include "list/ListElementOrder.h"
 #include "list/ListUtils.h"
 #include "metadata/PropertyType.h"
 
@@ -483,6 +484,22 @@ int compareOptColumn(const Column* column, size_t a, size_t b) {
     if (*valueA < *valueB) {
         return -1;
     } else if (*valueB < *valueA) {
+        return 1;
+    }
+
+    return 0;
+}
+
+// 3-way compare two rows of a type-erased column of tagged scalars. Cells need not share
+// a type, so a pair of different types compares by the order those types sort in; nulls
+// tie and sort after every value, as they do in a nullable value column.
+int compareListElementColumn(const Column* column, size_t a, size_t b) {
+    const auto& raw = static_cast<const ColumnVector<ListElementView>*>(column)->getRaw();
+    const std::strong_ordering order = raw[a] <=> raw[b];
+
+    if (order == std::strong_ordering::less) {
+        return -1;
+    } else if (order == std::strong_ordering::greater) {
         return 1;
     }
 
@@ -2668,6 +2685,18 @@ NLBroadcastFunction NLExecutor::selectListElementBlockRepeatFunction() {
 
 NLBroadcastFunction NLExecutor::selectListElementTileFunction() {
     return &tileColumn<ListElementView>;
+}
+
+NLAppendFunction NLExecutor::selectListElementAppendFunction() {
+    return &appendColumn<ListElementView>;
+}
+
+NLGatherFunction NLExecutor::selectListElementGatherFunction() {
+    return &gatherColumn<ListElementView>;
+}
+
+NLCompareFunction NLExecutor::selectListElementCompareFunction() {
+    return &compareListElementColumn;
 }
 
 NLCopyFunction NLExecutor::selectCopyFunction(NLChunkKind kind) {

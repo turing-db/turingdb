@@ -273,6 +273,12 @@ public:
     static NLBroadcastFunction selectListElementBlockRepeatFunction();
     static NLBroadcastFunction selectListElementTileFunction();
 
+    // Sort-accumulator append, emit-phase gather and 3-way compare for a list_element
+    // chunk, so a heterogeneous unwind can be sorted and its rows re-emitted.
+    static NLAppendFunction selectListElementAppendFunction();
+    static NLGatherFunction selectListElementGatherFunction();
+    static NLCompareFunction selectListElementCompareFunction();
+
     // Range copy for an ID chunk of this kind (skip suffix copy).
     static NLCopyFunction selectCopyFunction(NLChunkKind kind);
 

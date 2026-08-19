@@ -84,12 +84,13 @@ def UnwindConst : NLOp<"unwind_const", [Pure]> {
         nl.output(%x) : !nl.chunk<!storage.nullable<i64>>
       }
 
-    `elements` is the same literal array db.unwind_const carried, each entry a typed
+    `elements` is the same literal array db.unwind_const carried, each entry an
     attribute keeping its own type. A homogeneous list yields a nullable value chunk of
     that type - the shape a property fetch and the unwind_collect drain emit, so the
-    unwound column feeds the same consumers, even though a literal is never null; a
-    heterogeneous or empty list yields a type-erased !storage.list_element chunk (a
-    tagged scalar per row). The single chunk element type depends on the elements, so -
+    unwound column feeds the same consumers, even though such a literal is never null;
+    a heterogeneous or empty list yields a type-erased !storage.list_element chunk (a
+    tagged scalar per row), which is also what a list holding a null or a nested list
+    unwinds into. The single chunk element type depends on the elements, so -
     unlike nl.scan_nodes, whose node-ID iterator is fixed and inferred - it is spelled
     after the colon, as nl.collect's is. It opens the dataflow: no input, no carry.
   }];
