@@ -95,6 +95,35 @@ These are structural properties of the graph model, not validation rules layered
 - `memory/` - Memory management
 - `vector/` - Vector search with Faiss
 
+## Cypher language support
+
+**If a query is valid openCypher, implement it. Do not reject it in the analyzer.** An
+analyzer error is for queries that are genuinely ill-formed; it is never a shortcut around
+a gap in codegen. When a valid query fails somewhere downstream — a lowering assert, an
+invalid-IR error, wrong rows — the fix is to make the engine execute it. Adding a rule that
+turns it away is a regression dressed as validation: it closes the door on the feature and
+hides the gap behind a message that blames the user's query.
+
+Before writing any new analyzer rejection, establish which side of the line the query is on:
+- **Valid Cypher** → implement it. Judge by the language's semantics, not by how far the
+  current implementation happens to reach. Reference points: openCypher, Neo4j's behaviour,
+  and SQL where the construct is shared (`GROUP BY` / `ORDER BY` / `DISTINCT` scoping).
+- **Invalid Cypher** → reject it, with a message naming what is wrong with the query.
+
+Worked example — `ORDER BY` over an aggregating projection:
+- `RETURN n.age, count(n.name) ORDER BY n.age + 1` is **valid**: `n.age + 1` is functionally
+  determined by the grouping key `n.age`, exactly as SQL allows `GROUP BY age ... ORDER BY
+  age + 1`. So grouping keys are substituted into the key expression at any depth
+  (`DBProgramGenerator::bindOrderByKeyColumns`), and the key is computed over the grouped
+  column.
+- `RETURN n, count(b) ORDER BY b.name` is **invalid**: `b` is neither a grouping key nor
+  determined by one, so `b.name` has no single value per group to order on. That one is
+  rejected (`CypherAnalyzer::analyzeAggregateOrderBy`).
+
+Corollary: a rejection rule must reject *exactly* the invalid set. Probe the engine with
+the shapes on both sides of the line before writing the check, so a rule aimed at the
+invalid ones does not also turn away queries that already work.
+
 ## C++ Coding Style
 
 Please read `CODING_STYLE.md` for guidelines before any new work.
