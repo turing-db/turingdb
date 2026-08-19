@@ -79,6 +79,7 @@ public:
     size_t findItemIndex(const Expr* key) const;
     const Expr* findItemExpr(const Expr* key) const;
     bool hasItem(const Expr* key) const;
+    bool hasVariableItem(const VarDecl* decl) const;
 
 private:
     Limit* _limit {nullptr};

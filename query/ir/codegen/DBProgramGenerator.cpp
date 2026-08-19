@@ -51,9 +51,11 @@
 #include "expr/BinaryExpr.h"
 #include "expr/Expr.h"
 #include "expr/ExprChain.h"
+#include "expr/ExprChildren.h"
 #include "expr/FunctionInvocationExpr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/PropertyExpr.h"
+#include "expr/StructuralExpressionComparator.h"
 #include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
 #include "stmt/CreateStmt.h"
@@ -2168,11 +2170,14 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
 
     const mlir::ResultRange results = groupAgg.getResults();
 
+    GroupedKeyColumns groupedKeys;
+
     for (size_t i = 0; i < keyCount; i++) {
         if (keyVarAtPos[i]) {
             registerValue(keyVarAtPos[i], results[i]);
         } else {
             _exprMap[keyExprAtPos[i]] = results[i];
+            groupedKeys.emplace_back(keyExprAtPos[i], results[i]);
 
             const bool isSymbol = keyExprAtPos[i]->getKind() == Expr::Kind::SYMBOL;
             if (not isSymbol) {
@@ -2193,5 +2198,44 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
 
     for (size_t i = 0; i < aggCount; i++) {
         _exprMap[aggFuncExprs[i]] = results[keyCount + i];
+    }
+
+    bindOrderByKeyColumns(proj, groupedKeys);
+}
+
+void DBProgramGenerator::bindOrderByKeyColumns(const Projection* projection,
+                                               const GroupedKeyColumns& groupedKeys) {
+    if (!projection->hasOrderBy() || groupedKeys.empty()) {
+        return;
+    }
+
+    const OrderBy* orderBy = projection->getOrderBy();
+
+    for (const OrderByItem* item : orderBy->getItems()) {
+        bindGroupedKeyColumn(item->getExpr(), groupedKeys);
+    }
+}
+
+void DBProgramGenerator::bindGroupedKeyColumn(const Expr* expr, const GroupedKeyColumns& groupedKeys) {
+    if (!expr || _exprMap.contains(expr)) {
+        return;
+    }
+
+    for (const auto& [keyExpr, keyColumn] : groupedKeys) {
+        // The key reads this grouping key whole, so the grouped column is what it reads:
+        // nothing below it has to be looked at, let alone translated again
+        if (StructuralExpressionComparator::equal(keyExpr, expr)) {
+            _exprMap[expr] = keyColumn;
+            return;
+        }
+    }
+
+    std::vector<const Expr*> children;
+    if (!ExprChildren::collect(expr, children)) {
+        return;
+    }
+
+    for (const Expr* child : children) {
+        bindGroupedKeyColumn(child, groupedKeys);
     }
 }

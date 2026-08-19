@@ -1,6 +1,8 @@
 #pragma once
 
+#include <span>
 #include <string_view>
+#include <vector>
 
 #include "views/GraphView.h"
 
@@ -88,6 +90,9 @@ private:
 
     void declareItemAlias(Expr* item, std::string_view alias);
     void analyzeDistinct(const ReturnStmt* returnSt, const Projection* projection) const;
+    void analyzeAggregateOrderBy(const Projection* projection) const;
+    bool isGroupWise(const Expr* expr, const Projection* projection) const;
+    bool isGroupWise(std::span<const Expr* const> exprs, const Projection* projection) const;
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
