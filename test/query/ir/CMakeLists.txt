@@ -99,6 +99,20 @@ target_link_libraries(test_query_ir_call_yield_into_match PRIVATE
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s)
 
+# The crossing-call tests hop twice from the column a CALL yielded and then call again,
+# once with a constant argument alone and once reading the chain's tail, from the query
+# text over the simpledb fixture - so they need the frontend, the registry and the
+# examples graph.
+add_ir_tests(test_query_ir_crossing_call CrossingCallTest.cpp)
+target_link_libraries(test_query_ir_crossing_call PRIVATE
+        turing_db_procedures_s
+        turing_db_examples_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s)
+
 # The db.* procedure tests drive the registered schema and version-control procedures from
 # the query text alone, so they need the procedure registry and the frontend as well as the
 # engine.
