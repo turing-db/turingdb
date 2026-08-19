@@ -333,6 +333,16 @@ TEST_F(CreateEquivalenceTest, matchThreeComponentCrossProductCreateNode) {
         "MATCH (m:Gadget) RETURN count(m)");
 }
 
+// A node-id-filtered MATCH feeding a CREATE that hangs a new node off the single
+// matched node: the binding is one row, so exactly one LIKES edge and one Interest
+// are created, from node 0 only - not from every node.
+TEST_F(CreateEquivalenceTest, matchFilteredCreateEdgeToNewNode) {
+    expectSeededCreateEquivalent(
+        R"(CREATE (:Person {name: "Remy"}), (:Person {name: "Adam"}))",
+        R"(MATCH (n) WHERE n = 0 CREATE (n)-[:LIKES]->(c:Interest {name: "Cake"}))",
+        R"(MATCH (n)-[:LIKES]->(c:Interest) RETURN n.name, c.name)");
+}
+
 TEST_F(CreateEquivalenceTest, multipleSequentialCreates) {
     applyV2(_v2GraphName, R"(CREATE (n:Person {name: "Alice"}))");
     applyV2(_v2GraphName, R"(CREATE (n:Person {name: "Bob"}))");
