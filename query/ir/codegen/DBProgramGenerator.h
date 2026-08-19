@@ -354,8 +354,10 @@ private:
     mlir::Value resolveWildcardColumn() const;
 
     // The column an aggregate folds over: the column count(*) counts, or the one its
-    // argument's translation computes
-    mlir::Value translateAggregateInput(const Expr* argExpr);
+    // argument's translation computes. @param variableColumns resolves an entity
+    // argument, and may be null, in which case a map is built to resolve it through
+    mlir::Value translateAggregateInput(const Expr* argExpr,
+                                        const VariableColumnMap* variableColumns);
 
     void generatePropertyConstraints(std::span<Stmt* const> stmts);
 
