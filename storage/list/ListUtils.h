@@ -3,6 +3,7 @@
 #include "ListView.h"
 #include "ListBufferTypeTag.h"
 
+#include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
 namespace db {
@@ -33,6 +34,9 @@ struct ListTagDispatcher {
             break;
             case ListBufferTypeTag::ListView:
                 return executor.template operator()<ListView>(view);
+            break;
+            case ListBufferTypeTag::Null:
+                return executor.template operator()<PropertyNull>(view);
             break;
 
             case ListBufferTypeTag::INVALID:
@@ -79,6 +83,11 @@ struct TypeToListBufferTag<types::Embedding::Primitive> {
 template <>
 struct TypeToListBufferTag<ListView> {
     static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::ListView;
+};
+
+template <>
+struct TypeToListBufferTag<PropertyNull> {
+    static constexpr ListBufferTypeTag Tag = ListBufferTypeTag::Null;
 };
 
 }

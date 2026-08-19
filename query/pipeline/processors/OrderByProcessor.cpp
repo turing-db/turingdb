@@ -20,6 +20,7 @@
 #include "columns/ColumnOperatorDispatcher.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
+#include "list/ListElementOrder.h"
 
 #include "BioAssert.h"
 #include "FatalException.h"

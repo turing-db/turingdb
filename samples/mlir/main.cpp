@@ -429,6 +429,10 @@ private:
                 std::cout << "<list>";
             break;
 
+            case ListBufferTypeTag::Null:
+                std::cout << "null";
+            break;
+
             case ListBufferTypeTag::INVALID:
                 std::cout << "?";
             break;

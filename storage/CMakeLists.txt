@@ -14,6 +14,7 @@ set(storage_sources
 
         list/ListByteBuffer.cpp
         list/ListBuffer.cpp
+        list/ListElementOrder.cpp
         list/ListElementViewBuffer.cpp
         list/ListWriteCursor.cpp
 
