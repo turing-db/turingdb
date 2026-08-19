@@ -430,7 +430,10 @@ struct OrderedTypes {
         EdgeTypeID,
         PropertyTypeID,
         LabelID,
-        LabelSetID
+        LabelSetID,
+
+        // Tagged scalars
+        ListElementView
     >>;
 
     using Excluded = ExcludedContainers<

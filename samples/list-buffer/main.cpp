@@ -5,6 +5,7 @@
 #include "list/ListElementView.h"
 #include "list/ListUtils.h"
 
+#include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
 using namespace db;
@@ -21,6 +22,8 @@ int main() {
             spdlog::info("element: {}", "embedding");
         } else if constexpr (std::is_same_v<T, ListView>) {
             spdlog::info("element: {}", "list");
+        } else if constexpr (std::is_same_v<T, PropertyNull>) {
+            spdlog::info("element: {}", "null");
         } else {
             spdlog::info("element: {}", value);
         }

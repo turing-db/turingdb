@@ -12,6 +12,7 @@
 #include "ListView.h"
 #include "ListWriteCursor.h"
 
+#include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
 #include "TypeUtils.h"
@@ -20,7 +21,8 @@ namespace {
 using ListableTypesImpl =
     std::tuple<db::types::Int64::Primitive, db::types::UInt64::Primitive,
                db::types::Double::Primitive, db::types::String::Primitive,
-               db::types::Bool::Primitive, db::types::Embedding::Primitive, db::ListView>;
+               db::types::Bool::Primitive, db::types::Embedding::Primitive, db::ListView,
+               db::PropertyNull>;
 }
 
 namespace db {

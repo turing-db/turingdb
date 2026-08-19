@@ -504,6 +504,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumns) {
     items.emplace_back(StringView {text});
     items.emplace_back(Embedding {embedding});
     items.emplace_back(UInt64 {123});
+    items.emplace_back(db::PropertyNull {});
 
     const db::ListView list = localMem.listBuffer().insert(items);
 
@@ -527,7 +528,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumns) {
     ASSERT_EQ(decoded.cols().size(), 1u);
     const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnVector<db::ListElementView>>();
     ASSERT_NE(decodedCol, nullptr);
-    ASSERT_EQ(decodedCol->size(), 4u);
+    ASSERT_EQ(decodedCol->size(), 5u);
 
     EXPECT_EQ(decodedCol->at(0).getTag(), db::ListBufferTypeTag::Int);
     EXPECT_EQ(decodedCol->at(0).getAs<Int64>(), -3);
@@ -537,6 +538,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsListElementViewColumns) {
     expectEmbedding(decodedCol->at(2).getAs<Embedding>(), std::span<const float>(embedding));
     EXPECT_EQ(decodedCol->at(3).getTag(), db::ListBufferTypeTag::UInt);
     EXPECT_EQ(decodedCol->at(3).getAs<UInt64>(), 123u);
+    EXPECT_EQ(decodedCol->at(4).getTag(), db::ListBufferTypeTag::Null);
 }
 
 // Encode a ColumnConst<ListView> whose elements include a nested list, which itself

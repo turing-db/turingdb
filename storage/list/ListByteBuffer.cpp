@@ -6,6 +6,8 @@
 #include "ListView.h"
 #include "ListElementView.h"
 
+#include "metadata/PropertyNull.h"
+
 using namespace db;
 
 template <size_t N>
@@ -116,4 +118,5 @@ template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types:
 template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::String::Primitive&);
 template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const types::Embedding::Primitive&);
 template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const ListView&);
+template ListElementView ListByteBuffer<>::write(ListBufferTypeTag, const PropertyNull&);
 }
