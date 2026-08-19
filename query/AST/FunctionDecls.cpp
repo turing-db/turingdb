@@ -67,6 +67,11 @@ void FunctionDecls::initDefault() {
     countBools->setReturnTypes({{EvaluatedType::Integer}});
     countBools->setIsAggregate(true);
 
+    FunctionSignature* countListItems = createFunction("count");
+    countListItems->setArguments({EvaluatedType::ListItem});
+    countListItems->setReturnTypes({{EvaluatedType::Integer}});
+    countListItems->setIsAggregate(true);
+
     FunctionSignature* countWildcard = createFunction("count");
     countWildcard->setArguments({EvaluatedType::Wildcard});
     countWildcard->setReturnTypes({{EvaluatedType::Integer}});

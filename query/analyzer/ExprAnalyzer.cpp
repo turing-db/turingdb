@@ -155,6 +155,20 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
+            // A type-erased cell is equal only to a cell holding the same value, so it
+            // compares against the scalar types it can hold. Only the MLIR engine runs
+            // such a comparison: the legacy planner hands the operator no cell column
+            const bool comparesListItem =
+                pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Integer)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Char)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Bool);
+
+            if (_isV3 && comparesListItem) {
+                break;
+            }
+
             // Allows NodeID <-> NodeID and NodeID <-> Integer comparisons
             if (pair == TypePairBitset(EvaluatedType::NodePattern,
                                        EvaluatedType::NodePattern)

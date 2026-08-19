@@ -336,6 +336,11 @@ void CypherAnalyzer::declareItemAlias(Expr* item, std::string_view alias) {
     _ctxt->declareAlias(alias, aliasedDecl);
 }
 
+void CypherAnalyzer::setV3() {
+    _isV3 = true;
+    _exprAnalyzer->setV3();
+}
+
 void CypherAnalyzer::analyzeDistinct(const ReturnStmt* returnSt, const Projection* projection) const {
     if (!_isV3) { // only supported by MLIR v3
         throwError("DISTINCT not yet supported.", returnSt);

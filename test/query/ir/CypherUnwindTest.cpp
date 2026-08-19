@@ -207,6 +207,7 @@ protected:
         parser.parse(query);
 
         CypherAnalyzer analyzer(&ast, view);
+        analyzer.setV3();
         analyzer.analyze();
 
         mlir::MLIRContext context;
@@ -491,24 +492,73 @@ TEST_F(CypherUnwindTest, countsHomogeneousUnwind) {
     expectRows("UNWIND [1, 2] AS l RETURN count(l)", expected);
 }
 
-TEST_F(CypherUnwindTest, rejectsCountOverHeterogeneousUnwind) {
-    // A type-erased cell has no value type for count to read, so the analyzer rejects the
-    // call - unlike the homogeneous list of countsHomogeneousUnwind.
-    Rows rows;
-    EXPECT_THROW(runQuery("UNWIND [1, null, 'a'] AS l RETURN count(l)", rows), TuringException);
+TEST_F(CypherUnwindTest, countsHeterogeneousUnwind) {
+    // count charges the non-null cells, as it does the present values of a nullable
+    // value column.
+    const Rows expected = {{"2"}};
+    expectRows("UNWIND [1, null, 'a'] AS l RETURN count(l)", expected);
 }
 
-TEST_F(CypherUnwindTest, rejectsHeterogeneousUnwoundVariableInWhere) {
-    // Same reason: the predicate has no type to compare the property against, where
-    // filtersOnUnwoundVariableInWhere compares against a homogeneous list's integers.
-    Rows rows;
-    EXPECT_THROW(runQuery("UNWIND [1, null] AS l MATCH (n) WHERE n.age = l RETURN n.name, l", rows), TuringException);
+TEST_F(CypherUnwindTest, countsNestedListElements) {
+    const Rows expected = {{"2"}};
+    expectRows("UNWIND [[1], null, 'a'] AS l RETURN count(l)", expected);
 }
 
-TEST_F(CypherUnwindTest, rejectsDistinctAfterUnwind) {
-    // DISTINCT is unsupported after an UNWIND whatever the list holds, so the tagged
-    // column is not what the rejection is about.
-    Rows rows;
-    EXPECT_THROW(runQuery("UNWIND [1, null, 1, null] AS l RETURN DISTINCT l", rows), TuringException);
-    EXPECT_THROW(runQuery("UNWIND [1, 2, 1] AS l RETURN DISTINCT l", rows), TuringException);
+TEST_F(CypherUnwindTest, countsAllNullListAsZero) {
+    const Rows expected = {{"0"}};
+    expectRows("UNWIND [null, null] AS l RETURN count(l)", expected);
 }
+
+TEST_F(CypherUnwindTest, dedupsHeterogeneousUnwind) {
+    // Every null is one value, so DISTINCT keeps a single null row.
+    const Rows expected = {{"1"}, {"null"}};
+    expectRows("UNWIND [1, null, 1, null] AS l RETURN DISTINCT l", expected);
+}
+
+TEST_F(CypherUnwindTest, dedupsNumbersAcrossTags) {
+    // An integer and the float holding the same value are one Cypher value, so they
+    // dedup together even though the cells are tagged differently.
+    const Rows expected = {{"1"}, {"a"}};
+    expectRows("UNWIND [1, 1.0, 'a', 'a'] AS l RETURN DISTINCT l", expected);
+}
+
+TEST_F(CypherUnwindTest, dedupsNestedLists) {
+    const Rows expected = {{"[1]"}, {"[2]"}, {"null"}};
+    expectRows("UNWIND [[1], [1], [2], null, null] AS l RETURN DISTINCT l", expected);
+}
+
+TEST_F(CypherUnwindTest, dedupsAndSortsHeterogeneousUnwind) {
+    const Rows expected = {{"a"}, {"1"}, {"null"}};
+    expectRows("UNWIND [1, null, 'a'] AS l RETURN DISTINCT l ORDER BY l", expected);
+}
+
+TEST_F(CypherUnwindTest, filtersOnHeterogeneousUnwoundVariableInWhere) {
+    // The tagged cell compares against the property by the type it carries: the null
+    // cell matches no row, where the integer one matches the ages equal to it.
+    const Rows expected = {{"Remy", "32"}, {"Adam", "32"}};
+    expectRows("UNWIND [32, null] AS l MATCH (n) WHERE n.age = l RETURN n.name, l", expected);
+}
+
+TEST_F(CypherUnwindTest, filtersOnHeterogeneousUnwoundVariableOnEitherSide) {
+    const Rows expected = {{"Remy"}, {"Adam"}};
+    expectRows("UNWIND [32, null] AS l MATCH (n) WHERE l = n.age RETURN n.name", expected);
+}
+
+TEST_F(CypherUnwindTest, filtersOnHeterogeneousUnwoundVariableAcrossNumericTags) {
+    // A float cell equals an integer property of the same value, as one number equals
+    // the other in Cypher.
+    const Rows expected = {{"Remy"}, {"Adam"}};
+    expectRows("UNWIND [32.0, null] AS l MATCH (n) WHERE n.age = l RETURN n.name", expected);
+}
+
+TEST_F(CypherUnwindTest, filtersOnHeterogeneousUnwoundVariableOfAnotherType) {
+    // The string cell carries no integer, so it matches no age at all.
+    const Rows expected = {{"Remy", "32"}, {"Adam", "32"}};
+    expectRows("UNWIND [32, 'x'] AS l MATCH (n) WHERE n.age = l RETURN n.name, l", expected);
+}
+
+TEST_F(CypherUnwindTest, filtersOnHeterogeneousUnwoundStringVariable) {
+    const Rows expected = {{"Remy", "Remy"}};
+    expectRows("UNWIND ['Remy', null, 3] AS l MATCH (n) WHERE n.name = l RETURN n.name, l", expected);
+}
+

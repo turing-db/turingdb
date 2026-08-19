@@ -45,6 +45,7 @@ public:
     ExprAnalyzer& operator=(ExprAnalyzer&&) = delete;
 
     void setDeclContext(DeclContext* ctxt) { _ctxt = ctxt; }
+    void setV3() { _isV3 = true; }
 
     // Expressions
     void analyzeRootExpr(Expr* expr);
@@ -79,6 +80,7 @@ private:
     GraphView _graphView;
     DeclContext* _ctxt {nullptr};
     const GraphMetadata& _graphMetadata;
+    bool _isV3 {false};
 
     std::unordered_map<std::string_view, ValueType> _toBeCreatedTypes;
 
