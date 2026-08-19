@@ -1119,6 +1119,33 @@ mlir::Value DBProgramGenerator::resolveEntityColumn(std::string_view varName) {
     return mlir::Value {};
 }
 
+bool DBProgramGenerator::isRowAlignedHere(mlir::Value column) const {
+    mlir::Operation* const definingOp = column.getDefiningOp();
+    mlir::Block* const definingBlock = definingOp
+        ? definingOp->getBlock()
+        : mlir::cast<mlir::BlockArgument>(column).getOwner();
+
+    return definingBlock == _opBuilder.getInsertionBlock();
+}
+
+mlir::Value DBProgramGenerator::resolveWildcardColumn() const {
+    for (const VariableDependency& var : _vdg.vars()) {
+        const auto findIt = _varMap.find(&var);
+        if (findIt == _varMap.end() || findIt->second.empty()) {
+            continue;
+        }
+
+        const mlir::Value column = findIt->second.back();
+        if (!isRowAlignedHere(column)) {
+            continue;
+        }
+
+        return column;
+    }
+
+    return mlir::Value {};
+}
+
 void DBProgramGenerator::generateSet(const CypherAST* ast) {
     const CypherAST::QueryCommands& queries = ast->queries();
     if (queries.size() != 1) {
@@ -2039,8 +2066,8 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
     mlir::Value inputColumn;
 
     if (argExpr->getType() == EvaluatedType::Wildcard) {
-        bioassert(!_varMap.empty(), "count(*) requires at least one traversal variable.");
-        inputColumn = _varMap.begin()->second.back();
+        inputColumn = resolveWildcardColumn();
+        bioassert(inputColumn, "count(*) over no column holding the rows it counts.");
     } else {
         translateExpr(argExpr);
         inputColumn = _exprMap.at(argExpr);
@@ -2226,8 +2253,8 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
         mlir::Value inputColumn;
 
         if (argExpr->getType() == EvaluatedType::Wildcard) {
-            bioassert(!_varMap.empty(), "count(*) requires at least one traversal variable.");
-            inputColumn = _varMap.begin()->second.back();
+            inputColumn = resolveWildcardColumn();
+            bioassert(inputColumn, "count(*) over no column holding the rows it counts.");
         } else {
             translateExpr(argExpr);
             inputColumn = _exprMap.at(argExpr);
