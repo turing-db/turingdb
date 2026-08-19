@@ -34,7 +34,9 @@
 #include "Projection.h"
 #include "decl/DeclContext.h"
 #include "decl/EvaluatedType.h"
+#include "expr/EntityTypeExpr.h"
 #include "expr/Expr.h"
+#include "expr/ExprChildren.h"
 #include "expr/PropertyExpr.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
@@ -310,6 +312,8 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
     if (isAggregate) {
         projection->setAggregate();
         projection->setHasGroupingKeys(hasGroupingKeys);
+
+        analyzeAggregateOrderBy(projection);
     }
 }
 
@@ -365,6 +369,74 @@ void CypherAnalyzer::analyzeDistinct(const ReturnStmt* returnSt, const Projectio
             throwError("ORDER BY with DISTINCT may only order by returned columns.", keyExpr);
         }
     }
+}
+
+void CypherAnalyzer::analyzeAggregateOrderBy(const Projection* projection) const {
+    if (!projection->hasOrderBy()) {
+        return;
+    }
+
+    const OrderBy* orderBy = projection->getOrderBy();
+
+    for (const OrderByItem* item : orderBy->getItems()) {
+        const Expr* keyExpr = item->getExpr();
+
+        if (!isGroupWise(keyExpr, projection)) {
+            throwError("ORDER BY with an aggregate may only order by expressions over the "
+                       "returned columns.",
+                       keyExpr);
+        }
+    }
+}
+
+bool CypherAnalyzer::isGroupWise(const Expr* expr, const Projection* projection) const {
+    if (!expr) {
+        return true;
+    }
+
+    // A constant holds the same value in every matched row, so it holds one per group too
+    if (!expr->isDynamic()) {
+        return true;
+    }
+
+    // A grouping key holds one value per group by construction, and so does the alias of
+    // one: the projection carries that column, at whatever depth of the key it is read
+    if (projection->hasItem(expr)) {
+        return true;
+    }
+
+    const Expr::Kind kind = expr->getKind();
+
+    if (kind == Expr::Kind::PROPERTY) {
+        const PropertyExpr* property = static_cast<const PropertyExpr*>(expr);
+
+        return projection->hasVariableItem(property->getEntityVarDecl());
+    } else if (kind == Expr::Kind::ENTITY_TYPES) {
+        const EntityTypeExpr* entityType = static_cast<const EntityTypeExpr*>(expr);
+
+        return projection->hasVariableItem(entityType->getEntityVarDecl());
+    } else if (kind == Expr::Kind::SYMBOL) {
+        // A returned variable, and the alias of a returned item, are both matched above:
+        // a symbol reaching here names a variable the grouping consumed
+        return false;
+    }
+
+    std::vector<const Expr*> children;
+    if (!ExprChildren::collect(expr, children)) {
+        return false;
+    }
+
+    return isGroupWise(children, projection);
+}
+
+bool CypherAnalyzer::isGroupWise(std::span<const Expr* const> exprs, const Projection* projection) const {
+    for (const Expr* expr : exprs) {
+        if (!isGroupWise(expr, projection)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 void CypherAnalyzer::analyze(OrderBy* orderBySt, const Projection* projection) {

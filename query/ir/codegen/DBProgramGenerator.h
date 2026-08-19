@@ -50,6 +50,10 @@ public:
     // projection and its ORDER BY read
     using VariableColumnMap = std::unordered_map<std::string_view, mlir::Value>;
 
+    // Each grouping key expression of an aggregating projection beside the column the
+    // group aggregate reduced it to, one value per group
+    using GroupedKeyColumns = llvm::SmallVector<std::pair<const Expr*, mlir::Value>>;
+
     explicit DBProgramGenerator(mlir::ModuleOp* mainModule);
     ~DBProgramGenerator();
 
@@ -135,6 +139,12 @@ private:
     void applyPredicateFilters(std::span<const Expr* const> predicates);
 
     void generateGroupAggregate(const CypherAST* ast);
+
+    // Publishes the grouped column of every grouping key an ORDER BY key reads, so that
+    // translating the key computes over one value per group instead of re-reading the
+    // ungrouped column the group aggregate consumed
+    void bindOrderByKeyColumns(const Projection* projection, const GroupedKeyColumns& groupedKeys);
+    void bindGroupedKeyColumn(const Expr* expr, const GroupedKeyColumns& groupedKeys);
 
     void translateExpr(const Expr* expr);
     void translateUnaryExpr(const Expr* expr, const UnaryExpr* unaryExpr);

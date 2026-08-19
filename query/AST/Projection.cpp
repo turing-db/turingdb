@@ -112,3 +112,29 @@ const Expr* Projection::findItemExpr(const Expr* key) const {
 bool Projection::hasItem(const Expr* key) const {
     return locateItem(key) != _items.end();
 }
+
+bool Projection::hasVariableItem(const VarDecl* decl) const {
+    if (!decl) {
+        return false;
+    }
+
+    for (const ReturnItem& item : _items) {
+        if (const Expr* const* itemExpr = std::get_if<Expr*>(&item)) {
+            const Expr* projectedExpr = *itemExpr;
+
+            // Only a bare variable returns the variable itself; every other item returns
+            // a value computed from it, which leaves the variable behind
+            const bool isBareVariable = projectedExpr->getKind() == Expr::Kind::SYMBOL;
+
+            if (isBareVariable && projectedExpr->getExprVarDecl() == decl) {
+                return true;
+            }
+        } else if (const VarDecl* const* itemDecl = std::get_if<VarDecl*>(&item)) {
+            if (*itemDecl == decl) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
