@@ -72,7 +72,7 @@ public:
     void analyze(Skip* skipSt);
     void analyze(Limit* limitSt);
 
-    void setV3() { _isV3 = true; }
+    void setV3();
 
 private:
     CypherAST* _ast {nullptr};
