@@ -279,6 +279,11 @@ public:
     static NLGatherFunction selectListElementGatherFunction();
     static NLCompareFunction selectListElementCompareFunction();
 
+    // Distinct row key and non-null tally for a list_element chunk, so a heterogeneous
+    // unwind can be deduped and counted.
+    static NLKeyAppendFunction selectListElementKeyAppendFunction();
+    static NLCountFunction selectListElementCountFunction();
+
     // Range copy for an ID chunk of this kind (skip suffix copy).
     static NLCopyFunction selectCopyFunction(NLChunkKind kind);
 
