@@ -799,15 +799,20 @@ TEST_F(EquivalenceTest, conversionFunctions) {
     expectEquivalent("MATCH (n) WHERE n.age > toInteger('30') RETURN n.name");
     expectEquivalent("MATCH (n) WHERE n.isFrench = toBoolean('true') RETURN n.name");
 
-    expectEquivalent("MATCH (n) RETURN toInteger('42')");
-    expectEquivalent("MATCH (n) RETURN toFloat('2.5')");
+    // DISABLED: Because v2 returns a single row (incorrect) whilst v3 returns |n| (correct)
+    //expectEquivalent("MATCH (n) RETURN toInteger('42')");
+    //expectEquivalent("MATCH (n) RETURN toFloat('2.5')");
 }
 
 TEST_F(EquivalenceTest, embeddingFunctions) {
-    expectEquivalent("MATCH (n) RETURN cosine_similarity((1.0, 2.0, 3.0), (0.4, 0.3, 0.8))");
-    expectEquivalent("MATCH (n) RETURN euclidean_distance((1.0, 2.0, 3.0), (0.4, 0.3, 0.8))");
-    expectEquivalent("MATCH (n) RETURN cosine_similarity((0.5, 0.5), (0.5, 0.5))");
-    expectEquivalent("MATCH (n) RETURN euclidean_distance((0.5, 0.5), (0.5, 0.5))");
+    expectEquivalent("RETURN cosine_similarity((1.0, 2.0, 3.0), (0.4, 0.3, 0.8))");
+    expectEquivalent("RETURN euclidean_distance((0.5, 0.5), (0.5, 0.5))");
+
+    // DISABLED: Because v2 returns a single row (incorrect) whilst v3 returns |n| (correct)
+    //expectEquivalent("MATCH (n) RETURN cosine_similarity((1.0, 2.0, 3.0), (0.4, 0.3, 0.8))");
+    //expectEquivalent("MATCH (n) RETURN euclidean_distance((1.0, 2.0, 3.0), (0.4, 0.3, 0.8))");
+    //expectEquivalent("MATCH (n) RETURN cosine_similarity((0.5, 0.5), (0.5, 0.5))");
+    //expectEquivalent("MATCH (n) RETURN euclidean_distance((0.5, 0.5), (0.5, 0.5))");
 }
 
 TEST_F(EquivalenceTest, functionsWithLimit) {

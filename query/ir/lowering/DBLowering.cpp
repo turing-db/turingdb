@@ -61,20 +61,23 @@ mlir::Type booleanFunctionElement(mlir::OpBuilder& builder) {
     return builder.getI1Type();
 }
 
+enum class ResultNullability {
+    FollowsInput,
+    AlwaysNullable,
+};
+
 struct UnaryFunctionLowering {
     NLUnaryFunctionEmitter emit {nullptr};
     UnaryFunctionElement element {nullptr};
-    bool nullableFollowsInput {false};
+    ResultNullability nullability {ResultNullability::FollowsInput};
 };
 
-constexpr bool NULLABLE = true;
-constexpr bool NOT_NULLABLE = false;
 const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionLowerings = {
-    {"db.labels",     {&emitNLUnaryFunction<nl::Labels>,    &stringFunctionElement,  NOT_NULLABLE}},
-    {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>,  &stringFunctionElement,  NOT_NULLABLE}},
-    {"db.to_integer", {&emitNLUnaryFunction<nl::ToInteger>, &integerFunctionElement, NULLABLE}},
-    {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,   NULLABLE}},
-    {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, &booleanFunctionElement, NULLABLE}},
+    {"db.labels",     {&emitNLUnaryFunction<nl::Labels>,    &stringFunctionElement,  ResultNullability::FollowsInput}},
+    {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>,  &stringFunctionElement,  ResultNullability::FollowsInput}},
+    {"db.to_integer", {&emitNLUnaryFunction<nl::ToInteger>, &integerFunctionElement, ResultNullability::AlwaysNullable}},
+    {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,   ResultNullability::AlwaysNullable}},
+    {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, &booleanFunctionElement, ResultNullability::AlwaysNullable}},
 };
 
 const UnaryFunctionLowering* lookupUnaryFunctionLowering(mlir::Operation& operation) {
@@ -381,10 +384,6 @@ bool reducesToOneRow(mlir::Operation* operation) {
                      mlir::db::Avg>(operation);
 }
 
-// Whether a chunk holds one value standing for every row rather than one per row.
-// The arithmetic ops listed are bound wherever their operands are, so a chunk
-// computed from constants alone through them is hoisted out of the producing loop
-// with the constants themselves and carries no more rows than they do.
 bool isConstantChunk(mlir::Value chunk) {
     mlir::Operation* const definingOp = chunk.getDefiningOp();
     if (!definingOp) {
@@ -395,7 +394,9 @@ bool isConstantChunk(mlir::Value chunk) {
         return true;
     }
 
-    if (!mlir::isa<nl::Add, nl::Sub, nl::Mul, nl::Div, nl::Mod, nl::Pow>(definingOp)) {
+    if (!mlir::isa<nl::Add, nl::Sub, nl::Mul, nl::Div, nl::Mod, nl::Pow,
+                   nl::ToInteger, nl::ToFloat, nl::ToBoolean,
+                   nl::CosineSimilarity, nl::EuclideanDistance>(definingOp)) {
         return false;
     }
 
@@ -2077,8 +2078,14 @@ void DBLowering::lowerUnaryFunction(mlir::Operation* op) {
     const mlir::Value inputChunk = mapValue(op->getOperand(0));
 
     const mlir::Type baseElement = spec->element(_builder);
+
+    const bool inputNullable = isNullableChunk(inputChunk.getType());
+    const bool alwaysNull = spec->nullability == ResultNullability::AlwaysNullable;
+    const bool specNull = spec->nullability == ResultNullability::FollowsInput && inputNullable;
+    const bool resultNullable = alwaysNull || specNull;
+
     mlir::Type resultElement = baseElement;
-    if (spec->nullableFollowsInput && isNullableChunk(inputChunk.getType())) {
+    if (resultNullable) {
         resultElement = storage::NullableType::get(_builder.getContext(), baseElement);
     }
 
