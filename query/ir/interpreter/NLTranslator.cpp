@@ -2313,6 +2313,8 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptKeyAppendFunction(valueType);
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        return NLExecutor::selectListElementKeyAppendFunction();
     }
 
     return NLExecutor::selectKeyAppendFunction(chunkKindFromElementType(elementType));
@@ -2325,6 +2327,8 @@ NLCountFunction NLTranslator::selectCountForChunkType(mlir::Type chunkType) {
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptCountFunction(valueType);
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        return NLExecutor::selectListElementCountFunction();
     }
 
     // A non-nullable chunk must be an ID chunk (node/edge/edge-type IDs), which has

@@ -567,6 +567,133 @@ void distinctKeyAppendOptColumn(const Column* column, size_t row, std::string& k
     distinctAppendValueBytes(key, *value);
 }
 
+void distinctAppendElementBytes(std::string& key, ListElementView element);
+
+// Serialize a nested list into the row key as its length then its elements, so a list
+// never keys the same as the concatenation of its neighbours.
+void distinctAppendListBytes(std::string& key, const ListView list) {
+    const size_t size = list.size();
+    key.append(reinterpret_cast<const char*>(&size), sizeof(size));
+
+    for (const ListElementView element : list) {
+        distinctAppendElementBytes(key, element);
+    }
+}
+
+// Serialize a number by its value rather than by the type it is tagged with: an integer
+// and a float holding the same value are one Cypher value, so a float with no fractional
+// part keys as that integer and only a fractional one keys as a double.
+void distinctAppendNumberBytes(std::string& key, const ListElementView element) {
+    const auto appendInteger = [&key](types::Int64::Primitive value) {
+        key.push_back(static_cast<char>(ListBufferTypeTag::Int));
+        distinctAppendValueBytes(key, value);
+    };
+
+    switch (element.getTag()) {
+        case ListBufferTypeTag::Int:
+            return appendInteger(element.getAs<types::Int64::Primitive>());
+        break;
+
+        case ListBufferTypeTag::UInt: {
+            const types::UInt64::Primitive value = element.getAs<types::UInt64::Primitive>();
+            if (value <= static_cast<types::UInt64::Primitive>(std::numeric_limits<types::Int64::Primitive>::max())) {
+                return appendInteger(static_cast<types::Int64::Primitive>(value));
+            }
+
+            key.push_back(static_cast<char>(ListBufferTypeTag::UInt));
+            distinctAppendValueBytes(key, value);
+            return;
+        }
+        break;
+
+        case ListBufferTypeTag::Double: {
+            constexpr types::Double::Primitive integerBound = 9223372036854775808.0;
+
+            const types::Double::Primitive value = element.getAs<types::Double::Primitive>();
+            const types::Double::Primitive truncated = std::trunc(value);
+            const bool holdsAnInteger = std::isfinite(value)
+                                     && truncated == value
+                                     && std::abs(value) < integerBound;
+
+            if (holdsAnInteger) {
+                return appendInteger(static_cast<types::Int64::Primitive>(truncated));
+            }
+
+            key.push_back(static_cast<char>(ListBufferTypeTag::Double));
+            distinctAppendValueBytes(key, value);
+            return;
+        }
+        break;
+
+        default:
+            bioassert(false, "Keying a non-numeric element as a number");
+        break;
+    }
+}
+
+// Serialize one tagged scalar into the row key: its tag, then its value's bytes. Cells of
+// two types never collide because the tag leads, and a null is the tag alone, so all
+// nulls dedup together as they do in a nullable value column.
+void distinctAppendElementBytes(std::string& key, const ListElementView element) {
+    const ListBufferTypeTag tag = element.getTag();
+
+    switch (tag) {
+        case ListBufferTypeTag::Int:
+        case ListBufferTypeTag::UInt:
+        case ListBufferTypeTag::Double:
+            return distinctAppendNumberBytes(key, element);
+        break;
+
+        case ListBufferTypeTag::Bool:
+            key.push_back(static_cast<char>(tag));
+            distinctAppendValueBytes(key, static_cast<bool>(element.getAs<types::Bool::Primitive>()));
+            return;
+        break;
+
+        case ListBufferTypeTag::String:
+            key.push_back(static_cast<char>(tag));
+            distinctAppendValueBytes(key, element.getAs<types::String::Primitive>());
+            return;
+        break;
+
+        case ListBufferTypeTag::ListView:
+            key.push_back(static_cast<char>(tag));
+            distinctAppendListBytes(key, element.getAs<ListView>());
+            return;
+        break;
+
+        case ListBufferTypeTag::Null:
+            key.push_back(static_cast<char>(tag));
+            return;
+        break;
+
+        case ListBufferTypeTag::Embedding:
+            throw IRException("cannot dedup by an embedding element");
+        break;
+
+        case ListBufferTypeTag::INVALID:
+            throw IRException("cannot dedup by an untagged element");
+        break;
+    }
+
+    bioassert(false, "Unknown ListBufferTypeTag");
+}
+
+// Serialize one row of a type-erased column of tagged scalars into the row key.
+void distinctKeyAppendListElementColumn(const Column* column, size_t row, std::string& key) {
+    const auto& raw = static_cast<const ColumnVector<ListElementView>*>(column)->getRaw();
+    distinctAppendElementBytes(key, raw[row]);
+}
+
+// Count the non-null cells of a type-erased column of tagged scalars, so count(x) over a
+// heterogeneous unwind charges the same rows a nullable value column would.
+size_t countNonNullElementsColumn(const Column* column) {
+    const auto& raw = static_cast<const ColumnVector<ListElementView>*>(column)->getRaw();
+    return std::count_if(raw.begin(), raw.end(), [](const ListElementView element) {
+        return element.getTag() != ListBufferTypeTag::Null;
+    });
+}
+
 // Count the present (non-null) values of a nullable value column - a
 // ColumnVector<std::optional<Primitive>> - so Cypher count(x) charges only the
 // rows in which x is not null.
@@ -2697,6 +2824,14 @@ NLGatherFunction NLExecutor::selectListElementGatherFunction() {
 
 NLCompareFunction NLExecutor::selectListElementCompareFunction() {
     return &compareListElementColumn;
+}
+
+NLKeyAppendFunction NLExecutor::selectListElementKeyAppendFunction() {
+    return &distinctKeyAppendListElementColumn;
+}
+
+NLCountFunction NLExecutor::selectListElementCountFunction() {
+    return &countNonNullElementsColumn;
 }
 
 NLCopyFunction NLExecutor::selectCopyFunction(NLChunkKind kind) {
