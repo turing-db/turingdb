@@ -28,6 +28,7 @@
 #include "DBPasses.h"
 #include "DBTypes.h"
 #include "StorageDialect.h"
+#include "StorageEnums.h"
 #include "StorageTypes.h"
 
 #include "DependencyEdge.h"
@@ -2122,18 +2123,8 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
         const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
         const std::string_view funcName = invocation->getSignature()->getFullName();
 
-        int64_t kind;
-        if (funcName == "count") {
-            kind = 0;
-        } else if (funcName == "sum") {
-            kind = 1;
-        } else if (funcName == "min") {
-            kind = 2;
-        } else if (funcName == "max") {
-            kind = 3;
-        } else if (funcName == "avg") {
-            kind = 4;
-        } else {
+        const std::optional<mlir::storage::GroupAggregateKind> kind = mlir::storage::symbolizeGroupAggregateKind(funcName);
+        if (!kind) {
             throw TuringException(fmt::format("Unsupported aggregate function: {}", funcName));
         }
 
@@ -2152,7 +2143,7 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
         }
 
         aggInputColumns.push_back(inputColumn);
-        aggKinds.push_back(kind);
+        aggKinds.push_back(static_cast<int64_t>(*kind));
         aggFuncExprs.push_back(funcExpr);
     }
 
