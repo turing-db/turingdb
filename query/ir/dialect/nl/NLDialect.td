@@ -23,6 +23,8 @@ def NL : Dialect {
 
 }
 
+def ConstantThroughOperands : NativeOpTrait<"ConstantThroughOperands">;
+
 // Base, from which all nested-loop dialect ops are derived
 class NLOp<string mnemonic, list<Trait> traits = []>
     : Op<NL, mnemonic, traits>;

@@ -10,6 +10,7 @@
 #include "EntityPattern.h"
 #include "NodePattern.h"
 #include "expr/Operators.h"
+
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Block.h"
 #include "mlir/IR/Builders.h"
@@ -30,6 +31,7 @@
 #include "StorageDialect.h"
 #include "StorageEnums.h"
 #include "StorageTypes.h"
+#include "IRConstantColumn.h"
 
 #include "DependencyEdge.h"
 #include "EdgeMetadata.h"
@@ -162,45 +164,6 @@ EdgeMetadata::EdgeType reverseEdge(EdgeMetadata::EdgeType type) {
 
 }
 
-// Whether a column holds one value standing for every row rather than one per row. It is
-// asked of the emitted column and not of the expression behind it, because the two can
-// disagree: a symbol naming the alias of a constant item is marked dynamic, yet it reads
-// that item's constant. The ops listed are the ones DBLowering binds wherever their
-// operands are bound, so a column computed from constants alone through them is hoisted
-// out of the scan loop with the constants themselves
-bool isConstantColumn(mlir::Value column) {
-    mlir::Operation* const definingOp = column.getDefiningOp();
-    if (!definingOp) {
-        return false;
-    }
-
-    if (mlir::isa<mlir::db::ConstantOp>(definingOp)) {
-        return true;
-    }
-
-    const bool boundWithItsOperands = mlir::isa<mlir::db::AddOp,
-                                                mlir::db::SubOp,
-                                                mlir::db::MulOp,
-                                                mlir::db::DivOp,
-                                                mlir::db::ModOp,
-                                                mlir::db::PowOp,
-                                                mlir::db::AndOp,
-                                                mlir::db::OrOp,
-                                                mlir::db::XorOp,
-                                                mlir::db::NotOp,
-                                                mlir::db::EqOp,
-                                                mlir::db::NeqOp,
-                                                mlir::db::GtOp,
-                                                mlir::db::LtOp,
-                                                mlir::db::GteOp,
-                                                mlir::db::LteOp>(definingOp);
-    if (!boundWithItsOperands) {
-        return false;
-    }
-
-    return llvm::all_of(definingOp->getOperands(), isConstantColumn);
-}
-
 // The projected columns that carry rows, and the item each of them is. A constant column
 // holds the same value in every row, so a step shaped by rows - a dedup, a sort, a cut -
 // is not given one: it rides along untouched, and reading it would anchor that step where
@@ -214,7 +177,7 @@ void collectRowColumns(const Projection* projection,
 
     for (size_t itemIndex = 0; itemIndex < projected.size(); itemIndex++) {
         const mlir::Value column = projected[itemIndex];
-        if (isConstantColumn(column)) {
+        if (yieldsConstantColumn(column)) {
             continue;
         }
 
@@ -1523,7 +1486,7 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
             // A key the projection does not carry is read into a column of its own, which
             // is constant when the key computes over constants alone: one value for every
             // row, so it orders nothing and there is no per-row column to key on
-            if (isConstantColumn(keyColumn)) {
+            if (yieldsConstantColumn(keyColumn)) {
                 continue;
             }
 
@@ -2210,7 +2173,7 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
             // A constant column holds the same value in every row, so it tells no two
             // rows apart: it groups nothing and rides along beside the groups, as it
             // rides past a dedup or a sort
-            if (isConstantColumn(keyColumn)) {
+            if (yieldsConstantColumn(keyColumn)) {
                 continue;
             }
 

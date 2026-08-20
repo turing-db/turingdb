@@ -149,6 +149,14 @@ TEST_F(ConstantOnlyProjectionTest, emitsNothingWhenTheMatchIsEmpty) {
     expectConstants("MATCH (n) WHERE n.name = 'nobody' RETURN 5", {});
 }
 
+TEST_F(ConstantOnlyProjectionTest, emitsNothingWhenAConstantPredicateExcludesEveryRow) {
+    expectConstants("MATCH (n) WHERE NOT TRUE RETURN 5", {});
+}
+
+TEST_F(ConstantOnlyProjectionTest, emitsTheConstantForEveryRowWhenAConstantPredicateKeepsEveryRow) {
+    expectConstants("MATCH (n) WHERE NOT FALSE RETURN 5", Constants(nodeCount, 5));
+}
+
 // An expression over constants alone is a constant column too, so it is sized the same
 // way: one row of 42 per matched node.
 TEST_F(ConstantOnlyProjectionTest, emitsTheComputedConstantOncePerMatchedRow) {

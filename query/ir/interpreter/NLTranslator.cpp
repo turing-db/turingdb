@@ -8,6 +8,8 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "NLOps.h"
+
+#include "IRConstantColumn.h"
 #include "mlir/IR/Block.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -246,30 +248,6 @@ ValueType valueTypeFromChunkType(mlir::Type chunkType) {
     return valueTypeFromElementType(elementType);
 }
 
-bool isConstantLike(mlir::Value value) {
-    mlir::Operation* definingOp = value.getDefiningOp();
-    if (!definingOp) {
-        return false;
-    }
-
-    if (mlir::isa<nl::Constant>(definingOp)) {
-        return true;
-    }
-
-    const bool foldsConstantOperands = mlir::isa<nl::Add, nl::Sub, nl::Mul, nl::Div,
-                                                 nl::ToInteger, nl::ToFloat, nl::ToBoolean, nl::Pow, nl::Mod,
-                                                 nl::CosineSimilarity, nl::EuclideanDistance>(definingOp);
-    if (!foldsConstantOperands) {
-        return false;
-    }
-
-    const auto& operands = definingOp->getOperands();
-    return std::all_of(operands.begin(), operands.end(),
-                       [](mlir::Value operand) { return isConstantLike(operand); });
-}
-
-// A predicate or a NOT over constants folds to a ColumnConst just as an arithmetic
-// operation does, which the column answers and isConstantLike, reading the op, does not.
 bool isConstantColumn(const Column* column) {
     return column->getContainerKind() == ContainerKind::code<ColumnConst>();
 }
@@ -1217,7 +1195,7 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
         mlir::Operation* definingOp = column.getDefiningOp();
         const bool isProducedInThisBlock = definingOp && definingOp->getBlock() == outputBlock;
 
-        const bool isConstant = isConstantLike(column);
+        const bool isConstant = yieldsConstantColumn(column);
 
         if (!isInnermostLoopVariable && !isProducedInThisBlock && !isConstant) {
             throw IRException("nl.output columns must be a loop variable of the enclosing "

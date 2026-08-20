@@ -13,6 +13,8 @@
 
 #include "NLOps.h"
 
+#include "IRConstantColumn.h"
+
 #include "views/GraphView.h"
 #include "metadata/GraphMetadata.h"
 #include "metadata/LabelSet.h"
@@ -382,25 +384,6 @@ bool reducesToOneRow(mlir::Operation* operation) {
                      mlir::db::Min,
                      mlir::db::Max,
                      mlir::db::Avg>(operation);
-}
-
-bool isConstantChunk(mlir::Value chunk) {
-    mlir::Operation* const definingOp = chunk.getDefiningOp();
-    if (!definingOp) {
-        return false;
-    }
-
-    if (mlir::isa<nl::Constant>(definingOp)) {
-        return true;
-    }
-
-    if (!mlir::isa<nl::Add, nl::Sub, nl::Mul, nl::Div, nl::Mod, nl::Pow,
-                   nl::ToInteger, nl::ToFloat, nl::ToBoolean,
-                   nl::CosineSimilarity, nl::EuclideanDistance>(definingOp)) {
-        return false;
-    }
-
-    return llvm::all_of(definingOp->getOperands(), isConstantChunk);
 }
 
 }
@@ -2223,7 +2206,7 @@ void DBLowering::lowerOutput(mlir::db::Output output) {
         // but if we have all constants, then it need be moved to the inner most loop to
         // match cardinality. An expression over constants alone is one of them: it is
         // bound where its operands are, above the loop whose rows it is projected over
-        const bool allConstants = llvm::all_of(columns, isConstantChunk);
+        const bool allConstants = llvm::all_of(columns, yieldsConstantColumn);
 
         if (allConstants) {
             anchorBlock = _innermostLoopBody;
@@ -2334,7 +2317,7 @@ void DBLowering::rowAlignCutChunks(llvm::SmallVectorImpl<mlir::Value>& chunks) {
 
 mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinality) {
     // A chunk that carries rows is its own alignment
-    if (!isConstantChunk(chunk)) {
+    if (!yieldsConstantColumn(chunk)) {
         return chunk;
     }
 

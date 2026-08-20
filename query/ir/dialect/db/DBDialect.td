@@ -18,6 +18,8 @@ def DB : Dialect {
 
 }
 
+def ConstantThroughOperands : NativeOpTrait<"ConstantThroughOperands">;
+
 // Base, from which all TuringDB dialects are derived
 class TuringOp<string mnemonic, list<Trait> traits = []>
     : Op<DB, mnemonic, traits>;
@@ -25,9 +27,8 @@ class TuringOp<string mnemonic, list<Trait> traits = []>
 class UnaryOp<string mnemonic, list<Trait> traits = []>
     : TuringOp<mnemonic, traits>;
 
-// TODO: Not sure if this top-level, generic op is the best
-// way to do this. To revisit
+// Arithmetic over two columns: constant when both operands are.
 class BinaryOp<string mnemonic, list<Trait> traits = []>
-    : TuringOp<mnemonic, traits>;
+    : TuringOp<mnemonic, !listconcat(traits, [ConstantThroughOperands])>;
 
 #endif //TURINGDB_DIALECT
