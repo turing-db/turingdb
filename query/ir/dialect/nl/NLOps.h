@@ -12,5 +12,7 @@
 #include "NLDialect.h"
 #include "NLTypes.h"
 
+#include "IRConstantColumn.h"
+
 #define GET_OP_CLASSES
 #include "NLOps.h.inc"

@@ -52,6 +52,7 @@ target_include_directories(turing_db_ir_dbdialect_s PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_BINARY_DIR}
   ${STORAGE_DIALECT_BINARY_DIR}
+  ${IR_COMMON_SOURCE_DIR}
   ${MLIR_INCLUDE_DIRS}
   ${LLVM_INCLUDE_DIRS}
 )

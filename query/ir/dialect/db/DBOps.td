@@ -878,7 +878,7 @@ def ConstantOp : TuringOp<"constant", [Pure, ConstantLike, DeclareOpInterfaceMet
 }
 
 class PredicateOp<string mnemonic, list<Trait> traits = []>
-    : TuringOp<mnemonic, traits>,
+    : TuringOp<mnemonic, !listconcat(traits, [ConstantThroughOperands])>,
       Arguments<(ins Column:$lhs, Column:$rhs)> {
   let results = (outs ColumnBools:$result);
   let assemblyFormat = "$lhs`,` $rhs attr-dict `:` functional-type(operands, results)";
@@ -899,7 +899,7 @@ def XorOp : PredicateOp<"xor", [Pure]> {
   let arguments = (ins Column : $lhs, Column : $rhs);
 }
 
-def NotOp : TuringOp<"not", [Pure]> {
+def NotOp : TuringOp<"not", [Pure, ConstantThroughOperands]> {
   let summary = "Row-wise logical NOT of a boolean column";
   let arguments = (ins Column:$operand);
   let results   = (outs ColumnBools:$result);
