@@ -207,6 +207,10 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
         status.setStatus(QueryStatus::Status::EXEC_ERROR);
         status.setMessage(e.what());
         return;
+    } catch (const TuringException& e) {
+        status.setStatus(QueryStatus::Status::EXEC_ERROR);
+        status.setMessage(e.what());
+        return;
     } catch (const std::exception& e) {
         status.setStatus(QueryStatus::Status::EXEC_ERROR);
         status.setMessage(std::string("Unexpected exception: ") + e.what());
