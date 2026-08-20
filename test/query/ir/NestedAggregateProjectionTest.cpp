@@ -133,8 +133,12 @@ TEST_F(NestedAggregateProjectionTest, rejectsAMapHoldingAnAggregateBesideAGroupi
     expectRejected("MATCH (n:Person) RETURN n.name, {total: count(n)}", nestedAggregateReason);
 }
 
-TEST_F(NestedAggregateProjectionTest, rejectsAnAggregateInsideAnExpression) {
-    expectRejected("MATCH (n:Person) RETURN n.name, count(n) + 1", nestedAggregateReason);
+// An aggregate wrapped in arithmetic is valid openCypher - count(n) + 1 is the group's
+// count read through one more computation, the grouped analogue of the scalar count(n) + 1.
+// The grouped aggregate registers the count and leaves the arithmetic to the projection.
+TEST_F(NestedAggregateProjectionTest, generatesAnAggregateInsideAnExpression) {
+    EXPECT_NO_THROW(generateProgram("MATCH (n:Person) RETURN n.name, count(n) + 1"));
+    EXPECT_NO_THROW(generateProgram("MATCH (n:Person) RETURN n.name, 2 * count(n) + 20"));
 }
 
 TEST_F(NestedAggregateProjectionTest, rejectsAListHoldingAnAggregateBesideAGroupingKey) {

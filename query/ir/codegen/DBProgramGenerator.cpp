@@ -2226,7 +2226,7 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
     llvm::SmallVector<const Expr*> keyExprAtPos;
 
     llvm::SmallVector<mlir::Value> aggInputColumns;
-    llvm::SmallVector<int64_t> aggKinds;
+    llvm::SmallVector<mlir::storage::GroupAggregateKind> aggKinds;
     llvm::SmallVector<const FunctionInvocationExpr*> aggFuncExprs;
 
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
@@ -2278,40 +2278,43 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
             continue;
         }
 
-        // An aggregate nested into a map makes the item an expr which is not a function
-        // invocation
-        const bool isInvocation = item->getKind() == Expr::Kind::FUNCTION_INVOCATION;
-        if (!isInvocation) {
+        // An item may carry an aggregate without being one: 2 * count(n) + 20 is an
+        // arithmetic expression the group reduces a count for, not an aggregate function
+        // it reduces whole. Its aggregates become the reduced columns, and the arithmetic
+        // around them is left for the projection to compute over the results.
+        llvm::SmallVector<const FunctionInvocationExpr*> itemAggregates;
+        if (!collectAggregateInvocations(item, itemAggregates)) {
             const std::string_view itemName = item->getName();
             throw TuringException(fmt::format("Nested aggregates are not supported: {}", itemName));
         }
 
-        const FunctionInvocationExpr* funcExpr = static_cast<const FunctionInvocationExpr*>(item);
-        const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
-        const std::string_view funcName = invocation->getSignature()->getFullName();
+        for (const FunctionInvocationExpr* funcExpr : itemAggregates) {
+            const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
+            const std::string_view funcName = invocation->getSignature()->getFullName();
 
-        const std::optional<mlir::storage::GroupAggregateKind> kind = mlir::storage::symbolizeGroupAggregateKind(funcName);
-        if (!kind) {
-            throw TuringException(fmt::format("Unsupported aggregate function: {}", funcName));
+            const std::optional<mlir::storage::GroupAggregateKind> kind = mlir::storage::symbolizeGroupAggregateKind(funcName);
+            if (!kind) {
+                throw TuringException(fmt::format("Unsupported aggregate function: {}", funcName));
+            }
+
+            const ExprChain* args = invocation->getArguments();
+            bioassert(args && !args->empty(), "Aggregate function invocation with no arguments.");
+
+            const Expr* argExpr = args->front();
+            mlir::Value inputColumn;
+
+            if (argExpr->getType() == EvaluatedType::Wildcard) {
+                inputColumn = resolveWildcardColumn();
+                bioassert(inputColumn, "count(*) over no column holding the rows it counts.");
+            } else {
+                translateExpr(argExpr);
+                inputColumn = _exprMap.at(argExpr);
+            }
+
+            aggInputColumns.push_back(inputColumn);
+            aggKinds.push_back(*kind);
+            aggFuncExprs.push_back(funcExpr);
         }
-
-        const ExprChain* args = invocation->getArguments();
-        bioassert(args && !args->empty(), "Aggregate function invocation with no arguments.");
-
-        const Expr* argExpr = args->front();
-        mlir::Value inputColumn;
-
-        if (argExpr->getType() == EvaluatedType::Wildcard) {
-            inputColumn = resolveWildcardColumn();
-            bioassert(inputColumn, "count(*) over no column holding the rows it counts.");
-        } else {
-            translateExpr(argExpr);
-            inputColumn = _exprMap.at(argExpr);
-        }
-
-        aggInputColumns.push_back(inputColumn);
-        aggKinds.push_back(static_cast<int64_t>(*kind));
-        aggFuncExprs.push_back(funcExpr);
     }
 
     const size_t keyCount = keyColumns.size();
@@ -2341,12 +2344,17 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
         resultTypes.push_back(noneType);
     }
 
+    llvm::SmallVector<int64_t> aggKindValues;
+    for (const mlir::storage::GroupAggregateKind kind : aggKinds) {
+        aggKindValues.push_back(static_cast<int64_t>(kind));
+    }
+
     auto groupAgg = _opBuilder.create<mlir::db::GroupAggregate>(
         loc,
         mlir::TypeRange{resultTypes},
         mlir::ValueRange{allColumns},
         static_cast<uint64_t>(keyCount),
-        llvm::ArrayRef<int64_t>{aggKinds});
+        llvm::ArrayRef<int64_t>{aggKindValues});
 
     const mlir::ResultRange results = groupAgg.getResults();
 
@@ -2418,4 +2426,36 @@ void DBProgramGenerator::bindGroupedKeyColumn(const Expr* expr, const GroupedKey
     for (const Expr* child : children) {
         bindGroupedKeyColumn(child, groupedKeys);
     }
+}
+
+bool DBProgramGenerator::collectAggregateInvocations(const Expr* expr,
+                                                     llvm::SmallVectorImpl<const FunctionInvocationExpr*>& found) {
+    if (!expr->isAggregate()) {
+        return true;
+    }
+
+    if (expr->getKind() == Expr::Kind::FUNCTION_INVOCATION) {
+        const FunctionInvocationExpr* funcExpr = static_cast<const FunctionInvocationExpr*>(expr);
+        const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
+
+        // An aggregate over an aggregate is invalid Cypher the analyzer turns away, so a
+        // reduced call is a leaf: its argument is the group's input, not another aggregate
+        if (invocation->getSignature()->isAggregate()) {
+            found.push_back(funcExpr);
+            return true;
+        }
+    }
+
+    std::vector<const Expr*> children;
+    if (!ExprChildren::collect(expr, children)) {
+        return false;
+    }
+
+    for (const Expr* child : children) {
+        if (!collectAggregateInvocations(child, found)) {
+            return false;
+        }
+    }
+
+    return true;
 }

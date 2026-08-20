@@ -637,6 +637,19 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
         expr->setAggregate();
     }
 
+    // Nested aggregates not allowed by OpenCypher: reject here
+    bool functionIsAggregate = false;
+    for (const FunctionSignature* candidate : signatures) {
+        if (candidate->isAggregate()) {
+            functionIsAggregate = true;
+            break;
+        }
+    }
+
+    if (functionIsAggregate && isAggregate) {
+        throwError("Aggregate functions cannot be nested inside other aggregate functions", expr);
+    }
+
     // For each overload, check if the argument types match
     for (FunctionSignature* signature : signatures) {
         const auto& expectedArgs = signature->argumentTypes();
