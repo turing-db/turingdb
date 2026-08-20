@@ -154,6 +154,9 @@ private:
     void bindOrderByKeyColumns(const Projection* projection, const GroupedKeyColumns& groupedKeys);
     void bindGroupedKeyColumn(const Expr* expr, const GroupedKeyColumns& groupedKeys);
 
+    bool collectAggregateInvocations(const Expr* expr,
+                                     llvm::SmallVectorImpl<const FunctionInvocationExpr*>& found);
+
     void translateExpr(const Expr* expr);
     void translateUnaryExpr(const Expr* expr, const UnaryExpr* unaryExpr);
     void translateBinaryExpr(const Expr* expr, const BinaryExpr* binExpr);
