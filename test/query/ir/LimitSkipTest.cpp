@@ -246,6 +246,21 @@ TEST_F(LimitSkipTest, matchedConstantSkipPastTheMatchedRowsEmitsNothing) {
     expectRows("MATCH (n) RETURN 5 SKIP 20", {});
 }
 
+TEST_F(LimitSkipTest, matchSkipConstantExpressionSkipsTheFoldedCount) {
+    const ValueRows expected = {{6}};
+    expectRows("MATCH (n) RETURN n SKIP 5 + 1 LIMIT 1", expected);
+}
+
+TEST_F(LimitSkipTest, matchLimitConstantExpressionKeepsTheFoldedCount) {
+    const ValueRows expected = {{1}, {2}};
+    expectRows("MATCH (n) RETURN n SKIP 1 LIMIT 1 + 1", expected);
+}
+
+TEST_F(LimitSkipTest, matchedConstantSkipMultiplicationKeepsTheSurvivingRows) {
+    const ValueRows expected = {{5}, {5}};
+    expectRows("MATCH (n) RETURN 5 SKIP 8 * 2", expected);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

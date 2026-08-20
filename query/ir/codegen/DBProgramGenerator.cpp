@@ -77,6 +77,8 @@
 #include "Symbol.h"
 #include "SymbolChain.h"
 
+#include "columns/BinaryOperators.h"
+
 #include "BioAssert.h"
 #include "FatalException.h"
 #include "TuringException.h"
@@ -247,6 +249,91 @@ void flattenConjuncts(const Expr* expr, std::vector<const Expr*>& conjuncts) {
     }
 
     conjuncts.push_back(expr);
+}
+
+int64_t applyConstantUnary(UnaryOperator op, int64_t operand) {
+    switch (op) {
+        case UnaryOperator::Plus:
+            return operand;
+        break;
+
+        case UnaryOperator::Minus:
+            return -operand;
+        break;
+
+        default:
+            throw TuringException(fmt::format("Unsupported unary operator in SKIP/LIMIT expression: {}",
+                                              UnaryOperatorDescription::value(op)));
+        break;
+    }
+}
+
+int64_t applyConstantBinary(BinaryOperator op, int64_t lhs, int64_t rhs) {
+    switch (op) {
+        case BinaryOperator::Add:
+            return Add {}(lhs, rhs);
+        break;
+
+        case BinaryOperator::Sub:
+            return Sub {}(lhs, rhs);
+        break;
+
+        case BinaryOperator::Mult:
+            return Mul {}(lhs, rhs);
+        break;
+
+        case BinaryOperator::Div:
+            return Div {}(lhs, rhs);
+        break;
+
+        case BinaryOperator::Mod:
+            return Mod {}(lhs, rhs);
+        break;
+
+        default:
+            throw TuringException(fmt::format("Unsupported operator in SKIP/LIMIT expression: {}",
+                                              BinaryOperatorDescription::value(op)));
+        break;
+    }
+}
+
+int64_t evaluateConstantInteger(const Expr* expr) {
+    const Expr::Kind kind = expr->getKind();
+
+    switch (kind) {
+        case Expr::Kind::LITERAL: {
+            const LiteralExpr* literalExpr = static_cast<const LiteralExpr*>(expr);
+            const Literal* literal = literalExpr->getLiteral();
+
+            if (literal->getKind() != Literal::Kind::INTEGER) {
+                throw TuringException("SKIP/LIMIT expression must evaluate to an integer");
+            }
+
+            const IntegerLiteral* integerLiteral = static_cast<const IntegerLiteral*>(literal);
+            return integerLiteral->getValue();
+        }
+        break;
+
+        case Expr::Kind::UNARY: {
+            const UnaryExpr* unaryExpr = static_cast<const UnaryExpr*>(expr);
+            const int64_t operand = evaluateConstantInteger(unaryExpr->getSubExpr());
+            return applyConstantUnary(unaryExpr->getOperator(), operand);
+        }
+        break;
+
+        case Expr::Kind::BINARY: {
+            const BinaryExpr* binaryExpr = static_cast<const BinaryExpr*>(expr);
+            const int64_t lhs = evaluateConstantInteger(binaryExpr->getLHS());
+            const int64_t rhs = evaluateConstantInteger(binaryExpr->getRHS());
+            return applyConstantBinary(binaryExpr->getOperator(), lhs, rhs);
+        }
+        break;
+
+        default:
+            throw TuringException(fmt::format("Unsupported expression in SKIP/LIMIT: {}",
+                                              ExprKindDescription::value(kind)));
+        break;
+    }
 }
 
 }
@@ -1324,9 +1411,13 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
 
     if (proj->hasSkip()) {
         const Expr* skipExpr = proj->getSkip()->getExpr();
-        const LiteralExpr* litExpr = static_cast<const LiteralExpr*>(skipExpr);
-        const IntegerLiteral* intLit = static_cast<const IntegerLiteral*>(litExpr->getLiteral());
-        const uint64_t skipCount = static_cast<uint64_t>(intLit->getValue());
+        const int64_t skipValue = evaluateConstantInteger(skipExpr);
+
+        if (skipValue < 0) {
+            throw TuringException("SKIP expression must be a non-negative integer");
+        }
+
+        const uint64_t skipCount = static_cast<uint64_t>(skipValue);
 
         llvm::SmallVector<size_t> skippedItems;
         llvm::SmallVector<mlir::Value> skipped;
@@ -1347,9 +1438,13 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
 
     if (proj->hasLimit()) {
         const Expr* limitExpr = proj->getLimit()->getExpr();
-        const LiteralExpr* litExpr = static_cast<const LiteralExpr*>(limitExpr);
-        const IntegerLiteral* intLit = static_cast<const IntegerLiteral*>(litExpr->getLiteral());
-        const uint64_t limitCount = static_cast<uint64_t>(intLit->getValue());
+        const int64_t limitValue = evaluateConstantInteger(limitExpr);
+
+        if (limitValue < 0) {
+            throw TuringException("LIMIT expression must be a non-negative integer");
+        }
+
+        const uint64_t limitCount = static_cast<uint64_t>(limitValue);
 
         llvm::SmallVector<size_t> limitedItems;
         llvm::SmallVector<mlir::Value> limited;
