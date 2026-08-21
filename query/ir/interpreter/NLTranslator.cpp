@@ -1965,9 +1965,8 @@ void NLTranslator::translateGroupAggregateUpdate(nl::GroupAggregateUpdate update
                     // count, as it is for count(*).
                     aggregate._fold = NLExecutor::selectGroupCountAllFold();
                 } else {
-                    // A non-nullable count input must be an ID chunk (count(*));
-                    // getChunkKind rejects any other element type.
-                    getChunkKind(chunkType);
+                    // A non-nullable chunk holds no null to skip - an ID chunk of
+                    // count(*), or a column a CALL yielded - so every row is charged.
                     aggregate._fold = NLExecutor::selectGroupCountAllFold();
                 }
             }
