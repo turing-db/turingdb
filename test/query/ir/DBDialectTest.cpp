@@ -330,6 +330,19 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (a) RETURN count(DISTINCT a): the same shape as countProgram with the distinct
+// flag set, so the tally charges each distinct value once. The flag is a unit
+// attribute printed as its own keyword ahead of the colon, which is what the round
+// trip has to preserve.
+const char* const countDistinctProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %n = db.count(%a) distinct : (!db.column<!storage.node_id>) -> !db.column<ui64>
+  db.output(%n) : !db.column<ui64>
+  return
+}
+)mlir";
+
 // MATCH (a) RETURN sum(a.score): a property column reduced to a single-row result.
 // Each reduction is its own op - db.sum / db.min / db.max / db.avg - the way count(*)
 // is db.count. Like db.count they change arity and type, so the input and result
@@ -983,6 +996,56 @@ TEST_F(DBDialectTest, countRoundTripsThroughTextualForm) {
     const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
     ASSERT_TRUE(reparsed);
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, parsesCountDistinct) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(countDistinctProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::Count count;
+    module.get().walk([&](mlir::db::Count op) {
+        count = op;
+    });
+    ASSERT_TRUE(count);
+
+    // The keyword sets the flag; the columns are the same as a plain count's, since
+    // deduplicating the input changes how many rows are charged, not the result type.
+    EXPECT_TRUE(count.getDistinct());
+
+    const mlir::OwningOpRef<mlir::ModuleOp> plainModule = parse(countProgram);
+    ASSERT_TRUE(plainModule);
+
+    mlir::db::Count plainCount;
+    plainModule.get().walk([&](mlir::db::Count op) {
+        plainCount = op;
+    });
+    ASSERT_TRUE(plainCount);
+    EXPECT_FALSE(plainCount.getDistinct());
+}
+
+TEST_F(DBDialectTest, countDistinctRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(countDistinctProgram);
+    ASSERT_TRUE(module);
+
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    // The flag survives the round trip as its keyword, so re-parsing yields a count
+    // that is still distinct - a printer dropping it would silently turn the query
+    // back into a plain count.
+    EXPECT_NE(printed.find("distinct"), std::string::npos);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+
+    mlir::db::Count count;
+    reparsed.get().walk([&](mlir::db::Count op) {
+        count = op;
+    });
+    ASSERT_TRUE(count);
+    EXPECT_TRUE(count.getDistinct());
 }
 
 TEST_F(DBDialectTest, parsesAndRoundTripsAggregateOps) {

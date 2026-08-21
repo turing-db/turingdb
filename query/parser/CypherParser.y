@@ -1413,7 +1413,15 @@ countFunc
         $$->setArguments($3);
         LOC($$, @$);
       }
-    | COUNT OPAREN DISTINCT exprChain CPAREN { scanner.notImplemented(@$, "count(DISTINCT)"); }
+    | COUNT OPAREN DISTINCT exprChain CPAREN {
+        Symbol* symbol = Symbol::create(ast, "count");
+        QualifiedName* name = QualifiedName::create(ast);
+        name->addName(symbol);
+        $$ = FunctionInvocation::create(ast, name);
+        $$->setArguments($4);
+        $$->setDistinct(true);
+        LOC($$, @$);
+      }
     | COUNT OBRACE patternWhere CBRACE { scanner.notImplemented(@$, "count(pattern WHERE)"); }
 
     // Here, returnSt is mandatory for MATCH subqueries, as opposed to Neo4j's Cypher parser

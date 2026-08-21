@@ -22,10 +22,16 @@ public:
     void setSignature(FunctionSignature* signature) { _signature = signature; }
     FunctionSignature* getSignature() const { return _signature; }
 
+    // Whether the invocation is over the distinct values of its argument -
+    // count(DISTINCT x) rather than count(x)
+    void setDistinct(bool distinct) { _distinct = distinct; }
+    bool isDistinct() const { return _distinct; }
+
 private:
     QualifiedName* _name {nullptr};
     ExprChain* _arguments {nullptr};
     FunctionSignature* _signature {nullptr};
+    bool _distinct {false};
 
     FunctionInvocation(QualifiedName* name)
         : _name(name)

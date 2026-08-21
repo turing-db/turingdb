@@ -217,7 +217,10 @@ private:
     // that materializes the single tally row (an unsigned i64, !nl.chunk<ui64>) at
     // function scope. db.count's result maps to that chunk, so the db.output that
     // follows lowers into a function-scope nl.output reading it. A pipeline breaker
-    // like db.sort, but it collapses to one row, so it opens no emit loop.
+    // like db.sort, but it collapses to one row, so it opens no emit loop. A
+    // `distinct` count adds the DISTINCT pair around the update - a hoisted
+    // nl.distinct seen-set and an nl.distinct_filter cutting the chunk ahead of the
+    // update - so the tally charges each distinct value once.
     void lowerCount(mlir::db::Count count);
 
     // Lower a db.sum / db.min / db.max / db.avg: the value-reducing siblings of

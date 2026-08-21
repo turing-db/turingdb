@@ -330,13 +330,17 @@ public:
     // aggregation. grow initializes a new group to the reduction's identity; fold
     // reduces a chunk's rows into their groups; emit materializes a slice of groups.
     // They throw for a value type the reduction cannot handle, exactly as the scalar
-    // selectors do (sum/avg need numeric, min/max orderable). count uses only the
-    // per-group tally, so its grow/emit ignore the value type, and its fold has an
-    // all-rows form (count(*) over an ID chunk) and a present-values form (count(x)
-    // over a nullable value chunk).
+    // selectors do (sum/avg need numeric, min/max orderable). count and
+    // count_distinct use only the per-group tally, so their grow/emit ignore the
+    // value type. count's fold has an all-rows form (count(*) over an ID chunk) and a
+    // present-values form (count(x) over a nullable value chunk); count_distinct's
+    // has an ID form and a present-values form the same way, both keyed on the
+    // value's bytes - so, unlike count, an embedding column is rejected.
     static NLGroupAggregateGrowFunction selectGroupAggregateGrow(GroupAggregateKind kind, ValueType accumulatorType);
     static NLGroupAggregateFoldFunction selectGroupAggregateFold(GroupAggregateKind kind, ValueType inputType);
     static NLGroupAggregateFoldFunction selectGroupCountAllFold();
+    static NLGroupAggregateFoldFunction selectGroupCountDistinctFold(ValueType inputType);
+    static NLGroupAggregateFoldFunction selectGroupCountDistinctIDFold(NLChunkKind kind);
     static NLGroupAggregateEmitFunction selectGroupAggregateEmit(GroupAggregateKind kind, ValueType resultType);
 
     // The append (onto a key buffer's tail) for an ID chunk of this kind / a

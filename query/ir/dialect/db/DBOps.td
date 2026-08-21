@@ -787,18 +787,29 @@ def Count : TuringOp<"count", [Pure]> {
       %a = db.scan_nodes() : !db.column<!storage.node_id>
       %n = db.count(%a) : (!db.column<!storage.node_id>) -> !db.column<ui64>
       db.output(%n) : !db.column<ui64>
+
+    `distinct` makes it Cypher's count(DISTINCT x): the tally charges each distinct
+    non-null value once, however many rows carry it. It stays one op rather than
+    two because the reduction is the same tally over a deduplicated column - it
+    lowers to the DISTINCT seen-set (nl.distinct / nl.distinct_filter) feeding the
+    ordinary nl.count_update, so nulls are dropped by the count as usual:
+
+      %n = db.count(%a) distinct : (!db.column<!storage.node_id>) -> !db.column<ui64>
   }];
 
   // One column in, one integer column out. The input and result types are
   // unrelated (an integer count of any column), so - unlike the pass-through ops -
-  // there is nothing to cross-check and no verifier.
-  let arguments = (ins Column:$input);
+  // there is nothing to cross-check and no verifier. distinct is a unit attribute:
+  // its presence is the flag, so a plain db.count is an absent attribute.
+  let arguments = (ins Column:$input, UnitAttr:$distinct);
   let results   = (outs Column:$result);
 
   // One operand and one result, so functional-type(operands, results) prints the
   // `(!db.column<...>) -> !db.column<...>` form, the same as db.get_node_properties.
+  // The distinct flag prints as its keyword ahead of the colon when set, so a plain
+  // count keeps the form it had before the flag existed.
   let assemblyFormat = [{
-    `(` $input `)` attr-dict `:` functional-type(operands, results)
+    `(` $input `)` (`distinct` $distinct^)? attr-dict `:` functional-type(operands, results)
   }];
 }
 
@@ -1157,8 +1168,10 @@ def GroupAggregate : TuringOp<"group_aggregate", [Pure]> {
     The operands are the grouping-key columns first, then the aggregate-input
     columns; `keys` is how many leading operands are keys (so the rest are the
     aggregate inputs, one per aggregate). `aggregates` names the reduction of each
-    aggregate input as GroupAggregateKind keywords (count, sum, min, max, avg), so
-    its length is the number of aggregate inputs.
+    aggregate input as GroupAggregateKind keywords (count, count_distinct, sum, min,
+    max, avg), so its length is the number of aggregate inputs. count_distinct is
+    Cypher's count(DISTINCT x): it charges each of a group's distinct non-null values
+    once, and emits the same ui64 as count.
 
       %a     = db.scan_nodes() : !db.column<!storage.node_id>
       %city  = db.get_node_properties(%a, "city")  : (!db.column<!storage.node_id>) -> !db.column<none>
@@ -1168,10 +1181,10 @@ def GroupAggregate : TuringOp<"group_aggregate", [Pure]> {
       db.output(%gcity, %total) : !db.column<none>, !db.column<none>
 
     The results are the grouping-key columns (in operand order, same types) then
-    one column per aggregate: count is a ui64 count, sum/min/max keep the input's
-    value type and avg widens to f64 - all resolved during lowering, so - like
-    db.count - the aggregate result types are unconstrained here. count(*) is
-    expressed by a count over a never-null column (node IDs).
+    one column per aggregate: count and count_distinct are ui64 counts, sum/min/max
+    keep the input's value type and avg widens to f64 - all resolved during lowering,
+    so - like db.count - the aggregate result types are unconstrained here. count(*)
+    is expressed by a count over a never-null column (node IDs).
 
     Grouped aggregation is a pipeline breaker: it must see every row before it can
     emit any, so - like db.sort - it lowers to a hoisted accumulator

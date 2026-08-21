@@ -490,6 +490,37 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (a) RETURN a.team, <count kind>(a.city): group by team and tally each group's
+// cities, either once per non-null row (kind "count") or once per distinct value (kind
+// "count_distinct"). The team-city graph repeats a city within a team, so the two kinds
+// disagree - which is what makes count_distinct's per-group seen-set observable.
+std::string groupCityCountProgram(const char* kind) {
+    return std::string("func.func @main() {\n"
+                       "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
+                       "  %team = db.get_node_properties(%a, \"team\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
+                       "  %city = db.get_node_properties(%a, \"city\") : (!db.column<!storage.node_id>) -> !db.column<none>\n"
+                       "  %gteam, %n = db.group_aggregate(%team, %city) keys 1 aggregates [")
+           + kind
+           + "] : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<ui64>)\n"
+             "  db.output(%gteam, %n) : !db.column<none>, !db.column<ui64>\n"
+             "  return\n"
+             "}\n";
+}
+
+// MATCH (a) RETURN a.team, count(DISTINCT b) where b is a never-null column: the node
+// IDs of the scan, so every group is charged once per distinct ID it sees. A node is
+// scanned once, so each group's distinct count equals its row count here - the case
+// that must not be broken by the ID keying path.
+constexpr const char* groupNodeCountDistinctProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %team = db.get_node_properties(%a, "team") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %gteam, %n = db.group_aggregate(%team, %a) keys 1 aggregates [count_distinct] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<ui64>)
+  db.output(%gteam, %n) : !db.column<none>, !db.column<ui64>
+  return
+}
+)mlir";
+
 // MATCH (a) RETURN a.team, count(*) LIMIT count: a limit over the emitted groups. The
 // limit caps how many group rows come out, never how many input rows are folded, so it
 // budgets the emit loop alone - the producing loop must still see every node for the
@@ -923,6 +954,59 @@ TEST_F(GroupAggregateTest, multiKeyMultipleAggregates) {
     expected.emplace_back(std::optional<std::string>("red"), std::optional<std::string>("lyon"), 1u, std::optional<int64_t>(5), std::optional<int64_t>(5));
     expected.emplace_back(std::optional<std::string>("red"), std::optional<std::string>("paris"), 2u, std::optional<int64_t>(30), std::optional<int64_t>(20));
     EXPECT_EQ(rows, expected);
+}
+
+TEST_F(GroupAggregateTest, countsDistinctValuesPerGroup) {
+    auto graph = buildTeamCityGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // red holds paris, paris and lyon; blue holds paris twice. So count(a.city)
+    // charges every non-null row - 3 and 2 - while count(DISTINCT a.city) charges each
+    // value once - 2 and 1.
+    GroupCountSink countSink;
+    runLoweredProgram(groupCityCountProgram("count").c_str(), reader.getView(), countSink);
+    std::vector<GroupCountSink::Row> countRows;
+    countSink.sortedRows(countRows);
+    EXPECT_EQ(countRows, (std::vector<GroupCountSink::Row> {{"blue", 2}, {"red", 3}}));
+
+    GroupCountSink distinctSink;
+    runLoweredProgram(groupCityCountProgram("count_distinct").c_str(), reader.getView(), distinctSink);
+    std::vector<GroupCountSink::Row> distinctRows;
+    distinctSink.sortedRows(distinctRows);
+    EXPECT_EQ(distinctRows, (std::vector<GroupCountSink::Row> {{"blue", 1}, {"red", 2}}));
+}
+
+TEST_F(GroupAggregateTest, countsDistinctValuesPerGroupAcrossChunkBoundaries) {
+    auto graph = buildTeamCityGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // A chunk size of two over five nodes splits a group's rows across chunks, so the
+    // repeated "paris" of a team can arrive in two different chunks. The seen-set is
+    // reset once at function scope, not per chunk, so the counts must not grow with
+    // the number of chunks.
+    GroupCountSink sink;
+    runLoweredProgram(groupCityCountProgram("count_distinct").c_str(), reader.getView(), sink, /*chunkSize=*/2);
+
+    std::vector<GroupCountSink::Row> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, (std::vector<GroupCountSink::Row> {{"blue", 1}, {"red", 2}}));
+}
+
+TEST_F(GroupAggregateTest, countsDistinctNodeIDsPerGroup) {
+    auto graph = buildTeamCityGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // count(DISTINCT a) over the never-null node IDs: each of red's three nodes and
+    // blue's two nodes is its own value, so the distinct counts equal the group sizes.
+    GroupCountSink sink;
+    runLoweredProgram(groupNodeCountDistinctProgram, reader.getView(), sink);
+
+    std::vector<GroupCountSink::Row> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, (std::vector<GroupCountSink::Row> {{"blue", 2}, {"red", 3}}));
 }
 
 TEST_F(GroupAggregateTest, nullGroupingKeyFormsOneGroup) {
