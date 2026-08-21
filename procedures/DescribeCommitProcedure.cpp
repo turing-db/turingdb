@@ -208,7 +208,7 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
             const auto treatVector = [&]<typename T>(const ColumnVector<T>* col) {
                 const auto& colVec = *col;
                 const size_t remaining =
-                    std::min(rawCommitCol->size(), ctxt->getChunkSize());
+                    std::min(colVec.size() - data._i, ctxt->getChunkSize());
 
                 std::string input;
                 CommitStats stats;
@@ -220,7 +220,7 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
 
                 data._i += remaining;
 
-                if (data._i == colVec.size()) {
+                if (data._i >= colVec.size()) {
                     proc->finish();
                 }
             };
