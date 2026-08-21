@@ -54,6 +54,8 @@ namespace {
 using Row = std::vector<std::string>;
 using Rows = std::vector<Row>;
 
+const std::string_view nonLiteralListElementReason = "Non-literal list elements are not yet supported";
+
 std::string renderList(ListView list);
 
 // Render one element of a list as its value, recursing into a nested list.
@@ -123,6 +125,10 @@ std::string renderCell(const Column* column, size_t row) {
     if (const auto* names = dynamic_cast<const ColumnOptVector<std::string_view>*>(column)) {
         const std::optional<std::string_view>& name = (*names)[row];
         return name ? std::string(*name) : "null";
+    }
+
+    if (const auto* constants = dynamic_cast<const ColumnConst<int64_t>*>(column)) {
+        return std::to_string((*constants)[row]);
     }
 
     if (const auto* integers = dynamic_cast<const ColumnOptVector<int64_t>*>(column)) {
@@ -258,6 +264,24 @@ protected:
         runQuery(query, actual, chunkSize);
 
         EXPECT_EQ(actual, expected) << "query: " << query;
+    }
+
+    // The query is turned away, and on @param reason rather than on whatever an earlier
+    // layer might have had to say about it: an element the analyzer names is a different
+    // rejection from one the parser or codegen finds.
+    void expectRejected(std::string_view query, std::string_view reason) {
+        Rows rows;
+
+        try {
+            runQuery(query, rows);
+        } catch (const TuringException& error) {
+            const std::string message = error.what();
+            EXPECT_NE(message.find(reason), std::string::npos)
+                << "query: " << query << "\nerror: " << message;
+            return;
+        }
+
+        ADD_FAILURE() << "query was accepted: " << query;
     }
 
     const std::string _graphName = "simpledb";
@@ -438,6 +462,18 @@ TEST_F(CypherListLiteralTest, dedupsTheListAloneToOneRow) {
     expectRows("RETURN DISTINCT [1, 2, 3]", expected);
 }
 
+TEST_F(CypherListLiteralTest, dedupsTheListAloneUnderAWindow) {
+    // The dedup of a projection of constants alone is a cap of one row, and the window cuts
+    // that capped row again: the second cut reads what the first emitted, still one list.
+    const Rows expected = {{"[1, 2, 3]"}};
+    expectRows("RETURN DISTINCT [1, 2, 3] SKIP 0 LIMIT 1", expected);
+}
+
+TEST_F(CypherListLiteralTest, dedupsTheConstantBesideTheListUnderAWindow) {
+    const Rows expected = {{"1", "[2]"}};
+    expectRows("RETURN DISTINCT 1, [2] SKIP 0 LIMIT 1", expected);
+}
+
 TEST_F(CypherListLiteralTest, dedupsTheMatchedListToOneRow) {
     // The match drives eighteen rows and each holds the same list, so the dedup keeps one.
     const Rows expected = {{"[1, 2]"}};
@@ -455,6 +491,13 @@ TEST_F(CypherListLiteralTest, cutsTheListAloneToNoRow) {
     // The list alone is one row, so dropping one leaves nothing for the LIMIT to keep.
     const Rows expected = {};
     expectRows("RETURN [1, 2] SKIP 1 LIMIT 1", expected);
+}
+
+TEST_F(CypherListLiteralTest, cutsTheListAloneToItsOneRow) {
+    // The window keeps the one row a SKIP of one drops, so the LIMIT of the chain copies a
+    // row out of what the SKIP emitted rather than an empty range.
+    const Rows expected = {{"[1, 2, 3]"}};
+    expectRows("RETURN [1, 2, 3] SKIP 0 LIMIT 1", expected);
 }
 
 TEST_F(CypherListLiteralTest, cutsTheMatchedListRows) {
@@ -538,6 +581,25 @@ TEST_F(CypherListLiteralTest, holdsASingletonNullList) {
 }
 
 TEST_F(CypherListLiteralTest, rejectsMapListElements) {
-    Rows rows;
-    EXPECT_THROW(runQuery("RETURN [{age: 32}]", rows), TuringException);
+    // A map literal is a literal, so it clears the analyzer's element check and is turned
+    // away only where the element becomes an attribute - the one rejection of the three
+    // that reaches codegen.
+    expectRejected("RETURN [{age: 32}]", "Only booleans, integers, floats, strings, nulls and lists");
+}
+
+TEST_F(CypherListLiteralTest, rejectsAPropertyListElement) {
+    // Elements are literals today: a property reads a row, which the list cannot carry.
+    expectRejected("MATCH (n) WHERE n.name = 'Remy' RETURN [n.age]", nonLiteralListElementReason);
+}
+
+TEST_F(CypherListLiteralTest, rejectsAnUnwoundVariableListElement) {
+    expectRejected("UNWIND [1, 2] AS x RETURN [x]", nonLiteralListElementReason);
+}
+
+TEST_F(CypherListLiteralTest, rejectsAnArithmeticListElement) {
+    // The grammar admits no expression inside a list, so an arithmetic element never
+    // reaches the analyzer's message above - the same limitation surfaces as a parse
+    // failure. Pinned so that teaching the grammar the expression moves the rejection to
+    // the analyzer visibly, rather than silently.
+    expectRejected("RETURN [1 + 1]", "syntax error");
 }
