@@ -386,6 +386,15 @@ bool reducesToOneRow(mlir::Operation* operation) {
                      mlir::db::Avg>(operation);
 }
 
+// Passes some of its rows on and keeps the rest back, so the rows reaching a cut below it
+// are fewer than the rows a producer above it made
+bool dropsRows(mlir::Operation* operation) {
+    return mlir::isa<mlir::db::FilterOp,
+                     mlir::db::Skip,
+                     mlir::db::Limit,
+                     mlir::db::RemoveDuplicates>(operation);
+}
+
 }
 
 DBLowering::DBLowering(mlir::MLIRContext* context, const GraphView* view)
@@ -471,7 +480,7 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
 
         bool producedByALoop = false;
         for (const mlir::Value column : limit.getColumns()) {
-            producedByALoop |= assignProducerLoops(column, handle);
+            producedByALoop |= assignProducerLoops(column, handle, /*rowsDroppedBeforeTheCut=*/false);
         }
 
         // A cut over constants alone walks back to no loop at all - the constants are
@@ -1607,7 +1616,9 @@ void DBLowering::lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect) {
     buildLoopForSource(unwindCollectOp.getResult(), unwindCollect.getOperation());
 }
 
-bool DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {
+bool DBLowering::assignProducerLoops(mlir::Value column,
+                                     mlir::Value handle,
+                                     bool rowsDroppedBeforeTheCut) {
     mlir::Operation* const definingOp = column.getDefiningOp();
     if (!definingOp) {
         // A cross-product factor's loop variable is a block argument with no
@@ -1626,15 +1637,28 @@ bool DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {
 
     bool reachedALoop = opensLoop || isCrossProduct || emitsThroughLoop;
 
+    // A loop's budget only stops it from taking another step, so bounding one never trims
+    // the step it is in. A cross product's budget cuts the product itself, which stands
+    // only while every row it makes reaches the output: an op below the cut that drops rows
+    // - a filter, a skip, a dedup - would leave it discarding rows that would have
+    // survived, and the cut short of its count. So the product keeps the handle only on a
+    // path that drops nothing; its factor loops take it either way.
+    // Declining the handle is not the same as reaching no loop: a cross product is still a
+    // producer the walk found, so reachedALoop stands and the cut keeps its nest.
+    const bool boundsCrossProduct = isCrossProduct && !rowsDroppedBeforeTheCut;
+    const bool takesTheHandle = opensLoop || boundsCrossProduct || emitsThroughLoop;
+
     // The first limit, in program order, to claim a producer wins, so a loop
     // shared by two limits' nests carries the outer one and never two handles.
-    if (reachedALoop && !_loopLimitHandle.count(definingOp)) {
+    if (takesTheHandle && !_loopLimitHandle.count(definingOp)) {
         _loopLimitHandle[definingOp] = handle;
     }
 
     if (breaksPipeline) {
         return reachedALoop;
     }
+
+    const bool rowsDropped = rowsDroppedBeforeTheCut || dropsRows(definingOp);
 
     if (isCrossProduct) {
         // A cross product takes no column operands - its factors are regions - so
@@ -1645,14 +1669,14 @@ bool DBLowering::assignProducerLoops(mlir::Value column, mlir::Value handle) {
         for (mlir::Region* const factor : factors) {
             mlir::Operation* const yield = factor->front().getTerminator();
             for (const mlir::Value yielded : yield->getOperands()) {
-                reachedALoop |= assignProducerLoops(yielded, handle);
+                reachedALoop |= assignProducerLoops(yielded, handle, rowsDropped);
             }
         }
     } else {
         // A non-loop producer (a property fetch) is traversed but not assigned -
         // it opens no loop - so its input chunk's loop is still reached.
         for (const mlir::Value operand : definingOp->getOperands()) {
-            reachedALoop |= assignProducerLoops(operand, handle);
+            reachedALoop |= assignProducerLoops(operand, handle, rowsDropped);
         }
     }
 
@@ -1666,7 +1690,10 @@ void DBLowering::assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value 
     // are the ones nl.output emits the constants over, so they are the rows this budget
     // cuts. A reduction in between leaves no such loop - it emits its one row at function
     // scope, and the relation behind it had to be read in full to reduce it.
+    // A row-dropping op only matters once the driver is behind it: what it drops are the
+    // driver's rows, which is what bars a cross-product driver from the budget.
     mlir::Operation* driver = nullptr;
+    bool rowsDropped = false;
     for (mlir::Operation& operation : *limitOp->getBlock()) {
         if (&operation == limitOp) {
             break;
@@ -1674,8 +1701,11 @@ void DBLowering::assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value 
 
         if (opensRowLoop(&operation)) {
             driver = &operation;
+            rowsDropped = false;
         } else if (reducesToOneRow(&operation)) {
             driver = nullptr;
+        } else if (dropsRows(&operation)) {
+            rowsDropped = true;
         }
     }
 
@@ -1683,7 +1713,7 @@ void DBLowering::assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value 
         return;
     }
 
-    assignProducerLoops(driver->getResult(0), handle);
+    assignProducerLoops(driver->getResult(0), handle, rowsDropped);
 }
 
 void DBLowering::foldTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {

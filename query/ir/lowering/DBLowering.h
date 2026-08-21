@@ -308,7 +308,9 @@ private:
     // its input chunk's loop. The first limit to claim a producer keeps it.
     // Returns whether the walk reached a loop at all: a column computed from constants
     // alone is produced by none, which is what sends the handle to the driving relation.
-    bool assignProducerLoops(mlir::Value column, mlir::Value handle);
+    // @param rowsDroppedBeforeTheCut is set once the walk has passed an op that
+    // drops rows, which bars the handle from a cross product below it.
+    bool assignProducerLoops(mlir::Value column, mlir::Value handle, bool rowsDroppedBeforeTheCut);
 
     // Records that the loops producing the relation which drives @param limit's projection
     // carry its handle, so a cut charged to constants alone stops its nest as any other
