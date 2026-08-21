@@ -509,6 +509,34 @@ TEST_F(CypherUnwindTest, countsAllNullListAsZero) {
     expectRows("UNWIND [null, null] AS l RETURN count(l)", expected);
 }
 
+TEST_F(CypherUnwindTest, countsHeterogeneousUnwindPerGroup) {
+    // A grouping key beside the count, so the tally is charged per group rather than over
+    // the whole relation. One matched node crossed with three cells is one group of three
+    // rows, of which the null cell is not charged.
+    const Rows expected = {{"Remy", "2"}};
+    expectRows("MATCH (n {name: 'Remy'}) UNWIND [1, null, 'a'] AS l RETURN n.name, count(l)", expected);
+}
+
+TEST_F(CypherUnwindTest, countsHeterogeneousUnwindPerGroupAcrossGroups) {
+    // Two nodes carry an age of 32, so the cross product gives two groups of two cells
+    // each - keyed on the age, which both share, so it is one group of four.
+    const Rows expected = {{"32", "2"}};
+    expectRows("MATCH (n) WHERE n.age = 32 UNWIND [1, null] AS l RETURN n.age, count(l)", expected);
+}
+
+TEST_F(CypherUnwindTest, countsAllNullUnwindPerGroupAsZero) {
+    // Every cell of the group is null, so the group survives with a tally of zero rather
+    // than disappearing.
+    const Rows expected = {{"Remy", "0"}};
+    expectRows("MATCH (n {name: 'Remy'}) UNWIND [null, null] AS l RETURN n.name, count(l)", expected);
+}
+
+TEST_F(CypherUnwindTest, countsNestedListElementsPerGroup) {
+    // A nested list is one cell and no more null than a scalar one, so it is charged.
+    const Rows expected = {{"Remy", "2"}};
+    expectRows("MATCH (n {name: 'Remy'}) UNWIND [[1], null, 'a'] AS l RETURN n.name, count(l)", expected);
+}
+
 TEST_F(CypherUnwindTest, dedupsHeterogeneousUnwind) {
     // Every null is one value, so DISTINCT keeps a single null row.
     const Rows expected = {{"1"}, {"null"}};
