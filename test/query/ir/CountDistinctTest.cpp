@@ -56,8 +56,12 @@ using CountPair = std::pair<uint64_t, uint64_t>;
 using CountPairs = std::vector<CountPair>;
 using NameCountRow = std::pair<std::optional<std::string>, uint64_t>;
 using NameCountRows = std::vector<NameCountRow>;
+using AgeCountRow = std::pair<std::optional<int64_t>, uint64_t>;
+using AgeCountRows = std::vector<AgeCountRow>;
 using NameCountCountRow = std::tuple<std::optional<std::string>, uint64_t, uint64_t>;
 using NameCountCountRows = std::vector<NameCountCountRow>;
+using NameSumCountRow = std::tuple<std::optional<std::string>, std::optional<int64_t>, uint64_t>;
+using NameSumCountRows = std::vector<NameSumCountRow>;
 
 // Collects the single-column ui64 rows a scalar count emits. A count collapses to one
 // row, so a test reads values().front() - but the vector keeps whatever came out, so a
@@ -141,6 +145,34 @@ private:
     NameCountRows _rows;
 };
 
+// The int64-keyed sibling of GroupedCountSink, for a grouping key that is a numeric
+// property rather than a name: a nullable i64 key chunk and a non-null ui64 count chunk.
+class GroupedAgeCountSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* ages = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[0]);
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
+        ASSERT_NE(ages, nullptr);
+        ASSERT_NE(counts, nullptr);
+
+        const auto& ageRaw = ages->getRaw();
+        const auto& countRaw = counts->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.emplace_back(ageRaw[rowIndex], countRaw[rowIndex]);
+        }
+    }
+
+    void sortedRows(AgeCountRows& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    AgeCountRows _rows;
+};
+
 // The three-column sibling of GroupedCountSink: a nullable string key beside a plain
 // count and a distinct count of the same column, so one query shows what the DISTINCT
 // changes.
@@ -176,6 +208,42 @@ public:
 
 private:
     NameCountCountRows _rows;
+};
+
+// A value reduction beside a distinct count under the same key: a nullable string key,
+// the nullable i64 sum of one column and the distinct count of another.
+class GroupedSumCountSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 3u);
+
+        const auto* names = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* sums = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[1]);
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[2]);
+        ASSERT_NE(names, nullptr);
+        ASSERT_NE(sums, nullptr);
+        ASSERT_NE(counts, nullptr);
+
+        const auto& nameRaw = names->getRaw();
+        const auto& sumRaw = sums->getRaw();
+        const auto& countRaw = counts->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            std::optional<std::string> name;
+            if (nameRaw[rowIndex]) {
+                name = std::string(*nameRaw[rowIndex]);
+            }
+
+            _rows.emplace_back(name, sumRaw[rowIndex], countRaw[rowIndex]);
+        }
+    }
+
+    void sortedRows(NameSumCountRows& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    NameSumCountRows _rows;
 };
 
 }
@@ -262,6 +330,21 @@ protected:
         EXPECT_EQ(rows, sortedExpected) << "query: " << query;
     }
 
+    void expectAgeGroupedCounts(std::string_view query,
+                                const AgeCountRows& expected,
+                                size_t chunkSize = ChunkConfig::CHUNK_SIZE) {
+        GroupedAgeCountSink sink;
+        runQuery(query, &sink, chunkSize);
+
+        AgeCountRows rows;
+        sink.sortedRows(rows);
+
+        AgeCountRows sortedExpected = expected;
+        std::sort(sortedExpected.begin(), sortedExpected.end());
+
+        EXPECT_EQ(rows, sortedExpected) << "query: " << query;
+    }
+
     // The db dialect program of a query, so a test can assert on the op the frontend
     // generated rather than only on the rows it produces
     std::string generatedProgram(std::string_view query) {
@@ -329,6 +412,22 @@ TEST_F(CountDistinctTest, countsZeroWhenNothingMatches) {
     expectScalarCount("MATCH (a) WHERE a.age = 999 RETURN count(DISTINCT a.age)", 0);
 }
 
+// The argument holds a value in every matched row rather than one that varies with it,
+// so count(42) charges each of simpledb's eighteen nodes while count(DISTINCT 42)
+// charges the one value they all carry.
+TEST_F(CountDistinctTest, countsOneDistinctValueOfAConstant) {
+    expectScalarCount("MATCH (a) RETURN count(42)", 18);
+    expectScalarCount("MATCH (a) RETURN count(DISTINCT 42)", 1);
+}
+
+// The rows a constant stands for are the rows the query left standing: a filter matching
+// nothing leaves none to carry the value, so there is no distinct value to charge - while
+// a projection with nothing driving it is one row of its own.
+TEST_F(CountDistinctTest, countsAConstantOverAnEmptyAndAnAbsentMatch) {
+    expectScalarCount("MATCH (a) WHERE a.age = 999 RETURN count(DISTINCT 42)", 0);
+    expectScalarCount("RETURN count(DISTINCT 42)", 1);
+}
+
 // Two distinct counts in one projection: only Remy and Adam carry an age and both are
 // 32 (one distinct value), while isFrench takes both true and false across the people
 // (two). Each count builds its own seen-set - the nl.distinct ops must not be merged
@@ -391,6 +490,51 @@ TEST_F(CountDistinctTest, countsPlainAndDistinctSideBySide) {
     expected.emplace_back(std::optional<std::string>("Maxime"), 0u, 0u);
     expected.emplace_back(std::optional<std::string>("Remy"), 3u, 1u);
     expected.emplace_back(std::optional<std::string>("Suhas"), 0u, 0u);
+    std::sort(expected.begin(), expected.end());
+
+    EXPECT_EQ(rows, expected);
+}
+
+// The DISTINCT argument is the grouping key itself, so a group cannot hold two values of
+// it: simpledb's two 32-year-olds are one group charging the one age they share, and the
+// sixteen nodes with no age are the null group - a key to group on, but not a value for
+// the count to charge.
+TEST_F(CountDistinctTest, countsTheDistinctValuesOfTheGroupingKey) {
+    const AgeCountRows expected {{32, 1}, {std::nullopt, 0}};
+
+    expectAgeGroupedCounts("MATCH (a) RETURN a.age, count(DISTINCT a.age)", expected);
+}
+
+// The same key one step up: an expression over two matched nodes, aliased, then counted
+// through that alias. Only Remy and Adam carry an age, so of the 324 pairs of the product
+// just the four among those two have a difference at all - and all four differ by zero.
+TEST_F(CountDistinctTest, countsTheDistinctValuesOfAnExpressionKey) {
+    const AgeCountRows expected {{0, 1}, {std::nullopt, 0}};
+
+    expectAgeGroupedCounts("MATCH (a), (b) RETURN b.age - a.age AS diff, COUNT(DISTINCT diff)", expected);
+}
+
+// A value reduction and a distinct count in one grouped projection, over two different
+// columns: each aggregate carries its own accumulator and its own seen-set, so the sum of
+// the durations and the tally of the targets are folded side by side under one key. A
+// source whose edges carry no duration sums to zero, the additive identity.
+TEST_F(CountDistinctTest, countsDistinctBesideASumPerGroup) {
+    GroupedSumCountSink sink;
+    runQuery("MATCH (a)-[e]->(b) RETURN a.name, sum(e.duration), count(DISTINCT b)", &sink);
+
+    NameSumCountRows rows;
+    sink.sortedRows(rows);
+
+    NameSumCountRows expected;
+    expected.emplace_back(std::optional<std::string>("Adam"), 20, 3u);
+    expected.emplace_back(std::optional<std::string>("Cyrus"), 0, 2u);
+    expected.emplace_back(std::optional<std::string>("Doruk"), 0, 1u);
+    expected.emplace_back(std::optional<std::string>("Ghosts"), 200, 1u);
+    expected.emplace_back(std::optional<std::string>("Luc"), 35, 2u);
+    expected.emplace_back(std::optional<std::string>("Martina"), 10, 1u);
+    expected.emplace_back(std::optional<std::string>("Maxime"), 0, 2u);
+    expected.emplace_back(std::optional<std::string>("Remy"), 60, 4u);
+    expected.emplace_back(std::optional<std::string>("Suhas"), 0, 2u);
     std::sort(expected.begin(), expected.end());
 
     EXPECT_EQ(rows, expected);
