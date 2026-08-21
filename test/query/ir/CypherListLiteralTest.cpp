@@ -620,6 +620,46 @@ TEST_F(CypherListLiteralTest, returnsTwoListsStraddlingAGroupedAggregate) {
     expectRows("MATCH (n) WHERE n.age = 32 RETURN n.age, [1, 2], count(n), [3, 4]", expected);
 }
 
+TEST_F(CypherListLiteralTest, countsTheRowsAListStandsFor) {
+    // count tallies the rows whose argument is not null, and a list is never null: the
+    // tally is the whole relation, not the one row the list is. SimpleGraph holds 18 nodes.
+    const Rows expected = {{"18"}};
+    expectRows("MATCH (n) RETURN count([1, 2])", expected);
+}
+
+TEST_F(CypherListLiteralTest, countsTheOneRowAListIsOnItsOwn) {
+    // With no relation driving it the projection is the single row the list is, so the
+    // tally is one - the same rule, over a relation of one row.
+    const Rows expected = {{"1"}};
+    expectRows("RETURN count([1, 2])", expected);
+}
+
+TEST_F(CypherListLiteralTest, countsTheRowsAnEmptyListStandsFor) {
+    // An empty list is a value, not an absent one, so it counts its rows like any other.
+    const Rows expected = {{"18"}};
+    expectRows("MATCH (n) RETURN count([])", expected);
+}
+
+TEST_F(CypherListLiteralTest, countsTheRowsAHeterogeneousListStandsFor) {
+    // The type-erased list is no more null than a typed one, so the tally is the same.
+    const Rows expected = {{"18"}};
+    expectRows("MATCH (n) RETURN count([true, 'mixed', 10])", expected);
+}
+
+TEST_F(CypherListLiteralTest, countsNoRowWhenTheMatchKeepsNone) {
+    // Nothing matched, so there is no row for the list to stand for and the tally is zero -
+    // where the list on its own would have been one.
+    const Rows expected = {{"0"}};
+    expectRows("MATCH (n) WHERE n.name = 'nobody' RETURN count([1, 2])", expected);
+}
+
+TEST_F(CypherListLiteralTest, countsTheRowsOfEachGroupAListStandsFor) {
+    // Grouped by the age, the list counts each group's rows: Remy and Adam are the only
+    // nodes carrying an age and both are 32, so that group holds two rows.
+    const Rows expected = {{"32", "2"}};
+    expectRows("MATCH (n) WHERE n.age = 32 RETURN n.age, count([1, 2])", expected);
+}
+
 TEST_F(CypherListLiteralTest, returnsTheListBesideAReduction) {
     // count tallies rows; max folds values. A list beside either is the same standing
     // value - Remy and Adam are the only nodes carrying an age, both 32.

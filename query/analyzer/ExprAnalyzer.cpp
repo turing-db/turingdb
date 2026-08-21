@@ -673,6 +673,17 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
             continue;
         }
 
+        // Reducing a whole list means reducing one constant cell standing for every row,
+        // and only the MLIR engine lays that cell out over the driving relation. The legacy
+        // planner reduces the single row the cell is - count([1, 2]) answers 1 where the
+        // relation holds more - so the overload stays out of its reach. Procedures take
+        // lists there too, and are no aggregate, so this leaves them alone.
+        const bool reducesAList = signature->isAggregate()
+            && std::ranges::find(expectedArgs, EvaluatedType::List) != expectedArgs.end();
+        if (!_isV3 && reducesAList) {
+            continue;
+        }
+
         // Register variables for each argument
         for (Expr* arg : providedArgs) {
             const VarDecl* var = arg->getExprVarDecl();
