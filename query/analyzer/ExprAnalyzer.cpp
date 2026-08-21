@@ -650,6 +650,9 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
         throwError("Aggregate functions cannot be nested inside other aggregate functions", expr);
     }
 
+    const FunctionArgumentType* constantReadingARow = nullptr;
+    const Expr* rowReadingArg = nullptr;
+
     // For each overload, check if the argument types match
     for (FunctionSignature* signature : signatures) {
         const auto& expectedArgs = signature->argumentTypes();
@@ -686,17 +689,26 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
 
         // A constant argument is read once per call, so an expression varying with the row
         // would have to be read again for every one. Turned away here rather than by the
-        // procedure at runtime, once a row has already reached it.
+        // procedure at runtime, once a row has already reached it - but only once every
+        // overload has been tried, since another may take that argument per row.
+        bool readsARowIntoAConstant = false;
         for (size_t argIndex = 0; argIndex < providedArgs.size(); argIndex++) {
             const FunctionArgumentType& expected = expectedArgs[argIndex];
             const Expr* arg = providedArgs[argIndex];
 
             if (expected.isConstant() && arg->isDynamic()) {
-                throwError(fmt::format("Argument '{}' of '{}' must be constant, so it cannot read a row",
-                                       expected.getName(),
-                                       name),
-                           arg);
+                if (!constantReadingARow) {
+                    constantReadingARow = &expected;
+                    rowReadingArg = arg;
+                }
+
+                readsARowIntoAConstant = true;
+                break;
             }
+        }
+
+        if (readsARowIntoAConstant) {
+            continue;
         }
 
         // Register variables for each argument
@@ -741,6 +753,13 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
         expr->setExprVarDecl(decl);
 
         return;
+    }
+
+    if (constantReadingARow) {
+        throwError(fmt::format("Argument '{}' of '{}' must be constant, so it cannot read a row",
+                               constantReadingARow->getName(),
+                               name),
+                   rowReadingArg);
     }
 
     // Checked all overloaded signatures, none match: error

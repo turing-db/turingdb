@@ -88,6 +88,18 @@ TEST_F(ProcedureConstantArgumentTest, acceptsAMatchedNodeBesideConstantArguments
     EXPECT_NO_THROW(analyzeQuery("MATCH (n) CALL gnn.neighbourhoodSample(n, 2, 42) YIELD tgt RETURN tgt"));
 }
 
+// The rejection is held back until every overload has been tried, so it has to carry the
+// argument it was raised on that far: a message naming the wrong one, or none, would say
+// nothing about which argument to make constant.
+TEST_F(ProcedureConstantArgumentTest, namesTheConstantArgumentItRefused) {
+    expectRejected("MATCH (n) CALL gnn.neighbourhoodSample(n, n.age) YIELD tgt RETURN tgt",
+                   "sampleSize");
+    expectRejected("MATCH (n) CALL gnn.neighbourhoodSample(n, 2, n.age) YIELD tgt RETURN tgt",
+                   "seed");
+    expectRejected("MATCH (n) CALL gnn.neighbourhoodSample(n, n.age) YIELD tgt RETURN tgt",
+                   "gnn.neighbourhoodSample");
+}
+
 TEST_F(ProcedureConstantArgumentTest, acceptsALiteralListAsAConstantArgument) {
     EXPECT_NO_THROW(analyzeQuery("CALL db.getNodes([0, 1]) YIELD id RETURN id"));
 }
