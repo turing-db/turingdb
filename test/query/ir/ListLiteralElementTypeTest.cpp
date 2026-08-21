@@ -143,8 +143,31 @@ TEST_F(ListLiteralElementTypeTest, typesABoolListAsBools) {
     expectListElementType("RETURN [true, false]", mlir::IntegerType::get(&_context, 1));
 }
 
+TEST_F(ListLiteralElementTypeTest, typesASingleElementListAsThatElement) {
+    // One element is enough to read a type from - the boundary of the rule that a typed
+    // list carries at least one element.
+    expectListElementType("RETURN [1]", mlir::IntegerType::get(&_context, 64));
+}
+
 TEST_F(ListLiteralElementTypeTest, typesAMixedListAsTaggedScalars) {
     expectListElementType("RETURN [true, 'mixed', 10]", listElementType());
+}
+
+TEST_F(ListLiteralElementTypeTest, typesAListEndingInNullAsTaggedScalars) {
+    // A null rides a unit attribute, which carries no type, so it agrees with no element:
+    // the integer ahead of it does not make the list a list of integers.
+    expectListElementType("RETURN [1, null]", listElementType());
+}
+
+TEST_F(ListLiteralElementTypeTest, typesAListOpeningOnNullAsTaggedScalars) {
+    // The same verdict with the null first, where there is no type yet to disagree with -
+    // the elements are read for a shared type from the front, so this is the other way in.
+    expectListElementType("RETURN [null, 1]", listElementType());
+}
+
+TEST_F(ListLiteralElementTypeTest, typesASingletonNullListAsTaggedScalars) {
+    // Nothing but the null, so the only element is the untyped one.
+    expectListElementType("RETURN [null]", listElementType());
 }
 
 TEST_F(ListLiteralElementTypeTest, typesAMixedNumericListAsTaggedScalars) {

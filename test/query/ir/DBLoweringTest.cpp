@@ -685,6 +685,28 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n) RETURN n, [1, 2, 3]: the scan drives the rows and the list stands beside
+// them, so the lowering has a loop for the const_list to be hoisted above.
+constexpr const char* constListOverMatchProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %xs = db.const_list([1, 2, 3]) : !db.column<!storage.list<i64>>
+  db.output(%n, %xs) : !db.column<!storage.node_id>, !db.column<!storage.list<i64>>
+  return
+}
+)mlir";
+
+// MATCH (n) RETURN n, [10, true, [1, 2]]: the same shape over a list whose elements share
+// no type, so the list is one of type-erased tagged scalars.
+constexpr const char* heterogeneousConstListOverMatchProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %xs = db.const_list([10, true, [1, 2]]) : !db.column<!storage.list<!storage.list_element>>
+  db.output(%n, %xs) : !db.column<!storage.node_id>, !db.column<!storage.list<!storage.list_element>>
+  return
+}
+)mlir";
+
 // The same cut with a reduction over the scan before it, which has to see every node.
 constexpr const char* constantLimitPastACountProgram = R"mlir(
 func.func @main() {
@@ -3999,6 +4021,104 @@ TEST_F(DBLoweringTest, boundsTheDrivingLoopOfACutOverConstants) {
     });
     EXPECT_EQ(updateOp.getState(), handle);
     EXPECT_TRUE(mlir::isa<mlir::nl::For>(updateOp->getParentOp()));
+}
+
+// A list literal is one value for the whole query, so it is materialized once above every
+// loop rather than per step. Nothing downstream reads the list's element type - every nl
+// consumer tests for a list chunk and stops - so both properties are asserted on the
+// lowered IR: the rows a wrong lowering emits are the same rows.
+TEST_F(DBLoweringTest, hoistsAConstListAboveTheDrivingLoop) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule =
+        mlir::parseSourceString<mlir::ModuleOp>(constListOverMatchProgram, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &reader.getView());
+    lowering.lower(dbFunction, *nlModule);
+
+    mlir::nl::ConstList constListOp;
+    mlir::nl::Output outputOp;
+    size_t constListCount = 0;
+    size_t forCount = 0;
+
+    nlModule->walk([&](mlir::Operation* operation) {
+        if (mlir::nl::ConstList found = mlir::dyn_cast<mlir::nl::ConstList>(operation)) {
+            constListOp = found;
+            constListCount++;
+        } else if (mlir::isa<mlir::nl::For>(operation)) {
+            forCount++;
+        } else if (mlir::nl::Output found = mlir::dyn_cast<mlir::nl::Output>(operation)) {
+            outputOp = found;
+        }
+    });
+
+    ASSERT_TRUE(constListOp);
+    ASSERT_TRUE(outputOp);
+    EXPECT_EQ(constListCount, 1u);
+    EXPECT_EQ(forCount, 1u);
+
+    // The scan opens the one loop and emits from inside it, while the list is bound at
+    // function scope: written once for the whole query, not once per step.
+    EXPECT_TRUE(mlir::isa<mlir::nl::For>(outputOp->getParentOp()));
+    EXPECT_TRUE(mlir::isa<mlir::func::FuncOp>(constListOp->getParentOp()));
+
+    // The literals ride the op unchanged, and the chunk keeps the db column's list type -
+    // the homogeneity verdict codegen reached, spelled rather than inferred.
+    EXPECT_EQ(constListOp.getElements().size(), 3u);
+
+    const mlir::Type int64Type = mlir::IntegerType::get(&context, 64);
+    const mlir::Type int64ListType = mlir::storage::ListType::get(&context, int64Type);
+    EXPECT_EQ(constListOp.getResult().getType(), mlir::nl::ChunkType::get(&context, int64ListType));
+}
+
+// The type-erased verdict survives the same lowering: a list of tagged scalars stays one,
+// rather than collapsing to the element type or to a bare list.
+TEST_F(DBLoweringTest, keepsTheErasedElementTypeOfAConstList) {
+    auto graph = buildDiamondGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    mlir::MLIRContext context;
+    context.getOrLoadDialect<mlir::func::FuncDialect>();
+    context.getOrLoadDialect<mlir::storage::Storage>();
+    context.getOrLoadDialect<mlir::db::DB>();
+    context.getOrLoadDialect<mlir::nl::NL>();
+
+    const mlir::ParserConfig parserConfig(&context);
+    mlir::OwningOpRef<mlir::ModuleOp> dbModule =
+        mlir::parseSourceString<mlir::ModuleOp>(heterogeneousConstListOverMatchProgram, parserConfig);
+    ASSERT_TRUE(dbModule);
+
+    const mlir::func::FuncOp dbFunction = dbModule->lookupSymbol<mlir::func::FuncOp>("main");
+    ASSERT_TRUE(dbFunction);
+
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+    DBLowering lowering(&context, &reader.getView());
+    lowering.lower(dbFunction, *nlModule);
+
+    mlir::nl::ConstList constListOp;
+    nlModule->walk([&](mlir::nl::ConstList found) {
+        constListOp = found;
+    });
+    ASSERT_TRUE(constListOp);
+
+    const mlir::Type elementType = mlir::storage::ListElementType::get(&context);
+    const mlir::Type erasedListType = mlir::storage::ListType::get(&context, elementType);
+    EXPECT_EQ(constListOp.getResult().getType(), mlir::nl::ChunkType::get(&context, erasedListType));
 }
 
 // The same cut with a reduction between the scan and the cut: the count has to see every

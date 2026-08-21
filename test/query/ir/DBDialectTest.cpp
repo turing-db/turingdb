@@ -1158,6 +1158,16 @@ func.func @main() {
 }
 )mlir";
 
+// An empty list typed as a homogeneous i64 column: rejected, since there is no element
+// to read that type from. The empty list is the list_element form.
+const char* const emptyHomogeneousUnwindConstProgram = R"mlir(
+func.func @main() {
+  %x = db.unwind_const([]) : !db.column<i64>
+  db.output(%x) : !db.column<i64>
+  return
+}
+)mlir";
+
 // RETURN [1, 2, 3]: the same literals as a value rather than a source, so the whole list
 // is one cell - a list of the type its elements share.
 const char* const constListProgram = R"mlir(
@@ -1203,6 +1213,36 @@ func.func @main() {
 const char* const mixedHomogeneousConstListProgram = R"mlir(
 func.func @main() {
   %xs = db.const_list([1, "string"]) : !db.column<!storage.list<i64>>
+  db.output(%xs) : !db.column<!storage.list<i64>>
+  return
+}
+)mlir";
+
+// An empty list typed as a homogeneous i64 list: rejected, since there is no element to
+// read that type from. Paired with the list_element type the same literals are valid.
+const char* const emptyHomogeneousConstListProgram = R"mlir(
+func.func @main() {
+  %xs = db.const_list([]) : !db.column<!storage.list<i64>>
+  db.output(%xs) : !db.column<!storage.list<i64>>
+  return
+}
+)mlir";
+
+// A list of nested lists typed as a homogeneous i64 list: the first element is an array,
+// which carries no type, so the verifier has none to check the rest against.
+const char* const nestedHomogeneousConstListProgram = R"mlir(
+func.func @main() {
+  %xs = db.const_list([[1, 2], [3]]) : !db.column<!storage.list<i64>>
+  db.output(%xs) : !db.column<!storage.list<i64>>
+  return
+}
+)mlir";
+
+// A null element in a homogeneous i64 list: a null rides a unit attribute, which carries
+// no type, so it cannot be an element of a typed list however its siblings agree.
+const char* const nullElementHomogeneousConstListProgram = R"mlir(
+func.func @main() {
+  %xs = db.const_list([1, unit]) : !db.column<!storage.list<i64>>
   db.output(%xs) : !db.column<!storage.list<i64>>
   return
 }
@@ -1390,6 +1430,14 @@ TEST_F(DBDialectTest, verifierRejectsHomogeneousUnwindConstWithMixedElements) {
     EXPECT_FALSE(module);
 }
 
+TEST_F(DBDialectTest, verifierRejectsHomogeneousUnwindConstWithoutElements) {
+    // The typed column claims a type no element carries. Codegen never spells this -
+    // it picks the list_element form for an empty list - so the verifier is what
+    // stands between the two forms.
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyHomogeneousUnwindConstProgram);
+    EXPECT_FALSE(module);
+}
+
 TEST_F(DBDialectTest, parsesConstList) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(constListProgram);
     ASSERT_TRUE(module);
@@ -1474,6 +1522,29 @@ TEST_F(DBDialectTest, verifierRejectsConstListWithScalarColumn) {
 
 TEST_F(DBDialectTest, verifierRejectsHomogeneousConstListWithMixedElements) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(mixedHomogeneousConstListProgram);
+    EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, verifierRejectsHomogeneousConstListWithoutElements) {
+    // The empty list is valid as the list_element form above, and rejected here as a
+    // typed one: no element carries the i64 the column claims. Codegen never spells
+    // this, so the verifier is the only thing holding the two forms apart.
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyHomogeneousConstListProgram);
+    EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, verifierRejectsHomogeneousConstListWithNestedElements) {
+    // A nested list rides an array attribute, which carries no type, so it cannot be an
+    // element of a typed list - here as the first element, which is where the verifier
+    // reads the shared type from.
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(nestedHomogeneousConstListProgram);
+    EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, verifierRejectsHomogeneousConstListWithANullElement) {
+    // The untyped element past the first one, which the verifier reaches only after it
+    // has a shared type to compare against.
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(nullElementHomogeneousConstListProgram);
     EXPECT_FALSE(module);
 }
 
