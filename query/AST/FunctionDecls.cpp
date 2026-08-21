@@ -101,6 +101,14 @@ void FunctionDecls::initDefault() {
     countNulls->setReturnTypes({{EvaluatedType::Integer}});
     countNulls->setIsAggregate(true);
 
+    // count over a whole list: a list is never null, so the tally is every row. Only the
+    // MLIR engine lays a list cell out over the driving relation, which ExprAnalyzer's
+    // v3 gate is what keeps the legacy planner away from.
+    FunctionSignature* countLists = createFunction("count");
+    countLists->setArguments({EvaluatedType::List});
+    countLists->setReturnTypes({{EvaluatedType::Integer}});
+    countLists->setIsAggregate(true);
+
     FunctionSignature* countWildcard = createFunction("count");
     countWildcard->setArguments({EvaluatedType::Wildcard});
     countWildcard->setReturnTypes({{EvaluatedType::Integer}});

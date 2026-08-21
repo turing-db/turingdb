@@ -1874,12 +1874,17 @@ void NLTranslator::translateGroupAggregateUpdate(nl::GroupAggregateUpdate update
                 aggregate._emit = NLExecutor::selectGroupAggregateEmit(kind, ValueType::Int64);
 
                 const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
-                const auto nullable = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
+                const mlir::Type countElementType = chunk.getElementType();
+                const auto nullable = mlir::dyn_cast<storage::NullableType>(countElementType);
                 if (nullable) {
                     const ValueType valueType = valueTypeFromElementType(nullable.getValueType());
                     aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, valueType);
-                } else if (mlir::isa<storage::ListElementType>(chunk.getElementType())) {
+                } else if (mlir::isa<storage::ListElementType>(countElementType)) {
                     aggregate._fold = NLExecutor::selectGroupCountListElementFold();
+                } else if (llvm::isa<storage::ListType>(countElementType)) {
+                    // No row of a list chunk is null, so a group's tally is its whole row
+                    // count, as it is for count(*).
+                    aggregate._fold = NLExecutor::selectGroupCountAllFold();
                 } else {
                     // A non-nullable count input must be an ID chunk (count(*));
                     // getChunkKind rejects any other element type.
