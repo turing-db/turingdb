@@ -842,6 +842,20 @@ func.func @main() {
 }
 )mlir";
 
+// A list chunk on both sides of a cross product. DBLowering never emits it - codegen keeps
+// constant columns out of the product's factors - but the op is meant to survive
+// hand-written IR, and the translator has no broadcast for a list cell. It must say so
+// rather than reach for a chunk kind and read the column as something it is not.
+constexpr const char* crossListChunkProgram = R"mlir(
+func.func @main() {
+  %xs = nl.const_list([1, 2]) : !nl.chunk<!storage.list<i64>>
+  %ys = nl.const_list([3, 4]) : !nl.chunk<!storage.list<i64>>
+  %p:2 = nl.cross_product{%xs} {%ys} : {!nl.chunk<!storage.list<i64>>} {!nl.chunk<!storage.list<i64>>}
+  nl.output(%p#0, %p#1) : !nl.chunk<!storage.list<i64>>, !nl.chunk<!storage.list<i64>>
+  func.return
+}
+)mlir";
+
 // Resolve the "score" property once above the loops, then read it per scanned
 // node and output (node, score). The value chunk is nullable, so nodes without
 // the property still appear, with a null value.
@@ -2112,6 +2126,12 @@ TEST_F(NLExecutorTest, rejectsCrossLoopOutputColumns) {
 
 TEST_F(NLExecutorTest, rejectsCrossLoopCarriedColumns) {
     expectTranslationFailure(crossLoopCarryProgram);
+}
+
+// Pins the rejection, not the limitation: teaching addCrossColumn to broadcast a list cell
+// should turn this into an execution test rather than leave it asserting a throw.
+TEST_F(NLExecutorTest, rejectsCrossProductOverListChunks) {
+    expectTranslationFailure(crossListChunkProgram);
 }
 
 TEST_F(NLExecutorTest, sortsScannedNodesDescending) {
