@@ -408,6 +408,43 @@ private:
     std::vector<Row> _rows;
 };
 
+// Collects the (first edge, second edge, count) rows a group keyed on two edge variables
+// emits: an id chunk per edge identity and a non-null !nl.chunk<ui64> count chunk.
+class GroupTwoEdgeCountSink : public NLOutputSink {
+public:
+    using Row = std::tuple<uint64_t, uint64_t, uint64_t>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 3u);
+
+        const auto* firstEdges = dynamic_cast<const ColumnEdgeIDs*>(chunks[0]);
+        const auto* secondEdges = dynamic_cast<const ColumnEdgeIDs*>(chunks[1]);
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[2]);
+        ASSERT_NE(firstEdges, nullptr);
+        ASSERT_NE(secondEdges, nullptr);
+        ASSERT_NE(counts, nullptr);
+        ASSERT_EQ(firstEdges->size(), counts->size());
+        ASSERT_EQ(secondEdges->size(), counts->size());
+
+        const auto& firstRaw = firstEdges->getRaw();
+        const auto& secondRaw = secondEdges->getRaw();
+        const auto& countRaw = counts->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.emplace_back(firstRaw[rowIndex].getValue(),
+                               secondRaw[rowIndex].getValue(),
+                               countRaw[rowIndex]);
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
 // Collects the (source, edge, target, team, count) rows a group whose keys come from
 // a RETURN * expansion emits: the three entity id chunks the wildcard names, a
 // nullable string key chunk and a non-null !nl.chunk<ui64> count chunk.
@@ -1609,6 +1646,23 @@ TEST_F(GroupAggregateCypherTest, groupedCountByWildcardNamingAnEdgeVariable) {
     sink.sortedRows(rows);
     const std::vector<GroupWildcardEdgeSink::Row> expected {{0, 0, 1, "red", 1},
                                                             {2, 1, 3, "red", 1}};
+    EXPECT_EQ(rows, expected);
+}
+
+// A key that is an edge variable is not in the variable map under its own name - the
+// occurrences of its identity are - so grouping on two of them rebinds through that
+// identity twice, over the same map the rebinding writes to.
+TEST_F(GroupAggregateCypherTest, groupedCountByTwoEdgeVariables) {
+    buildKnowsGraph();
+
+    GroupTwoEdgeCountSink sink;
+    match("MATCH (a)-[e]->(b), (c)-[f]->(d), (x:Node) RETURN e, f, count(*)", sink);
+
+    // Two edges crossed with themselves and with the four nodes: four pairs of four rows
+    // each, so a key read before the grouping would answer with sixteen rows instead.
+    std::vector<GroupTwoEdgeCountSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<GroupTwoEdgeCountSink::Row> expected {{0, 0, 4}, {0, 1, 4}, {1, 0, 4}, {1, 1, 4}};
     EXPECT_EQ(rows, expected);
 }
 

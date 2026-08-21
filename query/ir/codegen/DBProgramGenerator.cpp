@@ -428,10 +428,17 @@ void DBProgramGenerator::registerValue(const VariableDependency* var, mlir::Type
 }
 
 void DBProgramGenerator::rebindVariableColumn(std::string_view name, mlir::TypedValue<mlir::Type> val) {
+    // Registering a value writes to _varMap, so the variables it names are collected
+    // before any of them is rebound rather than while the map is being walked.
+    llvm::SmallVector<const VariableDependency*> named;
     for (const auto& [var, values] : _varMap) {
         if (var->getName() == name) {
-            registerValue(var, val);
+            named.push_back(var);
         }
+    }
+
+    for (const VariableDependency* var : named) {
+        registerValue(var, val);
     }
 
     for (YieldedColumn& yielded : _yieldedColumns) {
@@ -441,7 +448,7 @@ void DBProgramGenerator::rebindVariableColumn(std::string_view name, mlir::Typed
     }
 
     const VariableDependencyGraph::EdgeIdentityMap& edgeIdentities = _vdg.edgeIdentities();
-    const auto findIt = edgeIdentities.find(std::string(name));
+    const auto findIt = edgeIdentities.find(name);
     if (findIt == edgeIdentities.end()) {
         return;
     }
@@ -1766,7 +1773,7 @@ mlir::Value DBProgramGenerator::resolveEntityColumn(std::string_view varName) {
     }
 
     const VariableDependencyGraph::EdgeIdentityMap& edgeIdentities = _vdg.edgeIdentities();
-    const auto findIt = edgeIdentities.find(std::string(varName));
+    const auto findIt = edgeIdentities.find(varName);
     const bool foundEdgeIdentity = findIt != edgeIdentities.end() && !findIt->second.empty();
     if (foundEdgeIdentity) {
         const VariableDependency* representative = findIt->second.front();
