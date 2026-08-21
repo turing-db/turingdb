@@ -1,6 +1,7 @@
 #pragma once
 
 #include <deque>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -34,8 +35,17 @@ class UnwindStmt;
  */
 class VariableDependencyGraph {
 public:
+    struct EdgeIdentityHash {
+        using is_transparent = void;
+
+        size_t operator()(std::string_view name) const { return std::hash<std::string_view> {}(name); }
+    };
+
     using Cycle = std::vector<VariableDependency*>;
-    using EdgeIdentityMap = std::unordered_map<std::string, std::vector<VariableDependency*>>;
+    using EdgeIdentityMap = std::unordered_map<std::string,
+                                               std::vector<VariableDependency*>,
+                                               EdgeIdentityHash,
+                                               std::equal_to<>>;
     using UnwindSourceMap = std::unordered_map<const VariableDependency*, const UnwindStmt*>;
 
     VariableDependencyGraph();
