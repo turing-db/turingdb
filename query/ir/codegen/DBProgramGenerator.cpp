@@ -1771,7 +1771,10 @@ void DBProgramGenerator::applyConstraints(const VariableDependency* var) {
         } else if constexpr (std::is_same_v<T, VariableDependency::EdgeType>) {
             applyEdgeTypeConstraint(constraint);
         } else {
-            static_assert(false, "Unhandled constraint type.");
+            // sizeof(T) == 0 (never true) keeps the assert dependent on T so it only
+            // fires if this branch is ever instantiated; a bare static_assert(false)
+            // is diagnosed eagerly by pre-P2593 compilers even when discarded.
+            static_assert(sizeof(T) == 0, "Unhandled constraint type.");
         }
     }, *constraints);
 }
