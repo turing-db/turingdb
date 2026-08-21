@@ -1098,7 +1098,8 @@ template <typename Primitive>
 void groupFoldSum(Column* accumulator,
                   std::vector<uint64_t>& counts,
                   const Column* input,
-                  const std::vector<size_t>& groups) {
+                  const std::vector<size_t>& groups,
+                  NLGroupDistinctTally& distinct) {
     auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
@@ -1118,7 +1119,8 @@ template <typename Primitive, bool IsMax>
 void groupFoldMinMax(Column* accumulator,
                      std::vector<uint64_t>& counts,
                      const Column* input,
-                     const std::vector<size_t>& groups) {
+                     const std::vector<size_t>& groups,
+                     NLGroupDistinctTally& distinct) {
     auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
@@ -1150,7 +1152,8 @@ template <typename Primitive>
 void groupFoldAvg(Column* accumulator,
                   std::vector<uint64_t>& counts,
                   const Column* input,
-                  const std::vector<size_t>& groups) {
+                  const std::vector<size_t>& groups,
+                  NLGroupDistinctTally& distinct) {
     auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
@@ -1170,7 +1173,8 @@ void groupFoldAvg(Column* accumulator,
 void groupFoldCountAll(Column* accumulator,
                        std::vector<uint64_t>& counts,
                        const Column* input,
-                       const std::vector<size_t>& groups) {
+                       const std::vector<size_t>& groups,
+                       NLGroupDistinctTally& distinct) {
     for (const size_t group : groups) {
         counts[group]++;
     }
@@ -1182,12 +1186,64 @@ template <typename Primitive>
 void groupFoldCountPresent(Column* accumulator,
                            std::vector<uint64_t>& counts,
                            const Column* input,
-                           const std::vector<size_t>& groups) {
+                           const std::vector<size_t>& groups,
+                           NLGroupDistinctTally& distinct) {
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
         if (inputRaw[row].has_value()) {
             counts[groups[row]]++;
+        }
+    }
+}
+
+// Tally each group's distinct IDs (count(DISTINCT n) over a node/edge column): an ID
+// is never null, so every row is charged the first time its ID is seen in its group.
+template <typename ElementType>
+void groupFoldCountDistinctID(Column* accumulator,
+                              std::vector<uint64_t>& counts,
+                              const Column* input,
+                              const std::vector<size_t>& groups,
+                              NLGroupDistinctTally& distinct) {
+    const auto& inputRaw = static_cast<const ColumnVector<ElementType>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendValueBytes(distinct.getKey(), inputRaw[row].getValue());
+
+        if (distinct.insertIfNew()) {
+            counts[group]++;
+        }
+    }
+}
+
+// Tally each group's distinct present values (count(DISTINCT x)): a null row is not
+// charged, and a value repeated within its group is charged once. The value bytes are
+// the DISTINCT serializer's, so two rows count as one exactly when a whole-row DISTINCT
+// would fold them together.
+template <typename Primitive>
+void groupFoldCountDistinctPresent(Column* accumulator,
+                                   std::vector<uint64_t>& counts,
+                                   const Column* input,
+                                   const std::vector<size_t>& groups,
+                                   NLGroupDistinctTally& distinct) {
+    const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const std::optional<Primitive>& value = inputRaw[row];
+        if (!value.has_value()) {
+            continue;
+        }
+
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendValueBytes(distinct.getKey(), *value);
+
+        if (distinct.insertIfNew()) {
+            counts[group]++;
         }
     }
 }
@@ -2539,7 +2595,11 @@ void NLExecutor::runGroupAggregateUpdate(NLExecutionContext* context, NLFunction
     }
 
     for (NLGroupAggregateState::Aggregate& aggregate : aggregates) {
-        aggregate._fold(aggregate._accumulator, aggregate._counts, aggregate._input, groupIndices);
+        aggregate._fold(aggregate._accumulator,
+                        aggregate._counts,
+                        aggregate._input,
+                        groupIndices,
+                        aggregate._distinct);
     }
 }
 
@@ -3218,6 +3278,7 @@ NLGroupAggregateGrowFunction NLExecutor::selectGroupAggregateGrow(GroupAggregate
     // rather than silently taking the sum/min/max path.
     switch (kind) {
         case GroupAggregateKind::Count:
+        case GroupAggregateKind::CountDistinct:
             return &groupGrowCount;
         break;
 
@@ -3254,6 +3315,10 @@ NLGroupAggregateGrowFunction NLExecutor::selectGroupAggregateGrow(GroupAggregate
 
 NLGroupAggregateFoldFunction NLExecutor::selectGroupAggregateFold(GroupAggregateKind kind, ValueType inputType) {
     switch (kind) {
+        case GroupAggregateKind::CountDistinct:
+            return selectGroupCountDistinctFold(inputType);
+        break;
+
         case GroupAggregateKind::Count: {
             // count(x) over a nullable value chunk: tally the present values. count(*)
             // over an ID chunk goes through selectGroupCountAllFold instead. Every
@@ -3294,11 +3359,73 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountAllFold() {
     return &groupFoldCountAll;
 }
 
+// Selected per column from its value type. A manual switch, not ValueTypeDispatcher,
+// because a distinct tally keys on the value's bytes and an embedding has none to key
+// on - the same reason selectOptKeyAppendFunction is written out by hand.
+NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctFold(ValueType inputType) {
+    switch (inputType) {
+        case ValueType::Int64:
+            return &groupFoldCountDistinctPresent<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &groupFoldCountDistinctPresent<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &groupFoldCountDistinctPresent<types::Double::Primitive>;
+        break;
+
+        case ValueType::Bool:
+            return &groupFoldCountDistinctPresent<types::Bool::Primitive>;
+        break;
+
+        case ValueType::String:
+            return &groupFoldCountDistinctPresent<types::String::Primitive>;
+        break;
+
+        case ValueType::Embedding:
+            throw IRException("cannot count the distinct values of an embedding column");
+        break;
+
+        case ValueType::Invalid:
+        case ValueType::_SIZE:
+            throw IRException("invalid count(DISTINCT) value type");
+        break;
+    }
+
+    bioassert(false, "Unhandled value type");
+    return nullptr;
+}
+
+// count(DISTINCT n) over an ID chunk (never null): each group is charged once per
+// distinct ID it sees. The ID kind picks the column layout the key is read from, the
+// way selectKeyAppendFunction does for a DISTINCT row key.
+NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctIDFold(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return &groupFoldCountDistinctID<NodeID>;
+        break;
+
+        case NLChunkKind::EdgeID:
+            return &groupFoldCountDistinctID<EdgeID>;
+        break;
+
+        case NLChunkKind::EdgeTypeID:
+            return &groupFoldCountDistinctID<EdgeTypeID>;
+        break;
+    }
+
+    bioassert(false, "Unknown NLChunkKind");
+    return nullptr;
+}
+
 NLGroupAggregateEmitFunction NLExecutor::selectGroupAggregateEmit(GroupAggregateKind kind, ValueType resultType) {
     // A switch (not an if/else) over every kind so a new one is a compile error here
     // rather than silently taking the sum/min/max path.
     switch (kind) {
         case GroupAggregateKind::Count:
+        case GroupAggregateKind::CountDistinct:
             // count emits its per-group tally as an unsigned i64, whatever the input was.
             return &groupEmitCount;
         break;

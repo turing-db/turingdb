@@ -55,6 +55,7 @@ void NLGroupAggregateState::reset() {
         }
 
         aggregate._counts.clear();
+        aggregate._distinct.clear();
     }
 }
 

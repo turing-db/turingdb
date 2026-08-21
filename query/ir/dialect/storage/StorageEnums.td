@@ -34,12 +34,20 @@ def AggregateKind : I64EnumAttr<"AggregateKind", "A property-value aggregate", [
 // parsed as the symbolic keywords through the shared custom<GroupAggregateKinds>
 // assembly directive (GroupAggregateKindsFormat), which reuses the generated
 // symbolize/stringify below; the values are also range-checked in the verifiers.
+//
+// COUNT_DISTINCT is Cypher's count(DISTINCT x): it tallies each group's distinct
+// non-null values rather than its non-null rows, and emits the same ui64 per group
+// as COUNT. It is its own kind rather than a modifier on COUNT so the kinds array
+// stays the whole aggregate spec - a grouped aggregate needs no second attribute
+// parallel to it. The scalar count(DISTINCT x) is db.count's `distinct` flag
+// instead: with no group to key on, it is the plain tally of a deduplicated column.
 def GroupAggregateKind : I64EnumAttr<"GroupAggregateKind", "A grouped aggregate function", [
     I64EnumAttrCase<"Count", 0, "count">,
     I64EnumAttrCase<"Sum", 1, "sum">,
     I64EnumAttrCase<"Min", 2, "min">,
     I64EnumAttrCase<"Max", 3, "max">,
     I64EnumAttrCase<"Avg", 4, "avg">,
+    I64EnumAttrCase<"CountDistinct", 5, "count_distinct">,
 ]> {
     let cppNamespace = "::mlir::storage";
 }

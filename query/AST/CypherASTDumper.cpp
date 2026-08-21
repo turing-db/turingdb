@@ -1089,6 +1089,10 @@ void CypherASTDumper::dump(std::ostream& out, const FunctionInvocationExpr* expr
     dumpQualifiedName(out, invocation->getName());
     out << "\n";
 
+    if (invocation->isDistinct()) {
+        out << "        Distinct true\n";
+    }
+
     out << "    }\n";
 
     for (const Expr* arg : invocation->getArguments()->getExprs()) {

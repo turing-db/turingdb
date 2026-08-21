@@ -1226,6 +1226,11 @@ PipelineOutputInterface* PipelineGenerator::translateAggregateEvalNode(Aggregate
             throw PlannerException("FunctionInvocation is not an aggregate function");
         }
 
+        if (invocation->isDistinct()) {
+            throw PlannerException(fmt::format("Aggregate function '{}' with DISTINCT is not implemented yet",
+                                               signature->getFullName()));
+        }
+
         if (signature->getFullName() == "count") {
             translateCount(func, args, _builder, _mem, _declToColumn);
         } else if (signature->getFullName() == "avg") {

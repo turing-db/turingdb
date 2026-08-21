@@ -1293,6 +1293,36 @@ enum class GroupAggregateKind {
     Min,
     Max,
     Avg,
+    CountDistinct,
+};
+
+// The (group, value) pairs one count(DISTINCT x) has already charged. A single set
+// covers every group of the aggregate: the group index is prefixed onto the
+// serialized value, so two groups never share an entry. The distinct fold builds one
+// row's key in the scratch, then charges the group only when the pair is new. The
+// grouped sibling of NLDistinctState, which keys whole rows rather than one value
+// per group.
+class NLGroupDistinctTally {
+public:
+    // Start this row's key with the group it belongs to, so the value bytes the fold
+    // appends next are told apart per group.
+    void beginKey(size_t group) {
+        _key.assign(reinterpret_cast<const char*>(&group), sizeof(group));
+    }
+
+    std::string& getKey() { return _key; }
+
+    // Record the key built for this row; true when the (group, value) pair is new,
+    // so the caller charges the group's tally.
+    bool insertIfNew() { return _seen.insert(_key).second; }
+
+    // Drop every pair, so the aggregation starts fresh. Runs with the rest of the
+    // per-group state when nl.group_aggregate_buffer resets.
+    void clear() { _seen.clear(); }
+
+private:
+    std::unordered_set<std::string> _seen;
+    std::string _key;
 };
 
 // Append the values of the given rows of an input chunk onto the tail of a
@@ -1316,11 +1346,14 @@ using NLGroupAggregateGrowFunction = void (*)(Column* accumulator,
 // Fold this step's chunk into the per-group state: for each input row, reduce its
 // value (or tally it) into the group named by groups[row]. groups is the row ->
 // group-index map nl.group_aggregate_update built for this step. One per kind /
-// value type.
+// value type. The parameters are the union of what any reduction needs, so each fold
+// reads only its own: sum/min/max ignore counts, count ignores the accumulator, and
+// only count_distinct touches the tally of already-charged (group, value) pairs.
 using NLGroupAggregateFoldFunction = void (*)(Column* accumulator,
                                               std::vector<uint64_t>& counts,
                                               const Column* input,
-                                              const std::vector<size_t>& groups);
+                                              const std::vector<size_t>& groups,
+                                              NLGroupDistinctTally& distinct);
 
 // Materialize the reduction of groups [begin, begin + count) into an emit output
 // column: a copy of the accumulator slice (sum/min/max), a per-group divide
@@ -1401,12 +1434,14 @@ public:
     // state (_accumulator, one reduced value per group - null for count - and
     // _counts, one non-null tally per group, used by count and avg); the emit fills
     // the loop variable _output. _grow/_fold/_emit are baked from the kind and the
-    // value type.
+    // value type. _distinct is the count(DISTINCT x) tally, left empty by every other
+    // reduction.
     struct Aggregate {
         const Column* _input {nullptr};
         Column* _accumulator {nullptr};
         Column* _output {nullptr};
         std::vector<uint64_t> _counts;
+        NLGroupDistinctTally _distinct;
         NLGroupAggregateGrowFunction _grow {nullptr};
         NLGroupAggregateFoldFunction _fold {nullptr};
         NLGroupAggregateEmitFunction _emit {nullptr};

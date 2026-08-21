@@ -2135,8 +2135,13 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
         inputColumn = _exprMap.at(argExpr);
     }
 
+    const bool isDistinct = invocation->isDistinct();
+    if (isDistinct && funcName != "count") {
+        throw TuringException(fmt::format("DISTINCT is not supported in {}()", funcName));
+    }
+
     if (funcName == "count") {
-        _exprMap[expr] = _opBuilder.create<mlir::db::Count>(loc, noneType, inputColumn).getResult();
+        _exprMap[expr] = _opBuilder.create<mlir::db::Count>(loc, noneType, inputColumn, isDistinct).getResult();
     } else if (funcName == "sum") {
         _exprMap[expr] = _opBuilder.create<mlir::db::Sum>(loc, noneType, inputColumn).getResult();
     } else if (funcName == "min") {
@@ -2295,7 +2300,18 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
             const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
             const std::string_view funcName = invocation->getSignature()->getFullName();
 
-            const std::optional<mlir::storage::GroupAggregateKind> kind = mlir::storage::symbolizeGroupAggregateKind(funcName);
+            const bool isDistinct = invocation->isDistinct();
+            if (isDistinct && funcName != "count") {
+                throw TuringException(fmt::format("DISTINCT is not supported in {}()", funcName));
+            }
+
+            // count(DISTINCT x) charges each of a group's distinct values once, which is a
+            // kind of its own: the keyword the enum spells it under is the function's name
+            // with the modifier appended
+            const std::string kindName = isDistinct ? std::string(funcName) + "_distinct"
+                                                    : std::string(funcName);
+
+            const std::optional<mlir::storage::GroupAggregateKind> kind = mlir::storage::symbolizeGroupAggregateKind(kindName);
             if (!kind) {
                 throw TuringException(fmt::format("Unsupported aggregate function: {}", funcName));
             }

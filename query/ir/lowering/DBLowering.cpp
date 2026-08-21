@@ -258,9 +258,10 @@ mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type r
 }
 
 // The value-reduction AggregateKind matching a grouped aggregate's kind, so the
-// grouped result-type resolution reuses aggregateResultElementType. count tallies
-// rows rather than reducing values, so it has no value-reduction kind and never
-// reaches here (the caller resolves its result type - a ui64 - directly).
+// grouped result-type resolution reuses aggregateResultElementType. count and
+// count_distinct tally rows rather than reducing values, so they have no
+// value-reduction kind and never reach here (the caller resolves their result type -
+// a ui64 - directly).
 storage::AggregateKind groupKindToAggregateKind(storage::GroupAggregateKind kind) {
     switch (kind) {
         case storage::GroupAggregateKind::Sum:
@@ -280,6 +281,7 @@ storage::AggregateKind groupKindToAggregateKind(storage::GroupAggregateKind kind
         break;
 
         case storage::GroupAggregateKind::Count:
+        case storage::GroupAggregateKind::CountDistinct:
             throw IRException("count has no value-reduction kind");
         break;
     }
@@ -290,10 +292,10 @@ storage::AggregateKind groupKindToAggregateKind(storage::GroupAggregateKind kind
 // The nl chunk type of one grouped aggregate's result column, resolved from its
 // kind and input chunk. A switch (not an if/else) over every GroupAggregateKind so
 // a new kind is a compile error here rather than silently taking the value-reduction
-// path: count is a single non-null unsigned i64 per group; sum/min/max/avg reduce
-// the input's values, so they require a nullable value column (an ID column is
-// rejected) and follow aggregateResultElementType - sum/min/max keep the value type,
-// avg widens to f64.
+// path: count and count_distinct are a single non-null unsigned i64 per group;
+// sum/min/max/avg reduce the input's values, so they require a nullable value column
+// (an ID column is rejected) and follow aggregateResultElementType - sum/min/max keep
+// the value type, avg widens to f64.
 nl::ChunkType groupAggregateResultChunkType(mlir::OpBuilder& builder,
                                             storage::GroupAggregateKind kind,
                                             mlir::Value inputChunk,
@@ -302,6 +304,7 @@ nl::ChunkType groupAggregateResultChunkType(mlir::OpBuilder& builder,
 
     switch (kind) {
         case storage::GroupAggregateKind::Count:
+        case storage::GroupAggregateKind::CountDistinct:
             return countChunkType;
         break;
 
@@ -1345,11 +1348,27 @@ void DBLowering::lowerCount(mlir::db::Count count) {
     _builder.setInsertionPointToStart(_entryBlock);
     const mlir::Value state = _builder.create<nl::Count>(loc).getState();
 
+    // count(DISTINCT x) feeds the tally the survivors of a DISTINCT instead of the raw
+    // column. A null does survive the filter - all nulls share one key - but is still
+    // never charged, since nl.count_update counts only non-null rows, so the tally
+    // comes out as the distinct non-null value count Cypher asks for.
+    mlir::Value distinctState;
+    if (count.getDistinct()) {
+        distinctState = _builder.create<nl::Distinct>(loc).getState();
+    }
+
     // The update sits in the innermost producing loop body, where the counted
     // column is bound (the same block db.output would emit from), and charges each
     // step's non-null rows against the tally.
     setInsertionInto(ownerBlock(inputChunk));
-    _builder.create<nl::CountUpdate>(loc, state, inputChunk);
+
+    mlir::Value countedChunk = inputChunk;
+    if (distinctState) {
+        nl::DistinctFilter filter = _builder.create<nl::DistinctFilter>(loc, distinctState, mlir::ValueRange {inputChunk});
+        countedChunk = filter.getResults().front();
+    }
+
+    _builder.create<nl::CountUpdate>(loc, state, countedChunk);
 
     // COUNT is a pipeline breaker: the tally is final only once every row has been
     // seen. Since it collapses to exactly one row there is nothing to iterate, so -

@@ -218,6 +218,10 @@ GroupAggregateKind toRuntimeGroupAggregateKind(storage::GroupAggregateKind kind)
         case storage::GroupAggregateKind::Avg:
             return GroupAggregateKind::Avg;
         break;
+
+        case storage::GroupAggregateKind::CountDistinct:
+            return GroupAggregateKind::CountDistinct;
+        break;
     }
 
     throw IRException("Unhandled group aggregate kind");
@@ -1819,6 +1823,27 @@ void NLTranslator::translateGroupAggregateUpdate(nl::GroupAggregateUpdate update
                     // getChunkKind rejects any other element type.
                     getChunkKind(chunkType);
                     aggregate._fold = NLExecutor::selectGroupCountAllFold();
+                }
+            }
+            break;
+
+            case GroupAggregateKind::CountDistinct: {
+                // count(DISTINCT x) keeps the same per-group tally as count, charged
+                // once per distinct value instead of once per row, so it shares count's
+                // grow and emit and differs only in the fold. count(DISTINCT n) over an
+                // ID chunk keys on the ID; count(DISTINCT x) over a nullable value chunk
+                // keys on the value and skips the nulls.
+                aggregate._accumulator = nullptr;
+                aggregate._grow = NLExecutor::selectGroupAggregateGrow(kind, ValueType::Int64);
+                aggregate._emit = NLExecutor::selectGroupAggregateEmit(kind, ValueType::Int64);
+
+                const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+                const auto nullable = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
+                if (nullable) {
+                    const ValueType valueType = valueTypeFromElementType(nullable.getValueType());
+                    aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, valueType);
+                } else {
+                    aggregate._fold = NLExecutor::selectGroupCountDistinctIDFold(getChunkKind(chunkType));
                 }
             }
             break;
