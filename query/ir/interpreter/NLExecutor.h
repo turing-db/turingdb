@@ -201,10 +201,6 @@ public:
 
     static void runDeleteEdge(NLExecutionContext* context, NLFunctionData* data);
 
-    // Prepare a procedure call the first time its block runs, and rewind it on each
-    // later run, so a re-entered block restarts the call from its first row.
-    static void runProcedureReset(NLExecutionContext* context, NLFunctionData* data);
-
     // The drive loop of a row-producing procedure: rewind it, then run it once per step
     // - each call refilling the loop variables in place - rebuild any carried column,
     // and run the body over every step that produced rows, until the procedure declares

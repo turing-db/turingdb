@@ -1663,10 +1663,6 @@ public:
 
     void addResultColumn(Column* column) { _resultColumns.push_back(column); }
 
-    // Rewind the call each time the block holding its nl.procedure is re-entered, so a
-    // re-entered block restarts it from its first row.
-    void rewindBlock();
-
     // Prepare the procedure on its first drive and rewind it - the RESET step - on each
     // later one, so a procedure that finished the previous chunk of arguments starts
     // afresh on the next one, dropping whatever per-drive state it kept.
@@ -1712,22 +1708,6 @@ private:
 
     // The RESET step, which rewinds the procedure to its first row
     void reset();
-};
-
-// nl.procedure data: the call the statement drives. It carries nothing else - the
-// procedure's input and result columns are bound once on the state, and the procedure's
-// own state lives inside it.
-class NLProcedureCallData : public NLFunctionData {
-public:
-    NLProcedureCallData(NLProcedureState* state)
-        : _state(state)
-    {
-    }
-
-    NLProcedureState* getState() const { return _state; }
-
-private:
-    NLProcedureState* _state {nullptr};
 };
 
 // nl.for over nl.procedure_init data: the drive loop of a row-producing procedure. The

@@ -3252,11 +3252,6 @@ void NLExecutor::runCollectLoop(NLExecutionContext* context, NLFunctionData* dat
     }
 }
 
-void NLExecutor::runProcedureReset(NLExecutionContext* context, NLFunctionData* data) {
-    const NLProcedureCallData* call = static_cast<NLProcedureCallData*>(data);
-    call->getState()->rewindBlock();
-}
-
 void NLExecutor::runProcedureInitLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLProcedureLoopData* loopData = static_cast<NLProcedureLoopData*>(data);
     NLProcedureState* state = loopData->getState();
