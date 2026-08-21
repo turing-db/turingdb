@@ -1,5 +1,7 @@
 #include "ProcedureNamespace.h"
 
+#include <memory>
+
 #include "Procedure.h"
 #include "ProcedureException.h"
 
@@ -19,6 +21,10 @@ ProcedureNamespace::~ProcedureNamespace() {
 void ProcedureNamespace::addProcedure(Procedure* procedure) {
     std::unique_lock<std::shared_mutex> lock(_mutex);
 
+    // The namespace owns the declaration from here on, so one it goes on to refuse is
+    // freed rather than left behind by a caller that registers and moves on.
+    std::unique_ptr<Procedure> owned(procedure);
+
     std::string& fullName = procedure->_fullName;
     fullName.clear();
     fullName += _name;
@@ -34,7 +40,7 @@ void ProcedureNamespace::addProcedure(Procedure* procedure) {
                                  "rows it emits");
     }
 
-    _procedures.push_back(procedure);
+    _procedures.push_back(owned.release());
     _procedureMap[procedure->getName()] = procedure;
 }
 
