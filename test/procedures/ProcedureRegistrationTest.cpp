@@ -28,8 +28,6 @@ TEST_F(ProcedureRegistrationTest, rowAlignedArgumentWithoutIndicesIsRefused) {
 
     EXPECT_THROW(_testNamespace->addProcedure(procedure), ProcedureException);
     EXPECT_EQ(_testNamespace->getProcedure("perRow"), nullptr);
-
-    delete procedure;
 }
 
 TEST_F(ProcedureRegistrationTest, rowAlignedArgumentReportingIndicesIsAccepted) {
@@ -73,8 +71,6 @@ TEST_F(ProcedureRegistrationTest, oneRowAlignedArgumentAmongConstantsStillNeedsI
 
     EXPECT_TRUE(procedure->hasRowAlignedArgument());
     EXPECT_THROW(_testNamespace->addProcedure(procedure), ProcedureException);
-
-    delete procedure;
 }
 
 TEST_F(ProcedureRegistrationTest, everyRegisteredProcedureObeysTheContract) {
