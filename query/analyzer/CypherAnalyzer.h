@@ -90,6 +90,9 @@ private:
 
     void declareItemAlias(Expr* item, std::string_view alias);
     void analyzeDistinct(const ReturnStmt* returnSt, const Projection* projection) const;
+    void analyzeNestedAggregates(const Projection* projection) const;
+    void analyzeAggregateArguments(const Expr* expr, const Projection* projection) const;
+    bool readsAnAggregateItem(const Expr* expr, const Projection* projection) const;
     void analyzeAggregateOrderBy(const Projection* projection) const;
     bool isGroupWise(const Expr* expr, const Projection* projection) const;
     bool isGroupWise(std::span<const Expr* const> exprs, const Projection* projection) const;

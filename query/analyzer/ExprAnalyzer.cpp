@@ -697,6 +697,11 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
         }
 
         if (signature->isAggregate()) {
+            if (isAggregate) {
+                throwError(fmt::format("Aggregate functions may not be nested: the argument of "
+                                       "'{}' is itself an aggregate", name), expr);
+            }
+
             expr->setAggregate();
         }
 
