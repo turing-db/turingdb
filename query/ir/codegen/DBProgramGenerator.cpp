@@ -434,6 +434,12 @@ void DBProgramGenerator::rebindVariableColumn(std::string_view name, mlir::Typed
         }
     }
 
+    for (YieldedColumn& yielded : _yieldedColumns) {
+        if (yielded.first == name) {
+            yielded.second = val;
+        }
+    }
+
     const VariableDependencyGraph::EdgeIdentityMap& edgeIdentities = _vdg.edgeIdentities();
     const auto findIt = edgeIdentities.find(std::string(name));
     if (findIt == edgeIdentities.end()) {
@@ -1785,6 +1791,12 @@ mlir::Value DBProgramGenerator::resolveWildcardColumn() const {
         return column;
     }
 
+    for (const YieldedColumn& yielded : _yieldedColumns) {
+        if (isRowAlignedHere(yielded.second)) {
+            return yielded.second;
+        }
+    }
+
     return mlir::Value {};
 }
 
@@ -2820,6 +2832,10 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
     VariableColumnMap variableColumns;
     for (const auto& [cypherVar, mlirCol] : _varMap) {
         variableColumns[cypherVar->getName()] = mlirCol.back();
+    }
+
+    for (const YieldedColumn& yieldedColumn : _yieldedColumns) {
+        variableColumns[yieldedColumn.first] = yieldedColumn.second;
     }
 
     // An edge identity has no variable of its own: its column is the one the traversal
