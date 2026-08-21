@@ -73,8 +73,10 @@ std::string renderListElement(const ListElementView element) {
             return static_cast<bool>(element.getAs<CustomBool>()) ? "true" : "false";
         break;
 
+        // Quoted so a zero-length string reads as an element rather than as nothing: an
+        // unquoted [''] renders exactly as the empty list does.
         case ListBufferTypeTag::String:
-            return std::string(element.getAs<std::string_view>());
+            return "'" + std::string(element.getAs<std::string_view>()) + "'";
         break;
 
         case ListBufferTypeTag::ListView:
@@ -324,14 +326,26 @@ TEST_F(CypherListLiteralTest, keepsAnEarlierListWholePastAChunkAllocation) {
 }
 
 TEST_F(CypherListLiteralTest, returnsStringList) {
-    const Rows expected = {{"[one, two]"}};
+    const Rows expected = {{"['one', 'two']"}};
     expectRows("RETURN ['one', 'two']", expected);
+}
+
+TEST_F(CypherListLiteralTest, returnsAnEmptyStringElement) {
+    // One element that happens to carry no byte, which is not the same list as one
+    // carrying no element - the case returnsEmptyList covers.
+    const Rows expected = {{"['']"}};
+    expectRows("RETURN ['']", expected);
+}
+
+TEST_F(CypherListLiteralTest, returnsAnEmptyStringBesideAnother) {
+    const Rows expected = {{"['', 'x']"}};
+    expectRows("RETURN ['', 'x']", expected);
 }
 
 TEST_F(CypherListLiteralTest, returnsHeterogeneousList) {
     // The elements share no type, so the list is type-erased - each element keeps its own
     // tag, which is what the cell renders.
-    const Rows expected = {{"[true, mixed, 10]"}};
+    const Rows expected = {{"[true, 'mixed', 10]"}};
     expectRows("RETURN [true, 'mixed', 10]", expected);
 }
 
@@ -343,7 +357,7 @@ TEST_F(CypherListLiteralTest, returnsEmptyList) {
 }
 
 TEST_F(CypherListLiteralTest, returnsNestedList) {
-    const Row row = {"[10, true, [deep, " + std::to_string(2.5) + "]]"};
+    const Row row = {"[10, true, ['deep', " + std::to_string(2.5) + "]]"};
     const Rows expected = {row};
     expectRows("RETURN [10, true, ['deep', 2.5]]", expected);
 }
@@ -545,14 +559,14 @@ TEST_F(CypherListLiteralTest, skipsTheMatchedListRows) {
 TEST_F(CypherListLiteralTest, dedupsTheMatchedHeterogeneousListToOneRow) {
     // The type-erased list rides the same row-aligned cells a homogeneous one does: its
     // element type says nothing about how the rows are laid out.
-    const Rows expected = {{"[true, mixed, 10]"}};
+    const Rows expected = {{"[true, 'mixed', 10]"}};
     expectRows("MATCH (n) RETURN DISTINCT [true, 'mixed', 10]", expected);
 }
 
 TEST_F(CypherListLiteralTest, cutsTheMatchedNestedListRows) {
     // A cut copies list cells as views, so a nested list survives it whole rather than
     // being flattened or re-materialized per row.
-    const Row row = {"[10, [deep, " + std::to_string(2.5) + "]]"};
+    const Row row = {"[10, ['deep', " + std::to_string(2.5) + "]]"};
     const Rows expected(2, row);
 
     expectRows("MATCH (n) RETURN [10, ['deep', 2.5]] LIMIT 2", expected);
@@ -578,6 +592,171 @@ TEST_F(CypherListLiteralTest, holdsNullListElements) {
 TEST_F(CypherListLiteralTest, holdsASingletonNullList) {
     const Rows expected = {{"[null]"}};
     expectRows("RETURN [null]", expected);
+}
+
+TEST_F(CypherListLiteralTest, cutsTheOneRowOfAnAggregateBesideTheList) {
+    // An aggregate collapses the scan to one row, so the window cuts that one row rather
+    // than the relation's: the list stands beside a total either way.
+    const Rows expected = {{"[1, 2]", "18"}};
+    expectRows("MATCH (n) RETURN [1, 2], count(n) SKIP 0 LIMIT 1", expected);
+}
+
+TEST_F(CypherListLiteralTest, skipsPastTheOneRowOfAnAggregateBesideTheList) {
+    const Rows expected = {};
+    expectRows("MATCH (n) RETURN [1, 2], count(n) SKIP 1", expected);
+}
+
+TEST_F(CypherListLiteralTest, dedupsTheOneRowOfAnAggregateBesideTheList) {
+    // The dedup runs on the aggregate's result, which is one row already, so it drops
+    // nothing - and the list is no key, as it holds one value in every row.
+    const Rows expected = {{"[1, 2]", "18"}};
+    expectRows("MATCH (n) RETURN DISTINCT [1, 2], count(n)", expected);
+}
+
+TEST_F(CypherListLiteralTest, returnsTwoListsStraddlingAGroupedAggregate) {
+    // A list on either side of the count: both are laid out over the group, so neither
+    // groups anything nor is dropped for sitting past the aggregate.
+    const Rows expected = {{"32", "[1, 2]", "2", "[3, 4]"}};
+    expectRows("MATCH (n) WHERE n.age = 32 RETURN n.age, [1, 2], count(n), [3, 4]", expected);
+}
+
+TEST_F(CypherListLiteralTest, returnsTheListBesideAReduction) {
+    // count tallies rows; max folds values. A list beside either is the same standing
+    // value - Remy and Adam are the only nodes carrying an age, both 32.
+    const Rows expected = {{"[1, 2]", "32"}};
+    expectRows("MATCH (n) RETURN [1, 2], max(n.age)", expected);
+}
+
+TEST_F(CypherListLiteralTest, ordersTheMatchedRowsOnTheListItself) {
+    // A list literal holds one value in every row, so it tells no two rows apart and the
+    // key is dropped: the rows are the scan's, in whatever order it made them. Every row
+    // holds the same list, so the order decides nothing observable here.
+    constexpr size_t simpleGraphNodeCount = 18;
+    const Rows expected(simpleGraphNodeCount, Row {"[1, 2]"});
+
+    expectRows("MATCH (n) RETURN [1, 2] ORDER BY [1, 2]", expected);
+}
+
+TEST_F(CypherListLiteralTest, ordersTheMatchedRowsOnTheListDescending) {
+    constexpr size_t simpleGraphNodeCount = 18;
+    const Rows expected(simpleGraphNodeCount, Row {"[1, 2]"});
+
+    expectRows("MATCH (n) RETURN [1, 2] ORDER BY [1, 2] DESC", expected);
+}
+
+TEST_F(CypherListLiteralTest, ordersASingleRowOnTheList) {
+    // The key is constant, so the sort is free to keep any order - one matched row leaves
+    // it nothing to choose between, which is what makes this assertable.
+    const Rows expected = {{"Remy"}};
+    expectRows("MATCH (n) WHERE n.name = 'Remy' RETURN n.name ORDER BY [1, 2]", expected);
+}
+
+TEST_F(CypherListLiteralTest, ordersAGroupedAggregateOnTheList) {
+    // A grouping key the ORDER BY does not name, and a constant key that groups nothing:
+    // the one group survives and the list is no more a key here than a grouping one.
+    const Rows expected = {{"32", "2"}};
+    expectRows("MATCH (n) WHERE n.age = 32 RETURN n.age, count(n) ORDER BY [1, 2]", expected);
+}
+
+TEST_F(CypherListLiteralTest, cutsTheSortedListRows) {
+    // The cut reads what the sort emitted, so the list is laid out across the sorted rows
+    // rather than standing as the one value it is when nothing reads the rows.
+    const Rows expected(3, Row {"[1, 2]"});
+    expectRows("MATCH (n) RETURN [1, 2] ORDER BY n.name SKIP 2 LIMIT 3", expected);
+}
+
+TEST_F(CypherListLiteralTest, limitsTheDescendingSortedRowsBesideTheList) {
+    // A real sort key, so the order is the assertion: Travel and Suhas are the last two
+    // names in ascending byte order, so they are the first two descending.
+    const Rows expected = {{"Travel", "[1, 2]"}, {"Suhas", "[1, 2]"}};
+    expectRows("MATCH (n) RETURN n.name, [1, 2] ORDER BY n.name DESC LIMIT 2", expected);
+}
+
+TEST_F(CypherListLiteralTest, cutsTheMatchedListRowsAcrossEmitChunks) {
+    // One row per chunk, so the cut copies the list into a fresh chunk on every step it
+    // keeps a row for - the per-chunk copy runs repeatedly rather than once.
+    const Rows expected(3, Row {"[1, 2]"});
+    expectRows("MATCH (n) RETURN [1, 2] SKIP 2 LIMIT 3", expected, /*chunkSize=*/1);
+
+    EXPECT_GT(_emissionCount, 1u);
+}
+
+TEST_F(CypherListLiteralTest, cutsTheListBesideEveryNodeAcrossEmitChunks) {
+    const Rows expected = {{"2", "[1, 2]"}, {"3", "[1, 2]"}, {"4", "[1, 2]"}};
+    expectRows("MATCH (n) RETURN n, [1, 2] SKIP 2 LIMIT 3", expected, /*chunkSize=*/1);
+
+    EXPECT_GT(_emissionCount, 1u);
+}
+
+TEST_F(CypherListLiteralTest, skipsTheMatchedListRowsAcrossEmitChunks) {
+    // A SKIP with no LIMIT is emitted in place at an offset, so every chunk is emitted -
+    // one per node - and the three past the dropped prefix carry a row.
+    constexpr size_t simpleGraphNodeCount = 18;
+    const Rows expected(3, Row {"[1, 2]"});
+
+    expectRows("MATCH (n) RETURN [1, 2] SKIP 15", expected, /*chunkSize=*/1);
+
+    EXPECT_EQ(_emissionCount, simpleGraphNodeCount);
+}
+
+TEST_F(CypherListLiteralTest, dedupsTheRowsBesideTheListAcrossEmitChunks) {
+    // The dedup lays the list out over each step's rows and filters them there, so the
+    // one view is read again on every chunk rather than consumed by the first.
+    constexpr size_t simpleGraphNodeCount = 18;
+    const Rows expected = {{"32", "[1, 2]"}, {"null", "[1, 2]"}};
+
+    expectRows("MATCH (n) RETURN DISTINCT n.age, [1, 2]", expected, /*chunkSize=*/1);
+
+    EXPECT_EQ(_emissionCount, simpleGraphNodeCount);
+}
+
+TEST_F(CypherListLiteralTest, repeatsTheListForEveryUnwoundRow) {
+    // UNWIND opens the dataflow and the list rides it: the source spreads its literals
+    // over one row per element, the value holds the whole list in each of them.
+    const Rows expected(2, Row {"[3, 4]"});
+    expectRows("UNWIND [1, 2] AS x RETURN [3, 4]", expected);
+}
+
+TEST_F(CypherListLiteralTest, returnsTheListBesideEveryUnwoundElement) {
+    const Rows expected = {{"1", "[7, 8]"}, {"2", "[7, 8]"}, {"3", "[7, 8]"}};
+    expectRows("UNWIND [1, 2, 3] AS x RETURN x, [7, 8]", expected);
+}
+
+TEST_F(CypherListLiteralTest, cutsTheUnwoundRowsBesideTheList) {
+    const Rows expected = {{"[7, 8]"}};
+    expectRows("UNWIND [1, 2, 3] AS x RETURN [7, 8] SKIP 1 LIMIT 1", expected);
+}
+
+TEST_F(CypherListLiteralTest, dedupsTheUnwoundRowsBesideTheList) {
+    // Three unwound rows, each holding the same list, so they are one distinct row.
+    const Rows expected = {{"[7, 8]"}};
+    expectRows("UNWIND [1, 2, 3] AS x RETURN DISTINCT [7, 8]", expected);
+}
+
+TEST_F(CypherListLiteralTest, returnsTheListBesideAMatchCrossedWithAnUnwind) {
+    // The match and the unwind are crossed, so the rows are the product's - one node times
+    // two elements - and the list stands beside each of them.
+    const Rows expected = {{"1", "[7, 8]"}, {"2", "[7, 8]"}};
+    expectRows("MATCH (n) WHERE n.name = 'Remy' UNWIND [1, 2] AS x RETURN x, [7, 8]", expected);
+}
+
+TEST_F(CypherListLiteralTest, limitsTheTraversedRowsBesideTheList) {
+    // A traversal drives the rows here rather than a node scan, and the list stands beside
+    // them the same way: its cardinality is whatever relation feeds the projection.
+    const Rows expected(2, Row {"[1, 2]"});
+    expectRows("MATCH (n)-[e]->(m) RETURN [1, 2] LIMIT 2", expected);
+}
+
+TEST_F(CypherListLiteralTest, cutsTheTraversedRowsBesideTheList) {
+    const Rows expected(3, Row {"[1, 2]"});
+    expectRows("MATCH (n)-[e]->(m) RETURN [1, 2] SKIP 5 LIMIT 3", expected);
+}
+
+TEST_F(CypherListLiteralTest, returnsTheListBesideATraversedSource) {
+    // Remy (0) is scanned first and carries at least three out-edges, so the window stays
+    // within them and every row reads the same source node.
+    const Rows expected(3, Row {"0", "[1, 2]"});
+    expectRows("MATCH (n)-[e]->(m) RETURN n, [1, 2] LIMIT 3", expected);
 }
 
 TEST_F(CypherListLiteralTest, rejectsMapListElements) {
