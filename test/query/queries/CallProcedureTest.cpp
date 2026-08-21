@@ -447,6 +447,21 @@ TEST_F(CallProcedureTest, NonFiniteDoublePropertySerializesAsNull) {
     EXPECT_EQ(props.find("nan"), std::string::npos) << "props=" << props;
 }
 
+// The processor drives its procedure through a state nothing outside it reads, so the
+// only thing that says the state is still driven is the rows a call answers with: one
+// sample per matched node, and the same rows the same seed asks for every run.
+TEST_F(CallProcedureTest, DrivesItsProcedureOncePerMatchedRow) {
+    const size_t persons = rowCount("MATCH (n:Person) RETURN n");
+    ASSERT_GT(persons, 0u);
+
+    const std::string sampleQuery = "MATCH (n:Person) CALL gnn.neighbourhoodSample(n, 1, 42) "
+                                    "YIELD tgt RETURN tgt";
+
+    const size_t sampled = rowCount(sampleQuery);
+    EXPECT_EQ(sampled, persons);
+    EXPECT_EQ(rowCount(sampleQuery), sampled);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 1;
