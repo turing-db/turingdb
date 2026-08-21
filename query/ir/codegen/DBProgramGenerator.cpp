@@ -1930,12 +1930,16 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
     const ReturnStmt* rtn = sglPart->getReturnStmt();
     if (!rtn) {
         llvm::SmallVector<mlir::Value> yielded;
+        llvm::SmallVector<llvm::StringRef> yieldedNames;
         for (const YieldedColumn& yieldedColumn : _yieldedColumns) {
             yielded.push_back(yieldedColumn.second);
+            yieldedNames.push_back(llvm::StringRef(yieldedColumn.first.data(), yieldedColumn.first.size()));
         }
 
         if (!yielded.empty()) {
-            _opBuilder.create<mlir::db::Output>(_opBuilder.getUnknownLoc(), mlir::ValueRange {yielded});
+            _opBuilder.create<mlir::db::Output>(_opBuilder.getUnknownLoc(),
+                                                mlir::ValueRange {yielded},
+                                                _opBuilder.getStrArrayAttr(yieldedNames));
         }
 
         return;
