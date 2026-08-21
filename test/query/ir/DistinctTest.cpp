@@ -57,6 +57,7 @@ using Names = std::vector<std::string>;
 using ConstantNameRow = std::pair<int64_t, std::string>;
 using ConstantNameRows = std::vector<ConstantNameRow>;
 using Int64Values = std::vector<int64_t>;
+using StringValues = std::vector<std::string>;
 using ConstantPair = std::pair<int64_t, int64_t>;
 using ConstantPairs = std::vector<ConstantPair>;
 using OptInt64Values = std::vector<std::optional<int64_t>>;
@@ -353,6 +354,27 @@ public:
 
 private:
     ConstantPairs _rows;
+};
+
+// The string sibling of DistinctConstantSink: a string literal is one string_view standing
+// for every row, where a name read off a node comes as a column of optional views.
+class DistinctConstantStringSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* constants = dynamic_cast<const ColumnConst<std::string_view>*>(chunks[0]);
+        ASSERT_NE(constants, nullptr);
+
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _values.emplace_back((*constants)[rowIndex]);
+        }
+    }
+
+    const StringValues& values() const { return _values; }
+
+private:
+    StringValues _values;
 };
 
 }
@@ -679,6 +701,32 @@ TEST_F(DistinctTest, skipsTheOneRowOfAConstantProjection) {
     runQuery("MATCH (n) RETURN DISTINCT 5 SKIP 1", &sink);
 
     EXPECT_TRUE(sink.values().empty());
+}
+
+// A SKIP and a LIMIT after the dedup are two cuts chained over its cap, so the LIMIT reads
+// the constant column the SKIP emitted rather than the one the projection computed.
+TEST_F(DistinctTest, keepsTheOneRowOfAConstantProjectionUnderAWindow) {
+    DistinctConstantSink sink;
+    runQuery("RETURN DISTINCT 42 SKIP 0 LIMIT 1", &sink);
+
+    const Int64Values expected = {42};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+TEST_F(DistinctTest, keepsTheOneRowOfAConstantExpressionUnderAWindow) {
+    DistinctConstantSink sink;
+    runQuery("RETURN DISTINCT 40 + 2 SKIP 0 LIMIT 1", &sink);
+
+    const Int64Values expected = {42};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+TEST_F(DistinctTest, keepsTheOneRowOfAConstantStringProjectionUnderAWindow) {
+    DistinctConstantStringSink sink;
+    runQuery("RETURN DISTINCT 'abc' SKIP 0 LIMIT 1", &sink);
+
+    const StringValues expected = {"abc"};
+    EXPECT_EQ(sink.values(), expected);
 }
 
 // The projection is a grouped aggregate first, so the dedup runs on its results, where a
