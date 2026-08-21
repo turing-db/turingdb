@@ -3300,6 +3300,14 @@ NLCountFunction NLExecutor::selectListElementCountFunction() {
     return &countNonNullElementsColumn;
 }
 
+NLGroupKeyGatherFunction NLExecutor::selectListElementGroupKeyGatherFunction() {
+    return &groupGatherAppendColumn<ListElementView>;
+}
+
+NLCopyFunction NLExecutor::selectListElementCopyFunction() {
+    return &copyRangeColumn<ListElementView>;
+}
+
 NLBroadcastFunction NLExecutor::selectListBlockRepeatFunction() {
     return &blockRepeatColumn<ListView>;
 }
