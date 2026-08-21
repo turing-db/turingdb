@@ -1349,6 +1349,9 @@ void NLTranslator::addTruncateColumn(mlir::Value inputValue,
     } else if (llvm::isa<storage::ListType>(elementType)) {
         output = allocListColumn();
         copyPrefix = NLExecutor::selectListBlockRepeatFunction();
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        output = allocListElementColumn();
+        copyPrefix = NLExecutor::selectListElementBlockRepeatFunction();
     } else {
         const NLChunkKind kind = getChunkKind(chunkType);
         output = allocColumnForKind(kind);
@@ -1446,6 +1449,9 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
     } else if (llvm::isa<storage::ListType>(elementType)) {
         output = allocListColumn();
         copySuffix = NLExecutor::selectListCopyFunction();
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        output = allocListElementColumn();
+        copySuffix = NLExecutor::selectListElementCopyFunction();
     } else {
         const NLChunkKind kind = getChunkKind(chunkType);
         output = allocColumnForKind(kind);
@@ -2318,6 +2324,8 @@ NLGroupKeyGatherFunction NLTranslator::selectGroupKeyGatherForChunkType(mlir::Ty
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptGroupKeyGather(valueType);
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        return NLExecutor::selectListElementGroupKeyGatherFunction();
     }
 
     return NLExecutor::selectGroupKeyGather(chunkKindFromElementType(elementType));
@@ -2330,6 +2338,8 @@ NLCopyFunction NLTranslator::selectCopyForChunkType(mlir::Type chunkType) {
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptCopyFunction(valueType);
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        return NLExecutor::selectListElementCopyFunction();
     }
 
     if (isPlainValueElementType(elementType)) {
@@ -2350,6 +2360,8 @@ Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return allocOptColumnForValueType(valueType);
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        return allocListElementColumn();
     }
 
     if (isPlainValueElementType(elementType)) {

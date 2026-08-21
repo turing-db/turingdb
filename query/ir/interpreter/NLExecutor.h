@@ -309,6 +309,11 @@ public:
     static NLKeyAppendFunction selectListElementKeyAppendFunction();
     static NLCountFunction selectListElementCountFunction();
 
+    // Key-buffer gather-append and emit-phase range copy for a list_element chunk, so a
+    // heterogeneous unwind's cells can be a grouping key rather than only a counted column.
+    static NLGroupKeyGatherFunction selectListElementGroupKeyGatherFunction();
+    static NLCopyFunction selectListElementCopyFunction();
+
     // The cut families for a list chunk: a list cell copies as a view, so a prefix or a
     // suffix of them is the plain range copy every other cell column uses
     static NLBroadcastFunction selectListBlockRepeatFunction();
