@@ -43,6 +43,8 @@
 #include "stmt/ShortestPathStmt.h"
 #include "decl/VarDecl.h"
 #include "expr/SymbolExpr.h"
+#include "expr/FunctionInvocationExpr.h"
+#include "FunctionInvocation.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/ReturnStmt.h"
 #include "stmt/OrderBy.h"
@@ -59,6 +61,26 @@
 #include "AnalyzeException.h"
 
 using namespace db;
+
+namespace {
+
+const FunctionSignature* aggregateSignatureOf(const Expr* expr) {
+    if (expr->getKind() != Expr::Kind::FUNCTION_INVOCATION) {
+        return nullptr;
+    }
+
+    const FunctionInvocationExpr* call = static_cast<const FunctionInvocationExpr*>(expr);
+    const FunctionInvocation* invocation = call->getFunctionInvocation();
+    const FunctionSignature* signature = invocation->getSignature();
+
+    if (!signature || !signature->isAggregate()) {
+        return nullptr;
+    }
+
+    return signature;
+}
+
+}
 
 CypherAnalyzer::CypherAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),
@@ -313,6 +335,7 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         projection->setAggregate();
         projection->setHasGroupingKeys(hasGroupingKeys);
 
+        analyzeNestedAggregates(projection);
         analyzeAggregateOrderBy(projection);
     }
 }
@@ -369,6 +392,69 @@ void CypherAnalyzer::analyzeDistinct(const ReturnStmt* returnSt, const Projectio
             throwError("ORDER BY with DISTINCT may only order by returned columns.", keyExpr);
         }
     }
+}
+
+void CypherAnalyzer::analyzeNestedAggregates(const Projection* projection) const {
+    for (const Projection::ReturnItem& returnItem : projection->items()) {
+        const auto* exprPtr = std::get_if<Expr*>(&returnItem);
+        if (!exprPtr) {
+            continue;
+        }
+
+        analyzeAggregateArguments(*exprPtr, projection);
+    }
+}
+
+void CypherAnalyzer::analyzeAggregateArguments(const Expr* expr, const Projection* projection) const {
+    if (!expr) {
+        return;
+    }
+
+    std::vector<const Expr*> children;
+    if (!ExprChildren::collect(expr, children)) {
+        return;
+    }
+
+    const FunctionSignature* aggregate = aggregateSignatureOf(expr);
+
+    if (aggregate) {
+        for (const Expr* argument : children) {
+            if (readsAnAggregateItem(argument, projection)) {
+                throwError(fmt::format("Aggregate functions may not be nested: the argument of "
+                                       "'{}' names an aggregate of the same projection",
+                                       aggregate->getFullName()),
+                           expr);
+            }
+        }
+    }
+
+    for (const Expr* child : children) {
+        analyzeAggregateArguments(child, projection);
+    }
+}
+
+bool CypherAnalyzer::readsAnAggregateItem(const Expr* expr, const Projection* projection) const {
+    if (!expr) {
+        return false;
+    }
+
+    const Expr* namedItem = projection->findItemExpr(expr);
+    if (namedItem && namedItem->isAggregate()) {
+        return true;
+    }
+
+    std::vector<const Expr*> children;
+    if (!ExprChildren::collect(expr, children)) {
+        return false;
+    }
+
+    for (const Expr* child : children) {
+        if (readsAnAggregateItem(child, projection)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void CypherAnalyzer::analyzeAggregateOrderBy(const Projection* projection) const {
