@@ -2338,11 +2338,6 @@ void NLTranslator::translateProcedure(nl::Procedure procedureOp, NLStmtContainer
 
         state->addYieldIndex(procedure->getReturnValueIndex(std::string_view(yieldName.data(), yieldName.size())));
     }
-
-    // The prepare/reset runs each time the block holding this nl.procedure runs: once
-    // at function scope for a top-level CALL.
-    NLProcedureCallData* callData = _program->allocFunctionData<NLProcedureCallData>(state);
-    body->emplaceStmt(&NLExecutor::runProcedureReset, callData);
 }
 
 void NLTranslator::bindProcedureInputs(NLProcedureState* state, mlir::ValueRange inputs) {

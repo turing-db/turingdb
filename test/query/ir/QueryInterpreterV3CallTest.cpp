@@ -154,3 +154,41 @@ TEST_F(QueryInterpreterV3CallTest, standaloneCallWithoutAYieldNamesItsReturnValu
     EXPECT_EQ(sink.getNames(), expected);
     EXPECT_GT(sink.getRowCount(), 0u);
 }
+
+// A CALL crossed with a MATCH is driven again for every row the MATCH produces, and the
+// drive loop is what rewinds it between drives: each drive answers with the whole set of
+// labels, not with what the previous one left behind.
+TEST_F(QueryInterpreterV3CallTest, aReDrivenCallRepeatsEveryRow) {
+    LabelSink perDrive;
+    QueryStatus perDriveStatus;
+    runQuery("MATCH (n:Person) CALL db.labels() YIELD label RETURN label", perDriveStatus, perDrive);
+
+    EXPECT_EQ(perDriveStatus.getStatus(), QueryStatus::Status::OK);
+    EXPECT_EQ(perDriveStatus.getError(), "");
+
+    LabelSink once;
+    QueryStatus onceStatus;
+    runQuery("CALL db.labels() YIELD label RETURN label", onceStatus, once);
+
+    EXPECT_EQ(onceStatus.getStatus(), QueryStatus::Status::OK);
+
+    std::vector<std::string> labels;
+    once.sortedRows(labels);
+
+    std::vector<std::string> repeated;
+    perDrive.sortedRows(repeated);
+
+    ASSERT_FALSE(labels.empty());
+    ASSERT_EQ(repeated.size() % labels.size(), 0u);
+
+    const size_t drives = repeated.size() / labels.size();
+    EXPECT_GT(drives, 1u);
+
+    std::vector<std::string> expected;
+    for (size_t drive = 0; drive < drives; drive++) {
+        expected.insert(expected.end(), labels.begin(), labels.end());
+    }
+    std::sort(expected.begin(), expected.end());
+
+    EXPECT_EQ(repeated, expected);
+}

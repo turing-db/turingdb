@@ -38,16 +38,6 @@ NLProcedureState::~NLProcedureState() {
     }
 }
 
-void NLProcedureState::rewindBlock() {
-    // Preparing is left to the first drive, so a block reached before it has run has
-    // nothing to rewind yet.
-    if (!_prepared) {
-        return;
-    }
-
-    reset();
-}
-
 void NLProcedureState::prepareOrResetForNewDrive() {
     // A procedure reads its argument columns in its prepare step - gnn.neighbourhoodSample
     // builds its sampling iterator over the input nodes there - so the call is prepared
