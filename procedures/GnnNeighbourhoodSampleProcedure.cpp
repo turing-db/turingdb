@@ -1,5 +1,6 @@
 #include "GnnNeighbourhoodSampleProcedure.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <string_view>
@@ -37,7 +38,12 @@ void executeImpl(ProcedureState* proc) {
     std::unique_ptr<NeighbourhoodSampleChunkWriter>& chunkWriter = data.writer;
     bioassert(chunkWriter, "Null chunk writer.");
 
-    chunkWriter->fill(ChunkConfig::CHUNK_SIZE);
+    // A node's sample is emitted whole, so a sample wider than the chunk the caller
+    // budgeted for takes the step over that budget rather than being cut in two.
+    const size_t chunkSize = proc->getContext()->getChunkSize();
+    const size_t rowBudget = std::max(chunkSize, chunkWriter->getSampleSize());
+
+    chunkWriter->fill(rowBudget);
 
     if (chunkWriter->isDone()) {
         proc->finish();
