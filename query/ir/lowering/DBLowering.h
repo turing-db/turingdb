@@ -169,6 +169,12 @@ private:
     llvm::DenseSet<mlir::Operation*> _fusedLimits;          // db.limits fused into a sort
 
     void lowerOperation(mlir::Operation& operation);
+
+    // Lower one op of the system-command family - db.load_graph, db.change,
+    // db.commit and their siblings - by copying it to its nl sibling at function
+    // scope: same attributes, each db column result becoming the chunk the command
+    // fills. False when the op is not one of them.
+    bool lowerSystemCommand(mlir::Operation& operation);
     void lowerScanNodes(mlir::db::ScanNodes scanNodes);
     void lowerScanNodesByLabel(mlir::db::ScanNodesByLabel scanNodesByLabel);
     void lowerConstScanNodes(mlir::db::ConstScanNodes constScanNodes);

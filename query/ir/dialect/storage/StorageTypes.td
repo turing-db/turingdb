@@ -95,6 +95,17 @@ def Embedding : StorageType<"Embedding", "embedding"> {
     }];
 }
 
+def ChangeID : StorageType<"ChangeID", "change_id"> {
+    let summary = "A change identifier";
+    let description = [{
+        The element type of a chunk holding change IDs - storage's ChangeID. It
+        wraps a 64-bit value but is not an integer: it is rendered in hexadecimal
+        and only ever compared for identity, so a plain i64 would print the wrong
+        thing. Produced by db.change / nl.change, which report the changes an
+        operation created, submitted, deleted or listed.
+    }];
+}
+
 def Nullable : StorageType<"Nullable", "nullable"> {
     let summary = "A nullable property value";
     let description = [{
