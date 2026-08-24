@@ -8,6 +8,7 @@
 #include "datapart/EdgeContainer.h"
 #include "datapart/NodeContainer.h"
 #include "versioning/TombstoneRanges.h"
+#include "metadata/PropertyTypeDispatcher.h"
 #include "properties/PropertyManager.h"
 #include "reader/GraphReader.h"
 
@@ -16,31 +17,6 @@
 using namespace db;
 namespace rg = ranges;
 namespace rv = rg::views;
-
-struct PropertyTypeDispatcher {
-    ValueType _valueType {ValueType::Invalid};
-
-    auto execute(const auto& executor) const {
-        switch (_valueType) {
-            case ValueType::Int64:
-                return executor.template operator()<types::Int64>();
-            case ValueType::UInt64:
-                return executor.template operator()<types::UInt64>();
-            case ValueType::Double:
-                return executor.template operator()<types::Double>();
-            case ValueType::Bool:
-                return executor.template operator()<types::Bool>();
-            case ValueType::String:
-                return executor.template operator()<types::String>();
-            case ValueType::Embedding:
-                return executor.template operator()<types::Embedding>();
-            case ValueType::_SIZE:
-            case ValueType::Invalid: {
-                throw TuringException("Unsupported property type");
-            }
-        }
-    }
-};
 
 DataPartMerger::DataPartMerger(const CommitData* commitData,
                                MetadataBuilder& metadataBuilder)
