@@ -325,6 +325,26 @@ TEST_F(CypherListLiteralTest, keepsAnEarlierListWholePastAChunkAllocation) {
     expectRows("RETURN [" + elements + "], [1, 2, 3]", expected);
 }
 
+TEST_F(CypherListLiteralTest, keepsANestedListWholePastAChunkAllocation) {
+    // The outer list's region is reserved first and the nested one is written part-way
+    // through filling it, so the child's run lands after the parent's and crosses into a
+    // fresh chunk. Both have to read back whole: the parent's reserved slots must survive
+    // the child's allocation, and the child's view must still point at its own run.
+    const std::string elements = longListElements();
+    const Rows expected = {{"[[" + elements + "], 1]"}};
+
+    expectRows("RETURN [[" + elements + "], 1]", expected);
+}
+
+TEST_F(CypherListLiteralTest, keepsTwoNestedListsWholePastAChunkAllocation) {
+    // Two children, each outgrowing a chunk, written into the same parent: the first child's
+    // run has to stay put while the second one allocates past it.
+    const std::string elements = longListElements();
+    const Rows expected = {{"[[" + elements + "], [" + elements + "]]"}};
+
+    expectRows("RETURN [[" + elements + "], [" + elements + "]]", expected);
+}
+
 TEST_F(CypherListLiteralTest, returnsStringList) {
     const Rows expected = {{"['one', 'two']"}};
     expectRows("RETURN ['one', 'two']", expected);

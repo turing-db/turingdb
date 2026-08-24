@@ -672,33 +672,70 @@ void NLTranslator::translateUnwindConstLoop(const IteratorConfig& config,
     translateBlock(loopBody, loopData->getStmts());
 }
 
-ListView NLTranslator::materializeListView(mlir::ArrayAttr elements) {
-    std::vector<ListBuffer<>::ListItemVariant> items;
-    items.reserve(elements.size());
+// The bytes the values of a literal list's elements occupy, tag bytes excluded - what
+// ListBuffer::reserveList sizes the region from. Each element stores the same value object
+// the write below hands it, so the two walks must recognise the same attribute kinds in the
+// same order.
+size_t NLTranslator::listValueBytes(mlir::ArrayAttr elements) {
+    size_t valueBytes = 0;
 
     for (const mlir::Attribute element : elements) {
         // BoolAttr is an i1 IntegerAttr, so it must be tested before IntegerAttr; an
         // i64 literal falls through to the integer case.
-        if (const auto boolAttr = mlir::dyn_cast<mlir::BoolAttr>(element)) {
-            items.emplace_back(types::Bool::Primitive(boolAttr.getValue()));
-        } else if (const auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(element)) {
-            items.emplace_back(static_cast<types::Int64::Primitive>(intAttr.getInt()));
-        } else if (const auto floatAttr = mlir::dyn_cast<mlir::FloatAttr>(element)) {
-            items.emplace_back(floatAttr.getValueAsDouble());
-        } else if (const auto stringAttr = mlir::dyn_cast<mlir::StringAttr>(element)) {
-            const llvm::StringRef value = stringAttr.getValue();
-            items.emplace_back(types::String::Primitive(value.data(), value.size()));
+        if (mlir::isa<mlir::BoolAttr>(element)) {
+            valueBytes += sizeof(types::Bool::Primitive);
+        } else if (mlir::isa<mlir::IntegerAttr>(element)) {
+            valueBytes += sizeof(types::Int64::Primitive);
+        } else if (mlir::isa<mlir::FloatAttr>(element)) {
+            valueBytes += sizeof(types::Double::Primitive);
+        } else if (mlir::isa<mlir::StringAttr>(element)) {
+            valueBytes += sizeof(types::String::Primitive);
         } else if (mlir::isa<mlir::UnitAttr>(element)) {
-            items.emplace_back(PropertyNull {});
-        } else if (const auto nestedAttr = mlir::dyn_cast<mlir::ArrayAttr>(element)) {
-            items.emplace_back(materializeListView(nestedAttr));
+            valueBytes += sizeof(PropertyNull);
+        } else if (mlir::isa<mlir::ArrayAttr>(element)) {
+            // A nested list is one element of this one, storing the child's view
+            valueBytes += sizeof(ListView);
         } else {
             throw IRException("Unsupported literal attribute in a constant list");
         }
     }
 
-    LocalMemory::DefaultListBuffer& buffer = _memory->listBuffer();
-    return buffer.insert(items);
+    return valueBytes;
+}
+
+ListView NLTranslator::materializeListView(mlir::ArrayAttr elements) {
+    // The region is reserved and committed up front, so the elements are written straight
+    // into their final place - no staging container between the attributes and the buffer.
+    // A later reservation lands after this region rather than inside it, which is what lets
+    // a nested list be materialized part-way through filling its parent.
+    ListWriteCursor cursor = _memory->listBuffer().reserveList(elements.size(),
+                                                              listValueBytes(elements));
+
+    for (const mlir::Attribute element : elements) {
+        if (const auto boolAttr = mlir::dyn_cast<mlir::BoolAttr>(element)) {
+            cursor.writeValue(ListBufferTypeTag::Bool, types::Bool::Primitive(boolAttr.getValue()));
+        } else if (const auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(element)) {
+            cursor.writeValue(ListBufferTypeTag::Int,
+                              static_cast<types::Int64::Primitive>(intAttr.getInt()));
+        } else if (const auto floatAttr = mlir::dyn_cast<mlir::FloatAttr>(element)) {
+            cursor.writeValue(ListBufferTypeTag::Double,
+                              static_cast<types::Double::Primitive>(floatAttr.getValueAsDouble()));
+        } else if (const auto stringAttr = mlir::dyn_cast<mlir::StringAttr>(element)) {
+            // The payload stays in the attribute, which outlives the query, so the stored
+            // view points at it rather than at a copy
+            const llvm::StringRef value = stringAttr.getValue();
+            cursor.writeValue(ListBufferTypeTag::String,
+                              types::String::Primitive(value.data(), value.size()));
+        } else if (mlir::isa<mlir::UnitAttr>(element)) {
+            cursor.writeValue(ListBufferTypeTag::Null, PropertyNull {});
+        } else if (const auto nestedAttr = mlir::dyn_cast<mlir::ArrayAttr>(element)) {
+            cursor.writeValue(ListBufferTypeTag::ListView, materializeListView(nestedAttr));
+        } else {
+            throw IRException("Unsupported literal attribute in a constant list");
+        }
+    }
+
+    return cursor.getView();
 }
 
 void NLTranslator::translateScanEdgesLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body) {
