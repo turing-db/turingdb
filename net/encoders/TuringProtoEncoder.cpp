@@ -14,7 +14,7 @@ TuringProtoEncoder::TuringProtoEncoder(net::proto::TuringProtoOutBuf* outBuf)
 }
 
 void TuringProtoEncoder::writeDataframeHeader(const db::Dataframe* df) {
-    using Encoder = db::ColumnSingleDispatcher<ProtoEncoderSupportedTypes, ColumnHeaderWriter, db::OutputtedTypes::Excluded>;
+    using Encoder = db::ColumnSingleDispatcher<db::OutputtedTypes::Allowed, ColumnHeaderWriter, db::OutputtedTypes::Excluded>;
 
     size_t chunkHeaderLen = sizeof(WireSize);
     for (const db::NamedColumn* namedCol : df->cols()) {
@@ -48,7 +48,7 @@ void TuringProtoEncoder::writeDataframe(const db::Dataframe* df) {
         return;
     }
 
-    using Encoder = db::ColumnSingleDispatcher<ProtoEncoderSupportedTypes, DataWriter, db::OutputtedTypes::Excluded>;
+    using Encoder = db::ColumnSingleDispatcher<db::OutputtedTypes::Allowed, DataWriter, db::OutputtedTypes::Excluded>;
 
     DataWriter writer(_outBuf, _stack);
 
