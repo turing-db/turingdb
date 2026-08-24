@@ -247,6 +247,45 @@ private:
     }
 };
 
+// Collects rows pairing a collected list column with a node ID column, whichever side of
+// a cross product each of the two landed on.
+class CollectingListNodeSink : public NLOutputSink {
+public:
+    using Row = std::pair<std::vector<int64_t>, uint64_t>;
+
+    explicit CollectingListNodeSink(size_t listColumn)
+        : _listColumn(listColumn)
+    {
+    }
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[_listColumn]);
+        const auto* nodes = dynamic_cast<const ColumnVector<NodeID>*>(chunks[1 - _listColumn]);
+        ASSERT_NE(lists, nullptr);
+        ASSERT_NE(nodes, nullptr);
+        ASSERT_EQ(lists->size(), nodes->size());
+
+        const auto& listRaw = lists->getRaw();
+        const auto& nodeRaw = nodes->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            std::vector<int64_t> values;
+            for (const ListElementView& element : listRaw[rowIndex]) {
+                values.push_back(element.getAs<int64_t>());
+            }
+
+            _rows.emplace_back(values, nodeRaw[rowIndex].getValue());
+        }
+    }
+
+    const std::vector<Row>& rows() const { return _rows; }
+
+private:
+    std::vector<Row> _rows;
+    size_t _listColumn {0};
+};
+
 // A single constant materialized at function scope and emitted as one row.
 constexpr const char* singleConstantProgram = R"mlir(
 func.func @main() {
@@ -888,6 +927,54 @@ func.func @main() {
   %ys = nl.constant([3, 4])
   %p:2 = nl.cross_product{%xs} {%ys} : {!nl.chunk<!storage.list<i64>>} {!nl.chunk<!storage.list<i64>>}
   nl.output(%p#0, %p#1) : !nl.chunk<!storage.list<i64>>, !nl.chunk<!storage.list<i64>>
+  func.return
+}
+)mlir";
+
+// A collected list crossed with a scan: unlike the constant above, the list chunk here is
+// a real column of cells, so the product broadcasts it by repeating its rows rather than
+// by copying one value. The collect groups nothing, so it drains one row - the whole
+// score list - which every scanned node then pairs with.
+constexpr const char* crossCollectedListOuterProgram = R"mlir(
+func.func @main() {
+  %buf = nl.collect_buffer keys 0
+  %score = nl.get_property_type("score")
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %values = nl.get_node_properties(%a, %score) : !nl.chunk<!storage.nullable<i64>>
+    nl.collect_update %buf, (%values) : !nl.chunk<!storage.nullable<i64>>
+  }
+  %groups = nl.collect(%buf) : !nl.iter<!nl.chunk<!storage.list<i64>>>
+  nl.for %scores in %groups : !nl.iter<!nl.chunk<!storage.list<i64>>> {
+    %others = nl.scan_nodes()
+    nl.for %b in %others : !nl.iter<!nl.chunk<!storage.node_id>> {
+      %p:2 = nl.cross_product{%scores} {%b} : {!nl.chunk<!storage.list<i64>>} {!nl.chunk<!storage.node_id>}
+      nl.output(%p#0, %p#1) : !nl.chunk<!storage.list<i64>>, !nl.chunk<!storage.node_id>
+    }
+  }
+  func.return
+}
+)mlir";
+
+// The same product with the list on the inner side, which tiles the chunk rather than
+// repeating it in blocks - the other of the two broadcasts a cross product picks between.
+constexpr const char* crossCollectedListInnerProgram = R"mlir(
+func.func @main() {
+  %buf = nl.collect_buffer keys 0
+  %score = nl.get_property_type("score")
+  %nodes = nl.scan_nodes()
+  nl.for %a in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %values = nl.get_node_properties(%a, %score) : !nl.chunk<!storage.nullable<i64>>
+    nl.collect_update %buf, (%values) : !nl.chunk<!storage.nullable<i64>>
+  }
+  %groups = nl.collect(%buf) : !nl.iter<!nl.chunk<!storage.list<i64>>>
+  nl.for %scores in %groups : !nl.iter<!nl.chunk<!storage.list<i64>>> {
+    %others = nl.scan_nodes()
+    nl.for %b in %others : !nl.iter<!nl.chunk<!storage.node_id>> {
+      %p:2 = nl.cross_product{%b} {%scores} : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.list<i64>>}
+      nl.output(%p#0, %p#1) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.list<i64>>
+    }
+  }
   func.return
 }
 )mlir";
@@ -2173,6 +2260,35 @@ TEST_F(NLExecutorTest, crossesConstantListChunks) {
     runProgram(crossListChunkProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
 
     const std::vector<CollectingConstListSink::Row> expected {{{1, 2}, {3, 4}}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+// The scored graph's three nodes collect into one list of the two present scores, which
+// then pairs with every scanned node: the list column is broadcast, not re-collected, so
+// all three rows carry the same cells.
+TEST_F(NLExecutorTest, crossesACollectedListChunkOnTheOuterSide) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingListNodeSink sink(/*listColumn=*/0);
+    runProgram(crossCollectedListOuterProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<int64_t> scores {100, 200};
+    const std::vector<CollectingListNodeSink::Row> expected {{scores, 0}, {scores, 1}, {scores, 2}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(NLExecutorTest, crossesACollectedListChunkOnTheInnerSide) {
+    auto graph = buildScoredGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingListNodeSink sink(/*listColumn=*/1);
+    runProgram(crossCollectedListInnerProgram, reader.getView(), ChunkConfig::CHUNK_SIZE, sink);
+
+    const std::vector<int64_t> scores {100, 200};
+    const std::vector<CollectingListNodeSink::Row> expected {{scores, 0}, {scores, 1}, {scores, 2}};
     EXPECT_EQ(sink.rows(), expected);
 }
 
