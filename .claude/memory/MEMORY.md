@@ -84,6 +84,7 @@
 - @feedback_explicit_ci_runner_labels.md — put real runner labels in each workflow's os_list + `runs-on: ${{ matrix.os }}`, not a computed ternary / runner-group object
 - @feedback_no_build_during_iteration.md — don't build after every micro-edit; wait until the user asks
 - @feedback_no_redundant_cmake.md — don't run `cmake ..` before `make`; make reconfigures itself
+- @feedback_pr_body_plain_sentence.md — PR body is a bare imperative sentence ("Implement X."), not a one-sentence summary of scope or design
 
 ## Project context
 - @project_partitioning.md — partitioning is near-term; some customers asked for METIS-style structural partitioning
