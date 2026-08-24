@@ -17,6 +17,8 @@
 #include "list/ListBuffer.h"
 #include "list/ListView.h"
 
+#include "buffers/SpanBuffer.h"
+
 #include "metadata/PropertyType.h"
 #include "metadata/PropertyNull.h"
 #include "ID.h"
@@ -137,6 +139,7 @@ private:
     MemoryPools _pools;
     ColumnAllocatorMap _columnAllocators;
     QueryListBuffer _listBuffer;
+    SpanBuffer<char, std::string_view> _stringBuf;
 };
 
 }
