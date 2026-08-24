@@ -845,8 +845,13 @@ void DBProgramGenerator::translateComponent(const VariableDependency* root,
             continue;
         }
 
+        // A merge edge joins two dataflows instead of traversing the graph, so it never
+        // is half of a (source, edge, target) triple: it closes the chain it lands on,
+        // and whatever leaves its target opens a new one.
+        const bool predTraverses = pred && !pred->isMetaEdge();
+
         // Have we found a (source, edge, target) triple yet on this traversal?
-        const bool haveTriple = pred && predPred;
+        const bool haveTriple = predTraverses && predPred;
 
         for (const DependencyEdge* e : var->edges()) {
             const VariableDependency* other = e->src() == var ? e->tgt() : e->src();
@@ -854,9 +859,10 @@ void DBProgramGenerator::translateComponent(const VariableDependency* root,
                 continue;
             }
 
-            if (haveTriple) {
-                // We have discovered a full (src, edge, tgt) triple, set the next
-                // elements on the stack to only have (src, edge) and await tgt
+            if (haveTriple || !predTraverses) {
+                // We have discovered a full (src, edge, tgt) triple, or @ref pred is a
+                // merge edge that cannot open one: either way the next elements on the
+                // stack only have (src, edge) and await tgt
                 stack.emplace_back(other, e, nullptr);
             } else {
                 // We have not yet discovered a full (src, edge, tgt) triple, but the
