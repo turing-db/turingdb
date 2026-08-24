@@ -453,6 +453,7 @@ TEST_F(EquivalenceTest, crossProd) {
 
 TEST_F(EquivalenceTest, eqFilters) {
     expectEquivalent("MATCH (a) WHERE a.age = 32 RETURN a");
+    expectEquivalent("MATCH (a), (b) WHERE a.age = 32 RETURN a, b");
     expectEquivalent("MATCH (a), (b) WHERE a.age = b.age RETURN a, b");
     expectEquivalent("MATCH (a), (b) WHERE a.name = a.name RETURN b");
 

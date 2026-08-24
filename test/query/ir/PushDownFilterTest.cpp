@@ -192,3 +192,51 @@ TEST_F(PushDownFilterTest, leavesEdgePredicateAlone) {
     ASSERT_EQ(hops.size(), 1u);
     EXPECT_TRUE(hops.front().getOperation()->isBeforeInBlock(filters.front().getOperation()));
 }
+
+// MATCH (n), (m) WHERE n.age = 32 RETURN n, m
+const char* const crossProductFactorPredicate = R"mlir(
+func.func @main() {
+  %0:2 = db.cross_product factor {
+    %n = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %n : !db.column<!storage.node_id>
+  } factor {
+    %m = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %m : !db.column<!storage.node_id>
+  }
+  %age = db.get_node_properties(%0#0, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %c32 = db.constant(32 : i64)
+  %mask = db.eq %age, %c32 : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %nf, %mf = db.filter(%mask, {%0#0, %0#1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%nf, %mf) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(PushDownFilterTest, sinksPredicateIntoCrossProductFactor) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(crossProductFactorPredicate);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runPushDown(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::FilterOp> filters = collect<mlir::db::FilterOp>(*module);
+    ASSERT_EQ(filters.size(), 1u);
+    mlir::db::FilterOp filter = filters.front();
+
+    // The filter now lives inside a cross_product factor, not at the top level.
+    mlir::db::CrossProduct product = filter.getOperation()->getParentOfType<mlir::db::CrossProduct>();
+    ASSERT_TRUE(product);
+
+    // It carries the single scanned column of that factor.
+    ASSERT_EQ(filter.getColumnsToFilter().size(), 1u);
+    EXPECT_TRUE(mlir::isa<mlir::db::ScanNodes>(filter.getColumnsToFilter().front().getDefiningOp()));
+
+    // The factor now yields the filtered column, so the product crosses filtered n.
+    mlir::db::Yield leftYield = mlir::cast<mlir::db::Yield>(product.getLeftFactor().front().getTerminator());
+    ASSERT_EQ(leftYield.getColumns().size(), 1u);
+    EXPECT_EQ(leftYield.getColumns().front().getDefiningOp(), filter.getOperation());
+
+    // The mask reads the property off the scanned column, not the product result.
+    llvm::SmallVector<mlir::db::GetNodeProperties> reads = collect<mlir::db::GetNodeProperties>(*module);
+    ASSERT_EQ(reads.size(), 1u);
+    EXPECT_TRUE(mlir::isa<mlir::db::ScanNodes>(reads.front().getInputNodes().getDefiningOp()));
+}
