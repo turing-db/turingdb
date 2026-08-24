@@ -174,6 +174,7 @@ target_link_libraries(test_query_ir_db_procedures PRIVATE
         turing_db_ir_codegen_s)
 
 add_ir_tests(test_query_ir_dbdialect DBDialectTest.cpp)
+add_ir_tests(test_query_ir_push_down_filter PushDownFilterTest.cpp)
 add_ir_tests(test_query_ir_nldialect NLDialectTest.cpp)
 
 # The branch two-hop test runs against the shared SimpleGraph fixture.
