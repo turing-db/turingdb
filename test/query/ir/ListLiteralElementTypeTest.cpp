@@ -51,7 +51,7 @@ std::string typeText(mlir::Type type) {
 
 }
 
-// The element type db.const_list is given is the homogeneity verdict codegen reached, and
+// The element type db.constant infers for a list literal is the homogeneity verdict, and
 // it is the only place that verdict is visible: the runtime column is a ColumnConst of
 // ListViews either way and every cell keeps its own type tag, so a list typed as i64 and
 // one typed as list_element render the same rows. These tests read the type off the
@@ -102,13 +102,17 @@ protected:
         mlir::OwningOpRef<mlir::ModuleOp> module;
         generateProgram(query, module);
 
-        mlir::db::ConstList constList;
-        module.get().walk([&](mlir::db::ConstList op) {
-            constList = op;
+        // The list literal's constant, told apart from a scalar one by the array of
+        // elements it carries rather than a typed attribute.
+        mlir::db::ConstantOp listConstant;
+        module.get().walk([&](mlir::db::ConstantOp op) {
+            if (mlir::isa<mlir::ArrayAttr>(op.getValue())) {
+                listConstant = op;
+            }
         });
-        ASSERT_TRUE(constList) << "query: " << query << " generated no db.const_list";
+        ASSERT_TRUE(listConstant) << "query: " << query << " generated no list db.constant";
 
-        const mlir::db::ColumnType column = mlir::cast<mlir::db::ColumnType>(constList.getResult().getType());
+        const mlir::db::ColumnType column = mlir::cast<mlir::db::ColumnType>(listConstant.getResult().getType());
         const mlir::storage::ListType listType = mlir::dyn_cast<mlir::storage::ListType>(column.getType());
         ASSERT_TRUE(listType) << "query: " << query << " gave " << typeText(column);
 

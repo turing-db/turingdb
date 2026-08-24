@@ -686,11 +686,11 @@ func.func @main() {
 )mlir";
 
 // MATCH (n) RETURN n, [1, 2, 3]: the scan drives the rows and the list stands beside
-// them, so the lowering has a loop for the const_list to be hoisted above.
+// them, so the lowering has a loop for the list constant to be hoisted above.
 constexpr const char* constListOverMatchProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %xs = db.const_list([1, 2, 3]) : !db.column<!storage.list<i64>>
+  %xs = db.constant([1, 2, 3])
   db.output(%n, %xs) : !db.column<!storage.node_id>, !db.column<!storage.list<i64>>
   return
 }
@@ -701,7 +701,7 @@ func.func @main() {
 constexpr const char* heterogeneousConstListOverMatchProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %xs = db.const_list([10, true, [1, 2]]) : !db.column<!storage.list<!storage.list_element>>
+  %xs = db.constant([10, true, [1, 2]])
   db.output(%n, %xs) : !db.column<!storage.node_id>, !db.column<!storage.list<!storage.list_element>>
   return
 }
@@ -4050,13 +4050,14 @@ TEST_F(DBLoweringTest, hoistsAConstListAboveTheDrivingLoop) {
     DBLowering lowering(&context, &reader.getView());
     lowering.lower(dbFunction, *nlModule);
 
-    mlir::nl::ConstList constListOp;
+    mlir::nl::Constant constListOp;
     mlir::nl::Output outputOp;
     size_t constListCount = 0;
     size_t forCount = 0;
 
     nlModule->walk([&](mlir::Operation* operation) {
-        if (mlir::nl::ConstList found = mlir::dyn_cast<mlir::nl::ConstList>(operation)) {
+        mlir::nl::Constant found = mlir::dyn_cast<mlir::nl::Constant>(operation);
+        if (found && mlir::isa<mlir::ArrayAttr>(found.getValue())) {
             constListOp = found;
             constListCount++;
         } else if (mlir::isa<mlir::nl::For>(operation)) {
@@ -4078,7 +4079,7 @@ TEST_F(DBLoweringTest, hoistsAConstListAboveTheDrivingLoop) {
 
     // The literals ride the op unchanged, and the chunk keeps the db column's list type -
     // the homogeneity verdict codegen reached, spelled rather than inferred.
-    EXPECT_EQ(constListOp.getElements().size(), 3u);
+    EXPECT_EQ(mlir::cast<mlir::ArrayAttr>(constListOp.getValue()).size(), 3u);
 
     const mlir::Type int64Type = mlir::IntegerType::get(&context, 64);
     const mlir::Type int64ListType = mlir::storage::ListType::get(&context, int64Type);
@@ -4110,9 +4111,11 @@ TEST_F(DBLoweringTest, keepsTheErasedElementTypeOfAConstList) {
     DBLowering lowering(&context, &reader.getView());
     lowering.lower(dbFunction, *nlModule);
 
-    mlir::nl::ConstList constListOp;
-    nlModule->walk([&](mlir::nl::ConstList found) {
-        constListOp = found;
+    mlir::nl::Constant constListOp;
+    nlModule->walk([&](mlir::nl::Constant found) {
+        if (mlir::isa<mlir::ArrayAttr>(found.getValue())) {
+            constListOp = found;
+        }
     });
     ASSERT_TRUE(constListOp);
 

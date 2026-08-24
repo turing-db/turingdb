@@ -247,7 +247,6 @@ private:
 
     // Hoists an nl.const_list to the top of the entry block, the way a scalar constant is
     // hoisted; its chunk keeps the db column's list element type
-    void lowerConstList(mlir::db::ConstList constList);
 
     enum class BinaryResultKind {
         Numeric,   // add/sub/mul/div/mod: promoted numeric, nullable if either operand is

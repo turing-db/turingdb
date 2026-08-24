@@ -1169,10 +1169,11 @@ func.func @main() {
 )mlir";
 
 // RETURN [1, 2, 3]: the same literals as a value rather than a source, so the whole list
-// is one cell - a list of the type its elements share.
+// is one cell. A list literal is a db.constant value like any other, carried as the array
+// of its elements; the column type is inferred from them, so it is never spelled.
 const char* const constListProgram = R"mlir(
 func.func @main() {
-  %xs = db.const_list([1, 2, 3]) : !db.column<!storage.list<i64>>
+  %xs = db.constant([1, 2, 3])
   db.output(%xs) : !db.column<!storage.list<i64>>
   return
 }
@@ -1182,7 +1183,7 @@ func.func @main() {
 // which carries none at all - so the list is one of type-erased tagged scalars.
 const char* const nestedConstListProgram = R"mlir(
 func.func @main() {
-  %xs = db.const_list([10, true, [1, 2]]) : !db.column<!storage.list<!storage.list_element>>
+  %xs = db.constant([10, true, [1, 2]])
   db.output(%xs) : !db.column<!storage.list<!storage.list_element>>
   return
 }
@@ -1192,58 +1193,80 @@ func.func @main() {
 // same, unlike UNWIND of it, which yields no row.
 const char* const emptyConstListProgram = R"mlir(
 func.func @main() {
-  %xs = db.const_list([]) : !db.column<!storage.list<!storage.list_element>>
+  %xs = db.constant([])
   db.output(%xs) : !db.column<!storage.list<!storage.list_element>>
   return
 }
 )mlir";
 
-// A list typed as its elements' type rather than as a list of it: the verifier rejects it,
-// since a const_list holds the whole list in every row.
-const char* const scalarColumnConstListProgram = R"mlir(
+// A list holding a null: the unit attribute carries no type, so the elements share none
+// however their siblings agree, and the verdict is the type-erased form.
+const char* const nullElementConstListProgram = R"mlir(
 func.func @main() {
-  %xs = db.const_list([1, 2, 3]) : !db.column<i64>
-  db.output(%xs) : !db.column<i64>
+  %xs = db.constant([1, unit])
+  db.output(%xs) : !db.column<!storage.list<!storage.list_element>>
   return
 }
 )mlir";
 
-// A mixed-type list typed as a homogeneous i64 list: rejected by the same homogeneity
-// check the unwind_const form fails.
-const char* const mixedHomogeneousConstListProgram = R"mlir(
+// Only nested lists: the elements do agree, but on a type none of them carries, so this is
+// the type-erased form again rather than a list of lists of i64.
+const char* const nestedOnlyConstListProgram = R"mlir(
 func.func @main() {
-  %xs = db.const_list([1, "string"]) : !db.column<!storage.list<i64>>
-  db.output(%xs) : !db.column<!storage.list<i64>>
+  %xs = db.constant([[1, 2], [3]])
+  db.output(%xs) : !db.column<!storage.list<!storage.list_element>>
   return
 }
 )mlir";
 
-// An empty list typed as a homogeneous i64 list: rejected, since there is no element to
-// read that type from. Paired with the list_element type the same literals are valid.
-const char* const emptyHomogeneousConstListProgram = R"mlir(
+// A list literal cannot be spelled with a type of its own: the column is inferred, so
+// naming one that disagrees with the elements is a use-before-type mismatch, not an op
+// error - which is what makes the homogeneity verdict unrepresentable when wrong.
+const char* const mistypedConstListProgram = R"mlir(
 func.func @main() {
-  %xs = db.const_list([]) : !db.column<!storage.list<i64>>
-  db.output(%xs) : !db.column<!storage.list<i64>>
+  %xs = db.constant([1, 2, 3])
+  db.output(%xs) : !db.column<!storage.list<!storage.list_element>>
   return
 }
 )mlir";
 
-// A list of nested lists typed as a homogeneous i64 list: the first element is an array,
-// which carries no type, so the verifier has none to check the rest against.
-const char* const nestedHomogeneousConstListProgram = R"mlir(
+// An embedding constant: a rank-1 f32 dense attribute, which is typed and shaped, so it is
+// a different kind of attribute from the array a list literal carries.
+const char* const embeddingConstantProgram = R"mlir(
 func.func @main() {
-  %xs = db.const_list([[1, 2], [3]]) : !db.column<!storage.list<i64>>
-  db.output(%xs) : !db.column<!storage.list<i64>>
+  %e = db.constant(dense<[1.0, 2.0, 3.0]> : tensor<3xf32>)
+  db.output(%e) : !db.column<!storage.embedding>
   return
 }
 )mlir";
 
-// A null element in a homogeneous i64 list: a null rides a unit attribute, which carries
-// no type, so it cannot be an element of a typed list however its siblings agree.
-const char* const nullElementHomogeneousConstListProgram = R"mlir(
+// The same three floats written as a list literal instead: an array of per-element
+// attributes, which is what tells the two apart.
+const char* const floatListConstantProgram = R"mlir(
 func.func @main() {
-  %xs = db.const_list([1, unit]) : !db.column<!storage.list<i64>>
-  db.output(%xs) : !db.column<!storage.list<i64>>
+  %xs = db.constant([1.0, 2.0, 3.0])
+  db.output(%xs) : !db.column<!storage.list<f64>>
+  return
+}
+)mlir";
+
+// An attribute that is neither a typed value nor an array of elements: db.constant carries
+// a scalar, an embedding or a list, and nothing else.
+const char* const affineMapConstantProgram = R"mlir(
+func.func @main() {
+  %x = db.constant(affine_map<(d0) -> (d0)>)
+  return
+}
+)mlir";
+
+// MATCH (a)-[:KNOWS]->(b)<-[:LIKES]-(c): two by-type hops, one out and one in, each
+// naming its edge type as a string the lowering resolves against the schema.
+const char* const edgesByTypeProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %s0, %e0, %et0, %b = db.get_out_edges_by_type(%a, "KNOWS", {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %s1, %e1, %et1, %c = db.get_in_edges_by_type(%b, "LIKES", {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  db.output(%s0, %c) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
 )mlir";
@@ -1438,31 +1461,41 @@ TEST_F(DBDialectTest, verifierRejectsHomogeneousUnwindConstWithoutElements) {
     EXPECT_FALSE(module);
 }
 
+// The list literal's constant, told apart from a scalar one by the array of elements it
+// carries rather than a typed attribute.
+mlir::db::ConstantOp findListConstant(mlir::ModuleOp module) {
+    mlir::db::ConstantOp listConstant;
+    module.walk([&](mlir::db::ConstantOp op) {
+        if (mlir::isa<mlir::ArrayAttr>(op.getValue())) {
+            listConstant = op;
+        }
+    });
+
+    return listConstant;
+}
+
 TEST_F(DBDialectTest, parsesConstList) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(constListProgram);
     ASSERT_TRUE(module);
 
-    mlir::db::ConstList constList;
-    module.get().walk([&](mlir::db::ConstList op) {
-        constList = op;
-    });
-    ASSERT_TRUE(constList);
+    mlir::db::ConstantOp listConstant = findListConstant(module.get());
+    ASSERT_TRUE(listConstant);
 
-    // The three literals come back on the op, and the result is one column of lists of
+    // The three literals come back on the op, and the column it infers is one of lists of
     // the type they share.
-    const mlir::ArrayAttr elements = constList.getElements();
+    const auto elements = mlir::cast<mlir::ArrayAttr>(listConstant.getValue());
     ASSERT_EQ(elements.size(), 3u);
 
     const mlir::Type int64ListType = mlir::storage::ListType::get(&_context, mlir::IntegerType::get(&_context, 64));
-    EXPECT_EQ(constList.getResult().getType(), mlir::db::ColumnType::get(&_context, int64ListType));
+    EXPECT_EQ(listConstant.getResult().getType(), mlir::db::ColumnType::get(&_context, int64ListType));
 }
 
 TEST_F(DBDialectTest, constListRoundTripsThroughTextualForm) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(constListProgram);
     ASSERT_TRUE(module);
 
-    // Printing then re-parsing yields a module that still verifies, so the
-    // db.const_list printer and parser are inverses.
+    // Printing then re-parsing yields a module that still verifies. The column type is
+    // never printed, so the round trip also re-runs the inference.
     std::string printed;
     llvm::raw_string_ostream stream(printed);
     module.get().print(stream);
@@ -1476,15 +1509,12 @@ TEST_F(DBDialectTest, parsesNestedConstList) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(nestedConstListProgram);
     ASSERT_TRUE(module);
 
-    mlir::db::ConstList constList;
-    module.get().walk([&](mlir::db::ConstList op) {
-        constList = op;
-    });
-    ASSERT_TRUE(constList);
+    mlir::db::ConstantOp listConstant = findListConstant(module.get());
+    ASSERT_TRUE(listConstant);
 
     // The nested list is one element of the outer list, carried as an array of its own
     // element attributes.
-    const mlir::ArrayAttr elements = constList.getElements();
+    const auto elements = mlir::cast<mlir::ArrayAttr>(listConstant.getValue());
     ASSERT_EQ(elements.size(), 3u);
 
     const auto nested = mlir::dyn_cast<mlir::ArrayAttr>(elements[2]);
@@ -1513,53 +1543,106 @@ TEST_F(DBDialectTest, constListWithEmptyListIsValid) {
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
 }
 
-TEST_F(DBDialectTest, verifierRejectsConstListWithScalarColumn) {
-    // A const_list holds the whole list in every row, so a column of the elements' type
-    // fails the verifier during parsing and the module is null.
-    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(scalarColumnConstListProgram);
+// The homogeneity verdict, asserted on the op the parser built. A wrong verdict is not
+// representable - the type is inferred, never spelled - so these read it back rather than
+// checking that a mistyped spelling is rejected.
+TEST_F(DBDialectTest, infersATypedListFromAgreeingElements) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(constListProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::ConstantOp listConstant = findListConstant(module.get());
+    ASSERT_TRUE(listConstant);
+
+    const mlir::Type int64ListType = mlir::storage::ListType::get(&_context, mlir::IntegerType::get(&_context, 64));
+    EXPECT_EQ(listConstant.getResult().getType(), mlir::db::ColumnType::get(&_context, int64ListType));
+}
+
+TEST_F(DBDialectTest, infersAnErasedListFromAnEmptyOne) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyConstListProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::ConstantOp listConstant = findListConstant(module.get());
+    ASSERT_TRUE(listConstant);
+
+    const mlir::Type erasedListType = mlir::storage::ListType::get(&_context, mlir::storage::ListElementType::get(&_context));
+    EXPECT_EQ(listConstant.getResult().getType(), mlir::db::ColumnType::get(&_context, erasedListType));
+}
+
+TEST_F(DBDialectTest, infersAnErasedListFromANullElement) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(nullElementConstListProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::ConstantOp listConstant = findListConstant(module.get());
+    ASSERT_TRUE(listConstant);
+
+    const mlir::Type erasedListType = mlir::storage::ListType::get(&_context, mlir::storage::ListElementType::get(&_context));
+    EXPECT_EQ(listConstant.getResult().getType(), mlir::db::ColumnType::get(&_context, erasedListType));
+}
+
+TEST_F(DBDialectTest, infersAnErasedListFromNestedElementsAlone) {
+    // The elements agree, but on a type none of them carries.
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(nestedOnlyConstListProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::ConstantOp listConstant = findListConstant(module.get());
+    ASSERT_TRUE(listConstant);
+
+    const mlir::Type erasedListType = mlir::storage::ListType::get(&_context, mlir::storage::ListElementType::get(&_context));
+    EXPECT_EQ(listConstant.getResult().getType(), mlir::db::ColumnType::get(&_context, erasedListType));
+}
+
+TEST_F(DBDialectTest, rejectsAListSpelledWithADisagreeingType) {
+    // Naming a type the elements do not infer is a use mismatch at the consumer, so the
+    // module does not parse: there is no way to write a list whose type lies about it.
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(mistypedConstListProgram);
     EXPECT_FALSE(module);
 }
 
-TEST_F(DBDialectTest, verifierRejectsHomogeneousConstListWithMixedElements) {
-    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(mixedHomogeneousConstListProgram);
-    EXPECT_FALSE(module);
+// db.constant carries three kinds of value - a scalar, an embedding and a list - and each
+// is recognised by the kind of attribute it rides. An embedding is a dense, shaped, typed
+// attribute; a list is an untyped array of per-element ones. Nothing has to disambiguate
+// them, which is what lets one op carry all three.
+TEST_F(DBDialectTest, infersAnEmbeddingFromADenseFloatAttribute) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(embeddingConstantProgram);
+    ASSERT_TRUE(module);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    mlir::db::ConstantOp embedding;
+    module.get().walk([&](mlir::db::ConstantOp op) {
+        embedding = op;
+    });
+    ASSERT_TRUE(embedding);
+
+    // Rank-1 f32 is the embedding shape, so the column is one of embeddings rather than of
+    // the tensor the attribute spells.
+    const auto dense = mlir::dyn_cast<mlir::DenseElementsAttr>(embedding.getValue());
+    ASSERT_TRUE(dense);
+    EXPECT_EQ(dense.getNumElements(), 3);
+
+    const mlir::Type embeddingType = mlir::storage::EmbeddingType::get(&_context);
+    EXPECT_EQ(embedding.getResult().getType(), mlir::db::ColumnType::get(&_context, embeddingType));
 }
 
-TEST_F(DBDialectTest, verifierRejectsHomogeneousConstListWithoutElements) {
-    // The empty list is valid as the list_element form above, and rejected here as a
-    // typed one: no element carries the i64 the column claims. Codegen never spells
-    // this, so the verifier is the only thing holding the two forms apart.
-    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyHomogeneousConstListProgram);
-    EXPECT_FALSE(module);
+TEST_F(DBDialectTest, infersAListRatherThanAnEmbeddingFromAnArrayOfFloats) {
+    // The same three floats as an array of elements: an array attribute is never a dense
+    // one, so this is a list of doubles and the embedding shape rule never sees it.
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(floatListConstantProgram);
+    ASSERT_TRUE(module);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    mlir::db::ConstantOp listConstant = findListConstant(module.get());
+    ASSERT_TRUE(listConstant);
+
+    const mlir::Type doubleListType = mlir::storage::ListType::get(&_context, mlir::Float64Type::get(&_context));
+    EXPECT_EQ(listConstant.getResult().getType(), mlir::db::ColumnType::get(&_context, doubleListType));
 }
 
-TEST_F(DBDialectTest, verifierRejectsHomogeneousConstListWithNestedElements) {
-    // A nested list rides an array attribute, which carries no type, so it cannot be an
-    // element of a typed list - here as the first element, which is where the verifier
-    // reads the shared type from.
-    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(nestedHomogeneousConstListProgram);
+TEST_F(DBDialectTest, rejectsAConstantThatIsNeitherTypedNorAList) {
+    // db.constant carries a scalar, an embedding or a list, and its operand constraint is
+    // what holds the line - an untyped attribute of any other kind cannot reach inference.
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(affineMapConstantProgram);
     EXPECT_FALSE(module);
 }
-
-TEST_F(DBDialectTest, verifierRejectsHomogeneousConstListWithANullElement) {
-    // The untyped element past the first one, which the verifier reaches only after it
-    // has a shared type to compare against.
-    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(nullElementHomogeneousConstListProgram);
-    EXPECT_FALSE(module);
-}
-
-// MATCH (a)-[:KNOWS]->(b)<-[:LIKES]-(c): one by-type out-edge hop and one by-type
-// in-edge hop, so both ops' assembly formats (the type name inside the parens)
-// are exercised.
-const char* const edgesByTypeProgram = R"mlir(
-func.func @main() {
-  %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %s0, %e0, %et0, %b = db.get_out_edges_by_type(%a, "KNOWS", {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %s1, %e1, %et1, %c = db.get_in_edges_by_type(%b, "LIKES", {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  db.output(%s0, %c) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
-  return
-}
-)mlir";
 
 TEST_F(DBDialectTest, parsesGetEdgesByType) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(edgesByTypeProgram);
