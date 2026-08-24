@@ -703,6 +703,9 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
             }
 
             expr->setAggregate();
+        } else if (invoc->isDistinct()) {
+            throwError(fmt::format("DISTINCT may only be used in an aggregate function: "
+                                   "'{}' is not an aggregate", name), expr);
         }
 
         expr->setSignature(signature);

@@ -1143,8 +1143,29 @@ atomExpr
 
 collectExpr
     : COLLECT OBRACE readingStatements returnSt CBRACE { scanner.notImplemented(@$, "COLLECT"); }
-    | COLLECT OPAREN expr CPAREN { scanner.notImplemented(@$, "COLLECT"); }
-    | COLLECT OPAREN DISTINCT expr CPAREN { scanner.notImplemented(@$, "COLLECT"); }
+    | COLLECT OPAREN expr CPAREN {
+        Symbol* symbol = Symbol::create(ast, "collect");
+        QualifiedName* name = QualifiedName::create(ast);
+        name->addName(symbol);
+        FunctionInvocation* invocation = FunctionInvocation::create(ast, name);
+        ExprChain* arguments = ExprChain::create(ast);
+        arguments->add($3);
+        invocation->setArguments(arguments);
+        $$ = FunctionInvocationExpr::create(ast, invocation);
+        LOC($$, @$);
+      }
+    | COLLECT OPAREN DISTINCT expr CPAREN {
+        Symbol* symbol = Symbol::create(ast, "collect");
+        QualifiedName* name = QualifiedName::create(ast);
+        name->addName(symbol);
+        FunctionInvocation* invocation = FunctionInvocation::create(ast, name);
+        ExprChain* arguments = ExprChain::create(ast);
+        arguments->add($4);
+        invocation->setArguments(arguments);
+        invocation->setDistinct(true);
+        $$ = FunctionInvocationExpr::create(ast, invocation);
+        LOC($$, @$);
+      }
     ;
 
 patternPart
@@ -1272,9 +1293,14 @@ invocationName
 
 functionInvocation
     : invocationName OPAREN CPAREN { $$ = FunctionInvocation::create(ast, $1); LOC($$, @$); }
-    | invocationName OPAREN DISTINCT CPAREN { scanner.notImplemented(@$, "Function invocations with DISTINCT"); }
+    | invocationName OPAREN DISTINCT CPAREN { scanner.syntaxError(@$, "DISTINCT requires an argument"); }
     | invocationName OPAREN exprChain CPAREN { $$ = FunctionInvocation::create(ast, $1); $$->setArguments($3); LOC($$, @$); }
-    | invocationName OPAREN DISTINCT exprChain CPAREN { scanner.notImplemented(@$, "Function invocations with DISTINCT"); }
+    | invocationName OPAREN DISTINCT exprChain CPAREN {
+        $$ = FunctionInvocation::create(ast, $1);
+        $$->setArguments($4);
+        $$->setDistinct(true);
+        LOC($$, @$);
+      }
     ;
 
 pathExpr

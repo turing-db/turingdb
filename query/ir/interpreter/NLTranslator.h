@@ -482,7 +482,8 @@ private:
     // A count result is a ui64 tally, the pipeline's one non-nullable value chunk, so
     // it is neither an ID chunk nor a !storage.nullable<...> one and takes a plain
     // ColumnVector<uint64_t>.
-    static bool isCountElementType(mlir::Type elementType);
+    static bool isPlainValueElementType(mlir::Type elementType);
+    Column* allocPlainColumn(ValueType valueType);
     ColumnVector<uint64_t>* allocCountColumn();
 
     // Allocate a type-erased column of tagged scalars - the shape a heterogeneous

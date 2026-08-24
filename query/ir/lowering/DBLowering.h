@@ -233,8 +233,14 @@ private:
     // scope. The db result maps to that chunk. The accumulator element type (and thus
     // the result value type) follows Cypher: avg widens to f64, sum/min/max keep the
     // input's value type; sum/avg require a numeric column and min/max an orderable
-    // one, so a string sum or an embedding min is rejected here.
-    void lowerAggregate(mlir::Value input, mlir::Value result, mlir::storage::AggregateKind kind);
+    // one, so a string sum or an embedding min is rejected here. A `distinct`
+    // reduction adds the DISTINCT pair around the update - a hoisted nl.distinct
+    // seen-set and an nl.distinct_filter cutting the chunk ahead of the update - so
+    // each distinct value is reduced once.
+    void lowerAggregate(mlir::Value input,
+                        mlir::Value result,
+                        mlir::storage::AggregateKind kind,
+                        bool distinct);
 
     // Hoists an nl.constant to the top of the entry block
     void lowerConstant(mlir::db::ConstantOp constant);

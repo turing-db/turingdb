@@ -140,6 +140,11 @@ ValueType valueTypeFromElementType(mlir::Type elementType) {
         } else {
             return ValueType::Int64;
         }
+    } else if (mlir::isa<mlir::NoneType>(elementType)) {
+        // A null literal carries no type of its own, and a column has to have one to be
+        // laid out: it is carried as a null integer, which every reader sees as the
+        // absent value it is - the count that skips it, the key that groups on it
+        return ValueType::Int64;
     }
 
     throw IRException("Unsupported nullable value chunk element type");
@@ -222,6 +227,14 @@ GroupAggregateKind toRuntimeGroupAggregateKind(storage::GroupAggregateKind kind)
         case storage::GroupAggregateKind::CountDistinct:
             return GroupAggregateKind::CountDistinct;
         break;
+
+        case storage::GroupAggregateKind::SumDistinct:
+            return GroupAggregateKind::SumDistinct;
+        break;
+
+        case storage::GroupAggregateKind::AvgDistinct:
+            return GroupAggregateKind::AvgDistinct;
+        break;
     }
 
     throw IRException("Unhandled group aggregate kind");
@@ -239,6 +252,19 @@ ValueType nullableChunkValueType(mlir::Type chunkType) {
     }
 
     return valueTypeFromElementType(nullableType.getValueType());
+}
+
+// Whether a chunk carries the null literal, which has no value type of its own: a
+// !nl.chunk<!storage.nullable<none>>
+bool isUntypedNullChunk(mlir::Type chunkType) {
+    const auto chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        return false;
+    }
+
+    const auto nullableType = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
+
+    return nullableType && mlir::isa<mlir::NoneType>(nullableType.getValueType());
 }
 
 ValueType valueTypeFromChunkType(mlir::Type chunkType) {
@@ -1059,7 +1085,12 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
     Column* output = allocColumnForChunkType(resultType);
     _valueSlots[result] = output;
 
-    const NLBroadcastConstantFunction fill = NLExecutor::selectConstantBroadcast(nullableChunkValueType(resultType));
+    // The untyped null constant is a ColumnConst<PropertyNull>, which holds no value to
+    // repeat: its rows are absent values rather than copies of one
+    const bool isUntypedNull = isUntypedNullChunk(broadcast.getValue().getType());
+    const NLBroadcastConstantFunction fill = isUntypedNull
+                                          ? NLExecutor::selectNullConstantBroadcast()
+                                          : NLExecutor::selectConstantBroadcast(nullableChunkValueType(resultType));
 
     NLBroadcastConstantData* data = _program->allocFunctionData<NLBroadcastConstantData>(value, cardinality, output, fill);
     body->emplaceStmt(&NLExecutor::runBroadcastConstant, data);
@@ -1290,9 +1321,10 @@ void NLTranslator::addTruncateColumn(mlir::Value inputValue,
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         output = allocOptColumnForValueType(valueType);
         copyPrefix = NLExecutor::selectOptBlockRepeatFunction(valueType);
-    } else if (isCountElementType(elementType)) {
-        output = allocCountColumn();
-        copyPrefix = NLExecutor::selectCountBlockRepeatFunction();
+    } else if (isPlainValueElementType(elementType)) {
+        const ValueType valueType = valueTypeFromElementType(elementType);
+        output = allocPlainColumn(valueType);
+        copyPrefix = NLExecutor::selectPlainBlockRepeatFunction(valueType);
     } else {
         const NLChunkKind kind = getChunkKind(chunkType);
         output = allocColumnForKind(kind);
@@ -1383,9 +1415,10 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         output = allocOptColumnForValueType(valueType);
         copySuffix = NLExecutor::selectOptCopyFunction(valueType);
-    } else if (isCountElementType(elementType)) {
-        output = allocCountColumn();
-        copySuffix = NLExecutor::selectCountCopyFunction();
+    } else if (isPlainValueElementType(elementType)) {
+        const ValueType valueType = valueTypeFromElementType(elementType);
+        output = allocPlainColumn(valueType);
+        copySuffix = NLExecutor::selectPlainCopyFunction(valueType);
     } else {
         const NLChunkKind kind = getChunkKind(chunkType);
         output = allocColumnForKind(kind);
@@ -1818,6 +1851,8 @@ void NLTranslator::translateGroupAggregateUpdate(nl::GroupAggregateUpdate update
                 if (nullable) {
                     const ValueType valueType = valueTypeFromElementType(nullable.getValueType());
                     aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, valueType);
+                } else if (mlir::isa<storage::ListElementType>(chunk.getElementType())) {
+                    aggregate._fold = NLExecutor::selectGroupCountListElementFold();
                 } else {
                     // A non-nullable count input must be an ID chunk (count(*));
                     // getChunkKind rejects any other element type.
@@ -1842,6 +1877,8 @@ void NLTranslator::translateGroupAggregateUpdate(nl::GroupAggregateUpdate update
                 if (nullable) {
                     const ValueType valueType = valueTypeFromElementType(nullable.getValueType());
                     aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, valueType);
+                } else if (mlir::isa<storage::ListElementType>(chunk.getElementType())) {
+                    aggregate._fold = NLExecutor::selectGroupCountDistinctListElementFold();
                 } else {
                     aggregate._fold = NLExecutor::selectGroupCountDistinctIDFold(getChunkKind(chunkType));
                 }
@@ -1849,14 +1886,20 @@ void NLTranslator::translateGroupAggregateUpdate(nl::GroupAggregateUpdate update
             break;
 
             case GroupAggregateKind::Sum:
+            case GroupAggregateKind::SumDistinct:
             case GroupAggregateKind::Min:
             case GroupAggregateKind::Max:
-            case GroupAggregateKind::Avg: {
+            case GroupAggregateKind::Avg:
+            case GroupAggregateKind::AvgDistinct: {
                 // sum/min/max/avg reduce the values themselves, so the input must be a
                 // nullable value chunk; avg accumulates as f64, the rest in the input's
-                // own type. nullableChunkValueType rejects an ID chunk here.
+                // own type. nullableChunkValueType rejects an ID chunk here. The distinct
+                // kinds keep the shape of the kind they mirror and differ only in the
+                // fold, which charges each of a group's values once.
                 const ValueType inputType = nullableChunkValueType(chunkType);
-                const ValueType accumulatorType = (kind == GroupAggregateKind::Avg) ? ValueType::Double : inputType;
+                const bool accumulatesAsDouble = (kind == GroupAggregateKind::Avg)
+                                              || (kind == GroupAggregateKind::AvgDistinct);
+                const ValueType accumulatorType = accumulatesAsDouble ? ValueType::Double : inputType;
 
                 aggregate._accumulator = allocOptColumnForValueType(accumulatorType);
                 aggregate._grow = NLExecutor::selectGroupAggregateGrow(kind, accumulatorType);
@@ -1995,7 +2038,8 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
 
     state->setValueInput(getColumn(valueColumn));
     state->setValues(allocValueColumnForValueType(valueType));
-    state->setFold(NLExecutor::selectCollectFold(valueType));
+    state->setFold(buffer.getDistinct() ? NLExecutor::selectCollectDistinctFold(valueType)
+                                       : NLExecutor::selectCollectFold(valueType));
     state->setUnwindCollectEmit(NLExecutor::selectUnwindCollectValueEmit(valueType));
     state->setListEmit(NLExecutor::selectCollectListEmit(valueType));
 
@@ -2142,8 +2186,8 @@ Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
         return allocListElementColumn();
     }
 
-    if (isCountElementType(elementType)) {
-        return allocCountColumn();
+    if (isPlainValueElementType(elementType)) {
+        return allocPlainColumn(valueTypeFromElementType(elementType));
     }
 
     return allocColumnForKind(chunkKindFromElementType(elementType));
@@ -2160,8 +2204,8 @@ NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
         return NLExecutor::selectListElementAppendFunction();
     }
 
-    if (isCountElementType(elementType)) {
-        return NLExecutor::selectCountAppendFunction();
+    if (isPlainValueElementType(elementType)) {
+        return NLExecutor::selectPlainAppendFunction(valueTypeFromElementType(elementType));
     }
 
     return NLExecutor::selectAppendFunction(chunkKindFromElementType(elementType));
@@ -2178,8 +2222,8 @@ NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
         return NLExecutor::selectListElementGatherFunction();
     }
 
-    if (isCountElementType(elementType)) {
-        return NLExecutor::selectCountGatherFunction();
+    if (isPlainValueElementType(elementType)) {
+        return NLExecutor::selectPlainGatherFunction(valueTypeFromElementType(elementType));
     }
 
     return NLExecutor::selectGatherFunction(chunkKindFromElementType(elementType));
@@ -2194,6 +2238,10 @@ NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) 
         return NLExecutor::selectOptCompareFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementCompareFunction();
+    }
+
+    if (isPlainValueElementType(elementType)) {
+        return NLExecutor::selectPlainCompareFunction(valueTypeFromElementType(elementType));
     }
 
     return NLExecutor::selectCompareFunction(chunkKindFromElementType(elementType));
@@ -2248,6 +2296,10 @@ NLCopyFunction NLTranslator::selectCopyForChunkType(mlir::Type chunkType) {
         return NLExecutor::selectOptCopyFunction(valueType);
     }
 
+    if (isPlainValueElementType(elementType)) {
+        return NLExecutor::selectPlainCopyFunction(valueTypeFromElementType(elementType));
+    }
+
     return NLExecutor::selectCopyFunction(chunkKindFromElementType(elementType));
 }
 
@@ -2264,8 +2316,8 @@ Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
         return allocOptColumnForValueType(valueType);
     }
 
-    if (isCountElementType(elementType)) {
-        return allocCountColumn();
+    if (isPlainValueElementType(elementType)) {
+        return allocPlainColumn(valueTypeFromElementType(elementType));
     }
 
     // A list chunk (the nl.collect drain's per-group cell) is a column of ListViews,
@@ -2421,10 +2473,46 @@ Column* NLTranslator::allocSingleRowOptColumnForValueType(ValueType valueType) {
     return allocOptColumn(valueType, 1);
 }
 
-bool NLTranslator::isCountElementType(mlir::Type elementType) {
+// A plain value element type: a 64-bit number carried without a nullable wrapper. A
+// tally is one (a ui64 that is never null) and so is an expression over it (a signed
+// i64, or an f64 once a double takes part). A width-1 integer is a mask, not one of
+// these, and an ID or list element is its own family.
+bool NLTranslator::isPlainValueElementType(mlir::Type elementType) {
+    if (mlir::isa<mlir::Float64Type>(elementType)) {
+        return true;
+    }
+
     const auto intType = mlir::dyn_cast<mlir::IntegerType>(elementType);
 
-    return intType && intType.getWidth() == 64 && intType.isUnsigned();
+    return intType && intType.getWidth() == 64;
+}
+
+Column* NLTranslator::allocPlainColumn(ValueType valueType) {
+    const size_t chunkSize = _program->getChunkSize();
+
+    switch (valueType) {
+        case ValueType::Int64: {
+            ColumnVector<types::Int64::Primitive>* column = _memory->alloc<ColumnVector<types::Int64::Primitive>>();
+            column->reserve(chunkSize);
+            return column;
+        }
+        break;
+
+        case ValueType::UInt64:
+            return allocCountColumn();
+        break;
+
+        case ValueType::Double: {
+            ColumnVector<types::Double::Primitive>* column = _memory->alloc<ColumnVector<types::Double::Primitive>>();
+            column->reserve(chunkSize);
+            return column;
+        }
+        break;
+
+        default:
+            throw IRException("a plain value column must be numeric");
+        break;
+    }
 }
 
 ColumnVector<uint64_t>* NLTranslator::allocCountColumn() {

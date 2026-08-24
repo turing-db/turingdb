@@ -267,6 +267,12 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
 
         _exprAnalyzer->analyzeRootExpr(item);
 
+        // An item reading the alias of an aggregate is aggregate too: its value exists
+        // once the group is complete, not once per row, so it groups nothing
+        if (readsAnAggregateItem(item, projection)) {
+            item->setAggregate();
+        }
+
         bioassert(!name.empty(), "All declared variable must have a name.");
 
         // Reported before the alias is declared, so that a duplicate column name is not
@@ -288,6 +294,14 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
 
     if (projection->hasOrderBy()) {
         analyze(projection->getOrderBy(), projection);
+
+        // An aggregate in the ORDER BY aggregates the projection as an aggregate item
+        // would - RETURN a.name ORDER BY count(b) orders one row per name - so the items
+        // beside it are the grouping keys, and a projection of nothing but keys is
+        // aggregating after all
+        for (const OrderByItem* item : projection->getOrderBy()->getItems()) {
+            isAggregate |= item->getExpr()->isAggregate();
+        }
     }
 
     if (!_isV3) {
@@ -485,6 +499,12 @@ bool CypherAnalyzer::isGroupWise(const Expr* expr, const Projection* projection)
         return true;
     }
 
+    // An aggregate reduces its group to one value, which is what a group-wise key is: a
+    // count of the group orders the groups whether or not the projection returns it
+    if (expr->isAggregate()) {
+        return true;
+    }
+
     // A grouping key holds one value per group by construction, and so does the alias of
     // one: the projection carries that column, at whatever depth of the key it is read
     if (projection->hasItem(expr)) {
@@ -531,12 +551,17 @@ void CypherAnalyzer::analyze(OrderBy* orderBySt, const Projection* projection) {
         _exprAnalyzer->analyzeRootExpr(expr);
 
         // A key naming the alias of an aggregate is a symbol, and a symbol is never itself
-        // aggregate: the aggregate is the item the key names
+        // aggregate: the aggregate is the item the key names, so the key inherits it
         const Expr* namedItem = projection->findItemExpr(expr);
-        const bool isAggregateKey = expr->isAggregate();
         const bool namesAnAggregateItem = namedItem && namedItem->isAggregate();
 
-        if (isAggregateKey || namesAnAggregateItem) {
+        if (namesAnAggregateItem) {
+            expr->setAggregate();
+        }
+
+        // Only MLIR v3 sorts the groups an aggregate reduces to; the pipeline hands the
+        // sort one row and the whole projection's row count, and trips over the mismatch
+        if (!_isV3 && expr->isAggregate()) {
             throwError("Aggregate expressions in ORDER BY are not supported yet", orderBySt);
         }
     }

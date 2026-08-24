@@ -21,7 +21,7 @@ namespace {
 
 // Defined below with the other program strings; declared here so the fixture's
 // checkAggregateOp helper (an inline member) can name it.
-std::string aggregateProgram(const char* op);
+std::string aggregateProgram(const char* op, bool distinct);
 
 // A context with just the dialects a db-dialect program needs: db for the query
 // ops and func for the enclosing function.
@@ -59,8 +59,8 @@ protected:
     // it and re-parsing still verifies (the printer and parser are inverses). One
     // typed helper covers all four ops, which differ only in their name.
     template <typename OpType>
-    void checkAggregateOp(const char* op) {
-        const mlir::OwningOpRef<mlir::ModuleOp> module = parse(aggregateProgram(op).c_str());
+    void checkAggregateOp(const char* op, bool distinct) {
+        const mlir::OwningOpRef<mlir::ModuleOp> module = parse(aggregateProgram(op, distinct).c_str());
         ASSERT_TRUE(module) << op;
 
         OpType aggregate;
@@ -68,6 +68,8 @@ protected:
             aggregate = found;
         });
         ASSERT_TRUE(aggregate) << op;
+
+        EXPECT_EQ(aggregate.getDistinct(), distinct) << op;
 
         // One property column in, one reduced column out - the two spelled i64 columns.
         const mlir::Type int64ColumnType = mlir::db::ColumnType::get(&_context, mlir::IntegerType::get(&_context, 64));
@@ -81,6 +83,15 @@ protected:
         const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
         ASSERT_TRUE(reparsed) << op;
         EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed))) << op;
+
+        // A printer dropping the flag would silently turn a DISTINCT reduction back
+        // into a plain one, so the re-parsed op must still carry it.
+        OpType reparsedAggregate;
+        reparsed.get().walk([&](OpType found) {
+            reparsedAggregate = found;
+        });
+        ASSERT_TRUE(reparsedAggregate) << op;
+        EXPECT_EQ(reparsedAggregate.getDistinct(), distinct) << op;
     }
 
     mlir::MLIRContext _context;
@@ -348,13 +359,15 @@ func.func @main() {
 // is db.count. Like db.count they change arity and type, so the input and result
 // types are unrelated; only the op name differs, which lets one program string cover
 // all four ops.
-std::string aggregateProgram(const char* op) {
+std::string aggregateProgram(const char* op, bool distinct) {
     return std::string("func.func @main() {\n"
                        "  %a = db.scan_nodes() : !db.column<!storage.node_id>\n"
                        "  %s = db.get_node_properties(%a, \"score\") : (!db.column<!storage.node_id>) -> !db.column<i64>\n"
                        "  %r = db.")
            + op
-           + "(%s) : (!db.column<i64>) -> !db.column<i64>\n"
+           + "(%s)"
+           + (distinct ? " distinct" : "")
+           + " : (!db.column<i64>) -> !db.column<i64>\n"
              "  db.output(%r) : !db.column<i64>\n"
              "  return\n"
              "}\n";
@@ -1052,10 +1065,20 @@ TEST_F(DBDialectTest, parsesAndRoundTripsAggregateOps) {
     // Each aggregate is its own op - db.sum / db.min / db.max / db.avg - so each
     // parses to its own type, exposes the spelled input/result columns, and survives
     // a print/re-parse round trip.
-    checkAggregateOp<mlir::db::Sum>("sum");
-    checkAggregateOp<mlir::db::Min>("min");
-    checkAggregateOp<mlir::db::Max>("max");
-    checkAggregateOp<mlir::db::Avg>("avg");
+    checkAggregateOp<mlir::db::Sum>("sum", /*distinct=*/false);
+    checkAggregateOp<mlir::db::Min>("min", /*distinct=*/false);
+    checkAggregateOp<mlir::db::Max>("max", /*distinct=*/false);
+    checkAggregateOp<mlir::db::Avg>("avg", /*distinct=*/false);
+}
+
+TEST_F(DBDialectTest, parsesAndRoundTripsDistinctAggregateOps) {
+    // The distinct flag is a unit attribute printed as its own keyword ahead of the
+    // colon, the same shape db.count carries it in. It is spelled on all four ops,
+    // whatever the frontend chooses to generate.
+    checkAggregateOp<mlir::db::Sum>("sum", /*distinct=*/true);
+    checkAggregateOp<mlir::db::Min>("min", /*distinct=*/true);
+    checkAggregateOp<mlir::db::Max>("max", /*distinct=*/true);
+    checkAggregateOp<mlir::db::Avg>("avg", /*distinct=*/true);
 }
 
 // MATCH (a:Person:Employee) RETURN a: a scan restricted to the nodes carrying

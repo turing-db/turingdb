@@ -247,13 +247,9 @@ mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type r
         return builder.getF64Type();
     }
 
-    const auto lhsInteger = mlir::cast<mlir::IntegerType>(lhs);
-    const auto rhsInteger = mlir::cast<mlir::IntegerType>(rhs);
-    const bool anyUnsigned = lhsInteger.isUnsigned() || rhsInteger.isUnsigned();
-    if (anyUnsigned) {
-        return builder.getIntegerType(64, /*isSigned=*/false);
-    }
-
+    // Cypher has one integer type and it is signed. A tally is carried unsigned - it can
+    // never be negative - but arithmetic over it can be, so a count entering an expression
+    // is promoted like any other integer instead of wrapping around zero
     return builder.getIntegerType(64);
 }
 
@@ -265,6 +261,7 @@ mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type r
 storage::AggregateKind groupKindToAggregateKind(storage::GroupAggregateKind kind) {
     switch (kind) {
         case storage::GroupAggregateKind::Sum:
+        case storage::GroupAggregateKind::SumDistinct:
             return storage::AggregateKind::Sum;
         break;
 
@@ -277,6 +274,7 @@ storage::AggregateKind groupKindToAggregateKind(storage::GroupAggregateKind kind
         break;
 
         case storage::GroupAggregateKind::Avg:
+        case storage::GroupAggregateKind::AvgDistinct:
             return storage::AggregateKind::Avg;
         break;
 
@@ -309,9 +307,11 @@ nl::ChunkType groupAggregateResultChunkType(mlir::OpBuilder& builder,
         break;
 
         case storage::GroupAggregateKind::Sum:
+        case storage::GroupAggregateKind::SumDistinct:
         case storage::GroupAggregateKind::Min:
         case storage::GroupAggregateKind::Max:
-        case storage::GroupAggregateKind::Avg: {
+        case storage::GroupAggregateKind::Avg:
+        case storage::GroupAggregateKind::AvgDistinct: {
             const nl::ChunkType inputChunkType = mlir::cast<nl::ChunkType>(inputChunk.getType());
             const auto inputNullable = mlir::dyn_cast<storage::NullableType>(inputChunkType.getElementType());
             if (!inputNullable) {
@@ -574,13 +574,13 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
     } else if (mlir::db::Count count = mlir::dyn_cast<mlir::db::Count>(operation)) {
         lowerCount(count);
     } else if (mlir::db::Sum sum = mlir::dyn_cast<mlir::db::Sum>(operation)) {
-        lowerAggregate(sum.getInput(), sum.getResult(), storage::AggregateKind::Sum);
+        lowerAggregate(sum.getInput(), sum.getResult(), storage::AggregateKind::Sum, sum.getDistinct());
     } else if (mlir::db::Min min = mlir::dyn_cast<mlir::db::Min>(operation)) {
-        lowerAggregate(min.getInput(), min.getResult(), storage::AggregateKind::Min);
+        lowerAggregate(min.getInput(), min.getResult(), storage::AggregateKind::Min, min.getDistinct());
     } else if (mlir::db::Max max = mlir::dyn_cast<mlir::db::Max>(operation)) {
-        lowerAggregate(max.getInput(), max.getResult(), storage::AggregateKind::Max);
+        lowerAggregate(max.getInput(), max.getResult(), storage::AggregateKind::Max, max.getDistinct());
     } else if (mlir::db::Avg avg = mlir::dyn_cast<mlir::db::Avg>(operation)) {
-        lowerAggregate(avg.getInput(), avg.getResult(), storage::AggregateKind::Avg);
+        lowerAggregate(avg.getInput(), avg.getResult(), storage::AggregateKind::Avg, avg.getDistinct());
     } else if (mlir::db::ConstantOp constant = mlir::dyn_cast<mlir::db::ConstantOp>(operation)) {
         lowerConstant(constant);
     } else if (mlir::isa<mlir::db::AddOp>(operation)) {
@@ -1390,7 +1390,7 @@ void DBLowering::lowerCount(mlir::db::Count count) {
     _valueMap[count.getResult()] = result.getResult();
 }
 
-void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::AggregateKind kind) {
+void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::AggregateKind kind, bool distinct) {
     // The nl chunk the aggregated column lowered to; the update folds its per-step
     // non-null values into the accumulator. A constant column is reduced over the
     // rows it stands for, so it is laid out over the driving relation first.
@@ -1421,11 +1421,26 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
     const nl::AggregateStateType stateType = nl::AggregateStateType::get(context, resultElement);
     const mlir::Value state = _builder.create<nl::Aggregate>(loc, stateType, kind).getState();
 
+    // sum(DISTINCT x) folds the survivors of a DISTINCT instead of the raw column, so a
+    // value repeated across rows is charged once. A null does survive the filter - all
+    // nulls share one key - but the update skips nulls as it always does.
+    mlir::Value distinctState;
+    if (distinct) {
+        distinctState = _builder.create<nl::Distinct>(loc).getState();
+    }
+
     // The update sits in the innermost producing loop body, where the aggregated
     // column is bound (the same block db.output would emit from), and folds each
     // step's non-null values into the accumulator.
     setInsertionInto(ownerBlock(inputChunk));
-    _builder.create<nl::AggregateUpdate>(loc, state, inputChunk, kind);
+
+    mlir::Value reducedChunk = inputChunk;
+    if (distinctState) {
+        nl::DistinctFilter filter = _builder.create<nl::DistinctFilter>(loc, distinctState, mlir::ValueRange {inputChunk});
+        reducedChunk = filter.getResults().front();
+    }
+
+    _builder.create<nl::AggregateUpdate>(loc, state, reducedChunk, kind);
 
     // Like db.count, an aggregate is a pipeline breaker that collapses to one row,
     // so it opens no emit loop: nl.aggregate_result materializes the reduced value
@@ -1549,7 +1564,7 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
     // the group table exists before the producing loop fills it and the handle
     // dominates the update. The collect sibling of lowerGroupAggregate's buffer.
     _builder.setInsertionPointToStart(_entryBlock);
-    nl::CollectBuffer bufferOp = _builder.create<nl::CollectBuffer>(loc, keyCount);
+    nl::CollectBuffer bufferOp = _builder.create<nl::CollectBuffer>(loc, keyCount, collect.getDistinct());
     const mlir::Value state = bufferOp.getState();
 
     // The update folds each step's chunk of every column into the per-group lists. It
@@ -1611,7 +1626,7 @@ void DBLowering::lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect) {
     // The accumulate phase is identical to lowerCollect: a hoisted nl.collect_buffer
     // and an nl.collect_update in the producing loop body.
     _builder.setInsertionPointToStart(_entryBlock);
-    nl::CollectBuffer bufferOp = _builder.create<nl::CollectBuffer>(loc, keyCount);
+    nl::CollectBuffer bufferOp = _builder.create<nl::CollectBuffer>(loc, keyCount, /*distinct=*/false);
     const mlir::Value state = bufferOp.getState();
 
     const mlir::Value representative = chunks.front();

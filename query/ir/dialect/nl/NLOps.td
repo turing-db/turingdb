@@ -1552,14 +1552,18 @@ def CollectBuffer : NLOp<"collect_buffer", []> {
     keys (0 = one global list); the column types are recovered from the update.
 
       %buf = nl.collect_buffer keys 1
+
+    `distinct` makes the accumulator charge each of a group's values once - Cypher's
+    collect(DISTINCT x). It sits on the buffer rather than the update because it is part
+    of what the accumulator is, as its key count is: the update carries no spec of its own.
   }];
 
   // keyCount is unsigned; 0 is a valid ungrouped collect, so nothing to verify here
   // (the one-value-column split is checked during translation).
-  let arguments = (ins UI64Attr:$keyCount);
+  let arguments = (ins UI64Attr:$keyCount, UnitAttr:$distinct);
   let results   = (outs NLCollectState:$state);
 
-  let assemblyFormat = "`keys` $keyCount attr-dict";
+  let assemblyFormat = "`keys` $keyCount (`distinct` $distinct^)? attr-dict";
 }
 
 /**

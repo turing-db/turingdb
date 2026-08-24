@@ -316,13 +316,17 @@ private:
             std::cout << (*edgeTypes)[row].getValue();
         } else if (const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(column)) {
             std::cout << (*counts)[row];
-        } else if (printValueCell<int64_t>(column, row)
+        } else if (printPlainValueCell<int64_t>(column, row)
+                   || printPlainValueCell<double>(column, row)
+                   || printValueCell<int64_t>(column, row)
                    || printValueCell<uint64_t>(column, row)
                    || printValueCell<double>(column, row)
                    || printValueCell<std::string_view>(column, row)
                    || printValueCell<std::string>(column, row)
                    || printEmbeddingCell(column, row)) {
             // Printed by the helper for whichever nullable value type matched
+        } else if (dynamic_cast<const ColumnConst<PropertyNull>*>(column)) {
+            std::cout << "null";
         } else if (printConstValueCell<int64_t>(column, row)
                    || printConstValueCell<uint64_t>(column, row)
                    || printConstValueCell<double>(column, row)
