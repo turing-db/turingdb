@@ -33,6 +33,7 @@ add_storage_tests(test_storage_metadatarebaser versioning/MetadataRebaserTest.cp
 add_storage_tests(test_storage_datapartmerger versioning/DatapartMergerTest.cpp)
 
 add_storage_tests(test_storage_stringindex StringIndexTest.cpp)
+add_storage_tests(test_storage_listorder ListOrderTest.cpp)
 
 add_storage_tests(test_storage_dump_propertycontainerdumper dump/PropertyContainerDumperTest.cpp)
 add_storage_tests(test_storage_dump_propertydumpformat dump/PropertyDumpFormatTest.cpp)
