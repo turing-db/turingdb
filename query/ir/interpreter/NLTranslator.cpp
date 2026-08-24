@@ -1990,7 +1990,7 @@ void NLTranslator::translateGroupAggregateUpdate(nl::GroupAggregateUpdate update
                 } else if (mlir::isa<storage::ListElementType>(chunk.getElementType())) {
                     aggregate._fold = NLExecutor::selectGroupCountDistinctListElementFold();
                 } else {
-                    aggregate._fold = NLExecutor::selectGroupCountDistinctIDFold(getChunkKind(chunkType));
+                    aggregate._fold = NLExecutor::selectGroupCountDistinctChunkFold(getChunkKind(chunkType));
                 }
             }
             break;
