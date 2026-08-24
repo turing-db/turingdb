@@ -683,18 +683,20 @@ TEST_F(CypherCollectTest, groupedCollectWithOrderByAndLimit) {
     EXPECT_EQ(rows, expected);
 }
 
-// A list is carried through the sort but never compared, so it cannot be the key. The
-// analyzer already turns every aggregate ORDER BY key away, alias or spelled out.
+// A list is carried through the sort row-aligned with the keys but never compared, so it
+// cannot be the key the rows are ordered on - alias or spelled out.
 TEST_F(CypherCollectTest, rejectsOrderByOnTheCollectedList) {
     buildTeamGraph();
 
     QueryStatus aliasStatus;
     runQuery("MATCH (n:Node) RETURN n.team, collect(n.name) AS names ORDER BY names", aliasStatus);
-    EXPECT_EQ(aliasStatus.getStatus(), QueryStatus::Status::ANALYZE_ERROR);
+    EXPECT_EQ(aliasStatus.getStatus(), QueryStatus::Status::EXEC_ERROR);
+    EXPECT_EQ(aliasStatus.getError(), "a list column cannot be a sort key");
 
     QueryStatus spelledOutStatus;
     runQuery("MATCH (n:Node) RETURN n.team, collect(n.name) ORDER BY collect(n.name)", spelledOutStatus);
-    EXPECT_EQ(spelledOutStatus.getStatus(), QueryStatus::Status::ANALYZE_ERROR);
+    EXPECT_EQ(spelledOutStatus.getStatus(), QueryStatus::Status::EXEC_ERROR);
+    EXPECT_EQ(spelledOutStatus.getError(), "a list column cannot be a sort key");
 }
 
 TEST_F(CypherCollectTest, rejectsCollectOfConstant) {
