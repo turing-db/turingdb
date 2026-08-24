@@ -13,45 +13,6 @@
 
 using namespace db;
 
-namespace {
-
-void buildSignature(std::string& result, const Procedure* proc) {
-    result.clear();
-    result += proc->getFullName();
-    result += "(";
-
-    bool first = true;
-    for (const auto& arg : proc->argumentTypes()) {
-        if (!first) {
-            result += ", ";
-        }
-        result += arg._name;
-        result += " :: ";
-        result += ProcedureTypeName::value(arg._type);
-        if (arg._optional) {
-            result += " = null";
-        }
-        first = false;
-    }
-
-    result += ") :: (";
-
-    first = true;
-    for (const auto& rv : proc->returnValues()) {
-        if (!first) {
-            result += ", ";
-        }
-        result += rv._name;
-        result += " :: ";
-        result += ProcedureTypeName::value(rv._type);
-        first = false;
-    }
-
-    result += ")";
-}
-
-}
-
 ShowProceduresProcessor::ShowProceduresProcessor()
 {
 }
@@ -99,7 +60,7 @@ void ShowProceduresProcessor::execute() {
 
         for (const auto* proc : procedures) {
             colName->push_back(proc->getFullName());
-            buildSignature(signature, proc);
+            proc->buildSignature(signature);
             colSignature->push_back(signature);
         }
     }

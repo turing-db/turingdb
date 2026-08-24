@@ -26,6 +26,46 @@ void Procedure::setDeallocCallback(DeallocCallback cb) {
     _deallocCallback = cb;
 }
 
+void Procedure::buildSignature(std::string& result) const {
+    result.clear();
+    result += _fullName;
+    result += "(";
+
+    bool first = true;
+    for (const NamedProcedureType& argument : _argumentTypes) {
+        if (!first) {
+            result += ", ";
+        }
+
+        result += argument._name;
+        result += " :: ";
+        result += ProcedureTypeName::value(argument._type);
+
+        if (argument._optional) {
+            result += " = null";
+        }
+
+        first = false;
+    }
+
+    result += ") :: (";
+
+    first = true;
+    for (const NamedProcedureType& returnValue : _returnValues) {
+        if (!first) {
+            result += ", ";
+        }
+
+        result += returnValue._name;
+        result += " :: ";
+        result += ProcedureTypeName::value(returnValue._type);
+
+        first = false;
+    }
+
+    result += ")";
+}
+
 void Procedure::addReturnValue(std::string_view name, ProcedureType type) {
     _returnValues.add(name, type);
 }
