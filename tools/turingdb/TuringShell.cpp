@@ -655,6 +655,11 @@ void tabulateCell(tabulate::RowStream& rs, const Column* column, size_t row) {
         TABULATE_COL_CASE(ColumnVector<ListView>, row)
         TABULATE_COL_CASE(ColumnVector<ListElementView>, row)
 
+        // toX functions on a constant string produce opt const
+        TABULATE_COL_CASE(ColumnConst<std::optional<types::Int64::Primitive>>, row)
+        TABULATE_COL_CASE(ColumnConst<std::optional<types::Double::Primitive>>, row)
+        TABULATE_COL_CASE(ColumnConst<std::optional<types::Bool::Primitive>>, row)
+
         default: {
             panic("can not print columns of kind {}", column->getKind());
         }
