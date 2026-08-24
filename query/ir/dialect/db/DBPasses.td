@@ -8,4 +8,9 @@ def FuseScanByLabel : Pass<"fuse_scan_by_label"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def PushDownFilters : Pass<"push_down_filters"> {
+    let summary = "Sink a single-variable property-predicate filter to its variable's scan";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 #endif // TURINGDB_PASSES

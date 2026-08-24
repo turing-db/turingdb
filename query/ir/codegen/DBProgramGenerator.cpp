@@ -778,6 +778,7 @@ bool DBProgramGenerator::generateSystemCommand(const CypherAST* ast) {
 void DBProgramGenerator::runPasses() {
     mlir::PassManager passManager(_mlirCtxt);
     passManager.addPass(mlir::db::createFuseScanByLabel());
+    passManager.addPass(mlir::db::createPushDownFilters());
 
     if (mlir::failed(passManager.run(*_module))) {
         throw FatalException("DB pass pipeline failed");
