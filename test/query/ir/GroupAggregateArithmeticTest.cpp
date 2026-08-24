@@ -49,18 +49,19 @@ using namespace turing::test;
 namespace {
 
 // Collects the (nullable int64 grouping key, uint64 value) rows a grouped aggregate whose
-// value is arithmetic over a count emits: a nullable i64 key chunk and a non-null ui64
-// value chunk. 2 * count(n) + 20 and count(n) + 1 both promote to a non-null ui64 because
-// count is a ui64 and every other operand is a non-null integer literal.
+// value is arithmetic over a count emits: a nullable i64 key chunk and a non-null i64
+// value chunk. 2 * count(n) + 20 and count(n) + 1 are present in every group, and the
+// language has one integer type and it is signed, so a tally entering arithmetic is
+// promoted to it rather than staying the unsigned tally it was.
 class GroupIntValueSink : public NLOutputSink {
 public:
-    using Row = std::pair<std::optional<int64_t>, uint64_t>;
+    using Row = std::pair<std::optional<int64_t>, int64_t>;
 
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
         const auto* keys = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[0]);
-        const auto* values = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
+        const auto* values = dynamic_cast<const ColumnVector<int64_t>*>(chunks[1]);
         ASSERT_NE(keys, nullptr);
         ASSERT_NE(values, nullptr);
         ASSERT_EQ(keys->size(), values->size());

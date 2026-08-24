@@ -230,12 +230,30 @@ TEST_F(OrderByCountTest, skipsAndLimitsGroupsWithoutAnOrder) {
     }
 }
 
-// A count is not orderable by itself: the sort runs before the aggregate that would
-// produce the key, so the query is turned away at analysis rather than sorted on a
-// column that does not exist yet.
-TEST_F(OrderByCountTest, rejectsOrderByOnTheCount) {
-    OrderedSourceCountSink sink;
-    EXPECT_THROW(runQuery("MATCH (a)-->(b) RETURN a, count(b) ORDER BY count(b)", &sink), TuringException);
+// The count is a key like any other column the projection carries: the sort runs over the
+// grouped rows, so ordering by it orders the groups. The node breaks the ties, so the
+// order the sink sees is the one the query asks for rather than the one the groups
+// happened to be created in.
+TEST_F(OrderByCountTest, ordersGroupsByTheirCount) {
+    const SourceCountRows ascending = {
+        {6, 1}, {11, 1}, {17, 1}, {8, 2}, {9, 2}, {12, 2}, {15, 2}, {1, 3}, {0, 4},
+    };
+
+    expectRows("MATCH (a)-->(b) RETURN a, count(b) ORDER BY count(b), a", ascending);
+
+    const SourceCountRows descending = {
+        {0, 4}, {1, 3}, {8, 2}, {9, 2}, {12, 2}, {15, 2}, {6, 1}, {11, 1}, {17, 1},
+    };
+
+    expectRows("MATCH (a)-->(b) RETURN a, count(b) ORDER BY count(b) DESC, a", descending);
+}
+
+// The same order taken through the alias of the count, and cut down to the three groups
+// with the most out-edges - the top-N shape an ORDER BY over an aggregate exists for.
+TEST_F(OrderByCountTest, takesTheGroupsWithTheHighestCount) {
+    const SourceCountRows topThree = {{0, 4}, {1, 3}, {8, 2}};
+
+    expectRows("MATCH (a)-->(b) RETURN a, count(b) AS outEdges ORDER BY outEdges DESC, a LIMIT 3", topThree);
 }
 
 int main(int argc, char** argv) {

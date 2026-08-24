@@ -1910,10 +1910,20 @@ void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* u
         }
         break;
 
-        case UnaryOperator::Minus:
+        case UnaryOperator::Minus: {
+            // -x is 0 - x, the subtraction the engine already lowers: the promotion of the
+            // zero against the operand is what gives the negation its type
+            const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+            const mlir::TypedAttr zeroAttr = _opBuilder.getI64IntegerAttr(0);
+            const mlir::db::ColumnType zeroType = allocColumnType(zeroAttr.getType());
+            const mlir::Value zero = _opBuilder.create<mlir::db::ConstantOp>(loc, zeroType, zeroAttr).getResult();
+
+            _exprMap[expr] = _opBuilder.create<mlir::db::SubOp>(loc, noneType, zero, operandVal).getResult();
+        }
+        break;
+
         case UnaryOperator::Plus:
-            throw TuringException(fmt::format("Unsupported unary operator: {}",
-                                              UnaryOperatorDescription::value(op)));
+            _exprMap[expr] = operandVal;
         break;
 
         case UnaryOperator::_SIZE:
@@ -2136,20 +2146,35 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
     }
 
     const bool isDistinct = invocation->isDistinct();
-    if (isDistinct && funcName != "count") {
-        throw TuringException(fmt::format("DISTINCT is not supported in {}()", funcName));
-    }
+
+    // Dropping repeated values cannot move an extremum, so min(DISTINCT x) is min(x):
+    // the flag is spent here rather than on a seen-set the result cannot depend on
+    const bool isExtremum = funcName == "min" || funcName == "max";
+    const bool reducesDistinctValues = isDistinct && !isExtremum;
 
     if (funcName == "count") {
         _exprMap[expr] = _opBuilder.create<mlir::db::Count>(loc, noneType, inputColumn, isDistinct).getResult();
     } else if (funcName == "sum") {
-        _exprMap[expr] = _opBuilder.create<mlir::db::Sum>(loc, noneType, inputColumn).getResult();
+        _exprMap[expr] = _opBuilder.create<mlir::db::Sum>(loc, noneType, inputColumn, reducesDistinctValues).getResult();
     } else if (funcName == "min") {
-        _exprMap[expr] = _opBuilder.create<mlir::db::Min>(loc, noneType, inputColumn).getResult();
+        _exprMap[expr] = _opBuilder.create<mlir::db::Min>(loc, noneType, inputColumn, reducesDistinctValues).getResult();
     } else if (funcName == "max") {
-        _exprMap[expr] = _opBuilder.create<mlir::db::Max>(loc, noneType, inputColumn).getResult();
+        _exprMap[expr] = _opBuilder.create<mlir::db::Max>(loc, noneType, inputColumn, reducesDistinctValues).getResult();
     } else if (funcName == "avg") {
-        _exprMap[expr] = _opBuilder.create<mlir::db::Avg>(loc, noneType, inputColumn).getResult();
+        _exprMap[expr] = _opBuilder.create<mlir::db::Avg>(loc, noneType, inputColumn, reducesDistinctValues).getResult();
+    } else if (funcName == "collect") {
+        // collect gathers values rather than reducing them, so it is db.collect rather
+        // than one of the reductions: with no grouping key it is the keyless form, whose
+        // one row holds the whole match's values as a list
+        const mlir::Type listType = mlir::storage::ListType::get(_mlirCtxt, mlir::NoneType::get(_mlirCtxt));
+        const mlir::db::ColumnType listColumnType = allocColumnType(listType);
+
+        auto collectOp = _opBuilder.create<mlir::db::Collect>(loc,
+                                                             mlir::TypeRange {listColumnType},
+                                                             mlir::ValueRange {inputColumn},
+                                                             /*keyCount=*/0,
+                                                             reducesDistinctValues);
+        _exprMap[expr] = collectOp.getResults().front();
     } else {
         throw TuringException(fmt::format("Unsupported aggregate function: {}", funcName));
     }
@@ -2222,9 +2247,14 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
         variableColumns[cypherVar->getName()] = mlirCol.back();
     }
 
+    // An edge identity is carried by the traversal variable that produced it, under a
+    // name of its own: the representative is where its column - and its grouped
+    // replacement - is published, since the identity has no variable of its own
+    llvm::StringMap<const VariableDependency*> edgeIdentityVars;
     for (const auto& [name, vars] : _vdg.edgeIdentities()) {
         if (!vars.empty() && _varMap.contains(vars.front())) {
             variableColumns[name] = _varMap.at(vars.front()).back();
+            edgeIdentityVars[name] = vars.front();
         }
     }
 
@@ -2236,6 +2266,7 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
     llvm::SmallVector<mlir::Value> aggInputColumns;
     llvm::SmallVector<mlir::storage::GroupAggregateKind> aggKinds;
     llvm::SmallVector<const FunctionInvocationExpr*> aggFuncExprs;
+    llvm::SmallVector<const FunctionInvocationExpr*> itemInvocations;
 
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
     const mlir::Location loc = _opBuilder.getUnknownLoc();
@@ -2247,13 +2278,24 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
             bioassert(findIt != variableColumns.end(), "Grouping key variable {} not found.", name);
             keyColumns.push_back(findIt->second);
 
+            // An edge identity's column is published under its representative, and that
+            // is the one the projection reads back, so the grouped column has to replace
+            // it there rather than under a traversal variable of the same name
             const VariableDependency* keyVar = nullptr;
-            for (auto& [var, values] : _varMap) {
-                if (var->getName() == name) {
-                    keyVar = var;
-                    break;
+            const auto identityIt = edgeIdentityVars.find(name);
+
+            if (identityIt != edgeIdentityVars.end()) {
+                keyVar = identityIt->second;
+            } else {
+                for (auto& [var, values] : _varMap) {
+                    if (var->getName() == name) {
+                        keyVar = var;
+                        break;
+                    }
                 }
             }
+
+            bioassert(keyVar, "Grouping key variable {} has no column to group", name);
             keyVarAtPos.push_back(keyVar);
             keyExprAtPos.push_back(nullptr);
             continue;
@@ -2290,50 +2332,78 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
         // arithmetic expression the group reduces a count for, not an aggregate function
         // it reduces whole. Its aggregates become the reduced columns, and the arithmetic
         // around them is left for the projection to compute over the results.
-        llvm::SmallVector<const FunctionInvocationExpr*> itemAggregates;
-        if (!collectAggregateInvocations(item, itemAggregates)) {
+        if (!collectAggregateInvocations(item, itemInvocations)) {
             const std::string_view itemName = item->getName();
             throw TuringException(fmt::format("Nested aggregates are not supported: {}", itemName));
         }
+    }
 
-        for (const FunctionInvocationExpr* funcExpr : itemAggregates) {
-            const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
-            const std::string_view funcName = invocation->getSignature()->getFullName();
-
-            const bool isDistinct = invocation->isDistinct();
-            if (isDistinct && funcName != "count") {
-                throw TuringException(fmt::format("DISTINCT is not supported in {}()", funcName));
-            }
-
-            // count(DISTINCT x) charges each of a group's distinct values once, which is a
-            // kind of its own: the keyword the enum spells it under is the function's name
-            // with the modifier appended
-            const std::string kindName = isDistinct ? std::string(funcName) + "_distinct"
-                                                    : std::string(funcName);
-
-            const std::optional<mlir::storage::GroupAggregateKind> kind = mlir::storage::symbolizeGroupAggregateKind(kindName);
-            if (!kind) {
-                throw TuringException(fmt::format("Unsupported aggregate function: {}", funcName));
-            }
-
-            const ExprChain* args = invocation->getArguments();
-            bioassert(args && !args->empty(), "Aggregate function invocation with no arguments.");
-
-            const Expr* argExpr = args->front();
-            mlir::Value inputColumn;
-
-            if (argExpr->getType() == EvaluatedType::Wildcard) {
-                inputColumn = resolveWildcardColumn();
-                bioassert(inputColumn, "count(*) over no column holding the rows it counts.");
-            } else {
-                translateExpr(argExpr);
-                inputColumn = _exprMap.at(argExpr);
-            }
-
-            aggInputColumns.push_back(inputColumn);
-            aggKinds.push_back(*kind);
-            aggFuncExprs.push_back(funcExpr);
+    // A key may order the groups by an aggregate the projection does not return -
+    // RETURN a.name ORDER BY count(b) - which the aggregation has to compute all the same.
+    // Its result column is then read by the sort alone, and no db.output reads it, which is
+    // what keeps it out of the rows
+    if (proj->hasOrderBy()) {
+        llvm::SmallVector<const FunctionInvocationExpr*> keyInvocations;
+        for (const OrderByItem* orderByItem : proj->getOrderBy()->getItems()) {
+            collectAggregateInvocations(orderByItem->getExpr(), keyInvocations);
         }
+
+        for (const FunctionInvocationExpr* keyInvocation : keyInvocations) {
+            const bool alreadyReduced = std::any_of(itemInvocations.begin(),
+                                                    itemInvocations.end(),
+                                                    [keyInvocation](const FunctionInvocationExpr* collected) {
+                                                        return StructuralExpressionComparator::equal(collected, keyInvocation);
+                                                    });
+
+            if (!alreadyReduced) {
+                itemInvocations.push_back(keyInvocation);
+            }
+        }
+    }
+
+    for (const FunctionInvocationExpr* funcExpr : itemInvocations) {
+        const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
+        const std::string_view funcName = invocation->getSignature()->getFullName();
+
+        if (funcName == "collect") {
+            // db.collect groups on its own rather than being one function of a
+            // db.group_aggregate, so a collect beside a grouping key would need the two to
+            // be grouped together - the keyless form is what the frontend generates today
+            throw TuringException("collect() with grouping keys is not supported yet");
+        }
+
+        // Dropping repeated values cannot move an extremum, so min(DISTINCT x) is min(x)
+        // and takes the plain kind. The others reduce each of a group's distinct values
+        // once, which is a kind of its own, spelled as the function's name with the
+        // modifier appended
+        const bool isExtremum = funcName == "min" || funcName == "max";
+        const bool reducesDistinctValues = invocation->isDistinct() && !isExtremum;
+
+        const std::string kindName = reducesDistinctValues ? std::string(funcName) + "_distinct"
+                                                           : std::string(funcName);
+
+        const std::optional<mlir::storage::GroupAggregateKind> kind = mlir::storage::symbolizeGroupAggregateKind(kindName);
+        if (!kind) {
+            throw TuringException(fmt::format("Unsupported aggregate function: {}", funcName));
+        }
+
+        const ExprChain* args = invocation->getArguments();
+        bioassert(args && !args->empty(), "Aggregate function invocation with no arguments.");
+
+        const Expr* argExpr = args->front();
+        mlir::Value inputColumn;
+
+        if (argExpr->getType() == EvaluatedType::Wildcard) {
+            inputColumn = resolveWildcardColumn();
+            bioassert(inputColumn, "count(*) over no column holding the rows it counts.");
+        } else {
+            translateExpr(argExpr);
+            inputColumn = _exprMap.at(argExpr);
+        }
+
+        aggInputColumns.push_back(inputColumn);
+        aggKinds.push_back(*kind);
+        aggFuncExprs.push_back(funcExpr);
     }
 
     const size_t keyCount = keyColumns.size();
@@ -2377,23 +2447,33 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
 
     const mlir::ResultRange results = groupAgg.getResults();
 
-    GroupedKeyColumns groupedKeys;
+    GroupedColumns groupedColumns;
 
     for (size_t i = 0; i < keyCount; i++) {
         if (keyVarAtPos[i]) {
             registerValue(keyVarAtPos[i], results[i]);
         } else {
             _exprMap[keyExprAtPos[i]] = results[i];
-            groupedKeys.emplace_back(keyExprAtPos[i], results[i]);
+            groupedColumns.emplace_back(keyExprAtPos[i], results[i]);
 
             const bool isSymbol = keyExprAtPos[i]->getKind() == Expr::Kind::SYMBOL;
             if (not isSymbol) {
                 continue;
             }
 
-            // Symbols need their value updated: the aggregate gives them a new value
+            // Symbols need their value updated: the aggregate gives them a new value.
+            // An edge variable holds an identity rather than a traversal variable of its
+            // own, and the projection reads it back through the identity's
+            // representative, so that is where the grouped column has to land
             const SymbolExpr* sym = static_cast<const SymbolExpr*>(keyExprAtPos[i]);
             const std::string_view symName = sym->getDecl()->getName();
+            const auto identityIt = edgeIdentityVars.find(symName);
+
+            if (identityIt != edgeIdentityVars.end()) {
+                registerValue(identityIt->second, results[i]);
+                continue;
+            }
+
             for (auto& [var, values] : _varMap) {
                 if (var->getName() == symName) {
                     registerValue(var, results[i]);
@@ -2404,31 +2484,40 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
     }
 
     for (size_t i = 0; i < aggCount; i++) {
-        _exprMap[aggFuncExprs[i]] = results[keyCount + i];
+        const mlir::Value aggregateColumn = results[keyCount + i];
+        _exprMap[aggFuncExprs[i]] = aggregateColumn;
+        groupedColumns.emplace_back(aggFuncExprs[i], aggregateColumn);
+
+        // The alias of an aggregate names its reduced column, so a key or a later item
+        // spelling that alias reads this column instead of computing a second aggregate
+        const VarDecl* aggregateDecl = aggFuncExprs[i]->getExprVarDecl();
+        if (aggregateDecl) {
+            _projectedColumns[aggregateDecl] = aggregateColumn;
+        }
     }
 
-    bindOrderByKeyColumns(proj, groupedKeys);
+    bindOrderByKeyColumns(proj, groupedColumns);
 }
 
 void DBProgramGenerator::bindOrderByKeyColumns(const Projection* projection,
-                                               const GroupedKeyColumns& groupedKeys) {
-    if (!projection->hasOrderBy() || groupedKeys.empty()) {
+                                               const GroupedColumns& groupedColumns) {
+    if (!projection->hasOrderBy() || groupedColumns.empty()) {
         return;
     }
 
     const OrderBy* orderBy = projection->getOrderBy();
 
     for (const OrderByItem* item : orderBy->getItems()) {
-        bindGroupedKeyColumn(item->getExpr(), groupedKeys);
+        bindGroupedKeyColumn(item->getExpr(), groupedColumns);
     }
 }
 
-void DBProgramGenerator::bindGroupedKeyColumn(const Expr* expr, const GroupedKeyColumns& groupedKeys) {
+void DBProgramGenerator::bindGroupedKeyColumn(const Expr* expr, const GroupedColumns& groupedColumns) {
     if (!expr || _exprMap.contains(expr)) {
         return;
     }
 
-    for (const auto& [keyExpr, keyColumn] : groupedKeys) {
+    for (const auto& [keyExpr, keyColumn] : groupedColumns) {
         // The key reads this grouping key whole, so the grouped column is what it reads:
         // nothing below it has to be looked at, let alone translated again
         if (StructuralExpressionComparator::equal(keyExpr, expr)) {
@@ -2443,7 +2532,7 @@ void DBProgramGenerator::bindGroupedKeyColumn(const Expr* expr, const GroupedKey
     }
 
     for (const Expr* child : children) {
-        bindGroupedKeyColumn(child, groupedKeys);
+        bindGroupedKeyColumn(child, groupedColumns);
     }
 }
 

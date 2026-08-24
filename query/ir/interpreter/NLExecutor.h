@@ -253,6 +253,16 @@ public:
     static NLCompareFunction selectCompareFunction(NLChunkKind kind);
     static NLCompareFunction selectOptCompareFunction(ValueType valueType);
 
+    // The handlers of a plain value column - a ColumnVector<Primitive> rather than the
+    // nullable ColumnOptVector a property fetch yields. A tally comes out this way, and so
+    // does an expression over one: both are present in every row. Numeric only, since
+    // these are the shapes an aggregate and the arithmetic over it produce.
+    static NLAppendFunction selectPlainAppendFunction(ValueType valueType);
+    static NLGatherFunction selectPlainGatherFunction(ValueType valueType);
+    static NLCompareFunction selectPlainCompareFunction(ValueType valueType);
+    static NLCopyFunction selectPlainCopyFunction(ValueType valueType);
+    static NLBroadcastFunction selectPlainBlockRepeatFunction(ValueType valueType);
+
     // Block-repeat for an ID chunk of this kind (outer column).
     static NLBroadcastFunction selectBlockRepeatFunction(NLChunkKind kind);
 
@@ -275,6 +285,10 @@ public:
     // The fill that lays a constant column's single value out over a step's rows,
     // for a nullable value chunk of this value type (nl.broadcast_constant).
     static NLBroadcastConstantFunction selectConstantBroadcast(ValueType valueType);
+
+    // The broadcast of the null literal, whose rows are the absent value rather than
+    // copies of a value the constant holds
+    static NLBroadcastConstantFunction selectNullConstantBroadcast();
 
     // Block-repeat (outer column) and tile (inner column) for a list_element chunk: a
     // tagged scalar carries its own type, so there is no value type to dispatch on.
@@ -341,6 +355,11 @@ public:
     static NLGroupAggregateFoldFunction selectGroupCountAllFold();
     static NLGroupAggregateFoldFunction selectGroupCountDistinctFold(ValueType inputType);
     static NLGroupAggregateFoldFunction selectGroupCountDistinctIDFold(NLChunkKind kind);
+
+    // The grouped count / count(DISTINCT) folds of a type-erased column of tagged
+    // scalars, the column a heterogeneous UNWIND produces
+    static NLGroupAggregateFoldFunction selectGroupCountListElementFold();
+    static NLGroupAggregateFoldFunction selectGroupCountDistinctListElementFold();
     static NLGroupAggregateEmitFunction selectGroupAggregateEmit(GroupAggregateKind kind, ValueType resultType);
 
     // The append (onto a key buffer's tail) for an ID chunk of this kind / a
@@ -353,6 +372,7 @@ public:
     // its group's list in the flat value buffer. Only the scalar value types are
     // supported (collect of embeddings is unsupported for now).
     static NLCollectFoldFunction selectCollectFold(ValueType valueType);
+    static NLCollectFoldFunction selectCollectDistinctFold(ValueType valueType);
 
     // The unwind value-emit / collect list-emit for a column of this value type: the
     // drain-side siblings of selectCollectFold, baked from the same value type.

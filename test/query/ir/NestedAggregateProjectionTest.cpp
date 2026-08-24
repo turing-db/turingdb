@@ -124,11 +124,8 @@ TEST_F(NestedAggregateProjectionTest, rejectsAMapHoldingAnAggregateAlone) {
     EXPECT_THROW(generateProgram("MATCH (n:Person) RETURN {total: count(n)}"), TuringException);
 }
 
-// The finding: the aggregate the map holds is propagated onto the map literal itself, so
-// the projection reads as one grouping key plus one aggregate and the grouped aggregate
-// codegen runs. It reaches the map literal through a FunctionInvocationExpr* it casts
-// unchecked, and reads a MapLiteral* as a FunctionInvocation*. The query names a value
-// codegen cannot build, so it must be turned away like the two above - not crashed on.
+// An expression over an aggregate is computed from the aggregate's result, but a map is
+// not a value this codegen can build at all, so the aggregate it holds has nowhere to go.
 TEST_F(NestedAggregateProjectionTest, rejectsAMapHoldingAnAggregateBesideAGroupingKey) {
     expectRejected("MATCH (n:Person) RETURN n.name, {total: count(n)}", nestedAggregateReason);
 }

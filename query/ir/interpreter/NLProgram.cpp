@@ -61,6 +61,7 @@ void NLGroupAggregateState::reset() {
 
 void NLCollectState::reset() {
     _groupTable.clear();
+    _distinct.clear();
 
     for (KeyColumn& key : _keyColumns) {
         key._buffer->clear();

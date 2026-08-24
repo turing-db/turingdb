@@ -525,6 +525,16 @@ void broadcastConstantColumn(const Column* value, size_t rowCount, Column* outpu
     std::fill_n(outputRaw.begin(), rowCount, std::optional<Primitive>(typedValue->getRaw()));
 }
 
+// The null literal laid out over every row of the step: it holds no value to repeat, so
+// each row is the absent value. An untyped null is carried as a null integer, which is
+// the column the layout fills.
+void broadcastNullColumn(const Column* value, size_t rowCount, Column* output) {
+    ColumnOptVector<int64_t>* typedOutput = static_cast<ColumnOptVector<int64_t>*>(output);
+
+    auto& outputRaw = typedOutput->getRaw();
+    outputRaw.assign(rowCount, std::optional<int64_t> {});
+}
+
 // Range copy: rows [inputOffset, inputOffset + rowCount) of the input land at
 // output indices [0, rowCount). This lifts a skip's surviving suffix to the front
 // of a fresh chunk - nl.skip_truncate passes inputOffset = skipThisStep and
@@ -1112,6 +1122,38 @@ void groupFoldSum(Column* accumulator,
     }
 }
 
+// Fold a chunk's distinct present values into per-group sum accumulators
+// (sum(DISTINCT x)): a value its group has already been charged is skipped, so each
+// distinct value is added once however many rows carry it.
+template <typename Primitive>
+void groupFoldSumDistinct(Column* accumulator,
+                          std::vector<uint64_t>& counts,
+                          const Column* input,
+                          const std::vector<size_t>& groups,
+                          NLGroupDistinctTally& distinct) {
+    auto& raw = static_cast<ColumnOptVector<Primitive>*>(accumulator)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const std::optional<Primitive>& value = inputRaw[row];
+        if (!value.has_value()) {
+            continue;
+        }
+
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendValueBytes(distinct.getKey(), *value);
+
+        if (!distinct.insertIfNew()) {
+            continue;
+        }
+
+        std::optional<Primitive>& running = raw[group];
+        running = numericAdd(running.value(), *value);
+    }
+}
+
 // Fold a chunk's present values into per-group min (IsMax false) or max (IsMax
 // true) accumulators. The first present value of a group seeds it; a later value
 // replaces it when more extreme. A group with no present value stays null.
@@ -1165,6 +1207,39 @@ void groupFoldAvg(Column* accumulator,
             running = running.value() + static_cast<double>(*value);
             counts[group]++;
         }
+    }
+}
+
+// Fold a chunk's distinct present values into per-group avg accumulators
+// (avg(DISTINCT x)): a value its group has already been charged moves neither the
+// running sum nor the count, so the mean is taken over the distinct values.
+template <typename Primitive>
+void groupFoldAvgDistinct(Column* accumulator,
+                          std::vector<uint64_t>& counts,
+                          const Column* input,
+                          const std::vector<size_t>& groups,
+                          NLGroupDistinctTally& distinct) {
+    auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const std::optional<Primitive>& value = inputRaw[row];
+        if (!value.has_value()) {
+            continue;
+        }
+
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendValueBytes(distinct.getKey(), *value);
+
+        if (!distinct.insertIfNew()) {
+            continue;
+        }
+
+        std::optional<double>& running = raw[group];
+        running = running.value() + static_cast<double>(*value);
+        counts[group]++;
     }
 }
 
@@ -1248,6 +1323,50 @@ void groupFoldCountDistinctPresent(Column* accumulator,
     }
 }
 
+// Tally each group's present cells of a type-erased column of tagged scalars, so a
+// grouped count(x) over a heterogeneous unwind charges the same rows a nullable value
+// column would.
+void groupFoldCountPresentListElement(Column* accumulator,
+                                     std::vector<uint64_t>& counts,
+                                     const Column* input,
+                                     const std::vector<size_t>& groups,
+                                     NLGroupDistinctTally& distinct) {
+    const auto& inputRaw = static_cast<const ColumnVector<ListElementView>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        if (inputRaw[row].getTag() != ListBufferTypeTag::Null) {
+            counts[groups[row]]++;
+        }
+    }
+}
+
+// Tally each group's distinct present cells of a type-erased column of tagged scalars.
+// The key carries the tag as well as the value, so cells of different types are told
+// apart the way a whole-row DISTINCT tells them apart.
+void groupFoldCountDistinctListElement(Column* accumulator,
+                                       std::vector<uint64_t>& counts,
+                                       const Column* input,
+                                       const std::vector<size_t>& groups,
+                                       NLGroupDistinctTally& distinct) {
+    const auto& inputRaw = static_cast<const ColumnVector<ListElementView>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const ListElementView element = inputRaw[row];
+        if (element.getTag() == ListBufferTypeTag::Null) {
+            continue;
+        }
+
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendElementBytes(distinct.getKey(), element);
+
+        if (distinct.insertIfNew()) {
+            counts[group]++;
+        }
+    }
+}
+
 // Append a chunk's present values to the flat value buffer, recording each element's
 // position in its group's list. A null value is skipped (Cypher collect ignores
 // nulls). The flat buffer holds the collected type's primitive; the input is its
@@ -1256,7 +1375,8 @@ template <typename Primitive>
 void collectFold(Column* values,
                  const Column* input,
                  const std::vector<size_t>& groups,
-                 std::vector<std::vector<size_t>>& groupPositions) {
+                 std::vector<std::vector<size_t>>& groupPositions,
+                 NLGroupDistinctTally& distinct) {
     auto& valuesRaw = static_cast<ColumnVector<Primitive>*>(values)->getRaw();
     const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
 
@@ -1267,6 +1387,39 @@ void collectFold(Column* values,
             valuesRaw.push_back(*value);
             groupPositions[groups[row]].push_back(position);
         }
+    }
+}
+
+// Append this step's values a group has not collected yet - collect(DISTINCT x). A value
+// repeated within its group is dropped rather than buffered a second time, so the list is
+// the group's distinct values in first-seen order.
+template <typename Primitive>
+void collectFoldDistinct(Column* values,
+                         const Column* input,
+                         const std::vector<size_t>& groups,
+                         std::vector<std::vector<size_t>>& groupPositions,
+                         NLGroupDistinctTally& distinct) {
+    auto& valuesRaw = static_cast<ColumnVector<Primitive>*>(values)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnOptVector<Primitive>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const std::optional<Primitive>& value = inputRaw[row];
+        if (!value.has_value()) {
+            continue;
+        }
+
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendValueBytes(distinct.getKey(), *value);
+
+        if (!distinct.insertIfNew()) {
+            continue;
+        }
+
+        const size_t position = valuesRaw.size();
+        valuesRaw.push_back(*value);
+        groupPositions[group].push_back(position);
     }
 }
 
@@ -1388,6 +1541,30 @@ NLGroupAggregateFoldFunction selectGroupSumFold(ValueType inputType) {
     return nullptr;
 }
 
+// The grouped sum(DISTINCT x) fold for a column of this value type: sum's numeric
+// domain, reduced over each group's distinct values.
+NLGroupAggregateFoldFunction selectGroupSumDistinctFold(ValueType inputType) {
+    switch (inputType) {
+        case ValueType::Int64:
+            return &groupFoldSumDistinct<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &groupFoldSumDistinct<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &groupFoldSumDistinct<types::Double::Primitive>;
+        break;
+
+        default:
+            throw IRException("sum requires a numeric column");
+        break;
+    }
+
+    return nullptr;
+}
+
 // The grouped avg fold for a column of this value type. avg widens each value to
 // f64, so - like sum - only a numeric column is valid.
 NLGroupAggregateFoldFunction selectGroupAvgFold(ValueType inputType) {
@@ -1402,6 +1579,30 @@ NLGroupAggregateFoldFunction selectGroupAvgFold(ValueType inputType) {
 
         case ValueType::Double:
             return &groupFoldAvg<types::Double::Primitive>;
+        break;
+
+        default:
+            throw IRException("avg requires a numeric column");
+        break;
+    }
+
+    return nullptr;
+}
+
+// The grouped avg(DISTINCT x) fold for a column of this value type: avg's numeric
+// domain, averaged over each group's distinct values.
+NLGroupAggregateFoldFunction selectGroupAvgDistinctFold(ValueType inputType) {
+    switch (inputType) {
+        case ValueType::Int64:
+            return &groupFoldAvgDistinct<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &groupFoldAvgDistinct<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &groupFoldAvgDistinct<types::Double::Primitive>;
         break;
 
         default:
@@ -2718,7 +2919,7 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
     std::vector<std::vector<size_t>>& groupPositions = state->groupPositions();
     groupPositions.resize(groupCount);
 
-    state->getFold()(state->getValues(), valueInput, groupIndices, groupPositions);
+    state->getFold()(state->getValues(), valueInput, groupIndices, groupPositions, state->distinct());
 }
 
 // Only the scalar value types are collectable for now; an embedding column (a span of
@@ -2744,6 +2945,39 @@ NLCollectFoldFunction NLExecutor::selectCollectFold(ValueType valueType) {
 
         case ValueType::String:
             return &collectFold<types::String::Primitive>;
+        break;
+
+        default:
+            throw IRException("collect does not support this value type");
+        break;
+    }
+
+    return nullptr;
+}
+
+// The collect(DISTINCT x) fold for a column of this value type: collect's own domain,
+// with each of a group's values buffered once. An embedding has no bytes to key on, and
+// no primitive to buffer either, so it is rejected for both reasons.
+NLCollectFoldFunction NLExecutor::selectCollectDistinctFold(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &collectFoldDistinct<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &collectFoldDistinct<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &collectFoldDistinct<types::Double::Primitive>;
+        break;
+
+        case ValueType::Bool:
+            return &collectFoldDistinct<types::Bool::Primitive>;
+        break;
+
+        case ValueType::String:
+            return &collectFoldDistinct<types::String::Primitive>;
         break;
 
         default:
@@ -3004,6 +3238,10 @@ NLBroadcastFunction NLExecutor::selectOptTileFunction(ValueType valueType) {
     ValueTypeDispatcher(valueType).execute(select);
 
     return broadcast;
+}
+
+NLBroadcastConstantFunction NLExecutor::selectNullConstantBroadcast() {
+    return &broadcastNullColumn;
 }
 
 NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(ValueType valueType) {
@@ -3283,10 +3521,12 @@ NLGroupAggregateGrowFunction NLExecutor::selectGroupAggregateGrow(GroupAggregate
         break;
 
         case GroupAggregateKind::Avg:
+        case GroupAggregateKind::AvgDistinct:
             return &groupGrowAvg;
         break;
 
         case GroupAggregateKind::Sum:
+        case GroupAggregateKind::SumDistinct:
         case GroupAggregateKind::Min:
         case GroupAggregateKind::Max: {
             // sum grows each new group to a present zero (its additive identity),
@@ -3295,7 +3535,7 @@ NLGroupAggregateGrowFunction NLExecutor::selectGroupAggregateGrow(GroupAggregate
             // validated the kind / type pairing (and the fold selector re-checks it),
             // so one dispatch over the accumulator type suffices - the grouped sibling
             // of selectAggregateReset.
-            const bool growsToZero = (kind == GroupAggregateKind::Sum);
+            const bool growsToZero = (kind == GroupAggregateKind::Sum) || (kind == GroupAggregateKind::SumDistinct);
 
             NLGroupAggregateGrowFunction grow = nullptr;
             const auto select = [&]<SupportedType T>() {
@@ -3337,8 +3577,16 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupAggregateFold(GroupAggregate
             return selectGroupSumFold(inputType);
         break;
 
+        case GroupAggregateKind::SumDistinct:
+            return selectGroupSumDistinctFold(inputType);
+        break;
+
         case GroupAggregateKind::Avg:
             return selectGroupAvgFold(inputType);
+        break;
+
+        case GroupAggregateKind::AvgDistinct:
+            return selectGroupAvgDistinctFold(inputType);
         break;
 
         case GroupAggregateKind::Min:
@@ -3352,6 +3600,14 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupAggregateFold(GroupAggregate
 
     bioassert(false, "Unhandled group aggregate kind");
     return nullptr;
+}
+
+NLGroupAggregateFoldFunction NLExecutor::selectGroupCountListElementFold() {
+    return &groupFoldCountPresentListElement;
+}
+
+NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctListElementFold() {
+    return &groupFoldCountDistinctListElement;
 }
 
 NLGroupAggregateFoldFunction NLExecutor::selectGroupCountAllFold() {
@@ -3431,11 +3687,13 @@ NLGroupAggregateEmitFunction NLExecutor::selectGroupAggregateEmit(GroupAggregate
         break;
 
         case GroupAggregateKind::Avg:
+        case GroupAggregateKind::AvgDistinct:
             // avg emits the running f64 sum divided by the count, per group.
             return &groupEmitAvg;
         break;
 
         case GroupAggregateKind::Sum:
+        case GroupAggregateKind::SumDistinct:
         case GroupAggregateKind::Min:
         case GroupAggregateKind::Max: {
             // sum/min/max hold each group's reduced value in the result's own type, so
@@ -3485,6 +3743,106 @@ NLGroupKeyGatherFunction NLExecutor::selectOptGroupKeyGather(ValueType valueType
     ValueTypeDispatcher(valueType).execute(select);
 
     return gather;
+}
+
+NLAppendFunction NLExecutor::selectPlainAppendFunction(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &appendColumn<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &appendColumn<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &appendColumn<types::Double::Primitive>;
+        break;
+
+        default:
+            throw IRException("a plain value column must be numeric");
+        break;
+    }
+}
+
+NLGatherFunction NLExecutor::selectPlainGatherFunction(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &gatherColumn<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &gatherColumn<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &gatherColumn<types::Double::Primitive>;
+        break;
+
+        default:
+            throw IRException("a plain value column must be numeric");
+        break;
+    }
+}
+
+NLCompareFunction NLExecutor::selectPlainCompareFunction(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &compareColumn<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &compareColumn<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &compareColumn<types::Double::Primitive>;
+        break;
+
+        default:
+            throw IRException("a plain value column must be numeric");
+        break;
+    }
+}
+
+NLCopyFunction NLExecutor::selectPlainCopyFunction(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &copyRangeColumn<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &copyRangeColumn<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &copyRangeColumn<types::Double::Primitive>;
+        break;
+
+        default:
+            throw IRException("a plain value column must be numeric");
+        break;
+    }
+}
+
+NLBroadcastFunction NLExecutor::selectPlainBlockRepeatFunction(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &blockRepeatColumn<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &blockRepeatColumn<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &blockRepeatColumn<types::Double::Primitive>;
+        break;
+
+        default:
+            throw IRException("a plain value column must be numeric");
+        break;
+    }
 }
 
 NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {

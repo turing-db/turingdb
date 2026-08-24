@@ -72,6 +72,35 @@ void FunctionDecls::initDefault() {
     countListItems->setReturnTypes({{EvaluatedType::Integer}});
     countListItems->setIsAggregate(true);
 
+    // collect gathers the values of its group into a list, so it reduces like the others
+    // but returns a list rather than a scalar
+    FunctionSignature* collectIntegers = createFunction("collect");
+    collectIntegers->setArguments({EvaluatedType::Integer});
+    collectIntegers->setReturnTypes({{EvaluatedType::List}});
+    collectIntegers->setIsAggregate(true);
+
+    FunctionSignature* collectDoubles = createFunction("collect");
+    collectDoubles->setArguments({EvaluatedType::Double});
+    collectDoubles->setReturnTypes({{EvaluatedType::List}});
+    collectDoubles->setIsAggregate(true);
+
+    FunctionSignature* collectStrings = createFunction("collect");
+    collectStrings->setArguments({EvaluatedType::String});
+    collectStrings->setReturnTypes({{EvaluatedType::List}});
+    collectStrings->setIsAggregate(true);
+
+    FunctionSignature* collectBools = createFunction("collect");
+    collectBools->setArguments({EvaluatedType::Bool});
+    collectBools->setReturnTypes({{EvaluatedType::List}});
+    collectBools->setIsAggregate(true);
+
+    // count(null) is a query that can be asked: a null is never charged, so the tally is
+    // zero, and the overload is what keeps the answer from being an argument error
+    FunctionSignature* countNulls = createFunction("count");
+    countNulls->setArguments({EvaluatedType::Null});
+    countNulls->setReturnTypes({{EvaluatedType::Integer}});
+    countNulls->setIsAggregate(true);
+
     FunctionSignature* countWildcard = createFunction("count");
     countWildcard->setArguments({EvaluatedType::Wildcard});
     countWildcard->setReturnTypes({{EvaluatedType::Integer}});

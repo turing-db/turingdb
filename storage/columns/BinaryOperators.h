@@ -112,6 +112,29 @@ struct BinaryOpExecutor {
 };
 
 /**
+ * @brief Widen an unsigned integer operand to the signed integer the query language has.
+ * Cypher has one integer type and it is signed: a tally is carried unsigned because it
+ * can never be negative, but an expression over it can be, and computing in the
+ * unsigned type would wrap that result around zero (12 - 18 as 2^64 - 6).
+ */
+template <typename T>
+inline auto asSignedInteger(T&& value) {
+    using Decayed = std::decay_t<T>;
+
+    if constexpr (std::is_same_v<Decayed, uint64_t>) {
+        return static_cast<int64_t>(value);
+    } else if constexpr (std::is_same_v<Decayed, std::optional<uint64_t>>) {
+        if (!value.has_value()) {
+            return std::optional<int64_t> {};
+        }
+
+        return std::optional<int64_t> {static_cast<int64_t>(*value)};
+    } else {
+        return std::forward<T>(value);
+    }
+}
+
+/**
  * @brief Thin wrapper over a provided functor @param F to dispatch optional logic
  * accordingly
  */
@@ -120,12 +143,12 @@ struct BinaryOp {
     template<typename T, typename U>
         requires TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>
     inline decltype(auto) operator()(T&& a, U&& b) {
-        return optionalGeneric<F>(std::forward<T>(a), std::forward<U>(b));
+        return optionalGeneric<F>(asSignedInteger(std::forward<T>(a)), asSignedInteger(std::forward<U>(b)));
     }
 
     template <typename T, typename U>
     inline decltype(auto) operator()(T&& a, U&& b) {
-        return F {}(std::forward<T>(a), std::forward<U>(b));
+        return F {}(asSignedInteger(std::forward<T>(a)), asSignedInteger(std::forward<U>(b)));
     }
 };
 

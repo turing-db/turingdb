@@ -3,9 +3,9 @@
   "graph": "simpledb",
   "query": "RETURN COUNT(NULL)",
   "expect": {
-    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN COUNT(NULL)\n       |        ^^^^^^^^^^^\n-------* Invalid arguments for function 'count'",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN COUNT(NULL)\n       |        ^^^^^^^^^^^\n-------* Invalid arguments for function 'count'",
-    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | RETURN COUNT(NULL)\\n       |        ^^^^^^^^^^^\\n-------* Invalid arguments for function 'count'\"}"
+    "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): v0\n    `\"]\n    1[\"`\n        __AGGREGATE_EVAL__\n        __aggregate_func__: count\n    `\"]\n    2[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1\n    1-->2",
+    "result": "COUNT(NULL)\n0",
+    "resultJson": "{\"header\":{\"column_names\":[\"COUNT(NULL)\"],\"column_types\":[\"UInt64\"]},\"data\":[[[0]]]}"
   },
   "tags": [
     "count",

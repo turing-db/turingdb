@@ -830,16 +830,29 @@ def Count : TuringOp<"count", [Pure]> {
 // One op per reduction, the way db.count is its own op: the op name is the
 // aggregate, so no kind attribute is needed and each reads like `db.sum(%x)`. They
 // share this base since only the name differs.
+//
+// `distinct` is Cypher's sum(DISTINCT x) / avg(DISTINCT x): the reduction charges
+// each distinct value once, however many rows carry it. As on db.count it stays one
+// op, since the reduction is unchanged over a deduplicated column - it lowers to the
+// DISTINCT seen-set (nl.distinct / nl.distinct_filter) feeding the ordinary
+// nl.aggregate_update:
+//
+//   %s = db.sum(%x) distinct : (!db.column<none>) -> !db.column<none>
+//
+// db.min and db.max share the flag but the frontend never sets it: dropping repeated
+// values cannot move an extremum, so min(DISTINCT x) generates a plain db.min.
 class AggregateOp<string mnemonic> : TuringOp<mnemonic, [Pure]> {
   let summary = "Reduce a column of property values to a single-row result";
 
-  let arguments = (ins Column:$input);
+  let arguments = (ins Column:$input, UnitAttr:$distinct);
   let results   = (outs Column:$result);
 
   // One operand and one result, so functional-type(operands, results) prints the
-  // `(!db.column<...>) -> !db.column<...>` form, the same as db.count.
+  // `(!db.column<...>) -> !db.column<...>` form, the same as db.count. The distinct
+  // flag prints as its keyword ahead of the colon when set, so a plain reduction
+  // keeps the form it had before the flag existed.
   let assemblyFormat = [{
-    `(` $input `)` attr-dict `:` functional-type(operands, results)
+    `(` $input `)` (`distinct` $distinct^)? attr-dict `:` functional-type(operands, results)
   }];
 }
 
@@ -1168,10 +1181,12 @@ def GroupAggregate : TuringOp<"group_aggregate", [Pure]> {
     The operands are the grouping-key columns first, then the aggregate-input
     columns; `keys` is how many leading operands are keys (so the rest are the
     aggregate inputs, one per aggregate). `aggregates` names the reduction of each
-    aggregate input as GroupAggregateKind keywords (count, count_distinct, sum, min,
-    max, avg), so its length is the number of aggregate inputs. count_distinct is
-    Cypher's count(DISTINCT x): it charges each of a group's distinct non-null values
-    once, and emits the same ui64 as count.
+    aggregate input as GroupAggregateKind keywords (count, count_distinct, sum,
+    sum_distinct, min, max, avg, avg_distinct), so its length is the number of
+    aggregate inputs. The distinct kinds are Cypher's DISTINCT aggregates: each
+    reduces a group's distinct non-null values rather than all of its rows, and keeps
+    the result type of the kind it mirrors. min/max have no distinct kind, since
+    dropping repeated values cannot move an extremum.
 
       %a     = db.scan_nodes() : !db.column<!storage.node_id>
       %city  = db.get_node_properties(%a, "city")  : (!db.column<!storage.node_id>) -> !db.column<none>
@@ -1183,6 +1198,7 @@ def GroupAggregate : TuringOp<"group_aggregate", [Pure]> {
     The results are the grouping-key columns (in operand order, same types) then
     one column per aggregate: count and count_distinct are ui64 counts, sum/min/max
     keep the input's value type and avg widens to f64 - all resolved during lowering,
+    the distinct kinds exactly as the kinds they mirror,
     so - like db.count - the aggregate result types are unconstrained here. count(*)
     is expressed by a count over a never-null column (node IDs).
 
@@ -1234,14 +1250,21 @@ def Collect : TuringOp<"collect", [Pure]> {
 
     keyCount is how many leading columns are keys (0 = ungrouped); exactly one value
     column follows. Results are the keys (unchanged) then one list column.
+
+    `distinct` is Cypher's collect(DISTINCT x): a value repeated in a group is collected
+    once, so the list holds each of the group's distinct values. As on db.count the flag
+    stays on the one op, since the collection is the same over a deduplicated column.
+
+      %names = db.collect(%name) keys 0 distinct : (!db.column<none>) -> !db.column<!storage.list<none>>
   }];
 
   // keyCount grouping-key columns then one collected column; unsigned (never negative).
-  let arguments = (ins Variadic<Column>:$columns, UI64Attr:$keyCount);
+  let arguments = (ins Variadic<Column>:$columns, UI64Attr:$keyCount, UnitAttr:$distinct);
   let results   = (outs Variadic<Column>:$results);
 
   let assemblyFormat = [{
-    `(` $columns `)` `keys` $keyCount attr-dict `:` functional-type(operands, results)
+    `(` $columns `)` `keys` $keyCount (`distinct` $distinct^)? attr-dict `:`
+    functional-type(operands, results)
   }];
 
   // keyCount + 1 columns; key results pass through; trailing result is a list column.

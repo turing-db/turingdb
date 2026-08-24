@@ -449,7 +449,8 @@ LogicalResult GroupAggregate::verify() {
     }
 
     // Each kind names one aggregate's reduction, so it must be a valid
-    // GroupAggregateKind (count / count_distinct / sum / min / max / avg).
+    // GroupAggregateKind (count / count_distinct / sum / sum_distinct / min / max /
+    // avg / avg_distinct).
     for (const int64_t kind : kinds) {
         if (!storage::symbolizeGroupAggregateKind(kind)) {
             return emitOpError("has an unknown aggregate kind ") << kind;

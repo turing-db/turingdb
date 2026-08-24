@@ -1294,14 +1294,16 @@ enum class GroupAggregateKind {
     Max,
     Avg,
     CountDistinct,
+    SumDistinct,
+    AvgDistinct,
 };
 
-// The (group, value) pairs one count(DISTINCT x) has already charged. A single set
+// The (group, value) pairs one DISTINCT aggregate has already charged. A single set
 // covers every group of the aggregate: the group index is prefixed onto the
 // serialized value, so two groups never share an entry. The distinct fold builds one
-// row's key in the scratch, then charges the group only when the pair is new. The
-// grouped sibling of NLDistinctState, which keys whole rows rather than one value
-// per group.
+// row's key in the scratch, then charges the group only when the pair is new - a
+// tally for count(DISTINCT x), a reduction for sum/avg(DISTINCT x). The grouped
+// sibling of NLDistinctState, which keys whole rows rather than one value per group.
 class NLGroupDistinctTally {
 public:
     // Start this row's key with the group it belongs to, so the value bytes the fold
@@ -1348,7 +1350,7 @@ using NLGroupAggregateGrowFunction = void (*)(Column* accumulator,
 // group-index map nl.group_aggregate_update built for this step. One per kind /
 // value type. The parameters are the union of what any reduction needs, so each fold
 // reads only its own: sum/min/max ignore counts, count ignores the accumulator, and
-// only count_distinct touches the tally of already-charged (group, value) pairs.
+// only the distinct kinds touch the tally of already-charged (group, value) pairs.
 using NLGroupAggregateFoldFunction = void (*)(Column* accumulator,
                                               std::vector<uint64_t>& counts,
                                               const Column* input,
@@ -1434,8 +1436,8 @@ public:
     // state (_accumulator, one reduced value per group - null for count - and
     // _counts, one non-null tally per group, used by count and avg); the emit fills
     // the loop variable _output. _grow/_fold/_emit are baked from the kind and the
-    // value type. _distinct is the count(DISTINCT x) tally, left empty by every other
-    // reduction.
+    // value type. _distinct is the tally of a DISTINCT aggregate, left empty by every
+    // other reduction.
     struct Aggregate {
         const Column* _input {nullptr};
         Column* _accumulator {nullptr};
@@ -1545,7 +1547,8 @@ private:
 using NLCollectFoldFunction = void (*)(Column* values,
                                        const Column* input,
                                        const std::vector<size_t>& groups,
-                                       std::vector<std::vector<size_t>>& groupPositions);
+                                       std::vector<std::vector<size_t>>& groupPositions,
+                                       NLGroupDistinctTally& distinct);
 
 // Emit a chunk of unwound values (the nl.unwind_collect drain): for each flat-buffer position
 // this chunk covers, write the present value into the nullable value output. One per
@@ -1612,6 +1615,10 @@ public:
     NLCollectFoldFunction getFold() const { return _fold; }
     void setFold(NLCollectFoldFunction fold) { _fold = fold; }
 
+    // The values already collected per group, so collect(DISTINCT x) charges each of a
+    // group's values once. Left empty by a plain collect.
+    NLGroupDistinctTally& distinct() { return _distinct; }
+
     // The drain's output loop variable: the unwound value column (nl.unwind_collect) or the
     // per-group list column (nl.collect). Set at loop translation. A state feeds one
     // drain, so a single slot holds whichever it is.
@@ -1651,6 +1658,7 @@ private:
     const Column* _valueInput {nullptr};
     Column* _values {nullptr};
     NLCollectFoldFunction _fold {nullptr};
+    NLGroupDistinctTally _distinct;
     std::vector<std::vector<size_t>> _groupPositions;
 
     Column* _valueOutput {nullptr};

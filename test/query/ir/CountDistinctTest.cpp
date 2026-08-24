@@ -345,6 +345,21 @@ protected:
         EXPECT_EQ(rows, sortedExpected) << "query: " << query;
     }
 
+    void expectGroupedSumCounts(std::string_view query,
+                                const NameSumCountRows& expected,
+                                size_t chunkSize = ChunkConfig::CHUNK_SIZE) {
+        GroupedSumCountSink sink;
+        runQuery(query, &sink, chunkSize);
+
+        NameSumCountRows rows;
+        sink.sortedRows(rows);
+
+        NameSumCountRows sortedExpected = expected;
+        std::sort(sortedExpected.begin(), sortedExpected.end());
+
+        EXPECT_EQ(rows, sortedExpected) << "query: " << query;
+    }
+
     // The db dialect program of a query, so a test can assert on the op the frontend
     // generated rather than only on the rows it produces
     std::string generatedProgram(std::string_view query) {
@@ -378,6 +393,29 @@ TEST_F(CountDistinctTest, generatesACountDistinctAggregateKind) {
     EXPECT_NE(generatedProgram("MATCH (a)-->(b) RETURN a.name, count(DISTINCT b)").find("aggregates [count_distinct]"),
               std::string::npos);
     EXPECT_NE(generatedProgram("MATCH (a)-->(b) RETURN a.name, count(b)").find("aggregates [count]"),
+              std::string::npos);
+}
+
+// sum and avg carry the same flag as count, while min and max generate the plain op:
+// dropping repeated values cannot move an extremum, so the flag would only cost a
+// seen-set the result does not depend on.
+TEST_F(CountDistinctTest, generatesDistinctValueReductions) {
+    EXPECT_NE(generatedProgram("MATCH (a) RETURN sum(DISTINCT a.age)").find(") distinct :"), std::string::npos);
+    EXPECT_NE(generatedProgram("MATCH (a) RETURN avg(DISTINCT a.age)").find(") distinct :"), std::string::npos);
+    EXPECT_EQ(generatedProgram("MATCH (a) RETURN sum(a.age)").find("distinct"), std::string::npos);
+
+    EXPECT_EQ(generatedProgram("MATCH (a) RETURN min(DISTINCT a.age)").find("distinct"), std::string::npos);
+    EXPECT_EQ(generatedProgram("MATCH (a) RETURN max(DISTINCT a.age)").find("distinct"), std::string::npos);
+}
+
+// The grouped forms generate their own kinds, and min/max stay on the plain kind for
+// the same reason the scalar ones do.
+TEST_F(CountDistinctTest, generatesDistinctValueReductionAggregateKinds) {
+    EXPECT_NE(generatedProgram("MATCH (a)-[e]->(b) RETURN a.name, sum(DISTINCT e.duration)").find("aggregates [sum_distinct]"),
+              std::string::npos);
+    EXPECT_NE(generatedProgram("MATCH (a)-[e]->(b) RETURN a.name, avg(DISTINCT e.duration)").find("aggregates [avg_distinct]"),
+              std::string::npos);
+    EXPECT_NE(generatedProgram("MATCH (a)-[e]->(b) RETURN a.name, min(DISTINCT e.duration)").find("aggregates [min]"),
               std::string::npos);
 }
 
@@ -551,10 +589,30 @@ TEST_F(CountDistinctTest, countsDistinctPerGroupAcrossChunkBoundaries) {
     expectGroupedCounts("MATCH (a)-->(b)-->(c) RETURN a.name, count(DISTINCT b)", expected, /*chunkSize=*/3);
 }
 
-// DISTINCT is a modifier of count alone for now: a value reduction carrying it is
-// still turned away, rather than silently reducing the repeated values.
-TEST_F(CountDistinctTest, rejectsDistinctOnAValueReduction) {
+// A value reduction keeps its seen-set at function scope, as a distinct count does, so
+// a value repeated in a later chunk is still reduced once: Remy's three durations of 20
+// sum to 20 whether they arrive in one chunk or one per chunk.
+TEST_F(CountDistinctTest, sumsDistinctValuesPerGroupAcrossChunkBoundaries) {
+    NameSumCountRows expected;
+    expected.emplace_back(std::optional<std::string>("Adam"), 20, 3u);
+    expected.emplace_back(std::optional<std::string>("Cyrus"), 0, 2u);
+    expected.emplace_back(std::optional<std::string>("Doruk"), 0, 1u);
+    expected.emplace_back(std::optional<std::string>("Ghosts"), 200, 1u);
+    expected.emplace_back(std::optional<std::string>("Luc"), 35, 2u);
+    expected.emplace_back(std::optional<std::string>("Martina"), 10, 1u);
+    expected.emplace_back(std::optional<std::string>("Maxime"), 0, 2u);
+    expected.emplace_back(std::optional<std::string>("Remy"), 20, 4u);
+    expected.emplace_back(std::optional<std::string>("Suhas"), 0, 2u);
+
+    const std::string_view query = "MATCH (a)-[e]->(b) RETURN a.name, sum(DISTINCT e.duration), count(DISTINCT b)";
+    expectGroupedSumCounts(query, expected);
+    expectGroupedSumCounts(query, expected, /*chunkSize=*/1);
+    expectGroupedSumCounts(query, expected, /*chunkSize=*/3);
+}
+
+// DISTINCT belongs to an aggregate. A non-aggregate function carrying it is turned
+// away naming the function, rather than being read as a call over deduplicated rows.
+TEST_F(CountDistinctTest, rejectsDistinctOnANonAggregateFunction) {
     ScalarCountSink sink;
-    EXPECT_THROW(runQuery("MATCH (a) RETURN sum(DISTINCT a.age)", &sink), TuringException);
-    EXPECT_THROW(runQuery("MATCH (a) RETURN a.name, avg(DISTINCT a.age)", &sink), TuringException);
+    EXPECT_THROW(runQuery("MATCH (a) RETURN labels(DISTINCT a)", &sink), TuringException);
 }

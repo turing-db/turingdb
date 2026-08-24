@@ -211,6 +211,12 @@ bool StructuralExpressionComparator::equalInvocations(const FunctionInvocation* 
         return false;
     }
 
+    // count(x) and count(DISTINCT x) reduce the same argument to different values, so the
+    // modifier is part of what the call is, not decoration on it
+    if (lhs->isDistinct() != rhs->isDistinct()) {
+        return false;
+    }
+
     const QualifiedName* lhsName = lhs->getName();
     const QualifiedName* rhsName = rhs->getName();
     if (!lhsName || !rhsName || lhsName->size() != rhsName->size()) {
