@@ -105,6 +105,14 @@ bool isEdgeHop(Operation* op) {
     return isa<GetOutEdges, GetInEdges, GetEdges, GetOutEdgesByType, GetInEdgesByType>(op);
 }
 
+// The columns a cross_product factor yields, in result order.
+Operation::operand_range factorYieldColumns(mlir::Region& factor) {
+    mlir::Block& factorBlock = factor.front();
+    Yield yield = cast<Yield>(factorBlock.getTerminator());
+
+    return yield.getColumns();
+}
+
 // Walk op chain until we reach a node/edge source or something we can't push down to
 Value climbToLineageAnchor(Value column) {
     while (true) {
@@ -123,6 +131,25 @@ Value climbToLineageAnchor(Value column) {
             }
 
             return column;
+        }
+
+        if (CrossProduct product = dyn_cast<CrossProduct>(def)) {
+            // Descend into the xprod factor which holds def
+            const unsigned resultIndex = cast<OpResult>(column).getResultNumber();
+
+            mlir::Region& leftFactor = product.getLeftFactor();
+            const Operation::operand_range leftColumns = factorYieldColumns(leftFactor);
+            const unsigned leftCount = leftColumns.size();
+
+            if (resultIndex < leftCount) {
+                column = leftColumns[resultIndex];
+            } else {
+                mlir::Region& rightFactor = product.getRightFactor();
+                const Operation::operand_range rightColumns = factorYieldColumns(rightFactor);
+                column = rightColumns[resultIndex - leftCount];
+            }
+
+            continue;
         }
 
         if (isEdgeHop(def)) {
@@ -209,7 +236,7 @@ std::optional<PushablePredicate> matchPushablePredicate(FilterOp filter) {
     }
 
     Value anchor;
-    bool hasHopToCross = false;
+    bool reachedAnchor = true;
     for (const Value input : cone._inputs) {
         const Value inputAnchor = climbToLineageAnchor(input);
         if (!inputAnchor) {
@@ -224,12 +251,12 @@ std::optional<PushablePredicate> matchPushablePredicate(FilterOp filter) {
         }
 
         if (input != inputAnchor) {
-            hasHopToCross = true;
+            reachedAnchor = false;
         }
     }
 
-    // The mask already reads the anchor itself, so the filter is at its earliest point.
-    if (!hasHopToCross) {
+    // Filter already maximally pushed down
+    if (reachedAnchor) {
         return std::nullopt;
     }
 
@@ -239,6 +266,7 @@ std::optional<PushablePredicate> matchPushablePredicate(FilterOp filter) {
 void pushDownPredicate(FilterOp filter, const PushablePredicate& pushable, mlir::OpBuilder& builder) {
     Value anchor = pushable._anchor;
     const MaskCone& cone = pushable._cone;
+    const mlir::Location loc = filter.getLoc();
 
     // Rebuild the mask over the anchor version of the column, right after it is bound.
     mlir::IRMapping mapping;
@@ -258,7 +286,7 @@ void pushDownPredicate(FilterOp filter, const PushablePredicate& pushable, mlir:
     const Value clonedMask = mapping.lookup(filter.getMask());
 
     const llvm::SmallVector<mlir::Type, 1> resultTypes {anchor.getType()};
-    auto pushed = builder.create<FilterOp>(filter.getLoc(), resultTypes, clonedMask, mlir::ValueRange {anchor});
+    FilterOp pushed = builder.create<FilterOp>(loc, resultTypes, clonedMask, mlir::ValueRange {anchor});
     const Value pushedColumn = pushed.getResult(0);
     anchorReaders.insert(pushed.getOperation());
 
