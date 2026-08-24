@@ -874,11 +874,28 @@ TEST_F(CypherCollectTest, collectOfNodesWithOrderByAndSkipLimit) {
     }
 }
 
-TEST_F(CypherCollectTest, rejectsCollectDistinct) {
+TEST_F(CypherCollectTest, ungroupedCollectDistinct) {
     buildTeamGraph();
 
-    QueryStatus status;
-    runQuery("MATCH (n:Node) RETURN collect(DISTINCT n.name)", status);
+    StringListSink sink;
+    match("MATCH (n:Node) RETURN collect(DISTINCT n.team)", sink);
 
-    EXPECT_EQ(status.getStatus(), QueryStatus::Status::PARSE_ERROR);
+    const std::vector<std::vector<std::string>> expected {{"red", "blue"}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(CypherCollectTest, groupedCollectDistinct) {
+    buildTeamGraph();
+
+    KeyedStringListSink sink;
+    match("MATCH (n:Node) RETURN n.team, collect(DISTINCT n.team)", sink);
+
+    std::vector<KeyedStringListSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<KeyedStringListSink::Row> expected {
+        {"blue", {"blue"}},
+        {"red", {"red"}},
+    };
+    EXPECT_EQ(rows, expected);
 }
