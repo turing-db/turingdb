@@ -181,6 +181,10 @@ private:
     void lowerDeleteNode(mlir::db::DeleteNode deleteNode);
     void lowerDeleteEdge(mlir::db::DeleteEdge deleteEdge);
     void lowerCrossProduct(mlir::db::CrossProduct product);
+
+    // Lays the constant out over the rows of its driver, the layout rowAlignedChunk
+    // performs for every consumer that reads a constant per row
+    void lowerBroadcastConstant(mlir::db::BroadcastConstant broadcast);
     void lowerLimit(mlir::db::Limit limit);
     void lowerSkip(mlir::db::Skip skip);
 

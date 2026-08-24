@@ -1,6 +1,8 @@
 
 set(ir_common_sources 
     IRModuleInspector.cpp
+    IRConstantColumn.cpp
+    IRRowAlignment.cpp
     IRException.cpp)
 
 add_library(turing_db_ir_common_s STATIC ${ir_common_sources})

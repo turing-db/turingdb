@@ -8,10 +8,8 @@ class Projection;
 class WhereClause;
 class CypherAST;
 
-// A WITH clause: a projection that does not end the query but replaces its scope. The
-// statements after it read the columns this projection publishes and nothing else, and
-// its WHERE filters those rows once the projection - aggregation, DISTINCT, ORDER BY,
-// SKIP and LIMIT included - has produced them.
+// A projection that does not end the query but replaces its scope: the statements after
+// it read the columns it publishes and nothing else
 class WithStmt final : public Stmt {
 public:
     static WithStmt* create(CypherAST* ast, Projection* projection);

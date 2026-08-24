@@ -33,6 +33,7 @@ class OrderBy;
 class Skip;
 class Limit;
 class ReturnStmt;
+class Stmt;
 class WithStmt;
 class Projection;
 class CreateNodePropertyIndexQuery;
@@ -90,11 +91,11 @@ private:
 
     bool _isV3 {false};
 
-    void analyzeProjection(Projection* projection, const void* clause);
+    void analyzeProjection(Projection* projection, const Stmt* clause);
     void openWithScope(const Projection* projection);
     void analyzeWithAliases(const Projection* projection) const;
     void declareItemAlias(Expr* item, std::string_view alias);
-    void analyzeDistinct(const Projection* projection, const void* clause) const;
+    void analyzeDistinct(const Projection* projection, const Stmt* clause) const;
     void analyzeNestedAggregates(const Projection* projection) const;
     void analyzeAggregateArguments(const Expr* expr, const Projection* projection) const;
     bool readsAnAggregateItem(const Expr* expr, const Projection* projection) const;

@@ -44,18 +44,12 @@ public:
     VariableDependencyGraph();
     ~VariableDependencyGraph();
 
-    /// Inserts the variables of one query part - the statements between two WITH
-    /// barriers - keeping the ones @ref registerBoundVariable already declared, so that a
-    /// pattern naming a bound variable depends on it rather than on a variable of its own
+    /// Inserts the variables of one query part, keeping the ones @ref
+    /// registerBoundVariable already declared so a pattern naming one depends on it
     void build(std::span<Stmt* const> stmts);
 
-    /**
-     * @brief Declares a variable a preceding WITH bound, whose value the code generator
-     * already holds.
-     * @detail Enters the graph isolated, as an UNWIND variable does, and is reused by any
-     * pattern of the following part that names it. A pattern reaching one is a join onto
-     * the column the barrier published, not a scan.
-     */
+    /// Declares a variable a preceding WITH bound, whose column the code generator holds:
+    /// a pattern naming it is a join onto that column, not a scan, so it enters isolated
     VariableDependency* registerBoundVariable(std::string_view name);
 
     /// Drops every variable and edge, so the graph can be rebuilt for the next query part
@@ -103,6 +97,11 @@ private:
     VariableDependency* getOrCreateVariable(const EntityPattern* entity);
     VariableDependency* newVariable(const EntityPattern* entity);
     VariableDependency* newVariable(std::string_view name);
+
+    /// Under a name no Cypher identifier can be, so a user alias never resolves to it
+    VariableDependency* newAnonymousVariable(std::string_view declName);
+
+    VariableDependency* findVariable(std::string_view name);
 
     void getNextAnonymisation(VariableDependency* v, std::string& buf);
 

@@ -57,7 +57,14 @@ VarDecl* DeclContext::getOrCreateNamedVariable(CypherAST* ast, EvaluatedType typ
 
 VarDecl* DeclContext::createUnnamedVariable(CypherAST* ast, EvaluatedType type) {
     std::string* name = ast->createString();
-    name->assign("v" + std::to_string(_unnamedVarCounter++));
+
+    // The generated names share one spelling with what a query may call its own
+    // variables, and `v0` is a legal Cypher identifier: skipping the ones already
+    // declared here keeps a generated name from taking over a name the query wrote
+    do {
+        name->assign("v" + std::to_string(_unnamedVarCounter++));
+    } while (hasDecl(*name));
+
     VarDecl* decl = VarDecl::create(ast, this, *name, type);
     decl->setIsUnnamed(true);
 

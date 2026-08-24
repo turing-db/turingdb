@@ -1296,6 +1296,7 @@ enum class GroupAggregateKind {
     CountDistinct,
     SumDistinct,
     AvgDistinct,
+    CountRows,
 };
 
 // The (group, value) pairs one DISTINCT aggregate has already charged. A single set

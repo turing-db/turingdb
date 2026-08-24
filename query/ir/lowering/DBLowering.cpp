@@ -280,6 +280,7 @@ storage::AggregateKind groupKindToAggregateKind(storage::GroupAggregateKind kind
 
         case storage::GroupAggregateKind::Count:
         case storage::GroupAggregateKind::CountDistinct:
+        case storage::GroupAggregateKind::CountRows:
             throw IRException("count has no value-reduction kind");
         break;
     }
@@ -303,6 +304,7 @@ nl::ChunkType groupAggregateResultChunkType(mlir::OpBuilder& builder,
     switch (kind) {
         case storage::GroupAggregateKind::Count:
         case storage::GroupAggregateKind::CountDistinct:
+        case storage::GroupAggregateKind::CountRows:
             return countChunkType;
         break;
 
@@ -583,6 +585,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerAggregate(avg.getInput(), avg.getResult(), storage::AggregateKind::Avg, avg.getDistinct());
     } else if (mlir::db::ConstantOp constant = mlir::dyn_cast<mlir::db::ConstantOp>(operation)) {
         lowerConstant(constant);
+    } else if (mlir::db::BroadcastConstant broadcast = mlir::dyn_cast<mlir::db::BroadcastConstant>(operation)) {
+        lowerBroadcastConstant(broadcast);
     } else if (mlir::isa<mlir::db::AddOp>(operation)) {
         lowerBinaryOp<nl::Add>(operation, BinaryResultKind::Numeric);
     } else if (mlir::isa<mlir::db::SubOp>(operation)) {
@@ -1005,10 +1009,6 @@ mlir::Block* DBLowering::lowerFactor(mlir::Region& factor,
         }
     }
 
-    if (!_innermostLoopBody) {
-        throw IRException("cross_product factor opened no loop to iterate");
-    }
-
     // A factor's row count is read from its first yielded column, so a factor
     // that yields none cannot size its side of the product. The db.cross_product
     // verifier rejects this, so reaching it here means unverified IR - a
@@ -1017,12 +1017,24 @@ mlir::Block* DBLowering::lowerFactor(mlir::Region& factor,
         throw IRException("cross_product factor yields no column");
     }
 
-    mlir::Block* const innermostBody = _innermostLoopBody;
+    // The block the factor's columns are bound in, which is where the other factor has to
+    // root: the innermost loop body of a factor that walks a relation, and the root block
+    // itself for one whose columns are a single row bound above every loop - a scalar
+    // aggregate, or a constant laid out over the one row it is
+    mlir::Block* factorBody = rootBlock;
+    for (const mlir::Value chunk : yieldedChunks) {
+        mlir::Block* const owner = ownerBlock(chunk);
+        if (owner != rootBlock) {
+            factorBody = owner;
+            break;
+        }
+    }
+
     _rootBlock = previousRoot;
     _innermostLoopBody = previousInnermostLoopBody;
     _innermostCardinality = previousInnermostCardinality;
 
-    return innermostBody;
+    return factorBody;
 }
 
 mlir::Value DBLowering::getOrCreatePropertyTypeHandle(llvm::StringRef propertyName) {
@@ -1368,7 +1380,7 @@ void DBLowering::lowerCount(mlir::db::Count count) {
         countedChunk = filter.getResults().front();
     }
 
-    _builder.create<nl::CountUpdate>(loc, state, countedChunk);
+    _builder.create<nl::CountUpdate>(loc, state, countedChunk, count.getRows());
 
     // COUNT is a pipeline breaker: the tally is final only once every row has been
     // seen. Since it collapses to exactly one row there is nothing to iterate, so -
@@ -2025,6 +2037,13 @@ void DBLowering::lowerConstant(mlir::db::ConstantOp constant) {
     _valueMap[constant.getResult()] = nlConstant.getResult();
 }
 
+void DBLowering::lowerBroadcastConstant(mlir::db::BroadcastConstant broadcast) {
+    const mlir::Value driver = broadcast.getDriver();
+    const mlir::Value driverChunk = driver ? mapValue(driver) : mlir::Value();
+
+    _valueMap[broadcast.getResult()] = rowAlignedChunk(mapValue(broadcast.getValue()), driverChunk);
+}
+
 mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
                                            mlir::Type lhsType,
                                            mlir::Type rhsType) {
@@ -2164,10 +2183,6 @@ void DBLowering::lowerBinaryFunction(mlir::Operation* op) {
 }
 
 void DBLowering::lowerFilter(mlir::db::FilterOp filter) {
-    // Map mask and carry set -> nl chunks
-    const mlir::Value mask = filter.getMask();
-    const mlir::Value maskChunk = mapValue(mask);
-
     llvm::SmallVector<mlir::Value, 4> columnChunks;
     llvm::SmallVector<mlir::Type, 4> resultTypes;
     for (const mlir::Value column : filter.getColumnsToFilter()) {
@@ -2177,6 +2192,21 @@ void DBLowering::lowerFilter(mlir::db::FilterOp filter) {
         columnChunks.push_back(columnChunk);
         resultTypes.push_back(chunkType);
     }
+
+    // A predicate over constants alone holds one value standing for every row, and the cut
+    // reads a mask row by row: it is laid out over the rows of the columns it cuts, so the
+    // mask has exactly as many rows as they do - the driving relation's when a column of
+    // it is what the cut carries, and the single row a projection of constants is when
+    // nothing drives it.
+    mlir::Value maskDriver = _innermostCardinality;
+    for (const mlir::Value columnChunk : columnChunks) {
+        if (!yieldsConstantColumn(columnChunk)) {
+            maskDriver = columnChunk;
+            break;
+        }
+    }
+
+    const mlir::Value maskChunk = rowAlignedChunk(mapValue(filter.getMask()), maskDriver);
 
     // Inserted into the deepest block, where all operands are defined
     mlir::Value insertionReference = maskChunk;

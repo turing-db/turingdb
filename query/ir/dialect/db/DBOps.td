@@ -788,6 +788,13 @@ def Count : TuringOp<"count", [Pure]> {
       %n = db.count(%a) : (!db.column<!storage.node_id>) -> !db.column<ui64>
       db.output(%n) : !db.column<ui64>
 
+    `rows` makes it Cypher's count(*): the tally charges every row, whatever the input
+    column holds, so the wildcard can be anchored on whichever column of the query part
+    carries its rows - a nullable property column included, which a null-skipping tally
+    would under-count:
+
+      %n = db.count(%age) rows : (!db.column<none>) -> !db.column<ui64>
+
     `distinct` makes it Cypher's count(DISTINCT x): the tally charges each distinct
     non-null value once, however many rows carry it. It stays one op rather than
     two because the reduction is the same tally over a deduplicated column - it
@@ -799,17 +806,17 @@ def Count : TuringOp<"count", [Pure]> {
 
   // One column in, one integer column out. The input and result types are
   // unrelated (an integer count of any column), so - unlike the pass-through ops -
-  // there is nothing to cross-check and no verifier. distinct is a unit attribute:
-  // its presence is the flag, so a plain db.count is an absent attribute.
-  let arguments = (ins Column:$input, UnitAttr:$distinct);
+  // there is nothing to cross-check and no verifier. distinct and rows are unit
+  // attributes: their presence is the flag, so a plain db.count is two absent ones.
+  let arguments = (ins Column:$input, UnitAttr:$distinct, UnitAttr:$rows);
   let results   = (outs Column:$result);
 
   // One operand and one result, so functional-type(operands, results) prints the
   // `(!db.column<...>) -> !db.column<...>` form, the same as db.get_node_properties.
-  // The distinct flag prints as its keyword ahead of the colon when set, so a plain
-  // count keeps the form it had before the flag existed.
+  // The flags print as their keywords ahead of the colon when set, so a plain count
+  // keeps the form it had before they existed.
   let assemblyFormat = [{
-    `(` $input `)` (`distinct` $distinct^)? attr-dict `:` functional-type(operands, results)
+    `(` $input `)` (`distinct` $distinct^)? (`rows` $rows^)? attr-dict `:` functional-type(operands, results)
   }];
 }
 
@@ -899,6 +906,44 @@ def ConstantOp : TuringOp<"constant", [Pure, ConstantLike, DeclareOpInterfaceMet
   let results = (outs Column : $result);
 
   let assemblyFormat = "`(` $value `)` attr-dict";
+}
+
+def BroadcastConstant : TuringOp<"broadcast_constant", [Pure]> {
+  let summary = "Lay a constant column's single value out over the rows of a relation";
+  let description = [{
+    A constant column holds one value standing for every row rather than one per row,
+    so nothing shaped by rows can read it: a filter has no row of it to drop, a dedup
+    no two rows to tell apart, a count no rows to tally. This binds that value to the
+    rows of the relation the driver column carries, giving a column that carries rows
+    like any other:
+
+      %p = db.scan_nodes() : !db.column<!storage.node_id>
+      %c = db.constant(1 : i64) : !db.column<i64>
+      %x = db.broadcast_constant(%c, %p) : (!db.column<i64>, !db.column<!storage.node_id>) -> !db.column<none>
+
+    It is what a WITH publishing constants alone emits: `MATCH (p:Person) WITH 1 AS x`
+    publishes one row per Person, not the single row the literal is, so the statements
+    after the barrier - a WHERE cutting those rows, a count(*) tallying them, a pattern
+    crossed with them - read a column that has them.
+
+    The driver is absent when no relation drives the scope, which is then the single row
+    the constants are - `WITH 1 AS x WHERE x > 100`, whose one row the filter drops - so
+    the value is laid out over that row:
+
+      %x = db.broadcast_constant(%c) : (!db.column<i64>) -> !db.column<none>
+
+    The result element type is resolved during lowering, as for the arithmetic ops:
+    the rows are laid out as a nullable value column, present in every row.
+  }];
+
+  // The driver is the only optional operand, so MLIR tells it from the value without
+  // operand-segment sizes, as nl.broadcast_constant's cardinality is.
+  let arguments = (ins Column:$value, Optional<Column>:$driver);
+  let results = (outs Column:$result);
+
+  let assemblyFormat = [{
+    `(` $value (`,` $driver^)? `)` attr-dict `:` functional-type(operands, results)
+  }];
 }
 
 class PredicateOp<string mnemonic, list<Trait> traits = []>

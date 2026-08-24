@@ -262,6 +262,9 @@ public:
     static NLCompareFunction selectPlainCompareFunction(ValueType valueType);
     static NLCopyFunction selectPlainCopyFunction(ValueType valueType);
     static NLBroadcastFunction selectPlainBlockRepeatFunction(ValueType valueType);
+    static NLBroadcastFunction selectPlainTileFunction(ValueType valueType);
+    static NLKeyAppendFunction selectPlainKeyAppendFunction(ValueType valueType);
+    static NLGroupKeyGatherFunction selectPlainGroupKeyGather(ValueType valueType);
 
     // Block-repeat for an ID chunk of this kind (outer column).
     static NLBroadcastFunction selectBlockRepeatFunction(NLChunkKind kind);

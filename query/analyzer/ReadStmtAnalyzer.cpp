@@ -624,6 +624,12 @@ void ReadStmtAnalyzer::analyze(const UnwindStmt* unwind) {
 
     const std::string_view symName = symbol->getName();
 
+    // UNWIND names a new variable, so a name already in scope would put two of them under
+    // one name - the list's rows and whatever that name already holds
+    if (_ctxt->hasDecl(symName)) {
+        throwError(fmt::format("Variable '{}' is already declared", symName), unwind);
+    }
+
     _ctxt->getOrCreateNamedVariable(_ast, itemType, symName);
 }
 

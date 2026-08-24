@@ -814,7 +814,7 @@ shortestPathSt
     ;
 
 unwindSt
-    : UNWIND expr AS symbol { $$ = UnwindStmt::create(ast, $2, $4); }
+    : UNWIND expr AS symbol { $$ = UnwindStmt::create(ast, $2, $4); LOC($$, @$); }
     ;
 
 loadCSVSt

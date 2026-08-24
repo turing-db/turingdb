@@ -993,13 +993,20 @@ def CountUpdate : NLOp<"count_update", []> {
     the rows in which x is not null). The sole counter mutator.
 
       nl.count_update %c, %a : !nl.chunk<!storage.node_id>
+
+    `all_rows` charges the chunk's row count whatever it holds - Cypher count(*),
+    which counts rows and reads no value, so the chunk it is anchored on may be a
+    nullable one whose nulls a value tally would have skipped:
+
+      nl.count_update %c, %age all_rows : !nl.chunk<!storage.nullable<i64>>
   }];
 
   // The accumulator handle, then the column whose non-null rows are charged. The
-  // handle type is buildable and omitted; the column chunk type is spelled.
-  let arguments = (ins NLCountStateHandle:$state, NLChunk:$rows);
+  // handle type is buildable and omitted; the column chunk type is spelled. all_rows
+  // is a unit attribute: its presence is the flag.
+  let arguments = (ins NLCountStateHandle:$state, NLChunk:$rows, UnitAttr:$all_rows);
 
-  let assemblyFormat = "$state `,` $rows attr-dict `:` qualified(type($rows))";
+  let assemblyFormat = "$state `,` $rows (`all_rows` $all_rows^)? attr-dict `:` qualified(type($rows))";
 }
 
 /**

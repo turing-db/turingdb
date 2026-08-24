@@ -7,6 +7,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
@@ -51,13 +52,12 @@ public:
     using DefinedVars = std::unordered_set<const VariableDependency*>;
     using ExprValueMap = std::unordered_map<const Expr*, mlir::Value>;
     using ProjectedColumnMap = std::unordered_map<const VarDecl*, mlir::Value>;
+    using ColumnPredicate = llvm::function_ref<bool(mlir::Value)>;
 
     // Maps a Cypher variable name to the last column defined for it, the one the
     // projection and its ORDER BY read
     using VariableColumnMap = std::unordered_map<std::string_view, mlir::Value>;
 
-    // Each grouping key expression of an aggregating projection beside the column the
-    // group aggregate reduced it to, one value per group
     // The columns a grouped aggregation produces, each under the expression it computes:
     // the grouping keys and the aggregate results
     using GroupedColumns = llvm::SmallVector<std::pair<const Expr*, mlir::Value>>;
@@ -72,18 +72,24 @@ private:
     mlir::MLIRContext* _mlirCtxt {nullptr};
     mlir::OpBuilder _opBuilder;
 
-    // Maps a Cypher variable to all of its MLIR variable defs, in order of appearance
-    VariableIdentityMap _varMap;
+    // A WITH drops this whole object rather than naming its members one at a time, so a
+    // map added here is one the next part cannot read a stale binding out of
+    struct PartScope {
+        VariableIdentityMap _varMap;
 
-    // Maps each edge VDG var to its MLIR type column
-    std::unordered_map<const VariableDependency*, mlir::Value> _edgeTypeMap;
+        std::unordered_map<const VariableDependency*, mlir::Value> _edgeTypeMap;
 
-    ExprValueMap _exprMap;
+        ExprValueMap _exprMap;
 
-    // Maps each projected item to the column it produced, under the declaration the
-    // alias of that item shares with it
-    ProjectedColumnMap _projectedColumns;
+        // Maps each projected item to the column it produced, under the declaration the
+        // alias of that item shares with it
+        ProjectedColumnMap _projectedColumns;
+    };
 
+    PartScope _part;
+
+    // Of one part too, but emptied rather than replaced: its variables and edges point
+    // at each other
     VariableDependencyGraph _vdg;
 
     struct TranslatedComponent {
@@ -92,21 +98,15 @@ private:
         llvm::SmallVector<mlir::Value> _columns;
     };
 
-    // Generates the read part of the query one WITH barrier at a time: each part matches
-    // over the columns the barrier before it published, and each barrier replaces those
-    // columns with the ones its own projection publishes
     void generateQueryParts(const SinglePartQuery* query);
 
-    // The traversal, property constraints and predicates of one query part: the
-    // statements between two WITH barriers
+    // One query part: the statements between two WITH barriers
     void generatePart(std::span<Stmt* const> stmts);
 
     void generateTraversal(std::span<Stmt* const> stmts);
 
-    // Rejects an edge variable a WITH bound and a later pattern matches again: the column
-    // of an edge is published under the identity of the traversal that produced it, and a
-    // barrier leaves that traversal behind, so there is nothing left to join the pattern
-    // onto
+    // A barrier leaves behind the traversal an edge's column was published under, so a
+    // pattern matching that edge again has nothing to join onto
     void throwOnRematchedBoundEdge() const;
 
     bool holdsColumn(const VariableDependency* var) const;
@@ -115,20 +115,29 @@ private:
     // walk from the variables in scope
     void throwOnUnboundPatternVariable() const;
 
-    // Translates the hops the walk left behind because both of their ends were already
-    // bound
-    void closeBoundJoins(std::vector<const VariableDependency*>& carriedSet);
+    void closeBoundJoins(std::vector<const VariableDependency*>& carriedSet,
+                         std::vector<const VariableDependency*>& dataflowVars);
 
     // Walks one hop whose far end already holds a column, so the hop constrains the rows
     // instead of fanning them out: the column it lands on is filtered against that one
     void closeBoundJoin(const DependencyEdge* edgeProducer,
                         const VariableDependency* edge,
                         const VariableDependency* target,
-                        std::vector<const VariableDependency*>& carriedSet);
+                        std::vector<const VariableDependency*>& carriedSet,
+                        std::vector<const VariableDependency*>& dataflowVars);
 
-    // Walks the patterns of a part out from the variables a WITH bound, extending the
-    // dataflow the barrier left behind rather than opening one of its own
-    void extendBoundDataflow(DefinedVars& defined);
+    // The walk skips a merge target that already holds a column, so the equality closing
+    // a cycle through a bound variable is left to be emitted here
+    void closeBoundMerges();
+
+    // Extends the dataflow the barrier left behind rather than opening one of its own,
+    // filling @param dataflowVars with every variable that dataflow carries a column for
+    void extendBoundDataflow(DefinedVars& defined,
+                             std::vector<const VariableDependency*>& dataflowVars);
+
+    // Turns the dataflow the barrier left behind into a cross product factor: every op
+    // emitted into @param mainBlock so far, bar the ones binding a constant
+    void takeBoundDataflow(mlir::Block* mainBlock, TranslatedComponent& component);
 
     // Adds filters for edges which should be equivalent (joined on)
     void resolveEdgeIdentities();
@@ -160,12 +169,12 @@ private:
     void generateDelete(const SinglePartQuery* query);
     void generateOutput(const Projection* projection);
 
-    // Generates a WITH barrier: its projection, then the scope that projection publishes,
-    // then its WHERE over the rows that survived
     void generateWith(const WithStmt* with);
 
-    // Replaces every binding the statements before a barrier had with the columns the
-    // barrier publishes, each under the name the projection gives it
+    // A barrier publishes one row per row it read, not the single row its literals are:
+    // this binds a projection of constants alone to the rows of the match under it
+    void broadcastConstantProjection(llvm::SmallVectorImpl<mlir::Value>& projected);
+
     void publishBoundColumns(llvm::ArrayRef<llvm::StringRef> names,
                              llvm::ArrayRef<mlir::Value> columns);
 
@@ -173,28 +182,21 @@ private:
     // traversal variable, plus one per edge identity under its representative
     void collectVariableColumns(VariableColumnMap& variableColumns) const;
 
-    // The column and the name of every item of a projection, in item order
     void translateProjection(const Projection* projection,
                              const VariableColumnMap& variableColumns,
                              llvm::SmallVectorImpl<mlir::Value>& projected,
                              llvm::SmallVectorImpl<llvm::StringRef>& names);
 
-    // Applies what a projection asks for once its items are columns: DISTINCT dedups
-    // them, ORDER BY reorders the survivors, and SKIP and LIMIT cut the sorted rows
     void translateProjectionTail(const Projection* projection,
                                  const VariableColumnMap& variableColumns,
                                  llvm::SmallVectorImpl<mlir::Value>& projected);
 
-    // Cuts the projection with a db.skip or a db.limit of @param countExpr rows, replacing
-    // each cut column with its counterpart
     template <typename CutOp>
     void translateCut(const Projection* projection,
                       const Expr* countExpr,
                       std::string_view clauseName,
                       llvm::SmallVectorImpl<mlir::Value>& projected);
 
-    // Dedups the projection with a RemoveDuplicates over the varying columns of
-    // @param projected, replacing each of them with its deduped counterpart
     void translateDistinct(const Projection* projection,
                            llvm::SmallVectorImpl<mlir::Value>& projected);
 
@@ -205,8 +207,6 @@ private:
 
     void runPasses();
 
-    // Reorders the projection with a Sort over @param projected, replacing each
-    // projected column with its sorted counterpart
     void translateOrderBy(const Projection* projection,
                           const VariableColumnMap& variableColumns,
                           llvm::SmallVectorImpl<mlir::Value>& projected);
@@ -220,10 +220,17 @@ private:
 
     bool isRowAlignedHere(mlir::Value column) const;
 
-    // The column count(*) counts: the first variable of the pattern bound to a column
-    // holding the rows flowing past the insertion point, taken in the order the query
-    // declares its variables so the choice is the query's and not the addresses'
+    // Taken in the order the query declares its variables, so the choice is the query's
+    // and not the addresses'
+    mlir::Value resolveColumnInScope(ColumnPredicate accept) const;
+
+    mlir::Value resolveRowCarryingColumn() const;
+
+    // A scope of constants alone is the single row those constants are, which is what
+    // count(*) counts there
     mlir::Value resolveWildcardColumn() const;
+
+    void throwIfNoWildcardColumn(mlir::Value column) const;
 
     void generatePropertyConstraints(std::span<Stmt* const> stmts);
     void generateFilters(std::span<Stmt* const> stmts);
@@ -233,8 +240,8 @@ private:
     void generateGroupAggregate(const Projection* projection);
 
     // Publishes the grouped column of every grouping key and aggregate result an ORDER BY
-    // key reads, so that translating the key computes over one value per group instead of
-    // re-reading the ungrouped column the group aggregate consumed
+    // key reads, so the key computes over one value per group rather than over the
+    // ungrouped column the group aggregate consumed
     void bindOrderByKeyColumns(const Projection* projection, const GroupedColumns& groupedColumns);
     void bindGroupedKeyColumn(const Expr* expr, const GroupedColumns& groupedColumns);
 
@@ -271,35 +278,60 @@ private:
     void addUnwindConst(const VariableDependency* var, const UnwindStmt* unwind);
     void filterAllColumns(mlir::Value predicate);
 
+    // Such a scope is the single row those constants are: the predicate and the columns
+    // are laid out over that row
+    void filterConstantScope(mlir::Value predicate,
+                             llvm::ArrayRef<const VariableDependency*> constantVars);
+
     void applyConstraints(const VariableDependency* var);
 
     void addMergeFilter(const VariableDependency* var,
                         std::vector<const VariableDependency*>& carriedSet);
 
-    // Walks a hop out of @param src, binding the columns it produces to the triple's
-    // variables. A hop closing a join is given a @param joinedTarget instead: the column
-    // it lands on is written there and left unbound, for the caller to filter against the
-    // one @param tgt already holds
+    // @param joinedTarget is where the column the hop lands on is written when the caller
+    // closes a join with it, and null when the hop binds it to @param tgt - the two forms
+    // below, which are what callers reach for
+    template<typename EdgeOp>
+    void walkEdge(const VariableDependency* src,
+                  const VariableDependency* edge,
+                  const VariableDependency* tgt,
+                  const std::vector<const VariableDependency*>& carrySet,
+                  mlir::Value* joinedTarget);
+
     template<typename EdgeOp>
     void addEdgeTraversal(const VariableDependency* src,
                           const VariableDependency* edge,
                           const VariableDependency* tgt,
-                          const std::vector<const VariableDependency*>& carrySet,
-                          mlir::Value* joinedTarget = nullptr);
+                          const std::vector<const VariableDependency*>& carrySet);
 
-    template <typename... Args>
-    void addGetOutEdges(Args&&... args) {
-        return addEdgeTraversal<mlir::db::GetOutEdges>(std::forward<Args>(args)...);
+    // The target already holds a column, so the hop constrains the rows instead of
+    // fanning them out: the column it lands on is returned for the caller to filter
+    // against the one @param tgt keeps
+    template<typename EdgeOp>
+    mlir::Value addJoiningEdgeTraversal(const VariableDependency* src,
+                                        const VariableDependency* edge,
+                                        const VariableDependency* tgt,
+                                        const std::vector<const VariableDependency*>& carrySet);
+
+    void addGetOutEdges(const VariableDependency* src,
+                        const VariableDependency* edge,
+                        const VariableDependency* tgt,
+                        const std::vector<const VariableDependency*>& carrySet) {
+        addEdgeTraversal<mlir::db::GetOutEdges>(src, edge, tgt, carrySet);
     }
 
-    template <typename... Args>
-    void addGetInEdges(Args&&... args) {
-        return addEdgeTraversal<mlir::db::GetInEdges>(std::forward<Args>(args)...);
+    void addGetInEdges(const VariableDependency* src,
+                       const VariableDependency* edge,
+                       const VariableDependency* tgt,
+                       const std::vector<const VariableDependency*>& carrySet) {
+        addEdgeTraversal<mlir::db::GetInEdges>(src, edge, tgt, carrySet);
     }
 
-    template <typename... Args>
-    void addGetEdges(Args&&... args) {
-        return addEdgeTraversal<mlir::db::GetEdges>(std::forward<Args>(args)...);
+    void addGetEdges(const VariableDependency* src,
+                     const VariableDependency* edge,
+                     const VariableDependency* tgt,
+                     const std::vector<const VariableDependency*>& carrySet) {
+        addEdgeTraversal<mlir::db::GetEdges>(src, edge, tgt, carrySet);
     }
 
     mlir::db::ColumnType allocColumnType(mlir::Type type);

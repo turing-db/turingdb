@@ -221,6 +221,10 @@ GroupAggregateKind toRuntimeGroupAggregateKind(storage::GroupAggregateKind kind)
         case storage::GroupAggregateKind::AvgDistinct:
             return GroupAggregateKind::AvgDistinct;
         break;
+
+        case storage::GroupAggregateKind::CountRows:
+            return GroupAggregateKind::CountRows;
+        break;
     }
 
     throw IRException("Unhandled group aggregate kind");
@@ -1643,10 +1647,12 @@ void NLTranslator::translateCountUpdate(nl::CountUpdate update, NLStmtContainer*
     NLCountState* state = countStateFor(update.getState());
 
     // Measure the chunk's non-null rows the way its type demands: all rows for an
-    // ID chunk, the present values for a nullable value chunk.
+    // ID chunk, the present values for a nullable value chunk. count(*) reads no value,
+    // so it charges every row whatever the chunk holds.
     const mlir::Value rows = update.getRows();
     const Column* input = getColumn(rows);
-    const NLCountFunction count = selectCountForChunkType(rows.getType());
+    const NLCountFunction count = update.getAllRows() ? &NLExecutor::countAllRows
+                                                      : selectCountForChunkType(rows.getType());
 
     NLCountUpdateData* data = _program->allocFunctionData<NLCountUpdateData>(state, input, count);
     body->emplaceStmt(&NLExecutor::runCountUpdate, data);
@@ -1844,6 +1850,16 @@ void NLTranslator::translateGroupAggregateUpdate(nl::GroupAggregateUpdate update
                     getChunkKind(chunkType);
                     aggregate._fold = NLExecutor::selectGroupCountAllFold();
                 }
+            }
+            break;
+
+            case GroupAggregateKind::CountRows: {
+                // count(*) charges every row of the group and reads no value, so the
+                // chunk it is anchored on needs no type dispatch at all
+                aggregate._accumulator = nullptr;
+                aggregate._grow = NLExecutor::selectGroupAggregateGrow(kind, ValueType::Int64);
+                aggregate._emit = NLExecutor::selectGroupAggregateEmit(kind, ValueType::Int64);
+                aggregate._fold = NLExecutor::selectGroupCountAllFold();
             }
             break;
 
@@ -2243,6 +2259,10 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
         return NLExecutor::selectListElementKeyAppendFunction();
     }
 
+    if (isPlainValueElementType(elementType)) {
+        return NLExecutor::selectPlainKeyAppendFunction(valueTypeFromElementType(elementType));
+    }
+
     return NLExecutor::selectKeyAppendFunction(chunkKindFromElementType(elementType));
 }
 
@@ -2267,6 +2287,10 @@ NLGroupKeyGatherFunction NLTranslator::selectGroupKeyGatherForChunkType(mlir::Ty
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptGroupKeyGather(valueType);
+    }
+
+    if (isPlainValueElementType(elementType)) {
+        return NLExecutor::selectPlainGroupKeyGather(valueTypeFromElementType(elementType));
     }
 
     return NLExecutor::selectGroupKeyGather(chunkKindFromElementType(elementType));
@@ -2376,6 +2400,11 @@ void NLTranslator::addCrossColumn(mlir::Value inputValue,
         output = allocListElementColumn();
         broadcast = isOuter ? NLExecutor::selectListElementBlockRepeatFunction()
                             : NLExecutor::selectListElementTileFunction();
+    } else if (isPlainValueElementType(elementType)) {
+        const ValueType valueType = valueTypeFromElementType(elementType);
+        output = allocPlainColumn(valueType);
+        broadcast = isOuter ? NLExecutor::selectPlainBlockRepeatFunction(valueType)
+                            : NLExecutor::selectPlainTileFunction(valueType);
     } else {
         const NLChunkKind kind = getChunkKind(chunkType);
         output = allocColumnForKind(kind);

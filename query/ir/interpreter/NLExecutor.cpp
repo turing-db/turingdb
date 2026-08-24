@@ -693,6 +693,15 @@ void distinctKeyAppendOptColumn(const Column* column, size_t row, std::string& k
     distinctAppendValueBytes(key, *value);
 }
 
+// Serialize one row of a plain numeric column into the row key. A tally, and an
+// expression over one, is present in every row, so the key is the value's bytes with no
+// tag byte to tell a null from a value.
+template <typename Primitive>
+void distinctKeyAppendPlainColumn(const Column* column, size_t row, std::string& key) {
+    const auto& raw = static_cast<const ColumnVector<Primitive>*>(column)->getRaw();
+    distinctAppendValueBytes(key, raw[row]);
+}
+
 void distinctAppendElementBytes(std::string& key, ListElementView element);
 
 // Serialize a nested list into the row key as its length then its elements, so a list
@@ -3517,6 +3526,7 @@ NLGroupAggregateGrowFunction NLExecutor::selectGroupAggregateGrow(GroupAggregate
     switch (kind) {
         case GroupAggregateKind::Count:
         case GroupAggregateKind::CountDistinct:
+        case GroupAggregateKind::CountRows:
             return &groupGrowCount;
         break;
 
@@ -3555,6 +3565,10 @@ NLGroupAggregateGrowFunction NLExecutor::selectGroupAggregateGrow(GroupAggregate
 
 NLGroupAggregateFoldFunction NLExecutor::selectGroupAggregateFold(GroupAggregateKind kind, ValueType inputType) {
     switch (kind) {
+        case GroupAggregateKind::CountRows:
+            return selectGroupCountAllFold();
+        break;
+
         case GroupAggregateKind::CountDistinct:
             return selectGroupCountDistinctFold(inputType);
         break;
@@ -3682,6 +3696,7 @@ NLGroupAggregateEmitFunction NLExecutor::selectGroupAggregateEmit(GroupAggregate
     switch (kind) {
         case GroupAggregateKind::Count:
         case GroupAggregateKind::CountDistinct:
+        case GroupAggregateKind::CountRows:
             // count emits its per-group tally as an unsigned i64, whatever the input was.
             return &groupEmitCount;
         break;
@@ -3825,6 +3840,46 @@ NLCopyFunction NLExecutor::selectPlainCopyFunction(ValueType valueType) {
     }
 }
 
+NLKeyAppendFunction NLExecutor::selectPlainKeyAppendFunction(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &distinctKeyAppendPlainColumn<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &distinctKeyAppendPlainColumn<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &distinctKeyAppendPlainColumn<types::Double::Primitive>;
+        break;
+
+        default:
+            throw IRException("a plain value column must be numeric");
+        break;
+    }
+}
+
+NLGroupKeyGatherFunction NLExecutor::selectPlainGroupKeyGather(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &groupGatherAppendColumn<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &groupGatherAppendColumn<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &groupGatherAppendColumn<types::Double::Primitive>;
+        break;
+
+        default:
+            throw IRException("a plain value column must be numeric");
+        break;
+    }
+}
+
 NLBroadcastFunction NLExecutor::selectPlainBlockRepeatFunction(ValueType valueType) {
     switch (valueType) {
         case ValueType::Int64:
@@ -3837,6 +3892,26 @@ NLBroadcastFunction NLExecutor::selectPlainBlockRepeatFunction(ValueType valueTy
 
         case ValueType::Double:
             return &blockRepeatColumn<types::Double::Primitive>;
+        break;
+
+        default:
+            throw IRException("a plain value column must be numeric");
+        break;
+    }
+}
+
+NLBroadcastFunction NLExecutor::selectPlainTileFunction(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &tileColumn<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &tileColumn<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &tileColumn<types::Double::Primitive>;
         break;
 
         default:

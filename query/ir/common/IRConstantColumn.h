@@ -1,10 +1,10 @@
 #pragma once
 
 #include "mlir/IR/OpDefinition.h"
-#include "mlir/IR/Operation.h"
-#include "mlir/IR/Value.h"
 
-#include "llvm/ADT/STLExtras.h"
+namespace mlir {
+class Value;
+}
 
 namespace mlir::OpTrait {
 
@@ -17,22 +17,8 @@ class ConstantThroughOperands
 
 namespace db {
 
-inline bool yieldsConstantColumn(mlir::Value value) {
-    mlir::Operation* const definingOp = value.getDefiningOp();
-    if (!definingOp) {
-        return false;
-    }
-
-    if (definingOp->hasTrait<mlir::OpTrait::ConstantLike>()) {
-        return true;
-    }
-
-    if (!definingOp->hasTrait<mlir::OpTrait::ConstantThroughOperands>()) {
-        return false;
-    }
-
-    return llvm::all_of(definingOp->getOperands(),
-                        [](mlir::Value operand) { return yieldsConstantColumn(operand); });
-}
+// Whether @param value holds the same value in every row: a constant, or a computation
+// over constants alone
+bool yieldsConstantColumn(mlir::Value value);
 
 }

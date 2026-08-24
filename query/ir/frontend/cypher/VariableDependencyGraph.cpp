@@ -148,15 +148,25 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
         src = prev;
         tgt = tgtVar;
 
-        bioassert(edge->getDecl(), "Edge pattern without declaration.");
-        const std::string_view cypherEdgeName = edge->getDecl()->getName();
-        std::vector<VariableDependency*>& edgeOccurrences = _edgeIdentities[std::string(cypherEdgeName)];
-        std::string anonymousName;
-        anonymousName += cypherEdgeName;
-        anonymousName += '\'';
-        anonymousName += std::to_string(edgeOccurrences.size());
-        VariableDependency* edgeVar = newVariable(anonymousName);
-        edgeOccurrences.push_back(edgeVar);
+        const VarDecl* edgeDecl = edge->getDecl();
+        bioassert(edgeDecl, "Edge pattern without declaration.");
+        const std::string_view cypherEdgeName = edgeDecl->getName();
+
+        // An edge the pattern leaves anonymous is one occurrence of one variable, so it
+        // joins nothing: only a name the query wrote gets an identity, whose occurrences
+        // the code generator equates
+        VariableDependency* edgeVar = nullptr;
+        if (edgeDecl->isUnnamed()) {
+            edgeVar = newAnonymousVariable(cypherEdgeName);
+        } else {
+            std::vector<VariableDependency*>& edgeOccurrences = _edgeIdentities[std::string(cypherEdgeName)];
+            std::string occurrenceName;
+            occurrenceName += cypherEdgeName;
+            occurrenceName += '\'';
+            occurrenceName += std::to_string(edgeOccurrences.size());
+            edgeVar = newVariable(occurrenceName);
+            edgeOccurrences.push_back(edgeVar);
+        }
 
         const EdgePatternData* edgeData = edge->getData();
         std::string_view edgeTypeConstraint;
@@ -182,8 +192,14 @@ void VariableDependencyGraph::registerUnwindStmt(const UnwindStmt* stmt) {
 
     // An UNWIND variable is bound to a list rather than to a pattern, so it depends on
     // no other variable and enters the graph isolated - a root of its own connected
-    // component, whose dataflow the code generator opens from the list.
-    VariableDependency* unwindVar = newVariable(symbol->getName());
+    // component, whose dataflow the code generator opens from the list. The lookup by
+    // name is what registerPatternElement does: two variables of one name would leave
+    // every name-keyed resolver picking one of them by container order.
+    VariableDependency* unwindVar = findVariable(symbol->getName());
+    if (!unwindVar) {
+        unwindVar = newVariable(symbol->getName());
+    }
+
     _unwindSources[unwindVar] = stmt;
 }
 
@@ -196,15 +212,40 @@ VariableDependency* VariableDependencyGraph::newVariable(std::string_view name) 
     return &_vars.emplace_back(name);
 }
 
-VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPattern* entity) {
-    bioassert(entity->getDecl(), "Variable with null declaration.");
-    const auto match = [entity](const VariableDependency& dep) {
-        return entity->getDecl()->getName() == dep.getName();
+VariableDependency* VariableDependencyGraph::newAnonymousVariable(std::string_view declName) {
+    std::string name;
+    name += declName;
+    name += '\'';
+
+    return newVariable(name);
+}
+
+VariableDependency* VariableDependencyGraph::findVariable(std::string_view name) {
+    const auto match = [name](const VariableDependency& dep) {
+        return name == dep.getName();
     };
     const auto foundIt = std::ranges::find_if(_vars, match);
-    const bool exists  = foundIt != _vars.end();
 
-    VariableDependency* var = exists ? &*foundIt : newVariable(entity);
+    return foundIt != _vars.end() ? &*foundIt : nullptr;
+}
+
+VariableDependency* VariableDependencyGraph::getOrCreateVariable(const EntityPattern* entity) {
+    const VarDecl* decl = entity->getDecl();
+    bioassert(decl, "Variable with null declaration.");
+
+    // The name of an entity the pattern leaves anonymous is generated, and a Cypher alias
+    // can carry that spelling too - `WITH p AS v0` beside a `MATCH (v0)-->()` - so
+    // matching it by name would join the pattern onto whatever that alias holds. It gets
+    // a name of the graph's own instead, which no Cypher identifier can be
+    VariableDependency* var = nullptr;
+    if (decl->isUnnamed()) {
+        var = newAnonymousVariable(decl->getName());
+    } else {
+        var = findVariable(decl->getName());
+        if (!var) {
+            var = newVariable(entity);
+        }
+    }
 
     const NodePattern* node = dynamic_cast<const NodePattern*>(entity);
     if (node) {

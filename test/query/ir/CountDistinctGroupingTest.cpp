@@ -596,7 +596,8 @@ protected:
 // One db.group_aggregate carries every key and every aggregate of the projection, so two
 // keys beside two distinct counts is one op with a key count of two and one
 // count_distinct kind per tally - and a distinct count mixes with the other kinds in the
-// order the projection names them.
+// order the projection names them. count(*) tallies each group's rows rather than the
+// rows whose value is present, which is the count_rows kind.
 TEST_F(CountDistinctGroupingTest, generatesOneAggregateForEveryKeyAndTally) {
     const std::string twoKeys =
         generatedProgram("MATCH (a)-->(b)-->(c) RETURN a.name, a.age, count(DISTINCT b), count(DISTINCT c)");
@@ -604,7 +605,7 @@ TEST_F(CountDistinctGroupingTest, generatesOneAggregateForEveryKeyAndTally) {
 
     const std::string mixed =
         generatedProgram("MATCH (a)-[e]->(b) RETURN a.name, count(*), sum(e.duration), count(DISTINCT b)");
-    EXPECT_NE(mixed.find("keys 1 aggregates [count, sum, count_distinct]"), std::string::npos);
+    EXPECT_NE(mixed.find("keys 1 aggregates [count_rows, sum, count_distinct]"), std::string::npos);
 }
 
 // Two keys beside the tally: the four two-hop rows of each source are one group whatever

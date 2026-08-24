@@ -42,6 +42,12 @@ def AggregateKind : I64EnumAttr<"AggregateKind", "A property-value aggregate", [
 // parallel to it. The scalar count(DISTINCT x) is db.count's `distinct` flag
 // instead: with no group to key on, it is the plain tally of a deduplicated column.
 //
+// COUNT_ROWS is Cypher's count(*): it tallies every row of a group rather than the
+// rows whose value is present, so it reads no value at all and accepts a column of any
+// type - which is what lets count(*) be anchored on whichever column of the part carries
+// its rows, a nullable property column included. COUNT is count(x) and keeps its
+// null-skipping tally.
+//
 // SUM_DISTINCT and AVG_DISTINCT are the same for Cypher's sum(DISTINCT x) and
 // avg(DISTINCT x): they reduce each group's distinct non-null values and keep the
 // result shape of SUM and AVG. MIN and MAX need no such kind - dropping repeated
@@ -56,6 +62,7 @@ def GroupAggregateKind : I64EnumAttr<"GroupAggregateKind", "A grouped aggregate 
     I64EnumAttrCase<"CountDistinct", 5, "count_distinct">,
     I64EnumAttrCase<"SumDistinct", 6, "sum_distinct">,
     I64EnumAttrCase<"AvgDistinct", 7, "avg_distinct">,
+    I64EnumAttrCase<"CountRows", 8, "count_rows">,
 ]> {
     let cppNamespace = "::mlir::storage";
 }

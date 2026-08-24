@@ -259,9 +259,8 @@ void CypherAnalyzer::analyze(const WithStmt* withSt) {
     }
 }
 
-// Every column a WITH publishes is named, and those names are the whole scope of what
-// follows: the barrier is a new declaration context holding one variable per projected
-// item, so a statement after it resolves the items and nothing the projection dropped
+// The names a WITH gives its columns are the whole scope of what follows, so a statement
+// after the barrier resolves its items and nothing the projection dropped
 void CypherAnalyzer::openWithScope(const Projection* projection) {
     DeclContext* scope = DeclContext::create(_ast, _ctxt);
 
@@ -285,9 +284,8 @@ void CypherAnalyzer::openWithScope(const Projection* projection) {
     _writeAnalyzer->setDeclContext(_ctxt);
 }
 
-// A WITH names the columns it publishes, so every item of one has to be a variable or
-// carry an alias. RETURN needs no such rule: it names its columns for the caller and
-// nothing downstream reads them back
+// RETURN needs no such rule: it names its columns for the caller and nothing downstream
+// reads them back
 void CypherAnalyzer::analyzeWithAliases(const Projection* projection) const {
     for (const Projection::ReturnItem& returnItem : projection->items()) {
         const auto* exprPtr = std::get_if<Expr*>(&returnItem);
@@ -304,7 +302,7 @@ void CypherAnalyzer::analyzeWithAliases(const Projection* projection) const {
     }
 }
 
-void CypherAnalyzer::analyzeProjection(Projection* projection, const void* clause) {
+void CypherAnalyzer::analyzeProjection(Projection* projection, const Stmt* clause) {
     if (projection->hasSkip()) {
         analyze(projection->getSkip());
     }
@@ -421,6 +419,10 @@ void CypherAnalyzer::analyzeProjection(Projection* projection, const void* claus
             // Push at the front since '*' is only allowed at the beginning of the return statement
             projection->pushFrontDecl(decl);
             projection->setName(decl, decl->getName());
+
+            // A variable is never an aggregate, and the item loop above never saw this
+            // one: the wildcard had not been expanded yet
+            hasGroupingKeys = true;
         }
     }
 
@@ -453,7 +455,11 @@ void CypherAnalyzer::declareItemAlias(Expr* item, std::string_view alias) {
     VarDecl* aliasedDecl = symbolExpr->getDecl();
     const VarDecl* declared = _ctxt->getDecl(alias);
 
-    if (declared && declared != aliasedDecl) {
+    // A declaration the query did not name was generated for an expression and is reached
+    // through it, so an alias spelling that name is no redeclaration and takes it
+    const bool takenByAVariable = declared && !declared->isUnnamed();
+
+    if (takenByAVariable && declared != aliasedDecl) {
         throwError(fmt::format("Variable '{}' is already declared", alias), item);
     }
 
@@ -465,7 +471,7 @@ void CypherAnalyzer::setV3() {
     _exprAnalyzer->setV3();
 }
 
-void CypherAnalyzer::analyzeDistinct(const Projection* projection, const void* clause) const {
+void CypherAnalyzer::analyzeDistinct(const Projection* projection, const Stmt* clause) const {
     if (!_isV3) { // only supported by MLIR v3
         throwError("DISTINCT not yet supported.", clause);
     }
