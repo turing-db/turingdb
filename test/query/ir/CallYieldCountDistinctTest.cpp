@@ -20,6 +20,7 @@
 #include "SystemAccessor.h"
 #include "SystemManager.h"
 #include "columns/ColumnVector.h"
+#include "metadata/PropertyType.h"
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
@@ -75,6 +76,32 @@ public:
 
 private:
     std::set<std::string> _values;
+    size_t _rowCount {0};
+};
+
+// Collects the distinct value types of a single yielded value-type column, the enum a
+// procedure returns as VALUE_TYPE.
+class DistinctValueTypeSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* values = dynamic_cast<const ColumnVector<ValueType>*>(chunks[0]);
+        ASSERT_NE(values, nullptr);
+
+        const auto& raw = values->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _values.emplace(raw[rowIndex]);
+            _rowCount++;
+        }
+    }
+
+    size_t getDistinctCount() const { return _values.size(); }
+
+    size_t getRowCount() const { return _rowCount; }
+
+private:
+    std::set<ValueType> _values;
     size_t _rowCount {0};
 };
 
@@ -152,6 +179,21 @@ TEST_F(CallYieldCountDistinctTest, countsDistinctYieldedStrings) {
     runQuery("CALL db.labels() YIELD label RETURN count(DISTINCT label)", counted);
 
     const std::vector<uint64_t> expected {labels.getDistinctCount()};
+    EXPECT_EQ(counted.getCounts(), expected);
+}
+
+// A value type repeats across the properties that share it, so the distinct tally is
+// strictly under the row count: the enum keys on its own bytes like any other scalar.
+TEST_F(CallYieldCountDistinctTest, countsDistinctYieldedValueTypes) {
+    DistinctValueTypeSink valueTypes;
+    runQuery("CALL db.propertyTypes() YIELD valueType RETURN valueType", valueTypes);
+
+    ASSERT_GT(valueTypes.getRowCount(), valueTypes.getDistinctCount());
+
+    CountSink counted;
+    runQuery("CALL db.propertyTypes() YIELD valueType RETURN count(DISTINCT valueType)", counted);
+
+    const std::vector<uint64_t> expected {valueTypes.getDistinctCount()};
     EXPECT_EQ(counted.getCounts(), expected);
 }
 
