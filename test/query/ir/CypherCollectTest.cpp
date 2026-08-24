@@ -796,6 +796,24 @@ TEST_F(CypherCollectTest, groupedCollectOfNodesOrderedByTheList) {
     EXPECT_EQ(rows, expected);
 }
 
+// An aggregate projection emits one row per group, so no two of its rows can be equal:
+// the dedup is elided and DISTINCT beside a collect returns the groups untouched.
+TEST_F(CypherCollectTest, distinctOverTheCollectedList) {
+    buildTeamGraph();
+
+    KeyedStringListSink sink;
+    match("MATCH (n:Node) RETURN DISTINCT n.team, collect(n.name)", sink);
+
+    std::vector<KeyedStringListSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<KeyedStringListSink::Row> expected {
+        {"blue", {"bob", "dan"}},
+        {"red", {"alice", "carol"}},
+    };
+    EXPECT_EQ(rows, expected);
+}
+
 TEST_F(CypherCollectTest, rejectsCollectOfConstant) {
     buildTeamGraph();
 
