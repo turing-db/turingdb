@@ -15,6 +15,7 @@ set(VECTOR_SOURCES
         VecLibAccessor.cpp
         VecLibWriteAccessor.cpp
         VecLib.cpp
+        VectorCSVReader.cpp
         import/ImportResult.cpp
         import/ImportException.cpp
         import/JsonImporter.cpp)

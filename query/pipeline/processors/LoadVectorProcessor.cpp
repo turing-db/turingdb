@@ -1,9 +1,5 @@
 #include "LoadVectorProcessor.h"
 
-#include <fstream>
-#include <sstream>
-#include <span>
-
 #include <spdlog/fmt/fmt.h>
 
 #include "columns/ColumnConst.h"
@@ -15,6 +11,7 @@
 #include "VectorDatabase.h"
 #include "VecLibWriteAccessor.h"
 #include "BatchVectorCreate.h"
+#include "VectorCSVReader.h"
 #include "PipelineException.h"
 #include "VectorResult.h"
 
@@ -79,50 +76,10 @@ void LoadVectorProcessor::execute() {
             dataDir.get()));
     }
 
-    // Parse file and load embeddings
-    // Expected format: CSV with id,dim1,dim2,...,dimN
-    std::ifstream file(filePath.get());
-    if (!file.is_open()) {
-        throw PipelineException(fmt::format("Failed to open file '{}'", filePath.get()));
-    }
-
-    vec::Dimension dimension = accessor.metadata()->_dimension;
     vec::BatchVectorCreate batch;
     accessor.prepareCreateBatch(&batch);
 
-    std::string line;
-    std::string token;
-    std::vector<float> values;
-    values.reserve(dimension);
-
-    while (std::getline(file, line)) {
-        if (line.empty()) {
-            continue;
-        }
-
-        std::istringstream iss(line);
-
-        // Read ID
-        if (!std::getline(iss, token, ',')) {
-            throw PipelineException("Invalid vector file format: missing ID");
-        }
-        const int64_t id = std::stoll(token);
-
-        // Read vector values
-        values.clear();
-
-        while (std::getline(iss, token, ',')) {
-            values.push_back(std::stof(token));
-        }
-
-        if (values.size() != dimension) {
-            throw PipelineException(fmt::format(
-                "Vector dimension mismatch: expected {}, got {}",
-                dimension, values.size()));
-        }
-
-        batch.addPoint(id, std::span<const float>(values));
-    }
+    vec::VectorCSVReader::read(filePath, batch);
 
     const vec::VectorResult<void> result = accessor.addEmbeddings(&batch);
     if (!result.has_value()) {
