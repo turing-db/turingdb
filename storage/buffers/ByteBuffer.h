@@ -3,10 +3,7 @@
 #include "BufferChunk.h"
 
 #include <algorithm>
-#include <stdint.h>
 #include <stddef.h>
-
-#include <type_traits>
 
 namespace db {
 
@@ -31,16 +28,23 @@ public:
         }
     }
 
+    ByteBuffer(const ByteBuffer&) = delete;
+    ByteBuffer(ByteBuffer&&) = delete;
+    ByteBuffer& operator=(const ByteBuffer&) = delete;
+    ByteBuffer& operator=(ByteBuffer&&) = delete;
+
     std::byte* nextPtr() const { return &_last->_buf[_last->_size]; };
 
 private:
     template <typename E, typename V, size_t M>
     friend class SpanBuffer;
+    friend class StringBuffer;
 
     ByteChunk* _first {nullptr};
     ByteChunk* _last {nullptr};
 
     void reserveContiguous(size_t numTs);
+    void commit(size_t numBytes) { _last->_size += numBytes; }
     ByteChunk* allocateNext(size_t capacity);
 };
 

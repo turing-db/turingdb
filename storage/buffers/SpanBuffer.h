@@ -17,6 +17,7 @@ public:
     V insert(std::span<const E> items);
 
 private:
+    friend class StringBuffer;
     ByteBuffer<E, N> _bytes;
 
     static_assert(std::is_trivially_copyable_v<E>);
@@ -35,6 +36,8 @@ V SpanBuffer<E, V, N>::insert(std::span<const E> items) {
     const size_t numBytes = size * sizeof(E);
     std::memcpy(spanStart, eleStart, numBytes);
 
+    _bytes.commit(numBytes);
+
     const E* elePtr = std::bit_cast<const E*, const std::byte*>(spanStart);
 
     return V {elePtr, size};
@@ -48,6 +51,10 @@ public:
 };
 
 inline std::string_view StringBuffer::concatenate(std::string_view a, std::string_view b) {
+    const size_t stringSize = a.size() + b.size();
+
+    _bytes.reserveContiguous(stringSize);
+
     const char* aPtr = a.data();
     const std::span aSpan(aPtr, a.size());
 
@@ -58,7 +65,6 @@ inline std::string_view StringBuffer::concatenate(std::string_view a, std::strin
     insert(bSpan);
 
     const char* stringStart = aSV.data();
-    const size_t stringSize = a.size() + b.size();
 
     return {stringStart, stringSize};
 }
