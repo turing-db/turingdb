@@ -432,7 +432,6 @@ private:
     void translateBroadcastConstant(mlir::nl::BroadcastConstant broadcast, NLStmtContainer* body);
     // The list sibling of translateConstant: materializes the literals into the query's
     // ListBuffer and allocates a singleton column holding a view of them
-    void translateConstList(mlir::nl::ConstList constList);
 
     template <ColumnOperator Op, typename OpType>
     void translateBinaryOp(OpType op, NLStmtContainer* body);

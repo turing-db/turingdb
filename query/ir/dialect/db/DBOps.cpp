@@ -3,6 +3,7 @@
 
 #include "llvm/ADT/SmallVector.h"
 
+#include "IRLiteralList.h"
 #include "StorageEnums.h"
 #include "GroupAggregateKindsFormat.h"
 
@@ -411,7 +412,27 @@ LogicalResult ConstantOp::inferReturnTypes(MLIRContext* context,
                                            RegionRange regions,
                                            SmallVectorImpl<Type>& inferredReturnTypes) {
     ConstantOpGenericAdaptor adaptor(operands, attributes, properties, regions);
-    const mlir::TypedAttr typedValue = mlir::cast<mlir::TypedAttr>(adaptor.getValue());
+
+    // An array of per-element attributes is a list literal; it carries no type of its own,
+    // so the element type is the homogeneity verdict over the elements.
+    if (const auto elements = llvm::dyn_cast<ArrayAttr>(adaptor.getValue())) {
+        const mlir::Type shared = ::db::sharedLiteralElementType(elements);
+        const mlir::Type listElement = shared ? shared : storage::ListElementType::get(context);
+        const mlir::Type listType = storage::ListType::get(context, listElement);
+
+        inferredReturnTypes.emplace_back(mlir::db::ColumnType::get(context, listType));
+        return success();
+    }
+
+    // Type inference runs while the op is still being parsed, ahead of the operand
+    // constraint that limits the value to a typed attribute or an array, so an attribute of
+    // any other kind has to be turned away here rather than cast blindly.
+    const mlir::TypedAttr typedValue = llvm::dyn_cast<mlir::TypedAttr>(adaptor.getValue());
+    if (!typedValue) {
+        return mlir::emitOptionalError(location,
+                                       "db.constant carries a typed value or an array of "
+                                       "literals, not ", adaptor.getValue());
+    }
 
     mlir::Type elementType;
     if (const auto elements = mlir::dyn_cast<mlir::DenseElementsAttr>(typedValue)) {
@@ -597,23 +618,3 @@ LogicalResult UnwindConst::verify() {
     return verifyHomogeneousElements(getOperation(), getElements());
 }
 
-// The list-literal sibling of UnwindConst::verify: the same homogeneity check on the
-// elements, but the result holds the list itself rather than its elements, so it must be a
-// list column and the verdict sits on that list's element type.
-LogicalResult ConstList::verify() {
-    const ColumnType resultColumn = llvm::dyn_cast<ColumnType>(getResult().getType());
-    if (!resultColumn) {
-        return emitOpError("result must be a column");
-    }
-
-    const storage::ListType listType = llvm::dyn_cast<storage::ListType>(resultColumn.getType());
-    if (!listType) {
-        return emitOpError("result must be a list column");
-    }
-
-    if (llvm::isa<storage::ListElementType>(listType.getElementType())) {
-        return success();
-    }
-
-    return verifyHomogeneousElements(getOperation(), getElements());
-}

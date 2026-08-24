@@ -340,7 +340,7 @@ private:
         } else if (printListCell(column, row)) {
             // A per-group list cell from an nl.collect drain
         } else if (printConstListCell(column, row)) {
-            // The one list an nl.const_list holds for every row
+            // The one list a list-valued nl.constant holds for every row
         } else if (printListElementCell(column, row)) {
             // A tagged scalar from a heterogeneous unwind
         } else {
@@ -504,7 +504,7 @@ private:
     }
 
     // Print one cell of a constant list column (a ColumnConst<ListView> from an
-    // nl.const_list, which answers the same list at every row); returns whether the
+    // list-valued nl.constant, which answers the same list at every row); returns whether the
     // column matched.
     static bool printConstListCell(const Column* column, size_t row) {
         const auto* lists = dynamic_cast<const ColumnConst<ListView>*>(column);

@@ -398,8 +398,6 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateConstant(constant);
         } else if (nl::BroadcastConstant broadcast = mlir::dyn_cast<nl::BroadcastConstant>(operation)) {
             translateBroadcastConstant(broadcast, body);
-        } else if (nl::ConstList constList = mlir::dyn_cast<nl::ConstList>(operation)) {
-            translateConstList(constList);
         } else if (nl::Add add = mlir::dyn_cast<nl::Add>(operation)) {
             translateBinaryOp<OP_ADD>(add, body);
         } else if (nl::Sub sub = mlir::dyn_cast<nl::Sub>(operation)) {
@@ -1047,10 +1045,25 @@ void NLTranslator::translateDeleteEdge(nl::DeleteEdge deleteEdge, NLStmtContaine
 }
 
 void NLTranslator::translateConstant(nl::Constant constant) {
-    const mlir::TypedAttr value = mlir::cast<mlir::TypedAttr>(constant.getValue());
     const mlir::TypedValue<mlir::nl::ChunkType> res = constant.getResult();
     const auto chunkType = mlir::cast<nl::ChunkType>(res.getType());
     const mlir::Type elementType = chunkType.getElementType();
+
+    // A list literal is carried as the array of its elements. It is written into the
+    // query-scoped list buffer once, here, and the column holds a view over that run: one
+    // list for every row, as a scalar constant holds one value. The views outlive
+    // translation, so the chunk needs no per-step fill.
+    if (llvm::isa<storage::ListType>(elementType)) {
+        const auto elements = mlir::cast<mlir::ArrayAttr>(constant.getValue());
+
+        ColumnConst<ListView>* lists = _memory->alloc<ColumnConst<ListView>>();
+        lists->set(materializeListView(elements));
+
+        _valueSlots[res] = lists;
+        return;
+    }
+
+    const mlir::TypedAttr value = mlir::cast<mlir::TypedAttr>(constant.getValue());
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         if (mlir::isa<mlir::NoneType>(nullableType.getValueType())) {
@@ -1105,16 +1118,6 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
 
     NLBroadcastConstantData* data = _program->allocFunctionData<NLBroadcastConstantData>(value, cardinality, output, fill);
     body->emplaceStmt(&NLExecutor::runBroadcastConstant, data);
-}
-
-void NLTranslator::translateConstList(nl::ConstList constList) {
-    // The list is written into the query-scoped list buffer once, here, and the column
-    // holds a view over that run: one list for every row, as a scalar constant holds one
-    // value. The views outlive translation, so the chunk needs no per-step fill.
-    ColumnConst<ListView>* column = _memory->alloc<ColumnConst<ListView>>();
-    column->set(materializeListView(constList.getElements()));
-
-    _valueSlots[constList.getResult()] = column;
 }
 
 template <ColumnOperator Op, typename OpType>

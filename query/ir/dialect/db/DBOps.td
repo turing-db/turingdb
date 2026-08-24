@@ -145,49 +145,6 @@ def UnwindConst : TuringOp<"unwind_const", [Pure]> {
 }
 
 /**
-* ConstList
-*/
-def ConstList : TuringOp<"const_list", [Pure, ConstantLike]> {
-  let summary = "Produce a compile-time-known literal list as one list value per row";
-
-  let description = [{
-    The list sibling of db.constant: where that carries one scalar, this carries a whole
-    list - the value of a `[<literals>]` written in a query, as in `RETURN [1, 2, 3]`. It
-    holds one list standing for every row, so it is a value and not a source: unlike
-    db.unwind_const, which spreads the same literals over one row per element, it adds no
-    row and opens no dataflow.
-
-      %xs = db.const_list([1, 2, 3]) : !db.column<!storage.list<i64>>
-
-    `elements` carries the literals as an array of typed attributes, so each element keeps
-    its own type; an element that is itself an array is a nested list ([1, [2, 3]]), which
-    the runtime stores as one element of the outer list. The result is always a list
-    column, and its element type is the homogeneity verdict db.unwind_const spells the
-    same way: elements sharing one type give a list of that type, while elements that
-    differ - or a nested one, which carries no type - give a list of type-erased tagged
-    scalars, matching Cypher's LIST OF ANY:
-
-      %xs = db.const_list([true, "s", 10]) : !db.column<!storage.list<!storage.list_element>>
-
-    An empty list is that same type-erased form and is a value like any other: one list
-    holding no element, where UNWIND of it yields no row. Producing a fixed list is
-    deterministic, so the op is Pure.
-  }];
-
-  // `elements` is the literal list, each entry a typed builtin attribute carrying its own
-  // type, or an array attribute for a nested list. Being an attribute and not an SSA
-  // value, it is absent from `operands`.
-  let arguments = (ins ArrayAttr:$elements);
-  let results   = (outs Column:$result);
-  let hasVerifier = 1;
-
-  // The literals print inside the parens as `[1, 2, 3]`, ahead of the colon, the same
-  // place db.unwind_const prints its elements; the result column type follows, qualified,
-  // as db.unwind_const prints it.
-  let assemblyFormat = "`(` $elements `)` attr-dict `:` qualified(type($result))";
-}
-
-/**
 * ScanEdges
 */
 def ScanEdges : TuringOp<"scan_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
@@ -938,7 +895,11 @@ def EuclideanDistance : BinaryFunctionOp<"euclidean_distance">;
 def ConstantOp : TuringOp<"constant", [Pure, ConstantLike, DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
   let summary = "Produces a constant value in a column";
 
-  let arguments = (ins TypedAttrInterface: $value);
+  // A typed attribute for a scalar (or a dense one for an embedding), or an array of
+  // per-element attributes for a list literal. The array carries no type of its own, so
+  // the column's element type is the homogeneity verdict inferReturnTypes reads off the
+  // elements - which is why a list needs no separate op.
+  let arguments = (ins AnyAttrOf<[TypedAttrInterface, ArrayAttr]>: $value);
   let results = (outs Column : $result);
 
   let assemblyFormat = "`(` $value `)` attr-dict";

@@ -485,10 +485,10 @@ TEST_F(NLDialectTest, unwindConstRoundTripsThroughTextualForm) {
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
 }
 
-// nl.const_list holds a whole list rather than spreading it over rows, so it produces a
-// chunk of that list type - spelled, like nl.unwind_const's iterator, because the element
-// type comes from the literals. A nested list rides one element as an array of its own.
-TEST_F(NLDialectTest, constListBuildsListChunk) {
+// A list literal is an nl.constant value: it holds the whole list rather than spreading it
+// over rows, so it produces a chunk of that list type - inferred from the elements, since an
+// array attribute carries none of its own. A nested list rides one element as an array.
+TEST_F(NLDialectTest, listConstantBuildsListChunk) {
     mlir::OpBuilder builder(&_context);
     const mlir::Location loc = builder.getUnknownLoc();
 
@@ -503,16 +503,18 @@ TEST_F(NLDialectTest, constListBuildsListChunk) {
 
     const mlir::ArrayAttr elements = builder.getArrayAttr({builder.getI64IntegerAttr(1),
                                                            builder.getI64IntegerAttr(2)});
-    mlir::nl::ConstList constList = builder.create<mlir::nl::ConstList>(loc, chunkType, elements);
+    mlir::nl::Constant constant = builder.create<mlir::nl::Constant>(loc, elements);
     builder.create<mlir::func::ReturnOp>(loc);
 
-    EXPECT_EQ(constList.getResult().getType(), chunkType);
-    EXPECT_EQ(constList.getElements().size(), 2u);
+    // The chunk is inferred from the elements, not given: these two agree on i64.
+    EXPECT_EQ(constant.getResult().getType(), chunkType);
+    EXPECT_EQ(mlir::cast<mlir::ArrayAttr>(constant.getValue()).size(), 2u);
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
 }
 
-// Building an nl.const_list, printing the module and re-parsing it yields a module that
-// still verifies, so the nl.const_list printer and parser are inverses.
+// Building a list nl.constant, printing the module and re-parsing it yields a module that
+// still verifies, so the printer and parser are inverses - and since the chunk is never
+// printed, the round trip re-runs the inference too.
 TEST_F(NLDialectTest, constListRoundTripsThroughTextualForm) {
     mlir::OpBuilder builder(&_context);
     const mlir::Location loc = builder.getUnknownLoc();
@@ -529,7 +531,10 @@ TEST_F(NLDialectTest, constListRoundTripsThroughTextualForm) {
     const mlir::ArrayAttr nested = builder.getArrayAttr({builder.getI64IntegerAttr(2),
                                                          builder.getI64IntegerAttr(3)});
     const mlir::ArrayAttr elements = builder.getArrayAttr({builder.getI64IntegerAttr(1), nested});
-    builder.create<mlir::nl::ConstList>(loc, chunkType, elements);
+    mlir::nl::Constant constant = builder.create<mlir::nl::Constant>(loc, elements);
+
+    // The nested element carries no type, so the verdict is the type-erased form.
+    EXPECT_EQ(constant.getResult().getType(), chunkType);
     builder.create<mlir::func::ReturnOp>(loc);
 
     std::string printed;

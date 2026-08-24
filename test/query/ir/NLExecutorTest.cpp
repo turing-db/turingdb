@@ -848,8 +848,8 @@ func.func @main() {
 // rather than reach for a chunk kind and read the column as something it is not.
 constexpr const char* crossListChunkProgram = R"mlir(
 func.func @main() {
-  %xs = nl.const_list([1, 2]) : !nl.chunk<!storage.list<i64>>
-  %ys = nl.const_list([3, 4]) : !nl.chunk<!storage.list<i64>>
+  %xs = nl.constant([1, 2])
+  %ys = nl.constant([3, 4])
   %p:2 = nl.cross_product{%xs} {%ys} : {!nl.chunk<!storage.list<i64>>} {!nl.chunk<!storage.list<i64>>}
   nl.output(%p#0, %p#1) : !nl.chunk<!storage.list<i64>>, !nl.chunk<!storage.list<i64>>
   func.return

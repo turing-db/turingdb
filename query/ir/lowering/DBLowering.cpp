@@ -583,8 +583,6 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerAggregate(avg.getInput(), avg.getResult(), storage::AggregateKind::Avg, avg.getDistinct());
     } else if (mlir::db::ConstantOp constant = mlir::dyn_cast<mlir::db::ConstantOp>(operation)) {
         lowerConstant(constant);
-    } else if (mlir::db::ConstList constList = mlir::dyn_cast<mlir::db::ConstList>(operation)) {
-        lowerConstList(constList);
     } else if (mlir::isa<mlir::db::AddOp>(operation)) {
         lowerBinaryOp<nl::Add>(operation, BinaryResultKind::Numeric);
     } else if (mlir::isa<mlir::db::SubOp>(operation)) {
@@ -2025,24 +2023,6 @@ void DBLowering::lowerConstant(mlir::db::ConstantOp constant) {
 
     nl::Constant nlConstant = _builder.create<nl::Constant>(_builder.getUnknownLoc(), constant.getValue());
     _valueMap[constant.getResult()] = nlConstant.getResult();
-}
-
-void DBLowering::lowerConstList(mlir::db::ConstList constList) {
-    // A list literal is one value for the whole query, so - like a scalar constant - it is
-    // hoisted and materialized once, above every loop.
-    _builder.setInsertionPointToStart(_entryBlock);
-
-    // The chunk keeps the db column's element type - the storage list whose element type is
-    // the homogeneity verdict. Unlike nl.constant, which infers its chunk from the value
-    // attribute, a list carries no such type, so the chunk type is spelled here, as
-    // lowerUnwindConst spells its iterator's.
-    const mlir::db::ColumnType column = mlir::cast<mlir::db::ColumnType>(constList.getResult().getType());
-    const nl::ChunkType chunkType = nl::ChunkType::get(_builder.getContext(), column.getType());
-
-    nl::ConstList list = _builder.create<nl::ConstList>(_builder.getUnknownLoc(),
-                                                       chunkType,
-                                                       constList.getElementsAttr());
-    _valueMap[constList.getResult()] = list.getResult();
 }
 
 mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,

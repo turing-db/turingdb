@@ -4,6 +4,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
+#include "IRLiteralList.h"
 #include "StorageEnums.h"
 #include "GroupAggregateKindsFormat.h"
 
@@ -186,7 +187,25 @@ LogicalResult Constant::inferReturnTypes(MLIRContext* context,
                                          std::optional<Location> location,
                                          Constant::Adaptor adaptor,
                                          SmallVectorImpl<Type>& inferredReturnTypes) {
-    const TypedAttr value = cast<TypedAttr>(adaptor.getValue());
+    // An array of per-element attributes is a list literal; it carries no type of its own,
+    // so the element type is the homogeneity verdict over the elements.
+    if (const auto elements = dyn_cast<ArrayAttr>(adaptor.getValue())) {
+        const Type shared = ::db::sharedLiteralElementType(elements);
+        const Type listElement = shared ? shared : storage::ListElementType::get(context);
+        const Type listType = storage::ListType::get(context, listElement);
+
+        inferredReturnTypes.push_back(ChunkType::get(context, listType));
+        return success();
+    }
+
+    // Inference runs during parsing, ahead of the operand constraint, so an attribute that
+    // is neither typed nor an array is rejected here rather than cast blindly.
+    const auto value = dyn_cast<TypedAttr>(adaptor.getValue());
+    if (!value) {
+        return emitOptionalError(location,
+                                 "nl.constant carries a typed value or an array of "
+                                 "literals, not ", adaptor.getValue());
+    }
 
     Type elementType;
     if (const auto elements = dyn_cast<DenseElementsAttr>(value)) {

@@ -442,22 +442,13 @@ mlir::Value DBProgramGenerator::translateListLiteral(const ListLiteral* list) {
     llvm::SmallVector<mlir::Attribute> elements;
     translateListElements(list, elements);
 
-    // The list's element type is the homogeneity verdict db.const_list reads: elements
-    // sharing one type give a list of that type, and anything else - mixed, nested, null
-    // or no element at all - a list of type-erased tagged scalars.
-    const mlir::Type sharedType = sharedAttrType(elements);
-    const mlir::Type elementType = sharedType ? sharedType
-                                              : mlir::storage::ListElementType::get(_mlirCtxt);
+    // A list literal is a constant like any other, carried as the array of its elements.
+    // The column type is db.constant's to infer: an array attribute has none of its own, so
+    // the op reads the homogeneity verdict off the elements.
+    mlir::db::ConstantOp constant = _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(),
+                                                                           _opBuilder.getArrayAttr(elements));
 
-    const mlir::Type listType = mlir::storage::ListType::get(_mlirCtxt, elementType);
-    const mlir::db::ColumnType resultType = allocColumnType(listType);
-    const mlir::ArrayAttr elementsAttr = _opBuilder.getArrayAttr(elements);
-
-    mlir::db::ConstList constList = _opBuilder.create<mlir::db::ConstList>(_opBuilder.getUnknownLoc(),
-                                                                          resultType,
-                                                                          elementsAttr);
-
-    return constList.getResult();
+    return constant.getResult();
 }
 
 template<typename EdgeOp>
