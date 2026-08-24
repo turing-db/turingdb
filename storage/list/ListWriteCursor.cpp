@@ -46,4 +46,13 @@ namespace db {
 template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const types::String::Primitive&);
 template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const types::Embedding::Primitive&);
 template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const ListView&);
+
+// The fixed-width elements. A decoder reading a wire whose layout already matches the
+// stored one copies these through writeRaw instead; a caller holding the value itself,
+// with no such buffer to copy from, writes it through here.
+template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const types::Int64::Primitive&);
+template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const types::UInt64::Primitive&);
+template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const types::Double::Primitive&);
+template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const types::Bool::Primitive&);
+template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const PropertyNull&);
 }

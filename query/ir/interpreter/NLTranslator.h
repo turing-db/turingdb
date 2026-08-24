@@ -176,6 +176,10 @@ private:
     // execution - not just this call.
     ListView materializeListView(mlir::ArrayAttr elements);
 
+    // The bytes the elements' values occupy, which sizes the region materializeListView
+    // reserves before writing them
+    static size_t listValueBytes(mlir::ArrayAttr elements);
+
     // Translate the nl.for over an nl.scan_edges iterator: allocate the four
     // fixed edge loop variables (sources, edge IDs, edge type IDs, targets) and
     // record the edge-scan loop statement in body. The edge sibling of
