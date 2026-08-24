@@ -10,13 +10,6 @@
 
 namespace db {
 
-// struct ViewBufferTag {
-//     uint32_t _size {0};
-// };
-
-// static_assert(std::is_trivially_copyable_v<ViewBufferTag>);
-// static_assert(sizeof(uint32_t) == sizeof(ViewBufferTag), "Tag size changed");
-
 /**
  * @tparam T type being stored as raw bytes
  */
@@ -40,10 +33,8 @@ public:
 
     std::byte* nextPtr() const { return &_last->_buf[_last->_size]; };
 
-    // static consteval size_t tagSize() { return _tagSize; }
-
 private:
-    template <typename E, typename V>
+    template <typename E, typename V, size_t M>
     friend class SpanBuffer;
 
     ByteChunk* _first {nullptr};
@@ -51,8 +42,6 @@ private:
 
     void reserveContiguous(size_t numTs);
     ByteChunk* allocateNext(size_t capacity);
-
-    // static constexpr size_t _tagSize = sizeof(ViewBufferTag);
 };
 
 template <typename T, size_t N>

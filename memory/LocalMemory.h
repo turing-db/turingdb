@@ -139,7 +139,7 @@ private:
     MemoryPools _pools;
     ColumnAllocatorMap _columnAllocators;
     QueryListBuffer _listBuffer;
-    SpanBuffer<char, std::string_view> _stringBuf;
+    StringBuffer _stringBuf;
 };
 
 }
