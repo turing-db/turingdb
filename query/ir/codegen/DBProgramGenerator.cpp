@@ -427,34 +427,11 @@ void DBProgramGenerator::registerValue(const VariableDependency* var, mlir::Type
     _varMap[var].emplace_back(val);
 }
 
-void DBProgramGenerator::rebindVariableColumn(std::string_view name, mlir::TypedValue<mlir::Type> val) {
-    // Registering a value writes to _varMap, so the variables it names are collected
-    // before any of them is rebound rather than while the map is being walked.
-    llvm::SmallVector<const VariableDependency*> named;
-    for (const auto& [var, values] : _varMap) {
-        if (var->getName() == name) {
-            named.push_back(var);
-        }
-    }
-
-    for (const VariableDependency* var : named) {
-        registerValue(var, val);
-    }
-
+void DBProgramGenerator::rebindYieldedColumn(std::string_view name, mlir::TypedValue<mlir::Type> val) {
     for (YieldedColumn& yielded : _yieldedColumns) {
         if (yielded.first == name) {
             yielded.second = val;
         }
-    }
-
-    const VariableDependencyGraph::EdgeIdentityMap& edgeIdentities = _vdg.edgeIdentities();
-    const auto findIt = edgeIdentities.find(name);
-    if (findIt == edgeIdentities.end()) {
-        return;
-    }
-
-    for (const VariableDependency* occurrence : findIt->second) {
-        registerValue(occurrence, val);
     }
 }
 
@@ -2849,17 +2826,23 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
         variableColumns[yieldedColumn.first] = yieldedColumn.second;
     }
 
-    // An edge identity has no variable of its own: its column is the one the traversal
-    // variable that produced it carries, published here under the identity's name
+    // An edge identity is carried by the traversal variable that produced it, under a
+    // name of its own: the representative is where its column - and its grouped
+    // replacement - is published, since the identity has no variable of its own
+    llvm::StringMap<const VariableDependency*> edgeIdentityVars;
     for (const auto& [name, vars] : _vdg.edgeIdentities()) {
         if (!vars.empty() && _varMap.contains(vars.front())) {
             variableColumns[name] = _varMap.at(vars.front()).back();
+            edgeIdentityVars[name] = vars.front();
         }
     }
 
-    // Parallel: a key position is either a variable, named by keyVarNameAtPos, or an
-    // expression, held by keyExprAtPos
+    // Parallel: a key position is either a variable, named by keyVarNameAtPos and carried
+    // by keyVarAtPos, or an expression, held by keyExprAtPos. A column a CALL yielded is
+    // a variable with no keyVarAtPos: it appears in no pattern, so the VDG has nothing
+    // for it and its name is the only handle on it.
     llvm::SmallVector<mlir::Value> keyColumns;
+    llvm::SmallVector<const VariableDependency*> keyVarAtPos;
     llvm::SmallVector<std::string_view> keyVarNameAtPos;
     llvm::SmallVector<const Expr*> keyExprAtPos;
 
@@ -2878,6 +2861,24 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
             bioassert(findIt != variableColumns.end(), "Grouping key variable {} not found.", name);
             keyColumns.push_back(findIt->second);
 
+            // An edge identity's column is published under its representative, and that
+            // is the one the projection reads back, so the grouped column has to replace
+            // it there rather than under a traversal variable of the same name
+            const VariableDependency* keyVar = nullptr;
+            const auto identityIt = edgeIdentityVars.find(name);
+
+            if (identityIt != edgeIdentityVars.end()) {
+                keyVar = identityIt->second;
+            } else {
+                for (auto& [var, values] : _varMap) {
+                    if (var->getName() == name) {
+                        keyVar = var;
+                        break;
+                    }
+                }
+            }
+
+            keyVarAtPos.push_back(keyVar);
             keyVarNameAtPos.push_back(name);
             keyExprAtPos.push_back(nullptr);
             continue;
@@ -2905,6 +2906,7 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
             }
 
             keyColumns.push_back(keyColumn);
+            keyVarAtPos.push_back(nullptr);
             keyVarNameAtPos.push_back({});
             keyExprAtPos.push_back(item);
             continue;
@@ -3033,7 +3035,13 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
 
     for (size_t i = 0; i < keyCount; i++) {
         if (!keyVarNameAtPos[i].empty()) {
-            rebindVariableColumn(keyVarNameAtPos[i], results[i]);
+            if (keyVarAtPos[i]) {
+                registerValue(keyVarAtPos[i], results[i]);
+            }
+
+            // A YIELD can bind onto a variable a pattern already carries, which leaves the
+            // one name on both a variable and a yielded column, so both are rebound.
+            rebindYieldedColumn(keyVarNameAtPos[i], results[i]);
             continue;
         }
 
@@ -3045,9 +3053,28 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
             continue;
         }
 
-        // Symbols need their value updated: the aggregate gives them a new value
+        // Symbols need their value updated: the aggregate gives them a new value.
+        // An edge variable holds an identity rather than a traversal variable of its
+        // own, and the projection reads it back through the identity's
+        // representative, so that is where the grouped column has to land
         const SymbolExpr* sym = static_cast<const SymbolExpr*>(keyExprAtPos[i]);
-        rebindVariableColumn(sym->getDecl()->getName(), results[i]);
+        const std::string_view symName = sym->getDecl()->getName();
+
+        rebindYieldedColumn(symName, results[i]);
+
+        const auto identityIt = edgeIdentityVars.find(symName);
+
+        if (identityIt != edgeIdentityVars.end()) {
+            registerValue(identityIt->second, results[i]);
+            continue;
+        }
+
+        for (auto& [var, values] : _varMap) {
+            if (var->getName() == symName) {
+                registerValue(var, results[i]);
+                break;
+            }
+        }
     }
 
     for (size_t i = 0; i < aggCount; i++) {
