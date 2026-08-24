@@ -21,6 +21,16 @@ std::strong_ordering operator<=>(ListElementView lhs, ListElementView rhs);
 bool operator==(ListElementView lhs, ListElementView rhs);
 
 /**
+ * @brief Orders two lists of a @ref ListByteBuffer lexicographically.
+ *
+ * Compares pairwise from the front on the element order above, then puts the shorter
+ * list first when one is a prefix of the other - Cypher's order over lists, and the
+ * order a nested list element is compared on.
+ */
+std::strong_ordering operator<=>(ListView lhs, ListView rhs);
+bool operator==(ListView lhs, ListView rhs);
+
+/**
  * @brief Compares an element of a @ref ListByteBuffer against a value of a known type.
  *
  * Equal only when the element holds that value: a number compares numerically whatever

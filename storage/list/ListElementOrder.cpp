@@ -159,23 +159,6 @@ bool elementEqualsNumber(const ListElementView element, const Value value) {
     }
 }
 
-// Two lists compare lexicographically: pairwise from the front, then the shorter list
-// first when one is a prefix of the other.
-std::strong_ordering compareLists(const ListView lhs, const ListView rhs) {
-    const std::span<const ListElementView> lhsElements = lhs.elements();
-    const std::span<const ListElementView> rhsElements = rhs.elements();
-    const size_t common = std::min(lhsElements.size(), rhsElements.size());
-
-    for (size_t index = 0; index < common; index++) {
-        const std::strong_ordering order = lhsElements[index] <=> rhsElements[index];
-        if (order != std::strong_ordering::equal) {
-            return order;
-        }
-    }
-
-    return lhsElements.size() <=> rhsElements.size();
-}
-
 }
 
 std::strong_ordering db::operator<=>(const ListElementView lhs, const ListElementView rhs) {
@@ -196,7 +179,7 @@ std::strong_ordering db::operator<=>(const ListElementView lhs, const ListElemen
         break;
 
         case ListElementOrderClass::List:
-            return compareLists(lhs.getAs<ListView>(), rhs.getAs<ListView>());
+            return lhs.getAs<ListView>() <=> rhs.getAs<ListView>();
         break;
 
         case ListElementOrderClass::String:
@@ -221,6 +204,25 @@ std::strong_ordering db::operator<=>(const ListElementView lhs, const ListElemen
 }
 
 bool db::operator==(const ListElementView lhs, const ListElementView rhs) {
+    return (lhs <=> rhs) == std::strong_ordering::equal;
+}
+
+std::strong_ordering db::operator<=>(const ListView lhs, const ListView rhs) {
+    const std::span<const ListElementView> lhsElements = lhs.elements();
+    const std::span<const ListElementView> rhsElements = rhs.elements();
+    const size_t common = std::min(lhsElements.size(), rhsElements.size());
+
+    for (size_t index = 0; index < common; index++) {
+        const std::strong_ordering order = lhsElements[index] <=> rhsElements[index];
+        if (order != std::strong_ordering::equal) {
+            return order;
+        }
+    }
+
+    return lhsElements.size() <=> rhsElements.size();
+}
+
+bool db::operator==(const ListView lhs, const ListView rhs) {
     return (lhs <=> rhs) == std::strong_ordering::equal;
 }
 
