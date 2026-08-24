@@ -29,8 +29,6 @@ class Change;
 
 class LocalMemory {
 public:
-    using DefaultListBuffer = ListBuffer<>;
-
     template <typename T>
     struct MakeMemoryPool {
         using type = TypeValueMapPair<T, MemoryPool<T>>;
@@ -133,12 +131,12 @@ public:
         _listBuffer.clear();
     }
 
-    DefaultListBuffer& listBuffer() { return _listBuffer; }
+    QueryListBuffer& listBuffer() { return _listBuffer; }
 
 private:
     MemoryPools _pools;
     ColumnAllocatorMap _columnAllocators;
-    DefaultListBuffer _listBuffer;
+    QueryListBuffer _listBuffer;
 };
 
 }

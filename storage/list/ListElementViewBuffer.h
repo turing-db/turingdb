@@ -121,4 +121,5 @@ private:
     size_t _capacity {0};
     Chunk* _next {nullptr};
 };
+
 }
