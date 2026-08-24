@@ -268,6 +268,40 @@ private:
 };
 
 
+// Collects the (node, [names]) rows a collect keyed on a node alias emits.
+class NodeKeyedStringListSink : public NLOutputSink {
+public:
+    using Row = std::pair<uint64_t, std::vector<std::string>>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* keys = dynamic_cast<const ColumnVector<NodeID>*>(chunks[0]);
+        const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[1]);
+        ASSERT_NE(keys, nullptr);
+        ASSERT_NE(lists, nullptr);
+        ASSERT_EQ(keys->size(), lists->size());
+
+        const auto& keyRaw = keys->getRaw();
+        const auto& listRaw = lists->getRaw();
+        for (size_t row = offset; row < offset + rowCount; row++) {
+            std::vector<std::string> names;
+            readStringList(listRaw[row], names);
+
+            _rows.push_back({keyRaw[row].getValue(), names});
+        }
+    }
+
+    // The rows as the sink saw them, for the ORDER BY tests: the emit order is the result.
+    void rowsInEmitOrder(std::vector<Row>& rows) const {
+        rows = _rows;
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
+
 // Collects the ([ids]) rows an ungrouped entity collect emits: a single list cell chunk.
 class NodeListSink : public NLOutputSink {
 public:
@@ -612,6 +646,24 @@ TEST_F(CypherCollectTest, groupedCollectWithOrderByDescending) {
     const std::vector<KeyedStringListSink::Row> expected {
         {"red", {"alice", "carol"}},
         {"blue", {"bob", "dan"}},
+    };
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(CypherCollectTest, groupedCollectWithOrderByOverTheReturnedNode) {
+    buildTeamGraph();
+
+    NodeKeyedStringListSink sink;
+    match("MATCH (n:Node) RETURN n, collect(n.name) ORDER BY n.name", sink);
+
+    std::vector<NodeKeyedStringListSink::Row> rows;
+    sink.rowsInEmitOrder(rows);
+
+    const std::vector<NodeKeyedStringListSink::Row> expected {
+        {0, {"alice"}},
+        {2, {"bob"}},
+        {1, {"carol"}},
+        {3, {"dan"}},
     };
     EXPECT_EQ(rows, expected);
 }
