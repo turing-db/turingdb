@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
@@ -19,6 +21,7 @@ namespace db {
 class LocalMemory;
 class GraphView;
 class MetadataBuilder;
+class NLSystemTranslator;
 class Procedure;
 class ProcedureContext;
 
@@ -112,6 +115,9 @@ private:
     // a function containing an nl.procedure notices.
     const ProcedureContext* _procedureContext {nullptr};
     llvm::DenseMap<mlir::Value, Column*> _valueSlots;
+
+    std::unique_ptr<NLSystemTranslator> _systemTranslator;
+
     llvm::DenseMap<mlir::Value, IteratorConfig> _iteratorConfigs;
 
     // Set of nl.create_node result SSA values

@@ -2050,10 +2050,11 @@ void runProcedureDrive(NLExecutionContext* context,
 }
 
 NLExecutor::NLExecutor(const GraphView* view,
-                             const NLProgram* prog,
-                             NLOutputSink* sink,
-                             CommitWriteBuffer* writeBuffer)
-    : _ctxt(view, sink, prog->getChunkSize(), writeBuffer),
+                       const NLProgram* prog,
+                       NLOutputSink* sink,
+                       CommitWriteBuffer* writeBuffer,
+                       const NLSystemContext* system)
+    : _ctxt(view, sink, prog->getChunkSize(), writeBuffer, system),
     _prog(prog)
 {
 }

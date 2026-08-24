@@ -21,7 +21,8 @@ DBDialectInterpreter::DBDialectInterpreter(const mlir::ModuleOp& module,
                                            size_t chunkSize,
                                            CommitWriteBuffer* writeBuffer,
                                            MetadataBuilder* metadataBuilder,
-                                           const ProcedureContext* procedureContext)
+                                           const ProcedureContext* procedureContext,
+                                           const NLSystemContext* system)
     : _module(module),
     _view(view),
     _sink(sink),
@@ -29,7 +30,8 @@ DBDialectInterpreter::DBDialectInterpreter(const mlir::ModuleOp& module,
     _chunkSize(chunkSize),
     _writeBuffer(writeBuffer),
     _metadataBuilder(metadataBuilder),
-    _procedureContext(procedureContext)
+    _procedureContext(procedureContext),
+    _system(system)
 {
 }
 
@@ -86,7 +88,7 @@ DBDialectInterpreter::Status DBDialectInterpreter::run() {
     {
         const TimePoint start = Clock::now();
 
-        NLExecutor executor(_view, &program, _sink, _writeBuffer);
+        NLExecutor executor(_view, &program, _sink, _writeBuffer, _system);
         executor.run();
 
         const TimePoint end = Clock::now();

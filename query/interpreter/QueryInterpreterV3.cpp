@@ -9,6 +9,7 @@
 #include "DBDialect.h"
 #include "DBDialectInterpreter.h"
 #include "DBProgramGenerator.h"
+#include "NLSystemContext.h"
 #include "NLDialect.h"
 #include "StorageDialect.h"
 #include "iterators/ChunkConfig.h"
@@ -94,11 +95,21 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
 
     CommitWriteBuffer* writeBuffer = nullptr;
     MetadataBuilder* metadataBuilder = nullptr;
+    CommitBuilder* commitBuilder = nullptr;
     if (txRes->writingPendingCommit()) {
-        CommitBuilder* commitBuilder = txRes->get<PendingCommitWriteTx>().commitBuilder();
+        commitBuilder = txRes->get<PendingCommitWriteTx>().commitBuilder();
         writeBuffer = &commitBuilder->writeBuffer();
         metadataBuilder = &commitBuilder->metadata();
     }
+
+    // Filled for every query, since which statement this one is only becomes known
+    // once it is parsed. An ordinary query never reads it.
+    NLSystemContext systemContext;
+    systemContext.setSystemManager(_sysMan);
+    systemContext.setAccessor(&system);
+    systemContext.setTransaction(&txRes.value());
+    systemContext.setCommitBuilder(commitBuilder);
+    systemContext.setGraphName(graphName);
 
     CypherAST ast(system.getProcedures(), query);
     CypherParser parser(&ast);
@@ -188,7 +199,8 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
                                      ChunkConfig::CHUNK_SIZE,
                                      writeBuffer,
                                      metadataBuilder,
-                                     &procedureContext);
+                                     &procedureContext,
+                                     &systemContext);
     try {
         interpreter.run();
     } catch (const CompilerException& e) {

@@ -121,6 +121,11 @@ private:
     // which is what generating it after the traversal does.
     void generateLeadingCalls(const CypherAST* ast);
 
+    // Emits the op of a system-level statement - LOAD GRAPH, CHANGE, COMMIT and
+    // their siblings - which is the whole program. False for an ordinary query,
+    // which then goes through the traversal pipeline
+    bool generateSystemCommand(const CypherAST* ast);
+
     void generateTraversal(const CypherAST* ast);
 
     // Whether a variable can open a connected component: a node variable no traversal binds

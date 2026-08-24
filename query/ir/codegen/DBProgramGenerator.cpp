@@ -29,6 +29,7 @@
 #include "DBOps.h"
 #include "DBPasses.h"
 #include "DBTypes.h"
+#include "DBSystemProgramGenerator.h"
 #include "StorageDialect.h"
 #include "StorageEnums.h"
 #include "StorageTypes.h"
@@ -664,9 +665,15 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
         _opBuilder.setInsertionPointToStart(&block);
     }
 
+    if (generateSystemCommand(ast)) {
+        _opBuilder.create<mlir::func::ReturnOp>(uloc);
+        return;
+    }
+
     _vdg.buildFromAST(ast);
 
     generateLeadingCalls(ast);
+
     generateTraversal(ast);
     resolveEdgeIdentities();
     generatePropertyConstraints(ast);
@@ -681,6 +688,17 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
     _opBuilder.create<mlir::func::ReturnOp>(uloc);
 
     runPasses();
+}
+
+bool DBProgramGenerator::generateSystemCommand(const CypherAST* ast) {
+    const CypherAST::QueryCommands& queries = ast->queries();
+    if (queries.size() != 1) {
+        throw TuringException("Multiple queries not yet supported.");
+    }
+
+    DBSystemProgramGenerator systemGenerator(&_opBuilder);
+
+    return systemGenerator.generate(queries.front());
 }
 
 void DBProgramGenerator::runPasses() {

@@ -13,6 +13,7 @@ class NLOutputSink;
 class LocalMemory;
 class CommitWriteBuffer;
 class MetadataBuilder;
+class NLSystemContext;
 class ProcedureContext;
 
 class DBDialectInterpreter {
@@ -50,7 +51,8 @@ public:
                          size_t chunkSize = ChunkConfig::CHUNK_SIZE,
                          CommitWriteBuffer* writeBuffer = nullptr,
                          MetadataBuilder* metadataBuilder = nullptr,
-                         const ProcedureContext* procedureContext = nullptr);
+                         const ProcedureContext* procedureContext = nullptr,
+                         const NLSystemContext* system = nullptr);
 
     ~DBDialectInterpreter();
 
@@ -65,6 +67,7 @@ private:
     CommitWriteBuffer* _writeBuffer {nullptr};
     MetadataBuilder* _metadataBuilder {nullptr};
     const ProcedureContext* _procedureContext {nullptr};
+    const NLSystemContext* _system {nullptr};
 };
 
 }
