@@ -374,7 +374,7 @@ public:
     static NLGroupAggregateFoldFunction selectGroupAggregateFold(GroupAggregateKind kind, ValueType inputType);
     static NLGroupAggregateFoldFunction selectGroupCountAllFold();
     static NLGroupAggregateFoldFunction selectGroupCountDistinctFold(ValueType inputType);
-    static NLGroupAggregateFoldFunction selectGroupCountDistinctIDFold(NLChunkKind kind);
+    static NLGroupAggregateFoldFunction selectGroupCountDistinctChunkFold(NLChunkKind kind);
 
     // The grouped count / count(DISTINCT) folds of a type-erased column of tagged
     // scalars, the column a heterogeneous UNWIND produces

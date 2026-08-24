@@ -679,6 +679,13 @@ void distinctAppendValueBytes(std::string& key, std::string_view value) {
     key.append(value.data(), value.size());
 }
 
+// An owned string would otherwise pick the trivially-copyable template and key on the
+// object's own bytes - a pointer into its buffer - so two equal strings at different
+// addresses would count as two.
+void distinctAppendValueBytes(std::string& key, const std::string& value) {
+    distinctAppendValueBytes(key, std::string_view(value));
+}
+
 // Serialize one row of an ID column (node/edge/edge-type IDs) into the row key -
 // a std::string used as a byte buffer, not text - as the ID's underlying integer
 // value, byte for byte.
@@ -687,6 +694,15 @@ void distinctKeyAppendColumn(const Column* column, size_t row, std::string& key)
     const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
     const auto value = raw[row].getValue();
     distinctAppendValueBytes(key, value);
+}
+
+// Serialize one row of a chunk that holds its values plainly - a column a procedure
+// yielded - into the row key. The ID sibling reads through the ID's integer; here the
+// element is the value, and no row of such a chunk is null.
+template <typename ElementType>
+void distinctKeyAppendPlainColumn(const Column* column, size_t row, std::string& key) {
+    const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
+    distinctAppendValueBytes(key, raw[row]);
 }
 
 // Serialize one row of a nullable value column into the row key - a std::string
@@ -1301,6 +1317,29 @@ void groupFoldCountDistinctID(Column* accumulator,
 
         distinct.beginKey(group);
         distinctAppendValueBytes(distinct.getKey(), inputRaw[row].getValue());
+
+        if (distinct.insertIfNew()) {
+            counts[group]++;
+        }
+    }
+}
+
+// Tally each group's distinct values over a chunk holding them plainly - a column a
+// procedure yielded. No row of such a chunk is null, so every row is charged the first
+// time its value is seen in its group; the ID sibling keys on the ID's integer instead.
+template <typename ElementType>
+void groupFoldCountDistinctValue(Column* accumulator,
+                                 std::vector<uint64_t>& counts,
+                                 const Column* input,
+                                 const std::vector<size_t>& groups,
+                                 NLGroupDistinctTally& distinct) {
+    const auto& inputRaw = static_cast<const ColumnVector<ElementType>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendValueBytes(distinct.getKey(), inputRaw[row]);
 
         if (distinct.insertIfNew()) {
             counts[group]++;
@@ -3468,16 +3507,43 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
         break;
 
         case NLChunkKind::LabelID:
+            return &distinctKeyAppendColumn<LabelID>;
+        break;
+
         case NLChunkKind::PropertyTypeID:
+            return &distinctKeyAppendColumn<PropertyTypeID>;
+        break;
+
         case NLChunkKind::ValueTypeCode:
+            return &distinctKeyAppendPlainColumn<ValueType>;
+        break;
+
         case NLChunkKind::UInt64:
+            return &distinctKeyAppendPlainColumn<types::UInt64::Primitive>;
+        break;
+
         case NLChunkKind::Int64:
+            return &distinctKeyAppendPlainColumn<types::Int64::Primitive>;
+        break;
+
         case NLChunkKind::Double:
+            return &distinctKeyAppendPlainColumn<types::Double::Primitive>;
+        break;
+
         case NLChunkKind::Bool:
+            return &distinctKeyAppendPlainColumn<types::Bool::Primitive>;
+        break;
+
         case NLChunkKind::String:
+            return &distinctKeyAppendPlainColumn<types::String::Primitive>;
+        break;
+
         case NLChunkKind::OwnedString:
+            return &distinctKeyAppendPlainColumn<std::string>;
+        break;
+
         case NLChunkKind::List:
-            throw IRException("A column a procedure yielded cannot be a DISTINCT or grouping key yet: only an ID column has a serializer here");
+            throw IRException("A list column cannot be a DISTINCT or grouping key: a list has no scalar value to key on");
         break;
     }
 
@@ -3751,10 +3817,11 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctFold(ValueType 
     return nullptr;
 }
 
-// count(DISTINCT n) over an ID chunk (never null): each group is charged once per
-// distinct ID it sees. The ID kind picks the column layout the key is read from, the
-// way selectKeyAppendFunction does for a DISTINCT row key.
-NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctIDFold(NLChunkKind kind) {
+// count(DISTINCT x) over a chunk that is never null - an ID column, or one a procedure
+// yielded: each group is charged once per distinct value it sees. The chunk kind picks
+// the column layout the key is read from, the way selectKeyAppendFunction does for a
+// DISTINCT row key. An ID keys on its integer, everything else on the value itself.
+NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctChunkFold(NLChunkKind kind) {
     switch (kind) {
         case NLChunkKind::NodeID:
             return &groupFoldCountDistinctID<NodeID>;
@@ -3769,16 +3836,43 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctIDFold(NLChunkK
         break;
 
         case NLChunkKind::LabelID:
+            return &groupFoldCountDistinctID<LabelID>;
+        break;
+
         case NLChunkKind::PropertyTypeID:
+            return &groupFoldCountDistinctID<PropertyTypeID>;
+        break;
+
         case NLChunkKind::ValueTypeCode:
+            return &groupFoldCountDistinctValue<ValueType>;
+        break;
+
         case NLChunkKind::UInt64:
+            return &groupFoldCountDistinctValue<types::UInt64::Primitive>;
+        break;
+
         case NLChunkKind::Int64:
+            return &groupFoldCountDistinctValue<types::Int64::Primitive>;
+        break;
+
         case NLChunkKind::Double:
+            return &groupFoldCountDistinctValue<types::Double::Primitive>;
+        break;
+
         case NLChunkKind::Bool:
+            return &groupFoldCountDistinctValue<types::Bool::Primitive>;
+        break;
+
         case NLChunkKind::String:
+            return &groupFoldCountDistinctValue<types::String::Primitive>;
+        break;
+
         case NLChunkKind::OwnedString:
+            return &groupFoldCountDistinctValue<std::string>;
+        break;
+
         case NLChunkKind::List:
-            throw IRException("A column a procedure yielded cannot be counted with DISTINCT yet: only an ID column has a fold here");
+            throw IRException("count(DISTINCT) cannot key on a list column: a list has no scalar value to count distinct");
         break;
     }
 
