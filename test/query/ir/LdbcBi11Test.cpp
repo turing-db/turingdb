@@ -17,11 +17,11 @@
 #include "JobSystem.h"
 #include "SystemAccessor.h"
 #include "SystemManager.h"
-#include "columns/ColumnVector.h"
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 #include "writers/GraphWriter.h"
 
+#include "IRTestRows.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -29,27 +29,6 @@ using namespace db;
 using namespace turing::test;
 
 namespace {
-
-// Collects the single ui64 count the query reduces to
-class CountSink : public NLOutputSink {
-public:
-    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
-        ASSERT_EQ(chunks.size(), 1u);
-
-        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[0]);
-        ASSERT_NE(counts, nullptr);
-
-        const auto& countRaw = counts->getRaw();
-        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _counts.push_back(countRaw[rowIndex]);
-        }
-    }
-
-    const std::vector<uint64_t>& counts() const { return _counts; }
-
-private:
-    std::vector<uint64_t> _counts;
-};
 
 // The benchmark's query, verbatim but for the three parameters it is given: the country
 // name and the two bounds a creationDate is compared against
@@ -78,9 +57,8 @@ std::string bi11Query(std::string_view country, int64_t startDate, int64_t endDa
 }
 
 // LDBC SNB Business Intelligence query 11, "Friend triangles": five chained WITH
-// barriers, each followed by a pattern joining onto what the one before published - the
-// last of them, (c)-[k3:KNOWS]-(a), between two variables both bound. It runs as written
-// under two substitutions the engine has no other spelling for: its parameters, and a
+// barriers, the last of them joining two variables both bound. It runs as written under
+// two substitutions the engine has no other spelling for: its parameters, and a
 // creationDate stored as the epoch integer its datetime bounds are compared against.
 class LdbcBi11Test : public TuringTest {
 protected:
@@ -92,12 +70,10 @@ protected:
         buildGraph(system.createGraph(_graphName));
     }
 
-    // A slice of the social network holding three candidate triangles, one of them an
-    // answer. Persons 1 and 2 live in Delhi and 3 in Mumbai, both Indian cities; 4 lives
-    // in Paris and 5 in Delhi. The KNOWS edges close (1,2,3) inside India and inside the
-    // date window, (1,2,4) reaching outside India, and (1,2,5) over an edge that predates
-    // the window. Persons 1 and 2 know each other over an edge each way, so an undirected
-    // hop matches that pair twice and every count below depends on the DISTINCTs.
+    // Three candidate triangles, one of them an answer: (1,2,3) closes inside India and
+    // inside the date window, (1,2,4) reaches Paris, and (1,2,5) closes over an edge that
+    // predates the window. Persons 1 and 2 know each other over an edge each way, so an
+    // undirected hop matches that pair twice and every count depends on the DISTINCTs.
     void buildGraph(Graph* graph) {
         JobSystem jobSystem;
         jobSystem.init();

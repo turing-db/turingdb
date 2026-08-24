@@ -11,6 +11,16 @@ function(add_ir_tests exe_name cpp_file)
             MLIRParser)
 endfunction()
 
+# The output-row rendering and the count / row sinks that several of the tests below
+# would otherwise each redeclare.
+add_library(turing_ir_test_rows_s STATIC IRTestRows.cpp)
+target_link_libraries(turing_ir_test_rows_s
+    PUBLIC  GTest::gtest
+            turing_db_s
+            turing_db_storage_s
+            turing_db_interpreter_v3_s)
+target_include_directories(turing_ir_test_rows_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_ir_tests(test_query_ir_nlexecutor NLExecutorTest.cpp)
 add_ir_tests(test_query_ir_create_node_edge CreateNodeEdgeTest.cpp)
 add_ir_tests(test_query_ir_dblowering DBLoweringTest.cpp)
@@ -64,7 +74,8 @@ target_link_libraries(test_query_ir_create_equivalence PRIVATE
         turing_testenv_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
 target_include_directories(test_query_ir_create_equivalence PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_interpreter_v3_error QueryInterpreterV3ErrorTest.cpp)
@@ -93,7 +104,8 @@ target_link_libraries(test_query_ir_set_equivalence PRIVATE
         turing_testenv_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
 target_include_directories(test_query_ir_set_equivalence PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_delete_equivalence DeleteEquivalenceTest.cpp)
@@ -102,7 +114,8 @@ target_link_libraries(test_query_ir_delete_equivalence PRIVATE
         turing_testenv_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
 target_include_directories(test_query_ir_delete_equivalence PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_equivalence EquivalenceTest.cpp)
@@ -550,7 +563,8 @@ target_link_libraries(test_query_ir_aggregate_over_constant_alias PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
 target_include_directories(test_query_ir_aggregate_over_constant_alias PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_with WithTest.cpp)
@@ -560,7 +574,8 @@ target_link_libraries(test_query_ir_with PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
 target_include_directories(test_query_ir_with PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_ldbc_bi11 LdbcBi11Test.cpp)
@@ -569,7 +584,8 @@ target_link_libraries(test_query_ir_ldbc_bi11 PRIVATE
         turing_testenv_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
 target_include_directories(test_query_ir_ldbc_bi11 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_with_multi_part WithMultiPartTest.cpp)
@@ -579,7 +595,8 @@ target_link_libraries(test_query_ir_with_multi_part PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
 target_include_directories(test_query_ir_with_multi_part PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_order_by_aggregate_unprojected_key OrderByAggregateUnprojectedKeyTest.cpp)

@@ -23,6 +23,7 @@
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
+#include "IRTestRows.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -31,7 +32,6 @@ using namespace turing::test;
 
 namespace {
 
-using Counts = std::vector<uint64_t>;
 using Sums = std::vector<std::optional<int64_t>>;
 
 // The eight Person nodes of simpledb are what every count below is taken over
@@ -39,31 +39,6 @@ constexpr uint64_t personCount = 8;
 
 // Its eighteen nodes of every label, which MATCH (n) matches
 constexpr uint64_t nodeCount = 18;
-
-// Collects the ui64 column a grouped count emits. The aggregates come behind the
-// grouping keys, so the count is the last chunk whichever key is grouped on.
-class CountSink : public NLOutputSink {
-public:
-    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
-        ASSERT_FALSE(chunks.empty());
-
-        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks.back());
-        ASSERT_NE(counts, nullptr);
-
-        const auto& countRaw = counts->getRaw();
-        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _counts.push_back(countRaw[rowIndex]);
-        }
-    }
-
-    void sortedCounts(Counts& counts) const {
-        counts = _counts;
-        std::sort(counts.begin(), counts.end());
-    }
-
-private:
-    Counts _counts;
-};
 
 // The same for a sum, whose value column is a nullable i64 rather than a ui64 count
 class SumSink : public NLOutputSink {

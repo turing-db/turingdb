@@ -2,20 +2,14 @@
 
 #include <algorithm>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include <range/v3/view/zip.hpp>
 
-#include "columns/ColumnConst.h"
-#include "columns/ColumnEdgeTypes.h"
-#include "columns/ColumnIDs.h"
-#include "columns/ColumnOptVector.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
-#include "metadata/PropertyNull.h"
 
 #include "NLOutputSink.h"
 #include "QueryInterpreterV3.h"
@@ -29,6 +23,7 @@
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
+#include "IRTestRows.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -37,84 +32,6 @@ using namespace turing::test;
 
 namespace rg = ranges;
 namespace rv = rg::views;
-
-namespace {
-
-using Row = std::vector<std::string>;
-using Rows = std::vector<Row>;
-
-template <typename T>
-bool renderValueCell(const Column* column, size_t row, std::string& out) {
-    if (const auto* constCol = dynamic_cast<const ColumnConst<T>*>(column)) {
-        const T value = constCol->at(0);
-        if constexpr (std::is_same_v<T, std::string_view>) {
-            out = std::string(value);
-        } else {
-            out = std::to_string(value);
-        }
-        return true;
-    }
-
-    const auto* values = dynamic_cast<const ColumnOptVector<T>*>(column);
-    if (!values) {
-        return false;
-    }
-
-    const std::optional<T> value = (*values)[row];
-    if (!value) {
-        out = "null";
-        return true;
-    }
-
-    if constexpr (std::is_same_v<T, std::string_view>) {
-        out = std::string(*value);
-    } else {
-        out = std::to_string(*value);
-    }
-
-    return true;
-}
-
-void renderCell(const Column* column, size_t row, std::string& out) {
-    if (const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(column)) {
-        out = std::to_string((*nodeIDs)[row].getValue());
-    } else if (const auto* edgeIDs = dynamic_cast<const ColumnEdgeIDs*>(column)) {
-        out = std::to_string((*edgeIDs)[row].getValue());
-    } else if (const auto* edgeTypes = dynamic_cast<const ColumnEdgeTypes*>(column)) {
-        out = std::to_string((*edgeTypes)[row].getValue());
-    } else if (dynamic_cast<const ColumnConst<PropertyNull>*>(column)) {
-        out = "null";
-    } else if (renderValueCell<int64_t>(column, row, out)
-               || renderValueCell<uint64_t>(column, row, out)
-               || renderValueCell<double>(column, row, out)
-               || renderValueCell<std::string_view>(column, row, out)) {
-        // Rendered by the helper for whichever value type matched
-    } else {
-        throw std::runtime_error("CreateEquivalenceTest: unsupported output column type");
-    }
-}
-
-void collectPipelineRows(const Dataframe* dataframe, Rows& rows) {
-    const Dataframe::NamedColumns& columns = dataframe->cols();
-    const size_t rowCount = dataframe->getLogicalRowCount();
-
-    for (size_t row = 0; row < rowCount; row++) {
-        Row& cells = rows.emplace_back();
-        cells.resize(columns.size());
-
-        for (size_t column = 0; column < columns.size(); column++) {
-            renderCell(columns[column]->getColumn(), row, cells[column]);
-        }
-    }
-}
-
-// Discards output — CREATE-only programs produce no rows worth inspecting.
-class NullSink : public NLOutputSink {
-public:
-    void appendChunks(std::span<const Column* const>, size_t, size_t) override {}
-};
-
-}
 
 class CreateEquivalenceTest : public TuringTest {
 public:
