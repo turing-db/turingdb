@@ -82,6 +82,43 @@ private:
 };
 
 
+// Counts the rows of a single yielded column, whatever it holds, so a test can derive what
+// an aggregate over that same column has to answer.
+class YieldedRowCountSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        _rowCount += rowCount;
+    }
+
+    uint64_t getRowCount() const { return _rowCount; }
+
+private:
+    uint64_t _rowCount {0};
+};
+
+// Collects the single unsigned column an ungrouped aggregate emits.
+class AggregateSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[0]);
+        ASSERT_NE(counts, nullptr);
+
+        const auto& raw = counts->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _counts.push_back(raw[rowIndex]);
+        }
+    }
+
+    const std::vector<uint64_t>& getCounts() const { return _counts; }
+
+private:
+    std::vector<uint64_t> _counts;
+};
+
 // Collects the (label ID, count) rows of a count grouped on a yielded label ID column.
 class LabelCountSink : public NLOutputSink {
 public:
@@ -187,6 +224,60 @@ TEST_F(CallYieldGroupAggregateTest, countsOneYieldedColumnGroupedByAnother) {
     for (const auto& [labelID, count] : grouped.getCounts()) {
         EXPECT_EQ(count, 1u);
     }
+}
+
+// count over the types a procedure yields beside the scalars: a label ID, a property type
+// and the value type of a property are all columns of their own, countable like any other.
+TEST_F(CallYieldGroupAggregateTest, countsAYieldedLabelIDColumn) {
+    YieldedRowCountSink yielded;
+    runQuery("CALL db.labels() YIELD id RETURN id", yielded);
+
+    ASSERT_GT(yielded.getRowCount(), 0u);
+
+    AggregateSink counted;
+    runQuery("CALL db.labels() YIELD id RETURN count(id)", counted);
+
+    const std::vector<uint64_t> expected {yielded.getRowCount()};
+    EXPECT_EQ(counted.getCounts(), expected);
+}
+
+TEST_F(CallYieldGroupAggregateTest, countsAYieldedValueTypeColumn) {
+    YieldedRowCountSink yielded;
+    runQuery("CALL db.propertyTypes() YIELD valueType RETURN valueType", yielded);
+
+    ASSERT_GT(yielded.getRowCount(), 0u);
+
+    AggregateSink counted;
+    runQuery("CALL db.propertyTypes() YIELD valueType RETURN count(valueType)", counted);
+
+    const std::vector<uint64_t> expected {yielded.getRowCount()};
+    EXPECT_EQ(counted.getCounts(), expected);
+}
+
+TEST_F(CallYieldGroupAggregateTest, countsAYieldedPropertyTypeColumn) {
+    YieldedRowCountSink yielded;
+    runQuery("CALL db.propertyTypes() YIELD id RETURN id", yielded);
+
+    ASSERT_GT(yielded.getRowCount(), 0u);
+
+    AggregateSink counted;
+    runQuery("CALL db.propertyTypes() YIELD id RETURN count(id)", counted);
+
+    const std::vector<uint64_t> expected {yielded.getRowCount()};
+    EXPECT_EQ(counted.getCounts(), expected);
+}
+
+TEST_F(CallYieldGroupAggregateTest, countsAYieldedEdgeTypeColumn) {
+    YieldedRowCountSink yielded;
+    runQuery("CALL db.edgeTypes() YIELD id RETURN id", yielded);
+
+    ASSERT_GT(yielded.getRowCount(), 0u);
+
+    AggregateSink counted;
+    runQuery("CALL db.edgeTypes() YIELD id RETURN count(id)", counted);
+
+    const std::vector<uint64_t> expected {yielded.getRowCount()};
+    EXPECT_EQ(counted.getCounts(), expected);
 }
 
 int main(int argc, char** argv) {
