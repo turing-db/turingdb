@@ -19,6 +19,7 @@ public:
         LOAD_CSV,
         VECTOR_SEARCH,
         UNWIND,
+        WITH,
     };
 
     virtual Kind getKind() const = 0;

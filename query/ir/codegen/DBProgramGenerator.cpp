@@ -74,6 +74,7 @@
 #include "stmt/Skip.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/UnwindStmt.h"
+#include "stmt/WithStmt.h"
 #include "Symbol.h"
 #include "SymbolChain.h"
 
@@ -542,19 +543,67 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
         _opBuilder.setInsertionPointToStart(&block);
     }
 
-    generateTraversal(ast);
-    resolveEdgeIdentities();
-    generatePropertyConstraints(ast);
-    generateFilters(ast);
-    generateGroupAggregate(ast);
-    generateCreate(ast);
-    generateSet(ast);
-    generateDelete(ast);
-    generateOutput(ast);
+    const CypherAST::QueryCommands& queries = ast->queries();
+    if (queries.size() != 1) {
+        throw TuringException("Multiple queries not yet supported.");
+    }
+
+    const SinglePartQuery* query = dynamic_cast<const SinglePartQuery*>(queries.front());
+    if (!query) {
+        throw TuringException("Non-single part queries are not yet supported.");
+    }
+
+    generateQueryParts(query);
+
+    const ReturnStmt* returnStmt = query->getReturnStmt();
+    const Projection* projection = returnStmt ? returnStmt->getProjection() : nullptr;
+
+    if (projection) {
+        generateGroupAggregate(projection);
+    }
+
+    generateCreate(query);
+    generateSet(query);
+    generateDelete(query);
+
+    if (projection) {
+        generateOutput(projection);
+    }
 
     _opBuilder.create<mlir::func::ReturnOp>(uloc);
 
     runPasses();
+}
+
+void DBProgramGenerator::generateQueryParts(const SinglePartQuery* query) {
+    const StmtContainer* readStmts = query->getReadStmts();
+    if (!readStmts) {
+        return;
+    }
+
+    const std::span<Stmt* const> stmts {readStmts->stmts()};
+
+    // A WITH closes a query part: the statements before it feed its projection, and the
+    // columns that projection publishes are all the statements after it can read
+    size_t partBegin = 0;
+    for (size_t index = 0; index < stmts.size(); index++) {
+        if (stmts[index]->getKind() != Stmt::Kind::WITH) {
+            continue;
+        }
+
+        generatePart(stmts.subspan(partBegin, index - partBegin));
+        generateWith(static_cast<const WithStmt*>(stmts[index]));
+        partBegin = index + 1;
+    }
+
+    generatePart(stmts.subspan(partBegin));
+}
+
+void DBProgramGenerator::generatePart(std::span<Stmt* const> stmts) {
+    generateTraversal(stmts);
+    resolveEdgeIdentities();
+    generatePropertyConstraints(stmts);
+    generateFilters(stmts);
 }
 
 void DBProgramGenerator::runPasses() {
@@ -566,8 +615,8 @@ void DBProgramGenerator::runPasses() {
     }
 }
 
-void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
-    _vdg.buildFromAST(ast);
+void DBProgramGenerator::generateTraversal(std::span<Stmt* const> stmts) {
+    _vdg.build(stmts);
 
     if (_vdg.empty()) {
         return;
@@ -577,6 +626,12 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
     mlir::Block* const mainBlock = _opBuilder.getInsertionBlock();
 
     DefinedVars defined;
+
+    const VariableDependencyGraph::BoundVars& bound = _vdg.boundVars();
+    if (!bound.empty()) {
+        throwOnRematchedBoundEdge();
+        extendBoundDataflow(defined);
+    }
 
     // Connected components
     std::vector<TranslatedComponent> components;
@@ -618,6 +673,18 @@ void DBProgramGenerator::generateTraversal(const CypherAST* ast) {
 
     if (components.empty()) {
         return;
+    }
+
+    // A pattern naming none of the bound variables matches on its own, so its rows would
+    // have to be crossed with the ones the barrier published - and the whole dataflow
+    // below the barrier would have to become the left factor of that cross product
+    const bool crossesBoundRows = std::ranges::any_of(bound, [this](const VariableDependency* var) {
+        return !yieldsConstantColumn(_varMap.at(var).back());
+    });
+
+    if (crossesBoundRows) {
+        throw TuringException("A pattern sharing no variable with the preceding WITH is not "
+                              "yet supported.");
     }
 
     // Single connected component, no need to X prod any islands
@@ -668,6 +735,13 @@ void DBProgramGenerator::filterAllColumns(mlir::Value predicate) {
     llvm::SmallVector<const VariableDependency*> orderedVars;
     for (auto& [var, values] : _varMap) {
         const mlir::Value column = values.back();
+
+        // A constant column holds the same value in every row, so a filter has no row of
+        // it to drop: it rides past the cut the way it rides past a dedup or a sort
+        if (yieldsConstantColumn(column)) {
+            continue;
+        }
+
         mlir::Operation* const definingOp = column.getDefiningOp();
         mlir::Block* const definingBlock = definingOp
             ? definingOp->getBlock()
@@ -780,9 +854,70 @@ void DBProgramGenerator::resolveEdgeIdentities() {
     }
 }
 
+void DBProgramGenerator::throwOnRematchedBoundEdge() const {
+    const VariableDependencyGraph::EdgeIdentityMap& identities = _vdg.edgeIdentities();
+
+    for (const VariableDependency* var : _vdg.boundVars()) {
+        if (identities.contains(std::string(var->getName()))) {
+            throw TuringException(fmt::format("Matching the edge variable '{}' again after a "
+                                              "WITH is not yet supported.",
+                                              var->getName()));
+        }
+    }
+}
+
+void DBProgramGenerator::extendBoundDataflow(DefinedVars& defined) {
+    const VariableDependencyGraph::BoundVars& bound = _vdg.boundVars();
+
+    // Every column the barrier published already holds its rows, so no scan opens a
+    // dataflow here: the hops of this part extend that one, carrying those columns along
+    // so the whole projection stays row-aligned. A constant column holds one value
+    // standing for every row, so it has no rows to carry and rides along untouched
+    std::vector<const VariableDependency*> carriedSet;
+    for (const VariableDependency* var : bound) {
+        defined.insert(var);
+
+        if (!yieldsConstantColumn(_varMap.at(var).back())) {
+            carriedSet.push_back(var);
+        }
+    }
+
+    for (const VariableDependency* var : bound) {
+        applyConstraints(var);
+    }
+
+    std::vector<const VariableDependency*> reached;
+    for (const VariableDependency* var : bound) {
+        expandComponent(var, defined, carriedSet, reached);
+    }
+}
+
 void DBProgramGenerator::translateComponent(const VariableDependency* root,
                                             DefinedVars& defined,
                                             std::vector<const VariableDependency*>& outVars) {
+    // A root either is a pattern variable, whose dataflow opens with a node scan, or is
+    // bound by an UNWIND, whose dataflow opens with the literal list itself.
+    const VariableDependencyGraph::UnwindSourceMap& unwindSources = _vdg.unwindSources();
+    const auto unwindIt = unwindSources.find(root);
+
+    if (unwindIt != unwindSources.end()) {
+        addUnwindConst(root, unwindIt->second);
+    } else {
+        addScanNodes(root);
+    }
+
+    applyConstraints(root);
+
+    // Forms the "carried set" for this connected component
+    std::vector<const VariableDependency*> carriedSet;
+
+    expandComponent(root, defined, carriedSet, outVars);
+}
+
+void DBProgramGenerator::expandComponent(const VariableDependency* root,
+                                         DefinedVars& defined,
+                                         std::vector<const VariableDependency*>& carriedSet,
+                                         std::vector<const VariableDependency*>& outVars) {
     struct Frame {
         const VariableDependency* _var {nullptr};
         const DependencyEdge* _predEdge {nullptr};
@@ -796,22 +931,7 @@ void DBProgramGenerator::translateComponent(const VariableDependency* root,
         }
     };
 
-    // A root either is a pattern variable, whose dataflow opens with a node scan, or is
-    // bound by an UNWIND, whose dataflow opens with the literal list itself.
-    const VariableDependencyGraph::UnwindSourceMap& unwindSources = _vdg.unwindSources();
-    const auto unwindIt = unwindSources.find(root);
-
-    if (unwindIt != unwindSources.end()) {
-        addUnwindConst(root, unwindIt->second);
-    } else {
-        addScanNodes(root);
-    }
-
     markDefined(root);
-    applyConstraints(root);
-
-    // Forms the "carried set" for this connected component
-    std::vector<const VariableDependency*> carriedSet;
 
     std::vector<Frame> stack;
 
@@ -1013,19 +1133,8 @@ void DBProgramGenerator::moveComponentToFactor(TranslatedComponent& component,
     _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {component._columns});
 }
 
-void DBProgramGenerator::generateCreate(const CypherAST* ast) {
-    const CypherAST::QueryCommands& queries = ast->queries();
-    if (queries.size() != 1) {
-        throw TuringException("Multiple queries not yet supported.");
-    }
-
-    const QueryCommand* query = queries.front();
-    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
-    if (!sglPart) {
-        throw TuringException("Non-single part queries are not yet supported.");
-    }
-
-    const StmtContainer* updateStmts = sglPart->getUpdateStmts();
+void DBProgramGenerator::generateCreate(const SinglePartQuery* query) {
+    const StmtContainer* updateStmts = query->getUpdateStmts();
     if (!updateStmts) {
         return;
     }
@@ -1187,7 +1296,7 @@ mlir::Value DBProgramGenerator::resolveWildcardColumn() const {
         }
 
         const mlir::Value column = findIt->second.back();
-        if (!isRowAlignedHere(column)) {
+        if (yieldsConstantColumn(column) || !isRowAlignedHere(column)) {
             continue;
         }
 
@@ -1197,19 +1306,8 @@ mlir::Value DBProgramGenerator::resolveWildcardColumn() const {
     return mlir::Value {};
 }
 
-void DBProgramGenerator::generateSet(const CypherAST* ast) {
-    const CypherAST::QueryCommands& queries = ast->queries();
-    if (queries.size() != 1) {
-        throw TuringException("Multiple queries not yet supported.");
-    }
-
-    const QueryCommand* query = queries.front();
-    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
-    if (!sglPart) {
-        throw TuringException("Non-single part queries are not yet supported.");
-    }
-
-    const StmtContainer* updateStmts = sglPart->getUpdateStmts();
+void DBProgramGenerator::generateSet(const SinglePartQuery* query) {
+    const StmtContainer* updateStmts = query->getUpdateStmts();
     if (!updateStmts) {
         return;
     }
@@ -1254,19 +1352,8 @@ void DBProgramGenerator::generateSet(const CypherAST* ast) {
     }
 }
 
-void DBProgramGenerator::generateDelete(const CypherAST* ast) {
-    const CypherAST::QueryCommands& queries = ast->queries();
-    if (queries.size() != 1) {
-        throw TuringException("Multiple queries not yet supported.");
-    }
-
-    const QueryCommand* query = queries.front();
-    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
-    if (!sglPart) {
-        throw TuringException("Non-single part queries are not yet supported.");
-    }
-
-    const StmtContainer* updateStmts = sglPart->getUpdateStmts();
+void DBProgramGenerator::generateDelete(const SinglePartQuery* query) {
+    const StmtContainer* updateStmts = query->getUpdateStmts();
     if (!updateStmts) {
         return;
     }
@@ -1311,36 +1398,78 @@ void DBProgramGenerator::generateDelete(const CypherAST* ast) {
     }
 }
 
-void DBProgramGenerator::generateOutput(const CypherAST* ast) {
-    const CypherAST::QueryCommands& queries = ast->queries();
-    if (queries.size() != 1) {
-        throw TuringException("Multiple queries not yet supported.");
-    };
+void DBProgramGenerator::generateOutput(const Projection* projection) {
+    VariableColumnMap variableColumns;
+    collectVariableColumns(variableColumns);
 
-    const QueryCommand* query = queries.front();
+    llvm::SmallVector<mlir::Value> outputted;
+    llvm::SmallVector<llvm::StringRef> outputNames;
+    translateProjection(projection, variableColumns, outputted, outputNames);
 
-    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
-    if (!sglPart) {
-        throw TuringException("Non-single part queries are not yet supported.");
-    }
+    translateProjectionTail(projection, variableColumns, outputted);
 
-    const ReturnStmt* rtn = sglPart->getReturnStmt();
-    if (!rtn) {
+    _opBuilder.create<mlir::db::Output>(_opBuilder.getUnknownLoc(),
+                                       mlir::ValueRange {outputted},
+                                       _opBuilder.getStrArrayAttr(outputNames));
+}
+
+void DBProgramGenerator::generateWith(const WithStmt* with) {
+    const Projection* projection = with->getProjection();
+
+    generateGroupAggregate(projection);
+
+    VariableColumnMap variableColumns;
+    collectVariableColumns(variableColumns);
+
+    llvm::SmallVector<mlir::Value> projected;
+    llvm::SmallVector<llvm::StringRef> names;
+    translateProjection(projection, variableColumns, projected, names);
+
+    translateProjectionTail(projection, variableColumns, projected);
+
+    publishBoundColumns(names, projected);
+
+    const WhereClause* where = with->getWhere();
+    if (!where) {
         return;
     }
 
-    const Projection* proj = rtn->getProjection();
+    // The filter is written after ORDER BY, SKIP and LIMIT and is evaluated there too, as
+    // every sub-clause of a projection is evaluated where it is written: it cuts the rows
+    // those left rather than the rows of the match, so WITH x ORDER BY x LIMIT 3 WHERE p
+    // keeps those of the first three rows that satisfy p
+    std::vector<const Expr*> conjuncts;
+    flattenConjuncts(where->getExpr(), conjuncts);
 
-    const Projection::Items& returned = proj->items();
+    applyPredicateFilters(conjuncts);
+}
 
-    VariableColumnMap variableColumns;
-    for (auto& [cypherVar, mlirCol] : _varMap) {
+void DBProgramGenerator::publishBoundColumns(llvm::ArrayRef<llvm::StringRef> names,
+                                             llvm::ArrayRef<mlir::Value> columns) {
+    bioassert(names.size() == columns.size(), "One name per column a WITH publishes expected");
+
+    _varMap.clear();
+    _edgeTypeMap.clear();
+    _exprMap.clear();
+    _projectedColumns.clear();
+    _vdg.clear();
+
+    for (size_t index = 0; index < names.size(); index++) {
+        const llvm::StringRef name = names[index];
+        bioassert(!name.empty(), "Column a WITH publishes without a name");
+
+        const std::string_view boundName {name.data(), name.size()};
+        registerValue(_vdg.registerBoundVariable(boundName), columns[index]);
+    }
+}
+
+void DBProgramGenerator::collectVariableColumns(VariableColumnMap& variableColumns) const {
+    for (const auto& [cypherVar, mlirCol] : _varMap) {
         const std::string_view varName = cypherVar->getName();
 
         bioassert(not mlirCol.empty(), "No definitions for {}", varName);
-        const mlir::Value finalValue = mlirCol.back();
 
-        variableColumns[varName] = finalValue;
+        variableColumns[varName] = mlirCol.back();
     }
 
     for (const auto& [name, vars] : _vdg.edgeIdentities()) {
@@ -1349,7 +1478,12 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
         bioassert(_varMap.contains(representative), "Edge identity representative not in varMap");
         variableColumns[name] = _varMap.at(representative).back();
     }
+}
 
+void DBProgramGenerator::translateProjection(const Projection* projection,
+                                             const VariableColumnMap& variableColumns,
+                                             llvm::SmallVectorImpl<mlir::Value>& projected,
+                                             llvm::SmallVectorImpl<llvm::StringRef>& names) {
     const auto getVarForItem = [&](auto&& item) -> mlir::Value {
         using Type = std::remove_cvref_t<decltype(item)>;
 
@@ -1366,7 +1500,7 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
     // The analyzer names every item it accepts, so an item without one is left for the
     // sink to label by position rather than being a codegen error.
     const auto getNameForItem = [&](auto&& item) -> llvm::StringRef {
-        const std::optional<std::string_view> name = proj->getName(item);
+        const std::optional<std::string_view> name = projection->getName(item);
         if (!name) {
             return llvm::StringRef();
         }
@@ -1374,12 +1508,10 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
         return llvm::StringRef(name->data(), name->size());
     };
 
-    llvm::SmallVector<mlir::Value> outputted;
-    llvm::SmallVector<llvm::StringRef> outputNames;
-    for (const Projection::ReturnItem item : returned) {
+    for (const Projection::ReturnItem item : projection->items()) {
         const mlir::Value itemCol = std::visit(getVarForItem, item);
-        outputted.push_back(itemCol);
-        outputNames.push_back(std::visit(getNameForItem, item));
+        projected.push_back(itemCol);
+        names.push_back(std::visit(getNameForItem, item));
 
         // An alias is one variable declared once, so a key naming it holds the very
         // declaration of the item it names: publishing the column under that declaration
@@ -1394,78 +1526,61 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
             _projectedColumns[itemDecl] = itemCol;
         }
     }
+}
 
-    const mlir::Location loc = _opBuilder.getUnknownLoc();
-
+void DBProgramGenerator::translateProjectionTail(const Projection* projection,
+                                                 const VariableColumnMap& variableColumns,
+                                                 llvm::SmallVectorImpl<mlir::Value>& projected) {
     // DISTINCT dedups the projection, and everything after it works on the rows that
     // survive: the sort orders the distinct rows, and SKIP and LIMIT cut them
-    if (proj->isDistinct()) {
-        translateDistinct(proj, outputted);
+    if (projection->isDistinct()) {
+        translateDistinct(projection, projected);
     }
 
     // ORDER BY reorders the whole projection, so it comes before them too: SKIP and
     // LIMIT cut the sorted rows
-    if (proj->hasOrderBy()) {
-        translateOrderBy(proj, variableColumns, outputted);
+    if (projection->hasOrderBy()) {
+        translateOrderBy(projection, variableColumns, projected);
     }
 
-    if (proj->hasSkip()) {
-        const Expr* skipExpr = proj->getSkip()->getExpr();
-        const int64_t skipValue = evaluateConstantInteger(skipExpr);
-
-        if (skipValue < 0) {
-            throw TuringException("SKIP expression must be a non-negative integer");
-        }
-
-        const uint64_t skipCount = static_cast<uint64_t>(skipValue);
-
-        llvm::SmallVector<size_t> skippedItems;
-        llvm::SmallVector<mlir::Value> skipped;
-        collectCutColumns(proj, outputted, skippedItems, skipped);
-
-        llvm::SmallVector<mlir::Type> skipResultTypes;
-        for (const mlir::Value column : skipped) {
-            skipResultTypes.push_back(column.getType());
-        }
-
-        auto skipOp = _opBuilder.create<mlir::db::Skip>(loc, skipResultTypes, mlir::ValueRange{skipped}, skipCount);
-
-        const mlir::ResultRange skipResults = skipOp.getResults();
-        for (size_t resultIndex = 0; resultIndex < skippedItems.size(); resultIndex++) {
-            outputted[skippedItems[resultIndex]] = skipResults[resultIndex];
-        }
+    if (projection->hasSkip()) {
+        translateCut<mlir::db::Skip>(projection, projection->getSkip()->getExpr(), "SKIP", projected);
     }
 
-    if (proj->hasLimit()) {
-        const Expr* limitExpr = proj->getLimit()->getExpr();
-        const int64_t limitValue = evaluateConstantInteger(limitExpr);
+    if (projection->hasLimit()) {
+        translateCut<mlir::db::Limit>(projection, projection->getLimit()->getExpr(), "LIMIT", projected);
+    }
+}
 
-        if (limitValue < 0) {
-            throw TuringException("LIMIT expression must be a non-negative integer");
-        }
+template <typename CutOp>
+void DBProgramGenerator::translateCut(const Projection* projection,
+                                      const Expr* countExpr,
+                                      std::string_view clauseName,
+                                      llvm::SmallVectorImpl<mlir::Value>& projected) {
+    const int64_t countValue = evaluateConstantInteger(countExpr);
 
-        const uint64_t limitCount = static_cast<uint64_t>(limitValue);
-
-        llvm::SmallVector<size_t> limitedItems;
-        llvm::SmallVector<mlir::Value> limited;
-        collectCutColumns(proj, outputted, limitedItems, limited);
-
-        llvm::SmallVector<mlir::Type> limitResultTypes;
-        for (const mlir::Value column : limited) {
-            limitResultTypes.push_back(column.getType());
-        }
-
-        auto limitOp = _opBuilder.create<mlir::db::Limit>(loc, limitResultTypes, mlir::ValueRange{limited}, limitCount);
-
-        const mlir::ResultRange limitResults = limitOp.getResults();
-        for (size_t resultIndex = 0; resultIndex < limitedItems.size(); resultIndex++) {
-            outputted[limitedItems[resultIndex]] = limitResults[resultIndex];
-        }
+    if (countValue < 0) {
+        throw TuringException(fmt::format("{} expression must be a non-negative integer", clauseName));
     }
 
-    _opBuilder.create<mlir::db::Output>(loc,
-                                        mlir::ValueRange{outputted},
-                                        _opBuilder.getStrArrayAttr(outputNames));
+    llvm::SmallVector<size_t> cutItems;
+    llvm::SmallVector<mlir::Value> cut;
+    collectCutColumns(projection, projected, cutItems, cut);
+
+    llvm::SmallVector<mlir::Type> cutResultTypes;
+    for (const mlir::Value column : cut) {
+        cutResultTypes.push_back(column.getType());
+    }
+
+    auto cutOp = _opBuilder.create<CutOp>(_opBuilder.getUnknownLoc(),
+                                          cutResultTypes,
+                                          mlir::ValueRange {cut},
+                                          static_cast<uint64_t>(countValue));
+
+    const mlir::ResultRange cutResults = cutOp.getResults();
+    for (size_t resultIndex = 0; resultIndex < cutItems.size(); resultIndex++) {
+        projected[cutItems[resultIndex]] = cutResults[resultIndex];
+    }
 }
 
 void DBProgramGenerator::translateDistinct(const Projection* projection,
@@ -1646,27 +1761,10 @@ void DBProgramGenerator::applyPredicateFilters(std::span<const Expr* const> pred
     }
 }
 
-void DBProgramGenerator::generatePropertyConstraints(const CypherAST* ast) {
-    const CypherAST::QueryCommands& queries = ast->queries();
-    if (queries.size() != 1) {
-        throw TuringException("Multiple queries not yet supported.");
-    }
-
-    const QueryCommand* query = queries.front();
-
-    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
-    if (!sglPart) {
-        return;
-    }
-
-    const StmtContainer* stmtsContainer = sglPart->getReadStmts();
-    if (!stmtsContainer) {
-        return;
-    }
-
+void DBProgramGenerator::generatePropertyConstraints(std::span<Stmt* const> stmts) {
     std::vector<const Expr*> constraintExprs;
 
-    for (const Stmt* stmt : stmtsContainer->stmts()) {
+    for (const Stmt* stmt : stmts) {
         if (stmt->getKind() != Stmt::Kind::MATCH) {
             continue;
         }
@@ -1779,26 +1877,9 @@ void DBProgramGenerator::applyConstraints(const VariableDependency* var) {
     }, *constraints);
 }
 
-void DBProgramGenerator::generateFilters(const CypherAST* ast) {
-    const CypherAST::QueryCommands& queries = ast->queries();
-    if (queries.size() != 1) {
-        throw TuringException("Multiple queries not yet supported.");
-    }
-
-    const QueryCommand* query = queries.front();
-
-    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
-    if (!sglPart) {
-        return;
-    }
-
-    const StmtContainer* stmtsContainer = sglPart->getReadStmts();
-    if (!stmtsContainer) {
-        return;
-    }
-
+void DBProgramGenerator::generateFilters(std::span<Stmt* const> stmts) {
     std::vector<const Expr*> conjuncts;
-    for (const Stmt* stmt : stmtsContainer->stmts()) {
+    for (const Stmt* stmt : stmts) {
         if (stmt->getKind() != Stmt::Kind::MATCH) {
             continue;
         }
@@ -2220,24 +2301,7 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     throw TuringException(fmt::format("Unsupported function: {}", funcName));
 }
 
-void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
-    const CypherAST::QueryCommands& queries = ast->queries();
-    if (queries.size() != 1) {
-        return;
-    }
-
-    const QueryCommand* query = queries.front();
-    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(query);
-    if (!sglPart) {
-        return;
-    }
-
-    const ReturnStmt* rtn = sglPart->getReturnStmt();
-    if (!rtn) {
-        return;
-    }
-
-    const Projection* proj = rtn->getProjection();
+void DBProgramGenerator::generateGroupAggregate(const Projection* proj) {
     if (!proj->isAggregate() || !proj->hasGroupingKeys()) {
         return;
     }

@@ -83,6 +83,7 @@
     #include "DropIndexQuery.h"
     #include "MergeDataPartsQuery.h"
     #include "stmt/UnwindStmt.h"
+    #include "stmt/WithStmt.h"
     #include "EmbeddingsSpec.h"
 
     namespace db {
@@ -318,6 +319,7 @@
 %type<db::EdgePattern*> edgeDetail
 %type<std::pair<db::EdgePattern*, db::NodePattern*>> patternElemChain
 %type<db::WhereClause*> whereClause
+%type<db::WhereClause*> opt_whereClause
 %type<db::YieldClause*> yieldClause
 %type<db::YieldItems*> yieldItemChain
 %type<db::YieldItems*> yieldItems
@@ -365,6 +367,7 @@
 %type<db::StmtContainer*> updatingStatements
 %type<db::ChangeOp> changeOp
 %type<db::MatchStmt*> matchSt
+%type<db::WithStmt*> withSt
 %type<db::ShortestPathStmt*> shortestPathSt
 %type<db::CallStmt*> callSt
 %type<db::CreateStmt*> createSt
@@ -645,8 +648,16 @@ returnSt
     ;
 
 withSt
-    : WITH projectionBody whereClause { scanner.notImplemented(@$, "WITH ... WHERE"); }
-    | WITH projectionBody { scanner.notImplemented(@$, "WITH"); }
+    : WITH projectionBody opt_whereClause {
+        $$ = WithStmt::create(ast, $2);
+        $$->setWhere($3);
+        LOC($$, @$);
+      }
+    ;
+
+opt_whereClause
+    : whereClause { $$ = $1; }
+    | { $$ = nullptr; }
     ;
 
 skipSSt
@@ -774,9 +785,7 @@ multiPartQuery
 
 updateWithSt
     : updatingStatements withSt { scanner.notImplemented(@$, "Update + With"); }
-    | withSt { scanner.notImplemented(@$, "With"); }
     | updateWithSt updatingStatements withSt { scanner.notImplemented(@$, "Update + With + Update"); }
-    | updateWithSt withSt { scanner.notImplemented(@$, "Update + With"); }
     ;
 
 matchSt
@@ -838,6 +847,7 @@ loadCSVSt
 
 readingStatement
     : matchSt { $$ = $1; }
+    | withSt { $$ = $1; }
     | unwindSt { $$ = $1; }
     | callSt { $$ = $1; }
     | loadCSVSt { $$ = $1; }

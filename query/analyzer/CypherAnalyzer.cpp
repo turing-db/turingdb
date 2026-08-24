@@ -32,6 +32,7 @@
 #include "ShowVectorIndexesQuery.h"
 #include "InstallExtensionQuery.h"
 #include "Projection.h"
+#include "WhereClause.h"
 #include "decl/DeclContext.h"
 #include "decl/EvaluatedType.h"
 #include "expr/EntityTypeExpr.h"
@@ -47,6 +48,7 @@
 #include "FunctionInvocation.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/ReturnStmt.h"
+#include "stmt/WithStmt.h"
 #include "stmt/OrderBy.h"
 #include "stmt/OrderByItem.h"
 #include "stmt/Skip.h"
@@ -192,6 +194,11 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
     // Generate read statements (optional)
     if (readStmts) {
         for (Stmt* stmt : readStmts->stmts()) {
+            if (stmt->getKind() == Stmt::Kind::WITH) {
+                analyze(static_cast<const WithStmt*>(stmt));
+                continue;
+            }
+
             if (stmt->getKind() == Stmt::Kind::CALL) {
                 if (static_cast<const CallStmt*>(stmt)->isStandaloneCall()) {
                     returnMandatory = false;
@@ -220,8 +227,84 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
 }
 
 void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
-    Projection* projection = returnSt->getProjection();
+    analyzeProjection(returnSt->getProjection(), returnSt);
+}
 
+void CypherAnalyzer::analyze(const WithStmt* withSt) {
+    if (!_isV3) { // only supported by MLIR v3
+        throwError("WITH not yet supported.", withSt);
+    }
+
+    Projection* projection = withSt->getProjection();
+
+    analyzeWithAliases(projection);
+    analyzeProjection(projection, withSt);
+
+    openWithScope(projection);
+
+    const WhereClause* where = withSt->getWhere();
+    if (!where) {
+        return;
+    }
+
+    Expr* predicate = where->getExpr();
+    _exprAnalyzer->analyzeRootExpr(predicate);
+
+    if (predicate->isAggregate()) {
+        throwError("Invalid use of aggregate expression in this context", predicate);
+    }
+
+    if (predicate->getType() != EvaluatedType::Bool) {
+        throwError("WHERE expression must be a boolean", predicate);
+    }
+}
+
+// Every column a WITH publishes is named, and those names are the whole scope of what
+// follows: the barrier is a new declaration context holding one variable per projected
+// item, so a statement after it resolves the items and nothing the projection dropped
+void CypherAnalyzer::openWithScope(const Projection* projection) {
+    DeclContext* scope = DeclContext::create(_ast, _ctxt);
+
+    for (const Projection::ReturnItem& returnItem : projection->items()) {
+        if (const auto* declPtr = std::get_if<VarDecl*>(&returnItem)) {
+            const VarDecl* decl = *declPtr;
+            scope->getOrCreateNamedVariable(_ast, decl->getType(), decl->getName());
+            continue;
+        }
+
+        const Expr* item = std::get<Expr*>(returnItem);
+        const std::optional<std::string_view> name = projection->getName(item);
+        bioassert(name.has_value(), "Projected item of a WITH without a name.");
+
+        scope->getOrCreateNamedVariable(_ast, item->getType(), *name);
+    }
+
+    _ctxt = scope;
+    _exprAnalyzer->setDeclContext(_ctxt);
+    _readAnalyzer->setDeclContext(_ctxt);
+    _writeAnalyzer->setDeclContext(_ctxt);
+}
+
+// A WITH names the columns it publishes, so every item of one has to be a variable or
+// carry an alias. RETURN needs no such rule: it names its columns for the caller and
+// nothing downstream reads them back
+void CypherAnalyzer::analyzeWithAliases(const Projection* projection) const {
+    for (const Projection::ReturnItem& returnItem : projection->items()) {
+        const auto* exprPtr = std::get_if<Expr*>(&returnItem);
+        if (!exprPtr) {
+            continue;
+        }
+
+        const Expr* item = *exprPtr;
+        const bool named = item->getKind() == Expr::Kind::SYMBOL || !item->getName().empty();
+
+        if (!named) {
+            throwError("Expression in WITH must be aliased with AS", item);
+        }
+    }
+}
+
+void CypherAnalyzer::analyzeProjection(Projection* projection, const void* clause) {
     if (projection->hasSkip()) {
         analyze(projection->getSkip());
     }
@@ -308,7 +391,7 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
         const bool multipleReturns = projection->items().size() != 1;
         if (isAggregate && multipleReturns) {
             throwError("Aggregates may not yet be combined with multiple return items.",
-                       returnSt);
+                       clause);
         }
     }
 
@@ -342,7 +425,7 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
     }
 
     if (projection->isDistinct()) {
-        analyzeDistinct(returnSt, projection);
+        analyzeDistinct(projection, clause);
     }
 
     if (isAggregate) {
@@ -382,9 +465,9 @@ void CypherAnalyzer::setV3() {
     _exprAnalyzer->setV3();
 }
 
-void CypherAnalyzer::analyzeDistinct(const ReturnStmt* returnSt, const Projection* projection) const {
+void CypherAnalyzer::analyzeDistinct(const Projection* projection, const void* clause) const {
     if (!_isV3) { // only supported by MLIR v3
-        throwError("DISTINCT not yet supported.", returnSt);
+        throwError("DISTINCT not yet supported.", clause);
     }
 
     if (!projection->hasOrderBy()) {

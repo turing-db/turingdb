@@ -15,13 +15,10 @@
 #include "EntityPattern.h"
 #include "NodePattern.h"
 #include "VariableDependencyGraphDumper.h"
-#include "CypherAST.h"
-#include "SinglePartQuery.h"
 #include "Pattern.h"
 #include "PatternElement.h"
 #include "Symbol.h"
 #include "stmt/MatchStmt.h"
-#include "stmt/StmtContainer.h"
 #include "stmt/UnwindStmt.h"
 #include "decl/PatternData.h"
 #include "decl/VarDecl.h"
@@ -69,20 +66,7 @@ VariableDependencyGraph::VariableDependencyGraph()
 VariableDependencyGraph::~VariableDependencyGraph() {
 }
 
-void VariableDependencyGraph::buildFromAST(const CypherAST* ast) {
-    bioassert(ast->queries().size() == 1, "Single queries only.");
-
-    const QueryCommand* query = ast->queries().front();
-    const auto* spq = dynamic_cast<const SinglePartQuery*>(query);
-    bioassert(spq, "Non-SinglePartQueries are not yet supported.");
-
-    const StmtContainer* stmtsContainer = spq->getReadStmts();
-    if (!stmtsContainer) {
-        return;
-    }
-
-    const StmtContainer::Stmts& stmts = stmtsContainer->stmts();
-
+void VariableDependencyGraph::build(std::span<Stmt* const> stmts) {
     for (const Stmt* stmt : stmts) {
         if (const MatchStmt* match = dynamic_cast<const MatchStmt*>(stmt)) {
             const Pattern* pattern = match->getPattern();
@@ -98,6 +82,22 @@ void VariableDependencyGraph::buildFromAST(const CypherAST* ast) {
     }
 
     eliminateCycles();
+}
+
+VariableDependency* VariableDependencyGraph::registerBoundVariable(std::string_view name) {
+    VariableDependency* boundVar = newVariable(name);
+    _boundVars.push_back(boundVar);
+
+    return boundVar;
+}
+
+void VariableDependencyGraph::clear() {
+    _vars.clear();
+    _edges.clear();
+    _anonymised.clear();
+    _edgeIdentities.clear();
+    _unwindSources.clear();
+    _boundVars.clear();
 }
 
 const DependencyEdge* VariableDependencyGraph::addDirected(VariableDependency* src,

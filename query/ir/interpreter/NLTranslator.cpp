@@ -10,6 +10,7 @@
 #include "NLOps.h"
 
 #include "IRConstantColumn.h"
+#include "IRRowAlignment.h"
 #include "mlir/IR/Block.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -82,21 +83,6 @@ llvm::StringRef edgeTypeName(mlir::Value handle) {
     }
 
     return handleOp.getName();
-}
-
-bool sameCardinality(mlir::Value first, mlir::Value second) {
-    const mlir::BlockArgument firstArg = mlir::dyn_cast<mlir::BlockArgument>(first);
-    const mlir::BlockArgument secondArg = mlir::dyn_cast<mlir::BlockArgument>(second);
-
-    if (firstArg && secondArg) {
-        return firstArg.getOwner() == secondArg.getOwner();
-    }
-
-    if (!firstArg && !secondArg) {
-        return first.getDefiningOp() == second.getDefiningOp();
-    }
-
-    return false;
 }
 
 // The with-null fetch handler for a property's value type, on the node side
@@ -781,16 +767,15 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
     for (size_t carriedIndex = 0; carriedIndex < carriedCount; carriedIndex++) {
         const mlir::Value carriedValue = config._carriedColumns[carriedIndex];
 
-        if (!sameCardinality(config._inputNodes, carriedValue)) {
+        if (!rowAlignedWith(carriedValue, config._inputNodes)) {
             throw IRException("Carried column is not row-aligned with the input chunk");
         }
 
-        const NLChunkKind kind = getChunkKind(carriedValue.getType());
         Column* carriedOutput = allocColumn(loopBody.getArgument(static_cast<unsigned>(4 + carriedIndex)));
 
         const NLCarriedColumn carriedColumn(getColumn(carriedValue),
                                             carriedOutput,
-                                            NLExecutor::selectGatherFunction(kind));
+                                            selectGatherForChunkType(carriedValue.getType()));
         loopData->addCarriedColumn(carriedColumn);
     }
 
@@ -2409,9 +2394,7 @@ void NLTranslator::addCrossColumn(mlir::Value inputValue,
 }
 
 Column* NLTranslator::allocColumn(mlir::Value chunkValue) {
-    const NLChunkKind kind = getChunkKind(chunkValue.getType());
-
-    Column* column = allocColumnForKind(kind);
+    Column* column = allocColumnForChunkType(chunkValue.getType());
     _valueSlots[chunkValue] = column;
     return column;
 }

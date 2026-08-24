@@ -326,7 +326,7 @@ def GetEdgeType : NLOp<"get_edge_type", [Pure]> {
 /**
 * GetNodeProperties
 */
-def GetNodeProperties : NLOp<"get_node_properties", [Pure]> {
+def GetNodeProperties : NLOp<"get_node_properties", [Pure, RowAlignedThroughOperands]> {
   let summary = "Read one property of a chunk of nodes, as a nullable value chunk";
   let description = [{
     Imperative counterpart of db.get_node_properties. The property is named once
@@ -359,7 +359,7 @@ def GetNodeProperties : NLOp<"get_node_properties", [Pure]> {
 /**
 * GetEdgeProperties
 */
-def GetEdgeProperties : NLOp<"get_edge_properties", [Pure]> {
+def GetEdgeProperties : NLOp<"get_edge_properties", [Pure, RowAlignedThroughOperands]> {
   let summary = "Read one property of a chunk of edges, as a nullable value chunk";
   let description = [{
     The edge counterpart of get_node_properties: same shape, but the input is a
@@ -375,7 +375,7 @@ def GetEdgeProperties : NLOp<"get_edge_properties", [Pure]> {
   }];
 }
 
-def GetNodeLabelSet : NLOp<"get_node_label_set", [Pure]> {
+def GetNodeLabelSet : NLOp<"get_node_label_set", [Pure, RowAlignedThroughOperands]> {
   let summary = "Read the label-set ID of each node in a chunk";
   let description = [{
     For each node ID in the input chunk, fetches its LabelSetID.
@@ -394,7 +394,7 @@ def GetNodeLabelSet : NLOp<"get_node_label_set", [Pure]> {
   }];
 }
 
-def CheckLabelConstraint : NLOp<"check_label_constraint", [Pure]> {
+def CheckLabelConstraint : NLOp<"check_label_constraint", [Pure, RowAlignedThroughOperands]> {
   let summary = "Test each label-set ID against a precomputed matching set";
   let description = [{
     For each LabelSetID in the input chunk, emits true if the ID appears in
@@ -415,7 +415,7 @@ def CheckLabelConstraint : NLOp<"check_label_constraint", [Pure]> {
   }];
 }
 
-def CheckEdgeTypeConstraint : NLOp<"check_edge_type_constraint", [Pure]> {
+def CheckEdgeTypeConstraint : NLOp<"check_edge_type_constraint", [Pure, RowAlignedThroughOperands]> {
   let summary = "Test each edge type ID against a precomputed allowed set";
   let description = [{
     For each EdgeTypeID in the input chunk, emits true if the ID appears in
@@ -1148,7 +1148,7 @@ def Constant : NLOp<"constant", [Pure, ConstantLike, InferTypeOpAdaptor]> {
   let assemblyFormat = "`(` $value `)` attr-dict";
 }
 
-def BroadcastConstant : NLOp<"broadcast_constant", [Pure]> {
+def BroadcastConstant : NLOp<"broadcast_constant", [Pure, RowAlignedThroughOperands]> {
   let summary = "Repeat a constant chunk's single value over the rows of a step";
   let description = [{
       A constant chunk holds one value standing for every row rather than one per
@@ -1179,7 +1179,7 @@ def BroadcastConstant : NLOp<"broadcast_constant", [Pure]> {
 /**
 * Add
 */
-def Add : NLOp<"add", [Pure, ConstantThroughOperands]> {
+def Add : NLOp<"add", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise addition of two value chunks";
   let description = [{
       Result type is determined by the types (e.g. int -> double promotion
@@ -1194,7 +1194,7 @@ def Add : NLOp<"add", [Pure, ConstantThroughOperands]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def Sub : NLOp<"sub", [Pure, ConstantThroughOperands]> {
+def Sub : NLOp<"sub", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise subtraction of two value chunks";
   let description = [{
       Result type is determined by the types (e.g. int -> double promotion
@@ -1209,7 +1209,7 @@ def Sub : NLOp<"sub", [Pure, ConstantThroughOperands]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def Mul : NLOp<"mul", [Pure, ConstantThroughOperands]> {
+def Mul : NLOp<"mul", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise multiplication of two value chunks";
   let description = [{
       Result type is determined by the types (e.g. int -> double promotion
@@ -1224,7 +1224,7 @@ def Mul : NLOp<"mul", [Pure, ConstantThroughOperands]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def Div : NLOp<"div", [Pure, ConstantThroughOperands]> {
+def Div : NLOp<"div", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise division of two value chunks";
   let description = [{
       Result type is determined by the types (e.g. int -> double promotion
@@ -1240,7 +1240,7 @@ def Div : NLOp<"div", [Pure, ConstantThroughOperands]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def Mod : NLOp<"mod", [Pure, ConstantThroughOperands]> {
+def Mod : NLOp<"mod", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise modulo of two value chunks";
   let description = [{
       Modulo by zero throws.
@@ -1254,7 +1254,7 @@ def Mod : NLOp<"mod", [Pure, ConstantThroughOperands]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def Pow : NLOp<"pow", [Pure, ConstantThroughOperands]> {
+def Pow : NLOp<"pow", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise exponentiation of two value chunks";
   let description = [{
       %r = nl.pow %x, %y : (!nl.chunk<i64>, !nl.chunk<i64>) -> !nl.chunk<f64>
@@ -1266,7 +1266,7 @@ def Pow : NLOp<"pow", [Pure, ConstantThroughOperands]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def Eq : NLOp<"eq", [Pure, ConstantThroughOperands]> {
+def Eq : NLOp<"eq", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise equality of two value chunks";
   let description = [{
       %r = nl.eq %x, %y : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
@@ -1278,7 +1278,7 @@ def Eq : NLOp<"eq", [Pure, ConstantThroughOperands]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def Neq : NLOp<"neq", [Pure, ConstantThroughOperands]> {
+def Neq : NLOp<"neq", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise inequality of two value chunks";
   let description = [{
       %r = nl.neq %x, %y : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
@@ -1290,7 +1290,7 @@ def Neq : NLOp<"neq", [Pure, ConstantThroughOperands]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def Gt : NLOp<"gt", [Pure, ConstantThroughOperands]> {
+def Gt : NLOp<"gt", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise greater-than comparison of two value chunks";
   let description = [{
       %r = nl.gt %x, %y : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
@@ -1302,7 +1302,7 @@ def Gt : NLOp<"gt", [Pure, ConstantThroughOperands]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def Lt : NLOp<"lt", [Pure, ConstantThroughOperands]> {
+def Lt : NLOp<"lt", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise less-than comparison of two value chunks";
   let description = [{
       %r = nl.lt %x, %y : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
@@ -1314,7 +1314,7 @@ def Lt : NLOp<"lt", [Pure, ConstantThroughOperands]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def Gte : NLOp<"gte", [Pure, ConstantThroughOperands]> {
+def Gte : NLOp<"gte", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise greater-than-or-equal comparison of two value chunks";
   let description = [{
       %r = nl.gte %x, %y : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
@@ -1326,7 +1326,7 @@ def Gte : NLOp<"gte", [Pure, ConstantThroughOperands]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def Lte : NLOp<"lte", [Pure, ConstantThroughOperands]> {
+def Lte : NLOp<"lte", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise less-than-or-equal comparison of two value chunks";
   let description = [{
       %r = nl.lte %x, %y : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>
@@ -1338,7 +1338,7 @@ def Lte : NLOp<"lte", [Pure, ConstantThroughOperands]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def And : NLOp<"and", [Pure, ConstantThroughOperands]> {
+def And : NLOp<"and", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise logical AND of two boolean chunks";
   let description = [{
       Three-valued (Kleene) logic: null AND false is false, null AND true is
@@ -1353,7 +1353,7 @@ def And : NLOp<"and", [Pure, ConstantThroughOperands]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def Or : NLOp<"or", [Pure, ConstantThroughOperands]> {
+def Or : NLOp<"or", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise logical OR of two boolean chunks";
   let description = [{
       Three-valued (Kleene) logic: null OR true is true, null OR false is
@@ -1368,7 +1368,7 @@ def Or : NLOp<"or", [Pure, ConstantThroughOperands]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def Xor : NLOp<"xor", [Pure, ConstantThroughOperands]> {
+def Xor : NLOp<"xor", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise logical XOR of two boolean chunks";
   let description = [{
       %r = nl.xor %x, %y : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<i1>) -> !nl.chunk<!storage.nullable<i1>>
@@ -1380,7 +1380,7 @@ def Xor : NLOp<"xor", [Pure, ConstantThroughOperands]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def Not : NLOp<"not", [Pure, ConstantThroughOperands]> {
+def Not : NLOp<"not", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise logical NOT of a boolean chunk";
   let description = [{
       Three-valued logic: NOT null is null, so the result is nullable when the
@@ -1396,7 +1396,7 @@ def Not : NLOp<"not", [Pure, ConstantThroughOperands]> {
 }
 
 class NLUnaryFunctionOp<string mnemonic, list<Trait> extraTraits = []>
-    : NLOp<mnemonic, !listconcat([Pure], extraTraits)> {
+    : NLOp<mnemonic, !listconcat([Pure, RowAlignedThroughOperands], extraTraits)> {
   let summary = "Apply a unary scalar function row-wise to a value chunk";
 
   let arguments = (ins NLChunk:$operand);
@@ -1411,7 +1411,7 @@ def ToInteger : NLUnaryFunctionOp<"to_integer", [ConstantThroughOperands]>;
 def ToFloat : NLUnaryFunctionOp<"to_float", [ConstantThroughOperands]>;
 def ToBoolean : NLUnaryFunctionOp<"to_boolean", [ConstantThroughOperands]>;
 
-class NLBinaryFunctionOp<string mnemonic> : NLOp<mnemonic, [Pure, ConstantThroughOperands]> {
+class NLBinaryFunctionOp<string mnemonic> : NLOp<mnemonic, [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Apply a binary scalar function row-wise to two value chunks";
 
   let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);

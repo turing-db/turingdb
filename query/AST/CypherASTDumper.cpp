@@ -2,6 +2,7 @@
 
 #include "CypherAST.h"
 #include "SinglePartQuery.h"
+#include "stmt/WithStmt.h"
 #include "ChangeQuery.h"
 #include "CommitQuery.h"
 #include "MergeDataPartsQuery.h"
@@ -265,6 +266,13 @@ void CypherASTDumper::dump(std::ostream& out, const SinglePartQuery* query) {
                     out << "    _" << std::hex << stmt << " {\n";
                     out << "        ASTType VECTOR_SEARCH\n";
                     out << "    }\n";
+                }
+                break;
+
+                case Stmt::Kind::WITH: {
+                    const WithStmt* withStmt = static_cast<const WithStmt*>(stmt);
+                    out << "    _" << std::hex << query << " ||--o{ _" << std::hex << withStmt << " : \"\"\n";
+                    dump(out, withStmt);
                 }
                 break;
 
@@ -601,6 +609,23 @@ void CypherASTDumper::dump(std::ostream& out, const ReturnStmt* ret) {
     out << "    _" << std::hex << ret << " ||--o{ _" << std::hex << projection << " : \"\"\n";
 
     dump(out, projection);
+}
+
+void CypherASTDumper::dump(std::ostream& out, const WithStmt* with) {
+    out << "    _" << std::hex << with << " {\n";
+    out << "        ASTType WITH\n";
+    out << "    }\n";
+
+    const Projection* projection = with->getProjection();
+
+    out << "    _" << std::hex << with << " ||--o{ _" << std::hex << projection << " : \"\"\n";
+
+    dump(out, projection);
+
+    if (const WhereClause* where = with->getWhere()) {
+        out << "    _" << std::hex << with << " ||--o{ _" << std::hex << where << " : \"\"\n";
+        dump(out, where);
+    }
 }
 
 void CypherASTDumper::dump(std::ostream& out, const Projection* projection) {

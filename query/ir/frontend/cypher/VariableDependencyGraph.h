@@ -1,6 +1,7 @@
 #pragma once
 
 #include <deque>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -14,6 +15,7 @@ namespace db {
 class CypherAST;
 class EntityPattern;
 class PatternElement;
+class Stmt;
 class UnwindStmt;
 
 /**
@@ -37,11 +39,27 @@ public:
     using Cycle = std::vector<VariableDependency*>;
     using EdgeIdentityMap = std::unordered_map<std::string, std::vector<VariableDependency*>>;
     using UnwindSourceMap = std::unordered_map<const VariableDependency*, const UnwindStmt*>;
+    using BoundVars = std::vector<VariableDependency*>;
 
     VariableDependencyGraph();
     ~VariableDependencyGraph();
 
-    void buildFromAST(const CypherAST* ast);
+    /// Inserts the variables of one query part - the statements between two WITH
+    /// barriers - keeping the ones @ref registerBoundVariable already declared, so that a
+    /// pattern naming a bound variable depends on it rather than on a variable of its own
+    void build(std::span<Stmt* const> stmts);
+
+    /**
+     * @brief Declares a variable a preceding WITH bound, whose value the code generator
+     * already holds.
+     * @detail Enters the graph isolated, as an UNWIND variable does, and is reused by any
+     * pattern of the following part that names it. A pattern reaching one is a join onto
+     * the column the barrier published, not a scan.
+     */
+    VariableDependency* registerBoundVariable(std::string_view name);
+
+    /// Drops every variable and edge, so the graph can be rebuilt for the next query part
+    void clear();
 
     /// Given a pattern (e.g. (n)-[e]->(m)), inserts all vars into the dependency graph
     void registerPatternElement(const PatternElement* ptn);
@@ -55,6 +73,7 @@ public:
     const auto& edges() const { return _edges; }
     const EdgeIdentityMap& edgeIdentities() const { return _edgeIdentities; }
     const UnwindSourceMap& unwindSources() const { return _unwindSources; }
+    const BoundVars& boundVars() const { return _boundVars; }
 
     bool empty() const { return _vars.empty() && _edges.empty(); }
 
@@ -77,6 +96,9 @@ private:
 
     // Maps each UNWIND variable to the statement whose list it is bound to
     UnwindSourceMap _unwindSources;
+
+    // The variables a preceding WITH bound, in the order that WITH projects them
+    BoundVars _boundVars;
 
     VariableDependency* getOrCreateVariable(const EntityPattern* entity);
     VariableDependency* newVariable(const EntityPattern* entity);

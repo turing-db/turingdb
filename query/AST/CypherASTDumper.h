@@ -22,6 +22,7 @@ class Projection;
 class Pattern;
 class PatternElement;
 class WhereClause;
+class WithStmt;
 class Expr;
 class NodePattern;
 class EdgePattern;
@@ -72,6 +73,7 @@ private:
     std::unordered_set<const VarDecl*> _dumpedVariables;
 
     void dump(std::ostream& out, const SinglePartQuery* query);
+    void dump(std::ostream& out, const WithStmt* with);
     void dump(std::ostream& out, const LoadGraphQuery* query);
     void dump(std::ostream& out, const LoadJsonlQuery* query);
     void dump(std::ostream& out, const ChangeQuery* query);

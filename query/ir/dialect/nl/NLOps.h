@@ -13,6 +13,7 @@
 #include "NLTypes.h"
 
 #include "IRConstantColumn.h"
+#include "IRRowAlignment.h"
 
 #define GET_OP_CLASSES
 #include "NLOps.h.inc"

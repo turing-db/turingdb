@@ -33,6 +33,7 @@ class OrderBy;
 class Skip;
 class Limit;
 class ReturnStmt;
+class WithStmt;
 class Projection;
 class CreateNodePropertyIndexQuery;
 class CreateEdgePropertyIndexQuery;
@@ -55,6 +56,7 @@ public:
     // Query types
     void analyze(const SinglePartQuery* query);
     void analyze(const ReturnStmt* returnSt);
+    void analyze(const WithStmt* withSt);
     void analyze(const LoadGraphQuery* loadGraph);
     void analyze(const CreateGraphQuery* createGraph);
     void analyze(LoadGMLQuery* loadGML);
@@ -88,8 +90,11 @@ private:
 
     bool _isV3 {false};
 
+    void analyzeProjection(Projection* projection, const void* clause);
+    void openWithScope(const Projection* projection);
+    void analyzeWithAliases(const Projection* projection) const;
     void declareItemAlias(Expr* item, std::string_view alias);
-    void analyzeDistinct(const ReturnStmt* returnSt, const Projection* projection) const;
+    void analyzeDistinct(const Projection* projection, const void* clause) const;
     void analyzeNestedAggregates(const Projection* projection) const;
     void analyzeAggregateArguments(const Expr* expr, const Projection* projection) const;
     bool readsAnAggregateItem(const Expr* expr, const Projection* projection) const;

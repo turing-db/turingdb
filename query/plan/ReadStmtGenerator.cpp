@@ -126,6 +126,10 @@ void ReadStmtGenerator::generateStmt(const Stmt* stmt) {
             generateUnwindStmt(static_cast<const UnwindStmt*>(stmt));
         break;
 
+        case Stmt::Kind::WITH:
+            throwError("WITH is only supported by the MLIR query engine.", stmt);
+        break;
+
         case Stmt::Kind::CREATE:
         case Stmt::Kind::SET:
         case Stmt::Kind::DELETE:

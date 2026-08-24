@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <span>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -38,6 +39,10 @@ class UnwindStmt;
 class VarDecl;
 class VariableDependency;
 class DependencyEdge;
+class SinglePartQuery;
+class Stmt;
+class WhereClause;
+class WithStmt;
 
 class DBProgramGenerator {
 public:
@@ -87,7 +92,26 @@ private:
         llvm::SmallVector<mlir::Value> _columns;
     };
 
-    void generateTraversal(const CypherAST* ast);
+    // Generates the read part of the query one WITH barrier at a time: each part matches
+    // over the columns the barrier before it published, and each barrier replaces those
+    // columns with the ones its own projection publishes
+    void generateQueryParts(const SinglePartQuery* query);
+
+    // The traversal, property constraints and predicates of one query part: the
+    // statements between two WITH barriers
+    void generatePart(std::span<Stmt* const> stmts);
+
+    void generateTraversal(std::span<Stmt* const> stmts);
+
+    // Rejects an edge variable a WITH bound and a later pattern matches again: the column
+    // of an edge is published under the identity of the traversal that produced it, and a
+    // barrier leaves that traversal behind, so there is nothing left to join the pattern
+    // onto
+    void throwOnRematchedBoundEdge() const;
+
+    // Walks the patterns of a part out from the variables a WITH bound, extending the
+    // dataflow the barrier left behind rather than opening one of its own
+    void extendBoundDataflow(DefinedVars& defined);
 
     // Adds filters for edges which should be equivalent (joined on)
     void resolveEdgeIdentities();
@@ -96,6 +120,14 @@ private:
     void translateComponent(const VariableDependency* root,
                             std::unordered_set<const VariableDependency*>& defined,
                             std::vector<const VariableDependency*>& outVars);
+
+    // Walks a component out from @param root, one edge traversal per hop. The root has to
+    // hold a column already: translateComponent opens one with a scan, and a variable a
+    // WITH bound carries the one the barrier published
+    void expandComponent(const VariableDependency* root,
+                         std::unordered_set<const VariableDependency*>& defined,
+                         std::vector<const VariableDependency*>& carriedSet,
+                         std::vector<const VariableDependency*>& outVars);
 
     // Converts an arbitrary number of connected components into a cascading nest of
     // CrossProducts
@@ -106,10 +138,43 @@ private:
     // Moves a translated connected component into a CrossProduct factor
     void moveComponentToFactor(TranslatedComponent& component, mlir::Block* factorBlock);
 
-    void generateCreate(const CypherAST* ast);
-    void generateSet(const CypherAST* ast);
-    void generateDelete(const CypherAST* ast);
-    void generateOutput(const CypherAST* ast);
+    void generateCreate(const SinglePartQuery* query);
+    void generateSet(const SinglePartQuery* query);
+    void generateDelete(const SinglePartQuery* query);
+    void generateOutput(const Projection* projection);
+
+    // Generates a WITH barrier: its projection, then the scope that projection publishes,
+    // then its WHERE over the rows that survived
+    void generateWith(const WithStmt* with);
+
+    // Replaces every binding the statements before a barrier had with the columns the
+    // barrier publishes, each under the name the projection gives it
+    void publishBoundColumns(llvm::ArrayRef<llvm::StringRef> names,
+                             llvm::ArrayRef<mlir::Value> columns);
+
+    // The column every variable in scope currently holds, under its name: one per
+    // traversal variable, plus one per edge identity under its representative
+    void collectVariableColumns(VariableColumnMap& variableColumns) const;
+
+    // The column and the name of every item of a projection, in item order
+    void translateProjection(const Projection* projection,
+                             const VariableColumnMap& variableColumns,
+                             llvm::SmallVectorImpl<mlir::Value>& projected,
+                             llvm::SmallVectorImpl<llvm::StringRef>& names);
+
+    // Applies what a projection asks for once its items are columns: DISTINCT dedups
+    // them, ORDER BY reorders the survivors, and SKIP and LIMIT cut the sorted rows
+    void translateProjectionTail(const Projection* projection,
+                                 const VariableColumnMap& variableColumns,
+                                 llvm::SmallVectorImpl<mlir::Value>& projected);
+
+    // Cuts the projection with a db.skip or a db.limit of @param countExpr rows, replacing
+    // each cut column with its counterpart
+    template <typename CutOp>
+    void translateCut(const Projection* projection,
+                      const Expr* countExpr,
+                      std::string_view clauseName,
+                      llvm::SmallVectorImpl<mlir::Value>& projected);
 
     // Dedups the projection with a RemoveDuplicates over the varying columns of
     // @param projected, replacing each of them with its deduped counterpart
@@ -143,12 +208,12 @@ private:
     // declares its variables so the choice is the query's and not the addresses'
     mlir::Value resolveWildcardColumn() const;
 
-    void generatePropertyConstraints(const CypherAST* ast);
-    void generateFilters(const CypherAST* ast);
+    void generatePropertyConstraints(std::span<Stmt* const> stmts);
+    void generateFilters(std::span<Stmt* const> stmts);
 
     void applyPredicateFilters(std::span<const Expr* const> predicates);
 
-    void generateGroupAggregate(const CypherAST* ast);
+    void generateGroupAggregate(const Projection* projection);
 
     // Publishes the grouped column of every grouping key and aggregate result an ORDER BY
     // key reads, so that translating the key computes over one value per group instead of

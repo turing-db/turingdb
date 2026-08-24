@@ -101,6 +101,7 @@ class CreateEdgePropertyIndexQuery;
 class DropIndexQuery;
 class MergeDataPartsQuery;
 class UnwindStmt;
+class WithStmt;
 
 class CypherAST {
 public:
@@ -187,6 +188,7 @@ public:
     friend DropIndexQuery;
     friend MergeDataPartsQuery;
     friend UnwindStmt;
+    friend WithStmt;
 
     using QueryCommands = std::vector<QueryCommand*>;
 
