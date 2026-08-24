@@ -31,6 +31,8 @@
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
+#include "columns/AllowedKinds.h"
+#include "columns/ColumnOperatorDispatcher.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
 #include "GraphPath.h"
@@ -505,16 +507,9 @@ void asString(std::string& out, db::ValueType v) {
     out += ValueTypeName::value(v);
 }
 
-void asString(std::string& out, ChangeID changeID) {
-    out += fmt::format("{:x}", changeID.get());
-}
-
-void asString(std::string& out, const CommitBuilder* commit) {
-    out += fmt::format("{:x}", commit->hash().get());
-}
-
-void asString(std::string& out, const Change* change) {
-    out += fmt::format("{:x}", change->id().get());
+template <int I>
+void asString(std::string& out, const TemplateCommitHash<I>& hash) {
+    out += fmt::format("{:x}", hash.get());
 }
 
 void asString(std::string& out, const PropertyNull) {
@@ -603,67 +598,29 @@ void tabulateWrite(tabulate::RowStream& rs, const T& value) {
     rs << out;
 }
 
-#define TABULATE_COL_CASE(Type, i)                           \
-    case Type::staticKind(): {                               \
-        const Type& src = *static_cast<const Type*>(column); \
-        tabulateWrite(rs, src[i]);                           \
-    } break;
+struct TabulateCell {
+    tabulate::RowStream& _rowStream;
+    size_t _row {0};
 
-// Writes one column's cell at this row into the table row. Every printable column kind
-// is listed here once, so the dataframe renderer and the nl sink cannot drift apart, and
-// a kind neither can print fails loudly in both rather than showing a placeholder.
-void tabulateCell(tabulate::RowStream& rs, const Column* column, size_t row) {
-    switch (column->getKind()) {
-        TABULATE_COL_CASE(ColumnVector<EntityID>, row)
-        TABULATE_COL_CASE(ColumnVector<NodeID>, row)
-        TABULATE_COL_CASE(ColumnVector<EdgeID>, row)
-        TABULATE_COL_CASE(ColumnVector<Path>, row)
-        TABULATE_COL_CASE(ColumnVector<EntityList>, row)
-        TABULATE_COL_CASE(ColumnVector<PropertyTypeID>, row)
-        TABULATE_COL_CASE(ColumnVector<LabelID>, row)
-        TABULATE_COL_CASE(ColumnVector<EdgeTypeID>, row)
-        TABULATE_COL_CASE(ColumnVector<LabelSetID>, row)
-        TABULATE_COL_CASE(ColumnVector<types::UInt64::Primitive>, row)
-        TABULATE_COL_CASE(ColumnVector<types::Int64::Primitive>, row)
-        TABULATE_COL_CASE(ColumnVector<types::Double::Primitive>, row)
-        TABULATE_COL_CASE(ColumnVector<types::String::Primitive>, row)
-        TABULATE_COL_CASE(ColumnVector<types::Bool::Primitive>, row)
-        TABULATE_COL_CASE(ColumnVector<ValueType>, row)
-        TABULATE_COL_CASE(ColumnVector<ChangeID>, row)
-        TABULATE_COL_CASE(ColumnOptVector<types::UInt64::Primitive>, row)
-        TABULATE_COL_CASE(ColumnOptVector<types::Int64::Primitive>, row)
-        TABULATE_COL_CASE(ColumnOptVector<types::Double::Primitive>, row)
-        TABULATE_COL_CASE(ColumnOptVector<types::String::Primitive>, row)
-        TABULATE_COL_CASE(ColumnOptVector<types::Bool::Primitive>, row)
-        TABULATE_COL_CASE(ColumnOptVector<types::Embedding::Primitive>, row)
-        TABULATE_COL_CASE(ColumnVector<std::string>, row)
-        TABULATE_COL_CASE(ColumnOptVector<std::string>, row)
-        TABULATE_COL_CASE(ColumnVector<const CommitBuilder*>, row)
-        TABULATE_COL_CASE(ColumnVector<const Change*>, row)
-        TABULATE_COL_CASE(ColumnConst<EntityID>, row)
-        TABULATE_COL_CASE(ColumnConst<NodeID>, row)
-        TABULATE_COL_CASE(ColumnConst<EdgeID>, row)
-        TABULATE_COL_CASE(ColumnConst<types::UInt64::Primitive>, row)
-        TABULATE_COL_CASE(ColumnConst<types::Int64::Primitive>, row)
-        TABULATE_COL_CASE(ColumnConst<types::Double::Primitive>, row)
-        TABULATE_COL_CASE(ColumnConst<types::String::Primitive>, row)
-        TABULATE_COL_CASE(ColumnConst<types::Bool::Primitive>, row)
-        TABULATE_COL_CASE(ColumnConst<types::Embedding::Primitive>, row)
-        TABULATE_COL_CASE(ColumnConst<PropertyNull>, row)
-
-        TABULATE_COL_CASE(ColumnConst<ListView>, row)
-        TABULATE_COL_CASE(ColumnVector<ListView>, row)
-        TABULATE_COL_CASE(ColumnVector<ListElementView>, row)
-
-        // toX functions on a constant string produce opt const
-        TABULATE_COL_CASE(ColumnConst<std::optional<types::Int64::Primitive>>, row)
-        TABULATE_COL_CASE(ColumnConst<std::optional<types::Double::Primitive>>, row)
-        TABULATE_COL_CASE(ColumnConst<std::optional<types::Bool::Primitive>>, row)
-
-        default: {
-            panic("can not print columns of kind {}", column->getKind());
-        }
+    template <typename T>
+    void operator()(const ColumnVector<T>* column) {
+        tabulateWrite(_rowStream, column->at(_row));
     }
+
+    template <typename T>
+    void operator()(const ColumnConst<T>* column) {
+        tabulateWrite(_rowStream, column->at(_row));
+    }
+};
+
+void tabulateCell(tabulate::RowStream& rs, const Column* column, size_t row) {
+    TabulateCell cell(rs, row);
+
+    using Dispatcher = ColumnSingleDispatcher<OutputtedTypes::Allowed,
+                                              TabulateCell,
+                                              OutputtedTypes::Excluded>;
+
+    Dispatcher::dispatch(column, cell);
 }
 
 void queryCallback(size_t execCount, const Dataframe* df, tabulate::Table& table) {

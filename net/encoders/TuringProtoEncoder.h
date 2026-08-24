@@ -54,37 +54,6 @@ inline WireSize computeListByteSize(std::span<const db::ListElementView> element
     return static_cast<WireSize>(totalSize);
 }
 
-using ProtoEncoderSupportedTypes = std::tuple<
-    db::types::Int64::Primitive,
-    db::types::UInt64::Primitive,
-    db::types::Double::Primitive,
-    db::types::String::Primitive,
-    db::types::Bool::Primitive,
-    db::types::Embedding::Primitive,
-    std::optional<db::types::Int64::Primitive>,
-    std::optional<db::types::UInt64::Primitive>,
-    std::optional<db::types::Double::Primitive>,
-    std::optional<db::types::String::Primitive>,
-    std::optional<db::types::Bool::Primitive>,
-    std::optional<db::types::Embedding::Primitive>,
-    db::NodeID,
-    db::EdgeID,
-    db::LabelID,
-    db::LabelSetID,
-    db::EdgeTypeID,
-    db::PropertyTypeID,
-    db::ChangeID,
-    db::TemplateCommitHash<0>,
-    db::TemplateCommitHash<1>,
-    size_t,
-    std::string,
-    db::Path,
-    db::EntityList,
-    db::ListView,
-    db::ListElementView,
-    db::PropertyNull,
-    db::ValueType>;
-
 struct ColInternalKindToProtoEnum {
     template <typename T>
     static constexpr auto map() {
