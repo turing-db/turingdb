@@ -682,6 +682,21 @@ int compareListElementColumn(const Column* column, size_t a, size_t b) {
     return 0;
 }
 
+// 3-way compare two rows of a collected list column. Two lists order lexicographically
+// on the element order above, so a list can be the key the rows are sorted on.
+int compareListColumn(const Column* column, size_t a, size_t b) {
+    const auto& raw = static_cast<const ColumnVector<ListView>*>(column)->getRaw();
+    const std::strong_ordering order = raw[a] <=> raw[b];
+
+    if (order == std::strong_ordering::less) {
+        return -1;
+    } else if (order == std::strong_ordering::greater) {
+        return 1;
+    }
+
+    return 0;
+}
+
 // Append the raw bytes of a present property value to a distinct row key. The key
 // is a std::string used purely as a growable byte buffer - not text - so the value
 // is appended verbatim: a trivially-copyable primitive copies its object bytes; a
@@ -3602,6 +3617,10 @@ NLCopyFunction NLExecutor::selectListElementCopyFunction() {
 
 NLBroadcastFunction NLExecutor::selectListBlockRepeatFunction() {
     return &blockRepeatColumn<ListView>;
+}
+
+NLCompareFunction NLExecutor::selectListCompareFunction() {
+    return &compareListColumn;
 }
 
 NLCopyFunction NLExecutor::selectListCopyFunction() {

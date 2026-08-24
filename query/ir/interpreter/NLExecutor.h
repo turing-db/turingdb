@@ -275,6 +275,10 @@ public:
     static NLCompareFunction selectCompareFunction(NLChunkKind kind);
     static NLCompareFunction selectOptCompareFunction(ValueType valueType);
 
+    // The 3-way row comparator for a collected list chunk, ordering two lists
+    // lexicographically over their elements.
+    static NLCompareFunction selectListCompareFunction();
+
     // The handlers of a plain value column - a ColumnVector<Primitive> rather than the
     // nullable ColumnOptVector a property fetch yields. A tally comes out this way, and so
     // does an expression over one: both are present in every row. Numeric only, since

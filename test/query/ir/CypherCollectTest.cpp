@@ -227,6 +227,10 @@ public:
         std::sort(rows.begin(), rows.end());
     }
 
+    void rowsInEmitOrder(std::vector<Row>& rows) const {
+        rows = _rows;
+    }
+
 private:
     std::vector<Row> _rows;
 };
@@ -401,6 +405,12 @@ protected:
     void buildTeamGraph() {
         create(R"(CREATE (:Node {team: "red", name: "alice", score: 10}), (:Node {team: "red", name: "carol", score: 20}), (:Node {team: "blue", name: "bob", score: 100}))");
         create(R"(CREATE (:Node {team: "blue", name: "dan"}))");
+    }
+
+    // Inserts 3 nodes so that one group's collected list is a prefix of the other's:
+    // solo collects ["ann"], duo ["ann", "bob"].
+    void buildPrefixTeamGraph() {
+        create(R"(CREATE (:Node {team: "duo", name: "ann"}), (:Node {team: "solo", name: "ann"}), (:Node {team: "duo", name: "bob"}))");
     }
 
     // Inserts alice, who KNOWS both bob and carol.
@@ -683,20 +693,107 @@ TEST_F(CypherCollectTest, groupedCollectWithOrderByAndLimit) {
     EXPECT_EQ(rows, expected);
 }
 
-// A list is carried through the sort row-aligned with the keys but never compared, so it
-// cannot be the key the rows are ordered on - alias or spelled out.
-TEST_F(CypherCollectTest, rejectsOrderByOnTheCollectedList) {
+// Two lists order lexicographically, so the collected list can be the sort key: red's
+// ["alice", "carol"] sorts before blue's ["bob", "dan"] on the first element.
+TEST_F(CypherCollectTest, groupedCollectOrderedByTheList) {
     buildTeamGraph();
 
-    QueryStatus aliasStatus;
-    runQuery("MATCH (n:Node) RETURN n.team, collect(n.name) AS names ORDER BY names", aliasStatus);
-    EXPECT_EQ(aliasStatus.getStatus(), QueryStatus::Status::EXEC_ERROR);
-    EXPECT_EQ(aliasStatus.getError(), "a list column cannot be a sort key");
+    KeyedStringListSink sink;
+    match("MATCH (n:Node) RETURN n.team, collect(n.name) AS names ORDER BY names", sink);
 
-    QueryStatus spelledOutStatus;
-    runQuery("MATCH (n:Node) RETURN n.team, collect(n.name) ORDER BY collect(n.name)", spelledOutStatus);
-    EXPECT_EQ(spelledOutStatus.getStatus(), QueryStatus::Status::EXEC_ERROR);
-    EXPECT_EQ(spelledOutStatus.getError(), "a list column cannot be a sort key");
+    std::vector<KeyedStringListSink::Row> rows;
+    sink.rowsInEmitOrder(rows);
+
+    const std::vector<KeyedStringListSink::Row> expected {
+        {"red", {"alice", "carol"}},
+        {"blue", {"bob", "dan"}},
+    };
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(CypherCollectTest, groupedCollectOrderedByTheListDescending) {
+    buildTeamGraph();
+
+    KeyedStringListSink sink;
+    match("MATCH (n:Node) RETURN n.team, collect(n.name) AS names ORDER BY names DESC", sink);
+
+    std::vector<KeyedStringListSink::Row> rows;
+    sink.rowsInEmitOrder(rows);
+
+    const std::vector<KeyedStringListSink::Row> expected {
+        {"blue", {"bob", "dan"}},
+        {"red", {"alice", "carol"}},
+    };
+    EXPECT_EQ(rows, expected);
+}
+
+// The key need not be the alias: spelling the aggregate out again reads the same
+// collected column rather than collecting a second one.
+TEST_F(CypherCollectTest, groupedCollectOrderedBySpelledOutCollect) {
+    buildTeamGraph();
+
+    KeyedStringListSink sink;
+    match("MATCH (n:Node) RETURN n.team, collect(n.name) ORDER BY collect(n.name)", sink);
+
+    std::vector<KeyedStringListSink::Row> rows;
+    sink.rowsInEmitOrder(rows);
+
+    const std::vector<KeyedStringListSink::Row> expected {
+        {"red", {"alice", "carol"}},
+        {"blue", {"bob", "dan"}},
+    };
+    EXPECT_EQ(rows, expected);
+}
+
+// Element-wise comparison runs out of elements before it finds a difference, so the
+// shorter list - the prefix - sorts first.
+TEST_F(CypherCollectTest, groupedCollectOrderedByListPrefix) {
+    buildPrefixTeamGraph();
+
+    KeyedStringListSink sink;
+    match("MATCH (n:Node) RETURN n.team, collect(n.name) AS names ORDER BY names", sink);
+
+    std::vector<KeyedStringListSink::Row> rows;
+    sink.rowsInEmitOrder(rows);
+
+    const std::vector<KeyedStringListSink::Row> expected {
+        {"solo", {"ann"}},
+        {"duo", {"ann", "bob"}},
+    };
+    EXPECT_EQ(rows, expected);
+}
+
+// ORDER BY ... LIMIT fuses into a top-K accumulator, which trims by gathering the
+// surviving rows - so the list is both the key compared and a column gathered.
+TEST_F(CypherCollectTest, groupedCollectOrderedByTheListWithLimit) {
+    buildTeamGraph();
+
+    KeyedStringListSink sink;
+    match("MATCH (n:Node) RETURN n.team, collect(n.name) AS names ORDER BY names LIMIT 1", sink);
+
+    std::vector<KeyedStringListSink::Row> rows;
+    sink.rowsInEmitOrder(rows);
+
+    const std::vector<KeyedStringListSink::Row> expected {{"red", {"alice", "carol"}}};
+    EXPECT_EQ(rows, expected);
+}
+
+// A list of entities orders by its elements' IDs: red collects nodes 0 and 1, blue 2
+// and 3, so red sorts first.
+TEST_F(CypherCollectTest, groupedCollectOfNodesOrderedByTheList) {
+    buildTeamGraph();
+
+    KeyedNodeListSink sink;
+    match("MATCH (n:Node) RETURN n.team, collect(n) AS nodes ORDER BY nodes", sink);
+
+    std::vector<KeyedNodeListSink::Row> rows;
+    sink.rowsInEmitOrder(rows);
+
+    const std::vector<KeyedNodeListSink::Row> expected {
+        {"red", {0, 1}},
+        {"blue", {2, 3}},
+    };
+    EXPECT_EQ(rows, expected);
 }
 
 TEST_F(CypherCollectTest, rejectsCollectOfConstant) {
