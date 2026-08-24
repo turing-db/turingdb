@@ -105,6 +105,10 @@ bool isEdgeHop(Operation* op) {
     return isa<GetOutEdges, GetInEdges, GetEdges, GetOutEdgesByType, GetInEdgesByType>(op);
 }
 
+bool isReverseHop(Operation* op) {
+    return isa<GetInEdges, GetInEdgesByType>(op);
+}
+
 // The columns a cross_product factor yields, in result order.
 Operation::operand_range factorYieldColumns(mlir::Region& factor) {
     mlir::Block& factorBlock = factor.front();
@@ -155,9 +159,12 @@ Value climbToLineageAnchor(Value column) {
         if (isEdgeHop(def)) {
             const unsigned resultIndex = cast<OpResult>(column).getResultNumber();
             const unsigned srcResultIndex = 0;
+            const unsigned tgtResultIndex = 3;
             const unsigned fixedResultCount = 4;
 
-            if (resultIndex == srcResultIndex) {
+            const unsigned inputResultIndex = isReverseHop(def) ? tgtResultIndex : srcResultIndex;
+
+            if (resultIndex == inputResultIndex) {
                 column = def->getOperand(0);
             } else if (resultIndex >= fixedResultCount) {
                 // Carried columns follow input_nodes (operand 0) in operand order.
