@@ -15,7 +15,7 @@ public:
     }
 
     explicit BufferChunk(size_t size)
-        : _buf(static_cast<T*>(std::aligned_alloc(alignof(T), sizeof(T) * N))),
+        : _buf(static_cast<T*>(std::aligned_alloc(alignof(T), sizeof(T) * size))),
         _capacity(size)
     {
     }
@@ -30,8 +30,6 @@ public:
     [[nodiscard]] bool canFit(size_t numTs) const { return _capacity - _size >= numTs; }
 
 private:
-    template <typename V, size_t M>
-    friend class ViewBuffer;
     template <typename U, size_t M>
     friend class ByteBuffer;
     
