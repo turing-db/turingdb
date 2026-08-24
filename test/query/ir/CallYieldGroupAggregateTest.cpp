@@ -81,6 +81,33 @@ private:
     EdgeTypeCounts _counts;
 };
 
+
+// Collects the (label ID, count) rows of a count grouped on a yielded label ID column.
+class LabelCountSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* ids = dynamic_cast<const ColumnVector<LabelID>*>(chunks[0]);
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
+        ASSERT_NE(ids, nullptr);
+        ASSERT_NE(counts, nullptr);
+        ASSERT_EQ(ids->size(), counts->size());
+
+        const auto& idRaw = ids->getRaw();
+        const auto& countRaw = counts->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            const auto inserted = _counts.emplace(idRaw[rowIndex].getValue(), countRaw[rowIndex]);
+            ASSERT_TRUE(inserted.second);
+        }
+    }
+
+    const std::map<LabelID::Type, uint64_t>& getCounts() const { return _counts; }
+
+private:
+    std::map<LabelID::Type, uint64_t> _counts;
+};
+
 }
 
 // A CALL's yielded columns are variables of the query like any other, so a RETURN may
@@ -145,6 +172,21 @@ TEST_F(CallYieldGroupAggregateTest, groupsRepeatedYieldedValues) {
     runQuery("MATCH (n:Person) CALL db.edgeTypes() YIELD id RETURN id, count(*)", grouped);
 
     EXPECT_EQ(grouped.getCounts(), yielded.getCounts());
+}
+
+// Grouping on one yielded column while aggregating another: the key and the aggregate's
+// input are both bound by the same CALL, so the grouped key has to replace what the
+// projection reads back or it reads a column the aggregate's loop never defined.
+TEST_F(CallYieldGroupAggregateTest, countsOneYieldedColumnGroupedByAnother) {
+    LabelCountSink grouped;
+    runQuery("CALL db.labels() YIELD id, label RETURN id, count(label)", grouped);
+
+    ASSERT_FALSE(grouped.getCounts().empty());
+
+    // The schema names every label once, so each ID is a group of one row.
+    for (const auto& [labelID, count] : grouped.getCounts()) {
+        EXPECT_EQ(count, 1u);
+    }
 }
 
 int main(int argc, char** argv) {
