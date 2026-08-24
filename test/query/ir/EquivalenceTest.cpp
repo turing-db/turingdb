@@ -556,6 +556,8 @@ TEST_F(EquivalenceTest, arbitraryFilters) {
 
     expectEquivalent("MATCH (a {isFrench: true})-->(b), (c {hasPhD: false}) WHERE a.hasPhD RETURN a, b, c");
     expectEquivalent("MATCH (a {age: 32})-->(b), (c {isFrench: false}) WHERE a.isFrench RETURN a, c");
+
+    expectEquivalent("MATCH (a)<--(n)-->(m) WHERE n.age = 32 RETURN *");
 }
 
 TEST_F(EquivalenceTest, labelConstraints) {

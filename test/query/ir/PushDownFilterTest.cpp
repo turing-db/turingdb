@@ -240,3 +240,38 @@ TEST_F(PushDownFilterTest, sinksPredicateIntoCrossProductFactor) {
     ASSERT_EQ(reads.size(), 1u);
     EXPECT_TRUE(mlir::isa<mlir::db::ScanNodes>(reads.front().getInputNodes().getDefiningOp()));
 }
+
+// MATCH (a)<--(n)-->(m) WHERE n.age = 32 RETURN a, n, m
+const char* const inEdgeNeighbourPredicate = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %s1, %e1, %et1, %t1 = db.get_in_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %s2, %e2, %et2, %t2, %ac = db.get_out_edges(%s1, {%t1}) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %age = db.get_node_properties(%s2, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %k = db.constant(32 : i64)
+  %mask = db.eq %age, %k : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %nf, %mf, %af = db.filter(%mask, {%s2, %t2, %ac}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%af, %nf, %mf) names ["a", "n", "m"] : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(PushDownFilterTest, leavesInEdgeNeighbourPredicateAlone) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(inEdgeNeighbourPredicate);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runPushDown(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    // The predicate is not pushed: the in-hop binds n, so there is nowhere earlier to go.
+    llvm::SmallVector<mlir::db::FilterOp> filters = collect<mlir::db::FilterOp>(*module);
+    ASSERT_EQ(filters.size(), 1u);
+    mlir::db::FilterOp filter = filters.front();
+
+    // Still the original many-column filter, still below the hop that binds n - not a
+    // single-column filter hoisted above the scan.
+    EXPECT_EQ(filter.getColumnsToFilter().size(), 3u);
+
+    llvm::SmallVector<mlir::db::GetInEdges> inHops = collect<mlir::db::GetInEdges>(*module);
+    ASSERT_EQ(inHops.size(), 1u);
+    EXPECT_TRUE(inHops.front().getOperation()->isBeforeInBlock(filter.getOperation()));
+}
