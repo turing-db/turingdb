@@ -10,6 +10,7 @@
 #include "NLOps.h"
 
 #include "IRConstantColumn.h"
+#include "list/ListBuffer.h"
 #include "mlir/IR/Block.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"

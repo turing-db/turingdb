@@ -115,7 +115,7 @@ public:
     [[nodiscard]] bool canFit(size_t numBytes) const;
 
 private:
-    std::byte* _buf;
+    std::byte* _buf {nullptr};
     /// The number of elements of @ref _buf that have been written to
     size_t _size {0};
     size_t _capacity {0};

@@ -71,6 +71,9 @@ private:
     ListElementViewBuffer<N> _views;
 };
 
+// Default size; alias to avoid ugly empty template
+using QueryListBuffer = ListBuffer<>;
+
 template <typename T>
 concept Listable = TypeConcepts::InTuple<T, ListableTypesImpl>;
 
