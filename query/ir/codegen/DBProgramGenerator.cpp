@@ -442,7 +442,8 @@ template<typename EdgeOp>
 void DBProgramGenerator::addEdgeTraversal(const VariableDependency* src,
                                           const VariableDependency* edge,
                                           const VariableDependency* tgt,
-                                          const std::vector<const VariableDependency*>& carrySet) {
+                                          const std::vector<const VariableDependency*>& carrySet,
+                                          mlir::Value* joinedTarget) {
     static_assert(std::is_same_v<EdgeOp, mlir::db::GetOutEdges>
                       or std::is_same_v<EdgeOp, mlir::db::GetInEdges>
                       or std::is_same_v<EdgeOp, mlir::db::GetEdges>, "Invalid op");
@@ -502,14 +503,17 @@ void DBProgramGenerator::addEdgeTraversal(const VariableDependency* src,
 
     constexpr bool forwardOrientation = std::is_same_v<EdgeOp, mlir::db::GetOutEdges>
                                         or std::is_same_v<EdgeOp, mlir::db::GetEdges>;
-    if constexpr (forwardOrientation) {
-        registerValue(src, newSrcs);
-        registerValue(tgt, newTgts);
-    } else {
-        registerValue(src, newTgts);
-        registerValue(tgt, newSrcs);
-    }
+    const mlir::Value sourceColumn = forwardOrientation ? newSrcs : newTgts;
+    const mlir::Value targetColumn = forwardOrientation ? newTgts : newSrcs;
+
+    registerValue(src, sourceColumn);
     registerValue(edge, newEdges);
+
+    if (joinedTarget) {
+        *joinedTarget = targetColumn;
+    } else {
+        registerValue(tgt, targetColumn);
+    }
 
     // Register the new values of the carry set, appearing starting from index 4 in the
     // result range
@@ -601,6 +605,7 @@ void DBProgramGenerator::generateQueryParts(const SinglePartQuery* query) {
 
 void DBProgramGenerator::generatePart(std::span<Stmt* const> stmts) {
     generateTraversal(stmts);
+    throwOnUnboundPatternVariable();
     resolveEdgeIdentities();
     generatePropertyConstraints(stmts);
     generateFilters(stmts);
@@ -866,6 +871,23 @@ void DBProgramGenerator::throwOnRematchedBoundEdge() const {
     }
 }
 
+bool DBProgramGenerator::holdsColumn(const VariableDependency* var) const {
+    const auto findIt = _varMap.find(var);
+
+    return findIt != _varMap.end() && !findIt->second.empty();
+}
+
+void DBProgramGenerator::throwOnUnboundPatternVariable() const {
+    for (const VariableDependency& var : _vdg.vars()) {
+        if (holdsColumn(&var)) {
+            continue;
+        }
+
+        throw TuringException("A pattern the traversal cannot walk from the variables in "
+                              "scope is not yet supported.");
+    }
+}
+
 void DBProgramGenerator::extendBoundDataflow(DefinedVars& defined) {
     const VariableDependencyGraph::BoundVars& bound = _vdg.boundVars();
 
@@ -890,6 +912,81 @@ void DBProgramGenerator::extendBoundDataflow(DefinedVars& defined) {
     for (const VariableDependency* var : bound) {
         expandComponent(var, defined, carriedSet, reached);
     }
+
+    closeBoundJoins(carriedSet);
+}
+
+void DBProgramGenerator::closeBoundJoins(std::vector<const VariableDependency*>& carriedSet) {
+    // The walk orients a hop by the one end of it that is not yet bound, so it leaves
+    // behind the hops whose ends were both bound already - a pattern reaching back to a
+    // variable the barrier published, which constrains the rows rather than fanning them out
+    for (const VariableDependency& var : _vdg.vars()) {
+        if (holdsColumn(&var)) {
+            continue;
+        }
+
+        const VariableDependency::Edges& incoming = var.incoming();
+        const VariableDependency::Edges& outgoing = var.outgoing();
+
+        const auto edgeProducerIt = std::ranges::find_if(incoming, producesEdgeVar);
+        const auto nodeProducerIt = std::ranges::find_if(outgoing, producesNodeVar);
+
+        const bool isPatternEdge = edgeProducerIt != end(incoming) && nodeProducerIt != end(outgoing);
+        if (!isPatternEdge) {
+            continue;
+        }
+
+        const VariableDependency* target = (*nodeProducerIt)->tgt();
+
+        // A hop left behind with an end still open is not a join but a pattern of its own,
+        // which this walk does not reach: only both ends holding a column already make the
+        // hop a constraint on the rows they were bound over
+        const bool closesAJoin = holdsColumn((*edgeProducerIt)->src()) && holdsColumn(target);
+        if (!closesAJoin) {
+            continue;
+        }
+
+        closeBoundJoin(*edgeProducerIt, &var, target, carriedSet);
+    }
+}
+
+void DBProgramGenerator::closeBoundJoin(const DependencyEdge* edgeProducer,
+                                        const VariableDependency* edge,
+                                        const VariableDependency* target,
+                                        std::vector<const VariableDependency*>& carriedSet) {
+    const VariableDependency* source = edgeProducer->src();
+
+    mlir::Value landed;
+    const EdgeMetadata::EdgeType direction = edgeProducer->data().type();
+
+    switch (direction) {
+        case EdgeMetadata::EdgeType::GET_OUT_EDGES:
+            addGetOutEdges(source, edge, target, carriedSet, &landed);
+        break;
+
+        case EdgeMetadata::EdgeType::GET_IN_EDGES:
+            addGetInEdges(source, edge, target, carriedSet, &landed);
+        break;
+
+        case EdgeMetadata::EdgeType::GET_EDGES:
+            addGetEdges(source, edge, target, carriedSet, &landed);
+        break;
+
+        default:
+            throw FatalException(fmt::format("Attempted to close a join over {}",
+                                             EdgeTypeName::value(direction)));
+        break;
+    }
+
+    const mlir::Value bound = findVarOrThrow(_varMap, target);
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+
+    auto eq = _opBuilder.create<mlir::db::EqOp>(_opBuilder.getUnknownLoc(), boolType, landed, bound);
+    filterAllColumns(eq.getResult());
+
+    applyConstraints(edge);
+
+    carriedSet.push_back(edge);
 }
 
 void DBProgramGenerator::translateComponent(const VariableDependency* root,

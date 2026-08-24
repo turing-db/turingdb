@@ -641,7 +641,10 @@ TEST_F(WithTest, rejectsAVariableTheBarrierDropped) {
     expectRejected("MATCH (n:Person) WITH n.name AS name RETURN n");
 }
 
-TEST_F(WithTest, rejectsAPatternNamingADroppedVariable) {
+// A name the barrier dropped is free again below it, so a pattern spelling it declares a
+// variable of its own rather than joining onto what the name used to hold - which makes
+// this the cross product above, not a traversal of the published rows.
+TEST_F(WithTest, rejectsAPatternReusingADroppedName) {
     expectRejected("MATCH (n:Person) WITH n.name AS name MATCH (n)-->(x) RETURN name");
 }
 

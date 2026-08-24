@@ -109,6 +109,23 @@ private:
     // onto
     void throwOnRematchedBoundEdge() const;
 
+    bool holdsColumn(const VariableDependency* var) const;
+
+    // Rejects a pattern variable the traversal left without a column: a shape it cannot
+    // walk from the variables in scope
+    void throwOnUnboundPatternVariable() const;
+
+    // Translates the hops the walk left behind because both of their ends were already
+    // bound
+    void closeBoundJoins(std::vector<const VariableDependency*>& carriedSet);
+
+    // Walks one hop whose far end already holds a column, so the hop constrains the rows
+    // instead of fanning them out: the column it lands on is filtered against that one
+    void closeBoundJoin(const DependencyEdge* edgeProducer,
+                        const VariableDependency* edge,
+                        const VariableDependency* target,
+                        std::vector<const VariableDependency*>& carriedSet);
+
     // Walks the patterns of a part out from the variables a WITH bound, extending the
     // dataflow the barrier left behind rather than opening one of its own
     void extendBoundDataflow(DefinedVars& defined);
@@ -259,11 +276,16 @@ private:
     void addMergeFilter(const VariableDependency* var,
                         std::vector<const VariableDependency*>& carriedSet);
 
+    // Walks a hop out of @param src, binding the columns it produces to the triple's
+    // variables. A hop closing a join is given a @param joinedTarget instead: the column
+    // it lands on is written there and left unbound, for the caller to filter against the
+    // one @param tgt already holds
     template<typename EdgeOp>
     void addEdgeTraversal(const VariableDependency* src,
                           const VariableDependency* edge,
                           const VariableDependency* tgt,
-                          const std::vector<const VariableDependency*>& carrySet);
+                          const std::vector<const VariableDependency*>& carrySet,
+                          mlir::Value* joinedTarget = nullptr);
 
     template <typename... Args>
     void addGetOutEdges(Args&&... args) {
