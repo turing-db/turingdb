@@ -424,6 +424,10 @@ void CypherAnalyzer::analyzeProjection(Projection* projection, const Stmt* claus
             // one: the wildcard had not been expanded yet
             hasGroupingKeys = true;
         }
+
+        if (projection->items().empty()) {
+            throwError("Cannot use '*' when there are no variables in scope.", clause);
+        }
     }
 
     if (projection->isDistinct()) {
