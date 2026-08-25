@@ -99,6 +99,16 @@ target_link_libraries(test_query_ir_call_yield_into_match PRIVATE
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s)
 
+add_ir_tests(test_query_ir_call_yielded_edge_identity CallYieldedEdgeIdentityTest.cpp)
+target_link_libraries(test_query_ir_call_yielded_edge_identity PRIVATE
+        turing_db_procedures_s
+        turing_db_examples_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s)
+
 # The crossing-call tests hop twice from the column a CALL yielded and then call again,
 # once with a constant argument alone and once reading the chain's tail, from the query
 # text over the simpledb fixture - so they need the frontend, the registry and the
