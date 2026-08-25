@@ -64,6 +64,18 @@ module {
     return
   }
 
+  func.func @change_submit() {
+    %0 = nl.change submit : !nl.chunk<!storage.change_id>
+    nl.output(%0) names ["changeID"] : !nl.chunk<!storage.change_id>
+    return
+  }
+
+  func.func @change_delete() {
+    %0 = nl.change delete : !nl.chunk<!storage.change_id>
+    nl.output(%0) names ["changeID"] : !nl.chunk<!storage.change_id>
+    return
+  }
+
   func.func @commit() {
     nl.commit
     return
@@ -115,6 +127,12 @@ module {
 
   func.func @create_vector_index() {
     %0 = nl.create_vector_index("vectors", 4, euclidean, hnsw) : !nl.chunk<!storage.string>
+    nl.output(%0) names ["indexName"] : !nl.chunk<!storage.string>
+    return
+  }
+
+  func.func @create_vector_index_flat_cosine() {
+    %0 = nl.create_vector_index("vectors", 4, cosine, flat) : !nl.chunk<!storage.string>
     nl.output(%0) names ["indexName"] : !nl.chunk<!storage.string>
     return
   }
