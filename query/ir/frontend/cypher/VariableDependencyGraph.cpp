@@ -30,6 +30,7 @@
 
 #include "BioAssert.h"
 #include "FatalException.h"
+#include "TuringException.h"
 
 using namespace db;
 
@@ -130,8 +131,23 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
 
     const auto& chain = ptn->getElementChain();
 
+    // Two patterns sharing an edge variable are joined on identity; one element naming it
+    // twice is rejected instead, as no edge is two hops of one element.
+    std::vector<const VarDecl*> edgesInElement;
+
     VariableDependency* prev = originVar;
     for (const auto& [edge, tgtPtn] : chain) {
+        const VarDecl* edgeDecl = edge->getDecl();
+        bioassert(edgeDecl, "Edge pattern without declaration.");
+
+        const bool alreadyInElement =
+            std::ranges::find(edgesInElement, edgeDecl) != edgesInElement.end();
+        if (alreadyInElement) {
+            throw TuringException("Re-using the same edge variable in a single pattern is not supported");
+        }
+
+        edgesInElement.push_back(edgeDecl);
+
         VariableDependency* tgtVar = getOrCreateVariable(tgtPtn);
 
         const EdgePattern::Direction direction = edge->getDirection();
@@ -144,8 +160,7 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
         src = prev;
         tgt = tgtVar;
 
-        bioassert(edge->getDecl(), "Edge pattern without declaration.");
-        const std::string_view cypherEdgeName = edge->getDecl()->getName();
+        const std::string_view cypherEdgeName = edgeDecl->getName();
         std::vector<VariableDependency*>& edgeOccurrences = _edgeIdentities[std::string(cypherEdgeName)];
         std::string anonymousName;
         anonymousName += cypherEdgeName;
