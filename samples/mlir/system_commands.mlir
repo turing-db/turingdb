@@ -72,6 +72,20 @@ module {
     return
   }
 
+  // CHANGE SUBMIT
+  func.func @change_submit() {
+    %ids = db.change submit : !db.column<!storage.change_id>
+    db.output(%ids) names ["changeID"] : !db.column<!storage.change_id>
+    return
+  }
+
+  // CHANGE DELETE
+  func.func @change_delete() {
+    %ids = db.change delete : !db.column<!storage.change_id>
+    db.output(%ids) names ["changeID"] : !db.column<!storage.change_id>
+    return
+  }
+
   // COMMIT
   func.func @commit() {
     db.commit
@@ -135,6 +149,13 @@ module {
   // CREATE VECTOR INDEX vectors WITH DIMENSION 4 METRIC EUCLID TYPE HNSW
   func.func @create_vector_index() {
     %i = db.create_vector_index("vectors", 4, euclidean, hnsw) : !db.column<!storage.string>
+    db.output(%i) names ["indexName"] : !db.column<!storage.string>
+    return
+  }
+
+  // CREATE VECTOR INDEX vectors WITH DIMENSION 4 METRIC COSINE TYPE FLAT
+  func.func @create_vector_index_flat_cosine() {
+    %i = db.create_vector_index("vectors", 4, cosine, flat) : !db.column<!storage.string>
     db.output(%i) names ["indexName"] : !db.column<!storage.string>
     return
   }
