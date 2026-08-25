@@ -9,6 +9,9 @@
 #include "ID.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
+#include "list/ListBufferTypeTag.h"
+#include "list/ListElementView.h"
+#include "list/ListView.h"
 
 using namespace db;
 using namespace turing::test;
@@ -34,6 +37,61 @@ bool textOfPlain(const Column* chunk, size_t rowIndex, std::string& text) {
     }
 
     text = fmt::format("{}", column->getRaw()[rowIndex]);
+    return true;
+}
+
+std::string elementText(const ListElementView& element) {
+    switch (element.getTag()) {
+        case ListBufferTypeTag::Int:
+            return fmt::format("{}", element.getAs<int64_t>());
+        break;
+
+        case ListBufferTypeTag::UInt:
+            return fmt::format("{}", element.getAs<uint64_t>());
+        break;
+
+        case ListBufferTypeTag::Double:
+            return fmt::format("{}", element.getAs<double>());
+        break;
+
+        case ListBufferTypeTag::Bool:
+            return element.getAs<bool>() ? "true" : "false";
+        break;
+
+        case ListBufferTypeTag::String:
+            return std::string(element.getAs<std::string_view>());
+        break;
+
+        case ListBufferTypeTag::Null:
+            return "null";
+        break;
+
+        case ListBufferTypeTag::Embedding:
+        case ListBufferTypeTag::ListView:
+        case ListBufferTypeTag::INVALID:
+            throw std::runtime_error("StringRowSink cannot read this list element as text");
+        break;
+    }
+
+    throw std::runtime_error("StringRowSink met an unknown list element tag");
+}
+
+// A list cell reads as its elements joined by ", ", in the order the list holds them.
+bool textOfList(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnVector<ListView>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    text.clear();
+    for (const ListElementView& element : column->getRaw()[rowIndex]) {
+        if (!text.empty()) {
+            text += ", ";
+        }
+
+        text += elementText(element);
+    }
+
     return true;
 }
 
@@ -105,6 +163,8 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfOptional<double>(chunk, rowIndex, text)) {
         return text;
     } else if (textOfOptional<std::string_view>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfList(chunk, rowIndex, text)) {
         return text;
     }
 

@@ -113,7 +113,7 @@ target_link_libraries(test_query_ir_call_yielded_edge_identity PRIVATE
 # fixture, writes included, and read their rows as text through StringRowSink.
 function(add_call_v3_test exe_name cpp_file)
     add_turing_test(${exe_name} ${cpp_file})
-    target_sources(${exe_name} PRIVATE StringRowSink.cpp)
+    target_sources(${exe_name} PRIVATE StringRowSink.cpp CallV3Test.cpp)
     target_link_libraries(${exe_name} PRIVATE
             turing_db_s
             turing_testenv_s
@@ -134,6 +134,18 @@ add_call_v3_test(test_query_ir_call_yielded_is_null CallYieldedIsNullTest.cpp)
 add_call_v3_test(test_query_ir_call_source_create_property CallSourceCreatePropertyTest.cpp)
 add_call_v3_test(test_query_ir_call_reserved_word_procedure CallReservedWordProcedureTest.cpp)
 add_call_v3_test(test_query_ir_call_yield_star CallYieldStarTest.cpp)
+add_call_v3_test(test_query_ir_call_skip_limit CallSkipLimitTest.cpp)
+add_call_v3_test(test_query_ir_call_distinct CallDistinctTest.cpp)
+add_call_v3_test(test_query_ir_call_return_alias CallReturnAliasTest.cpp)
+add_call_v3_test(test_query_ir_call_order_by CallOrderByTest.cpp)
+add_call_v3_test(test_query_ir_call_grouped_aggregate CallGroupedAggregateTest.cpp)
+add_call_v3_test(test_query_ir_call_unwind CallUnwindTest.cpp)
+add_call_v3_test(test_query_ir_call_pattern_shapes CallPatternShapesTest.cpp)
+add_call_v3_test(test_query_ir_call_components CallComponentsTest.cpp)
+add_call_v3_test(test_query_ir_call_carried_scalar CallCarriedScalarTest.cpp)
+add_call_v3_test(test_query_ir_call_writes CallWritesTest.cpp)
+add_call_v3_test(test_query_ir_call_boolean_predicates CallBooleanPredicatesTest.cpp)
+add_call_v3_test(test_query_ir_call_show_indexes CallShowIndexesTest.cpp)
 
 # The crossing-call tests hop twice from the column a CALL yielded and then call again,
 # once with a constant argument alone and once reading the chain's tail, from the query
