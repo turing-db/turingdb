@@ -95,6 +95,14 @@ void readChangeIDColumn(std::span<const Column* const> chunks, size_t row, Syste
     sink.addNumber((*changes)[row].get());
 }
 
+void readProcedure(std::span<const Column* const> chunks, size_t row, SystemResultSink& sink) {
+    const ViewColumn* const names = static_cast<const ViewColumn*>(chunks[0]);
+    const StringColumn* const signatures = static_cast<const StringColumn*>(chunks[1]);
+
+    sink.addString((*names)[row]);
+    sink.addString((*signatures)[row]);
+}
+
 void readAvailableGraph(std::span<const Column* const> chunks, size_t row, SystemResultSink& sink) {
     const StringColumn* const names = static_cast<const StringColumn*>(chunks[0]);
     const BoolColumn* const loaded = static_cast<const BoolColumn*>(chunks[1]);
@@ -122,7 +130,9 @@ bool contains(const std::vector<std::string>& values, std::string_view value) {
 class SystemCommandTest : public TuringTest {
 public:
     void initialize() override {
-        _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
+        const fs::Path turingDir = fs::Path {_outDir} / "turing";
+        _env = _syncedOnDisk ? TuringTestEnv::createSyncedOnDisk(turingDir)
+                             : TuringTestEnv::create(turingDir);
 
         SystemAccessor system = _env->getSystemManager().accessUnique();
         Graph* graph = system.createGraph(_graphName);
@@ -155,8 +165,19 @@ protected:
     }
 
     const std::string _graphName = "simpledb";
+    bool _syncedOnDisk {false};
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<QueryInterpreterV3> _interpreter;
+};
+
+// LIST AVAILABLE GRAPHS reads the graphs directory, so a graph is only available
+// once it is on disk - which, in full in-memory mode, it never becomes: creating one
+// writes nothing and dumping one is a no-op that reports success.
+class SystemCommandOnDiskTest : public SystemCommandTest {
+public:
+    SystemCommandOnDiskTest() {
+        _syncedOnDisk = true;
+    }
 };
 
 TEST_F(SystemCommandTest, listGraphNamesTheLoadedGraph) {
@@ -189,7 +210,7 @@ TEST_F(SystemCommandTest, createGraphReportsItsNameAndRegistersIt) {
     EXPECT_TRUE(contains(listSink.getStrings(), _graphName));
 }
 
-TEST_F(SystemCommandTest, listAvailableGraphsReportsNameAndLoadState) {
+TEST_F(SystemCommandOnDiskTest, listAvailableGraphsReportsNameAndLoadState) {
     QueryStatus status;
     SystemResultSink sink(&readAvailableGraph);
     runQuery("LIST AVAILABLE GRAPHS", status, sink);
@@ -200,6 +221,15 @@ TEST_F(SystemCommandTest, listAvailableGraphsReportsNameAndLoadState) {
     EXPECT_EQ(sink.getColumnNames()[0], "graphName");
     EXPECT_EQ(sink.getColumnNames()[1], "isLoaded");
     EXPECT_EQ(sink.getColumnNames()[2], "isLoading");
+
+    ASSERT_GT(sink.getRowCount(), 0u);
+
+    const std::vector<std::string>& names = sink.getStrings();
+    const auto foundIt = std::ranges::find(names, _graphName);
+    ASSERT_NE(foundIt, names.end());
+
+    const size_t row = static_cast<size_t>(foundIt - names.begin());
+    EXPECT_EQ(sink.getNumbers()[row], 1u) << _graphName << " is loaded, so it must be reported so";
 }
 
 TEST_F(SystemCommandTest, changeNewReportsAnIdThatChangeListThenCarries) {
@@ -242,7 +272,7 @@ TEST_F(SystemCommandTest, loadingAnUnknownGraphFails) {
 
 TEST_F(SystemCommandTest, showProceduresReportsNamesAndSignatures) {
     QueryStatus status;
-    SystemResultSink sink(&readViewColumn);
+    SystemResultSink sink(&readProcedure);
     runQuery("SHOW PROCEDURES", status, sink);
 
     ASSERT_TRUE(status.isOk()) << status.getError();
@@ -251,13 +281,32 @@ TEST_F(SystemCommandTest, showProceduresReportsNamesAndSignatures) {
     EXPECT_EQ(sink.getColumnNames()[0], "name");
     EXPECT_EQ(sink.getColumnNames()[1], "signature");
     EXPECT_GT(sink.getRowCount(), 0u);
+
+    const std::vector<std::string>& rendered = sink.getStrings();
+    EXPECT_TRUE(contains(rendered, "db.edgeTypes"));
+    EXPECT_TRUE(contains(rendered, "db.edgeTypes() :: (id :: INTEGER, edgeType :: STRING)"));
 }
 
-TEST_F(SystemCommandTest, mergeDataPartsSucceeds) {
+// Merging compacts the data parts and leaves the rows alone, so the node count is
+// what says the command did its work rather than dropped some.
+TEST_F(SystemCommandTest, mergeDataPartsKeepsEveryNode) {
+    QueryStatus beforeStatus;
+    SystemResultSink beforeSink;
+    runQuery("MATCH (n) RETURN n", beforeStatus, beforeSink);
+
+    ASSERT_TRUE(beforeStatus.isOk()) << beforeStatus.getError();
+    ASSERT_GT(beforeSink.getRowCount(), 0u);
+
     QueryStatus status;
     runQuery("MERGE_DATAPARTS", status);
+    ASSERT_TRUE(status.isOk()) << status.getError();
 
-    EXPECT_TRUE(status.isOk()) << status.getError();
+    QueryStatus afterStatus;
+    SystemResultSink afterSink;
+    runQuery("MATCH (n) RETURN n", afterStatus, afterSink);
+
+    ASSERT_TRUE(afterStatus.isOk()) << afterStatus.getError();
+    EXPECT_EQ(afterSink.getRowCount(), beforeSink.getRowCount());
 }
 
 TEST_F(SystemCommandTest, vectorIndexIsCreatedListedAndDeleted) {
@@ -316,7 +365,18 @@ TEST_F(SystemCommandTest, propertyIndexIsCreatedAndDroppedInsideAChange) {
     QueryStatus dropStatus;
     SystemResultSink dropSink;
     runQuery("DROP INDEX byName", dropStatus, dropSink, changeID);
-    EXPECT_TRUE(dropStatus.isOk()) << dropStatus.getError();
+    ASSERT_TRUE(dropStatus.isOk()) << dropStatus.getError();
+
+    QueryStatus commitDropStatus;
+    SystemResultSink commitDropSink;
+    runQuery("COMMIT", commitDropStatus, commitDropSink, changeID);
+    ASSERT_TRUE(commitDropStatus.isOk()) << commitDropStatus.getError();
+
+    QueryStatus secondDropStatus;
+    SystemResultSink secondDropSink;
+    runQuery("DROP INDEX byName", secondDropStatus, secondDropSink, changeID);
+    EXPECT_EQ(secondDropStatus.getStatus(), QueryStatus::Status::EXEC_ERROR)
+        << "the index is still there, so the first drop did nothing";
 }
 
 TEST_F(SystemCommandTest, droppingAnUnknownIndexFails) {
