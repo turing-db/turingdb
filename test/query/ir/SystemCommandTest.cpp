@@ -2,6 +2,7 @@
 
 #include <stddef.h>
 #include <algorithm>
+#include <fstream>
 #include <memory>
 #include <span>
 #include <string>
@@ -33,6 +34,7 @@ using ViewColumn = ColumnVector<types::String::Primitive>;
 using StringColumn = ColumnVector<std::string>;
 using BoolColumn = ColumnVector<types::Bool::Primitive>;
 using ChangeIDColumn = ColumnVector<ChangeID>;
+using CountColumn = ColumnVector<types::UInt64::Primitive>;
 
 // Keeps the shape of a result table - the column names and how many rows came
 // out - which is all most of these commands report, and hands the columns to a
@@ -103,6 +105,11 @@ void readProcedure(std::span<const Column* const> chunks, size_t row, SystemResu
     sink.addString((*signatures)[row]);
 }
 
+void readCountColumn(std::span<const Column* const> chunks, size_t row, SystemResultSink& sink) {
+    const CountColumn* const counts = static_cast<const CountColumn*>(chunks.front());
+    sink.addNumber((*counts)[row]);
+}
+
 void readAvailableGraph(std::span<const Column* const> chunks, size_t row, SystemResultSink& sink) {
     const StringColumn* const names = static_cast<const StringColumn*>(chunks[0]);
     const BoolColumn* const loaded = static_cast<const BoolColumn*>(chunks[1]);
@@ -162,6 +169,13 @@ protected:
     void runQuery(std::string_view query, QueryStatus& status) {
         SystemResultSink sink;
         runQuery(query, status, sink);
+    }
+
+    void writeDataFile(std::string_view name, std::string_view contents) {
+        const fs::Path path = _env->getConfig().getDataDir() / name;
+
+        std::ofstream file(path.get());
+        file << contents;
     }
 
     const std::string _graphName = "simpledb";
@@ -517,4 +531,74 @@ TEST_F(SystemCommandTest, changeSubmitAndDeleteOutsideAChangeFail) {
     QueryStatus deleteStatus;
     runQuery("CHANGE DELETE", deleteStatus);
     EXPECT_EQ(deleteStatus.getStatus(), QueryStatus::Status::EXEC_ERROR);
+}
+
+// No command may read or write outside the data directory, so a path that climbs
+// out of it is refused before the file is ever opened. The index is created first
+// because a missing one is reported ahead of the path, which would pass the test
+// for the wrong reason.
+TEST_F(SystemCommandTest, loadVectorReadsInsideTheDataDirectoryOnly) {
+    QueryStatus createStatus;
+    SystemResultSink createSink(&readViewColumn);
+    runQuery("CREATE VECTOR INDEX vectors WITH DIMENSION 4 METRIC EUCLID", createStatus, createSink);
+    ASSERT_TRUE(createStatus.isOk()) << createStatus.getError();
+
+    writeDataFile("vectors.csv", "1,1,0,0,0\n2,0,1,0,0\n");
+
+    QueryStatus loadStatus;
+    SystemResultSink loadSink(&readCountColumn);
+    runQuery("LOAD VECTOR FROM \"vectors.csv\" IN vectors", loadStatus, loadSink);
+
+    ASSERT_TRUE(loadStatus.isOk()) << loadStatus.getError();
+    ASSERT_EQ(loadSink.getRowCount(), 1u);
+    EXPECT_EQ(loadSink.getColumnNames().front(), "count");
+    EXPECT_EQ(loadSink.getNumbers().front(), 2u);
+
+    QueryStatus escapeStatus;
+    SystemResultSink escapeSink;
+    runQuery("LOAD VECTOR FROM \"../../vectors.csv\" IN vectors", escapeStatus, escapeSink);
+
+    EXPECT_EQ(escapeStatus.getStatus(), QueryStatus::Status::EXEC_ERROR);
+    EXPECT_NE(escapeStatus.getError().find("Invalid file path"), std::string::npos)
+        << "the path is what must be refused, not something the file itself failed at: "
+        << escapeStatus.getError();
+}
+
+// The same guard on the other statement that reads a file the query named. It runs
+// inside a change, which LOAD EMBEDDING needs before it looks at the path at all.
+TEST_F(SystemCommandTest, loadEmbeddingReadsInsideTheDataDirectoryOnly) {
+    QueryStatus newStatus;
+    SystemResultSink newSink(&readChangeIDColumn);
+    runQuery("CHANGE NEW", newStatus, newSink);
+
+    ASSERT_TRUE(newStatus.isOk()) << newStatus.getError();
+    ASSERT_EQ(newSink.getRowCount(), 1u);
+
+    const ChangeID changeID {newSink.getNumbers().front()};
+
+    QueryStatus status;
+    SystemResultSink sink;
+    runQuery("LOAD EMBEDDING FROM \"../../embeddings.parquet\" AS emb", status, sink, changeID);
+
+    EXPECT_EQ(status.getStatus(), QueryStatus::Status::EXEC_ERROR);
+    EXPECT_NE(status.getError().find("Invalid file path"), std::string::npos) << status.getError();
+}
+
+// A path that stays inside the data directory while still spelling a climb is not
+// an escape, so it is resolved rather than refused - what it reaches is then an
+// ordinary missing file.
+TEST_F(SystemCommandTest, aPathThatClimbsBackInsideTheDataDirectoryIsNotRefused) {
+    QueryStatus createStatus;
+    SystemResultSink createSink(&readViewColumn);
+    runQuery("CREATE VECTOR INDEX vectors WITH DIMENSION 4 METRIC EUCLID", createStatus, createSink);
+    ASSERT_TRUE(createStatus.isOk()) << createStatus.getError();
+
+    QueryStatus status;
+    SystemResultSink sink;
+    runQuery("LOAD VECTOR FROM \"sub/../missing.csv\" IN vectors", status, sink);
+
+    ASSERT_EQ(status.getStatus(), QueryStatus::Status::EXEC_ERROR);
+    EXPECT_EQ(status.getError().find("Invalid file path"), std::string::npos)
+        << "the path resolves inside the data directory, so the guard must let it through: "
+        << status.getError();
 }
