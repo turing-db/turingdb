@@ -208,6 +208,11 @@ struct BinaryOpTraits<OP_ADD> {
 };
 
 template <>
+struct BinaryOpTraits<OP_CONCAT> {
+    using Functor = Concat;
+};
+
+template <>
 struct BinaryOpTraits<OP_SUB> {
     using Functor = Sub;
 
@@ -398,10 +403,27 @@ struct BinaryOpTraits<OP_FUNC_EUCLIDEAN_DISTANCE> {
 };
 
 template <ColumnOperator Op, typename ResCol, typename LhsCol, typename RhsCol>
-void applyBinaryOp(Column* result, const Column* lhs, const Column* rhs) {
-    BinaryOpTraits<Op>::exec(static_cast<ResCol*>(result),
-                             static_cast<const LhsCol*>(lhs),
-                             static_cast<const RhsCol*>(rhs));
+struct BinaryOpKernel {
+    static void run(Column* result, const Column* lhs, const Column* rhs, LocalMemory*) {
+        BinaryOpTraits<Op>::exec(static_cast<ResCol*>(result),
+                                 static_cast<const LhsCol*>(lhs),
+                                 static_cast<const RhsCol*>(rhs));
+    }
+};
+
+template <typename ResCol, typename LhsCol, typename RhsCol>
+struct BinaryOpKernel<OP_CONCAT, ResCol, LhsCol, RhsCol> {
+    static void run(Column* result, const Column* lhs, const Column* rhs, LocalMemory* mem) {
+        BinaryOperators::exec<Concat>(static_cast<ResCol*>(result),
+                                      static_cast<const LhsCol*>(lhs),
+                                      static_cast<const RhsCol*>(rhs),
+                                      Concat {&mem->stringBuffer()});
+    }
+};
+
+template <ColumnOperator Op, typename ResCol, typename LhsCol, typename RhsCol>
+void applyBinaryOp(Column* result, const Column* lhs, const Column* rhs, LocalMemory* mem) {
+    BinaryOpKernel<Op, ResCol, LhsCol, RhsCol>::run(result, lhs, rhs, mem);
 }
 
 template <ColumnOperator Op>
@@ -2995,7 +3017,7 @@ void NLExecutor::runBroadcastConstant(NLExecutionContext*, NLFunctionData* data)
 
 void NLExecutor::runBinary(NLExecutionContext*, NLFunctionData* data) {
     const NLBinaryData* binary = static_cast<NLBinaryData*>(data);
-    binary->getFn()(binary->getResult(), binary->getLhs(), binary->getRhs());
+    binary->getFn()(binary->getResult(), binary->getLhs(), binary->getRhs(), binary->getMemory());
 }
 
 void NLExecutor::runUnary(NLExecutionContext*, NLFunctionData* data) {
@@ -4776,6 +4798,7 @@ void NLExecutor::runCheckEdgeTypeConstraint(NLExecutionContext* context, NLFunct
 }
 
 template NLBinaryFn NLExecutor::selectBinary<OP_ADD>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
+template NLBinaryFn NLExecutor::selectBinary<OP_CONCAT>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_SUB>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_MUL>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_DIV>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);

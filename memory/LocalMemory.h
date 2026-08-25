@@ -131,9 +131,12 @@ public:
     void clear() {
         _pools.transform<ClearTransform>();
         _listBuffer.clear();
+        _stringBuf.clear();
     }
 
     QueryListBuffer& listBuffer() { return _listBuffer; }
+
+    StringBuffer& stringBuffer() { return _stringBuf; }
 
 private:
     MemoryPools _pools;
