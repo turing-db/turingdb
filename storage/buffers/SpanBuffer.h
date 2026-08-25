@@ -21,7 +21,7 @@ private:
     ByteBuffer<E, N> _bytes;
 
     static_assert(std::is_trivially_copyable_v<E>);
-    static_assert(std::is_constructible_v<V, std::span<E>>);
+    static_assert(std::is_constructible_v<V, E*, size_t>);
 };
 
 template <typename E, typename V, size_t N>
@@ -30,17 +30,13 @@ V SpanBuffer<E, V, N>::insert(std::span<const E> items) {
 
     _bytes.reserveContiguous(size);
 
-    std::byte* spanStart = _bytes.nextPtr();
-    const E* eleStart = items.data();
+    E* spanStart = _bytes.nextPtr();
 
-    const size_t numBytes = size * sizeof(E);
-    std::memcpy(spanStart, eleStart, numBytes);
+    std::memcpy(spanStart, items.data(), size * sizeof(E));
 
-    _bytes.commit(numBytes);
+    _bytes.commit(size);
 
-    const E* elePtr = std::bit_cast<const E*, const std::byte*>(spanStart);
-
-    return V {elePtr, size};
+    return V {spanStart, size};
 }
 
 template class SpanBuffer<char, std::string_view>;

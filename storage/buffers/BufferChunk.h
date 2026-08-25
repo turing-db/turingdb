@@ -40,6 +40,4 @@ private:
     BufferChunk<T, N>* _next {nullptr};
 };
 
-using ByteChunk = BufferChunk<std::byte>;
-
 }

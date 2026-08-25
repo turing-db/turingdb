@@ -14,7 +14,7 @@ template <typename T, size_t N = 4096>
 class ByteBuffer {
 public:
     ByteBuffer()
-        : _first (new ByteChunk),
+        : _first (new BufferChunk<T, N>),
         _last(_first)
     {
     }
@@ -33,24 +33,24 @@ public:
     ByteBuffer& operator=(const ByteBuffer&) = delete;
     ByteBuffer& operator=(ByteBuffer&&) = delete;
 
-    std::byte* nextPtr() const { return &_last->_buf[_last->_size]; };
+    T* nextPtr() const { return &_last->_buf[_last->_size]; };
 
 private:
     template <typename E, typename V, size_t M>
     friend class SpanBuffer;
     friend class StringBuffer;
 
-    ByteChunk* _first {nullptr};
-    ByteChunk* _last {nullptr};
+    BufferChunk<T>* _first {nullptr};
+    BufferChunk<T>* _last {nullptr};
 
     void reserveContiguous(size_t numTs);
-    void commit(size_t numBytes) { _last->_size += numBytes; }
-    ByteChunk* allocateNext(size_t capacity);
+    void commit(size_t numElements) { _last->_size += numElements; }
+    BufferChunk<T>* allocateNext(size_t capacity);
 };
 
 template <typename T, size_t N>
-ByteChunk* ByteBuffer<T, N>::allocateNext(size_t capacity) {
-    auto* newChunk = new ByteChunk(capacity);
+BufferChunk<T>* ByteBuffer<T, N>::allocateNext(size_t capacity) {
+    BufferChunk<T>* newChunk = new BufferChunk<T>(capacity);
     _last->_next = newChunk;
     _last = newChunk;
     return newChunk;
@@ -58,14 +58,12 @@ ByteChunk* ByteBuffer<T, N>::allocateNext(size_t capacity) {
 
 template <typename T, size_t N>
 void ByteBuffer<T, N>::reserveContiguous(size_t numTs) {
-    const size_t numBytes = numTs * sizeof(T);
-
-    if (_last->canFit(numBytes)) {
+    if (_last->canFit(numTs)) {
         return;
     }
 
-    const size_t newBufferSize = std::max(numBytes, N);
-    allocateNext(newBufferSize);
+    const size_t newCapacity = std::max(numTs, N);
+    allocateNext(newCapacity);
 }
 
 }
