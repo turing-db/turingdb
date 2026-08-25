@@ -951,3 +951,13 @@ target_link_libraries(test_query_ir_count_wildcard_empty_input PRIVATE
         turing_db_storage_s
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_count_wildcard_empty_input PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_repeated_edge_variable RepeatedEdgeVariableTest.cpp)
+target_link_libraries(test_query_ir_repeated_edge_variable PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_repeated_edge_variable PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
