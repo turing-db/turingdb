@@ -985,6 +985,8 @@ void DBProgramGenerator::resolveYieldedIdentities() {
         size_t _yieldedIndex {0};
     };
 
+    const VariableDependencyGraph::EdgeIdentityMap& edgeIdentities = _vdg.edgeIdentities();
+
     llvm::SmallVector<YieldedIdentity> identities;
     for (size_t yieldedIndex = 0; yieldedIndex < _yieldedColumns.size(); yieldedIndex++) {
         const std::string_view yieldedName = _yieldedColumns[yieldedIndex].first;
@@ -995,6 +997,12 @@ void DBProgramGenerator::resolveYieldedIdentities() {
             }
 
             identities.push_back({var, yieldedIndex});
+        }
+
+        const auto edgeIt = edgeIdentities.find(yieldedName);
+        const bool yieldsAPatternEdge = edgeIt != edgeIdentities.end() && !edgeIt->second.empty();
+        if (yieldsAPatternEdge) {
+            identities.push_back({edgeIt->second.front(), yieldedIndex});
         }
     }
 
