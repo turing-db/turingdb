@@ -1799,6 +1799,28 @@ mlir::Value DBProgramGenerator::resolveWildcardColumn() const {
     return mlir::Value {};
 }
 
+mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr) {
+    if (argExpr->getType() != EvaluatedType::Wildcard) {
+        translateExpr(argExpr);
+        return _exprMap.at(argExpr);
+    }
+
+    const mlir::Value column = resolveWildcardColumn();
+    if (column) {
+        return column;
+    }
+
+    // A query binding no column runs over one row of its own, and count(*) tallies
+    // that row: a constant stands for it, as the 42 of RETURN count(42) does
+    const bool bindsNoColumn = _varMap.empty() && _yieldedColumns.empty();
+    bioassert(bindsNoColumn, "count(*) over no column holding the rows it counts.");
+
+    const mlir::TypedAttr oneAttr = _opBuilder.getI64IntegerAttr(1);
+    const mlir::db::ColumnType oneType = allocColumnType(oneAttr.getType());
+
+    return _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(), oneType, oneAttr).getResult();
+}
+
 void DBProgramGenerator::generateSet(const CypherAST* ast) {
     const CypherAST::QueryCommands& queries = ast->queries();
     if (queries.size() != 1) {
@@ -2725,15 +2747,7 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
     bioassert(args && !args->empty(), "Aggregate function invocation with no arguments.");
 
     const Expr* argExpr = args->front();
-    mlir::Value inputColumn;
-
-    if (argExpr->getType() == EvaluatedType::Wildcard) {
-        inputColumn = resolveWildcardColumn();
-        bioassert(inputColumn, "count(*) over no column holding the rows it counts.");
-    } else {
-        translateExpr(argExpr);
-        inputColumn = _exprMap.at(argExpr);
-    }
+    const mlir::Value inputColumn = translateAggregateInput(argExpr);
 
     const bool isDistinct = invocation->isDistinct();
 
@@ -2990,15 +3004,7 @@ void DBProgramGenerator::generateGroupAggregate(const CypherAST* ast) {
         bioassert(args && !args->empty(), "Aggregate function invocation with no arguments.");
 
         const Expr* argExpr = args->front();
-        mlir::Value inputColumn;
-
-        if (argExpr->getType() == EvaluatedType::Wildcard) {
-            inputColumn = resolveWildcardColumn();
-            bioassert(inputColumn, "count(*) over no column holding the rows it counts.");
-        } else {
-            translateExpr(argExpr);
-            inputColumn = _exprMap.at(argExpr);
-        }
+        const mlir::Value inputColumn = translateAggregateInput(argExpr);
 
         aggInputColumns.push_back(inputColumn);
         aggKinds.push_back(*kind);

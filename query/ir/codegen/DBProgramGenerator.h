@@ -223,6 +223,10 @@ private:
     // declares its variables so the choice is the query's and not the addresses'
     mlir::Value resolveWildcardColumn() const;
 
+    // The column an aggregate folds over: the column count(*) counts, or the one its
+    // argument's translation computes
+    mlir::Value translateAggregateInput(const Expr* argExpr);
+
     void generatePropertyConstraints(const CypherAST* ast);
 
     void applyPredicateFilters(std::span<const Expr* const> predicates);
