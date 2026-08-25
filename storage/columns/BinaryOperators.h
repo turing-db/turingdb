@@ -3,10 +3,12 @@
 #include <cmath>
 #include <functional>
 #include <optional>
+#include <string_view>
 
 #include "ColumnVector.h"
 #include "ColumnConst.h"
 #include "TypeUtils.h"
+#include "buffers/StringBuffer.h"
 
 #include "BioAssert.h"
 #include "TuringException.h"
@@ -109,6 +111,63 @@ struct BinaryOpExecutor {
         const Res& result = op(lhs->getRaw(), rhs->getRaw());
         res->set(result);
     }
+
+    static void apply(ColumnVector<Res>* res,
+                      const ColumnVector<T>* lhs,
+                      const ColumnVector<U>* rhs,
+                      const Op& op) {
+        bioassert(lhs->size() == rhs->size(), "Misshapen ColumnVectors.");
+        const size_t size = lhs->size();
+        res->resize(size);
+
+        const auto& lhsd = lhs->getRaw();
+        const auto& rhsd = rhs->getRaw();
+        auto& resd = res->getRaw();
+
+        for (size_t i = 0; i < size; i++) {
+            resd[i] = op(lhsd[i], rhsd[i]);
+        }
+    }
+
+    static void apply(ColumnVector<Res>* res,
+                      const ColumnVector<T>* lhs,
+                      const ColumnConst<U>* rhs,
+                      const Op& op) {
+       const size_t size = lhs->size();
+
+       res->resize(size);
+       auto& resd = res->getRaw();
+       const auto& lhsd = lhs->getRaw();
+       const auto& val = rhs->getRaw();
+
+       for (size_t i = 0; i < size; i++) {
+           resd[i] = op(lhsd[i], val);
+       }
+    }
+
+    static void apply(ColumnVector<Res>* res,
+                      const ColumnConst<T>* lhs,
+                      const ColumnVector<U>* rhs,
+                      const Op& op) {
+       const size_t size = rhs->size();
+
+       res->resize(size);
+       auto& resd = res->getRaw();
+       const auto& val = lhs->getRaw();
+       const auto& rhsd = rhs->getRaw();
+
+       for (size_t i = 0; i < size; i++) {
+           resd[i] = op(val, rhsd[i]);
+       }
+    }
+
+    static void apply(ColumnConst<Res>* res,
+                      const ColumnConst<T>* lhs,
+                      const ColumnConst<U>* rhs,
+                      const Op& op) {
+        const Res& result = op(lhs->getRaw(), rhs->getRaw());
+        res->set(result);
+    }
 };
 
 /**
@@ -187,6 +246,35 @@ struct Power {
     }
 };
 
+struct StringConcatenate {
+    StringBuffer* _buffer {nullptr};
+
+    inline std::string_view operator()(std::string_view a, std::string_view b) const {
+        return _buffer->concatenate(a, b);
+    }
+
+    template <typename A, typename B>
+        requires TypeUtils::is_optional_v<A> || TypeUtils::is_optional_v<B>
+    inline std::optional<std::string_view> operator()(const A& a, const B& b) const {
+        if constexpr (TypeUtils::is_optional_v<A>) {
+            if (!a.has_value()) {
+                return std::nullopt;
+            }
+        }
+
+        if constexpr (TypeUtils::is_optional_v<B>) {
+            if (!b.has_value()) {
+                return std::nullopt;
+            }
+        }
+
+        const std::string_view av = TypeUtils::unwrap(a);
+        const std::string_view bv = TypeUtils::unwrap(b);
+
+        return _buffer->concatenate(av, bv);
+    }
+};
+
 }
 
 using Add = BinaryOp<std::plus<>>;
@@ -195,6 +283,7 @@ using Mul = BinaryOp<std::multiplies<>>;
 using Div = BinaryOp<SafeDivides>;
 using Mod = BinaryOp<SafeModulo>;
 using Pow = BinaryOp<Power>;
+using Concat = StringConcatenate;
 
 }
 
