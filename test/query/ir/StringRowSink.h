@@ -15,7 +15,7 @@ namespace turing::test {
 
 // Reads every result cell as text, so a test compares rows of strings whatever kinds the
 // columns are: an ID or a plain scalar as its number or string, a nullable value as the
-// value or "null".
+// value or "null", a list as its elements joined by ", ".
 class StringRowSink : public db::NLOutputSink {
 public:
     using Row = std::vector<std::string>;
