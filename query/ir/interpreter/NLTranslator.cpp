@@ -445,6 +445,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateBroadcastConstant(broadcast, body);
         } else if (nl::Add add = mlir::dyn_cast<nl::Add>(operation)) {
             translateBinaryOp<OP_ADD>(add, body);
+        } else if (nl::Concat concat = mlir::dyn_cast<nl::Concat>(operation)) {
+            translateBinaryOp<OP_CONCAT>(concat, body);
         } else if (nl::Sub sub = mlir::dyn_cast<nl::Sub>(operation)) {
             translateBinaryOp<OP_SUB>(sub, body);
         } else if (nl::Mul mul = mlir::dyn_cast<nl::Mul>(operation)) {
@@ -1232,7 +1234,7 @@ void NLTranslator::translateBinaryOp(OpType op, NLStmtContainer* body) {
 
     _valueSlots[op.getResult()] = result;
 
-    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
+    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn, _memory);
     body->emplaceStmt(&NLExecutor::runBinary, data);
 }
 
@@ -1299,7 +1301,7 @@ void NLTranslator::translateBinaryFunction(mlir::Operation* op, NLStmtContainer*
 
     _valueSlots[op->getResult(0)] = result;
 
-    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn);
+    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn, _memory);
     body->emplaceStmt(&NLExecutor::runBinary, data);
 }
 

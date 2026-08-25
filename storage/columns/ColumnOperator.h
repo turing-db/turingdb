@@ -24,6 +24,7 @@ enum ColumnOperator : uint8_t {
     OP_XOR,
 
     OP_ADD,
+    OP_CONCAT,
     OP_SUB,
     OP_MUL,
     OP_DIV,
@@ -80,6 +81,7 @@ constexpr ColumnOperatorType getOperatorType(ColumnOperator op) {
         case OP_XOR:
 
         case OP_ADD:
+        case OP_CONCAT:
         case OP_SUB:
         case OP_MUL:
         case OP_DIV:
@@ -140,6 +142,7 @@ using ColumnOperatorDescription = EnumToString<ColumnOperator>::Create<
     EnumStringPair<ColumnOperator::OP_XOR, "XOR">,
 
     EnumStringPair<ColumnOperator::OP_ADD, "ADD">,
+    EnumStringPair<ColumnOperator::OP_CONCAT, "CONCAT">,
     EnumStringPair<ColumnOperator::OP_SUB, "SUB">,
     EnumStringPair<ColumnOperator::OP_MUL, "MUL">,
     EnumStringPair<ColumnOperator::OP_DIV, "DIV">,

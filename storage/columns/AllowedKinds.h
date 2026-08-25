@@ -292,6 +292,21 @@ struct PairRestrictions<Op> {
     >;
 };
 
+template <ColumnOperator Op>
+    requires (Op == OP_CONCAT)
+struct PairRestrictions<Op> {
+    using Allowed = GenerateKindPairList<
+        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs
+    >;
+
+    using AllowedMixed = AllowedMixedList<>;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
+};
+
 struct MaskedPairs {
     using Allowed = GenerateKindPairList<>;
 

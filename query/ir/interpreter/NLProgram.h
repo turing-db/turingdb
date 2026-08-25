@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "ID.h"
+#include "LocalMemory.h"
 #include "ProcedureState.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
@@ -30,6 +31,7 @@ class NLFunctionData;
 class Procedure;
 class ProcedureContext;
 class ProcedureData;
+class LocalMemory;
 
 // Translation resolves every chunk SSA value
 // to a concrete ColumnVector type through this kind
@@ -2177,16 +2179,16 @@ private:
 };
 
 // Binary function to execute
-using NLBinaryFn = void (*)(Column* result, const Column* lhs, const Column* rhs);
+using NLBinaryFn = void (*)(Column* result, const Column* lhs, const Column* rhs, LocalMemory* mem);
 
-// Binary function to execute, plus operands and results
 class NLBinaryData : public NLFunctionData {
 public:
-    NLBinaryData(const Column* lhs, const Column* rhs, Column* result, NLBinaryFn fn)
+    NLBinaryData(const Column* lhs, const Column* rhs, Column* result, NLBinaryFn fn, LocalMemory* mem)
         : _lhs(lhs),
         _rhs(rhs),
         _result(result),
-        _fn(fn)
+        _fn(fn),
+        _mem(mem)
     {
     }
 
@@ -2194,12 +2196,14 @@ public:
     const Column* getRhs() const { return _rhs; }
     Column* getResult() const { return _result; }
     NLBinaryFn getFn() const { return _fn; }
+    LocalMemory* getMemory() const { return _mem; }
 
 private:
     const Column* _lhs {nullptr};
     const Column* _rhs {nullptr};
     Column* _result {nullptr};
     NLBinaryFn _fn {nullptr};
+    LocalMemory* _mem {nullptr};
 };
 
 // Unary function to execute
