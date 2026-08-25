@@ -5,6 +5,11 @@ set(storage_sources
         RowStore.cpp
         EntityList.cpp
 
+        buffers/BufferChunk.cpp
+        buffers/RawBuffer.cpp
+        buffers/SpanBuffer.cpp
+        buffers/StringBuffer.cpp
+
         datapart/DataPart.cpp
         datapart/NodeContainer.cpp
         datapart/EdgeContainer.cpp

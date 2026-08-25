@@ -17,7 +17,7 @@
 #include "list/ListBuffer.h"
 #include "list/ListView.h"
 
-#include "buffers/SpanBuffer.h"
+#include "buffers/StringBuffer.h"
 
 #include "metadata/PropertyType.h"
 #include "metadata/PropertyNull.h"
