@@ -1,5 +1,7 @@
 #include "BufferChunk.h"
 
+#include <cstdlib>
+
 using namespace db;
 
 template <typename T, size_t N>

@@ -1,7 +1,6 @@
 #pragma once
 
-#include <cstddef>
-#include <stdlib.h>
+#include <stddef.h>
 
 namespace db {
 
