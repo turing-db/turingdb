@@ -169,6 +169,35 @@ TEST_F(WithMultiPartTest, pagesARankingOnTheBarrier) {
                       {{"Bio", "2"}, {"Computers", "2"}, {"Cooking", "2"}});
 }
 
+// A barrier per hop caps each one on its own: Adam and Cyrus are the first two Persons by
+// name, their five targets sort to Bio, Cooking, Gym, Remy, Travel, and the second cap
+// keeps three of them
+TEST_F(WithMultiPartTest, limitsBothHopsOfAChain) {
+    expectRowsInOrder("MATCH (a:Person) WITH a ORDER BY a.name LIMIT 2 "
+                      "MATCH (a)-->(b) WITH b ORDER BY b.name LIMIT 3 "
+                      "RETURN b.name",
+                      {{"Bio"}, {"Cooking"}, {"Gym"}});
+}
+
+// Suhas and Remy are the last two Persons by name; of their six targets the cap keeps
+// Adam, Computers and Eighties, and only Adam has out-edges of his own
+TEST_F(WithMultiPartTest, limitsEveryHopOfAThreeHopChain) {
+    expectRowsInOrder("MATCH (a:Person) WITH a ORDER BY a.name DESC LIMIT 2 "
+                      "MATCH (a)-->(b) WITH b ORDER BY b.name LIMIT 3 "
+                      "MATCH (b)-->(c) WITH c ORDER BY c.name LIMIT 2 "
+                      "RETURN c.name",
+                      {{"Bio"}, {"Cooking"}});
+}
+
+// The window a hop publishes can be skipped into as well as cut: Adam and Cyrus are
+// interested in Bio, Cooking, Gym and Travel, and the second barrier pages past the first
+TEST_F(WithMultiPartTest, skipsAndLimitsAWindowAtEveryHop) {
+    expectRowsInOrder("MATCH (a:Person) WITH a ORDER BY a.name LIMIT 2 "
+                      "MATCH (a)-[:INTERESTED_IN]->(i) WITH i ORDER BY i.name SKIP 1 LIMIT 2 "
+                      "RETURN i.name",
+                      {{"Cooking"}, {"Gym"}});
+}
+
 // The common-neighbour shape, whose two ends are both variables the barrier bound:
 // Computers is the one interest Remy and Luc share.
 TEST_F(WithMultiPartTest, joinsTwoBoundVariablesThroughANewNode) {
