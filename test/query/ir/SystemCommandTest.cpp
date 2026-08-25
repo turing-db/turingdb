@@ -103,6 +103,13 @@ void readAvailableGraph(std::span<const Column* const> chunks, size_t row, Syste
     sink.addNumber(static_cast<bool>((*loaded)[row]) ? 1 : 0);
 }
 
+// Matches only what the change-lifecycle tests create, so the row count alone says
+// whether the write is visible from where the query ran. The label is one simpledb
+// already carries: a label the graph has never seen is rejected by the analyzer
+// rather than matching nothing, which would report an error where the test wants
+// the empty result.
+constexpr std::string_view matchLifecycleNode = "MATCH (n:Person {name: \"lifecycle\"}) RETURN n";
+
 bool contains(const std::vector<std::string>& values, std::string_view value) {
     return std::ranges::find(values, value) != values.end();
 }
@@ -327,4 +334,127 @@ TEST_F(SystemCommandTest, droppingAnUnknownIndexFails) {
     runQuery("DROP INDEX missing", status, sink, changeID);
 
     EXPECT_EQ(status.getStatus(), QueryStatus::Status::EXEC_ERROR);
+}
+
+// The write path end to end: a change stages a CREATE, COMMIT makes it readable to
+// the change itself, and SUBMIT turns it into the graph's history - which is what
+// closes the change and puts the node at head.
+TEST_F(SystemCommandTest, changeSubmitPublishesTheWriteAndClosesTheChange) {
+    QueryStatus newStatus;
+    SystemResultSink newSink(&readChangeIDColumn);
+    runQuery("CHANGE NEW", newStatus, newSink);
+
+    ASSERT_TRUE(newStatus.isOk()) << newStatus.getError();
+    ASSERT_EQ(newSink.getRowCount(), 1u);
+
+    const ChangeID changeID {newSink.getNumbers().front()};
+
+    QueryStatus createStatus;
+    SystemResultSink createSink;
+    runQuery("CREATE (n:Person {name: \"lifecycle\"})", createStatus, createSink, changeID);
+    ASSERT_TRUE(createStatus.isOk()) << createStatus.getError();
+
+    QueryStatus bufferedStatus;
+    SystemResultSink bufferedSink;
+    runQuery(matchLifecycleNode, bufferedStatus, bufferedSink, changeID);
+    ASSERT_TRUE(bufferedStatus.isOk()) << bufferedStatus.getError();
+    EXPECT_EQ(bufferedSink.getRowCount(), 0u);
+
+    QueryStatus commitStatus;
+    SystemResultSink commitSink;
+    runQuery("COMMIT", commitStatus, commitSink, changeID);
+    ASSERT_TRUE(commitStatus.isOk()) << commitStatus.getError();
+
+    QueryStatus committedStatus;
+    SystemResultSink committedSink;
+    runQuery(matchLifecycleNode, committedStatus, committedSink, changeID);
+    ASSERT_TRUE(committedStatus.isOk()) << committedStatus.getError();
+    EXPECT_EQ(committedSink.getRowCount(), 1u);
+
+    QueryStatus unsubmittedHeadStatus;
+    SystemResultSink unsubmittedHeadSink;
+    runQuery(matchLifecycleNode, unsubmittedHeadStatus, unsubmittedHeadSink);
+    ASSERT_TRUE(unsubmittedHeadStatus.isOk()) << unsubmittedHeadStatus.getError();
+    EXPECT_EQ(unsubmittedHeadSink.getRowCount(), 0u);
+
+    QueryStatus submitStatus;
+    SystemResultSink submitSink(&readChangeIDColumn);
+    runQuery("CHANGE SUBMIT", submitStatus, submitSink, changeID);
+
+    ASSERT_TRUE(submitStatus.isOk()) << submitStatus.getError();
+    ASSERT_EQ(submitSink.getRowCount(), 1u);
+    EXPECT_EQ(submitSink.getColumnNames().front(), "changeID");
+    EXPECT_EQ(submitSink.getNumbers().front(), changeID.get());
+
+    QueryStatus listStatus;
+    SystemResultSink listSink(&readChangeIDColumn);
+    runQuery("CHANGE LIST", listStatus, listSink);
+
+    ASSERT_TRUE(listStatus.isOk()) << listStatus.getError();
+
+    const std::vector<uint64_t>& openChanges = listSink.getNumbers();
+    EXPECT_EQ(std::ranges::find(openChanges, changeID.get()), openChanges.end());
+
+    QueryStatus headStatus;
+    SystemResultSink headSink;
+    runQuery(matchLifecycleNode, headStatus, headSink);
+    ASSERT_TRUE(headStatus.isOk()) << headStatus.getError();
+    EXPECT_EQ(headSink.getRowCount(), 1u);
+}
+
+// The other way a change ends: DELETE drops it, so its commits never reach head.
+TEST_F(SystemCommandTest, changeDeleteDiscardsTheWriteAndClosesTheChange) {
+    QueryStatus newStatus;
+    SystemResultSink newSink(&readChangeIDColumn);
+    runQuery("CHANGE NEW", newStatus, newSink);
+
+    ASSERT_TRUE(newStatus.isOk()) << newStatus.getError();
+    ASSERT_EQ(newSink.getRowCount(), 1u);
+
+    const ChangeID changeID {newSink.getNumbers().front()};
+
+    QueryStatus createStatus;
+    SystemResultSink createSink;
+    runQuery("CREATE (n:Person {name: \"lifecycle\"})", createStatus, createSink, changeID);
+    ASSERT_TRUE(createStatus.isOk()) << createStatus.getError();
+
+    QueryStatus commitStatus;
+    SystemResultSink commitSink;
+    runQuery("COMMIT", commitStatus, commitSink, changeID);
+    ASSERT_TRUE(commitStatus.isOk()) << commitStatus.getError();
+
+    QueryStatus deleteStatus;
+    SystemResultSink deleteSink(&readChangeIDColumn);
+    runQuery("CHANGE DELETE", deleteStatus, deleteSink, changeID);
+
+    ASSERT_TRUE(deleteStatus.isOk()) << deleteStatus.getError();
+    ASSERT_EQ(deleteSink.getRowCount(), 1u);
+    EXPECT_EQ(deleteSink.getNumbers().front(), changeID.get());
+
+    QueryStatus listStatus;
+    SystemResultSink listSink(&readChangeIDColumn);
+    runQuery("CHANGE LIST", listStatus, listSink);
+
+    ASSERT_TRUE(listStatus.isOk()) << listStatus.getError();
+
+    const std::vector<uint64_t>& openChanges = listSink.getNumbers();
+    EXPECT_EQ(std::ranges::find(openChanges, changeID.get()), openChanges.end());
+
+    QueryStatus headStatus;
+    SystemResultSink headSink;
+    runQuery(matchLifecycleNode, headStatus, headSink);
+    ASSERT_TRUE(headStatus.isOk()) << headStatus.getError();
+    EXPECT_EQ(headSink.getRowCount(), 0u);
+}
+
+// Submit and delete act on the change the session selected, the way COMMIT does, so
+// both fail the same way when it opened none.
+TEST_F(SystemCommandTest, changeSubmitAndDeleteOutsideAChangeFail) {
+    QueryStatus submitStatus;
+    runQuery("CHANGE SUBMIT", submitStatus);
+    EXPECT_EQ(submitStatus.getStatus(), QueryStatus::Status::EXEC_ERROR);
+
+    QueryStatus deleteStatus;
+    runQuery("CHANGE DELETE", deleteStatus);
+    EXPECT_EQ(deleteStatus.getStatus(), QueryStatus::Status::EXEC_ERROR);
 }
