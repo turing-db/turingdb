@@ -616,7 +616,9 @@ void DBProgramGenerator::generateQueryParts(const SinglePartQuery* query) {
         partBegin = index + 1;
     }
 
-    generatePart(stmts.subspan(partBegin));
+    if (partBegin < stmts.size()) {
+        generatePart(stmts.subspan(partBegin));
+    }
 }
 
 void DBProgramGenerator::generatePart(std::span<Stmt* const> stmts) {
@@ -933,8 +935,9 @@ void DBProgramGenerator::throwOnUnboundPatternVariable() const {
             continue;
         }
 
-        throw TuringException("A pattern the traversal cannot walk from the variables in "
-                              "scope is not yet supported.");
+        throw TuringException(fmt::format("Reaching the pattern variable '{}' from the rest "
+                                          "of the query is not yet supported.",
+                                          var.getName()));
     }
 }
 
@@ -1058,7 +1061,12 @@ void DBProgramGenerator::closeBoundJoin(const DependencyEdge* edgeProducer,
     applyConstraints(edge);
 
     carriedSet.push_back(edge);
-    dataflowVars.push_back(edge);
+
+    // The walk lists an edge as soon as it reaches it, before any hop has given it a
+    // column, so one whose ends were both bound is already there with nothing behind it
+    if (std::ranges::find(dataflowVars, edge) == dataflowVars.end()) {
+        dataflowVars.push_back(edge);
+    }
 }
 
 void DBProgramGenerator::translateComponent(const VariableDependency* root,
@@ -1686,6 +1694,7 @@ void DBProgramGenerator::broadcastConstantProjection(llvm::SmallVectorImpl<mlir:
 void DBProgramGenerator::publishBoundColumns(llvm::ArrayRef<llvm::StringRef> names,
                                              llvm::ArrayRef<mlir::Value> columns) {
     bioassert(names.size() == columns.size(), "One name per column a WITH publishes expected");
+    bioassert(!names.empty(), "A WITH publishes at least one column");
 
     _part = PartScope {};
     _vdg.clear();

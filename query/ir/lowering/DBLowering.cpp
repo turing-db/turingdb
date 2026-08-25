@@ -1022,11 +1022,14 @@ mlir::Block* DBLowering::lowerFactor(mlir::Region& factor,
     // itself for one whose columns are a single row bound above every loop - a scalar
     // aggregate, or a constant laid out over the one row it is
     mlir::Block* factorBody = rootBlock;
+    size_t deepestDepth = blockNestingDepth(rootBlock);
     for (const mlir::Value chunk : yieldedChunks) {
         mlir::Block* const owner = ownerBlock(chunk);
-        if (owner != rootBlock) {
+        const size_t ownerDepth = blockNestingDepth(owner);
+
+        if (ownerDepth > deepestDepth) {
             factorBody = owner;
-            break;
+            deepestDepth = ownerDepth;
         }
     }
 
@@ -2434,6 +2437,15 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
     nl::BroadcastConstant broadcast = _builder.create<nl::BroadcastConstant>(_builder.getUnknownLoc(), resultType, chunk, cardinality);
 
     return broadcast.getResult();
+}
+
+size_t DBLowering::blockNestingDepth(mlir::Block* block) {
+    size_t depth = 0;
+    for (mlir::Operation* parent = block->getParentOp(); parent; parent = parent->getParentOp()) {
+        depth++;
+    }
+
+    return depth;
 }
 
 mlir::Block* DBLowering::ownerBlock(mlir::Value chunkValue) {

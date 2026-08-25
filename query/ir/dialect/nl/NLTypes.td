@@ -123,7 +123,9 @@ def NLCollectState : NLType<"CollectState", "collect_state"> {
     }];
 }
 
-def NLChunk : NLType<"Chunk", "chunk"> {
+def CarriesRows : NativeTypeTrait<"CarriesRows">;
+
+def NLChunk : NLType<"Chunk", "chunk", [CarriesRows]> {
     let summary = "A bounded batch of values";
     let description = "One column chunk filled by a single database iterator step";
     let parameters = (ins "::mlir::Type":$elementType);

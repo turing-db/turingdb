@@ -2,7 +2,8 @@
 
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
-#include "llvm/ADT/STLExtras.h"
+
+#include "IRConstantColumn.h"
 
 using namespace db;
 
@@ -27,7 +28,21 @@ bool db::rowAlignedWith(mlir::Value column, mlir::Value reference) {
         return false;
     }
 
-    return llvm::any_of(definingOp->getOperands(), [reference](mlir::Value operand) {
-        return rowAlignedWith(operand, reference);
-    });
+    bool carriesRows = false;
+    for (const mlir::Value operand : definingOp->getOperands()) {
+        const bool isHandle = !operand.getType().hasTrait<mlir::TypeTrait::CarriesRows>();
+        const bool standsForEveryRow = yieldsConstantColumn(operand);
+
+        if (isHandle || standsForEveryRow) {
+            continue;
+        }
+
+        if (!rowAlignedWith(operand, reference)) {
+            return false;
+        }
+
+        carriesRows = true;
+    }
+
+    return carriesRows;
 }

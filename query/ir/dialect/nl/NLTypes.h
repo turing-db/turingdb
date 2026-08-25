@@ -4,5 +4,7 @@
 
 #include "StorageTypes.h"
 
+#include "IRRowAlignment.h"
+
 #define GET_TYPEDEF_CLASSES
 #include "NLTypes.h.inc"
