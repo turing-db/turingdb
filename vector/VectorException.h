@@ -1,12 +1,14 @@
 #pragma once
 
-#include <stdexcept>
+#include <string>
+
+#include "TuringException.h"
 
 namespace vec {
 
-class VectorException : public std::runtime_error {
+class VectorException : public TuringException {
 public:
-    explicit VectorException(const std::string& message);
+    explicit VectorException(std::string&& message);
     ~VectorException() noexcept override;
 };
 
