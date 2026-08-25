@@ -222,6 +222,7 @@ public:
     static void runUnary(NLExecutionContext* context, NLFunctionData* data);
 
     static NLUnaryFn selectNot(const Column* operand, LocalMemory* memory, Column*& result);
+    static NLUnaryFn selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result);
 
     // Lay a constant chunk's single value out over the driving relation's rows
     // (nl.broadcast_constant), so a fold that walks rows is handed the step's rows

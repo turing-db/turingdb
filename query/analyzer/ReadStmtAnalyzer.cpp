@@ -147,11 +147,8 @@ void ReadStmtAnalyzer::analyze(const CallStmt* callStmt) {
     }
 
     // Step 3. Analyze YIELD clause
-    const YieldClause* yield = callStmt->getYield();
-    if (yield == nullptr || yield->getItems() == nullptr) {
-        // In the current implemention having YIELD * or no yield at all means the same thing.
-        // In neo4j YIELD * returns all columns including deprecated ones.
-        // including deprecated ones.
+    YieldClause* yield = callStmt->getYield();
+    if (yield == nullptr) {
         if (!callStmt->isStandaloneCall()) {
             throwError("Procedure call inside a query requires to name the "
                        "return items explicitly with a YIELD clause",
@@ -160,7 +157,27 @@ void ReadStmtAnalyzer::analyze(const CallStmt* callStmt) {
         return;
     }
 
+    // YIELD * names every return value the procedure declares. A standalone call needs no
+    // declarations for them, so its items stay unnamed for the code generator to spell out.
+    if (yield->getItems() == nullptr) {
+        if (callStmt->isStandaloneCall()) {
+            return;
+        }
+
+        yieldEveryReturnValue(*signature, yield);
+    }
+
     analyze(*func, yield);
+}
+
+void ReadStmtAnalyzer::yieldEveryReturnValue(const FunctionSignature& signature, YieldClause* yield) {
+    YieldItems* items = YieldItems::create(_ast);
+    for (const FunctionReturnType& returnType : signature.returnTypes()) {
+        Symbol* symbol = Symbol::create(_ast, returnType.getName());
+        items->add(SymbolExpr::create(_ast, symbol));
+    }
+
+    yield->setItems(items);
 }
 
 void ReadStmtAnalyzer::analyze(LoadCSVStmt* loadCSV) {

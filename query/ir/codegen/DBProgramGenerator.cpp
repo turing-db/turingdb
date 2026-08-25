@@ -1628,11 +1628,18 @@ void DBProgramGenerator::generateCreate(const CypherAST* ast) {
         return;
     }
 
-    // Collect MATCH-bound columns by variable name so CREATE patterns can reference them.
+    // Collect the columns a MATCH bound or a CALL yielded, by variable name, so CREATE
+    // patterns can reference them.
     std::unordered_map<std::string_view, mlir::Value> knownVars;
     for (const auto& [var, identities] : _varMap) {
         if (!identities.empty()) {
             knownVars[var->getName()] = identities.back();
+        }
+    }
+
+    for (const YieldedColumn& yieldedColumn : _yieldedColumns) {
+        if (isRowAlignedHere(yieldedColumn.second)) {
+            knownVars[yieldedColumn.first] = yieldedColumn.second;
         }
     }
 
@@ -1765,7 +1772,7 @@ mlir::Value DBProgramGenerator::resolveEntityColumn(std::string_view varName) {
         return _varMap.at(representative).back();
     }
 
-    return mlir::Value {};
+    return findYieldedColumn(varName);
 }
 
 mlir::Value DBProgramGenerator::resolveWildcardColumn() const {

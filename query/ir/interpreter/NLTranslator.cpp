@@ -459,6 +459,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateBinaryOp<OP_XOR>(xorOp, body);
         } else if (nl::Not notOp = mlir::dyn_cast<nl::Not>(operation)) {
             translateNot(notOp, body);
+        } else if (nl::ToNullable toNullable = mlir::dyn_cast<nl::ToNullable>(operation)) {
+            translateToNullable(toNullable, body);
         } else if (lookupUnaryFunctionSelector(operation)) {
             translateUnaryFunction(&operation, body);
         } else if (lookupBinaryFunctionSelector(operation)) {
@@ -1213,6 +1215,23 @@ void NLTranslator::translateNot(nl::Not notOp, NLStmtContainer* body) {
     bioassert(result, "Failed to allocate NOT result column.");
 
     _valueSlots[notOp.getResult()] = result;
+
+    NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
+    body->emplaceStmt(&NLExecutor::runUnary, data);
+}
+
+void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContainer* body) {
+    const Column* operand = getColumn(toNullable.getOperand());
+
+    const auto resultChunk = mlir::cast<nl::ChunkType>(toNullable.getResult().getType());
+    const auto nullableType = mlir::cast<storage::NullableType>(resultChunk.getElementType());
+    const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+
+    Column* result = nullptr;
+    const NLUnaryFn fn = NLExecutor::selectToNullable(valueType, operand, _memory, result);
+    bioassert(result, "Failed to allocate the nullable column of nl.to_nullable.");
+
+    _valueSlots[toNullable.getResult()] = result;
 
     NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
     body->emplaceStmt(&NLExecutor::runUnary, data);

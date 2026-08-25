@@ -585,8 +585,9 @@ void appendColumn(const Column* input, Column* buffer) {
     bufferRaw.insert(bufferRaw.end(), inputRaw.begin(), inputRaw.end());
 }
 
-// 3-way compare two rows of a non-null orderable column (an ID column): negative
-// if row a sorts before row b, positive if after, zero if they are equal.
+// 3-way compare two rows of a non-null orderable column (an ID column, or a plain scalar
+// a procedure yielded): negative if row a sorts before row b, positive if after, zero if
+// they are equal.
 template <typename ElementType>
 int compareColumn(const Column* column, size_t a, size_t b) {
     const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
@@ -628,6 +629,41 @@ int compareOptColumn(const Column* column, size_t a, size_t b) {
     }
 
     return 0;
+}
+
+// Copy a plain value column into a nullable one with every row present (nl.to_nullable),
+// so a kernel reading a nullable value column takes a column a procedure yielded.
+template <typename Primitive>
+void toNullableColumn(Column* result, const Column* operand) {
+    const auto& values = static_cast<const ColumnVector<Primitive>*>(operand)->getRaw();
+    auto& nullables = static_cast<ColumnOptVector<Primitive>*>(result)->getRaw();
+
+    nullables.resize(values.size());
+    std::copy(values.begin(), values.end(), nullables.begin());
+}
+
+template <typename Primitive>
+void toNullableConst(Column* result, const Column* operand) {
+    const auto* constant = static_cast<const ColumnConst<Primitive>*>(operand);
+    auto* nullable = static_cast<ColumnConst<std::optional<Primitive>>*>(result);
+
+    if (constant->empty()) {
+        nullable->clear();
+        return;
+    }
+
+    *nullable = std::optional<Primitive>((*constant)[0]);
+}
+
+template <typename Primitive>
+NLUnaryFn selectToNullableOf(const Column* operand, LocalMemory* memory, Column*& result) {
+    if (operand->getContainerKind() == ContainerKind::code<ColumnConst>()) {
+        result = memory->alloc<ColumnConst<std::optional<Primitive>>>();
+        return &toNullableConst<Primitive>;
+    }
+
+    result = memory->alloc<ColumnOptVector<Primitive>>();
+    return &toNullableColumn<Primitive>;
 }
 
 // 3-way compare two rows of a type-erased column of tagged scalars. Cells need not share
@@ -2629,6 +2665,36 @@ NLUnaryFn NLExecutor::selectNot(const Column* operand, LocalMemory* memory, Colu
     return &applyNotOnMask;
 }
 
+NLUnaryFn NLExecutor::selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return selectToNullableOf<types::Int64::Primitive>(operand, memory, result);
+        break;
+
+        case ValueType::UInt64:
+            return selectToNullableOf<types::UInt64::Primitive>(operand, memory, result);
+        break;
+
+        case ValueType::Double:
+            return selectToNullableOf<types::Double::Primitive>(operand, memory, result);
+        break;
+
+        case ValueType::Bool:
+            return selectToNullableOf<types::Bool::Primitive>(operand, memory, result);
+        break;
+
+        case ValueType::String:
+            return selectToNullableOf<types::String::Primitive>(operand, memory, result);
+        break;
+
+        default:
+            throw IRException("Only a scalar value column can be read as a nullable value column");
+        break;
+    }
+
+    return nullptr;
+}
+
 template <ColumnOperator Op>
 NLBinaryFn NLExecutor::selectBinary(const Column* lhs,
                                     const Column* rhs,
@@ -4052,16 +4118,43 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
         break;
 
         case NLChunkKind::LabelID:
+            return &compareColumn<LabelID>;
+        break;
+
         case NLChunkKind::PropertyTypeID:
+            return &compareColumn<PropertyTypeID>;
+        break;
+
         case NLChunkKind::ValueTypeCode:
+            return &compareColumn<ValueType>;
+        break;
+
         case NLChunkKind::UInt64:
+            return &compareColumn<types::UInt64::Primitive>;
+        break;
+
         case NLChunkKind::Int64:
+            return &compareColumn<types::Int64::Primitive>;
+        break;
+
         case NLChunkKind::Double:
+            return &compareColumn<types::Double::Primitive>;
+        break;
+
         case NLChunkKind::Bool:
+            return &compareColumn<types::Bool::Primitive>;
+        break;
+
         case NLChunkKind::String:
+            return &compareColumn<types::String::Primitive>;
+        break;
+
         case NLChunkKind::OwnedString:
+            return &compareColumn<std::string>;
+        break;
+
         case NLChunkKind::List:
-            throw IRException("A column a procedure yielded cannot be a sort key yet: only an ID column has a comparator here");
+            throw IRException("A list column cannot be a sort key: a list has no order here");
         break;
     }
 
