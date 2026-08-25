@@ -2,8 +2,8 @@
 
 using namespace vec;
 
-VectorException::VectorException(const std::string& message)
-    : std::runtime_error(message)
+VectorException::VectorException(std::string&& message)
+    : TuringException(std::move(message))
 {
 }
 
