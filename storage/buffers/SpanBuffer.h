@@ -1,13 +1,11 @@
 #pragma once
 
-#include <cstring>
 #include <stddef.h>
 
 #include <span>
-#include <string_view>
 #include <type_traits>
 
-#include "ByteBuffer.h"
+#include "RawBuffer.h"
 
 namespace db {
 
@@ -18,51 +16,10 @@ public:
 
 private:
     friend class StringBuffer;
-    ByteBuffer<E, N> _bytes;
+    RawBuffer<E, N> _bytes;
 
     static_assert(std::is_trivially_copyable_v<E>);
     static_assert(std::is_constructible_v<V, E*, size_t>);
 };
-
-template <typename E, typename V, size_t N>
-V SpanBuffer<E, V, N>::insert(std::span<const E> items) {
-    const size_t size = items.size();
-
-    _bytes.reserveContiguous(size);
-
-    E* spanStart = _bytes.nextPtr();
-
-    std::memcpy(spanStart, items.data(), size * sizeof(E));
-
-    _bytes.commit(size);
-
-    return V {spanStart, size};
-}
-
-template class SpanBuffer<char, std::string_view>;
-
-class StringBuffer final : public SpanBuffer<char, std::string_view> {
-public:
-    std::string_view concatenate(std::string_view a, std::string_view b);
-};
-
-inline std::string_view StringBuffer::concatenate(std::string_view a, std::string_view b) {
-    const size_t stringSize = a.size() + b.size();
-
-    _bytes.reserveContiguous(stringSize);
-
-    const char* aPtr = a.data();
-    const std::span aSpan(aPtr, a.size());
-
-    const char* bPtr = b.data();
-    const std::span bSpan(bPtr, b.size());
-
-    std::string_view aSV = insert(aSpan);
-    insert(bSpan);
-
-    const char* stringStart = aSV.data();
-
-    return {stringStart, stringSize};
-}
 
 }
