@@ -314,6 +314,17 @@ bool isNullableChunk(mlir::Type chunkType) {
     return mlir::isa<storage::NullableType>(chunk.getElementType());
 }
 
+// The null literal's chunk: nullable with no value type of its own.
+bool isUntypedNullChunk(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        return false;
+    }
+
+    const auto nullableType = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
+    return nullableType && mlir::isa<mlir::NoneType>(nullableType.getValueType());
+}
+
 mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
     const bool anyFloat = mlir::isa<mlir::Float64Type>(lhs) || mlir::isa<mlir::Float64Type>(rhs);
     if (anyFloat) {
@@ -1473,7 +1484,7 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
     // The nl chunk the aggregated column lowered to; the update folds its per-step
     // non-null values into the accumulator. A constant column is reduced over the
     // rows it stands for, so it is laid out over the driving relation first.
-    const mlir::Value inputChunk = rowAlignedChunk(mapValue(input), _innermostCardinality);
+    const mlir::Value inputChunk = nullableValueChunk(rowAlignedChunk(mapValue(input), _innermostCardinality));
 
     mlir::MLIRContext* const context = _builder.getContext();
     const mlir::Location loc = _builder.getUnknownLoc();
@@ -1564,6 +1575,16 @@ void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
         chunks[inputIndex] = rowAlignedChunk(chunks[inputIndex], chunks.front());
     }
 
+    for (size_t aggregateIndex = 0; aggregateIndex < kinds.size(); aggregateIndex++) {
+        const auto kind = static_cast<storage::GroupAggregateKind>(kinds[aggregateIndex]);
+        const bool countsRows = kind == storage::GroupAggregateKind::Count
+            || kind == storage::GroupAggregateKind::CountDistinct;
+
+        if (!countsRows) {
+            chunks[keyCount + aggregateIndex] = nullableValueChunk(chunks[keyCount + aggregateIndex]);
+        }
+    }
+
     mlir::MLIRContext* const context = _builder.getContext();
     const mlir::Location loc = _builder.getUnknownLoc();
 
@@ -1636,6 +1657,8 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
     if (chunks.empty()) {
         throw IRException("db.collect requires at least one column");
     }
+
+    chunks[keyCount] = nullableValueChunk(chunks[keyCount]);
 
     const mlir::Location loc = _builder.getUnknownLoc();
 
@@ -2284,8 +2307,15 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
 
 template <typename NLOp>
 void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
-    const mlir::Value lhsChunk = mapValue(op.getOperand(0));
-    const mlir::Value rhsChunk = mapValue(op.getOperand(1));
+    mlir::Value lhsChunk = mapValue(op.getOperand(0));
+    mlir::Value rhsChunk = mapValue(op.getOperand(1));
+
+    // x IS NULL over a plain scalar column meets kernels reading a nullable value column
+    if (isUntypedNullChunk(rhsChunk.getType()) && !isNullableChunk(lhsChunk.getType())) {
+        lhsChunk = nullableValueChunk(lhsChunk);
+    } else if (isUntypedNullChunk(lhsChunk.getType()) && !isNullableChunk(rhsChunk.getType())) {
+        rhsChunk = nullableValueChunk(rhsChunk);
+    }
 
     const mlir::Type resultElement = binaryResultElement(kind, lhsChunk.getType(), rhsChunk.getType());
     const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
@@ -2604,6 +2634,42 @@ void DBLowering::rowAlignCutChunks(llvm::SmallVectorImpl<mlir::Value>& chunks) {
     for (mlir::Value& chunk : chunks) {
         chunk = rowAlignedChunk(chunk, _innermostCardinality);
     }
+}
+
+// A scalar a procedure yielded is a plain value chunk, while a reduction, a collect or a
+// comparison with null read a nullable one: the plain chunk is read as nullable right
+// where it is bound, so those kernels take it as they take a property value.
+mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
+    const auto chunkType = mlir::cast<nl::ChunkType>(chunk.getType());
+    const mlir::Type element = chunkType.getElementType();
+    if (mlir::isa<storage::NullableType>(element)) {
+        return chunk;
+    }
+
+    mlir::Type valueElement = element;
+    if (mlir::isa<storage::BoolType>(element)) {
+        valueElement = _builder.getI1Type();
+    }
+
+    const bool isString = mlir::isa<storage::StringType>(valueElement);
+    const bool isDouble = mlir::isa<mlir::Float64Type>(valueElement);
+    const bool isInteger = mlir::isa<mlir::IntegerType>(valueElement);
+    if (!isString && !isDouble && !isInteger) {
+        throw IRException("Only a scalar value column can be read as a nullable value column");
+    }
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const storage::NullableType nullableType = storage::NullableType::get(context, valueElement);
+    const nl::ChunkType resultType = nl::ChunkType::get(context, nullableType);
+
+    mlir::OpBuilder::InsertionGuard guard(_builder);
+    if (mlir::Operation* const definingOp = chunk.getDefiningOp()) {
+        _builder.setInsertionPointAfter(definingOp);
+    } else {
+        _builder.setInsertionPointToStart(mlir::cast<mlir::BlockArgument>(chunk).getOwner());
+    }
+
+    return _builder.create<nl::ToNullable>(_builder.getUnknownLoc(), resultType, chunk).getResult();
 }
 
 mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinality) {

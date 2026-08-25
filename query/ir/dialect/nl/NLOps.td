@@ -1397,6 +1397,18 @@ def Not : NLOp<"not", [Pure, ConstantThroughOperands]> {
   let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
 }
 
+def ToNullable : NLOp<"to_nullable", [Pure]> {
+  let summary = "Read a plain value chunk as a nullable value chunk holding a value in every row";
+  let description = [{
+      %r = nl.to_nullable %x : (!nl.chunk<ui64>) -> !nl.chunk<!storage.nullable<ui64>>
+  }];
+
+  let arguments = (ins NLChunk:$operand);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
+}
+
 class NLUnaryFunctionOp<string mnemonic, list<Trait> extraTraits = []>
     : NLOp<mnemonic, !listconcat([Pure], extraTraits)> {
   let summary = "Apply a unary scalar function row-wise to a value chunk";

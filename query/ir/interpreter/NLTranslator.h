@@ -500,6 +500,7 @@ private:
     void translateBinaryOp(OpType op, NLStmtContainer* body);
 
     void translateNot(mlir::nl::Not notOp, NLStmtContainer* body);
+    void translateToNullable(mlir::nl::ToNullable toNullable, NLStmtContainer* body);
 
     void translateUnaryFunction(mlir::Operation* op, NLStmtContainer* body);
 

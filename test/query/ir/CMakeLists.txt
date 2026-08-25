@@ -109,6 +109,32 @@ target_link_libraries(test_query_ir_call_yielded_edge_identity PRIVATE
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s)
 
+# The CALL gap tests drive the whole engine through QueryInterpreterV3 on the simpledb
+# fixture, writes included, and read their rows as text through StringRowSink.
+function(add_call_v3_test exe_name cpp_file)
+    add_turing_test(${exe_name} ${cpp_file})
+    target_sources(${exe_name} PRIVATE StringRowSink.cpp)
+    target_link_libraries(${exe_name} PRIVATE
+            turing_db_s
+            turing_testenv_s
+            turing_db_examples_s
+            turing_db_system_s
+            turing_db_storage_s
+            turing_db_interpreter_v3_s)
+    target_include_directories(${exe_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+endfunction()
+
+add_call_v3_test(test_query_ir_call_yielded_property CallYieldedPropertyTest.cpp)
+add_call_v3_test(test_query_ir_call_yielded_node_create_edge CallYieldedNodeCreateEdgeTest.cpp)
+add_call_v3_test(test_query_ir_call_yielded_entity_delete CallYieldedEntityDeleteTest.cpp)
+add_call_v3_test(test_query_ir_call_yielded_sort_key CallYieldedSortKeyTest.cpp)
+add_call_v3_test(test_query_ir_call_yielded_aggregate CallYieldedAggregateTest.cpp)
+add_call_v3_test(test_query_ir_call_yielded_collect CallYieldedCollectTest.cpp)
+add_call_v3_test(test_query_ir_call_yielded_is_null CallYieldedIsNullTest.cpp)
+add_call_v3_test(test_query_ir_call_source_create_property CallSourceCreatePropertyTest.cpp)
+add_call_v3_test(test_query_ir_call_reserved_word_procedure CallReservedWordProcedureTest.cpp)
+add_call_v3_test(test_query_ir_call_yield_star CallYieldStarTest.cpp)
+
 # The crossing-call tests hop twice from the column a CALL yielded and then call again,
 # once with a constant argument alone and once reading the chain's tail, from the query
 # text over the simpledb fixture - so they need the frontend, the registry and the

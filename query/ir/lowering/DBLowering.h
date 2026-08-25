@@ -387,6 +387,8 @@ private:
     // of its own to walk.
     mlir::Value rowAlignedChunk(mlir::Value chunk, mlir::Value cardinality);
 
+    mlir::Value nullableValueChunk(mlir::Value chunk);
+
     // The nl chunk a db value lowered to, and the block that holds a chunk
     mlir::Value mapValue(mlir::Value dbValue) const;
     static mlir::Block* ownerBlock(mlir::Value chunkValue);
