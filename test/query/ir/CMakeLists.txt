@@ -228,6 +228,10 @@ target_link_libraries(test_query_ir_interpreter_v3_call PRIVATE
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_interpreter_v3_call PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_ir_tests(test_query_ir_system_command_lowering SystemCommandLoweringTest.cpp)
+target_compile_definitions(test_query_ir_system_command_lowering
+    PRIVATE MLIR_SAMPLES_DIR="${CMAKE_SOURCE_DIR}/samples/mlir")
+
 add_turing_test(test_query_ir_system_command SystemCommandTest.cpp)
 target_link_libraries(test_query_ir_system_command PRIVATE
         turing_db_s

@@ -25,6 +25,12 @@ module {
     return
   }
 
+  func.func @import_parquet() {
+    %0 = nl.import_graph parquet("/data/social") as "social" : !nl.chunk<!storage.string>
+    nl.output(%0) names ["graphName"] : !nl.chunk<!storage.string>
+    return
+  }
+
   func.func @import_jsonl_with_embeddings() {
     %0 = nl.import_graph jsonl("/data/social.jsonl") as "social" embeddings {vector = 128 : ui64}
        : !nl.chunk<!storage.string>
@@ -52,6 +58,12 @@ module {
     return
   }
 
+  func.func @change_list() {
+    %0 = nl.change list : !nl.chunk<!storage.change_id>
+    nl.output(%0) names ["changeID"] : !nl.chunk<!storage.change_id>
+    return
+  }
+
   func.func @commit() {
     nl.commit
     return
@@ -74,6 +86,11 @@ module {
 
   func.func @s3_pull() {
     nl.s3_transfer pull("bucket", "graphs/", "", "graphs")
+    return
+  }
+
+  func.func @s3_push() {
+    nl.s3_transfer push("bucket", "", "graphs/social.jsonl", "graphs")
     return
   }
 
