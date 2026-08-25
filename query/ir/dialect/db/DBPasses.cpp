@@ -1,5 +1,7 @@
 #include "DBPasses.h"
 
+#include <optional>
+
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Operation.h"
@@ -10,9 +12,6 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 
-#include <optional>
-
-#include "DBDialect.h"
 #include "DBOps.h"
 
 namespace mlir::db {
@@ -119,7 +118,7 @@ Operation::operand_range factorYieldColumns(mlir::Region& factor) {
 
 // Walk op chain until we reach a node/edge source or something we can't push down to
 Value climbToLineageAnchor(Value column) {
-    while (true) {
+    for (;;) {
         Operation* const def = column.getDefiningOp();
         if (!def) {
             return {};
@@ -129,11 +128,9 @@ Value climbToLineageAnchor(Value column) {
             return column;
         }
 
-        if (FilterOp filter = dyn_cast<FilterOp>(def)) {
-            if (filter.getColumnsToFilter().size() != 1) {
-                return {};
-            }
-
+        if (isa<FilterOp>(def)) {
+            // A filter passes each column through unchanged, so its result is the same
+            // variable one step on - a valid boundary to sit a further filter right after.
             return column;
         }
 
@@ -157,12 +154,16 @@ Value climbToLineageAnchor(Value column) {
         }
 
         if (isEdgeHop(def)) {
-            const unsigned resultIndex = cast<OpResult>(column).getResultNumber();
-            const unsigned srcResultIndex = 0;
-            const unsigned tgtResultIndex = 3;
-            const unsigned fixedResultCount = 4;
+            const size_t resultIndex = cast<OpResult>(column).getResultNumber();
+            constexpr size_t srcResultIndex = 0;
+            constexpr size_t tgtResultIndex = 3;
+            constexpr size_t fixedResultCount = 4;
 
-            const unsigned inputResultIndex = isReverseHop(def) ? tgtResultIndex : srcResultIndex;
+            // The input node re-surfaces as srcids (forward) or tgtids (reverse) and each
+            // carried column passes through: those continue a variable that existed before
+            // the hop, so keep climbing. The opposite node end and the eids/etypes are
+            // bound here, so the variable is born at this hop - its earliest filter point.
+            const size_t inputResultIndex = isReverseHop(def) ? tgtResultIndex : srcResultIndex;
 
             if (resultIndex == inputResultIndex) {
                 column = def->getOperand(0);
@@ -170,7 +171,7 @@ Value climbToLineageAnchor(Value column) {
                 // Carried columns follow input_nodes (operand 0) in operand order.
                 column = def->getOperand(1 + (resultIndex - fixedResultCount));
             } else {
-                return {};
+                return column;
             }
         } else {
             return {};
@@ -275,34 +276,46 @@ void pushDownPredicate(FilterOp filter, const PushablePredicate& pushable, mlir:
     const MaskCone& cone = pushable._cone;
     const mlir::Location loc = filter.getLoc();
 
+    Operation* const anchorProducer = anchor.getDefiningOp();
+
+    llvm::SmallVector<mlir::Value> liveColumns;
+    for (const mlir::Value result : anchorProducer->getResults()) {
+        if (!result.use_empty()) {
+            liveColumns.push_back(result);
+        }
+    }
+
     // Rebuild the mask over the anchor version of the column, right after it is bound.
     mlir::IRMapping mapping;
     for (const Value input : cone._inputs) {
         mapping.map(input, anchor);
     }
 
-    builder.setInsertionPointAfter(anchor.getDefiningOp());
+    builder.setInsertionPointAfter(anchorProducer);
 
-    llvm::SmallPtrSet<Operation*, 8> anchorReaders;
+    llvm::SmallPtrSet<Operation*, 8> boundaryReaders;
     for (Operation* const coneOp : cone._ops) {
         Operation* const cloned = builder.clone(*coneOp, mapping);
-        anchorReaders.insert(cloned);
+        boundaryReaders.insert(cloned);
         builder.setInsertionPointAfter(cloned);
     }
 
     const Value clonedMask = mapping.lookup(filter.getMask());
 
-    const llvm::SmallVector<mlir::Type, 1> resultTypes {anchor.getType()};
-    FilterOp pushed = builder.create<FilterOp>(loc, resultTypes, clonedMask, mlir::ValueRange {anchor});
-    const Value pushedColumn = pushed.getResult(0);
-    anchorReaders.insert(pushed.getOperation());
+    llvm::SmallVector<mlir::Type, 8> resultTypes;
+    for (const mlir::Value column : liveColumns) {
+        resultTypes.push_back(column.getType());
+    }
 
-    // Every downstream consumer of the anchor now reads the filtered column; the clones
-    // and the pushed filter keep reading the anchor itself.
-    anchor.replaceAllUsesExcept(pushedColumn, anchorReaders);
+    FilterOp pushed = builder.create<FilterOp>(loc, resultTypes, clonedMask, liveColumns);
+    boundaryReaders.insert(pushed.getOperation());
 
-    // The original filter is now redundant - its rows were already dropped upstream - so
-    // its outputs fold back onto its inputs and it, then its dead mask cone, are erased.
+    // Replace live columns with filtered versions
+    for (size_t i {0}; mlir::Value liveCol : liveColumns) {
+        liveCol.replaceAllUsesExcept(pushed.getResult(i++), boundaryReaders);
+    }
+
+    // Remove original filter
     const mlir::ResultRange filtered = filter.getFilteredColumns();
     const Operation::operand_range carried = filter.getColumnsToFilter();
     for (size_t index = 0; index < filtered.size(); index++) {

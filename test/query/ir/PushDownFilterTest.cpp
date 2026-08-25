@@ -256,22 +256,30 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(PushDownFilterTest, leavesInEdgeNeighbourPredicateAlone) {
+TEST_F(PushDownFilterTest, sinksNeighbourPredicateToBindingHop) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(inEdgeNeighbourPredicate);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runPushDown(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
 
-    // The predicate is not pushed: the in-hop binds n, so there is nowhere earlier to go.
     llvm::SmallVector<mlir::db::FilterOp> filters = collect<mlir::db::FilterOp>(*module);
     ASSERT_EQ(filters.size(), 1u);
     mlir::db::FilterOp filter = filters.front();
 
-    // Still the original many-column filter, still below the hop that binds n - not a
-    // single-column filter hoisted above the scan.
-    EXPECT_EQ(filter.getColumnsToFilter().size(), 3u);
-
     llvm::SmallVector<mlir::db::GetInEdges> inHops = collect<mlir::db::GetInEdges>(*module);
     ASSERT_EQ(inHops.size(), 1u);
-    EXPECT_TRUE(inHops.front().getOperation()->isBeforeInBlock(filter.getOperation()));
+    llvm::SmallVector<mlir::db::GetOutEdges> outHops = collect<mlir::db::GetOutEdges>(*module);
+    ASSERT_EQ(outHops.size(), 1u);
+    mlir::db::GetInEdges inHop = inHops.front();
+    mlir::db::GetOutEdges outHop = outHops.front();
+
+    EXPECT_TRUE(inHop.getOperation()->isBeforeInBlock(filter.getOperation()));
+    EXPECT_TRUE(filter.getOperation()->isBeforeInBlock(outHop.getOperation()));
+
+    EXPECT_EQ(filter.getColumnsToFilter().size(), 2u);
+    EXPECT_EQ(outHop.getInputNodes().getDefiningOp(), filter.getOperation());
+
+    llvm::SmallVector<mlir::db::GetNodeProperties> reads = collect<mlir::db::GetNodeProperties>(*module);
+    ASSERT_EQ(reads.size(), 1u);
+    EXPECT_EQ(reads.front().getInputNodes().getDefiningOp(), inHop.getOperation());
 }
