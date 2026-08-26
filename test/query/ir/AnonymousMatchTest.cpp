@@ -43,10 +43,14 @@ protected:
         SimpleGraph::createSimpleGraph(graph);
     }
 
+    void runQuery(std::string_view query, StringRowSink& sink, QueryStatus& status) {
+        _interpreter->execute(status, query, _graphName, CommitHash::head(), ChangeID::head(), &_env->getMem(), &sink);
+    }
+
     void expectRows(std::string_view query, const std::vector<StringRowSink::Row>& expected) {
         StringRowSink sink;
         QueryStatus status;
-        _interpreter->execute(status, query, _graphName, CommitHash::head(), ChangeID::head(), &_env->getMem(), &sink);
+        runQuery(query, sink, status);
         ASSERT_TRUE(status.isOk()) << query << ": " << status.getError();
 
         std::vector<StringRowSink::Row> actual;
@@ -56,6 +60,16 @@ protected:
         std::sort(sortedExpected.begin(), sortedExpected.end());
 
         EXPECT_EQ(actual, sortedExpected) << "query: " << query;
+    }
+
+    void expectError(std::string_view query, std::string_view reason) {
+        StringRowSink sink;
+        QueryStatus status;
+        runQuery(query, sink, status);
+        ASSERT_FALSE(status.isOk()) << "accepted: " << query;
+
+        const std::string error = status.getError();
+        EXPECT_NE(error.find(reason), std::string::npos) << query << ": " << error;
     }
 
     const std::string _graphName = "simpledb";
@@ -82,6 +96,10 @@ TEST_F(AnonymousMatchTest, matchesNodesAfterAnAnonymousEdgeMatch) {
     }
 
     expectRows("MATCH ()-->() MATCH (v0) RETURN v0", expected);
+}
+
+TEST_F(AnonymousMatchTest, doesNotResolveAnAnonymousNodeByName) {
+    expectError("MATCH ()-->() RETURN v0", "Variable 'v0' not found");
 }
 
 int main(int argc, char** argv) {
