@@ -1376,7 +1376,11 @@ void DBProgramGenerator::generateFiltersAndCalls(const CypherAST* ast) {
 
         if (kind == Stmt::Kind::MATCH) {
             matchSeen = true;
-            generateMatchFilter(static_cast<const MatchStmt*>(stmt));
+
+            const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt);
+            generateMatchFilter(matchStmt);
+            generateMatchOrderBy(matchStmt);
+            generateMatchWindow(matchStmt);
         } else if (kind == Stmt::Kind::CALL) {
             const bool drivesTheTraversal = _drivenRoot && !matchSeen;
 
@@ -1398,6 +1402,112 @@ void DBProgramGenerator::generateMatchFilter(const MatchStmt* matchStmt) {
     flattenConjuncts(where->getExpr(), conjuncts);
 
     applyPredicateFilters(conjuncts);
+}
+
+void DBProgramGenerator::generateMatchOrderBy(const MatchStmt* matchStmt) {
+    if (!matchStmt->hasOrderBy()) {
+        return;
+    }
+
+    InFlightColumns inFlight;
+    collectInFlightColumns(inFlight);
+
+    if (inFlight._columns.empty()) {
+        return;
+    }
+
+    VariableColumnMap variableColumns;
+    collectVariableColumns(variableColumns);
+
+    llvm::SmallVector<mlir::Value> sorted(inFlight._columns.begin(), inFlight._columns.end());
+    llvm::SmallVector<int64_t> keyColumns;
+    llvm::SmallVector<bool> keyAscending;
+
+    for (const OrderByItem* item : matchStmt->getOrderBy()->getItems()) {
+        const Expr* keyExpr = item->getExpr();
+
+        // A constant key holds the same value in every row, so it changes no order
+        if (!keyExpr->isDynamic()) {
+            continue;
+        }
+
+        const mlir::Value keyColumn = getOrTranslateExprColumn(variableColumns, keyExpr);
+        if (yieldsConstantColumn(keyColumn)) {
+            continue;
+        }
+
+        // A key the match does not carry - the n.name of MATCH (n) ORDER BY n.name - is
+        // handed to the sort as one more column, so that it moves with the row it belongs
+        // to; its result is then left unread, which is what keeps it out of the rows
+        auto sortedKey = std::find(sorted.begin(), sorted.end(), keyColumn);
+        if (sortedKey == sorted.end()) {
+            sorted.push_back(keyColumn);
+            sortedKey = std::prev(sorted.end());
+        }
+
+        keyColumns.push_back(static_cast<int64_t>(std::distance(sorted.begin(), sortedKey)));
+        keyAscending.push_back(item->getType() == OrderByType::ASC);
+    }
+
+    if (keyColumns.empty()) {
+        return;
+    }
+
+    llvm::SmallVector<mlir::Type> sortResultTypes;
+    for (const mlir::Value column : sorted) {
+        sortResultTypes.push_back(column.getType());
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    auto sortOp = _opBuilder.create<mlir::db::Sort>(loc,
+                                                    sortResultTypes,
+                                                    mlir::ValueRange {sorted},
+                                                    keyColumns,
+                                                    keyAscending);
+
+    rebindInFlightColumns(sortOp.getResults(), /*firstResult=*/0, inFlight);
+}
+
+void DBProgramGenerator::generateMatchWindow(const MatchStmt* matchStmt) {
+    if (matchStmt->hasSkip()) {
+        const int64_t skipValue = evaluateConstantInteger(matchStmt->getSkip()->getExpr());
+
+        if (skipValue < 0) {
+            throw TuringException("SKIP expression must be a non-negative integer");
+        }
+
+        cutAllColumns<mlir::db::Skip>(static_cast<uint64_t>(skipValue));
+    }
+
+    if (matchStmt->hasLimit()) {
+        const int64_t limitValue = evaluateConstantInteger(matchStmt->getLimit()->getExpr());
+
+        if (limitValue < 0) {
+            throw TuringException("LIMIT expression must be a non-negative integer");
+        }
+
+        cutAllColumns<mlir::db::Limit>(static_cast<uint64_t>(limitValue));
+    }
+}
+
+template <typename CutOp>
+void DBProgramGenerator::cutAllColumns(uint64_t count) {
+    InFlightColumns inFlight;
+    collectInFlightColumns(inFlight);
+
+    if (inFlight._columns.empty()) {
+        return;
+    }
+
+    llvm::SmallVector<mlir::Type> resultTypes;
+    for (const mlir::Value column : inFlight._columns) {
+        resultTypes.push_back(column.getType());
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    auto cutOp = _opBuilder.create<CutOp>(loc, resultTypes, inFlight._columns, count);
+
+    rebindInFlightColumns(cutOp.getResults(), /*firstResult=*/0, inFlight);
 }
 
 void DBProgramGenerator::generateCall(const CallStmt* callStmt) {
@@ -1935,6 +2045,27 @@ void DBProgramGenerator::generateDelete(const CypherAST* ast) {
     }
 }
 
+void DBProgramGenerator::collectVariableColumns(VariableColumnMap& variableColumns) const {
+    for (const auto& [cypherVar, columns] : _varMap) {
+        const std::string_view varName = cypherVar->getName();
+
+        bioassert(not columns.empty(), "No definitions for {}", varName);
+        variableColumns[varName] = columns.back();
+    }
+
+    // A CALL's yielded columns are variables of the query too, named by the YIELD.
+    for (const YieldedColumn& yieldedColumn : _yieldedColumns) {
+        variableColumns[yieldedColumn.first] = yieldedColumn.second;
+    }
+
+    for (const auto& [name, vars] : _vdg.edgeIdentities()) {
+        bioassert(!vars.empty(), "Empty edge identity for '{}'", name);
+        const VariableDependency* representative = vars.front();
+        bioassert(_varMap.contains(representative), "Edge identity representative not in varMap");
+        variableColumns[name] = _varMap.at(representative).back();
+    }
+}
+
 void DBProgramGenerator::generateOutput(const CypherAST* ast) {
     const CypherAST::QueryCommands& queries = ast->queries();
     if (queries.size() != 1) {
@@ -1971,26 +2102,7 @@ void DBProgramGenerator::generateOutput(const CypherAST* ast) {
     const Projection::Items& returned = proj->items();
 
     VariableColumnMap variableColumns;
-    for (auto& [cypherVar, mlirCol] : _varMap) {
-        const std::string_view varName = cypherVar->getName();
-
-        bioassert(not mlirCol.empty(), "No definitions for {}", varName);
-        const mlir::Value finalValue = mlirCol.back();
-
-        variableColumns[varName] = finalValue;
-    }
-
-    // A CALL's yielded columns are variables of the query too, named by the YIELD.
-    for (const YieldedColumn& yieldedColumn : _yieldedColumns) {
-        variableColumns[yieldedColumn.first] = yieldedColumn.second;
-    }
-
-    for (const auto& [name, vars] : _vdg.edgeIdentities()) {
-        bioassert(!vars.empty(), "Empty edge identity for '{}'", name);
-        const VariableDependency* representative = vars.front();
-        bioassert(_varMap.contains(representative), "Edge identity representative not in varMap");
-        variableColumns[name] = _varMap.at(representative).back();
-    }
+    collectVariableColumns(variableColumns);
 
     const auto getVarForItem = [&](auto&& item) -> mlir::Value {
         using Type = std::remove_cvref_t<decltype(item)>;
