@@ -231,6 +231,12 @@ public:
     // chunk and running the body over each.
     static void runCollectLoop(NLExecutionContext* context, NLFunctionData* data);
 
+    static void runShortestPathReset(NLExecutionContext* context, NLFunctionData* data);
+
+    static void runShortestPathUpdate(NLExecutionContext* context, NLFunctionData* data);
+
+    static void runShortestPathLoop(NLExecutionContext* context, NLFunctionData* data);
+
     static void runCreateNode(NLExecutionContext* context, NLFunctionData* data);
 
     static void runCreateEdge(NLExecutionContext* context, NLFunctionData* data);

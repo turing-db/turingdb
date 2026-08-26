@@ -787,6 +787,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerCollect(collect);
     } else if (mlir::db::UnwindCollect unwindCollect = mlir::dyn_cast<mlir::db::UnwindCollect>(operation)) {
         lowerUnwindCollect(unwindCollect);
+    } else if (mlir::db::ShortestPath shortestPath = mlir::dyn_cast<mlir::db::ShortestPath>(operation)) {
+        lowerShortestPath(shortestPath);
     } else if (mlir::db::CallProcedure call = mlir::dyn_cast<mlir::db::CallProcedure>(operation)) {
         lowerCallProcedure(call);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
@@ -1931,6 +1933,46 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
     setInsertionInto(_entryBlock);
     nl::Collect collectOp = _builder.create<nl::Collect>(loc, iteratorType, state);
     buildLoopForSource(collectOp.getResult(), collect.getOperation());
+}
+
+void DBLowering::lowerShortestPath(mlir::db::ShortestPath shortestPath) {
+    const mlir::Value sourceChunk = mapValue(shortestPath.getSource());
+    const mlir::Value targetChunk = mapValue(shortestPath.getTarget());
+    const llvm::StringRef edgeProperty = shortestPath.getEdgeProperty();
+
+    const mlir::Location loc = _builder.getUnknownLoc();
+    mlir::MLIRContext* const context = _builder.getContext();
+
+    // The search accumulator is hoisted above every loop, so its node-set buffers exist
+    // before the producing loops fill them and the handle dominates both updates.
+    _builder.setInsertionPointToStart(_entryBlock);
+    const mlir::Value state = _builder.create<nl::ShortestPathBuffer>(loc).getState();
+
+    // The source and target sets are filled by two separate updates, each spliced into
+    // the loop that binds its node chunk - the two are distinct patterns, so they lower
+    // to sibling loops. Placing the drain after both guarantees each set is complete.
+    setInsertionInto(ownerBlock(sourceChunk));
+    _builder.create<nl::ShortestPathUpdate>(loc, state, sourceChunk, /*target=*/false);
+
+    setInsertionInto(ownerBlock(targetChunk));
+    _builder.create<nl::ShortestPathUpdate>(loc, state, targetChunk, /*target=*/true);
+
+    // The emit phase: an nl.shortest_path source runs the weighted search once, reading
+    // the edge weight through the hoisted property handle, and yields the one result row.
+    // Its chunk types are the db op's result columns: the distance's numeric type, then a
+    // storage path.
+    const mlir::Value handle = getOrCreatePropertyTypeHandle(edgeProperty);
+    const mlir::Type distanceElement = mlir::cast<mlir::db::ColumnType>(shortestPath.getDistance().getType()).getType();
+
+    llvm::SmallVector<mlir::Type, 2> chunkTypes;
+    chunkTypes.push_back(nl::ChunkType::get(context, distanceElement));
+    chunkTypes.push_back(nl::ChunkType::get(context, storage::PathType::get(context)));
+
+    const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunkTypes);
+
+    setInsertionInto(_entryBlock);
+    nl::ShortestPath searchOp = _builder.create<nl::ShortestPath>(loc, iteratorType, state, handle);
+    buildLoopForSource(searchOp.getResult(), shortestPath.getOperation());
 }
 
 void DBLowering::lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect) {

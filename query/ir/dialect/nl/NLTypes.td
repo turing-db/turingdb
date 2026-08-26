@@ -123,6 +123,15 @@ def NLCollectState : NLType<"CollectState", "collect_state"> {
     }];
 }
 
+def NLShortestPathState : NLType<"ShortestPathState", "shortest_path_state"> {
+    let summary = "A shortest-path search accumulator handle";
+    let description = [{
+        One SHORTESTPATH's fully buffered source and target node sets. Produced by
+        nl.shortest_path_buffer, appended to by nl.shortest_path_update, and drained by the
+        nl.for over nl.shortest_path, which runs the search once both sets are complete.
+    }];
+}
+
 def NLProcedureState : NLType<"ProcedureState", "procedure_state"> {
     let summary = "A live procedure call handle";
     let description = [{
@@ -311,6 +320,12 @@ def NLCollectStateHandle : Type<
         CPred<"::llvm::isa<::mlir::nl::CollectStateType>($_self)">,
         "collect state handle", "::mlir::nl::CollectStateType">,
     BuildableType<"::mlir::nl::CollectStateType::get($_builder.getContext())">;
+
+// Constrains an operand to an !nl.shortest_path_state handle
+def NLShortestPathStateHandle : Type<
+        CPred<"::llvm::isa<::mlir::nl::ShortestPathStateType>($_self)">,
+        "shortest path state handle", "::mlir::nl::ShortestPathStateType">,
+    BuildableType<"::mlir::nl::ShortestPathStateType::get($_builder.getContext())">;
 
 // Constrains an operand to an !nl.procedure_state handle, the same way
 // NLSortStateHandle constrains the sort handle. The single concrete type - there

@@ -3,10 +3,13 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <queue>
 #include <span>
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <unordered_map>
+#include <unordered_set>
 
 #include <spdlog/fmt/bundled/format.h>
 
@@ -18,6 +21,7 @@
 #include "iterators/GetNodeLabelSetIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/GetOutEdgesByTypeIterator.h"
+#include "iterators/GetPropertiesIterator.h"
 #include "iterators/GetPropertiesWithNullIterator.h"
 #include "iterators/ScanEdgesIterator.h"
 #include "iterators/ScanNodesIterator.h"
@@ -2332,6 +2336,152 @@ void runProcedureDrive(NLExecutionContext* context,
     }
 }
 
+template <typename T>
+struct ShortestPathHeapNode {
+    NodeID id;
+    NodeID previous;
+    EdgeID edge;
+    T distance {0};
+};
+
+template <typename T>
+struct ShortestPathBest {
+    NodeID previous;
+    EdgeID edge;
+    T distance {0};
+};
+
+template <typename T>
+struct ShortestPathHeapOrder {
+    bool operator()(const ShortestPathHeapNode<T>& left, const ShortestPathHeapNode<T>& right) const {
+        return left.distance > right.distance;
+    }
+};
+
+// Weighted Dijkstra over out-edges from the buffered source set to the buffered target
+// set, summing the resolved weight property. Emits one row - the total weight and the
+// back-traced path (target-first, alternating node and edge IDs) - or no row when no
+// target is reachable. Ported from the V2 ShortestPathProcessor.
+template <SupportedType T>
+void shortestPathSearch(NLExecutionContext* context, NLShortestPathLoopData* loopData) {
+    using Weight = typename T::Primitive;
+
+    const GraphView& view = *context->getView();
+    NLShortestPathState* state = loopData->getState();
+
+    ColumnNodeIDs* expansionInput = loopData->getExpansionInput();
+    ColumnEdgeIDs* expandedEdges = loopData->getExpandedEdges();
+    ColumnNodeIDs* expandedTargets = loopData->getExpandedTargets();
+    ColumnVector<size_t>* expandedIndices = loopData->getExpandedIndices();
+    ColumnVector<size_t>* weightIndices = loopData->getWeightIndices();
+    ColumnVector<Weight>* weightValues = static_cast<ColumnVector<Weight>*>(loopData->getWeightValues());
+
+    GetOutEdgesChunkWriter edgeWriter(view, expansionInput);
+    edgeWriter.setIndices(expandedIndices);
+    edgeWriter.setEdgeIDs(expandedEdges);
+    edgeWriter.setTgtIDs(expandedTargets);
+
+    GetPropertiesChunkWriter<EdgeID, T> weightWriter(view, loopData->getPropertyTypeID(), expandedEdges);
+    weightWriter.setOutput(weightValues);
+    weightWriter.setIndices(weightIndices);
+
+    std::unordered_set<NodeID> targets;
+    for (const NodeID id : *state->targets()) {
+        targets.insert(id);
+    }
+
+    std::priority_queue<ShortestPathHeapNode<Weight>,
+                        std::vector<ShortestPathHeapNode<Weight>>,
+                        ShortestPathHeapOrder<Weight>> heap;
+    std::unordered_map<NodeID, ShortestPathBest<Weight>> best;
+
+    for (const NodeID id : *state->sources()) {
+        heap.push({id, NodeID(), EdgeID(), 0});
+        best.insert({id, {NodeID(), EdgeID(), 0}});
+    }
+
+    const size_t wholeChunk = std::numeric_limits<size_t>::max();
+
+    while (!heap.empty()) {
+        const ShortestPathHeapNode<Weight> node = heap.top();
+
+        if (targets.contains(node.id)) {
+            break;
+        }
+
+        heap.pop();
+
+        // A node re-pushed at a shorter distance leaves its old entry behind; the best map
+        // records the current distance, so a heap entry that disagrees is stale - skip it.
+        const auto bestIt = best.find(node.id);
+        if (bestIt != best.end() && bestIt->second.distance != node.distance) {
+            continue;
+        }
+
+        expansionInput->clear();
+        expansionInput->push_back(node.id);
+
+        edgeWriter.reset();
+        edgeWriter.fill(wholeChunk);
+
+        weightWriter.reset();
+        weightWriter.fill(wholeChunk);
+
+        const std::vector<Weight>& weights = weightValues->getRaw();
+        for (size_t weight = 0; weight < weights.size(); weight++) {
+            if constexpr (std::is_signed_v<Weight>) {
+                if (weights[weight] < 0) {
+                    throw IRException("Cannot compute a shortest path with negative edge weights");
+                }
+            }
+
+            const size_t edgeIndex = (*weightIndices)[weight];
+            const NodeID neighbour = (*expandedTargets)[edgeIndex];
+            const EdgeID edge = (*expandedEdges)[edgeIndex];
+            const Weight distance = node.distance + weights[weight];
+
+            const auto neighbourIt = best.find(neighbour);
+            const bool unseen = neighbourIt == best.end();
+            if (unseen || distance < neighbourIt->second.distance) {
+                heap.push({neighbour, node.id, edge, distance});
+                best[neighbour] = {node.id, edge, distance};
+            }
+        }
+    }
+
+    ColumnVector<Weight>* distanceOutput = static_cast<ColumnVector<Weight>*>(loopData->getDistanceOutput());
+    ColumnVector<Path>* pathOutput = loopData->getPathOutput();
+
+    distanceOutput->clear();
+    pathOutput->clear();
+
+    // The heap empties only when no target was reachable from any source: emit no row.
+    if (heap.empty()) {
+        return;
+    }
+
+    const ShortestPathHeapNode<Weight> reached = heap.top();
+    distanceOutput->push_back(reached.distance);
+
+    // Walk the best-predecessor chain back from the reached target to a source, so the
+    // path is stored target-first as alternating node and edge IDs.
+    Path& path = pathOutput->emplace_back();
+    path.push_back(reached.id.getValue());
+
+    NodeID previous = reached.previous;
+    EdgeID edge = reached.edge;
+    while (previous.isValid()) {
+        path.push_back(edge.getValue());
+        path.push_back(previous.getValue());
+
+        const ShortestPathBest<Weight>& step = best[previous];
+        previous = step.previous;
+        edge = step.edge;
+    }
+
+    runBody(context, loopData->getStmts());
+}
+
 }
 
 vec::VectorDatabase* NLExecutionContext::getVectorDatabase() const {
@@ -3898,6 +4048,44 @@ void NLExecutor::runCollectLoop(NLExecutionContext* context, NLFunctionData* dat
     }
 }
 
+void NLExecutor::runShortestPathReset(NLExecutionContext* context, NLFunctionData* data) {
+    const NLShortestPathResetData* reset = static_cast<NLShortestPathResetData*>(data);
+    reset->getState()->reset();
+}
+
+void NLExecutor::runShortestPathUpdate(NLExecutionContext* context, NLFunctionData* data) {
+    NLShortestPathUpdateData* update = static_cast<NLShortestPathUpdateData*>(data);
+    NLShortestPathState* state = update->getState();
+
+    const std::vector<NodeID>& nodes = update->getNodes()->getRaw();
+    ColumnNodeIDs* set = update->isTarget() ? state->targets() : state->sources();
+
+    std::vector<NodeID>& setRaw = set->getRaw();
+    setRaw.insert(setRaw.end(), nodes.begin(), nodes.end());
+}
+
+void NLExecutor::runShortestPathLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLShortestPathLoopData* loopData = static_cast<NLShortestPathLoopData*>(data);
+
+    switch (loopData->getValueType()) {
+        case ValueType::Double:
+            return shortestPathSearch<types::Double>(context, loopData);
+        break;
+
+        case ValueType::Int64:
+            return shortestPathSearch<types::Int64>(context, loopData);
+        break;
+
+        case ValueType::UInt64:
+            return shortestPathSearch<types::UInt64>(context, loopData);
+        break;
+
+        default:
+            throw IRException("SHORTESTPATH weight must be an Int64, UInt64 or Double property");
+        break;
+    }
+}
+
 void NLExecutor::runProcedureInitLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLProcedureLoopData* loopData = static_cast<NLProcedureLoopData*>(data);
     NLProcedureState* state = loopData->getState();
@@ -4173,6 +4361,10 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
 
         case NLChunkKind::List:
             throw IRException("A list column cannot be a DISTINCT or grouping key: a list has no scalar value to key on");
+        break;
+
+        case NLChunkKind::Path:
+            throw IRException("A path column cannot be a DISTINCT or grouping key: a path has no scalar value to key on");
         break;
     }
 
@@ -4508,6 +4700,10 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctChunkFold(NLChu
         case NLChunkKind::List:
             throw IRException("count(DISTINCT) cannot key on a list column: a list has no scalar value to count distinct");
         break;
+
+        case NLChunkKind::Path:
+            throw IRException("count(DISTINCT) cannot key on a path column: a path has no scalar value to count distinct");
+        break;
     }
 
     bioassert(false, "Unknown NLChunkKind");
@@ -4784,6 +4980,10 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
 
         case NLChunkKind::List:
             throw IRException("A list column cannot be a sort key: a list has no order here");
+        break;
+
+        case NLChunkKind::Path:
+            throw IRException("A path column cannot be a sort key: a path has no order here");
         break;
     }
 
