@@ -39,6 +39,19 @@ void RawBuffer<T, N>::reserveContiguous(size_t numTs) {
     allocateNext(newCapacity);
 }
 
+template <typename T, size_t N>
+void RawBuffer<T, N>::clear() {
+    auto* cur = _first;
+    while (cur) {
+        auto* next = cur->_next;
+        delete cur;
+        cur = next;
+    }
+
+    _first = new BufferChunk<T, N>;
+    _last = _first;
+}
+
 namespace db {
 template class RawBuffer<char>;
 }
