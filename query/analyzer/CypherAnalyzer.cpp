@@ -308,13 +308,13 @@ void CypherAnalyzer::throwOnUnpublishedKeyVariable(const Expr* keyExpr,
 
 // The names a WITH gives its columns are the whole scope of what follows, so a statement
 // after the barrier resolves its items and nothing the projection dropped
-void CypherAnalyzer::openWithScope(const Projection* projection) {
+void CypherAnalyzer::openWithScope(Projection* projection) {
     DeclContext* scope = DeclContext::create(_ast, _ctxt);
 
     for (const Projection::ReturnItem& returnItem : projection->items()) {
         if (const auto* declPtr = std::get_if<VarDecl*>(&returnItem)) {
             const VarDecl* decl = *declPtr;
-            scope->getOrCreateNamedVariable(_ast, decl->getType(), decl->getName());
+            projection->addPublishedDecl(scope->getOrCreateNamedVariable(_ast, decl->getType(), decl->getName()));
             continue;
         }
 
@@ -322,7 +322,7 @@ void CypherAnalyzer::openWithScope(const Projection* projection) {
         const std::optional<std::string_view> name = projection->getName(item);
         bioassert(name.has_value(), "Projected item of a WITH without a name.");
 
-        scope->getOrCreateNamedVariable(_ast, item->getType(), *name);
+        projection->addPublishedDecl(scope->getOrCreateNamedVariable(_ast, item->getType(), *name));
     }
 
     _ctxt = scope;

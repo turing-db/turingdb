@@ -86,7 +86,7 @@ void ReadStmtAnalyzer::analyze(Stmt* stmt) {
         break;
 
         case Stmt::Kind::UNWIND:
-            analyze(static_cast<const UnwindStmt*>(stmt));
+            analyze(static_cast<UnwindStmt*>(stmt));
         break;
 
         case Stmt::Kind::CREATE:
@@ -591,7 +591,7 @@ void ReadStmtAnalyzer::analyze(const ShortestPathStmt* spSt) {
     _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::GraphPath, pathName);
 }
 
-void ReadStmtAnalyzer::analyze(const UnwindStmt* unwind) {
+void ReadStmtAnalyzer::analyze(UnwindStmt* unwind) {
     const Expr* arg = unwind->arg();
     bioassert(arg, "Invalid argument");
 
@@ -661,7 +661,8 @@ void ReadStmtAnalyzer::analyze(const UnwindStmt* unwind) {
         throwError(fmt::format("Variable '{}' is already declared", symName), unwind);
     }
 
-    _ctxt->getOrCreateNamedVariable(_ast, itemType, symName);
+    const VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast, itemType, symName);
+    unwind->setDecl(decl);
 }
 
 void ReadStmtAnalyzer::throwError(std::string_view msg, const void* obj) const {
