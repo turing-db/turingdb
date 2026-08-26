@@ -283,3 +283,54 @@ TEST_F(PushDownFilterTest, sinksNeighbourPredicateToBindingHop) {
     ASSERT_EQ(reads.size(), 1u);
     EXPECT_EQ(reads.front().getInputNodes().getDefiningOp(), inHop.getOperation());
 }
+
+// MATCH (a)-->(b)-->(c) WHERE a.age = pow(2, 5) RETURN a, b, c
+const char* const powConstantPredicate = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %s1, %e1, %et1, %t1 = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %s2, %e2, %et2, %t2, %ac = db.get_out_edges(%t1, {%s1}) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %age = db.get_node_properties(%ac, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %base = db.constant(2 : i64)
+  %exp = db.constant(5 : i64)
+  %pow = db.pow %base, %exp : (!db.column<i64>, !db.column<i64>) -> !db.column<f64>
+  %mask = db.eq %age, %pow : (!db.column<i64>, !db.column<f64>) -> !db.column<!storage.bool>
+  %af, %bf, %cf = db.filter(%mask, {%ac, %s2, %t2}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%af, %bf, %cf) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(PushDownFilterTest, sinksRootPredicateWithConstantPowExpression) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(powConstantPredicate);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runPushDown(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::FilterOp> filters = collect<mlir::db::FilterOp>(*module);
+    ASSERT_EQ(filters.size(), 1u);
+    mlir::db::FilterOp filter = filters.front();
+
+    llvm::SmallVector<mlir::db::GetOutEdges> hops = collect<mlir::db::GetOutEdges>(*module);
+    ASSERT_EQ(hops.size(), 2u);
+    mlir::db::GetOutEdges firstHop = hops.front();
+
+    // The whole mask cone - the pow of two constants included - sinks ahead of both hops.
+    EXPECT_TRUE(filter.getOperation()->isBeforeInBlock(firstHop.getOperation()));
+    EXPECT_EQ(firstHop.getInputNodes().getDefiningOp(), filter.getOperation());
+
+    llvm::SmallVector<mlir::db::PowOp> pows = collect<mlir::db::PowOp>(*module);
+    ASSERT_EQ(pows.size(), 1u);
+    EXPECT_TRUE(pows.front().getOperation()->isBeforeInBlock(firstHop.getOperation()));
+
+    llvm::SmallVector<mlir::db::ConstantOp> constants = collect<mlir::db::ConstantOp>(*module);
+    ASSERT_EQ(constants.size(), 2u);
+    for (mlir::db::ConstantOp constant : constants) {
+        EXPECT_TRUE(constant.getOperation()->isBeforeInBlock(firstHop.getOperation()));
+    }
+
+    // The mask still reads age off the scanned column, with pow feeding the equality.
+    llvm::SmallVector<mlir::db::GetNodeProperties> reads = collect<mlir::db::GetNodeProperties>(*module);
+    ASSERT_EQ(reads.size(), 1u);
+    EXPECT_TRUE(mlir::isa<mlir::db::ScanNodes>(reads.front().getInputNodes().getDefiningOp()));
+}
