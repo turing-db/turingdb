@@ -562,20 +562,25 @@ LogicalResult Collect::verify() {
     const Operation::result_range results = getResults();
     const uint64_t keyCount = getKeyCount();
 
-    // Exactly one collected column follows the grouping keys. Bound keyCount by the
-    // real column count first: summing keyCount + 1 could wrap in unsigned 64-bit and
-    // let a pathological keyCount slip past into out-of-bounds lowering.
+    // The collected column follows the grouping keys, and one aggregate input follows it
+    // per kind. Bound keyCount by the real column count first: summing keyCount + 1 could
+    // wrap in unsigned 64-bit and let a pathological keyCount slip past into
+    // out-of-bounds lowering.
     const size_t columnCount = columns.size();
-    if (keyCount >= columnCount || columnCount - keyCount != 1) {
+    const size_t aggregateCount = getKinds() ? getKinds()->size() : 0;
+    if (keyCount >= columnCount || columnCount - keyCount != 1 + aggregateCount) {
         return emitOpError("expects ") << keyCount
-                                       << " grouping-key columns and one collected column, but has "
+                                       << " grouping-key columns, one collected column and "
+                                       << aggregateCount
+                                       << " aggregate columns, but has "
                                        << columnCount;
     }
 
-    // One result per grouping key then the collected list.
+    // One result per grouping key, the collected list, then one per aggregate.
     if (results.size() != columnCount) {
         return emitOpError("expects ") << columnCount
-                                       << " results, one per grouping key plus the collected list, but has "
+                                       << " results, one per grouping key plus the collected list and the "
+                                          "aggregates, but has "
                                        << results.size();
     }
 

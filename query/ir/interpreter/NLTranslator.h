@@ -349,6 +349,13 @@ private:
     // (by the keyCount / kinds on the producing nl.group_aggregate_buffer), allocate
     // each key buffer and each aggregate's per-group state with its grow/fold/emit
     // handlers, and record the per-step fold statement.
+    // The per-group accumulator one aggregate kind needs over a column: the grow, fold
+    // and emit handlers baked from the kind and the input's value type. Shared by the
+    // grouped aggregation and the collect that reduces beside its list.
+    void buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKind,
+                             mlir::Value column,
+                             NLGroupAggregateState::Aggregate& aggregate);
+
     void translateGroupAggregateUpdate(mlir::nl::GroupAggregateUpdate update, NLStmtContainer* body);
 
     // Translate the nl.for over an nl.group_aggregate iterator: allocate one loop

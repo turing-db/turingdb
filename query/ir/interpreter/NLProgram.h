@@ -1843,6 +1843,12 @@ public:
     // group's values once. Left empty by a plain collect.
     NLGroupDistinctTally& distinct() { return _distinct; }
 
+    // The reductions taken over the same groups as the list - Cypher's collect(x) beside
+    // count(y) - each folded and emitted exactly as a grouped aggregation does, since one
+    // accumulator holds the groups both read.
+    void addAggregate(const NLGroupAggregateState::Aggregate& aggregate) { _aggregates.push_back(aggregate); }
+    std::vector<NLGroupAggregateState::Aggregate>& aggregates() { return _aggregates; }
+
     // The drain's output loop variable: the unwound value column (nl.unwind_collect) or the
     // per-group list column (nl.collect). Set at loop translation. A state feeds one
     // drain, so a single slot holds whichever it is.
@@ -1889,6 +1895,8 @@ private:
     NLUnwindCollectValueEmitFunction _unwindCollectEmit {nullptr};
     NLCollectListEmitFunction _listEmit {nullptr};
     ListBuffer<> _listBuffer;
+
+    std::vector<NLGroupAggregateState::Aggregate> _aggregates;
 
     NLGroupTable _groupTable;
 

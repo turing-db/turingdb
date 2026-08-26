@@ -1614,11 +1614,16 @@ def CollectBuffer : NLOp<"collect_buffer", []> {
   }];
 
   // keyCount is unsigned; 0 is a valid ungrouped collect, so nothing to verify here
-  // (the one-value-column split is checked during translation).
-  let arguments = (ins UI64Attr:$keyCount, UnitAttr:$distinct);
+  // (the value-column split is checked during translation). kinds names the reductions
+  // taken over the same groups as the list, one per aggregate input the update carries
+  // after the value column, and is absent when the collect reduces nothing beside it.
+  let arguments = (ins UI64Attr:$keyCount, OptionalAttr<DenseI64ArrayAttr>:$kinds, UnitAttr:$distinct);
   let results   = (outs NLCollectState:$state);
 
-  let assemblyFormat = "`keys` $keyCount (`distinct` $distinct^)? attr-dict";
+  let assemblyFormat = [{
+    `keys` $keyCount (`aggregates` custom<GroupAggregateKinds>($kinds)^)?
+    (`distinct` $distinct^)? attr-dict
+  }];
 }
 
 /**

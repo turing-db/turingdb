@@ -1547,7 +1547,8 @@ void DBLowering::lowerCount(mlir::db::Count count) {
     // The update sits in the innermost producing loop body, where the counted
     // column is bound (the same block db.output would emit from), and charges each
     // step's non-null rows against the tally.
-    setInsertionInto(ownerBlock(inputChunk));
+    mlir::Block* const producingBlock = ownerBlock(inputChunk);
+    setInsertionInto(producingBlock);
 
     mlir::Value countedChunk = inputChunk;
     if (distinctState) {
@@ -1560,15 +1561,15 @@ void DBLowering::lowerCount(mlir::db::Count count) {
     // COUNT is a pipeline breaker: the tally is final only once every row has been
     // seen. Since it collapses to exactly one row there is nothing to iterate, so -
     // unlike db.sort - it opens no emit loop: nl.count_result materializes the tally
-    // chunk in place at function scope (after the producing loop, before the
-    // func.return), and db.output consumes it there. The chunk is the single-row
-    // count as an unsigned i64 (!nl.chunk<ui64>) - a non-negative tally that is
-    // never null, so no nullable wrapper.
+    // chunk in place at function scope, right after the producing loop, and db.output
+    // consumes it there. The chunk is the single-row count as an unsigned i64
+    // (!nl.chunk<ui64>) - a non-negative tally that is never null, so no nullable
+    // wrapper.
     mlir::MLIRContext* const context = _builder.getContext();
     const mlir::Type countElementType = _builder.getIntegerType(64, /*isSigned=*/false);
     const nl::ChunkType countChunkType = nl::ChunkType::get(context, countElementType);
 
-    setInsertionInto(_entryBlock);
+    setInsertionAfterProducingLoop(producingBlock);
     nl::CountResult result = _builder.create<nl::CountResult>(loc, countChunkType, state);
 
     // db.count's result maps to that chunk, so the db.output that follows lowers
@@ -1613,7 +1614,8 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
     // The update sits in the innermost producing loop body, where the aggregated
     // column is bound (the same block db.output would emit from), and folds each
     // step's non-null values into the accumulator.
-    setInsertionInto(ownerBlock(inputChunk));
+    mlir::Block* const producingBlock = ownerBlock(inputChunk);
+    setInsertionInto(producingBlock);
 
     mlir::Value reducedChunk = inputChunk;
     if (distinctState) {
@@ -1625,13 +1627,13 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
 
     // Like db.count, an aggregate is a pipeline breaker that collapses to one row,
     // so it opens no emit loop: nl.aggregate_result materializes the reduced value
-    // in place at function scope (after the producing loop, before the func.return).
-    // The result is a single-row nullable value chunk - an aggregate can be null
-    // (min/max/avg of no non-null row), and sum rides the same representation.
+    // in place at function scope, right after the producing loop. The result is a
+    // single-row nullable value chunk - an aggregate can be null (min/max/avg of no
+    // non-null row), and sum rides the same representation.
     const storage::NullableType resultNullable = storage::NullableType::get(context, resultElement);
     const nl::ChunkType resultChunkType = nl::ChunkType::get(context, resultNullable);
 
-    setInsertionInto(_entryBlock);
+    setInsertionAfterProducingLoop(producingBlock);
     nl::AggregateResult aggregateResult = _builder.create<nl::AggregateResult>(loc, resultChunkType, state, kind);
 
     // The db aggregate's result maps to that chunk, so the db.output that follows
@@ -1749,6 +1751,15 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
         throw IRException("db.collect requires at least one column");
     }
 
+    // A constant collected column is folded over the rows of the group it falls in, not
+    // over the single row it is, so it is laid out over the chunk the grouping keys are
+    // read from - the driving relation when the collect has no keys. The aggregate
+    // inputs beside it are laid out the same way, as lowerGroupAggregate lays its own.
+    const mlir::Value cardinality = keyCount > 0 ? chunks.front() : _innermostCardinality;
+    for (size_t inputIndex = keyCount; inputIndex < chunks.size(); inputIndex++) {
+        chunks[inputIndex] = rowAlignedChunk(chunks[inputIndex], cardinality);
+    }
+
     // An entity column collects as the IDs it carries, which every row holds: only a
     // scalar value column is read as nullable, the way a property fetch is.
     const mlir::Type collectedElement = mlir::cast<nl::ChunkType>(chunks[keyCount].getType()).getElementType();
@@ -1758,13 +1769,28 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
         chunks[keyCount] = nullableValueChunk(chunks[keyCount]);
     }
 
+    // A reduction beside the list reads its input as a nullable value chunk, as it does
+    // under a grouped aggregation; a count tallies rows and takes the chunk as it is.
+    const llvm::ArrayRef<int64_t> kinds = collect.getKinds().value_or(llvm::ArrayRef<int64_t> {});
+    for (size_t aggregateIndex = 0; aggregateIndex < kinds.size(); aggregateIndex++) {
+        const auto kind = static_cast<storage::GroupAggregateKind>(kinds[aggregateIndex]);
+
+        if (reducesValues(kind)) {
+            const size_t chunkIndex = keyCount + 1 + aggregateIndex;
+            chunks[chunkIndex] = nullableValueChunk(chunks[chunkIndex]);
+        }
+    }
+
     const mlir::Location loc = _builder.getUnknownLoc();
 
     // The accumulator is hoisted to the top of the entry block, above every loop, so
     // the group table exists before the producing loop fills it and the handle
     // dominates the update. The collect sibling of lowerGroupAggregate's buffer.
     _builder.setInsertionPointToStart(_entryBlock);
-    nl::CollectBuffer bufferOp = _builder.create<nl::CollectBuffer>(loc, keyCount, collect.getDistinct());
+    nl::CollectBuffer bufferOp = _builder.create<nl::CollectBuffer>(loc,
+                                                                    keyCount,
+                                                                    collect.getKindsAttr(),
+                                                                    collect.getDistinct());
     const mlir::Value state = bufferOp.getState();
 
     // The update folds each step's chunk of every column into the per-group lists. It
@@ -1796,6 +1822,16 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
     const nl::ChunkType listChunk = nl::ChunkType::get(context, storage::ListType::get(context, listElement));
     chunkTypes.push_back(listChunk);
 
+    const mlir::Type ui64Element = _builder.getIntegerType(64, /*isSigned=*/false);
+    const nl::ChunkType countChunkType = nl::ChunkType::get(context, ui64Element);
+
+    for (size_t aggregateIndex = 0; aggregateIndex < kinds.size(); aggregateIndex++) {
+        const storage::GroupAggregateKind kind = static_cast<storage::GroupAggregateKind>(kinds[aggregateIndex]);
+        const mlir::Value inputChunk = chunks[keyCount + 1 + aggregateIndex];
+
+        chunkTypes.push_back(groupAggregateResultChunkType(_builder, kind, inputChunk, countChunkType));
+    }
+
     const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunkTypes);
 
     setInsertionInto(_entryBlock);
@@ -1826,7 +1862,10 @@ void DBLowering::lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect) {
     // The accumulate phase is identical to lowerCollect: a hoisted nl.collect_buffer
     // and an nl.collect_update in the producing loop body.
     _builder.setInsertionPointToStart(_entryBlock);
-    nl::CollectBuffer bufferOp = _builder.create<nl::CollectBuffer>(loc, keyCount, /*distinct=*/false);
+    nl::CollectBuffer bufferOp = _builder.create<nl::CollectBuffer>(loc,
+                                                                    keyCount,
+                                                                    mlir::DenseI64ArrayAttr {},
+                                                                    /*distinct=*/false);
     const mlir::Value state = bufferOp.getState();
 
     const mlir::Value representative = chunks.front();
@@ -2691,6 +2730,20 @@ void DBLowering::setInsertionInto(mlir::Block* block) {
     // or a loop body's implicit nl.yield - so the next op goes just before it,
     // after any siblings already lowered here.
     _builder.setInsertionPoint(block->getTerminator());
+}
+
+void DBLowering::setInsertionAfterProducingLoop(mlir::Block* updateBlock) {
+    if (updateBlock == _entryBlock) {
+        setInsertionInto(_entryBlock);
+        return;
+    }
+
+    mlir::Operation* enclosing = updateBlock->getParentOp();
+    while (enclosing->getBlock() != _entryBlock) {
+        enclosing = enclosing->getBlock()->getParentOp();
+    }
+
+    _builder.setInsertionPointAfter(enclosing);
 }
 
 void DBLowering::setInsertionForBinaryOp(mlir::Value lhs, mlir::Value rhs) {

@@ -409,10 +409,11 @@ int64_t evaluateConstantInteger(const Expr* expr) {
     }
 }
 
-// Collect is only supported when it is the only aggregate in a return projection
+// Each collect drains through a loop of its own, and one emit cannot read two of them:
+// the second list is bound in a loop the output is not in. Every other aggregate
+// collapses to a single row above the drain, which the emit does read.
 void throwIfCollectUnsupported(const Projection* projection) {
     size_t collectCount = 0;
-    size_t aggregateCount = 0;
 
     for (const Projection::ReturnItem& returnItem : projection->items()) {
         Expr* const* itemPtr = std::get_if<Expr*>(&returnItem);
@@ -421,12 +422,6 @@ void throwIfCollectUnsupported(const Projection* projection) {
         }
 
         const Expr* item = *itemPtr;
-
-        if (!item->isAggregate()) {
-            continue;
-        }
-
-        aggregateCount++;
 
         const bool isInvocation = item->getKind() == Expr::Kind::FUNCTION_INVOCATION;
         if (!isInvocation) {
@@ -442,9 +437,8 @@ void throwIfCollectUnsupported(const Projection* projection) {
         }
     }
 
-    const bool mixesAggregates = collectCount > 0 && aggregateCount > 1;
-    if (mixesAggregates) {
-        throw TuringException("collect() may not yet be combined with another aggregate.");
+    if (collectCount > 1) {
+        throw TuringException("collect() may not yet be combined with another collect().");
     }
 }
 
@@ -3331,7 +3325,7 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
         _part._exprMap[expr] = _opBuilder.create<mlir::db::Avg>(loc, noneType, inputColumn, reducesDistinctValues).getResult();
     } else if (funcName == "collect") {
         mlir::db::Collect collectOp = createCollect({}, inputColumn, reducesDistinctValues);
-        _part._exprMap[expr] = collectOp.getResults().front();
+        _part._exprMap[expr] = collectOp.getResults().back();
     } else {
         throw TuringException(fmt::format("Unsupported aggregate function: {}", funcName));
     }
@@ -3379,16 +3373,12 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
 
 mlir::db::Collect DBProgramGenerator::createCollect(llvm::ArrayRef<mlir::Value> keyColumns,
                                                     mlir::Value valueColumn,
-                                                    bool distinctValues) {
-    // A constant column is bound above the scan loop, so the collect would fold its one
-    // value once instead of once per row: the list would hold a single element where
-    // Cypher collects one per matched row.
-    if (yieldsConstantColumn(valueColumn)) {
-        throw TuringException("collect() of a constant expression is not yet supported.");
-    }
-
+                                                    bool distinctValues,
+                                                    llvm::ArrayRef<mlir::Value> aggregateColumns,
+                                                    llvm::ArrayRef<mlir::storage::GroupAggregateKind> aggregateKinds) {
     llvm::SmallVector<mlir::Value> columns(keyColumns.begin(), keyColumns.end());
     columns.push_back(valueColumn);
+    columns.append(aggregateColumns.begin(), aggregateColumns.end());
 
     llvm::SmallVector<mlir::Type> resultTypes;
     for (const mlir::Value keyColumn : keyColumns) {
@@ -3399,10 +3389,23 @@ mlir::db::Collect DBProgramGenerator::createCollect(llvm::ArrayRef<mlir::Value> 
     const mlir::Type listType = mlir::storage::ListType::get(_mlirCtxt, valueType.getType());
     resultTypes.push_back(allocColumnType(listType));
 
+    // An aggregate's result type is resolved during lowering, as db.group_aggregate's is.
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+    llvm::SmallVector<int64_t> kindValues;
+    for (const mlir::storage::GroupAggregateKind kind : aggregateKinds) {
+        kindValues.push_back(static_cast<int64_t>(kind));
+        resultTypes.push_back(noneType);
+    }
+
+    const mlir::DenseI64ArrayAttr kindsAttr = kindValues.empty()
+                                                  ? mlir::DenseI64ArrayAttr {}
+                                                  : _opBuilder.getDenseI64ArrayAttr(kindValues);
+
     return _opBuilder.create<mlir::db::Collect>(_opBuilder.getUnknownLoc(),
                                                 mlir::TypeRange {resultTypes},
                                                 mlir::ValueRange {columns},
                                                 static_cast<uint64_t>(keyColumns.size()),
+                                                kindsAttr,
                                                 distinctValues);
 }
 
@@ -3411,9 +3414,8 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         return;
     }
 
-    throwIfCollectUnsupported(projection);
-
     if (!projection->hasGroupingKeys()) {
+        throwIfCollectUnsupported(projection);
         return;
     }
 
@@ -3601,6 +3603,13 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
     const size_t collectCount = collectInputColumns.size();
     bioassert(aggCount + collectCount > 0, "grouped aggregate with no aggregate columns.");
 
+    // Only the leading collect is built and only its list is mapped below, so a second
+    // collect would be dropped here - and reappear in generateOutput as an ungrouped
+    // collect of its own, next to this grouped one
+    if (collectCount > 1) {
+        throw TuringException("collect() may not yet be combined with another collect().");
+    }
+
     // Every non-aggregate item was constant, so nothing tells the matched rows apart:
     // the projection is one group, which is the scalar aggregate the projection
     // translates on its own - RETURN 1 AS x, count(n) counts the whole match
@@ -3613,19 +3622,16 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
     mlir::Operation* aggregateOp = nullptr;
 
     if (isCollecting) {
-        // Only the leading collect is built and only the collect items are mapped below, so
-        // a second collect or a scalar aggregate would be dropped here - and reappear in
-        // generateOutput as an ungrouped aggregate of its own, next to this grouped one
-        bioassert(collectCount == 1 && aggCount == 0,
-                  "Collect lowered alongside {} other collects and {} scalar aggregates.",
-                  collectCount - 1,
-                  aggCount);
-
+        // One accumulator holds the groups both the list and the reductions read, so the
+        // collect carries the other aggregates rather than a second op grouping the same
+        // rows again.
         const FunctionInvocation* collectInvocation = collectFuncExprs.front()->getFunctionInvocation();
 
         mlir::db::Collect collectOp = createCollect(keyColumns,
                                                     collectInputColumns.front(),
-                                                    collectInvocation->isDistinct());
+                                                    collectInvocation->isDistinct(),
+                                                    aggInputColumns,
+                                                    aggKinds);
         aggregateOp = collectOp.getOperation();
     } else {
         llvm::SmallVector<mlir::Value> allColumns;
@@ -3707,7 +3713,14 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         }
     }
 
-    const llvm::SmallVector<const FunctionInvocationExpr*>& aggregateItems = isCollecting ? collectFuncExprs : aggFuncExprs;
+    // The results behind the keys are the collect's list then its reductions, or - with
+    // no collect - the reductions alone.
+    llvm::SmallVector<const FunctionInvocationExpr*> aggregateItems;
+    if (isCollecting) {
+        aggregateItems.push_back(collectFuncExprs.front());
+    }
+
+    aggregateItems.append(aggFuncExprs.begin(), aggFuncExprs.end());
 
     for (size_t i = 0; i < aggregateItems.size(); i++) {
         const FunctionInvocationExpr* aggregateItem = aggregateItems[i];

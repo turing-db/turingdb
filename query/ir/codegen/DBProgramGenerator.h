@@ -376,7 +376,9 @@ private:
 
     mlir::db::Collect createCollect(llvm::ArrayRef<mlir::Value> keyColumns,
                                     mlir::Value valueColumn,
-                                    bool distinctValues);
+                                    bool distinctValues,
+                                    llvm::ArrayRef<mlir::Value> aggregateColumns = {},
+                                    llvm::ArrayRef<mlir::storage::GroupAggregateKind> aggregateKinds = {});
 
     void translateExpr(const Expr* expr);
     void translateUnaryExpr(const Expr* expr, const UnaryExpr* unaryExpr);
