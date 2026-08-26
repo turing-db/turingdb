@@ -47,6 +47,7 @@ class MatchStmt;
 class Projection;
 class PropertyExpr;
 class ReturnStmt;
+class ShortestPathStmt;
 class UnwindStmt;
 class VarDecl;
 class VectorSearchStmt;
@@ -322,6 +323,11 @@ private:
     // Emits the filters a MATCH's inline property constraints ask for - `(n {age: 32})` -
     // one predicate per constrained property of its pattern
     void generateMatchConstraints(const MatchStmt* matchStmt);
+
+    void generateShortestPath(const CypherAST* ast);
+
+    const ShortestPathStmt* findShortestPathStmt(const CypherAST* ast) const;
+
     void generateMatchFilter(const MatchStmt* matchStmt);
 
     // Emits the Sort a MATCH's ORDER BY asks for, over everything in flight: the rows the
