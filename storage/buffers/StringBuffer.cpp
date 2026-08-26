@@ -5,7 +5,7 @@ using namespace db;
 std::string_view StringBuffer::concatenate(std::string_view a, std::string_view b) {
     const size_t stringSize = a.size() + b.size();
 
-    _bytes.reserveContiguous(stringSize);
+    _buf.reserveContiguous(stringSize);
 
     const char* aPtr = a.data();
     const std::span aSpan(aPtr, a.size());

@@ -29,6 +29,7 @@ private:
 
     void reserveContiguous(size_t numTs);
     void commit(size_t numElements) { _last->_size += numElements; }
+    void clear();
     BufferChunk<T>* allocateNext(size_t capacity);
 };
 

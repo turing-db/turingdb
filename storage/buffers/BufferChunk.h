@@ -1,6 +1,6 @@
 #pragma once
 
-#include <stddef.h>
+#include <cstddef>
 
 namespace db {
 
@@ -27,6 +27,9 @@ private:
     size_t _capacity {0};
 
     BufferChunk<T, N>* _next {nullptr};
+
+    static_assert(alignof(T) <= alignof(std::max_align_t),
+                  "malloc will return unaligned buffer for T; use aligned_alloc");
 };
 
 }
