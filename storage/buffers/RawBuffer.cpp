@@ -6,7 +6,7 @@ using namespace db;
 
 template <typename T, size_t N>
 RawBuffer<T, N>::RawBuffer()
-    : _first(new BufferChunk<T, N>),
+    : _first(new BufferChunk<T, N>()),
     _last(_first)
 {
 }
@@ -23,7 +23,7 @@ RawBuffer<T, N>::~RawBuffer() {
 
 template <typename T, size_t N>
 BufferChunk<T>* RawBuffer<T, N>::allocateNext(size_t capacity) {
-    BufferChunk<T>* newChunk = new BufferChunk<T>(capacity);
+    BufferChunk<T, N>* newChunk = new BufferChunk<T, N>(capacity);
     _last->_next = newChunk;
     _last = newChunk;
     return newChunk;
@@ -48,7 +48,7 @@ void RawBuffer<T, N>::clear() {
         cur = next;
     }
 
-    _first = new BufferChunk<T, N>;
+    _first = new BufferChunk<T, N>();
     _last = _first;
 }
 
