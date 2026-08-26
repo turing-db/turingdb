@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <list>
+#include <vector>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
@@ -25,6 +26,7 @@ public:
 
     using ReturnItem = std::variant<Expr*, VarDecl*>;
     using Items = std::list<ReturnItem>;
+    using PublishedDecls = std::vector<VarDecl*>;
 
     static Projection* create(CypherAST* ast);
 
@@ -76,6 +78,12 @@ public:
     std::optional<std::string_view> getName(const VarDecl* item) const;
     bool hasName(const std::string_view& name) const;
 
+    // The variable each item declares in the scope a WITH opens, in item order. What
+    // follows the barrier reads the published columns through these declarations rather
+    // than through the ones the items carry, which belong to the scope above it.
+    const PublishedDecls& publishedDecls() const { return _publishedDecls; }
+    void addPublishedDecl(VarDecl* decl) { _publishedDecls.push_back(decl); }
+
     size_t findItemIndex(const Expr* key) const;
     const Expr* findItemExpr(const Expr* key) const;
     bool hasItem(const Expr* key) const;
@@ -91,6 +99,8 @@ private:
     bool _returningAll {false};
 
     Items _items;
+
+    PublishedDecls _publishedDecls;
 
     // Maps a VarDecl*/Expr* to its column name
     std::unordered_map<uintptr_t, std::string_view> _names;

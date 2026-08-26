@@ -1,7 +1,6 @@
 #pragma once
 
 #include <deque>
-#include <functional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -18,6 +17,7 @@ class EntityPattern;
 class PatternElement;
 class Stmt;
 class UnwindStmt;
+class VarDecl;
 
 /**
  * @brief Graph representation of the dependencies among variables, generated from
@@ -37,17 +37,8 @@ class UnwindStmt;
  */
 class VariableDependencyGraph {
 public:
-    struct EdgeIdentityHash {
-        using is_transparent = void;
-
-        size_t operator()(std::string_view name) const { return std::hash<std::string_view> {}(name); }
-    };
-
     using Cycle = std::vector<VariableDependency*>;
-    using EdgeIdentityMap = std::unordered_map<std::string,
-                                               std::vector<VariableDependency*>,
-                                               EdgeIdentityHash,
-                                               std::equal_to<>>;
+    using EdgeIdentityMap = std::unordered_map<const VarDecl*, std::vector<VariableDependency*>>;
     using UnwindSourceMap = std::unordered_map<const VariableDependency*, const UnwindStmt*>;
     using BoundVars = std::vector<VariableDependency*>;
 
@@ -60,7 +51,7 @@ public:
 
     /// Declares a variable a preceding WITH bound, whose column the code generator holds:
     /// a pattern naming it is a join onto that column, not a scan, so it enters isolated
-    VariableDependency* registerBoundVariable(std::string_view name);
+    VariableDependency* registerBoundVariable(std::string_view name, const VarDecl* decl);
 
     /// Drops every variable and edge, so the graph can be rebuilt for the next query part
     void clear();
@@ -95,7 +86,7 @@ private:
     // Tracks how many times a variable has been anonimised
     std::unordered_map<VariableDependency*, int> _anonymised;
 
-    // Maps each Cypher edge variable name to all anonymous VDG variables created for it
+    // Maps each Cypher edge variable to all anonymous VDG variables created for it
     EdgeIdentityMap _edgeIdentities;
 
     // Maps each UNWIND variable to the statement whose list it is bound to
@@ -105,13 +96,13 @@ private:
     BoundVars _boundVars;
 
     VariableDependency* getOrCreateVariable(const EntityPattern* entity);
-    VariableDependency* newVariable(const EntityPattern* entity);
+    VariableDependency* newVariable(const VarDecl* decl);
     VariableDependency* newVariable(std::string_view name);
 
     /// Under a name no Cypher identifier can be, so a user alias never resolves to it
-    VariableDependency* newAnonymousVariable(std::string_view declName);
+    VariableDependency* newAnonymousVariable(const VarDecl* decl);
 
-    VariableDependency* findVariable(std::string_view name);
+    VariableDependency* findVariable(const VarDecl* decl);
 
     void getNextAnonymisation(VariableDependency* v, std::string& buf);
 

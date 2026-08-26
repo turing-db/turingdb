@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <span>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
@@ -61,11 +62,29 @@ public:
     using ExprValueMap = std::unordered_map<const Expr*, mlir::Value>;
     using ProjectedColumnMap = std::unordered_map<const VarDecl*, mlir::Value>;
     using ColumnPredicate = llvm::function_ref<bool(mlir::Value)>;
-    using VariableColumnBinding = llvm::function_ref<void(std::string_view, mlir::Value)>;
+    using VariableColumnBinding = llvm::function_ref<void(const VarDecl*, std::string_view, mlir::Value)>;
 
-    // Maps a Cypher variable name to the last column defined for it, the one the
-    // projection and its ORDER BY read
-    using VariableColumnMap = std::unordered_map<std::string_view, mlir::Value>;
+    // Maps a Cypher variable to the last column defined for it, the one the projection
+    // and its ORDER BY read
+    using VariableColumnMap = std::unordered_map<const VarDecl*, mlir::Value>;
+
+    // A column a CALL produced for one of its yielded return values, under the declaration
+    // the query knows it by and the name it is output under. A standalone call naming no
+    // YIELD declares nothing, so its columns carry a null declaration.
+    struct YieldedColumn {
+        const VarDecl* _decl {nullptr};
+        std::string_view _name;
+        mlir::Value _column;
+    };
+
+    // A column a part cut hands to the part below it, under the declaration and the name
+    // it was bound to above. The name is owned, since publishing clears the variables the
+    // one in flight points into.
+    struct PublishedColumn {
+        const VarDecl* _decl {nullptr};
+        std::string _name;
+        mlir::Value _column;
+    };
 
     // The columns a grouped aggregation produces, each under the expression it computes:
     // the grouping keys and the aggregate results
@@ -83,13 +102,6 @@ private:
 
     // A WITH drops this whole object rather than naming its members one at a time, so a
     // map added here is one the next part cannot read a stale binding out of
-    // The column a CALL produced for each of its yielded return values, named as the
-    // query knows it - its alias when the YIELD renamed it. A yielded variable appears in
-    // no pattern, so it is not a VDG variable and cannot live in _varMap; the projection
-    // and symbol translation consult both. Kept in yield order, because a standalone CALL
-    // has no projection of its own and emits its columns in that order.
-    using YieldedColumn = std::pair<std::string_view, mlir::Value>;
-
     struct PartScope {
         VariableIdentityMap _varMap;
 
@@ -101,6 +113,11 @@ private:
         // alias of that item shares with it
         ProjectedColumnMap _projectedColumns;
 
+        // The column a CALL produced for each of its yielded return values. A yielded
+        // variable appears in no pattern, so it is not a VDG variable and cannot live in
+        // _varMap; the projection and symbol translation consult both. Kept in yield
+        // order, because a standalone CALL has no projection of its own and emits its
+        // columns in that order.
         std::vector<YieldedColumn> _yieldedColumns;
 
         // What a CREATE wrote for one of its named pattern entities: the column of
@@ -112,7 +129,7 @@ private:
             std::unordered_map<std::string_view, mlir::Value> _properties;
         };
 
-        std::unordered_map<std::string_view, CreatedEntity> _createdEntities;
+        std::unordered_map<const VarDecl*, CreatedEntity> _createdEntities;
 
         // The traversal root a CALL ahead of the MATCH bound, when the query lets the
         // traversal expand that column instead of scanning the graph and joining. Null
@@ -240,7 +257,7 @@ private:
 
     // Records what a CREATE wrote for one named entity of its pattern, so the projection
     // reads that back rather than fetching an ID the graph does not hold yet
-    void publishCreatedEntity(std::string_view name,
+    void publishCreatedEntity(const VarDecl* decl,
                               mlir::Value column,
                               llvm::ArrayRef<llvm::StringRef> propNames,
                               llvm::ArrayRef<mlir::Value> propValues);
@@ -278,9 +295,10 @@ private:
     // the call has run - so the predicate reads the rows the procedure emitted.
     void generateYieldFilter(const YieldItems* yieldItems);
 
+    // Fills the column of each entry of @param yielded and appends them to _yieldedColumns
     void generateCrossedCall(std::string_view procedureName,
                              llvm::ArrayRef<mlir::Attribute> yieldedNames,
-                             llvm::ArrayRef<std::string_view> yieldedVariables,
+                             llvm::SmallVectorImpl<YieldedColumn>& yielded,
                              mlir::ValueRange inputs,
                              const InFlightColumns& inFlight);
 
@@ -313,9 +331,8 @@ private:
                                size_t firstResult,
                                const InFlightColumns& inFlight);
 
-    // The column a yielded variable of this name holds, or a null Value when no CALL
-    // yielded it.
-    mlir::Value findYieldedColumn(std::string_view name) const;
+    // The column a yielded variable holds, or a null Value when no CALL yielded it.
+    mlir::Value findYieldedColumn(const VarDecl* decl) const;
 
     void generateWith(const WithStmt* with);
 
@@ -323,23 +340,26 @@ private:
     // this binds a projection of constants alone to the rows of the match under it
     void broadcastConstantProjection(llvm::SmallVectorImpl<mlir::Value>& projected);
 
-    void publishBoundColumns(llvm::ArrayRef<llvm::StringRef> names,
+    void publishBoundColumns(const Projection* projection,
+                             llvm::ArrayRef<llvm::StringRef> names,
                              llvm::ArrayRef<mlir::Value> columns);
 
     // Publishes every column in scope under the name it already carries, so the part that
     // follows a cut reads them the way it reads what a WITH published
     void publishInFlightColumns();
 
-    // The column each variable in scope is bound to, under the name it carries: the
-    // traversal variables, what a CALL yielded, what a CREATE wrote, and each edge
-    // identity under its own name. A name a later source rebinds is visited twice, with
-    // the binding that wins last, so a map filled from it holds what the query reads.
+    // The column each variable in scope is bound to, under the declaration and the name
+    // it carries: the traversal variables, what a CALL yielded, what a CREATE wrote, and
+    // each edge identity under its own declaration. A variable a later source rebinds is
+    // visited twice, with the binding that wins last, so a map filled from it holds what
+    // the query reads. A standalone CALL declares nothing, so its columns are bound under
+    // a null declaration.
     void forEachVariableColumn(const VariableColumnBinding& bind) const;
     void collectVariableColumns(VariableColumnMap& variableColumns) const;
 
-    // The column one name is bound to, over the same bindings, for a caller that reads a
-    // single variable rather than every one in scope
-    mlir::Value findVariableColumn(std::string_view name) const;
+    // The column one variable is bound to, over the same bindings, for a caller that reads
+    // a single variable rather than every one in scope
+    mlir::Value findVariableColumn(const VarDecl* decl) const;
 
     void translateProjection(const Projection* projection,
                              const VariableColumnMap& variableColumns,
@@ -376,7 +396,7 @@ private:
     mlir::Value getOrTranslateExprColumn(const VariableColumnMap& variableColumns, const Expr* expr);
     mlir::Value getOrTranslateExprColumn(const Expr* expr);
 
-    mlir::Value resolveEntityColumn(std::string_view varName);
+    mlir::Value resolveEntityColumn(const VarDecl* decl);
 
     mlir::Value nullConstantColumn();
 
@@ -524,7 +544,7 @@ private:
 
     mlir::db::ColumnType allocColumnType(mlir::Type type);
     void registerValue(const VariableDependency* var, mlir::TypedValue<mlir::Type> val);
-    void rebindYieldedColumn(std::string_view name, mlir::TypedValue<mlir::Type> val);
+    void rebindYieldedColumn(const VarDecl* decl, mlir::TypedValue<mlir::Type> val);
 };
 
 }

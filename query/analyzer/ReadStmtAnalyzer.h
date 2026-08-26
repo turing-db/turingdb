@@ -53,7 +53,7 @@ public:
     void analyze(Skip* skipSt);
     void analyze(Limit* limitSt);
     void analyze(const ShortestPathStmt* spSt);
-    void analyze(const UnwindStmt* unwind);
+    void analyze(UnwindStmt* unwind);
 
     // Pattern
     void analyze(const Pattern* pattern);

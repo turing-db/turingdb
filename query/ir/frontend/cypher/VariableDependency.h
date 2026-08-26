@@ -16,6 +16,7 @@ namespace db {
 namespace rg = ranges;
 namespace rv = rg::views;
 
+class VarDecl;
 class VariableDependencyGraph;
 
 /**
@@ -35,11 +36,18 @@ public:
     {
     }
 
+    VariableDependency(std::string_view name, const VarDecl* decl)
+        : _name(name),
+        _decl(decl)
+    {
+    }
+
     auto edges() const { return rv::concat(_incoming, _outgoing); }
     const Edges& outgoing() const { return _outgoing; }
     const Edges& incoming() const { return _incoming; }
 
     std::string_view getName() const { return _name; }
+    const VarDecl* getDecl() const { return _decl; }
 
     const std::optional<Constraint>& constraints() const { return _constraints; }
 
@@ -65,6 +73,7 @@ private:
     std::optional<Constraint> _constraints;
 
     std::string _name;
+    const VarDecl* _decl {nullptr};
 };
 
 }

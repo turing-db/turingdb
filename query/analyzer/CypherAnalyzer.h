@@ -92,7 +92,7 @@ private:
     bool _isV3 {false};
 
     void analyzeProjection(Projection* projection, const Stmt* clause);
-    void openWithScope(const Projection* projection);
+    void openWithScope(Projection* projection);
     void analyzeWithAliases(const Projection* projection) const;
     void analyzeWithOrderBy(const Projection* projection) const;
     void throwOnUnpublishedKeyVariable(const Expr* keyExpr, const Projection* projection) const;
