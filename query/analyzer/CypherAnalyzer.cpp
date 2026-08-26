@@ -239,6 +239,7 @@ void CypherAnalyzer::analyze(const WithStmt* withSt) {
 
     analyzeWithAliases(projection);
     analyzeProjection(projection, withSt);
+    analyzeWithOrderBy(projection);
 
     openWithScope(projection);
 
@@ -256,6 +257,52 @@ void CypherAnalyzer::analyze(const WithStmt* withSt) {
 
     if (predicate->getType() != EvaluatedType::Bool) {
         throwError("WHERE expression must be a boolean", predicate);
+    }
+}
+
+// The ORDER BY of a WITH sorts the rows the projection publishes, so its keys read the
+// scope that projection opens - a variable the projection dropped is as out of reach here
+// as it is in the WHERE. A RETURN is the other way round: it may order by any expression
+// over the scope it ends, projected or not
+void CypherAnalyzer::analyzeWithOrderBy(const Projection* projection) const {
+    if (!projection->hasOrderBy()) {
+        return;
+    }
+
+    for (const OrderByItem* item : projection->getOrderBy()->getItems()) {
+        throwOnUnpublishedKeyVariable(item->getExpr(), projection);
+    }
+}
+
+void CypherAnalyzer::throwOnUnpublishedKeyVariable(const Expr* keyExpr,
+                                                   const Projection* projection) const {
+    if (!keyExpr) {
+        return;
+    }
+
+    // The name as the key spells it, not the one its declaration carries: an alias is a
+    // second name for one declaration, and it is the alias the projection publishes
+    std::string_view readName;
+    if (keyExpr->getKind() == Expr::Kind::SYMBOL) {
+        readName = static_cast<const SymbolExpr*>(keyExpr)->getSymbol()->getName();
+    } else if (keyExpr->getKind() == Expr::Kind::PROPERTY) {
+        readName = static_cast<const PropertyExpr*>(keyExpr)->getFullName()->front()->getName();
+    }
+
+    if (!readName.empty() && !projection->hasName(readName)) {
+        throwError(fmt::format("Variable '{}' not found: a WITH may only order by the "
+                               "columns it publishes",
+                               readName),
+                   keyExpr);
+    }
+
+    std::vector<const Expr*> children;
+    if (!ExprChildren::collect(keyExpr, children)) {
+        return;
+    }
+
+    for (const Expr* child : children) {
+        throwOnUnpublishedKeyVariable(child, projection);
     }
 }
 
@@ -449,7 +496,7 @@ void CypherAnalyzer::declareItemAlias(Expr* item, std::string_view alias) {
     // it is a second name for that one variable, not a variable of its own
     if (item->getKind() != Expr::Kind::SYMBOL) {
         const EvaluatedType type = item->getType();
-        const VarDecl* namedDecl = _ctxt->getOrCreateNamedVariable(_ast, type, alias);
+        const VarDecl* namedDecl = _ctxt->declareProjectedVariable(_ast, type, alias);
         item->setExprVarDecl(namedDecl);
 
         return;

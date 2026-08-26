@@ -525,6 +525,18 @@ void broadcastConstantColumn(const Column* value, size_t rowCount, Column* outpu
     std::fill_n(outputRaw.begin(), rowCount, std::optional<Primitive>(typedValue->getRaw()));
 }
 
+// A plain value column laid out as a nullable one: a column carrying no null has every
+// row present, so the copy is the layout. std::copy of a contiguous range widens each
+// value into its optional in place.
+template <typename Primitive>
+void wrapNullableColumn(Column* output, const Column* input) {
+    const auto& inputRaw = static_cast<const ColumnVector<Primitive>*>(input)->getRaw();
+    auto& outputRaw = static_cast<ColumnOptVector<Primitive>*>(output)->getRaw();
+
+    outputRaw.resize(inputRaw.size());
+    std::copy(inputRaw.begin(), inputRaw.end(), outputRaw.begin());
+}
+
 // The null literal laid out over every row of the step: it holds no value to repeat, so
 // each row is the absent value. An untyped null is carried as a null integer, which is
 // the column the layout fills.
@@ -3251,6 +3263,16 @@ NLBroadcastFunction NLExecutor::selectOptTileFunction(ValueType valueType) {
 
 NLBroadcastConstantFunction NLExecutor::selectNullConstantBroadcast() {
     return &broadcastNullColumn;
+}
+
+NLUnaryFn NLExecutor::selectNullableWrap(ValueType valueType) {
+    NLUnaryFn wrap = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        wrap = &wrapNullableColumn<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return wrap;
 }
 
 NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(ValueType valueType) {

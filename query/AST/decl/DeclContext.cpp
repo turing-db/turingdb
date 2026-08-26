@@ -55,6 +55,18 @@ VarDecl* DeclContext::getOrCreateNamedVariable(CypherAST* ast, EvaluatedType typ
     return decl;
 }
 
+VarDecl* DeclContext::declareProjectedVariable(CypherAST* ast, EvaluatedType type, std::string_view name) {
+    VarDecl* declared = getDecl(name);
+    if (declared && declared->getType() == type) {
+        return declared;
+    }
+
+    VarDecl* decl = VarDecl::create(ast, this, name, type);
+    decl->setIsUnnamed(false);
+
+    return decl;
+}
+
 VarDecl* DeclContext::createUnnamedVariable(CypherAST* ast, EvaluatedType type) {
     std::string* name = ast->createString();
 

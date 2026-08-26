@@ -285,6 +285,10 @@ public:
     // Tile for a nullable value chunk of this value type (inner column).
     static NLBroadcastFunction selectOptTileFunction(ValueType valueType);
 
+    // The copy nl.wrap_nullable runs: a plain value column of this value type read as
+    // the nullable one a value reduction folds
+    static NLUnaryFn selectNullableWrap(ValueType valueType);
+
     // The fill that lays a constant column's single value out over a step's rows,
     // for a nullable value chunk of this value type (nl.broadcast_constant).
     static NLBroadcastConstantFunction selectConstantBroadcast(ValueType valueType);

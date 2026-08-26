@@ -29,11 +29,11 @@ Type getEdgeTypeIDChunkType(MLIRContext* context) {
     return ChunkType::get(context, storage::EdgeTypeIDType::get(context));
 }
 
-// The value type an aggregate reduces: the T in a !nl.chunk<!storage.nullable<T>>.
-// Aggregates fold property values, so an update's input and a result's output are
-// always such chunks. Returns a null Type for anything else (an ID chunk, say), so
-// the caller can reject it.
-Type aggregateValueType(Type chunkType) {
+// The value type a nullable value chunk carries: the T in a
+// !nl.chunk<!storage.nullable<T>>. An aggregate folds property values, so an update's
+// input and a result's output are such chunks. Returns a null Type for anything else
+// (an ID chunk, say), so the caller can reject it.
+Type nullableChunkValueType(Type chunkType) {
     const auto chunk = dyn_cast<ChunkType>(chunkType);
     if (!chunk) {
         return Type();
@@ -464,6 +464,27 @@ LogicalResult Output::verify() {
     return success();
 }
 
+bool WrapNullable::isPlainValueElement(Type elementType) {
+    return isa<storage::StringType, storage::EmbeddingType, Float64Type, IntegerType>(elementType);
+}
+
+// The copy reads the operand as a plain value column and writes the result as a nullable
+// column of that same value type, so anything else on either side would read or write a
+// column of another shape.
+LogicalResult WrapNullable::verify() {
+    const auto valueChunk = dyn_cast<ChunkType>(getValue().getType());
+    if (!valueChunk || !isPlainValueElement(valueChunk.getElementType())) {
+        return emitOpError("operand must be a plain value chunk, neither nullable nor an ID chunk");
+    }
+
+    const Type resultValueType = nullableChunkValueType(getResult().getType());
+    if (resultValueType != valueChunk.getElementType()) {
+        return emitOpError("result must be a nullable chunk of the operand's value type");
+    }
+
+    return success();
+}
+
 // avg accumulates a running sum as f64, so its accumulator state must be an f64;
 // sum/min/max accumulate in the value's own type, so any value element type is
 // fine here (the update and result ops check the input/output against it).
@@ -486,7 +507,7 @@ LogicalResult AggregateUpdate::verify() {
     const storage::AggregateKind kind = getKind();
 
     // The input is a property value chunk; its value type is what the fold reads.
-    const Type inputValueType = aggregateValueType(getRows().getType());
+    const Type inputValueType = nullableChunkValueType(getRows().getType());
     if (!inputValueType) {
         return emitOpError("input must be a nullable value chunk (a property column)");
     }
@@ -520,7 +541,7 @@ LogicalResult AggregateUpdate::verify() {
 LogicalResult AggregateResult::verify() {
     const storage::AggregateKind kind = getKind();
 
-    const Type resultValueType = aggregateValueType(getResult().getType());
+    const Type resultValueType = nullableChunkValueType(getResult().getType());
     if (!resultValueType) {
         return emitOpError("result must be a nullable value chunk");
     }

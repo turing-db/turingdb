@@ -388,6 +388,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateConstant(constant);
         } else if (nl::BroadcastConstant broadcast = mlir::dyn_cast<nl::BroadcastConstant>(operation)) {
             translateBroadcastConstant(broadcast, body);
+        } else if (nl::WrapNullable wrap = mlir::dyn_cast<nl::WrapNullable>(operation)) {
+            translateWrapNullable(wrap, body);
         } else if (nl::Add add = mlir::dyn_cast<nl::Add>(operation)) {
             translateBinaryOp<OP_ADD>(add, body);
         } else if (nl::Sub sub = mlir::dyn_cast<nl::Sub>(operation)) {
@@ -1083,6 +1085,21 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
 
     NLBroadcastConstantData* data = _program->allocFunctionData<NLBroadcastConstantData>(value, cardinality, output, fill);
     body->emplaceStmt(&NLExecutor::runBroadcastConstant, data);
+}
+
+void NLTranslator::translateWrapNullable(nl::WrapNullable wrap, NLStmtContainer* body) {
+    const Column* input = getColumn(wrap.getValue());
+
+    const mlir::Value result = wrap.getResult();
+    const mlir::Type resultType = result.getType();
+
+    Column* output = allocColumnForChunkType(resultType);
+    _valueSlots[result] = output;
+
+    const NLUnaryFn copy = NLExecutor::selectNullableWrap(nullableChunkValueType(resultType));
+
+    NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(input, output, copy);
+    body->emplaceStmt(&NLExecutor::runUnary, data);
 }
 
 template <ColumnOperator Op, typename OpType>

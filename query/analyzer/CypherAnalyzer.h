@@ -94,6 +94,8 @@ private:
     void analyzeProjection(Projection* projection, const Stmt* clause);
     void openWithScope(const Projection* projection);
     void analyzeWithAliases(const Projection* projection) const;
+    void analyzeWithOrderBy(const Projection* projection) const;
+    void throwOnUnpublishedKeyVariable(const Expr* keyExpr, const Projection* projection) const;
     void declareItemAlias(Expr* item, std::string_view alias);
     void analyzeDistinct(const Projection* projection, const Stmt* clause) const;
     void analyzeNestedAggregates(const Projection* projection) const;

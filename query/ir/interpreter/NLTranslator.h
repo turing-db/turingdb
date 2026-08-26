@@ -428,6 +428,7 @@ private:
     // Allocates the row-aligned column a constant is laid out into, and binds the
     // fill that writes the driving relation's row count of its value each step
     void translateBroadcastConstant(mlir::nl::BroadcastConstant broadcast, NLStmtContainer* body);
+    void translateWrapNullable(mlir::nl::WrapNullable wrap, NLStmtContainer* body);
 
     template <ColumnOperator Op, typename OpType>
     void translateBinaryOp(OpType op, NLStmtContainer* body);

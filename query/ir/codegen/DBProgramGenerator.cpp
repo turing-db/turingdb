@@ -1983,16 +1983,17 @@ mlir::Value DBProgramGenerator::getOrTranslateExprColumn(const VariableColumnMap
                                                          const Expr* expr) {
     // One column is held per variable, under the name of that variable, so an expression
     // only has a column to be found there when it is a variable and nothing else.
-    // Anything more is a computation over columns, and has to be translated
+    // Anything more is a computation over columns, and has to be translated - as is a
+    // symbol naming no variable but the alias of a projected item, which the translation
+    // resolves through the item that published that column
     if (expr->getKind() == Expr::Kind::SYMBOL) {
         const VarDecl* var = expr->getExprVarDecl();
         bioassert(var, "Symbol expression without a declaration.");
 
-        const std::string_view name = var->getName();
-        const auto findIt = variableColumns.find(name);
-        bioassert(findIt != end(variableColumns), "No column for variable '{}'", name);
-
-        return findIt->second;
+        const auto findIt = variableColumns.find(var->getName());
+        if (findIt != end(variableColumns)) {
+            return findIt->second;
+        }
     }
 
     translateExpr(expr);

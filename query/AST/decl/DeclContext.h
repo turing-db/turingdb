@@ -30,6 +30,12 @@ public:
     VarDecl* getDecl(std::string_view name) const;
 
     VarDecl* getOrCreateNamedVariable(CypherAST* ast, EvaluatedType type, std::string_view name);
+
+    // The name a projected item publishes its column under. What follows the projection
+    // reads that column, so the name binds to the item even when the query already used
+    // it for a variable of another type
+    VarDecl* declareProjectedVariable(CypherAST* ast, EvaluatedType type, std::string_view name);
+
     VarDecl* createUnnamedVariable(CypherAST* ast, EvaluatedType type);
 
     void declareAlias(std::string_view name, VarDecl* decl);

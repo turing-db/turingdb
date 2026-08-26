@@ -288,6 +288,30 @@ storage::AggregateKind groupKindToAggregateKind(storage::GroupAggregateKind kind
     throw IRException("Unhandled group aggregate kind");
 }
 
+// Whether a grouped aggregate reduces the values of its input column, rather than
+// tallying its rows: the reductions read a nullable value chunk, while the counts read
+// the chunk they are anchored on as it comes (an ID chunk for count(*)).
+bool reducesValues(storage::GroupAggregateKind kind) {
+    switch (kind) {
+        case storage::GroupAggregateKind::Sum:
+        case storage::GroupAggregateKind::SumDistinct:
+        case storage::GroupAggregateKind::Min:
+        case storage::GroupAggregateKind::Max:
+        case storage::GroupAggregateKind::Avg:
+        case storage::GroupAggregateKind::AvgDistinct:
+            return true;
+        break;
+
+        case storage::GroupAggregateKind::Count:
+        case storage::GroupAggregateKind::CountDistinct:
+        case storage::GroupAggregateKind::CountRows:
+            return false;
+        break;
+    }
+
+    throw IRException("Unhandled group aggregate kind");
+}
+
 // The nl chunk type of one grouped aggregate's result column, resolved from its
 // kind and input chunk. A switch (not an if/else) over every GroupAggregateKind so
 // a new kind is a compile error here rather than silently taking the value-reduction
@@ -317,7 +341,7 @@ nl::ChunkType groupAggregateResultChunkType(mlir::OpBuilder& builder,
             const nl::ChunkType inputChunkType = mlir::cast<nl::ChunkType>(inputChunk.getType());
             const auto inputNullable = mlir::dyn_cast<storage::NullableType>(inputChunkType.getElementType());
             if (!inputNullable) {
-                throw IRException("db.group_aggregate sum/min/max/avg requires a property value column");
+                throw IRException("db.group_aggregate sum/min/max/avg requires a value column");
             }
 
             const mlir::Type resultElement = aggregateResultElementType(builder,
@@ -1408,20 +1432,15 @@ void DBLowering::lowerCount(mlir::db::Count count) {
 void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::AggregateKind kind, bool distinct) {
     // The nl chunk the aggregated column lowered to; the update folds its per-step
     // non-null values into the accumulator. A constant column is reduced over the
-    // rows it stands for, so it is laid out over the driving relation first.
-    const mlir::Value inputChunk = rowAlignedChunk(mapValue(input), _innermostCardinality);
+    // rows it stands for, so it is laid out over the driving relation first, and a
+    // column carrying no null is laid out as a nullable one - the shape every fold reads.
+    const mlir::Value inputChunk = nullableValueChunk(rowAlignedChunk(mapValue(input), _innermostCardinality));
 
     mlir::MLIRContext* const context = _builder.getContext();
     const mlir::Location loc = _builder.getUnknownLoc();
 
-    // The input must be a property value column - a nullable value chunk - since
-    // these reduce the values themselves (unlike count(*), which tallies IDs). An
-    // ID chunk has no value to reduce, so reject it here.
     const nl::ChunkType inputChunkType = mlir::cast<nl::ChunkType>(inputChunk.getType());
-    const auto inputNullable = mlir::dyn_cast<storage::NullableType>(inputChunkType.getElementType());
-    if (!inputNullable) {
-        throw IRException("db aggregate requires a property value column");
-    }
+    const auto inputNullable = mlir::cast<storage::NullableType>(inputChunkType.getElementType());
 
     // The accumulator (and result) element type: avg widens to f64, the rest keep
     // the input type. This also validates the reduction against the value type.
@@ -1495,9 +1514,16 @@ void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
 
     // A constant aggregate input is reduced over the rows of the group it falls in,
     // not over the single row it is, so it is laid out over the chunk the grouping
-    // keys are read from - the same rows the group assignment is computed for.
+    // keys are read from - the same rows the group assignment is computed for. A
+    // reduction then reads its input as a nullable value chunk, so a column carrying
+    // no null is laid out as one; a count reads the chunk it is anchored on as it comes.
     for (size_t inputIndex = keyCount; inputIndex < chunks.size(); inputIndex++) {
         chunks[inputIndex] = rowAlignedChunk(chunks[inputIndex], chunks.front());
+
+        const auto kind = static_cast<storage::GroupAggregateKind>(kinds[inputIndex - keyCount]);
+        if (reducesValues(kind)) {
+            chunks[inputIndex] = nullableValueChunk(chunks[inputIndex]);
+        }
     }
 
     mlir::MLIRContext* const context = _builder.getContext();
@@ -2437,6 +2463,29 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
     nl::BroadcastConstant broadcast = _builder.create<nl::BroadcastConstant>(_builder.getUnknownLoc(), resultType, chunk, cardinality);
 
     return broadcast.getResult();
+}
+
+mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
+    const auto chunkType = mlir::cast<nl::ChunkType>(chunk.getType());
+    const mlir::Type elementType = chunkType.getElementType();
+
+    if (mlir::isa<storage::NullableType>(elementType)) {
+        return chunk;
+    }
+
+    // An ID column holds no value to reduce: count(*) tallies such a chunk without
+    // reading it, but a sum or an extremum of one is IR that should never have been built
+    if (!nl::WrapNullable::isPlainValueElement(elementType)) {
+        throw IRException("A value reduction requires a value column");
+    }
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const nl::ChunkType resultType = nl::ChunkType::get(context, storage::NullableType::get(context, elementType));
+
+    setInsertionInto(ownerBlock(chunk));
+    nl::WrapNullable wrap = _builder.create<nl::WrapNullable>(_builder.getUnknownLoc(), resultType, chunk);
+
+    return wrap.getResult();
 }
 
 size_t DBLowering::blockNestingDepth(mlir::Block* block) {

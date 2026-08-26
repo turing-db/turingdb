@@ -1184,6 +1184,40 @@ def BroadcastConstant : NLOp<"broadcast_constant", [Pure, RowAlignedThroughOpera
 }
 
 /**
+* WrapNullable
+*/
+def WrapNullable : NLOp<"wrap_nullable", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Lay a plain value chunk out as a nullable value chunk";
+  let description = [{
+      A value chunk carrying no null - the tally a count published, an arithmetic
+      result over such columns - holds a bare value per row, while every value
+      reduction reads its input as a nullable value chunk (the shape a property
+      fetch produces). This lays the same rows out in that shape, each one present,
+      so a fold reduces them without a second spelling of every handler.
+
+      %r = nl.wrap_nullable %c : (!nl.chunk<ui64>) -> !nl.chunk<!storage.nullable<ui64>>
+  }];
+
+  let arguments = (ins NLChunk:$value);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$value attr-dict `:` functional-type(operands, results)";
+
+  let extraClassDeclaration = [{
+    // Whether a chunk element type is a bare value this can copy: a string, an
+    // embedding or a number (a bool being a one-bit integer), rather than an entity
+    // ID or a nullable value it already wraps
+    static bool isPlainValueElement(::mlir::Type elementType);
+  }];
+
+  // The copy reads the operand as a plain value column and writes the result as a
+  // nullable one of the same value type, so a nullable operand, an ID chunk on
+  // either side or a result of another value type would read or write the wrong
+  // column. The verifier rejects all three.
+  let hasVerifier = 1;
+}
+
+/**
 * Add
 */
 def Add : NLOp<"add", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {

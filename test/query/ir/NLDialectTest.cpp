@@ -316,6 +316,85 @@ TEST_F(NLDialectTest, verifierRejectsAvgWithNonFloatState) {
     EXPECT_TRUE(mlir::failed(mlir::verify(function)));
 }
 
+// A tally another part of the query published carries no null, so an nl.wrap_nullable
+// lays it out as the nullable value chunk a reduction folds, keeping its value type.
+TEST_F(NLDialectTest, verifierAcceptsWrapNullable) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+
+    const mlir::Type ui64Type = mlir::IntegerType::get(&_context, 64, mlir::IntegerType::Unsigned);
+    const mlir::Type countChunkType = mlir::nl::ChunkType::get(&_context, ui64Type);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {countChunkType}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+    const mlir::Value chunk = function.getBody().front().getArgument(0);
+
+    const mlir::Type valueChunkType = mlir::nl::ChunkType::get(&_context,
+                                                               mlir::storage::NullableType::get(&_context, ui64Type));
+    mlir::nl::WrapNullable wrap = builder.create<mlir::nl::WrapNullable>(loc, valueChunkType, chunk);
+
+    const mlir::nl::AggregateStateType stateType = mlir::nl::AggregateStateType::get(&_context, ui64Type);
+    const mlir::Value handle = builder.create<mlir::nl::Aggregate>(loc, stateType, mlir::storage::AggregateKind::Sum).getState();
+    builder.create<mlir::nl::AggregateUpdate>(loc, handle, wrap.getResult(), mlir::storage::AggregateKind::Sum);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+    EXPECT_EQ(wrap.getResult().getType(), valueChunkType);
+}
+
+// The copy reads its operand as a plain value column, so a chunk that is nullable
+// already - or an ID chunk, which holds no value at all - is not one it can lay out.
+TEST_F(NLDialectTest, verifierRejectsWrapNullableOfANullableChunk) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+
+    const mlir::Type int64Type = mlir::IntegerType::get(&_context, 64);
+    const mlir::Type valueChunkType = mlir::nl::ChunkType::get(&_context,
+                                                               mlir::storage::NullableType::get(&_context, int64Type));
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {valueChunkType}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+    const mlir::Value chunk = function.getBody().front().getArgument(0);
+
+    builder.create<mlir::nl::WrapNullable>(loc, valueChunkType, chunk);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+    EXPECT_TRUE(mlir::failed(mlir::verify(function)));
+}
+
+// The copy writes the result as a column of the operand's own value type, so a result
+// of another type would be written through the wrong column.
+TEST_F(NLDialectTest, verifierRejectsWrapNullableWideningTheValueType) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+
+    const mlir::Type int64Type = mlir::IntegerType::get(&_context, 64);
+    const mlir::Type plainChunkType = mlir::nl::ChunkType::get(&_context, int64Type);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {plainChunkType}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+    const mlir::Value chunk = function.getBody().front().getArgument(0);
+
+    const mlir::Type doubleChunkType = mlir::nl::ChunkType::get(&_context,
+                                                                mlir::storage::NullableType::get(&_context, builder.getF64Type()));
+    builder.create<mlir::nl::WrapNullable>(loc, doubleChunkType, chunk);
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+    EXPECT_TRUE(mlir::failed(mlir::verify(function)));
+}
+
 // A folded nl.output carries the single handle of the truncate adjacent to it,
 // never both: an output with both a limit and a skip handle fails verification.
 TEST_F(NLDialectTest, verifierRejectsOutputWithBothLimitAndSkip) {
