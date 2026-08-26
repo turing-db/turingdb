@@ -581,17 +581,19 @@ def Output : NLOp<"output", [AttrSizedOperandSegments]> {
     nl.output(%targets) skip %h : !nl.chunk<!storage.node_id>
 
     An optional `cardinality` operand carries a representative chunk of the driving
-    relation. A projection of only constants - RETURN 5 - has no per-row column to
-    size the emission, yet its cardinality is the driving relation's (projection
-    preserves cardinality), so the output nests in the driving loop and reads its row
-    count from this chunk; the constants broadcast against it. Absent for a per-row
-    projection (its own columns size it) or a single-row emit.
+    relation - any loop variable of the loop this output nests in. A projection of
+    only constants - RETURN 5 - has no per-row column to size the emission, yet its
+    cardinality is the driving relation's (projection preserves cardinality), so the
+    output nests in the driving loop and reads its row count from this chunk; the
+    constants broadcast against it. Absent for a per-row projection (its own columns
+    size it) or a single-row emit.
 
     nl.output(%c) cardinality(%n : !nl.chunk<!storage.node_id>) : !nl.chunk<i64>
 
     Only that row count is read, never a value, so the driver is a chunk of any
-    element type - the node IDs a scan binds, the values an UNWIND unwinds - as
-    nl.broadcast_constant's own cardinality operand is:
+    element type - the node IDs a scan binds, the values an UNWIND unwinds, the return
+    values a procedure drive binds - as nl.broadcast_constant's own cardinality
+    operand is:
 
     nl.output(%c) cardinality(%x : !nl.chunk<!storage.nullable<i64>>) : !nl.chunk<i64>
 
@@ -1149,7 +1151,7 @@ def Constant : NLOp<"constant", [Pure, ConstantLike, InferTypeOpAdaptor]> {
       %c = nl.constant(30 : i64) : !nl.chunk<i64>
   }];
 
-  let arguments = (ins TypedAttrInterface:$value);
+  let arguments = (ins AnyAttrOf<[TypedAttrInterface, ArrayAttr]>:$value);
   let results   = (outs NLChunk:$result);
 
   let assemblyFormat = "`(` $value `)` attr-dict";
@@ -1181,40 +1183,6 @@ def BroadcastConstant : NLOp<"broadcast_constant", [Pure, RowAlignedThroughOpera
   let results   = (outs NLChunk:$result);
 
   let assemblyFormat = "$value (`,` $cardinality^)? attr-dict `:` functional-type(operands, results)";
-}
-
-/**
-* WrapNullable
-*/
-def WrapNullable : NLOp<"wrap_nullable", [Pure, RowAlignedThroughOperands]> {
-  let summary = "Lay a plain value chunk out as a nullable value chunk";
-  let description = [{
-      A value chunk carrying no null - the tally a count published, an arithmetic
-      result over such columns - holds a bare value per row, while every value
-      reduction reads its input as a nullable value chunk (the shape a property
-      fetch produces). This lays the same rows out in that shape, each one present,
-      so a fold reduces them without a second spelling of every handler.
-
-      %r = nl.wrap_nullable %c : (!nl.chunk<ui64>) -> !nl.chunk<!storage.nullable<ui64>>
-  }];
-
-  let arguments = (ins NLChunk:$value);
-  let results   = (outs NLChunk:$result);
-
-  let assemblyFormat = "$value attr-dict `:` functional-type(operands, results)";
-
-  let extraClassDeclaration = [{
-    // Whether a chunk element type is a bare value this can copy: a string, an
-    // embedding or a number (a bool being a one-bit integer), rather than an entity
-    // ID or a nullable value it already wraps
-    static bool isPlainValueElement(::mlir::Type elementType);
-  }];
-
-  // The copy reads the operand as a plain value column and writes the result as a
-  // nullable one of the same value type, so a nullable operand, an ID chunk on
-  // either side or a result of another value type would read or write the wrong
-  // column. The verifier rejects all three.
-  let hasVerifier = 1;
 }
 
 /**
@@ -1436,6 +1404,18 @@ def Not : NLOp<"not", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]
   let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
 }
 
+def ToNullable : NLOp<"to_nullable", [Pure]> {
+  let summary = "Read a plain value chunk as a nullable value chunk holding a value in every row";
+  let description = [{
+      %r = nl.to_nullable %x : (!nl.chunk<ui64>) -> !nl.chunk<!storage.nullable<ui64>>
+  }];
+
+  let arguments = (ins NLChunk:$operand);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
+}
+
 class NLUnaryFunctionOp<string mnemonic, list<Trait> extraTraits = []>
     : NLOp<mnemonic, !listconcat([Pure, RowAlignedThroughOperands], extraTraits)> {
   let summary = "Apply a unary scalar function row-wise to a value chunk";
@@ -1579,6 +1559,39 @@ def GroupAggregate : NLOp<"group_aggregate", [Pure]> {
   let results   = (outs NLIterator:$result);
 
   let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
+}
+
+/**
+* Procedure
+*/
+// NOT Pure: it prepares a live procedure - the alloc callback's data and the
+// procedure's PREPARE step - so two must never be CSE'd into one (each CALL is its
+// own call), and an unread one must not be DCE'd: preparing it is a side effect
+// (like nl.limit / nl.sort_buffer).
+def Procedure : NLOp<"procedure", []> {
+  let summary = "Prepare one procedure call, once, ahead of the loops";
+  let description = [{
+    Sits at the top of the scope it governs - function scope for a top-level CALL -
+    where it prepares the procedure once and re-initializes it each further time
+    that block runs. Produces the !nl.procedure_state handle nl.procedure_init reads.
+
+      %call = nl.procedure("db.labels") yields ["id", "label"]
+
+    `name` is the procedure's full name, resolved against the procedure registry
+    during translation - the procedure sibling of nl.get_property_type, which
+    resolves a property name once above the loops so the consumers below reuse it.
+    `yields` names the return values this call binds, in the order the consuming op
+    produces them, so the columns the procedure writes into are allocated once here
+    and shared by every step. It may be empty - a procedure declaring no return value
+    binds no column and is driven for what it does rather than for rows. The result
+    type is buildable and omitted.
+  }];
+
+  let arguments = (ins StrAttr:$name, StrArrayAttr:$yields);
+  let results   = (outs NLProcedureState:$state);
+
+  let assemblyFormat = "`(` $name `)` `yields` $yields attr-dict";
+  let hasVerifier = 1;
 }
 
 /**
@@ -1785,6 +1798,83 @@ def DeleteEdge : NLOp<"delete_edge"> {
 
   let assemblyFormat = [{
     $input_edges attr-dict
+  }];
+}
+
+/**
+* ProcedureInit
+*/
+// NOT Pure: driving the iterator runs the procedure's execute callback, so no CSE of two
+// iterators over one call and no DCE of an unread one.
+def ProcedureInit : NLOp<"procedure_init", [AttrSizedOperandSegments]> {
+  let summary = "Create a database iterator driving a procedure over its arguments";
+  let description = [{
+    The row-producing form of a CALL, the procedure counterpart of nl.scan_nodes and
+    nl.get_out_edges: it opens an iterator over the rows the procedure produces, and
+    each step of the enclosing nl.for calls the procedure's execute callback once,
+    which refills the result columns with that step's rows. The loop runs until the
+    procedure declares itself finished, so - exactly like an edge hop over one chunk of
+    nodes - a procedure may answer one chunk of arguments with as many chunks of rows as
+    it needs:
+
+      %call = nl.procedure("db.labels") yields ["id", "label"]
+      %rows = nl.procedure_init(%call, (), {}) : (!nl.procedure_state) -> !nl.iter<!nl.chunk<!storage.label_id>, !nl.chunk<!storage.string>>
+      nl.for %ids, %labels in %rows : !nl.iter<...> {
+        nl.output(%ids, %labels) : !nl.chunk<!storage.label_id>, !nl.chunk<!storage.string>
+      }
+
+    `inputs` are the call's arguments, in the procedure's declaration order, so operand
+    i is argument i. With none the procedure is a source and its loop sits at function
+    scope, as above. With arguments the iterator is created inside the loop that binds
+    them and re-opened once per chunk of them - the nested-loop shape nl.get_out_edges
+    has - so the procedure is reset at the top of each drive and starts afresh for the
+    new chunk.
+
+    `columns_to_filter` is the carry set, mirroring nl.get_out_edges: the chunks bound
+    alongside the arguments that must survive the call. A procedure need not emit one
+    row per input row, so a carried chunk cannot pass through untouched - each step
+    rebuilds it from the input-row index the procedure reports for every row it emits,
+    which replicates the rows of an expanding call and drops those of a filtering one.
+    Each carried chunk comes back as a trailing chunk of the iterator, so the nl.for
+    binds it after the yields:
+
+      %rows = nl.procedure_init(%call, (%m), {%n, %m})
+                : (!nl.procedure_state, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>)
+                  -> !nl.iter<!nl.chunk<i64>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>>
+      nl.for %x, %n2, %m2 in %rows : !nl.iter<...> {
+        nl.output(%n2, %m2, %x) : ...
+      }
+
+    Only a procedure that declares it makes that report can be carried past
+    (Procedure::getIndices), which lowering settles at plan time; hand-written IR
+    is caught during translation. A procedure that declares it and then reports nothing
+    is caught at the first step it emits, rather than silently misaligning the
+    projection.
+
+    The iterator's chunk types are the yielded return values' column types followed by
+    the carried ones. Neither can be recovered from the parameterless state handle, so
+    they are spelled after the colon (as the nl.for iterator type is). A call binding no
+    return value gives an iterator of no chunk, whose nl.for binds no variable and runs an
+    empty body: the drive is all there is to it, which is what a call made for its side
+    effect wants.
+  }];
+
+  // Two variadic operand groups - the arguments and the carry set - so the op carries
+  // operand-segment sizes to tell them apart, as nl.cross_product does.
+  let arguments = (ins NLProcedureStateHandle:$state,
+                       Variadic<NLChunk>:$inputs,
+                       Variadic<NLChunk>:$columns_to_filter);
+  let results   = (outs NLIterator:$result);
+
+  // The handle prints first, then the parenthesized argument chunks and the
+  // brace-wrapped carry set, so a source call reads `nl.procedure_init(%call, (), {})`
+  // - the brace style nl.get_out_edges uses, which keeps the syntax total without an
+  // optional group. Neither operand group's chunk types are buildable and the iterator
+  // type cannot be inferred from them, so functional-type spells both sides, as
+  // nl.filter does.
+  let assemblyFormat = [{
+    `(` $state `,` `(` $inputs `)` `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    functional-type(operands, results)
   }];
 }
 

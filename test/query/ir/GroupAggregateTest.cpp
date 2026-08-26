@@ -377,8 +377,163 @@ private:
     std::vector<Row> _rows;
 };
 
+// Collects the (edge, count) rows a group over an edge variable emits: an edge id
+// key chunk and a non-null !nl.chunk<ui64> count chunk.
+class GroupEdgeCountSink : public NLOutputSink {
+public:
+    using Row = std::pair<uint64_t, uint64_t>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* edges = dynamic_cast<const ColumnEdgeIDs*>(chunks[0]);
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
+        ASSERT_NE(edges, nullptr);
+        ASSERT_NE(counts, nullptr);
+        ASSERT_EQ(edges->size(), counts->size());
+
+        const auto& edgeRaw = edges->getRaw();
+        const auto& countRaw = counts->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.push_back({edgeRaw[rowIndex].getValue(), countRaw[rowIndex]});
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
+// Collects the (first edge, second edge, count) rows a group keyed on two edge variables
+// emits: an id chunk per edge identity and a non-null !nl.chunk<ui64> count chunk.
+class GroupTwoEdgeCountSink : public NLOutputSink {
+public:
+    using Row = std::tuple<uint64_t, uint64_t, uint64_t>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 3u);
+
+        const auto* firstEdges = dynamic_cast<const ColumnEdgeIDs*>(chunks[0]);
+        const auto* secondEdges = dynamic_cast<const ColumnEdgeIDs*>(chunks[1]);
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[2]);
+        ASSERT_NE(firstEdges, nullptr);
+        ASSERT_NE(secondEdges, nullptr);
+        ASSERT_NE(counts, nullptr);
+        ASSERT_EQ(firstEdges->size(), counts->size());
+        ASSERT_EQ(secondEdges->size(), counts->size());
+
+        const auto& firstRaw = firstEdges->getRaw();
+        const auto& secondRaw = secondEdges->getRaw();
+        const auto& countRaw = counts->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.emplace_back(firstRaw[rowIndex].getValue(),
+                               secondRaw[rowIndex].getValue(),
+                               countRaw[rowIndex]);
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
+// Collects the (source, edge, target, team, count) rows a group whose keys come from
+// a RETURN * expansion emits: the three entity id chunks the wildcard names, a
+// nullable string key chunk and a non-null !nl.chunk<ui64> count chunk.
+class GroupWildcardEdgeSink : public NLOutputSink {
+public:
+    using Row = std::tuple<uint64_t, uint64_t, uint64_t, std::optional<std::string>, uint64_t>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 5u);
+
+        const auto* sources = dynamic_cast<const ColumnNodeIDs*>(chunks[0]);
+        const auto* edges = dynamic_cast<const ColumnEdgeIDs*>(chunks[1]);
+        const auto* targets = dynamic_cast<const ColumnNodeIDs*>(chunks[2]);
+        const auto* teams = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[3]);
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[4]);
+        ASSERT_NE(sources, nullptr);
+        ASSERT_NE(edges, nullptr);
+        ASSERT_NE(targets, nullptr);
+        ASSERT_NE(teams, nullptr);
+        ASSERT_NE(counts, nullptr);
+
+        const auto& sourceRaw = sources->getRaw();
+        const auto& edgeRaw = edges->getRaw();
+        const auto& targetRaw = targets->getRaw();
+        const auto& teamRaw = teams->getRaw();
+        const auto& countRaw = counts->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            std::optional<std::string> team;
+            if (teamRaw[rowIndex]) {
+                team = std::string(*teamRaw[rowIndex]);
+            }
+
+            _rows.emplace_back(sourceRaw[rowIndex].getValue(),
+                               edgeRaw[rowIndex].getValue(),
+                               targetRaw[rowIndex].getValue(),
+                               team,
+                               countRaw[rowIndex]);
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
 // Counts appendChunks calls and total rows without materializing them, so an empty
 // grouped aggregation can be shown to emit nothing.
+// Collects the (team, constant, count) rows a grouped count emits beside a constant item:
+// the constant rides a ColumnConst, which answers its one value at every row rather than
+// carrying one per row.
+class GroupConstantCountSink : public NLOutputSink {
+public:
+    using Row = std::tuple<std::optional<std::string>, int64_t, uint64_t>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 3u);
+
+        const auto* teams = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* constants = dynamic_cast<const ColumnConst<int64_t>*>(chunks[1]);
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[2]);
+        ASSERT_NE(teams, nullptr);
+        ASSERT_NE(constants, nullptr);
+        ASSERT_NE(counts, nullptr);
+
+        const auto& teamRaw = teams->getRaw();
+        const auto& countRaw = counts->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            std::optional<std::string> team;
+            if (teamRaw[rowIndex]) {
+                team = std::string(*teamRaw[rowIndex]);
+            }
+
+            _rows.push_back({team, (*constants)[rowIndex], countRaw[rowIndex]});
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
 class CountingSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
@@ -1298,6 +1453,13 @@ protected:
         create(R"(CREATE (:Node {team: "blue"}))");
     }
 
+    // Two KNOWS edges (ids 0 and 1) over four nodes, so a group on the edge variable
+    // has one group per edge.
+    void buildKnowsGraph() {
+        create(R"(CREATE (:Node {team: "red"})-[:KNOWS]->(:Node {team: "blue"}))");
+        create(R"(CREATE (:Node {team: "red"})-[:KNOWS]->(:Node {team: "blue"}))");
+    }
+
     void buildTeamCityGraph() {
         create(R"(CREATE (:Node {team: "red", city: "paris", score: 10}), (:Node {team: "red", city: "paris", score: 20}), (:Node {team: "red", city: "lyon", score: 5}), (:Node {team: "blue", city: "paris", score: 100}))");
         create(R"(CREATE (:Node {team: "blue", city: "paris"}))");
@@ -1329,6 +1491,22 @@ TEST_F(GroupAggregateCypherTest, groupedCountStar) {
     std::vector<GroupCountSink::Row> rows;
     sink.sortedRows(rows);
     const std::vector<GroupCountSink::Row> expected {{"blue", 2}, {"red", 2}};
+    EXPECT_EQ(rows, expected);
+}
+
+// A constant item answers the same value in every row, so it groups nothing: the rows are
+// grouped by the team alone and the constant stands beside each group. Handing it to the
+// aggregate instead would make it a grouping key, gathered per row - which a column that
+// carries no rows cannot answer.
+TEST_F(GroupAggregateCypherTest, groupedCountBesideAConstant) {
+    buildTeamGraph();
+
+    GroupConstantCountSink sink;
+    match("MATCH (n:Node) RETURN n.team, 5, count(*)", sink);
+
+    std::vector<GroupConstantCountSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<GroupConstantCountSink::Row> expected {{"blue", 5, 2}, {"red", 5, 2}};
     EXPECT_EQ(rows, expected);
 }
 
@@ -1429,6 +1607,62 @@ TEST_F(GroupAggregateCypherTest, aggregateAfterCartesianProduct) {
     std::vector<GroupCountSink::Row> rows;
     groupSink.sortedRows(rows);
     const std::vector<GroupCountSink::Row> expected {{"blue", 8}, {"red", 8}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(GroupAggregateCypherTest, groupedCountByEdgeVariable) {
+    buildKnowsGraph();
+
+    GroupEdgeCountSink sink;
+    match("MATCH (a)-[e]->(b) RETURN e, count(*)", sink);
+
+    std::vector<GroupEdgeCountSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<GroupEdgeCountSink::Row> expected {{0, 1}, {1, 1}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(GroupAggregateCypherTest, groupedCountByEdgeVariableOverACartesianProduct) {
+    buildKnowsGraph();
+
+    GroupEdgeCountSink sink;
+    match("MATCH (a)-[e]->(b), (n:Node) RETURN e, count(*)", sink);
+
+    // Each edge is paired with the four nodes, so every edge counts four rows.
+    std::vector<GroupEdgeCountSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<GroupEdgeCountSink::Row> expected {{0, 4}, {1, 4}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(GroupAggregateCypherTest, groupedCountByWildcardNamingAnEdgeVariable) {
+    buildKnowsGraph();
+
+    GroupWildcardEdgeSink sink;
+    match("MATCH (a)-[e]->(b) RETURN *, a.team, count(*)", sink);
+
+    // The wildcard makes a, e and b grouping keys, so each edge is its own group.
+    std::vector<GroupWildcardEdgeSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<GroupWildcardEdgeSink::Row> expected {{0, 0, 1, "red", 1},
+                                                            {2, 1, 3, "red", 1}};
+    EXPECT_EQ(rows, expected);
+}
+
+// A key that is an edge variable is not in the variable map under its own name - the
+// occurrences of its identity are - so grouping on two of them rebinds through that
+// identity twice, over the same map the rebinding writes to.
+TEST_F(GroupAggregateCypherTest, groupedCountByTwoEdgeVariables) {
+    buildKnowsGraph();
+
+    GroupTwoEdgeCountSink sink;
+    match("MATCH (a)-[e]->(b), (c)-[f]->(d), (x:Node) RETURN e, f, count(*)", sink);
+
+    // Two edges crossed with themselves and with the four nodes: four pairs of four rows
+    // each, so a key read before the grouping would answer with sixteen rows instead.
+    std::vector<GroupTwoEdgeCountSink::Row> rows;
+    sink.sortedRows(rows);
+    const std::vector<GroupTwoEdgeCountSink::Row> expected {{0, 0, 4}, {0, 1, 4}, {1, 0, 4}, {1, 1, 4}};
     EXPECT_EQ(rows, expected);
 }
 

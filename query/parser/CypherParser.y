@@ -1294,7 +1294,7 @@ subqueryExist
 
 qualifiedName
     : symbol { $$ = QualifiedName::create(ast); $$->addName($1); }
-    | qualifiedName DOT symbol { $$ = $1; $$->addName($3); }
+    | qualifiedName DOT name { $$ = $1; $$->addName($3); }
     ;
 
 invocationName

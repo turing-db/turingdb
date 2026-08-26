@@ -5,7 +5,8 @@
 namespace db {
 
 ScanLabelsIterator::ScanLabelsIterator(const LabelMap& labelMap)
-    : _it(labelMap.begin()),
+    : _begin(labelMap.begin()),
+    _it(labelMap.begin()),
     _end(labelMap.end())
 {
 }
@@ -15,7 +16,7 @@ ScanLabelsIterator ScanLabelsIterator::end(const LabelMap& labelMap) {
 }
 
 void ScanLabelsIterator::reset() {
-    bioassert(false, "Cannot reset ScanLabelsIterator");
+    _it = _begin;
 }
 
 void ScanLabelsIterator::next() {

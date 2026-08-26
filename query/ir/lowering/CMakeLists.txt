@@ -10,7 +10,8 @@ target_link_libraries(turing_db_ir_lowering_s
 
     PRIVATE
         turing_db_ir_common_s
-        turing_db_storage_s)
+        turing_db_storage_s
+        turing_db_procedures_s)
 
 target_include_directories(turing_db_ir_lowering_s PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR})

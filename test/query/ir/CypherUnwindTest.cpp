@@ -509,6 +509,94 @@ TEST_F(CypherUnwindTest, countsAllNullListAsZero) {
     expectRows("UNWIND [null, null] AS l RETURN count(l)", expected);
 }
 
+TEST_F(CypherUnwindTest, countsHeterogeneousUnwindPerGroup) {
+    // A grouping key beside the count, so the tally is charged per group rather than over
+    // the whole relation. One matched node crossed with three cells is one group of three
+    // rows, of which the null cell is not charged.
+    const Rows expected = {{"Remy", "2"}};
+    expectRows("MATCH (n {name: 'Remy'}) UNWIND [1, null, 'a'] AS l RETURN n.name, count(l)", expected);
+}
+
+TEST_F(CypherUnwindTest, countsHeterogeneousUnwindPerGroupAcrossGroups) {
+    // Two nodes carry an age of 32, so the cross product gives two groups of two cells
+    // each - keyed on the age, which both share, so it is one group of four.
+    const Rows expected = {{"32", "2"}};
+    expectRows("MATCH (n) WHERE n.age = 32 UNWIND [1, null] AS l RETURN n.age, count(l)", expected);
+}
+
+TEST_F(CypherUnwindTest, countsAllNullUnwindPerGroupAsZero) {
+    // Every cell of the group is null, so the group survives with a tally of zero rather
+    // than disappearing.
+    const Rows expected = {{"Remy", "0"}};
+    expectRows("MATCH (n {name: 'Remy'}) UNWIND [null, null] AS l RETURN n.name, count(l)", expected);
+}
+
+TEST_F(CypherUnwindTest, countsNestedListElementsPerGroup) {
+    // A nested list is one cell and no more null than a scalar one, so it is charged.
+    const Rows expected = {{"Remy", "2"}};
+    expectRows("MATCH (n {name: 'Remy'}) UNWIND [[1], null, 'a'] AS l RETURN n.name, count(l)", expected);
+}
+
+TEST_F(CypherUnwindTest, groupsByTheUnwoundCell) {
+    // The cell is the grouping key here, not just the counted column: each distinct cell is
+    // one group. The null cell is a group of its own and counts none of its rows, so it
+    // survives with a tally of zero. Groups come out in creation order.
+    const Rows expected = {{"1", "1"}, {"null", "0"}};
+    expectRows("UNWIND [1, null] AS l RETURN l, count(l)", expected);
+}
+
+TEST_F(CypherUnwindTest, groupsRepeatedUnwoundCellsTogether) {
+    // Cells of different types tell groups apart the way the dedup does, and equal cells
+    // share one however far apart they are unwound.
+    const Rows expected = {{"1", "2"}, {"a", "1"}};
+    expectRows("UNWIND [1, 'a', 1] AS l RETURN l, count(l)", expected);
+}
+
+TEST_F(CypherUnwindTest, groupsRepeatedNullCellsTogether) {
+    // Every null is one value, as DISTINCT reads them, so the two nulls are one group -
+    // charged nothing.
+    const Rows expected = {{"1", "2"}, {"null", "0"}};
+    expectRows("UNWIND [1, null, 1, null] AS l RETURN l, count(l)", expected);
+}
+
+TEST_F(CypherUnwindTest, groupsByANestedUnwoundCell) {
+    // A nested list is one cell, and two equal ones are one group: the key is serialized
+    // through the list rather than by identity.
+    const Rows expected = {{"[1]", "2"}, {"a", "1"}};
+    expectRows("UNWIND [[1], [1], 'a'] AS l RETURN l, count(l)", expected);
+}
+
+TEST_F(CypherUnwindTest, countsTheMatchedRowsOfEachUnwoundCellGroup) {
+    // Grouping by the cell while counting something else: the two nodes crossed with each
+    // cell make a group of two per cell.
+    const Rows expected = {{"1", "2"}, {"a", "2"}};
+    expectRows("MATCH (n) WHERE n.age = 32 UNWIND [1, 'a'] AS l RETURN l, count(n)", expected);
+}
+
+TEST_F(CypherUnwindTest, cutsTheUnwoundCellGroups) {
+    // A SKIP and a LIMIT chained over the groups: the LIMIT copies cells out of what the
+    // SKIP emitted, rather than a lone cut folded into the emission.
+    const Rows expected = {{"1", "2"}};
+    expectRows("UNWIND [1, 'a', 1] AS l RETURN l, count(l) SKIP 0 LIMIT 1", expected);
+}
+
+TEST_F(CypherUnwindTest, cutsTheUnwoundCellsUnderAWindow) {
+    // The same chained cut with no aggregate: the cells are copied twice over, once per
+    // cut, rather than emitted in place.
+    const Rows expected = {{"1"}};
+    expectRows("UNWIND [1, 'a', 1] AS l RETURN l SKIP 0 LIMIT 1", expected);
+}
+
+TEST_F(CypherUnwindTest, cutsTheDedupedUnwoundCellsUnderAWindow) {
+    const Rows expected = {{"1"}};
+    expectRows("UNWIND [1, 'a'] AS l RETURN DISTINCT l SKIP 0 LIMIT 1", expected);
+}
+
+TEST_F(CypherUnwindTest, skipsPastTheFirstUnwoundCellUnderAWindow) {
+    const Rows expected = {{"a"}};
+    expectRows("UNWIND [1, 'a', 1] AS l RETURN l SKIP 1 LIMIT 1", expected);
+}
+
 TEST_F(CypherUnwindTest, dedupsHeterogeneousUnwind) {
     // Every null is one value, so DISTINCT keeps a single null row.
     const Rows expected = {{"1"}, {"null"}};

@@ -57,6 +57,8 @@ public:
 
     bool isDone() const { return _nodeIt == _inputNodeIDs->cend(); }
 
+    size_t getSampleSize() const { return _sampleSize; }
+
     void setOutputColumns(ColumnNodeIDs* srcIDs,
                           ColumnEdgeIDs* edgeIDs,
                           ColumnEdgeTypes* edgeTypes,

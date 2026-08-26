@@ -4,6 +4,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
+#include "IRLiteralList.h"
 #include "StorageEnums.h"
 #include "GroupAggregateKindsFormat.h"
 
@@ -29,11 +30,11 @@ Type getEdgeTypeIDChunkType(MLIRContext* context) {
     return ChunkType::get(context, storage::EdgeTypeIDType::get(context));
 }
 
-// The value type a nullable value chunk carries: the T in a
-// !nl.chunk<!storage.nullable<T>>. An aggregate folds property values, so an update's
-// input and a result's output are such chunks. Returns a null Type for anything else
-// (an ID chunk, say), so the caller can reject it.
-Type nullableChunkValueType(Type chunkType) {
+// The value type an aggregate reduces: the T in a !nl.chunk<!storage.nullable<T>>.
+// Aggregates fold property values, so an update's input and a result's output are
+// always such chunks. Returns a null Type for anything else (an ID chunk, say), so
+// the caller can reject it.
+Type aggregateValueType(Type chunkType) {
     const auto chunk = dyn_cast<ChunkType>(chunkType);
     if (!chunk) {
         return Type();
@@ -186,7 +187,25 @@ LogicalResult Constant::inferReturnTypes(MLIRContext* context,
                                          std::optional<Location> location,
                                          Constant::Adaptor adaptor,
                                          SmallVectorImpl<Type>& inferredReturnTypes) {
-    const TypedAttr value = cast<TypedAttr>(adaptor.getValue());
+    // An array of per-element attributes is a list literal; it carries no type of its own,
+    // so the element type is the homogeneity verdict over the elements.
+    if (const auto elements = dyn_cast<ArrayAttr>(adaptor.getValue())) {
+        const Type shared = ::db::sharedLiteralElementType(elements);
+        const Type listElement = shared ? shared : storage::ListElementType::get(context);
+        const Type listType = storage::ListType::get(context, listElement);
+
+        inferredReturnTypes.push_back(ChunkType::get(context, listType));
+        return success();
+    }
+
+    // Inference runs during parsing, ahead of the operand constraint, so an attribute that
+    // is neither typed nor an array is rejected here rather than cast blindly.
+    const auto value = dyn_cast<TypedAttr>(adaptor.getValue());
+    if (!value) {
+        return emitOptionalError(location,
+                                 "nl.constant carries a typed value or an array of "
+                                 "literals, not ", adaptor.getValue());
+    }
 
     Type elementType;
     if (const auto elements = dyn_cast<DenseElementsAttr>(value)) {
@@ -464,27 +483,6 @@ LogicalResult Output::verify() {
     return success();
 }
 
-bool WrapNullable::isPlainValueElement(Type elementType) {
-    return isa<storage::StringType, storage::EmbeddingType, Float64Type, IntegerType>(elementType);
-}
-
-// The copy reads the operand as a plain value column and writes the result as a nullable
-// column of that same value type, so anything else on either side would read or write a
-// column of another shape.
-LogicalResult WrapNullable::verify() {
-    const auto valueChunk = dyn_cast<ChunkType>(getValue().getType());
-    if (!valueChunk || !isPlainValueElement(valueChunk.getElementType())) {
-        return emitOpError("operand must be a plain value chunk, neither nullable nor an ID chunk");
-    }
-
-    const Type resultValueType = nullableChunkValueType(getResult().getType());
-    if (resultValueType != valueChunk.getElementType()) {
-        return emitOpError("result must be a nullable chunk of the operand's value type");
-    }
-
-    return success();
-}
-
 // avg accumulates a running sum as f64, so its accumulator state must be an f64;
 // sum/min/max accumulate in the value's own type, so any value element type is
 // fine here (the update and result ops check the input/output against it).
@@ -507,7 +505,7 @@ LogicalResult AggregateUpdate::verify() {
     const storage::AggregateKind kind = getKind();
 
     // The input is a property value chunk; its value type is what the fold reads.
-    const Type inputValueType = nullableChunkValueType(getRows().getType());
+    const Type inputValueType = aggregateValueType(getRows().getType());
     if (!inputValueType) {
         return emitOpError("input must be a nullable value chunk (a property column)");
     }
@@ -541,7 +539,7 @@ LogicalResult AggregateUpdate::verify() {
 LogicalResult AggregateResult::verify() {
     const storage::AggregateKind kind = getKind();
 
-    const Type resultValueType = nullableChunkValueType(getResult().getType());
+    const Type resultValueType = aggregateValueType(getResult().getType());
     if (!resultValueType) {
         return emitOpError("result must be a nullable value chunk");
     }
@@ -630,6 +628,14 @@ LogicalResult GroupAggregateBuffer::verify() {
         }
     }
 
+    return success();
+}
+
+// The names in `yields` are checked against the procedure's declared return values
+// during translation, which is where the registry is available; there is nothing to
+// check here. An empty list is legal and means the call binds no return value at all -
+// a procedure declaring none, driven for what it does rather than for rows.
+LogicalResult Procedure::verify() {
     return success();
 }
 

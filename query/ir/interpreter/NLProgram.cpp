@@ -4,6 +4,11 @@
 #include <limits>
 #include <numeric>
 
+#include "Procedure.h"
+#include "ProcedureData.h"
+
+#include "IRException.h"
+
 using namespace db;
 
 NLProgram::NLProgram() {
@@ -14,6 +19,104 @@ NLProgram::~NLProgram() {
 
 void NLProgram::setColumnNames(std::span<const std::string_view> names) {
     _columnNames.assign(names.begin(), names.end());
+}
+
+NLProcedureState::NLProcedureState(const Procedure* procedure,
+                                   ProcedureData* data,
+                                   const ProcedureContext* context)
+    : _procedure(procedure),
+    _data(data)
+{
+    _procedureState.setData(data);
+    _procedureState.setContext(context);
+}
+
+NLProcedureState::~NLProcedureState() {
+    const Procedure::DeallocCallback dealloc = _procedure->getDeallocCallback();
+    if (dealloc) {
+        dealloc(_data);
+    }
+}
+
+void NLProcedureState::prepareOrResetForNewDrive() {
+    // A procedure reads its argument columns in its prepare step - gnn.neighbourhoodSample
+    // builds its sampling iterator over the input nodes there - so the call is prepared
+    // on its first drive, once the producing loop has filled them, rather than when its
+    // handle is bound.
+    if (!_prepared) {
+        prepare();
+        return;
+    }
+
+    // Preparing the call already left the procedure at its first row, so the drive that
+    // prepared it needs no rewind - and a procedure whose rows cannot be re-read would
+    // refuse one it never needed.
+    if (!_driven) {
+        return;
+    }
+
+    reset();
+}
+
+void NLProcedureState::prepare() {
+    _procedureState.setStep(ProcedureState::Step::PREPARE);
+    _procedureState.clearFinished();
+    _procedure->getExecCallback()(&_procedureState);
+
+    if (_procedureState.isFinished()) {
+        throw IRException("A procedure cannot finish in its prepare step");
+    }
+
+    _prepared = true;
+    _driven = false;
+}
+
+void NLProcedureState::reset() {
+    _procedureState.setStep(ProcedureState::Step::RESET);
+    _procedureState.clearFinished();
+    _procedure->getExecCallback()(&_procedureState);
+
+    if (_procedureState.isFinished()) {
+        throw IRException("A procedure cannot finish in its reset step");
+    }
+
+    _driven = false;
+}
+
+void NLProcedureState::execute() {
+    _procedureState.setStep(ProcedureState::Step::EXECUTE);
+    _procedureState.clearFinished();
+    _procedure->getExecCallback()(&_procedureState);
+
+    _driven = true;
+}
+
+size_t NLProcedureState::getRowCount() const {
+    if (_resultColumns.empty()) {
+        return 0;
+    }
+
+    return _resultColumns.front()->size();
+}
+
+size_t NLProcedureState::getInputRowCount() const {
+    // A constant argument holds a single value however many rows the chunk has, so
+    // only a row-aligned argument can size the input the procedure was handed; a
+    // call passing constants alone hands it no rows a carry set could align with.
+    const size_t argumentCount = _procedure->argumentTypes().size();
+
+    for (size_t argumentIndex = 0; argumentIndex < argumentCount; argumentIndex++) {
+        const Column* argument = _data->getInputColumn(argumentIndex);
+        if (!argument) {
+            continue;
+        }
+
+        if (argument->getContainerKind() != ContainerKind::code<ColumnConst>()) {
+            return argument->size();
+        }
+    }
+
+    return 0;
 }
 
 void NLSortState::reset() {

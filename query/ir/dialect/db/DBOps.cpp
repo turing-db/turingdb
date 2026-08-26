@@ -3,6 +3,7 @@
 
 #include "llvm/ADT/SmallVector.h"
 
+#include "IRLiteralList.h"
 #include "StorageEnums.h"
 #include "GroupAggregateKindsFormat.h"
 
@@ -63,6 +64,37 @@ ParseResult parseFactorRegion(OpAsmParser& parser, OperationState& result) {
 
     Region* factor = result.addRegion();
     return parser.parseRegion(*factor, {});
+}
+
+// A literal list typed as homogeneous - db.unwind_const's typed column, db.const_list's
+// typed list - must carry at least one element and every element must be a typed
+// attribute of one shared type. The elements are checked against each other and not
+// against the spelled element type: a hand-written "s" parses as an untyped StringAttr,
+// so comparing it to a !storage.string would reject valid IR. A homogeneous result paired
+// with literals of another type is therefore not an op-level error; the runtime fill
+// catches that on the element's type tag.
+LogicalResult verifyHomogeneousElements(Operation* op, ArrayAttr elements) {
+    if (elements.empty()) {
+        return op->emitOpError("a homogeneous literal list must carry at least one element; "
+                               "an empty list is the list_element form");
+    }
+
+    const TypedAttr firstElement = llvm::dyn_cast<TypedAttr>(elements[0]);
+    if (!firstElement) {
+        return op->emitOpError("literal list element is not a typed attribute");
+    }
+
+    const mlir::Type payloadType = firstElement.getType();
+    for (const Attribute element : elements) {
+        const TypedAttr typedElement = llvm::dyn_cast<TypedAttr>(element);
+        if (!typedElement) {
+            return op->emitOpError("literal list element is not a typed attribute");
+        } else if (typedElement.getType() != payloadType) {
+            return op->emitOpError("a homogeneous literal list requires every element to share one type");
+        }
+    }
+
+    return success();
 }
 
 // db.limit and db.skip both pass their columns straight through, so the results
@@ -372,6 +404,48 @@ LogicalResult RemoveDuplicates::verify() {
     return verifyPassThrough(getOperation(), getColumns(), getResults());
 }
 
+// A call produces one column per yielded return value then one per carried column, so
+// `yields`, the carry set and the results must line up. A call yielding nothing has no
+// column to produce and no row count to be read from, so it is rejected here at the db
+// level; the procedure's return values themselves are checked against the registry
+// during lowering, which is where the registry is available.
+LogicalResult CallProcedure::verify() {
+    const ArrayAttr yields = getYields();
+    const OperandRange carriedColumns = getCarriedColumns();
+
+    // A call yielding nothing produces no column, so it has no row count for a carried
+    // row to be replicated against - it is called for what it does, not for rows, and
+    // nothing can ride through it.
+    if (yields.empty() && !carriedColumns.empty()) {
+        return emitOpError("yields no return value, so it cannot carry ")
+               << carriedColumns.size() << " columns past it";
+    }
+
+    const Operation::result_range results = getResults();
+    const size_t expectedResults = yields.size() + carriedColumns.size();
+    if (results.size() != expectedResults) {
+        return emitOpError("expects ") << expectedResults
+                                       << " results, one per yielded return value and carried column, but has "
+                                       << results.size();
+    }
+
+    // A carried column is only replicated by the call, never retyped, so each trailing
+    // result keeps its carried column's type - the pass-through check db.limit shares,
+    // applied to the results after the yields.
+    for (size_t carriedIndex = 0; carriedIndex < carriedColumns.size(); carriedIndex++) {
+        const Value carried = carriedColumns[carriedIndex];
+        const Value result = results[yields.size() + carriedIndex];
+
+        if (carried.getType() != result.getType()) {
+            return emitOpError("carried result ") << carriedIndex
+                                                  << " must have the same type as carried column "
+                                                  << carriedIndex;
+        }
+    }
+
+    return success();
+}
+
 // Allows inline declaration of a constant type
 LogicalResult ConstantOp::inferReturnTypes(MLIRContext* context,
                                            std::optional<Location> location,
@@ -380,7 +454,27 @@ LogicalResult ConstantOp::inferReturnTypes(MLIRContext* context,
                                            RegionRange regions,
                                            SmallVectorImpl<Type>& inferredReturnTypes) {
     ConstantOpGenericAdaptor adaptor(operands, attributes, properties, regions);
-    const mlir::TypedAttr typedValue = mlir::cast<mlir::TypedAttr>(adaptor.getValue());
+
+    // An array of per-element attributes is a list literal; it carries no type of its own,
+    // so the element type is the homogeneity verdict over the elements.
+    if (const auto elements = llvm::dyn_cast<ArrayAttr>(adaptor.getValue())) {
+        const mlir::Type shared = ::db::sharedLiteralElementType(elements);
+        const mlir::Type listElement = shared ? shared : storage::ListElementType::get(context);
+        const mlir::Type listType = storage::ListType::get(context, listElement);
+
+        inferredReturnTypes.emplace_back(mlir::db::ColumnType::get(context, listType));
+        return success();
+    }
+
+    // Type inference runs while the op is still being parsed, ahead of the operand
+    // constraint that limits the value to a typed attribute or an array, so an attribute of
+    // any other kind has to be turned away here rather than cast blindly.
+    const mlir::TypedAttr typedValue = llvm::dyn_cast<mlir::TypedAttr>(adaptor.getValue());
+    if (!typedValue) {
+        return mlir::emitOptionalError(location,
+                                       "db.constant carries a typed value or an array of "
+                                       "literals, not ", adaptor.getValue());
+    }
 
     mlir::Type elementType;
     if (const auto elements = mlir::dyn_cast<mlir::DenseElementsAttr>(typedValue)) {
@@ -549,10 +643,9 @@ LogicalResult UnwindCollect::verify() {
     return success();
 }
 
-// The literals are checked against each other, not against the column's element type -
-// a StringAttr carries no !storage.string to compare against - so a homogeneous result
-// type paired with literals of another type is not an op-level error; the runtime fill
-// catches that on the element's type tag.
+// The unwound column's element type is the homogeneity verdict: a type-erased
+// list_element column accepts any elements, a typed one requires them to share that one
+// type - the shared check the const_list verifier runs too.
 LogicalResult UnwindConst::verify() {
     const ColumnType resultColumn = llvm::dyn_cast<ColumnType>(getResult().getType());
     if (!resultColumn) {
@@ -560,32 +653,10 @@ LogicalResult UnwindConst::verify() {
     }
 
     const mlir::Type elementType = resultColumn.getType();
-    const bool isTypeErased = llvm::isa<storage::ListElementType>(elementType);
-
-    if (isTypeErased) {
+    if (llvm::isa<storage::ListElementType>(elementType)) {
         return success();
     }
 
-    const ArrayAttr elements = getElements();
-    if (elements.empty()) {
-        return emitOpError("a homogeneous unwind_const must carry at least one element; "
-                           "an empty list is the list_element form");
-    }
-
-    const TypedAttr firstElement = llvm::dyn_cast<TypedAttr>(elements[0]);
-    if (!firstElement) {
-        return emitOpError("unwind_const element is not a typed attribute");
-    }
-
-    const mlir::Type payloadType = firstElement.getType();
-    for (const Attribute element : elements) {
-        const TypedAttr typedElement = llvm::dyn_cast<TypedAttr>(element);
-        if (!typedElement) {
-            return emitOpError("unwind_const element is not a typed attribute");
-        } else if (typedElement.getType() != payloadType) {
-            return emitOpError("a homogeneous unwind_const requires every element to share one type");
-        }
-    }
-
-    return success();
+    return verifyHomogeneousElements(getOperation(), getElements());
 }
+

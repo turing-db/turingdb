@@ -76,6 +76,7 @@
 - @feedback_dump_object_bytes.md — bulk-write trivially-copyable object bytes, layouts pinned by central static_asserts; no staging
 - @feedback_doc_utility_functions.md — one-line WHAT comment above each free function in tool .cpp drivers
 - @feedback_minimal_comments.md — write almost no comments; default is none, hard cap 2-4 lines when one is justified
+- @feedback_no_optimisation_in_codegen.md — no liveness/dead-column/use-later analysis in DBProgramGenerator; optimisation belongs in an MLIR pass
 
 ## Workflow Preferences
 - @feedback_test_first.md — write failing test before fix
@@ -84,6 +85,7 @@
 - @feedback_explicit_ci_runner_labels.md — put real runner labels in each workflow's os_list + `runs-on: ${{ matrix.os }}`, not a computed ternary / runner-group object
 - @feedback_no_build_during_iteration.md — don't build after every micro-edit; wait until the user asks
 - @feedback_no_redundant_cmake.md — don't run `cmake ..` before `make`; make reconfigures itself
+- @feedback_pr_body_plain_sentence.md — PR body is a bare imperative sentence ("Implement X."), not a one-sentence summary of scope or design
 
 ## Project context
 - @project_partitioning.md — partitioning is near-term; some customers asked for METIS-style structural partitioning

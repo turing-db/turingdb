@@ -201,6 +201,13 @@ public:
 
     static void runDeleteEdge(NLExecutionContext* context, NLFunctionData* data);
 
+    // The drive loop of a row-producing procedure: rewind it, then run it once per step
+    // - each call refilling the loop variables in place - rebuild any carried column,
+    // and run the body over every step that produced rows, until the procedure declares
+    // itself finished. One entry covers one chunk of arguments, however many chunks of
+    // rows the procedure answers it with.
+    static void runProcedureInitLoop(NLExecutionContext* context, NLFunctionData* data);
+
     static void runOutput(NLExecutionContext* context, NLFunctionData* data);
 
     // Run a row-wise binary op (nl.add): invoke the typed kernel bound at
@@ -215,6 +222,7 @@ public:
     static void runUnary(NLExecutionContext* context, NLFunctionData* data);
 
     static NLUnaryFn selectNot(const Column* operand, LocalMemory* memory, Column*& result);
+    static NLUnaryFn selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result);
 
     // Lay a constant chunk's single value out over the driving relation's rows
     // (nl.broadcast_constant), so a fold that walks rows is handed the step's rows
@@ -285,10 +293,6 @@ public:
     // Tile for a nullable value chunk of this value type (inner column).
     static NLBroadcastFunction selectOptTileFunction(ValueType valueType);
 
-    // The copy nl.wrap_nullable runs: a plain value column of this value type read as
-    // the nullable one a value reduction folds
-    static NLUnaryFn selectNullableWrap(ValueType valueType);
-
     // The fill that lays a constant column's single value out over a step's rows,
     // for a nullable value chunk of this value type (nl.broadcast_constant).
     static NLBroadcastConstantFunction selectConstantBroadcast(ValueType valueType);
@@ -296,6 +300,9 @@ public:
     // The broadcast of the null literal, whose rows are the absent value rather than
     // copies of a value the constant holds
     static NLBroadcastConstantFunction selectNullConstantBroadcast();
+
+    // The list sibling: a list constant lays its one view out over the step's rows
+    static NLBroadcastConstantFunction selectConstantListBroadcast();
 
     // Block-repeat (outer column) and tile (inner column) for a list_element chunk: a
     // tagged scalar carries its own type, so there is no value type to dispatch on.
@@ -312,6 +319,16 @@ public:
     // unwind can be deduped and counted.
     static NLKeyAppendFunction selectListElementKeyAppendFunction();
     static NLCountFunction selectListElementCountFunction();
+
+    // Key-buffer gather-append and emit-phase range copy for a list_element chunk, so a
+    // heterogeneous unwind's cells can be a grouping key rather than only a counted column.
+    static NLGroupKeyGatherFunction selectListElementGroupKeyGatherFunction();
+    static NLCopyFunction selectListElementCopyFunction();
+
+    // The cut families for a list chunk: a list cell copies as a view, so a prefix or a
+    // suffix of them is the plain range copy every other cell column uses
+    static NLBroadcastFunction selectListBlockRepeatFunction();
+    static NLCopyFunction selectListCopyFunction();
 
     // Range copy for an ID chunk of this kind (skip suffix copy).
     static NLCopyFunction selectCopyFunction(NLChunkKind kind);
@@ -361,7 +378,7 @@ public:
     static NLGroupAggregateFoldFunction selectGroupAggregateFold(GroupAggregateKind kind, ValueType inputType);
     static NLGroupAggregateFoldFunction selectGroupCountAllFold();
     static NLGroupAggregateFoldFunction selectGroupCountDistinctFold(ValueType inputType);
-    static NLGroupAggregateFoldFunction selectGroupCountDistinctIDFold(NLChunkKind kind);
+    static NLGroupAggregateFoldFunction selectGroupCountDistinctChunkFold(NLChunkKind kind);
 
     // The grouped count / count(DISTINCT) folds of a type-erased column of tagged
     // scalars, the column a heterogeneous UNWIND produces

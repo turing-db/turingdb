@@ -288,11 +288,11 @@ void ListNodesProcedure::registerProcedure(ProcedureNamespace* ns) {
     proc->setExecuteCallback(&execute);
     proc->setAllocCallback(&allocData);
     proc->setDeallocCallback(&deallocData);
-    proc->addArgument("labels", ProcedureType::LIST);
-    proc->addArgument("propertyKeys", ProcedureType::LIST);
-    proc->addArgument("propertyValues", ProcedureType::LIST);
-    proc->addArgument("skip", ProcedureType::INT64);
-    proc->addArgument("limit", ProcedureType::INT64);
+    proc->addConstantArgument("labels", ProcedureType::LIST);
+    proc->addConstantArgument("propertyKeys", ProcedureType::LIST);
+    proc->addConstantArgument("propertyValues", ProcedureType::LIST);
+    proc->addConstantArgument("skip", ProcedureType::INT64);
+    proc->addConstantArgument("limit", ProcedureType::INT64);
     proc->addReturnValue("id", ProcedureType::NODE);
     proc->addReturnValue("labels", ProcedureType::LIST);
     proc->addReturnValue("properties", ProcedureType::STRING);

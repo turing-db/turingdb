@@ -73,11 +73,13 @@ TEST_F(QueryInterpreterV3ErrorTest, reportsUnsupportedExpressionRejectionAsIs) {
 }
 
 // An internal generator failure is a FatalException and must keep reading as
-// one, rather than being dressed up as a deliberate rejection.
+// one, rather than being dressed up as a deliberate rejection. A map literal
+// reading a row is one: the key varies, so it is not dropped as a constant, and
+// the generator has no column to read a map into.
 TEST_F(QueryInterpreterV3ErrorTest, reportsInternalGeneratorFailureAsUnexpected) {
     QueryStatus status;
-    runQuery("MATCH (n) WHERE n.age IN [1, 2] RETURN n", status);
+    runQuery("MATCH (n) RETURN n.name ORDER BY {a: n.age}", status);
 
     EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
-    EXPECT_EQ(status.getError(), "Unexpected exception: List literals are not yet supported in MLIR codegen.");
+    EXPECT_EQ(status.getError(), "Unexpected exception: Unsupported literal kind in WHERE clause expression.");
 }

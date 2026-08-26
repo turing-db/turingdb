@@ -17,10 +17,15 @@
 #include "mlir/IR/Verifier.h"
 #include "llvm/ADT/SmallVector.h"
 
+#include "Procedure.h"
+#include "ProcedureContext.h"
+#include "ProcedureData.h"
+#include "ProcedureManager.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/Functions.h"
+#include "list/ListView.h"
 #include "metadata/GraphMetadata.h"
 #include "metadata/LabelSet.h"
 #include "metadata/LabelSetHandle.h"
@@ -70,6 +75,16 @@ NLBinaryFunctionSelector lookupBinaryFunctionSelector(mlir::Operation& operation
     const llvm::StringRef name = operation.getName().getStringRef();
     const auto it = binaryFunctionSelectors.find(std::string_view(name.data(), name.size()));
     return it == binaryFunctionSelectors.end() ? nullptr : it->second;
+}
+
+// Pool-allocate a plain (never-null) chunk column of the given element type, reserving a
+// full chunk so execution stays allocation-free. Every such column - an ID chunk, or one a
+// procedure yielded - is a ColumnVector, so the element type is all that varies.
+template <typename T>
+Column* allocPlainChunkColumn(LocalMemory* memory, size_t chunkSize) {
+    ColumnVector<T>* column = memory->alloc<ColumnVector<T>>();
+    column->reserve(chunkSize);
+    return column;
 }
 
 // The edge type name carried by the nl.get_edge_type handle a by-type hop's
@@ -290,11 +305,13 @@ void throwIfAlreadyDrained(const NLCollectState* state) {
 NLTranslator::NLTranslator(NLProgram* program,
                            LocalMemory* memory,
                            const GraphView* view,
-                           MetadataBuilder* metadataBuilder)
+                           MetadataBuilder* metadataBuilder,
+                           const ProcedureContext* procedureContext)
     : _program(program),
     _memory(memory),
     _view(view),
-    _metadataBuilder(metadataBuilder)
+    _metadataBuilder(metadataBuilder),
+    _procedureContext(procedureContext)
 {
 }
 
@@ -380,6 +397,18 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._kind = IteratorKind::UnwindConst;
             config._list = materializeListView(unwindConst.getElements());
             _iteratorConfigs[unwindConst.getResult()] = config;
+        } else if (nl::ProcedureInit procedureInit = mlir::dyn_cast<nl::ProcedureInit>(operation)) {
+            IteratorConfig config;
+            config._kind = IteratorKind::ProcedureInit;
+            config._procedureState = procedureStateFor(procedureInit.getState());
+
+            const mlir::OperandRange procedureInputs = procedureInit.getInputs();
+            config._procedureInputs.assign(procedureInputs.begin(), procedureInputs.end());
+
+            const mlir::OperandRange carriedColumns = procedureInit.getColumnsToFilter();
+            config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
+
+            _iteratorConfigs[procedureInit.getResult()] = config;
         } else if (nl::For forLoop = mlir::dyn_cast<nl::For>(operation)) {
             translateFor(forLoop, body);
         } else if (mlir::isa<nl::GetPropertyType, nl::GetEdgeType>(operation)) {
@@ -388,8 +417,6 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateConstant(constant);
         } else if (nl::BroadcastConstant broadcast = mlir::dyn_cast<nl::BroadcastConstant>(operation)) {
             translateBroadcastConstant(broadcast, body);
-        } else if (nl::WrapNullable wrap = mlir::dyn_cast<nl::WrapNullable>(operation)) {
-            translateWrapNullable(wrap, body);
         } else if (nl::Add add = mlir::dyn_cast<nl::Add>(operation)) {
             translateBinaryOp<OP_ADD>(add, body);
         } else if (nl::Sub sub = mlir::dyn_cast<nl::Sub>(operation)) {
@@ -422,6 +449,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateBinaryOp<OP_XOR>(xorOp, body);
         } else if (nl::Not notOp = mlir::dyn_cast<nl::Not>(operation)) {
             translateNot(notOp, body);
+        } else if (nl::ToNullable toNullable = mlir::dyn_cast<nl::ToNullable>(operation)) {
+            translateToNullable(toNullable, body);
         } else if (lookupUnaryFunctionSelector(operation)) {
             translateUnaryFunction(&operation, body);
         } else if (lookupBinaryFunctionSelector(operation)) {
@@ -500,6 +529,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateDeleteNode(deleteNode, body);
         } else if (nl::DeleteEdge deleteEdge = mlir::dyn_cast<nl::DeleteEdge>(operation)) {
             translateDeleteEdge(deleteEdge, body);
+        } else if (nl::Procedure procedureOp = mlir::dyn_cast<nl::Procedure>(operation)) {
+            translateProcedure(procedureOp, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
@@ -549,6 +580,8 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         // A const unwind is a plain source, so - like a scan - a downstream LIMIT can
         // bound its loop through the ordinary early-exit.
         translateUnwindConstLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::ProcedureInit) {
+        translateProcedureInitLoop(config, loopBody, limit, body);
     } else {
         translateEdgeLoop(config, loopBody, limit, body);
     }
@@ -664,33 +697,70 @@ void NLTranslator::translateUnwindConstLoop(const IteratorConfig& config,
     translateBlock(loopBody, loopData->getStmts());
 }
 
-ListView NLTranslator::materializeListView(mlir::ArrayAttr elements) {
-    std::vector<ListBuffer<>::ListItemVariant> items;
-    items.reserve(elements.size());
+// The bytes the values of a literal list's elements occupy, tag bytes excluded - what
+// ListBuffer::reserveList sizes the region from. Each element stores the same value object
+// the write below hands it, so the two walks must recognise the same attribute kinds in the
+// same order.
+size_t NLTranslator::listValueBytes(mlir::ArrayAttr elements) {
+    size_t valueBytes = 0;
 
     for (const mlir::Attribute element : elements) {
         // BoolAttr is an i1 IntegerAttr, so it must be tested before IntegerAttr; an
         // i64 literal falls through to the integer case.
-        if (const auto boolAttr = mlir::dyn_cast<mlir::BoolAttr>(element)) {
-            items.emplace_back(types::Bool::Primitive(boolAttr.getValue()));
-        } else if (const auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(element)) {
-            items.emplace_back(static_cast<types::Int64::Primitive>(intAttr.getInt()));
-        } else if (const auto floatAttr = mlir::dyn_cast<mlir::FloatAttr>(element)) {
-            items.emplace_back(floatAttr.getValueAsDouble());
-        } else if (const auto stringAttr = mlir::dyn_cast<mlir::StringAttr>(element)) {
-            const llvm::StringRef value = stringAttr.getValue();
-            items.emplace_back(types::String::Primitive(value.data(), value.size()));
+        if (mlir::isa<mlir::BoolAttr>(element)) {
+            valueBytes += sizeof(types::Bool::Primitive);
+        } else if (mlir::isa<mlir::IntegerAttr>(element)) {
+            valueBytes += sizeof(types::Int64::Primitive);
+        } else if (mlir::isa<mlir::FloatAttr>(element)) {
+            valueBytes += sizeof(types::Double::Primitive);
+        } else if (mlir::isa<mlir::StringAttr>(element)) {
+            valueBytes += sizeof(types::String::Primitive);
         } else if (mlir::isa<mlir::UnitAttr>(element)) {
-            items.emplace_back(PropertyNull {});
-        } else if (const auto nestedAttr = mlir::dyn_cast<mlir::ArrayAttr>(element)) {
-            items.emplace_back(materializeListView(nestedAttr));
+            valueBytes += sizeof(PropertyNull);
+        } else if (mlir::isa<mlir::ArrayAttr>(element)) {
+            // A nested list is one element of this one, storing the child's view
+            valueBytes += sizeof(ListView);
         } else {
-            throw IRException("Unsupported literal attribute in nl.unwind_const");
+            throw IRException("Unsupported literal attribute in a constant list");
         }
     }
 
-    LocalMemory::DefaultListBuffer& buffer = _memory->listBuffer();
-    return buffer.insert(items);
+    return valueBytes;
+}
+
+ListView NLTranslator::materializeListView(mlir::ArrayAttr elements) {
+    // The region is reserved and committed up front, so the elements are written straight
+    // into their final place - no staging container between the attributes and the buffer.
+    // A later reservation lands after this region rather than inside it, which is what lets
+    // a nested list be materialized part-way through filling its parent.
+    ListWriteCursor cursor = _memory->listBuffer().reserveList(elements.size(),
+                                                              listValueBytes(elements));
+
+    for (const mlir::Attribute element : elements) {
+        if (const auto boolAttr = mlir::dyn_cast<mlir::BoolAttr>(element)) {
+            cursor.writeValue(ListBufferTypeTag::Bool, types::Bool::Primitive(boolAttr.getValue()));
+        } else if (const auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(element)) {
+            cursor.writeValue(ListBufferTypeTag::Int,
+                              static_cast<types::Int64::Primitive>(intAttr.getInt()));
+        } else if (const auto floatAttr = mlir::dyn_cast<mlir::FloatAttr>(element)) {
+            cursor.writeValue(ListBufferTypeTag::Double,
+                              static_cast<types::Double::Primitive>(floatAttr.getValueAsDouble()));
+        } else if (const auto stringAttr = mlir::dyn_cast<mlir::StringAttr>(element)) {
+            // The payload stays in the attribute, which outlives the query, so the stored
+            // view points at it rather than at a copy
+            const llvm::StringRef value = stringAttr.getValue();
+            cursor.writeValue(ListBufferTypeTag::String,
+                              types::String::Primitive(value.data(), value.size()));
+        } else if (mlir::isa<mlir::UnitAttr>(element)) {
+            cursor.writeValue(ListBufferTypeTag::Null, PropertyNull {});
+        } else if (const auto nestedAttr = mlir::dyn_cast<mlir::ArrayAttr>(element)) {
+            cursor.writeValue(ListBufferTypeTag::ListView, materializeListView(nestedAttr));
+        } else {
+            throw IRException("Unsupported literal attribute in a constant list");
+        }
+    }
+
+    return cursor.getView();
 }
 
 void NLTranslator::translateScanEdgesLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body) {
@@ -1036,10 +1106,25 @@ void NLTranslator::translateDeleteEdge(nl::DeleteEdge deleteEdge, NLStmtContaine
 }
 
 void NLTranslator::translateConstant(nl::Constant constant) {
-    const mlir::TypedAttr value = mlir::cast<mlir::TypedAttr>(constant.getValue());
     const mlir::TypedValue<mlir::nl::ChunkType> res = constant.getResult();
     const auto chunkType = mlir::cast<nl::ChunkType>(res.getType());
     const mlir::Type elementType = chunkType.getElementType();
+
+    // A list literal is carried as the array of its elements. It is written into the
+    // query-scoped list buffer once, here, and the column holds a view over that run: one
+    // list for every row, as a scalar constant holds one value. The views outlive
+    // translation, so the chunk needs no per-step fill.
+    if (llvm::isa<storage::ListType>(elementType)) {
+        const auto elements = mlir::cast<mlir::ArrayAttr>(constant.getValue());
+
+        ColumnConst<ListView>* lists = _memory->alloc<ColumnConst<ListView>>();
+        lists->set(materializeListView(elements));
+
+        _valueSlots[res] = lists;
+        return;
+    }
+
+    const mlir::TypedAttr value = mlir::cast<mlir::TypedAttr>(constant.getValue());
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         if (mlir::isa<mlir::NoneType>(nullableType.getValueType())) {
@@ -1077,29 +1162,23 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
     _valueSlots[result] = output;
 
     // The untyped null constant is a ColumnConst<PropertyNull>, which holds no value to
-    // repeat: its rows are absent values rather than copies of one
+    // repeat: its rows are absent values rather than copies of one. A list rides a list
+    // chunk rather than a nullable value one, so its fill repeats the one view the constant
+    // holds instead of dispatching on a value type.
     const bool isUntypedNull = isUntypedNullChunk(broadcast.getValue().getType());
-    const NLBroadcastConstantFunction fill = isUntypedNull
-                                          ? NLExecutor::selectNullConstantBroadcast()
-                                          : NLExecutor::selectConstantBroadcast(nullableChunkValueType(resultType));
+    const bool isList = llvm::isa<storage::ListType>(mlir::cast<nl::ChunkType>(resultType).getElementType());
+
+    NLBroadcastConstantFunction fill = nullptr;
+    if (isUntypedNull) {
+        fill = NLExecutor::selectNullConstantBroadcast();
+    } else if (isList) {
+        fill = NLExecutor::selectConstantListBroadcast();
+    } else {
+        fill = NLExecutor::selectConstantBroadcast(nullableChunkValueType(resultType));
+    }
 
     NLBroadcastConstantData* data = _program->allocFunctionData<NLBroadcastConstantData>(value, cardinality, output, fill);
     body->emplaceStmt(&NLExecutor::runBroadcastConstant, data);
-}
-
-void NLTranslator::translateWrapNullable(nl::WrapNullable wrap, NLStmtContainer* body) {
-    const Column* input = getColumn(wrap.getValue());
-
-    const mlir::Value result = wrap.getResult();
-    const mlir::Type resultType = result.getType();
-
-    Column* output = allocColumnForChunkType(resultType);
-    _valueSlots[result] = output;
-
-    const NLUnaryFn copy = NLExecutor::selectNullableWrap(nullableChunkValueType(resultType));
-
-    NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(input, output, copy);
-    body->emplaceStmt(&NLExecutor::runUnary, data);
 }
 
 template <ColumnOperator Op, typename OpType>
@@ -1125,6 +1204,23 @@ void NLTranslator::translateNot(nl::Not notOp, NLStmtContainer* body) {
     bioassert(result, "Failed to allocate NOT result column.");
 
     _valueSlots[notOp.getResult()] = result;
+
+    NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
+    body->emplaceStmt(&NLExecutor::runUnary, data);
+}
+
+void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContainer* body) {
+    const Column* operand = getColumn(toNullable.getOperand());
+
+    const auto resultChunk = mlir::cast<nl::ChunkType>(toNullable.getResult().getType());
+    const auto nullableType = mlir::cast<storage::NullableType>(resultChunk.getElementType());
+    const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+
+    Column* result = nullptr;
+    const NLUnaryFn fn = NLExecutor::selectToNullable(valueType, operand, _memory, result);
+    bioassert(result, "Failed to allocate the nullable column of nl.to_nullable.");
+
+    _valueSlots[toNullable.getResult()] = result;
 
     NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
     body->emplaceStmt(&NLExecutor::runUnary, data);
@@ -1331,6 +1427,12 @@ void NLTranslator::addTruncateColumn(mlir::Value inputValue,
         const ValueType valueType = valueTypeFromElementType(elementType);
         output = allocPlainColumn(valueType);
         copyPrefix = NLExecutor::selectPlainBlockRepeatFunction(valueType);
+    } else if (llvm::isa<storage::ListType>(elementType)) {
+        output = allocListColumn();
+        copyPrefix = NLExecutor::selectListBlockRepeatFunction();
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        output = allocListElementColumn();
+        copyPrefix = NLExecutor::selectListElementBlockRepeatFunction();
     } else {
         const NLChunkKind kind = getChunkKind(chunkType);
         output = allocColumnForKind(kind);
@@ -1425,6 +1527,12 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
         const ValueType valueType = valueTypeFromElementType(elementType);
         output = allocPlainColumn(valueType);
         copySuffix = NLExecutor::selectPlainCopyFunction(valueType);
+    } else if (llvm::isa<storage::ListType>(elementType)) {
+        output = allocListColumn();
+        copySuffix = NLExecutor::selectListCopyFunction();
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        output = allocListElementColumn();
+        copySuffix = NLExecutor::selectListElementCopyFunction();
     } else {
         const NLChunkKind kind = getChunkKind(chunkType);
         output = allocColumnForKind(kind);
@@ -1855,16 +1963,20 @@ void NLTranslator::translateGroupAggregateUpdate(nl::GroupAggregateUpdate update
                 aggregate._emit = NLExecutor::selectGroupAggregateEmit(kind, ValueType::Int64);
 
                 const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
-                const auto nullable = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
+                const mlir::Type countElementType = chunk.getElementType();
+                const auto nullable = mlir::dyn_cast<storage::NullableType>(countElementType);
                 if (nullable) {
                     const ValueType valueType = valueTypeFromElementType(nullable.getValueType());
                     aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, valueType);
-                } else if (mlir::isa<storage::ListElementType>(chunk.getElementType())) {
+                } else if (mlir::isa<storage::ListElementType>(countElementType)) {
                     aggregate._fold = NLExecutor::selectGroupCountListElementFold();
+                } else if (llvm::isa<storage::ListType>(countElementType)) {
+                    // No row of a list chunk is null, so a group's tally is its whole row
+                    // count, as it is for count(*).
+                    aggregate._fold = NLExecutor::selectGroupCountAllFold();
                 } else {
-                    // A non-nullable count input must be an ID chunk (count(*));
-                    // getChunkKind rejects any other element type.
-                    getChunkKind(chunkType);
+                    // A non-nullable chunk holds no null to skip - an ID chunk of
+                    // count(*), or a column a CALL yielded - so every row is charged.
                     aggregate._fold = NLExecutor::selectGroupCountAllFold();
                 }
             }
@@ -1898,7 +2010,7 @@ void NLTranslator::translateGroupAggregateUpdate(nl::GroupAggregateUpdate update
                 } else if (mlir::isa<storage::ListElementType>(chunk.getElementType())) {
                     aggregate._fold = NLExecutor::selectGroupCountDistinctListElementFold();
                 } else {
-                    aggregate._fold = NLExecutor::selectGroupCountDistinctIDFold(getChunkKind(chunkType));
+                    aggregate._fold = NLExecutor::selectGroupCountDistinctChunkFold(getChunkKind(chunkType));
                 }
             }
             break;
@@ -2190,6 +2302,300 @@ Column* NLTranslator::allocValueColumnForValueType(ValueType valueType) {
     return nullptr;
 }
 
+void NLTranslator::translateProcedure(nl::Procedure procedureOp, NLStmtContainer* body) {
+    const llvm::StringRef name = procedureOp.getName();
+
+    if (!_procedureContext) {
+        throw IRException(fmt::format("nl.procedure of '{}' requires a procedure context, but the "
+                                      "translator was created without one",
+                                      name.str()));
+    }
+
+    const ProcedureManager* procedures = _procedureContext->getProcedures();
+    if (!procedures) {
+        throw IRException("The procedure context carries no procedure registry to resolve "
+                          "nl.procedure against");
+    }
+
+    // A procedure fills at most a chunk's worth of rows per call, reading that budget
+    // off the context: a zero budget leaves a drive loop asking an exhausted-looking
+    // procedure for rows forever, so reject the unset context here rather than hang.
+    if (_procedureContext->getChunkSize() == 0) {
+        throw IRException("The procedure context carries no chunk size, so a procedure would be "
+                          "asked for chunks of no rows");
+    }
+
+    const Procedure* procedure = procedures->getProcedure(std::string_view(name.data(), name.size()));
+    if (!procedure) {
+        throw IRException(fmt::format("Procedure '{}' does not exist", name.str()));
+    }
+
+    // A procedure keeps its own state - iterators, tallies - in the data its alloc
+    // callback produces, and every callback runs through the execute entry point, so
+    // a procedure missing either cannot be called at all.
+    const Procedure::AllocCallback alloc = procedure->getAllocCallback();
+    if (!alloc || !procedure->getExecCallback()) {
+        throw IRException(fmt::format("Procedure '{}' has no alloc or execute callback", name.str()));
+    }
+
+    // The slots the procedure reads its arguments from and writes its return values
+    // into. Every declared value gets a slot, so a return value this call does not
+    // yield stays null and the procedure skips it.
+    ProcedureData* procedureData = alloc();
+    procedureData->resizeInputColumns(procedure->argumentTypes().size());
+    procedureData->resizeReturnColumns(procedure->returnValues().size());
+
+    // The runtime call owns that data from here on - its dealloc callback releases it
+    // - and is mapped to the handle, so every op that names the handle drives the same
+    // procedure.
+    NLProcedureState* state = _program->allocProcedureState(procedure, procedureData, _procedureContext);
+    _procedureStates[procedureOp.getState()] = state;
+
+    // Resolve each yielded name to the procedure's own return value index once here,
+    // so the ops that bind columns work off indices rather than names.
+    for (const mlir::Attribute yield : procedureOp.getYields()) {
+        const llvm::StringRef yieldName = mlir::cast<mlir::StringAttr>(yield).getValue();
+
+        state->addYieldIndex(procedure->getReturnValueIndex(std::string_view(yieldName.data(), yieldName.size())));
+    }
+}
+
+void NLTranslator::bindProcedureInputs(NLProcedureState* state, mlir::ValueRange inputs) {
+    // Operand i is argument i, so each argument chunk lands in the slot the procedure
+    // reads that argument from. The chunks are the enclosing loop's variables, refilled
+    // in place each step, so binding them once here holds for every step. A call that
+    // stopped short of the trailing optional arguments leaves their slots at the null
+    // the alloc sized them to, which is how the procedure reads an omitted one.
+    const Procedure* procedure = state->getProcedure();
+    const size_t argumentCount = procedure->argumentTypes().size();
+    const size_t requiredCount = procedure->getRequiredArgumentCount();
+    const bool tooFewArguments = inputs.size() < requiredCount;
+    const bool tooManyArguments = inputs.size() > argumentCount;
+    if (tooFewArguments || tooManyArguments) {
+        throw IRException(fmt::format("A procedure call passes {} arguments, but the procedure "
+                                      "declares {}, {} of them required",
+                                      inputs.size(),
+                                      argumentCount,
+                                      requiredCount));
+    }
+
+    ProcedureData* procedureData = state->getData();
+    for (size_t inputIndex = 0; inputIndex < inputs.size(); inputIndex++) {
+        procedureData->setInputColumn(inputIndex, getColumn(inputs[inputIndex]));
+    }
+}
+
+void NLTranslator::addProcedureCarriedColumns(const IteratorConfig& config,
+                                              mlir::Block& loopBody,
+                                              size_t yieldCount,
+                                              NLProcedureLoopData* loopData) {
+    const llvm::SmallVector<mlir::Value, 4>& carriedColumns = config._carriedColumns;
+    const Procedure* procedure = loopData->getState()->getProcedure();
+
+    // A call binding no return value has no row count for a carried row to be replicated
+    // against, so nothing can ride through it - it is driven for what it does, not for
+    // rows. The db verifier settles this, so reaching it here means hand-written nl IR.
+    if (!carriedColumns.empty() && yieldCount == 0) {
+        throw IRException(fmt::format("nl.procedure_init carries columns past '{}', which binds no "
+                                      "return value, so they could not be aligned with anything",
+                                      procedure->getFullName()));
+    }
+
+    // Only a procedure that declares it reports the input row behind each row it emits
+    // can be carried past: that report is what the carried columns are rebuilt from.
+    // Lowering settles this at plan time, so reaching it here means hand-written nl IR.
+    if (!carriedColumns.empty() && !procedure->hasIndices()) {
+        throw IRException(fmt::format("nl.procedure_init carries columns past '{}', but the "
+                                      "procedure does not report the input row of the rows it emits",
+                                      procedure->getFullName()));
+    }
+
+    for (size_t carriedIndex = 0; carriedIndex < carriedColumns.size(); carriedIndex++) {
+        const mlir::Value carried = carriedColumns[carriedIndex];
+
+        // A carried chunk comes back as a loop variable after the yields, and is
+        // rebuilt into it each step - the call may repeat or drop its rows, so it
+        // cannot be passed through in place.
+        const auto loopVariableIndex = static_cast<unsigned>(yieldCount + carriedIndex);
+        const mlir::Value loopVariable = loopBody.getArgument(loopVariableIndex);
+
+        Column* output = allocColumnForChunkType(loopVariable.getType());
+        _valueSlots[loopVariable] = output;
+
+        const NLCarriedColumn column(getColumn(carried),
+                                     output,
+                                     selectGatherForChunkType(loopVariable.getType()));
+        loopData->addCarriedColumn(column);
+    }
+
+    if (carriedColumns.empty()) {
+        return;
+    }
+
+    // The procedure reports the input row behind each row it emits only when something
+    // is carried past the call; hand it the map the loop gathers those columns through,
+    // reserving a chunk so the reporting stays allocation-free.
+    ColumnIndices* indices = loopData->getIndices();
+    indices->reserve(_program->getChunkSize());
+
+    ProcedureData* data = loopData->getState()->getData();
+    IndexedProcedureData* indexedData = dynamic_cast<IndexedProcedureData*>(data);
+
+    bioassert(indexedData,
+              "Procedure '{}' is expected to have indices but has no indices data",
+              procedure->getFullName());
+
+    indexedData->setIndices(indices);
+}
+
+void NLTranslator::translateProcedureInitLoop(const IteratorConfig& config,
+                                              mlir::Block& loopBody,
+                                              NLLimitState* limit,
+                                              NLStmtContainer* body) {
+    NLProcedureState* state = config._procedureState;
+    if (!state) {
+        throw IRException("nl.procedure_init iterator must carry a procedure call");
+    }
+
+    bindProcedureInputs(state, config._procedureInputs);
+
+    // For::verify binds one loop variable per iterator chunk, and a drive iterator's
+    // chunks are the yielded return values followed by the carried ones. The yields are
+    // the columns the procedure fills, so those loop variables are its result columns -
+    // each step rewrites them in place, with no gather and no copy.
+    const size_t yieldCount = state->yieldIndices().size();
+    const size_t carriedCount = config._carriedColumns.size();
+    if (loopBody.getNumArguments() != yieldCount + carriedCount) {
+        throw IRException(fmt::format("An nl.procedure_init loop binds {} variables, but its call "
+                                      "yields {} return values and carries {} columns",
+                                      loopBody.getNumArguments(),
+                                      yieldCount,
+                                      carriedCount));
+    }
+
+    bindProcedureResults(state, loopBody.getArguments().take_front(yieldCount));
+
+    NLProcedureLoopData* loopData = _program->allocFunctionData<NLProcedureLoopData>(state);
+    loopData->setLimit(limit);
+
+    // The carried columns come back as the trailing loop variables, rebuilt each step
+    // from the input rows the procedure reports.
+    addProcedureCarriedColumns(config, loopBody, yieldCount, loopData);
+
+    body->emplaceStmt(&NLExecutor::runProcedureInitLoop, loopData);
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+NLProcedureState* NLTranslator::procedureStateFor(mlir::Value handle) const {
+    const auto stateIt = _procedureStates.find(handle);
+    if (stateIt == _procedureStates.end()) {
+        throw IRException("procedure handle must be produced by an nl.procedure");
+    }
+
+    return stateIt->second;
+}
+
+void NLTranslator::bindProcedureResults(NLProcedureState* state, mlir::ValueRange chunks) {
+    // One op binds the call's result columns - the drive loop - so a second one would
+    // allocate a rival set of columns the procedure no longer writes into.
+    if (!state->resultColumns().empty()) {
+        throw IRException("A procedure call binds its result chunks once, but a second operation "
+                          "names the same handle");
+    }
+
+    const std::vector<size_t>& yieldIndices = state->yieldIndices();
+    if (chunks.size() != yieldIndices.size()) {
+        throw IRException(fmt::format("A procedure call produces {} chunks, but its nl.procedure "
+                                      "yields {} return values",
+                                      chunks.size(),
+                                      yieldIndices.size()));
+    }
+
+    const Procedure* procedure = state->getProcedure();
+    ProcedureData* procedureData = state->getData();
+
+    for (size_t yieldIndex = 0; yieldIndex < yieldIndices.size(); yieldIndex++) {
+        const size_t returnIndex = yieldIndices[yieldIndex];
+        Column* column = allocColumnForProcedureType(procedure->getReturnValueType(returnIndex));
+
+        // The procedure writes through the slot its own declaration order names; the
+        // engine reads the same column through the chunk value, and the ordered list
+        // on the call sizes each step's rows.
+        procedureData->setReturnColumn(returnIndex, column);
+        state->addResultColumn(column);
+        _valueSlots[chunks[yieldIndex]] = column;
+    }
+}
+
+Column* NLTranslator::allocColumnForProcedureType(ProcedureType procedureType) {
+    const size_t chunkSize = _program->getChunkSize();
+
+    // The column type each declared return type is written through, matching the
+    // pipeline engine's allocReturnValues: the procedure static_casts its return
+    // column to exactly this type, so the two must not drift.
+    switch (procedureType) {
+        case ProcedureType::NODE:
+            return allocPlainChunkColumn<NodeID>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::EDGE:
+            return allocPlainChunkColumn<EdgeID>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::LABEL_ID:
+            return allocPlainChunkColumn<LabelID>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::EDGE_TYPE_ID:
+            return allocPlainChunkColumn<EdgeTypeID>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::PROPERTY_TYPE_ID:
+            return allocPlainChunkColumn<PropertyTypeID>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::VALUE_TYPE:
+            return allocPlainChunkColumn<ValueType>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::UINT_64:
+            return allocPlainChunkColumn<types::UInt64::Primitive>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::INT64:
+            return allocPlainChunkColumn<types::Int64::Primitive>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::DOUBLE:
+            return allocPlainChunkColumn<types::Double::Primitive>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::BOOL:
+            return allocPlainChunkColumn<types::Bool::Primitive>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::STRING_VIEW:
+            return allocPlainChunkColumn<types::String::Primitive>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::STRING:
+            return allocPlainChunkColumn<std::string>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::LIST:
+            return allocPlainChunkColumn<ListView>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::INVALID:
+        case ProcedureType::_SIZE:
+            throw IRException("Invalid procedure return type");
+        break;
+    }
+
+    throw IRException("Unhandled procedure return type");
+}
+
 // An ID chunk allocates an ID column on its kind; a !storage.nullable<...> chunk
 // allocates a ColumnOptVector on its value type; a ui64 count chunk a
 // ColumnVector<uint64_t>. Mirrors addCrossColumn's split.
@@ -2206,6 +2612,10 @@ Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
 
     if (isPlainValueElementType(elementType)) {
         return allocPlainColumn(valueTypeFromElementType(elementType));
+    }
+
+    if (llvm::isa<storage::ListType>(elementType)) {
+        return allocListColumn();
     }
 
     return allocColumnForKind(chunkKindFromElementType(elementType));
@@ -2304,6 +2714,8 @@ NLGroupKeyGatherFunction NLTranslator::selectGroupKeyGatherForChunkType(mlir::Ty
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptGroupKeyGather(valueType);
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        return NLExecutor::selectListElementGroupKeyGatherFunction();
     }
 
     if (isPlainValueElementType(elementType)) {
@@ -2320,6 +2732,8 @@ NLCopyFunction NLTranslator::selectCopyForChunkType(mlir::Type chunkType) {
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptCopyFunction(valueType);
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        return NLExecutor::selectListElementCopyFunction();
     }
 
     if (isPlainValueElementType(elementType)) {
@@ -2340,6 +2754,8 @@ Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return allocOptColumnForValueType(valueType);
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        return allocListElementColumn();
     }
 
     if (isPlainValueElementType(elementType)) {
@@ -2349,9 +2765,7 @@ Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
     // A list chunk (the nl.collect drain's per-group cell) is a column of ListViews,
     // each spanning that group's run in the accumulator's list buffer.
     if (llvm::isa<storage::ListType>(elementType)) {
-        ColumnVector<ListView>* output = _memory->alloc<ColumnVector<ListView>>();
-        output->reserve(_program->getChunkSize());
-        return output;
+        return allocListColumn();
     }
 
     return allocColumnForKind(chunkKindFromElementType(elementType));
@@ -2408,7 +2822,12 @@ void NLTranslator::addCrossColumn(mlir::Value inputValue,
     Column* output = nullptr;
     NLBroadcastFunction broadcast = nullptr;
 
-    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+    // A constant column holds one value standing for every row, so repeating it block-wise
+    // and tiling it give the same column: the one broadcast serves both sides.
+    if (isConstantColumn(input)) {
+        output = _memory->allocSame(input);
+        broadcast = NLExecutor::selectConstBlockRepeatFunction();
+    } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         output = allocOptColumnForValueType(valueType);
         broadcast = isOuter ? NLExecutor::selectOptBlockRepeatFunction(valueType)
@@ -2458,31 +2877,12 @@ Column* NLTranslator::allocColumnIfUsed(mlir::Value chunkValue) {
 Column* NLTranslator::allocColumnForKind(NLChunkKind kind) {
     const size_t chunkSize = _program->getChunkSize();
 
-    switch (kind) {
-        case NLChunkKind::NodeID: {
-            ColumnNodeIDs* column = _memory->alloc<ColumnNodeIDs>();
-            column->reserve(chunkSize);
-            return column;
-        }
-        break;
+    Column* column = nullptr;
+    dispatchChunkKind(kind, [&]<typename ElementType>() {
+        column = allocPlainChunkColumn<ElementType>(_memory, chunkSize);
+    });
 
-        case NLChunkKind::EdgeID: {
-            ColumnEdgeIDs* column = _memory->alloc<ColumnEdgeIDs>();
-            column->reserve(chunkSize);
-            return column;
-        }
-        break;
-
-        case NLChunkKind::EdgeTypeID: {
-            ColumnEdgeTypes* column = _memory->alloc<ColumnEdgeTypes>();
-            column->reserve(chunkSize);
-            return column;
-        }
-        break;
-    }
-
-    bioassert(false, "Unknown NLChunkKind");
-    return nullptr;
+    return column;
 }
 
 // Pool-allocate a nullable value column (ColumnOptVector) of the right primitive
@@ -2551,6 +2951,13 @@ ColumnVector<uint64_t>* NLTranslator::allocCountColumn() {
     return column;
 }
 
+Column* NLTranslator::allocListColumn() {
+    ColumnVector<ListView>* column = _memory->alloc<ColumnVector<ListView>>();
+    column->reserve(_program->getChunkSize());
+
+    return column;
+}
+
 Column* NLTranslator::allocListElementColumn() {
     ColumnVector<ListElementView>* column = _memory->alloc<ColumnVector<ListElementView>>();
     column->reserve(_program->getChunkSize());
@@ -2593,12 +3000,40 @@ NLChunkKind NLTranslator::getChunkKind(mlir::Type chunkType) {
 }
 
 NLChunkKind NLTranslator::chunkKindFromElementType(mlir::Type elementType) {
+    // The ID chunks a scan or a hop binds, then the element types a CALL's yielded
+    // columns carry - so a yielded column is crossed and carried like any other. The
+    // integer widths are read the way a nullable value chunk's are: unsigned for a ui64,
+    // one bit for a bool.
     if (mlir::isa<storage::NodeIDType>(elementType)) {
         return NLChunkKind::NodeID;
     } else if (mlir::isa<storage::EdgeIDType>(elementType)) {
         return NLChunkKind::EdgeID;
     } else if (mlir::isa<storage::EdgeTypeIDType>(elementType)) {
         return NLChunkKind::EdgeTypeID;
+    } else if (mlir::isa<storage::LabelIDType>(elementType)) {
+        return NLChunkKind::LabelID;
+    } else if (mlir::isa<storage::PropertyTypeIDType>(elementType)) {
+        return NLChunkKind::PropertyTypeID;
+    } else if (mlir::isa<storage::ValueTypeType>(elementType)) {
+        return NLChunkKind::ValueTypeCode;
+    } else if (mlir::isa<storage::StringType>(elementType)) {
+        return NLChunkKind::String;
+    } else if (mlir::isa<storage::OwnedStringType>(elementType)) {
+        return NLChunkKind::OwnedString;
+    } else if (mlir::isa<storage::ListType>(elementType)) {
+        return NLChunkKind::List;
+    } else if (mlir::isa<storage::BoolType>(elementType)) {
+        return NLChunkKind::Bool;
+    } else if (mlir::isa<mlir::Float64Type>(elementType)) {
+        return NLChunkKind::Double;
+    } else if (const auto intType = mlir::dyn_cast<mlir::IntegerType>(elementType)) {
+        if (intType.getWidth() == 1) {
+            return NLChunkKind::Bool;
+        } else if (intType.isUnsigned()) {
+            return NLChunkKind::UInt64;
+        }
+
+        return NLChunkKind::Int64;
     }
 
     throw IRException("Unsupported chunk element type");

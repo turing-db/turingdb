@@ -8,6 +8,8 @@
 #include <string_view>
 #include <type_traits>
 
+#include <spdlog/fmt/bundled/format.h>
+
 #include "TypeUtils.h"
 #include "iterators/GetEdgesIterator.h"
 #include "ID.h"
@@ -525,18 +527,6 @@ void broadcastConstantColumn(const Column* value, size_t rowCount, Column* outpu
     std::fill_n(outputRaw.begin(), rowCount, std::optional<Primitive>(typedValue->getRaw()));
 }
 
-// A plain value column laid out as a nullable one: a column carrying no null has every
-// row present, so the copy is the layout. std::copy of a contiguous range widens each
-// value into its optional in place.
-template <typename Primitive>
-void wrapNullableColumn(Column* output, const Column* input) {
-    const auto& inputRaw = static_cast<const ColumnVector<Primitive>*>(input)->getRaw();
-    auto& outputRaw = static_cast<ColumnOptVector<Primitive>*>(output)->getRaw();
-
-    outputRaw.resize(inputRaw.size());
-    std::copy(inputRaw.begin(), inputRaw.end(), outputRaw.begin());
-}
-
 // The null literal laid out over every row of the step: it holds no value to repeat, so
 // each row is the absent value. An untyped null is carried as a null integer, which is
 // the column the layout fills.
@@ -545,6 +535,18 @@ void broadcastNullColumn(const Column* value, size_t rowCount, Column* output) {
 
     auto& outputRaw = typedOutput->getRaw();
     outputRaw.assign(rowCount, std::optional<int64_t> {});
+}
+
+// The list sibling of broadcastConstantColumn: a list cell is a view over the query's
+// list buffer and is never absent, so the rows are a plain column of that one view.
+void broadcastConstantListColumn(const Column* value, size_t rowCount, Column* output) {
+    const ColumnConst<ListView>* typedValue = static_cast<const ColumnConst<ListView>*>(value);
+    ColumnVector<ListView>* typedOutput = static_cast<ColumnVector<ListView>*>(output);
+
+    auto& outputRaw = typedOutput->getRaw();
+    outputRaw.resize(rowCount);
+
+    std::fill_n(outputRaw.begin(), rowCount, typedValue->getRaw());
 }
 
 // Range copy: rows [inputOffset, inputOffset + rowCount) of the input land at
@@ -583,8 +585,9 @@ void appendColumn(const Column* input, Column* buffer) {
     bufferRaw.insert(bufferRaw.end(), inputRaw.begin(), inputRaw.end());
 }
 
-// 3-way compare two rows of a non-null orderable column (an ID column): negative
-// if row a sorts before row b, positive if after, zero if they are equal.
+// 3-way compare two rows of a non-null orderable column (an ID column, or a plain scalar
+// a procedure yielded): negative if row a sorts before row b, positive if after, zero if
+// they are equal.
 template <typename ElementType>
 int compareColumn(const Column* column, size_t a, size_t b) {
     const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
@@ -626,6 +629,41 @@ int compareOptColumn(const Column* column, size_t a, size_t b) {
     }
 
     return 0;
+}
+
+// Copy a plain value column into a nullable one with every row present (nl.to_nullable),
+// so a kernel reading a nullable value column takes a column a procedure yielded.
+template <typename Primitive>
+void toNullableColumn(Column* result, const Column* operand) {
+    const auto& values = static_cast<const ColumnVector<Primitive>*>(operand)->getRaw();
+    auto& nullables = static_cast<ColumnOptVector<Primitive>*>(result)->getRaw();
+
+    nullables.resize(values.size());
+    std::copy(values.begin(), values.end(), nullables.begin());
+}
+
+template <typename Primitive>
+void toNullableConst(Column* result, const Column* operand) {
+    const auto* constant = static_cast<const ColumnConst<Primitive>*>(operand);
+    auto* nullable = static_cast<ColumnConst<std::optional<Primitive>>*>(result);
+
+    if (constant->empty()) {
+        nullable->clear();
+        return;
+    }
+
+    *nullable = std::optional<Primitive>((*constant)[0]);
+}
+
+template <typename Primitive>
+NLUnaryFn selectToNullableOf(const Column* operand, LocalMemory* memory, Column*& result) {
+    if (operand->getContainerKind() == ContainerKind::code<ColumnConst>()) {
+        result = memory->alloc<ColumnConst<std::optional<Primitive>>>();
+        return &toNullableConst<Primitive>;
+    }
+
+    result = memory->alloc<ColumnOptVector<Primitive>>();
+    return &toNullableColumn<Primitive>;
 }
 
 // 3-way compare two rows of a type-erased column of tagged scalars. Cells need not share
@@ -677,6 +715,13 @@ void distinctAppendValueBytes(std::string& key, std::string_view value) {
     key.append(value.data(), value.size());
 }
 
+// An owned string would otherwise pick the trivially-copyable template and key on the
+// object's own bytes - a pointer into its buffer - so two equal strings at different
+// addresses would count as two.
+void distinctAppendValueBytes(std::string& key, const std::string& value) {
+    distinctAppendValueBytes(key, std::string_view(value));
+}
+
 // Serialize one row of an ID column (node/edge/edge-type IDs) into the row key -
 // a std::string used as a byte buffer, not text - as the ID's underlying integer
 // value, byte for byte.
@@ -685,6 +730,16 @@ void distinctKeyAppendColumn(const Column* column, size_t row, std::string& key)
     const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
     const auto value = raw[row].getValue();
     distinctAppendValueBytes(key, value);
+}
+
+// Serialize one row of a chunk that holds its values plainly - a column a procedure
+// yielded, a tally, an expression over one - into the row key. The ID sibling reads
+// through the ID's integer; here the element is the value, and no row of such a chunk is
+// null, so the key carries no tag byte to tell a null from a value.
+template <typename ElementType>
+void distinctKeyAppendPlainColumn(const Column* column, size_t row, std::string& key) {
+    const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
+    distinctAppendValueBytes(key, raw[row]);
 }
 
 // Serialize one row of a nullable value column into the row key - a std::string
@@ -703,15 +758,6 @@ void distinctKeyAppendOptColumn(const Column* column, size_t row, std::string& k
 
     key.push_back('\1');
     distinctAppendValueBytes(key, *value);
-}
-
-// Serialize one row of a plain numeric column into the row key. A tally, and an
-// expression over one, is present in every row, so the key is the value's bytes with no
-// tag byte to tell a null from a value.
-template <typename Primitive>
-void distinctKeyAppendPlainColumn(const Column* column, size_t row, std::string& key) {
-    const auto& raw = static_cast<const ColumnVector<Primitive>*>(column)->getRaw();
-    distinctAppendValueBytes(key, raw[row]);
 }
 
 void distinctAppendElementBytes(std::string& key, ListElementView element);
@@ -1315,6 +1361,29 @@ void groupFoldCountDistinctID(Column* accumulator,
     }
 }
 
+// Tally each group's distinct values over a chunk holding them plainly - a column a
+// procedure yielded. No row of such a chunk is null, so every row is charged the first
+// time its value is seen in its group; the ID sibling keys on the ID's integer instead.
+template <typename ElementType>
+void groupFoldCountDistinctValue(Column* accumulator,
+                                 std::vector<uint64_t>& counts,
+                                 const Column* input,
+                                 const std::vector<size_t>& groups,
+                                 NLGroupDistinctTally& distinct) {
+    const auto& inputRaw = static_cast<const ColumnVector<ElementType>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendValueBytes(distinct.getKey(), inputRaw[row]);
+
+        if (distinct.insertIfNew()) {
+            counts[group]++;
+        }
+    }
+}
+
 // Tally each group's distinct present values (count(DISTINCT x)): a null row is not
 // charged, and a value repeated within its group is charged once. The value bytes are
 // the DISTINCT serializer's, so two rows count as one exactly when a whole-row DISTINCT
@@ -1877,6 +1946,104 @@ void throwIfNodesHaveEdges(const GraphView& view, const ColumnNodeIDs* nodes) {
     for (const EdgeRecord& record : inEdges) {
         if (!tombstones.containsEdge(record._edgeID)) {
             throw IRException("Cannot delete a node with relationships; use DETACH DELETE");
+        }
+    }
+}
+
+// Rebuild every column carried past a call from the input rows the procedure reported
+// for the rows it just emitted: an input row it emitted several rows for is repeated,
+// one it emitted none for is dropped - the gather an edge hop replicates its carry set
+// with, over a row map a callback filled rather than a chunk writer.
+//
+// Throws when the procedure reported no row for every row it emitted, or one outside
+// the chunk it was handed: either would leave the carried columns misaligned, silently
+// pairing the wrong rows in the projection, so it is caught at the step that did it.
+void gatherProcedureCarriedColumns(NLProcedureLoopData* loopData) {
+    NLProcedureState* state = loopData->getState();
+    ColumnIndices* indices = loopData->getIndices();
+
+    const size_t emittedRows = state->getRowCount();
+    const std::vector<size_t>& indicesRaw = indices->getRaw();
+    if (indicesRaw.size() != emittedRows) {
+        throw IRException(fmt::format("Procedure '{}' emitted {} rows but reported the input row of "
+                                      "{} of them, so the columns carried past the call cannot be "
+                                      "aligned with its result",
+                                      state->getProcedure()->getFullName(),
+                                      emittedRows,
+                                      indicesRaw.size()));
+    }
+
+    // Each index selects the input row a carried value is replicated from, so one out
+    // of range would read past the chunk the procedure was handed.
+    const size_t inputRows = state->getInputRowCount();
+    for (const size_t inputRow : indicesRaw) {
+        if (inputRow >= inputRows) {
+            throw IRException(fmt::format("Procedure '{}' reported input row {} for a chunk of {} "
+                                          "rows",
+                                          state->getProcedure()->getFullName(),
+                                          inputRow,
+                                          inputRows));
+        }
+    }
+
+    for (const NLCarriedColumn& carriedColumn : loopData->carriedColumns()) {
+        const NLGatherFunction gather = carriedColumn.getGatherFunc();
+        gather(carriedColumn.getInput(), indices, carriedColumn.getOutput());
+    }
+}
+
+// Drive a procedure through one loop: each step runs its execute callback once through
+// runStep, refilling the loop variables in place, then rebuilds any carried column and
+// runs the body. The loop ends when the procedure declares itself finished, so one entry
+// may cover as many chunks as it needs.
+//
+// The body sees only the steps that produced rows. A procedure declares itself finished
+// on the step that exhausts it - which may still carry rows - so the flag is read after
+// the call, not tested before it.
+template <typename StepFunction>
+void runProcedureDrive(NLExecutionContext* context,
+                       NLProcedureLoopData* loopData,
+                       StepFunction runStep) {
+    NLProcedureState* state = loopData->getState();
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    const NLProcedureLoopData::CarriedColumns& carriedColumns = loopData->carriedColumns();
+
+    // A null limit leaves the drive unbounded; otherwise it stops once the budget is
+    // spent, so a LIMIT ends the drive rather than running the procedure out. The limit
+    // is fixed for the whole loop, so the null check is hoisted out of the per-iteration
+    // condition, as the scan loops do.
+    const NLLimitState* limit = loopData->getLimit();
+
+    bool finished = false;
+    const auto runIteration = [&]() {
+        // The procedure reports the input row behind each row it emits, so clear the
+        // map before the call: what it appends is this step's mapping alone, as its
+        // result columns are.
+        if (!carriedColumns.empty()) {
+            loopData->getIndices()->clear();
+        }
+
+        runStep();
+        finished = state->isFinished();
+
+        if (state->getRowCount() == 0) {
+            return;
+        }
+
+        if (!carriedColumns.empty()) {
+            gatherProcedureCarriedColumns(loopData);
+        }
+
+        runBody(context, loopBody);
+    };
+
+    if (limit) {
+        while (!finished && limit->getRemaining() > 0) {
+            runIteration();
+        }
+    } else {
+        while (!finished) {
+            runIteration();
         }
     }
 }
@@ -2497,6 +2664,36 @@ NLUnaryFn NLExecutor::selectNot(const Column* operand, LocalMemory* memory, Colu
 
     result = memory->alloc<ColumnMask>();
     return &applyNotOnMask;
+}
+
+NLUnaryFn NLExecutor::selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return selectToNullableOf<types::Int64::Primitive>(operand, memory, result);
+        break;
+
+        case ValueType::UInt64:
+            return selectToNullableOf<types::UInt64::Primitive>(operand, memory, result);
+        break;
+
+        case ValueType::Double:
+            return selectToNullableOf<types::Double::Primitive>(operand, memory, result);
+        break;
+
+        case ValueType::Bool:
+            return selectToNullableOf<types::Bool::Primitive>(operand, memory, result);
+        break;
+
+        case ValueType::String:
+            return selectToNullableOf<types::String::Primitive>(operand, memory, result);
+        break;
+
+        default:
+            throw IRException("Only a scalar value column can be read as a nullable value column");
+        break;
+    }
+
+    return nullptr;
 }
 
 template <ColumnOperator Op>
@@ -3161,23 +3358,23 @@ void NLExecutor::runCollectLoop(NLExecutionContext* context, NLFunctionData* dat
     }
 }
 
+void NLExecutor::runProcedureInitLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLProcedureLoopData* loopData = static_cast<NLProcedureLoopData*>(data);
+    NLProcedureState* state = loopData->getState();
+
+    // This loop drives the procedure over one chunk of its arguments and is re-entered
+    // for the next chunk, so rewind it here: a procedure that finished the previous
+    // chunk starts afresh on this one, and its own per-drive state goes with it.
+    state->prepareOrResetForNewDrive();
+
+    runProcedureDrive(context, loopData, [state]() { state->execute(); });
+}
+
 NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {
-    switch (kind) {
-        case NLChunkKind::NodeID:
-            return &gatherColumn<NodeID>;
-        break;
+    NLGatherFunction selected = nullptr;
+    dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &gatherColumn<ElementType>; });
 
-        case NLChunkKind::EdgeID:
-            return &gatherColumn<EdgeID>;
-        break;
-
-        case NLChunkKind::EdgeTypeID:
-            return &gatherColumn<EdgeTypeID>;
-        break;
-    }
-
-    bioassert(false, "Unknown NLChunkKind");
-    return nullptr;
+    return selected;
 }
 
 NLGatherFunction NLExecutor::selectCountGatherFunction() {
@@ -3193,22 +3390,10 @@ NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(bool nullable) {
 }
 
 NLBroadcastFunction NLExecutor::selectBlockRepeatFunction(NLChunkKind kind) {
-    switch (kind) {
-        case NLChunkKind::NodeID:
-            return &blockRepeatColumn<NodeID>;
-        break;
+    NLBroadcastFunction selected = nullptr;
+    dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &blockRepeatColumn<ElementType>; });
 
-        case NLChunkKind::EdgeID:
-            return &blockRepeatColumn<EdgeID>;
-        break;
-
-        case NLChunkKind::EdgeTypeID:
-            return &blockRepeatColumn<EdgeTypeID>;
-        break;
-    }
-
-    bioassert(false, "Unknown NLChunkKind");
-    return nullptr;
+    return selected;
 }
 
 NLBroadcastFunction NLExecutor::selectCountBlockRepeatFunction() {
@@ -3220,22 +3405,10 @@ NLBroadcastFunction NLExecutor::selectConstBlockRepeatFunction() {
 }
 
 NLBroadcastFunction NLExecutor::selectTileFunction(NLChunkKind kind) {
-    switch (kind) {
-        case NLChunkKind::NodeID:
-            return &tileColumn<NodeID>;
-        break;
+    NLBroadcastFunction selected = nullptr;
+    dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &tileColumn<ElementType>; });
 
-        case NLChunkKind::EdgeID:
-            return &tileColumn<EdgeID>;
-        break;
-
-        case NLChunkKind::EdgeTypeID:
-            return &tileColumn<EdgeTypeID>;
-        break;
-    }
-
-    bioassert(false, "Unknown NLChunkKind");
-    return nullptr;
+    return selected;
 }
 
 // A nullable value chunk is a ColumnOptVector<Primitive> - that is,
@@ -3265,14 +3438,8 @@ NLBroadcastConstantFunction NLExecutor::selectNullConstantBroadcast() {
     return &broadcastNullColumn;
 }
 
-NLUnaryFn NLExecutor::selectNullableWrap(ValueType valueType) {
-    NLUnaryFn wrap = nullptr;
-    const auto select = [&]<SupportedType T>() {
-        wrap = &wrapNullableColumn<typename T::Primitive>;
-    };
-    ValueTypeDispatcher(valueType).execute(select);
-
-    return wrap;
+NLBroadcastConstantFunction NLExecutor::selectConstantListBroadcast() {
+    return &broadcastConstantListColumn;
 }
 
 NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(ValueType valueType) {
@@ -3315,23 +3482,27 @@ NLCountFunction NLExecutor::selectListElementCountFunction() {
     return &countNonNullElementsColumn;
 }
 
+NLGroupKeyGatherFunction NLExecutor::selectListElementGroupKeyGatherFunction() {
+    return &groupGatherAppendColumn<ListElementView>;
+}
+
+NLCopyFunction NLExecutor::selectListElementCopyFunction() {
+    return &copyRangeColumn<ListElementView>;
+}
+
+NLBroadcastFunction NLExecutor::selectListBlockRepeatFunction() {
+    return &blockRepeatColumn<ListView>;
+}
+
+NLCopyFunction NLExecutor::selectListCopyFunction() {
+    return &copyRangeColumn<ListView>;
+}
+
 NLCopyFunction NLExecutor::selectCopyFunction(NLChunkKind kind) {
-    switch (kind) {
-        case NLChunkKind::NodeID:
-            return &copyRangeColumn<NodeID>;
-        break;
+    NLCopyFunction selected = nullptr;
+    dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &copyRangeColumn<ElementType>; });
 
-        case NLChunkKind::EdgeID:
-            return &copyRangeColumn<EdgeID>;
-        break;
-
-        case NLChunkKind::EdgeTypeID:
-            return &copyRangeColumn<EdgeTypeID>;
-        break;
-    }
-
-    bioassert(false, "Unknown NLChunkKind");
-    return nullptr;
+    return selected;
 }
 
 NLCopyFunction NLExecutor::selectCountCopyFunction() {
@@ -3355,22 +3526,10 @@ NLGatherFunction NLExecutor::selectOptGatherFunction(ValueType valueType) {
 }
 
 NLAppendFunction NLExecutor::selectAppendFunction(NLChunkKind kind) {
-    switch (kind) {
-        case NLChunkKind::NodeID:
-            return &appendColumn<NodeID>;
-        break;
+    NLAppendFunction selected = nullptr;
+    dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &appendColumn<ElementType>; });
 
-        case NLChunkKind::EdgeID:
-            return &appendColumn<EdgeID>;
-        break;
-
-        case NLChunkKind::EdgeTypeID:
-            return &appendColumn<EdgeTypeID>;
-        break;
-    }
-
-    bioassert(false, "Unknown NLChunkKind");
-    return nullptr;
+    return selected;
 }
 
 NLAppendFunction NLExecutor::selectCountAppendFunction() {
@@ -3412,6 +3571,46 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
 
         case NLChunkKind::EdgeTypeID:
             return &distinctKeyAppendColumn<EdgeTypeID>;
+        break;
+
+        case NLChunkKind::LabelID:
+            return &distinctKeyAppendColumn<LabelID>;
+        break;
+
+        case NLChunkKind::PropertyTypeID:
+            return &distinctKeyAppendColumn<PropertyTypeID>;
+        break;
+
+        case NLChunkKind::ValueTypeCode:
+            return &distinctKeyAppendPlainColumn<ValueType>;
+        break;
+
+        case NLChunkKind::UInt64:
+            return &distinctKeyAppendPlainColumn<types::UInt64::Primitive>;
+        break;
+
+        case NLChunkKind::Int64:
+            return &distinctKeyAppendPlainColumn<types::Int64::Primitive>;
+        break;
+
+        case NLChunkKind::Double:
+            return &distinctKeyAppendPlainColumn<types::Double::Primitive>;
+        break;
+
+        case NLChunkKind::Bool:
+            return &distinctKeyAppendPlainColumn<types::Bool::Primitive>;
+        break;
+
+        case NLChunkKind::String:
+            return &distinctKeyAppendPlainColumn<types::String::Primitive>;
+        break;
+
+        case NLChunkKind::OwnedString:
+            return &distinctKeyAppendPlainColumn<std::string>;
+        break;
+
+        case NLChunkKind::List:
+            throw IRException("A list column cannot be a DISTINCT or grouping key: a list has no scalar value to key on");
         break;
     }
 
@@ -3690,10 +3889,11 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctFold(ValueType 
     return nullptr;
 }
 
-// count(DISTINCT n) over an ID chunk (never null): each group is charged once per
-// distinct ID it sees. The ID kind picks the column layout the key is read from, the
-// way selectKeyAppendFunction does for a DISTINCT row key.
-NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctIDFold(NLChunkKind kind) {
+// count(DISTINCT x) over a chunk that is never null - an ID column, or one a procedure
+// yielded: each group is charged once per distinct value it sees. The chunk kind picks
+// the column layout the key is read from, the way selectKeyAppendFunction does for a
+// DISTINCT row key. An ID keys on its integer, everything else on the value itself.
+NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctChunkFold(NLChunkKind kind) {
     switch (kind) {
         case NLChunkKind::NodeID:
             return &groupFoldCountDistinctID<NodeID>;
@@ -3705,6 +3905,46 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctIDFold(NLChunkK
 
         case NLChunkKind::EdgeTypeID:
             return &groupFoldCountDistinctID<EdgeTypeID>;
+        break;
+
+        case NLChunkKind::LabelID:
+            return &groupFoldCountDistinctID<LabelID>;
+        break;
+
+        case NLChunkKind::PropertyTypeID:
+            return &groupFoldCountDistinctID<PropertyTypeID>;
+        break;
+
+        case NLChunkKind::ValueTypeCode:
+            return &groupFoldCountDistinctValue<ValueType>;
+        break;
+
+        case NLChunkKind::UInt64:
+            return &groupFoldCountDistinctValue<types::UInt64::Primitive>;
+        break;
+
+        case NLChunkKind::Int64:
+            return &groupFoldCountDistinctValue<types::Int64::Primitive>;
+        break;
+
+        case NLChunkKind::Double:
+            return &groupFoldCountDistinctValue<types::Double::Primitive>;
+        break;
+
+        case NLChunkKind::Bool:
+            return &groupFoldCountDistinctValue<types::Bool::Primitive>;
+        break;
+
+        case NLChunkKind::String:
+            return &groupFoldCountDistinctValue<types::String::Primitive>;
+        break;
+
+        case NLChunkKind::OwnedString:
+            return &groupFoldCountDistinctValue<std::string>;
+        break;
+
+        case NLChunkKind::List:
+            throw IRException("count(DISTINCT) cannot key on a list column: a list has no scalar value to count distinct");
         break;
     }
 
@@ -3752,22 +3992,10 @@ NLGroupAggregateEmitFunction NLExecutor::selectGroupAggregateEmit(GroupAggregate
 }
 
 NLGroupKeyGatherFunction NLExecutor::selectGroupKeyGather(NLChunkKind kind) {
-    switch (kind) {
-        case NLChunkKind::NodeID:
-            return &groupGatherAppendColumn<NodeID>;
-        break;
+    NLGroupKeyGatherFunction selected = nullptr;
+    dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &groupGatherAppendColumn<ElementType>; });
 
-        case NLChunkKind::EdgeID:
-            return &groupGatherAppendColumn<EdgeID>;
-        break;
-
-        case NLChunkKind::EdgeTypeID:
-            return &groupGatherAppendColumn<EdgeTypeID>;
-        break;
-    }
-
-    bioassert(false, "Unknown NLChunkKind");
-    return nullptr;
+    return selected;
 }
 
 // A nullable key column appends the same way an ID key does - copy the chosen rows -
@@ -3954,6 +4182,46 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
 
         case NLChunkKind::EdgeTypeID:
             return &compareColumn<EdgeTypeID>;
+        break;
+
+        case NLChunkKind::LabelID:
+            return &compareColumn<LabelID>;
+        break;
+
+        case NLChunkKind::PropertyTypeID:
+            return &compareColumn<PropertyTypeID>;
+        break;
+
+        case NLChunkKind::ValueTypeCode:
+            return &compareColumn<ValueType>;
+        break;
+
+        case NLChunkKind::UInt64:
+            return &compareColumn<types::UInt64::Primitive>;
+        break;
+
+        case NLChunkKind::Int64:
+            return &compareColumn<types::Int64::Primitive>;
+        break;
+
+        case NLChunkKind::Double:
+            return &compareColumn<types::Double::Primitive>;
+        break;
+
+        case NLChunkKind::Bool:
+            return &compareColumn<types::Bool::Primitive>;
+        break;
+
+        case NLChunkKind::String:
+            return &compareColumn<types::String::Primitive>;
+        break;
+
+        case NLChunkKind::OwnedString:
+            return &compareColumn<std::string>;
+        break;
+
+        case NLChunkKind::List:
+            throw IRException("A list column cannot be a sort key: a list has no order here");
         break;
     }
 

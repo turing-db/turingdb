@@ -21,6 +21,7 @@ class PatternElement;
 class NodePattern;
 class EdgePattern;
 class FunctionInvocation;
+class FunctionSignature;
 class LoadCSVStmt;
 class ShortestPathStmt;
 class GraphMetadata;
@@ -65,6 +66,7 @@ private:
     ExprAnalyzer* _exprAnalyzer {nullptr};
     const GraphMetadata& _graphMetadata;
 
+    void yieldEveryReturnValue(const FunctionSignature& signature, YieldClause* yield);
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
 

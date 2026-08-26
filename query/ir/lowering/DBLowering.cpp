@@ -14,6 +14,9 @@
 #include "NLOps.h"
 
 #include "IRConstantColumn.h"
+#include "Procedure.h"
+#include "ProcedureManager.h"
+#include "ProcedureTypeVector.h"
 
 #include "views/GraphView.h"
 #include "metadata/GraphMetadata.h"
@@ -157,6 +160,76 @@ mlir::Type valueTypeToElementType(mlir::OpBuilder& builder, ValueType valueType)
     throw IRException("Unhandled property value type");
 }
 
+// The chunk a procedure's return value of this type is read as. The element type
+// names the concrete column the procedure writes into, so an nl chunk of a
+// procedure result is as fully typed as a property chunk: an ID column for the
+// entity types, the storage placeholder for the ones with no MLIR builtin (a value
+// type code, an owned string, a list) and the matching builtin for the numbers.
+nl::ChunkType procedureChunkType(mlir::OpBuilder& builder, ProcedureType procedureType) {
+    mlir::MLIRContext* const context = builder.getContext();
+
+    switch (procedureType) {
+        case ProcedureType::NODE:
+            return nl::ChunkType::get(context, storage::NodeIDType::get(context));
+        break;
+
+        case ProcedureType::EDGE:
+            return nl::ChunkType::get(context, storage::EdgeIDType::get(context));
+        break;
+
+        case ProcedureType::LABEL_ID:
+            return nl::ChunkType::get(context, storage::LabelIDType::get(context));
+        break;
+
+        case ProcedureType::EDGE_TYPE_ID:
+            return nl::ChunkType::get(context, storage::EdgeTypeIDType::get(context));
+        break;
+
+        case ProcedureType::PROPERTY_TYPE_ID:
+            return nl::ChunkType::get(context, storage::PropertyTypeIDType::get(context));
+        break;
+
+        case ProcedureType::VALUE_TYPE:
+            return nl::ChunkType::get(context, storage::ValueTypeType::get(context));
+        break;
+
+        case ProcedureType::UINT_64:
+            return nl::ChunkType::get(context, builder.getIntegerType(64, /*isSigned=*/false));
+        break;
+
+        case ProcedureType::INT64:
+            return nl::ChunkType::get(context, builder.getIntegerType(64));
+        break;
+
+        case ProcedureType::DOUBLE:
+            return nl::ChunkType::get(context, builder.getF64Type());
+        break;
+
+        case ProcedureType::BOOL:
+            return nl::ChunkType::get(context, storage::BoolType::get(context));
+        break;
+
+        case ProcedureType::STRING_VIEW:
+            return nl::ChunkType::get(context, storage::StringType::get(context));
+        break;
+
+        case ProcedureType::STRING:
+            return nl::ChunkType::get(context, storage::OwnedStringType::get(context));
+        break;
+
+        case ProcedureType::LIST:
+            return nl::ChunkType::get(context, storage::ListType::get(context, mlir::NoneType::get(context)));
+        break;
+
+        case ProcedureType::INVALID:
+        case ProcedureType::_SIZE:
+            throw IRException("Invalid procedure value type");
+        break;
+    }
+
+    throw IRException("Unhandled procedure value type");
+}
+
 // The accumulator (and result) element type of an aggregate over a column whose
 // nullable value chunk wraps inputElement. avg always reduces to an f64; sum,
 // min and max keep the input's own type. Throws for a value type the reduction
@@ -241,6 +314,17 @@ bool isNullableChunk(mlir::Type chunkType) {
     return mlir::isa<storage::NullableType>(chunk.getElementType());
 }
 
+// The null literal's chunk: nullable with no value type of its own.
+bool isUntypedNullChunk(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        return false;
+    }
+
+    const auto nullableType = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
+    return nullableType && mlir::isa<mlir::NoneType>(nullableType.getValueType());
+}
+
 mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
     const bool anyFloat = mlir::isa<mlir::Float64Type>(lhs) || mlir::isa<mlir::Float64Type>(rhs);
     if (anyFloat) {
@@ -288,9 +372,9 @@ storage::AggregateKind groupKindToAggregateKind(storage::GroupAggregateKind kind
     throw IRException("Unhandled group aggregate kind");
 }
 
-// Whether a grouped aggregate reduces the values of its input column, rather than
-// tallying its rows: the reductions read a nullable value chunk, while the counts read
-// the chunk they are anchored on as it comes (an ID chunk for count(*)).
+// Whether a grouped aggregate reduces the values of its input column rather than tallying
+// its rows: the reductions read a nullable value chunk, while the counts read the chunk
+// they are anchored on as it comes - an ID chunk for count(*).
 bool reducesValues(storage::GroupAggregateKind kind) {
     switch (kind) {
         case storage::GroupAggregateKind::Sum:
@@ -341,7 +425,7 @@ nl::ChunkType groupAggregateResultChunkType(mlir::OpBuilder& builder,
             const nl::ChunkType inputChunkType = mlir::cast<nl::ChunkType>(inputChunk.getType());
             const auto inputNullable = mlir::dyn_cast<storage::NullableType>(inputChunkType.getElementType());
             if (!inputNullable) {
-                throw IRException("db.group_aggregate sum/min/max/avg requires a value column");
+                throw IRException("db.group_aggregate sum/min/max/avg requires a property value column");
             }
 
             const mlir::Type resultElement = aggregateResultElementType(builder,
@@ -395,7 +479,8 @@ bool opensSourceLoop(mlir::Operation* operation) {
                      mlir::db::GetInEdges,
                      mlir::db::GetEdges,
                      mlir::db::GetOutEdgesByType,
-                     mlir::db::GetInEdgesByType>(operation);
+                     mlir::db::GetInEdgesByType,
+                     mlir::db::CallProcedure>(operation);
 }
 
 // The db ops whose rows a projection is emitted over: a source, the nest a cross product
@@ -426,9 +511,12 @@ bool dropsRows(mlir::Operation* operation) {
 
 }
 
-DBLowering::DBLowering(mlir::MLIRContext* context, const GraphView* view)
+DBLowering::DBLowering(mlir::MLIRContext* context,
+                       const GraphView* view,
+                       const ProcedureManager* procedures)
     : _builder(context),
-    _view(view)
+    _view(view),
+    _procedures(procedures)
 {
 }
 
@@ -651,6 +739,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerCollect(collect);
     } else if (mlir::db::UnwindCollect unwindCollect = mlir::dyn_cast<mlir::db::UnwindCollect>(operation)) {
         lowerUnwindCollect(unwindCollect);
+    } else if (mlir::db::CallProcedure call = mlir::dyn_cast<mlir::db::CallProcedure>(operation)) {
+        lowerCallProcedure(call);
     } else if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
         lowerOutput(output);
     } else if (lookupUnaryFunctionLowering(operation)) {
@@ -1432,8 +1522,7 @@ void DBLowering::lowerCount(mlir::db::Count count) {
 void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::AggregateKind kind, bool distinct) {
     // The nl chunk the aggregated column lowered to; the update folds its per-step
     // non-null values into the accumulator. A constant column is reduced over the
-    // rows it stands for, so it is laid out over the driving relation first, and a
-    // column carrying no null is laid out as a nullable one - the shape every fold reads.
+    // rows it stands for, so it is laid out over the driving relation first.
     const mlir::Value inputChunk = nullableValueChunk(rowAlignedChunk(mapValue(input), _innermostCardinality));
 
     mlir::MLIRContext* const context = _builder.getContext();
@@ -1519,10 +1608,13 @@ void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
     // no null is laid out as one; a count reads the chunk it is anchored on as it comes.
     for (size_t inputIndex = keyCount; inputIndex < chunks.size(); inputIndex++) {
         chunks[inputIndex] = rowAlignedChunk(chunks[inputIndex], chunks.front());
+    }
 
-        const auto kind = static_cast<storage::GroupAggregateKind>(kinds[inputIndex - keyCount]);
+    for (size_t aggregateIndex = 0; aggregateIndex < kinds.size(); aggregateIndex++) {
+        const auto kind = static_cast<storage::GroupAggregateKind>(kinds[aggregateIndex]);
+
         if (reducesValues(kind)) {
-            chunks[inputIndex] = nullableValueChunk(chunks[inputIndex]);
+            chunks[keyCount + aggregateIndex] = nullableValueChunk(chunks[keyCount + aggregateIndex]);
         }
     }
 
@@ -1598,6 +1690,8 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
     if (chunks.empty()) {
         throw IRException("db.collect requires at least one column");
     }
+
+    chunks[keyCount] = nullableValueChunk(chunks[keyCount]);
 
     const mlir::Location loc = _builder.getUnknownLoc();
 
@@ -1689,6 +1783,150 @@ void DBLowering::lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect) {
     setInsertionInto(_entryBlock);
     nl::UnwindCollect unwindCollectOp = _builder.create<nl::UnwindCollect>(loc, iteratorType, state);
     buildLoopForSource(unwindCollectOp.getResult(), unwindCollect.getOperation());
+}
+
+void DBLowering::lowerCallProcedure(mlir::db::CallProcedure call) {
+    const Procedure* procedure = procedureFor(call.getProcedure());
+
+    // One column per written argument, in declaration order, so operand i is argument
+    // i - the call cannot bind an argument by name. The optional arguments come last
+    // and a call may stop short of them, leaving the procedure to read their slots as
+    // unbound, so the required count is the floor rather than the count itself.
+    const mlir::OperandRange inputs = call.getInputs();
+    const ProcedureTypeVector& argumentTypes = procedure->argumentTypes();
+    const size_t requiredCount = procedure->getRequiredArgumentCount();
+    const bool tooFewArguments = inputs.size() < requiredCount;
+    const bool tooManyArguments = inputs.size() > argumentTypes.size();
+    if (tooFewArguments || tooManyArguments) {
+        throw IRException("db.call_procedure of '" + call.getProcedure().str() + "' passes "
+                          + std::to_string(inputs.size()) + " arguments, but the procedure declares "
+                          + std::to_string(argumentTypes.size()) + ", "
+                          + std::to_string(requiredCount) + " of them required");
+    }
+
+    // CallProcedure::verify guarantees one result per yielded name plus one per carried
+    // column, with at least one yield, so the ranges below line up. Each yielded name
+    // resolves to one of the procedure's declared return values, whose type is the
+    // chunk the result is read as; an unknown name throws here.
+    const mlir::ArrayAttr yields = call.getYields();
+    llvm::SmallVector<mlir::Type, 4> chunkTypes;
+    for (const mlir::Attribute yield : yields) {
+        const llvm::StringRef name = mlir::cast<mlir::StringAttr>(yield).getValue();
+        const std::string_view yieldName(name.data(), name.size());
+        const size_t returnIndex = procedure->getReturnValueIndex(yieldName);
+        const ProcedureType returnType = procedure->getReturnValueType(returnIndex);
+
+        chunkTypes.push_back(procedureChunkType(_builder, returnType));
+    }
+
+    // Each carried column comes back with its own chunk type - the call replicates its
+    // rows, it never retypes them - so the carried chunks follow the yields in both the
+    // result types and the result mapping.
+    const mlir::OperandRange carriedColumns = call.getCarriedColumns();
+
+    // A carried row is replicated once per row the procedure emitted for it, which only
+    // the procedure can say - it reports the input row behind each row it emits. One
+    // that does not declare that report cannot be carried past at all, and this is where
+    // that is settled: at plan time, rather than mid-execution once the rows fail to
+    // line up.
+    if (!carriedColumns.empty() && !procedure->hasIndices()) {
+        throw IRException("db.call_procedure of '" + call.getProcedure().str()
+                          + "' carries columns past it, but the procedure does not report the input"
+                            " row of the rows it emits, so they could not be aligned with its"
+                            " result");
+    }
+
+    llvm::SmallVector<mlir::Value, 4> carriedChunks;
+    for (const mlir::Value carried : carriedColumns) {
+        const mlir::Value carriedChunk = mapValue(carried);
+
+        carriedChunks.push_back(carriedChunk);
+        chunkTypes.push_back(carriedChunk.getType());
+    }
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    // The call handle is hoisted to the top of the entry block, above every loop, so
+    // the procedure is prepared once - its data allocated and its result columns
+    // bound - before the loops that drive it, and the handle dominates every op that
+    // names it. A correlated CALL (re-prepared per enclosing step) would hoist into
+    // its enclosing loop body instead - future work, as for the streaming limit.
+    _builder.setInsertionPointToStart(_entryBlock);
+    const mlir::Value state = _builder.create<nl::Procedure>(loc, call.getProcedureAttr(), yields).getState();
+
+    llvm::SmallVector<mlir::Value, 4> inputChunks;
+    for (const mlir::Value input : inputs) {
+        inputChunks.push_back(mapValue(input));
+    }
+
+    // A procedure is driven by a loop of its own, the way a scan or a hop is, and each
+    // step of that nl.for runs the procedure once until it has answered that chunk of
+    // arguments in full - so one chunk of arguments may yield many chunks of rows.
+    //
+    // The loop opens where the arguments are bound: the innermost producing loop body. A
+    // call whose arguments are all loop-invariant - constants, or none at all - has no
+    // producing loop to sit in, so it opens its loop where the current dataflow is
+    // rooted, exactly as a scan does: the entry block at top level, or the outer factor's
+    // innermost loop body inside a db.cross_product, so the factor nests under it.
+    // Rooting such a call at the entry block instead would leave it outside the product's
+    // nest, referring to chunks that do not dominate it.
+    llvm::SmallVector<mlir::Value, 8> operandChunks(inputChunks.begin(), inputChunks.end());
+    operandChunks.append(carriedChunks.begin(), carriedChunks.end());
+
+    // Anchored on the deepest-bound operand, so a loop-bound argument or carried column
+    // is found wherever it sits in the operand list, behind any hoisted constants.
+    mlir::Value anchorChunk;
+    for (const mlir::Value operandChunk : operandChunks) {
+        if (!anchorChunk) {
+            anchorChunk = operandChunk;
+            continue;
+        }
+
+        mlir::Block* const block = deeperBlock(anchorChunk, operandChunk);
+        if (ownerBlock(operandChunk) == block) {
+            anchorChunk = operandChunk;
+        }
+    }
+
+    mlir::Block* insertionBlock = _rootBlock;
+    if (anchorChunk) {
+        mlir::Block* const argumentBlock = ownerBlock(anchorChunk);
+
+        // A factor shares no SSA value with its sibling, so an argument bound anywhere
+        // but function scope is bound inside this factor's own nest.
+        if (argumentBlock != _entryBlock) {
+            insertionBlock = argumentBlock;
+        }
+    }
+
+    setInsertionInto(insertionBlock);
+
+    const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunkTypes);
+    nl::ProcedureInit init = _builder.create<nl::ProcedureInit>(loc,
+                                                               iteratorType,
+                                                               state,
+                                                               inputChunks,
+                                                               carriedChunks);
+
+    // buildLoopForSource binds one loop variable per yielded return value and then per
+    // carried column, and maps db.call_procedure's results to them, so the db.output that
+    // follows lowers into the drive loop's body reading that step's rows.
+    buildLoopForSource(init.getResult(), call.getOperation());
+}
+
+const Procedure* DBLowering::procedureFor(llvm::StringRef name) const {
+    if (!_procedures) {
+        throw IRException("db.call_procedure requires a procedure registry, but the lowering was "
+                          "created without one");
+    }
+
+    const Procedure* procedure = _procedures->getProcedure(std::string_view(name.data(), name.size()));
+    if (!procedure) {
+        throw IRException("Procedure '" + name.str() + "' does not exist");
+    }
+
+    return procedure;
 }
 
 bool DBLowering::assignProducerLoops(mlir::Value column,
@@ -2109,8 +2347,15 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
 
 template <typename NLOp>
 void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
-    const mlir::Value lhsChunk = mapValue(op.getOperand(0));
-    const mlir::Value rhsChunk = mapValue(op.getOperand(1));
+    mlir::Value lhsChunk = mapValue(op.getOperand(0));
+    mlir::Value rhsChunk = mapValue(op.getOperand(1));
+
+    // x IS NULL over a plain scalar column meets kernels reading a nullable value column
+    if (isUntypedNullChunk(rhsChunk.getType()) && !isNullableChunk(lhsChunk.getType())) {
+        lhsChunk = nullableValueChunk(lhsChunk);
+    } else if (isUntypedNullChunk(lhsChunk.getType()) && !isNullableChunk(rhsChunk.getType())) {
+        rhsChunk = nullableValueChunk(rhsChunk);
+    }
 
     const mlir::Type resultElement = binaryResultElement(kind, lhsChunk.getType(), rhsChunk.getType());
     const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultElement);
@@ -2364,7 +2609,11 @@ void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp)
     // This is the innermost loop opened so far in the current factor (loops
     // nest in dataflow order), so a cross product nests at this body.
     _innermostLoopBody = loopBody;
-    _innermostCardinality = loopBody->getArguments().front();
+
+    // A loop over a call that binds no return value has no variable, so there is no chunk
+    // here for a constant projection to be sized against.
+    _innermostCardinality = loopBody->getNumArguments() > 0 ? loopBody->getArgument(0)
+                                                           : mlir::Value();
 
     const mlir::ResultRange dbResults = dbOp->getResults();
     for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
@@ -2438,6 +2687,42 @@ void DBLowering::rowAlignCutChunks(llvm::SmallVectorImpl<mlir::Value>& chunks) {
     }
 }
 
+// A scalar a procedure yielded is a plain value chunk, while a reduction, a collect or a
+// comparison with null read a nullable one: the plain chunk is read as nullable right
+// where it is bound, so those kernels take it as they take a property value.
+mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
+    const auto chunkType = mlir::cast<nl::ChunkType>(chunk.getType());
+    const mlir::Type element = chunkType.getElementType();
+    if (mlir::isa<storage::NullableType>(element)) {
+        return chunk;
+    }
+
+    mlir::Type valueElement = element;
+    if (mlir::isa<storage::BoolType>(element)) {
+        valueElement = _builder.getI1Type();
+    }
+
+    const bool isString = mlir::isa<storage::StringType>(valueElement);
+    const bool isDouble = mlir::isa<mlir::Float64Type>(valueElement);
+    const bool isInteger = mlir::isa<mlir::IntegerType>(valueElement);
+    if (!isString && !isDouble && !isInteger) {
+        throw IRException("Only a scalar value column can be read as a nullable value column");
+    }
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const storage::NullableType nullableType = storage::NullableType::get(context, valueElement);
+    const nl::ChunkType resultType = nl::ChunkType::get(context, nullableType);
+
+    mlir::OpBuilder::InsertionGuard guard(_builder);
+    if (mlir::Operation* const definingOp = chunk.getDefiningOp()) {
+        _builder.setInsertionPointAfter(definingOp);
+    } else {
+        _builder.setInsertionPointToStart(mlir::cast<mlir::BlockArgument>(chunk).getOwner());
+    }
+
+    return _builder.create<nl::ToNullable>(_builder.getUnknownLoc(), resultType, chunk).getResult();
+}
+
 mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinality) {
     // A chunk that carries rows is its own alignment
     if (!yieldsConstantColumn(chunk)) {
@@ -2451,9 +2736,14 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
     }
 
     // The rows are laid out as a nullable value chunk - present in every row - which is
-    // what every fold, key serialization and reduction reads a value column as.
+    // what every fold, key serialization and reduction reads a value column as. A list is
+    // laid out as the list chunk an nl.collect drain emits instead: a cell is a view over
+    // the query's list buffer, which is never absent, and no nullable list column exists.
     mlir::MLIRContext* const context = _builder.getContext();
-    const nl::ChunkType resultType = nl::ChunkType::get(context, storage::NullableType::get(context, valueElement));
+    const bool isList = llvm::isa<storage::ListType>(valueElement);
+    const mlir::Type resultElement = isList ? valueElement
+                                            : storage::NullableType::get(context, valueElement);
+    const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);
 
     // With no relation driving the projection the value is laid out where the constant
     // itself is bound, over the single row that projection is
@@ -2463,29 +2753,6 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
     nl::BroadcastConstant broadcast = _builder.create<nl::BroadcastConstant>(_builder.getUnknownLoc(), resultType, chunk, cardinality);
 
     return broadcast.getResult();
-}
-
-mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
-    const auto chunkType = mlir::cast<nl::ChunkType>(chunk.getType());
-    const mlir::Type elementType = chunkType.getElementType();
-
-    if (mlir::isa<storage::NullableType>(elementType)) {
-        return chunk;
-    }
-
-    // An ID column holds no value to reduce: count(*) tallies such a chunk without
-    // reading it, but a sum or an extremum of one is IR that should never have been built
-    if (!nl::WrapNullable::isPlainValueElement(elementType)) {
-        throw IRException("A value reduction requires a value column");
-    }
-
-    mlir::MLIRContext* const context = _builder.getContext();
-    const nl::ChunkType resultType = nl::ChunkType::get(context, storage::NullableType::get(context, elementType));
-
-    setInsertionInto(ownerBlock(chunk));
-    nl::WrapNullable wrap = _builder.create<nl::WrapNullable>(_builder.getUnknownLoc(), resultType, chunk);
-
-    return wrap.getResult();
 }
 
 size_t DBLowering::blockNestingDepth(mlir::Block* block) {

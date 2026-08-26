@@ -566,6 +566,62 @@ def Yield : TuringOp<"yield", [Pure, Terminator, HasParent<"CrossProduct">]> {
 }
 
 /**
+* CallProcedure
+*/
+def CallProcedure : TuringOp<"call_procedure", [AttrSizedOperandSegments]> {
+  let summary = "Call a registered procedure, yielding the return values named";
+
+  let description = [{
+    The declarative counterpart of a Cypher CALL ... YIELD. Calls the procedure
+    registered under `procedure` and produces one column per yielded return value,
+    then one per column carried past the call:
+
+      %id, %label = db.call_procedure("db.labels", {}, {}) yields ["id", "label"]
+                      : () -> (!db.column<none>, !db.column<none>)
+      db.output(%id, %label) : !db.column<none>, !db.column<none>
+
+    `yields` names the return values the query asked
+    for, one per leading result and in result order. A procedure's other return
+    values are left unbound and the procedure skips them. A yielded name that the
+    procedure does not return, or a result count that disagrees with `yields` and
+    the carry set, is rejected.
+
+    The result value types come from the procedure's declared return types, so -
+    like db.get_node_properties' value column - they are left typed none here and
+    resolved during lowering.
+
+    An argument-less call is a source: the procedure produces rows on its own and is
+    driven until it declares itself finished, so it lowers to an nl.procedure_init
+    and its own nl.for. With arguments it is a per-chunk call: the procedure's
+    execute callback runs once per chunk of its argument columns, inside the loop
+    that produces them, refilling its result columns each step - the same
+    nl.procedure_init shape, opened where those arguments are bound.
+
+    A carried column must be row-aligned with the arguments (both bound by the same
+    loop), since the correspondence the procedure reports is an index into its own
+    input rows. Only a procedure reporting those indices can be carried past, which
+    every procedure declaring a row-aligned argument owes: one taking no argument, or
+    only constant ones, has no input row to report against (cross its rows in with
+    db.cross_product instead).
+  }];
+
+  let arguments = (ins StrAttr:$procedure,
+                       Variadic<Column>:$inputs,
+                       Variadic<Column>:$carried_columns,
+                       StrArrayAttr:$yields);
+
+  // One result per yielded return value, then one per carried column.
+  let results   = (outs Variadic<Column>:$results);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $procedure `,` `{` $inputs `}` `,` `{` $carried_columns `}` `)` `yields` $yields
+    attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
 * Output
 */
 def Output : TuringOp<"output"> {
@@ -902,7 +958,11 @@ def EuclideanDistance : BinaryFunctionOp<"euclidean_distance">;
 def ConstantOp : TuringOp<"constant", [Pure, ConstantLike, DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
   let summary = "Produces a constant value in a column";
 
-  let arguments = (ins TypedAttrInterface: $value);
+  // A typed attribute for a scalar (or a dense one for an embedding), or an array of
+  // per-element attributes for a list literal. The array carries no type of its own, so
+  // the column's element type is the homogeneity verdict inferReturnTypes reads off the
+  // elements - which is why a list needs no separate op.
+  let arguments = (ins AnyAttrOf<[TypedAttrInterface, ArrayAttr]>: $value);
   let results = (outs Column : $result);
 
   let assemblyFormat = "`(` $value `)` attr-dict";

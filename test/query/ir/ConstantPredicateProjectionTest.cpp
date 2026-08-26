@@ -151,6 +151,18 @@ TEST_F(ConstantPredicateProjectionTest, emitsEveryConstantPredicateColumnOfTheRo
     expectRows("RETURN 1 < 2, true and false SKIP 0 LIMIT 1", expected);
 }
 
+TEST_F(ConstantPredicateProjectionTest, dedupsAConstantBooleanUnderAWindow) {
+    // The dedup caps the projection at one row and the window cuts that row again, so the
+    // boolean the LIMIT copies is the one the SKIP emitted.
+    const BoolRows expected = {{true}};
+    expectRows("RETURN DISTINCT true SKIP 0 LIMIT 1", expected);
+}
+
+TEST_F(ConstantPredicateProjectionTest, dedupsAConstantNegationUnderAWindow) {
+    const BoolRows expected = {{false}};
+    expectRows("RETURN DISTINCT not true SKIP 0 LIMIT 1", expected);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

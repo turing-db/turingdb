@@ -7,6 +7,7 @@
 #include "llvm/ADT/StringRef.h"
 
 #include "columns/ColumnOperator.h"
+#include "ProcedureTypeVector.h"
 #include "metadata/PropertyType.h"
 
 #include "NLOps.h"
@@ -18,6 +19,8 @@ namespace db {
 class LocalMemory;
 class GraphView;
 class MetadataBuilder;
+class Procedure;
+class ProcedureContext;
 
 // Translates an MLIR func.func in the nl dialect into an NLProgram
 class NLTranslator {
@@ -25,7 +28,8 @@ public:
     NLTranslator(NLProgram* program,
                  LocalMemory* memory,
                  const GraphView* view,
-                 MetadataBuilder* metadataBuilder = nullptr);
+                 MetadataBuilder* metadataBuilder = nullptr,
+                 const ProcedureContext* procedureContext = nullptr);
     ~NLTranslator();
 
     void translate(const mlir::func::FuncOp& function);
@@ -47,6 +51,7 @@ private:
         UnwindCollect,
         Collect,
         UnwindConst,
+        ProcedureInit,
     };
 
     // Settings of the iterators passed to each for loop
@@ -63,6 +68,13 @@ private:
 
         // The accumulator an UnwindCollect / Collect iterator drains; null otherwise.
         NLCollectState* _collectState {nullptr};
+
+        // The call a ProcedureInit iterator drives; null for the other kinds.
+        NLProcedureState* _procedureState {nullptr};
+
+        // The argument chunks a ProcedureInit iterator hands the procedure, in its
+        // declaration order; empty for the other kinds (and for a source call).
+        llvm::SmallVector<mlir::Value, 4> _procedureInputs;
 
         // The label names a ScanNodesByLabel iterator filters by; empty for the
         // other kinds. These are views into the op's interned StringAttr storage,
@@ -93,6 +105,12 @@ private:
     LocalMemory* _memory {nullptr};
     const GraphView* _view {nullptr};
     MetadataBuilder* _metadataBuilder {nullptr};
+
+    // The execution context a procedure reads the graph and the request through,
+    // borrowed from the caller: it also carries the registry an nl.procedure's name
+    // is resolved against. Null when the caller runs without procedures, which only
+    // a function containing an nl.procedure notices.
+    const ProcedureContext* _procedureContext {nullptr};
     llvm::DenseMap<mlir::Value, Column*> _valueSlots;
     llvm::DenseMap<mlir::Value, IteratorConfig> _iteratorConfigs;
 
@@ -134,6 +152,10 @@ private:
     // table and per-group lists
     llvm::DenseMap<mlir::Value, NLCollectState*> _collectStates;
 
+    // nl.procedure handle SSA value -> the runtime call it produces, so every op that
+    // names the handle - the nl.for over nl.procedure_init - drives the same procedure
+    llvm::DenseMap<mlir::Value, NLProcedureState*> _procedureStates;
+
     void translateBlock(mlir::Block& block, NLStmtContainer* body);
     void translateFor(mlir::nl::For forLoop, NLStmtContainer* body);
     void translateScanLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
@@ -168,11 +190,17 @@ private:
                                   NLLimitState* limit,
                                   NLStmtContainer* body);
 
-    // Materialize an nl.unwind_const's literal element attributes into a ListView in
-    // the query-scoped ListBuffer, which the loop then reads chunk by chunk. A string
-    // element stores the string_view, not the characters, so the module the literals
-    // came from must outlive execution - not just this call.
+    // Materialize a literal element array - an nl.unwind_const's or an nl.const_list's -
+    // into a ListView in the query-scoped ListBuffer, which the unwind loop then reads
+    // chunk by chunk and a constant list keeps whole. A nested array is materialized
+    // first and kept as one element of the list holding it. A string element stores the
+    // string_view, not the characters, so the module the literals came from must outlive
+    // execution - not just this call.
     ListView materializeListView(mlir::ArrayAttr elements);
+
+    // The bytes the elements' values occupy, which sizes the region materializeListView
+    // reserves before writing them
+    static size_t listValueBytes(mlir::ArrayAttr elements);
 
     // Translate the nl.for over an nl.scan_edges iterator: allocate the four
     // fixed edge loop variables (sources, edge IDs, edge type IDs, targets) and
@@ -367,6 +395,43 @@ private:
     // present values are appended across steps.
     Column* allocValueColumnForValueType(ValueType valueType);
 
+    void translateProcedure(mlir::nl::Procedure procedureOp, NLStmtContainer* body);
+
+    // Bind the argument chunks of a call as the procedure's input columns, one per
+    // declared argument in declaration order. The chunks are loop variables refilled in
+    // place, so binding them once holds for every step.
+    void bindProcedureInputs(NLProcedureState* state, mlir::ValueRange inputs);
+
+    void addProcedureCarriedColumns(const IteratorConfig& config,
+                                    mlir::Block& loopBody,
+                                    size_t yieldCount,
+                                    NLProcedureLoopData* loopData);
+
+    // Translate the nl.for over an nl.procedure_init iterator: bind one loop variable
+    // per yielded return value as the procedure's result columns, and record the
+    // drive-loop statement (run the procedure once per step until it finishes).
+    void translateProcedureInitLoop(const IteratorConfig& config,
+                                    mlir::Block& loopBody,
+                                    NLLimitState* limit,
+                                    NLStmtContainer* body);
+
+    // The runtime call a procedure handle names. The handle is a required operand of
+    // its consumers, so this throws if it was not produced by an nl.procedure.
+    NLProcedureState* procedureStateFor(mlir::Value handle) const;
+
+    // Allocate one result column per yielded return value of the call, bind it to
+    // that return value's slot in the procedure's data - so the procedure writes
+    // where the engine reads - and map the matching chunk value to it. The chunks are
+    // an op's results, or a drive loop's variables; either way there is one per
+    // yielded name, in yield order.
+    void bindProcedureResults(NLProcedureState* state, mlir::ValueRange chunks);
+
+    // Pool-allocate a result column for one of a procedure's declared return types -
+    // an ID column, a value column or a list column - reserving a full chunk so
+    // execution stays allocation-free. This is what fixes the column type a procedure
+    // writes through, so it mirrors the pipeline engine's allocReturnValues exactly.
+    Column* allocColumnForProcedureType(ProcedureType procedureType);
+
     // Allocate an emit output column for a group-aggregate output chunk type: an ID
     // column for an ID chunk (a grouping key), a nullable value column for a
     // !storage.nullable<...> chunk (a key or a sum/min/max/avg result), or a
@@ -428,12 +493,14 @@ private:
     // Allocates the row-aligned column a constant is laid out into, and binds the
     // fill that writes the driving relation's row count of its value each step
     void translateBroadcastConstant(mlir::nl::BroadcastConstant broadcast, NLStmtContainer* body);
-    void translateWrapNullable(mlir::nl::WrapNullable wrap, NLStmtContainer* body);
+    // The list sibling of translateConstant: materializes the literals into the query's
+    // ListBuffer and allocates a singleton column holding a view of them
 
     template <ColumnOperator Op, typename OpType>
     void translateBinaryOp(OpType op, NLStmtContainer* body);
 
     void translateNot(mlir::nl::Not notOp, NLStmtContainer* body);
+    void translateToNullable(mlir::nl::ToNullable toNullable, NLStmtContainer* body);
 
     void translateUnaryFunction(mlir::Operation* op, NLStmtContainer* body);
 
@@ -489,6 +556,9 @@ private:
 
     // Allocate a type-erased column of tagged scalars - the shape a heterogeneous
     // unwind emits and a cross product broadcasts - reserving a full chunk.
+    // A column of list cells, each a view over the query's list buffer
+    Column* allocListColumn();
+
     Column* allocListElementColumn();
 
     Column* getColumn(mlir::Value chunkValue) const;

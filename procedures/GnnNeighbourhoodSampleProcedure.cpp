@@ -1,5 +1,6 @@
 #include "GnnNeighbourhoodSampleProcedure.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <string_view>
@@ -37,7 +38,12 @@ void executeImpl(ProcedureState* proc) {
     std::unique_ptr<NeighbourhoodSampleChunkWriter>& chunkWriter = data.writer;
     bioassert(chunkWriter, "Null chunk writer.");
 
-    chunkWriter->fill(ChunkConfig::CHUNK_SIZE);
+    // A node's sample is emitted whole, so a sample wider than the chunk the caller
+    // budgeted for takes the step over that budget rather than being cut in two.
+    const size_t chunkSize = proc->getContext()->getChunkSize();
+    const size_t rowBudget = std::max(chunkSize, chunkWriter->getSampleSize());
+
+    chunkWriter->fill(rowBudget);
 
     if (chunkWriter->isDone()) {
         proc->finish();
@@ -52,6 +58,8 @@ void prepareImpl(ProcedureState* proc) {
     const auto* inputNodeIDs = static_cast<const ColumnNodeIDs*>(data.getInputColumn(0));
     const Column* inputSampleSize = data.getInputColumn(1);
     const Column* inputSeed = data.getInputColumn(2);
+
+    bioassert(inputNodeIDs, "gnn.neighbourhoodSample: must be provided input nodes");
 
     auto* srcCol = static_cast<ColumnNodeIDs*>(data.getReturnColumn(0));
     auto* edgeCol = static_cast<ColumnEdgeIDs*>(data.getReturnColumn(1));
@@ -71,11 +79,6 @@ void prepareImpl(ProcedureState* proc) {
                                  + chunkSizeString);
     }
     const size_t sampleSize = signedSampleSize;
-
-    if (!inputNodeIDs || inputNodeIDs->size() == 0) {
-        proc->finish();
-        return;
-    }
 
     std::optional<uint64_t> seed = std::nullopt;
     if (inputSeed) {
@@ -109,8 +112,8 @@ void GnnNeighbourhoodSampleProcedure::registerProcedure(ProcedureNamespace* ns) 
     proc->setDeallocCallback(&deallocData);
 
     proc->addArgument("node", ProcedureType::NODE);
-    proc->addArgument("sampleSize", ProcedureType::INT64);
-    proc->addOptionalArgument("seed", ProcedureType::INT64);
+    proc->addConstantArgument("sampleSize", ProcedureType::INT64);
+    proc->addOptionalConstantArgument("seed", ProcedureType::INT64);
 
     proc->addReturnValue("src", ProcedureType::NODE);
     proc->addReturnValue("edge", ProcedureType::EDGE);

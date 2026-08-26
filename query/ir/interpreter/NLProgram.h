@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "ID.h"
+#include "ProcedureState.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnMask.h"
@@ -26,14 +27,99 @@ namespace db {
 
 class NLExecutionContext;
 class NLFunctionData;
+class Procedure;
+class ProcedureContext;
+class ProcedureData;
 
-// Translation resolves every chunk SSA value 
+// Translation resolves every chunk SSA value
 // to a concrete ColumnVector type through this kind
+//
+// The first three are the ID columns a scan or a hop binds. The rest are what a CALL
+// yields: a procedure's declared return types map onto these, so a yielded column can be
+// crossed and carried like any other. Every one of them is a plain (never-null)
+// ColumnVector of the element type its name says - String is a borrowed string_view,
+// OwnedString a std::string the column owns.
 enum class NLChunkKind {
     NodeID,
     EdgeID,
     EdgeTypeID,
+    LabelID,
+    PropertyTypeID,
+    ValueTypeCode,
+    UInt64,
+    Int64,
+    Double,
+    Bool,
+    String,
+    OwnedString,
+    List,
 };
+
+// Invoke handler with the column element type a chunk kind stands for, so the families of
+// per-element-type handlers are selected in one place rather than through a switch
+// repeated in each selector. handler is a template lambda - [&]<typename ElementType>(){}
+// - which is therefore instantiated for every kind, so only a family defined for all of
+// them dispatches this way: copying values (gather, broadcast, range copy) and allocating
+// the column. Ordering, key serialization and reduction are not defined for every kind, so
+// their selectors spell out the kinds they support and reject the rest.
+template <typename Handler>
+void dispatchChunkKind(NLChunkKind kind, Handler&& handler) {
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return handler.template operator()<NodeID>();
+        break;
+
+        case NLChunkKind::EdgeID:
+            return handler.template operator()<EdgeID>();
+        break;
+
+        case NLChunkKind::EdgeTypeID:
+            return handler.template operator()<EdgeTypeID>();
+        break;
+
+        case NLChunkKind::LabelID:
+            return handler.template operator()<LabelID>();
+        break;
+
+        case NLChunkKind::PropertyTypeID:
+            return handler.template operator()<PropertyTypeID>();
+        break;
+
+        case NLChunkKind::ValueTypeCode:
+            return handler.template operator()<ValueType>();
+        break;
+
+        case NLChunkKind::UInt64:
+            return handler.template operator()<types::UInt64::Primitive>();
+        break;
+
+        case NLChunkKind::Int64:
+            return handler.template operator()<types::Int64::Primitive>();
+        break;
+
+        case NLChunkKind::Double:
+            return handler.template operator()<types::Double::Primitive>();
+        break;
+
+        case NLChunkKind::Bool:
+            return handler.template operator()<types::Bool::Primitive>();
+        break;
+
+        case NLChunkKind::String:
+            return handler.template operator()<types::String::Primitive>();
+        break;
+
+        case NLChunkKind::OwnedString:
+            return handler.template operator()<std::string>();
+        break;
+
+        case NLChunkKind::List:
+            return handler.template operator()<ListView>();
+        break;
+    }
+
+    bioassert(false, "Unknown NLChunkKind");
+}
 
 // Type of function pointers implementing operations
 using NLHandlerFunction = void (*)(NLExecutionContext* context, NLFunctionData* data);
@@ -1540,6 +1626,143 @@ private:
     NLStmtContainer _stmts;
 };
 
+// Runtime state of one CALL: the live procedure call the nl.procedure statements
+// drive. It owns the data the procedure's alloc callback produced (released by the
+// dealloc callback here) and the ProcedureState the callbacks read - the procedure,
+// the execution context, the step and the finished flag - plus the result columns
+// the yielded return values are bound to, in yield order.
+//
+// Unlike the other accumulators the state being folded into lives inside the
+// procedure, not here: this class only drives the callbacks and knows which columns
+// they write into. The result columns are borrowed - the translator pool-allocates
+// them in the same arena as the loop columns - and are shared by every step, so the
+// procedure refills them in place, chunk after chunk.
+class NLProcedureState {
+public:
+    NLProcedureState(const Procedure* procedure,
+                     ProcedureData* data,
+                     const ProcedureContext* context);
+    ~NLProcedureState();
+
+    NLProcedureState(const NLProcedureState&) = delete;
+    NLProcedureState& operator=(const NLProcedureState&) = delete;
+
+    const Procedure* getProcedure() const { return _procedure; }
+    ProcedureData* getData() const { return _data; }
+
+    // The procedure's own index for each yielded return value, in yield order: a
+    // procedure writes a return value through the slot its declaration order names,
+    // while the query reads the yields in the order it asked for them. Resolved once,
+    // when the call is prepared, so the ops binding columns need no name lookup.
+    const std::vector<size_t>& yieldIndices() const { return _yieldIndices; }
+
+    void addYieldIndex(size_t returnIndex) { _yieldIndices.push_back(returnIndex); }
+
+    // The columns the yielded return values are bound to, parallel to yieldIndices.
+    // Also the loop variables of a drive loop, so a step fills them in place.
+    const std::vector<Column*>& resultColumns() const { return _resultColumns; }
+
+    void addResultColumn(Column* column) { _resultColumns.push_back(column); }
+
+    // Prepare the procedure on its first drive and rewind it - the RESET step - on each
+    // later one, so a procedure that finished the previous chunk of arguments starts
+    // afresh on the next one, dropping whatever per-drive state it kept.
+    //
+    // Preparing here rather than where the handle is bound is what lets a procedure read
+    // its arguments in its prepare step: the producing loop has filled them by the time
+    // its drive loop is entered.
+    void prepareOrResetForNewDrive();
+
+    // Run the procedure's execute callback once, over whatever its input columns
+    // currently hold. Clears the finished flag first, so a procedure that marks
+    // itself finished once it has produced a chunk's rows is still driven again.
+    void execute();
+
+    // True once the procedure has declared it has no more rows to produce, which is
+    // what ends a drive loop.
+    bool isFinished() const { return _procedureState.isFinished(); }
+
+    // The rows the last callback filled. Every result column is row-aligned - one
+    // row of the call per row of each column - so the first one sizes the step.
+    size_t getRowCount() const;
+
+    // The rows of the chunk the procedure was handed this step, read from its first
+    // row-aligned argument column. This is the range the input-row indices a carry set
+    // is replicated through must fall in; zero for a procedure handed no row-aligned
+    // argument, which can carry nothing.
+    size_t getInputRowCount() const;
+
+private:
+    const Procedure* _procedure {nullptr};
+    ProcedureData* _data {nullptr};
+    ProcedureState _procedureState;
+    std::vector<size_t> _yieldIndices;
+    std::vector<Column*> _resultColumns;
+    bool _prepared {false};
+
+    // Whether the procedure has run since it was prepared or last rewound, which is
+    // what makes a rewind necessary before the next drive
+    bool _driven {false};
+
+    // The PREPARE step, which lets the procedure build whatever it produces its rows from
+    void prepare();
+
+    // The RESET step, which rewinds the procedure to its first row
+    void reset();
+};
+
+// nl.for over nl.procedure_init data: the drive loop of a row-producing procedure. The
+// loop is reset at entry and then runs the procedure once per step - filling the result
+// columns, which are the loop variables - until it declares itself finished, so one
+// chunk of arguments may be answered with several chunks of rows. The procedure sibling
+// of NLEdgeLoopData: a loop whose chunks come from a callback rather than a graph
+// iterator, but which replicates its carry set exactly the same way.
+//
+// A procedure may emit several rows per input row or none, which would leave a carried
+// column misaligned with what it emitted, so each step rebuilds every carried column
+// through the input-row index the procedure reports per emitted row - the same
+// (input, output, gather) shape, and the same NLGatherFunction, an edge hop uses. The
+// index column is owned here: the translator hands it to the procedure once, and the
+// loop clears it before each step.
+class NLProcedureLoopData : public NLFunctionData {
+public:
+    using CarriedColumns = std::vector<NLCarriedColumn>;
+
+    NLProcedureLoopData(NLProcedureState* state)
+        : _state(state)
+    {
+    }
+
+    NLProcedureState* getState() const { return _state; }
+
+    // The governing limit counter, or null for an unbounded loop. The loop driver
+    // stops once it reaches zero, so a LIMIT ends the drive early instead of running
+    // the procedure out.
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
+    const CarriedColumns& carriedColumns() const { return _carriedColumns; }
+
+    void addCarriedColumn(const NLCarriedColumn& carried) {
+        _carriedColumns.push_back(carried);
+    }
+
+    ColumnIndices* getIndices() { return &_indices; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
+    NLProcedureState* _state {nullptr};
+    NLLimitState* _limit {nullptr};
+    CarriedColumns _carriedColumns;
+
+    // One index per row the procedure emitted this step: the input row it came from
+    ColumnIndices _indices;
+
+    NLStmtContainer _stmts;
+};
+
 // Append this step's present values to a collect accumulator's flat value buffer,
 // recording each element's position in its group's list. nl.collect_update calls this
 // after assigning rows to groups; a null value is skipped (Cypher collect ignores
@@ -2122,6 +2345,19 @@ public:
         return statePtr;
     }
 
+    // Allocate one CALL's runtime state, owned by the program; the statements that
+    // prepare and drive the call hold a borrowed pointer. Releasing the
+    // procedure's data is this state's business, so it outlives every statement
+    // naming it.
+    NLProcedureState* allocProcedureState(const Procedure* procedure,
+                                          ProcedureData* data,
+                                          const ProcedureContext* context) {
+        auto state = std::make_unique<NLProcedureState>(procedure, data, context);
+        NLProcedureState* statePtr = state.get();
+        _procedureStates.push_back(std::move(state));
+        return statePtr;
+    }
+
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
@@ -2146,6 +2382,7 @@ private:
     std::vector<std::unique_ptr<NLAggregateState>> _aggregateStates;
     std::vector<std::unique_ptr<NLGroupAggregateState>> _groupAggregateStates;
     std::vector<std::unique_ptr<NLCollectState>> _collectStates;
+    std::vector<std::unique_ptr<NLProcedureState>> _procedureStates;
     NLStmtContainer _stmts;
 };
 

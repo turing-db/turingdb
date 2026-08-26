@@ -13,6 +13,8 @@
 namespace db {
 
 class GraphView;
+class Procedure;
+class ProcedureManager;
 
 // Lowers a function in the db dialect into a function in the nl dialect.
 //
@@ -93,7 +95,9 @@ class GraphView;
 //
 class DBLowering {
 public:
-    DBLowering(mlir::MLIRContext* context, const GraphView* view);
+    DBLowering(mlir::MLIRContext* context,
+               const GraphView* view,
+               const ProcedureManager* procedures = nullptr);
     ~DBLowering();
 
     // Translate a FuncOp in db dialect to nl dialect
@@ -104,6 +108,12 @@ private:
 
     // Graph schema, used to resolve a property name to its value type
     const GraphView* _view {nullptr};
+
+    // Procedure registry, used to resolve a db.call_procedure's name to the
+    // procedure and its declared argument and return types - the procedure
+    // counterpart of _view. Null when the caller runs without procedures, which
+    // only a module containing a db.call_procedure notices.
+    const ProcedureManager* _procedures {nullptr};
 
     // db column SSA value -> the nl chunk
     llvm::DenseMap<mlir::Value, mlir::Value> _valueMap;
@@ -249,6 +259,9 @@ private:
     // Hoists an nl.constant to the top of the entry block
     void lowerConstant(mlir::db::ConstantOp constant);
 
+    // Hoists an nl.const_list to the top of the entry block, the way a scalar constant is
+    // hoisted; its chunk keeps the db column's list element type
+
     enum class BinaryResultKind {
         Numeric,   // add/sub/mul/div/mod: promoted numeric, nullable if either operand is
         Boolean,   // eq/neq/gt/lt/gte/lte and and/or/xor: i1, nullable if either is
@@ -299,6 +312,8 @@ private:
     // element) plus its nl.for - the list never materializes.
     void lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect);
 
+    void lowerCallProcedure(mlir::db::CallProcedure call);
+
     void lowerOutput(mlir::db::Output output);
 
     // Lower one factor region of a db.cross_product into a loop nest rooted at
@@ -338,6 +353,10 @@ private:
     void foldTruncatesIntoOutputs(mlir::func::FuncOp nlFunction);
     void foldSkipTruncatesIntoOutputs(mlir::func::FuncOp nlFunction);
 
+    // The procedure registered under this full name, or a clear error when there is
+    // no registry to resolve it against or no procedure of that name
+    const Procedure* procedureFor(llvm::StringRef name) const;
+
     // The nl.get_property_type handle for a property name, inserted once at the
     // top of the entry block (above every loop) and reused on later lookups
     mlir::Value getOrCreatePropertyTypeHandle(llvm::StringRef propertyName);
@@ -372,8 +391,6 @@ private:
     // of its own to walk.
     mlir::Value rowAlignedChunk(mlir::Value chunk, mlir::Value cardinality);
 
-    // The nullable value chunk a value reduction folds @param chunk as: the chunk itself
-    // when it is one already, else its rows laid out in that shape, every one present
     mlir::Value nullableValueChunk(mlir::Value chunk);
 
     // The nl chunk a db value lowered to, and the block that holds a chunk

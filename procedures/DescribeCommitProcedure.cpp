@@ -2,6 +2,7 @@
 
 #include "ProcedureContext.h"
 #include "FatalException.h"
+#include "ProcedureData.h"
 #include "ProcedureState.h"
 #include "Procedure.h"
 #include "ProcedureNamespace.h"
@@ -19,7 +20,7 @@ namespace {
 
 using UInt64Col = ColumnVector<types::UInt64::Primitive>;
 
-struct Data : public ProcedureData {
+struct Data : public IndexedProcedureData {
     size_t _i {0};
     const Commit* _headCommit {nullptr};
 };
@@ -115,6 +116,7 @@ void DescribeCommitProcedure::registerProcedure(ProcedureNamespace* ns) {
     proc->setAllocCallback(&allocData);
     proc->setDeallocCallback(&deallocData);
     proc->addArgument("commit", ProcedureType::STRING);
+    proc->setHasIndices(true);
     proc->addReturnValue("nodeCount", ProcedureType::UINT_64);
     proc->addReturnValue("edgeCount", ProcedureType::UINT_64);
     proc->addReturnValue("partCount", ProcedureType::UINT_64);
@@ -164,6 +166,7 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
         break;
 
         case ProcedureState::Step::RESET:
+            data._i = 0;
         break;
 
         case ProcedureState::Step::EXECUTE: {
@@ -179,7 +182,12 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
                 partCountCol->clear();
             }
 
-            const auto pushStats = [&](const CommitStats* stats) {
+            ColumnIndices* indices = data.indices();
+            if (indices) {
+                indices->clear();
+            }
+
+            const auto pushStats = [&](const CommitStats* stats, size_t inputRow) {
                 if (nodeCountCol) {
                     nodeCountCol->push_back(stats->_nodeCount);
                 }
@@ -191,24 +199,28 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
                 if (partCountCol) {
                     partCountCol->push_back(stats->_partCount);
                 }
+
+                if (indices) {
+                    indices->push_back(inputRow);
+                }
             };
 
             const auto treatVector = [&]<typename T>(const ColumnVector<T>* col) {
                 const auto& colVec = *col;
                 const size_t remaining =
-                    std::min(rawCommitCol->size(), ctxt->getChunkSize());
+                    std::min(colVec.size() - data._i, ctxt->getChunkSize());
 
                 std::string input;
                 CommitStats stats;
                 for (size_t i = data._i; i < remaining + data._i; ++i) {
                     extractString(input, colVec[i]);
                     getCommitStats(&stats, input, data._headCommit);
-                    pushStats(&stats);
+                    pushStats(&stats, i);
                 }
 
                 data._i += remaining;
 
-                if (data._i == colVec.size()) {
+                if (data._i >= colVec.size()) {
                     proc->finish();
                 }
             };
@@ -218,7 +230,7 @@ void DescribeCommitProcedure::execute(ProcedureState* proc) {
                 CommitStats stats;
                 extractString(input, col->getRaw());
                 getCommitStats(&stats, input, data._headCommit);
-                pushStats(&stats);
+                pushStats(&stats, 0);
                 proc->finish();
             };
 

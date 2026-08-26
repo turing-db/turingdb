@@ -42,8 +42,6 @@ public:
     PipelineBlockInputInterface& input();
     PipelineBlockOutputInterface& output() { return _output; }
 
-    const ProcedureState& getProcedureState() const { return _procedureState; }
-
 private:
     const Procedure* _procedure {nullptr};
     ProcedureContext _procedureContext;

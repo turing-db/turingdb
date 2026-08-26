@@ -101,6 +101,37 @@ void FunctionDecls::initDefault() {
     countNulls->setReturnTypes({{EvaluatedType::Integer}});
     countNulls->setIsAggregate(true);
 
+    // count over a whole list: a list is never null, so the tally is every row. Only the
+    // MLIR engine lays a list cell out over the driving relation, which ExprAnalyzer's
+    // v3 gate is what keeps the legacy planner away from.
+    FunctionSignature* countLists = createFunction("count");
+    countLists->setArguments({EvaluatedType::List});
+    countLists->setReturnTypes({{EvaluatedType::Integer}});
+    countLists->setIsAggregate(true);
+
+    // The schema types a CALL can yield are columns like any other, so count tallies their
+    // rows too. Without these overloads a YIELD of a label, a property type or a value type
+    // could be returned but never aggregated.
+    FunctionSignature* countLabels = createFunction("count");
+    countLabels->setArguments({EvaluatedType::Label});
+    countLabels->setReturnTypes({{EvaluatedType::Integer}});
+    countLabels->setIsAggregate(true);
+
+    FunctionSignature* countEdgeTypes = createFunction("count");
+    countEdgeTypes->setArguments({EvaluatedType::EdgeType});
+    countEdgeTypes->setReturnTypes({{EvaluatedType::Integer}});
+    countEdgeTypes->setIsAggregate(true);
+
+    FunctionSignature* countPropertyTypes = createFunction("count");
+    countPropertyTypes->setArguments({EvaluatedType::PropertyType});
+    countPropertyTypes->setReturnTypes({{EvaluatedType::Integer}});
+    countPropertyTypes->setIsAggregate(true);
+
+    FunctionSignature* countValueTypes = createFunction("count");
+    countValueTypes->setArguments({EvaluatedType::ValueType});
+    countValueTypes->setReturnTypes({{EvaluatedType::Integer}});
+    countValueTypes->setIsAggregate(true);
+
     FunctionSignature* countWildcard = createFunction("count");
     countWildcard->setArguments({EvaluatedType::Wildcard});
     countWildcard->setReturnTypes({{EvaluatedType::Integer}});

@@ -123,6 +123,21 @@ def NLCollectState : NLType<"CollectState", "collect_state"> {
     }];
 }
 
+def NLProcedureState : NLType<"ProcedureState", "procedure_state"> {
+    let summary = "A live procedure call handle";
+    let description = [{
+        Stands for one CALL's procedure state: the procedure's own data (what its
+        alloc callback produced), the input columns its arguments are bound to and
+        the result columns its yielded return values are bound to. Produced by
+        nl.procedure, which prepares it once above the loops, then read by the
+        nl.for over nl.procedure_init, which drives the procedure until it
+        finishes.
+        It is a handle, not a chunk: it owns the call, not a chunk of values - the
+        sibling of !nl.sort_state, except the state lives inside the procedure
+        rather than in the engine.
+    }];
+}
+
 def CarriesRows : NativeTypeTrait<"CarriesRows">;
 
 def NLChunk : NLType<"Chunk", "chunk", [CarriesRows]> {
@@ -296,5 +311,14 @@ def NLCollectStateHandle : Type<
         CPred<"::llvm::isa<::mlir::nl::CollectStateType>($_self)">,
         "collect state handle", "::mlir::nl::CollectStateType">,
     BuildableType<"::mlir::nl::CollectStateType::get($_builder.getContext())">;
+
+// Constrains an operand to an !nl.procedure_state handle, the same way
+// NLSortStateHandle constrains the sort handle. The single concrete type - there
+// is only ever !nl.procedure_state - is what lets nl.procedure_init omit the
+// handle's type in its assembly, building it from this recipe instead.
+def NLProcedureStateHandle : Type<
+        CPred<"::llvm::isa<::mlir::nl::ProcedureStateType>($_self)">,
+        "procedure state handle", "::mlir::nl::ProcedureStateType">,
+    BuildableType<"::mlir::nl::ProcedureStateType::get($_builder.getContext())">;
 
 #endif // TURINGDB_NL_TYPES
