@@ -87,6 +87,25 @@ TEST_F(ListOrderTest, comparesEntityElementsByTheirID) {
     EXPECT_EQ(highNode <=> edge, std::strong_ordering::less);
 }
 
+// The class an element sorts in is decided before its value is read, so one element of
+// each class puts the lists in the declared order however large the values are.
+TEST_F(ListOrderTest, ordersTheElementClassesAheadOfTheValues) {
+    const std::vector<ListView> ascending {
+        list({NodeID {9}}),
+        list({EdgeID {9}}),
+        list({list({int64_t {9}})}),
+        list({std::string_view {"zzz"}}),
+        list({CustomBool {true}}),
+        list({std::numeric_limits<int64_t>::max()}),
+        list({PropertyNull {}}),
+    };
+
+    for (size_t index = 1; index < ascending.size(); index++) {
+        EXPECT_EQ(ascending[index - 1] <=> ascending[index], std::strong_ordering::less) << "at index " << index;
+        EXPECT_EQ(ascending[index] <=> ascending[index - 1], std::strong_ordering::greater) << "at index " << index;
+    }
+}
+
 // A nested list element compares on this same order, so the outer lists are decided by
 // comparing the inner ones element-wise.
 TEST_F(ListOrderTest, comparesNestedListsElementWise) {
