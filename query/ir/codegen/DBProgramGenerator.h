@@ -99,6 +99,17 @@ private:
 
         std::vector<YieldedColumn> _yieldedColumns;
 
+        // What a CREATE wrote for one of its named pattern entities: the column of
+        // provisional IDs, and the value column of every property it set. A created entity
+        // is in no pattern the traversal walked, so it is no VDG variable, and its rows are
+        // not in the graph a fetch would read - both come from here instead
+        struct CreatedEntity {
+            mlir::Value _column;
+            std::unordered_map<std::string_view, mlir::Value> _properties;
+        };
+
+        std::unordered_map<std::string_view, CreatedEntity> _createdEntities;
+
         // The traversal root a CALL ahead of the MATCH bound, when the query lets the
         // traversal expand that column instead of scanning the graph and joining. Null
         // otherwise, which leaves every call after the traversal and every root opening
@@ -212,6 +223,13 @@ private:
     // Moves a translated connected component into a CrossProduct factor
     void moveComponentToFactor(TranslatedComponent& component, mlir::Block* factorBlock);
 
+    // Records what a CREATE wrote for one named entity of its pattern, so the projection
+    // reads that back rather than fetching an ID the graph does not hold yet
+    void publishCreatedEntity(std::string_view name,
+                              mlir::Value column,
+                              llvm::ArrayRef<llvm::StringRef> propNames,
+                              llvm::ArrayRef<mlir::Value> propValues);
+
     void generateCreate(const SinglePartQuery* query);
     void generateSet(const SinglePartQuery* query);
     void generateDelete(const SinglePartQuery* query);
@@ -303,6 +321,8 @@ private:
     mlir::Value getOrTranslateExprColumn(const VariableColumnMap& variableColumns, const Expr* expr);
 
     mlir::Value resolveEntityColumn(std::string_view varName);
+
+    mlir::Value nullConstantColumn();
 
     // Taken in the order the query declares its variables, so the choice is the query's
     // and not the addresses'

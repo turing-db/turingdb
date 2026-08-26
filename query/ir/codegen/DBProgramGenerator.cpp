@@ -1916,6 +1916,21 @@ void DBProgramGenerator::generateCrossedCall(std::string_view procedureName,
     }
 }
 
+void DBProgramGenerator::publishCreatedEntity(std::string_view name,
+                                              mlir::Value column,
+                                              llvm::ArrayRef<llvm::StringRef> propNames,
+                                              llvm::ArrayRef<mlir::Value> propValues) {
+    bioassert(propNames.size() == propValues.size(), "One value per created property expected");
+
+    PartScope::CreatedEntity& created = _part._createdEntities[name];
+    created._column = column;
+
+    for (size_t index = 0; index < propNames.size(); index++) {
+        const llvm::StringRef propName = propNames[index];
+        created._properties[std::string_view {propName.data(), propName.size()}] = propValues[index];
+    }
+}
+
 void DBProgramGenerator::generateCreate(const SinglePartQuery* query) {
     const StmtContainer* updateStmts = query->getUpdateStmts();
     if (!updateStmts) {
@@ -1994,6 +2009,7 @@ void DBProgramGenerator::generateCreate(const SinglePartQuery* query) {
 
         if (!name.empty()) {
             knownVars[name] = nodeValue;
+            publishCreatedEntity(name, nodeValue, propNames, propValues);
         }
 
         return nodeValue;
@@ -2040,7 +2056,7 @@ void DBProgramGenerator::generateCreate(const SinglePartQuery* query) {
                 const mlir::Value tgtValue =
                     edge->getDirection() == EdgePattern::Direction::Backward ? lhsValue : rhsValue;
 
-                _opBuilder.create<mlir::db::CreateEdge>(
+                mlir::db::CreateEdge createEdge = _opBuilder.create<mlir::db::CreateEdge>(
                     loc,
                     edgeIDType,
                     srcValue,
@@ -2048,6 +2064,11 @@ void DBProgramGenerator::generateCreate(const SinglePartQuery* query) {
                     _opBuilder.getStringAttr(edgeType),
                     _opBuilder.getStrArrayAttr(propNames),
                     mlir::ValueRange{propValues});
+
+                const VarDecl* edgeDecl = edge->getDecl();
+                if (edgeDecl && !edgeDecl->isUnnamed()) {
+                    publishCreatedEntity(edgeDecl->getName(), createEdge.getResult(), propNames, propValues);
+                }
 
                 lhsValue = rhsValue;
             }
@@ -2068,6 +2089,11 @@ mlir::Value DBProgramGenerator::resolveEntityColumn(std::string_view varName) {
     if (foundEdgeIdentity) {
         const VariableDependency* representative = findIt->second.front();
         return _part._varMap.at(representative).back();
+    }
+
+    const auto createdIt = _part._createdEntities.find(varName);
+    if (createdIt != end(_part._createdEntities)) {
+        return createdIt->second._column;
     }
 
     return findYieldedColumn(varName);
@@ -2338,6 +2364,11 @@ void DBProgramGenerator::collectVariableColumns(VariableColumnMap& variableColum
     // A CALL's yielded columns are variables of the query too, named by the YIELD.
     for (const YieldedColumn& yieldedColumn : _part._yieldedColumns) {
         variableColumns[yieldedColumn.first] = yieldedColumn.second;
+    }
+
+    // So are the entities a CREATE wrote, named by its pattern
+    for (const auto& [createdName, created] : _part._createdEntities) {
+        variableColumns[createdName] = created._column;
     }
 
     for (const auto& [name, vars] : _vdg.edgeIdentities()) {
@@ -3027,10 +3058,35 @@ mlir::Value DBProgramGenerator::translateLiteralExpr(const Literal* literal) {
     return _opBuilder.create<mlir::db::ConstantOp>(uloc, resultType, valueAttr).getResult();
 }
 
+// The column of a null in every row, the shape translateLiteralExpr gives the null literal
+mlir::Value DBProgramGenerator::nullConstantColumn() {
+    const mlir::Type nullableType = mlir::storage::NullableType::get(_mlirCtxt,
+                                                                    mlir::NoneType::get(_mlirCtxt));
+    const mlir::TypedAttr valueAttr = mlir::StringAttr::get("", nullableType);
+    const mlir::db::ColumnType resultType = allocColumnType(valueAttr.getType());
+
+    return _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(), resultType, valueAttr).getResult();
+}
+
 mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propExpr) {
     const VarDecl* entityDecl = propExpr->getEntityVarDecl();
     const std::string_view varName = entityDecl->getName();
     const std::string_view propName = propExpr->getPropName();
+
+    // A created entity holds a provisional ID, which the graph a fetch reads knows nothing
+    // about: the value of one of its properties is the one the CREATE wrote there, and
+    // every property it did not write is null
+    const auto createdIt = _part._createdEntities.find(varName);
+    if (createdIt != end(_part._createdEntities)) {
+        const auto& properties = createdIt->second._properties;
+        const auto propertyIt = properties.find(propName);
+
+        if (propertyIt != end(properties)) {
+            return propertyIt->second;
+        }
+
+        return nullConstantColumn();
+    }
 
     const mlir::Value entityColumn = resolveEntityColumn(varName);
 
