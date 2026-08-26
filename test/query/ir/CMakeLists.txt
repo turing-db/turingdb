@@ -26,6 +26,9 @@ add_ir_tests(test_query_ir_create_node_edge CreateNodeEdgeTest.cpp)
 add_ir_tests(test_query_ir_dblowering DBLoweringTest.cpp)
 # The nested cross product execution tests run against the shared SimpleGraph fixture.
 target_link_libraries(test_query_ir_dblowering PRIVATE turing_db_examples_s)
+add_ir_tests(test_query_ir_shortest_path ShortestPathLoweringTest.cpp)
+# The path column is rendered to text by StringRowSink.
+target_sources(test_query_ir_shortest_path PRIVATE StringRowSink.cpp)
 add_ir_tests(test_query_ir_group_aggregate GroupAggregateTest.cpp)
 target_link_libraries(test_query_ir_group_aggregate PRIVATE
         turing_db_s
