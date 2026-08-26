@@ -41,6 +41,7 @@ VarDecl* DeclContext::getOrCreateNamedVariable(CypherAST* ast, EvaluatedType typ
     if (!decl) {
         decl = VarDecl::create(ast, this, name, type);
         decl->setIsUnnamed(false);
+        _declMap[decl->getName()] = decl;
     }
 
     if (decl->getType() != type) {
@@ -63,6 +64,7 @@ VarDecl* DeclContext::declareProjectedVariable(CypherAST* ast, EvaluatedType typ
 
     VarDecl* decl = VarDecl::create(ast, this, name, type);
     decl->setIsUnnamed(false);
+    _declMap[decl->getName()] = decl;
 
     return decl;
 }
@@ -90,7 +92,6 @@ void DeclContext::declareAlias(std::string_view name, VarDecl* decl) {
 }
 
 void DeclContext::addDecl(VarDecl* decl) {
-    _declMap[decl->getName()] = decl;
     _decls.push_back(decl);
 }
 
