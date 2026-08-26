@@ -67,4 +67,62 @@ def GroupAggregateKind : I64EnumAttr<"GroupAggregateKind", "A grouped aggregate 
     let cppNamespace = "::mlir::storage";
 }
 
+// The parameters of the system-command family - the statements that act on the
+// server rather than on the graph's rows. Each is carried by a db op and copied
+// verbatim onto its nl sibling by the lowering, so - like AggregateKind - they
+// belong to neither dialect alone and live here.
+
+// Which change-management operation `CHANGE <op>` performs.
+def ChangeOperation : I64EnumAttr<"ChangeOperation", "A change-management operation", [
+    I64EnumAttrCase<"New", 0, "new">,
+    I64EnumAttrCase<"Submit", 1, "submit">,
+    I64EnumAttrCase<"Delete", 2, "delete">,
+    I64EnumAttrCase<"List", 3, "list">,
+]> {
+    let cppNamespace = "::mlir::storage";
+}
+
+// The on-disk format an imported graph is read from. The importer sniffs the
+// file itself, so this records what the query declared, which is what a
+// mismatch is reported against.
+def GraphImportFormat : I64EnumAttr<"GraphImportFormat", "The declared format of an imported graph", [
+    I64EnumAttrCase<"Jsonl", 0, "jsonl">,
+    I64EnumAttrCase<"Gml", 1, "gml">,
+    I64EnumAttrCase<"Parquet", 2, "parquet">,
+]> {
+    let cppNamespace = "::mlir::storage";
+}
+
+// Which way `S3 PULL` / `S3 PUSH` moves its files.
+def S3TransferDirection : I64EnumAttr<"S3TransferDirection", "The direction of an S3 transfer", [
+    I64EnumAttrCase<"Pull", 0, "pull">,
+    I64EnumAttrCase<"Push", 1, "push">,
+]> {
+    let cppNamespace = "::mlir::storage";
+}
+
+// The distance a vector index scores its neighbours by.
+def VectorMetric : I64EnumAttr<"VectorMetric", "The distance metric of a vector index", [
+    I64EnumAttrCase<"Euclidean", 0, "euclidean">,
+    I64EnumAttrCase<"Cosine", 1, "cosine">,
+]> {
+    let cppNamespace = "::mlir::storage";
+}
+
+// The implementation backing a vector index: an exhaustive scan or a graph.
+def VectorIndexKind : I64EnumAttr<"VectorIndexKind", "The implementation of a vector index", [
+    I64EnumAttrCase<"Flat", 0, "flat">,
+    I64EnumAttrCase<"Hnsw", 1, "hnsw">,
+]> {
+    let cppNamespace = "::mlir::storage";
+}
+
+// Whether a property index covers nodes or edges.
+def IndexedEntity : I64EnumAttr<"IndexedEntity", "The entity a property index covers", [
+    I64EnumAttrCase<"Node", 0, "node">,
+    I64EnumAttrCase<"Edge", 1, "edge">,
+]> {
+    let cppNamespace = "::mlir::storage";
+}
+
 #endif // STORAGE_ENUMS

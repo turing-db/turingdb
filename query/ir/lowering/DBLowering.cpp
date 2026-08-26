@@ -66,6 +66,34 @@ mlir::Type booleanFunctionElement(mlir::OpBuilder& builder) {
     return builder.getI1Type();
 }
 
+// The nl sibling of each db system command. They are copied across one for one -
+// same attributes under the same names, each db column result becoming the chunk
+// the command fills - so the whole family lowers through one table instead of a
+// branch apiece.
+const llvm::StringMap<llvm::StringRef> systemCommandSiblings = {
+    {mlir::db::LoadGraph::getOperationName(),           nl::LoadGraph::getOperationName()},
+    {mlir::db::CreateGraph::getOperationName(),         nl::CreateGraph::getOperationName()},
+    {mlir::db::ImportGraph::getOperationName(),         nl::ImportGraph::getOperationName()},
+    {mlir::db::ListGraphs::getOperationName(),          nl::ListGraphs::getOperationName()},
+    {mlir::db::ListAvailableGraphs::getOperationName(), nl::ListAvailableGraphs::getOperationName()},
+    {mlir::db::ChangeCommand::getOperationName(),       nl::ChangeCommand::getOperationName()},
+    {mlir::db::CommitChange::getOperationName(),        nl::CommitChange::getOperationName()},
+    {mlir::db::LoadCommit::getOperationName(),          nl::LoadCommit::getOperationName()},
+    {mlir::db::MergeDataParts::getOperationName(),      nl::MergeDataParts::getOperationName()},
+    {mlir::db::S3Connect::getOperationName(),           nl::S3Connect::getOperationName()},
+    {mlir::db::S3Transfer::getOperationName(),          nl::S3Transfer::getOperationName()},
+    {mlir::db::ShowProcedures::getOperationName(),      nl::ShowProcedures::getOperationName()},
+    {mlir::db::InstallExtension::getOperationName(),    nl::InstallExtension::getOperationName()},
+    {mlir::db::ShowExtensions::getOperationName(),      nl::ShowExtensions::getOperationName()},
+    {mlir::db::CreateVectorIndex::getOperationName(),   nl::CreateVectorIndex::getOperationName()},
+    {mlir::db::DeleteVectorIndex::getOperationName(),   nl::DeleteVectorIndex::getOperationName()},
+    {mlir::db::ShowVectorIndexes::getOperationName(),   nl::ShowVectorIndexes::getOperationName()},
+    {mlir::db::LoadVector::getOperationName(),          nl::LoadVector::getOperationName()},
+    {mlir::db::LoadEmbedding::getOperationName(),       nl::LoadEmbedding::getOperationName()},
+    {mlir::db::CreatePropertyIndex::getOperationName(), nl::CreatePropertyIndex::getOperationName()},
+    {mlir::db::DropIndex::getOperationName(),           nl::DropIndex::getOperationName()},
+};
+
 enum class ResultNullability {
     FollowsInput,
     AlwaysNullable,
@@ -749,10 +777,40 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerBinaryFunction(&operation);
     } else if (mlir::isa<mlir::func::ReturnOp>(operation)) {
         // We already added a ReturnOp to the nl function
-    } else {
+    } else if (!lowerSystemCommand(operation)) {
         throw IRException("DBLowering cannot lower operation '"
                           + operation.getName().getStringRef().str() + "'");
     }
+}
+
+bool DBLowering::lowerSystemCommand(mlir::Operation& operation) {
+    const auto siblingIt = systemCommandSiblings.find(operation.getName().getStringRef());
+    if (siblingIt == systemCommandSiblings.end()) {
+        return false;
+    }
+
+    // A system command reads no column, so nothing constrains where it sits, and it
+    // opens no loop: it materializes its whole (small) result table in one step at
+    // function scope, the way nl.count_result materializes its single row.
+    setInsertionInto(_entryBlock);
+
+    mlir::MLIRContext* const context = _builder.getContext();
+
+    mlir::OperationState state(_builder.getUnknownLoc(), siblingIt->second);
+    state.addAttributes(operation.getAttrs());
+
+    for (const mlir::Value result : operation.getResults()) {
+        const mlir::db::ColumnType columnType = mlir::cast<mlir::db::ColumnType>(result.getType());
+        state.addTypes(nl::ChunkType::get(context, columnType.getType()));
+    }
+
+    mlir::Operation* const nlOperation = _builder.create(state);
+
+    for (size_t resultIndex = 0; resultIndex < operation.getNumResults(); resultIndex++) {
+        _valueMap[operation.getResult(resultIndex)] = nlOperation->getResult(resultIndex);
+    }
+
+    return true;
 }
 
 void DBLowering::lowerScanNodes(mlir::db::ScanNodes scanNodes) {

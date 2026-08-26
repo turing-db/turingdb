@@ -239,6 +239,35 @@ target_link_libraries(test_query_ir_interpreter_v3_call PRIVATE
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_interpreter_v3_call PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_turing_test(test_query_ir_system_command_equivalence SystemCommandEquivalenceTest.cpp)
+target_link_libraries(test_query_ir_system_command_equivalence PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_system_command_equivalence PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_ir_tests(test_query_ir_system_command_context SystemCommandContextTest.cpp)
+add_ir_tests(test_query_ir_system_ops_dialect SystemOpsDialectTest.cpp)
+target_compile_definitions(test_query_ir_system_ops_dialect
+    PRIVATE MLIR_SAMPLES_DIR="${CMAKE_SOURCE_DIR}/samples/mlir")
+
+add_ir_tests(test_query_ir_system_command_lowering SystemCommandLoweringTest.cpp)
+target_compile_definitions(test_query_ir_system_command_lowering
+    PRIVATE MLIR_SAMPLES_DIR="${CMAKE_SOURCE_DIR}/samples/mlir")
+
+add_turing_test(test_query_ir_system_command SystemCommandTest.cpp)
+target_link_libraries(test_query_ir_system_command PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_system_command PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_call_yield_group_aggregate CallYieldGroupAggregateTest.cpp)
 target_link_libraries(test_query_ir_call_yield_group_aggregate PRIVATE
         turing_db_s
@@ -1075,3 +1104,78 @@ target_link_libraries(test_query_ir_comma_pattern_join_keys PRIVATE
         turing_db_storage_s
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_comma_pattern_join_keys PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_variable_type_conflict VariableTypeConflictTest.cpp)
+target_link_libraries(test_query_ir_variable_type_conflict PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_variable_type_conflict PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_unknown_variable UnknownVariableTest.cpp)
+target_link_libraries(test_query_ir_unknown_variable PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_unknown_variable PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_aggregate_with_return_items AggregateWithReturnItemsTest.cpp)
+target_sources(test_query_ir_aggregate_with_return_items PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_aggregate_with_return_items PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_aggregate_with_return_items PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_pattern_loop PatternLoopTest.cpp)
+target_sources(test_query_ir_pattern_loop PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_pattern_loop PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_pattern_loop PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_multi_pattern_join MultiPatternJoinTest.cpp)
+target_sources(test_query_ir_multi_pattern_join PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_multi_pattern_join PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_multi_pattern_join PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_match_order_by MatchOrderByTest.cpp)
+target_sources(test_query_ir_match_order_by PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_match_order_by PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_match_order_by PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_match_skip_limit MatchSkipLimitTest.cpp)
+target_sources(test_query_ir_match_skip_limit PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_match_skip_limit PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_match_skip_limit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

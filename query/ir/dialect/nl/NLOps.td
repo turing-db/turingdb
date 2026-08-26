@@ -7,6 +7,7 @@ include "mlir/IR/BuiltinAttributeInterfaces.td"
 
 include "NLDialect.td"
 include "NLTypes.td"
+include "NLSystemOps.td"
 
 /**
 * ScanNodes

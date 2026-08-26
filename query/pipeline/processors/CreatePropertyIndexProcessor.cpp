@@ -9,6 +9,7 @@
 #include "PipelinePort.h"
 
 #include "metadata/PropertyType.h"
+#include "metadata/PropertyTypeDispatcher.h"
 #include "metadata/SupportedType.h"
 #include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
@@ -16,35 +17,6 @@
 #include "FatalException.h"
 
 using namespace db;
-
-namespace {
-
-struct PropertyTypeDispatcher {
-    ValueType _valueType {ValueType::Invalid};
-
-    auto execute(const auto& executor) const {
-        switch (_valueType) {
-            case ValueType::Int64:
-                return executor.template operator()<types::Int64>();
-            case ValueType::UInt64:
-                return executor.template operator()<types::UInt64>();
-            case ValueType::Double:
-                return executor.template operator()<types::Double>();
-            case ValueType::Bool:
-                return executor.template operator()<types::Bool>();
-            case ValueType::String:
-                return executor.template operator()<types::String>();
-            case ValueType::Embedding:
-                return executor.template operator()<types::Embedding>();
-            case ValueType::_SIZE:
-            case ValueType::Invalid: {
-                throw TuringException("Unsupported property type");
-            }
-        }
-    }
-};
-
-}
 
 CreatePropertyIndexProcessor::CreatePropertyIndexProcessor(std::string_view indexName,
                                                            std::string_view propName,

@@ -11,6 +11,7 @@
 
 #include "IRConstantColumn.h"
 #include "IRRowAlignment.h"
+#include "list/ListBuffer.h"
 #include "mlir/IR/Block.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -36,6 +37,7 @@
 #include "writers/MetadataBuilder.h"
 
 #include "NLExecutor.h"
+#include "NLSystemTranslator.h"
 
 #include "LocalMemory.h"
 #include "IRException.h"
@@ -311,7 +313,8 @@ NLTranslator::NLTranslator(NLProgram* program,
     _memory(memory),
     _view(view),
     _metadataBuilder(metadataBuilder),
-    _procedureContext(procedureContext)
+    _procedureContext(procedureContext),
+    _systemTranslator(std::make_unique<NLSystemTranslator>(program, memory, &_valueSlots))
 {
 }
 
@@ -535,7 +538,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateOutput(output, body);
         } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
             // Structural terminators carry no behavior
-        } else {
+        } else if (!_systemTranslator->translate(operation, body)) {
             throw IRException(fmt::format("NLTranslator cannot translate operation '{}'",
                                           operation.getName().getStringRef().str()));
         }

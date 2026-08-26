@@ -163,6 +163,18 @@ TEST_F(ConstantPredicateProjectionTest, dedupsAConstantNegationUnderAWindow) {
     expectRows("RETURN DISTINCT not true SKIP 0 LIMIT 1", expected);
 }
 
+// The query test suite's where-not-true-return-not-false case: the constant predicate keeps
+// no node, so the projection standing for every row stands for none.
+TEST_F(ConstantPredicateProjectionTest, emitsNothingWhenAConstantPredicateExcludesEveryMatchedRow) {
+    expectRows("MATCH (n) WHERE NOT TRUE RETURN NOT FALSE", {});
+}
+
+// The same projection once the predicate keeps every node of simpledb
+TEST_F(ConstantPredicateProjectionTest, emitsTheConstantForEveryMatchedRowWhenTheConstantPredicateKeepsThem) {
+    const BoolRows expected(18, {true});
+    expectRows("MATCH (n) WHERE NOT FALSE RETURN NOT FALSE", expected);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

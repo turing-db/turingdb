@@ -66,6 +66,38 @@ TEST_F(PathTest, Mkdir) {
     ASSERT_TRUE(info.writable());
 }
 
+// The containment check every command that reads or writes a path the query named
+// resolves it through: whatever the path spells, what counts is where it lands.
+TEST_F(PathTest, IsSubDirectory) {
+    const fs::Path root(_outDir);
+
+    { // A path under the root, however deep
+        ASSERT_TRUE((root / "file").isSubDirectory(root));
+        ASSERT_TRUE((root / "sub" / "deeper" / "file").isSubDirectory(root));
+    }
+
+    { // A climb that lands back inside is still inside
+        ASSERT_TRUE((root / "sub" / ".." / "file").isSubDirectory(root));
+    }
+
+    { // A climb that leaves is out, whether it is spelled or already resolved
+        ASSERT_FALSE((root / "..").isSubDirectory(root));
+        ASSERT_FALSE((root / ".." / "sibling").isSubDirectory(root));
+        ASSERT_FALSE((root / ".." / ".." / "etc" / "passwd").isSubDirectory(root));
+        ASSERT_FALSE(fs::Path("/etc/passwd").isSubDirectory(root));
+    }
+
+    { // The root resolves to "." against itself, which counts as inside - so a
+      // command handed an empty path resolves to the directory itself and fails on
+      // opening it rather than on the containment check
+        ASSERT_TRUE(root.isSubDirectory(root));
+    }
+
+    { // A sibling whose name starts with the root's is not under it
+        ASSERT_FALSE(fs::Path(_outDir + "_other").isSubDirectory(root));
+    }
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 4;

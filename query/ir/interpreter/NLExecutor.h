@@ -13,17 +13,20 @@ class GraphView;
 class NLOutputSink;
 class LocalMemory;
 class CommitWriteBuffer;
+class NLSystemContext;
 
 class NLExecutionContext {
 public:
     NLExecutionContext(const GraphView* view,
                        NLOutputSink* sink,
                        size_t chunkSize,
-                       CommitWriteBuffer* writeBuffer = nullptr)
+                       CommitWriteBuffer* writeBuffer = nullptr,
+                       const NLSystemContext* system = nullptr)
         : _view(view),
         _sink(sink),
         _chunkSize(chunkSize),
-        _writeBuffer(writeBuffer)
+        _writeBuffer(writeBuffer),
+        _system(system)
     {
     }
 
@@ -32,20 +35,26 @@ public:
     size_t getChunkSize() const { return _chunkSize; }
     CommitWriteBuffer* getWriteBuffer() const { return _writeBuffer; }
 
+    // The server-level facilities only the system commands reach for; null for a
+    // program with none, which is every ordinary query
+    const NLSystemContext* getSystem() const { return _system; }
+
 private:
     const GraphView* _view {nullptr};
     NLOutputSink* _sink {nullptr};
     size_t _chunkSize {0};
     CommitWriteBuffer* _writeBuffer {nullptr};
+    const NLSystemContext* _system {nullptr};
 };
 
 // Executes a translated NLProgram against a graph view
 class NLExecutor {
 public:
     NLExecutor(const GraphView* view,
-                  const NLProgram* prog,
-                  NLOutputSink* sink,
-                  CommitWriteBuffer* writeBuffer = nullptr);
+               const NLProgram* prog,
+               NLOutputSink* sink,
+               CommitWriteBuffer* writeBuffer = nullptr,
+               const NLSystemContext* system = nullptr);
     ~NLExecutor();
 
     void run();

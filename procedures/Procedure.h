@@ -75,6 +75,10 @@ public:
 
     bool hasRowAlignedArgument() const;
 
+    // Renders the procedure as `name(arg :: TYPE, opt :: TYPE = null) :: (ret :: TYPE)`,
+    // the form SHOW PROCEDURES lists it in
+    void buildSignature(std::string& result) const;
+
     bool hasIndices() const { return _hasIndices; }
     void setHasIndices(bool value) { _hasIndices = value; }
 

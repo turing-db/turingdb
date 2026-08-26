@@ -17,6 +17,8 @@
 #include "list/ListBuffer.h"
 #include "list/ListView.h"
 
+#include "buffers/StringBuffer.h"
+
 #include "metadata/PropertyType.h"
 #include "metadata/PropertyNull.h"
 #include "ID.h"
@@ -29,8 +31,6 @@ class Change;
 
 class LocalMemory {
 public:
-    using DefaultListBuffer = ListBuffer<>;
-
     template <typename T>
     struct MakeMemoryPool {
         using type = TypeValueMapPair<T, MemoryPool<T>>;
@@ -133,12 +133,13 @@ public:
         _listBuffer.clear();
     }
 
-    DefaultListBuffer& listBuffer() { return _listBuffer; }
+    QueryListBuffer& listBuffer() { return _listBuffer; }
 
 private:
     MemoryPools _pools;
     ColumnAllocatorMap _columnAllocators;
-    DefaultListBuffer _listBuffer;
+    QueryListBuffer _listBuffer;
+    StringBuffer _stringBuf;
 };
 
 }

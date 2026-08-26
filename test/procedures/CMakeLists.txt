@@ -1,6 +1,9 @@
 add_turing_test(test_procedures_registration ProcedureRegistrationTest.cpp)
 target_link_libraries(test_procedures_registration PRIVATE turing_db_procedures_s)
 
+add_turing_test(test_procedures_signature ProcedureSignatureTest.cpp)
+target_link_libraries(test_procedures_signature PRIVATE turing_db_procedures_s)
+
 # The gnn sample and describeCommit chunking tests drive real registered procedures
 # against the shared SimpleGraph fixture.
 add_turing_test(test_procedures_gnn_neighbourhood_sample_chunk GnnNeighbourhoodSampleChunkTest.cpp)

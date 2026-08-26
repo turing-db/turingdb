@@ -2038,7 +2038,7 @@ PipelineOutputInterface* PipelineGenerator::translateUnwindNode(UnwindNode* node
         }
 
         // Allocate the list in the query-long list buffer
-        LocalMemory::DefaultListBuffer& buf = memory().listBuffer();
+        QueryListBuffer& buf = memory().listBuffer();
         listView = buf.insert(items);
     }
     bioassert(listView, "Failed to allocate ListView.");

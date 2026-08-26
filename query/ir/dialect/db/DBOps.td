@@ -8,6 +8,7 @@ include "mlir/IR/BuiltinAttributeInterfaces.td"
 
 include "DBDialect.td"
 include "DBTypes.td"
+include "DBSystemOps.td"
 
 /**
 * ScanNodes

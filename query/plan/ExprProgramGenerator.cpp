@@ -314,7 +314,7 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
                 AddItem::dispatch(itemConst, listBuilder);
             }
 
-            LocalMemory::DefaultListBuffer& buf = _gen->memory().listBuffer();
+            QueryListBuffer& buf = _gen->memory().listBuffer();
 
             const ListView view = buf.insert(items);
 

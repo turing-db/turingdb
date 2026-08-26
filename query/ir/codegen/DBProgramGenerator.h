@@ -186,6 +186,11 @@ private:
     // which is what generating it after the traversal does.
     void generateLeadingCalls(std::span<Stmt* const> stmts);
 
+    // Emits the op of a system-level statement - LOAD GRAPH, CHANGE, COMMIT and
+    // their siblings - which is the whole program. False for an ordinary query,
+    // which then goes through the traversal pipeline
+    bool generateSystemCommand(const CypherAST* ast);
+
     // Whether a variable can open a connected component: a node variable no traversal binds
     bool isValidRoot(const VariableDependency& var) const;
 
@@ -242,6 +247,14 @@ private:
     // so a predicate reading what a call yielded is generated once the call has bound it.
     void generateFiltersAndCalls(std::span<Stmt* const> stmts);
     void generateMatchFilter(const MatchStmt* matchStmt);
+
+    // Emits the Sort a MATCH's ORDER BY asks for, over everything in flight: the rows the
+    // rest of the query reads are then the ordered ones.
+    void generateMatchOrderBy(const MatchStmt* matchStmt);
+
+    // Emits the cuts a MATCH's SKIP and LIMIT ask for, the SKIP first: what the rest of the
+    // query reads is then the window rather than every row matched.
+    void generateMatchWindow(const MatchStmt* matchStmt);
     void generateCall(const CallStmt* callStmt);
 
     // Generate the filter a CALL's YIELD ... WHERE asks for, over everything in flight once
@@ -261,6 +274,10 @@ private:
     // Collect those columns. One bound in another block is skipped: an op here can only
     // take what this block binds.
     void collectInFlightColumns(InFlightColumns& inFlight);
+
+    // Cut the rows in flight with a db.skip or a db.limit, given as @tparam CutOp
+    template <typename CutOp>
+    void cutAllColumns(uint64_t count);
 
     // Rebind them to an op's results, so later ops read what it produced. firstResult is
     // where its pass-through results start - zero for an op that only takes them (a
@@ -282,8 +299,9 @@ private:
     void publishBoundColumns(llvm::ArrayRef<llvm::StringRef> names,
                              llvm::ArrayRef<mlir::Value> columns);
 
-    // The column every variable in scope currently holds, under its name: one per
-    // traversal variable, plus one per edge identity under its representative
+    // The column each variable in scope is bound to, under the name it carries: the
+    // traversal variables, what a CALL yielded, what a CREATE wrote, and each edge
+    // identity under its own name
     void collectVariableColumns(VariableColumnMap& variableColumns) const;
 
     void translateProjection(const Projection* projection,

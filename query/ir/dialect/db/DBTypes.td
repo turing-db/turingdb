@@ -41,7 +41,14 @@ def ColumnNodeIDs : ColumnOf<"::mlir::storage::NodeIDType", "nodeid">;
 def ColumnEdgeIDs : ColumnOf<"::mlir::storage::EdgeIDType", "edgeid">;
 def ColumnEdgeTypes : ColumnOf<"::mlir::storage::EdgeTypeIDType", "edge_type_id">;
 
+def ColumnChangeIDs : ColumnOf<"::mlir::storage::ChangeIDType", "change_id">;
+
 // Property Types
 def ColumnBools : ColumnOf<"::mlir::storage::BoolType", "bool">;
+
+// The two element types the system commands report their result tables in: a
+// name or signature they looked up, and a size or tally they counted.
+def ColumnStrings : ColumnOf<"::mlir::storage::StringType", "string">;
+def ColumnCounts : ColumnOf<"::mlir::IntegerType", "ui64">;
 
 #endif // TURINGDB_TYPES
