@@ -1,22 +1,20 @@
 #include "StringBuffer.h"
 
+#include <string.h>
+
 using namespace db;
 
 std::string_view StringBuffer::concatenate(std::string_view a, std::string_view b) {
-    const size_t stringSize = a.size() + b.size();
+    const size_t totalSize = a.size() + b.size();
 
-    _buf.reserveContiguous(stringSize);
+    _buf.reserveContiguous(totalSize);
 
-    const char* aPtr = a.data();
-    const std::span aSpan(aPtr, a.size());
+    char* start = _buf.nextPtr();
 
-    const char* bPtr = b.data();
-    const std::span bSpan(bPtr, b.size());
+    memcpy(start, a.data(), a.size());
+    memcpy(start + a.size(), b.data(), b.size());
 
-    std::string_view aSV = insert(aSpan);
-    insert(bSpan);
+    _buf.commit(totalSize);
 
-    const char* stringStart = aSV.data();
-
-    return {stringStart, stringSize};
+    return {start, totalSize};
 }
