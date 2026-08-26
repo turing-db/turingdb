@@ -34,6 +34,9 @@ target_link_libraries(test_query_ir_group_aggregate PRIVATE
         turing_db_interpreter_v3_s)
 add_ir_tests(test_query_ir_collect CollectTest.cpp)
 
+# The chunked collect tests force the collect fold to span chunk boundaries.
+add_ir_tests(test_query_ir_collect_chunked CollectChunkedTest.cpp)
+
 # The collect row-alignment and drain tests run against the shared SimpleGraph fixture.
 add_ir_tests(test_query_ir_collect_row_alignment CollectRowAlignmentTest.cpp)
 target_link_libraries(test_query_ir_collect_row_alignment PRIVATE turing_db_examples_s)
@@ -186,6 +189,34 @@ target_link_libraries(test_query_ir_db_procedures PRIVATE
 # The Cypher-level collect tests drive queries end to end through QueryInterpreterV3.
 add_ir_tests(test_query_ir_cypher_collect CypherCollectTest.cpp)
 target_link_libraries(test_query_ir_cypher_collect PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_system_s
+        turing_db_interpreter_v3_s)
+
+add_ir_tests(test_query_ir_cypher_collect_distinct_entity CypherCollectDistinctEntityTest.cpp)
+target_link_libraries(test_query_ir_cypher_collect_distinct_entity PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_system_s
+        turing_db_interpreter_v3_s)
+
+add_ir_tests(test_query_ir_cypher_collect_element_type CypherCollectElementTypeTest.cpp)
+target_link_libraries(test_query_ir_cypher_collect_element_type PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_system_s
+        turing_db_interpreter_v3_s)
+
+add_ir_tests(test_query_ir_cypher_collect_aggregate CypherCollectAggregateTest.cpp)
+target_link_libraries(test_query_ir_cypher_collect_aggregate PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_system_s
+        turing_db_interpreter_v3_s)
+
+add_ir_tests(test_query_ir_cypher_collect_input CypherCollectInputTest.cpp)
+target_link_libraries(test_query_ir_cypher_collect_input PRIVATE
         turing_db_s
         turing_testenv_s
         turing_db_system_s
