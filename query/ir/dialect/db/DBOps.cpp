@@ -643,21 +643,6 @@ LogicalResult Collect::verify() {
     return success();
 }
 
-LogicalResult ShortestPath::verify() {
-    const ColumnType distanceColumn = llvm::cast<ColumnType>(getDistance().getType());
-    const mlir::Type weightType = distanceColumn.getType();
-
-    const bool isDouble = llvm::isa<mlir::Float64Type>(weightType);
-    const auto intType = llvm::dyn_cast<mlir::IntegerType>(weightType);
-    const bool isInt64 = intType && intType.getWidth() == 64;
-
-    if (!isDouble && !isInt64) {
-        return emitOpError("distance column must be f64, i64 or ui64, the weight property's value type, but is ") << weightType;
-    }
-
-    return success();
-}
-
 // db.unwind_collect has the same column shape as db.collect - keyCount grouping keys
 // then one collected value column - but re-emits one scalar row per element, so its
 // results are the key columns (passed through) then one value column.

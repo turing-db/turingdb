@@ -86,6 +86,7 @@
 #include "stmt/ReturnStmt.h"
 #include "stmt/SetItem.h"
 #include "stmt/SetStmt.h"
+#include "stmt/ShortestPathStmt.h"
 #include "stmt/Skip.h"
 #include "stmt/StmtContainer.h"
 #include "stmt/UnwindStmt.h"
@@ -2725,6 +2726,66 @@ void DBProgramGenerator::generateDelete(const SinglePartQuery* query) {
             }
         }
     }
+}
+
+const ShortestPathStmt* DBProgramGenerator::findShortestPathStmt(const CypherAST* ast) const {
+    const CypherAST::QueryCommands& queries = ast->queries();
+    if (queries.size() != 1) {
+        return nullptr;
+    }
+
+    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(queries.front());
+    if (!sglPart) {
+        return nullptr;
+    }
+
+    const StmtContainer* readStmts = sglPart->getReadStmts();
+    if (!readStmts) {
+        return nullptr;
+    }
+
+    for (const Stmt* stmt : readStmts->stmts()) {
+        if (stmt->getKind() == Stmt::Kind::SHORTESTPATH) {
+            return static_cast<const ShortestPathStmt*>(stmt);
+        }
+    }
+
+    return nullptr;
+}
+
+void DBProgramGenerator::generateShortestPath(const CypherAST* ast) {
+    const ShortestPathStmt* stmt = findShortestPathStmt(ast);
+    if (!stmt) {
+        return;
+    }
+
+    const std::string_view sourceName = stmt->getSource()->getName();
+    const std::string_view targetName = stmt->getTarget()->getName();
+    const std::string_view propertyName = stmt->getEdgeProperty()->getName();
+    const std::string_view distName = stmt->getDistVar()->getName();
+    const std::string_view pathName = stmt->getPathVar()->getName();
+
+    const mlir::Value sourceColumn = resolveEntityColumn(sourceName);
+    bioassert(sourceColumn, "SHORTESTPATH source not bound: {}", sourceName);
+
+    const mlir::Value targetColumn = resolveEntityColumn(targetName);
+    bioassert(targetColumn, "SHORTESTPATH target not bound: {}", targetName);
+
+    // The distance column is a none placeholder resolved to the weight property's value
+    // type at lowering
+    const mlir::db::ColumnType distanceType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+    const mlir::db::ColumnType pathType = allocColumnType(mlir::storage::PathType::get(_mlirCtxt));
+    const mlir::StringAttr propertyAttr = _opBuilder.getStringAttr(propertyName);
+
+    auto shortestPath = _opBuilder.create<mlir::db::ShortestPath>(_opBuilder.getUnknownLoc(),
+                                                                  distanceType,
+                                                                  pathType,
+                                                                  sourceColumn,
+                                                                  targetColumn,
+                                                                  propertyAttr);
+
+    _yieldedColumns.emplace_back(distName, shortestPath.getDistance());
+    _yieldedColumns.emplace_back(pathName, shortestPath.getPath());
 }
 
 void DBProgramGenerator::generateOutput(const Projection* projection) {

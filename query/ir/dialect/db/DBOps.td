@@ -1567,14 +1567,14 @@ def ShortestPath : TuringOp<"shortest_path", [Pure]> {
 
       %dist, %path = db.shortest_path(%a, %b) weight "cost"
                        : (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
-                         -> (!db.column<f64>, !db.column<!storage.path>)
+                         -> (!db.column<none>, !db.column<!storage.path>)
 
-    Pipeline breaker as both node columns are consumed in full
+    Pipeline breaker as both node columns are consumed in full. The distance column
+    is typed `none` here and resolved to the weight property's value type at lowering.
   }];
 
   let arguments = (ins ColumnNodeIDs:$source, ColumnNodeIDs:$target, StrAttr:$edgeProperty);
   let results   = (outs Column:$distance, ColumnPath:$path);
-  let hasVerifier = 1;
 
   let assemblyFormat = [{
     `(` $source `,` $target `)` `weight` $edgeProperty attr-dict `:`

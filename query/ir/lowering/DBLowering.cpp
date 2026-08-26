@@ -1948,9 +1948,10 @@ void DBLowering::lowerShortestPath(mlir::db::ShortestPath shortestPath) {
     _builder.setInsertionPointToStart(_entryBlock);
     const mlir::Value state = _builder.create<nl::ShortestPathBuffer>(loc).getState();
 
-    // The source and target sets are filled by two separate updates, each spliced into
-    // the loop that binds its node chunk - the two are distinct patterns, so they lower
-    // to sibling loops. Placing the drain after both guarantees each set is complete.
+    // The source and target sets are filled by two updates, each spliced into the loop that
+    // binds its node chunk. Disconnected patterns are cross-producted upstream, so in
+    // practice both chunks are bound by the same loop and both updates land in it; placing
+    // the drain after that loop guarantees each set is complete before the search runs.
     setInsertionInto(ownerBlock(sourceChunk));
     _builder.create<nl::ShortestPathUpdate>(loc, state, sourceChunk, /*target=*/false);
 
@@ -1959,10 +1960,21 @@ void DBLowering::lowerShortestPath(mlir::db::ShortestPath shortestPath) {
 
     // The emit phase: an nl.shortest_path source runs the weighted search once, reading
     // the edge weight through the hoisted property handle, and yields the one result row.
-    // Its chunk types are the db op's result columns: the distance's numeric type, then a
-    // storage path.
+    // The distance chunk is the weight property's value type (resolved here against the
+    // schema, since the db distance column is a none placeholder), and it is plain, not
+    // nullable - the one emitted row always carries a distance. The path chunk is a path.
     const mlir::Value handle = getOrCreatePropertyTypeHandle(edgeProperty);
-    const mlir::Type distanceElement = mlir::cast<mlir::db::ColumnType>(shortestPath.getDistance().getType()).getType();
+
+    if (!_view) {
+        throw IRException("Lowering a shortest path needs a graph to resolve the weight property '" + edgeProperty.str() + "'");
+    }
+
+    const std::optional<PropertyType> weightType = _view->metadata().propTypes().get(edgeProperty);
+    if (!weightType) {
+        throw IRException("Unknown property '" + edgeProperty.str() + "'");
+    }
+
+    const mlir::Type distanceElement = valueTypeToElementType(_builder, weightType->_valueType);
 
     llvm::SmallVector<mlir::Type, 2> chunkTypes;
     chunkTypes.push_back(nl::ChunkType::get(context, distanceElement));

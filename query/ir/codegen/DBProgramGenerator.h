@@ -44,6 +44,7 @@ class MatchStmt;
 class Projection;
 class PropertyExpr;
 class ReturnStmt;
+class ShortestPathStmt;
 class UnwindStmt;
 class VarDecl;
 class VectorSearchStmt;
@@ -282,6 +283,11 @@ private:
     // query writes them, so a predicate or an argument reading what a statement yielded is
     // generated once that statement has bound it.
     void generateFiltersCallsAndSearches(std::span<Stmt* const> stmts);
+
+    void generateShortestPath(const CypherAST* ast);
+
+    const ShortestPathStmt* findShortestPathStmt(const CypherAST* ast) const;
+
     void generateMatchFilter(const MatchStmt* matchStmt);
 
     // Emits the Sort a MATCH's ORDER BY asks for, over everything in flight: the rows the
