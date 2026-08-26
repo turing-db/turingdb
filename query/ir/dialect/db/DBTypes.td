@@ -40,6 +40,7 @@ class ColumnOf<string cppType, string mnemonic> : Type<
 def ColumnNodeIDs : ColumnOf<"::mlir::storage::NodeIDType", "nodeid">;
 def ColumnEdgeIDs : ColumnOf<"::mlir::storage::EdgeIDType", "edgeid">;
 def ColumnEdgeTypes : ColumnOf<"::mlir::storage::EdgeTypeIDType", "edge_type_id">;
+def ColumnPath : ColumnOf<"::mlir::storage::PathType", "path">;
 
 def ColumnChangeIDs : ColumnOf<"::mlir::storage::ChangeIDType", "change_id">;
 
