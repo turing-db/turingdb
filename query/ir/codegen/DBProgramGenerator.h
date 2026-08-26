@@ -160,6 +160,14 @@ private:
     // predicate reading what a call yielded is generated once the call has bound it.
     void generateFiltersAndCalls(const CypherAST* ast);
     void generateMatchFilter(const MatchStmt* matchStmt);
+
+    // Emits the Sort a MATCH's ORDER BY asks for, over everything in flight: the rows the
+    // rest of the query reads are then the ordered ones.
+    void generateMatchOrderBy(const MatchStmt* matchStmt);
+
+    // Emits the cuts a MATCH's SKIP and LIMIT ask for, the SKIP first: what the rest of the
+    // query reads is then the window rather than every row matched.
+    void generateMatchWindow(const MatchStmt* matchStmt);
     void generateCall(const CallStmt* callStmt);
 
     // Generate the filter a CALL's YIELD ... WHERE asks for, over everything in flight once
@@ -179,6 +187,10 @@ private:
     // Collect those columns. One bound in another block is skipped: an op here can only
     // take what this block binds.
     void collectInFlightColumns(InFlightColumns& inFlight);
+
+    // Cut the rows in flight with a db.skip or a db.limit, given as @tparam CutOp
+    template <typename CutOp>
+    void cutAllColumns(uint64_t count);
 
     // Rebind them to an op's results, so later ops read what it produced. firstResult is
     // where its pass-through results start - zero for an op that only takes them (a
@@ -210,6 +222,10 @@ private:
     void translateOrderBy(const Projection* projection,
                           const VariableColumnMap& variableColumns,
                           llvm::SmallVectorImpl<mlir::Value>& projected);
+
+    // The column each variable of the query is bound to, under the name it carries: the
+    // traversal variables, what a CALL yielded, and each edge identity under its own name
+    void collectVariableColumns(VariableColumnMap& variableColumns) const;
 
     // The column holding the values of an expression: the column already published for
     // the traversal variable it names, when the expression is nothing but that variable,
