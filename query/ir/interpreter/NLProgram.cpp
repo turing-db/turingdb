@@ -177,6 +177,15 @@ void NLCollectState::reset() {
     _groupPositions.clear();
     _listBuffer.clear();
 
+    for (NLGroupAggregateState::Aggregate& aggregate : _aggregates) {
+        if (aggregate._accumulator) {
+            aggregate._accumulator->clear();
+        }
+
+        aggregate._counts.clear();
+        aggregate._distinct.clear();
+    }
+
     // An ungrouped collect has exactly one group - the empty key tuple - and that group
     // exists whether or not a row ever arrives: collect() over no row is the empty list,
     // not the absence of a row. Creating it here rather than on the first update keeps

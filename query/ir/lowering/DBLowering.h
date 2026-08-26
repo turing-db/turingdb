@@ -380,6 +380,12 @@ private:
     // lowered op belongs
     void setInsertionInto(mlir::Block* block);
 
+    // Point the builder just after the loop nest that @param updateBlock belongs to,
+    // where an accumulator filled from that block holds its final value. A drain loop
+    // lowered before this one sits further down the entry block and may read the
+    // result, so the end of the entry block is too late a home for it.
+    void setInsertionAfterProducingLoop(mlir::Block* updateBlock);
+
     // Point the builder at the right place for an op consuming lhs and rhs.
     void setInsertionForBinaryOp(mlir::Value lhs, mlir::Value rhs);
 

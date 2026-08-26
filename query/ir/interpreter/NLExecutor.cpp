@@ -1551,10 +1551,11 @@ void collectEntityFold(Column* values,
     auto& valuesRaw = static_cast<ColumnVector<IDType>*>(values)->getRaw();
     const auto& inputRaw = static_cast<const ColumnVector<IDType>*>(input)->getRaw();
 
+    const size_t base = valuesRaw.size();
+    valuesRaw.insert(valuesRaw.end(), inputRaw.begin(), inputRaw.end());
+
     for (size_t row = 0; row < inputRaw.size(); row++) {
-        const size_t position = valuesRaw.size();
-        valuesRaw.push_back(inputRaw[row]);
-        groupPositions[groups[row]].push_back(position);
+        groupPositions[groups[row]].push_back(base + row);
     }
 }
 
@@ -1632,6 +1633,17 @@ void collectListEmit(const Column* values,
 
         outputRaw.push_back(listBuffer.insert(elements));
     }
+}
+
+// The fold and the list emit an entity collect of this ID reads. The list emits through
+// the value path's template - its elements are the IDs the fold appended - so there is
+// no entity emit of its own.
+template <typename IDType>
+void selectCollectIDHandlers(bool distinctValues,
+                             NLCollectFoldFunction& fold,
+                             NLCollectListEmitFunction& listEmit) {
+    fold = distinctValues ? &collectEntityFoldDistinct<IDType> : &collectEntityFold<IDType>;
+    listEmit = &collectListEmit<IDType>;
 }
 
 // Emit a sum/min/max slice: the accumulator holds each group's reduced value in the
@@ -3168,6 +3180,12 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
     bioassert(valueInput->size() == rowCount,
               "nl.collect_update value column must be row-aligned with the grouping keys");
 
+    std::vector<NLGroupAggregateState::Aggregate>& aggregates = state->aggregates();
+    for (const NLGroupAggregateState::Aggregate& aggregate : aggregates) {
+        bioassert(aggregate._input->size() == rowCount,
+                  "nl.collect_update aggregate inputs must be row-aligned with the grouping keys");
+    }
+
     if (rowCount == 0) {
         return;
     }
@@ -3211,6 +3229,20 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
     groupPositions.resize(groupCount);
 
     state->getFold()(state->getValues(), valueInput, groupIndices, groupPositions, state->distinct());
+
+    // The reductions taken over the same groups fold beside the list, off the group
+    // assignment computed once above, exactly as nl.group_aggregate_update folds them.
+    for (NLGroupAggregateState::Aggregate& aggregate : aggregates) {
+        aggregate._grow(aggregate._accumulator, aggregate._counts, groupCount);
+    }
+
+    for (NLGroupAggregateState::Aggregate& aggregate : aggregates) {
+        aggregate._fold(aggregate._accumulator,
+                        aggregate._counts,
+                        aggregate._input,
+                        groupIndices,
+                        aggregate._distinct);
+    }
 }
 
 // Only the scalar value types are collectable for now; an embedding column (a span of
@@ -3339,46 +3371,17 @@ NLCollectListEmitFunction NLExecutor::selectCollectListEmit(ValueType valueType)
     return nullptr;
 }
 
-NLCollectFoldFunction NLExecutor::selectCollectEntityFold(NLChunkKind kind) {
+void NLExecutor::selectCollectEntityHandlers(NLChunkKind kind,
+                                             bool distinctValues,
+                                             NLCollectFoldFunction& fold,
+                                             NLCollectListEmitFunction& listEmit) {
     switch (kind) {
         case NLChunkKind::NodeID:
-            return &collectEntityFold<NodeID>;
+            return selectCollectIDHandlers<NodeID>(distinctValues, fold, listEmit);
         break;
 
         case NLChunkKind::EdgeID:
-            return &collectEntityFold<EdgeID>;
-        break;
-
-        default:
-            throw IRException("collect does not support this chunk kind");
-        break;
-    }
-}
-
-NLCollectFoldFunction NLExecutor::selectCollectEntityDistinctFold(NLChunkKind kind) {
-    switch (kind) {
-        case NLChunkKind::NodeID:
-            return &collectEntityFoldDistinct<NodeID>;
-        break;
-
-        case NLChunkKind::EdgeID:
-            return &collectEntityFoldDistinct<EdgeID>;
-        break;
-
-        default:
-            throw IRException("collect does not support this chunk kind");
-        break;
-    }
-}
-
-NLCollectListEmitFunction NLExecutor::selectCollectEntityListEmit(NLChunkKind kind) {
-    switch (kind) {
-        case NLChunkKind::NodeID:
-            return &collectListEmit<NodeID>;
-        break;
-
-        case NLChunkKind::EdgeID:
-            return &collectListEmit<EdgeID>;
+            return selectCollectIDHandlers<EdgeID>(distinctValues, fold, listEmit);
         break;
 
         default:
@@ -3474,6 +3477,10 @@ void NLExecutor::runCollectLoop(NLExecutionContext* context, NLFunctionData* dat
                              stepGroups,
                              state->listBuffer(),
                              state->getValueOutput());
+
+        for (const NLGroupAggregateState::Aggregate& aggregate : state->aggregates()) {
+            aggregate._emit(aggregate._accumulator, aggregate._counts, offset, stepGroups, aggregate._output);
+        }
 
         runBody(context, loopBody);
     }

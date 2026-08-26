@@ -104,6 +104,13 @@ void FunctionDecls::initDefault() {
     collectEdges->setReturnTypes({{EvaluatedType::List}});
     collectEdges->setIsAggregate(true);
 
+    // collect(null) is a query that can be asked: every row's null is dropped, so the list
+    // comes out empty, and the overload is what keeps the answer from being an argument error
+    FunctionSignature* collectNulls = createFunction("collect");
+    collectNulls->setArguments({EvaluatedType::Null});
+    collectNulls->setReturnTypes({{EvaluatedType::List}});
+    collectNulls->setIsAggregate(true);
+
     // count(null) is a query that can be asked: a null is never charged, so the tally is
     // zero, and the overload is what keeps the answer from being an argument error
     FunctionSignature* countNulls = createFunction("count");

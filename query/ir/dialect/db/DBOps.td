@@ -1354,8 +1354,13 @@ def Collect : TuringOp<"collect", [Pure]> {
       %gcity, %names = db.collect(%city, %name) keys 1
                          : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<!storage.list<none>>)
 
-    keyCount is how many leading columns are keys (0 = ungrouped); exactly one value
-    column follows. Results are the keys (unchanged) then one list column.
+    keyCount is how many leading columns are keys (0 = ungrouped); one value column
+    follows, and then one input per aggregate `aggregates` names - the reductions taken
+    over the same groups, as db.group_aggregate takes them. Results are the keys
+    (unchanged), the list column, then one column per aggregate.
+
+      %gcity, %names, %n = db.collect(%city, %name, %score) keys 1 aggregates [count]
+                             : (...) -> (...)
 
     `distinct` is Cypher's collect(DISTINCT x): a value repeated in a group is collected
     once, so the list holds each of the group's distinct values. As on db.count the flag
@@ -1364,13 +1369,17 @@ def Collect : TuringOp<"collect", [Pure]> {
       %names = db.collect(%name) keys 0 distinct : (!db.column<none>) -> !db.column<!storage.list<none>>
   }];
 
-  // keyCount grouping-key columns then one collected column; unsigned (never negative).
-  let arguments = (ins Variadic<Column>:$columns, UI64Attr:$keyCount, UnitAttr:$distinct);
+  // keyCount grouping-key columns, one collected column, then one input per aggregate
+  // kinds names; keyCount is unsigned (never negative).
+  let arguments = (ins Variadic<Column>:$columns,
+                       UI64Attr:$keyCount,
+                       OptionalAttr<DenseI64ArrayAttr>:$kinds,
+                       UnitAttr:$distinct);
   let results   = (outs Variadic<Column>:$results);
 
   let assemblyFormat = [{
-    `(` $columns `)` `keys` $keyCount (`distinct` $distinct^)? attr-dict `:`
-    functional-type(operands, results)
+    `(` $columns `)` `keys` $keyCount (`aggregates` custom<GroupAggregateKinds>($kinds)^)?
+    (`distinct` $distinct^)? attr-dict `:` functional-type(operands, results)
   }];
 
   // keyCount + 1 columns; key results pass through; trailing result is a list column.

@@ -68,6 +68,9 @@ void readEdgeIDList(const ListView& view, std::vector<uint64_t>& out) {
     }
 }
 
+const std::string_view droppedKeyReason =
+    "ORDER BY with an aggregate may only order by expressions over the returned columns";
+
 // Discards output: used by the CREATE queries building the fixture and by the queries
 // that are rejected before producing rows.
 class NullSink : public NLOutputSink {
@@ -307,7 +310,8 @@ private:
 
 
 // Collects the ([ids]) rows an ungrouped entity collect emits: a single list cell chunk.
-class NodeListSink : public NLOutputSink {
+template <void (*Reader)(const ListView&, std::vector<uint64_t>&)>
+class IDListSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
@@ -318,7 +322,7 @@ public:
         const auto& listRaw = lists->getRaw();
         for (size_t row = offset; row < offset + rowCount; row++) {
             std::vector<uint64_t> ids;
-            readNodeIDList(listRaw[row], ids);
+            Reader(listRaw[row], ids);
             _rows.push_back(ids);
         }
     }
@@ -327,6 +331,212 @@ public:
 
 private:
     std::vector<std::vector<uint64_t>> _rows;
+};
+
+using NodeListSink = IDListSink<readNodeIDList>;
+using EdgeListSink = IDListSink<readEdgeIDList>;
+
+// Collects the ([scores]) rows an ungrouped collect over an Int64 value emits.
+class Int64ListSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[0]);
+        ASSERT_NE(lists, nullptr);
+
+        const auto& listRaw = lists->getRaw();
+        for (size_t row = offset; row < offset + rowCount; row++) {
+            std::vector<int64_t> scores;
+            readInt64List(listRaw[row], scores);
+            _rows.push_back(scores);
+        }
+    }
+
+    const std::vector<std::vector<int64_t>>& rows() const { return _rows; }
+
+private:
+    std::vector<std::vector<int64_t>> _rows;
+};
+
+// Collects the (team, [names], count) rows a grouped collect emits beside a tally.
+class KeyedListAndCountSink : public NLOutputSink {
+public:
+    using Row = std::tuple<std::optional<std::string>, std::vector<std::string>, uint64_t>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 3u);
+
+        const auto* keys = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[1]);
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[2]);
+        ASSERT_NE(keys, nullptr);
+        ASSERT_NE(lists, nullptr);
+        ASSERT_NE(counts, nullptr);
+
+        const auto& keyRaw = keys->getRaw();
+        const auto& listRaw = lists->getRaw();
+        const auto& countRaw = counts->getRaw();
+        for (size_t row = offset; row < offset + rowCount; row++) {
+            std::optional<std::string> key;
+            if (keyRaw[row]) {
+                key = std::string(*keyRaw[row]);
+            }
+
+            std::vector<std::string> names;
+            readStringList(listRaw[row], names);
+
+            _rows.push_back({key, names, countRaw[row]});
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+    void rowsInEmitOrder(std::vector<Row>& rows) const {
+        rows = _rows;
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
+// Collects the (team, [names], sum) rows a grouped collect emits beside a reduction.
+class KeyedListAndSumSink : public NLOutputSink {
+public:
+    using Row = std::tuple<std::optional<std::string>, std::vector<std::string>, std::optional<int64_t>>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 3u);
+
+        const auto* keys = dynamic_cast<const ColumnOptVector<std::string_view>*>(chunks[0]);
+        const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[1]);
+        const auto* sums = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[2]);
+        ASSERT_NE(keys, nullptr);
+        ASSERT_NE(lists, nullptr);
+        ASSERT_NE(sums, nullptr);
+
+        const auto& keyRaw = keys->getRaw();
+        const auto& listRaw = lists->getRaw();
+        const auto& sumRaw = sums->getRaw();
+        for (size_t row = offset; row < offset + rowCount; row++) {
+            std::optional<std::string> key;
+            if (keyRaw[row]) {
+                key = std::string(*keyRaw[row]);
+            }
+
+            std::vector<std::string> names;
+            readStringList(listRaw[row], names);
+
+            _rows.push_back({key, names, sumRaw[row]});
+        }
+    }
+
+    void sortedRows(std::vector<Row>& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    std::vector<Row> _rows;
+};
+
+// Collects the ([names], count) row a collect emits beside a tally, reading each column
+// by its type so both projection orders share one sink.
+class ListAndCountSink : public NLOutputSink {
+public:
+    using Row = std::pair<std::vector<std::string>, uint64_t>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const ColumnVector<ListView>* lists = nullptr;
+        const ColumnVector<uint64_t>* counts = nullptr;
+        for (const Column* chunk : chunks) {
+            const ColumnVector<ListView>* list = dynamic_cast<const ColumnVector<ListView>*>(chunk);
+            if (list) {
+                lists = list;
+                continue;
+            }
+
+            const ColumnVector<uint64_t>* count = dynamic_cast<const ColumnVector<uint64_t>*>(chunk);
+            if (count) {
+                counts = count;
+            }
+        }
+
+        ASSERT_NE(lists, nullptr);
+        ASSERT_NE(counts, nullptr);
+
+        const auto& listRaw = lists->getRaw();
+        const auto& countRaw = counts->getRaw();
+        for (size_t row = offset; row < offset + rowCount; row++) {
+            std::vector<std::string> names;
+            readStringList(listRaw[row], names);
+
+            _rows.push_back({names, countRaw[row]});
+        }
+    }
+
+    const std::vector<Row>& rows() const { return _rows; }
+
+private:
+    std::vector<Row> _rows;
+};
+
+// Collects the ([names], sum) row a collect emits beside a value reduction.
+class ListAndSumSink : public NLOutputSink {
+public:
+    using Row = std::pair<std::vector<std::string>, std::optional<int64_t>>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks[0]);
+        const auto* sums = dynamic_cast<const ColumnOptVector<int64_t>*>(chunks[1]);
+        ASSERT_NE(lists, nullptr);
+        ASSERT_NE(sums, nullptr);
+
+        const auto& listRaw = lists->getRaw();
+        const auto& sumRaw = sums->getRaw();
+        for (size_t row = offset; row < offset + rowCount; row++) {
+            std::vector<std::string> names;
+            readStringList(listRaw[row], names);
+
+            _rows.push_back({names, sumRaw[row]});
+        }
+    }
+
+    const std::vector<Row>& rows() const { return _rows; }
+
+private:
+    std::vector<Row> _rows;
+};
+
+// Collects the list cell a projection ends with, for the shapes carrying a column beside
+// the list that the assert does not read.
+class TrailingInt64ListSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_FALSE(chunks.empty());
+
+        const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(chunks.back());
+        ASSERT_NE(lists, nullptr);
+
+        const auto& listRaw = lists->getRaw();
+        for (size_t row = offset; row < offset + rowCount; row++) {
+            std::vector<int64_t> scores;
+            readInt64List(listRaw[row], scores);
+            _rows.push_back(scores);
+        }
+    }
+
+    const std::vector<std::vector<int64_t>>& rows() const { return _rows; }
+
+private:
+    std::vector<std::vector<int64_t>> _rows;
 };
 
 // Collects the ([names]) rows an ungrouped collect emits: a single list cell chunk.
@@ -491,6 +701,45 @@ TEST_F(CypherCollectTest, groupedCollectDropsNulls) {
     EXPECT_EQ(rows, expected);
 }
 
+// The literal every row collects is the one collect drops, so each group's list comes out
+// empty however many rows folded into it.
+TEST_F(CypherCollectTest, groupedCollectOfNull) {
+    buildTeamGraph();
+
+    KeyedInt64ListSink sink;
+    match("MATCH (n:Node) RETURN n.team, collect(null)", sink);
+
+    std::vector<KeyedInt64ListSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<KeyedInt64ListSink::Row> expected {
+        {"blue", {}},
+        {"red", {}},
+    };
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(CypherCollectTest, ungroupedCollectOfNull) {
+    buildTeamGraph();
+
+    Int64ListSink sink;
+    match("MATCH (n:Node) RETURN collect(null)", sink);
+
+    const std::vector<std::vector<int64_t>> expected {{}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+// No match drives the projection, so the collect folds the single row a bare RETURN is.
+TEST_F(CypherCollectTest, collectOfNullWithoutAMatch) {
+    buildTeamGraph();
+
+    Int64ListSink sink;
+    match("RETURN collect(null)", sink);
+
+    const std::vector<std::vector<int64_t>> expected {{}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
 TEST_F(CypherCollectTest, ungroupedCollect) {
     buildTeamGraph();
 
@@ -518,20 +767,13 @@ TEST_F(CypherCollectTest, groupedCollectWithLimit) {
     match("MATCH (n:Node) RETURN n.team, collect(n.name) LIMIT 1", sink);
 
     // One group row survives the cut, and it is a whole group: the limit budgets the
-    // drain, not the rows folded into it.
+    // drain, not the rows folded into it. Which group it is separates the limit from the
+    // skip below, so it is pinned rather than taken either way.
     std::vector<KeyedStringListSink::Row> rows;
-    sink.sortedRows(rows);
+    sink.rowsInEmitOrder(rows);
 
-    ASSERT_EQ(rows.size(), 1u);
-    const KeyedStringListSink::Row& row = rows.front();
-    ASSERT_TRUE(row.first);
-
-    if (*row.first == "red") {
-        EXPECT_EQ(row.second, std::vector<std::string>({"alice", "carol"}));
-    } else {
-        EXPECT_EQ(*row.first, "blue");
-        EXPECT_EQ(row.second, std::vector<std::string>({"bob", "dan"}));
-    }
+    const std::vector<KeyedStringListSink::Row> expected {{"red", {"alice", "carol"}}};
+    EXPECT_EQ(rows, expected);
 }
 
 TEST_F(CypherCollectTest, groupedCollectWithSkipAndLimit) {
@@ -541,18 +783,10 @@ TEST_F(CypherCollectTest, groupedCollectWithSkipAndLimit) {
     match("MATCH (n:Node) RETURN n.team, collect(n.name) SKIP 1 LIMIT 1", sink);
 
     std::vector<KeyedStringListSink::Row> rows;
-    sink.sortedRows(rows);
+    sink.rowsInEmitOrder(rows);
 
-    ASSERT_EQ(rows.size(), 1u);
-    const KeyedStringListSink::Row& row = rows.front();
-    ASSERT_TRUE(row.first);
-
-    if (*row.first == "red") {
-        EXPECT_EQ(row.second, std::vector<std::string>({"alice", "carol"}));
-    } else {
-        EXPECT_EQ(*row.first, "blue");
-        EXPECT_EQ(row.second, std::vector<std::string>({"bob", "dan"}));
-    }
+    const std::vector<KeyedStringListSink::Row> expected {{"blue", {"bob", "dan"}}};
+    EXPECT_EQ(rows, expected);
 }
 
 TEST_F(CypherCollectTest, groupedCollectWithSkip) {
@@ -562,60 +796,223 @@ TEST_F(CypherCollectTest, groupedCollectWithSkip) {
     match("MATCH (n:Node) RETURN n.team, collect(n.name) SKIP 1", sink);
 
     std::vector<KeyedStringListSink::Row> rows;
+    sink.rowsInEmitOrder(rows);
+
+    const std::vector<KeyedStringListSink::Row> expected {{"blue", {"bob", "dan"}}};
+    EXPECT_EQ(rows, expected);
+}
+
+// One accumulator holds both: the group's list and the tally of the same rows, so the
+// drain emits them beside the key they belong to.
+TEST_F(CypherCollectTest, groupedCollectBesideACount) {
+    buildTeamGraph();
+
+    KeyedListAndCountSink sink;
+    match("MATCH (n:Node) RETURN n.team, collect(n.name), count(*)", sink);
+
+    std::vector<KeyedListAndCountSink::Row> rows;
     sink.sortedRows(rows);
 
-    ASSERT_EQ(rows.size(), 1u);
-    const KeyedStringListSink::Row& row = rows.front();
-    ASSERT_TRUE(row.first);
-
-    if (*row.first == "red") {
-        EXPECT_EQ(row.second, std::vector<std::string>({"alice", "carol"}));
-    } else {
-        EXPECT_EQ(*row.first, "blue");
-        EXPECT_EQ(row.second, std::vector<std::string>({"bob", "dan"}));
-    }
+    const std::vector<KeyedListAndCountSink::Row> expected {
+        {"blue", {"bob", "dan"}, 2},
+        {"red", {"alice", "carol"}, 2},
+    };
+    EXPECT_EQ(rows, expected);
 }
 
-TEST_F(CypherCollectTest, rejectsCollectWithAnotherAggregate) {
+// The tally counts non-null rows, so it need not be the length of the list beside it:
+// dan has no score, and collect drops the null the count skips.
+TEST_F(CypherCollectTest, groupedCollectBesideACountOfANullableProperty) {
     buildTeamGraph();
 
-    QueryStatus status;
-    runQuery("MATCH (n:Node) RETURN n.team, collect(n.name), count(*)", status);
+    KeyedListAndCountSink sink;
+    match("MATCH (n:Node) RETURN n.team, collect(n.name), count(n.score)", sink);
 
-    EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
-    EXPECT_EQ(status.getError(), "collect() may not yet be combined with another aggregate.");
+    std::vector<KeyedListAndCountSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<KeyedListAndCountSink::Row> expected {
+        {"blue", {"bob", "dan"}, 1},
+        {"red", {"alice", "carol"}, 2},
+    };
+    EXPECT_EQ(rows, expected);
 }
 
-TEST_F(CypherCollectTest, rejectsUngroupedCollectWithCount) {
+// Several reductions beside the list, each with its own per-group accumulator on the
+// state the list is collected into.
+TEST_F(CypherCollectTest, groupedCollectBesideTwoAggregates) {
     buildTeamGraph();
 
-    QueryStatus status;
-    runQuery("MATCH (n:Node) RETURN collect(n.name), count(*)", status);
+    KeyedListAndCountSink counts;
+    match("MATCH (n:Node) RETURN n.team, collect(n.name), count(*)", counts);
 
-    EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
-    EXPECT_EQ(status.getError(), "collect() may not yet be combined with another aggregate.");
+    KeyedListAndSumSink sums;
+    match("MATCH (n:Node) RETURN n.team, collect(n.name), sum(n.score)", sums);
+
+    std::vector<KeyedListAndCountSink::Row> countRows;
+    counts.sortedRows(countRows);
+
+    const std::vector<KeyedListAndCountSink::Row> expectedCounts {
+        {"blue", {"bob", "dan"}, 2},
+        {"red", {"alice", "carol"}, 2},
+    };
+    EXPECT_EQ(countRows, expectedCounts);
+
+    std::vector<KeyedListAndSumSink::Row> sumRows;
+    sums.sortedRows(sumRows);
+
+    const std::vector<KeyedListAndSumSink::Row> expectedSums {
+        {"blue", {"bob", "dan"}, 100},
+        {"red", {"alice", "carol"}, 30},
+    };
+    EXPECT_EQ(sumRows, expectedSums);
 }
 
-TEST_F(CypherCollectTest, rejectsUngroupedCollectWithAWrappedAggregate) {
+// Each dedups against a tally of its own: the collect charges a group's distinct names
+// once, and the count a group's distinct scores.
+TEST_F(CypherCollectTest, groupedCollectDistinctBesideACountDistinct) {
     buildTeamGraph();
 
-    QueryStatus status;
-    runQuery("MATCH (n:Node) RETURN collect(n.name), count(n) + 1", status);
+    KeyedListAndCountSink sink;
+    match("MATCH (n:Node) RETURN n.team, collect(DISTINCT n.team), count(DISTINCT n.score)", sink);
 
-    EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
-    EXPECT_EQ(status.getError(), "collect() may not yet be combined with another aggregate.");
+    std::vector<KeyedListAndCountSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<KeyedListAndCountSink::Row> expected {
+        {"blue", {"blue"}, 1},
+        {"red", {"red"}, 2},
+    };
+    EXPECT_EQ(rows, expected);
 }
 
-TEST_F(CypherCollectTest, rejectsGroupedCollectWithAWrappedAggregate) {
+// The key orders the groups by an aggregate the projection does not return, which the
+// same accumulator computes: blue scores once, red twice.
+TEST_F(CypherCollectTest, groupedCollectOrderedByACount) {
     buildTeamGraph();
 
-    QueryStatus status;
-    runQuery("MATCH (n:Node) RETURN n.team, collect(n.name), sum(n.score) + 0", status);
+    KeyedStringListSink sink;
+    match("MATCH (n:Node) RETURN n.team, collect(n.name) ORDER BY count(n.score)", sink);
 
-    EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
-    EXPECT_EQ(status.getError(), "collect() may not yet be combined with another aggregate.");
+    std::vector<KeyedStringListSink::Row> rows;
+    sink.rowsInEmitOrder(rows);
+
+    const std::vector<KeyedStringListSink::Row> expected {
+        {"blue", {"bob", "dan"}},
+        {"red", {"alice", "carol"}},
+    };
+    EXPECT_EQ(rows, expected);
 }
 
+TEST_F(CypherCollectTest, groupedCollectOrderedByACountDescending) {
+    buildTeamGraph();
+
+    KeyedStringListSink sink;
+    match("MATCH (n:Node) RETURN n.team, collect(n.name) ORDER BY count(n.score) DESC", sink);
+
+    std::vector<KeyedStringListSink::Row> rows;
+    sink.rowsInEmitOrder(rows);
+
+    const std::vector<KeyedStringListSink::Row> expected {
+        {"red", {"alice", "carol"}},
+        {"blue", {"bob", "dan"}},
+    };
+    EXPECT_EQ(rows, expected);
+}
+
+// Two pipeline breakers over one match, each collapsing to one row: the collect drains its
+// single group in a loop of its own, and the tally is a single-row chunk bound above that
+// loop - loop-invariant, as a constant is, so the emit reads it beside the list.
+TEST_F(CypherCollectTest, ungroupedCollectBesideACount) {
+    buildTeamGraph();
+
+    ListAndCountSink sink;
+    match("MATCH (n:Node) RETURN collect(n.name), count(*)", sink);
+
+    const std::vector<ListAndCountSink::Row> expected {{{"alice", "carol", "bob", "dan"}, 4}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+// The tally ahead of the list: the emit is anchored in the drain loop whichever order the
+// projection names them in.
+TEST_F(CypherCollectTest, ungroupedCountBesideACollect) {
+    buildTeamGraph();
+
+    ListAndCountSink sink;
+    match("MATCH (n:Node) RETURN count(*), collect(n.name)", sink);
+
+    const std::vector<ListAndCountSink::Row> expected {{{"alice", "carol", "bob", "dan"}, 4}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+// The value reduction beside a collect: dan has no score, so the sum is over the three
+// that have one.
+TEST_F(CypherCollectTest, ungroupedCollectBesideASum) {
+    buildTeamGraph();
+
+    ListAndSumSink sink;
+    match("MATCH (n:Node) RETURN collect(n.name), sum(n.score)", sink);
+
+    const std::vector<ListAndSumSink::Row> expected {{{"alice", "carol", "bob", "dan"}, 130}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+// The aggregate wrapped in an expression is computed off the same single-row chunk.
+TEST_F(CypherCollectTest, ungroupedCollectBesideAWrappedAggregate) {
+    buildTeamGraph();
+
+    ListAndSumSink sink;
+    match("MATCH (n:Node) RETURN collect(n.name), sum(n.score) + 1", sink);
+
+    const std::vector<ListAndSumSink::Row> expected {{{"alice", "carol", "bob", "dan"}, 131}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+// The reduction beside a collect, wrapped in an expression computed off its grouped
+// column: red scores 30, and blue 100 - dan has none.
+TEST_F(CypherCollectTest, groupedCollectBesideAWrappedAggregate) {
+    buildTeamGraph();
+
+    KeyedListAndSumSink sink;
+    match("MATCH (n:Node) RETURN n.team, collect(n.name), sum(n.score) + 0", sink);
+
+    std::vector<KeyedListAndSumSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<KeyedListAndSumSink::Row> expected {
+        {"blue", {"bob", "dan"}, 100},
+        {"red", {"alice", "carol"}, 30},
+    };
+    EXPECT_EQ(rows, expected);
+}
+
+// With no grouping key the projection is one row, and the key reducing a second aggregate
+// over the same match is one value beside it: the sort has a row to order, so the query
+// runs rather than needing the collect and the count to share an accumulator.
+TEST_F(CypherCollectTest, ungroupedCollectOrderedByACount) {
+    buildTeamGraph();
+
+    StringListSink sink;
+    match("MATCH (n:Node) RETURN collect(n.name) ORDER BY count(n)", sink);
+
+    const std::vector<std::vector<std::string>> expected {{"alice", "carol", "bob", "dan"}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+// The value reduction of the same shape, whose result is materialized the same way
+TEST_F(CypherCollectTest, ungroupedCollectOrderedByASum) {
+    buildTeamGraph();
+
+    StringListSink sink;
+    match("MATCH (n:Node) RETURN collect(n.name) ORDER BY sum(n.score) DESC", sink);
+
+    const std::vector<std::vector<std::string>> expected {{"alice", "carol", "bob", "dan"}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+// Each collect drains through a loop of its own, and the emit sits in one of them: the
+// other list is bound in a loop the output is not in, so this is the pair that is still
+// turned away.
 TEST_F(CypherCollectTest, rejectsTwoCollects) {
     buildTeamGraph();
 
@@ -623,7 +1020,7 @@ TEST_F(CypherCollectTest, rejectsTwoCollects) {
     runQuery("MATCH (n:Node) RETURN collect(n.name), collect(n.team)", status);
 
     EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
-    EXPECT_EQ(status.getError(), "collect() may not yet be combined with another aggregate.");
+    EXPECT_EQ(status.getError(), "collect() may not yet be combined with another collect().");
 }
 
 // The sort orders the group rows the drain emits, carrying each group's list along with
@@ -676,6 +1073,31 @@ TEST_F(CypherCollectTest, groupedCollectWithOrderByOverTheReturnedNode) {
         {3, {"dan"}},
     };
     EXPECT_EQ(rows, expected);
+}
+
+// The other side of the line the test above stands on: n is returned there, so n.name is
+// one name per group, while grouping on n.team drops n and leaves one name per matched
+// row - four of them against two groups, lining up with no row the drain emits.
+TEST_F(CypherCollectTest, rejectsOrderByOverAVariableTheGroupingDropped) {
+    buildTeamGraph();
+
+    QueryStatus status;
+    runQuery("MATCH (n:Node) RETURN n.team, collect(n.name) ORDER BY n.name", status);
+
+    EXPECT_EQ(status.getStatus(), QueryStatus::Status::ANALYZE_ERROR);
+    EXPECT_NE(status.getError().find(droppedKeyReason), std::string::npos) << status.getError();
+}
+
+// An ungrouped collect keeps no variable at all, so there is not even a group for the key
+// to hold one value of.
+TEST_F(CypherCollectTest, rejectsOrderByOverADroppedVariableUnderAnUngroupedCollect) {
+    buildTeamGraph();
+
+    QueryStatus status;
+    runQuery("MATCH (n:Node) RETURN collect(n.name) ORDER BY n.name", status);
+
+    EXPECT_EQ(status.getStatus(), QueryStatus::Status::ANALYZE_ERROR);
+    EXPECT_NE(status.getError().find(droppedKeyReason), std::string::npos) << status.getError();
 }
 
 // ORDER BY ... LIMIT fuses into a top-K accumulator, which trims the buffers by gathering
@@ -814,33 +1236,120 @@ TEST_F(CypherCollectTest, distinctOverTheCollectedList) {
     EXPECT_EQ(rows, expected);
 }
 
-TEST_F(CypherCollectTest, rejectsCollectOfConstant) {
+// A constant is bound above the loop the matched rows are read in, so it is laid out over
+// those rows before the fold reads it: what is collected is one element per row of the
+// group, not the single row the constant is.
+TEST_F(CypherCollectTest, groupedCollectOfAConstant) {
     buildTeamGraph();
 
-    QueryStatus status;
-    runQuery("MATCH (n:Node) RETURN n.team, collect(1)", status);
+    KeyedInt64ListSink sink;
+    match("MATCH (n:Node) RETURN n.team, collect(1)", sink);
 
-    EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
-    EXPECT_EQ(status.getError(), "collect() of a constant expression is not yet supported.");
+    std::vector<KeyedInt64ListSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<KeyedInt64ListSink::Row> expected {
+        {"blue", {1, 1}},
+        {"red", {1, 1}},
+    };
+    EXPECT_EQ(rows, expected);
 }
 
-// The alias is what makes the collected column look row-carrying: what it names is still
-// the constant, bound above the loop the matched rows are read in, so both spellings must
-// reach the same rejection.
-TEST_F(CypherCollectTest, rejectsCollectOfAConstantAlias) {
+TEST_F(CypherCollectTest, ungroupedCollectOfAConstant) {
     buildTeamGraph();
 
-    QueryStatus groupedStatus;
-    runQuery("MATCH (n:Node) RETURN n.team, 1 AS x, collect(x)", groupedStatus);
+    Int64ListSink sink;
+    match("MATCH (n:Node) RETURN collect(1)", sink);
 
-    EXPECT_EQ(groupedStatus.getStatus(), QueryStatus::Status::PLAN_ERROR);
-    EXPECT_EQ(groupedStatus.getError(), "collect() of a constant expression is not yet supported.");
+    const std::vector<std::vector<int64_t>> expected {{1, 1, 1, 1}};
+    EXPECT_EQ(sink.rows(), expected);
+}
 
-    QueryStatus ungroupedStatus;
-    runQuery("MATCH (n:Node) RETURN 1 AS x, collect(x)", ungroupedStatus);
+// The arithmetic is computed once, above the rows, and the value it holds is what every
+// row contributes.
+TEST_F(CypherCollectTest, ungroupedCollectOfConstantArithmetic) {
+    buildTeamGraph();
 
-    EXPECT_EQ(ungroupedStatus.getStatus(), QueryStatus::Status::PLAN_ERROR);
-    EXPECT_EQ(ungroupedStatus.getError(), "collect() of a constant expression is not yet supported.");
+    Int64ListSink sink;
+    match("MATCH (n:Node) RETURN collect(2 + 3)", sink);
+
+    const std::vector<std::vector<int64_t>> expected {{5, 5, 5, 5}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+TEST_F(CypherCollectTest, ungroupedCollectOfAConstantString) {
+    buildTeamGraph();
+
+    StringListSink sink;
+    match(R"(MATCH (n:Node) RETURN collect("x"))", sink);
+
+    const std::vector<std::vector<std::string>> expected {{"x", "x", "x", "x"}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+// Every row holds the same value, so dropping the repeats leaves the one element.
+TEST_F(CypherCollectTest, ungroupedCollectDistinctOfAConstant) {
+    buildTeamGraph();
+
+    Int64ListSink sink;
+    match("MATCH (n:Node) RETURN collect(DISTINCT 1)", sink);
+
+    const std::vector<std::vector<int64_t>> expected {{1}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+// No match drives the projection, so the rows the constant is laid out over are the single
+// row a bare RETURN is.
+TEST_F(CypherCollectTest, collectOfAConstantWithoutAMatch) {
+    buildTeamGraph();
+
+    Int64ListSink sink;
+    match("RETURN collect(1)", sink);
+
+    const std::vector<std::vector<int64_t>> expected {{1}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+// The rows the constant is laid out over are the rows the query left standing, so a
+// filter is what the list is sized by: two of the four nodes are red.
+TEST_F(CypherCollectTest, ungroupedCollectOfAConstantUnderAFilter) {
+    buildTeamGraph();
+
+    Int64ListSink sink;
+    match(R"(MATCH (n:Node) WHERE n.team = "red" RETURN collect(1))", sink);
+
+    const std::vector<std::vector<int64_t>> expected {{1, 1}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+// The driving relation need not be a match: an unwound list drives the rows here, and the
+// constant is laid out over its cells.
+TEST_F(CypherCollectTest, ungroupedCollectOfAConstantOverAnUnwind) {
+    buildTeamGraph();
+
+    Int64ListSink sink;
+    match("UNWIND [10, 20] AS v RETURN collect(1)", sink);
+
+    const std::vector<std::vector<int64_t>> expected {{1, 1}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
+// An alias of a constant names that constant, so it is laid out the same way - grouped,
+// once per row of each group, and ungrouped, once per matched row.
+TEST_F(CypherCollectTest, collectOfAConstantAlias) {
+    buildTeamGraph();
+
+    TrailingInt64ListSink groupedSink;
+    match("MATCH (n:Node) RETURN n.team, 1 AS x, collect(x)", groupedSink);
+
+    const std::vector<std::vector<int64_t>> grouped {{1, 1}, {1, 1}};
+    EXPECT_EQ(groupedSink.rows(), grouped);
+
+    TrailingInt64ListSink ungroupedSink;
+    match("MATCH (n:Node) RETURN 1 AS x, collect(x)", ungroupedSink);
+
+    const std::vector<std::vector<int64_t>> ungrouped {{1, 1, 1, 1}};
+    EXPECT_EQ(ungroupedSink.rows(), ungrouped);
 }
 
 // An aliased item is a non-aggregate item like any other, so it groups the rows too: each
@@ -956,6 +1465,36 @@ TEST_F(CypherCollectTest, groupedCollectOfEdges) {
     EXPECT_EQ(rows, expected);
 }
 
+// Grouping on the other end of the traversal: the key is a property of the target rather
+// than of the source the two edges share, so each edge lands in a group of its own.
+TEST_F(CypherCollectTest, groupedCollectOfEdgesOnTheTraversalTarget) {
+    buildKnowsGraph();
+
+    KeyedEdgeListSink sink;
+    match("MATCH (a:Person)-[e:KNOWS]->(b:Person) RETURN b.name, collect(e)", sink);
+
+    std::vector<KeyedEdgeListSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<KeyedEdgeListSink::Row> expected {
+        {"bob", {0}},
+        {"carol", {1}},
+    };
+    EXPECT_EQ(rows, expected);
+}
+
+// With no grouping key there is no key column to resolve the edge beside, so the argument
+// is resolved through the edge identity's representative alone.
+TEST_F(CypherCollectTest, ungroupedCollectOfEdges) {
+    buildKnowsGraph();
+
+    EdgeListSink sink;
+    match("MATCH (a:Person)-[e:KNOWS]->(b:Person) RETURN collect(e)", sink);
+
+    const std::vector<std::vector<uint64_t>> expected {{0, 1}};
+    EXPECT_EQ(sink.rows(), expected);
+}
+
 // The list carries entities through the same buffers a value list does, so the sort and
 // the skip/limit copies need no entity case of their own.
 TEST_F(CypherCollectTest, collectOfNodesWithOrderByAndSkipLimit) {
@@ -965,30 +1504,22 @@ TEST_F(CypherCollectTest, collectOfNodesWithOrderByAndSkipLimit) {
     match("MATCH (n:Node) RETURN n.team, collect(n) ORDER BY n.team DESC", orderedSink);
 
     std::vector<KeyedNodeListSink::Row> orderedRows;
-    orderedSink.sortedRows(orderedRows);
+    orderedSink.rowsInEmitOrder(orderedRows);
 
-    const std::vector<KeyedNodeListSink::Row> expected {
-        {"blue", {2, 3}},
+    const std::vector<KeyedNodeListSink::Row> ordered {
         {"red", {0, 1}},
+        {"blue", {2, 3}},
     };
-    EXPECT_EQ(orderedRows, expected);
+    EXPECT_EQ(orderedRows, ordered);
 
     KeyedNodeListSink cutSink;
     match("MATCH (n:Node) RETURN n.team, collect(n) SKIP 1 LIMIT 1", cutSink);
 
     std::vector<KeyedNodeListSink::Row> cutRows;
-    cutSink.sortedRows(cutRows);
+    cutSink.rowsInEmitOrder(cutRows);
 
-    ASSERT_EQ(cutRows.size(), 1u);
-    const KeyedNodeListSink::Row& row = cutRows.front();
-    ASSERT_TRUE(row.first);
-
-    if (*row.first == "red") {
-        EXPECT_EQ(row.second, std::vector<uint64_t>({0, 1}));
-    } else {
-        EXPECT_EQ(*row.first, "blue");
-        EXPECT_EQ(row.second, std::vector<uint64_t>({2, 3}));
-    }
+    const std::vector<KeyedNodeListSink::Row> cut {{"blue", {2, 3}}};
+    EXPECT_EQ(cutRows, cut);
 }
 
 TEST_F(CypherCollectTest, ungroupedCollectDistinct) {
