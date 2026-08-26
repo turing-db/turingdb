@@ -4,6 +4,7 @@
 #include <functional>
 #include <optional>
 #include <string_view>
+#include <type_traits>
 
 #include "ColumnVector.h"
 #include "ColumnConst.h"
@@ -57,65 +58,8 @@ template <typename Op, typename Res, typename T, typename U>
 struct BinaryOpExecutor {
     static void apply(ColumnVector<Res>* res,
                       const ColumnVector<T>* lhs,
-                      const ColumnVector<U>* rhs) {
-        bioassert(lhs->size() == rhs->size(), "Misshapen ColumnVectors.");
-        const size_t size = lhs->size();
-        res->resize(size);
-
-        const auto& lhsd = lhs->getRaw();
-        const auto& rhsd = rhs->getRaw();
-        auto& resd = res->getRaw();
-
-        auto op = Op {};
-        for (size_t i = 0; i < size; i++) {
-            resd[i] = op(lhsd[i], rhsd[i]);
-        }
-    }
-
-    static void apply(ColumnVector<Res>* res,
-                      const ColumnVector<T>* lhs,
-                      const ColumnConst<U>* rhs) {
-       const size_t size = lhs->size();
-
-       res->resize(size);
-       auto& resd = res->getRaw();
-       const auto& lhsd = lhs->getRaw();
-       const auto& val = rhs->getRaw();
-
-       auto op = Op {};
-       for (size_t i = 0; i < size; i++) {
-           resd[i] = op(lhsd[i], val);
-       }
-    }
-
-    static void apply(ColumnVector<Res>* res,
-                      const ColumnConst<T>* lhs,
-                      const ColumnVector<U>* rhs) {
-       const size_t size = rhs->size();
-
-       res->resize(size);
-       auto& resd = res->getRaw();
-       const auto& val = lhs->getRaw();
-       const auto& rhsd = rhs->getRaw();
-
-       auto op = Op {};
-       for (size_t i = 0; i < size; i++) {
-           resd[i] = op(val, rhsd[i]);
-       }
-    }
-
-    static void apply(ColumnConst<Res>* res,
-                      const ColumnConst<T>* lhs,
-                      const ColumnConst<U>* rhs) {
-        auto op = Op {};
-        const Res& result = op(lhs->getRaw(), rhs->getRaw());
-        res->set(result);
-    }
-
-    static void apply(ColumnVector<Res>* res,
-                      const ColumnVector<T>* lhs,
                       const ColumnVector<U>* rhs,
-                      const Op& op) {
+                      Op op = {}) {
         bioassert(lhs->size() == rhs->size(), "Misshapen ColumnVectors.");
         const size_t size = lhs->size();
         res->resize(size);
@@ -132,7 +76,7 @@ struct BinaryOpExecutor {
     static void apply(ColumnVector<Res>* res,
                       const ColumnVector<T>* lhs,
                       const ColumnConst<U>* rhs,
-                      const Op& op) {
+                      Op op = {}) {
        const size_t size = lhs->size();
 
        res->resize(size);
@@ -148,7 +92,7 @@ struct BinaryOpExecutor {
     static void apply(ColumnVector<Res>* res,
                       const ColumnConst<T>* lhs,
                       const ColumnVector<U>* rhs,
-                      const Op& op) {
+                      Op op = {}) {
        const size_t size = rhs->size();
 
        res->resize(size);
@@ -164,10 +108,12 @@ struct BinaryOpExecutor {
     static void apply(ColumnConst<Res>* res,
                       const ColumnConst<T>* lhs,
                       const ColumnConst<U>* rhs,
-                      const Op& op) {
+                      Op op = {}) {
         const Res& result = op(lhs->getRaw(), rhs->getRaw());
         res->set(result);
     }
+
+    static_assert(std::is_trivially_copyable_v<Op>, "NOTE: Op passed by value in apply");
 };
 
 /**
@@ -199,21 +145,21 @@ inline auto asSignedInteger(T&& value) {
  */
 template <typename F>
 struct BinaryOp {
-    template<typename T, typename U>
+    template <typename T, typename U>
         requires TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>
-    inline decltype(auto) operator()(T&& a, U&& b) {
+    inline decltype(auto) operator()(T&& a, U&& b) const {
         return optionalGeneric<F>(asSignedInteger(std::forward<T>(a)), asSignedInteger(std::forward<U>(b)));
     }
 
     template <typename T, typename U>
-    inline decltype(auto) operator()(T&& a, U&& b) {
+    inline decltype(auto) operator()(T&& a, U&& b) const {
         return F {}(asSignedInteger(std::forward<T>(a)), asSignedInteger(std::forward<U>(b)));
     }
 };
 
 struct SafeDivides {
     template <typename T, typename U>
-    inline auto operator()(T&& a, U&& b) {
+    inline auto operator()(T&& a, U&& b) const {
         if (b == 0) {
             throw TuringException("Attempted to divide by zero.");
         }
@@ -223,7 +169,7 @@ struct SafeDivides {
 
 struct SafeModulo {
     template <typename T, typename U>
-    inline auto operator()(T&& a, U&& b) {
+    inline auto operator()(T&& a, U&& b) const {
         using DecayT = std::decay_t<T>;
         using DecayU = std::decay_t<U>;
 
@@ -241,7 +187,7 @@ struct SafeModulo {
 
 struct Power {
     template <typename T, typename U>
-    inline double operator()(T&& a, U&& b) {
+    inline double operator()(T&& a, U&& b) const {
         return std::pow(static_cast<double>(a), static_cast<double>(b));
     }
 };
