@@ -226,6 +226,9 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             }
 
             if (pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)) {
+                if (not _isV3) {
+                    throwError("String concatenation is only supported in V3", expr);
+                }
                 type = EvaluatedType::String;
                 break;
             }
