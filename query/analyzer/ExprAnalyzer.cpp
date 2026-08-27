@@ -676,14 +676,17 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
             continue;
         }
 
-        // Reducing a whole list means reducing one constant cell standing for every row,
-        // and only the MLIR engine lays that cell out over the driving relation. The legacy
-        // planner reduces the single row the cell is - count([1, 2]) answers 1 where the
-        // relation holds more - so the overload stays out of its reach. Procedures take
-        // lists there too, and are no aggregate, so this leaves them alone.
-        const bool reducesAList = signature->isAggregate()
-            && std::ranges::find(expectedArgs, EvaluatedType::List, &FunctionArgumentType::getType) != expectedArgs.end();
-        if (!_isV3 && reducesAList) {
+        // Reducing a whole list or a whole embedding means reducing one constant cell
+        // standing for every row, and only the MLIR engine lays that cell out over the
+        // driving relation. The legacy planner reduces the single row the cell is -
+        // count([1, 2]) and count((1,2,3)) answer 1 where the relation holds more - so the
+        // overloads stay out of its reach. Procedures and the distance functions take these
+        // types there too, and are no aggregate, so this leaves them alone.
+        const bool takesAList = std::ranges::find(expectedArgs, EvaluatedType::List, &FunctionArgumentType::getType) != expectedArgs.end();
+        const bool takesAnEmbedding = std::ranges::find(expectedArgs, EvaluatedType::Embedding, &FunctionArgumentType::getType) != expectedArgs.end();
+
+        const bool reducesAWholeCell = signature->isAggregate() && (takesAList || takesAnEmbedding);
+        if (!_isV3 && reducesAWholeCell) {
             continue;
         }
 

@@ -959,11 +959,12 @@ def EuclideanDistance : BinaryFunctionOp<"euclidean_distance">;
 def ConstantOp : TuringOp<"constant", [Pure, ConstantLike, DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
   let summary = "Produces a constant value in a column";
 
-  // A typed attribute for a scalar (or a dense one for an embedding), or an array of
-  // per-element attributes for a list literal. The array carries no type of its own, so
-  // the column's element type is the homogeneity verdict inferReturnTypes reads off the
-  // elements - which is why a list needs no separate op.
-  let arguments = (ins AnyAttrOf<[TypedAttrInterface, ArrayAttr]>: $value);
+  // A typed attribute for a scalar, a dense f32 array for an embedding, or an array of
+  // per-element attributes for a list literal. Neither array carries a type of its own, so
+  // the column's element type is what inferReturnTypes reads off them: an embedding for the
+  // dense array, the homogeneity verdict over the elements for the list - which is why a
+  // list needs no separate op.
+  let arguments = (ins AnyAttrOf<[TypedAttrInterface, DenseF32ArrayAttr, ArrayAttr]>: $value);
   let results = (outs Column : $result);
 
   let assemblyFormat = "`(` $value `)` attr-dict";

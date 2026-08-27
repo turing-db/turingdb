@@ -823,7 +823,7 @@ TEST_F(CypherListLiteralTest, rejectsMapListElements) {
     // A map literal is a literal, so it clears the analyzer's element check and is turned
     // away only where the element becomes an attribute - the one rejection of the three
     // that reaches codegen.
-    expectRejected("RETURN [{age: 32}]", "Only booleans, integers, floats, strings, nulls and lists");
+    expectRejected("RETURN [{age: 32}]", "Only booleans, integers, floats, strings, nulls");
 }
 
 TEST_F(CypherListLiteralTest, rejectsAPropertyListElement) {

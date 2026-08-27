@@ -1230,11 +1230,11 @@ func.func @main() {
 }
 )mlir";
 
-// An embedding constant: a rank-1 f32 dense attribute, which is typed and shaped, so it is
-// a different kind of attribute from the array a list literal carries.
+// An embedding constant: a dense f32 array, a flat run of floats, so it is a different kind
+// of attribute from the array of per-element ones a list literal carries.
 const char* const embeddingConstantProgram = R"mlir(
 func.func @main() {
-  %e = db.constant(dense<[1.0, 2.0, 3.0]> : tensor<3xf32>)
+  %e = db.constant(array<f32: 1.0, 2.0, 3.0>)
   db.output(%e) : !db.column<!storage.embedding>
   return
 }
@@ -1599,9 +1599,9 @@ TEST_F(DBDialectTest, rejectsAListSpelledWithADisagreeingType) {
 }
 
 // db.constant carries three kinds of value - a scalar, an embedding and a list - and each
-// is recognised by the kind of attribute it rides. An embedding is a dense, shaped, typed
-// attribute; a list is an untyped array of per-element ones. Nothing has to disambiguate
-// them, which is what lets one op carry all three.
+// is recognised by the kind of attribute it rides. An embedding is a dense f32 array; a
+// list is an array of per-element attributes. Nothing has to disambiguate them, which is
+// what lets one op carry all three.
 TEST_F(DBDialectTest, infersAnEmbeddingFromADenseFloatAttribute) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(embeddingConstantProgram);
     ASSERT_TRUE(module);
@@ -1613,11 +1613,9 @@ TEST_F(DBDialectTest, infersAnEmbeddingFromADenseFloatAttribute) {
     });
     ASSERT_TRUE(embedding);
 
-    // Rank-1 f32 is the embedding shape, so the column is one of embeddings rather than of
-    // the tensor the attribute spells.
-    const auto dense = mlir::dyn_cast<mlir::DenseElementsAttr>(embedding.getValue());
-    ASSERT_TRUE(dense);
-    EXPECT_EQ(dense.getNumElements(), 3);
+    const auto floats = mlir::dyn_cast<mlir::DenseF32ArrayAttr>(embedding.getValue());
+    ASSERT_TRUE(floats);
+    EXPECT_EQ(floats.size(), 3);
 
     const mlir::Type embeddingType = mlir::storage::EmbeddingType::get(&_context);
     EXPECT_EQ(embedding.getResult().getType(), mlir::db::ColumnType::get(&_context, embeddingType));
@@ -1625,7 +1623,7 @@ TEST_F(DBDialectTest, infersAnEmbeddingFromADenseFloatAttribute) {
 
 TEST_F(DBDialectTest, infersAListRatherThanAnEmbeddingFromAnArrayOfFloats) {
     // The same three floats as an array of elements: an array attribute is never a dense
-    // one, so this is a list of doubles and the embedding shape rule never sees it.
+    // one, so this is a list of doubles and the embedding rule never sees it.
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(floatListConstantProgram);
     ASSERT_TRUE(module);
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
