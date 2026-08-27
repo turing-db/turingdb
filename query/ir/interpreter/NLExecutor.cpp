@@ -40,6 +40,14 @@
 #include "versioning/CommitWriteBuffer.h"
 #include "views/GraphView.h"
 
+#include "SystemAccessor.h"
+#include "VecLibAccessor.h"
+#include "VectorDatabase.h"
+#include "VectorSearchQuery.h"
+#include "VectorSearchResult.h"
+
+#include "NLSystemContext.h"
+
 #include "NLProgram.h"
 #include "NLOutputSink.h"
 
@@ -2266,6 +2274,12 @@ void runProcedureDrive(NLExecutionContext* context,
 
 }
 
+vec::VectorDatabase* NLExecutionContext::getVectorDatabase() const {
+    SystemAccessor* const accessor = _system ? _system->getAccessor() : nullptr;
+
+    return accessor ? accessor->getVectorDatabase() : nullptr;
+}
+
 NLExecutor::NLExecutor(const GraphView* view,
                        const NLProgram* prog,
                        NLOutputSink* sink,
@@ -2580,6 +2594,96 @@ void NLExecutor::runUnwindConstLoop(NLExecutionContext* context, NLFunctionData*
         } else {
             fillHomogeneousChunk(output, valueType, list, cursor, rows);
         }
+
+        cursor += rows;
+
+        runBody(context, loopBody);
+    };
+
+    if (limit) {
+        while (cursor < totalCount && limit->getRemaining() > 0) {
+            runIteration();
+        }
+    } else {
+        while (cursor < totalCount) {
+            runIteration();
+        }
+    }
+}
+
+void NLExecutor::runVectorSearchLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLVectorSearchLoopData* loopData = static_cast<NLVectorSearchLoopData*>(data);
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    const std::string_view indexName = loopData->getIndexName();
+
+    vec::VectorDatabase* const vectorDatabase = context->getVectorDatabase();
+    if (!vectorDatabase) {
+        throw IRException("A vector search needs a vector database, which this session has not opened");
+    }
+
+    vec::VecLibAccessor accessor = vectorDatabase->getLibrary(indexName);
+    if (!accessor.isValid()) {
+        throw IRException(fmt::format("Vector index '{}' not found", indexName));
+    }
+
+    // The index reads the query vector as a flat span of exactly its dimension, so a
+    // shorter one would be read past its end rather than rejected further down.
+    const vec::Dimension dimension = accessor.metadata()->_dimension;
+    const std::span<const float> queryVector = loopData->getQueryVector();
+    if (queryVector.size() != dimension) {
+        throw IRException(fmt::format("Vector index '{}' holds vectors of dimension {}, but the "
+                                      "query searches for one of dimension {}",
+                                      indexName,
+                                      dimension,
+                                      queryVector.size()));
+    }
+
+    vec::VectorSearchQuery query(dimension);
+    query.setVector(queryVector);
+    query.setMaxResultCount(loopData->getNeighbourCount());
+
+    vec::VectorSearchResult result;
+    const vec::VectorResult<void> searched = accessor.search(&query, &result);
+    if (!searched.has_value()) {
+        throw IRException(fmt::format("Vector search in '{}' failed: {}",
+                                      indexName,
+                                      searched.error().fmtMessage()));
+    }
+
+    // The neighbours come back nearest first, the two spans row-aligned, so either one
+    // measures the result.
+    const std::span<const int64_t> ids = result.ids();
+    const std::span<const float> distances = result.distances();
+
+    using IDColumn = ColumnOptVector<types::Int64::Primitive>;
+    using ScoreColumn = ColumnOptVector<types::Double::Primitive>;
+
+    IDColumn* const idColumn = static_cast<IDColumn*>(loopData->getIDs());
+    ScoreColumn* const scoreColumn = static_cast<ScoreColumn*>(loopData->getScores());
+
+    const size_t chunkSize = context->getChunkSize();
+    const size_t totalCount = ids.size();
+
+    // A null limit leaves the loop unbounded, exactly as in runUnwindConstLoop.
+    const NLLimitState* limit = loopData->getLimit();
+
+    // Emit the neighbours one chunk at a time: each step fills the two chunks with the
+    // next slice and runs the body over them. The search and the cursor are both local to
+    // this call, so a search nested in a cross product reports its neighbours afresh on
+    // every outer step - the way runScanNodesLoop reopens its chunk writer each call.
+    size_t cursor = 0;
+
+    const auto runIteration = [&]() {
+        const size_t remaining = totalCount - cursor;
+        const size_t rows = std::min(chunkSize, remaining);
+
+        std::vector<std::optional<types::Int64::Primitive>>& rawIDs = idColumn->getRaw();
+        rawIDs.resize(rows);
+        std::copy(ids.begin() + cursor, ids.begin() + cursor + rows, rawIDs.begin());
+
+        std::vector<std::optional<types::Double::Primitive>>& rawScores = scoreColumn->getRaw();
+        rawScores.resize(rows);
+        std::copy(distances.begin() + cursor, distances.begin() + cursor + rows, rawScores.begin());
 
         cursor += rows;
 

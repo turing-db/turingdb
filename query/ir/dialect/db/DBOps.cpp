@@ -687,3 +687,18 @@ LogicalResult UnwindConst::verify() {
     return verifyHomogeneousElements(getOperation(), getElements());
 }
 
+// A search reporting no neighbour, or searching for no vector, is a query that asked for
+// nothing: neither is a shape the index can be asked for, so both are rejected here rather
+// than left to return an empty result the query would read as "no match".
+LogicalResult VectorSearch::verify() {
+    if (getK() == 0) {
+        return emitOpError("must report at least one neighbour");
+    }
+
+    if (getQueryVector().empty()) {
+        return emitOpError("must search for a vector of at least one dimension");
+    }
+
+    return success();
+}
+

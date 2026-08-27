@@ -43,12 +43,14 @@ class PropertyExpr;
 class ReturnStmt;
 class UnwindStmt;
 class VarDecl;
+class VectorSearchStmt;
 class VariableDependency;
 class DependencyEdge;
 class SinglePartQuery;
 class Stmt;
 class WhereClause;
 class WithStmt;
+class YieldClause;
 class YieldItems;
 
 class DBProgramGenerator {
@@ -262,6 +264,16 @@ private:
     // query reads is then the window rather than every row matched.
     void generateMatchWindow(const MatchStmt* matchStmt);
     void generateCall(const CallStmt* callStmt);
+
+    // Generates the vector searches of a part, after the traversal so a search is paired
+    // with the rows it matched, and before the filters and calls so a WHERE or an argument
+    // reading what a search yielded sees it bound.
+    void generateVectorSearches(std::span<Stmt* const> stmts);
+    void generateVectorSearch(const VectorSearchStmt* vectorSearchStmt);
+
+    // Names the two columns a search produced as the query knows them - the yielded
+    // variables of the statement, in the order it wrote them
+    void publishVectorSearchYields(const YieldItems* yieldItems, mlir::Value ids, mlir::Value scores);
 
     // Generate the filter a CALL's YIELD ... WHERE asks for, over everything in flight once
     // the call has run - so the predicate reads the rows the procedure emitted.

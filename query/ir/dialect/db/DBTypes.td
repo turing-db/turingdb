@@ -51,4 +51,9 @@ def ColumnBools : ColumnOf<"::mlir::storage::BoolType", "bool">;
 def ColumnStrings : ColumnOf<"::mlir::storage::StringType", "string">;
 def ColumnCounts : ColumnOf<"::mlir::IntegerType", "ui64">;
 
+// The two element types a vector search reports a neighbour in: the ID the index
+// holds it under, and the distance the metric scored it at.
+def ColumnInts : ColumnOf<"::mlir::IntegerType", "i64">;
+def ColumnDoubles : ColumnOf<"::mlir::FloatType", "f64">;
+
 #endif // TURINGDB_TYPES
