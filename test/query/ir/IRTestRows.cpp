@@ -15,12 +15,90 @@
 #include "columns/ColumnVector.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
+#include "list/ListBufferTypeTag.h"
+#include "list/ListElementView.h"
+#include "list/ListView.h"
 #include "metadata/PropertyNull.h"
+
+#include "ID.h"
 
 using namespace db;
 using namespace turing::test;
 
 namespace {
+
+void renderList(const ListView& list, std::string& out);
+
+void renderListElement(const ListElementView& element, std::string& out) {
+    switch (element.getTag()) {
+        case ListBufferTypeTag::Int:
+            out += std::to_string(element.getAs<int64_t>());
+            return;
+        break;
+
+        case ListBufferTypeTag::UInt:
+            out += std::to_string(element.getAs<uint64_t>());
+            return;
+        break;
+
+        case ListBufferTypeTag::Double:
+            out += std::to_string(element.getAs<double>());
+            return;
+        break;
+
+        case ListBufferTypeTag::Bool:
+            out += element.getAs<bool>() ? "true" : "false";
+            return;
+        break;
+
+        case ListBufferTypeTag::String:
+            out += element.getAs<std::string_view>();
+            return;
+        break;
+
+        case ListBufferTypeTag::ListView:
+            renderList(element.getAs<ListView>(), out);
+            return;
+        break;
+
+        case ListBufferTypeTag::Null:
+            out += "null";
+            return;
+        break;
+
+        case ListBufferTypeTag::NodeID:
+            out += std::to_string(element.getAs<NodeID>().getValue());
+            return;
+        break;
+
+        case ListBufferTypeTag::EdgeID:
+            out += std::to_string(element.getAs<EdgeID>().getValue());
+            return;
+        break;
+
+        case ListBufferTypeTag::Embedding:
+        case ListBufferTypeTag::INVALID:
+        break;
+    }
+
+    throw std::runtime_error("IRTestRows: unsupported list element tag");
+}
+
+void renderList(const ListView& list, std::string& out) {
+    out += '[';
+
+    bool isFirst = true;
+    for (const ListElementView& element : list) {
+        if (!isFirst) {
+            out += ", ";
+        }
+
+        isFirst = false;
+        renderListElement(element, out);
+    }
+
+    out += ']';
+}
 
 template <typename T>
 bool renderValueCell(const Column* column, size_t row, std::string& out) {
@@ -75,6 +153,9 @@ void turing::test::renderCell(const Column* column, size_t row, std::string& out
         out = std::to_string((*edgeTypes)[row].getValue());
     } else if (dynamic_cast<const ColumnConst<PropertyNull>*>(column)) {
         out = "null";
+    } else if (const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(column)) {
+        out.clear();
+        renderList((*lists)[row], out);
     } else if (renderValueCell<int64_t>(column, row, out)
                || renderValueCell<uint64_t>(column, row, out)
                || renderValueCell<double>(column, row, out)
