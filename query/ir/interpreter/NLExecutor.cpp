@@ -3160,11 +3160,12 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
     NLCollectState* state = update->getState();
 
     std::vector<NLCollectState::KeyColumn>& keyColumns = state->keyColumns();
+    std::vector<NLCollectState::ValueColumn>& valueColumns = state->valueColumns();
 
     // Every column is row-aligned. With grouping keys the first key sizes this step's
-    // rows; ungrouped (no key), the collected value column sizes it.
-    const Column* valueInput = state->getValueInput();
-    const size_t rowCount = keyColumns.empty() ? valueInput->size() : keyColumns.front()._input->size();
+    // rows; ungrouped (no key), the first collected value column sizes it.
+    const size_t rowCount = keyColumns.empty() ? valueColumns.front()._input->size()
+                                               : keyColumns.front()._input->size();
 
     // That alignment is this step's precondition, not a property of the op's types:
     // the group assignment is computed once per key row, then indexed by the fold as it
@@ -3177,8 +3178,10 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
                   "nl.collect_update grouping keys must be row-aligned");
     }
 
-    bioassert(valueInput->size() == rowCount,
-              "nl.collect_update value column must be row-aligned with the grouping keys");
+    for (const NLCollectState::ValueColumn& valueColumn : valueColumns) {
+        bioassert(valueColumn._input->size() == rowCount,
+                  "nl.collect_update value columns must be row-aligned with the grouping keys");
+    }
 
     std::vector<NLGroupAggregateState::Aggregate>& aggregates = state->aggregates();
     for (const NLGroupAggregateState::Aggregate& aggregate : aggregates) {
@@ -3225,10 +3228,15 @@ void NLExecutor::runCollectUpdate(NLExecutionContext* context, NLFunctionData* d
         keyColumn._gatherAppend(keyColumn._input, newGroupRows, keyColumn._buffer);
     }
 
-    std::vector<std::vector<size_t>>& groupPositions = state->groupPositions();
-    groupPositions.resize(groupCount);
+    for (NLCollectState::ValueColumn& valueColumn : valueColumns) {
+        valueColumn._groupPositions.resize(groupCount);
 
-    state->getFold()(state->getValues(), valueInput, groupIndices, groupPositions, state->distinct());
+        valueColumn._fold(valueColumn._buffer,
+                          valueColumn._input,
+                          groupIndices,
+                          valueColumn._groupPositions,
+                          valueColumn._distinct);
+    }
 
     // The reductions taken over the same groups fold beside the list, off the group
     // assignment computed once above, exactly as nl.group_aggregate_update folds them.
@@ -3398,7 +3406,8 @@ void NLExecutor::runUnwindCollectLoop(NLExecutionContext* context, NLFunctionDat
     const NLStmtContainer* loopBody = loopData->getStmts();
 
     std::vector<NLCollectState::KeyColumn>& keyColumns = state->keyColumns();
-    const std::vector<std::vector<size_t>>& groupPositions = state->groupPositions();
+    NLCollectState::ValueColumn& unwound = state->unwoundColumn();
+    const std::vector<std::vector<size_t>>& groupPositions = unwound._groupPositions;
     const size_t totalGroups = groupPositions.size();
 
     ColumnVector<size_t>* groupIndices = loopData->getGroupIndices();
@@ -3442,7 +3451,7 @@ void NLExecutor::runUnwindCollectLoop(NLExecutionContext* context, NLFunctionDat
             keyColumn._gather(keyColumn._buffer, groupIndices, keyColumn._output);
         }
 
-        state->getUnwindCollectEmit()(state->getValues(), positions, state->getValueOutput());
+        unwound._unwindCollectEmit(unwound._buffer, positions, unwound._output);
 
         runBody(context, loopBody);
     }
@@ -3471,12 +3480,14 @@ void NLExecutor::runCollectLoop(NLExecutionContext* context, NLFunctionData* dat
             keyColumn._emitCopy(keyColumn._buffer, offset, stepGroups, keyColumn._output);
         }
 
-        state->getListEmit()(state->getValues(),
-                             state->groupPositions(),
-                             offset,
-                             stepGroups,
-                             state->listBuffer(),
-                             state->getValueOutput());
+        for (NLCollectState::ValueColumn& valueColumn : state->valueColumns()) {
+            valueColumn._listEmit(valueColumn._buffer,
+                                  valueColumn._groupPositions,
+                                  offset,
+                                  stepGroups,
+                                  state->listBuffer(),
+                                  valueColumn._output);
+        }
 
         for (const NLGroupAggregateState::Aggregate& aggregate : state->aggregates()) {
             aggregate._emit(aggregate._accumulator, aggregate._counts, offset, stepGroups, aggregate._output);

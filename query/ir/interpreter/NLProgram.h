@@ -1823,25 +1823,35 @@ public:
         NLGatherFunction _gather {nullptr};
     };
 
+    // One collected column - Cypher's collect(x). The update reads the incoming chunk
+    // _input and appends its present values to _buffer through _fold, recording where
+    // each group's elements landed in _groupPositions; _distinct holds the (group,
+    // value) pairs already charged, so collect(DISTINCT x) takes each once and a plain
+    // collect leaves it empty. The drain fills _output - the per-group list cell
+    // through _listEmit, or the unwound value through _unwindCollectEmit.
+    struct ValueColumn {
+        const Column* _input {nullptr};
+        Column* _buffer {nullptr};
+        Column* _output {nullptr};
+        NLCollectFoldFunction _fold {nullptr};
+        NLCollectListEmitFunction _listEmit {nullptr};
+        NLUnwindCollectValueEmitFunction _unwindCollectEmit {nullptr};
+        NLGroupDistinctTally _distinct;
+        std::vector<std::vector<size_t>> _groupPositions;
+    };
+
     void addKeyColumn(const KeyColumn& key) { _keyColumns.push_back(key); }
     std::vector<KeyColumn>& keyColumns() { return _keyColumns; }
 
     NLGroupTable& groupTable() { return _groupTable; }
 
-    // The incoming value chunk (a loop variable, refilled each step), the flat buffer
-    // its present values accumulate into, and the fold that appends them. Set once by
-    // the update translation.
-    const Column* getValueInput() const { return _valueInput; }
-    void setValueInput(const Column* input) { _valueInput = input; }
-    Column* getValues() { return _values; }
-    const Column* getValues() const { return _values; }
-    void setValues(Column* values) { _values = values; }
-    NLCollectFoldFunction getFold() const { return _fold; }
-    void setFold(NLCollectFoldFunction fold) { _fold = fold; }
+    void addValueColumn(const ValueColumn& value) { _valueColumns.push_back(value); }
+    std::vector<ValueColumn>& valueColumns() { return _valueColumns; }
+    const std::vector<ValueColumn>& valueColumns() const { return _valueColumns; }
 
-    // The values already collected per group, so collect(DISTINCT x) charges each of a
-    // group's values once. Left empty by a plain collect.
-    NLGroupDistinctTally& distinct() { return _distinct; }
+    // An nl.unwind_collect drain reads exactly one collected column, so it names it
+    // rather than indexing the list every caller would otherwise have to bound.
+    ValueColumn& unwoundColumn();
 
     // The reductions taken over the same groups as the list - Cypher's collect(x) beside
     // count(y) - each folded and emitted exactly as a grouped aggregation does, since one
@@ -1849,26 +1859,10 @@ public:
     void addAggregate(const NLGroupAggregateState::Aggregate& aggregate) { _aggregates.push_back(aggregate); }
     std::vector<NLGroupAggregateState::Aggregate>& aggregates() { return _aggregates; }
 
-    // The drain's output loop variable: the unwound value column (nl.unwind_collect) or the
-    // per-group list column (nl.collect). Set at loop translation. A state feeds one
-    // drain, so a single slot holds whichever it is.
-    Column* getValueOutput() const { return _valueOutput; }
-    void setValueOutput(Column* output) { _valueOutput = output; }
-
-    // The per-element (unwind) and per-group (collect) emit handlers, both baked from
-    // the value type at update time; the drain loop uses whichever it needs.
-    NLUnwindCollectValueEmitFunction getUnwindCollectEmit() const { return _unwindCollectEmit; }
-    void setUnwindCollectEmit(NLUnwindCollectValueEmitFunction emit) { _unwindCollectEmit = emit; }
-    NLCollectListEmitFunction getListEmit() const { return _listEmit; }
-    void setListEmit(NLCollectListEmitFunction emit) { _listEmit = emit; }
-
     // The query-scoped list buffer the nl.collect drain materializes per-group runs
-    // into; the ListViews it hands out span it and stay valid for the whole run.
+    // into; the ListViews it hands out span it and stay valid for the whole run. Every
+    // collected column shares it, since each run is contiguous per insert.
     ListBuffer<>& listBuffer() { return _listBuffer; }
-
-    // Per group, the positions of its elements in the flat value buffer, in append
-    // order. Grown to the group count each update step.
-    std::vector<std::vector<size_t>>& groupPositions() { return _groupPositions; }
 
     // Scratch reused per update step: the row key being built, the per-row group index
     // map, and the incoming rows that created a new group this step.
@@ -1876,7 +1870,7 @@ public:
     std::vector<size_t>& groupIndicesScratch() { return _groupIndices; }
     std::vector<size_t>& newGroupRowsScratch() { return _newGroupRows; }
 
-    // Empty the group table, key buffers, value buffer and per-group positions, so the
+    // Empty the group table, key buffers, value buffers and per-group positions, so the
     // collect starts fresh. Runs each time nl.collect_buffer's block runs. An ungrouped
     // collect comes back with its single empty group already created, since that group
     // does not depend on any row arriving.
@@ -1885,15 +1879,8 @@ public:
 private:
     std::vector<KeyColumn> _keyColumns;
 
-    const Column* _valueInput {nullptr};
-    Column* _values {nullptr};
-    NLCollectFoldFunction _fold {nullptr};
-    NLGroupDistinctTally _distinct;
-    std::vector<std::vector<size_t>> _groupPositions;
+    std::vector<ValueColumn> _valueColumns;
 
-    Column* _valueOutput {nullptr};
-    NLUnwindCollectValueEmitFunction _unwindCollectEmit {nullptr};
-    NLCollectListEmitFunction _listEmit {nullptr};
     ListBuffer<> _listBuffer;
 
     std::vector<NLGroupAggregateState::Aggregate> _aggregates;

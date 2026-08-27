@@ -78,15 +78,6 @@ protected:
         EXPECT_EQ(sink.rows(), expected) << "query: " << query << "\ngot:\n" << actualText;
     }
 
-    void expectRejected(std::string_view query, QueryStatus::Status stage, std::string_view reason) {
-        RowSink sink;
-        const QueryStatus status = runQuery(query, &sink);
-        ASSERT_FALSE(status.isOk()) << "query accepted: " << query;
-
-        EXPECT_EQ(status.getStatus(), stage) << "query: " << query;
-        EXPECT_EQ(status.getError(), reason) << "query: " << query;
-    }
-
     const std::string _graphName = "simpledb";
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<QueryInterpreterV3> _interpreter;
@@ -238,12 +229,17 @@ TEST_F(WithCollectTest, collectsOnlyTheRowsTheBarrierLeft) {
                {{"[Adam, Cyrus, Doruk]"}});
 }
 
-// Each collect drains through a loop of its own and one emit cannot read two of them, at
-// a barrier as in a projection
-TEST_F(WithCollectTest, rejectsTwoCollectsAtTheBarrier) {
-    expectRejected("MATCH (p:Person)-[:INTERESTED_IN]->(i:Interest) "
-                   "WITH p.name AS person, collect(i.name) AS interests, collect(i) AS nodes "
-                   "RETURN person, interests, nodes",
-                   QueryStatus::Status::PLAN_ERROR,
-                   "collect() may not yet be combined with another collect().");
+// One accumulator carries both lists, so a barrier publishes them side by side
+TEST_F(WithCollectTest, publishesTwoListsAtTheBarrier) {
+    expectRows("MATCH (p:Person)-[:INTERESTED_IN]->(i:Interest) "
+               "WITH p.name AS person, collect(i.name) AS interests, collect(i) AS nodes "
+               "RETURN person, interests, nodes",
+               {{"Remy", "[Ghosts, Computers, Eighties]", "[6, 2, 3]"},
+                {"Adam", "[Bio, Cooking]", "[4, 5]"},
+                {"Maxime", "[Bio, Padel]", "[4, 7]"},
+                {"Luc", "[Animals, Computers]", "[10, 2]"},
+                {"Martina", "[Cooking]", "[5]"},
+                {"Suhas", "[Gym, JiuJitsu]", "[13, 16]"},
+                {"Cyrus", "[Gym, Travel]", "[13, 14]"},
+                {"Doruk", "[Gym]", "[13]"}});
 }

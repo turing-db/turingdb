@@ -162,19 +162,30 @@ void NLGroupAggregateState::reset() {
     }
 }
 
+NLCollectState::ValueColumn& NLCollectState::unwoundColumn() {
+    if (_valueColumns.size() != 1) {
+        throw IRException("nl.unwind_collect must drain an accumulator holding a single collected column");
+    }
+
+    return _valueColumns.front();
+}
+
 void NLCollectState::reset() {
     _groupTable.clear();
-    _distinct.clear();
 
     for (KeyColumn& key : _keyColumns) {
         key._buffer->clear();
     }
 
-    if (_values) {
-        _values->clear();
+    for (ValueColumn& value : _valueColumns) {
+        if (value._buffer) {
+            value._buffer->clear();
+        }
+
+        value._distinct.clear();
+        value._groupPositions.clear();
     }
 
-    _groupPositions.clear();
     _listBuffer.clear();
 
     for (NLGroupAggregateState::Aggregate& aggregate : _aggregates) {
@@ -194,7 +205,10 @@ void NLCollectState::reset() {
     if (_keyColumns.empty()) {
         _key.clear();
         _groupTable.assign(_key);
-        _groupPositions.resize(1);
+
+        for (ValueColumn& value : _valueColumns) {
+            value._groupPositions.resize(1);
+        }
     }
 }
 

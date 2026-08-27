@@ -1354,35 +1354,41 @@ def Collect : TuringOp<"collect", [Pure]> {
       %gcity, %names = db.collect(%city, %name) keys 1
                          : (!db.column<none>, !db.column<none>) -> (!db.column<none>, !db.column<!storage.list<none>>)
 
-    keyCount is how many leading columns are keys (0 = ungrouped); one value column
-    follows, and then one input per aggregate `aggregates` names - the reductions taken
-    over the same groups, as db.group_aggregate takes them. Results are the keys
-    (unchanged), the list column, then one column per aggregate.
+    keyCount is how many leading columns are keys (0 = ungrouped); the collected value
+    columns follow, one per list the projection returns, and then one input per aggregate
+    `aggregates` names - the reductions taken over the same groups, as db.group_aggregate
+    takes them. Results are the keys (unchanged), one list column per value, then one
+    column per aggregate. The value count is what is left over: columns minus the keys
+    and the aggregate inputs.
 
       %gcity, %names, %n = db.collect(%city, %name, %score) keys 1 aggregates [count]
                              : (...) -> (...)
 
-    `distinct` is Cypher's collect(DISTINCT x): a value repeated in a group is collected
-    once, so the list holds each of the group's distinct values. As on db.count the flag
-    stays on the one op, since the collection is the same over a deduplicated column.
+      %names, %ages = db.collect(%name, %age) keys 0
+                        : (...) -> (!db.column<!storage.list<none>>, !db.column<!storage.list<none>>)
 
-      %names = db.collect(%name) keys 0 distinct : (!db.column<none>) -> !db.column<!storage.list<none>>
+    `distinct` is Cypher's collect(DISTINCT x): a value repeated in a group is collected
+    once, so the list holds each of the group's distinct values. It names the value
+    columns that dedupe by index, since one projection may collect a column both ways.
+
+      %names = db.collect(%name) keys 0 distinct [0] : (!db.column<none>) -> !db.column<!storage.list<none>>
   }];
 
-  // keyCount grouping-key columns, one collected column, then one input per aggregate
-  // kinds names; keyCount is unsigned (never negative).
+  // keyCount grouping-key columns, one or more collected columns, then one input per
+  // aggregate kinds names; keyCount is unsigned (never negative).
   let arguments = (ins Variadic<Column>:$columns,
                        UI64Attr:$keyCount,
                        OptionalAttr<DenseI64ArrayAttr>:$kinds,
-                       UnitAttr:$distinct);
+                       OptionalAttr<DenseI64ArrayAttr>:$distinctValues);
   let results   = (outs Variadic<Column>:$results);
 
   let assemblyFormat = [{
     `(` $columns `)` `keys` $keyCount (`aggregates` custom<GroupAggregateKinds>($kinds)^)?
-    (`distinct` $distinct^)? attr-dict `:` functional-type(operands, results)
+    (`distinct` custom<ColumnIndices>($distinctValues)^)? attr-dict `:` functional-type(operands, results)
   }];
 
-  // keyCount + 1 columns; key results pass through; trailing result is a list column.
+  // At least one value column after the keys; key results pass through; one list result
+  // per value column.
   let hasVerifier = 1;
 }
 

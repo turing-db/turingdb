@@ -29,7 +29,7 @@ module {
 
     %name = db.get_node_properties(%src, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
 
-    %gname, %targets = db.collect(%name, %tgt) keys 1 distinct : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<!storage.list<!storage.node_id>>)
+    %gname, %targets = db.collect(%name, %tgt) keys 1 distinct [0] : (!db.column<none>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<!storage.list<!storage.node_id>>)
 
     db.output(%gname, %targets) : !db.column<none>, !db.column<!storage.list<!storage.node_id>>
 
