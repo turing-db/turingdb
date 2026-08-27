@@ -2,6 +2,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <algorithm>
 #include <fstream>
 #include <memory>
 #include <optional>
@@ -642,6 +643,56 @@ TEST_F(VectorSearchTest, chainsThreeRetrievalsAlongTwoHops) {
     // and Adam's two interests are the two topics retrieved.
     const std::vector<StringRowSink::Row> expected {{"Remy", "Adam", "Bio"},
                                                     {"Remy", "Adam", "Cooking"}};
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+
+    EXPECT_EQ(rows, expected);
+}
+
+// The output shape a retrieval stage hands on: one row per neighbour the search reported,
+// carrying its whole expanded neighbourhood as a list rather than one row per edge.
+TEST_F(VectorSearchTest, collectsTheExpandedNeighbourhoodOfEachNeighbour) {
+    loadNodeVectors();
+
+    QueryStatus status;
+    StringRowSink sink;
+    runQuery("VECTOR SEARCH IN nodes FOR 2 (1.0, 0.0, 0.0, 0.0) YIELD ids "
+             "MATCH (ids)-[:INTERESTED_IN]->(m) RETURN ids, collect(m.name)",
+             status,
+             sink);
+
+    ASSERT_TRUE(status.isOk()) << status.getError();
+
+    // A group's list holds its elements in the order the expansion emitted them, which is
+    // the order the graph holds each node's out-edges in.
+    std::vector<StringRowSink::Row> expected {
+        {std::to_string(_remy.getValue()), "Ghosts, Computers, Eighties"},
+        {std::to_string(_adam.getValue()), "Bio, Cooking"}};
+    std::ranges::sort(expected);
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+
+    EXPECT_EQ(rows, expected);
+}
+
+// The same bundle at the end of a chain: two hops out of the retrieved seed, gathered into
+// one row per seed. What a RAG stage would pass on as the context it retrieved.
+TEST_F(VectorSearchTest, collectsTheNeighbourhoodTwoHopsOutOfTheSeed) {
+    loadRagVectors();
+
+    QueryStatus status;
+    StringRowSink sink;
+    runQuery("VECTOR SEARCH IN people FOR 1 (1.0, 0.0, 0.0, 0.0) YIELD ids AS seed "
+             "MATCH (seed)-[:KNOWS_WELL]->(peer)-[:INTERESTED_IN]->(topic) "
+             "RETURN seed.name, collect(topic.name)",
+             status,
+             sink);
+
+    ASSERT_TRUE(status.isOk()) << status.getError();
+
+    const std::vector<StringRowSink::Row> expected {{"Remy", "Bio, Cooking"}};
 
     std::vector<StringRowSink::Row> rows;
     sink.sortedRows(rows);
