@@ -126,6 +126,11 @@ void FunctionDecls::initDefault() {
     countLists->setReturnTypes({{EvaluatedType::Integer}});
     countLists->setIsAggregate(true);
 
+    FunctionSignature* countEmbeddings = createFunction("count");
+    countEmbeddings->setArguments({EvaluatedType::Embedding});
+    countEmbeddings->setReturnTypes({{EvaluatedType::Integer}});
+    countEmbeddings->setIsAggregate(true);
+
     // The schema types a CALL can yield are columns like any other, so count tallies their
     // rows too. Without these overloads a YIELD of a label, a property type or a value type
     // could be returned but never aggregated.

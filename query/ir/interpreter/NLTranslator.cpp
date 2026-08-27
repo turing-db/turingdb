@@ -178,7 +178,7 @@ ValueType valueTypeFromElementType(mlir::Type elementType) {
 }
 
 template <SupportedType T>
-typename T::Primitive constantValueAs(mlir::TypedAttr value) {
+typename T::Primitive constantValueAs(mlir::Attribute value) {
     if constexpr (std::same_as<T, types::Int64>) {
         return mlir::cast<mlir::IntegerAttr>(value).getInt();
     } else if constexpr (std::same_as<T, types::UInt64>) {
@@ -190,12 +190,8 @@ typename T::Primitive constantValueAs(mlir::TypedAttr value) {
     } else if constexpr (std::same_as<T, types::String>) {
         return mlir::cast<mlir::StringAttr>(value).getValue();
     } else if constexpr (std::same_as<T, types::Embedding>) {
-        const mlir::DenseElementsAttr elements =
-            mlir::cast<mlir::DenseElementsAttr>(value);
-        const llvm::ArrayRef<char> rawBytes = elements.getRawData();
-        const float* floats = reinterpret_cast<const float*>(rawBytes.data());
-        const size_t size = rawBytes.size() / sizeof(float);
-        return std::span<const float>{floats, size};
+        const llvm::ArrayRef<float> floats = mlir::cast<mlir::DenseF32ArrayAttr>(value).asArrayRef();
+        return std::span<const float> {floats.data(), floats.size()};
     } else {
         throw IRException("Unsupported constant value type");
     }
@@ -745,6 +741,8 @@ size_t NLTranslator::listValueBytes(mlir::ArrayAttr elements) {
             valueBytes += sizeof(types::Double::Primitive);
         } else if (mlir::isa<mlir::StringAttr>(element)) {
             valueBytes += sizeof(types::String::Primitive);
+        } else if (mlir::isa<mlir::DenseF32ArrayAttr>(element)) {
+            valueBytes += sizeof(types::Embedding::Primitive);
         } else if (mlir::isa<mlir::UnitAttr>(element)) {
             valueBytes += sizeof(PropertyNull);
         } else if (mlir::isa<mlir::ArrayAttr>(element)) {
@@ -781,6 +779,12 @@ ListView NLTranslator::materializeListView(mlir::ArrayAttr elements) {
             const llvm::StringRef value = stringAttr.getValue();
             cursor.writeValue(ListBufferTypeTag::String,
                               types::String::Primitive(value.data(), value.size()));
+        } else if (const auto embeddingAttr = mlir::dyn_cast<mlir::DenseF32ArrayAttr>(element)) {
+            // The floats stay in the attribute, as a string element's bytes do, so the
+            // stored span points at them rather than at a copy
+            const llvm::ArrayRef<float> floats = embeddingAttr.asArrayRef();
+            cursor.writeValue(ListBufferTypeTag::Embedding,
+                              types::Embedding::Primitive(floats.data(), floats.size()));
         } else if (mlir::isa<mlir::UnitAttr>(element)) {
             cursor.writeValue(ListBufferTypeTag::Null, PropertyNull {});
         } else if (const auto nestedAttr = mlir::dyn_cast<mlir::ArrayAttr>(element)) {
@@ -1154,7 +1158,7 @@ void NLTranslator::translateConstant(nl::Constant constant) {
         return;
     }
 
-    const mlir::TypedAttr value = mlir::cast<mlir::TypedAttr>(constant.getValue());
+    const mlir::Attribute value = constant.getValue();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         if (mlir::isa<mlir::NoneType>(nullableType.getValueType())) {

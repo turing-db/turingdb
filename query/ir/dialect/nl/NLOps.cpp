@@ -199,27 +199,23 @@ LogicalResult Constant::inferReturnTypes(MLIRContext* context,
         return success();
     }
 
+    // The db-dialect sibling's rule: a dense f32 array is an embedding, a type the attribute
+    // itself does not carry.
+    if (isa<DenseF32ArrayAttr>(adaptor.getValue())) {
+        inferredReturnTypes.push_back(ChunkType::get(context, storage::EmbeddingType::get(context)));
+        return success();
+    }
+
     // Inference runs during parsing, ahead of the operand constraint, so an attribute that
     // is neither typed nor an array is rejected here rather than cast blindly.
     const auto value = dyn_cast<TypedAttr>(adaptor.getValue());
     if (!value) {
         return emitOptionalError(location,
-                                 "nl.constant carries a typed value or an array of "
-                                 "literals, not ", adaptor.getValue());
+                                 "nl.constant carries a typed value, a dense f32 array or "
+                                 "an array of literals, not ", adaptor.getValue());
     }
 
-    Type elementType;
-    if (const auto elements = dyn_cast<DenseElementsAttr>(value)) {
-        const auto shapedType = cast<ShapedType>(elements.getType());
-        const bool isEmbedding = shapedType.getElementType().isF32()
-                                 && shapedType.hasRank()
-                                 && shapedType.getRank() == 1;
-        elementType = isEmbedding ? storage::EmbeddingType::get(context) : value.getType();
-    } else {
-        elementType = value.getType();
-    }
-
-    inferredReturnTypes.push_back(ChunkType::get(context, elementType));
+    inferredReturnTypes.push_back(ChunkType::get(context, value.getType()));
     return success();
 }
 

@@ -469,28 +469,26 @@ LogicalResult ConstantOp::inferReturnTypes(MLIRContext* context,
         return success();
     }
 
+    // A dense f32 array is an embedding: a flat run of floats, which is the one attribute
+    // kind carrying no type of its own that still names its column's element type.
+    if (llvm::isa<mlir::DenseF32ArrayAttr>(adaptor.getValue())) {
+        const mlir::Type embeddingType = storage::EmbeddingType::get(context);
+
+        inferredReturnTypes.emplace_back(mlir::db::ColumnType::get(context, embeddingType));
+        return success();
+    }
+
     // Type inference runs while the op is still being parsed, ahead of the operand
-    // constraint that limits the value to a typed attribute or an array, so an attribute of
-    // any other kind has to be turned away here rather than cast blindly.
+    // constraint that limits the value to those three kinds, so an attribute of any other
+    // kind has to be turned away here rather than cast blindly.
     const mlir::TypedAttr typedValue = llvm::dyn_cast<mlir::TypedAttr>(adaptor.getValue());
     if (!typedValue) {
         return mlir::emitOptionalError(location,
-                                       "db.constant carries a typed value or an array of "
-                                       "literals, not ", adaptor.getValue());
+                                       "db.constant carries a typed value, a dense f32 array "
+                                       "or an array of literals, not ", adaptor.getValue());
     }
 
-    mlir::Type elementType;
-    if (const auto elements = mlir::dyn_cast<mlir::DenseElementsAttr>(typedValue)) {
-        const auto shapedType = mlir::cast<mlir::ShapedType>(elements.getType());
-        const bool isEmbedding = shapedType.getElementType().isF32()
-                                 && shapedType.hasRank()
-                                 && shapedType.getRank() == 1;
-        elementType = isEmbedding ? storage::EmbeddingType::get(context) : typedValue.getType();
-    } else {
-        elementType = typedValue.getType();
-    }
-
-    inferredReturnTypes.emplace_back(mlir::db::ColumnType::get(context, elementType));
+    inferredReturnTypes.emplace_back(mlir::db::ColumnType::get(context, typedValue.getType()));
     return mlir::success();
 }
 

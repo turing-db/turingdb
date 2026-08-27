@@ -8,7 +8,8 @@ namespace db {
 
 // The homogeneity verdict over a literal list's elements: the one type they all carry, or
 // null when they disagree - or when any of them carries none at all, which a null (a unit
-// attr) and a nested list (an array attr) do not. An empty list has no type to read either.
+// attr), an embedding (a dense f32 array attr) and a nested list (an array attr) do not. An
+// empty list has no type to read either.
 //
 // A null verdict is the type-erased form, a list of tagged scalars. An array attribute
 // carries no type of its own, so this is what both dialects' constant ops read to infer the

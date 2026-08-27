@@ -551,6 +551,8 @@ mlir::Attribute DBProgramGenerator::listElementAttr(const Literal* literal) {
 
     if (kind == Literal::Kind::NULL_LITERAL) {
         return _opBuilder.getUnitAttr();
+    } else if (kind == Literal::Kind::EMBEDDING) {
+        return embeddingLiteralAttr(static_cast<const EmbeddingLiteral*>(literal));
     } else if (kind == Literal::Kind::LIST) {
         const ListLiteral* nested = static_cast<const ListLiteral*>(literal);
 
@@ -562,8 +564,8 @@ mlir::Attribute DBProgramGenerator::listElementAttr(const Literal* literal) {
 
     const mlir::TypedAttr scalarAttr = scalarLiteralAttr(literal);
     if (!scalarAttr) {
-        throw TuringException("Only booleans, integers, floats, strings, nulls and lists are "
-                              "supported as list elements.");
+        throw TuringException("Only booleans, integers, floats, strings, nulls, embeddings and "
+                              "lists are supported as list elements.");
     }
 
     return scalarAttr;
@@ -3187,6 +3189,12 @@ mlir::TypedAttr DBProgramGenerator::scalarLiteralAttr(const Literal* literal) {
     }
 }
 
+mlir::Attribute DBProgramGenerator::embeddingLiteralAttr(const EmbeddingLiteral* literal) {
+    const std::span<const float> floats = literal->getValue();
+
+    return mlir::DenseF32ArrayAttr::get(_mlirCtxt, llvm::ArrayRef<float> {floats.data(), floats.size()});
+}
+
 mlir::Value DBProgramGenerator::translateLiteralExpr(const Literal* literal) {
     const mlir::Location uloc = _opBuilder.getUnknownLoc();
 
@@ -3201,21 +3209,10 @@ mlir::Value DBProgramGenerator::translateLiteralExpr(const Literal* literal) {
         break;
 
         case Literal::Kind::EMBEDDING: {
-            const EmbeddingLiteral* embeddingLiteral = static_cast<const EmbeddingLiteral*>(literal);
-            const std::span<const float> floats = embeddingLiteral->getValue();
-            const mlir::FloatType f32Type = _opBuilder.getF32Type();
-            const size_t size = floats.size();
-
-            const mlir::RankedTensorType tensorType = mlir::RankedTensorType::get(size, f32Type);
-
-            const auto* bytes = reinterpret_cast<const char*>(floats.data());
-            const size_t numBytes = size * sizeof(float);
-
-            const llvm::ArrayRef<char> rawBytes {bytes, numBytes};
-
-            const mlir::TypedAttr embAttr = mlir::DenseElementsAttr::getFromRawBuffer(tensorType, rawBytes);
+            const mlir::Attribute embeddingAttr = embeddingLiteralAttr(static_cast<const EmbeddingLiteral*>(literal));
             const mlir::db::ColumnType embResultType = allocColumnType(mlir::storage::EmbeddingType::get(_mlirCtxt));
-            return _opBuilder.create<mlir::db::ConstantOp>(uloc, embResultType, embAttr).getResult();
+
+            return _opBuilder.create<mlir::db::ConstantOp>(uloc, embResultType, embeddingAttr).getResult();
         }
         break;
 
