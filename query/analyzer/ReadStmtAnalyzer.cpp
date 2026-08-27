@@ -540,19 +540,24 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
 
     for (SymbolExpr* yieldItemExpr : *yieldItems) {
         const Symbol* yieldItem = yieldItemExpr->getSymbol();
+
+        // The statement's own name for the value picks which of the two it is; the symbol's
+        // name is what the query calls it, which is the alias when the YIELD renamed it. So
+        // two searches in one query yield under names of their own rather than colliding.
+        const std::string_view yieldedValue = yieldItem->getOriginalName();
         const std::string_view yieldName = yieldItem->getName();
 
         EvaluatedType yieldType = EvaluatedType::Invalid;
-        if (yieldName == "ids") {
+        if (yieldedValue == "ids") {
             // The MLIR engine reports each neighbour as the node the index holds it under,
             // so a pattern can walk out of the yielded variable and an equality can compare
             // a matched node to it. The pipeline reports the raw ID instead.
             yieldType = _isV3 ? EvaluatedType::NodePattern : EvaluatedType::Integer;
-        } else if (yieldName == "score") {
+        } else if (yieldedValue == "score") {
             yieldType = EvaluatedType::Double;
         } else {
             throwError(fmt::format("VECTOR SEARCH only supports YIELD ids and score, got '{}'",
-                                   yieldName), stmt);
+                                   yieldedValue), stmt);
         }
 
         if (_ctxt->hasDecl(yieldName)) {
