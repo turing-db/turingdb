@@ -241,6 +241,42 @@ TEST_F(PushDownFilterTest, sinksPredicateIntoCrossProductFactor) {
     EXPECT_TRUE(mlir::isa<mlir::db::ScanNodes>(reads.front().getInputNodes().getDefiningOp()));
 }
 
+// MATCH (n {name: 'Remy'}), (m) RETURN n, m
+const char* const hoistedConstantInFactorPredicate = R"mlir(
+func.func @main() {
+  %c = db.constant("Remy" : !storage.string)
+  %0:2 = db.cross_product factor {
+    %n = db.scan_nodes() : !db.column<!storage.node_id>
+    %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %mask = db.eq %name, %c : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+    %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+    db.yield %nf : !db.column<!storage.node_id>
+  } factor {
+    %m = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %m : !db.column<!storage.node_id>
+  }
+  db.output(%0#0, %0#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(PushDownFilterTest, gathersMaskConeSpanningBlocks) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(hoistedConstantInFactorPredicate);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runPushDown(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::FilterOp> filters = collect<mlir::db::FilterOp>(*module);
+    ASSERT_EQ(filters.size(), 1u);
+    mlir::db::FilterOp filter = filters.front();
+
+    mlir::db::CrossProduct product = filter.getOperation()->getParentOfType<mlir::db::CrossProduct>();
+    ASSERT_TRUE(product);
+
+    ASSERT_EQ(filter.getColumnsToFilter().size(), 1u);
+    EXPECT_TRUE(mlir::isa<mlir::db::ScanNodes>(filter.getColumnsToFilter().front().getDefiningOp()));
+}
+
 // MATCH (a)<--(n)-->(m) WHERE n.age = 32 RETURN a, n, m
 const char* const inEdgeNeighbourPredicate = R"mlir(
 func.func @main() {
