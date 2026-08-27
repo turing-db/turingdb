@@ -87,7 +87,8 @@ VECTOR SEARCH IN <index_name> FOR <k> (<vector>) YIELD <variable> [, score]
 
 `ids` is the node the index holds each vector under, so a pattern can walk out of it
 directly and an equality can compare a matched node to it. The query vector must have
-as many elements as the index' dimension.
+as many elements as the index' dimension. A `YIELD ids AS <name>` renames what the
+search reports, which is what lets several searches stand side by side in one query.
 
 **Examples:**
 ```cypher
@@ -107,6 +108,13 @@ RETURN ids, m.title
 VECTOR SEARCH IN embeddings FOR 10 (0.5, 0.3, 0.8, 0.1) YIELD ids
 MATCH (n:Document)-[:CITES]->(m) WHERE n = ids
 RETURN n.title, m.title
+
+-- Two retrievals around one expansion: the first seeds it, the second constrains where
+-- it lands
+VECTOR SEARCH IN embeddings FOR 10 (0.5, 0.3, 0.8, 0.1) YIELD ids AS seed
+VECTOR SEARCH IN topic_embeddings FOR 5 (0.2, 0.7, 0.1, 0.4) YIELD ids AS wanted
+MATCH (seed)-[:CITES]->(d)-[:ABOUT]->(topic) WHERE topic = wanted
+RETURN seed.title, d.title, topic.name
 ```
 
 ---

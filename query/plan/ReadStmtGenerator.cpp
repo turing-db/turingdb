@@ -252,7 +252,7 @@ void ReadStmtGenerator::generateVectorSearchStmt(const VectorSearchStmt* stmt) {
         for (SymbolExpr* yieldItemExpr : *yieldItems) {
             const VarDecl* decl = yieldItemExpr->getExprVarDecl();
 
-            if (yieldItemExpr->getSymbol()->getName() == "score") {
+            if (yieldItemExpr->getSymbol()->getOriginalName() == "score") {
                 node->setScoreVarDecl(decl);
             } else {
                 node->setIDsVarDecl(decl);
