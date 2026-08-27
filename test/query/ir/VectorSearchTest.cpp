@@ -18,6 +18,8 @@
 #include "SimpleGraph.h"
 #include "SystemAccessor.h"
 #include "SystemManager.h"
+#include "ID.h"
+#include "columns/ColumnIDs.h"
 #include "columns/ColumnOptVector.h"
 #include "metadata/PropertyType.h"
 #include "versioning/ChangeID.h"
@@ -32,10 +34,9 @@ using namespace turing::test;
 
 namespace {
 
-using IDColumn = ColumnOptVector<types::Int64::Primitive>;
 using ScoreColumn = ColumnOptVector<types::Double::Primitive>;
 
-// The two columns a VECTOR SEARCH reports, row by row: the ID the index holds each
+// The two columns a VECTOR SEARCH reports, row by row: the node the index holds each
 // neighbour under and the distance it scored. A query yielding only one of them, or
 // crossing them with a match, leaves the columns it did not ask for empty.
 class VectorSearchSink : public NLOutputSink {
@@ -48,13 +49,13 @@ public:
         _columnCount = chunks.size();
         _rowCount += rowCount;
 
-        const IDColumn* const ids = dynamic_cast<const IDColumn*>(chunks.front());
+        const ColumnNodeIDs* const ids = dynamic_cast<const ColumnNodeIDs*>(chunks.front());
         const ScoreColumn* const scores = chunks.size() > 1 ? dynamic_cast<const ScoreColumn*>(chunks[1])
                                                             : nullptr;
 
         for (size_t row = offset; row < offset + rowCount; row++) {
             if (ids) {
-                _ids.push_back((*ids)[row].value());
+                _ids.push_back((*ids)[row].getValue());
             }
 
             if (scores) {
@@ -64,14 +65,14 @@ public:
     }
 
     const std::vector<std::string>& getColumnNames() const { return _columnNames; }
-    const std::vector<int64_t>& getIDs() const { return _ids; }
+    const std::vector<uint64_t>& getIDs() const { return _ids; }
     const std::vector<double>& getScores() const { return _scores; }
     size_t getColumnCount() const { return _columnCount; }
     size_t getRowCount() const { return _rowCount; }
 
 private:
     std::vector<std::string> _columnNames;
-    std::vector<int64_t> _ids;
+    std::vector<uint64_t> _ids;
     std::vector<double> _scores;
     size_t _columnCount {0};
     size_t _rowCount {0};
@@ -97,6 +98,13 @@ constexpr std::string_view loadSeeds = "LOAD VECTOR FROM \"seeds.csv\" IN seeds"
 // search crossed with a match builds.
 constexpr size_t simpledbPersonCount = 8;
 
+constexpr std::string_view createNodeIndex = "CREATE VECTOR INDEX nodes WITH DIMENSION 4 METRIC EUCLID";
+constexpr std::string_view loadNodes = "LOAD VECTOR FROM \"nodes.csv\" IN nodes";
+
+// The three interests Remy is INTERESTED_IN, which is what a traversal seeded on Remy
+// reports whichever way the query names him.
+const std::vector<std::string> remyInterests {"Computers", "Eighties", "Ghosts"};
+
 }
 
 // VECTOR SEARCH through the MLIR engine: a source op of its own, whose two row-aligned
@@ -111,6 +119,12 @@ public:
         SystemAccessor system = _env->getSystemManager().accessUnique();
         Graph* graph = system.createGraph(_graphName);
         SimpleGraph::createSimpleGraph(graph);
+
+        // A node ID follows the label-set order of its data part rather than the order the
+        // fixture writes its nodes, so the two the vector index is keyed on are looked up
+        // rather than assumed.
+        _remy = SimpleGraph::findNodeID(graph, "Remy");
+        _adam = SimpleGraph::findNodeID(graph, "Adam");
 
         _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
     }
@@ -167,7 +181,28 @@ protected:
         ASSERT_TRUE(loadStatus.isOk()) << loadStatus.getError();
     }
 
+    // The index of nodes, keyed on the node IDs the graph gave Remy and Adam, so what the
+    // search reports is a node a pattern can walk out of. Remy is the nearer of the two to
+    // (1, 0, 0, 0).
+    void loadNodeVectors() {
+        const fs::Path path = _env->getConfig().getDataDir() / "nodes.csv";
+
+        std::ofstream file(path.get());
+        file << _remy.getValue() << ",1,0,0,0\n" << _adam.getValue() << ",2,0,0,0\n";
+        file.close();
+
+        QueryStatus createStatus;
+        runQuery(createNodeIndex, createStatus);
+        ASSERT_TRUE(createStatus.isOk()) << createStatus.getError();
+
+        QueryStatus loadStatus;
+        runQuery(loadNodes, loadStatus);
+        ASSERT_TRUE(loadStatus.isOk()) << loadStatus.getError();
+    }
+
     const std::string _graphName = "simpledb";
+    NodeID _remy;
+    NodeID _adam;
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<QueryInterpreterV3> _interpreter;
 };
@@ -187,7 +222,7 @@ TEST_F(VectorSearchTest, searchReportsTheNearestNeighboursNearestFirst) {
     EXPECT_EQ(sink.getColumnNames()[0], "ids");
     EXPECT_EQ(sink.getColumnNames()[1], "score");
 
-    const std::vector<int64_t> expectedIDs {1, 2};
+    const std::vector<uint64_t> expectedIDs {1, 2};
     const std::vector<double> expectedScores {0.0, 1.0};
 
     EXPECT_EQ(sink.getIDs(), expectedIDs);
@@ -206,7 +241,7 @@ TEST_F(VectorSearchTest, searchYieldingOnlyTheIDsEmitsThatColumnAlone) {
     ASSERT_TRUE(status.isOk()) << status.getError();
     EXPECT_EQ(sink.getColumnCount(), 1u);
 
-    const std::vector<int64_t> expectedIDs {1, 2, 3};
+    const std::vector<uint64_t> expectedIDs {1, 2, 3};
     EXPECT_EQ(sink.getIDs(), expectedIDs);
 }
 
@@ -241,7 +276,7 @@ TEST_F(VectorSearchTest, searchNeighboursCanBeSortedAndCut) {
 
     ASSERT_TRUE(status.isOk()) << status.getError();
 
-    const std::vector<int64_t> expectedIDs {3};
+    const std::vector<uint64_t> expectedIDs {3};
     const std::vector<double> expectedScores {9.0};
 
     EXPECT_EQ(sink.getIDs(), expectedIDs);
@@ -262,7 +297,7 @@ TEST_F(VectorSearchTest, searchFiltersItsNeighboursWithTheYieldPredicate) {
 
     ASSERT_TRUE(status.isOk()) << status.getError();
 
-    const std::vector<int64_t> expectedIDs {2, 3};
+    const std::vector<uint64_t> expectedIDs {2, 3};
     const std::vector<double> expectedScores {1.0, 9.0};
 
     EXPECT_EQ(sink.getIDs(), expectedIDs);
@@ -351,4 +386,84 @@ TEST_F(VectorSearchTest, searchSeedingATraversalMatchesNothingWhenNoNeighbourAgr
 
     ASSERT_TRUE(status.isOk()) << status.getError();
     EXPECT_TRUE(sink.getRows().empty());
+}
+
+// A neighbour is the node the index holds it under, so the pattern names the yielded
+// variable itself and the traversal expands that column - no scan of the graph, and no
+// product to pair the two sides with.
+TEST_F(VectorSearchTest, searchDrivesATraversalNamedOnTheYieldedVariable) {
+    loadNodeVectors();
+
+    QueryStatus status;
+    StringRowSink sink;
+    runQuery("VECTOR SEARCH IN nodes FOR 1 (1.0, 0.0, 0.0, 0.0) YIELD ids "
+             "MATCH (ids)-[:INTERESTED_IN]->(m) RETURN ids, m.name",
+             status,
+             sink);
+
+    ASSERT_TRUE(status.isOk()) << status.getError();
+
+    const std::string remy = std::to_string(_remy.getValue());
+    std::vector<StringRowSink::Row> expected;
+    for (const std::string& interest : remyInterests) {
+        expected.push_back({remy, interest});
+    }
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+
+    EXPECT_EQ(rows, expected);
+}
+
+// The same traversal written the other way round: the pattern matches on its own and an
+// equality ties one of its nodes to the neighbour. It reports the rows the driven form
+// reports, since the two say the same thing about the same nodes.
+TEST_F(VectorSearchTest, searchConstrainsAMatchedNodeByEqualityWithTheNeighbour) {
+    loadNodeVectors();
+
+    QueryStatus status;
+    StringRowSink sink;
+    runQuery("VECTOR SEARCH IN nodes FOR 1 (1.0, 0.0, 0.0, 0.0) YIELD ids "
+             "MATCH (n)-[:INTERESTED_IN]->(m) WHERE n = ids RETURN n.name, m.name",
+             status,
+             sink);
+
+    ASSERT_TRUE(status.isOk()) << status.getError();
+
+    std::vector<StringRowSink::Row> expected;
+    for (const std::string& interest : remyInterests) {
+        expected.push_back({"Remy", interest});
+    }
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+
+    EXPECT_EQ(rows, expected);
+}
+
+// The score rides through the hop beside the neighbour it belongs to, so a driven
+// traversal can still project it: it is replicated once per edge the expansion walked.
+TEST_F(VectorSearchTest, aDrivenTraversalCarriesTheScoreThroughTheHop) {
+    loadNodeVectors();
+
+    QueryStatus status;
+    StringRowSink sink;
+    runQuery("VECTOR SEARCH IN nodes FOR 2 (1.0, 0.0, 0.0, 0.0) YIELD ids, score "
+             "MATCH (ids)-[:INTERESTED_IN]->(m) RETURN m.name, score",
+             status,
+             sink);
+
+    ASSERT_TRUE(status.isOk()) << status.getError();
+
+    // Remy scored 0 and is interested in three things, Adam scored 1 and in two.
+    const std::vector<StringRowSink::Row> expected {{"Bio", "1"},
+                                                    {"Computers", "0"},
+                                                    {"Cooking", "1"},
+                                                    {"Eighties", "0"},
+                                                    {"Ghosts", "0"}};
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+
+    EXPECT_EQ(rows, expected);
 }
