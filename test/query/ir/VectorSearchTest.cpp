@@ -23,6 +23,7 @@
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
+#include "StringRowSink.h"
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
@@ -84,6 +85,14 @@ constexpr std::string_view vectorFile = "1,1,0,0,0\n2,2,0,0,0\n3,4,0,0,0\n";
 constexpr std::string_view createIndex = "CREATE VECTOR INDEX vectors WITH DIMENSION 4 METRIC EUCLID";
 constexpr std::string_view loadVectors = "LOAD VECTOR FROM \"vectors.csv\" IN vectors";
 
+// The same three vectors under the IDs simpledb holds as ages, so a search reports IDs a
+// MATCH can constrain a node property against: 32 is the age Remy and Adam carry, 20 is
+// nobody's, and 99 is the farthest of the three from (1, 0, 0, 0).
+constexpr std::string_view seedFile = "32,1,0,0,0\n20,2,0,0,0\n99,4,0,0,0\n";
+
+constexpr std::string_view createSeedIndex = "CREATE VECTOR INDEX seeds WITH DIMENSION 4 METRIC EUCLID";
+constexpr std::string_view loadSeeds = "LOAD VECTOR FROM \"seeds.csv\" IN seeds";
+
 // simpledb carries eight Person nodes, which is the left factor of the cross product a
 // search crossed with a match builds.
 constexpr size_t simpledbPersonCount = 8;
@@ -107,7 +116,7 @@ public:
     }
 
 protected:
-    void runQuery(std::string_view query, QueryStatus& status, VectorSearchSink& sink) {
+    void runQuery(std::string_view query, QueryStatus& status, NLOutputSink& sink) {
         _interpreter->execute(status,
                               query,
                               _graphName,
@@ -137,6 +146,24 @@ protected:
 
         QueryStatus loadStatus;
         runQuery(loadVectors, loadStatus);
+        ASSERT_TRUE(loadStatus.isOk()) << loadStatus.getError();
+    }
+
+    // The sibling index of loadFixtureVectors, holding the same vectors under IDs the
+    // simpledb fixture carries as node properties.
+    void loadSeedVectors() {
+        const fs::Path path = _env->getConfig().getDataDir() / "seeds.csv";
+
+        std::ofstream file(path.get());
+        file << seedFile;
+        file.close();
+
+        QueryStatus createStatus;
+        runQuery(createSeedIndex, createStatus);
+        ASSERT_TRUE(createStatus.isOk()) << createStatus.getError();
+
+        QueryStatus loadStatus;
+        runQuery(loadSeeds, loadStatus);
         ASSERT_TRUE(loadStatus.isOk()) << loadStatus.getError();
     }
 
@@ -274,4 +301,54 @@ TEST_F(VectorSearchTest, searchForAVectorOfTheWrongDimensionReportsIt) {
 
     EXPECT_EQ(status.getStatus(), QueryStatus::Status::EXEC_ERROR);
     EXPECT_NE(status.getError().find("dimension"), std::string::npos) << status.getError();
+}
+
+// The documented shape: what the search yielded seeds the traversal through a MATCH's
+// WHERE, which is the only way an ID column can - it holds the IDs the index was loaded
+// with, not node IDs, so it can never be a pattern variable. The constraint picks the
+// nodes the pattern hops out of, and the yielded column rides through the hop beside them.
+TEST_F(VectorSearchTest, searchSeedsATraversalThroughAWhereConstraint) {
+    loadSeedVectors();
+
+    QueryStatus status;
+    StringRowSink sink;
+    runQuery("VECTOR SEARCH IN seeds FOR 2 (1.0, 0.0, 0.0, 0.0) YIELD ids "
+             "MATCH (n:Person)-[:INTERESTED_IN]->(m:Interest) WHERE n.age = ids "
+             "RETURN n.name, m.name, ids",
+             status,
+             sink);
+
+    ASSERT_TRUE(status.isOk()) << status.getError();
+
+    // The two nearest IDs are 32 and 20; only 32 is an age simpledb holds, and Remy and
+    // Adam are the two carrying it. A Person with no age at all fetches null, which the
+    // equality drops.
+    const std::vector<StringRowSink::Row> expected {{"Adam", "Bio", "32"},
+                                                    {"Adam", "Cooking", "32"},
+                                                    {"Remy", "Computers", "32"},
+                                                    {"Remy", "Eighties", "32"},
+                                                    {"Remy", "Ghosts", "32"}};
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+
+    EXPECT_EQ(rows, expected);
+}
+
+// The same shape with a query vector whose nearest neighbour is an ID no node carries: the
+// constraint holds for no row, so the traversal reports none. A constraint that was dropped
+// rather than applied would report every hop the pattern walks.
+TEST_F(VectorSearchTest, searchSeedingATraversalMatchesNothingWhenNoNeighbourAgrees) {
+    loadSeedVectors();
+
+    QueryStatus status;
+    StringRowSink sink;
+    runQuery("VECTOR SEARCH IN seeds FOR 1 (4.0, 0.0, 0.0, 0.0) YIELD ids "
+             "MATCH (n:Person)-[:INTERESTED_IN]->(m:Interest) WHERE n.age = ids "
+             "RETURN n.name, m.name",
+             status,
+             sink);
+
+    ASSERT_TRUE(status.isOk()) << status.getError();
+    EXPECT_TRUE(sink.getRows().empty());
 }
