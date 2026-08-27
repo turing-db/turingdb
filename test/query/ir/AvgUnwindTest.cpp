@@ -37,6 +37,10 @@ using ColumnNames = std::vector<std::string>;
 // runs over the elements of a list rather than over a scanned column. An average is a
 // double whatever its input was, so an integer list averages to the fraction between two
 // of its elements rather than to a truncated integer.
+//
+// A list whose elements share one type unwinds into a column of that type; one that mixes
+// numeric types, holds a null or holds nothing at all unwinds into a type-erased column of
+// tagged cells, which the fold reads a tag at a time. Both average the same way.
 class AvgUnwindTest : public TuringTest {
 protected:
     void initialize() override {
@@ -74,6 +78,26 @@ protected:
 
         EXPECT_EQ(sink.getNames(), names) << "query: " << query;
         EXPECT_EQ(sink.getRows(), expected) << "query: " << query;
+    }
+
+    // The query is turned away, and on @param reason: an average of something that is not
+    // a number is a different failure from one the engine cannot lay out.
+    void expectError(std::string_view query, std::string_view reason) {
+        StringRowSink sink;
+
+        QueryStatus status;
+        _interpreter->execute(status,
+                              query,
+                              _graphName,
+                              CommitHash::head(),
+                              ChangeID::head(),
+                              &_env->getMem(),
+                              &sink);
+
+        ASSERT_FALSE(status.isOk()) << "query was accepted: " << query;
+
+        const std::string error = status.getError();
+        EXPECT_NE(error.find(reason), std::string::npos) << "query: " << query << "\nerror: " << error;
     }
 
     const std::string _graphName = "simpledb";
@@ -132,6 +156,75 @@ TEST_F(AvgUnwindTest, averagesTheElementsRepeatedByEveryMatchedNode) {
 TEST_F(AvgUnwindTest, averagesEachGroupOfTheUnwoundCell) {
     const Rows expected = {{"1", "1"}, {"2", "2"}};
     expectRows("UNWIND [1.0, 1.0, 2.0] AS rg RETURN rg, avg(rg)", expected);
+}
+
+// A list mixing an integer and a double unwinds type-erased, so the fold reads each cell
+// through its own tag and widens both to the double an average is.
+TEST_F(AvgUnwindTest, averagesAMixedNumericList) {
+    const Rows expected = {{"1.75"}};
+    expectRows("UNWIND [1, 2.5] AS x RETURN avg(x)", expected);
+}
+
+TEST_F(AvgUnwindTest, averagesAcrossThreeMixedElements) {
+    const Rows expected = {{"2.5"}};
+    expectRows("UNWIND [1, 2.5, 4] AS x RETURN avg(x)", expected);
+}
+
+// A null element makes the list type-erased too, and the fold skips it as it skips the
+// null of a property column: the average divides by the two values it did read.
+TEST_F(AvgUnwindTest, averagesPastTheNullElementsOfAList) {
+    const Rows expected = {{"1.5"}};
+    expectRows("UNWIND [1.0, null, 2.0] AS x RETURN avg(x)", expected);
+}
+
+TEST_F(AvgUnwindTest, averagesAnAllNullListToNull) {
+    const Rows expected = {{"null"}};
+    expectRows("UNWIND [null, null] AS x RETURN avg(x)", expected);
+}
+
+// An empty list yields no row to fold, and the aggregate still answers one - holding no
+// average, as it does over a match that kept nothing.
+TEST_F(AvgUnwindTest, averagesAnEmptyListToNull) {
+    const Rows expected = {{"null"}};
+    expectNamedRows("UNWIND [] AS x RETURN avg(x)", {"avg(x)"}, expected);
+}
+
+// A string is no number, so averaging one is an error rather than a cell the fold skips.
+TEST_F(AvgUnwindTest, rejectsAveragingANonNumericElement) {
+    expectError("UNWIND [1, 'two'] AS x RETURN avg(x)", "numeric");
+}
+
+// avg(DISTINCT x) over tagged cells keys them by value: the repeated element is charged
+// once, so the average is taken over the two values the list holds.
+TEST_F(AvgUnwindTest, averagesTheDistinctCellsOfAMixedList) {
+    const Rows expected = {{"1.75"}};
+    expectRows("UNWIND [1, 1, 2.5] AS x RETURN avg(DISTINCT x)", expected);
+}
+
+// Under a grouping key the fold runs per group: Remy (0) is the only node the match
+// keeps, so the two cells average within that one group.
+TEST_F(AvgUnwindTest, averagesAMixedListWithinAMatchedGroup) {
+    const Rows expected = {{"0", "1.75"}};
+    expectRows("UNWIND [1, 2.5] AS x MATCH (n) WHERE n.name = 'Remy' RETURN n, avg(x)", expected);
+}
+
+// Two groups, each pairing with the same two cells: Remy (0) and Adam (1) are the nodes
+// carrying an age, and neither group reads the other's rows.
+TEST_F(AvgUnwindTest, averagesAMixedListWithinEachMatchedGroup) {
+    const Rows expected = {{"0", "1.75"}, {"1", "1.75"}};
+    expectRows("UNWIND [1, 2.5] AS x MATCH (n) WHERE n.age = 32 RETURN n, avg(x)", expected);
+}
+
+TEST_F(AvgUnwindTest, averagesTheDistinctCellsWithinAMatchedGroup) {
+    const Rows expected = {{"0", "1.75"}};
+    expectRows("UNWIND [1, 1, 2.5] AS x MATCH (n) WHERE n.name = 'Remy' RETURN n, avg(DISTINCT x)", expected);
+}
+
+// The tagged cell as the grouping key of its own average: 1 and 1.0 are one Cypher value,
+// so they group together and the group averages to the value they share.
+TEST_F(AvgUnwindTest, averagesEachGroupOfAMixedUnwoundCell) {
+    const Rows expected = {{"1", "1"}, {"2.5", "2.5"}};
+    expectRows("UNWIND [1, 1.0, 2.5] AS x RETURN x, avg(x)", expected);
 }
 
 int main(int argc, char** argv) {

@@ -380,6 +380,11 @@ public:
     // a numeric type, min/max an orderable one. Used by the nl.aggregate ops.
     static NLAggregateResetFunction selectAggregateReset(AggregateKind kind, ValueType accumulatorType);
     static NLAggregateUpdateFunction selectAggregateUpdate(AggregateKind kind, ValueType inputType);
+
+    // The siblings of selectAggregateUpdate / selectGroupAggregateFold for a type-erased
+    // column, whose cells carry their own tags rather than sharing one value type
+    static NLAggregateUpdateFunction selectListElementAggregateUpdate(AggregateKind kind);
+    static NLGroupAggregateFoldFunction selectListElementGroupAggregateFold(GroupAggregateKind kind);
     static NLAggregateResultFunction selectAggregateResult(AggregateKind kind, ValueType resultType);
 
     // The grouped counterparts, selected for one aggregate of a grouped

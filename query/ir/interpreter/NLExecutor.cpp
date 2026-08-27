@@ -1053,6 +1053,53 @@ void aggregateResultAvg(const NLAggregateState* state, Column* output) {
     }
 }
 
+// The number one tagged cell holds, widened to the f64 an average accumulates in. A cell
+// of any other type is no number to average, which is an error rather than a cell to skip
+// - only a null cell is skipped, by the folds below, before they read it.
+double listElementAsDouble(const ListElementView element) {
+    switch (element.getTag()) {
+        case ListBufferTypeTag::Int:
+            return static_cast<double>(element.getAs<types::Int64::Primitive>());
+        break;
+
+        case ListBufferTypeTag::UInt:
+            return static_cast<double>(element.getAs<types::UInt64::Primitive>());
+        break;
+
+        case ListBufferTypeTag::Double:
+            return element.getAs<types::Double::Primitive>();
+        break;
+
+        default:
+            throw IRException("avg requires a numeric column");
+        break;
+    }
+}
+
+// Fold a type-erased chunk's numeric cells into an avg accumulator: the tagged-cell
+// sibling of aggregateUpdateAvg, reading each cell through its own tag so that an integer
+// and a double element both charge the one running f64 sum. A null cell is skipped, as an
+// absent value of a nullable column is.
+void aggregateUpdateAvgElements(NLAggregateState* state, const Column* input) {
+    auto* accumulator = static_cast<ColumnOptVector<double>*>(state->getAccumulator());
+    std::optional<double>& current = accumulator->getRaw().front();
+    const auto& inputRaw = static_cast<const ColumnVector<ListElementView>*>(input)->getRaw();
+
+    double running = current.value();
+    size_t seen = 0;
+    for (const ListElementView element : inputRaw) {
+        if (element.getTag() == ListBufferTypeTag::Null) {
+            continue;
+        }
+
+        running += listElementAsDouble(element);
+        seen++;
+    }
+
+    current = running;
+    state->addCount(seen);
+}
+
 // The fold handler for a sum over a column of this value type. sum adds the
 // values, so only a numeric column is valid - a string or bool sum is rejected
 // (which also keeps aggregateUpdateSum from being instantiated for a type whose
@@ -1333,6 +1380,61 @@ void groupFoldAvgDistinct(Column* accumulator,
 
         std::optional<double>& running = raw[group];
         running = running.value() + static_cast<double>(*value);
+        counts[group]++;
+    }
+}
+
+// Fold a type-erased chunk's numeric cells into per-group avg accumulators: the
+// tagged-cell sibling of groupFoldAvg.
+void groupFoldAvgListElement(Column* accumulator,
+                             std::vector<uint64_t>& counts,
+                             const Column* input,
+                             const std::vector<size_t>& groups,
+                             NLGroupDistinctTally& distinct) {
+    auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnVector<ListElementView>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const ListElementView element = inputRaw[row];
+        if (element.getTag() == ListBufferTypeTag::Null) {
+            continue;
+        }
+
+        const size_t group = groups[row];
+        std::optional<double>& running = raw[group];
+        running = running.value() + listElementAsDouble(element);
+        counts[group]++;
+    }
+}
+
+// The distinct sibling of groupFoldAvgListElement (avg(DISTINCT x) over tagged cells):
+// cells are keyed by value across tags, as a DISTINCT over the same column keys them, so
+// the 1 and the 1.0 of one group are charged once between them.
+void groupFoldAvgDistinctListElement(Column* accumulator,
+                                     std::vector<uint64_t>& counts,
+                                     const Column* input,
+                                     const std::vector<size_t>& groups,
+                                     NLGroupDistinctTally& distinct) {
+    auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnVector<ListElementView>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const ListElementView element = inputRaw[row];
+        if (element.getTag() == ListBufferTypeTag::Null) {
+            continue;
+        }
+
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendElementBytes(distinct.getKey(), element);
+
+        if (!distinct.insertIfNew()) {
+            continue;
+        }
+
+        std::optional<double>& running = raw[group];
+        running = running.value() + listElementAsDouble(element);
         counts[group]++;
     }
 }
@@ -3623,6 +3725,24 @@ NLKeyAppendFunction NLExecutor::selectListElementKeyAppendFunction() {
 
 NLCountFunction NLExecutor::selectListElementCountFunction() {
     return &countNonNullElementsColumn;
+}
+
+NLAggregateUpdateFunction NLExecutor::selectListElementAggregateUpdate(AggregateKind kind) {
+    if (kind != AggregateKind::Avg) {
+        throw IRException("only avg reduces a column of tagged cells");
+    }
+
+    return &aggregateUpdateAvgElements;
+}
+
+NLGroupAggregateFoldFunction NLExecutor::selectListElementGroupAggregateFold(GroupAggregateKind kind) {
+    if (kind == GroupAggregateKind::Avg) {
+        return &groupFoldAvgListElement;
+    } else if (kind == GroupAggregateKind::AvgDistinct) {
+        return &groupFoldAvgDistinctListElement;
+    }
+
+    throw IRException("only avg reduces a column of tagged cells");
 }
 
 NLGroupKeyGatherFunction NLExecutor::selectListElementGroupKeyGatherFunction() {

@@ -1870,14 +1870,13 @@ void NLTranslator::translateAggregateUpdate(nl::AggregateUpdate update, NLStmtCo
     // or throws if it was not produced by an nl.aggregate.
     NLAggregateState* state = aggregateStateFor(update.getState());
 
-    // Fold the chunk's non-null values the way its kind and value type demand. The
+    // Fold the chunk's non-null values the way its kind and chunk type demand. The
     // input value type may differ from the accumulator's (an avg of i64 folds into
-    // an f64 accumulator), so the handler is selected from the input type here.
+    // an f64 accumulator), so the handler is selected from the input here.
     const mlir::Value rows = update.getRows();
     const Column* input = getColumn(rows);
     const AggregateKind kind = toRuntimeAggregateKind(update.getKind());
-    const ValueType inputType = nullableChunkValueType(rows.getType());
-    const NLAggregateUpdateFunction fold = NLExecutor::selectAggregateUpdate(kind, inputType);
+    const NLAggregateUpdateFunction fold = selectAggregateUpdateForChunkType(kind, rows.getType());
 
     NLAggregateUpdateData* data = _program->allocFunctionData<NLAggregateUpdateData>(state, input, fold);
     body->emplaceStmt(&NLExecutor::runAggregateUpdate, data);
@@ -2011,14 +2010,23 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             // own type. nullableChunkValueType rejects an ID chunk here. The distinct
             // kinds keep the shape of the kind they mirror and differ only in the
             // fold, which charges each of a group's values once.
-            const ValueType inputType = nullableChunkValueType(chunkType);
+            //
+            // A type-erased column is the exception: its cells carry their own tags, so
+            // only avg folds one (lowering rejects the others) and it accumulates in the
+            // f64 an average is whatever those tags were.
+            const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+            const bool taggedCells = mlir::isa<storage::ListElementType>(chunk.getElementType());
+
+            const ValueType inputType = taggedCells ? ValueType::Double
+                                                    : nullableChunkValueType(chunkType);
             const bool accumulatesAsDouble = (kind == GroupAggregateKind::Avg)
                                           || (kind == GroupAggregateKind::AvgDistinct);
             const ValueType accumulatorType = accumulatesAsDouble ? ValueType::Double : inputType;
 
             aggregate._accumulator = allocOptColumnForValueType(accumulatorType);
             aggregate._grow = NLExecutor::selectGroupAggregateGrow(kind, accumulatorType);
-            aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, inputType);
+            aggregate._fold = taggedCells ? NLExecutor::selectListElementGroupAggregateFold(kind)
+                                          : NLExecutor::selectGroupAggregateFold(kind, inputType);
             aggregate._emit = NLExecutor::selectGroupAggregateEmit(kind, accumulatorType);
         }
         break;
@@ -2807,6 +2815,18 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
     }
 
     return NLExecutor::selectKeyAppendFunction(chunkKindFromElementType(elementType));
+}
+
+// The value-reduction sibling of selectCountForChunkType: a type-erased column of tagged
+// cells is folded cell by cell, every other one through the value type it shares.
+NLAggregateUpdateFunction NLTranslator::selectAggregateUpdateForChunkType(AggregateKind kind,
+                                                                         mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+    if (mlir::isa<storage::ListElementType>(chunk.getElementType())) {
+        return NLExecutor::selectListElementAggregateUpdate(kind);
+    }
+
+    return NLExecutor::selectAggregateUpdate(kind, nullableChunkValueType(chunkType));
 }
 
 NLCountFunction NLTranslator::selectCountForChunkType(mlir::Type chunkType) {

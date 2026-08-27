@@ -119,17 +119,20 @@ void FunctionDecls::initDefault() {
     countNulls->setIsAggregate(true);
 
     // count over a whole list: a list is never null, so the tally is every row. Only the
-    // MLIR engine lays a list cell out over the driving relation, which ExprAnalyzer's
-    // v3 gate is what keeps the legacy planner away from.
+    // MLIR engine lays a list cell out over the driving relation - the legacy planner
+    // reduces the single row the cell is, and count([1, 2]) answers 1 where the relation
+    // holds more - so this overload and the embedding one below are v3-only.
     FunctionSignature* countLists = createFunction("count");
     countLists->setArguments({EvaluatedType::List});
     countLists->setReturnTypes({{EvaluatedType::Integer}});
     countLists->setIsAggregate(true);
+    countLists->setIsV3Only(true);
 
     FunctionSignature* countEmbeddings = createFunction("count");
     countEmbeddings->setArguments({EvaluatedType::Embedding});
     countEmbeddings->setReturnTypes({{EvaluatedType::Integer}});
     countEmbeddings->setIsAggregate(true);
+    countEmbeddings->setIsV3Only(true);
 
     // The schema types a CALL can yield are columns like any other, so count tallies their
     // rows too. Without these overloads a YIELD of a label, a property type or a value type
@@ -188,6 +191,16 @@ void FunctionDecls::initDefault() {
     avgDouble->setArguments({EvaluatedType::Double});
     avgDouble->setReturnTypes({{EvaluatedType::Double}});
     avgDouble->setIsAggregate(true);
+
+    // avg over a type-erased column of tagged cells - what a list mixing numeric types,
+    // holding a null or holding nothing unwinds into. Each cell is read through its tag,
+    // and an average is a double whatever those tags were. Only the MLIR engine folds such
+    // a column, so the overload is v3-only like the whole-cell counts above.
+    FunctionSignature* avgListItems = createFunction("avg");
+    avgListItems->setArguments({EvaluatedType::ListItem});
+    avgListItems->setReturnTypes({{EvaluatedType::Double}});
+    avgListItems->setIsAggregate(true);
+    avgListItems->setIsV3Only(true);
 
     // sum() enabled for v3 analyzer 
     FunctionSignature* sumInt = createFunction("sum");

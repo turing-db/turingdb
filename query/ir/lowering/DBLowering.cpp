@@ -259,10 +259,13 @@ nl::ChunkType procedureChunkType(mlir::OpBuilder& builder, ProcedureType procedu
 }
 
 // The accumulator (and result) element type of an aggregate over a column whose
-// nullable value chunk wraps inputElement. avg always reduces to an f64; sum,
+// nullable value chunk wraps inputElement - or over a type-erased column, whose
+// inputElement is the tagged cell itself. avg always reduces to an f64; sum,
 // min and max keep the input's own type. Throws for a value type the reduction
 // cannot handle: sum/avg need a numeric column, min/max an orderable one (so a
-// string sum, a bool sum or an embedding min is rejected, matching Cypher).
+// string sum, a bool sum or an embedding min is rejected, matching Cypher). A
+// tagged cell is numeric only once read, so only avg - whose result type does not
+// depend on what the tags were - accepts one.
 mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
                                       storage::AggregateKind kind,
                                       mlir::Type inputElement) {
@@ -272,6 +275,7 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
     const bool isInteger = integerType && !isBool;
     const bool isNumeric = isFloat || isInteger;
     const bool isString = mlir::isa<storage::StringType>(inputElement);
+    const bool isTaggedCell = mlir::isa<storage::ListElementType>(inputElement);
 
     switch (kind) {
         case storage::AggregateKind::Sum: {
@@ -283,7 +287,7 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
         break;
 
         case storage::AggregateKind::Avg: {
-            if (!isNumeric) {
+            if (!isNumeric && !isTaggedCell) {
                 throw IRException("db.avg requires a numeric column");
             }
             return builder.getF64Type();
@@ -451,14 +455,16 @@ nl::ChunkType groupAggregateResultChunkType(mlir::OpBuilder& builder,
         case storage::GroupAggregateKind::Avg:
         case storage::GroupAggregateKind::AvgDistinct: {
             const nl::ChunkType inputChunkType = mlir::cast<nl::ChunkType>(inputChunk.getType());
-            const auto inputNullable = mlir::dyn_cast<storage::NullableType>(inputChunkType.getElementType());
-            if (!inputNullable) {
+            const mlir::Type inputElement = inputChunkType.getElementType();
+            const auto inputNullable = mlir::dyn_cast<storage::NullableType>(inputElement);
+            const bool taggedCells = mlir::isa<storage::ListElementType>(inputElement);
+            if (!inputNullable && !taggedCells) {
                 throw IRException("db.group_aggregate sum/min/max/avg requires a property value column");
             }
 
             const mlir::Type resultElement = aggregateResultElementType(builder,
                                                                         groupKindToAggregateKind(kind),
-                                                                        inputNullable.getValueType());
+                                                                        taggedCells ? inputElement : inputNullable.getValueType());
             const storage::NullableType resultNullable = storage::NullableType::get(context, resultElement);
 
             return nl::ChunkType::get(context, resultNullable);
@@ -1582,17 +1588,29 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
     // The nl chunk the aggregated column lowered to; the update folds its per-step
     // non-null values into the accumulator. A constant column is reduced over the
     // rows it stands for, so it is laid out over the driving relation first.
-    const mlir::Value inputChunk = nullableValueChunk(rowAlignedChunk(mapValue(input), _innermostCardinality));
+    const mlir::Value alignedChunk = rowAlignedChunk(mapValue(input), _innermostCardinality);
+
+    // A type-erased column of tagged cells - what a list mixing types, holding a null
+    // or holding nothing unwinds into - is folded as it stands: every cell carries its
+    // own tag, so there is no one value type to read the column as.
+    const mlir::Type alignedElement = mlir::cast<nl::ChunkType>(alignedChunk.getType()).getElementType();
+    const bool taggedCells = mlir::isa<storage::ListElementType>(alignedElement);
+
+    const mlir::Value inputChunk = taggedCells ? alignedChunk : nullableValueChunk(alignedChunk);
 
     mlir::MLIRContext* const context = _builder.getContext();
     const mlir::Location loc = _builder.getUnknownLoc();
 
-    const nl::ChunkType inputChunkType = mlir::cast<nl::ChunkType>(inputChunk.getType());
-    const auto inputNullable = mlir::cast<storage::NullableType>(inputChunkType.getElementType());
+    // A type-erased column is read as the tagged cell it holds; every other input is a
+    // nullable value chunk, and the reduction is resolved from the value type it wraps.
+    const mlir::Type inputChunkElement = mlir::cast<nl::ChunkType>(inputChunk.getType()).getElementType();
+    const mlir::Type inputElement = taggedCells
+        ? inputChunkElement
+        : mlir::cast<storage::NullableType>(inputChunkElement).getValueType();
 
     // The accumulator (and result) element type: avg widens to f64, the rest keep
     // the input type. This also validates the reduction against the value type.
-    const mlir::Type resultElement = aggregateResultElementType(_builder, kind, inputNullable.getValueType());
+    const mlir::Type resultElement = aggregateResultElementType(_builder, kind, inputElement);
 
     // The accumulator is hoisted to the top of the entry block, above every loop,
     // so it is reset once at function scope and dominates the update in the
@@ -1673,8 +1691,15 @@ void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
     for (size_t aggregateIndex = 0; aggregateIndex < kinds.size(); aggregateIndex++) {
         const auto kind = static_cast<storage::GroupAggregateKind>(kinds[aggregateIndex]);
 
-        if (reducesValues(kind)) {
-            chunks[keyCount + aggregateIndex] = nullableValueChunk(chunks[keyCount + aggregateIndex]);
+        // A type-erased column of tagged cells is folded as it stands, like a count's
+        // input: every cell carries its own tag, so there is no one value type to read
+        // the column as.
+        const mlir::Value aggregateChunk = chunks[keyCount + aggregateIndex];
+        const mlir::Type aggregateElement = mlir::cast<nl::ChunkType>(aggregateChunk.getType()).getElementType();
+        const bool taggedCells = mlir::isa<storage::ListElementType>(aggregateElement);
+
+        if (reducesValues(kind) && !taggedCells) {
+            chunks[keyCount + aggregateIndex] = nullableValueChunk(aggregateChunk);
         }
     }
 
