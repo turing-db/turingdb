@@ -500,22 +500,35 @@ LogicalResult Aggregate::verify() {
 // rather than folding into a wrongly-typed or wrongly-initialized accumulator.
 LogicalResult AggregateUpdate::verify() {
     const storage::AggregateKind kind = getKind();
+    const bool isAvg = kind == storage::AggregateKind::Avg;
+    const Type accumulatorType = cast<AggregateStateType>(getState().getType()).getElementType();
 
-    // The input is a property value chunk; its value type is what the fold reads.
-    const Type inputValueType = aggregateValueType(getRows().getType());
-    if (!inputValueType) {
-        return emitOpError("input must be a nullable value chunk (a property column)");
+    // A type-erased column of tagged cells has no one value type: every cell is read
+    // through its own tag. Only avg folds one, since its f64 accumulator is the same
+    // whatever the tags were, where sum/min/max hold the reduced value in the input's
+    // own type and so have to know it.
+    const auto rowsChunk = cast<ChunkType>(getRows().getType());
+    const bool taggedCells = isa<storage::ListElementType>(rowsChunk.getElementType());
+    if (taggedCells && !isAvg) {
+        return emitOpError("only avg folds a column of tagged cells");
     }
 
-    // avg folds any numeric input into an f64 accumulator; sum/min/max fold into an
-    // accumulator of the input's own value type.
-    const Type accumulatorType = cast<AggregateStateType>(getState().getType()).getElementType();
-    if (kind == storage::AggregateKind::Avg) {
-        if (!isa<Float64Type>(accumulatorType)) {
-            return emitOpError("avg must fold into an f64 accumulator state");
+    // Every other input is a property value chunk; its value type is what the fold
+    // reads, and sum/min/max fold into an accumulator of that type.
+    if (!taggedCells) {
+        const Type inputValueType = aggregateValueType(getRows().getType());
+        if (!inputValueType) {
+            return emitOpError("input must be a nullable value chunk (a property column)");
         }
-    } else if (inputValueType != accumulatorType) {
-        return emitOpError("sum/min/max must fold into an accumulator of the input's value type");
+
+        if (!isAvg && inputValueType != accumulatorType) {
+            return emitOpError("sum/min/max must fold into an accumulator of the input's value type");
+        }
+    }
+
+    // avg folds any numeric input into an f64 accumulator, tagged cells included.
+    if (isAvg && !isa<Float64Type>(accumulatorType)) {
+        return emitOpError("avg must fold into an f64 accumulator state");
     }
 
     // The accumulator's reset depends on the producer's kind (a present zero for

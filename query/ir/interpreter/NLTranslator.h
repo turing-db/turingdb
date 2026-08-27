@@ -473,6 +473,11 @@ private:
     // nl.count_update.
     static NLCountFunction selectCountForChunkType(mlir::Type chunkType);
 
+    // The fold handler for a value reduction over a chunk type. Used by
+    // nl.aggregate_update.
+    static NLAggregateUpdateFunction selectAggregateUpdateForChunkType(AggregateKind kind,
+                                                                      mlir::Type chunkType);
+
     // Translate an nl.get_node_properties / nl.get_edge_properties: resolve the
     // property name (carried by the nl.get_property_type that produced the
     // handle) to a PropertyTypeID and value type, allocate the nullable value
