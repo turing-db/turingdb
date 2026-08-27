@@ -1324,6 +1324,20 @@ target_link_libraries(test_query_ir_aggregate_over_constant_alias PRIVATE
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_aggregate_over_constant_alias PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# OPTIONAL MATCH beside the clauses around it: a mandatory MATCH, another OPTIONAL MATCH, a
+# WITH barrier, an aggregation and a CALL. Reads its rows as text through StringRowSink,
+# since the projections range over IDs, properties and lists.
+add_turing_test(test_query_ir_optional_match_composition OptionalMatchCompositionTest.cpp)
+target_sources(test_query_ir_optional_match_composition PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_optional_match_composition PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_optional_match_composition PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_optional_match OptionalMatchTest.cpp)
 target_link_libraries(test_query_ir_optional_match PRIVATE
         turing_db_s
