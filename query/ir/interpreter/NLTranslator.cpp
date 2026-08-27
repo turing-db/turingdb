@@ -321,7 +321,10 @@ bool isConstantColumn(const Column* column) {
 // second one means malformed IR - the accumulate side rejects a second
 // nl.collect_update the same way.
 void throwIfAlreadyDrained(const NLCollectState* state) {
-    if (state->getValueOutput()) {
+    const std::vector<NLCollectState::ValueColumn>& valueColumns = state->valueColumns();
+    const bool isDrained = !valueColumns.empty() && valueColumns.front()._output;
+
+    if (isDrained) {
         throw IRException("an nl.collect_buffer must be drained by a single nl.collect or nl.unwind_collect");
     }
 }
@@ -2159,10 +2162,10 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
         throw IRException("collect_update state must come from nl.collect_buffer");
     }
 
-    // The key buffers and the value buffer are allocated once, by the single update
+    // The key buffers and the value buffers are allocated once, by the single update
     // feeding an accumulator. Generated IR has exactly one update per accumulator; a
     // second would append the same rows twice, so it is rejected here.
-    if (!state->keyColumns().empty() || state->getValues()) {
+    if (!state->keyColumns().empty() || !state->valueColumns().empty()) {
         throw IRException("an nl.collect_buffer must be fed by a single nl.collect_update");
     }
 
@@ -2170,11 +2173,16 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
     const size_t keyCount = buffer.getKeyCount();
     const llvm::ArrayRef<int64_t> kinds = buffer.getKinds().value_or(llvm::ArrayRef<int64_t> {});
 
-    // The collected columns are the grouping keys, the one value column, then one input
-    // per aggregate reduced over the same groups.
-    if (columns.size() != keyCount + 1 + kinds.size()) {
-        throw IRException("collect collects one value column after the grouping keys, then one column per aggregate");
+    // The collected columns are the grouping keys, the value columns, then one input per
+    // aggregate reduced over the same groups: what the keys and the aggregates leave is
+    // what the collect gathers, and it gathers at least one.
+    if (columns.size() <= keyCount + kinds.size()) {
+        throw IRException("collect collects at least one value column after the grouping keys, then one column per aggregate");
     }
+
+    const size_t valueCount = columns.size() - keyCount - kinds.size();
+
+    const llvm::ArrayRef<int64_t> distinctValues = buffer.getDistinctValues().value_or(llvm::ArrayRef<int64_t> {});
 
     NLCollectUpdateData* data = _program->allocFunctionData<NLCollectUpdateData>(state);
 
@@ -2194,36 +2202,41 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
         state->addKeyColumn(key);
     }
 
-    // The collected value column is either a nullable value chunk (a property fetch),
-    // whose present values accumulate in a flat buffer of the same primitive with nulls
+    // Each collected column is either a nullable value chunk (a property fetch), whose
+    // present values accumulate in a flat buffer of the same primitive with nulls
     // dropped to match Cypher collect, or an entity chunk, whose every row carries an
     // ID. The fold (append) and the drain emit handlers are baked from that type here,
     // so whichever drain the query uses reads a ready handler off the state.
-    const mlir::Value valueColumn = columns[keyCount];
-    const mlir::Type valueElement = mlir::cast<nl::ChunkType>(valueColumn.getType()).getElementType();
+    for (size_t valueIndex = 0; valueIndex < valueCount; valueIndex++) {
+        const mlir::Value column = columns[keyCount + valueIndex];
+        const mlir::Type element = mlir::cast<nl::ChunkType>(column.getType()).getElementType();
 
-    state->setValueInput(getColumn(valueColumn));
+        const bool isDistinct = llvm::is_contained(distinctValues, static_cast<int64_t>(valueIndex));
 
-    const bool isDistinct = buffer.getDistinct();
+        NLCollectState::ValueColumn value;
+        value._input = getColumn(column);
 
-    if (mlir::isa<storage::NullableType>(valueElement)) {
-        const ValueType valueType = nullableChunkValueType(valueColumn.getType());
+        if (mlir::isa<storage::NullableType>(element)) {
+            const ValueType valueType = nullableChunkValueType(column.getType());
 
-        state->setValues(allocValueColumnForValueType(valueType));
-        state->setFold(isDistinct ? NLExecutor::selectCollectDistinctFold(valueType)
-                                  : NLExecutor::selectCollectFold(valueType));
-        state->setUnwindCollectEmit(NLExecutor::selectUnwindCollectValueEmit(valueType));
-        state->setListEmit(NLExecutor::selectCollectListEmit(valueType));
-    } else {
-        const NLChunkKind kind = getChunkKind(valueColumn.getType());
+            value._buffer = allocValueColumnForValueType(valueType);
+            value._fold = isDistinct ? NLExecutor::selectCollectDistinctFold(valueType)
+                                     : NLExecutor::selectCollectFold(valueType);
+            value._unwindCollectEmit = NLExecutor::selectUnwindCollectValueEmit(valueType);
+            value._listEmit = NLExecutor::selectCollectListEmit(valueType);
+        } else {
+            const NLChunkKind kind = getChunkKind(column.getType());
 
-        NLCollectFoldFunction fold = nullptr;
-        NLCollectListEmitFunction listEmit = nullptr;
-        NLExecutor::selectCollectEntityHandlers(kind, isDistinct, fold, listEmit);
+            NLCollectFoldFunction fold = nullptr;
+            NLCollectListEmitFunction listEmit = nullptr;
+            NLExecutor::selectCollectEntityHandlers(kind, isDistinct, fold, listEmit);
 
-        state->setValues(allocColumnForKind(kind));
-        state->setFold(fold);
-        state->setListEmit(listEmit);
+            value._buffer = allocColumnForKind(kind);
+            value._fold = fold;
+            value._listEmit = listEmit;
+        }
+
+        state->addValueColumn(value);
     }
 
     // The reductions taken beside the list read the same groups, so their accumulators
@@ -2232,7 +2245,7 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
         const storage::GroupAggregateKind aggregateKind = static_cast<storage::GroupAggregateKind>(kinds[aggregateIndex]);
 
         NLGroupAggregateState::Aggregate aggregate;
-        buildGroupAggregate(aggregateKind, columns[keyCount + 1 + aggregateIndex], aggregate);
+        buildGroupAggregate(aggregateKind, columns[keyCount + valueCount + aggregateIndex], aggregate);
 
         state->addAggregate(aggregate);
     }
@@ -2261,7 +2274,8 @@ void NLTranslator::translateUnwindCollectLoop(const IteratorConfig& config,
 
     // Only a value collect bakes an unwind emit handler; an entity collect leaves it
     // unset, so its list can be returned but not yet unwound element by element.
-    if (!state->getUnwindCollectEmit()) {
+    NLCollectState::ValueColumn& unwound = state->unwoundColumn();
+    if (!unwound._unwindCollectEmit) {
         throw IRException("unwinding a collected entity list is not supported");
     }
 
@@ -2292,7 +2306,7 @@ void NLTranslator::translateUnwindCollectLoop(const IteratorConfig& config,
     const mlir::Value valueVariable = loopBody.getArgument(static_cast<unsigned>(keyCount));
     Column* valueOutput = allocColumnForResultChunkType(valueVariable.getType());
     _valueSlots[valueVariable] = valueOutput;
-    state->setValueOutput(valueOutput);
+    unwound._output = valueOutput;
 
     body->emplaceStmt(&NLExecutor::runUnwindCollectLoop, loopData);
 
@@ -2309,12 +2323,13 @@ void NLTranslator::translateCollectLoop(const IteratorConfig& config,
 
     throwIfAlreadyDrained(state);
 
-    // The collect iterator's chunks are the grouping keys, the list cell, then one per
-    // aggregate reduced over the same groups.
+    // The collect iterator's chunks are the grouping keys, one list cell per collected
+    // column, then one per aggregate reduced over the same groups.
     const size_t keyCount = state->keyColumns().size();
+    std::vector<NLCollectState::ValueColumn>& valueColumns = state->valueColumns();
     std::vector<NLGroupAggregateState::Aggregate>& aggregates = state->aggregates();
-    if (loopBody.getNumArguments() != keyCount + 1 + aggregates.size()) {
-        throw IRException("nl.collect loop must bind one variable per grouping key, the list, and one per aggregate");
+    if (loopBody.getNumArguments() != keyCount + valueColumns.size() + aggregates.size()) {
+        throw IRException("nl.collect loop must bind one variable per grouping key, one per list, and one per aggregate");
     }
 
     NLCollectLoopData* loopData = _program->allocFunctionData<NLCollectLoopData>(state);
@@ -2329,16 +2344,19 @@ void NLTranslator::translateCollectLoop(const IteratorConfig& config,
         state->keyColumns()[keyIndex]._output = output;
     }
 
-    // Then the per-group list cell (a ColumnVector<ListView>).
-    const mlir::Value listVariable = loopBody.getArgument(static_cast<unsigned>(keyCount));
-    Column* listOutput = allocColumnForResultChunkType(listVariable.getType());
-    _valueSlots[listVariable] = listOutput;
-    state->setValueOutput(listOutput);
+    // Then one per-group list cell per collected column (a ColumnVector<ListView>).
+    for (size_t valueIndex = 0; valueIndex < valueColumns.size(); valueIndex++) {
+        const mlir::Value listVariable = loopBody.getArgument(static_cast<unsigned>(keyCount + valueIndex));
+
+        Column* listOutput = allocColumnForResultChunkType(listVariable.getType());
+        _valueSlots[listVariable] = listOutput;
+        valueColumns[valueIndex]._output = listOutput;
+    }
 
     // The remaining variables take the reductions, one per aggregate, filled from the
-    // same group window the list is sliced over.
+    // same group window the lists are sliced over.
     for (size_t aggregateIndex = 0; aggregateIndex < aggregates.size(); aggregateIndex++) {
-        const unsigned argumentIndex = static_cast<unsigned>(keyCount + 1 + aggregateIndex);
+        const unsigned argumentIndex = static_cast<unsigned>(keyCount + valueColumns.size() + aggregateIndex);
         const mlir::Value loopVariable = loopBody.getArgument(argumentIndex);
 
         Column* output = allocColumnForResultChunkType(loopVariable.getType());

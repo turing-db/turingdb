@@ -2,7 +2,7 @@
 // Reproduce with: mlir -dump-lowered collect_distinct.mlir -graph <graph>
 // This is the DBLowering output; edit collect_distinct.mlir, not this file.
 //
-// The flag rides the accumulator: nl.collect_buffer carries `distinct`, so the fold
+// The flag rides the accumulator: nl.collect_buffer names the deduping value column, so the fold
 // nl.collect_update runs is the deduplicating one. Nothing else about the shape moves -
 // the same hoisted buffer, the same update inside the loop nest, the same nl.collect
 // source draining one row per group - which is why collect(DISTINCT x) is a flag rather
@@ -14,7 +14,7 @@
 // !storage.list<!storage.node_id> chunk whatever the schema says.
 module {
   func.func @main() {
-    %0 = nl.collect_buffer keys 1 distinct
+    %0 = nl.collect_buffer keys 1 distinct [0]
     %1 = nl.get_property_type("name")
     %2 = nl.scan_nodes()
     nl.for %arg0 in %2 : !nl.iter<!nl.chunk<!storage.node_id>> {

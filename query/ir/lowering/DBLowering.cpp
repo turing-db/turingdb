@@ -1737,19 +1737,24 @@ void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
 void DBLowering::lowerCollect(mlir::db::Collect collect) {
     const mlir::OperandRange columns = collect.getColumns();
     const uint64_t keyCount = collect.getKeyCount();
+    const llvm::ArrayRef<int64_t> kinds = collect.getKinds().value_or(llvm::ArrayRef<int64_t> {});
 
-    // The nl chunks the columns lowered to: the grouping keys first, then the single
-    // collected value column. nl.collect_update appends these to the per-group lists.
+    // The nl chunks the columns lowered to: the grouping keys first, then the collected
+    // value columns, then the aggregate inputs. nl.collect_update appends these to the
+    // per-group lists.
     llvm::SmallVector<mlir::Value, 4> chunks;
     for (const mlir::Value column : columns) {
         chunks.push_back(mapValue(column));
     }
 
-    // Collect::verify guarantees columns.size() == keyCount + 1, so an empty column set
-    // here means unverified IR - a defensive backstop, as in lowerGroupAggregate.
+    // Collect::verify guarantees at least one value column after the keys, so an empty
+    // column set here means unverified IR - a defensive backstop, as in
+    // lowerGroupAggregate.
     if (chunks.empty()) {
         throw IRException("db.collect requires at least one column");
     }
+
+    const size_t valueCount = chunks.size() - keyCount - kinds.size();
 
     // A constant collected column is folded over the rows of the group it falls in, not
     // over the single row it is, so it is laid out over the chunk the grouping keys are
@@ -1762,21 +1767,23 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
 
     // An entity column collects as the IDs it carries, which every row holds: only a
     // scalar value column is read as nullable, the way a property fetch is.
-    const mlir::Type collectedElement = mlir::cast<nl::ChunkType>(chunks[keyCount].getType()).getElementType();
-    const bool collectsEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(collectedElement);
+    for (size_t valueIndex = 0; valueIndex < valueCount; valueIndex++) {
+        const size_t chunkIndex = keyCount + valueIndex;
+        const mlir::Type collectedElement = mlir::cast<nl::ChunkType>(chunks[chunkIndex].getType()).getElementType();
+        const bool collectsEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(collectedElement);
 
-    if (!collectsEntity) {
-        chunks[keyCount] = nullableValueChunk(chunks[keyCount]);
+        if (!collectsEntity) {
+            chunks[chunkIndex] = nullableValueChunk(chunks[chunkIndex]);
+        }
     }
 
-    // A reduction beside the list reads its input as a nullable value chunk, as it does
+    // A reduction beside the lists reads its input as a nullable value chunk, as it does
     // under a grouped aggregation; a count tallies rows and takes the chunk as it is.
-    const llvm::ArrayRef<int64_t> kinds = collect.getKinds().value_or(llvm::ArrayRef<int64_t> {});
     for (size_t aggregateIndex = 0; aggregateIndex < kinds.size(); aggregateIndex++) {
         const auto kind = static_cast<storage::GroupAggregateKind>(kinds[aggregateIndex]);
 
         if (reducesValues(kind)) {
-            const size_t chunkIndex = keyCount + 1 + aggregateIndex;
+            const size_t chunkIndex = keyCount + valueCount + aggregateIndex;
             chunks[chunkIndex] = nullableValueChunk(chunks[chunkIndex]);
         }
     }
@@ -1790,7 +1797,7 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
     nl::CollectBuffer bufferOp = _builder.create<nl::CollectBuffer>(loc,
                                                                     keyCount,
                                                                     collect.getKindsAttr(),
-                                                                    collect.getDistinct());
+                                                                    collect.getDistinctValuesAttr());
     const mlir::Value state = bufferOp.getState();
 
     // The update folds each step's chunk of every column into the per-group lists. It
@@ -1802,10 +1809,10 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
     _builder.create<nl::CollectUpdate>(loc, state, chunks);
 
     // The emit phase: an nl.collect source iterator yielding one row per group - the
-    // key columns then the per-group list cell - drained by an nl.for after the
-    // producing loop. The list chunk's element is the resolved value type (unwrapped
-    // from the collected column's nullable) wrapped in a storage list; the key chunks
-    // keep their input types.
+    // key columns then one per-group list cell per collected column - drained by an
+    // nl.for after the producing loop. Each list chunk's element is the resolved value
+    // type (unwrapped from the collected column's nullable) wrapped in a storage list;
+    // the key chunks keep their input types.
     mlir::MLIRContext* const context = _builder.getContext();
 
     llvm::SmallVector<mlir::Type, 4> chunkTypes;
@@ -1813,21 +1820,23 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
         chunkTypes.push_back(chunks[keyIndex].getType());
     }
 
-    const mlir::Type valueElement = mlir::cast<nl::ChunkType>(chunks[keyCount].getType()).getElementType();
-    mlir::Type listElement = valueElement;
-    if (const auto nullable = mlir::dyn_cast<storage::NullableType>(valueElement)) {
-        listElement = nullable.getValueType();
-    }
+    for (size_t valueIndex = 0; valueIndex < valueCount; valueIndex++) {
+        const mlir::Type valueElement = mlir::cast<nl::ChunkType>(chunks[keyCount + valueIndex].getType()).getElementType();
 
-    const nl::ChunkType listChunk = nl::ChunkType::get(context, storage::ListType::get(context, listElement));
-    chunkTypes.push_back(listChunk);
+        mlir::Type listElement = valueElement;
+        if (const auto nullable = mlir::dyn_cast<storage::NullableType>(valueElement)) {
+            listElement = nullable.getValueType();
+        }
+
+        chunkTypes.push_back(nl::ChunkType::get(context, storage::ListType::get(context, listElement)));
+    }
 
     const mlir::Type ui64Element = _builder.getIntegerType(64, /*isSigned=*/false);
     const nl::ChunkType countChunkType = nl::ChunkType::get(context, ui64Element);
 
     for (size_t aggregateIndex = 0; aggregateIndex < kinds.size(); aggregateIndex++) {
         const storage::GroupAggregateKind kind = static_cast<storage::GroupAggregateKind>(kinds[aggregateIndex]);
-        const mlir::Value inputChunk = chunks[keyCount + 1 + aggregateIndex];
+        const mlir::Value inputChunk = chunks[keyCount + valueCount + aggregateIndex];
 
         chunkTypes.push_back(groupAggregateResultChunkType(_builder, kind, inputChunk, countChunkType));
     }
@@ -1865,7 +1874,7 @@ void DBLowering::lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect) {
     nl::CollectBuffer bufferOp = _builder.create<nl::CollectBuffer>(loc,
                                                                     keyCount,
                                                                     mlir::DenseI64ArrayAttr {},
-                                                                    /*distinct=*/false);
+                                                                    mlir::DenseI64ArrayAttr {});
     const mlir::Value state = bufferOp.getState();
 
     const mlir::Value representative = chunks.front();

@@ -6,6 +6,7 @@
 
 #include "IRLiteralList.h"
 #include "StorageEnums.h"
+#include "ColumnIndicesFormat.h"
 #include "GroupAggregateKindsFormat.h"
 
 using namespace mlir;

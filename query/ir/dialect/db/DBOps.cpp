@@ -1,10 +1,13 @@
 #include "DBOps.h"
 #include "DBDialect.h"
 
+#include <optional>
+
 #include "llvm/ADT/SmallVector.h"
 
 #include "IRLiteralList.h"
 #include "StorageEnums.h"
+#include "ColumnIndicesFormat.h"
 #include "GroupAggregateKindsFormat.h"
 
 using namespace mlir;
@@ -562,24 +565,27 @@ LogicalResult Collect::verify() {
     const Operation::result_range results = getResults();
     const uint64_t keyCount = getKeyCount();
 
-    // The collected column follows the grouping keys, and one aggregate input follows it
-    // per kind. Bound keyCount by the real column count first: summing keyCount + 1 could
-    // wrap in unsigned 64-bit and let a pathological keyCount slip past into
-    // out-of-bounds lowering.
+    // The collected columns follow the grouping keys, and one aggregate input follows
+    // them per kind, so what is left over after the keys and the aggregates is the value
+    // columns - at least one. Bound keyCount by the real column count first: summing
+    // keyCount + aggregateCount could wrap in unsigned 64-bit and let a pathological
+    // keyCount slip past into out-of-bounds lowering.
     const size_t columnCount = columns.size();
     const size_t aggregateCount = getKinds() ? getKinds()->size() : 0;
-    if (keyCount >= columnCount || columnCount - keyCount != 1 + aggregateCount) {
+    if (keyCount >= columnCount || columnCount - keyCount <= aggregateCount) {
         return emitOpError("expects ") << keyCount
-                                       << " grouping-key columns, one collected column and "
+                                       << " grouping-key columns, at least one collected column and "
                                        << aggregateCount
                                        << " aggregate columns, but has "
                                        << columnCount;
     }
 
-    // One result per grouping key, the collected list, then one per aggregate.
+    const size_t valueCount = columnCount - keyCount - aggregateCount;
+
+    // One result per grouping key, one per collected list, then one per aggregate.
     if (results.size() != columnCount) {
         return emitOpError("expects ") << columnCount
-                                       << " results, one per grouping key plus the collected list and the "
+                                       << " results, one per grouping key plus the collected lists and the "
                                           "aggregates, but has "
                                        << results.size();
     }
@@ -594,19 +600,37 @@ LogicalResult Collect::verify() {
         }
     }
 
-    // The trailing result is the collected list: a column whose element type is a
-    // storage list.
-    const ColumnType listColumn = llvm::dyn_cast<ColumnType>(results[keyCount].getType());
-    if (!listColumn || !llvm::isa<storage::ListType>(listColumn.getType())) {
-        return emitOpError("collected result must be a list column");
+    // Each value's result is the list it collects into: a column whose element type is a
+    // storage list of that value column's type.
+    for (size_t valueIndex = 0; valueIndex < valueCount; valueIndex++) {
+        const size_t position = keyCount + valueIndex;
+
+        const ColumnType listColumn = llvm::dyn_cast<ColumnType>(results[position].getType());
+        if (!listColumn || !llvm::isa<storage::ListType>(listColumn.getType())) {
+            return emitOpError("collected result ") << valueIndex << " must be a list column";
+        }
+
+        const ColumnType valueColumn = llvm::cast<ColumnType>(columns[position].getType());
+        const storage::ListType collectedList = llvm::cast<storage::ListType>(listColumn.getType());
+        if (collectedList.getElementType() != valueColumn.getType()) {
+            return emitOpError("collected result ") << valueIndex
+                                                    << " must be a list of "
+                                                    << valueColumn.getType()
+                                                    << ", the collected column's type, but collects "
+                                                    << collectedList.getElementType();
+        }
     }
 
-    const ColumnType valueColumn = llvm::cast<ColumnType>(columns[keyCount].getType());
-    const storage::ListType collectedList = llvm::cast<storage::ListType>(listColumn.getType());
-    if (collectedList.getElementType() != valueColumn.getType()) {
-        return emitOpError("collected result must be a list of ") << valueColumn.getType()
-                                                                  << ", the collected column's type, but collects "
-                                                                  << collectedList.getElementType();
+    // Every deduplicating value names one of the collected columns.
+    if (const std::optional<llvm::ArrayRef<int64_t>> distinctValues = getDistinctValues()) {
+        for (const int64_t valueIndex : *distinctValues) {
+            if (valueIndex < 0 || static_cast<size_t>(valueIndex) >= valueCount) {
+                return emitOpError("distinct value index ") << valueIndex
+                                                            << " is out of range for "
+                                                            << valueCount
+                                                            << " collected columns";
+            }
+        }
     }
 
     return success();

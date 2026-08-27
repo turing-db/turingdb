@@ -1010,19 +1010,6 @@ TEST_F(CypherCollectTest, ungroupedCollectOrderedByASum) {
     EXPECT_EQ(sink.rows(), expected);
 }
 
-// Each collect drains through a loop of its own, and the emit sits in one of them: the
-// other list is bound in a loop the output is not in, so this is the pair that is still
-// turned away.
-TEST_F(CypherCollectTest, rejectsTwoCollects) {
-    buildTeamGraph();
-
-    QueryStatus status;
-    runQuery("MATCH (n:Node) RETURN collect(n.name), collect(n.team)", status);
-
-    EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
-    EXPECT_EQ(status.getError(), "collect() may not yet be combined with another collect().");
-}
-
 // The sort orders the group rows the drain emits, carrying each group's list along with
 // the key it belongs to.
 TEST_F(CypherCollectTest, groupedCollectWithOrderBy) {

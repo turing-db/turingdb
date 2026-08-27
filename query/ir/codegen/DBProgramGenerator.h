@@ -374,11 +374,17 @@ private:
     bool collectAggregateInvocations(const Expr* expr,
                                      llvm::SmallVectorImpl<const FunctionInvocationExpr*>& found);
 
+    // One db.collect gathering every list the projection returns: the collects share the
+    // group table, so a second list is another value column rather than another op
     mlir::db::Collect createCollect(llvm::ArrayRef<mlir::Value> keyColumns,
-                                    mlir::Value valueColumn,
-                                    bool distinctValues,
+                                    llvm::ArrayRef<mlir::Value> valueColumns,
+                                    llvm::ArrayRef<int64_t> distinctValues,
                                     llvm::ArrayRef<mlir::Value> aggregateColumns = {},
                                     llvm::ArrayRef<mlir::storage::GroupAggregateKind> aggregateKinds = {});
+
+    // The collects a keyless projection returns, built as one op so a single drain emits
+    // them all. One collect needs no help: its own translation is that op.
+    void generateKeylessCollect(const Projection* projection);
 
     void translateExpr(const Expr* expr);
     void translateUnaryExpr(const Expr* expr, const UnaryExpr* unaryExpr);

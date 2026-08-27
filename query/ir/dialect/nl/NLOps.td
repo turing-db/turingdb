@@ -1604,25 +1604,31 @@ def CollectBuffer : NLOp<"collect_buffer", []> {
   let description = [{
     Hoisted above the loops; produces the !nl.collect_state handle nl.collect_update
     appends to and the drain reads. `keys` is how many collected columns are grouping
-    keys (0 = one global list); the column types are recovered from the update.
+    keys (0 = one global list); the column types, and how many value columns follow the
+    keys, are recovered from the update.
 
       %buf = nl.collect_buffer keys 1
 
     `distinct` makes the accumulator charge each of a group's values once - Cypher's
-    collect(DISTINCT x). It sits on the buffer rather than the update because it is part
-    of what the accumulator is, as its key count is: the update carries no spec of its own.
+    collect(DISTINCT x) - naming the value columns that dedupe by index. It sits on the
+    buffer rather than the update because it is part of what the accumulator is, as its
+    key count is: the update carries no spec of its own.
+
+      %buf = nl.collect_buffer keys 0 distinct [1]
   }];
 
   // keyCount is unsigned; 0 is a valid ungrouped collect, so nothing to verify here
   // (the value-column split is checked during translation). kinds names the reductions
   // taken over the same groups as the list, one per aggregate input the update carries
-  // after the value column, and is absent when the collect reduces nothing beside it.
-  let arguments = (ins UI64Attr:$keyCount, OptionalAttr<DenseI64ArrayAttr>:$kinds, UnitAttr:$distinct);
+  // after the value columns, and is absent when the collect reduces nothing beside it.
+  let arguments = (ins UI64Attr:$keyCount,
+                       OptionalAttr<DenseI64ArrayAttr>:$kinds,
+                       OptionalAttr<DenseI64ArrayAttr>:$distinctValues);
   let results   = (outs NLCollectState:$state);
 
   let assemblyFormat = [{
     `keys` $keyCount (`aggregates` custom<GroupAggregateKinds>($kinds)^)?
-    (`distinct` $distinct^)? attr-dict
+    (`distinct` custom<ColumnIndices>($distinctValues)^)? attr-dict
   }];
 }
 
@@ -1633,9 +1639,9 @@ def CollectBuffer : NLOp<"collect_buffer", []> {
 def CollectUpdate : NLOp<"collect_update", []> {
   let summary = "Append this step's rows to the per-group value lists";
   let description = [{
-    Assigns each row to its group by the grouping-key tuple and appends its value to
-    that group's list. Columns are the grouping keys then the single value column, per
-    the buffer's `keys`; nulls are dropped (Cypher collect ignores them).
+    Assigns each row to its group by the grouping-key tuple and appends its values to
+    that group's lists. Columns are the grouping keys then the value columns, per the
+    buffer's `keys`; nulls are dropped (Cypher collect ignores them).
 
       nl.collect_update %buf, (%city, %name) : !nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<!storage.string>>
   }];
@@ -1677,10 +1683,11 @@ def UnwindCollect : NLOp<"unwind_collect", [Pure]> {
 def Collect : NLOp<"collect", [Pure]> {
   let summary = "Create a database iterator that drains a collect accumulator, one row per group carrying the whole list";
   let description = [{
-    Per-group drain of an nl.collect_state: one row per group - the key values then a
-    list cell (a ListView over the group's elements). An empty group yields an empty
-    list (unlike nl.unwind_collect). The iterator chunk types (keys then the list cell) are
-    spelled after the colon, and it is placed after the producing loop.
+    Per-group drain of an nl.collect_state: one row per group - the key values then one
+    list cell per value column (a ListView over the group's elements). An empty group
+    yields an empty list (unlike nl.unwind_collect). The iterator chunk types (the keys
+    then the list cells) are spelled after the colon, and it is placed after the
+    producing loop.
 
       %rows = nl.collect(%buf) : !nl.iter<!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.list<!storage.string>>>
   }];
