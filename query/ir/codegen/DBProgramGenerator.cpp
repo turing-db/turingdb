@@ -848,6 +848,7 @@ void DBProgramGenerator::generatePart(std::span<Stmt* const> stmts) {
     generatePropertyConstraints(stmts);
     generateFiltersCallsAndSearches(stmts);
     resolveYieldedIdentities();
+    generateShortestPath(stmts);
 }
 
 bool DBProgramGenerator::generateSystemCommand(const CypherAST* ast) {
@@ -2728,23 +2729,8 @@ void DBProgramGenerator::generateDelete(const SinglePartQuery* query) {
     }
 }
 
-const ShortestPathStmt* DBProgramGenerator::findShortestPathStmt(const CypherAST* ast) const {
-    const CypherAST::QueryCommands& queries = ast->queries();
-    if (queries.size() != 1) {
-        return nullptr;
-    }
-
-    const SinglePartQuery* sglPart = dynamic_cast<const SinglePartQuery*>(queries.front());
-    if (!sglPart) {
-        return nullptr;
-    }
-
-    const StmtContainer* readStmts = sglPart->getReadStmts();
-    if (!readStmts) {
-        return nullptr;
-    }
-
-    for (const Stmt* stmt : readStmts->stmts()) {
+const ShortestPathStmt* DBProgramGenerator::findShortestPathStmt(std::span<Stmt* const> stmts) const {
+    for (const Stmt* stmt : stmts) {
         if (stmt->getKind() == Stmt::Kind::SHORTESTPATH) {
             return static_cast<const ShortestPathStmt*>(stmt);
         }
@@ -2753,8 +2739,8 @@ const ShortestPathStmt* DBProgramGenerator::findShortestPathStmt(const CypherAST
     return nullptr;
 }
 
-void DBProgramGenerator::generateShortestPath(const CypherAST* ast) {
-    const ShortestPathStmt* stmt = findShortestPathStmt(ast);
+void DBProgramGenerator::generateShortestPath(std::span<Stmt* const> stmts) {
+    const ShortestPathStmt* stmt = findShortestPathStmt(stmts);
     if (!stmt) {
         return;
     }
@@ -2784,8 +2770,8 @@ void DBProgramGenerator::generateShortestPath(const CypherAST* ast) {
                                                                   targetColumn,
                                                                   propertyAttr);
 
-    _yieldedColumns.emplace_back(distName, shortestPath.getDistance());
-    _yieldedColumns.emplace_back(pathName, shortestPath.getPath());
+    _part._yieldedColumns.emplace_back(distName, shortestPath.getDistance());
+    _part._yieldedColumns.emplace_back(pathName, shortestPath.getPath());
 }
 
 void DBProgramGenerator::generateOutput(const Projection* projection) {

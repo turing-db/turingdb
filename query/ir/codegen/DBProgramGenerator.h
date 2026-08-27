@@ -284,9 +284,13 @@ private:
     // generated once that statement has bound it.
     void generateFiltersCallsAndSearches(std::span<Stmt* const> stmts);
 
-    void generateShortestPath(const CypherAST* ast);
+    // Emit db.shortest_path for a SHORTESTPATH statement in this part: feed it the source
+    // and target columns bound by the preceding matches and publish its distance and path
+    // results under the declared variable names. A no-op when the part has no such statement.
+    void generateShortestPath(std::span<Stmt* const> stmts);
 
-    const ShortestPathStmt* findShortestPathStmt(const CypherAST* ast) const;
+    // The SHORTESTPATH statement among the part's statements, or null.
+    const ShortestPathStmt* findShortestPathStmt(std::span<Stmt* const> stmts) const;
 
     void generateMatchFilter(const MatchStmt* matchStmt);
 
