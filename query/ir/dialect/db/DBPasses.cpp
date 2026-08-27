@@ -192,35 +192,32 @@ struct MaskCone {
     llvm::SmallSetVector<Value, 4> _inputs;
 };
 
-// Gathers the mask's compute cone and the external columns feeding it. The cone ops
-// come back in topological (block) order, ready to clone.
+// Gathers the mask's compute cone and the external columns feeding it. Valid
+// even when the cone spans blocks.
+void collectConePostOrder(Value value, llvm::SmallPtrSet<Operation*, 8>& visited, MaskCone& cone) {
+    Operation* const def = value.getDefiningOp();
+
+    if (!def || !isMaskComputeOp(def)) {
+        cone._inputs.insert(value);
+        return;
+    }
+
+    if (!visited.insert(def).second) {
+        return;
+    }
+
+    for (const Value operand : def->getOperands()) {
+        collectConePostOrder(operand, visited, cone);
+    }
+
+    cone._ops.push_back(def);
+}
+
 MaskCone collectMaskCone(Value mask) {
     MaskCone cone;
 
-    llvm::SmallPtrSet<Operation*, 8> inCone;
-    llvm::SmallVector<Value, 8> worklist {mask};
-    while (!worklist.empty()) {
-        const Value value = worklist.pop_back_val();
-        Operation* const def = value.getDefiningOp();
-
-        if (!def || !isMaskComputeOp(def)) {
-            cone._inputs.insert(value);
-            continue;
-        }
-
-        if (!inCone.insert(def).second) {
-            continue;
-        }
-
-        cone._ops.push_back(def);
-        for (const Value operand : def->getOperands()) {
-            worklist.push_back(operand);
-        }
-    }
-
-    llvm::sort(cone._ops, [](Operation* lhs, Operation* rhs) {
-        return lhs->isBeforeInBlock(rhs);
-    });
+    llvm::SmallPtrSet<Operation*, 8> visited;
+    collectConePostOrder(mask, visited, cone);
 
     return cone;
 }
