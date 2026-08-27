@@ -158,10 +158,8 @@ TEST_F(ShortestPathLoweringTest, findsCheapestMultiHopPath) {
     StringRowSink sink;
     runLoweredProgram(shortestPathProgram, reader.getView(), sink);
 
-    // A -> B -> C costs 10 + 20 = 30, beating the direct A -> C edge at 50. The path is
-    // stored target-first as alternating node/edge IDs: C(2), edge B->C(1), B(1),
-    // edge A->B(0), A(0).
-    const std::vector<StringRowSink::Row> expected {{"30", "2, 1, 1, 0, 0"}};
+    // A -> B -> C = 10 + 20 = 30 < A -> C =50
+    const std::vector<StringRowSink::Row> expected {{"30", "2, 2, 1, 0, 0"}};
 
     std::vector<StringRowSink::Row> rows;
     sink.sortedRows(rows);

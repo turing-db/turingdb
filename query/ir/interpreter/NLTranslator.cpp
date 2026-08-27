@@ -154,21 +154,6 @@ llvm::StringRef propertyTypeName(mlir::Value handle) {
     return handleOp.getName();
 }
 
-bool sameCardinality(mlir::Value first, mlir::Value second) {
-    const mlir::BlockArgument firstArg = mlir::dyn_cast<mlir::BlockArgument>(first);
-    const mlir::BlockArgument secondArg = mlir::dyn_cast<mlir::BlockArgument>(second);
-
-    if (firstArg && secondArg) {
-        return firstArg.getOwner() == secondArg.getOwner();
-    }
-
-    if (!firstArg && !secondArg) {
-        return first.getDefiningOp() == second.getDefiningOp();
-    }
-
-    return false;
-}
-
 // The with-null fetch handler for a property's value type, on the node side
 // when isNode is true and the edge side otherwise. Selecting it here keeps the
 // value-type dispatch with the rest of translation; the handler bodies live in
