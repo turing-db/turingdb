@@ -2467,12 +2467,18 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
     const bool opensLoop = opensSourceLoop(definingOp);
     const bool isCrossProduct = mlir::isa<mlir::db::CrossProduct>(definingOp);
 
-    // A pipeline breaker accumulates every row before emitting any, so the walk stops
-    // here; the limit budgets its emit loop instead, when it opens one.
     const bool emitsThroughLoop = mlir::isa<mlir::db::Sort,
                                             mlir::db::GroupAggregate,
                                             mlir::db::OptionalMatch>(definingOp);
-    const bool breaksPipeline = emitsThroughLoop || reducesToOneRow(definingOp);
+
+    // A sort or a grouped aggregate accumulates the whole relation before emitting any of
+    // it, so the loops feeding it have to see every row: the walk stops and the limit
+    // budgets the emit loop alone. An optional match accumulates one step of the rows it
+    // joins onto rather than the relation, and emits them in input order, so once the
+    // budget is spent no later step can contribute a row - the walk carries on and bounds
+    // the loops feeding it too.
+    const bool accumulatesTheRelation = mlir::isa<mlir::db::Sort, mlir::db::GroupAggregate>(definingOp);
+    const bool breaksPipeline = accumulatesTheRelation || reducesToOneRow(definingOp);
 
     bool reachedALoop = opensLoop || isCrossProduct || emitsThroughLoop;
 
