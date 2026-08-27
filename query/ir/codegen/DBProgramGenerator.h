@@ -135,6 +135,11 @@ private:
     // One query part: the statements between two WITH barriers
     void generatePart(std::span<Stmt* const> stmts);
 
+    // Whether the statement at this index closes a part on the cut it carries: a MATCH
+    // whose ORDER BY, SKIP or LIMIT reads the rows that MATCH produced, which a later
+    // MATCH of the same part would otherwise have crossed into them first
+    bool closesPartOnItsCut(std::span<Stmt* const> stmts, size_t index) const;
+
     void generateTraversal(std::span<Stmt* const> stmts);
 
     // A barrier leaves behind the traversal an edge's column was published under, so a
@@ -299,6 +304,10 @@ private:
 
     void publishBoundColumns(llvm::ArrayRef<llvm::StringRef> names,
                              llvm::ArrayRef<mlir::Value> columns);
+
+    // Publishes every column in scope under the name it already carries, so the part that
+    // follows a cut reads them the way it reads what a WITH published
+    void publishInFlightColumns();
 
     // The column each variable in scope is bound to, under the name it carries: the
     // traversal variables, what a CALL yielded, what a CREATE wrote, and each edge
