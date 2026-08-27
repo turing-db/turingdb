@@ -181,6 +181,7 @@ private:
     void lowerUnwindConst(mlir::db::UnwindConst unwindConst);
     void lowerLoadCSV(mlir::db::LoadCSV loadCSV);
     void lowerVectorSearch(mlir::db::VectorSearch vectorSearch);
+    void lowerUnwind(mlir::db::Unwind unwind);
     void lowerScanEdges(mlir::db::ScanEdges scanEdges);
     void lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges);
     void lowerGetInEdges(mlir::db::GetInEdges getInEdges);
@@ -414,6 +415,11 @@ private:
     mlir::Value rowAlignedChunk(mlir::Value chunk, mlir::Value cardinality);
 
     mlir::Value nullableValueChunk(mlir::Value chunk);
+
+    // The chunk element type an unwind of @param sourceElement produces: the type-erased
+    // list_element of tagged scalars when a list is drained, and the source's own element
+    // otherwise, its cells being the elements themselves
+    static mlir::Type unwoundElementType(mlir::MLIRContext* context, mlir::Type sourceElement);
 
     // The nl chunk a db value lowered to, and the block that holds a chunk
     mlir::Value mapValue(mlir::Value dbValue) const;

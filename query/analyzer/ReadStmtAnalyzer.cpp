@@ -1,5 +1,6 @@
 #include "ReadStmtAnalyzer.h"
 
+#include <algorithm>
 #include <string_view>
 
 #include "AnalyzeException.h"
@@ -52,6 +53,54 @@
 #include "FatalException.h"
 
 using namespace db;
+
+namespace {
+
+// A tagged scalar carries its type per row rather than in the plan, so no property type
+// rules it out: the comparison the constraint becomes settles it row by row, as the same
+// test written as a WHERE does.
+bool constraintTypeCompatible(ValueType propertyType, EvaluatedType exprType) {
+    return exprType == EvaluatedType::ListItem
+           || ExprAnalyzer::propTypeCompatible(propertyType, exprType);
+}
+
+// The type each row an UNWIND emits carries: the one type a homogeneous literal list's
+// elements share, the type of anything that is not a list (spread to its singleton), and
+// otherwise a tagged scalar, since a list carries no element type of its own.
+EvaluatedType unwoundItemType(const Expr* arg) {
+    if (arg->getType() != EvaluatedType::List) {
+        return arg->getType();
+    }
+
+    if (arg->getKind() != Expr::Kind::LITERAL) {
+        return EvaluatedType::ListItem;
+    }
+
+    const Literal* literal = static_cast<const LiteralExpr*>(arg)->getLiteral();
+    if (literal->getKind() != Literal::Kind::LIST) {
+        return EvaluatedType::ListItem;
+    }
+
+    const ListLiteral::Items& items = static_cast<const ListLiteral*>(literal)->items();
+    if (items.empty()) {
+        return EvaluatedType::ListItem;
+    }
+
+    const auto differingType = [](const Expr* a, const Expr* b) {
+        return a->getType() != b->getType();
+    };
+
+    const bool homogeneous = std::ranges::adjacent_find(items, differingType) == end(items);
+    if (!homogeneous) {
+        return EvaluatedType::ListItem;
+    }
+
+    // A list of lists has no ValueType to restrict to, so it stays tagged scalars
+    const EvaluatedType homogeneity = items.front()->getType();
+    return convertibleToValueType(homogeneity) ? homogeneity : EvaluatedType::ListItem;
+}
+
+}
 
 ReadStmtAnalyzer::ReadStmtAnalyzer(CypherAST* ast, GraphView graphView)
     : _ast(ast),
@@ -381,7 +430,7 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
                 throwError(fmt::format("Unknown property: {}", propName->getName()), nodePattern);
             }
 
-            if (!ExprAnalyzer::propTypeCompatible(propType->_valueType, expr->getType())) {
+            if (!constraintTypeCompatible(propType->_valueType, expr->getType())) {
                 throwError(fmt::format("Cannot evaluate node property: types '{}' and '{}' are incompatible",
                                        ValueTypeName::value(propType->_valueType),
                                        EvaluatedTypeName::value(expr->getType())),
@@ -452,7 +501,7 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
                 throwError(fmt::format("Unknown property: {}", propName->getName()), edgePattern);
             }
 
-            if (!ExprAnalyzer::propTypeCompatible(propType->_valueType, expr->getType())) {
+            if (!constraintTypeCompatible(propType->_valueType, expr->getType())) {
                 throwError(fmt::format("Cannot evaluate edge property: types '{}' and '{}' are incompatible",
                                        ValueTypeName::value(propType->_valueType),
                                        EvaluatedTypeName::value(expr->getType())),
@@ -592,63 +641,10 @@ void ReadStmtAnalyzer::analyze(const ShortestPathStmt* spSt) {
 }
 
 void ReadStmtAnalyzer::analyze(UnwindStmt* unwind) {
-    const Expr* arg = unwind->arg();
+    Expr* arg = unwind->arg();
     bioassert(arg, "Invalid argument");
 
-    {
-        const Expr::Kind argKind = arg->getKind();
-        const bool isLiteral = argKind == Expr::Kind::LITERAL;
-
-        if (!isLiteral) {
-            throwError("Non-literal UNWIND expressions are not yet supported.", arg);
-        }
-    }
-
-    const auto* litArg = static_cast<const LiteralExpr*>(arg);
-
-    const Literal* lit = litArg->getLiteral();
-    bioassert(lit, "Invalid literal.");
-
-    const Literal::Kind litKind = lit->getKind();
-    const bool isList = litKind == Literal::Kind::LIST;
-
-    /// Non-lists can be unwound, it just turns the argument into a singleton list
-    if (!isList) {
-        // TODO: Implement
-        throwError("Non-list arguments to UNWIND are not yet supported", litArg);
-    }
-
-    const auto* list = static_cast<const ListLiteral*>(lit);
-    const ListLiteral::Items& items = list->items();
-    for (Expr* ele : items) {
-        _exprAnalyzer->analyzeExpr(ele);
-    }
-
-    EvaluatedType itemType = EvaluatedType::ListItem;
-    if (!items.empty()) {
-        // Check for homogeneity: update evaluated type if found
-        const auto differingType = [](const Expr* a, const Expr* b) {
-            return a->getType() != b->getType();
-        };
-
-        const auto typeIt = std::ranges::adjacent_find(items, differingType);
-        const bool homogeneous = typeIt == end(items);
-
-        if (homogeneous) {
-            // List is homogeneous and non empty: perform type restriction
-            const Expr* item = items.front();
-            const EvaluatedType homogeneity = item->getType();
-            // Could be a list of lists: there is no ValueType::List -> do not treat as
-            // homogeneous
-            const bool isValueType = convertibleToValueType(homogeneity);
-
-            const bool canBeHomogeneous = isValueType;
-
-            if (canBeHomogeneous) {
-                itemType = homogeneity;
-            }
-        }
-    }
+    _exprAnalyzer->analyzeExpr(arg);
 
     const Symbol* symbol = unwind->symbol();
     bioassert(symbol, "Invalid symbol.");
@@ -661,7 +657,7 @@ void ReadStmtAnalyzer::analyze(UnwindStmt* unwind) {
         throwError(fmt::format("Variable '{}' is already declared", symName), unwind);
     }
 
-    VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast, itemType, symName);
+    VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast, unwoundItemType(arg), symName);
     decl->setIsUnwound(true);
 
     unwind->setDecl(decl);

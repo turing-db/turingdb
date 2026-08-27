@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "remote-enabled": false,
+  "graph": "simpledb",
+  "query": "MATCH (n) UNWIND n.age AS a RETURN n.name, a",
+  "expect": {
+    "plan": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n) UNWIND n.age AS a RETURN n.name, a\n       |                  ^^^^^\n-------* UNWIND of an expression evaluated per row is only supported by the MLIR query engine.",
+    "result": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n) UNWIND n.age AS a RETURN n.name, a\n       |                  ^^^^^\n-------* UNWIND of an expression evaluated per row is only supported by the MLIR query engine.",
+    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n) UNWIND n.age AS a RETURN n.name, a\\n       |                  ^^^^^\\n-------* UNWIND of an expression evaluated per row is only supported by the MLIR query engine.\"}"
+  },
+  "tags": [
+    "errors",
+    "unwind",
+    "lists"
+  ],
+  "write-required": false
+}

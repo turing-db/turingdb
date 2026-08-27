@@ -56,6 +56,7 @@ private:
         UnwindConst,
         LoadCSV,
         VectorSearch,
+        Unwind,
         ProcedureInit,
     };
 
@@ -121,6 +122,10 @@ private:
         mlir::ArrayAttr _csvFields;
         bool _csvHasHeaders {false};
         bool _csvSkipOnError {false};
+
+        // The column an Unwind iterator expands, one row per element of each of its
+        // cells; null for the other kinds.
+        mlir::Value _source;
     };
 
     NLProgram* _program {nullptr};
@@ -234,6 +239,15 @@ private:
                                    mlir::Block& loopBody,
                                    NLLimitState* limit,
                                    NLStmtContainer* body);
+
+    // Translate the nl.for over an nl.unwind iterator: allocate the element loop
+    // variable and one per carried column, pick the handlers that read the source
+    // column's shape, and record the expansion loop statement. The per-row sibling of
+    // translateUnwindConstLoop - it reads an input chunk and carries the rows in flight.
+    void translateUnwindLoop(const IteratorConfig& config,
+                             mlir::Block& loopBody,
+                             NLLimitState* limit,
+                             NLStmtContainer* body);
 
     // Materialize a literal element array - an nl.unwind_const's or an nl.const_list's -
     // into a ListView in the query-scoped ListBuffer, which the unwind loop then reads

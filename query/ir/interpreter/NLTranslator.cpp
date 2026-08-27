@@ -465,6 +465,15 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._neighbourCount = vectorSearch.getK();
             config._queryVector = vectorSearch.getQueryVector();
             _iteratorConfigs[vectorSearch.getResult()] = config;
+        } else if (nl::Unwind unwind = mlir::dyn_cast<nl::Unwind>(operation)) {
+            IteratorConfig config;
+            config._kind = IteratorKind::Unwind;
+            config._source = unwind.getSource();
+
+            const mlir::OperandRange carriedColumns = unwind.getColumnsToFilter();
+            config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
+
+            _iteratorConfigs[unwind.getResult()] = config;
         } else if (nl::ProcedureInit procedureInit = mlir::dyn_cast<nl::ProcedureInit>(operation)) {
             IteratorConfig config;
             config._kind = IteratorKind::ProcedureInit;
@@ -665,6 +674,10 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         // A vector search is a plain source too, so a downstream LIMIT can bound its
         // loop through the ordinary early-exit.
         translateVectorSearchLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::Unwind) {
+        // An unwind expands the rows it is given rather than accumulating them, so - like
+        // a hop - a downstream LIMIT can bound its loop through the ordinary early-exit.
+        translateUnwindLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::ProcedureInit) {
         translateProcedureInitLoop(config, loopBody, limit, body);
     } else {
@@ -842,6 +855,74 @@ void NLTranslator::translateVectorSearchLoop(const IteratorConfig& config,
     loopData->setLimit(limit);
 
     body->emplaceStmt(&NLExecutor::runVectorSearchLoop, loopData);
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateUnwindLoop(const IteratorConfig& config,
+                                       mlir::Block& loopBody,
+                                       NLLimitState* limit,
+                                       NLStmtContainer* body) {
+    const mlir::Value sourceValue = config._source;
+    const Column* source = getColumn(sourceValue);
+
+    const nl::ChunkType sourceChunk = mlir::cast<nl::ChunkType>(sourceValue.getType());
+    const mlir::Type sourceElement = sourceChunk.getElementType();
+
+    // An unwind binds the elements first, then one variable per carried column.
+    const mlir::Value elementValue = loopBody.getArgument(0);
+
+    // A column whose cells hold more than the element - a list, or a tagged scalar that
+    // may itself be a list - drains through its own emit. A scalar column already holds
+    // one element per cell, so its element column is the source's own rows gathered by
+    // the step: a carried column like the rest, and no drain here.
+    NLUnwindElementCountFunction elementCount = nullptr;
+    NLUnwindElementEmitFunction elementEmit = nullptr;
+
+    if (llvm::isa<storage::ListType>(sourceElement)) {
+        elementCount = NLExecutor::selectListUnwindElementCount();
+        elementEmit = NLExecutor::selectListUnwindElementEmit();
+    } else if (llvm::isa<storage::ListElementType>(sourceElement)) {
+        elementCount = NLExecutor::selectTaggedUnwindElementCount();
+        elementEmit = NLExecutor::selectTaggedUnwindElementEmit();
+    } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(sourceElement)) {
+        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        elementCount = NLExecutor::selectOptUnwindElementCount(valueType);
+    } else {
+        elementCount = NLExecutor::selectValueUnwindElementCount();
+    }
+
+    Column* const elementOutput = elementEmit ? allocColumn(elementValue) : nullptr;
+
+    NLUnwindLoopData* loopData = _program->allocFunctionData<NLUnwindLoopData>(source,
+                                                                               elementCount,
+                                                                               elementEmit,
+                                                                               elementOutput);
+    loopData->setLimit(limit);
+
+    const size_t chunkSize = _program->getChunkSize();
+    loopData->getRows()->reserve(chunkSize);
+    loopData->getPositions()->reserve(chunkSize);
+
+    if (!elementEmit) {
+        const NLCarriedColumn elementColumn(source,
+                                            allocColumn(elementValue),
+                                            selectGatherForChunkType(sourceChunk));
+        loopData->addCarriedColumn(elementColumn);
+    }
+
+    const size_t carriedCount = config._carriedColumns.size();
+    for (size_t carriedIndex = 0; carriedIndex < carriedCount; carriedIndex++) {
+        const mlir::Value carriedValue = config._carriedColumns[carriedIndex];
+        const mlir::Value loopVariable = loopBody.getArgument(static_cast<unsigned>(1 + carriedIndex));
+
+        const NLCarriedColumn carriedColumn(getColumn(carriedValue),
+                                            allocColumn(loopVariable),
+                                            selectGatherForChunkType(loopVariable.getType()));
+        loopData->addCarriedColumn(carriedColumn);
+    }
+
+    body->emplaceStmt(&NLExecutor::runUnwindLoop, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
 }

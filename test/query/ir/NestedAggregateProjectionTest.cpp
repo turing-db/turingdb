@@ -139,5 +139,5 @@ TEST_F(NestedAggregateProjectionTest, generatesAnAggregateInsideAnExpression) {
 }
 
 TEST_F(NestedAggregateProjectionTest, rejectsAListHoldingAnAggregateBesideAGroupingKey) {
-    expectRejected("MATCH (n) RETURN DISTINCT n, [count(n.age0)]", nonLiteralListElementReason);
+    expectRejected("MATCH (n) RETURN DISTINCT n, [count(n.age)]", nonLiteralListElementReason);
 }

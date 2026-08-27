@@ -679,6 +679,28 @@ LogicalResult UnwindCollect::verify() {
     return success();
 }
 
+// A carried column comes back replicated, never retyped, so the carry set and the
+// results past the element column must match one for one.
+LogicalResult Unwind::verify() {
+    const OperandRange carriedColumns = getColumnsToFilter();
+    const Operation::result_range carriedResults = getCarried();
+
+    if (carriedColumns.size() != carriedResults.size()) {
+        return emitOpError("expects one carried result per carried column, but has ")
+               << carriedResults.size() << " for " << carriedColumns.size();
+    }
+
+    for (size_t carriedIndex = 0; carriedIndex < carriedColumns.size(); carriedIndex++) {
+        if (carriedColumns[carriedIndex].getType() != carriedResults[carriedIndex].getType()) {
+            return emitOpError("carried result ") << carriedIndex
+                                                  << " must have the same type as carried column "
+                                                  << carriedIndex;
+        }
+    }
+
+    return success();
+}
+
 // The unwound column's element type is the homogeneity verdict: a type-erased
 // list_element column accepts any elements, a typed one requires them to share that one
 // type - the shared check the const_list verifier runs too.

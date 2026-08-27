@@ -154,6 +154,9 @@ void turing::test::renderCell(const Column* column, size_t row, std::string& out
     } else if (const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(column)) {
         out.clear();
         renderList((*lists)[row], out);
+    } else if (const auto* elements = dynamic_cast<const ColumnVector<ListElementView>*>(column)) {
+        out.clear();
+        renderListElement((*elements)[row], out);
     } else if (renderValueCell<int64_t>(column, row, out)
                || renderValueCell<uint64_t>(column, row, out)
                || renderValueCell<double>(column, row, out)

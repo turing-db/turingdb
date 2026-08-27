@@ -260,6 +260,48 @@ def VectorSearch : TuringOp<"vector_search", [Pure]> {
 }
 
 /**
+* Unwind
+*/
+def Unwind : TuringOp<"unwind", [Pure]> {
+  let summary = "Produce one row per element of a value computed for each input row";
+
+  let description = [{
+    `UNWIND <expr> AS x` where the expression is evaluated per row rather than known
+    at plan time - the general form db.unwind_const is the literal special case of. It
+    reads one source column and expands the rows in flight through it:
+
+      %x, %n = db.unwind(%names, {%node}) : (!db.column<none>, !db.column<!storage.node_id>)
+                                        -> (!db.column<none>, !db.column<!storage.node_id>)
+
+    Each source cell contributes the rows Cypher unwinds it into: a list one row per
+    element, a null none at all, and any other value the single row that value is - the
+    singleton an UNWIND of a scalar spreads to. A tagged scalar is read the same way, so
+    a cell that is itself a list unwinds one level deeper. `columns_to_filter` is the
+    carry set, as on db.get_out_edges: each carried column comes back replicated, its
+    cell repeated once per row its source cell produced, so everything in flight stays
+    row-aligned with the elements. A constant source stands for every carried row, so it
+    expands each of them.
+
+    The element column's type is the source's to decide and is resolved during
+    lowering, as a property fetch's value column is: unwinding a list yields a
+    type-erased !storage.list_element column of tagged scalars, matching Cypher's LIST
+    OF ANY, while a source that is already a scalar column keeps its own type - the
+    singleton is the value it already holds.
+  }];
+
+  let arguments = (ins Column:$source, Variadic<Column>:$columns_to_filter);
+  let results   = (outs Column:$element, Variadic<Column>:$carried);
+  let hasVerifier = 1;
+
+  // The carry set prints in braces, as db.get_out_edges' does; the source and the
+  // result types follow as a function type, so the element column's type is spelled
+  // beside the ones the carried columns keep.
+  let assemblyFormat = [{
+    `(` $source `,` `{` $columns_to_filter `}` `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
 * ScanEdges
 */
 def ScanEdges : TuringOp<"scan_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {

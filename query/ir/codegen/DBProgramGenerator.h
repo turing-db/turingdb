@@ -70,13 +70,16 @@ public:
     // and its ORDER BY read
     using VariableColumnMap = std::unordered_map<const VarDecl*, mlir::Value>;
 
-    // A column a CALL produced for one of its yielded return values, under the declaration
-    // the query knows it by and the name it is output under. A standalone call naming no
-    // YIELD declares nothing, so its columns carry a null declaration.
+    // A column bound under a name rather than by a pattern - what a CALL or a VECTOR SEARCH
+    // yielded, what an UNWIND of an expression bound - under the declaration the query
+    // knows it by and the name it is output under. A standalone call naming no YIELD
+    // declares nothing, so its columns carry a null declaration. _isResult marks the ones
+    // that stand in for a projection.
     struct YieldedColumn {
         const VarDecl* _decl {nullptr};
         std::string_view _name;
         mlir::Value _column;
+        bool _isResult {false};
     };
 
     // A column a part cut hands to the part below it, under the declaration and the name
@@ -287,10 +290,15 @@ private:
     // A standalone CALL ends no projection: what it yielded is the result
     void generateYieldedOutput(const SinglePartQuery* query);
 
-    // Emits each MATCH's WHERE, each CALL and each VECTOR SEARCH of a part in the order the
-    // query writes them, so a predicate or an argument reading what a statement yielded is
-    // generated once that statement has bound it.
-    void generateFiltersCallsAndSearches(std::span<Stmt* const> stmts);
+    // Emits what each statement of a part contributes over the rows the traversal matched -
+    // a MATCH's constraints, WHERE and cuts, a CALL, a VECTOR SEARCH, an UNWIND - in the
+    // order the query writes them, so a statement reading what an earlier one bound is
+    // generated once that one has bound it.
+    void generateStatementOperations(std::span<Stmt* const> stmts);
+
+    // Emits the filters a MATCH's inline property constraints ask for - `(n {age: 32})` -
+    // one predicate per constrained property of its pattern
+    void generateMatchConstraints(const MatchStmt* matchStmt);
     void generateMatchFilter(const MatchStmt* matchStmt);
 
     // Emits the Sort a MATCH's ORDER BY asks for, over everything in flight: the rows the
@@ -445,8 +453,6 @@ private:
     mlir::Value translateAggregateInput(const Expr* argExpr,
                                         const VariableColumnMap* variableColumns);
 
-    void generatePropertyConstraints(std::span<Stmt* const> stmts);
-
     void applyPredicateFilters(std::span<const Expr* const> predicates);
 
     void generateGroupAggregate(const Projection* projection);
@@ -510,13 +516,17 @@ private:
     // the graph's nodes: the variable takes those rows over as its own
     void addYieldedColumn(const VariableDependency* var, mlir::Value column);
 
-    // Opens a dataflow from an UNWIND's literal list, the way addScanNodes opens one
+    // Opens a dataflow from an UNWIND's literal elements, the way addScanNodes opens one
     // from the graph's nodes
     void addUnwindConst(const VariableDependency* var, const UnwindStmt* unwind);
 
     // Opens a dataflow from the nodes an UNWIND's literal list names, for a variable a
     // pattern uses as a node: the list seeds the traversal instead of feeding it values
     void addConstScanNodes(const VariableDependency* var, const UnwindStmt* unwind);
+
+    // Expands the rows in flight through an UNWIND whose expression is evaluated per row,
+    // binding its variable to the elements those rows unwound into
+    void generateUnwind(const UnwindStmt* unwind);
 
     void filterAllColumns(mlir::Value predicate);
 
