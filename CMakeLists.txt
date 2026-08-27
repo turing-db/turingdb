@@ -311,6 +311,15 @@ execute_process(COMMAND git show --no-patch --format=%at
                 OUTPUT_VARIABLE HEAD_COMMIT_TIMESTAMP
                 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
+# Project version: hardcoded in the VERSION file, bumped by hand per release.
+# SETUPTOOLS_SCM_PRETEND_VERSION overrides it the same way it overrides the
+# Python wheel version, so CI can pin one consistent version for both.
+if(DEFINED ENV{SETUPTOOLS_SCM_PRETEND_VERSION})
+    set(PROJECT_VERSION $ENV{SETUPTOOLS_SCM_PRETEND_VERSION})
+else()
+    file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/VERSION PROJECT_VERSION LIMIT_COUNT 1)
+endif()
+
 add_subdirectory(cmake)
 add_subdirectory(external)
 
