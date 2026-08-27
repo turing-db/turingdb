@@ -507,6 +507,7 @@ bool opensSourceLoop(mlir::Operation* operation) {
     return mlir::isa<mlir::db::ScanNodes,
                      mlir::db::ConstScanNodes,
                      mlir::db::UnwindConst,
+                     mlir::db::VectorSearch,
                      mlir::db::ScanNodesByLabel,
                      mlir::db::ScanEdges,
                      mlir::db::GetOutEdges,
@@ -675,6 +676,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerConstScanNodes(constScanNodes);
     } else if (mlir::db::UnwindConst unwindConst = mlir::dyn_cast<mlir::db::UnwindConst>(operation)) {
         lowerUnwindConst(unwindConst);
+    } else if (mlir::db::VectorSearch vectorSearch = mlir::dyn_cast<mlir::db::VectorSearch>(operation)) {
+        lowerVectorSearch(vectorSearch);
     } else if (mlir::db::ScanEdges scanEdges = mlir::dyn_cast<mlir::db::ScanEdges>(operation)) {
         lowerScanEdges(scanEdges);
     } else if (mlir::db::GetOutEdges getOutEdges = mlir::dyn_cast<mlir::db::GetOutEdges>(operation)) {
@@ -891,6 +894,20 @@ void DBLowering::lowerUnwindConst(mlir::db::UnwindConst unwindConst) {
                                                             iteratorType,
                                                             unwindConst.getElementsAttr());
     buildLoopForSource(rows.getResult(), unwindConst.getOperation());
+}
+
+void DBLowering::lowerVectorSearch(mlir::db::VectorSearch vectorSearch) {
+    // The neighbour sibling of lowerUnwindConst: a source reads no column, so its loop
+    // sits at the top of the current root block. The index, the neighbour count and the
+    // query vector are forwarded as-is; the two chunk types are fixed, so the iterator
+    // type is inferred rather than spelled.
+    setInsertionInto(_rootBlock);
+
+    nl::VectorSearch neighbours = _builder.create<nl::VectorSearch>(_builder.getUnknownLoc(),
+                                                                    vectorSearch.getIndexNameAttr(),
+                                                                    vectorSearch.getKAttr(),
+                                                                    vectorSearch.getQueryVectorAttr());
+    buildLoopForSource(neighbours.getResult(), vectorSearch.getOperation());
 }
 
 void DBLowering::lowerScanEdges(mlir::db::ScanEdges scanEdges) {

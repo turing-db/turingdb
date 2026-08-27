@@ -378,6 +378,49 @@ private:
     NLStmtContainer _stmts;
 };
 
+// The neighbour sibling of NLUnwindConstLoopData: runs one search against a vector index
+// and streams the neighbours it found one chunk at a time, into a nullable i64 column of
+// the IDs the index holds them under and a nullable f64 column of the distances they
+// scored. The index name and the query vector are views into the module's attribute
+// storage, which the MLIRContext keeps alive for the whole execution. A plain source, so
+// a downstream LIMIT can bound it.
+class NLVectorSearchLoopData : public NLFunctionData {
+public:
+    NLVectorSearchLoopData(Column* ids,
+                           Column* scores,
+                           std::string_view indexName,
+                           size_t neighbourCount,
+                           std::span<const float> queryVector)
+        : _ids(ids),
+        _scores(scores),
+        _indexName(indexName),
+        _neighbourCount(neighbourCount),
+        _queryVector(queryVector)
+    {
+    }
+
+    Column* getIDs() const { return _ids; }
+    Column* getScores() const { return _scores; }
+    std::string_view getIndexName() const { return _indexName; }
+    size_t getNeighbourCount() const { return _neighbourCount; }
+    std::span<const float> getQueryVector() const { return _queryVector; }
+
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
+    Column* _ids {nullptr};
+    Column* _scores {nullptr};
+    std::string_view _indexName;
+    size_t _neighbourCount {0};
+    std::span<const float> _queryVector;
+    NLLimitState* _limit {nullptr};
+    NLStmtContainer _stmts;
+};
+
 // nl.scan_edges loop data: the edge sibling of NLScanLoopData. A source loop
 // (no input column, no carry set), so - unlike NLEdgeLoopData - it holds only
 // the four fixed output chunks a step fills (sources, edge IDs, edge type IDs,

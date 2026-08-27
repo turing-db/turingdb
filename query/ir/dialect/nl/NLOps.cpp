@@ -31,6 +31,10 @@ Type getEdgeTypeIDChunkType(MLIRContext* context) {
     return ChunkType::get(context, storage::EdgeTypeIDType::get(context));
 }
 
+Type getNullableChunkType(MLIRContext* context, Type valueType) {
+    return ChunkType::get(context, storage::NullableType::get(context, valueType));
+}
+
 // The value type an aggregate reduces: the T in a !nl.chunk<!storage.nullable<T>>.
 // Aggregates fold property values, so an update's input and a result's output are
 // always such chunks. Returns a null Type for anything else (an ID chunk, say), so
@@ -104,6 +108,21 @@ LogicalResult ConstScanNodes::inferReturnTypes(MLIRContext* context,
                                                ConstScanNodes::Adaptor adaptor,
                                                SmallVectorImpl<Type>& inferredReturnTypes) {
     inferredReturnTypes.push_back(IteratorType::get(context, {getNodeIDChunkType(context)}));
+    return success();
+}
+
+// A vector search produces the two fixed neighbour chunks per step - the IDs the index
+// holds them under and the distances they scored - and reads no input, so the iterator
+// has exactly those two chunks and no carried tail. Both ride nullable value chunks, the
+// shape every value-chunk consumer dispatches on.
+LogicalResult VectorSearch::inferReturnTypes(MLIRContext* context,
+                                             std::optional<Location> location,
+                                             VectorSearch::Adaptor adaptor,
+                                             SmallVectorImpl<Type>& inferredReturnTypes) {
+    const Type ids = getNullableChunkType(context, IntegerType::get(context, 64));
+    const Type scores = getNullableChunkType(context, Float64Type::get(context));
+
+    inferredReturnTypes.push_back(IteratorType::get(context, {ids, scores}));
     return success();
 }
 

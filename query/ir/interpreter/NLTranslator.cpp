@@ -423,6 +423,13 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._kind = IteratorKind::UnwindConst;
             config._list = materializeListView(unwindConst.getElements());
             _iteratorConfigs[unwindConst.getResult()] = config;
+        } else if (nl::VectorSearch vectorSearch = mlir::dyn_cast<nl::VectorSearch>(operation)) {
+            IteratorConfig config;
+            config._kind = IteratorKind::VectorSearch;
+            config._indexName = vectorSearch.getIndexName();
+            config._neighbourCount = vectorSearch.getK();
+            config._queryVector = vectorSearch.getQueryVector();
+            _iteratorConfigs[vectorSearch.getResult()] = config;
         } else if (nl::ProcedureInit procedureInit = mlir::dyn_cast<nl::ProcedureInit>(operation)) {
             IteratorConfig config;
             config._kind = IteratorKind::ProcedureInit;
@@ -612,6 +619,10 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         // A const unwind is a plain source, so - like a scan - a downstream LIMIT can
         // bound its loop through the ordinary early-exit.
         translateUnwindConstLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::VectorSearch) {
+        // A vector search is a plain source too, so a downstream LIMIT can bound its
+        // loop through the ordinary early-exit.
+        translateVectorSearchLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::ProcedureInit) {
         translateProcedureInitLoop(config, loopBody, limit, body);
     } else {
@@ -725,6 +736,35 @@ void NLTranslator::translateUnwindConstLoop(const IteratorConfig& config,
     loopData->setLimit(limit);
 
     body->emplaceStmt(&NLExecutor::runUnwindConstLoop, loopData);
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateVectorSearchLoop(const IteratorConfig& config,
+                                             mlir::Block& loopBody,
+                                             NLLimitState* limit,
+                                             NLStmtContainer* body) {
+    // A vector search binds two chunks: the neighbour IDs and the distances they scored.
+    const mlir::Value idChunk = loopBody.getArgument(0);
+    const mlir::Value scoreChunk = loopBody.getArgument(1);
+
+    Column* const ids = allocOptColumnForValueType(nullableChunkValueType(idChunk.getType()));
+    Column* const scores = allocOptColumnForValueType(nullableChunkValueType(scoreChunk.getType()));
+
+    _valueSlots[idChunk] = ids;
+    _valueSlots[scoreChunk] = scores;
+
+    const std::string_view indexName {config._indexName.data(), config._indexName.size()};
+    const std::span<const float> queryVector {config._queryVector.data(), config._queryVector.size()};
+
+    NLVectorSearchLoopData* loopData = _program->allocFunctionData<NLVectorSearchLoopData>(ids,
+                                                                                          scores,
+                                                                                          indexName,
+                                                                                          config._neighbourCount,
+                                                                                          queryVector);
+    loopData->setLimit(limit);
+
+    body->emplaceStmt(&NLExecutor::runVectorSearchLoop, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
 }

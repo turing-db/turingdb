@@ -54,6 +54,7 @@ private:
         UnwindCollect,
         Collect,
         UnwindConst,
+        VectorSearch,
         ProcedureInit,
     };
 
@@ -102,6 +103,14 @@ private:
         // for the other kinds. Materialized by materializeListView into the
         // query-scoped ListBuffer at config setup.
         ListView _list;
+
+        // What a VectorSearch iterator searches for: the index, how many neighbours to
+        // report, and the query vector. Empty and zero for the other kinds. Like _labels
+        // and _nodeIDs, views into the op's interned attribute storage, which the
+        // MLIRContext keeps alive for the whole execution.
+        llvm::StringRef _indexName;
+        size_t _neighbourCount {0};
+        llvm::ArrayRef<float> _queryVector;
     };
 
     NLProgram* _program {nullptr};
@@ -195,6 +204,16 @@ private:
                                   mlir::Block& loopBody,
                                   NLLimitState* limit,
                                   NLStmtContainer* body);
+
+    // Translate the nl.for over an nl.vector_search iterator: allocate the two nullable
+    // value loop variables (the neighbour IDs and the distances they scored) and record
+    // the vector-search loop statement in body. The neighbour sibling of
+    // translateUnwindConstLoop - a source loop whose rows come from a vector index
+    // rather than from a fixed list.
+    void translateVectorSearchLoop(const IteratorConfig& config,
+                                   mlir::Block& loopBody,
+                                   NLLimitState* limit,
+                                   NLStmtContainer* body);
 
     // Materialize a literal element array - an nl.unwind_const's or an nl.const_list's -
     // into a ListView in the query-scoped ListBuffer, which the unwind loop then reads

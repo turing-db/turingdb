@@ -146,6 +146,49 @@ def UnwindConst : TuringOp<"unwind_const", [Pure]> {
 }
 
 /**
+* VectorSearch
+*/
+def VectorSearch : TuringOp<"vector_search", [Pure]> {
+  let summary = "Produce the nearest neighbours of a query vector, with the distance each scored";
+
+  let description = [{
+    The source op for `VECTOR SEARCH IN vec1 FOR 3 (1.0, 0.0) YIELD ids, score`. The
+    index, the neighbour count and the query vector are all fixed by the query, so it
+    reads no column and opens a dataflow of its own, the way db.unwind_const opens one
+    from a literal list:
+
+      %ids, %scores = db.vector_search("vec1", 3, [1.000000e+00, 0.000000e+00])
+        : !db.column<i64>, !db.column<f64>
+
+    The two results are row-aligned, one row per neighbour, ordered nearest first:
+    `ids` is the ID the index holds each vector under - the ID a `LOAD VECTOR` row
+    carried, not a node ID - and `scores` the distance the index' metric scored it at
+    (squared L2 for euclidean, inner product for cosine). The search returns at most
+    `k` neighbours and fewer when the index holds fewer, so a `k` larger than the index
+    is not an error.
+
+    `query_vector` must have as many elements as the index' dimension, which the schema
+    holds rather than the IR, so the search itself reports a mismatch. Reading the index
+    is a deterministic read, so the op is Pure. With incoming rows
+    (VECTOR SEARCH ... YIELD ids MATCH (n)) it is crossed with them through
+    db.cross_product; there is no variant of this op that takes a column.
+  }];
+
+  // Every parameter is fixed by the query, so none is an SSA value: the index to search,
+  // how many neighbours to report, and the vector to search for.
+  let arguments = (ins StrAttr:$index_name, UI64Attr:$k, DenseF32ArrayAttr:$query_vector);
+  let results   = (outs ColumnInts:$ids, ColumnDoubles:$scores);
+  let hasVerifier = 1;
+
+  // The parameters print inside the parens ahead of the colon, as db.const_scan_nodes
+  // prints its IDs; the two result types follow, qualified, as db.scan_edges prints its.
+  let assemblyFormat = [{
+    `(` $index_name `,` $k `,` $query_vector `)`
+    attr-dict `:` qualified(type($ids)) `,` qualified(type($scores))
+  }];
+}
+
+/**
 * ScanEdges
 */
 def ScanEdges : TuringOp<"scan_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {

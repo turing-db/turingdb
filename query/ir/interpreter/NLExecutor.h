@@ -7,6 +7,10 @@
 
 #include "NLProgram.h"
 
+namespace vec {
+class VectorDatabase;
+}
+
 namespace db {
 
 class GraphView;
@@ -38,6 +42,12 @@ public:
     // The server-level facilities only the system commands reach for; null for a
     // program with none, which is every ordinary query
     const NLSystemContext* getSystem() const { return _system; }
+
+    // The vector indexes a search reads, borrowed from the session's accessor. They are
+    // the one store outside the graph an ordinary query reaches, so - unlike the rest of
+    // the system context - a dataflow loop reads them; null for a session that opened no
+    // accessor, which the search reports as a user-facing error.
+    vec::VectorDatabase* getVectorDatabase() const;
 
 private:
     const GraphView* _view {nullptr};
@@ -71,6 +81,12 @@ public:
     // for a homogeneous list, a ColumnVector<ListElementView> for a heterogeneous one -
     // running the body over each slice. A null limit leaves it unbounded.
     static void runUnwindConstLoop(NLExecutionContext* context, NLFunctionData* data);
+
+    // The neighbour sibling of runUnwindConstLoop: search the named vector index for the
+    // loop data's query vector, then stream the neighbours it found one chunk at a time
+    // into the ID and score columns, running the body over each slice. A null limit
+    // leaves it unbounded.
+    static void runVectorSearchLoop(NLExecutionContext* context, NLFunctionData* data);
 
     static void runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
