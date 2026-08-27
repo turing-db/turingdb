@@ -778,18 +778,46 @@ void DBProgramGenerator::generateQueryParts(const SinglePartQuery* query) {
     // columns that projection publishes are all the statements after it can read
     size_t partBegin = 0;
     for (size_t index = 0; index < stmts.size(); index++) {
-        if (stmts[index]->getKind() != Stmt::Kind::WITH) {
-            continue;
+        if (stmts[index]->getKind() == Stmt::Kind::WITH) {
+            generatePart(stmts.subspan(partBegin, index - partBegin));
+            generateWith(static_cast<const WithStmt*>(stmts[index]));
+            partBegin = index + 1;
+        } else if (closesPartOnItsCut(stmts, index)) {
+            generatePart(stmts.subspan(partBegin, index + 1 - partBegin));
+            publishInFlightColumns();
+            partBegin = index + 1;
         }
-
-        generatePart(stmts.subspan(partBegin, index - partBegin));
-        generateWith(static_cast<const WithStmt*>(stmts[index]));
-        partBegin = index + 1;
     }
 
     if (partBegin < stmts.size()) {
         generatePart(stmts.subspan(partBegin));
     }
+}
+
+bool DBProgramGenerator::closesPartOnItsCut(std::span<Stmt* const> stmts, size_t index) const {
+    const Stmt* stmt = stmts[index];
+    if (stmt->getKind() != Stmt::Kind::MATCH) {
+        return false;
+    }
+
+    const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt);
+    const bool carriesACut = matchStmt->hasOrderBy() || matchStmt->hasSkip() || matchStmt->hasLimit();
+
+    if (!carriesACut) {
+        return false;
+    }
+
+    for (size_t next = index + 1; next < stmts.size(); next++) {
+        const Stmt::Kind kind = stmts[next]->getKind();
+
+        if (kind == Stmt::Kind::WITH) {
+            return false;
+        } else if (kind == Stmt::Kind::MATCH) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void DBProgramGenerator::generatePart(std::span<Stmt* const> stmts) {
@@ -2531,6 +2559,26 @@ void DBProgramGenerator::publishBoundColumns(llvm::ArrayRef<llvm::StringRef> nam
 
         const std::string_view boundName {name.data(), name.size()};
         registerValue(_vdg.registerBoundVariable(boundName), columns[index]);
+    }
+}
+
+void DBProgramGenerator::publishInFlightColumns() {
+    VariableColumnMap variableColumns;
+    collectVariableColumns(variableColumns);
+
+    llvm::SmallVector<std::pair<std::string_view, mlir::Value>> published {variableColumns.begin(),
+                                                                          variableColumns.end()};
+
+    // Under a name order rather than the map's, so the same query generates the same IR
+    std::ranges::sort(published, [](const auto& left, const auto& right) {
+        return left.first < right.first;
+    });
+
+    _part = PartScope {};
+    _vdg.clear();
+
+    for (const auto& [name, column] : published) {
+        registerValue(_vdg.registerBoundVariable(name), column);
     }
 }
 
