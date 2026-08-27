@@ -30,6 +30,20 @@ using ColumnNames = std::vector<std::string>;
 // No node of SimpleGraph carries this name, so the match keeps no row at all
 const std::string_view emptyMatch = "MATCH (n) WHERE n.name = 'THIS IS NOT A NAME' ";
 
+// Only Remy and Adam carry an age, so this match keeps rows - the other 16 nodes - whose
+// age is null in every one of them
+const std::string_view allNullMatch = "MATCH (n) WHERE n.age IS NULL ";
+
+constexpr uint64_t agelessNodeCount = 16;
+
+// The ageless nodes of SimpleGraph by name, in ascending byte order: every node but Remy
+// and Adam, the two the age belongs to.
+const std::vector<std::string> agelessNodeNames = {
+    "Animals", "Bio", "Computers", "Cooking", "Cyrus",
+    "Doruk", "Eighties", "Ghosts", "Gym", "JiuJitsu", "Luc",
+    "Martina", "Maxime", "Padel", "Suhas", "Travel",
+};
+
 }
 
 // The query test suite's avg-empty and avg-all-null cases on the v3 engine:
@@ -97,6 +111,46 @@ TEST_F(AvgEmptyTest, averagesAnEmptyMatchToNull) {
 TEST_F(AvgEmptyTest, averagesAnAllNullPropertyToNull) {
     const Rows expected = {{"null"}};
     expectNamedRows("MATCH (n) WHERE n.age IS NULL RETURN avg(n.age)", {"avg(n.age)"}, expected);
+}
+
+// The rows an all-null match keeps are rows all the same: count(n) tallies them, where
+// count(n.age) reads the values and finds none. This is the whole difference between the
+// two cases - an empty match has neither.
+TEST_F(AvgEmptyTest, countsTheRowsOfAnAllNullMatchButNoneOfItsValues) {
+    const Rows rowTally = {{std::to_string(agelessNodeCount), "0"}};
+    expectRows(std::string(allNullMatch) + "RETURN count(n), count(n.age)", rowTally);
+}
+
+TEST_F(AvgEmptyTest, sumsAnAllNullPropertyToZero) {
+    const Rows expected = {{"0"}};
+    expectRows(std::string(allNullMatch) + "RETURN sum(n.age)", expected);
+}
+
+TEST_F(AvgEmptyTest, minimisesAndMaximisesAnAllNullPropertyToNull) {
+    const Rows expected = {{"null", "null"}};
+    expectRows(std::string(allNullMatch) + "RETURN min(n.age), max(n.age)", expected);
+}
+
+TEST_F(AvgEmptyTest, keepsTheAllNullAverageThroughAnExpression) {
+    const Rows expected = {{"null"}};
+    expectRows(std::string(allNullMatch) + "RETURN avg(n.age) + 10", expected);
+}
+
+// Under a grouping key each kept row is a group of its own, so an all-null match answers
+// one null average per node - where the empty match below answers no row at all.
+TEST_F(AvgEmptyTest, emitsANullAverageForEveryGroupOfAnAllNullMatch) {
+    Rows expected;
+    for (const std::string& name : agelessNodeNames) {
+        expected.push_back({name, "null"});
+    }
+
+    StringRowSink sink;
+    runQuery(std::string(allNullMatch) + "RETURN n.name, avg(n.age)", sink);
+
+    Rows rows;
+    sink.sortedRows(rows);
+
+    EXPECT_EQ(rows, expected);
 }
 
 // The two aggregates that do answer a number over nothing, against the same empty match.
