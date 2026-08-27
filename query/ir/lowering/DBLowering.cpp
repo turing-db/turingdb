@@ -682,6 +682,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerLoadCSV(loadCSV);
     } else if (mlir::db::VectorSearch vectorSearch = mlir::dyn_cast<mlir::db::VectorSearch>(operation)) {
         lowerVectorSearch(vectorSearch);
+    } else if (mlir::db::Unwind unwind = mlir::dyn_cast<mlir::db::Unwind>(operation)) {
+        lowerUnwind(unwind);
     } else if (mlir::db::ScanEdges scanEdges = mlir::dyn_cast<mlir::db::ScanEdges>(operation)) {
         lowerScanEdges(scanEdges);
     } else if (mlir::db::GetOutEdges getOutEdges = mlir::dyn_cast<mlir::db::GetOutEdges>(operation)) {
@@ -937,6 +939,60 @@ void DBLowering::lowerVectorSearch(mlir::db::VectorSearch vectorSearch) {
                                                                     vectorSearch.getKAttr(),
                                                                     vectorSearch.getQueryVectorAttr());
     buildLoopForSource(neighbours.getResult(), vectorSearch.getOperation());
+}
+
+mlir::Type DBLowering::unwoundElementType(mlir::MLIRContext* context, mlir::Type sourceElement) {
+    // A list drains into the type-erased column of tagged scalars: its elements carry
+    // their own type. Any other source keeps the column it already rides - its cells are
+    // the elements, and a tagged cell holding a list gives up tagged scalars again.
+    if (llvm::isa<storage::ListType>(sourceElement)) {
+        return storage::ListElementType::get(context);
+    }
+
+    return sourceElement;
+}
+
+void DBLowering::lowerUnwind(mlir::db::Unwind unwind) {
+    llvm::SmallVector<mlir::Value, 4> carriedChunks;
+    for (const mlir::Value carriedColumn : unwind.getColumnsToFilter()) {
+        carriedChunks.push_back(mapValue(carriedColumn));
+    }
+
+    // A constant source holds one cell standing for every row rather than one per row, so
+    // it is laid out over the rows it expands - the carried ones, or the single row a
+    // scope of constants alone is when there are none.
+    const mlir::Value cardinality = carriedChunks.empty() ? _innermostCardinality
+                                                          : carriedChunks.front();
+    const mlir::Value sourceChunk = rowAlignedChunk(mapValue(unwind.getSource()), cardinality);
+
+    // Inserted into the deepest block, where every operand is bound - as lowerFilter's is
+    mlir::Value insertionReference = sourceChunk;
+    for (const mlir::Value carriedChunk : carriedChunks) {
+        mlir::Block* const block = deeperBlock(insertionReference, carriedChunk);
+        if (ownerBlock(carriedChunk) == block) {
+            insertionReference = carriedChunk;
+        }
+    }
+
+    setInsertionInto(ownerBlock(insertionReference));
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const mlir::Type sourceElement = mlir::cast<nl::ChunkType>(sourceChunk.getType()).getElementType();
+
+    llvm::SmallVector<mlir::Type, 4> chunkTypes;
+    chunkTypes.push_back(nl::ChunkType::get(context, unwoundElementType(context, sourceElement)));
+
+    for (const mlir::Value carriedChunk : carriedChunks) {
+        chunkTypes.push_back(carriedChunk.getType());
+    }
+
+    const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunkTypes);
+
+    nl::Unwind rows = _builder.create<nl::Unwind>(_builder.getUnknownLoc(),
+                                                  iteratorType,
+                                                  sourceChunk,
+                                                  carriedChunks);
+    buildLoopForSource(rows.getResult(), unwind.getOperation());
 }
 
 void DBLowering::lowerScanEdges(mlir::db::ScanEdges scanEdges) {

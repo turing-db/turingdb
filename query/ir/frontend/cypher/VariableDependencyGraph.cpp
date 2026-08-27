@@ -199,11 +199,17 @@ void VariableDependencyGraph::registerUnwindStmt(const UnwindStmt* stmt) {
     const VarDecl* decl = stmt->getDecl();
     bioassert(decl, "UNWIND without a declaration.");
 
-    // An UNWIND variable is bound to a list rather than to a pattern, so it depends on
-    // no other variable and enters the graph isolated - a root of its own connected
-    // component, whose dataflow the code generator opens from the list. The lookup is what
-    // registerPatternElement does: two variables of one declaration would leave every
-    // resolver picking one of them by container order.
+    // An UNWIND over an expression evaluated per row expands the rows already in flight,
+    // so its variable is bound where the statement is written rather than by a dataflow
+    // of its own - it is no root, and the graph does not carry it.
+    if (!stmt->unwindsLiteral()) {
+        return;
+    }
+
+    // A literal list depends on no other variable and enters the graph isolated - a root
+    // of its own connected component, whose dataflow the code generator opens from the
+    // list. The lookup is what registerPatternElement does: two variables of one
+    // declaration would leave every resolver picking one of them by container order.
     VariableDependency* unwindVar = findVariable(decl);
     if (!unwindVar) {
         unwindVar = newVariable(decl);

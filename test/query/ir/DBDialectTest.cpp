@@ -1208,6 +1208,32 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n) WITH collect(n.name) AS names UNWIND names AS x RETURN n, x: a list column
+// drained per row, carrying the matched nodes past it so they stay row-aligned with the
+// elements. The element column's type is resolved during lowering, so it is left
+// unresolved here.
+const char* const unwindProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %xs = db.collect(%n) keys 0 : (!db.column<!storage.node_id>) -> !db.column<!storage.list<!storage.node_id>>
+  %x, %carried = db.unwind(%xs, {%n}) : (!db.column<!storage.list<!storage.node_id>>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<!storage.node_id>)
+  db.output(%x, %carried) : !db.column<none>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// A carried column coming back under another type: the unwind replicates rows, it never
+// retypes them, so the verifier rejects it.
+const char* const retypedCarryUnwindProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %xs = db.collect(%n) keys 0 : (!db.column<!storage.node_id>) -> !db.column<!storage.list<!storage.node_id>>
+  %x, %carried = db.unwind(%xs, {%n}) : (!db.column<!storage.list<!storage.node_id>>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<i64>)
+  db.output(%x, %carried) : !db.column<none>, !db.column<i64>
+  return
+}
+)mlir";
+
 // RETURN [1, 2, 3]: the same literals as a value rather than a source, so the whole list
 // is one cell. A list literal is a db.constant value like any other, carried as the array
 // of its elements; the column type is inferred from them, so it is never spelled.
@@ -1589,6 +1615,44 @@ TEST_F(DBDialectTest, verifierRejectsHomogeneousUnwindConstWithoutElements) {
     // it picks the list_element form for an empty list - so the verifier is what
     // stands between the two forms.
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyHomogeneousUnwindConstProgram);
+    EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, parsesUnwind) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(unwindProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::Unwind unwind;
+    module.get().walk([&](mlir::db::Unwind op) {
+        unwind = op;
+    });
+    ASSERT_TRUE(unwind);
+
+    // One carried result per carried column, keeping its type, and the element column
+    // ahead of them with its own type still unresolved.
+    ASSERT_EQ(unwind.getColumnsToFilter().size(), 1u);
+    ASSERT_EQ(unwind.getCarried().size(), 1u);
+
+    const mlir::Type nodeColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::NodeIDType::get(&_context));
+    EXPECT_EQ(unwind.getCarried().front().getType(), nodeColumnType);
+    EXPECT_EQ(unwind.getElement().getType(), mlir::db::ColumnType::get(&_context));
+}
+
+TEST_F(DBDialectTest, unwindRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(unwindProgram);
+    ASSERT_TRUE(module);
+
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, verifierRejectsUnwindRetypingACarriedColumn) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(retypedCarryUnwindProgram);
     EXPECT_FALSE(module);
 }
 

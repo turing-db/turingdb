@@ -1238,11 +1238,22 @@ void ReadStmtGenerator::generateUnwindStmt(const UnwindStmt* stmt) {
     const VarDecl* var = _declContext->getDecl(symbolName);
     bioassert(var, "Null variable for UNWIND.");
 
-    const auto* litArg = dynamic_cast<const LiteralExpr*>(arg);
-    bioassert(litArg, "Non-literal argument.");
+    if (!stmt->unwindsLiteral()) {
+        throwError("UNWIND of an expression evaluated per row is only supported by the MLIR "
+                   "query engine.",
+                   arg);
+    }
+
+    const auto* litArg = static_cast<const LiteralExpr*>(arg);
     const Literal* lit = litArg->getLiteral();
     bioassert(lit, "Null literal");
+
     const auto* list = dynamic_cast<const ListLiteral*>(lit);
+    if (!list) {
+        throwError("UNWIND of a value that is not a list is only supported by the MLIR query "
+                   "engine.",
+                   arg);
+    }
 
     const ListLiteral::Items& items = list->items();
 

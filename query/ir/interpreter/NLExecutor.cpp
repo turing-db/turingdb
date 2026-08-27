@@ -106,6 +106,82 @@ void fillHomogeneousChunk(Column* output, ValueType valueType, const ListView li
     ValueTypeDispatcher {valueType}.execute(fill);
 }
 
+// The rows one cell of a list column unwinds into: one per element, so an empty list
+// contributes none.
+size_t unwindListElementCount(const Column* source, size_t row) {
+    const auto* lists = static_cast<const ColumnVector<ListView>*>(source);
+    return (*lists)[row].size();
+}
+
+// The rows one cell of a nullable value column unwinds into: the single row a present
+// value is, and none for a null - Cypher's UNWIND of a null.
+template <typename Primitive>
+size_t unwindOptElementCount(const Column* source, size_t row) {
+    const auto* values = static_cast<const ColumnOptVector<Primitive>*>(source);
+    return (*values)[row].has_value() ? 1 : 0;
+}
+
+// The rows one cell of a column holding a value in every row unwinds into: the single
+// row that value is.
+size_t unwindValueElementCount(const Column* source, size_t row) {
+    return 1;
+}
+
+// Copy the tagged elements one step covers out of a list column into the type-erased
+// element column: each output row is the element at its position in the list its source
+// row holds.
+void unwindListElementEmit(const Column* source,
+                           const ColumnVector<size_t>* rows,
+                           const ColumnVector<size_t>* positions,
+                           Column* output) {
+    const std::vector<ListView>& lists = static_cast<const ColumnVector<ListView>*>(source)->getRaw();
+    const std::vector<size_t>& rowsRaw = rows->getRaw();
+    const std::vector<size_t>& positionsRaw = positions->getRaw();
+
+    std::vector<ListElementView>& outputRaw = static_cast<ColumnVector<ListElementView>*>(output)->getRaw();
+    outputRaw.resize(rowsRaw.size());
+
+    for (size_t index = 0; index < rowsRaw.size(); index++) {
+        outputRaw[index] = lists[rowsRaw[index]].elements()[positionsRaw[index]];
+    }
+}
+
+// The rows one cell of a type-erased column unwinds into: a tagged list its elements, a
+// tagged null none, and any other tagged scalar the single row it is.
+size_t unwindTaggedElementCount(const Column* source, size_t row) {
+    const auto* elements = static_cast<const ColumnVector<ListElementView>*>(source);
+    const ListElementView element = (*elements)[row];
+    const ListBufferTypeTag tag = element.getTag();
+
+    if (tag == ListBufferTypeTag::ListView) {
+        return element.getAs<ListView>().size();
+    }
+
+    return tag == ListBufferTypeTag::Null ? 0 : 1;
+}
+
+// Fill the element chunk from a type-erased column: a cell holding a nested list gives up
+// the element at this row's position, and any other cell is itself the element.
+void unwindTaggedElementEmit(const Column* source,
+                             const ColumnVector<size_t>* rows,
+                             const ColumnVector<size_t>* positions,
+                             Column* output) {
+    const std::vector<ListElementView>& elements = static_cast<const ColumnVector<ListElementView>*>(source)->getRaw();
+    const std::vector<size_t>& rowsRaw = rows->getRaw();
+    const std::vector<size_t>& positionsRaw = positions->getRaw();
+
+    std::vector<ListElementView>& outputRaw = static_cast<ColumnVector<ListElementView>*>(output)->getRaw();
+    outputRaw.resize(rowsRaw.size());
+
+    for (size_t index = 0; index < rowsRaw.size(); index++) {
+        const ListElementView element = elements[rowsRaw[index]];
+
+        outputRaw[index] = element.getTag() == ListBufferTypeTag::ListView
+                               ? element.getAs<ListView>().elements()[positionsRaw[index]]
+                               : element;
+    }
+}
+
 template <typename Functor>
 Functor makeFunctor(NLExecutionContext* context) {
     if constexpr (std::is_constructible_v<Functor, GraphView>) {
@@ -2900,6 +2976,88 @@ void NLExecutor::runVectorSearchLoop(NLExecutionContext* context, NLFunctionData
     }
 }
 
+void NLExecutor::runUnwindLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLUnwindLoopData* loopData = static_cast<NLUnwindLoopData*>(data);
+    const Column* source = loopData->getSource();
+    const size_t sourceRows = source->size();
+
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    const NLUnwindElementCountFunction elementCount = loopData->getElementCountFunc();
+    const NLUnwindElementEmitFunction elementEmit = loopData->getElementEmitFunc();
+    const size_t chunkSize = context->getChunkSize();
+
+    // A null limit leaves the loop unbounded, exactly as in runUnwindConstLoop.
+    const NLLimitState* limit = loopData->getLimit();
+
+    ColumnVector<size_t>* rows = loopData->getRows();
+    ColumnVector<size_t>* positions = loopData->getPositions();
+
+    // Walk every (row, element) pair in row order. sourceRow / elementIndex is the cursor
+    // into that flattened sequence; a cell contributing nothing - a null, an empty list -
+    // is skipped, so it emits no row. The cursor is local to this call, so an unwind
+    // nested in an outer loop restarts on every one of its steps.
+    size_t sourceRow = 0;
+    size_t elementIndex = 0;
+    size_t rowElements = 0;
+
+    const auto openNextRow = [&]() {
+        while (sourceRow < sourceRows) {
+            rowElements = elementCount(source, sourceRow);
+            if (rowElements > 0) {
+                return;
+            }
+
+            sourceRow++;
+        }
+    };
+
+    openNextRow();
+
+    const auto runIteration = [&]() {
+        std::vector<size_t>& rowsRaw = rows->getRaw();
+        std::vector<size_t>& positionsRaw = positions->getRaw();
+        rowsRaw.clear();
+        positionsRaw.clear();
+
+        // Fill up to chunkSize rows, each the next (row, element) pair.
+        while (rowsRaw.size() < chunkSize && sourceRow < sourceRows) {
+            rowsRaw.push_back(sourceRow);
+            positionsRaw.push_back(elementIndex);
+            elementIndex++;
+
+            if (elementIndex == rowElements) {
+                elementIndex = 0;
+                sourceRow++;
+                openNextRow();
+            }
+        }
+
+        // A source whose cells hold more than the element drains through its own emit;
+        // any other holds the elements already and rides the carry set, gathered by the
+        // source row like everything else in flight.
+        if (elementEmit) {
+            elementEmit(source, rows, positions, loopData->getElementOutput());
+        }
+
+        for (const NLCarriedColumn& carriedColumn : loopData->carriedColumns()) {
+            const auto gatherFunc = carriedColumn.getGatherFunc();
+            gatherFunc(carriedColumn.getInput(), rows, carriedColumn.getOutput());
+        }
+
+        runBody(context, loopBody);
+    };
+
+    if (limit) {
+        while (sourceRow < sourceRows && limit->getRemaining() > 0) {
+            runIteration();
+        }
+    } else {
+        while (sourceRow < sourceRows) {
+            runIteration();
+        }
+    }
+}
+
 void NLExecutor::runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLScanEdgesLoopData* loopData = static_cast<NLScanEdgesLoopData*>(data);
     const NLStmtContainer* loopBody = loopData->getStmts();
@@ -3752,6 +3910,37 @@ NLCollectFoldFunction NLExecutor::selectCollectDistinctFold(ValueType valueType)
     }
 
     return nullptr;
+}
+
+NLUnwindElementCountFunction NLExecutor::selectListUnwindElementCount() {
+    return &unwindListElementCount;
+}
+
+NLUnwindElementCountFunction NLExecutor::selectOptUnwindElementCount(ValueType valueType) {
+    NLUnwindElementCountFunction selected = nullptr;
+
+    const auto select = [&]<SupportedType T>() {
+        selected = &unwindOptElementCount<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return selected;
+}
+
+NLUnwindElementCountFunction NLExecutor::selectValueUnwindElementCount() {
+    return &unwindValueElementCount;
+}
+
+NLUnwindElementEmitFunction NLExecutor::selectListUnwindElementEmit() {
+    return &unwindListElementEmit;
+}
+
+NLUnwindElementCountFunction NLExecutor::selectTaggedUnwindElementCount() {
+    return &unwindTaggedElementCount;
+}
+
+NLUnwindElementEmitFunction NLExecutor::selectTaggedUnwindElementEmit() {
+    return &unwindTaggedElementEmit;
 }
 
 NLUnwindCollectValueEmitFunction NLExecutor::selectUnwindCollectValueEmit(ValueType valueType) {

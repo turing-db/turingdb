@@ -168,6 +168,46 @@ def VectorSearch : NLOp<"vector_search", [Pure, InferTypeOpAdaptor]> {
 }
 
 /**
+* Unwind
+*/
+// Pure: expanding a chunk of values is deterministic; the per-element fan-out is in the nl.for.
+def Unwind : NLOp<"unwind", [Pure]> {
+  let summary = "Create a database iterator that expands a chunk of values, one row per element";
+  let description = [{
+    Imperative counterpart of db.unwind. Each step of an enclosing nl.for fills one
+    chunk of unwound elements plus one chunk per carried column, gathered so a carried
+    cell repeats once per row its source cell produced:
+
+      %rows = nl.unwind(%names, {%nodes})
+                : (!nl.chunk<!storage.list<!storage.string>>, !nl.chunk<!storage.node_id>)
+                -> !nl.iter<!nl.chunk<!storage.list_element>, !nl.chunk<!storage.node_id>>
+      nl.for %x, %n in %rows : !nl.iter<!nl.chunk<!storage.list_element>, !nl.chunk<!storage.node_id>> {
+        nl.output(%x, %n) : !nl.chunk<!storage.list_element>, !nl.chunk<!storage.node_id>
+      }
+
+    A list cell contributes one row per element, a null cell none, and any other cell
+    the single row it is - a tagged scalar included, so a list_element cell that is
+    itself a list unwinds one level deeper. Unlike nl.unwind_const it reads an input
+    chunk, so it nests in the loop that binds it, the way nl.get_out_edges nests in the
+    loop binding its nodes. The element chunk type follows the source's - a list unwinds
+    into the type-erased list_element chunk, a scalar column into its own - and, like
+    nl.collect's, is spelled out rather than inferred.
+  }];
+
+  // `columns_to_filter`: the variadic carry set, after the fixed source, mirroring
+  // nl.get_out_edges.
+  let arguments = (ins NLChunk:$source, Variadic<NLChunk>:$columns_to_filter);
+  let results   = (outs NLIterator:$result);
+
+  // The source chunk's element type decides the element chunk's, and the carried types
+  // vary from call to call, so operands and result print as a function type - as
+  // nl.broadcast_constant's do - rather than the result alone.
+  let assemblyFormat = [{
+    `(` $source `,` `{` $columns_to_filter `}` `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
 * ScanEdges
 */
 def ScanEdges : NLOp<"scan_edges", [Pure, InferTypeOpAdaptor]> {

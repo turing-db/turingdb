@@ -15,11 +15,16 @@ public:
 
     Kind getKind() const final { return Kind::UNWIND; }
 
-    const Expr* arg() const { return _arg; }
+    Expr* arg() const { return _arg; }
     const Symbol* symbol() const { return _symbol; }
     const VarDecl* getDecl() const { return _decl; }
 
     void setDecl(const VarDecl* decl) { _decl = decl; }
+
+    /// Whether every row this UNWIND emits is known at plan time: the argument is a
+    /// literal, and a list literal's items are literals too, at any depth. Anything else
+    /// is evaluated per row, against the rows already in flight.
+    bool unwindsLiteral() const;
 
 private:
     Expr* _arg {nullptr};

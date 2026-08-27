@@ -105,6 +105,11 @@ public:
     // leaves it unbounded.
     static void runVectorSearchLoop(NLExecutionContext* context, NLFunctionData* data);
 
+    // The per-row sibling of runUnwindConstLoop: expand the loop data's source column,
+    // emitting one row per element of each of its cells - none for a null - one chunk at
+    // a time, with the carry set gathered by the source row each emitted row came from.
+    static void runUnwindLoop(NLExecutionContext* context, NLFunctionData* data);
+
     static void runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
@@ -452,6 +457,21 @@ public:
     // The unwind value-emit / collect list-emit for a column of this value type: the
     // drain-side siblings of selectCollectFold, baked from the same value type.
     static NLUnwindCollectValueEmitFunction selectUnwindCollectValueEmit(ValueType valueType);
+
+    // The row counts an nl.unwind reads its source column with: a list column drains its
+    // elements, a type-erased column drains a cell tagged as a list and drops one tagged
+    // null, a nullable value column drops its nulls, and a column holding a value in every
+    // row spreads each of them to the single row it is.
+    static NLUnwindElementCountFunction selectListUnwindElementCount();
+    static NLUnwindElementCountFunction selectTaggedUnwindElementCount();
+    static NLUnwindElementCountFunction selectOptUnwindElementCount(ValueType valueType);
+    static NLUnwindElementCountFunction selectValueUnwindElementCount();
+
+    // The drains filling an nl.unwind's element chunk from a column whose cells hold more
+    // than the element. A scalar column needs none: its cells are the elements, gathered
+    // through the carry set.
+    static NLUnwindElementEmitFunction selectListUnwindElementEmit();
+    static NLUnwindElementEmitFunction selectTaggedUnwindElementEmit();
     static NLCollectListEmitFunction selectCollectListEmit(ValueType valueType);
 
     // The fold and list-emit for an entity chunk of this kind, whose elements carry a

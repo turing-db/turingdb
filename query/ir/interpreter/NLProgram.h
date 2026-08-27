@@ -490,6 +490,76 @@ private:
     NLStmtContainer _stmts;
 };
 
+// The rows one cell of an unwound column contributes: a list its element count, a null
+// none, and any other value the single row it is. One per source column shape, selected
+// during translation.
+using NLUnwindElementCountFunction = size_t (*)(const Column* source, size_t row);
+
+// Fill the element chunk of one nl.unwind step from a column whose cells hold more than
+// the element: output row i is the element at positions[i] of the cell at rows[i].
+using NLUnwindElementEmitFunction = void (*)(const Column* source,
+                                             const ColumnVector<size_t>* rows,
+                                             const ColumnVector<size_t>* positions,
+                                             Column* output);
+
+// nl.for over nl.unwind data: the per-element expansion of a value column. Holds the
+// source column with the handler counting the rows each of its cells contributes, the
+// drain filling the element chunk, and the carry set gathered by each emitted row's
+// source row - the same NLCarriedColumn shape the edge loops use. The scratch columns
+// hold, per emitted row of the current step, the source row it came from and the
+// position of the element inside that row's cell.
+class NLUnwindLoopData : public NLFunctionData {
+public:
+    using CarriedColumns = std::vector<NLCarriedColumn>;
+
+    // @param elementEmit and @param elementOutput are null when the source's cells are
+    // themselves the elements: they are then gathered through the carry set like any
+    // other column.
+    NLUnwindLoopData(const Column* source,
+                     NLUnwindElementCountFunction elementCount,
+                     NLUnwindElementEmitFunction elementEmit,
+                     Column* elementOutput)
+        : _source(source),
+        _elementCount(elementCount),
+        _elementEmit(elementEmit),
+        _elementOutput(elementOutput)
+    {
+    }
+
+    const Column* getSource() const { return _source; }
+    NLUnwindElementCountFunction getElementCountFunc() const { return _elementCount; }
+    NLUnwindElementEmitFunction getElementEmitFunc() const { return _elementEmit; }
+    Column* getElementOutput() const { return _elementOutput; }
+
+    const CarriedColumns& carriedColumns() const { return _carriedColumns; }
+
+    void addCarriedColumn(const NLCarriedColumn& carried) {
+        _carriedColumns.push_back(carried);
+    }
+
+    ColumnVector<size_t>* getRows() { return &_rows; }
+    ColumnVector<size_t>* getPositions() { return &_positions; }
+
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
+    const Column* _source {nullptr};
+    NLUnwindElementCountFunction _elementCount {nullptr};
+    NLUnwindElementEmitFunction _elementEmit {nullptr};
+    Column* _elementOutput {nullptr};
+
+    NLLimitState* _limit {nullptr};
+    CarriedColumns _carriedColumns;
+    NLStmtContainer _stmts;
+
+    ColumnVector<size_t> _rows;
+    ColumnVector<size_t> _positions;
+};
+
 // nl.scan_edges loop data: the edge sibling of NLScanLoopData. A source loop
 // (no input column, no carry set), so - unlike NLEdgeLoopData - it holds only
 // the four fixed output chunks a step fills (sources, edge IDs, edge type IDs,

@@ -562,10 +562,24 @@ void DBProgramGenerator::addConstScanNodes(const VariableDependency* var, const 
 void DBProgramGenerator::addUnwindConst(const VariableDependency* var, const UnwindStmt* unwind) {
     bioassert(!_part._varMap.contains(var), "UnwindConst for registered variable");
 
-    const ListLiteral* list = unwindListOrThrow(unwind);
+    // Only a literal UNWIND opens a dataflow of its own, and the dependency graph roots no
+    // other kind here, so anything else is hand-built input this path cannot lower.
+    const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(unwind->arg());
+    if (!literalExpr) {
+        throw TuringException("A non-literal UNWIND expression does not open a dataflow of its own.");
+    }
+
+    // A list unwinds into its elements; any other literal is the single row that value is,
+    // and a null into no row at all.
+    const Literal* literal = literalExpr->getLiteral();
+    const Literal::Kind literalKind = literal->getKind();
 
     llvm::SmallVector<mlir::Attribute> elements;
-    translateListElements(list, elements);
+    if (literalKind == Literal::Kind::LIST) {
+        translateListElements(static_cast<const ListLiteral*>(literal), elements);
+    } else if (literalKind != Literal::Kind::NULL_LITERAL) {
+        elements.push_back(listElementAttr(literal));
+    }
 
     const mlir::Type sharedType = sharedAttrType(elements);
     const mlir::Type elementType = sharedType ? sharedType
@@ -881,8 +895,7 @@ void DBProgramGenerator::generatePart(std::span<Stmt* const> stmts) {
     closeBoundMerges();
     resolveEdgeIdentities();
     generateCSVLoads(stmts);
-    generatePropertyConstraints(stmts);
-    generateFiltersCallsAndSearches(stmts);
+    generateStatementOperations(stmts);
     resolveYieldedIdentities();
 }
 
@@ -1849,10 +1862,11 @@ void DBProgramGenerator::generateLeadingYields(std::span<Stmt* const> stmts) {
     _part._drivenRoot = drivenRoot;
 }
 
-void DBProgramGenerator::generateFiltersCallsAndSearches(std::span<Stmt* const> stmts) {
+void DBProgramGenerator::generateStatementOperations(std::span<Stmt* const> stmts) {
     // In statement order, so a call or a search reading what an earlier one yielded sees
-    // it, and a MATCH's WHERE reading a yielded value is generated once the statement has
-    // bound it - the reading statements are generated in the order the query writes them.
+    // it, a MATCH's constraints and WHERE reading a yielded or unwound value are generated
+    // once the statement that binds it has run, and an UNWIND expands the rows the
+    // statements ahead of it left in flight.
     bool matchSeen = false;
     for (const Stmt* stmt : stmts) {
         const Stmt::Kind kind = stmt->getKind();
@@ -1862,6 +1876,7 @@ void DBProgramGenerator::generateFiltersCallsAndSearches(std::span<Stmt* const> 
             matchSeen = true;
 
             const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt);
+            generateMatchConstraints(matchStmt);
             generateMatchFilter(matchStmt);
             generateMatchOrderBy(matchStmt);
             generateMatchWindow(matchStmt);
@@ -1869,6 +1884,14 @@ void DBProgramGenerator::generateFiltersCallsAndSearches(std::span<Stmt* const> 
             generateCall(static_cast<const CallStmt*>(stmt));
         } else if (kind == Stmt::Kind::VECTOR_SEARCH && !drivesTheTraversal) {
             generateVectorSearch(static_cast<const VectorSearchStmt*>(stmt));
+        } else if (kind == Stmt::Kind::UNWIND) {
+            const UnwindStmt* unwindStmt = static_cast<const UnwindStmt*>(stmt);
+
+            // A literal UNWIND opened a dataflow of its own during the traversal, which
+            // the cross product has already paired with the rows beside it.
+            if (!unwindStmt->unwindsLiteral()) {
+                generateUnwind(unwindStmt);
+            }
         }
     }
 }
@@ -2024,7 +2047,7 @@ void DBProgramGenerator::generateCall(const CallStmt* callStmt) {
             // is what the call op names; the symbol's name is what the query calls it,
             // which is the alias when the YIELD renamed it.
             yieldedNames.push_back(_opBuilder.getStringAttr(symbol->getOriginalName()));
-            yielded.push_back({item->getDecl(), symbol->getName(), mlir::Value {}});
+            yielded.push_back({item->getDecl(), symbol->getName(), mlir::Value {}, /*isResult=*/true});
         }
     } else {
         // A call naming no return value produces every one the procedure declares, under
@@ -2033,7 +2056,7 @@ void DBProgramGenerator::generateCall(const CallStmt* callStmt) {
         // gets here: the analyzer requires a YIELD of any call inside a query.
         for (const FunctionReturnType& returnType : signature->returnTypes()) {
             yieldedNames.push_back(_opBuilder.getStringAttr(returnType.getName()));
-            yielded.push_back({nullptr, returnType.getName(), mlir::Value {}});
+            yielded.push_back({nullptr, returnType.getName(), mlir::Value {}, /*isResult=*/true});
         }
     }
 
@@ -2307,8 +2330,45 @@ void DBProgramGenerator::publishVectorSearchYields(const YieldItems* yieldItems,
         // the column, and the analyzer has already rejected every name but these two.
         const bool isScore = symbol->getOriginalName() == vectorSearchScoreYield;
 
-        _part._yieldedColumns.push_back({item->getDecl(), symbol->getName(), isScore ? scores : ids});
+        _part._yieldedColumns.push_back({item->getDecl(),
+                                         symbol->getName(),
+                                         isScore ? scores : ids,
+                                         /*isResult=*/true});
     }
+}
+
+void DBProgramGenerator::generateUnwind(const UnwindStmt* unwind) {
+    const Symbol* symbol = unwind->symbol();
+    bioassert(symbol, "UNWIND without a variable.");
+
+    VariableColumnMap variableColumns;
+    collectVariableColumns(variableColumns);
+
+    const mlir::Value source = getOrTranslateExprColumn(variableColumns, unwind->arg());
+
+    // Everything already in flight rides through the carry set, replicated once per row
+    // the cell beside it unwound into, so the rest of the query still reads it row-aligned
+    // with the elements.
+    InFlightColumns inFlight;
+    collectInFlightColumns(inFlight);
+
+    // The element column's value type is the source's to decide and is resolved during
+    // lowering, as a property fetch's value column is. A carried column keeps its own
+    // type: the unwind replicates its rows, it never retypes them.
+    llvm::SmallVector<mlir::Type> resultTypes {mlir::db::ColumnType::get(_mlirCtxt)};
+    for (const mlir::Value column : inFlight._columns) {
+        resultTypes.push_back(column.getType());
+    }
+
+    auto unwindOp = _opBuilder.create<mlir::db::Unwind>(_opBuilder.getUnknownLoc(),
+                                                        resultTypes,
+                                                        source,
+                                                        mlir::ValueRange {inFlight._columns});
+
+    const mlir::Operation::result_range results = unwindOp.getResults();
+    rebindInFlightColumns(results, /*firstResult=*/1, inFlight);
+
+    _part._yieldedColumns.push_back({unwind->getDecl(), symbol->getName(), results[0], /*isResult=*/false});
 }
 
 void DBProgramGenerator::generateYieldFilter(const YieldItems* yieldItems) {
@@ -2817,6 +2877,12 @@ void DBProgramGenerator::generateYieldedOutput(const SinglePartQuery* query) {
     llvm::SmallVector<mlir::Value> yielded;
     llvm::SmallVector<llvm::StringRef> yieldedNames;
     for (const YieldedColumn& yieldedColumn : _part._yieldedColumns) {
+        // An UNWIND's elements ride here so the rest of the part reads them, but they are
+        // no result of their own: a query with no projection returns nothing.
+        if (!yieldedColumn._isResult) {
+            continue;
+        }
+
         yielded.push_back(yieldedColumn._column);
         yieldedNames.push_back(llvm::StringRef(yieldedColumn._name.data(), yieldedColumn._name.size()));
     }
@@ -3286,48 +3352,39 @@ void DBProgramGenerator::applyPredicateFilters(std::span<const Expr* const> pred
     }
 }
 
-void DBProgramGenerator::generatePropertyConstraints(std::span<Stmt* const> stmts) {
+void DBProgramGenerator::generateMatchConstraints(const MatchStmt* matchStmt) {
+    const Pattern* pattern = matchStmt->getPattern();
+
     std::vector<const Expr*> constraintExprs;
 
-    for (const Stmt* stmt : stmts) {
-        if (stmt->getKind() != Stmt::Kind::MATCH) {
-            continue;
+    for (const PatternElement* element : pattern->elements()) {
+        const NodePattern* rootNode = static_cast<const NodePattern*>(element->getRootEntity());
+        const NodePatternData* rootData = rootNode->getData();
+
+        if (rootData) {
+            for (const EntityPropertyConstraint& constraint : rootData->exprConstraints()) {
+                constraintExprs.push_back(constraint._expr);
+            }
         }
 
-        const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt);
-        const Pattern* pattern = matchStmt->getPattern();
-
-        constraintExprs.clear();
-
-        for (const PatternElement* element : pattern->elements()) {
-            const NodePattern* rootNode = static_cast<const NodePattern*>(element->getRootEntity());
-            const NodePatternData* rootData = rootNode->getData();
-
-            if (rootData) {
-                for (const EntityPropertyConstraint& constraint : rootData->exprConstraints()) {
+        for (auto [edgePattern, nodePattern] : element->getElementChain()) {
+            const EdgePatternData* edgeData = edgePattern->getData();
+            if (edgeData) {
+                for (const EntityPropertyConstraint& constraint : edgeData->exprConstraints()) {
                     constraintExprs.push_back(constraint._expr);
                 }
             }
 
-            for (auto [edgePattern, nodePattern] : element->getElementChain()) {
-                const EdgePatternData* edgeData = edgePattern->getData();
-                if (edgeData) {
-                    for (const EntityPropertyConstraint& constraint : edgeData->exprConstraints()) {
-                        constraintExprs.push_back(constraint._expr);
-                    }
-                }
-
-                const NodePatternData* nodeData = nodePattern->getData();
-                if (nodeData) {
-                    for (const EntityPropertyConstraint& constraint : nodeData->exprConstraints()) {
-                        constraintExprs.push_back(constraint._expr);
-                    }
+            const NodePatternData* nodeData = nodePattern->getData();
+            if (nodeData) {
+                for (const EntityPropertyConstraint& constraint : nodeData->exprConstraints()) {
+                    constraintExprs.push_back(constraint._expr);
                 }
             }
         }
-
-        applyPredicateFilters(constraintExprs);
     }
+
+    applyPredicateFilters(constraintExprs);
 }
 
 void DBProgramGenerator::applyConstraints(const VariableDependency* var) {

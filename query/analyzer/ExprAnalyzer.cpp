@@ -944,14 +944,13 @@ void ExprAnalyzer::analyzeListExpr(ListExpr* expr) {
 
 void ExprAnalyzer::analyzeListElements(Expr* expr, std::span<Expr* const> elements) {
     for (Expr* element : elements) {
-        const Expr::Kind elementKind = element->getKind();
-        const bool elementLiteral = elementKind == Expr::Kind::LITERAL;
+        // Analyzed before the literal check, so an element that is ill-formed - a name no
+        // pattern declares - is reported as that rather than as the gap it also falls in
+        analyzeExpr(element);
 
-        if (!elementLiteral) {
+        if (element->getKind() != Expr::Kind::LITERAL) {
             throwError("Non-literal list elements are not yet supported", element);
         }
-
-        analyzeExpr(element);
 
         // An element is an expression of its own, so its flags are the list's. Elements
         // are literals today, and a map literal is one: the {age: n.age} of

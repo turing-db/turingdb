@@ -620,6 +620,49 @@ TEST_F(NLDialectTest, loadCSVRoundTripsThroughTextualForm) {
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
 }
 
+// nl.unwind spells its iterator type too: the element chunk follows the source's element
+// type - a list drains into the type-erased list_element chunk - and each carried chunk
+// comes back after it, keeping the type it had.
+TEST_F(NLDialectTest, unwindBuildsElementAndCarriedChunkIterator) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    const mlir::ArrayAttr elements = builder.getArrayAttr({builder.getI64IntegerAttr(1),
+                                                           builder.getI64IntegerAttr(2)});
+    mlir::nl::Constant source = builder.create<mlir::nl::Constant>(loc, elements);
+    mlir::nl::Constant carried = builder.create<mlir::nl::Constant>(loc, builder.getI64IntegerAttr(7));
+
+    const mlir::Type elementChunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::ListElementType::get(&_context));
+    const mlir::Type iteratorType = mlir::nl::IteratorType::get(&_context,
+                                                                {elementChunkType, carried.getResult().getType()});
+
+    mlir::nl::Unwind unwind = builder.create<mlir::nl::Unwind>(loc,
+                                                               iteratorType,
+                                                               source.getResult(),
+                                                               mlir::ValueRange {carried.getResult()});
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    EXPECT_EQ(unwind.getResult().getType(), iteratorType);
+    EXPECT_EQ(unwind.getColumnsToFilter().size(), 1u);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+
+    // Printing then re-parsing yields a module that still verifies, so the nl.unwind
+    // printer and parser are inverses.
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module->print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed =
+        mlir::parseSourceString<mlir::ModuleOp>(printed, mlir::ParserConfig(&_context));
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
 // A list literal is an nl.constant value: it holds the whole list rather than spreading it
 // over rows, so it produces a chunk of that list type - inferred from the elements, since an
 // array attribute carries none of its own. A nested list rides one element as an array.
