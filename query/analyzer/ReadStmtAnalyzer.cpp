@@ -124,8 +124,8 @@ void ReadStmtAnalyzer::analyze(Stmt* stmt) {
 }
 
 void ReadStmtAnalyzer::analyze(const MatchStmt* matchSt) {
-    if (matchSt->isOptional()) {
-        throwError("OPTIONAL MATCH not supported", matchSt);
+    if (matchSt->isOptional() && !_isV3) { // only supported by MLIR v3
+        throwError("OPTIONAL MATCH not yet supported.", matchSt);
     }
 
     const Pattern* pattern = matchSt->getPattern();

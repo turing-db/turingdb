@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numeric>
 #include <queue>
 #include <span>
 #include <string>
@@ -313,17 +314,21 @@ void functionVectorKernel(NLExecutionContext* context, Column* result, const Col
     bioassert(false, "Function operand has an unexpected column type.");
 }
 
+// A node or edge an OPTIONAL MATCH did not match is an invalid ID, so a function reading
+// one produces a null rather than reading the graph at an ID that is not in it. The
+// entity sibling of functionOptKernel: the input is a plain ID column, which carries its
+// null in the ID itself instead of in an optional.
 template <typename Functor>
-void functionOptKernel(NLExecutionContext* context, Column* result, const Column* input) {
+void functionEntityKernel(NLExecutionContext* context, Column* result, const Column* input) {
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
     using JustRes = TypeUtils::unwrap_optional_t<Res>;
 
-    const auto* typedInput = dynamic_cast<const ColumnOptVector<Arg>*>(input);
+    const auto* typedInput = dynamic_cast<const ColumnVector<Arg>*>(input);
     bioassert(typedInput, "Function operand has an unexpected column type.");
     auto* output = static_cast<ColumnOptVector<JustRes>*>(result);
 
-    const auto& inputRaw = typedInput->getRaw();
+    const std::vector<Arg>& inputRaw = typedInput->getRaw();
     const size_t size = inputRaw.size();
 
     output->resize(size);
@@ -331,12 +336,57 @@ void functionOptKernel(NLExecutionContext* context, Column* result, const Column
 
     Functor functor = makeFunctor<Functor>(context);
     for (size_t row = 0; row < size; row++) {
+        if (inputRaw[row].isValid()) {
+            outputRaw[row] = functor(inputRaw[row]);
+        } else {
+            outputRaw[row] = std::nullopt;
+        }
+    }
+}
+
+template <typename Functor, typename Element>
+void applyFunctionOverOptVector(Functor& functor,
+                                const ColumnOptVector<Element>* input,
+                                ColumnOptVector<TypeUtils::unwrap_optional_t<typename Functor::ResultType>>* output) {
+    const auto& inputRaw = input->getRaw();
+    const size_t size = inputRaw.size();
+
+    output->resize(size);
+    auto& outputRaw = output->getRaw();
+
+    for (size_t row = 0; row < size; row++) {
         if (inputRaw[row].has_value()) {
             outputRaw[row] = functor(inputRaw[row].value());
         } else {
             outputRaw[row] = std::nullopt;
         }
     }
+}
+
+template <typename Functor>
+void functionOptKernel(NLExecutionContext* context, Column* result, const Column* input) {
+    using Arg = typename Functor::ArgType;
+    using Res = typename Functor::ResultType;
+    using JustRes = TypeUtils::unwrap_optional_t<Res>;
+
+    auto* output = static_cast<ColumnOptVector<JustRes>*>(result);
+    Functor functor = makeFunctor<Functor>(context);
+
+    if (const auto* typedInput = dynamic_cast<const ColumnOptVector<Arg>*>(input)) {
+        applyFunctionOverOptVector(functor, typedInput, output);
+        return;
+    }
+
+    // The same fallback functionVectorKernel keeps: a function taking a string may be
+    // handed a column of std::strings rather than of views
+    if constexpr (std::is_same_v<Arg, types::String::Primitive>) {
+        if (const auto* ownedInput = dynamic_cast<const ColumnOptVector<types::String::OwningPrimitive>*>(input)) {
+            applyFunctionOverOptVector(functor, ownedInput, output);
+            return;
+        }
+    }
+
+    bioassert(false, "Function operand has an unexpected column type.");
 }
 
 // Whether a column holds this element, in any of the shapes a chunk column takes: a plain
@@ -668,6 +718,16 @@ void gatherColumn(const Column* input,
     }
 }
 
+// Fill a chunk with a run of null rows. Every element type reads its own
+// default-constructed value as null: an ID defaults to the invalid ID that ID::isValid
+// rejects, which is how an entity an OPTIONAL MATCH did not match is spelled.
+template <typename ElementType>
+void fillNullColumn(Column* output, size_t rowCount) {
+    ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
+
+    typedOutput->getRaw().assign(rowCount, ElementType {});
+}
+
 void collectMaskSurvivors(const Column* mask, ColumnVector<size_t>* indices) {
     const ColumnMask* typedMask = static_cast<const ColumnMask*>(mask);
     const std::vector<ColumnMask::Bool_t>& maskRaw = typedMask->getRaw();
@@ -898,6 +958,24 @@ void toNullableColumn(Column* result, const Column* operand) {
 
     nullables.resize(values.size());
     std::copy(values.begin(), values.end(), nullables.begin());
+}
+
+// Read an entity column as a nullable column of its IDs' integers: a node or an edge an
+// OPTIONAL MATCH did not match carries an invalid ID, which is the null. The entity
+// sibling of toNullableColumn, for the column family whose null is not an absent optional.
+template <typename ID>
+void entityToNullableColumn(Column* result, const Column* operand) {
+    const std::vector<ID>& ids = static_cast<const ColumnVector<ID>*>(operand)->getRaw();
+    auto& nullables = static_cast<ColumnOptVector<types::UInt64::Primitive>*>(result)->getRaw();
+
+    nullables.resize(ids.size());
+    for (size_t row = 0; row < ids.size(); row++) {
+        if (ids[row].isValid()) {
+            nullables[row] = ids[row].getValue();
+        } else {
+            nullables[row] = std::nullopt;
+        }
+    }
 }
 
 template <typename Primitive>
@@ -1177,6 +1255,17 @@ size_t countNonNullElementsColumn(const Column* column) {
     return std::count_if(raw.begin(), raw.end(), [](const ListElementView element) {
         return element.getTag() != ListBufferTypeTag::Null;
     });
+}
+
+// An entity an OPTIONAL MATCH did not match is an invalid ID, which is a null, so an ID
+// chunk charges only the rows holding a valid one - Cypher's count(x) counts the non-null
+// rows. The ID sibling of countPresentColumn, for the one column family whose null is not
+// a missing optional.
+template <typename ID>
+size_t countValidIDs(const Column* column) {
+    const std::vector<ID>& raw = static_cast<const ColumnVector<ID>*>(column)->getRaw();
+
+    return std::ranges::count_if(raw, [](const ID id) { return id.isValid(); });
 }
 
 // Count the present (non-null) values of a nullable value column - a
@@ -1721,8 +1810,26 @@ void groupFoldCountPresent(Column* accumulator,
     }
 }
 
-// Tally each group's distinct IDs (count(DISTINCT n) over a node/edge column): an ID
-// is never null, so every row is charged the first time its ID is seen in its group.
+// Tally each group's rows holding a valid ID (count(n) over a node/edge column): an
+// invalid ID is a null, so it is not charged - the ID sibling of groupFoldCountPresent.
+template <typename ID>
+void groupFoldCountValidID(Column* accumulator,
+                           std::vector<uint64_t>& counts,
+                           const Column* input,
+                           const std::vector<size_t>& groups,
+                           NLGroupDistinctTally& distinct) {
+    const std::vector<ID>& inputRaw = static_cast<const ColumnVector<ID>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        if (inputRaw[row].isValid()) {
+            counts[groups[row]]++;
+        }
+    }
+}
+
+// Tally each group's distinct IDs (count(DISTINCT n) over a node/edge column): an
+// invalid ID is a null, which count(DISTINCT x) does not charge, so only the valid ones
+// are keyed.
 template <typename ElementType>
 void groupFoldCountDistinctID(Column* accumulator,
                               std::vector<uint64_t>& counts,
@@ -1732,6 +1839,10 @@ void groupFoldCountDistinctID(Column* accumulator,
     const auto& inputRaw = static_cast<const ColumnVector<ElementType>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
+        if (!inputRaw[row].isValid()) {
+            continue;
+        }
+
         const size_t group = groups[row];
 
         distinct.beginKey(group);
@@ -3963,6 +4074,26 @@ NLUnaryFn NLExecutor::selectNot(const Column* operand, LocalMemory* memory, Colu
     return &applyNotOnMask;
 }
 
+NLUnaryFn NLExecutor::selectEntityToNullable(NLChunkKind kind, LocalMemory* memory, Column*& result) {
+    result = memory->alloc<ColumnOptVector<types::UInt64::Primitive>>();
+
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return &entityToNullableColumn<NodeID>;
+        break;
+
+        case NLChunkKind::EdgeID:
+            return &entityToNullableColumn<EdgeID>;
+        break;
+
+        default:
+            throw IRException("Only a node or an edge column can be read as a nullable ID column");
+        break;
+    }
+
+    return nullptr;
+}
+
 NLUnaryFn NLExecutor::selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result) {
     switch (valueType) {
         case ValueType::Int64:
@@ -4034,6 +4165,13 @@ NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool input
     if (inputNullable) {
         result = memory->alloc<ColumnOptVector<JustRes>>();
         return &functionOptKernel<Functor>;
+    }
+
+    // An entity column carries its null in the ID rather than in an optional, so it is
+    // read row by row for validity and its result is nullable all the same
+    if constexpr (TypedInternalID<typename Functor::ArgType>) {
+        result = memory->alloc<ColumnOptVector<JustRes>>();
+        return &functionEntityKernel<Functor>;
     }
 
     result = memory->alloc<ColumnVector<Res>>();
@@ -4127,6 +4265,96 @@ void NLExecutor::runSortLoop(NLExecutionContext* context, NLFunctionData* data) 
         for (size_t offset = 0; offset < totalRows; offset += chunkSize) {
             runIteration(offset);
         }
+    }
+}
+
+void NLExecutor::runOptionalReset(NLExecutionContext* context, NLFunctionData* data) {
+    NLOptionalResetData* reset = static_cast<NLOptionalResetData*>(data);
+    NLOptionalState* state = reset->getState();
+
+    state->reset();
+
+    // The tag holds each input row's position, so the pattern carries it the way it
+    // carries any other column and the collect reads the rows it matched off it.
+    std::vector<uint64_t>& tagRaw = reset->getTag()->getRaw();
+    tagRaw.resize(state->getRowCount());
+    std::iota(tagRaw.begin(), tagRaw.end(), uint64_t {0});
+}
+
+void NLExecutor::runOptionalCollect(NLExecutionContext* context, NLFunctionData* data) {
+    NLOptionalCollectData* collect = static_cast<NLOptionalCollectData*>(data);
+    NLOptionalState* state = collect->getState();
+
+    for (const NLOptionalCollectData::Append& append : collect->appends()) {
+        append._append(append._input, append._buffer);
+    }
+
+    const ColumnVector<uint64_t>* tag = collect->getTag();
+    if (!tag) {
+        // No input row to tag: the step is the single empty row, which this step's rows
+        // match - and a predicate that cut them all leaves nothing to match it.
+        const std::vector<NLOptionalCollectData::Append>& appends = collect->appends();
+        bioassert(!appends.empty(), "nl.optional_collect needs at least one column");
+
+        if (appends.front()._input->size() > 0) {
+            state->markMatched(0);
+        }
+
+        return;
+    }
+
+    for (const uint64_t row : tag->getRaw()) {
+        state->markMatched(row);
+    }
+}
+
+void NLExecutor::runOptionalDrainLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLOptionalDrainLoopData* loopData = static_cast<NLOptionalDrainLoopData*>(data);
+    NLOptionalState* state = loopData->getState();
+
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    const size_t chunkSize = context->getChunkSize();
+    ColumnVector<size_t>* indices = loopData->getIndices();
+    std::vector<size_t>& indicesRaw = indices->getRaw();
+
+    const NLLimitState* limit = loopData->getLimit();
+    const auto budgetLeft = [&]() { return !limit || limit->getRemaining() > 0; };
+
+    // The rows the pattern matched, re-chunked out of the buffers the collect grew. A
+    // chunk never mixes them with the padded ones: the two are gathered from different
+    // columns, so each step reads one or the other.
+    const size_t matchedRows = state->getMatchedRowCount();
+    for (size_t offset = 0; offset < matchedRows && budgetLeft(); offset += chunkSize) {
+        const size_t stepRows = std::min(chunkSize, matchedRows - offset);
+
+        indicesRaw.resize(stepRows);
+        std::iota(indicesRaw.begin(), indicesRaw.end(), offset);
+
+        for (const NLOptionalDrainLoopData::DrainColumn& column : loopData->columns()) {
+            column._gather(column._buffer, indices, column._output);
+        }
+
+        runBody(context, loopBody);
+    }
+
+    // Then one row per input row nothing matched: its own values in the columns the
+    // pattern joined onto, and null in the ones the pattern binds.
+    const std::vector<size_t>& missedRaw = state->missedRows().getRaw();
+    const size_t missedRows = missedRaw.size();
+    for (size_t offset = 0; offset < missedRows && budgetLeft(); offset += chunkSize) {
+        const size_t stepRows = std::min(chunkSize, missedRows - offset);
+
+        indicesRaw.assign(missedRaw.begin() + offset, missedRaw.begin() + offset + stepRows);
+
+        for (const NLOptionalDrainLoopData::DrainColumn& column : loopData->columns()) {
+            if (column._input) {
+                column._gather(column._input, indices, column._output);
+            } else {
+                column._fillNull(column._output, stepRows);
+            }
+        }
+
+        runBody(context, loopBody);
     }
 }
 
@@ -4855,6 +5083,13 @@ void NLExecutor::runProcedureInitLoop(NLExecutionContext* context, NLFunctionDat
     runProcedureDrive(context, loopData, [state]() { state->execute(); });
 }
 
+NLFillNullFunction NLExecutor::selectFillNullFunction(NLChunkKind kind) {
+    NLFillNullFunction selected = nullptr;
+    dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &fillNullColumn<ElementType>; });
+
+    return selected;
+}
+
 NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {
     NLGatherFunction selected = nullptr;
     dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &gatherColumn<ElementType>; });
@@ -5004,6 +5239,38 @@ NLCopyFunction NLExecutor::selectConstCopyFunction() {
 
 // A nullable value chunk gathers the same way an ID chunk does - copy the indexed
 // rows - on the ColumnOptVector<Primitive> instantiation of the gather template.
+// The owned-string members of the nullable handler families. A nullable chunk of owned
+// strings wraps a value type of String, but its rows own their characters rather than
+// borrowing them from the graph, so it takes the std::string handlers where a property
+// column takes the std::string_view ones. Zero-argument, like the list-element family.
+NLGatherFunction NLExecutor::selectOptOwnedStringGather() {
+    return &gatherColumn<std::optional<types::String::OwningPrimitive>>;
+}
+
+NLAppendFunction NLExecutor::selectOptOwnedStringAppend() {
+    return &appendColumn<std::optional<types::String::OwningPrimitive>>;
+}
+
+NLCopyFunction NLExecutor::selectOptOwnedStringCopy() {
+    return &copyRangeColumn<std::optional<types::String::OwningPrimitive>>;
+}
+
+NLGroupKeyGatherFunction NLExecutor::selectOptOwnedStringGroupKeyGather() {
+    return &groupGatherAppendColumn<std::optional<types::String::OwningPrimitive>>;
+}
+
+NLCompareFunction NLExecutor::selectOptOwnedStringCompare() {
+    return &compareOptColumn<types::String::OwningPrimitive>;
+}
+
+NLKeyAppendFunction NLExecutor::selectOptOwnedStringKeyAppend() {
+    return &distinctKeyAppendOptColumn<types::String::OwningPrimitive>;
+}
+
+NLCountFunction NLExecutor::selectOptOwnedStringCount() {
+    return &countPresentColumn<std::optional<types::String::OwningPrimitive>>;
+}
+
 NLGatherFunction NLExecutor::selectOptGatherFunction(ValueType valueType) {
     NLGatherFunction gather = nullptr;
     const auto select = [&]<SupportedType T>() {
@@ -5157,6 +5424,54 @@ NLKeyAppendFunction NLExecutor::selectOptKeyAppendFunction(ValueType valueType) 
 // irrelevant here - the row count is just the column size.
 size_t NLExecutor::countAllRows(const Column* column) {
     return column->size();
+}
+
+// Selected per column from its kind, so count(n) tallies only the rows in which the node
+// or edge n is not null. A kind whose rows are never null - a label ID, or a scalar a
+// procedure yielded - has no invalid value to skip and gets no handle here.
+NLCountFunction NLExecutor::selectIDCountFunction(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return &countValidIDs<NodeID>;
+        break;
+
+        case NLChunkKind::EdgeID:
+            return &countValidIDs<EdgeID>;
+        break;
+
+        case NLChunkKind::EdgeTypeID:
+            return &countValidIDs<EdgeTypeID>;
+        break;
+
+        default:
+            return nullptr;
+        break;
+    }
+
+    return nullptr;
+}
+
+// The grouped sibling of selectIDCountFunction, for count(n) inside a GROUP BY.
+NLGroupAggregateFoldFunction NLExecutor::selectGroupCountValidIDFold(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return &groupFoldCountValidID<NodeID>;
+        break;
+
+        case NLChunkKind::EdgeID:
+            return &groupFoldCountValidID<EdgeID>;
+        break;
+
+        case NLChunkKind::EdgeTypeID:
+            return &groupFoldCountValidID<EdgeTypeID>;
+        break;
+
+        default:
+            return nullptr;
+        break;
+    }
+
+    return nullptr;
 }
 
 // Selected per column from its value type, so count(x) tallies only the rows in

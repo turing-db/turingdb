@@ -60,4 +60,15 @@ def ColumnOwnedStrings : ColumnOf<"::mlir::storage::OwnedStringType", "owned_str
 // so it rides the node ID column above.
 def ColumnDoubles : ColumnOf<"::mlir::Float64Type", "f64">;
 
+// The column an OPTIONAL MATCH's row tag rides on: the position of the input row
+// each matched row descends from. Unlike the ColumnOf constraints above it carries
+// a BuildableType recipe for its single concrete type, so db.optional_yield can
+// leave the tag's type out of its assembly and build it from here instead.
+def ColumnRowTags : Type<
+        CPred<"::llvm::isa<::mlir::db::ColumnType>($_self) && "
+              "::llvm::cast<::mlir::db::ColumnType>($_self).getType().isUnsignedInteger(64)">,
+        "column of row tags", "::mlir::db::ColumnType">,
+    BuildableType<"::mlir::db::ColumnType::get($_builder.getContext(), "
+                  "$_builder.getIntegerType(64, false))">;
+
 #endif // TURINGDB_TYPES

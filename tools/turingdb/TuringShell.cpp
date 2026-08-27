@@ -523,6 +523,17 @@ void asString(std::string& out, const PropertyNull) {
     out += "null";
 }
 
+// An entity an OPTIONAL MATCH did not match is an invalid ID, which reads as null
+template <db::IntegralType T, int Tag>
+void asString(std::string& out, const db::ID<T, Tag>& id) {
+    if (!id.isValid()) {
+        out += "null";
+        return;
+    }
+
+    out += fmt::format("{}", id.getValue());
+}
+
 void asString(std::string& out, std::span<const float> embedding) {
     out += "[";
 

@@ -230,6 +230,16 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
+            // n IS NULL over a node or an edge, which an OPTIONAL MATCH leaves null when
+            // its pattern missed. Only the MLIR engine can bind such a variable
+            const bool comparesEntityToNull =
+                pair == TypePairBitset(EvaluatedType::NodePattern, EvaluatedType::Null)
+                || pair == TypePairBitset(EvaluatedType::EdgePattern, EvaluatedType::Null);
+
+            if (_isV3 && comparesEntityToNull) {
+                break;
+            }
+
             const std::string error = fmt::format(
                 "Operands are not valid or compatible types: '{}' and '{}'",
                 EvaluatedTypeName::value(a),

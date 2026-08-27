@@ -831,3 +831,87 @@ LogicalResult VectorSearch::verify() {
     return success();
 }
 
+// The region's entry block stands for the rows in flight: one argument per input
+// column, then the row tag. The db.optional_yield names the tag and the columns
+// the region contributes - the input columns as the pattern left them, then the
+// pattern's own variables - and the op's results are exactly those columns. A
+// pattern variable is what a row the pattern missed comes back with null, so it
+// has to be an ID column: those carry an invalid ID, which is how a null entity
+// is spelled, where a property value column would need a null of its own.
+LogicalResult OptionalMatch::verify() {
+    Block& patternBlock = getPattern().front();
+
+    auto yield = dyn_cast_or_null<OptionalYield>(patternBlock.empty() ? nullptr : &patternBlock.back());
+    if (!yield) {
+        return emitOpError("pattern region must end with a db.optional_yield");
+    }
+
+    const size_t inputCount = getInputColumns().size();
+
+    // No input column means no input row to tag: the rows the pattern joins onto are
+    // the single empty row the query starts from.
+    const size_t expectedArguments = inputCount == 0 ? 0 : inputCount + 1;
+
+    if (patternBlock.getNumArguments() != expectedArguments) {
+        return emitOpError("pattern region takes one argument per input column plus the row tag, ")
+               << "expected " << expectedArguments << " but has " << patternBlock.getNumArguments();
+    }
+
+    const bool tagsRows = inputCount != 0;
+    const bool yieldsATag = yield.getTag() != nullptr;
+
+    if (tagsRows != yieldsATag) {
+        return emitOpError("the pattern yields a row tag exactly when the op takes input columns");
+    }
+
+    for (size_t inputIndex = 0; inputIndex < inputCount; inputIndex++) {
+        if (patternBlock.getArgument(inputIndex).getType() != getInputColumns()[inputIndex].getType()) {
+            return emitOpError("pattern argument ") << inputIndex << " must have the type of input column "
+                                                    << inputIndex;
+        }
+    }
+
+    const ValueRange yieldedColumns = yield.getColumns();
+    if (yieldedColumns.empty()) {
+        return emitOpError("pattern must yield at least one column");
+    }
+
+    if (yieldedColumns.size() < inputCount) {
+        return emitOpError("pattern must yield at least one column per input column, expected ")
+               << inputCount << " but has " << yieldedColumns.size();
+    }
+
+    for (size_t inputIndex = 0; inputIndex < inputCount; inputIndex++) {
+        if (yieldedColumns[inputIndex].getType() != getInputColumns()[inputIndex].getType()) {
+            return emitOpError("yielded column ") << inputIndex << " must have the type of input column "
+                                                  << inputIndex;
+        }
+    }
+
+    for (size_t columnIndex = inputCount; columnIndex < yieldedColumns.size(); columnIndex++) {
+        const auto column = llvm::dyn_cast<ColumnType>(yieldedColumns[columnIndex].getType());
+        const mlir::Type elementType = column ? column.getType() : mlir::Type();
+        const bool isEntityColumn = llvm::isa_and_present<storage::NodeIDType, storage::EdgeIDType>(elementType);
+
+        if (!isEntityColumn) {
+            return emitOpError("pattern variable column ")
+                   << columnIndex << " must be a node or edge ID column, so a missed match can be null";
+        }
+    }
+
+    const Operation::result_type_range resultTypes = getOperation()->getResultTypes();
+    if (resultTypes.size() != yieldedColumns.size()) {
+        return emitOpError("expects ") << yieldedColumns.size()
+                                       << " results, the columns the pattern yields, but has "
+                                       << resultTypes.size();
+    }
+
+    for (size_t resultIndex = 0; resultIndex < resultTypes.size(); resultIndex++) {
+        if (resultTypes[resultIndex] != yieldedColumns[resultIndex].getType()) {
+            return emitOpError("result ") << resultIndex << " must be the yielded column type "
+                                          << yieldedColumns[resultIndex].getType();
+        }
+    }
+
+    return success();
+}

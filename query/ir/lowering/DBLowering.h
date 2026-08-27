@@ -207,6 +207,23 @@ private:
     void lowerDeleteEdge(mlir::db::DeleteEdge deleteEdge);
     void lowerCrossProduct(mlir::db::CrossProduct product);
 
+    // Lower a db.optional_match: an nl.optional_buffer at the step of the block binding
+    // the columns the pattern joins onto - so the accumulator is emptied once per step -
+    // then the pattern's own loop nest rooted there (the shape lowerFactor gives a cross
+    // product's factor), an nl.optional_collect at its deepest point appending the matched
+    // rows and marking the input rows they came from, and - after that nest - an
+    // nl.optional_drain source plus its nl.for, which yields the matched rows and then one
+    // null-padded row per input row the pattern missed. db.optional_match's results map to
+    // that emit loop's variables, so what follows lowers into it, reading the rows the
+    // join kept. A pipeline breaker with an emit loop, like db.sort, but one whose
+    // accumulator lives inside the enclosing step rather than at function scope: the rows
+    // it must see before emitting any are one step's, not the whole relation's.
+    void lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch);
+
+    // The most deeply nested block any of @param chunks is bound in, or @param fallback
+    // when they are all bound at or above it: where an op reading them all belongs
+    static mlir::Block* deepestOwnerBlock(llvm::ArrayRef<mlir::Value> chunks, mlir::Block* fallback);
+
     // Lays the constant out over the rows of its driver, the layout rowAlignedChunk
     // performs for every consumer that reads a constant per row
     void lowerBroadcastConstant(mlir::db::BroadcastConstant broadcast);

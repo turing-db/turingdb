@@ -108,6 +108,22 @@ def NLGroupAggregateState : NLType<"GroupAggregateState", "group_aggregate_state
     }];
 }
 
+def NLOptionalState : NLType<"OptionalState", "optional_state"> {
+    let summary = "An OPTIONAL MATCH accumulator handle";
+    let description = [{
+        Stands for one OPTIONAL MATCH's state over the current step of the rows it
+        joins onto: the input chunks themselves, a matched flag per input row, and
+        the row buffers the matched rows are collected into. Produced by
+        nl.optional_buffer at the top of the block whose step it covers - so it is
+        reset once per step of the rows in flight - appended to by
+        nl.optional_collect, and drained by the nl.for over nl.optional_drain, which
+        emits the collected rows and then one null-padded row per input row nothing
+        matched. The pattern sibling of !nl.sort_state: it accumulates rows to
+        re-emit them, but keeps the input chunks beside them so the rows it missed
+        can be rebuilt.
+    }];
+}
+
 def NLCollectState : NLType<"CollectState", "collect_state"> {
     let summary = "A per-group value-list accumulator handle for one collect";
     let description = [{
@@ -345,5 +361,26 @@ def NLProcedureStateHandle : Type<
         CPred<"::llvm::isa<::mlir::nl::ProcedureStateType>($_self)">,
         "procedure state handle", "::mlir::nl::ProcedureStateType">,
     BuildableType<"::mlir::nl::ProcedureStateType::get($_builder.getContext())">;
+
+// Constrains an operand to an !nl.optional_state handle, the same way
+// NLSortStateHandle constrains the sort handle. The single concrete type - there
+// is only ever !nl.optional_state - is what lets nl.optional_collect and
+// nl.optional_drain omit the handle's type in their assembly, building it from
+// this recipe instead.
+def NLOptionalStateHandle : Type<
+        CPred<"::llvm::isa<::mlir::nl::OptionalStateType>($_self)">,
+        "optional state handle", "::mlir::nl::OptionalStateType">,
+    BuildableType<"::mlir::nl::OptionalStateType::get($_builder.getContext())">;
+
+// Constrains an operand to a chunk of unsigned 64-bit counts, the way
+// NLNodeIDChunk constrains an ID chunk. It is what an OPTIONAL MATCH's row tag
+// rides on - the position of the input row each matched row descends from - and
+// the BuildableType recipe lets the ops naming it omit the type.
+def NLUInt64Chunk : Type<
+        CPred<"::llvm::isa<::mlir::nl::ChunkType>($_self) && "
+              "::llvm::cast<::mlir::nl::ChunkType>($_self).getElementType().isUnsignedInteger(64)">,
+        "chunk of unsigned 64-bit counts", "::mlir::nl::ChunkType">,
+    BuildableType<"::mlir::nl::ChunkType::get($_builder.getContext(), "
+                  "$_builder.getIntegerType(64, false))">;
 
 #endif // TURINGDB_NL_TYPES

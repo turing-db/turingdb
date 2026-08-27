@@ -109,8 +109,11 @@ struct UnaryFunctionLowering {
 };
 
 const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionLowerings = {
-    {"db.labels",     {&emitNLUnaryFunction<nl::Labels>,    &ownedStringFunctionElement, ResultNullability::FollowsInput}},
-    {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>,  &ownedStringFunctionElement, ResultNullability::FollowsInput}},
+    // Both read an entity column, which carries its null in the ID an OPTIONAL MATCH left
+    // invalid rather than in an optional, so their result is nullable whatever the input
+    // chunk's own type says
+    {"db.labels",     {&emitNLUnaryFunction<nl::Labels>,    &ownedStringFunctionElement, ResultNullability::AlwaysNullable}},
+    {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>,  &ownedStringFunctionElement, ResultNullability::AlwaysNullable}},
     {"db.to_integer", {&emitNLUnaryFunction<nl::ToInteger>, &integerFunctionElement,     ResultNullability::AlwaysNullable}},
     {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,       ResultNullability::AlwaysNullable}},
     {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, &booleanFunctionElement,     ResultNullability::AlwaysNullable}},
@@ -550,7 +553,10 @@ bool opensSourceLoop(mlir::Operation* operation) {
 // builds, and the emit loop a pipeline breaker opens over what it accumulated
 bool opensRowLoop(mlir::Operation* operation) {
     return opensSourceLoop(operation)
-        || mlir::isa<mlir::db::CrossProduct, mlir::db::Sort, mlir::db::GroupAggregate>(operation);
+        || mlir::isa<mlir::db::CrossProduct,
+                     mlir::db::Sort,
+                     mlir::db::GroupAggregate,
+                     mlir::db::OptionalMatch>(operation);
 }
 
 // A reduction emits its one row at function scope, so what follows it walks no rows of the
@@ -771,6 +777,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerDeleteEdge(deleteEdge);
     } else if (mlir::db::CrossProduct crossProduct = mlir::dyn_cast<mlir::db::CrossProduct>(operation)) {
         lowerCrossProduct(crossProduct);
+    } else if (mlir::db::OptionalMatch optionalMatch = mlir::dyn_cast<mlir::db::OptionalMatch>(operation)) {
+        lowerOptionalMatch(optionalMatch);
     } else if (mlir::db::Limit limit = mlir::dyn_cast<mlir::db::Limit>(operation)) {
         lowerLimit(limit);
     } else if (mlir::db::Skip skip = mlir::dyn_cast<mlir::db::Skip>(operation)) {
@@ -1344,6 +1352,108 @@ void DBLowering::lowerCheckEdgeTypeConstraint(mlir::db::CheckEdgeTypeConstraint 
     _valueMap[checkEdgeTypeConstraint.getResult()] = check.getResult();
 }
 
+mlir::Block* DBLowering::deepestOwnerBlock(llvm::ArrayRef<mlir::Value> chunks, mlir::Block* fallback) {
+    mlir::Block* deepest = fallback;
+    size_t deepestDepth = blockNestingDepth(fallback);
+
+    for (const mlir::Value chunk : chunks) {
+        mlir::Block* const owner = ownerBlock(chunk);
+        const size_t ownerDepth = blockNestingDepth(owner);
+
+        if (ownerDepth > deepestDepth) {
+            deepest = owner;
+            deepestDepth = ownerDepth;
+        }
+    }
+
+    return deepest;
+}
+
+void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    llvm::SmallVector<mlir::Value, 4> inputChunks;
+    for (const mlir::Value column : optionalMatch.getInputColumns()) {
+        inputChunks.push_back(mapValue(column));
+    }
+
+    // The step the accumulator covers is the one binding the columns the pattern joins
+    // onto, so it is emptied once per chunk of them - and the pattern's nest and the drain
+    // loop both go there, the drain after the nest.
+    mlir::Block* const stepBlock = deepestOwnerBlock(inputChunks, _rootBlock);
+
+    setInsertionInto(stepBlock);
+    nl::OptionalBuffer buffer = _builder.create<nl::OptionalBuffer>(loc, inputChunks);
+    const mlir::Value state = buffer.getState();
+
+    // The pattern reads this step's rows through its block arguments, and the row tag
+    // through the trailing one; a pattern with nothing to join onto has neither.
+    mlir::Block& patternBlock = optionalMatch.getPattern().front();
+    for (size_t inputIndex = 0; inputIndex < inputChunks.size(); inputIndex++) {
+        _valueMap[patternBlock.getArgument(static_cast<unsigned>(inputIndex))] = inputChunks[inputIndex];
+    }
+
+    if (!inputChunks.empty()) {
+        _valueMap[patternBlock.getArgument(static_cast<unsigned>(inputChunks.size()))] = buffer.getTag();
+    }
+
+    // A dataflow of its own, rooted where the accumulator sits so its loops nest inside
+    // this step; the caller's root and innermost loop are restored once it is lowered.
+    mlir::Block* const previousRoot = _rootBlock;
+    mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    _rootBlock = stepBlock;
+    _innermostLoopBody = nullptr;
+    _innermostCardinality = mlir::Value();
+
+    llvm::SmallVector<mlir::Value, 4> matchedChunks;
+    mlir::Value matchedTag;
+
+    for (mlir::Operation& operation : patternBlock) {
+        mlir::db::OptionalYield yield = mlir::dyn_cast<mlir::db::OptionalYield>(operation);
+        if (!yield) {
+            lowerOperation(operation);
+            continue;
+        }
+
+        for (const mlir::Value column : yield.getColumns()) {
+            matchedChunks.push_back(mapValue(column));
+        }
+
+        if (yield.getTag()) {
+            matchedTag = mapValue(yield.getTag());
+        }
+    }
+
+    // OptionalMatch::verify rejects a pattern yielding no column, so reaching this means
+    // unverified IR - a defensive backstop, as in lowerFactor and lowerSort.
+    if (matchedChunks.empty()) {
+        throw IRException("db.optional_match pattern yields no column");
+    }
+
+    // The collect belongs where the pattern bound its columns together - the same block an
+    // nl.output over them would sit in.
+    setInsertionInto(deepestOwnerBlock(matchedChunks, stepBlock));
+    _builder.create<nl::OptionalCollect>(loc, state, matchedTag, matchedChunks);
+
+    _rootBlock = previousRoot;
+    _innermostLoopBody = previousInnermostLoopBody;
+    _innermostCardinality = previousInnermostCardinality;
+
+    llvm::SmallVector<mlir::Type, 4> chunkTypes;
+    for (const mlir::Value chunk : matchedChunks) {
+        chunkTypes.push_back(chunk.getType());
+    }
+
+    // Placed after the pattern's nest in the block that opened the accumulator, so the
+    // matched rows are all in by the time it first steps.
+    const nl::IteratorType iteratorType = nl::IteratorType::get(_builder.getContext(), chunkTypes);
+    setInsertionInto(stepBlock);
+    nl::OptionalDrain drain = _builder.create<nl::OptionalDrain>(loc, iteratorType, state);
+
+    buildLoopForSource(drain.getResult(), optionalMatch.getOperation());
+}
+
 void DBLowering::lowerCrossProduct(mlir::db::CrossProduct product) {
     // The outer factor roots where this op would have - the entry block at top
     // level. The inner factor roots inside the outer factor's innermost loop
@@ -1429,17 +1539,7 @@ mlir::Block* DBLowering::lowerFactor(mlir::Region& factor,
     // root: the innermost loop body of a factor that walks a relation, and the root block
     // itself for one whose columns are a single row bound above every loop - a scalar
     // aggregate, or a constant laid out over the one row it is
-    mlir::Block* factorBody = rootBlock;
-    size_t deepestDepth = blockNestingDepth(rootBlock);
-    for (const mlir::Value chunk : yieldedChunks) {
-        mlir::Block* const owner = ownerBlock(chunk);
-        const size_t ownerDepth = blockNestingDepth(owner);
-
-        if (ownerDepth > deepestDepth) {
-            factorBody = owner;
-            deepestDepth = ownerDepth;
-        }
-    }
+    mlir::Block* const factorBody = deepestOwnerBlock(yieldedChunks, rootBlock);
 
     _rootBlock = previousRoot;
     _innermostLoopBody = previousInnermostLoopBody;
@@ -2369,7 +2469,9 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
 
     // A pipeline breaker accumulates every row before emitting any, so the walk stops
     // here; the limit budgets its emit loop instead, when it opens one.
-    const bool emitsThroughLoop = mlir::isa<mlir::db::Sort, mlir::db::GroupAggregate>(definingOp);
+    const bool emitsThroughLoop = mlir::isa<mlir::db::Sort,
+                                            mlir::db::GroupAggregate,
+                                            mlir::db::OptionalMatch>(definingOp);
     const bool breaksPipeline = emitsThroughLoop || reducesToOneRow(definingOp);
 
     bool reachedALoop = opensLoop || isCrossProduct || emitsThroughLoop;
@@ -3275,6 +3377,12 @@ mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
     mlir::Type valueElement = element;
     if (mlir::isa<storage::BoolType>(element)) {
         valueElement = _builder.getI1Type();
+    }
+
+    // A node or an edge reads as its ID's integer, absent where an OPTIONAL MATCH left the
+    // ID invalid: that is what makes n IS NULL the ordinary null test over a value column
+    if (mlir::isa<storage::NodeIDType, storage::EdgeIDType>(element)) {
+        valueElement = _builder.getIntegerType(64, /*isSigned=*/false);
     }
 
     const bool isString = mlir::isa<storage::StringType>(valueElement);

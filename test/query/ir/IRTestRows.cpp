@@ -29,6 +29,17 @@ using namespace turing::test;
 
 namespace {
 
+// An entity an OPTIONAL MATCH did not match is an invalid ID, which is a null
+template <typename ID>
+void renderEntityCell(ID id, std::string& out) {
+    if (!id.isValid()) {
+        out = "null";
+        return;
+    }
+
+    out = std::to_string(id.getValue());
+}
+
 void renderList(const ListView& list, std::string& out);
 
 void renderListElement(const ListElementView& element, std::string& out) {
@@ -145,11 +156,11 @@ bool renderValueCell(const Column* column, size_t row, std::string& out) {
 
 void turing::test::renderCell(const Column* column, size_t row, std::string& out) {
     if (const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(column)) {
-        out = std::to_string((*nodeIDs)[row].getValue());
+        renderEntityCell((*nodeIDs)[row], out);
     } else if (const auto* edgeIDs = dynamic_cast<const ColumnEdgeIDs*>(column)) {
-        out = std::to_string((*edgeIDs)[row].getValue());
+        renderEntityCell((*edgeIDs)[row], out);
     } else if (const auto* edgeTypes = dynamic_cast<const ColumnEdgeTypes*>(column)) {
-        out = std::to_string((*edgeTypes)[row].getValue());
+        renderEntityCell((*edgeTypes)[row], out);
     } else if (const auto* mask = dynamic_cast<const ColumnMask*>(column)) {
         out = (*mask)[row] ? "true" : "false";
     } else if (dynamic_cast<const ColumnConst<PropertyNull>*>(column)) {

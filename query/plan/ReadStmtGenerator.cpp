@@ -143,6 +143,10 @@ void ReadStmtGenerator::generateStmt(const Stmt* stmt) {
 void ReadStmtGenerator::generateMatchStmt(const MatchStmt* stmt) {
     const Pattern* pattern = stmt->getPattern();
 
+    if (stmt->isOptional()) {
+        throwError("OPTIONAL MATCH is only supported by the MLIR query engine.", stmt);
+    }
+
     if (stmt->hasOrderBy()) {
         throwError("MATCH ... ORDER BY ... is not supported yet. "
                    "Please use RETURN ... ORDER BY ... instead",

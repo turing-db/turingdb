@@ -2259,4 +2259,102 @@ def ProcedureInit : NLOp<"procedure_init", [AttrSizedOperandSegments]> {
   }];
 }
 
+/**
+* OptionalBuffer
+*/
+// NOT Pure: it re-initializes the accumulator, so it must run exactly where it
+// sits - once per step of the rows the OPTIONAL MATCH joins onto - and must not
+// be hoisted, CSE'd or eliminated (like nl.sort_buffer).
+def OptionalBuffer : NLOp<"optional_buffer", [RowAlignedThroughOperands]> {
+  let summary = "Create (and reset) the accumulator for one OPTIONAL MATCH over this step's rows";
+  let description = [{
+    Sits at the top of the block whose step it covers - the innermost loop body
+    binding the columns the OPTIONAL MATCH joins onto - so the accumulator is
+    empty again at every step. It records this step's input chunks, clears the
+    matched flag of each of their rows, and produces the row tag: a chunk holding
+    each input row's position, which the pattern carries alongside the columns it
+    walks so nl.optional_collect knows which rows matched.
+
+      %state, %tag = nl.optional_buffer (%p) : {!nl.chunk<!storage.node_id>}
+
+    With no input columns - a query opening on OPTIONAL MATCH - the step is the
+    single empty row Cypher starts from, so the accumulator holds one flag and the
+    tag one row. The pattern has nothing to join onto there, so it never carries
+    that tag, which is why the op is row-aligned through its operands: a tag over
+    input rows holds exactly the rows those chunks do.
+  }];
+
+  // The chunks the OPTIONAL MATCH joins onto; the accumulator reads its row count
+  // from the first of them, and rebuilds the rows the pattern missed out of them.
+  let arguments = (ins Variadic<NLChunk>:$input_columns);
+
+  // The accumulator, then the row tag over this step's input rows.
+  let results = (outs NLOptionalState:$state, NLUInt64Chunk:$tag);
+
+  // The tag's type is buildable and so omitted; only the input chunk types are
+  // spelled, in braces as nl.cross_product spells a factor's.
+  let assemblyFormat = [{
+    `(` $input_columns `)` attr-dict `:` `{` qualified(type($input_columns)) `}`
+  }];
+}
+
+/**
+* OptionalCollect
+*/
+// NOT Pure: it appends the step's matched rows to the accumulator and marks the
+// input rows they came from, so it must run exactly where it sits (like
+// nl.sort_collect).
+def OptionalCollect : NLOp<"optional_collect", [AttrSizedOperandSegments]> {
+  let summary = "Append this step's matched rows to an OPTIONAL MATCH accumulator";
+  let description = [{
+    Runs in the pattern's innermost loop body, once per step. Appends the current
+    chunk of every column the pattern contributes to the accumulator's buffers,
+    and marks as matched each input row the tag names, so once the pattern is
+    walked the unmarked rows are exactly the ones it missed.
+
+      nl.optional_collect %state, %tag, (%p2, %e, %f)
+        : {!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.node_id>}
+
+    The tag is absent when the accumulator has no input columns: the step is then
+    the single empty row, which any collected row marks.
+  }];
+
+  let arguments = (ins NLOptionalStateHandle:$state,
+                       Optional<NLUInt64Chunk>:$tag,
+                       Variadic<NLChunk>:$columns);
+
+  let assemblyFormat = [{
+    $state (`,` $tag^)? `,` `(` $columns `)` attr-dict `:` `{` qualified(type($columns)) `}`
+  }];
+}
+
+/**
+* OptionalDrain
+*/
+// Pure: given a filled accumulator it deterministically yields the same rows, and
+// produces no side effect of its own - the emission happens in the driving
+// nl.for. Mirrors nl.sort: a source op whose loop does the work.
+def OptionalDrain : NLOp<"optional_drain", [Pure]> {
+  let summary = "Create a database iterator over an OPTIONAL MATCH's matched rows, then its missed ones";
+  let description = [{
+    The emit phase of an OPTIONAL MATCH. Consumes a filled nl.optional_state and
+    produces an iterator whose steps yield first the rows the pattern matched, as
+    collected, and then one row per input row it missed: the input columns taken
+    from the step's own chunks and the pattern's own columns null - an invalid ID,
+    which reads as null through a property fetch.
+
+      %rows = nl.optional_drain(%state) : !nl.iter<!nl.chunk<!storage.node_id>, ...>
+      nl.for %p, %e, %f in %rows : !nl.iter<...> { ... }
+
+    Placing it after the pattern's loop nest, in the same block as the
+    nl.optional_buffer that opened the accumulator, is what guarantees the matched
+    rows are all in by the time it first steps.
+  }];
+
+  let arguments = (ins NLOptionalStateHandle:$state);
+  let results   = (outs NLIterator:$result);
+
+  let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
+}
+
 #endif //TURINGDB_NL_OPS
