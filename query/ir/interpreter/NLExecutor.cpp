@@ -2655,10 +2655,9 @@ void NLExecutor::runVectorSearchLoop(NLExecutionContext* context, NLFunctionData
     const std::span<const int64_t> ids = result.ids();
     const std::span<const float> distances = result.distances();
 
-    using IDColumn = ColumnOptVector<types::Int64::Primitive>;
     using ScoreColumn = ColumnOptVector<types::Double::Primitive>;
 
-    IDColumn* const idColumn = static_cast<IDColumn*>(loopData->getIDs());
+    ColumnNodeIDs* const idColumn = loopData->getIDs();
     ScoreColumn* const scoreColumn = static_cast<ScoreColumn*>(loopData->getScores());
 
     const size_t chunkSize = context->getChunkSize();
@@ -2677,9 +2676,15 @@ void NLExecutor::runVectorSearchLoop(NLExecutionContext* context, NLFunctionData
         const size_t remaining = totalCount - cursor;
         const size_t rows = std::min(chunkSize, remaining);
 
-        std::vector<std::optional<types::Int64::Primitive>>& rawIDs = idColumn->getRaw();
+        // An ID naming no node is kept rather than dropped the way a const scan drops one:
+        // it matches no edge and holds no property, so an index whose IDs are not node IDs
+        // still reports every neighbour it found.
+        std::vector<NodeID>& rawIDs = idColumn->getRaw();
         rawIDs.resize(rows);
-        std::copy(ids.begin() + cursor, ids.begin() + cursor + rows, rawIDs.begin());
+        std::transform(ids.begin() + cursor,
+                       ids.begin() + cursor + rows,
+                       rawIDs.begin(),
+                       [](int64_t id) { return NodeID {static_cast<uint64_t>(id)}; });
 
         std::vector<std::optional<types::Double::Primitive>>& rawScores = scoreColumn->getRaw();
         rawScores.resize(rows);

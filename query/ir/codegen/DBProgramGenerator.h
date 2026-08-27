@@ -188,11 +188,12 @@ private:
         llvm::SmallVector<size_t> _yieldedIndices;
     };
 
-    // Generates the calls a part writes ahead of its first MATCH, when what they yield can
-    // drive the traversal, and names the root that will expand it. Generates nothing
-    // otherwise: a call whose rows the traversal does not consume has to be paired with it,
-    // which is what generating it after the traversal does.
-    void generateLeadingCalls(std::span<Stmt* const> stmts);
+    // Generates the statements a part writes ahead of its first MATCH that bind variables
+    // of their own - its calls and its vector searches - when what they yield can drive the
+    // traversal, and names the root that will expand it. Generates nothing otherwise: rows
+    // the traversal does not consume have to be paired with it, which is what generating
+    // them after the traversal does.
+    void generateLeadingYields(std::span<Stmt* const> stmts);
 
     // Emits the op of a system-level statement - LOAD GRAPH, CHANGE, COMMIT and
     // their siblings - which is the whole program. False for an ordinary query,
@@ -265,9 +266,9 @@ private:
     void generateMatchWindow(const MatchStmt* matchStmt);
     void generateCall(const CallStmt* callStmt);
 
-    // Generates the vector searches of a part, after the traversal so a search is paired
-    // with the rows it matched, and before the filters and calls so a WHERE or an argument
-    // reading what a search yielded sees it bound.
+    // Generates the vector searches of a part the leading pass did not, after the traversal
+    // so a search is paired with the rows it matched, and before the filters and calls so a
+    // WHERE or an argument reading what a search yielded sees it bound.
     void generateVectorSearches(std::span<Stmt* const> stmts);
     void generateVectorSearch(const VectorSearchStmt* vectorSearchStmt);
 

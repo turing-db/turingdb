@@ -111,15 +111,15 @@ LogicalResult ConstScanNodes::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
-// A vector search produces the two fixed neighbour chunks per step - the IDs the index
-// holds them under and the distances they scored - and reads no input, so the iterator
-// has exactly those two chunks and no carried tail. Both ride nullable value chunks, the
-// shape every value-chunk consumer dispatches on.
+// A vector search produces the two fixed neighbour chunks per step - the nodes the index
+// holds the vectors under and the distances they scored - and reads no input, so the
+// iterator has exactly those two chunks and no carried tail. The neighbours ride the same
+// node ID chunk a scan binds, the distances a nullable value chunk.
 LogicalResult VectorSearch::inferReturnTypes(MLIRContext* context,
                                              std::optional<Location> location,
                                              VectorSearch::Adaptor adaptor,
                                              SmallVectorImpl<Type>& inferredReturnTypes) {
-    const Type ids = getNullableChunkType(context, IntegerType::get(context, 64));
+    const Type ids = getNodeIDChunkType(context);
     const Type scores = getNullableChunkType(context, Float64Type::get(context));
 
     inferredReturnTypes.push_back(IteratorType::get(context, {ids, scores}));

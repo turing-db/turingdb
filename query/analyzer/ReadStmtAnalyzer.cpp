@@ -544,7 +544,10 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
 
         EvaluatedType yieldType = EvaluatedType::Invalid;
         if (yieldName == "ids") {
-            yieldType = EvaluatedType::Integer;
+            // The MLIR engine reports each neighbour as the node the index holds it under,
+            // so a pattern can walk out of the yielded variable and an equality can compare
+            // a matched node to it. The pipeline reports the raw ID instead.
+            yieldType = _isV3 ? EvaluatedType::NodePattern : EvaluatedType::Integer;
         } else if (yieldName == "score") {
             yieldType = EvaluatedType::Double;
         } else {
