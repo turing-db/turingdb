@@ -102,6 +102,10 @@ TEST_F(AnonymousMatchTest, doesNotResolveAnAnonymousNodeByName) {
     expectError("MATCH ()-->() RETURN v0", "Variable 'v0' not found");
 }
 
+TEST_F(AnonymousMatchTest, doesNotResolveTheAnonymousNodesOfAChainByName) {
+    expectError("match ()--()--() where v0=42 and v1=17 return count(*)", "Variable 'v0' not found");
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
