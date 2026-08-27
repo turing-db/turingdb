@@ -778,11 +778,13 @@ void DBProgramGenerator::generateQueryParts(const SinglePartQuery* query) {
     // columns that projection publishes are all the statements after it can read
     size_t partBegin = 0;
     for (size_t index = 0; index < stmts.size(); index++) {
-        if (stmts[index]->getKind() == Stmt::Kind::WITH) {
+        const Stmt* stmt = stmts[index];
+
+        if (stmt->getKind() == Stmt::Kind::WITH) {
             generatePart(stmts.subspan(partBegin, index - partBegin));
-            generateWith(static_cast<const WithStmt*>(stmts[index]));
+            generateWith(static_cast<const WithStmt*>(stmt));
             partBegin = index + 1;
-        } else if (closesPartOnItsCut(stmts, index)) {
+        } else if (closesPartOnItsCut(stmt, stmts.subspan(index + 1))) {
             generatePart(stmts.subspan(partBegin, index + 1 - partBegin));
             publishInFlightColumns();
             partBegin = index + 1;
@@ -794,8 +796,7 @@ void DBProgramGenerator::generateQueryParts(const SinglePartQuery* query) {
     }
 }
 
-bool DBProgramGenerator::closesPartOnItsCut(std::span<Stmt* const> stmts, size_t index) const {
-    const Stmt* stmt = stmts[index];
+bool DBProgramGenerator::closesPartOnItsCut(const Stmt* stmt, std::span<Stmt* const> following) const {
     if (stmt->getKind() != Stmt::Kind::MATCH) {
         return false;
     }
@@ -807,8 +808,8 @@ bool DBProgramGenerator::closesPartOnItsCut(std::span<Stmt* const> stmts, size_t
         return false;
     }
 
-    for (size_t next = index + 1; next < stmts.size(); next++) {
-        const Stmt::Kind kind = stmts[next]->getKind();
+    for (const Stmt* next : following) {
+        const Stmt::Kind kind = next->getKind();
 
         if (kind == Stmt::Kind::WITH) {
             return false;
