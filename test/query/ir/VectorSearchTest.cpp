@@ -105,6 +105,11 @@ constexpr std::string_view loadNodes = "LOAD VECTOR FROM \"nodes.csv\" IN nodes"
 // reports whichever way the query names him.
 const std::vector<std::string> remyInterests {"Computers", "Eighties", "Ghosts"};
 
+constexpr std::string_view createPeopleIndex = "CREATE VECTOR INDEX people WITH DIMENSION 4 METRIC EUCLID";
+constexpr std::string_view loadPeople = "LOAD VECTOR FROM \"people.csv\" IN people";
+constexpr std::string_view createTopicIndex = "CREATE VECTOR INDEX topics WITH DIMENSION 4 METRIC EUCLID";
+constexpr std::string_view loadTopics = "LOAD VECTOR FROM \"topics.csv\" IN topics";
+
 }
 
 // VECTOR SEARCH through the MLIR engine: a source op of its own, whose two row-aligned
@@ -125,6 +130,8 @@ public:
         // rather than assumed.
         _remy = SimpleGraph::findNodeID(graph, "Remy");
         _adam = SimpleGraph::findNodeID(graph, "Adam");
+        _bio = SimpleGraph::findNodeID(graph, "Bio");
+        _cooking = SimpleGraph::findNodeID(graph, "Cooking");
 
         _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
     }
@@ -200,9 +207,48 @@ protected:
         ASSERT_TRUE(loadStatus.isOk()) << loadStatus.getError();
     }
 
+    // The two indexes an unrolled graph RAG retrieves from: people, where Remy is nearest
+    // to (1, 0, 0, 0) and Adam next, and topics, where Bio is nearest to (0, 1, 0, 0) and
+    // Cooking next.
+    void loadRagVectors() {
+        writeVectorFile("people.csv", _remy, _adam, /*firstAxis=*/true);
+        writeVectorFile("topics.csv", _bio, _cooking, /*firstAxis=*/false);
+
+        QueryStatus peopleCreateStatus;
+        runQuery(createPeopleIndex, peopleCreateStatus);
+        ASSERT_TRUE(peopleCreateStatus.isOk()) << peopleCreateStatus.getError();
+
+        QueryStatus peopleLoadStatus;
+        runQuery(loadPeople, peopleLoadStatus);
+        ASSERT_TRUE(peopleLoadStatus.isOk()) << peopleLoadStatus.getError();
+
+        QueryStatus topicCreateStatus;
+        runQuery(createTopicIndex, topicCreateStatus);
+        ASSERT_TRUE(topicCreateStatus.isOk()) << topicCreateStatus.getError();
+
+        QueryStatus topicLoadStatus;
+        runQuery(loadTopics, topicLoadStatus);
+        ASSERT_TRUE(topicLoadStatus.isOk()) << topicLoadStatus.getError();
+    }
+
+    // Two vectors one unit apart along one axis, so the nearer of the two is the one the
+    // corresponding query vector names and the order is exact in a float.
+    void writeVectorFile(std::string_view name, NodeID nearer, NodeID farther, bool firstAxis) {
+        const fs::Path path = _env->getConfig().getDataDir() / name;
+
+        std::ofstream file(path.get());
+        if (firstAxis) {
+            file << nearer.getValue() << ",1,0,0,0\n" << farther.getValue() << ",2,0,0,0\n";
+        } else {
+            file << nearer.getValue() << ",0,1,0,0\n" << farther.getValue() << ",0,2,0,0\n";
+        }
+    }
+
     const std::string _graphName = "simpledb";
     NodeID _remy;
     NodeID _adam;
+    NodeID _bio;
+    NodeID _cooking;
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<QueryInterpreterV3> _interpreter;
 };
@@ -461,6 +507,141 @@ TEST_F(VectorSearchTest, aDrivenTraversalCarriesTheScoreThroughTheHop) {
                                                     {"Cooking", "1"},
                                                     {"Eighties", "0"},
                                                     {"Ghosts", "0"}};
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+
+    EXPECT_EQ(rows, expected);
+}
+
+// A YIELD renames what the search reports, which is what lets two searches stand side by
+// side in one query rather than colliding on the one name the statement knows.
+TEST_F(VectorSearchTest, searchYieldsUnderTheAliasTheQueryGaveIt) {
+    loadNodeVectors();
+
+    QueryStatus status;
+    VectorSearchSink sink;
+    runQuery("VECTOR SEARCH IN nodes FOR 1 (1.0, 0.0, 0.0, 0.0) YIELD ids AS seed, score AS distance "
+             "RETURN seed, distance",
+             status,
+             sink);
+
+    ASSERT_TRUE(status.isOk()) << status.getError();
+    ASSERT_EQ(sink.getColumnNames().size(), 2u);
+    EXPECT_EQ(sink.getColumnNames()[0], "seed");
+    EXPECT_EQ(sink.getColumnNames()[1], "distance");
+
+    const std::vector<uint64_t> expectedIDs {_remy.getValue()};
+    const std::vector<double> expectedScores {0.0};
+
+    EXPECT_EQ(sink.getIDs(), expectedIDs);
+    EXPECT_EQ(sink.getScores(), expectedScores);
+}
+
+// An unrolled graph RAG: retrieve a seed by similarity, expand two hops out of it, retrieve
+// again from a second index, and keep the expansions the second retrieval reached. Both
+// searches sit ahead of the pattern, so the first drives the expansion and the second rides
+// its carry set to the equality that constrains the far end - no scan of the graph anywhere.
+TEST_F(VectorSearchTest, chainsTwoRetrievalsAroundAGraphExpansion) {
+    loadRagVectors();
+
+    QueryStatus status;
+    StringRowSink sink;
+    runQuery("VECTOR SEARCH IN people FOR 1 (1.0, 0.0, 0.0, 0.0) YIELD ids AS seed "
+             "VECTOR SEARCH IN topics FOR 1 (0.0, 1.0, 0.0, 0.0) YIELD ids AS wanted "
+             "MATCH (seed)-[:KNOWS_WELL]->(peer)-[:INTERESTED_IN]->(topic) WHERE topic = wanted "
+             "RETURN seed.name, peer.name, topic.name",
+             status,
+             sink);
+
+    ASSERT_TRUE(status.isOk()) << status.getError();
+
+    // Remy is the seed, the only one he KNOWS_WELL is Adam, Adam is INTERESTED_IN Bio and
+    // Cooking, and Bio is the topic the second retrieval reported.
+    const std::vector<StringRowSink::Row> expected {{"Remy", "Adam", "Bio"}};
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+
+    EXPECT_EQ(rows, expected);
+}
+
+// The same chain with the second retrieval reporting both topics: the expansion it keeps
+// widens with it, so the constraint tracks what was retrieved rather than one fixed node.
+TEST_F(VectorSearchTest, aWiderSecondRetrievalKeepsMoreOfTheExpansion) {
+    loadRagVectors();
+
+    QueryStatus status;
+    StringRowSink sink;
+    runQuery("VECTOR SEARCH IN people FOR 1 (1.0, 0.0, 0.0, 0.0) YIELD ids AS seed "
+             "VECTOR SEARCH IN topics FOR 2 (0.0, 1.0, 0.0, 0.0) YIELD ids AS wanted "
+             "MATCH (seed)-[:KNOWS_WELL]->(peer)-[:INTERESTED_IN]->(topic) WHERE topic = wanted "
+             "RETURN seed.name, peer.name, topic.name",
+             status,
+             sink);
+
+    ASSERT_TRUE(status.isOk()) << status.getError();
+
+    const std::vector<StringRowSink::Row> expected {{"Remy", "Adam", "Bio"},
+                                                    {"Remy", "Adam", "Cooking"}};
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+
+    EXPECT_EQ(rows, expected);
+}
+
+// Both retrievals reported alongside the expansion they bracket, which is the context row a
+// RAG pipeline hands on: the score of the seed rides two hops, the second search's own node
+// rides the equality that kept the row.
+TEST_F(VectorSearchTest, aChainedRetrievalProjectsBothItsScoreAndItsNodes) {
+    loadRagVectors();
+
+    QueryStatus status;
+    StringRowSink sink;
+    runQuery("VECTOR SEARCH IN people FOR 2 (1.0, 0.0, 0.0, 0.0) YIELD ids AS seed, score AS seedScore "
+             "VECTOR SEARCH IN topics FOR 2 (0.0, 1.0, 0.0, 0.0) YIELD ids AS wanted "
+             "MATCH (seed)-[:KNOWS_WELL]->(peer)-[:INTERESTED_IN]->(topic) WHERE topic = wanted "
+             "RETURN seed.name, seedScore, peer.name, topic.name",
+             status,
+             sink);
+
+    ASSERT_TRUE(status.isOk()) << status.getError();
+
+    // Remy scored 0 and KNOWS_WELL Adam, who is INTERESTED_IN both retrieved topics; Adam
+    // scored 1 and KNOWS_WELL Remy, whose interests are neither of them.
+    const std::vector<StringRowSink::Row> expected {{"Remy", "0", "Adam", "Bio"},
+                                                    {"Remy", "0", "Adam", "Cooking"}};
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+
+    EXPECT_EQ(rows, expected);
+}
+
+// Three rounds of the same pipeline, unrolled: one retrieval seeds the expansion and two
+// more constrain the nodes it lands on, hop by hop. Every search sits ahead of the pattern,
+// so they cross into one row set that the expansion is driven from and the predicates read.
+TEST_F(VectorSearchTest, chainsThreeRetrievalsAlongTwoHops) {
+    loadRagVectors();
+
+    QueryStatus status;
+    StringRowSink sink;
+    runQuery("VECTOR SEARCH IN people FOR 1 (1.0, 0.0, 0.0, 0.0) YIELD ids AS seed "
+             "VECTOR SEARCH IN people FOR 2 (1.0, 0.0, 0.0, 0.0) YIELD ids AS peerWanted "
+             "VECTOR SEARCH IN topics FOR 2 (0.0, 1.0, 0.0, 0.0) YIELD ids AS topicWanted "
+             "MATCH (seed)-[:KNOWS_WELL]->(peer)-[:INTERESTED_IN]->(topic) "
+             "WHERE peer = peerWanted AND topic = topicWanted "
+             "RETURN seed.name, peer.name, topic.name",
+             status,
+             sink);
+
+    ASSERT_TRUE(status.isOk()) << status.getError();
+
+    // Remy seeds it, Adam is both the one he KNOWS_WELL and one of the two people retrieved,
+    // and Adam's two interests are the two topics retrieved.
+    const std::vector<StringRowSink::Row> expected {{"Remy", "Adam", "Bio"},
+                                                    {"Remy", "Adam", "Cooking"}};
 
     std::vector<StringRowSink::Row> rows;
     sink.sortedRows(rows);
