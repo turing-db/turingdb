@@ -26,6 +26,7 @@ class LoadCSVStmt;
 class ShortestPathStmt;
 class GraphMetadata;
 class UnwindStmt;
+class YieldItems;
 
 class ReadStmtAnalyzer {
 public:
@@ -67,6 +68,11 @@ private:
     const GraphMetadata& _graphMetadata;
 
     void yieldEveryReturnValue(const FunctionSignature& signature, YieldClause* yield);
+
+    // The predicate a YIELD ... WHERE filters the rows its statement produced with. Shared
+    // by every statement that yields, since what a yield binds is what the predicate reads.
+    void analyzeYieldFilter(const YieldItems* yieldItems);
+
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
 

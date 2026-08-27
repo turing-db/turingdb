@@ -236,18 +236,24 @@ void ReadStmtAnalyzer::analyze(const FunctionInvocation& func, const YieldClause
     }
 
     // Step 4. Analyze WHERE clause on YIELD items
-    WhereClause* where = yieldItems->getWhereClause();
-    if (where) {
-        Expr* whereExpr = where->getExpr();
-        _exprAnalyzer->analyzeRootExpr(whereExpr);
+    analyzeYieldFilter(yieldItems);
+}
 
-        if (whereExpr->isAggregate()) {
-            throwError("Invalid use of aggregate expression in this context", yield);
-        }
+void ReadStmtAnalyzer::analyzeYieldFilter(const YieldItems* yieldItems) {
+    const WhereClause* where = yieldItems->getWhereClause();
+    if (!where) {
+        return;
+    }
 
-        if (whereExpr->getType() != EvaluatedType::Bool) {
-            throwError("WHERE expression must be a boolean", yield);
-        }
+    Expr* whereExpr = where->getExpr();
+    _exprAnalyzer->analyzeRootExpr(whereExpr);
+
+    if (whereExpr->isAggregate()) {
+        throwError("Invalid use of aggregate expression in this context", where);
+    }
+
+    if (whereExpr->getType() != EvaluatedType::Bool) {
+        throwError("WHERE expression must be a boolean", where);
     }
 }
 
@@ -555,6 +561,8 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
         yieldItemExpr->setDecl(decl);
         yieldItemExpr->setExprVarDecl(decl);
     }
+
+    analyzeYieldFilter(yieldItems);
 }
 
 void ReadStmtAnalyzer::analyze(const ShortestPathStmt* spSt) {
