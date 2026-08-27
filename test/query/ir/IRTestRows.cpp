@@ -19,6 +19,7 @@
 #include "list/ListElementView.h"
 #include "list/ListView.h"
 #include "metadata/PropertyNull.h"
+#include "metadata/PropertyType.h"
 
 #include "ID.h"
 
@@ -101,24 +102,25 @@ void renderList(const ListView& list, std::string& out) {
 }
 
 template <typename T>
+void renderValue(const T& value, std::string& out) {
+    if constexpr (std::is_same_v<T, std::string_view>) {
+        out = std::string(value);
+    } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
+        out = value ? "true" : "false";
+    } else {
+        out = std::to_string(value);
+    }
+}
+
+template <typename T>
 bool renderValueCell(const Column* column, size_t row, std::string& out) {
     if (const auto* constCol = dynamic_cast<const ColumnConst<T>*>(column)) {
-        const T value = constCol->at(0);
-        if constexpr (std::is_same_v<T, std::string_view>) {
-            out = std::string(value);
-        } else {
-            out = std::to_string(value);
-        }
+        renderValue<T>(constCol->at(0), out);
         return true;
     }
 
     if (const auto* plain = dynamic_cast<const ColumnVector<T>*>(column)) {
-        const T value = (*plain)[row];
-        if constexpr (std::is_same_v<T, std::string_view>) {
-            out = std::string(value);
-        } else {
-            out = std::to_string(value);
-        }
+        renderValue<T>((*plain)[row], out);
         return true;
     }
 
@@ -133,11 +135,7 @@ bool renderValueCell(const Column* column, size_t row, std::string& out) {
         return true;
     }
 
-    if constexpr (std::is_same_v<T, std::string_view>) {
-        out = std::string(*value);
-    } else {
-        out = std::to_string(*value);
-    }
+    renderValue<T>(*value, out);
 
     return true;
 }
@@ -159,6 +157,7 @@ void turing::test::renderCell(const Column* column, size_t row, std::string& out
     } else if (renderValueCell<int64_t>(column, row, out)
                || renderValueCell<uint64_t>(column, row, out)
                || renderValueCell<double>(column, row, out)
+               || renderValueCell<types::Bool::Primitive>(column, row, out)
                || renderValueCell<std::string_view>(column, row, out)) {
         // Rendered by the helper for whichever value type matched
     } else {
