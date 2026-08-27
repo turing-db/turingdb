@@ -744,15 +744,12 @@ void NLTranslator::translateVectorSearchLoop(const IteratorConfig& config,
                                              mlir::Block& loopBody,
                                              NLLimitState* limit,
                                              NLStmtContainer* body) {
-    // A vector search binds two chunks: the neighbour IDs and the distances they scored.
+    // A vector search binds two chunks: the neighbour nodes and the distances they scored.
     const mlir::Value idChunk = loopBody.getArgument(0);
     const mlir::Value scoreChunk = loopBody.getArgument(1);
 
-    Column* const ids = allocOptColumnForValueType(nullableChunkValueType(idChunk.getType()));
-    Column* const scores = allocOptColumnForValueType(nullableChunkValueType(scoreChunk.getType()));
-
-    _valueSlots[idChunk] = ids;
-    _valueSlots[scoreChunk] = scores;
+    ColumnNodeIDs* const ids = static_cast<ColumnNodeIDs*>(allocColumn(idChunk));
+    Column* const scores = allocColumn(scoreChunk);
 
     const std::string_view indexName {config._indexName.data(), config._indexName.size()};
     const std::span<const float> queryVector {config._queryVector.data(), config._queryVector.size()};

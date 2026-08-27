@@ -379,14 +379,14 @@ private:
 };
 
 // The neighbour sibling of NLUnwindConstLoopData: runs one search against a vector index
-// and streams the neighbours it found one chunk at a time, into a nullable i64 column of
-// the IDs the index holds them under and a nullable f64 column of the distances they
+// and streams the neighbours it found one chunk at a time, into the node ID column of the
+// nodes the index holds the vectors under and a nullable f64 column of the distances they
 // scored. The index name and the query vector are views into the module's attribute
 // storage, which the MLIRContext keeps alive for the whole execution. A plain source, so
 // a downstream LIMIT can bound it.
 class NLVectorSearchLoopData : public NLFunctionData {
 public:
-    NLVectorSearchLoopData(Column* ids,
+    NLVectorSearchLoopData(ColumnNodeIDs* ids,
                            Column* scores,
                            std::string_view indexName,
                            size_t neighbourCount,
@@ -399,7 +399,7 @@ public:
     {
     }
 
-    Column* getIDs() const { return _ids; }
+    ColumnNodeIDs* getIDs() const { return _ids; }
     Column* getScores() const { return _scores; }
     std::string_view getIndexName() const { return _indexName; }
     size_t getNeighbourCount() const { return _neighbourCount; }
@@ -412,7 +412,7 @@ public:
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
 private:
-    Column* _ids {nullptr};
+    ColumnNodeIDs* _ids {nullptr};
     Column* _scores {nullptr};
     std::string_view _indexName;
     size_t _neighbourCount {0};

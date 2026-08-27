@@ -75,32 +75,38 @@ Searches for the k nearest neighbors of a query vector in the specified index. T
 
 **Syntax:**
 ```
-VECTOR SEARCH IN <index_name> FOR <k> [<vector>] YIELD <variable>
+VECTOR SEARCH IN <index_name> FOR <k> (<vector>) YIELD <variable> [, score]
 ```
 
 **Parameters:**
 - `<index_name>` - Name of the vector index to search
 - `<k>` - Number of nearest neighbors to return (positive integer)
-- `<vector>` - Query vector as a list literal of float values
-- `<variable>` - Variable name to hold the result IDs (typically `ids`)
+- `<vector>` - Query vector as a parenthesised list of float values
+- `<variable>` - Variable name to hold the result nodes (typically `ids`)
+- `score` - Optional second yielded variable, the distance each neighbor scored
+
+`ids` is the node the index holds each vector under, so a pattern can walk out of it
+directly and an equality can compare a matched node to it. The query vector must have
+as many elements as the index' dimension.
 
 **Examples:**
 ```cypher
 -- Find 10 nearest neighbors for a 4-dimensional query vector
-VECTOR SEARCH IN test_index FOR 10 [0.256, 0.12, 0.12345, 0.89] YIELD ids
+VECTOR SEARCH IN test_index FOR 10 (0.256, 0.12, 0.12345, 0.89) YIELD ids RETURN ids
 
--- Find 5 nearest neighbors for a 128-dimensional vector
-VECTOR SEARCH IN embeddings FOR 5 [0.1, 0.2, 0.3, ...] YIELD ids
+-- Report the distance each neighbor scored alongside it
+VECTOR SEARCH IN test_index FOR 10 (0.256, 0.12, 0.12345, 0.89) YIELD ids, score
+RETURN ids, score
 
--- Combine vector search with MATCH to retrieve node data
-VECTOR SEARCH IN embeddings FOR 10 [0.5, 0.3, 0.8, 0.1] YIELD ids
-MATCH (n:Document) WHERE n.id = ids
-RETURN n.title, n.content
+-- Walk out of the neighbors: the pattern names the yielded variable itself
+VECTOR SEARCH IN embeddings FOR 10 (0.5, 0.3, 0.8, 0.1) YIELD ids
+MATCH (ids)-[:CITES]->(m)
+RETURN ids, m.title
 
--- Find similar products based on embedding
-VECTOR SEARCH IN product_embeddings FOR 20 [0.15, 0.82, 0.44, 0.91] YIELD ids
-MATCH (p:Product) WHERE p.embedding_id = ids
-RETURN p.name, p.price
+-- The same traversal written the other way round
+VECTOR SEARCH IN embeddings FOR 10 (0.5, 0.3, 0.8, 0.1) YIELD ids
+MATCH (n:Document)-[:CITES]->(m) WHERE n = ids
+RETURN n.title, m.title
 ```
 
 ---
@@ -158,9 +164,9 @@ CREATE VECTOR INDEX doc_embeddings WITH DIMENSION 384 METRIC COSINE
 LOAD VECTOR FROM "/data/document_embeddings.csv" IN doc_embeddings
 
 -- 3. Search for similar documents given a query embedding
-VECTOR SEARCH IN doc_embeddings FOR 5 [0.12, 0.45, 0.78, ...] YIELD ids
-MATCH (d:Document) WHERE d.id = ids
-RETURN d.title, d.summary
+VECTOR SEARCH IN doc_embeddings FOR 5 (0.12, 0.45, 0.78, ...) YIELD ids, score
+MATCH (d:Document) WHERE d = ids
+RETURN d.title, d.summary, score
 
 -- 4. View all indexes
 SHOW VECTOR INDEXES

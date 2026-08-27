@@ -177,9 +177,8 @@ bool readsAnyColumn(mlir::ValueRange values, llvm::ArrayRef<mlir::Value> columns
     return false;
 }
 
-// The variables a call's YIELD binds, named as the query knows them.
-void collectYieldVariables(const CallStmt* callStmt, llvm::SmallVectorImpl<std::string_view>& variables) {
-    const YieldClause* yield = callStmt->getYield();
+// The variables a YIELD binds, named as the query knows them.
+void collectYieldVariables(const YieldClause* yield, llvm::SmallVectorImpl<std::string_view>& variables) {
     const YieldItems* yieldItems = yield ? yield->getItems() : nullptr;
     if (!yieldItems) {
         return;
@@ -188,6 +187,15 @@ void collectYieldVariables(const CallStmt* callStmt, llvm::SmallVectorImpl<std::
     for (const SymbolExpr* item : *yieldItems) {
         variables.push_back(item->getSymbol()->getName());
     }
+}
+
+// The YIELD of a statement that binds variables of its own: a CALL or a VECTOR SEARCH.
+const YieldClause* yieldClauseOf(const Stmt* stmt) {
+    if (stmt->getKind() == Stmt::Kind::CALL) {
+        return static_cast<const CallStmt*>(stmt)->getYield();
+    }
+
+    return static_cast<const VectorSearchStmt*>(stmt)->getYield();
 }
 
 // The ops values are transitively defined by: the chain that has to travel with them for
@@ -829,7 +837,7 @@ bool DBProgramGenerator::closesPartOnItsCut(const Stmt* stmt, std::span<Stmt* co
 void DBProgramGenerator::generatePart(std::span<Stmt* const> stmts) {
     _vdg.build(stmts);
 
-    generateLeadingCalls(stmts);
+    generateLeadingYields(stmts);
     generateTraversal(stmts);
     throwOnUnboundPatternVariable();
     closeBoundMerges();
@@ -1699,29 +1707,30 @@ void DBProgramGenerator::moveComponentToFactor(TranslatedComponent& component,
     _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {component._columns});
 }
 
-void DBProgramGenerator::generateLeadingCalls(std::span<Stmt* const> stmts) {
+void DBProgramGenerator::generateLeadingYields(std::span<Stmt* const> stmts) {
     if (_vdg.empty()) {
         return;
     }
 
-    // A part that continues from a WITH already has a dataflow to extend, so what a call
-    // yields is paired with the rows of that one after the traversal rather than driving it
+    // A part that continues from a WITH already has a dataflow to extend, so what a
+    // statement yields is paired with the rows of that one after the traversal rather than
+    // driving it
     if (!_vdg.boundVars().empty()) {
         return;
     }
 
-    llvm::SmallVector<const CallStmt*> leadingCalls;
+    llvm::SmallVector<const Stmt*> leading;
     for (const Stmt* stmt : stmts) {
         const Stmt::Kind kind = stmt->getKind();
 
         if (kind == Stmt::Kind::MATCH) {
             break;
-        } else if (kind == Stmt::Kind::CALL) {
-            leadingCalls.push_back(static_cast<const CallStmt*>(stmt));
+        } else if (kind == Stmt::Kind::CALL || kind == Stmt::Kind::VECTOR_SEARCH) {
+            leading.push_back(stmt);
         }
     }
 
-    if (leadingCalls.empty()) {
+    if (leading.empty()) {
         return;
     }
 
@@ -1729,18 +1738,18 @@ void DBProgramGenerator::generateLeadingCalls(std::span<Stmt* const> stmts) {
     collectComponentRoots(componentRoots);
 
     // Only a traversal of a single connected component can be driven. A second component
-    // would have to be paired with the first, and what the calls yielded is one row set to
-    // expand rather than a factor of a product.
+    // would have to be paired with the first, and what the statements yielded is one row
+    // set to expand rather than a factor of a product.
     if (componentRoots.size() != 1) {
         return;
     }
 
     llvm::SmallVector<std::string_view> yieldedVariables;
-    for (const CallStmt* callStmt : leadingCalls) {
-        collectYieldVariables(callStmt, yieldedVariables);
+    for (const Stmt* stmt : leading) {
+        collectYieldVariables(yieldClauseOf(stmt), yieldedVariables);
     }
 
-    // Any variable the calls bound can open the component, not only the one the graph lists
+    // Any variable they bound can open the component, not only the one the graph lists
     // first: a pattern that reaches the yielded variable from its other end is walked
     // backwards from it, which is the traversal a reversed edge already emits.
     const VariableDependency* drivenRoot = nullptr;
@@ -1758,8 +1767,12 @@ void DBProgramGenerator::generateLeadingCalls(std::span<Stmt* const> stmts) {
         return;
     }
 
-    for (const CallStmt* callStmt : leadingCalls) {
-        generateCall(callStmt);
+    for (const Stmt* stmt : leading) {
+        if (stmt->getKind() == Stmt::Kind::CALL) {
+            generateCall(static_cast<const CallStmt*>(stmt));
+        } else {
+            generateVectorSearch(static_cast<const VectorSearchStmt*>(stmt));
+        }
     }
 
     _part._drivenRoot = drivenRoot;
@@ -2015,9 +2028,18 @@ void DBProgramGenerator::generateCall(const CallStmt* callStmt) {
 }
 
 void DBProgramGenerator::generateVectorSearches(std::span<Stmt* const> stmts) {
+    bool matchSeen = false;
     for (const Stmt* stmt : stmts) {
-        if (stmt->getKind() == Stmt::Kind::VECTOR_SEARCH) {
-            generateVectorSearch(static_cast<const VectorSearchStmt*>(stmt));
+        const Stmt::Kind kind = stmt->getKind();
+
+        if (kind == Stmt::Kind::MATCH) {
+            matchSeen = true;
+        } else if (kind == Stmt::Kind::VECTOR_SEARCH) {
+            const bool drivesTheTraversal = _part._drivenRoot && !matchSeen;
+
+            if (!drivesTheTraversal) {
+                generateVectorSearch(static_cast<const VectorSearchStmt*>(stmt));
+            }
         }
     }
 }
@@ -2042,7 +2064,7 @@ void DBProgramGenerator::generateVectorSearch(const VectorSearchStmt* vectorSear
                                      vectorSearchStmt->getIndexName().size()};
     const uint64_t neighbourCount = vectorSearchStmt->getK();
 
-    const mlir::db::ColumnType idType = allocColumnType(_opBuilder.getIntegerType(64));
+    const mlir::db::ColumnType idType = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
     const mlir::db::ColumnType scoreType = allocColumnType(_opBuilder.getF64Type());
     const mlir::Location loc = _opBuilder.getUnknownLoc();
 

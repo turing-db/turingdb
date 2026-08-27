@@ -158,14 +158,21 @@ def VectorSearch : TuringOp<"vector_search", [Pure]> {
     from a literal list:
 
       %ids, %scores = db.vector_search("vec1", 3, [1.000000e+00, 0.000000e+00])
-        : !db.column<i64>, !db.column<f64>
+        : !db.column<!storage.node_id>, !db.column<f64>
 
     The two results are row-aligned, one row per neighbour, ordered nearest first:
-    `ids` is the ID the index holds each vector under - the ID a `LOAD VECTOR` row
-    carried, not a node ID - and `scores` the distance the index' metric scored it at
-    (squared L2 for euclidean, inner product for cosine). The search returns at most
+    `ids` is the node the index holds each vector under - the ID a `LOAD VECTOR` row
+    carried, read as a node ID - and `scores` the distance the index' metric scored it
+    at (squared L2 for euclidean, inner product for cosine). The search returns at most
     `k` neighbours and fewer when the index holds fewer, so a `k` larger than the index
     is not an error.
+
+    Reporting a node is what lets the rest of the query treat the neighbours as matched
+    rows: a pattern walks out of them (`YIELD ids MATCH (ids)-[e]->(m)`, which expands
+    this column rather than scanning) and an equality compares a matched node to them
+    (`WHERE n = ids`). An ID naming no node is kept rather than dropped - it simply
+    matches no edge and holds no property - so an index whose IDs are not node IDs still
+    reports every neighbour it found.
 
     `query_vector` must have as many elements as the index' dimension, which the schema
     holds rather than the IR, so the search itself reports a mismatch. Reading the index
@@ -177,7 +184,7 @@ def VectorSearch : TuringOp<"vector_search", [Pure]> {
   // Every parameter is fixed by the query, so none is an SSA value: the index to search,
   // how many neighbours to report, and the vector to search for.
   let arguments = (ins StrAttr:$index_name, UI64Attr:$k, DenseF32ArrayAttr:$query_vector);
-  let results   = (outs ColumnInts:$ids, ColumnDoubles:$scores);
+  let results   = (outs ColumnNodeIDs:$ids, ColumnDoubles:$scores);
   let hasVerifier = 1;
 
   // The parameters print inside the parens ahead of the colon, as db.const_scan_nodes

@@ -520,6 +520,7 @@ void CypherAnalyzer::declareItemAlias(Expr* item, std::string_view alias) {
 void CypherAnalyzer::setV3() {
     _isV3 = true;
     _exprAnalyzer->setV3();
+    _readAnalyzer->setV3();
 }
 
 void CypherAnalyzer::analyzeDistinct(const Projection* projection, const Stmt* clause) const {

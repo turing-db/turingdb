@@ -109,19 +109,20 @@ def VectorSearch : NLOp<"vector_search", [Pure, InferTypeOpAdaptor]> {
   let summary = "Create a database iterator over the nearest neighbours of a query vector";
   let description = [{
     Imperative counterpart of db.vector_search. Each step of an enclosing nl.for fills
-    one row of neighbour chunks - the IDs the index holds them under, and the distances
-    the metric scored them at:
+    one row of neighbour chunks - the nodes the index holds the vectors under, and the
+    distances the metric scored them at:
 
       %n = nl.vector_search("vec1", 3, [1.000000e+00, 0.000000e+00])
-        : !nl.iter<!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<f64>>>
+        : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<f64>>>
 
     The parameters are the ones db.vector_search carried, forwarded as-is; the search
     runs against the session's vector indexes, which is the one thing a loop of this
     family reads outside the graph. Like nl.unwind_const it reads no input chunk and
-    carries nothing: it opens the dataflow. The two chunks are nullable value chunks -
-    the shape a property fetch emits, and what every value-chunk consumer dispatches on -
-    even though a neighbour is never null. Their element types are fixed, so the
-    iterator type is inferred rather than spelled.
+    carries nothing: it opens the dataflow. The neighbours ride the same node ID chunk a
+    scan binds, so a hop expands them unchanged; the distances ride a nullable value
+    chunk, the shape every value-chunk consumer dispatches on, even though a neighbour is
+    never null. Both element types are fixed, so the iterator type is inferred rather
+    than spelled.
   }];
 
   let arguments = (ins StrAttr:$index_name, UI64Attr:$k, DenseF32ArrayAttr:$query_vector);
