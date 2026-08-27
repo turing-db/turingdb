@@ -882,7 +882,16 @@ LogicalResult OptionalMatch::verify() {
     }
 
     for (size_t inputIndex = 0; inputIndex < inputCount; inputIndex++) {
-        if (yieldedColumns[inputIndex].getType() != getInputColumns()[inputIndex].getType()) {
+        const mlir::Type inputType = getInputColumns()[inputIndex].getType();
+
+        // A traversal rebinds its source to a typed ID column, so a pattern walking from a
+        // column whose element type is still unspecified - what a CALL yields - hands it
+        // back refined. Any other change of type is a carry set that lost track of a column.
+        const auto inputColumn = llvm::dyn_cast<ColumnType>(inputType);
+        const bool refinesAnUnspecifiedColumn = inputColumn
+                                                && llvm::isa<mlir::NoneType>(inputColumn.getType());
+
+        if (yieldedColumns[inputIndex].getType() != inputType && !refinesAnUnspecifiedColumn) {
             return emitOpError("yielded column ") << inputIndex << " must have the type of input column "
                                                   << inputIndex;
         }

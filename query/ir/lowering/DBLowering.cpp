@@ -1431,6 +1431,16 @@ void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
         throw IRException("db.optional_match pattern yields no column");
     }
 
+    // The drain rebuilds a missed row's carried columns out of this step's input chunks, so
+    // the two must be the same chunk type however the db types were spelled: a column a
+    // CALL yielded enters type-erased and comes back refined, and the chunk behind it is
+    // the same one either way.
+    for (size_t inputIndex = 0; inputIndex < inputChunks.size(); inputIndex++) {
+        if (matchedChunks[inputIndex].getType() != inputChunks[inputIndex].getType()) {
+            throw IRException("db.optional_match carries an input column back as another chunk type");
+        }
+    }
+
     // The collect belongs where the pattern bound its columns together - the same block an
     // nl.output over them would sit in.
     setInsertionInto(deepestOwnerBlock(matchedChunks, stepBlock));
