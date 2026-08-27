@@ -122,6 +122,19 @@ public:
     // variables and running the body (the nl.output) per chunk.
     static void runSortLoop(NLExecutionContext* context, NLFunctionData* data);
 
+    // Empty the buffers and matched flags of an OPTIONAL MATCH accumulator and lay its row
+    // tag out over this step's input rows; runs each time its block runs.
+    static void runOptionalReset(NLExecutionContext* context, NLFunctionData* data);
+
+    // Append this step's chunk of every column the pattern contributes to its buffer, and
+    // mark as matched each input row the row tag names. The sole matched-flag mutator.
+    static void runOptionalCollect(NLExecutionContext* context, NLFunctionData* data);
+
+    // The emit phase of an OPTIONAL MATCH: re-chunk the collected rows, running the body
+    // per chunk, then sweep the matched flags and emit one null-padded row per input row
+    // the pattern missed.
+    static void runOptionalDrainLoop(NLExecutionContext* context, NLFunctionData* data);
+
     // Empty the seen-set of a DISTINCT; runs each time its block runs.
     static void runDistinctReset(NLExecutionContext* context, NLFunctionData* data);
 
@@ -234,6 +247,11 @@ public:
     static void runUnary(NLExecutionContext* context, NLFunctionData* data);
 
     static NLUnaryFn selectNot(const Column* operand, LocalMemory* memory, Column*& result);
+    // Read a node or edge column as a nullable column of its IDs' integers, an invalid ID
+    // - what an OPTIONAL MATCH leaves - reading as the null. The entity sibling of
+    // selectToNullable, which reads a scalar value column.
+    static NLUnaryFn selectEntityToNullable(NLChunkKind kind, LocalMemory* memory, Column*& result);
+
     static NLUnaryFn selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result);
 
     // Lay a constant chunk's single value out over the driving relation's rows
@@ -255,7 +273,22 @@ public:
     template <typename StringFunctor>
     static NLUnaryFunctionKernel selectConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
+    // The owned-string members of the nullable handler families, for the chunk kind
+    // labels() and edgeType() produce: a nullable value whose rows own their characters
+    // rather than borrowing them, so the value type alone does not pick the handler.
+    static NLGatherFunction selectOptOwnedStringGather();
+    static NLAppendFunction selectOptOwnedStringAppend();
+    static NLCopyFunction selectOptOwnedStringCopy();
+    static NLGroupKeyGatherFunction selectOptOwnedStringGroupKeyGather();
+    static NLCompareFunction selectOptOwnedStringCompare();
+    static NLKeyAppendFunction selectOptOwnedStringKeyAppend();
+    static NLCountFunction selectOptOwnedStringCount();
+
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
+
+    // The null fill for a chunk of this kind: an invalid ID for an ID chunk, which is how
+    // an entity an OPTIONAL MATCH did not match is spelled.
+    static NLFillNullFunction selectFillNullFunction(NLChunkKind kind);
 
     // Gather for a nullable value chunk of this value type (sort emit re-chunk).
     static NLGatherFunction selectOptGatherFunction(ValueType valueType);
@@ -390,6 +423,13 @@ public:
     // counts only its present values. Used by nl.count_update.
     static size_t countAllRows(const Column* column);
     static NLCountFunction selectOptCountFunction(ValueType valueType);
+
+    // Non-null row count for a COUNT over a node, edge or edge-type ID chunk, whose null
+    // is an invalid ID rather than a missing optional; null for a kind that has no such
+    // row, which then keeps countAllRows. The grouped sibling folds the same tally per
+    // group.
+    static NLCountFunction selectIDCountFunction(NLChunkKind kind);
+    static NLGroupAggregateFoldFunction selectGroupCountValidIDFold(NLChunkKind kind);
 
     // The reset / fold / emit handlers for one aggregate, selected from the
     // reduction and a value type (the accumulator's for reset/result, the input's

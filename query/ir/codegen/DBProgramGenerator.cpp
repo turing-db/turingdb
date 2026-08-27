@@ -163,6 +163,11 @@ void fillPipelinePassNames(std::vector<std::string_view>& passNames) {
     }
 }
 
+// Under a name no Cypher identifier can be, the way the dependency graph names an
+// anonymised variable, so an OPTIONAL MATCH's row tag is carried alongside the columns its
+// pattern walks without a query variable ever resolving to it
+constexpr std::string_view optionalTagName {"'optional_tag"};
+
 using UnaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder,
                                              mlir::Location loc,
                                              mlir::db::ColumnType resultType,
@@ -1014,14 +1019,36 @@ void DBProgramGenerator::generateQueryParts(const SinglePartQuery* query) {
         const Stmt* stmt = stmts[index];
 
         if (stmt->getKind() == Stmt::Kind::WITH) {
-            generatePart(stmts.subspan(partBegin, index - partBegin));
+            generateOptionalParts(stmts.subspan(partBegin, index - partBegin));
             generateWith(static_cast<const WithStmt*>(stmt));
             partBegin = index + 1;
         } else if (closesPartOnItsCut(stmt, stmts.subspan(index + 1))) {
-            generatePart(stmts.subspan(partBegin, index + 1 - partBegin));
+            generateOptionalParts(stmts.subspan(partBegin, index + 1 - partBegin));
             publishInFlightColumns();
             partBegin = index + 1;
         }
+    }
+
+    if (partBegin < stmts.size()) {
+        generateOptionalParts(stmts.subspan(partBegin));
+    }
+}
+
+void DBProgramGenerator::generateOptionalParts(std::span<Stmt* const> stmts) {
+    const auto isOptionalMatch = [](const Stmt* stmt) {
+        return stmt->getKind() == Stmt::Kind::MATCH
+               && static_cast<const MatchStmt*>(stmt)->isOptional();
+    };
+
+    size_t partBegin = 0;
+    for (size_t index = 0; index < stmts.size(); index++) {
+        if (!isOptionalMatch(stmts[index])) {
+            continue;
+        }
+
+        generatePart(stmts.subspan(partBegin, index - partBegin));
+        generateOptionalMatch(stmts.subspan(index, 1));
+        partBegin = index + 1;
     }
 
     if (partBegin < stmts.size()) {
@@ -3686,6 +3713,118 @@ void DBProgramGenerator::generateWith(const WithStmt* with) {
     applyPredicateFilters(conjuncts);
 }
 
+void DBProgramGenerator::generateOptionalMatch(std::span<Stmt* const> stmt) {
+    llvm::SmallVector<PublishedColumn> scopeColumns;
+    collectPublishedColumns(scopeColumns);
+
+    // A constant holds one value standing for every row rather than rows of its own, so it
+    // is no row of this join: it stays bound where it is and the pattern reads it there
+    llvm::SmallVector<PublishedColumn> inputs;
+    llvm::SmallVector<PublishedColumn> constants;
+
+    for (const PublishedColumn& column : scopeColumns) {
+        if (yieldsConstantColumn(column._column)) {
+            constants.push_back(column);
+        } else {
+            inputs.push_back(column);
+        }
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    mlir::Block* const outerBlock = _opBuilder.getInsertionBlock();
+
+    // Built into a scratch region: the op's results are the columns the pattern turns out
+    // to yield, which is known only once it is generated
+    mlir::Region pattern;
+    mlir::Block* const patternBlock = new mlir::Block(); // Region destructor frees it
+    pattern.push_back(patternBlock);
+
+    llvm::SmallVector<mlir::Value> inputColumns;
+    llvm::SmallVector<PublishedColumn> patternScope;
+    for (const PublishedColumn& input : inputs) {
+        inputColumns.push_back(input._column);
+        patternScope.push_back({input._decl, input._name, patternBlock->addArgument(input._column.getType(), loc)});
+    }
+
+    // No input column means no input row to tag: the rows the pattern joins onto are the
+    // single empty row the query starts from, which any match marks
+    const bool tagsRows = !inputs.empty();
+    mlir::Value tagArgument;
+    if (tagsRows) {
+        const mlir::db::ColumnType tagType = allocColumnType(_opBuilder.getIntegerType(64, /*isSigned=*/false));
+        tagArgument = patternBlock->addArgument(tagType, loc);
+    }
+
+    patternScope.append(constants.begin(), constants.end());
+
+    rebindScope(patternScope);
+
+    const VariableDependency* tagVariable = nullptr;
+    if (tagsRows) {
+        tagVariable = _vdg.registerBoundVariable(optionalTagName, nullptr);
+        registerValue(tagVariable, tagArgument);
+    }
+
+    _opBuilder.setInsertionPointToStart(patternBlock);
+    generatePart(stmt);
+
+    llvm::SmallVector<PublishedColumn> matched;
+    collectPublishedColumns(matched);
+
+    const auto findMatched = [&matched](std::string_view name) {
+        const auto foundIt = std::ranges::find(matched, name, &PublishedColumn::_name);
+        bioassert(foundIt != matched.end(), "Column '{}' lost by an OPTIONAL MATCH pattern", name);
+        return foundIt;
+    };
+
+    const auto boundOutside = [&inputs, &constants](std::string_view name) {
+        const auto sameName = [name](const PublishedColumn& candidate) {
+            return candidate._name == name;
+        };
+
+        return std::ranges::any_of(inputs, sameName) || std::ranges::any_of(constants, sameName);
+    };
+
+    // The columns the pattern contributes: the ones it joins onto first, in operand order,
+    // then the variables of its own - what a row it missed comes back with null
+    llvm::SmallVector<PublishedColumn> yielded;
+    for (const PublishedColumn& input : inputs) {
+        yielded.push_back(*findMatched(input._name));
+    }
+
+    for (const PublishedColumn& column : matched) {
+        if (column._name == optionalTagName || boundOutside(column._name)) {
+            continue;
+        }
+
+        yielded.push_back(column);
+    }
+
+    llvm::SmallVector<mlir::Value> yieldedColumns;
+    llvm::SmallVector<mlir::Type> resultTypes;
+    for (const PublishedColumn& column : yielded) {
+        yieldedColumns.push_back(column._column);
+        resultTypes.push_back(column._column.getType());
+    }
+
+    const mlir::Value carriedTag = tagsRows ? _part._varMap.at(tagVariable).back() : mlir::Value();
+    _opBuilder.create<mlir::db::OptionalYield>(loc, carriedTag, yieldedColumns);
+
+    _opBuilder.setInsertionPointToEnd(outerBlock);
+
+    auto optionalMatch = _opBuilder.create<mlir::db::OptionalMatch>(loc, resultTypes, inputColumns);
+    optionalMatch.getPattern().takeBody(pattern);
+
+    llvm::SmallVector<PublishedColumn> published {yielded};
+    for (size_t index = 0; index < published.size(); index++) {
+        published[index]._column = optionalMatch.getResult(index);
+    }
+
+    published.append(constants.begin(), constants.end());
+
+    rebindScope(published);
+}
+
 void DBProgramGenerator::broadcastConstantProjection(llvm::SmallVectorImpl<mlir::Value>& projected) {
     const bool constantsAlone = std::ranges::all_of(projected, [](mlir::Value column) {
         return yieldsConstantColumn(column);
@@ -3719,25 +3858,27 @@ void DBProgramGenerator::publishBoundColumns(const Projection* projection,
     const Projection::PublishedDecls& publishedDecls = projection->publishedDecls();
     bioassert(publishedDecls.size() == names.size(), "One declaration per column a WITH publishes expected");
 
+    llvm::SmallVector<PublishedColumn> published;
+    for (size_t index = 0; index < names.size(); index++) {
+        const llvm::StringRef name = names[index];
+        published.push_back({publishedDecls[index], std::string(name.data(), name.size()), columns[index]});
+    }
+
+    rebindScope(published);
+}
+
+void DBProgramGenerator::rebindScope(llvm::ArrayRef<PublishedColumn> published) {
     _part = PartScope {};
     _vdg.clear();
 
-    for (size_t index = 0; index < names.size(); index++) {
-        const llvm::StringRef name = names[index];
-        bioassert(!name.empty(), "Column a WITH publishes without a name");
+    for (const PublishedColumn& column : published) {
+        bioassert(!column._name.empty(), "Bound column without a name");
 
-        const std::string_view boundName {name.data(), name.size()};
-        registerValue(_vdg.registerBoundVariable(boundName, publishedDecls[index]), columns[index]);
+        registerValue(_vdg.registerBoundVariable(column._name, column._decl), column._column);
     }
 }
 
-void DBProgramGenerator::publishInFlightColumns() {
-    // A cut opens no scope of its own, so the part below reads these columns through the
-    // very declarations the part above bound them to. Each name is copied out: the
-    // variables holding them are the ones this clears, and the part below is opened with
-    // them
-    llvm::SmallVector<PublishedColumn> published;
-
+void DBProgramGenerator::collectPublishedColumns(llvm::SmallVectorImpl<PublishedColumn>& published) const {
     forEachVariableColumn([&published](const VarDecl* decl, std::string_view name, mlir::Value column) {
         const auto sameName = [name](const PublishedColumn& candidate) {
             return candidate._name == name;
@@ -3757,13 +3898,13 @@ void DBProgramGenerator::publishInFlightColumns() {
     std::ranges::sort(published, [](const PublishedColumn& left, const PublishedColumn& right) {
         return left._name < right._name;
     });
+}
 
-    _part = PartScope {};
-    _vdg.clear();
+void DBProgramGenerator::publishInFlightColumns() {
+    llvm::SmallVector<PublishedColumn> published;
+    collectPublishedColumns(published);
 
-    for (const PublishedColumn& column : published) {
-        registerValue(_vdg.registerBoundVariable(column._name, column._decl), column._column);
-    }
+    rebindScope(published);
 }
 
 void DBProgramGenerator::forEachVariableColumn(const VariableColumnBinding& bind) const {

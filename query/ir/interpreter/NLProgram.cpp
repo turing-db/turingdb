@@ -143,6 +143,50 @@ size_t NLProcedureState::getInputRowCount() const {
     return 0;
 }
 
+size_t NLOptionalState::getRowCount() const {
+    if (_inputColumns.empty()) {
+        return 1;
+    }
+
+    return _inputColumns.front()->size();
+}
+
+size_t NLOptionalState::getMatchedRowCount() const {
+    if (_buffers.empty()) {
+        return 0;
+    }
+
+    return _buffers.front()->size();
+}
+
+void NLOptionalState::reset() {
+    for (Column* buffer : _buffers) {
+        buffer->clear();
+    }
+
+    _matched.assign(getRowCount(), false);
+
+    _missedRows.clear();
+    _swept = false;
+}
+
+const ColumnVector<size_t>& NLOptionalState::missedRows() {
+    if (_swept) {
+        return _missedRows;
+    }
+
+    std::vector<size_t>& missedRaw = _missedRows.getRaw();
+    for (size_t row = 0; row < _matched.size(); row++) {
+        if (!_matched[row]) {
+            missedRaw.push_back(row);
+        }
+    }
+
+    _swept = true;
+
+    return _missedRows;
+}
+
 void NLSortState::reset() {
     for (Column* buffer : _buffers) {
         buffer->clear();

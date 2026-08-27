@@ -204,6 +204,11 @@ private:
 
     void generateQueryParts(const SinglePartQuery* query);
 
+    // The statements between two WITH barriers, split again at each OPTIONAL MATCH: an
+    // optional pattern keeps the rows it does not match, so it cannot be walked with the
+    // mandatory patterns beside it and closes the traversal before it the way a barrier does
+    void generateOptionalParts(std::span<Stmt* const> stmts);
+
     // One query part: the statements between two WITH barriers
     void generatePart(std::span<Stmt* const> stmts);
 
@@ -217,6 +222,12 @@ private:
     // SKIP or LIMIT reads the rows that MATCH produced, which a later MATCH or UNWIND of
     // the same part would otherwise have crossed into them first
     bool closesPartOnItsCut(const Stmt* stmt, std::span<Stmt* const> following) const;
+
+    // Emits the db.optional_match of one OPTIONAL MATCH, given as the single-statement
+    // @param stmt: the columns in flight become the rows its pattern joins onto, the
+    // pattern is generated into the op's region as a part of its own, and the op's
+    // results - those rows with the ones the pattern missed added back - take the scope over
+    void generateOptionalMatch(std::span<Stmt* const> stmt);
 
     void generateTraversal(std::span<Stmt* const> stmts);
 
@@ -514,6 +525,15 @@ private:
     // Publishes every column in scope under the name it already carries, so the part that
     // follows a cut reads them the way it reads what a WITH published
     void publishInFlightColumns();
+
+    // Every column in scope, deduplicated by name and in name order so the columns a cut
+    // or an OPTIONAL MATCH carries are the query's choice and not the addresses'
+    void collectPublishedColumns(llvm::SmallVectorImpl<PublishedColumn>& published) const;
+
+    // Drops the scope and opens a fresh one holding these columns alone: what a barrier or
+    // a cut publishes, and what an OPTIONAL MATCH hands to its pattern and then to the rest
+    // of the query
+    void rebindScope(llvm::ArrayRef<PublishedColumn> published);
 
     // The column each variable in scope is bound to, under the declaration and the name
     // it carries: the traversal variables, what a CALL yielded, what a CREATE wrote, and

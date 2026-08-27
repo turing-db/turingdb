@@ -2988,6 +2988,155 @@ private:
     NLUnaryFunctionKernel _kernel {nullptr};
 };
 
+// Type of handle that fills a column with a run of null rows - for an ID column an
+// invalid ID, which is how an entity a pattern did not match is spelled. One per column
+// kind, selected during translation the way the gather and append families are.
+using NLFillNullFunction = void (*)(Column* output, size_t rowCount);
+
+// Runtime state of one OPTIONAL MATCH over one step of the rows its pattern joins onto:
+// that step's own chunks, a matched flag per row of them, and the row buffers the matched
+// rows are collected into. nl.optional_buffer resets it once per step,
+// nl.optional_collect appends one chunk of every column the pattern contributes and marks
+// the input rows the row tag names, and the nl.for over nl.optional_drain reads the
+// collected rows back and then rebuilds the rows nothing matched out of the input chunks.
+// The pattern sibling of NLSortState: it accumulates rows to re-emit them, but keeps the
+// input chunks beside them, and covers one step rather than the whole relation - so the
+// memory it holds is one step's matches, not every row.
+class NLOptionalState {
+public:
+    // One chunk of the step the pattern joins onto, in the order the pattern yields them
+    // back; borrowed, since they are the enclosing loop's own variables.
+    void addInputColumn(const Column* input) { _inputColumns.push_back(input); }
+
+    // One buffer per column the pattern contributes, in yield order.
+    void addMatchedBuffer(Column* buffer) { _buffers.push_back(buffer); }
+
+    const std::vector<const Column*>& inputColumns() const { return _inputColumns; }
+    const std::vector<Column*>& buffers() const { return _buffers; }
+
+    // The rows this step joins onto: the input chunks' row count, and one - the single
+    // empty row a query opening on OPTIONAL MATCH starts from - when there are none.
+    size_t getRowCount() const;
+
+    // The rows the pattern matched, read from the first buffer as a sort reads its own.
+    size_t getMatchedRowCount() const;
+
+    // Empty the buffers and clear every matched flag, so the accumulator covers this step
+    // alone. Runs each time nl.optional_buffer's block runs.
+    void reset();
+
+    void markMatched(size_t row) { _matched[row] = true; }
+
+    // The input rows nothing matched, in order. Computed on the first call of a step, so
+    // the drain pays for the sweep once however many chunks it emits.
+    const ColumnVector<size_t>& missedRows();
+
+private:
+    std::vector<const Column*> _inputColumns;
+    std::vector<Column*> _buffers;
+
+    // One flag per row of this step's input chunks, cleared by the reset and set by the
+    // collect through the row tag.
+    std::vector<bool> _matched;
+
+    ColumnVector<size_t> _missedRows;
+    bool _swept {false};
+};
+
+// nl.optional_buffer data: empties an accumulator and lays the row tag out over this
+// step's input rows, each time the block it lives in runs.
+class NLOptionalResetData : public NLFunctionData {
+public:
+    NLOptionalResetData(NLOptionalState* state, ColumnVector<uint64_t>* tag)
+        : _state(state),
+        _tag(tag)
+    {
+    }
+
+    NLOptionalState* getState() const { return _state; }
+    ColumnVector<uint64_t>* getTag() const { return _tag; }
+
+private:
+    NLOptionalState* _state {nullptr};
+    ColumnVector<uint64_t>* _tag {nullptr};
+};
+
+// nl.optional_collect data: appends the current chunk of every column the pattern
+// contributes to the matching buffer, and marks the input rows the tag names. Each entry
+// pairs the pattern's chunk with the buffer it grows and the append that copies one into
+// the other, as nl.sort_collect's do.
+class NLOptionalCollectData : public NLFunctionData {
+public:
+    struct Append {
+        const Column* _input {nullptr};
+        Column* _buffer {nullptr};
+        NLAppendFunction _append {nullptr};
+    };
+
+    NLOptionalCollectData(NLOptionalState* state)
+        : _state(state)
+    {
+    }
+
+    NLOptionalState* getState() const { return _state; }
+
+    // Null when the accumulator has no input column: the step is then the single empty
+    // row, which any collected row marks.
+    const ColumnVector<uint64_t>* getTag() const { return _tag; }
+    void setTag(const ColumnVector<uint64_t>* tag) { _tag = tag; }
+
+    const std::vector<Append>& appends() const { return _appends; }
+
+    void addAppend(const Append& append) { _appends.push_back(append); }
+
+private:
+    NLOptionalState* _state {nullptr};
+    const ColumnVector<uint64_t>* _tag {nullptr};
+    std::vector<Append> _appends;
+};
+
+// nl.for over nl.optional_drain data: the emit phase of an OPTIONAL MATCH. Holds the
+// accumulator and, per column, the buffer the matched rows are read from, the input chunk
+// a missed row's value is read from - null for a column the pattern binds, which a missed
+// row has no value for - the loop variable to fill, and the gather and null fill that
+// write it. The indices scratch holds the row slice of the current emit step.
+class NLOptionalDrainLoopData : public NLFunctionData {
+public:
+    struct DrainColumn {
+        const Column* _buffer {nullptr};
+        const Column* _input {nullptr};
+        Column* _output {nullptr};
+        NLGatherFunction _gather {nullptr};
+        NLFillNullFunction _fillNull {nullptr};
+    };
+
+    NLOptionalDrainLoopData(NLOptionalState* state)
+        : _state(state)
+    {
+    }
+
+    NLOptionalState* getState() const { return _state; }
+
+    const std::vector<DrainColumn>& columns() const { return _columns; }
+
+    void addColumn(const DrainColumn& column) { _columns.push_back(column); }
+
+    ColumnVector<size_t>* getIndices() { return &_indices; }
+
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
+    NLOptionalState* _state {nullptr};
+    NLLimitState* _limit {nullptr};
+    std::vector<DrainColumn> _columns;
+    ColumnVector<size_t> _indices;
+    NLStmtContainer _stmts;
+};
+
 class NLProgram {
 public:
     NLProgram();
@@ -3103,6 +3252,16 @@ public:
         return statePtr;
     }
 
+    // Allocate one OPTIONAL MATCH's runtime accumulator, owned by the program; the reset,
+    // collect and drain statements that share it hold a borrowed pointer. The pattern
+    // sibling of allocSortState.
+    NLOptionalState* allocOptionalState() {
+        auto state = std::make_unique<NLOptionalState>();
+        NLOptionalState* statePtr = state.get();
+        _optionalStates.push_back(std::move(state));
+        return statePtr;
+    }
+
     // The candidate index one chain-node signature already has, or a null pointer for a
     // signature no chain node of the program has reached yet. Two nodes of the same
     // labels and key properties look their candidates up in one index, so the label set
@@ -3150,6 +3309,7 @@ private:
     std::vector<std::unique_ptr<NLGroupAggregateState>> _groupAggregateStates;
     std::vector<std::unique_ptr<NLCollectState>> _collectStates;
     std::vector<std::unique_ptr<NLShortestPathState>> _shortestPathStates;
+    std::vector<std::unique_ptr<NLOptionalState>> _optionalStates;
     std::vector<std::unique_ptr<NLProcedureState>> _procedureStates;
     std::unordered_map<std::string, std::unique_ptr<NLMergeNodeIndex>> _mergeNodeIndexes;
     NLMergePendingEdges _mergePendingEdges;

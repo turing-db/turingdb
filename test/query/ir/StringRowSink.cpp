@@ -216,6 +216,8 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
         return text;
     } else if (textOfOptional<std::string_view>(chunk, rowIndex, text)) {
         return text;
+    } else if (textOfOptional<std::string>(chunk, rowIndex, text)) {
+        return text;
     } else if (textOfListElement(chunk, rowIndex, text)) {
         return text;
     } else if (textOfList(chunk, rowIndex, text)) {

@@ -61,6 +61,7 @@ private:
         VectorSearch,
         Unwind,
         ProcedureInit,
+        OptionalDrain,
     };
 
     // Settings of the iterators passed to each for loop
@@ -79,6 +80,9 @@ private:
         NLCollectState* _collectState {nullptr};
 
         NLShortestPathState* _shortestPathState {nullptr};
+
+        // The accumulator an OptionalDrain iterator drains; null for the other kinds.
+        NLOptionalState* _optionalState {nullptr};
 
         // The call a ProcedureInit iterator drives; null for the other kinds.
         NLProcedureState* _procedureState {nullptr};
@@ -195,6 +199,11 @@ private:
     llvm::DenseMap<mlir::Value, NLCollectState*> _collectStates;
 
     llvm::DenseMap<mlir::Value, NLShortestPathState*> _shortestPathStates;
+
+    // nl.optional_buffer handle SSA value -> the runtime accumulator it produces, so
+    // nl.optional_collect and the nl.for over nl.optional_drain find the same buffers and
+    // matched flags
+    llvm::DenseMap<mlir::Value, NLOptionalState*> _optionalStates;
 
     // nl.procedure handle SSA value -> the runtime call it produces, so every op that
     // names the handle - the nl.for over nl.procedure_init - drives the same procedure
@@ -471,6 +480,30 @@ private:
     // produced by an nl.collect_buffer translated earlier.
     NLCollectState* collectStateFor(mlir::Value handle) const;
 
+    // Translate an nl.optional_buffer: allocate the runtime accumulator, map the handle to
+    // it, record this step's input chunks and the row tag column, and record the reset
+    // statement (run each time the block runs). The row buffers are allocated by the
+    // collect, which knows their types, as nl.sort_collect allocates a sort's.
+    void translateOptionalBuffer(mlir::nl::OptionalBuffer buffer, NLStmtContainer* body);
+
+    // Translate an nl.optional_collect: allocate one growing buffer per column the pattern
+    // contributes with the append that grows it, wire the row tag, and record the per-step
+    // statement.
+    void translateOptionalCollect(mlir::nl::OptionalCollect collect, NLStmtContainer* body);
+
+    // Translate the nl.for over an nl.optional_drain iterator: allocate one loop variable
+    // per column, pair it with the buffer the matched rows come from and - for a column
+    // the pattern joined onto - the input chunk a missed row is rebuilt from, and record
+    // the emit-loop statement.
+    void translateOptionalDrainLoop(const IteratorConfig& config,
+                                    mlir::Block& loopBody,
+                                    NLLimitState* limit,
+                                    NLStmtContainer* body);
+
+    // The runtime accumulator an optional handle names. Throws if the handle was not
+    // produced by an nl.optional_buffer translated earlier.
+    NLOptionalState* optionalStateFor(mlir::Value handle) const;
+
     // Translate the nl.for over an nl.unwind_collect iterator: allocate one loop variable per
     // grouping key plus the element value, wire the key outputs and value output onto
     // the shared state, and record the per-element emit-loop statement.
@@ -698,6 +731,13 @@ private:
     // A count result is a ui64 tally, the pipeline's one non-nullable value chunk, so
     // it is neither an ID chunk nor a !storage.nullable<...> one and takes a plain
     // ColumnVector<uint64_t>.
+    // Whether a nullable chunk's value type is one whose rows own their characters, which
+    // the value type alone does not say: labels() and edgeType() format their own text
+    // where a string property column borrows the graph's
+    static bool isOwnedStringElement(mlir::Type elementType);
+
+    Column* allocOptOwnedStringColumn();
+
     static bool isPlainValueElementType(mlir::Type elementType);
     Column* allocPlainColumn(ValueType valueType);
     ColumnVector<uint64_t>* allocCountColumn();

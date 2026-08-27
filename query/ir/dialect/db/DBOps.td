@@ -1854,4 +1854,84 @@ def ShortestPath : TuringOp<"shortest_path", [Pure]> {
   }];
 }
 
+/**
+* OptionalMatch
+*/
+def OptionalMatch : TuringOp<"optional_match", [Pure]> {
+  let summary = "Match a pattern against the rows in flight, keeping the rows it does not match";
+
+  let description = [{
+    Models Cypher's OPTIONAL MATCH: a left outer join of the rows in flight
+    against a pattern. A row the pattern matches fans out exactly as a MATCH
+    would; a row it matches not at all survives once, with the pattern's own
+    variables null. The pattern matches whole or not at all - a second hop that
+    finds nothing nulls the first hop's variables too - so it cannot be modelled
+    by making each traversal optional, and lives in a region of its own.
+
+    `input_columns` are the columns the pattern joins onto - every named column
+    the query holds at this point. The region's entry block takes one argument
+    per input column, so the pattern walks the rows in flight rather than the
+    whole graph, plus a trailing `!db.column<ui64>` row tag: the position of each
+    input row, carried through the pattern the way any other column is, so the
+    rows that matched are known once the pattern is walked. A query opening on
+    OPTIONAL MATCH has no input column and so no tag either - the rows it joins
+    onto are the single empty row Cypher starts from, which any match marks.
+
+      %p2, %e, %f = db.optional_match(%p) ({
+        ^bb0(%pIn: !db.column<!storage.node_id>, %tag: !db.column<ui64>):
+          %s, %e, %et, %t, %tag2 = db.get_out_edges(%pIn, {%tag}) : ...
+          db.optional_yield %tag2, {%s, %e, %t} : !db.column<ui64>, {...}
+      }) : (!db.column<!storage.node_id>) -> (...)
+
+    The db.optional_yield names the tag as the pattern left it, then the columns
+    the region contributes: one per input column first, in operand order - these
+    are the input rows as the pattern filtered and repeated them - then one per
+    variable the pattern binds of its own. The op's results line up with those
+    columns, so the results past the input count are the pattern's variables, and
+    those are the ones a row the pattern missed comes back with null. A null node
+    or edge is an invalid ID (`ID::isValid()`), which reads as null through a
+    property fetch and renders as null, so no column type changes here.
+
+    Reading the graph is deterministic, so the op is Pure.
+  }];
+
+  let arguments = (ins Variadic<Column>:$input_columns);
+
+  // One per column the region yields: the input columns as the pattern left
+  // them, then the variables the pattern binds.
+  let results = (outs Variadic<Column>:$results);
+
+  // Exactly one block, ending in a db.optional_yield.
+  let regions = (region SizedRegion<1>:$pattern);
+
+  let assemblyFormat = [{
+    `(` $input_columns `)` $pattern attr-dict `:` functional-type($input_columns, results)
+  }];
+
+  let hasVerifier = 1;
+}
+
+/**
+* OptionalYield
+*/
+def OptionalYield : TuringOp<"optional_yield", [Pure, Terminator, AttrSizedOperandSegments, HasParent<"OptionalMatch">]> {
+  let summary = "Name the row tag and the columns a db.optional_match's pattern contributes";
+
+  let description = [{
+    Terminates a db.optional_match's pattern region. `tag` is the row tag as the
+    pattern left it - the input row each matched row came from, absent when the
+    op has no input column - and `columns` are the columns the region
+    contributes, one per input column in operand order followed by the pattern's
+    own variables. The enclosing op's results are exactly those columns.
+  }];
+
+  let arguments = (ins Optional<ColumnRowTags>:$tag, Variadic<Column>:$columns);
+
+  // The tag's type is buildable and so left out; only the contributed column types
+  // are spelled, in braces as db.cross_product spells a factor's.
+  let assemblyFormat = [{
+    ($tag^ `,`)? `{` $columns `}` attr-dict `:` `{` qualified(type($columns)) `}`
+  }];
+}
+
 #endif //TURINGDB_OPS

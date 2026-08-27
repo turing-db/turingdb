@@ -587,6 +587,11 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
 
             _iteratorConfigs[unwind.getResult()] = config;
+        } else if (nl::OptionalDrain optionalDrain = mlir::dyn_cast<nl::OptionalDrain>(operation)) {
+            IteratorConfig config;
+            config._kind = IteratorKind::OptionalDrain;
+            config._optionalState = optionalStateFor(optionalDrain.getState());
+            _iteratorConfigs[optionalDrain.getResult()] = config;
         } else if (nl::ProcedureInit procedureInit = mlir::dyn_cast<nl::ProcedureInit>(operation)) {
             IteratorConfig config;
             config._kind = IteratorKind::ProcedureInit;
@@ -723,6 +728,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateShortestPathBuffer(shortestPathBuffer, body);
         } else if (nl::ShortestPathUpdate shortestPathUpdate = mlir::dyn_cast<nl::ShortestPathUpdate>(operation)) {
             translateShortestPathUpdate(shortestPathUpdate, body);
+        } else if (nl::OptionalBuffer optionalBuffer = mlir::dyn_cast<nl::OptionalBuffer>(operation)) {
+            translateOptionalBuffer(optionalBuffer, body);
+        } else if (nl::OptionalCollect optionalCollect = mlir::dyn_cast<nl::OptionalCollect>(operation)) {
+            translateOptionalCollect(optionalCollect, body);
         } else if (nl::CreateNode createNode = mlir::dyn_cast<nl::CreateNode>(operation)) {
             translateCreateNode(createNode, body);
         } else if (nl::CreateEdge createEdge = mlir::dyn_cast<nl::CreateEdge>(operation)) {
@@ -807,6 +816,8 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         // An unwind expands the rows it is given rather than accumulating them, so - like
         // a hop - a downstream LIMIT can bound its loop through the ordinary early-exit.
         translateUnwindLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::OptionalDrain) {
+        translateOptionalDrainLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::ProcedureInit) {
         translateProcedureInitLoop(config, loopBody, limit, body);
     } else {
@@ -1924,14 +1935,23 @@ void NLTranslator::translateNot(nl::Not notOp, NLStmtContainer* body) {
 }
 
 void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContainer* body) {
-    const Column* operand = getColumn(toNullable.getOperand());
+    const mlir::Value operandValue = toNullable.getOperand();
+    const Column* operand = getColumn(operandValue);
 
     const auto resultChunk = mlir::cast<nl::ChunkType>(toNullable.getResult().getType());
     const auto nullableType = mlir::cast<storage::NullableType>(resultChunk.getElementType());
     const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
 
+    // An entity column carries its null in the ID rather than in an optional, so it is
+    // read row by row for validity instead of copied straight across
+    const auto operandChunk = mlir::cast<nl::ChunkType>(operandValue.getType());
+    const mlir::Type operandElement = operandChunk.getElementType();
+    const bool readsAnEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(operandElement);
+
     Column* result = nullptr;
-    const NLUnaryFn fn = NLExecutor::selectToNullable(valueType, operand, _memory, result);
+    const NLUnaryFn fn = readsAnEntity
+        ? NLExecutor::selectEntityToNullable(chunkKindFromElementType(operandElement), _memory, result)
+        : NLExecutor::selectToNullable(valueType, operand, _memory, result);
     bioassert(result, "Failed to allocate the nullable column of nl.to_nullable.");
 
     _valueSlots[toNullable.getResult()] = result;
@@ -2427,6 +2447,113 @@ void NLTranslator::translateSortLoop(const IteratorConfig& config,
     translateBlock(loopBody, loopData->getStmts());
 }
 
+void NLTranslator::translateOptionalBuffer(nl::OptionalBuffer buffer, NLStmtContainer* body) {
+    NLOptionalState* state = _program->allocOptionalState();
+    _optionalStates[buffer.getState()] = state;
+
+    // This step's own chunks: the drain rebuilds the rows the pattern missed out of them,
+    // and their row count is how many matched flags the reset clears.
+    for (const mlir::Value column : buffer.getInputColumns()) {
+        state->addInputColumn(getColumn(column));
+    }
+
+    ColumnVector<uint64_t>* tag = static_cast<ColumnVector<uint64_t>*>(allocColumn(buffer.getTag()));
+
+    NLOptionalResetData* resetData = _program->allocFunctionData<NLOptionalResetData>(state, tag);
+    body->emplaceStmt(&NLExecutor::runOptionalReset, resetData);
+}
+
+void NLTranslator::translateOptionalCollect(nl::OptionalCollect collect, NLStmtContainer* body) {
+    NLOptionalState* state = optionalStateFor(collect.getState());
+
+    // The buffers are allocated once, by the single collect feeding an accumulator.
+    // Generated IR has exactly one collect per accumulator; a second would append to the
+    // same buffers and double the rows, so it is rejected here as a sort's is.
+    if (!state->buffers().empty()) {
+        throw IRException("an nl.optional_buffer must be fed by a single nl.optional_collect");
+    }
+
+    NLOptionalCollectData* data = _program->allocFunctionData<NLOptionalCollectData>(state);
+
+    if (const mlir::Value tag = collect.getTag()) {
+        data->setTag(static_cast<const ColumnVector<uint64_t>*>(getColumn(tag)));
+    }
+
+    // One growing buffer per column the pattern contributes, row-aligned. The buffer keeps
+    // the column's element type; the append copies a chunk's rows onto its tail.
+    for (const mlir::Value column : collect.getColumns()) {
+        Column* bufferColumn = allocColumnForChunkType(column.getType());
+        state->addMatchedBuffer(bufferColumn);
+
+        const NLOptionalCollectData::Append append {getColumn(column),
+                                                    bufferColumn,
+                                                    selectAppendForChunkType(column.getType())};
+        data->addAppend(append);
+    }
+
+    body->emplaceStmt(&NLExecutor::runOptionalCollect, data);
+}
+
+void NLTranslator::translateOptionalDrainLoop(const IteratorConfig& config,
+                                              mlir::Block& loopBody,
+                                              NLLimitState* limit,
+                                              NLStmtContainer* body) {
+    NLOptionalState* state = config._optionalState;
+    if (!state) {
+        throw IRException("nl.optional_drain iterator must carry an optional accumulator");
+    }
+
+    // For::verify binds one loop variable per iterator chunk, and the drain iterator's
+    // chunk types are the collected column types, so the loop must take one per buffer.
+    const size_t bufferCount = state->buffers().size();
+    if (loopBody.getNumArguments() != bufferCount) {
+        throw IRException("nl.optional_drain loop must bind one variable per collected column");
+    }
+
+    NLOptionalDrainLoopData* loopData = _program->allocFunctionData<NLOptionalDrainLoopData>(state);
+    loopData->setLimit(limit);
+
+    // Reserve the row-slice scratch so the per-step gather stays allocation-free, the same
+    // as the edge loop's indices column.
+    loopData->getIndices()->reserve(_program->getChunkSize());
+
+    // The columns the pattern joined onto come first, in the order it yielded them back,
+    // so the first inputColumns().size() of them are the ones a missed row is rebuilt from.
+    const std::vector<const Column*>& inputColumns = state->inputColumns();
+
+    for (size_t columnIndex = 0; columnIndex < bufferCount; columnIndex++) {
+        const mlir::Value loopVariable = loopBody.getArgument(static_cast<unsigned>(columnIndex));
+        const mlir::Type chunkType = loopVariable.getType();
+
+        Column* output = allocColumnForChunkType(chunkType);
+        _valueSlots[loopVariable] = output;
+
+        const bool joinedOnto = columnIndex < inputColumns.size();
+
+        NLOptionalDrainLoopData::DrainColumn column;
+        column._buffer = state->buffers()[columnIndex];
+        column._input = joinedOnto ? inputColumns[columnIndex] : nullptr;
+        column._output = output;
+        column._gather = selectGatherForChunkType(chunkType);
+        column._fillNull = joinedOnto ? nullptr : NLExecutor::selectFillNullFunction(getChunkKind(chunkType));
+
+        loopData->addColumn(column);
+    }
+
+    body->emplaceStmt(&NLExecutor::runOptionalDrainLoop, loopData);
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+NLOptionalState* NLTranslator::optionalStateFor(mlir::Value handle) const {
+    const auto stateIt = _optionalStates.find(handle);
+    if (stateIt == _optionalStates.end()) {
+        throw IRException("optional handle must be produced by an nl.optional_buffer");
+    }
+
+    return stateIt->second;
+}
+
 NLSortState* NLTranslator::sortStateFor(mlir::Value handle) const {
     const auto stateIt = _sortStates.find(handle);
     if (stateIt == _sortStates.end()) {
@@ -2668,9 +2795,13 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
                 // count, as it is for count(*).
                 aggregate._fold = NLExecutor::selectGroupCountAllFold();
             } else {
-                // A non-nullable chunk holds no null to skip - an ID chunk of
-                // count(*), or a column a CALL yielded - so every row is charged.
-                aggregate._fold = NLExecutor::selectGroupCountAllFold();
+                // An ID chunk charges its valid rows, an invalid ID being the null an
+                // OPTIONAL MATCH leaves; every other non-nullable chunk holds no null
+                // to skip - a column a CALL yielded - so every row is charged.
+                const NLChunkKind countKind = chunkKindFromElementType(countElementType);
+                const NLGroupAggregateFoldFunction idFold = NLExecutor::selectGroupCountValidIDFold(countKind);
+
+                aggregate._fold = idFold ? idFold : NLExecutor::selectGroupCountAllFold();
             }
         }
         break;
@@ -3554,6 +3685,10 @@ Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
     const mlir::Type elementType = chunk.getElementType();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        if (isOwnedStringElement(nullableType.getValueType())) {
+            return allocOptOwnedStringColumn();
+        }
+
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return allocOptColumnForValueType(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
@@ -3576,6 +3711,10 @@ NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
     const mlir::Type elementType = chunk.getElementType();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        if (isOwnedStringElement(nullableType.getValueType())) {
+            return NLExecutor::selectOptOwnedStringAppend();
+        }
+
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptAppendFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
@@ -3594,6 +3733,10 @@ NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
     const mlir::Type elementType = chunk.getElementType();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        if (isOwnedStringElement(nullableType.getValueType())) {
+            return NLExecutor::selectOptOwnedStringGather();
+        }
+
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptGatherFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
@@ -3612,6 +3755,10 @@ NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) 
     const mlir::Type elementType = chunk.getElementType();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        if (isOwnedStringElement(nullableType.getValueType())) {
+            return NLExecutor::selectOptOwnedStringCompare();
+        }
+
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptCompareFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
@@ -3663,6 +3810,10 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
     const mlir::Type elementType = chunk.getElementType();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        if (isOwnedStringElement(nullableType.getValueType())) {
+            return NLExecutor::selectOptOwnedStringKeyAppend();
+        }
+
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptKeyAppendFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
@@ -3693,10 +3844,20 @@ NLCountFunction NLTranslator::selectCountForChunkType(mlir::Type chunkType) {
     const mlir::Type elementType = chunk.getElementType();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        if (isOwnedStringElement(nullableType.getValueType())) {
+            return NLExecutor::selectOptOwnedStringCount();
+        }
+
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptCountFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementCountFunction();
+    }
+
+    // An entity an OPTIONAL MATCH did not match is an invalid ID, so an ID chunk counts
+    // its valid rows; every other plain chunk holds no null and counts them all.
+    if (const NLCountFunction idCount = NLExecutor::selectIDCountFunction(chunkKindFromElementType(elementType))) {
+        return idCount;
     }
 
     return &NLExecutor::countAllRows;
@@ -3707,6 +3868,10 @@ NLGroupKeyGatherFunction NLTranslator::selectGroupKeyGatherForChunkType(mlir::Ty
     const mlir::Type elementType = chunk.getElementType();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        if (isOwnedStringElement(nullableType.getValueType())) {
+            return NLExecutor::selectOptOwnedStringGroupKeyGather();
+        }
+
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptGroupKeyGather(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
@@ -3725,6 +3890,10 @@ NLCopyFunction NLTranslator::selectCopyForChunkType(mlir::Type chunkType) {
     const mlir::Type elementType = chunk.getElementType();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        if (isOwnedStringElement(nullableType.getValueType())) {
+            return NLExecutor::selectOptOwnedStringCopy();
+        }
+
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptCopyFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
@@ -3901,6 +4070,20 @@ Column* NLTranslator::allocSingleRowOptColumnForValueType(ValueType valueType) {
 // tally is one (a ui64 that is never null) and so is an expression over it (a signed
 // i64, or an f64 once a double takes part). A width-1 integer is a mask, not one of
 // these, and an ID or list element is its own family.
+// A nullable chunk whose rows own their characters - what labels() and edgeType() produce
+// - rather than borrowing them from the graph, as a string property column does. Its value
+// type is String either way, so the handler families need this beside it.
+bool NLTranslator::isOwnedStringElement(mlir::Type elementType) {
+    return mlir::isa<storage::OwnedStringType>(elementType);
+}
+
+Column* NLTranslator::allocOptOwnedStringColumn() {
+    auto* column = _memory->alloc<ColumnOptVector<types::String::OwningPrimitive>>();
+    column->reserve(_program->getChunkSize());
+
+    return column;
+}
+
 bool NLTranslator::isPlainValueElementType(mlir::Type elementType) {
     if (mlir::isa<mlir::Float64Type>(elementType)) {
         return true;
