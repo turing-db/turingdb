@@ -311,6 +311,8 @@ target_include_directories(test_query_ir_system_command PRIVATE ${CMAKE_CURRENT_
 # VECTOR SEARCH runs against the session's vector indexes, which the system manager
 # holds, so the search tests drive the whole engine the way the system-command ones do.
 add_turing_test(test_query_ir_vector_search VectorSearchTest.cpp)
+# The traversal cases read their rows as text, whatever kinds the projected columns are.
+target_sources(test_query_ir_vector_search PRIVATE StringRowSink.cpp)
 target_link_libraries(test_query_ir_vector_search PRIVATE
         turing_db_s
         turing_testenv_s
