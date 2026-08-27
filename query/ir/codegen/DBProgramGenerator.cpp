@@ -2567,8 +2567,14 @@ void DBProgramGenerator::publishInFlightColumns() {
     VariableColumnMap variableColumns;
     collectVariableColumns(variableColumns);
 
-    llvm::SmallVector<std::pair<std::string_view, mlir::Value>> published {variableColumns.begin(),
-                                                                          variableColumns.end()};
+    // Each name is copied out: the variables holding them are the ones this clears, and the
+    // part below is opened with them
+    llvm::SmallVector<std::pair<std::string, mlir::Value>> published;
+    published.reserve(variableColumns.size());
+
+    for (const auto& [name, column] : variableColumns) {
+        published.emplace_back(name, column);
+    }
 
     // Under a name order rather than the map's, so the same query generates the same IR
     std::ranges::sort(published, [](const auto& left, const auto& right) {
