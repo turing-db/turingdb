@@ -84,6 +84,18 @@ std::string elementText(const ListElementView& element) {
     throw std::runtime_error("StringRowSink met an unknown list element tag");
 }
 
+// A type-erased column of tagged scalars - the column a heterogeneous UNWIND drives - reads
+// each cell through the tag it carries rather than through the column's type.
+bool textOfListElement(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnVector<ListElementView>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    text = elementText(column->getRaw()[rowIndex]);
+    return true;
+}
+
 // A list cell reads as its elements joined by ", ", in the order the list holds them.
 bool textOfList(const Column* chunk, size_t rowIndex, std::string& text) {
     const auto* column = dynamic_cast<const ColumnVector<ListView>*>(chunk);
@@ -171,6 +183,8 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfOptional<double>(chunk, rowIndex, text)) {
         return text;
     } else if (textOfOptional<std::string_view>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfListElement(chunk, rowIndex, text)) {
         return text;
     } else if (textOfList(chunk, rowIndex, text)) {
         return text;
