@@ -20,6 +20,7 @@ using namespace turing::test;
 
 namespace {
 
+// An entity an OPTIONAL MATCH did not match is an invalid ID, which reads as null
 template <typename IDType>
 bool textOfID(const Column* chunk, size_t rowIndex, std::string& text) {
     const auto* column = dynamic_cast<const ColumnVector<IDType>*>(chunk);
@@ -27,7 +28,9 @@ bool textOfID(const Column* chunk, size_t rowIndex, std::string& text) {
         return false;
     }
 
-    text = fmt::format("{}", column->getRaw()[rowIndex].getValue());
+    const IDType id = column->getRaw()[rowIndex];
+    text = id.isValid() ? fmt::format("{}", id.getValue()) : "null";
+
     return true;
 }
 
