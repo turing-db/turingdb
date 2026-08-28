@@ -1388,9 +1388,14 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
     // which the per-column check below enforces: a loop variable of this loop, or a
     // chunk materialized in this block (a property fetch, or nl.count_result at
     // function scope). Two chunks cross that scope: a constant, and the single row a
-    // reduction collapsed to - both hold one value for every row of the step. Any
-    // other chunk from an outer or sibling loop fails the check.
+    // reduction collapsed to. Any other chunk from an outer or sibling loop fails the
+    // check.
     mlir::Block* outputBlock = output->getBlock();
+
+    // A constant broadcasts to any step, since reading it ignores the row. A reduced
+    // row is one row and nothing here spreads it over more, so it crosses only into a
+    // step that is that single row.
+    const bool singleRowStep = stepKeepsASingleRow(outputBlock);
 
     NLOutputData* outputData = _program->allocFunctionData<NLOutputData>();
     outputData->setLimit(limitStateFor(output.getLimit()));
@@ -1410,14 +1415,14 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
         const bool isProducedInThisBlock = definingOp && definingOp->getBlock() == outputBlock;
 
         const bool isConstant = yieldsConstantColumn(column);
-        const bool isReducedRow = yieldsReducedRowChunk(column);
+        const bool isReducedRow = singleRowStep && yieldsReducedRowChunk(column);
 
         if (!isInnermostLoopVariable && !isProducedInThisBlock && !isConstant && !isReducedRow) {
             throw IRException("nl.output columns must be a loop variable of the enclosing "
                               "nl.for, produced in this block, a constant, or a reduced row");
         }
 
-        outputData->addOutputColumn(getColumn(column), !isConstant);
+        outputData->addOutputColumn(getColumn(column), !isConstant && !isReducedRow);
     }
 
     // The names label the result, not one emission of it, so they go on the program
@@ -1433,6 +1438,23 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
     }
 
     body->emplaceStmt(&NLExecutor::runOutput, outputData);
+}
+
+bool NLTranslator::stepKeepsASingleRow(mlir::Block* block) const {
+    nl::For forLoop = mlir::dyn_cast<nl::For>(block->getParentOp());
+    if (!forLoop) {
+        return true;
+    }
+
+    const auto configIt = _iteratorConfigs.find(forLoop->getOperand(0));
+    if (configIt == _iteratorConfigs.end()) {
+        return false;
+    }
+
+    const IteratorConfig& config = configIt->second;
+    const bool drainsACollect = config._kind == IteratorKind::Collect;
+
+    return drainsACollect && config._collectState->keyColumns().empty();
 }
 
 void NLTranslator::translateLimit(nl::Limit limit, NLStmtContainer* body) {
