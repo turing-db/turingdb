@@ -46,6 +46,8 @@ target_link_libraries(test_query_ir_collect_drain PRIVATE turing_db_examples_s)
 
 add_ir_tests(test_query_ir_collect_result_type CollectResultTypeTest.cpp)
 
+add_ir_tests(test_query_ir_collect_aggregate_kind CollectAggregateKindTest.cpp)
+
 # The CALL procedure tests drive real registered procedures (db.labels) alongside two
 # test-local ones, so they need the procedure registry.
 add_ir_tests(test_query_ir_call_procedure MLIRCallProcedureTest.cpp)
