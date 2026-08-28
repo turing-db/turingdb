@@ -286,6 +286,16 @@ private:
                              mlir::ValueRange inputs,
                              const InFlightColumns& inFlight);
 
+    // Move the dataflow built so far into the product's left factor: it is a self-contained
+    // dataflow already, so every op of the block ahead of the product moves wholesale.
+    void moveDataflowIntoLeftFactor(mlir::db::CrossProduct crossProduct);
+
+    // Move the constants the left factor swallowed back out, ahead of the product.
+    // collectInFlightColumns leaves a constant out of the factor's yield, so the product
+    // carries no column for it and its definition has to stay where the ops after the
+    // product can still read it.
+    void hoistConstantsOutOfLeftFactor(mlir::db::CrossProduct crossProduct);
+
     // Whether a column holds the rows flowing past the current insertion point, which is
     // what an op consuming a whole row set needs of each of its operands.
     bool isRowAlignedHere(mlir::Value column) const;

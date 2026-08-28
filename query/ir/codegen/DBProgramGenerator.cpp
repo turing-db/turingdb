@@ -2105,14 +2105,8 @@ void DBProgramGenerator::generateVectorSearch(const VectorSearchStmt* vectorSear
     mlir::Block* const leftBlock = &crossProduct.getLeftFactor().front();
     mlir::Block* const rightBlock = &crossProduct.getRightFactor().front();
 
-    // Everything generated so far becomes the left factor: it is a self-contained dataflow
-    // already, so it moves wholesale - every op of this block ahead of the product - and
-    // its db.yield names the columns it contributes.
-    mlir::Block::OpListType& blockOps = currentBlock->getOperations();
-    leftBlock->getOperations().splice(leftBlock->end(),
-                                      blockOps,
-                                      blockOps.begin(),
-                                      crossProduct->getIterator());
+    moveDataflowIntoLeftFactor(crossProduct);
+    hoistConstantsOutOfLeftFactor(crossProduct);
 
     _opBuilder.setInsertionPointToEnd(leftBlock);
     _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {inFlight._columns});
@@ -2171,6 +2165,36 @@ void DBProgramGenerator::generateYieldFilter(const YieldItems* yieldItems) {
     filterAllColumns(findIt->second);
 }
 
+void DBProgramGenerator::moveDataflowIntoLeftFactor(mlir::db::CrossProduct crossProduct) {
+    mlir::Block* const currentBlock = crossProduct->getBlock();
+    mlir::Block* const leftBlock = &crossProduct.getLeftFactor().front();
+
+    mlir::Block::OpListType& blockOps = currentBlock->getOperations();
+    leftBlock->getOperations().splice(leftBlock->end(),
+                                     blockOps,
+                                     blockOps.begin(),
+                                     crossProduct->getIterator());
+}
+
+void DBProgramGenerator::hoistConstantsOutOfLeftFactor(mlir::db::CrossProduct crossProduct) {
+    mlir::Block* const leftBlock = &crossProduct.getLeftFactor().front();
+
+    // Every operand of a constant column is itself a constant column, so the whole cone
+    // moves and nothing left outside reads what stayed in.
+    llvm::SmallVector<mlir::Operation*> constantOps;
+    for (mlir::Operation& op : *leftBlock) {
+        const bool yieldsAConstant = op.getNumResults() > 0 && yieldsConstantColumn(op.getResult(0));
+
+        if (yieldsAConstant) {
+            constantOps.push_back(&op);
+        }
+    }
+
+    for (mlir::Operation* op : constantOps) {
+        op->moveBefore(crossProduct);
+    }
+}
+
 void DBProgramGenerator::generateCrossedCall(std::string_view procedureName,
                                              llvm::ArrayRef<mlir::Attribute> yieldedNames,
                                              llvm::ArrayRef<std::string_view> yieldedVariables,
@@ -2198,14 +2222,7 @@ void DBProgramGenerator::generateCrossedCall(std::string_view procedureName,
     mlir::Block* const leftBlock = &crossProduct.getLeftFactor().front();
     mlir::Block* const rightBlock = &crossProduct.getRightFactor().front();
 
-    // Everything generated so far becomes the left factor: it is a self-contained
-    // dataflow already, so it moves wholesale - every op of this block ahead of the
-    // product - and its db.yield names the columns it contributes.
-    mlir::Block::OpListType& blockOps = currentBlock->getOperations();
-    leftBlock->getOperations().splice(leftBlock->end(),
-                                     blockOps,
-                                     blockOps.begin(),
-                                     crossProduct->getIterator());
+    moveDataflowIntoLeftFactor(crossProduct);
 
     // The argument columns were built into the block that has just become the left factor,
     // but the call reading them is the right one and a value cannot cross a region
@@ -2224,6 +2241,8 @@ void DBProgramGenerator::generateCrossedCall(std::string_view procedureName,
     for (mlir::Operation* op : argumentOpsInOrder) {
         op->moveBefore(rightBlock, rightBlock->end());
     }
+
+    hoistConstantsOutOfLeftFactor(crossProduct);
 
     _opBuilder.setInsertionPointToEnd(leftBlock);
     _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {inFlight._columns});
