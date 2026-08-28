@@ -228,6 +228,11 @@ add_ir_tests(test_query_ir_dbdialect DBDialectTest.cpp)
 add_ir_tests(test_query_ir_push_down_filter PushDownFilterTest.cpp)
 add_ir_tests(test_query_ir_nldialect NLDialectTest.cpp)
 
+# The keyless collect drain emits its one group whether or not a row arrived, against the
+# shared SimpleGraph fixture and an empty graph.
+add_ir_tests(test_query_ir_keyless_collect_empty_input KeylessCollectEmptyInputTest.cpp)
+target_link_libraries(test_query_ir_keyless_collect_empty_input PRIVATE turing_db_examples_s)
+
 # The branch two-hop test runs against the shared SimpleGraph fixture.
 add_ir_tests(test_query_ir_branch_two_hop BranchTwoHopTest.cpp)
 target_link_libraries(test_query_ir_branch_two_hop PRIVATE turing_db_examples_s)
