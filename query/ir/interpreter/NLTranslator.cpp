@@ -16,6 +16,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Verifier.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 
 #include "Procedure.h"
@@ -53,25 +54,47 @@ namespace {
 // A chunk holding the single row a reduction collapsed the whole relation to, or a
 // computation over such rows and constants: like a constant, it holds one value for
 // every row of the step that reads it, whichever loop that step belongs to.
-bool yieldsReducedRowChunk(mlir::Value column) {
+//
+// Classified once per value: a computation asks two questions of every operand, and
+// operands are commonly shared, so answering from a fresh walk each time costs a multiple
+// of the cone at every level.
+bool yieldsReducedRowChunk(mlir::Value column, llvm::DenseMap<mlir::Value, bool>& classified) {
+    const auto classifiedIt = classified.find(column);
+    if (classifiedIt != classified.end()) {
+        return classifiedIt->second;
+    }
+
     mlir::Operation* const definingOp = column.getDefiningOp();
+
+    bool isReducedRow = false;
     if (!definingOp) {
-        return false;
+        isReducedRow = false;
+    } else if (mlir::isa<nl::CountResult, nl::AggregateResult>(definingOp)) {
+        isReducedRow = true;
+    } else if (definingOp->hasTrait<mlir::OpTrait::ConstantThroughOperands>()) {
+        bool readsAReducedRow = false;
+        bool everyOperandStandsForEveryRow = true;
+
+        for (const mlir::Value operand : definingOp->getOperands()) {
+            const bool operandIsReducedRow = yieldsReducedRowChunk(operand, classified);
+            const bool operandStandsForEveryRow = operandIsReducedRow || yieldsConstantColumn(operand);
+
+            readsAReducedRow = readsAReducedRow || operandIsReducedRow;
+            everyOperandStandsForEveryRow = everyOperandStandsForEveryRow && operandStandsForEveryRow;
+        }
+
+        isReducedRow = readsAReducedRow && everyOperandStandsForEveryRow;
     }
 
-    if (mlir::isa<nl::CountResult, nl::AggregateResult>(definingOp)) {
-        return true;
-    }
+    classified[column] = isReducedRow;
 
-    if (!definingOp->hasTrait<mlir::OpTrait::ConstantThroughOperands>()) {
-        return false;
-    }
+    return isReducedRow;
+}
 
-    const bool readsAReducedRow = llvm::any_of(definingOp->getOperands(), yieldsReducedRowChunk);
+bool yieldsReducedRowChunk(mlir::Value column) {
+    llvm::DenseMap<mlir::Value, bool> classified;
 
-    return readsAReducedRow && llvm::all_of(definingOp->getOperands(), [](mlir::Value operand) {
-        return yieldsReducedRowChunk(operand) || yieldsConstantColumn(operand);
-    });
+    return yieldsReducedRowChunk(column, classified);
 }
 
 using NLUnaryFunctionSelector = NLUnaryFunctionKernel (*)(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
