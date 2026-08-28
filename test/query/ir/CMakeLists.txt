@@ -233,6 +233,11 @@ add_ir_tests(test_query_ir_nldialect NLDialectTest.cpp)
 add_ir_tests(test_query_ir_keyless_collect_empty_input KeylessCollectEmptyInputTest.cpp)
 target_link_libraries(test_query_ir_keyless_collect_empty_input PRIVATE turing_db_examples_s)
 
+# The reduced-row output tests read the single row a reduction collapsed to from another
+# block, against the shared SimpleGraph fixture.
+add_ir_tests(test_query_ir_reduced_row_output ReducedRowOutputTest.cpp)
+target_link_libraries(test_query_ir_reduced_row_output PRIVATE turing_db_examples_s)
+
 # The branch two-hop test runs against the shared SimpleGraph fixture.
 add_ir_tests(test_query_ir_branch_two_hop BranchTwoHopTest.cpp)
 target_link_libraries(test_query_ir_branch_two_hop PRIVATE turing_db_examples_s)

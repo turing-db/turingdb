@@ -547,6 +547,11 @@ private:
 
     void translateOutput(mlir::nl::Output output, NLStmtContainer* body);
 
+    // Whether a step emitting from this block keeps a single row: at function scope the
+    // one emission the function makes, and in a loop body only the drain of a keyless
+    // accumulator, which carries the single group its reset created.
+    bool stepKeepsASingleRow(mlir::Block* block) const;
+
     // Translate an nl.cross_product: allocate an output column per crossed
     // column, map each to the matching op result, and record the broadcast
     // statement (outer columns block-repeated, inner columns tiled)
