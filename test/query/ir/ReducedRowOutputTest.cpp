@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <span>
+#include <string>
 #include <vector>
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -34,11 +35,18 @@ using namespace turing::test;
 
 namespace {
 
-// The malformed program below is turned away before it runs, so nothing reaches a sink.
-class DiscardingSink : public NLOutputSink {
+// The programs below are read for whether they translate and how many rows they emit, so
+// the chunks themselves go unread.
+class RowCountingSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        _rowCount += rowCount;
     }
+
+    size_t getRowCount() const { return _rowCount; }
+
+private:
+    size_t _rowCount {0};
 };
 
 // The rows of the keyless collect drain: the one list the whole match collapsed to, and
@@ -108,8 +116,38 @@ func.func @main() {
 }
 )mlir";
 
+// A computation over the tally, @param depth levels deep, each level reading the level
+// below it twice. Classifying the output column has to visit each level once rather than
+// once per path down to the tally, or the cost doubles with every level.
+void buildDeepTallyChain(size_t depth, std::string& program) {
+    program =
+        "func.func @main() {\n"
+        "  %tally = nl.count\n"
+        "  %people = nl.scan_nodes_by_label([\"Person\"])\n"
+        "  nl.for %person in %people : !nl.iter<!nl.chunk<!storage.node_id>> {\n"
+        "    nl.count_update %tally, %person all_rows : !nl.chunk<!storage.node_id>\n"
+        "  }\n"
+        "  %sum0 = nl.count_result(%tally) : !nl.chunk<ui64>\n";
+
+    for (size_t level = 0; level < depth; level++) {
+        const std::string below = std::to_string(level);
+        const std::string above = std::to_string(level + 1);
+
+        program += "  %sum" + above + " = nl.add %sum" + below + ", %sum" + below
+                 + " : (!nl.chunk<ui64>, !nl.chunk<ui64>) -> !nl.chunk<ui64>\n";
+    }
+
+    program += "  nl.output(%sum" + std::to_string(depth) + ") names [\"total\"] : !nl.chunk<ui64>\n"
+               "  func.return\n"
+               "}\n";
+}
+
 // simpledb carries eight Person nodes
 constexpr size_t personCount = 8;
+
+// Deep enough that visiting a level once per path down to the tally would take 2^32
+// visits, and shallow enough that visiting each level once is immediate.
+constexpr size_t deepChainDepth = 32;
 
 }
 
@@ -155,8 +193,24 @@ TEST_F(ReducedRowOutputTest, rejectsATallyReadByAStepThatKeepsManyRows) {
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    DiscardingSink sink;
+    RowCountingSink sink;
     EXPECT_THROW(runProgram(scanLoopReadsTheTally, reader.getView(), sink), IRException);
+}
+
+TEST_F(ReducedRowOutputTest, classifiesADeepComputationOverTheTally) {
+    auto graph = Graph::create();
+    SimpleGraph::createSimpleGraph(graph.get());
+
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    std::string program;
+    buildDeepTallyChain(deepChainDepth, program);
+
+    RowCountingSink sink;
+    runProgram(program.c_str(), reader.getView(), sink);
+
+    EXPECT_EQ(sink.getRowCount(), 1u);
 }
 
 int main(int argc, char** argv) {
