@@ -112,6 +112,9 @@ jobs:
     - name: Fetch tags
       run: git fetch --tags --force
 
+    - name: Set VERSION from git tag
+      run: git describe --tags --match 'v*' --always --dirty | sed 's/^v//' > VERSION
+
     - name: Checkout submodules (shallow)
       run: |
         attempt=1
