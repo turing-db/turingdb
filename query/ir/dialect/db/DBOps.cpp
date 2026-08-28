@@ -569,7 +569,8 @@ LogicalResult Collect::verify() {
     // keyCount + aggregateCount could wrap in unsigned 64-bit and let a pathological
     // keyCount slip past into out-of-bounds lowering.
     const size_t columnCount = columns.size();
-    const size_t aggregateCount = getKinds() ? getKinds()->size() : 0;
+    const llvm::ArrayRef<int64_t> kinds = getKinds().value_or(llvm::ArrayRef<int64_t> {});
+    const size_t aggregateCount = kinds.size();
     if (keyCount >= columnCount || columnCount - keyCount <= aggregateCount) {
         return emitOpError("expects ") << keyCount
                                        << " grouping-key columns, at least one collected column and "
@@ -616,6 +617,14 @@ LogicalResult Collect::verify() {
                                                     << valueColumn.getType()
                                                     << ", the collected column's type, but collects "
                                                     << collectedList.getElementType();
+        }
+    }
+
+    // Each kind names one aggregate's reduction, so it must be a valid
+    // GroupAggregateKind, exactly as db.group_aggregate's kinds must.
+    for (const int64_t kind : kinds) {
+        if (!storage::symbolizeGroupAggregateKind(kind)) {
+            return emitOpError("has an unknown aggregate kind ") << kind;
         }
     }
 
