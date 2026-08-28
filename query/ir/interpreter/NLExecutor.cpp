@@ -2609,6 +2609,23 @@ const CommitWriteBuffer::SupportedTypeVariant* findEntityUpdate(const NLWrittenV
     }
 }
 
+// A node an OPTIONAL MATCH did not match is an invalid ID, and no edge can hang off one.
+// The whole column is read before anything is staged, so a CREATE naming a null endpoint
+// writes none of its edges rather than leaving the commit one it cannot resolve. A pending
+// endpoint is an offset into this change's new nodes rather than an ID, so only an existing
+// one can be null.
+void throwIfAnyNodeIsNull(const ColumnNodeIDs* column, bool isPending, std::string_view error) {
+    if (isPending) {
+        return;
+    }
+
+    for (const NodeID nodeID : column->getRaw()) {
+        if (!nodeID.isValid()) {
+            throw IRException(std::string(error));
+        }
+    }
+}
+
 void throwIfNodesHaveEdges(const GraphView& view, const ColumnNodeIDs* nodes) {
     const Tombstones& tombstones = view.tombstones();
 
@@ -3057,6 +3074,9 @@ void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data
     const ColumnMask* srcPending = createData->getSrcPendingMask();
     const ColumnMask* tgtPending = createData->getTgtPendingMask();
 
+    throwIfAnyNodeIsNull(src, srcIsPending, "Cannot create an edge from a null node");
+    throwIfAnyNodeIsNull(tgt, tgtIsPending, "Cannot create an edge to a null node");
+
     const GraphView* view = context->getView();
     const size_t firstPendingNodeID = committedNodeCount(view);
 
@@ -3110,9 +3130,12 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
 
     const size_t firstPendingNodeID = committedNodeCount(context->getView());
 
+    // A node an OPTIONAL MATCH did not match is an invalid ID, which Cypher writes nothing
+    // for: staging it would have the commit look the ID up among the nodes this change
+    // wrote, where it is not.
     const auto& raw = nodes->getRaw();
     for (size_t row = 0; row < rowCount; row++) {
-        if (!writeTouchesRow(rows, row)) {
+        if (!writeTouchesRow(rows, row) || !raw[row].isValid()) {
             continue;
         }
 
@@ -3146,7 +3169,7 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
 
     const auto& raw = edges->getRaw();
     for (size_t row = 0; row < rowCount; row++) {
-        if (!writeTouchesRow(rows, row)) {
+        if (!writeTouchesRow(rows, row) || !raw[row].isValid()) {
             continue;
         }
 
