@@ -209,6 +209,10 @@ void NLCollectState::reset() {
         for (ValueColumn& value : _valueColumns) {
             value._groupPositions.resize(1);
         }
+
+        for (NLGroupAggregateState::Aggregate& aggregate : _aggregates) {
+            aggregate._grow(aggregate._accumulator, aggregate._counts, 1);
+        }
     }
 }
 
