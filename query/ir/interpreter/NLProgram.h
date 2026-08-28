@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -411,6 +412,16 @@ public:
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
+    // The neighbours the index reported, nearest first, in the types the two chunks
+    // carry. The search reads no column and its op is Pure, so one search answers every
+    // step: a loop re-entered from an enclosing cross product slices these again rather
+    // than asking the index a second time.
+    bool hasSearched() const { return _searched; }
+    void markSearched() { _searched = true; }
+
+    std::vector<NodeID>& neighbourIDs() { return _neighbourIDs; }
+    std::vector<std::optional<types::Double::Primitive>>& neighbourScores() { return _neighbourScores; }
+
 private:
     ColumnNodeIDs* _ids {nullptr};
     Column* _scores {nullptr};
@@ -418,6 +429,9 @@ private:
     size_t _neighbourCount {0};
     std::span<const float> _queryVector;
     NLLimitState* _limit {nullptr};
+    std::vector<NodeID> _neighbourIDs;
+    std::vector<std::optional<types::Double::Primitive>> _neighbourScores;
+    bool _searched {false};
     NLStmtContainer _stmts;
 };
 
