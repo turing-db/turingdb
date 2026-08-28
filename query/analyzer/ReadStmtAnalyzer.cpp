@@ -521,9 +521,7 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
 
     // Validate vector has elements
     const EmbeddingLiteral* queryVector = stmt->getQueryVector();
-    const std::span<const float> query = queryVector->getValue();
-
-    if (!queryVector || query.empty()) {
+    if (!queryVector || queryVector->getValue().empty()) {
         throwError("VECTOR SEARCH query vector cannot be empty", stmt);
     }
 
