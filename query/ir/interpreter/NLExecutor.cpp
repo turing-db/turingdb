@@ -2611,9 +2611,7 @@ void NLExecutor::runUnwindConstLoop(NLExecutionContext* context, NLFunctionData*
     }
 }
 
-void NLExecutor::runVectorSearchLoop(NLExecutionContext* context, NLFunctionData* data) {
-    NLVectorSearchLoopData* loopData = static_cast<NLVectorSearchLoopData*>(data);
-    const NLStmtContainer* loopBody = loopData->getStmts();
+void NLExecutor::searchVectorIndex(NLExecutionContext* context, NLVectorSearchLoopData* loopData) {
     const std::string_view indexName = loopData->getIndexName();
 
     vec::VectorDatabase* const vectorDatabase = context->getVectorDatabase();
@@ -2655,6 +2653,37 @@ void NLExecutor::runVectorSearchLoop(NLExecutionContext* context, NLFunctionData
     const std::span<const int64_t> ids = result.ids();
     const std::span<const float> distances = result.distances();
 
+    // An ID naming no node is kept rather than dropped the way a const scan drops one: it
+    // matches no edge and holds no property, so an index whose IDs are not node IDs still
+    // reports every neighbour it found.
+    std::vector<NodeID>& neighbourIDs = loopData->neighbourIDs();
+    neighbourIDs.resize(ids.size());
+    std::transform(ids.begin(),
+                   ids.end(),
+                   neighbourIDs.begin(),
+                   [](int64_t id) { return NodeID {static_cast<uint64_t>(id)}; });
+
+    std::vector<std::optional<types::Double::Primitive>>& neighbourScores = loopData->neighbourScores();
+    neighbourScores.resize(distances.size());
+    std::copy(distances.begin(), distances.end(), neighbourScores.begin());
+
+    loopData->markSearched();
+}
+
+void NLExecutor::runVectorSearchLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLVectorSearchLoopData* loopData = static_cast<NLVectorSearchLoopData*>(data);
+    const NLStmtContainer* loopBody = loopData->getStmts();
+
+    // The reader lock the accessor holds lives no longer than the search itself, so a
+    // concurrent LOAD VECTOR into this index waits for the search rather than for the
+    // whole query the neighbours feed.
+    if (!loopData->hasSearched()) {
+        searchVectorIndex(context, loopData);
+    }
+
+    const std::span<const NodeID> ids = loopData->neighbourIDs();
+    const std::span<const std::optional<types::Double::Primitive>> scores = loopData->neighbourScores();
+
     using ScoreColumn = ColumnOptVector<types::Double::Primitive>;
 
     ColumnNodeIDs* const idColumn = loopData->getIDs();
@@ -2667,28 +2696,22 @@ void NLExecutor::runVectorSearchLoop(NLExecutionContext* context, NLFunctionData
     const NLLimitState* limit = loopData->getLimit();
 
     // Emit the neighbours one chunk at a time: each step fills the two chunks with the
-    // next slice and runs the body over them. The search and the cursor are both local to
-    // this call, so a search nested in a cross product reports its neighbours afresh on
-    // every outer step - the way runScanNodesLoop reopens its chunk writer each call.
+    // next slice and runs the body over them. The cursor is local to this call, so a
+    // search nested in a cross product walks the neighbours again on every outer step -
+    // the way runScanNodesLoop reopens its chunk writer each call.
     size_t cursor = 0;
 
     const auto runIteration = [&]() {
         const size_t remaining = totalCount - cursor;
         const size_t rows = std::min(chunkSize, remaining);
 
-        // An ID naming no node is kept rather than dropped the way a const scan drops one:
-        // it matches no edge and holds no property, so an index whose IDs are not node IDs
-        // still reports every neighbour it found.
         std::vector<NodeID>& rawIDs = idColumn->getRaw();
         rawIDs.resize(rows);
-        std::transform(ids.begin() + cursor,
-                       ids.begin() + cursor + rows,
-                       rawIDs.begin(),
-                       [](int64_t id) { return NodeID {static_cast<uint64_t>(id)}; });
+        std::copy(ids.begin() + cursor, ids.begin() + cursor + rows, rawIDs.begin());
 
         std::vector<std::optional<types::Double::Primitive>>& rawScores = scoreColumn->getRaw();
         rawScores.resize(rows);
-        std::copy(distances.begin() + cursor, distances.begin() + cursor + rows, rawScores.begin());
+        std::copy(scores.begin() + cursor, scores.begin() + cursor + rows, rawScores.begin());
 
         cursor += rows;
 

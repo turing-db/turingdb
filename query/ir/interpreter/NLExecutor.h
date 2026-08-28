@@ -18,6 +18,7 @@ class NLOutputSink;
 class LocalMemory;
 class CommitWriteBuffer;
 class NLSystemContext;
+class NLVectorSearchLoopData;
 
 class NLExecutionContext {
 public:
@@ -459,6 +460,10 @@ public:
 private:
     NLExecutionContext _ctxt;
     const NLProgram* _prog {nullptr};
+
+    // Search the index the loop names and keep its neighbours on the loop data, in the
+    // types the two chunks carry. Holds the index' reader lock for the search alone.
+    static void searchVectorIndex(NLExecutionContext* context, NLVectorSearchLoopData* loopData);
 };
 
 }
