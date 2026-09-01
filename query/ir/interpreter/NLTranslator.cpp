@@ -1464,6 +1464,13 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
 }
 
 bool NLTranslator::stepKeepsASingleRow(mlir::Block* block) const {
+    // A cross product pairs what the loop bound with every row of another factor, so the
+    // block holds that product rather than the one row the loop stands for.
+    const bool crossesAnotherFactor = !block->getOps<nl::CrossProduct>().empty();
+    if (crossesAnotherFactor) {
+        return false;
+    }
+
     nl::For forLoop = mlir::dyn_cast<nl::For>(block->getParentOp());
     if (!forLoop) {
         return true;
@@ -2275,12 +2282,14 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
 
     // The collected columns are the grouping keys, the value columns, then one input per
     // aggregate reduced over the same groups: what the keys and the aggregates leave is
-    // what the collect gathers, and it gathers at least one.
-    if (columns.size() <= keyCount + kinds.size()) {
+    // what the collect gathers, and it gathers at least one. Bound keyCount by the column
+    // count before summing, as nl.collect_update's verifier does.
+    const size_t columnCount = columns.size();
+    if (keyCount >= columnCount || columnCount - keyCount <= kinds.size()) {
         throw IRException("collect collects at least one value column after the grouping keys, then one column per aggregate");
     }
 
-    const size_t valueCount = columns.size() - keyCount - kinds.size();
+    const size_t valueCount = columnCount - keyCount - kinds.size();
 
     const llvm::ArrayRef<int64_t> distinctValues = buffer.getDistinctValues().value_or(llvm::ArrayRef<int64_t> {});
 

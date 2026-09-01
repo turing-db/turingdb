@@ -126,6 +126,21 @@ LogicalResult VectorSearch::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+// The parameters db.vector_search rejects reach the index through this op unchanged: a
+// search reporting no neighbour sizes its result buffers at zero, and a query vector of
+// no dimension has nothing to score the neighbours against.
+LogicalResult VectorSearch::verify() {
+    if (getK() == 0) {
+        return emitOpError("must report at least one neighbour");
+    }
+
+    if (getQueryVector().empty()) {
+        return emitOpError("must search for a vector of at least one dimension");
+    }
+
+    return success();
+}
+
 // An edge scan produces the same four fixed edge chunks per step as an
 // out-edges fetch, but reads no input and carries nothing, so the iterator has
 // exactly those four chunks and no carried tail.
@@ -679,13 +694,47 @@ LogicalResult GroupAggregateUpdate::verify() {
     return success();
 }
 
-// A collect update must carry at least one column - the grouping keys (if any) and
-// the single value column - since with no column it could neither size the row set
-// nor build a group key. The one-value-column split against the buffer's keyCount is
-// reconciled during translation, where that count is known.
+// The columns split into the buffer's grouping keys, the collected values and one input
+// per reduction the buffer names, which is the split db.collect's verifier makes over its
+// own operands: the buffer holds the counts and the update holds the columns, so this is
+// where the nl side re-establishes it.
 LogicalResult CollectUpdate::verify() {
-    if (getColumns().empty()) {
+    const OperandRange columns = getColumns();
+    if (columns.empty()) {
         return emitOpError("requires at least one column to collect");
+    }
+
+    CollectBuffer buffer = getState().getDefiningOp<CollectBuffer>();
+    if (!buffer) {
+        return emitOpError("state must come from an nl.collect_buffer");
+    }
+
+    // Bound keyCount by the real column count first: summing keyCount + aggregateCount
+    // could wrap in unsigned 64-bit and let a pathological keyCount slip past into
+    // out-of-bounds translation.
+    const size_t columnCount = columns.size();
+    const uint64_t keyCount = buffer.getKeyCount();
+    const size_t aggregateCount = buffer.getKinds().value_or(llvm::ArrayRef<int64_t> {}).size();
+    if (keyCount >= columnCount || columnCount - keyCount <= aggregateCount) {
+        return emitOpError("expects ") << keyCount
+                                       << " grouping-key columns, at least one collected column and "
+                                       << aggregateCount
+                                       << " aggregate columns, but has "
+                                       << columnCount;
+    }
+
+    const size_t valueCount = columnCount - keyCount - aggregateCount;
+
+    // Every deduplicating value names one of the collected columns.
+    if (const std::optional<llvm::ArrayRef<int64_t>> distinctValues = buffer.getDistinctValues()) {
+        for (const int64_t valueIndex : *distinctValues) {
+            if (valueIndex < 0 || static_cast<size_t>(valueIndex) >= valueCount) {
+                return emitOpError("distinct value index ") << valueIndex
+                                                            << " is out of range for "
+                                                            << valueCount
+                                                            << " collected columns";
+            }
+        }
     }
 
     return success();

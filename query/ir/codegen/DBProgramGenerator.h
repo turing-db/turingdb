@@ -252,9 +252,10 @@ private:
     // A standalone CALL ends no projection: what it yielded is the result
     void generateYieldedOutput();
 
-    // Emits each MATCH's WHERE and each CALL of a part in the order the query writes them,
-    // so a predicate reading what a call yielded is generated once the call has bound it.
-    void generateFiltersAndCalls(std::span<Stmt* const> stmts);
+    // Emits each MATCH's WHERE, each CALL and each VECTOR SEARCH of a part in the order the
+    // query writes them, so a predicate or an argument reading what a statement yielded is
+    // generated once that statement has bound it.
+    void generateFiltersCallsAndSearches(std::span<Stmt* const> stmts);
     void generateMatchFilter(const MatchStmt* matchStmt);
 
     // Emits the Sort a MATCH's ORDER BY asks for, over everything in flight: the rows the
@@ -266,10 +267,6 @@ private:
     void generateMatchWindow(const MatchStmt* matchStmt);
     void generateCall(const CallStmt* callStmt);
 
-    // Generates the vector searches of a part the leading pass did not, after the traversal
-    // so a search is paired with the rows it matched, and before the filters and calls so a
-    // WHERE or an argument reading what a search yielded sees it bound.
-    void generateVectorSearches(std::span<Stmt* const> stmts);
     void generateVectorSearch(const VectorSearchStmt* vectorSearchStmt);
 
     // Names the two columns a search produced as the query knows them - the yielded

@@ -128,6 +128,7 @@ def VectorSearch : NLOp<"vector_search", [Pure, InferTypeOpAdaptor]> {
   let arguments = (ins StrAttr:$index_name, UI64Attr:$k, DenseF32ArrayAttr:$query_vector);
   let results   = (outs NLIterator:$result);
   let assemblyFormat = "`(` $index_name `,` $k `,` $query_vector `)` attr-dict `:` qualified(type($result))";
+  let hasVerifier = 1;
 }
 
 /**
