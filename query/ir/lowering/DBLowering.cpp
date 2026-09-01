@@ -2735,7 +2735,7 @@ void DBLowering::lowerOutput(mlir::db::Output output) {
         // but if we have all constants, then it need be moved to the inner most loop to
         // match cardinality. An expression over constants alone is one of them: it is
         // bound where its operands are, above the loop whose rows it is projected over
-        const bool allConstants = llvm::all_of(columns, yieldsConstantColumn);
+        const bool allConstants = llvm::all_of(columns, [](mlir::Value column) { return yieldsConstantColumn(column); });
 
         if (allConstants) {
             anchorBlock = _innermostLoopBody;

@@ -2674,6 +2674,14 @@ void NLExecutor::runVectorSearchLoop(NLExecutionContext* context, NLFunctionData
     NLVectorSearchLoopData* loopData = static_cast<NLVectorSearchLoopData*>(data);
     const NLStmtContainer* loopBody = loopData->getStmts();
 
+    // A null limit leaves the loop unbounded, exactly as in runUnwindConstLoop. A spent
+    // one emits nothing, so the neighbours it would report are never read: the index is
+    // asked for them only once the budget can take a row.
+    const NLLimitState* limit = loopData->getLimit();
+    if (limit && limit->getRemaining() == 0) {
+        return;
+    }
+
     // The reader lock the accessor holds lives no longer than the search itself, so a
     // concurrent LOAD VECTOR into this index waits for the search rather than for the
     // whole query the neighbours feed.
@@ -2691,9 +2699,6 @@ void NLExecutor::runVectorSearchLoop(NLExecutionContext* context, NLFunctionData
 
     const size_t chunkSize = context->getChunkSize();
     const size_t totalCount = ids.size();
-
-    // A null limit leaves the loop unbounded, exactly as in runUnwindConstLoop.
-    const NLLimitState* limit = loopData->getLimit();
 
     // Emit the neighbours one chunk at a time: each step fills the two chunks with the
     // next slice and runs the body over them. The cursor is local to this call, so a

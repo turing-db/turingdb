@@ -61,6 +61,7 @@ public:
     using ExprValueMap = std::unordered_map<const Expr*, mlir::Value>;
     using ProjectedColumnMap = std::unordered_map<const VarDecl*, mlir::Value>;
     using ColumnPredicate = llvm::function_ref<bool(mlir::Value)>;
+    using VariableColumnBinding = llvm::function_ref<void(std::string_view, mlir::Value)>;
 
     // Maps a Cypher variable name to the last column defined for it, the one the
     // projection and its ORDER BY read
@@ -331,8 +332,14 @@ private:
 
     // The column each variable in scope is bound to, under the name it carries: the
     // traversal variables, what a CALL yielded, what a CREATE wrote, and each edge
-    // identity under its own name
+    // identity under its own name. A name a later source rebinds is visited twice, with
+    // the binding that wins last, so a map filled from it holds what the query reads.
+    void forEachVariableColumn(const VariableColumnBinding& bind) const;
     void collectVariableColumns(VariableColumnMap& variableColumns) const;
+
+    // The column one name is bound to, over the same bindings, for a caller that reads a
+    // single variable rather than every one in scope
+    mlir::Value findVariableColumn(std::string_view name) const;
 
     void translateProjection(const Projection* projection,
                              const VariableColumnMap& variableColumns,
@@ -367,6 +374,7 @@ private:
     // the traversal variable it names, when the expression is nothing but that variable,
     // otherwise the column its translation computes
     mlir::Value getOrTranslateExprColumn(const VariableColumnMap& variableColumns, const Expr* expr);
+    mlir::Value getOrTranslateExprColumn(const Expr* expr);
 
     mlir::Value resolveEntityColumn(std::string_view varName);
 
