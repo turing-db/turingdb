@@ -122,6 +122,104 @@ TEST_F(StringPredicateTest, combinedWithPropertyPredicates) {
                {{"Adam"}});
 }
 
+TEST_F(StringPredicateTest, countOverOrOfStringPredicates) {
+    expectRows("MATCH (n) WHERE n.name STARTS WITH 'C' OR n.name STARTS WITH 'A' RETURN count(n)",
+               {{"5"}});
+
+    expectRows("MATCH (n) WHERE n.name ENDS WITH 's' OR n.name STARTS WITH 'G' RETURN count(n)",
+               {{"7"}});
+
+    expectRows("MATCH (n) WHERE n.name CONTAINS 'oo' OR n.name ENDS WITH 'l' RETURN count(n)",
+               {{"3"}});
+
+    expectRows("MATCH (n) WHERE n.name STARTS WITH 'C' OR n.name STARTS WITH 'A' RETURN count(*)",
+               {{"5"}});
+}
+
+TEST_F(StringPredicateTest, countMixingStringAndPropertyPredicates) {
+    expectRows("MATCH (n:Person) WHERE n.name ENDS WITH 's' OR n.isFrench = true RETURN count(n)",
+               {{"6"}});
+
+    expectRows("MATCH (n:Person) WHERE n.name STARTS WITH 'M' OR n.hasPhD = false RETURN count(n)",
+               {{"5"}});
+
+    expectRows("MATCH (n) WHERE n.name STARTS WITH 'C' OR n.isReal = false RETURN count(n)",
+               {{"4"}});
+
+    expectRows("MATCH (n:Person) WHERE n.name STARTS WITH 'M' AND n.hasPhD = false RETURN count(n)",
+               {{"1"}});
+
+    expectRows("MATCH (n:Person) WHERE n.name ENDS WITH 's' AND n.isFrench = false RETURN count(n)",
+               {{"2"}});
+
+    expectRows("MATCH (n) WHERE n.name CONTAINS 'o' AND n.isReal = true RETURN count(n)",
+               {{"2"}});
+}
+
+TEST_F(StringPredicateTest, sumOfAgeUnderStringPredicates) {
+    expectRows("MATCH (n:Person) WHERE n.name STARTS WITH 'R' OR n.name STARTS WITH 'A' RETURN sum(n.age)",
+               {{"64"}});
+
+    expectRows("MATCH (n:Person) WHERE n.name ENDS WITH 'y' OR n.hasPhD = true RETURN sum(n.age)",
+               {{"64"}});
+
+    expectRows("MATCH (n:Person) WHERE n.name STARTS WITH 'S' OR n.name STARTS WITH 'D' RETURN sum(n.age)",
+               {{"0"}});
+
+    expectRows("MATCH (n:Person) WHERE n.name STARTS WITH 'Z' RETURN sum(n.age)",
+               {{"0"}});
+}
+
+TEST_F(StringPredicateTest, countAndSumTogether) {
+    expectRows("MATCH (n:Person) WHERE n.name STARTS WITH 'R' OR n.name ENDS WITH 'm' RETURN count(n), sum(n.age)",
+               {{"2", "64"}});
+
+    expectRows("MATCH (n:Person) WHERE n.name ENDS WITH 's' OR n.isFrench = true RETURN count(n), sum(n.age)",
+               {{"6", "64"}});
+
+    expectRows("MATCH (n:Person) WHERE n.name STARTS WITH 'R' OR n.name STARTS WITH 'S' RETURN count(n), count(n.age)",
+               {{"2", "1"}});
+}
+
+TEST_F(StringPredicateTest, aggregatesOverEdgeStringPredicates) {
+    expectRows("MATCH (a)-[e]->(b) WHERE e.name STARTS WITH 'Remy' RETURN count(e), sum(e.duration)",
+               {{"4", "60"}});
+
+    expectRows("MATCH (a)-[e]->(b) WHERE e.name STARTS WITH 'Remy' OR e.name STARTS WITH 'Ghosts' RETURN sum(e.duration)",
+               {{"260"}});
+
+    expectRows("MATCH (a)-[e]->(b) WHERE e.name ENDS WITH 'Gym' RETURN count(e), sum(e.duration)",
+               {{"3", "0"}});
+}
+
+TEST_F(StringPredicateTest, parenthesizedAndOrPermutations) {
+    expectRows("MATCH (n:Person) WHERE (n.name STARTS WITH 'M' OR n.name STARTS WITH 'R') AND n.hasPhD = true RETURN count(n)",
+               {{"2"}});
+
+    expectRows("MATCH (n:Person) WHERE (n.name ENDS WITH 's' OR n.name ENDS WITH 'y') AND n.isFrench = false RETURN count(n)",
+               {{"2"}});
+
+    expectRows("MATCH (n) WHERE n.name STARTS WITH 'C' AND (n.name ENDS WITH 's' OR n.name ENDS WITH 'g') RETURN count(n)",
+               {{"3"}});
+
+    expectRows("MATCH (n:Person) WHERE n.name STARTS WITH 'R' OR n.name STARTS WITH 'A' OR n.name STARTS WITH 'M' RETURN count(n), sum(n.age)",
+               {{"4", "64"}});
+}
+
+TEST_F(StringPredicateTest, aggregatesOverDobStringPredicates) {
+    expectRows("MATCH (n:Person) WHERE n.dob STARTS WITH '18' RETURN count(n)",
+               {{"2"}});
+
+    expectRows("MATCH (n:Person) WHERE n.dob ENDS WITH '05' OR n.dob ENDS WITH '07' RETURN count(n)",
+               {{"2"}});
+
+    expectRows("MATCH (n:Person) WHERE n.dob CONTAINS '/0' RETURN count(n), sum(n.age)",
+               {{"4", "64"}});
+
+    expectRows("MATCH (n:Person) WHERE n.name STARTS WITH 'A' OR n.dob STARTS WITH '24' RETURN count(n), sum(n.age)",
+               {{"2", "32"}});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
