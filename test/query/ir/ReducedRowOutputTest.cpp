@@ -116,6 +116,31 @@ func.func @main() {
 }
 )mlir";
 
+// The keyless drain as the inner factor of a cross product: the crossed columns hold one
+// row per outer row in the very block whose own list holds one, so the step the tally
+// stands for is no longer the single row it collapsed to.
+constexpr const char* crossedDrainReadsTheTally = R"mlir(
+func.func @main() {
+  %tally = nl.count
+  %buffer = nl.collect_buffer keys 0
+  %people = nl.scan_nodes_by_label(["Person"])
+  nl.for %person in %people : !nl.iter<!nl.chunk<!storage.node_id>> {
+    nl.collect_update %buffer, (%person) : !nl.chunk<!storage.node_id>
+    nl.count_update %tally, %person all_rows : !nl.chunk<!storage.node_id>
+  }
+  %count = nl.count_result(%tally) : !nl.chunk<ui64>
+  %interests = nl.scan_nodes_by_label(["Interest"])
+  nl.for %interest in %interests : !nl.iter<!nl.chunk<!storage.node_id>> {
+    %groups = nl.collect(%buffer) : !nl.iter<!nl.chunk<!storage.list<!storage.node_id>>>
+    nl.for %list in %groups : !nl.iter<!nl.chunk<!storage.list<!storage.node_id>>> {
+      %crossedInterest, %crossedList = nl.cross_product {%interest} {%list} : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.list<!storage.node_id>>}
+      nl.output(%crossedInterest, %crossedList, %count) names ["interest", "people", "total"] : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.list<!storage.node_id>>, !nl.chunk<ui64>
+    }
+  }
+  func.return
+}
+)mlir";
+
 // A computation over the tally, @param depth levels deep, each level reading the level
 // below it twice. Classifying the output column has to visit each level once rather than
 // once per path down to the tally, or the cost doubles with every level.
@@ -195,6 +220,17 @@ TEST_F(ReducedRowOutputTest, rejectsATallyReadByAStepThatKeepsManyRows) {
 
     RowCountingSink sink;
     EXPECT_THROW(runProgram(scanLoopReadsTheTally, reader.getView(), sink), IRException);
+}
+
+TEST_F(ReducedRowOutputTest, rejectsATallyReadBesideACrossProductInTheDrainBody) {
+    auto graph = Graph::create();
+    SimpleGraph::createSimpleGraph(graph.get());
+
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    RowCountingSink sink;
+    EXPECT_THROW(runProgram(crossedDrainReadsTheTally, reader.getView(), sink), IRException);
 }
 
 TEST_F(ReducedRowOutputTest, classifiesADeepComputationOverTheTally) {

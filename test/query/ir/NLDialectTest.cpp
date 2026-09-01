@@ -39,8 +39,76 @@ protected:
         return function;
     }
 
+    // Parses one nl program and reports whether it verified.
+    bool parses(const char* programText) {
+        const mlir::OwningOpRef<mlir::ModuleOp> module = mlir::parseSourceString<mlir::ModuleOp>(programText,
+                                                                                                mlir::ParserConfig(&_context));
+
+        return static_cast<bool>(module);
+    }
+
     mlir::MLIRContext _context;
 };
+
+// The columns an nl.collect_update carries are the buffer's grouping keys, then at least
+// one collected value, then one input per reduction the buffer names.
+constexpr const char* collectsOneValueUnderOneKey = R"mlir(
+func.func @main() {
+  %buffer = nl.collect_buffer keys 1 distinct [0]
+  %nodes = nl.scan_nodes()
+  nl.for %node in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    nl.collect_update %buffer, (%node, %node) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
+  }
+  func.return
+}
+)mlir";
+
+// A key count past the columns leaves nothing to collect, and summing it with the
+// aggregate count would wrap in unsigned 64-bit before the shortfall is noticed.
+constexpr const char* collectsUnderMoreKeysThanColumns = R"mlir(
+func.func @main() {
+  %buffer = nl.collect_buffer keys 18446744073709551615
+  %nodes = nl.scan_nodes()
+  nl.for %node in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    nl.collect_update %buffer, (%node, %node) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
+  }
+  func.return
+}
+)mlir";
+
+// A distinct index naming no collected column would dedupe nothing, leaving the plain
+// list a collect(DISTINCT x) asked to charge each value once.
+constexpr const char* collectsDistinctPastTheValues = R"mlir(
+func.func @main() {
+  %buffer = nl.collect_buffer keys 0 distinct [3]
+  %nodes = nl.scan_nodes()
+  nl.for %node in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    nl.collect_update %buffer, (%node) : !nl.chunk<!storage.node_id>
+  }
+  func.return
+}
+)mlir";
+
+constexpr const char* searchesForThreeNeighbours = R"mlir(
+func.func @main() {
+  %neighbours = nl.vector_search("vectors", 3, [1.000000e+00, 0.000000e+00]) : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<f64>>>
+  func.return
+}
+)mlir";
+
+constexpr const char* searchesForNoNeighbour = R"mlir(
+func.func @main() {
+  %neighbours = nl.vector_search("vectors", 0, [1.000000e+00, 0.000000e+00]) : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<f64>>>
+  func.return
+}
+)mlir";
+
+constexpr const char* searchesForAVectorOfNoDimension = R"mlir(
+func.func @main() {
+  %neighbours = nl.vector_search("vectors", 3, []) : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<f64>>>
+  func.return
+}
+)mlir";
 
 // An nl.limit_truncate passes its column types through unchanged - results mirror
 // the operand chunk types - and verifies in a limit/update/truncate/output chain.
@@ -742,6 +810,52 @@ TEST_F(NLDialectTest, verifierAcceptsDeleteEdge) {
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
     EXPECT_EQ(deleteEdge.getInputEdges().getType(), edgeChunkType);
     EXPECT_EQ(deleteEdge->getNumResults(), 0u);
+}
+
+// db.collect bounds its key count against the columns it is given before summing it with
+// the aggregates, and rejects a distinct index naming no collected column. The nl sibling
+// carries the split across two ops, so the update is where the same guarantees are made.
+TEST_F(NLDialectTest, verifierAcceptsCollectUpdateSplitAcrossKeysAndValues) {
+    EXPECT_TRUE(parses(collectsOneValueUnderOneKey));
+}
+
+TEST_F(NLDialectTest, verifierRejectsCollectUpdateWithMoreKeysThanColumns) {
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+
+    EXPECT_FALSE(parses(collectsUnderMoreKeysThanColumns));
+}
+
+TEST_F(NLDialectTest, verifierRejectsCollectUpdateWithADistinctIndexPastTheValues) {
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+
+    EXPECT_FALSE(parses(collectsDistinctPastTheValues));
+}
+
+// The shapes db.vector_search rejects reach faiss through the nl sibling otherwise: a
+// search reporting no neighbour sizes its output buffers at zero, and a query vector of
+// no dimension has nothing to score against.
+TEST_F(NLDialectTest, verifierAcceptsVectorSearchForSeveralNeighbours) {
+    EXPECT_TRUE(parses(searchesForThreeNeighbours));
+}
+
+TEST_F(NLDialectTest, verifierRejectsVectorSearchForNoNeighbour) {
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+
+    EXPECT_FALSE(parses(searchesForNoNeighbour));
+}
+
+TEST_F(NLDialectTest, verifierRejectsVectorSearchForAVectorOfNoDimension) {
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+
+    EXPECT_FALSE(parses(searchesForAVectorOfNoDimension));
 }
 
 }

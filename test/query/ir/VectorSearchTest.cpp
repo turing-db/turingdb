@@ -351,6 +351,29 @@ TEST_F(VectorSearchTest, searchFiltersItsNeighboursWithTheYieldPredicate) {
     EXPECT_EQ(sink.getScores(), expectedScores);
 }
 
+// The predicate of a search's YIELD ... WHERE can read what a CALL written before it
+// yielded, so the statements of a part are generated in the order the query writes them
+// rather than every search ahead of every call.
+TEST_F(VectorSearchTest, searchYieldPredicateReadsWhatAnEarlierCallYielded) {
+    loadFixtureVectors();
+
+    QueryStatus status;
+    VectorSearchSink sink;
+    runQuery("CALL db.getNodes([0]) YIELD inEdgeCount "
+             "VECTOR SEARCH IN vectors FOR 3 (1.0, 0.0, 0.0, 0.0) YIELD ids, score WHERE inEdgeCount >= 0 "
+             "RETURN ids, score",
+             status,
+             sink);
+
+    ASSERT_TRUE(status.isOk()) << status.getError();
+
+    const std::vector<uint64_t> expectedIDs {1, 2, 3};
+    const std::vector<double> expectedScores {0.0, 1.0, 9.0};
+
+    EXPECT_EQ(sink.getIDs(), expectedIDs);
+    EXPECT_EQ(sink.getScores(), expectedScores);
+}
+
 // Asking for more neighbours than the index holds is not an error: the search reports
 // the ones it found, which is the set-membership semantics a const scan has too.
 TEST_F(VectorSearchTest, searchStopsAtTheNeighboursTheIndexHolds) {

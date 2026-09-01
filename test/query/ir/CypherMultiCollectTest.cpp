@@ -191,6 +191,15 @@ TEST_F(CypherMultiCollectTest, collectsAConstantBesideAVaryingColumn) {
                {{"[1, 1]", "[Bio, Cooking]"}});
 }
 
+// A constant tells no two rows apart, so a projection whose only grouping key is one
+// groups nothing: the two lists are the one keyless accumulator's, as they are without it
+TEST_F(CypherMultiCollectTest, collectsTwoValuesUnderAConstantKey) {
+    expectRows("MATCH (i:Interest) RETURN 1 AS x, collect(i.name), collect(i)",
+               {{"1",
+                 "[Computers, Eighties, Bio, Cooking, Ghosts, Padel, Animals, Gym, Travel, JiuJitsu]",
+                 "[2, 3, 4, 5, 6, 7, 10, 13, 14, 16]"}});
+}
+
 // A collected list is a value like any other, so DISTINCT over the projected rows reads
 // two of them the way it reads two scalars
 TEST_F(CypherMultiCollectTest, dedupesTheRowsTwoListsProject) {

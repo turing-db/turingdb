@@ -843,8 +843,7 @@ void DBProgramGenerator::generatePart(std::span<Stmt* const> stmts) {
     closeBoundMerges();
     resolveEdgeIdentities();
     generatePropertyConstraints(stmts);
-    generateVectorSearches(stmts);
-    generateFiltersAndCalls(stmts);
+    generateFiltersCallsAndSearches(stmts);
     resolveYieldedIdentities();
 }
 
@@ -1778,13 +1777,14 @@ void DBProgramGenerator::generateLeadingYields(std::span<Stmt* const> stmts) {
     _part._drivenRoot = drivenRoot;
 }
 
-void DBProgramGenerator::generateFiltersAndCalls(std::span<Stmt* const> stmts) {
-    // In statement order, so a call reading what an earlier one yielded sees it, and a
-    // MATCH's WHERE reading a yielded value is generated once the call has bound it - the
-    // reading statements are generated in the order the query writes them.
+void DBProgramGenerator::generateFiltersCallsAndSearches(std::span<Stmt* const> stmts) {
+    // In statement order, so a call or a search reading what an earlier one yielded sees
+    // it, and a MATCH's WHERE reading a yielded value is generated once the statement has
+    // bound it - the reading statements are generated in the order the query writes them.
     bool matchSeen = false;
     for (const Stmt* stmt : stmts) {
         const Stmt::Kind kind = stmt->getKind();
+        const bool drivesTheTraversal = _part._drivenRoot && !matchSeen;
 
         if (kind == Stmt::Kind::MATCH) {
             matchSeen = true;
@@ -1793,12 +1793,10 @@ void DBProgramGenerator::generateFiltersAndCalls(std::span<Stmt* const> stmts) {
             generateMatchFilter(matchStmt);
             generateMatchOrderBy(matchStmt);
             generateMatchWindow(matchStmt);
-        } else if (kind == Stmt::Kind::CALL) {
-            const bool drivesTheTraversal = _part._drivenRoot && !matchSeen;
-
-            if (!drivesTheTraversal) {
-                generateCall(static_cast<const CallStmt*>(stmt));
-            }
+        } else if (kind == Stmt::Kind::CALL && !drivesTheTraversal) {
+            generateCall(static_cast<const CallStmt*>(stmt));
+        } else if (kind == Stmt::Kind::VECTOR_SEARCH && !drivesTheTraversal) {
+            generateVectorSearch(static_cast<const VectorSearchStmt*>(stmt));
         }
     }
 }
@@ -2025,23 +2023,6 @@ void DBProgramGenerator::generateCall(const CallStmt* callStmt) {
     rebindInFlightColumns(results, yieldedVariables.size(), inFlight);
 
     generateYieldFilter(yieldItems);
-}
-
-void DBProgramGenerator::generateVectorSearches(std::span<Stmt* const> stmts) {
-    bool matchSeen = false;
-    for (const Stmt* stmt : stmts) {
-        const Stmt::Kind kind = stmt->getKind();
-
-        if (kind == Stmt::Kind::MATCH) {
-            matchSeen = true;
-        } else if (kind == Stmt::Kind::VECTOR_SEARCH) {
-            const bool drivesTheTraversal = _part._drivenRoot && !matchSeen;
-
-            if (!drivesTheTraversal) {
-                generateVectorSearch(static_cast<const VectorSearchStmt*>(stmt));
-            }
-        }
-    }
 }
 
 void DBProgramGenerator::generateVectorSearch(const VectorSearchStmt* vectorSearchStmt) {
@@ -3843,6 +3824,14 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         }
     }
 
+    // Every non-aggregate item was constant, so nothing tells the matched rows apart: the
+    // projection is the one keyless group, whichever way it spells its key - RETURN 1 AS
+    // x, count(n) counts the whole match, as RETURN count(n) does
+    if (keyColumns.empty()) {
+        generateKeylessCollect(projection);
+        return;
+    }
+
     // A key may order the groups by an aggregate the projection does not return -
     // RETURN a.name ORDER BY count(b) - which the aggregation has to compute all the same.
     // Its result column is then read by the sort alone, and no db.output reads it, which is
@@ -3917,13 +3906,6 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
     const size_t aggCount = aggInputColumns.size();
     const size_t collectCount = collectInputColumns.size();
     bioassert(aggCount + collectCount > 0, "grouped aggregate with no aggregate columns.");
-
-    // Every non-aggregate item was constant, so nothing tells the matched rows apart:
-    // the projection is one group, which is the scalar aggregate the projection
-    // translates on its own - RETURN 1 AS x, count(n) counts the whole match
-    if (keyCount == 0) {
-        return;
-    }
 
     const bool isCollecting = collectCount > 0;
 
