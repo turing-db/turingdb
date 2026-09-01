@@ -2453,12 +2453,8 @@ void NLTranslator::translateShortestPathBuffer(nl::ShortestPathBuffer buffer, NL
     NLShortestPathState* state = _program->allocShortestPathState();
     _shortestPathStates[buffer.getState()] = state;
 
-    ColumnNodeIDs* sources = _memory->alloc<ColumnNodeIDs>();
-    ColumnNodeIDs* targets = _memory->alloc<ColumnNodeIDs>();
-    state->setBuffers(sources, targets);
-
-    // The reset empties both sets each time the block holding this nl.shortest_path_buffer
-    // runs: once at function scope
+    // The reset empties both node sets each time the block holding this
+    // nl.shortest_path_buffer runs: once at function scope.
     NLShortestPathResetData* resetData = _program->allocFunctionData<NLShortestPathResetData>(state);
     body->emplaceStmt(&NLExecutor::runShortestPathReset, resetData);
 }

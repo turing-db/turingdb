@@ -2385,17 +2385,14 @@ void shortestPathSearch(NLExecutionContext* context, NLShortestPathLoopData* loo
     weightWriter.setOutput(weightValues);
     weightWriter.setIndices(weightIndices);
 
-    std::unordered_set<NodeID> targets;
-    for (const NodeID id : *state->targets()) {
-        targets.insert(id);
-    }
+    const std::unordered_set<NodeID>& targets = state->targets();
 
     std::priority_queue<ShortestPathHeapNode<Weight>,
                         std::vector<ShortestPathHeapNode<Weight>>,
                         ShortestPathHeapOrder<Weight>> heap;
     std::unordered_map<NodeID, ShortestPathBest<Weight>> best;
 
-    for (const NodeID id : *state->sources()) {
+    for (const NodeID id : state->sources()) {
         heap.push({id, NodeID(), EdgeID(), 0});
         best.insert({id, {NodeID(), EdgeID(), 0}});
     }
@@ -4058,10 +4055,9 @@ void NLExecutor::runShortestPathUpdate(NLExecutionContext* context, NLFunctionDa
     NLShortestPathState* state = update->getState();
 
     const std::vector<NodeID>& nodes = update->getNodes()->getRaw();
-    ColumnNodeIDs* set = update->isTarget() ? state->targets() : state->sources();
+    std::unordered_set<NodeID>& set = update->isTarget() ? state->targets() : state->sources();
 
-    std::vector<NodeID>& setRaw = set->getRaw();
-    setRaw.insert(setRaw.end(), nodes.begin(), nodes.end());
+    set.insert(nodes.begin(), nodes.end());
 }
 
 void NLExecutor::runShortestPathLoop(NLExecutionContext* context, NLFunctionData* data) {

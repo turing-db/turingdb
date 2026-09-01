@@ -2095,21 +2095,19 @@ private:
 class NLShortestPathState {
 public:
     void reset() {
-        _sources->clear();
-        _targets->clear();
+        _sources.clear();
+        _targets.clear();
     }
 
-    void setBuffers(ColumnNodeIDs* sources, ColumnNodeIDs* targets) {
-        _sources = sources;
-        _targets = targets;
-    }
+    std::unordered_set<NodeID>& sources() { return _sources; }
+    std::unordered_set<NodeID>& targets() { return _targets; }
 
-    ColumnNodeIDs* sources() const { return _sources; }
-    ColumnNodeIDs* targets() const { return _targets; }
+    const std::unordered_set<NodeID>& sources() const { return _sources; }
+    const std::unordered_set<NodeID>& targets() const { return _targets; }
 
 private:
-    ColumnNodeIDs* _sources {nullptr};
-    ColumnNodeIDs* _targets {nullptr};
+    std::unordered_set<NodeID> _sources;
+    std::unordered_set<NodeID> _targets;
 };
 
 // nl.shortest_path_buffer data: empties the accumulator each time the block it lives
