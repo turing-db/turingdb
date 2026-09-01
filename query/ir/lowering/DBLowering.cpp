@@ -349,6 +349,15 @@ bool isNullableChunk(mlir::Type chunkType) {
     return mlir::isa<storage::NullableType>(chunk.getElementType());
 }
 
+bool isListChunk(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        return false;
+    }
+
+    return mlir::isa<storage::ListType>(chunk.getElementType());
+}
+
 // The null literal's chunk: nullable with no value type of its own.
 bool isUntypedNullChunk(mlir::Type chunkType) {
     const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
@@ -771,7 +780,7 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
     } else if (mlir::isa<mlir::db::AddOp>(operation)) {
         lowerBinaryOp<nl::Add>(operation, BinaryResultKind::Numeric);
     } else if (mlir::isa<mlir::db::ConcatOp>(operation)) {
-        lowerBinaryOp<nl::Concat>(operation, BinaryResultKind::String);
+        lowerBinaryOp<nl::Concat>(operation, BinaryResultKind::Concat);
     } else if (mlir::isa<mlir::db::SubOp>(operation)) {
         lowerBinaryOp<nl::Sub>(operation, BinaryResultKind::Numeric);
     } else if (mlir::isa<mlir::db::MulOp>(operation)) {
@@ -2665,7 +2674,11 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
         }
         break;
 
-        case BinaryResultKind::String: {
+        case BinaryResultKind::Concat: {
+            if (isListChunk(lhsType) || isListChunk(rhsType)) {
+                return storage::ListType::get(ctx, mlir::NoneType::get(ctx));
+            }
+
             const mlir::Type stringElement = storage::StringType::get(ctx);
             return operandNullable ? storage::NullableType::get(ctx, stringElement) : stringElement;
         }
