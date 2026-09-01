@@ -187,6 +187,27 @@ struct Power {
     }
 };
 
+struct StartsWith {
+    template <StringLike T, StringLike U>
+    bool operator()(const T& text, U&& prefix) const {
+        return text.starts_with(std::forward<U>(prefix));
+    }
+};
+
+struct EndsWith {
+    template <StringLike T, StringLike U>
+    bool operator()(const T& text, U&& suffix) const {
+        return text.ends_with(std::forward<U>(suffix));
+    }
+};
+
+struct Contains {
+    template <StringLike T, StringLike U>
+    bool operator()(const T& text, U&& pattern) const {
+        return text.find(std::forward<U>(pattern)) != T::npos;
+    }
+};
+
 }
 
 using Add = BinaryOp<std::plus<>>;
@@ -195,6 +216,9 @@ using Mul = BinaryOp<std::multiplies<>>;
 using Div = BinaryOp<SafeDivides>;
 using Mod = BinaryOp<SafeModulo>;
 using Pow = BinaryOp<Power>;
+using StartsWith = BinaryOp<StartsWith>;
+using EndsWith = BinaryOp<EndsWith>;
+using Contains = BinaryOp<Contains>;
 
 }
 
