@@ -2161,10 +2161,13 @@ void DBProgramGenerator::hoistConstantsOutOfLeftFactor(mlir::db::CrossProduct cr
     mlir::Block* const leftBlock = &crossProduct.getLeftFactor().front();
 
     // Every operand of a constant column is itself a constant column, so the whole cone
-    // moves and nothing left outside reads what stayed in.
+    // moves and nothing left outside reads what stayed in. Each op of that cone is asked
+    // in turn, so an answer is kept for the ops above it rather than rewalked under each.
+    llvm::DenseMap<mlir::Value, bool> classified;
+
     llvm::SmallVector<mlir::Operation*> constantOps;
     for (mlir::Operation& op : *leftBlock) {
-        const bool yieldsAConstant = op.getNumResults() > 0 && yieldsConstantColumn(op.getResult(0));
+        const bool yieldsAConstant = op.getNumResults() > 0 && yieldsConstantColumn(op.getResult(0), classified);
 
         if (yieldsAConstant) {
             constantOps.push_back(&op);
@@ -2475,10 +2478,7 @@ mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr,
             return getOrTranslateExprColumn(*variableColumns, argExpr);
         }
 
-        VariableColumnMap ownColumns;
-        collectVariableColumns(ownColumns);
-
-        return getOrTranslateExprColumn(ownColumns, argExpr);
+        return getOrTranslateExprColumn(argExpr);
     } else if (argType != EvaluatedType::Wildcard) {
         translateExpr(argExpr);
         return _part._exprMap.at(argExpr);
@@ -2733,31 +2733,48 @@ void DBProgramGenerator::publishInFlightColumns() {
     }
 }
 
-void DBProgramGenerator::collectVariableColumns(VariableColumnMap& variableColumns) const {
+void DBProgramGenerator::forEachVariableColumn(const VariableColumnBinding& bind) const {
     for (const auto& [cypherVar, mlirCol] : _part._varMap) {
         const std::string_view varName = cypherVar->getName();
 
         bioassert(not mlirCol.empty(), "No definitions for {}", varName);
 
-        variableColumns[varName] = mlirCol.back();
+        bind(varName, mlirCol.back());
     }
 
     // A CALL's yielded columns are variables of the query too, named by the YIELD.
     for (const YieldedColumn& yieldedColumn : _part._yieldedColumns) {
-        variableColumns[yieldedColumn.first] = yieldedColumn.second;
+        bind(yieldedColumn.first, yieldedColumn.second);
     }
 
     // So are the entities a CREATE wrote, named by its pattern
     for (const auto& [createdName, created] : _part._createdEntities) {
-        variableColumns[createdName] = created._column;
+        bind(createdName, created._column);
     }
 
     for (const auto& [name, vars] : _vdg.edgeIdentities()) {
         bioassert(!vars.empty(), "Empty edge identity for '{}'", name);
         const VariableDependency* representative = vars.front();
         bioassert(_part._varMap.contains(representative), "Edge identity representative not in varMap");
-        variableColumns[name] = _part._varMap.at(representative).back();
+        bind(name, _part._varMap.at(representative).back());
     }
+}
+
+void DBProgramGenerator::collectVariableColumns(VariableColumnMap& variableColumns) const {
+    forEachVariableColumn([&variableColumns](std::string_view name, mlir::Value column) {
+        variableColumns[name] = column;
+    });
+}
+
+mlir::Value DBProgramGenerator::findVariableColumn(std::string_view name) const {
+    mlir::Value found;
+    forEachVariableColumn([&found, name](std::string_view boundName, mlir::Value column) {
+        if (boundName == name) {
+            found = column;
+        }
+    });
+
+    return found;
 }
 
 void DBProgramGenerator::translateProjection(const Projection* projection,
@@ -3028,6 +3045,22 @@ mlir::Value DBProgramGenerator::getOrTranslateExprColumn(const VariableColumnMap
         const auto findIt = variableColumns.find(var->getName());
         if (findIt != end(variableColumns)) {
             return findIt->second;
+        }
+    }
+
+    translateExpr(expr);
+    return _part._exprMap.at(expr);
+}
+
+// The same, for a caller holding no map: the one name the expression could name is looked
+// up over the bindings rather than every one of them being gathered to answer for it
+mlir::Value DBProgramGenerator::getOrTranslateExprColumn(const Expr* expr) {
+    if (expr->getKind() == Expr::Kind::SYMBOL) {
+        const VarDecl* var = expr->getExprVarDecl();
+        bioassert(var, "Symbol expression without a declaration.");
+
+        if (const mlir::Value column = findVariableColumn(var->getName())) {
+            return column;
         }
     }
 

@@ -6,17 +6,41 @@
 
 using namespace db;
 
-bool db::yieldsConstantColumn(mlir::Value value) {
-    mlir::Operation* const definingOp = value.getDefiningOp();
+namespace {
 
-    if (!definingOp) {
-        return false;
-    } else if (definingOp->hasTrait<mlir::OpTrait::ConstantLike>()) {
-        return true;
-    } else if (!definingOp->hasTrait<mlir::OpTrait::ConstantThroughOperands>()) {
-        return false;
+bool isConstantColumn(mlir::Value value, llvm::DenseMap<mlir::Value, bool>* classified) {
+    if (classified) {
+        const auto classifiedIt = classified->find(value);
+        if (classifiedIt != classified->end()) {
+            return classifiedIt->second;
+        }
     }
 
-    return llvm::all_of(definingOp->getOperands(),
-                        [](mlir::Value operand) { return yieldsConstantColumn(operand); });
+    mlir::Operation* const definingOp = value.getDefiningOp();
+
+    bool isConstant = false;
+    if (definingOp) {
+        if (definingOp->hasTrait<mlir::OpTrait::ConstantLike>()) {
+            isConstant = true;
+        } else if (definingOp->hasTrait<mlir::OpTrait::ConstantThroughOperands>()) {
+            isConstant = llvm::all_of(definingOp->getOperands(),
+                                      [classified](mlir::Value operand) { return isConstantColumn(operand, classified); });
+        }
+    }
+
+    if (classified) {
+        (*classified)[value] = isConstant;
+    }
+
+    return isConstant;
+}
+
+}
+
+bool db::yieldsConstantColumn(mlir::Value value) {
+    return isConstantColumn(value, nullptr);
+}
+
+bool db::yieldsConstantColumn(mlir::Value value, llvm::DenseMap<mlir::Value, bool>& classified) {
+    return isConstantColumn(value, &classified);
 }
