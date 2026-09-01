@@ -10,6 +10,7 @@
 #include "ColumnConst.h"
 #include "TypeUtils.h"
 #include "buffers/StringBuffer.h"
+#include "list/ListBuffer.h"
 
 #include "BioAssert.h"
 #include "TuringException.h"
@@ -192,11 +193,12 @@ struct Power {
     }
 };
 
-struct StringConcatenate {
-    StringBuffer* _buffer {nullptr};
+struct Concatenate {
+    StringBuffer* _stringBuffer {nullptr};
+    QueryListBuffer* _listBuffer {nullptr};
 
     inline std::string_view operator()(std::string_view a, std::string_view b) const {
-        return _buffer->concatenate(a, b);
+        return _stringBuffer->concatenate(a, b);
     }
 
     template <typename A, typename B>
@@ -217,7 +219,11 @@ struct StringConcatenate {
         const std::string_view av = TypeUtils::unwrap(a);
         const std::string_view bv = TypeUtils::unwrap(b);
 
-        return _buffer->concatenate(av, bv);
+        return _stringBuffer->concatenate(av, bv);
+    }
+
+    inline ListView operator()(ListView a, ListView b) const {
+        return _listBuffer->concatenate(a, b);
     }
 };
 
@@ -229,7 +235,7 @@ using Mul = BinaryOp<std::multiplies<>>;
 using Div = BinaryOp<SafeDivides>;
 using Mod = BinaryOp<SafeModulo>;
 using Pow = BinaryOp<Power>;
-using Concat = StringConcatenate;
+using Concat = Concatenate;
 
 }
 
