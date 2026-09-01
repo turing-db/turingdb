@@ -70,6 +70,8 @@ private:
 
     TombstoneFilter _filter;
 
+    size_t _ptr;
+
     void filterTombstones();
 };
 

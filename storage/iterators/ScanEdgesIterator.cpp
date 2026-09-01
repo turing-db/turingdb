@@ -8,6 +8,8 @@
 
 #include "BioAssert.h"
 
+#include <valgrind/callgrind.h>
+
 namespace db {
 
 ScanEdgesIterator::ScanEdgesIterator(const GraphView& view)
@@ -84,13 +86,14 @@ static constexpr size_t NColumns = 4;
 static constexpr size_t NCombinations = 1 << NColumns;
 
 void ScanEdgesChunkWriter::fill(size_t maxCount) {
+    CALLGRIND_START_INSTRUMENTATION;
     size_t remainingToMax = maxCount;
     static constexpr auto bools = generateArray<NColumns, NCombinations>();
     static constexpr auto masks = generateBitmasks<NColumns, NCombinations>();
     bioassert(_srcs || _tgts || _edgeIDs || _types,
               "ScanEdgesChunkWriter must be initialized with at least one valid column");
 
-    const auto getPrevSize = [&]() {
+    [[maybe_unused]] const auto getPrevSize = [&]() {
         if (_srcs) {
             return _srcs->size();
         }
@@ -107,6 +110,7 @@ void ScanEdgesChunkWriter::fill(size_t maxCount) {
         bioassert(false, "At least one column must be set");
     };
 
+    /*
     if (_srcs) {
         _srcs->clear();
     }
@@ -119,6 +123,8 @@ void ScanEdgesChunkWriter::fill(size_t maxCount) {
     if (_types) {
         _types->clear();
     }
+    */
+    _ptr = 0;
 
     const auto fill = [&]<std::array<bool, NColumns> conditions>() {
         while (isValid() && remainingToMax > 0) {
@@ -126,7 +132,7 @@ void ScanEdgesChunkWriter::fill(size_t maxCount) {
             const auto partOutEnd = partOutEdges.end();
             const size_t availInPart = std::distance(_edgeIt, partOutEnd);
             const size_t rangeSize = std::min(remainingToMax, availInPart);
-            const size_t prevSize = getPrevSize();
+            const size_t prevSize = _ptr;
             const size_t newSize = prevSize + rangeSize;
 
             if constexpr (conditions[0]) {
@@ -142,18 +148,18 @@ void ScanEdgesChunkWriter::fill(size_t maxCount) {
                 _types->resize(newSize);
             }
             remainingToMax -= rangeSize;
-            for (size_t i = prevSize; i < newSize; i++) {
+            for (; _ptr < newSize; _ptr++) {
                 if constexpr (conditions[0]) {
-                    (*_srcs)[i] = _edgeIt->_nodeID;
+                    (*_srcs)[_ptr] = _edgeIt->_nodeID;
                 }
                 if constexpr (conditions[1]) {
-                    (*_edgeIDs)[i] = _edgeIt->_edgeID;
+                    (*_edgeIDs)[_ptr] = _edgeIt->_edgeID;
                 }
                 if constexpr (conditions[2]) {
-                    (*_tgts)[i] = _edgeIt->_otherID;
+                    (*_tgts)[_ptr] = _edgeIt->_otherID;
                 }
                 if constexpr (conditions[3]) {
-                    (*_types)[i] = _edgeIt->_edgeTypeID;
+                    (*_types)[_ptr] = _edgeIt->_edgeTypeID;
                 }
                 ++_edgeIt;
             }
@@ -183,6 +189,7 @@ void ScanEdgesChunkWriter::fill(size_t maxCount) {
     if (_view.tombstones().hasEdges()) {
         filterTombstones();
     }
+    CALLGRIND_STOP_INSTRUMENTATION;
 }
 
 }
