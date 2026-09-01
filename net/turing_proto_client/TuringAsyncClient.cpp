@@ -1,4 +1,3 @@
-
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
@@ -19,6 +18,8 @@
 #include "TuringProtoDecoder.h"
 #include "TuringProtoHeaders.h"
 #include "TuringException.h"
+#include "TuringSink.h"
+#include "TuringSinkColumnContainer.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
 
@@ -138,9 +139,11 @@ TuringAsyncClient::TuringAsyncClient(const std::string& remoteAddress,
     _remotePort(remotePort),
     _localMem(localMem),
     _inBuf(bufferCapacity),
+    _sink(_localMem, &_embeddingBuffer, &_stringBuffer, &_listBuffer),
     _dfMan(std::make_unique<db::DataframeManager>()),
     _df(std::make_unique<db::Dataframe>()),
-    _decoder(std::make_unique<TuringProtoDecoder>(_localMem, _dfMan.get(), &_inBuf, &_embeddingBuffer, &_stringBuffer, &_listBuffer, _colSchemas))
+    _dataframeContainer(std::make_unique<TuringSinkColumnContainer>(_df.get(), _dfMan.get())),
+    _decoder(&_inBuf, &_sink, _columnSchemas)
 {
     _sendBuffer.reserve(256);
 }
@@ -376,21 +379,21 @@ void TuringAsyncClient::processProtoPacket() {
 
     switch (responseHeader._type) {
         case MessageTypes::CHUNK_HEADER:
-            _decoder->decodeIncomingChunkHeader(_df.get());
+            _decoder.decodeIncomingChunkHeader(_dataframeContainer.get());
         break;
 
         case MessageTypes::CHUNK:
-            _decoder->decodeIncomingChunk(_df.get());
+            _decoder.decodeIncomingChunk(_dataframeContainer.get());
         break;
 
         case MessageTypes::END_CHUNK:
             _callbackFired = true;
             _callback(_df.get());
             _df->clear();
-            for (auto& schema : _colSchemas) {
-                schema.getColState().reset();
+            for (auto& schema : _columnSchemas) {
+                schema.getColumnState().reset();
             }
-            _decoder->reset();
+            _decoder.reset();
         break;
 
         case MessageTypes::END: {
@@ -626,21 +629,17 @@ void TuringAsyncClient::reset() {
 
     // Proto payload and decoded-response state. _df/_dfMan are rebuilt from scratch so each
     // query starts with an empty dataframe; recreating _dfMan frees the columns it owned for
-    // the previous query. _decoder is rebound to the fresh _dfMan.
+    // the previous query. The decoder references _inBuf, _sink and _columnSchemas, which all
+    // live for the client's lifetime, so it is reset in place (which also resets the sink).
     _inBuf.reset();
     _embeddingBuffer.clear();
     _stringBuffer.clear();
     _listBuffer.clear();
-    _colSchemas.clear();
+    _columnSchemas.clear();
+    _decoder.reset();
     _dfMan = std::make_unique<db::DataframeManager>();
     _df = std::make_unique<db::Dataframe>();
-    _decoder = std::make_unique<TuringProtoDecoder>(_localMem,
-                                                    _dfMan.get(),
-                                                    &_inBuf,
-                                                    &_embeddingBuffer,
-                                                    &_stringBuffer,
-                                                    &_listBuffer,
-                                                    _colSchemas);
+    _dataframeContainer = std::make_unique<TuringSinkColumnContainer>(_df.get(), _dfMan.get());
 
     // Per-query callback and accumulated result.
     _callback = db::QueryCallbacks::OnOutputData();

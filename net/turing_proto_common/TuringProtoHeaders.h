@@ -64,7 +64,6 @@ enum class ColumnInternalKind : uint32_t {
     ENTITY_LIST,
     LIST_VIEW,
     VALUE_TYPE,
-    NULL_VALUE,
     LIST_ELEMENT_VIEW,
     NODE_ID,
     EDGE_ID,

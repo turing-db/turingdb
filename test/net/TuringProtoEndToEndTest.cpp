@@ -172,6 +172,42 @@ TEST_F(TuringProtoEndToEndTest, ManySmallQueryChunks) {
     EXPECT_EQ(received, expected);
 }
 
+// An optional-constant column across many chunk groups: toInteger of a string literal
+// evaluates to ColumnConst<std::optional<Int64>>, re-encoded per group by chunkRows=1.
+// Guards the END_CHUNK per-column state reset; the constant sits last in the projection
+// so a decode desync fails as a wrong value rather than a garbage string allocation.
+TEST_F(TuringProtoEndToEndTest, OptionalConstantAcrossManyChunkGroups) {
+    constexpr size_t ROW_COUNT = 12;
+
+    auto seeder = [&](db::Graph* graph, db::JobSystem* jobSystem) {
+        db::GraphWriter writer(graph, jobSystem);
+        for (size_t i = 0; i < ROW_COUNT; ++i) {
+            const auto node = writer.addNode({"TestLabel"});
+            const std::string name = "node_" + std::to_string(i);
+            writer.addNodeProperty<db::types::String>(node, "name", std::string_view(name));
+        }
+        ASSERT_TRUE(writer.commit());
+        ASSERT_TRUE(writer.submit());
+    };
+
+    const auto result = runEndToEnd(_outDir,
+                                    /*queryChunkRows=*/1,
+                                    /*bufferCapacity=*/net::proto::DEFAULT_BUFFER_CAPACITY,
+                                    seeder,
+                                    "MATCH (n:TestLabel) RETURN n.name AS name, toInteger(\"7\") AS seven");
+
+    EXPECT_EQ(result.dataframesReceived, ROW_COUNT);
+    ASSERT_EQ(result.rows.size(), ROW_COUNT);
+    ASSERT_EQ(result.columnNames.size(), 2u);
+    EXPECT_EQ(result.columnNames[0], "name");
+    EXPECT_EQ(result.columnNames[1], "seven");
+
+    for (const auto& row : result.rows) {
+        ASSERT_EQ(row.size(), 2u);
+        EXPECT_EQ(row[1], "7");
+    }
+}
+
 // One row whose value is far larger than the proto buffer. The server's
 // TuringProtoEncoder writes the value into _buffer; whenever it fills, the
 // buffer-full callback emits a CHUNK packet and resets. So this single value
