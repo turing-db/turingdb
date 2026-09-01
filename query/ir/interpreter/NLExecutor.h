@@ -271,10 +271,6 @@ public:
     // Gather for the count result chunk: one non-nullable uint64 tally per row.
     static NLGatherFunction selectCountGatherFunction();
 
-    // Gather for a collected list chunk: one ListView per row, each spanning its
-    // group's run in the collect accumulator's list buffer, which outlives the sort.
-    static NLGatherFunction selectListGatherFunction();
-
     // The mask survivor collector for an nl.filter, chosen by the mask chunk's
     // nullability: a nullable mask drops null rows as well as false ones.
     static NLMaskSurvivorFunction selectMaskSurvivorFunction(bool nullable);
@@ -284,7 +280,6 @@ public:
     static NLAppendFunction selectAppendFunction(NLChunkKind kind);
     static NLAppendFunction selectOptAppendFunction(ValueType valueType);
     static NLAppendFunction selectCountAppendFunction();
-    static NLAppendFunction selectListAppendFunction();
 
     // The 3-way row comparator for an ID key column of this kind / a nullable
     // value key column of this value type. The value-type selector throws for a

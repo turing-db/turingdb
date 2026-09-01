@@ -1880,12 +1880,10 @@ public:
         NLGatherFunction _gather {nullptr};
     };
 
-    // One collected column - Cypher's collect(x). The update reads the incoming chunk
-    // _input and appends its present values to _buffer through _fold, recording where
-    // each group's elements landed in _groupPositions; _distinct holds the (group,
-    // value) pairs already charged, so collect(DISTINCT x) takes each once and a plain
-    // collect leaves it empty. The drain fills _output - the per-group list cell
-    // through _listEmit, or the unwound value through _unwindCollectEmit.
+    // One collected column - Cypher's collect(x). _distinct holds the (group, value) pairs
+    // already charged, so collect(DISTINCT x) takes each value once and a plain collect
+    // leaves it empty; _output is filled either as the per-group list cell or as the
+    // unwound value, which is why the drain carries an emit handler for each.
     struct ValueColumn {
         const Column* _input {nullptr};
         Column* _buffer {nullptr};

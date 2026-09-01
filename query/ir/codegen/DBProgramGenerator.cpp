@@ -2067,9 +2067,7 @@ void DBProgramGenerator::generateVectorSearch(const VectorSearchStmt* vectorSear
 
     // The search takes no column at all, so it produces the same neighbours for every row
     // already in flight: their cartesian product, which is what a call reading none of
-    // them is paired with too. Each side becomes a factor of a db.cross_product - what the
-    // query has matched so far on the left, the search on the right - and the product
-    // pairs them.
+    // them is paired with too.
     mlir::Block* const currentBlock = _opBuilder.getInsertionBlock();
 
     llvm::SmallVector<mlir::Type> resultTypes;

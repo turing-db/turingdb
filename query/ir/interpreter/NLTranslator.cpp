@@ -54,10 +54,6 @@ namespace {
 // A chunk holding the single row a reduction collapsed the whole relation to, or a
 // computation over such rows and constants: like a constant, it holds one value for
 // every row of the step that reads it, whichever loop that step belongs to.
-//
-// Classified once per value: a computation asks two questions of every operand, and
-// operands are commonly shared, so answering from a fresh walk each time costs a multiple
-// of the cone at every level.
 bool yieldsReducedRowChunk(mlir::Value column, llvm::DenseMap<mlir::Value, bool>& classified) {
     const auto classifiedIt = classified.find(column);
     if (classifiedIt != classified.end()) {
@@ -67,23 +63,23 @@ bool yieldsReducedRowChunk(mlir::Value column, llvm::DenseMap<mlir::Value, bool>
     mlir::Operation* const definingOp = column.getDefiningOp();
 
     bool isReducedRow = false;
-    if (!definingOp) {
-        isReducedRow = false;
-    } else if (mlir::isa<nl::CountResult, nl::AggregateResult>(definingOp)) {
-        isReducedRow = true;
-    } else if (definingOp->hasTrait<mlir::OpTrait::ConstantThroughOperands>()) {
-        bool readsAReducedRow = false;
-        bool everyOperandStandsForEveryRow = true;
+    if (definingOp) {
+        if (mlir::isa<nl::CountResult, nl::AggregateResult>(definingOp)) {
+            isReducedRow = true;
+        } else if (definingOp->hasTrait<mlir::OpTrait::ConstantThroughOperands>()) {
+            bool readsAReducedRow = false;
+            bool everyOperandStandsForEveryRow = true;
 
-        for (const mlir::Value operand : definingOp->getOperands()) {
-            const bool operandIsReducedRow = yieldsReducedRowChunk(operand, classified);
-            const bool operandStandsForEveryRow = operandIsReducedRow || yieldsConstantColumn(operand);
+            for (const mlir::Value operand : definingOp->getOperands()) {
+                const bool operandIsReducedRow = yieldsReducedRowChunk(operand, classified);
+                const bool operandStandsForEveryRow = operandIsReducedRow || yieldsConstantColumn(operand);
 
-            readsAReducedRow = readsAReducedRow || operandIsReducedRow;
-            everyOperandStandsForEveryRow = everyOperandStandsForEveryRow && operandStandsForEveryRow;
+                readsAReducedRow = readsAReducedRow || operandIsReducedRow;
+                everyOperandStandsForEveryRow = everyOperandStandsForEveryRow && operandStandsForEveryRow;
+            }
+
+            isReducedRow = readsAReducedRow && everyOperandStandsForEveryRow;
         }
-
-        isReducedRow = readsAReducedRow && everyOperandStandsForEveryRow;
     }
 
     classified[column] = isReducedRow;
@@ -606,7 +602,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
 
 void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
     // Fetch the iterator associated to this loop
-    const auto configIt = _iteratorConfigs.find(forLoop->getOperand(0));
+    const auto configIt = _iteratorConfigs.find(forLoop.getIterator());
     if (configIt == _iteratorConfigs.end()) {
         throw IRException("nl.for iterator must be produced by an nl source operation");
     }
@@ -1476,7 +1472,7 @@ bool NLTranslator::stepKeepsASingleRow(mlir::Block* block) const {
         return true;
     }
 
-    const auto configIt = _iteratorConfigs.find(forLoop->getOperand(0));
+    const auto configIt = _iteratorConfigs.find(forLoop.getIterator());
     if (configIt == _iteratorConfigs.end()) {
         return false;
     }
@@ -2845,10 +2841,6 @@ NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
         return NLExecutor::selectPlainAppendFunction(valueTypeFromElementType(elementType));
     }
 
-    if (llvm::isa<storage::ListType>(elementType)) {
-        return NLExecutor::selectListAppendFunction();
-    }
-
     return NLExecutor::selectAppendFunction(chunkKindFromElementType(elementType));
 }
 
@@ -2865,10 +2857,6 @@ NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
 
     if (isPlainValueElementType(elementType)) {
         return NLExecutor::selectPlainGatherFunction(valueTypeFromElementType(elementType));
-    }
-
-    if (llvm::isa<storage::ListType>(elementType)) {
-        return NLExecutor::selectListGatherFunction();
     }
 
     return NLExecutor::selectGatherFunction(chunkKindFromElementType(elementType));
