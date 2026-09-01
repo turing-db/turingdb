@@ -22,6 +22,8 @@
 #include "versioning/ChangeID.h"
 #include "TuringProtoDecoderConcepts.h"
 
+#include "FatalException.h"
+
 using namespace net::proto;
 
 namespace {
@@ -36,7 +38,7 @@ decltype(auto) dispatchColumnType(net::proto::ColumnInternalKind typeCode, net::
         case net::proto::ColumnInternalKind::DOUBLE:
             return fn.template operator()<db::types::Double::Primitive>(encoding);
         case net::proto::ColumnInternalKind::STRING:
-            return fn.template operator()<std::string>(encoding);
+            return fn.template operator()<db::types::String::Primitive>(encoding);
         case net::proto::ColumnInternalKind::BOOL:
             return fn.template operator()<db::types::Bool::Primitive>(encoding);
         case net::proto::ColumnInternalKind::PATH:
@@ -88,6 +90,7 @@ struct MakeColumnFn {
                 }
             }
             break;
+
             case net::proto::ColumnKind::CONSTANT: {
                 if constexpr (SupportedColumnConstTypes<T>) {
                     return _localMem->alloc<db::ColumnConst<T>>();
@@ -96,6 +99,7 @@ struct MakeColumnFn {
                 }
             }
             break;
+
             case net::proto::ColumnKind::OPTIONAL_VECTOR: {
                 if constexpr (SupportedColumnOptVectorTypes<T>) {
                     return _localMem->alloc<db::ColumnVector<std::optional<T>>>();
@@ -104,6 +108,7 @@ struct MakeColumnFn {
                 }
             }
             break;
+
             case net::proto::ColumnKind::OPTIONAL_CONSTANT: {
                 if constexpr (SupportedColumnOptConstTypes<T>) {
                     return _localMem->alloc<db::ColumnConst<std::optional<T>>>();
@@ -112,10 +117,9 @@ struct MakeColumnFn {
                 }
             }
             break;
-            default: {
-                throw TuringException("Unsupported incoming column kind");
-            }
         }
+
+        throw FatalException("Unknown proto::ColumnKind.");
     }
 };
 
@@ -135,6 +139,8 @@ struct DecodeColumnFn {
                     throw TuringException("Unsupported type for Vector");
                 }
             }
+            break;
+
             case net::proto::ColumnKind::OPTIONAL_VECTOR: {
                 if constexpr (SupportedColumnOptVectorTypes<T>) {
                     auto* typedCol = static_cast<db::ColumnVector<std::optional<T>>*>(_column);
@@ -142,7 +148,8 @@ struct DecodeColumnFn {
                 } else {
                     throw TuringException("Unsupported type for Optional Vector");
                 }
-            }
+            } break;
+
             case net::proto::ColumnKind::CONSTANT: {
                 if constexpr (SupportedColumnConstTypes<T>) {
                     auto* typedCol = static_cast<db::ColumnConst<T>*>(_column);
@@ -150,7 +157,8 @@ struct DecodeColumnFn {
                 } else {
                     throw TuringException("Unsupported type for Constant");
                 }
-            }
+            } break;
+
             case net::proto::ColumnKind::OPTIONAL_CONSTANT: {
                 if constexpr (SupportedColumnOptConstTypes<T>) {
                     auto* typedCol = static_cast<db::ColumnConst<std::optional<T>>*>(_column);
@@ -159,9 +167,10 @@ struct DecodeColumnFn {
                     throw TuringException("Unsupported type for Optional Constant");
                 }
             }
-            default:
-                throw TuringException("Unsupported column kind");
+            break;
         }
+
+        throw FatalException("Invalid proto::ColumnKind.");
     }
 };
 
@@ -246,6 +255,7 @@ TuringProtoDecoder::TuringProtoDecoder(db::LocalMemory* localMem,
     _ctxt._embeddingBuffer = embeddingBuffer;
     _ctxt._stringBuffer = stringBuffer;
     _ctxt._listBuffer = listBuffer;
+    _ctxt._mem = _localMem;
 }
 
 void TuringProtoDecoder::reset() {

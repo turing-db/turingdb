@@ -15,6 +15,8 @@ public:
     V insert(std::span<const E> items);
     void clear();
 
+    E* nextPtr() { return _buf.nextPtr(); }
+
 private:
     friend class StringBuffer;
     RawBuffer<E, N> _buf;

@@ -735,6 +735,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerBroadcastConstant(broadcast);
     } else if (mlir::isa<mlir::db::AddOp>(operation)) {
         lowerBinaryOp<nl::Add>(operation, BinaryResultKind::Numeric);
+    } else if (mlir::isa<mlir::db::ConcatOp>(operation)) {
+        lowerBinaryOp<nl::Concat>(operation, BinaryResultKind::String);
     } else if (mlir::isa<mlir::db::SubOp>(operation)) {
         lowerBinaryOp<nl::Sub>(operation, BinaryResultKind::Numeric);
     } else if (mlir::isa<mlir::db::MulOp>(operation)) {
@@ -2482,6 +2484,12 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
 
             const mlir::Type doubleElement = _builder.getF64Type();
             return operandNullable ? storage::NullableType::get(ctx, doubleElement) : doubleElement;
+        }
+        break;
+
+        case BinaryResultKind::String: {
+            const mlir::Type stringElement = storage::StringType::get(ctx);
+            return operandNullable ? storage::NullableType::get(ctx, stringElement) : stringElement;
         }
         break;
     }

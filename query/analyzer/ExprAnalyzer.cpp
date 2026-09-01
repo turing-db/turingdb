@@ -213,7 +213,34 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             throwError(error, expr);
         } break;
 
-        case BinaryOperator::Add:
+        case BinaryOperator::Add: {
+            if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer)) {
+                type = EvaluatedType::Integer;
+                break;
+            }
+
+            if (pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)
+                || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Integer)) {
+                type = EvaluatedType::Double;
+                break;
+            }
+
+            if (pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)) {
+                if (not _isV3) {
+                    throwError("String concatenation is only supported in V3", expr);
+                }
+                type = EvaluatedType::String;
+                break;
+            }
+
+            const std::string error = fmt::format(
+                "Operands are not valid and compatible types for '+': '{}' and '{}'",
+                EvaluatedTypeName::value(a),
+                EvaluatedTypeName::value(b));
+
+            throwError(error, expr);
+        } break;
+
         case BinaryOperator::Sub:
         case BinaryOperator::Mult:
         case BinaryOperator::Div:

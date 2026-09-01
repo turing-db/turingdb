@@ -6,11 +6,14 @@
 #include <cstring>
 #include <span>
 #include <string>
+#include <string_view>
 
 #include "ChunkedBuffer.h"
 #include "GraphPath.h"
+#include "LocalMemory.h"
 #include "TuringProtoDecoder.h"
 #include "TuringProtoDecoderConcepts.h"
+#include "TuringProtoHeaders.h"
 #include "TuringProtoInBuf.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
@@ -204,6 +207,66 @@ inline bool decodeVector(TuringProtoDecoder::DecodeContext* ctx,
     }
 
     ctx->_inBuf->readData(typedCol->data() + ctx->_rowIndex, rowsRemaining * sizeof(T));
+    return true;
+}
+
+template <>
+inline bool decodeVector<std::string_view>(TuringProtoDecoder::DecodeContext* ctx,
+                                      db::ColumnVector<std::string_view>* typedCol,
+                                      DfColumnState* columnState) {
+    const size_t numRows = columnState->getNumRows();
+
+    if (ctx->_rowIndex == 0) {
+        typedCol->reserve(numRows);
+    }
+
+    const size_t startIndex = ctx->_rowIndex;
+    TuringProtoInBuf* inBuf = ctx->_inBuf;
+    const size_t readableRemaining = inBuf->readable();
+
+    for (size_t i = 0; startIndex + i < numRows; i++) {
+        if (readableRemaining < sizeof(WireSize)) {
+            ctx->_rowIndex += i;
+            return false;
+        }
+
+        WireSize stringSize = 0;
+        inBuf->readData(&stringSize, sizeof(stringSize));
+
+        db::StringBuffer& strBuf = ctx->_mem->stringBuffer();
+
+        // Entire string is in this buffer
+        if (stringSize <= readableRemaining) {
+            const char* startPtr = inBuf->readPtr();
+            const std::string_view wireString {startPtr, stringSize};
+
+            const std::string_view bufferString = strBuf.insert(wireString);
+            typedCol->emplace_back(bufferString);
+            continue;
+        }
+
+        // String starts but does not finish in this buffer
+
+        // Temporary used to copy bytes into buffer
+        std::string tmpBuffer(stringSize, '\0');
+        inBuf->readData(tmpBuffer.data(), readableRemaining);
+
+        // Write the chars which exists in this buffer, plus additional space for the
+        // remainder of the string into the string buffer
+        char* svStart = strBuf.nextPtr();
+        std::string_view bufferString = strBuf.insert(tmpBuffer);
+        // The column will hold a view onto the to-be-finished string
+        typedCol->emplace_back(bufferString);
+
+        // Update the buffer state so @ref decodeIncomingChunk completes this string
+        ctx->_bufferState._start = svStart;
+        ctx->_bufferState._len = stringSize;
+        ctx->_bufferState._offset = readableRemaining;
+
+        ctx->_rowIndex += i + 1;
+        return false;
+    }
+
     return true;
 }
 

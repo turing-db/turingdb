@@ -130,6 +130,7 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
                             ColumnOperatorDescription::value(op)));
         break;
 
+        case OP_CONCAT:
         case OP_MOD:
         case OP_POW:
         case OP_STARTS_WITH:
@@ -184,6 +185,7 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
         case OP_AND:
         case OP_OR:
         case OP_ADD:
+        case OP_CONCAT:
         case OP_SUB:
         case OP_MUL:
         case OP_DIV:
@@ -251,6 +253,7 @@ void ExprProgram::evalFunction(const Instruction& instr) {
         case OP_AND:
         case OP_OR:
         case OP_ADD:
+        case OP_CONCAT:
         case OP_SUB:
         case OP_MUL:
         case OP_DIV:
