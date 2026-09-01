@@ -467,22 +467,22 @@ struct TuringXor {
     }
 };
 
-struct StartsWith {
-    template <StringLike T, StringLike U>
+struct StringStartsWith {
+    template <typename T, typename U>
     bool operator()(const T& text, U&& prefix) const {
         return text.starts_with(std::forward<U>(prefix));
     }
 };
 
-struct EndsWith {
-    template <StringLike T, StringLike U>
+struct StringEndsWith {
+    template <typename T, typename U>
     bool operator()(const T& text, U&& suffix) const {
         return text.ends_with(std::forward<U>(suffix));
     }
 };
 
-struct Contains {
-    template <StringLike T, StringLike U>
+struct StringContains {
+    template <typename T, typename U>
     bool operator()(const T& text, U&& pattern) const {
         return text.find(std::forward<U>(pattern)) != T::npos;
     }
@@ -503,8 +503,8 @@ using And = BinaryPredicate<std::logical_and<>>;
 using Or = BinaryPredicate<std::logical_or<>>;
 using Xor = BinaryPredicate<TuringXor>;
 
-using StartsWith = BinaryPredicate<StartsWith>;
-using EndsWith = BinaryPredicate<EndsWith>;
-using Contains = BinaryPredicate<Contains>;
+using StartsWith = BinaryPredicate<StringStartsWith>;
+using EndsWith = BinaryPredicate<StringEndsWith>;
+using Contains = BinaryPredicate<StringContains>;
 
 }

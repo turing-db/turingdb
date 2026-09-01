@@ -233,6 +233,23 @@ struct PairRestrictions<Op> {
 };
 
 template <ColumnOperator Op>
+    requires (Op == OP_STARTS_WITH) || (Op == OP_ENDS_WITH) || (Op == OP_CONTAINS)
+struct PairRestrictions<Op> {
+    using Allowed = GenerateKindPairList<
+        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
+        OptionalKindPairs<types::String::Primitive, types::String::OwningPrimitive>::Pairs,
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs
+    >;
+
+    using AllowedMixed = AllowedMixedList<>;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
+};
+
+template <ColumnOperator Op>
     requires (Op == OP_AND) || (Op == OP_OR) || (Op == OP_XOR)
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<

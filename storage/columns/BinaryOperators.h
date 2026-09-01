@@ -195,9 +195,6 @@ using Mul = BinaryOp<std::multiplies<>>;
 using Div = BinaryOp<SafeDivides>;
 using Mod = BinaryOp<SafeModulo>;
 using Pow = BinaryOp<Power>;
-using StartsWith = BinaryOp<StartsWith>;
-using EndsWith = BinaryOp<EndsWith>;
-using Contains = BinaryOp<Contains>;
 
 }
 

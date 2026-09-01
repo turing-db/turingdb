@@ -467,6 +467,12 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateBinaryOp<OP_GREATER_THAN_OR_EQUAL>(gte, body);
         } else if (nl::Lte lte = mlir::dyn_cast<nl::Lte>(operation)) {
             translateBinaryOp<OP_LESS_THAN_OR_EQUAL>(lte, body);
+        } else if (nl::StartsWith startsWith = mlir::dyn_cast<nl::StartsWith>(operation)) {
+            translateBinaryOp<OP_STARTS_WITH>(startsWith, body);
+        } else if (nl::EndsWith endsWith = mlir::dyn_cast<nl::EndsWith>(operation)) {
+            translateBinaryOp<OP_ENDS_WITH>(endsWith, body);
+        } else if (nl::Contains containsOp = mlir::dyn_cast<nl::Contains>(operation)) {
+            translateBinaryOp<OP_CONTAINS>(containsOp, body);
         } else if (nl::And andOp = mlir::dyn_cast<nl::And>(operation)) {
             translateBinaryOp<OP_AND>(andOp, body);
         } else if (nl::Or orOp = mlir::dyn_cast<nl::Or>(operation)) {

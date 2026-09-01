@@ -340,6 +340,36 @@ struct BinaryOpTraits<OP_XOR> {
 };
 
 template <>
+struct BinaryOpTraits<OP_STARTS_WITH> {
+    using Functor = StartsWith;
+
+    template <typename ResCol, typename LhsCol, typename RhsCol>
+    static void exec(ResCol* result, const LhsCol* lhs, const RhsCol* rhs) {
+        BinaryPredicates::exec<Functor>(result, lhs, rhs);
+    }
+};
+
+template <>
+struct BinaryOpTraits<OP_ENDS_WITH> {
+    using Functor = EndsWith;
+
+    template <typename ResCol, typename LhsCol, typename RhsCol>
+    static void exec(ResCol* result, const LhsCol* lhs, const RhsCol* rhs) {
+        BinaryPredicates::exec<Functor>(result, lhs, rhs);
+    }
+};
+
+template <>
+struct BinaryOpTraits<OP_CONTAINS> {
+    using Functor = Contains;
+
+    template <typename ResCol, typename LhsCol, typename RhsCol>
+    static void exec(ResCol* result, const LhsCol* lhs, const RhsCol* rhs) {
+        BinaryPredicates::exec<Functor>(result, lhs, rhs);
+    }
+};
+
+template <>
 struct BinaryOpTraits<OP_FUNC_COSINE_SIMILARITY> {
     using Functor = CosineSimilarityFunction;
 
@@ -4631,5 +4661,8 @@ template NLBinaryFn NLExecutor::selectBinary<OP_AND>(const Column* lhs, const Co
 template NLBinaryFn NLExecutor::selectBinary<OP_OR>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_NOT_EQUAL>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_XOR>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
+template NLBinaryFn NLExecutor::selectBinary<OP_STARTS_WITH>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
+template NLBinaryFn NLExecutor::selectBinary<OP_ENDS_WITH>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
+template NLBinaryFn NLExecutor::selectBinary<OP_CONTAINS>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_FUNC_COSINE_SIMILARITY>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_FUNC_EUCLIDEAN_DISTANCE>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
