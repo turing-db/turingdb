@@ -159,6 +159,7 @@ add_call_v3_test(test_query_ir_call_carried_scalar CallCarriedScalarTest.cpp)
 add_call_v3_test(test_query_ir_call_writes CallWritesTest.cpp)
 add_call_v3_test(test_query_ir_call_boolean_predicates CallBooleanPredicatesTest.cpp)
 add_call_v3_test(test_query_ir_call_show_indexes CallShowIndexesTest.cpp)
+add_call_v3_test(test_query_ir_order_by_labels OrderByLabelsTest.cpp)
 
 # The crossing-call tests hop twice from the column a CALL yielded and then call again,
 # once with a constant argument alone and once reading the chain's tail, from the query
