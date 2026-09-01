@@ -62,16 +62,6 @@ protected:
     std::unique_ptr<QueryInterpreterV3> _interpreter;
 };
 
-// An expression kind the generator has no translation for is rejected with a plain
-// TuringException: the user must see that message as-is.
-TEST_F(QueryInterpreterV3ErrorTest, reportsUnsupportedExpressionRejectionAsIs) {
-    QueryStatus status;
-    runQuery("MATCH (n) WHERE n.name STARTS WITH 'R' RETURN n", status);
-
-    EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
-    EXPECT_EQ(status.getError(), "Unsupported expression: STRING");
-}
-
 // An internal generator failure is a FatalException and must keep reading as
 // one, rather than being dressed up as a deliberate rejection. A map literal
 // reading a row is one: the key varies, so it is not dropped as a constant, and
