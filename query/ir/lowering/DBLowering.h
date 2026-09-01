@@ -273,7 +273,8 @@ private:
         Numeric,   // add/sub/mul/div/mod: promoted numeric, nullable if either operand is
         Boolean,   // eq/neq/gt/lt/gte/lte and and/or/xor: i1, nullable if either is
         Double,    // pow: always f64 per openCypher, nullable if either operand is
-        String,    // concat: string, nullable if either operand is
+        Concat,    // concat: mirrors the operand sequence type - string (nullable if
+                   // either operand is) or list (never nullable)
     };
 
     template <typename NLOp>

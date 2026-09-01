@@ -1110,7 +1110,7 @@ def AddOp : BinaryOp<"add", [Pure]> {
 }
 
 def ConcatOp : BinaryOp<"concat", [Pure]> {
-  let summary = "Row-wise concatenation of two string columns";
+  let summary = "Row-wise concatenation of two string or two list columns";
 
   let arguments = (ins Column:$lhs, Column:$rhs);
   let results   = (outs Column:$result);

@@ -64,6 +64,12 @@ public:
      */
     ListWriteCursor reserveList(size_t numElements, size_t valueBytes);
 
+    /**
+     * @brief Stores the elements of @param a followed by those of @param b as one new list
+     * in contiguous storage and returns a @ref ListView over it.
+     */
+    ListView concatenate(ListView a, ListView b);
+
     void clear();
 
 private:

@@ -9,6 +9,23 @@
 
 using namespace db;
 
+namespace {
+
+struct ElementValueSize {
+    template <typename T>
+    size_t operator()(const ListElementView&) const {
+        return sizeof(T);
+    }
+};
+
+size_t elementValueSize(const ListElementView element) {
+    const ListTagDispatcher dispatcher {element.getTag()};
+
+    return dispatcher.execute(ElementValueSize {}, element);
+}
+
+}
+
 template <size_t N>
 ListView ListBuffer<N>::insert(std::span<const ListItemVariant> elements) {
     // For each element, calculate the bytes taken by the tag + the raw bytes of the type
@@ -61,6 +78,32 @@ ListWriteCursor ListBuffer<N>::reserveList(size_t numElements, size_t valueBytes
         elementWritePtr,
         viewWritePtr,
     };
+}
+
+template <size_t N>
+ListView ListBuffer<N>::concatenate(ListView a, ListView b) {
+    const size_t numElements = a.size() + b.size();
+
+    size_t valueBytes = 0;
+    for (const ListElementView element : a) {
+        valueBytes += elementValueSize(element);
+    }
+    for (const ListElementView element : b) {
+        valueBytes += elementValueSize(element);
+    }
+
+    ListWriteCursor cursor = reserveList(numElements, valueBytes);
+
+    for (const ListElementView element : a) {
+        const size_t numBytes = ListByteBuffer<N>::tagSize() + elementValueSize(element);
+        cursor.writeRaw(element.getData(), numBytes);
+    }
+    for (const ListElementView element : b) {
+        const size_t numBytes = ListByteBuffer<N>::tagSize() + elementValueSize(element);
+        cursor.writeRaw(element.getData(), numBytes);
+    }
+
+    return cursor.getView();
 }
 
 template <size_t N>

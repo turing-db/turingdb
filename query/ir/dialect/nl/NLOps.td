@@ -1235,9 +1235,10 @@ def Add : NLOp<"add", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]
 }
 
 def Concat : NLOp<"concat", [Pure, ConstantThroughOperands]> {
-  let summary = "Row-wise concatenation of two string chunks";
+  let summary = "Row-wise concatenation of two string or two list chunks";
   let description = [{
       %r = nl.concat %x, %y : (!nl.chunk<!storage.string>, !nl.chunk<!storage.string>) -> !nl.chunk<!storage.string>
+      %l = nl.concat %s, %t : (!nl.chunk<!storage.list<none>>, !nl.chunk<!storage.list<none>>) -> !nl.chunk<!storage.list<none>>
   }];
 
   let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);

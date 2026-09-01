@@ -417,7 +417,7 @@ struct BinaryOpKernel<OP_CONCAT, ResCol, LhsCol, RhsCol> {
         BinaryOperators::exec<Concat>(static_cast<ResCol*>(result),
                                       static_cast<const LhsCol*>(lhs),
                                       static_cast<const RhsCol*>(rhs),
-                                      Concat {&mem->stringBuffer()});
+                                      Concat {&mem->stringBuffer(), &mem->listBuffer()});
     }
 };
 

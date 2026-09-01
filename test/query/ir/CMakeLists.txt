@@ -686,6 +686,27 @@ target_link_libraries(test_query_ir_string_concat PRIVATE
         MLIRParser)
 target_include_directories(test_query_ir_string_concat PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_turing_test(test_query_ir_list_concat ListConcatTest.cpp)
+target_link_libraries(test_query_ir_list_concat PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s
+        turing_db_ir_interpreter_s
+        turing_db_ir_lowering_s
+        turing_db_ir_dbdialect_s
+        turing_db_ir_nldialect_s
+        turing_db_ir_storagedialect_s
+        turing_db_ir_common_s
+        turing_db_storage_s
+        MLIRParser)
+target_include_directories(test_query_ir_list_concat PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_group_aggregate_arithmetic GroupAggregateArithmeticTest.cpp)
 target_link_libraries(test_query_ir_group_aggregate_arithmetic PRIVATE
         turing_db_s
