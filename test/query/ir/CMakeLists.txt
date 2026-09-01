@@ -29,6 +29,18 @@ target_link_libraries(test_query_ir_dblowering PRIVATE turing_db_examples_s)
 add_ir_tests(test_query_ir_shortest_path ShortestPathLoweringTest.cpp)
 # The path column is rendered to text by StringRowSink.
 target_sources(test_query_ir_shortest_path PRIVATE StringRowSink.cpp)
+
+# The Cypher-level shortest path tests drive SHORTESTPATH end to end through
+# QueryInterpreterV3 over a custom weighted graph, reading distance and path as text.
+add_turing_test(test_query_ir_cypher_shortest_path CypherShortestPathTest.cpp)
+target_sources(test_query_ir_cypher_shortest_path PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_cypher_shortest_path PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_cypher_shortest_path PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 add_ir_tests(test_query_ir_group_aggregate GroupAggregateTest.cpp)
 target_link_libraries(test_query_ir_group_aggregate PRIVATE
         turing_db_s
