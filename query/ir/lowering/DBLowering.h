@@ -416,9 +416,10 @@ private:
 
     mlir::Value nullableValueChunk(mlir::Value chunk);
 
-    // The chunk element type an unwind of @param sourceElement produces: the type-erased
-    // list_element of tagged scalars when a list is drained, and the source's own element
-    // otherwise, its cells being the elements themselves
+    // The chunk element type an unwind of @param sourceElement produces: a drained list
+    // gives up the type its own elements carry, falling back to the type-erased
+    // list_element when they share none, and any other source keeps its own element,
+    // its cells being the elements themselves
     static mlir::Type unwoundElementType(mlir::MLIRContext* context, mlir::Type sourceElement);
 
     // The nl chunk a db value lowered to, and the block that holds a chunk

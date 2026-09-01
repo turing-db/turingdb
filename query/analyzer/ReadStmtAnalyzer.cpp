@@ -1,6 +1,5 @@
 #include "ReadStmtAnalyzer.h"
 
-#include <algorithm>
 #include <string_view>
 
 #include "AnalyzeException.h"
@@ -64,40 +63,15 @@ bool constraintTypeCompatible(ValueType propertyType, EvaluatedType exprType) {
            || ExprAnalyzer::propTypeCompatible(propertyType, exprType);
 }
 
-// The type each row an UNWIND emits carries: the one type a homogeneous literal list's
-// elements share, the type of anything that is not a list (spread to its singleton), and
-// otherwise a tagged scalar, since a list carries no element type of its own.
+// The type each row an UNWIND emits carries: one level out of a list's shape - however
+// the list was built - and the type of anything that is not a list, spread to its
+// singleton.
 EvaluatedType unwoundItemType(const Expr* arg) {
     if (arg->getType() != EvaluatedType::List) {
         return arg->getType();
     }
 
-    if (arg->getKind() != Expr::Kind::LITERAL) {
-        return EvaluatedType::ListItem;
-    }
-
-    const Literal* literal = static_cast<const LiteralExpr*>(arg)->getLiteral();
-    if (literal->getKind() != Literal::Kind::LIST) {
-        return EvaluatedType::ListItem;
-    }
-
-    const ListLiteral::Items& items = static_cast<const ListLiteral*>(literal)->items();
-    if (items.empty()) {
-        return EvaluatedType::ListItem;
-    }
-
-    const auto differingType = [](const Expr* a, const Expr* b) {
-        return a->getType() != b->getType();
-    };
-
-    const bool homogeneous = std::ranges::adjacent_find(items, differingType) == end(items);
-    if (!homogeneous) {
-        return EvaluatedType::ListItem;
-    }
-
-    // A list of lists has no ValueType to restrict to, so it stays tagged scalars
-    const EvaluatedType homogeneity = items.front()->getType();
-    return convertibleToValueType(homogeneity) ? homogeneity : EvaluatedType::ListItem;
+    return arg->getListShape().unwoundType();
 }
 
 }
@@ -657,10 +631,14 @@ void ReadStmtAnalyzer::analyze(UnwindStmt* unwind) {
         throwError(fmt::format("Variable '{}' is already declared", symName), unwind);
     }
 
-    VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast, unwoundItemType(arg), symName);
-    decl->setIsUnwound(true);
+    VarDecl* itemDecl = _ctxt->getOrCreateNamedVariable(_ast, unwoundItemType(arg), symName);
+    itemDecl->setIsUnwound(true);
 
-    unwind->setDecl(decl);
+    unwind->setDecl(itemDecl);
+
+    // Unwinding a list of lists leaves a list, so the variable carries the shape it has
+    // left: what a second UNWIND of it reads to know its own elements.
+    itemDecl->setListShape(arg->getListShape().unwound());
 }
 
 void ReadStmtAnalyzer::throwError(std::string_view msg, const void* obj) const {

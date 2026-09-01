@@ -414,10 +414,9 @@ public:
     static NLAggregateResetFunction selectAggregateReset(AggregateKind kind, ValueType accumulatorType);
     static NLAggregateUpdateFunction selectAggregateUpdate(AggregateKind kind, ValueType inputType);
 
-    // The siblings of selectAggregateUpdate / selectGroupAggregateFold for a type-erased
-    // column, whose cells carry their own tags rather than sharing one value type
-    static NLAggregateUpdateFunction selectListElementAggregateUpdate(AggregateKind kind);
-    static NLGroupAggregateFoldFunction selectListElementGroupAggregateFold(GroupAggregateKind kind);
+    // The sibling reading a type-erased input column: sum and avg reduce its numeric
+    // cells into the f64 accumulator, whatever tags they carry.
+    static NLAggregateUpdateFunction selectTaggedAggregateUpdate(AggregateKind kind);
     static NLAggregateResultFunction selectAggregateResult(AggregateKind kind, ValueType resultType);
 
     // The grouped counterparts, selected for one aggregate of a grouped
@@ -432,6 +431,10 @@ public:
     // value's bytes - so, unlike count, an embedding column is rejected.
     static NLGroupAggregateGrowFunction selectGroupAggregateGrow(GroupAggregateKind kind, ValueType accumulatorType);
     static NLGroupAggregateFoldFunction selectGroupAggregateFold(GroupAggregateKind kind, ValueType inputType);
+
+    // The sibling reading a type-erased input column: sum and avg reduce its numeric
+    // cells into the f64 accumulator, whatever tags they carry.
+    static NLGroupAggregateFoldFunction selectTaggedGroupAggregateFold(GroupAggregateKind kind);
     static NLGroupAggregateFoldFunction selectGroupCountAllFold();
     static NLGroupAggregateFoldFunction selectGroupCountDistinctFold(ValueType inputType);
     static NLGroupAggregateFoldFunction selectGroupCountDistinctChunkFold(NLChunkKind kind);
@@ -468,9 +471,14 @@ public:
     static NLUnwindElementCountFunction selectValueUnwindElementCount();
 
     // The drains filling an nl.unwind's element chunk from a column whose cells hold more
-    // than the element. A scalar column needs none: its cells are the elements, gathered
-    // through the carry set.
+    // than the element: a drained list fills the column its own element type names, and
+    // only one whose elements share no type fills the type-erased column. A scalar column
+    // needs none - its cells are the elements, gathered through the carry set.
     static NLUnwindElementEmitFunction selectListUnwindElementEmit();
+    static NLUnwindElementEmitFunction selectListUnwindValueEmit(ValueType valueType);
+    static NLUnwindElementEmitFunction selectListUnwindNodeEmit();
+    static NLUnwindElementEmitFunction selectListUnwindEdgeEmit();
+    static NLUnwindElementEmitFunction selectListUnwindListEmit();
     static NLUnwindElementEmitFunction selectTaggedUnwindElementEmit();
     static NLCollectListEmitFunction selectCollectListEmit(ValueType valueType);
 
@@ -478,6 +486,17 @@ public:
     // node or edge ID. An edge-type ID is no entity, so the kind is rejected.
     static void selectCollectEntityHandlers(NLChunkKind kind,
                                             bool distinctValues,
+                                            NLCollectFoldFunction& fold,
+                                            NLCollectListEmitFunction& listEmit);
+
+    // The handlers a collect of a list column reads: the cells nest into a list of lists.
+    static void selectCollectListHandlers(bool distinctValues,
+                                          NLCollectFoldFunction& fold,
+                                          NLCollectListEmitFunction& listEmit);
+
+    // The handlers a collect of a type-erased column reads: each cell keeps the type its
+    // tag names, and a cell tagged null is dropped as Cypher's collect drops a null.
+    static void selectCollectTaggedHandlers(bool distinctValues,
                                             NLCollectFoldFunction& fold,
                                             NLCollectListEmitFunction& listEmit);
 

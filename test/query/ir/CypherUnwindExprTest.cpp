@@ -227,6 +227,273 @@ TEST_F(CypherUnwindExprTest, unwindsAnEmptyCollectToNoRow) {
                {});
 }
 
+TEST_F(CypherUnwindExprTest, unwindsACollectedIntegerList) {
+    // The tags the collect wrote are the ones the unwind reads back, so every value type
+    // it can fold is a path of its own. Only Remy and Adam carry an age.
+    expectRows("MATCH (n:Person) WITH collect(n.age) AS ages UNWIND ages AS a RETURN a",
+               {{"32"}, {"32"}});
+}
+
+TEST_F(CypherUnwindExprTest, unwindsACollectedBooleanList) {
+    expectRows("MATCH (n:Person) WITH collect(n.isFrench) AS flags UNWIND flags AS f RETURN f",
+               {{"true"}, {"true"}, {"true"}, {"true"},
+                {"false"}, {"false"}, {"false"}, {"false"}});
+}
+
+TEST_F(CypherUnwindExprTest, unwindsACollectedDoubleList) {
+    expectRowsInOrder("UNWIND [1.5, 2.5] AS v WITH collect(v) AS values "
+                      "UNWIND values AS x RETURN x",
+                      {{"1.500000"}, {"2.500000"}});
+}
+
+TEST_F(CypherUnwindExprTest, unwindsACollectedEdgeProperty) {
+    // A collect drops the rows whose property is absent, so the eleven edges carrying no
+    // proficiency reach neither the list nor the unwind.
+    expectRows("MATCH ()-[e:INTERESTED_IN]->() WITH collect(e.proficiency) AS levels "
+               "UNWIND levels AS level RETURN level",
+               {{"expert"}, {"expert"}, {"expert"}, {"moderate"}});
+}
+
+TEST_F(CypherUnwindExprTest, unwindsADistinctCollect) {
+    // The collect dedups, so each interest is one element and the unwind emits it once -
+    // Computers and the three Gym rows collapse before the expansion rather than after.
+    expectRows("MATCH (:Person)-[:INTERESTED_IN]->(i:Interest) "
+               "WITH collect(DISTINCT i.name) AS names "
+               "UNWIND names AS name RETURN name",
+               {{"Ghosts"}, {"Computers"}, {"Eighties"}, {"Bio"}, {"Cooking"}, {"Padel"},
+                {"Animals"}, {"Gym"}, {"JiuJitsu"}, {"Travel"}});
+}
+
+TEST_F(CypherUnwindExprTest, unwindsEmptyGroupsBesideNonEmptyOnes) {
+    // Six of the eight people carry no age, so their group's list is empty and the unwind
+    // walks past it to the next cell that holds one.
+    expectRows("MATCH (n:Person) WITH n.name AS name, collect(n.age) AS ages "
+               "UNWIND ages AS age RETURN name, age",
+               {{"Remy", "32"}, {"Adam", "32"}});
+}
+
+TEST_F(CypherUnwindExprTest, unwindsACollectedNodeAsANode) {
+    // A list of nodes gives up nodes, so the element reads its properties the way the
+    // matched variable it was collected from does.
+    expectRows("MATCH (n:Person) WITH collect(n) AS people UNWIND people AS person "
+               "RETURN person.name",
+               {{"Remy"}, {"Adam"}, {"Maxime"}, {"Luc"}, {"Martina"}, {"Suhas"},
+                {"Cyrus"}, {"Doruk"}});
+}
+
+TEST_F(CypherUnwindExprTest, unwindsACollectedEdgeAsAnEdge) {
+    expectRows("MATCH ()-[e:KNOWS_WELL]->() WITH collect(e) AS edges UNWIND edges AS edge "
+               "RETURN edge.name, edge.duration",
+               {{"Remy -> Adam", "20"}, {"Adam -> Remy", "20"}, {"Ghosts -> Remy", "200"}});
+}
+
+TEST_F(CypherUnwindExprTest, traversesFromACollectedNodeAfterUnwinding) {
+    // The element is a node, so a later pattern binds it and hops off it - the collect
+    // and the expansion leave the variable as good as the one the MATCH bound.
+    expectRows("MATCH (p:Person) WHERE p.name = 'Adam' "
+               "WITH collect(p) AS people "
+               "UNWIND people AS person "
+               "MATCH (person)-[:INTERESTED_IN]->(i:Interest) "
+               "RETURN person.name, i.name",
+               {{"Adam", "Bio"}, {"Adam", "Cooking"}});
+}
+
+TEST_F(CypherUnwindExprTest, unwindsADistinctCollectOfNodes) {
+    // Ten interests are reached by fifteen edges, so the collect's dedup is what the
+    // count behind the expansion reports.
+    expectRows("MATCH (:Person)-[:INTERESTED_IN]->(i:Interest) "
+               "WITH collect(DISTINCT i) AS interests "
+               "UNWIND interests AS interest "
+               "RETURN count(interest)",
+               {{"10"}});
+}
+
+TEST_F(CypherUnwindExprTest, unwindsAGroupedCollectOfNodes) {
+    expectRows("MATCH (p:Person)-[:INTERESTED_IN]->(i:Interest) "
+               "WITH p.name AS person, collect(i) AS interests "
+               "UNWIND interests AS interest "
+               "RETURN person, interest.name",
+               {{"Remy", "Ghosts"}, {"Remy", "Computers"}, {"Remy", "Eighties"},
+                {"Adam", "Bio"}, {"Adam", "Cooking"},
+                {"Maxime", "Bio"}, {"Maxime", "Padel"},
+                {"Luc", "Animals"}, {"Luc", "Computers"},
+                {"Martina", "Cooking"},
+                {"Suhas", "Gym"}, {"Suhas", "JiuJitsu"},
+                {"Cyrus", "Gym"}, {"Cyrus", "Travel"},
+                {"Doruk", "Gym"}});
+}
+
+TEST_F(CypherUnwindExprTest, reducesOverACollectedElement) {
+    // The elements are the integers the collect gathered, so they reduce like any other
+    // integer column rather than only being counted.
+    expectRows("MATCH ()-[e]->() WITH collect(e.duration) AS durations "
+               "UNWIND durations AS duration "
+               "RETURN sum(duration), min(duration), max(duration), count(duration)",
+               {{"325", "10", "200", "8"}});
+}
+
+TEST_F(CypherUnwindExprTest, averagesACollectedElement) {
+    expectRows("MATCH (n:Person) WITH collect(n.age) AS ages UNWIND ages AS age "
+               "RETURN avg(age)",
+               {{"32.000000"}});
+}
+
+TEST_F(CypherUnwindExprTest, computesOverACollectedElement) {
+    expectRows("MATCH (n:Person) WITH collect(n.age) AS ages UNWIND ages AS age "
+               "RETURN age + 1",
+               {{"33"}, {"33"}});
+}
+
+TEST_F(CypherUnwindExprTest, ordersACollectedElementByItsOwnType) {
+    // 200 sorts after 20 rather than between 15 and 20, so the elements are ordered as
+    // the integers they are.
+    expectRowsInOrder("MATCH ()-[e]->() WITH collect(e.duration) AS durations "
+                      "UNWIND durations AS duration "
+                      "RETURN duration ORDER BY duration",
+                      {{"10"}, {"15"}, {"20"}, {"20"}, {"20"}, {"20"}, {"20"}, {"200"}});
+}
+
+TEST_F(CypherUnwindExprTest, recollectsAnUnwoundElement) {
+    // The round trip: what a collect gathered comes back out of the expansion as the same
+    // values, so a second collect gathers them again.
+    expectRows("MATCH (i:Interest) WITH collect(i.name) AS names "
+               "UNWIND names AS name "
+               "WITH collect(name) AS again "
+               "RETURN again",
+               {{"[Computers, Eighties, Bio, Cooking, Ghosts, Padel, Animals, Gym, Travel, JiuJitsu]"}});
+}
+
+TEST_F(CypherUnwindExprTest, collectsAListIntoAListOfLists) {
+    // A list cell collects like any other value, nesting one list inside another.
+    expectRows("MATCH (p:Person)-[:INTERESTED_IN]->(i:Interest) WHERE p.name = 'Adam' "
+               "WITH p.name AS person, collect(i.name) AS interests "
+               "WITH collect(interests) AS nested "
+               "RETURN nested",
+               {{"[[Bio, Cooking]]"}});
+}
+
+TEST_F(CypherUnwindExprTest, unwindsAListOfListsOneLevel) {
+    // The outer list gives up its cells, each still a list of its own.
+    expectRows("MATCH (p:Person)-[:INTERESTED_IN]->(i:Interest) WHERE p.name = 'Adam' "
+               "WITH p.name AS person, collect(i.name) AS interests "
+               "WITH collect(interests) AS nested "
+               "UNWIND nested AS one "
+               "RETURN one",
+               {{"[Bio, Cooking]"}});
+}
+
+TEST_F(CypherUnwindExprTest, unwindsAListOfListsToItsLeaves) {
+    expectRows("MATCH (p:Person)-[:INTERESTED_IN]->(i:Interest) WHERE p.name = 'Adam' "
+               "WITH p.name AS person, collect(i.name) AS interests "
+               "WITH collect(interests) AS nested "
+               "UNWIND nested AS one UNWIND one AS interest "
+               "RETURN interest",
+               {{"Bio"}, {"Cooking"}});
+}
+
+TEST_F(CypherUnwindExprTest, unwindsEveryGroupsListOutOfANestedCollect) {
+    // One inner list per person, gathered into one outer list and drained back down to
+    // the fifteen names the groups were built from.
+    expectRows("MATCH (p:Person)-[:INTERESTED_IN]->(i:Interest) "
+               "WITH p.name AS person, collect(i.name) AS interests "
+               "WITH collect(interests) AS nested "
+               "UNWIND nested AS one UNWIND one AS interest "
+               "RETURN count(interest)",
+               {{"15"}});
+}
+
+TEST_F(CypherUnwindExprTest, unwindsANestedNodeListToItsNodes) {
+    // The nodes survive both levels: the outer list gives up lists of nodes and the inner
+    // one the nodes themselves, so the leaf reads its properties.
+    expectRows("MATCH (p:Person)-[:INTERESTED_IN]->(i:Interest) WHERE p.name = 'Adam' "
+               "WITH p.name AS person, collect(i) AS interests "
+               "WITH collect(interests) AS nested "
+               "UNWIND nested AS one UNWIND one AS interest "
+               "RETURN interest.name",
+               {{"Bio"}, {"Cooking"}});
+}
+
+TEST_F(CypherUnwindExprTest, traversesFromANodeUnwoundOutOfANestedList) {
+    expectRows("MATCH (p:Person)-[:INTERESTED_IN]->(i:Interest) WHERE p.name = 'Adam' "
+               "WITH p.name AS person, collect(i) AS interests "
+               "WITH collect(interests) AS nested "
+               "UNWIND nested AS one UNWIND one AS interest "
+               "MATCH (interest)<-[:INTERESTED_IN]-(fan:Person) "
+               "RETURN interest.name, fan.name",
+               {{"Bio", "Adam"}, {"Bio", "Maxime"},
+                {"Cooking", "Adam"}, {"Cooking", "Martina"}});
+}
+
+TEST_F(CypherUnwindExprTest, reducesOverTheLeafOfANestedList) {
+    expectRows("MATCH ()-[e]->() WITH collect(e.duration) AS durations "
+               "WITH collect(durations) AS nested "
+               "UNWIND nested AS one UNWIND one AS duration "
+               "RETURN sum(duration)",
+               {{"325"}});
+}
+
+TEST_F(CypherUnwindExprTest, unwindsThreeLevelsOfCollectedLists) {
+    // Nothing caps the nesting: each collect goes one level deeper and each UNWIND one
+    // level back out, down to the values the innermost list holds.
+    expectRowsInOrder("UNWIND [1, 2] AS v "
+                      "WITH collect(v) AS ones "
+                      "WITH collect(ones) AS twos "
+                      "WITH collect(twos) AS threes "
+                      "UNWIND threes AS a UNWIND a AS b UNWIND b AS c "
+                      "RETURN c",
+                      {{"1"}, {"2"}});
+}
+
+TEST_F(CypherUnwindExprTest, collectsAHeterogeneousElement) {
+    // The elements share no type, so each is gathered under the one its own tag names.
+    expectRows("UNWIND [10, 'a'] AS v RETURN collect(v)", {{"[10, a]"}});
+}
+
+TEST_F(CypherUnwindExprTest, collectsANestedListElement) {
+    expectRows("UNWIND [[1, 2], [3]] AS l RETURN collect(l)", {{"[[1, 2], [3]]"}});
+}
+
+TEST_F(CypherUnwindExprTest, dropsNullsCollectingAHeterogeneousElement) {
+    // A cell tagged null is the null Cypher's collect drops, exactly as a typed collect
+    // drops an absent property.
+    expectRows("UNWIND [1, null, 2] AS v RETURN collect(v)", {{"[1, 2]"}});
+}
+
+TEST_F(CypherUnwindExprTest, dedupsAHeterogeneousCollect) {
+    expectRows("UNWIND [1, 'a', 1, 'a', 2] AS v RETURN collect(DISTINCT v)", {{"[1, a, 2]"}});
+}
+
+TEST_F(CypherUnwindExprTest, roundTripsAHeterogeneousElementThroughACollect) {
+    expectRowsInOrder("UNWIND [10, 'a'] AS v WITH collect(v) AS values "
+                      "UNWIND values AS x RETURN x",
+                      {{"10"}, {"a"}});
+}
+
+TEST_F(CypherUnwindExprTest, dedupsEqualListsInACollect) {
+    // Two groups build the same list from different rows, so DISTINCT keeps one of it:
+    // two list cells are the same value when their elements are, never by sharing a cell.
+    const std::string_view collected = "UNWIND [1, 2] AS key "
+                                       "MATCH (p:Person) WHERE p.name = 'Adam' "
+                                       "MATCH (p)-[:INTERESTED_IN]->(i:Interest) "
+                                       "WITH key, collect(i.name) AS interests ";
+
+    expectRows(std::string(collected).append("WITH collect(DISTINCT interests) AS nested "
+                                             "UNWIND nested AS one RETURN one"),
+               {{"[Bio, Cooking]"}});
+
+    expectRows(std::string(collected).append("WITH collect(interests) AS nested "
+                                             "UNWIND nested AS one RETURN one"),
+               {{"[Bio, Cooking]"}, {"[Bio, Cooking]"}});
+}
+
+TEST_F(CypherUnwindExprTest, reducesOverAListLiteralPublishedByAWith) {
+    // The barrier publishes the element type with the list, so a literal read through a
+    // variable reduces exactly as the same literal written into the UNWIND does.
+    expectRows("WITH [10, 20] AS numbers UNWIND numbers AS x RETURN sum(x)", {{"30"}});
+    expectRows("WITH [10, 20] AS numbers UNWIND numbers AS x RETURN x + 1",
+               {{"11"}, {"21"}});
+}
+
 TEST_F(CypherUnwindExprTest, crossesTheUnwoundElementsWithAFollowingMatch) {
     expectRows("MATCH (p:Person) WHERE p.name = 'Adam' "
                "MATCH (p)-[:INTERESTED_IN]->(i:Interest) "
@@ -235,6 +502,29 @@ TEST_F(CypherUnwindExprTest, crossesTheUnwoundElementsWithAFollowingMatch) {
                "MATCH (n) WHERE n.name = interest "
                "RETURN n.name",
                {{"Bio"}, {"Cooking"}});
+}
+
+TEST_F(CypherUnwindExprTest, carriesANodeAndAnEdgePastTheUnwind) {
+    // Entity columns ride the carry set as values do, so the node and the edge of each
+    // group come back beside the element their own row's cell unwound into.
+    expectRows("MATCH (p:Person) WHERE p.name = 'Adam' "
+               "MATCH (p)-[e:INTERESTED_IN]->(i:Interest) "
+               "WITH p, e, collect(i.name) AS interests "
+               "UNWIND interests AS interest "
+               "RETURN p.name, e.name, interest",
+               {{"Adam", "Adam -> Bio", "Bio"}, {"Adam", "Adam -> Cooking", "Cooking"}});
+}
+
+TEST_F(CypherUnwindExprTest, traversesFromANodeCarriedPastTheUnwind) {
+    // The carried node is still a node behind the expansion, so a later MATCH hops off it
+    // once per element it was replicated for.
+    expectRows("MATCH (p:Person) WHERE p.name = 'Adam' "
+               "MATCH (p)-[:INTERESTED_IN]->(i:Interest) "
+               "WITH p, collect(i.name) AS interests "
+               "UNWIND interests AS interest "
+               "MATCH (p)-[:KNOWS_WELL]->(other) "
+               "RETURN interest, other.name",
+               {{"Bio", "Remy"}, {"Cooking", "Remy"}});
 }
 
 TEST_F(CypherUnwindExprTest, filtersAFollowingMatchOnAnInlinePropertyConstraint) {
@@ -271,6 +561,19 @@ TEST_F(CypherUnwindExprTest, cutsTheUnwoundElements) {
                       "UNWIND interests AS interest "
                       "RETURN interest ORDER BY interest SKIP 1 LIMIT 1",
                       {{"Eighties"}});
+}
+
+TEST_F(CypherUnwindExprTest, cutsTheUnwoundElementsWithoutASort) {
+    // No sort stands between the cut and the expansion, so the limit bounds the expansion
+    // itself: it stops once three elements are out, whatever chunk size it reaches them in.
+    const Rows firstThree {{"Computers"}, {"Eighties"}, {"Bio"}};
+    const std::string_view query = "MATCH (i:Interest) WITH collect(i.name) AS names "
+                                   "UNWIND names AS name RETURN name LIMIT 3";
+
+    expectRowsInOrder(query, firstThree);
+    expectRowsInOrder(query, firstThree, /*chunkSize=*/1);
+    expectRowsInOrder(query, firstThree, /*chunkSize=*/2);
+    expectRowsInOrder(query, firstThree, /*chunkSize=*/4);
 }
 
 TEST_F(CypherUnwindExprTest, dedupsTheUnwoundElements) {
@@ -315,6 +618,36 @@ TEST_F(CypherUnwindExprTest, chainsTwoExpressionUnwinds) {
                {{"32", "33"}});
 }
 
+TEST_F(CypherUnwindExprTest, unwindsTheSameCollectedListTwice) {
+    // Both unwinds read the one list, and the second expands the rows the first produced,
+    // so the elements come back crossed with themselves.
+    expectRows("MATCH (p:Person) WHERE p.name = 'Adam' "
+               "MATCH (p)-[:INTERESTED_IN]->(i:Interest) "
+               "WITH collect(i.name) AS interests "
+               "UNWIND interests AS a UNWIND interests AS b "
+               "RETURN a, b",
+               {{"Bio", "Bio"}, {"Bio", "Cooking"},
+                {"Cooking", "Bio"}, {"Cooking", "Cooking"}});
+}
+
+TEST_F(CypherUnwindExprTest, unwindsTwoListsOfOneProjection) {
+    // Two collects of the same projection, each expanded in turn: the second list rides
+    // the first expansion's carry set before unwinding over it.
+    expectRows("MATCH (p:Person)-[:INTERESTED_IN]->(i:Interest) WHERE p.name = 'Adam' "
+               "WITH collect(p.name) AS people, collect(i.name) AS interests "
+               "UNWIND people AS person UNWIND interests AS interest "
+               "RETURN person, interest",
+               {{"Adam", "Bio"}, {"Adam", "Bio"},
+                {"Adam", "Cooking"}, {"Adam", "Cooking"}});
+}
+
+TEST_F(CypherUnwindExprTest, unwindsAListLiteralPublishedByAWith) {
+    // The list is a literal, but the UNWIND reads it through a variable, so it takes the
+    // per-row path over a constant column with nothing in flight to carry.
+    expectRowsInOrder("WITH [1, 2, 3] AS numbers UNWIND numbers AS x RETURN x",
+                      {{"1"}, {"2"}, {"3"}});
+}
+
 TEST_F(CypherUnwindExprTest, unwindsAcrossChunkBoundaries) {
     // One chunk per element, so the loop re-enters its body for every row it emits and
     // the carried key is gathered afresh each time.
@@ -331,6 +664,19 @@ TEST_F(CypherUnwindExprTest, unwindsAcrossChunkBoundaries) {
                 {"Cyrus", "Gym"}, {"Cyrus", "Travel"},
                 {"Doruk", "Gym"}},
                /*chunkSize=*/1);
+}
+
+TEST_F(CypherUnwindExprTest, unwindsOneCollectedCellAcrossChunkBoundaries) {
+    // A single ungrouped cell holding every interest, cut at sizes that do not divide its
+    // ten elements: the expansion resumes inside the cell it was halfway through.
+    const Rows interests {{"Computers"}, {"Eighties"}, {"Bio"}, {"Cooking"}, {"Ghosts"},
+                          {"Padel"}, {"Animals"}, {"Gym"}, {"Travel"}, {"JiuJitsu"}};
+    const std::string_view query = "MATCH (i:Interest) WITH collect(i.name) AS names "
+                                   "UNWIND names AS name RETURN name";
+
+    expectRowsInOrder(query, interests, /*chunkSize=*/3);
+    expectRowsInOrder(query, interests, /*chunkSize=*/4);
+    expectRowsInOrder(query, interests, /*chunkSize=*/7);
 }
 
 TEST_F(CypherUnwindExprTest, publishesTheUnwoundElementAtAFollowingBarrier) {
@@ -360,6 +706,61 @@ TEST_F(CypherUnwindExprTest, unwindsTaggedCellsBesideTheCellTheyCameFrom) {
     // outer cell rides the carry set, so it repeats beside each of them.
     expectRowsInOrder("UNWIND [1, 'a', [2, 3]] AS l UNWIND l AS x RETURN l, x",
                       {{"1", "1"}, {"a", "a"}, {"[2, 3]", "2"}, {"[2, 3]", "3"}});
+}
+
+TEST_F(CypherUnwindExprTest, sumsAHeterogeneousElement) {
+    // Mixed numeric tags are what leaves the list type-erased, and Cypher adds those to a
+    // float, so the cells reduce by tag into one.
+    expectRows("UNWIND [1, 2.5] AS v RETURN sum(v)", {{"3.500000"}});
+}
+
+TEST_F(CypherUnwindExprTest, averagesAHeterogeneousElement) {
+    expectRows("UNWIND [1, 2.5] AS v RETURN avg(v)", {{"1.750000"}});
+}
+
+TEST_F(CypherUnwindExprTest, sumsTheDistinctCellsOfAHeterogeneousElement) {
+    expectRows("UNWIND [1, 2.5, 1] AS v RETURN sum(DISTINCT v)", {{"3.500000"}});
+}
+
+TEST_F(CypherUnwindExprTest, sumsAHeterogeneousElementOutOfACollect) {
+    expectRows("UNWIND [1, 2.5] AS v WITH collect(v) AS values "
+               "UNWIND values AS x RETURN sum(x)",
+               {{"3.500000"}});
+}
+
+TEST_F(CypherUnwindExprTest, sumsAHeterogeneousElementPerGroup) {
+    expectRows("UNWIND [1, 2.5] AS v MATCH (n:Person) WHERE n.name = 'Remy' "
+               "RETURN n.name, sum(v), avg(v)",
+               {{"Remy", "3.500000", "1.750000"}});
+}
+
+TEST_F(CypherUnwindExprTest, sumsNoHeterogeneousCellToZero) {
+    expectRows("UNWIND [] AS v RETURN sum(v)", {{"0.000000"}});
+}
+
+TEST_F(CypherUnwindExprTest, collectsEachTagOfAHeterogeneousElement) {
+    // Every cell goes back into the list under the type its own tag names, so a bool
+    // stays a bool and a double a double beside whatever they were mixed with.
+    expectRows("UNWIND [true, 1] AS v RETURN collect(v)", {{"[true, 1]"}});
+    expectRows("UNWIND [1.5, 'a'] AS v RETURN collect(v)", {{"[1.500000, a]"}});
+}
+
+TEST_F(CypherUnwindExprTest, averagesTheDistinctCellsOfAHeterogeneousElement) {
+    expectRows("UNWIND [1, 2.5, 1] AS v RETURN avg(DISTINCT v)", {{"1.750000"}});
+}
+
+TEST_F(CypherUnwindExprTest, unwindsANestedEdgeListToItsEdges) {
+    expectRows("MATCH ()-[e:KNOWS_WELL]->() WITH collect(e) AS edges "
+               "WITH collect(edges) AS nested "
+               "UNWIND nested AS one UNWIND one AS edge "
+               "RETURN edge.name",
+               {{"Remy -> Adam"}, {"Adam -> Remy"}, {"Ghosts -> Remy"}});
+}
+
+TEST_F(CypherUnwindExprTest, rejectsSummingANonNumericCell) {
+    // The cells carry a type each, so the check the column types make for a typed
+    // reduction is made per row instead - and a string is no number in either.
+    expectRejected("UNWIND [10, 'a'] AS v RETURN sum(v)", "requires a numeric column");
 }
 
 TEST_F(CypherUnwindExprTest, rejectsAnUnwoundVariableThatIsAlreadyDeclared) {

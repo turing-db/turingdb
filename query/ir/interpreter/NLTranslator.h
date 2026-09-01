@@ -249,6 +249,10 @@ private:
                              NLLimitState* limit,
                              NLStmtContainer* body);
 
+    // The drain filling an nl.unwind's element chunk from a list column: the chunk's own
+    // element type is what the list resolved to, so it names the column the drain fills
+    static NLUnwindElementEmitFunction selectListUnwindEmit(mlir::Type chunkType);
+
     // Materialize a literal element array - an nl.unwind_const's or an nl.const_list's -
     // into a ListView in the query-scoped ListBuffer, which the unwind loop then reads
     // chunk by chunk and a constant list keeps whole. A nested array is materialized

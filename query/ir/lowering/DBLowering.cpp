@@ -264,9 +264,10 @@ nl::ChunkType procedureChunkType(mlir::OpBuilder& builder, ProcedureType procedu
 // inputElement is the tagged cell itself. avg always reduces to an f64; sum,
 // min and max keep the input's own type. Throws for a value type the reduction
 // cannot handle: sum/avg need a numeric column, min/max an orderable one (so a
-// string sum, a bool sum or an embedding min is rejected, matching Cypher). A
-// tagged cell is numeric only once read, so only avg - whose result type does not
-// depend on what the tags were - accepts one.
+// string sum, a bool sum or an embedding min is rejected, matching Cypher). A tagged
+// cell is numeric only once read, so sum and avg accept one - both landing on the f64
+// mixed numeric tags reduce to - where min/max would have to hand the winning cell back
+// under its own type, which no single result type names.
 mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
                                       storage::AggregateKind kind,
                                       mlir::Type inputElement) {
@@ -280,10 +281,10 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
 
     switch (kind) {
         case storage::AggregateKind::Sum: {
-            if (!isNumeric) {
+            if (!isNumeric && !isTaggedCell) {
                 throw IRException("db.sum requires a numeric column");
             }
-            return inputElement;
+            return isTaggedCell ? builder.getF64Type() : inputElement;
         }
         break;
 
@@ -510,6 +511,7 @@ bool opensSourceLoop(mlir::Operation* operation) {
                      mlir::db::UnwindConst,
                      mlir::db::LoadCSV,
                      mlir::db::VectorSearch,
+                     mlir::db::Unwind,
                      mlir::db::ScanNodesByLabel,
                      mlir::db::ScanEdges,
                      mlir::db::GetOutEdges,
@@ -544,6 +546,25 @@ bool dropsRows(mlir::Operation* operation) {
                      mlir::db::Skip,
                      mlir::db::Limit,
                      mlir::db::RemoveDuplicates>(operation);
+}
+
+// The list element types an unwind can drain into a column of that very type: the entity
+// IDs, the value types a nullable value chunk is laid out for, and a nested list, which
+// drains into a list column one level shallower. An unresolved element, an embedding, or
+// the list_element a heterogeneous list holds drains as tagged scalars instead - none of
+// them names a column shape the drain could fill.
+bool drainsToItsOwnElementType(mlir::Type listElement) {
+    if (mlir::isa<storage::NodeIDType, storage::EdgeIDType, storage::StringType, storage::ListType>(listElement)) {
+        return true;
+    }
+
+    if (mlir::isa<mlir::Float64Type>(listElement)) {
+        return true;
+    }
+
+    const auto intType = mlir::dyn_cast<mlir::IntegerType>(listElement);
+
+    return intType && (intType.getWidth() == 1 || intType.getWidth() == 64);
 }
 
 }
@@ -942,14 +963,30 @@ void DBLowering::lowerVectorSearch(mlir::db::VectorSearch vectorSearch) {
 }
 
 mlir::Type DBLowering::unwoundElementType(mlir::MLIRContext* context, mlir::Type sourceElement) {
-    // A list drains into the type-erased column of tagged scalars: its elements carry
-    // their own type. Any other source keeps the column it already rides - its cells are
-    // the elements, and a tagged cell holding a list gives up tagged scalars again.
-    if (llvm::isa<storage::ListType>(sourceElement)) {
+    // Any source but a list keeps the column it already rides - its cells are the
+    // elements, and a tagged cell holding a list gives up tagged scalars again.
+    const auto listType = mlir::dyn_cast<storage::ListType>(sourceElement);
+    if (!listType) {
+        return sourceElement;
+    }
+
+    // The elements of a list whose type is known are that type, so the unwind hands the
+    // rest of the query a column it can read as one - a node stays a node, an integer an
+    // integer. Only a list whose elements share no such type drains into the type-erased
+    // column of tagged scalars.
+    const mlir::Type listElement = listType.getElementType();
+    if (!drainsToItsOwnElementType(listElement)) {
         return storage::ListElementType::get(context);
     }
 
-    return sourceElement;
+    // An entity ID and a nested list are present in every row they are drained from, so
+    // they ride a plain chunk; a value rides the nullable one every value-chunk consumer
+    // dispatches on, as lowerUnwindConst's homogeneous list does.
+    if (mlir::isa<storage::NodeIDType, storage::EdgeIDType, storage::ListType>(listElement)) {
+        return listElement;
+    }
+
+    return storage::NullableType::get(context, listElement);
 }
 
 void DBLowering::lowerUnwind(mlir::db::Unwind unwind) {
@@ -1802,16 +1839,17 @@ void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
 
     for (size_t aggregateIndex = 0; aggregateIndex < kinds.size(); aggregateIndex++) {
         const auto kind = static_cast<storage::GroupAggregateKind>(kinds[aggregateIndex]);
+        const size_t chunkIndex = keyCount + aggregateIndex;
 
         // A type-erased column of tagged cells is folded as it stands, like a count's
         // input: every cell carries its own tag, so there is no one value type to read
         // the column as.
-        const mlir::Value aggregateChunk = chunks[keyCount + aggregateIndex];
+        const mlir::Value aggregateChunk = chunks[chunkIndex];
         const mlir::Type aggregateElement = mlir::cast<nl::ChunkType>(aggregateChunk.getType()).getElementType();
         const bool taggedCells = mlir::isa<storage::ListElementType>(aggregateElement);
 
         if (reducesValues(kind) && !taggedCells) {
-            chunks[keyCount + aggregateIndex] = nullableValueChunk(aggregateChunk);
+            chunks[chunkIndex] = nullableValueChunk(aggregateChunk);
         }
     }
 
@@ -1902,14 +1940,19 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
         chunks[inputIndex] = rowAlignedChunk(chunks[inputIndex], cardinality);
     }
 
-    // An entity column collects as the IDs it carries, which every row holds: only a
-    // scalar value column is read as nullable, the way a property fetch is.
+    // An entity column collects as the IDs it carries, a list column as the cells it
+    // holds, and a type-erased one as the tagged cells - all present in every row, the
+    // tagged null among them, which the fold drops rather than the column. Only a scalar
+    // value column is read as nullable, the way a property fetch is.
     for (size_t valueIndex = 0; valueIndex < valueCount; valueIndex++) {
         const size_t chunkIndex = keyCount + valueIndex;
         const mlir::Type collectedElement = mlir::cast<nl::ChunkType>(chunks[chunkIndex].getType()).getElementType();
-        const bool collectsEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(collectedElement);
+        const bool collectsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
+                                                              storage::EdgeIDType,
+                                                              storage::ListType,
+                                                              storage::ListElementType>(collectedElement);
 
-        if (!collectsEntity) {
+        if (!collectsCellsPresentInEveryRow) {
             chunks[chunkIndex] = nullableValueChunk(chunks[chunkIndex]);
         }
     }

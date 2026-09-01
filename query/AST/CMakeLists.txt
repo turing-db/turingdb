@@ -9,6 +9,7 @@ set(ast_sources
     ProcedureLookup.cpp
 
     decl/DeclContext.cpp
+    decl/ListShape.cpp
     decl/PatternData.cpp
     decl/VarDecl.cpp
 

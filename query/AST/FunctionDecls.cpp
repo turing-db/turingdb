@@ -78,31 +78,54 @@ void FunctionDecls::initDefault() {
     collectIntegers->setArguments({EvaluatedType::Integer});
     collectIntegers->setReturnTypes({{EvaluatedType::List}});
     collectIntegers->setIsAggregate(true);
+    collectIntegers->setCollectsItsArgument(true);
 
     FunctionSignature* collectDoubles = createFunction("collect");
     collectDoubles->setArguments({EvaluatedType::Double});
     collectDoubles->setReturnTypes({{EvaluatedType::List}});
     collectDoubles->setIsAggregate(true);
+    collectDoubles->setCollectsItsArgument(true);
 
     FunctionSignature* collectStrings = createFunction("collect");
     collectStrings->setArguments({EvaluatedType::String});
     collectStrings->setReturnTypes({{EvaluatedType::List}});
     collectStrings->setIsAggregate(true);
+    collectStrings->setCollectsItsArgument(true);
 
     FunctionSignature* collectBools = createFunction("collect");
     collectBools->setArguments({EvaluatedType::Bool});
     collectBools->setReturnTypes({{EvaluatedType::List}});
     collectBools->setIsAggregate(true);
+    collectBools->setCollectsItsArgument(true);
 
     FunctionSignature* collectNodes = createFunction("collect");
     collectNodes->setArguments({EvaluatedType::NodePattern});
     collectNodes->setReturnTypes({{EvaluatedType::List}});
     collectNodes->setIsAggregate(true);
+    collectNodes->setCollectsItsArgument(true);
 
     FunctionSignature* collectEdges = createFunction("collect");
     collectEdges->setArguments({EvaluatedType::EdgePattern});
     collectEdges->setReturnTypes({{EvaluatedType::List}});
     collectEdges->setIsAggregate(true);
+    collectEdges->setCollectsItsArgument(true);
+
+    // A list collects into a list of lists: one level deeper over the same innermost
+    // elements, so unwinding it twice hands those elements back with their own type.
+    FunctionSignature* collectLists = createFunction("collect");
+    collectLists->setArguments({EvaluatedType::List});
+    collectLists->setReturnTypes({{EvaluatedType::List}});
+    collectLists->setIsAggregate(true);
+    collectLists->setCollectsItsArgument(true);
+
+    // A type-erased cell collects too: the list gathers the values the cells hold, each
+    // keeping its own type, so the list is homogeneous in nothing and hands tagged
+    // scalars back out.
+    FunctionSignature* collectListItems = createFunction("collect");
+    collectListItems->setArguments({EvaluatedType::ListItem});
+    collectListItems->setReturnTypes({{EvaluatedType::List}});
+    collectListItems->setIsAggregate(true);
+    collectListItems->setCollectsItsArgument(true);
 
     // collect(null) is a query that can be asked: every row's null is dropped, so the list
     // comes out empty, and the overload is what keeps the answer from being an argument error
@@ -110,6 +133,7 @@ void FunctionDecls::initDefault() {
     collectNulls->setArguments({EvaluatedType::Null});
     collectNulls->setReturnTypes({{EvaluatedType::List}});
     collectNulls->setIsAggregate(true);
+    collectNulls->setCollectsItsArgument(true);
 
     // count(null) is a query that can be asked: a null is never charged, so the tally is
     // zero, and the overload is what keeps the answer from being an argument error
@@ -212,6 +236,16 @@ void FunctionDecls::initDefault() {
     sumDouble->setArguments({EvaluatedType::Double});
     sumDouble->setReturnTypes({{EvaluatedType::Double}});
     sumDouble->setIsAggregate(true);
+
+    // A type-erased cell carries its number's type per row. Mixed numeric tags are what
+    // leaves a list type-erased, and Cypher sums those to a float, so this reduces to one
+    // whichever tags turn up - and errors on a cell that is no number at all. Only the
+    // MLIR engine folds such a column, so the overload is v3-only as avg's is.
+    FunctionSignature* sumListItems = createFunction("sum");
+    sumListItems->setArguments({EvaluatedType::ListItem});
+    sumListItems->setReturnTypes({{EvaluatedType::Double}});
+    sumListItems->setIsAggregate(true);
+    sumListItems->setIsV3Only(true);
 
     // Conversion functions
     FunctionSignature* toInteger = createFunction("toInteger");

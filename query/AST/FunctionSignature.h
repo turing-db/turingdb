@@ -70,6 +70,10 @@ public:
 
     bool isV3Only() const { return _isV3Only; }
 
+    // Whether the list this returns holds the values of its own argument, so a caller
+    // reading an element back knows the type it has - collect, and nothing else today.
+    bool collectsItsArgument() const { return _collectsItsArgument; }
+
     size_t getMinArgCount() const { return _requiredArgCount; }
 
     void setArguments(ArgumentTypes&& args) {
@@ -88,6 +92,8 @@ public:
 
     void setIsV3Only(bool v3Only) { _isV3Only = v3Only; }
 
+    void setCollectsItsArgument(bool collects) { _collectsItsArgument = collects; }
+
 private:
     std::string_view _fullName;
     ArgumentTypes _argumentTypes;
@@ -95,6 +101,7 @@ private:
     size_t _requiredArgCount {0};
     bool _isAggregate {false};
     bool _isProcedure {false};
+    bool _collectsItsArgument {false};
 
     // An overload only the MLIR engine answers: the legacy planner either cannot lay its
     // argument out or reduces it over the wrong rows, so it never matches there

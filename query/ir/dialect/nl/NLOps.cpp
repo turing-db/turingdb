@@ -538,13 +538,19 @@ LogicalResult AggregateUpdate::verify() {
     const Type accumulatorType = cast<AggregateStateType>(getState().getType()).getElementType();
 
     // A type-erased column of tagged cells has no one value type: every cell is read
-    // through its own tag. Only avg folds one, since its f64 accumulator is the same
-    // whatever the tags were, where sum/min/max hold the reduced value in the input's
-    // own type and so have to know it.
+    // through its own tag. Only sum and avg fold one, into the f64 a reduction over mixed
+    // numeric tags lands on, where min/max hold the reduced value in the input's own type
+    // and so have to know it.
     const auto rowsChunk = cast<ChunkType>(getRows().getType());
     const bool taggedCells = isa<storage::ListElementType>(rowsChunk.getElementType());
-    if (taggedCells && !isAvg) {
-        return emitOpError("only avg folds a column of tagged cells");
+    if (taggedCells) {
+        if (!isAvg && kind != storage::AggregateKind::Sum) {
+            return emitOpError("only sum and avg fold a column of tagged cells");
+        }
+
+        if (!isa<Float64Type>(accumulatorType)) {
+            return emitOpError("a reduction over type-erased cells must fold into an f64 accumulator state");
+        }
     }
 
     // Every other input is a property value chunk; its value type is what the fold
