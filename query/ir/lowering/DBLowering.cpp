@@ -50,8 +50,8 @@ mlir::Value emitNLUnaryFunction(mlir::OpBuilder& builder,
     return builder.create<NLOp>(loc, resultType, input).getResult();
 }
 
-mlir::Type stringFunctionElement(mlir::OpBuilder& builder) {
-    return storage::StringType::get(builder.getContext());
+mlir::Type ownedStringFunctionElement(mlir::OpBuilder& builder) {
+    return storage::OwnedStringType::get(builder.getContext());
 }
 
 mlir::Type integerFunctionElement(mlir::OpBuilder& builder) {
@@ -106,11 +106,11 @@ struct UnaryFunctionLowering {
 };
 
 const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionLowerings = {
-    {"db.labels",     {&emitNLUnaryFunction<nl::Labels>,    &stringFunctionElement,  ResultNullability::FollowsInput}},
-    {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>,  &stringFunctionElement,  ResultNullability::FollowsInput}},
-    {"db.to_integer", {&emitNLUnaryFunction<nl::ToInteger>, &integerFunctionElement, ResultNullability::AlwaysNullable}},
-    {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,   ResultNullability::AlwaysNullable}},
-    {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, &booleanFunctionElement, ResultNullability::AlwaysNullable}},
+    {"db.labels",     {&emitNLUnaryFunction<nl::Labels>,    &ownedStringFunctionElement, ResultNullability::FollowsInput}},
+    {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>,  &ownedStringFunctionElement, ResultNullability::FollowsInput}},
+    {"db.to_integer", {&emitNLUnaryFunction<nl::ToInteger>, &integerFunctionElement,     ResultNullability::AlwaysNullable}},
+    {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,       ResultNullability::AlwaysNullable}},
+    {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, &booleanFunctionElement,     ResultNullability::AlwaysNullable}},
 };
 
 const UnaryFunctionLowering* lookupUnaryFunctionLowering(mlir::Operation& operation) {
