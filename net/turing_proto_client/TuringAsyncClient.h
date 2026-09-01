@@ -14,6 +14,7 @@
 #include "TuringProtoHeaders.h"
 #include "QueryCallbacks.h"
 #include "QueryStatus.h"
+#include "TuringSink.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
 #include "list/ListBuffer.h"
@@ -134,16 +135,18 @@ private:
     net::proto::ChunkedBuffer<float> _embeddingBuffer;
     net::proto::ChunkedBuffer<char> _stringBuffer;
     db::ListBuffer<> _listBuffer;
+    net::proto::TuringSink _sink;
 
     // Decoded-response state, persisted across recv() resumptions for the in-flight query
     // and rebuilt fresh per query in reset(). _df/_dfMan are owned so a new query starts
     // with an empty dataframe; recreating _dfMan also frees the columns it owned from the
     // previous query (it deletes them in its destructor), instead of accumulating one set
     // of columns per query for the client's lifetime.
-    std::vector<DecodedColumnSchema> _colSchemas;
+    std::vector<DecodedColumnSchema> _columnSchemas;
     std::unique_ptr<db::DataframeManager> _dfMan;
     std::unique_ptr<db::Dataframe> _df;
-    std::unique_ptr<TuringProtoDecoder> _decoder;
+    std::unique_ptr<TuringSinkColumnContainer> _dataframeContainer;
+    TuringProtoDecoder<TuringSink> _decoder;
 
     // Per-query output callback and accumulated result.
     db::QueryCallbacks::OnOutputData _callback;

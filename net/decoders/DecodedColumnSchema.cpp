@@ -2,12 +2,12 @@
 
 using namespace net::proto;
 
-DfColumnState::DfColumnState() = default;
-DfColumnState::DfColumnState(const DfColumnState&) = default;
-DfColumnState::DfColumnState(DfColumnState&&) = default;
-DfColumnState& DfColumnState::operator=(const DfColumnState&) = default;
-DfColumnState& DfColumnState::operator=(DfColumnState&&) = default;
-DfColumnState::~DfColumnState() = default;
+ProtoColumnState::ProtoColumnState() = default;
+ProtoColumnState::ProtoColumnState(const ProtoColumnState&) = default;
+ProtoColumnState::ProtoColumnState(ProtoColumnState&&) = default;
+ProtoColumnState& ProtoColumnState::operator=(const ProtoColumnState&) = default;
+ProtoColumnState& ProtoColumnState::operator=(ProtoColumnState&&) = default;
+ProtoColumnState::~ProtoColumnState() = default;
 
 DecodedColumnSchema::DecodedColumnSchema() = default;
 DecodedColumnSchema::DecodedColumnSchema(const DecodedColumnSchema&) = default;

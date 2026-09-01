@@ -19,6 +19,8 @@
 #include "TuringProtoDecoder.h"
 #include "TuringProtoHeaders.h"
 #include "TuringException.h"
+#include "TuringSink.h"
+#include "TuringSinkColumnContainer.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
 
@@ -456,9 +458,11 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
     _listBuffer.clear();
     db::DataframeManager dfMan;
     db::QueryStatus res;
-    std::vector<DecodedColumnSchema> colSchemas;
+    std::vector<DecodedColumnSchema> columnSchemas;
     db::Dataframe df;
-    TuringProtoDecoder decoder(_localMem, &dfMan, &_inBuf, &_embeddingBuffer, &_stringBuffer, &_listBuffer, colSchemas);
+    TuringSink sink(_localMem, &_embeddingBuffer, &_stringBuffer, &_listBuffer);
+    TuringSinkColumnContainer dataframeContainer(&df, &dfMan);
+    TuringProtoDecoder<TuringSink> decoder(&_inBuf, &sink, columnSchemas);
 
     bool callbackFired = false;
     bool sawTerminalPacket = false;
@@ -486,19 +490,19 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
 
         switch (responseHeader._type) {
             case MessageTypes::CHUNK_HEADER:
-                decoder.decodeIncomingChunkHeader(&df);
+                decoder.decodeIncomingChunkHeader(&dataframeContainer);
             break;
 
             case MessageTypes::CHUNK:
-                decoder.decodeIncomingChunk(&df);
+                decoder.decodeIncomingChunk(&dataframeContainer);
             break;
 
             case MessageTypes::END_CHUNK:
                 callbackFired = true;
                 callback(&df);
                 df.clear();
-                for (auto& schema : colSchemas) {
-                    schema.getColState().reset();
+                for (auto& schema : columnSchemas) {
+                    schema.getColumnState().reset();
                 }
                 decoder.reset();
             break;

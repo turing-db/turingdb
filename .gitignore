@@ -1,4 +1,6 @@
 .cache/
+.clangd
+.clang-format
 compile_commands.json
 *.swp
 .env
