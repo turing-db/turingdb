@@ -1120,6 +1120,18 @@ def LteOp : PredicateOp<"lte", [Pure]> {
   let summary = "Row-wise less-than-or-equal comparison of two value columns";
 }
 
+def StartsWithOp : PredicateOp<"starts_with", [Pure]> {
+  let summary = "Row-wise test of whether each string column value starts with the given prefix";
+}
+
+def EndsWithOp : PredicateOp<"ends_with", [Pure]> {
+  let summary = "Row-wise test of whether each string column value ends with the given suffix";
+}
+
+def ContainsOp : PredicateOp<"contains", [Pure]> {
+  let summary = "Row-wise test of whether each string column value contains the given substring";
+}
+
 def FilterOp : TuringOp<"filter", [Pure]> {
   let summary = "Keep only the rows where the mask is true, filtering carried columns alongside";
 

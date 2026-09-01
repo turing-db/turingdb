@@ -181,6 +181,7 @@ Value climbToLineageAnchor(Value column) {
 
 bool isMaskComputeOp(Operation* op) {
     return isa<EqOp, NeqOp, GtOp, LtOp, GteOp, LteOp,
+               StartsWithOp, EndsWithOp, ContainsOp,
                AndOp, OrOp, XorOp, NotOp,
                AddOp, SubOp, MulOp, DivOp, ModOp, PowOp,
                ConstantOp,

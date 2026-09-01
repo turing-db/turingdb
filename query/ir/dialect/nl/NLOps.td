@@ -1348,6 +1348,42 @@ def Lte : NLOp<"lte", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
+def StartsWith : NLOp<"starts_with", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
+  let summary = "Row-wise test of whether each string chunk value starts with the given prefix";
+  let description = [{
+      %r = nl.starts_with %x, %y : (!nl.chunk<!storage.string>, !nl.chunk<!storage.string>) -> !nl.chunk<!storage.nullable<i1>>
+  }];
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
+def EndsWith : NLOp<"ends_with", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
+  let summary = "Row-wise test of whether each string chunk value ends with the given suffix";
+  let description = [{
+      %r = nl.ends_with %x, %y : (!nl.chunk<!storage.string>, !nl.chunk<!storage.string>) -> !nl.chunk<!storage.nullable<i1>>
+  }];
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
+def Contains : NLOp<"contains", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
+  let summary = "Row-wise test of whether each string chunk value contains the given substring";
+  let description = [{
+      %r = nl.contains %x, %y : (!nl.chunk<!storage.string>, !nl.chunk<!storage.string>) -> !nl.chunk<!storage.nullable<i1>>
+  }];
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
 def And : NLOp<"and", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise logical AND of two boolean chunks";
   let description = [{
