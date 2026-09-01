@@ -757,6 +757,12 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerBinaryOp<nl::Gte>(operation, BinaryResultKind::Boolean);
     } else if (mlir::isa<mlir::db::LteOp>(operation)) {
         lowerBinaryOp<nl::Lte>(operation, BinaryResultKind::Boolean);
+    } else if (mlir::isa<mlir::db::StartsWithOp>(operation)) {
+        lowerBinaryOp<nl::StartsWith>(operation, BinaryResultKind::Boolean);
+    } else if (mlir::isa<mlir::db::EndsWithOp>(operation)) {
+        lowerBinaryOp<nl::EndsWith>(operation, BinaryResultKind::Boolean);
+    } else if (mlir::isa<mlir::db::ContainsOp>(operation)) {
+        lowerBinaryOp<nl::Contains>(operation, BinaryResultKind::Boolean);
     } else if (mlir::isa<mlir::db::AndOp>(operation)) {
         lowerBinaryOp<nl::And>(operation, BinaryResultKind::Boolean);
     } else if (mlir::isa<mlir::db::OrOp>(operation)) {

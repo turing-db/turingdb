@@ -3076,6 +3076,11 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         }
         break;
 
+        case Expr::Kind::STRING: {
+            translateStringExpr(expr);
+        }
+        break;
+
         case Expr::Kind::FUNCTION_INVOCATION: {
             const FunctionInvocationExpr* funcExpr = static_cast<const FunctionInvocationExpr*>(expr);
             translateFunctionInvocationExpr(expr, funcExpr);
@@ -3084,7 +3089,6 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
 
         case Expr::Kind::INDEX:
         case Expr::Kind::LIST:
-        case Expr::Kind::STRING:
         case Expr::Kind::ENTITY_TYPES:
         case Expr::Kind::PATH:
             throw TuringException(fmt::format("Unsupported expression: {}",
@@ -3207,6 +3211,41 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
         break;
 
         case BinaryOperator::_SIZE:
+        break;
+    }
+}
+
+void DBProgramGenerator::translateStringExpr(const Expr* expr) {
+    const StringExpr* strExpr = static_cast<const StringExpr*>(expr);
+
+    const Expr* lhsExpr = strExpr->getLHS();
+    const Expr* rhsExpr = strExpr->getRHS();
+
+    translateExpr(lhsExpr);
+    translateExpr(rhsExpr);
+
+    bioassert(_part._exprMap.contains(lhsExpr), "String operation with unknown LHS operand.");
+    bioassert(_part._exprMap.contains(rhsExpr), "String operation with unknown RHS operand.");
+
+    const mlir::Value lhs = _part._exprMap.at(lhsExpr);
+    const mlir::Value rhs = _part._exprMap.at(rhsExpr);
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+
+    const StringOperator op = strExpr->getStringOperator();
+
+    switch (op) {
+        case StringOperator::StartsWith:
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::StartsWithOp>(loc, boolType, lhs, rhs).getResult();
+        break;
+        case StringOperator::EndsWith:
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::EndsWithOp>(loc, boolType, lhs, rhs).getResult();
+        break;
+        case StringOperator::Contains:
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::ContainsOp>(loc, boolType, lhs, rhs).getResult();
+        break;
+        case StringOperator::_SIZE:
+            throw TuringException("Unknown string operator.");
         break;
     }
 }
