@@ -146,6 +146,56 @@ void unwindListElementEmit(const Column* source,
     }
 }
 
+// Copy the elements one step covers out of a list column into a typed value column: each
+// output row is the element at its position in the list its source row holds. The list's
+// element type is the column's, so every element is present and shares that type - the
+// tag check is what holds a list whose elements disagree with it to that promise.
+template <typename Primitive>
+void unwindListValueEmit(const Column* source,
+                         const ColumnVector<size_t>* rows,
+                         const ColumnVector<size_t>* positions,
+                         Column* output) {
+    const std::vector<ListView>& lists = static_cast<const ColumnVector<ListView>*>(source)->getRaw();
+    const std::vector<size_t>& rowsRaw = rows->getRaw();
+    const std::vector<size_t>& positionsRaw = positions->getRaw();
+
+    std::vector<std::optional<Primitive>>& outputRaw = static_cast<ColumnOptVector<Primitive>*>(output)->getRaw();
+    outputRaw.resize(rowsRaw.size());
+
+    constexpr ListBufferTypeTag expectedTag = TypeToListBufferTag<Primitive>::Tag;
+
+    for (size_t index = 0; index < rowsRaw.size(); index++) {
+        const ListElementView element = lists[rowsRaw[index]].elements()[positionsRaw[index]];
+        bioassert(element.getTag() == expectedTag, "Unwound element does not have the unwound list's value type.");
+
+        outputRaw[index] = element.getAs<Primitive>();
+    }
+}
+
+// The present-in-every-row sibling of unwindListValueEmit: an entity ID and a nested list
+// are always there, so the elements drain into a plain column rather than a nullable one.
+template <typename Element>
+void unwindListPlainEmit(const Column* source,
+                         const ColumnVector<size_t>* rows,
+                         const ColumnVector<size_t>* positions,
+                         Column* output) {
+    const std::vector<ListView>& lists = static_cast<const ColumnVector<ListView>*>(source)->getRaw();
+    const std::vector<size_t>& rowsRaw = rows->getRaw();
+    const std::vector<size_t>& positionsRaw = positions->getRaw();
+
+    std::vector<Element>& outputRaw = static_cast<ColumnVector<Element>*>(output)->getRaw();
+    outputRaw.resize(rowsRaw.size());
+
+    constexpr ListBufferTypeTag expectedTag = TypeToListBufferTag<Element>::Tag;
+
+    for (size_t index = 0; index < rowsRaw.size(); index++) {
+        const ListElementView element = lists[rowsRaw[index]].elements()[positionsRaw[index]];
+        bioassert(element.getTag() == expectedTag, "Unwound element does not have the unwound list's element type.");
+
+        outputRaw[index] = element.getAs<Element>();
+    }
+}
+
 // The rows one cell of a type-erased column unwinds into: a tagged list its elements, a
 // tagged null none, and any other tagged scalar the single row it is.
 size_t unwindTaggedElementCount(const Column* source, size_t row) {
@@ -1180,6 +1230,58 @@ void aggregateUpdateMinMax(NLAggregateState* state, const Column* input) {
     }
 }
 
+// The number a tagged cell holds, whatever numeric type its tag names. A reduction over
+// a type-erased column is defined over numbers only, so any other tag is a query error -
+// the check the static column types make for a typed column, made per row here.
+double taggedNumericValue(const ListElementView element) {
+    switch (element.getTag()) {
+        case ListBufferTypeTag::Int:
+            return static_cast<double>(element.getAs<types::Int64::Primitive>());
+        break;
+
+        case ListBufferTypeTag::UInt:
+            return static_cast<double>(element.getAs<types::UInt64::Primitive>());
+        break;
+
+        case ListBufferTypeTag::Double:
+            return element.getAs<types::Double::Primitive>();
+        break;
+
+        default:
+            throw IRException("sum/avg over type-erased cells requires a numeric column");
+        break;
+    }
+}
+
+// Fold a chunk of tagged cells into a running f64 sum, counting the ones folded so avg
+// reads the same accumulator. A cell tagged null is skipped, as a null value column row
+// is. Mixed numeric tags are what makes a column type-erased, and Cypher sums those to a
+// float, so the accumulator is an f64 whichever tags turn up.
+template <bool CountsRows>
+void aggregateUpdateNumericTagged(NLAggregateState* state, const Column* input) {
+    auto* accumulator = static_cast<ColumnOptVector<double>*>(state->getAccumulator());
+    std::optional<double>& current = accumulator->getRaw().front();
+    const auto& inputRaw = static_cast<const ColumnVector<ListElementView>*>(input)->getRaw();
+
+    double running = current.value();
+    size_t seen = 0;
+
+    for (const ListElementView element : inputRaw) {
+        if (element.getTag() == ListBufferTypeTag::Null) {
+            continue;
+        }
+
+        running += taggedNumericValue(element);
+        seen++;
+    }
+
+    current = running;
+
+    if constexpr (CountsRows) {
+        state->addCount(seen);
+    }
+}
+
 // Fold a chunk's present values into an avg accumulator: a running f64 sum plus a
 // count of the non-null rows (the input primitive is widened to f64). avg divides
 // the two at the emit step, so both are accumulated here.
@@ -1226,53 +1328,6 @@ void aggregateResultAvg(const NLAggregateState* state, Column* output) {
         const double average = accumulator->getRaw().front().value() / static_cast<double>(count);
         outputRaw.assign(1, std::optional<double>(average));
     }
-}
-
-// The number one tagged cell holds, widened to the f64 an average accumulates in. A cell
-// of any other type is no number to average, which is an error rather than a cell to skip
-// - only a null cell is skipped, by the folds below, before they read it.
-double listElementAsDouble(const ListElementView element) {
-    switch (element.getTag()) {
-        case ListBufferTypeTag::Int:
-            return static_cast<double>(element.getAs<types::Int64::Primitive>());
-        break;
-
-        case ListBufferTypeTag::UInt:
-            return static_cast<double>(element.getAs<types::UInt64::Primitive>());
-        break;
-
-        case ListBufferTypeTag::Double:
-            return element.getAs<types::Double::Primitive>();
-        break;
-
-        default:
-            throw IRException("avg requires a numeric column");
-        break;
-    }
-}
-
-// Fold a type-erased chunk's numeric cells into an avg accumulator: the tagged-cell
-// sibling of aggregateUpdateAvg, reading each cell through its own tag so that an integer
-// and a double element both charge the one running f64 sum. A null cell is skipped, as an
-// absent value of a nullable column is.
-void aggregateUpdateAvgElements(NLAggregateState* state, const Column* input) {
-    auto* accumulator = static_cast<ColumnOptVector<double>*>(state->getAccumulator());
-    std::optional<double>& current = accumulator->getRaw().front();
-    const auto& inputRaw = static_cast<const ColumnVector<ListElementView>*>(input)->getRaw();
-
-    double running = current.value();
-    size_t seen = 0;
-    for (const ListElementView element : inputRaw) {
-        if (element.getTag() == ListBufferTypeTag::Null) {
-            continue;
-        }
-
-        running += listElementAsDouble(element);
-        seen++;
-    }
-
-    current = running;
-    state->addCount(seen);
 }
 
 // The fold handler for a sum over a column of this value type. sum adds the
@@ -1470,6 +1525,44 @@ void groupFoldSumDistinct(Column* accumulator,
     }
 }
 
+// Fold a group's tagged cells into its running f64 sum, tallying the ones folded so avg
+// divides by the same count. The type-erased sibling of groupFoldSum / groupFoldAvg: the
+// cells carry a type each, so the number each holds is read by its tag.
+template <bool CountsRows, bool Distinct>
+void groupFoldNumericTagged(Column* accumulator,
+                            std::vector<uint64_t>& counts,
+                            const Column* input,
+                            const std::vector<size_t>& groups,
+                            NLGroupDistinctTally& distinct) {
+    auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnVector<ListElementView>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const ListElementView element = inputRaw[row];
+        if (element.getTag() == ListBufferTypeTag::Null) {
+            continue;
+        }
+
+        const size_t group = groups[row];
+
+        if constexpr (Distinct) {
+            distinct.beginKey(group);
+            distinctAppendElementBytes(distinct.getKey(), element);
+
+            if (!distinct.insertIfNew()) {
+                continue;
+            }
+        }
+
+        std::optional<double>& running = raw[group];
+        running = running.value() + taggedNumericValue(element);
+
+        if constexpr (CountsRows) {
+            counts[group]++;
+        }
+    }
+}
+
 // Fold a chunk's present values into per-group min (IsMax false) or max (IsMax
 // true) accumulators. The first present value of a group seeds it; a later value
 // replaces it when more extreme. A group with no present value stays null.
@@ -1555,61 +1648,6 @@ void groupFoldAvgDistinct(Column* accumulator,
 
         std::optional<double>& running = raw[group];
         running = running.value() + static_cast<double>(*value);
-        counts[group]++;
-    }
-}
-
-// Fold a type-erased chunk's numeric cells into per-group avg accumulators: the
-// tagged-cell sibling of groupFoldAvg.
-void groupFoldAvgListElement(Column* accumulator,
-                             std::vector<uint64_t>& counts,
-                             const Column* input,
-                             const std::vector<size_t>& groups,
-                             NLGroupDistinctTally& distinct) {
-    auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
-    const auto& inputRaw = static_cast<const ColumnVector<ListElementView>*>(input)->getRaw();
-
-    for (size_t row = 0; row < inputRaw.size(); row++) {
-        const ListElementView element = inputRaw[row];
-        if (element.getTag() == ListBufferTypeTag::Null) {
-            continue;
-        }
-
-        const size_t group = groups[row];
-        std::optional<double>& running = raw[group];
-        running = running.value() + listElementAsDouble(element);
-        counts[group]++;
-    }
-}
-
-// The distinct sibling of groupFoldAvgListElement (avg(DISTINCT x) over tagged cells):
-// cells are keyed by value across tags, as a DISTINCT over the same column keys them, so
-// the 1 and the 1.0 of one group are charged once between them.
-void groupFoldAvgDistinctListElement(Column* accumulator,
-                                     std::vector<uint64_t>& counts,
-                                     const Column* input,
-                                     const std::vector<size_t>& groups,
-                                     NLGroupDistinctTally& distinct) {
-    auto& raw = static_cast<ColumnOptVector<double>*>(accumulator)->getRaw();
-    const auto& inputRaw = static_cast<const ColumnVector<ListElementView>*>(input)->getRaw();
-
-    for (size_t row = 0; row < inputRaw.size(); row++) {
-        const ListElementView element = inputRaw[row];
-        if (element.getTag() == ListBufferTypeTag::Null) {
-            continue;
-        }
-
-        const size_t group = groups[row];
-
-        distinct.beginKey(group);
-        distinctAppendElementBytes(distinct.getKey(), element);
-
-        if (!distinct.insertIfNew()) {
-            continue;
-        }
-
-        std::optional<double>& running = raw[group];
-        running = running.value() + listElementAsDouble(element);
         counts[group]++;
     }
 }
@@ -1852,6 +1890,166 @@ void collectEntityFoldDistinct(Column* values,
 
         distinct.beginKey(group);
         distinctAppendValueBytes(distinct.getKey(), inputRaw[row].getValue());
+
+        if (!distinct.insertIfNew()) {
+            continue;
+        }
+
+        const size_t position = valuesRaw.size();
+        valuesRaw.push_back(inputRaw[row]);
+        groupPositions[group].push_back(position);
+    }
+}
+
+// The list-buffer value a tagged cell holds, read back as the type its tag names, so a
+// collect of type-erased cells buffers each one under the type it came in with.
+ListBuffer<>::ListItemVariant taggedListItem(const ListElementView element) {
+    const ListBufferTypeTag tag = element.getTag();
+
+    switch (tag) {
+        case ListBufferTypeTag::Int:
+            return ListBuffer<>::ListItemVariant {element.getAs<types::Int64::Primitive>()};
+        break;
+
+        case ListBufferTypeTag::UInt:
+            return ListBuffer<>::ListItemVariant {element.getAs<types::UInt64::Primitive>()};
+        break;
+
+        case ListBufferTypeTag::Double:
+            return ListBuffer<>::ListItemVariant {element.getAs<types::Double::Primitive>()};
+        break;
+
+        case ListBufferTypeTag::Bool:
+            return ListBuffer<>::ListItemVariant {element.getAs<types::Bool::Primitive>()};
+        break;
+
+        case ListBufferTypeTag::String:
+            return ListBuffer<>::ListItemVariant {element.getAs<types::String::Primitive>()};
+        break;
+
+        case ListBufferTypeTag::Embedding:
+            return ListBuffer<>::ListItemVariant {element.getAs<types::Embedding::Primitive>()};
+        break;
+
+        case ListBufferTypeTag::ListView:
+            return ListBuffer<>::ListItemVariant {element.getAs<ListView>()};
+        break;
+
+        case ListBufferTypeTag::Null:
+            return ListBuffer<>::ListItemVariant {element.getAs<PropertyNull>()};
+        break;
+
+        case ListBufferTypeTag::NodeID:
+            return ListBuffer<>::ListItemVariant {element.getAs<NodeID>()};
+        break;
+
+        case ListBufferTypeTag::EdgeID:
+            return ListBuffer<>::ListItemVariant {element.getAs<EdgeID>()};
+        break;
+
+        case ListBufferTypeTag::INVALID:
+            throw IRException("cannot collect an untagged element");
+        break;
+    }
+
+    throw IRException("Unknown ListBufferTypeTag");
+}
+
+// The type-erased sibling of collectFold: a tagged cell is there in every row, but one
+// tagged null is the null Cypher's collect drops, so only the rest join the group's list.
+void collectTaggedFold(Column* values,
+                       const Column* input,
+                       const std::vector<size_t>& groups,
+                       std::vector<std::vector<size_t>>& groupPositions,
+                       NLGroupDistinctTally& distinct) {
+    auto& valuesRaw = static_cast<ColumnVector<ListElementView>*>(values)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnVector<ListElementView>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        if (inputRaw[row].getTag() == ListBufferTypeTag::Null) {
+            continue;
+        }
+
+        const size_t position = valuesRaw.size();
+        valuesRaw.push_back(inputRaw[row]);
+        groupPositions[groups[row]].push_back(position);
+    }
+}
+
+// The dedup sibling: a tagged cell keys by the value its tag names, so the same number
+// reached under two tags keys once - the ordering rules read these cells the same way.
+void collectTaggedFoldDistinct(Column* values,
+                               const Column* input,
+                               const std::vector<size_t>& groups,
+                               std::vector<std::vector<size_t>>& groupPositions,
+                               NLGroupDistinctTally& distinct) {
+    auto& valuesRaw = static_cast<ColumnVector<ListElementView>*>(values)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnVector<ListElementView>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        if (inputRaw[row].getTag() == ListBufferTypeTag::Null) {
+            continue;
+        }
+
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendElementBytes(distinct.getKey(), inputRaw[row]);
+
+        if (!distinct.insertIfNew()) {
+            continue;
+        }
+
+        const size_t position = valuesRaw.size();
+        valuesRaw.push_back(inputRaw[row]);
+        groupPositions[group].push_back(position);
+    }
+}
+
+// The type-erased sibling of collectListEmit: each buffered cell goes into the list
+// buffer as the value its own tag names, so the list keeps the types it gathered.
+void collectTaggedListEmit(const Column* values,
+                           const std::vector<std::vector<size_t>>& groupPositions,
+                           size_t begin,
+                           size_t count,
+                           ListBuffer<>& listBuffer,
+                           Column* output) {
+    const auto& valuesRaw = static_cast<const ColumnVector<ListElementView>*>(values)->getRaw();
+    auto& outputRaw = static_cast<ColumnVector<ListView>*>(output)->getRaw();
+
+    outputRaw.clear();
+    outputRaw.reserve(count);
+
+    std::vector<ListBuffer<>::ListItemVariant> elements;
+    for (size_t index = 0; index < count; index++) {
+        const std::vector<size_t>& positions = groupPositions[begin + index];
+
+        elements.clear();
+        elements.reserve(positions.size());
+        for (const size_t position : positions) {
+            elements.push_back(taggedListItem(valuesRaw[position]));
+        }
+
+        outputRaw.push_back(listBuffer.insert(elements));
+    }
+}
+
+// The list sibling of collectEntityFoldDistinct: two cells are the same value when their
+// elements are, so a cell keys by the list serialized element by element rather than by
+// the ListView's own span, which two equal lists never share.
+void collectListFoldDistinct(Column* values,
+                             const Column* input,
+                             const std::vector<size_t>& groups,
+                             std::vector<std::vector<size_t>>& groupPositions,
+                             NLGroupDistinctTally& distinct) {
+    auto& valuesRaw = static_cast<ColumnVector<ListView>*>(values)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnVector<ListView>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendListBytes(distinct.getKey(), inputRaw[row]);
 
         if (!distinct.insertIfNew()) {
             continue;
@@ -3935,6 +4133,29 @@ NLUnwindElementEmitFunction NLExecutor::selectListUnwindElementEmit() {
     return &unwindListElementEmit;
 }
 
+NLUnwindElementEmitFunction NLExecutor::selectListUnwindValueEmit(ValueType valueType) {
+    NLUnwindElementEmitFunction selected = nullptr;
+
+    const auto select = [&]<SupportedType T>() {
+        selected = &unwindListValueEmit<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return selected;
+}
+
+NLUnwindElementEmitFunction NLExecutor::selectListUnwindNodeEmit() {
+    return &unwindListPlainEmit<NodeID>;
+}
+
+NLUnwindElementEmitFunction NLExecutor::selectListUnwindEdgeEmit() {
+    return &unwindListPlainEmit<EdgeID>;
+}
+
+NLUnwindElementEmitFunction NLExecutor::selectListUnwindListEmit() {
+    return &unwindListPlainEmit<ListView>;
+}
+
 NLUnwindElementCountFunction NLExecutor::selectTaggedUnwindElementCount() {
     return &unwindTaggedElementCount;
 }
@@ -4020,6 +4241,24 @@ void NLExecutor::selectCollectEntityHandlers(NLChunkKind kind,
             throw IRException("collect does not support this chunk kind");
         break;
     }
+}
+
+// A list cell is present in every row, so it folds the way an entity ID does; only the
+// dedup differs, keying on the elements rather than on the cell.
+void NLExecutor::selectCollectListHandlers(bool distinctValues,
+                                           NLCollectFoldFunction& fold,
+                                           NLCollectListEmitFunction& listEmit) {
+    fold = distinctValues ? &collectListFoldDistinct : &collectEntityFold<ListView>;
+    listEmit = &collectListEmit<ListView>;
+}
+
+// A type-erased cell carries its own type, so the fold drops the ones tagged null and the
+// emit writes each survivor back under the type its tag names.
+void NLExecutor::selectCollectTaggedHandlers(bool distinctValues,
+                                             NLCollectFoldFunction& fold,
+                                             NLCollectListEmitFunction& listEmit) {
+    fold = distinctValues ? &collectTaggedFoldDistinct : &collectTaggedFold;
+    listEmit = &collectTaggedListEmit;
 }
 
 void NLExecutor::runUnwindCollectLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -4243,24 +4482,6 @@ NLKeyAppendFunction NLExecutor::selectListElementKeyAppendFunction() {
 
 NLCountFunction NLExecutor::selectListElementCountFunction() {
     return &countNonNullElementsColumn;
-}
-
-NLAggregateUpdateFunction NLExecutor::selectListElementAggregateUpdate(AggregateKind kind) {
-    if (kind != AggregateKind::Avg) {
-        throw IRException("only avg reduces a column of tagged cells");
-    }
-
-    return &aggregateUpdateAvgElements;
-}
-
-NLGroupAggregateFoldFunction NLExecutor::selectListElementGroupAggregateFold(GroupAggregateKind kind) {
-    if (kind == GroupAggregateKind::Avg) {
-        return &groupFoldAvgListElement;
-    } else if (kind == GroupAggregateKind::AvgDistinct) {
-        return &groupFoldAvgDistinctListElement;
-    }
-
-    throw IRException("only avg reduces a column of tagged cells");
 }
 
 NLGroupKeyGatherFunction NLExecutor::selectListElementGroupKeyGatherFunction() {
@@ -4505,6 +4726,29 @@ NLAggregateUpdateFunction NLExecutor::selectAggregateUpdate(AggregateKind kind, 
     return nullptr;
 }
 
+// The reduction of a type-erased column: only sum and avg are defined over one, both
+// into the f64 accumulator mixed numeric tags reduce to. min/max would have to hand back
+// the winning cell in its own type, which no static result type names.
+NLAggregateUpdateFunction NLExecutor::selectTaggedAggregateUpdate(AggregateKind kind) {
+    switch (kind) {
+        case AggregateKind::Sum:
+            return &aggregateUpdateNumericTagged</*CountsRows=*/false>;
+        break;
+
+        case AggregateKind::Avg:
+            return &aggregateUpdateNumericTagged</*CountsRows=*/true>;
+        break;
+
+        case AggregateKind::Min:
+        case AggregateKind::Max:
+            throw IRException("min/max over type-erased cells is not supported");
+        break;
+    }
+
+    bioassert(false, "Unhandled aggregate kind");
+    return nullptr;
+}
+
 NLAggregateResultFunction NLExecutor::selectAggregateResult(AggregateKind kind, ValueType resultType) {
     if (kind == AggregateKind::Avg) {
         // avg always emits an f64 (the running sum divided by the count), whatever
@@ -4566,6 +4810,35 @@ NLGroupAggregateGrowFunction NLExecutor::selectGroupAggregateGrow(GroupAggregate
     }
 
     bioassert(false, "Unhandled group aggregate kind");
+    return nullptr;
+}
+
+// The grouped reduction of a type-erased column: sum and avg only, both into the f64
+// accumulator mixed numeric tags reduce to - the grouped sibling of
+// selectTaggedAggregateUpdate.
+NLGroupAggregateFoldFunction NLExecutor::selectTaggedGroupAggregateFold(GroupAggregateKind kind) {
+    switch (kind) {
+        case GroupAggregateKind::Sum:
+            return &groupFoldNumericTagged</*CountsRows=*/false, /*Distinct=*/false>;
+        break;
+
+        case GroupAggregateKind::SumDistinct:
+            return &groupFoldNumericTagged</*CountsRows=*/false, /*Distinct=*/true>;
+        break;
+
+        case GroupAggregateKind::Avg:
+            return &groupFoldNumericTagged</*CountsRows=*/true, /*Distinct=*/false>;
+        break;
+
+        case GroupAggregateKind::AvgDistinct:
+            return &groupFoldNumericTagged</*CountsRows=*/true, /*Distinct=*/true>;
+        break;
+
+        default:
+            throw IRException("min/max over type-erased cells is not supported");
+        break;
+    }
+
     return nullptr;
 }
 

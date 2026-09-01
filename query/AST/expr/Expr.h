@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "decl/EvaluatedType.h"
+#include "decl/ListShape.h"
 
 #include "EnumToString.h"
 
@@ -41,6 +42,10 @@ public:
 
     virtual EvaluatedType getType() const { return _type; }
 
+    // How deeply a List-typed expression nests and what its innermost elements are.
+    // What an UNWIND of this expression binds its variable to.
+    const ListShape& getListShape() const { return _listShape; }
+
     const VarDecl* getExprVarDecl() const { return _exprVarDecl; }
 
     std::string_view getName() const {
@@ -48,6 +53,8 @@ public:
     }
 
     void setType(EvaluatedType type) { _type = type; }
+
+    void setListShape(const ListShape& shape) { _listShape = shape; }
 
     void setExprVarDecl(const VarDecl* decl) { _exprVarDecl = decl; }
 
@@ -88,6 +95,7 @@ private:
     const VarDecl* _exprVarDecl {nullptr};
     Kind _exprKind {Kind::BINARY};
     EvaluatedType _type {EvaluatedType::Invalid};
+    ListShape _listShape;
     Flags _flags {Flags::NONE};
     std::string_view _name;
 };

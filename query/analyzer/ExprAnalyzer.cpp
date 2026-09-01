@@ -26,6 +26,50 @@
 
 using namespace db;
 
+namespace {
+
+// The shape of the list these elements make: depth 1 over the one type they share, or
+// one level deeper than the lists they are. Elements that share no type - an empty list,
+// a mix of types, lists of differing shape - leave the leaf Invalid, which is what makes
+// the list hand out tagged scalars.
+ListShape sharedListShape(std::span<Expr* const> elements) {
+    if (elements.empty()) {
+        return ListShape(EvaluatedType::Invalid, 1);
+    }
+
+    const auto differingType = [](const Expr* a, const Expr* b) {
+        return a->getType() != b->getType();
+    };
+
+    const bool homogeneous = std::ranges::adjacent_find(elements, differingType) == end(elements);
+    if (!homogeneous) {
+        return ListShape(EvaluatedType::Invalid, 1);
+    }
+
+    const Expr* first = elements.front();
+    const EvaluatedType shared = first->getType();
+
+    if (shared == EvaluatedType::List) {
+        const auto differingShape = [](const Expr* a, const Expr* b) {
+            const ListShape& left = a->getListShape();
+            const ListShape& right = b->getListShape();
+            return left.getDepth() != right.getDepth() || left.getLeafType() != right.getLeafType();
+        };
+
+        if (std::ranges::adjacent_find(elements, differingShape) != end(elements)) {
+            return ListShape(EvaluatedType::Invalid, 1);
+        }
+    }
+
+    if (!convertibleToValueType(shared) && shared != EvaluatedType::List) {
+        return ListShape(EvaluatedType::Invalid, 1);
+    }
+
+    return ListShape::collecting(shared, first->getListShape());
+}
+
+}
+
 ExprAnalyzer::ExprAnalyzer(CypherAST* ast, const GraphView& graphView)
     : _ast(ast),
     _graphView(graphView),
@@ -380,6 +424,7 @@ void ExprAnalyzer::analyzeSymbolExpr(SymbolExpr* expr) {
 
     expr->setDecl(varDecl);
     expr->setType(varDecl->getType());
+    expr->setListShape(varDecl->getListShape());
     expr->setExprVarDecl(varDecl);
 
     // For now, variable expressions cannot be evaluated at compile time
@@ -808,6 +853,13 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
             expr->setType(EvaluatedType::Tuple);
         }
 
+        // A collect's list holds the values of its argument, so it is one level deeper
+        // than what it gathers - what an UNWIND of the list binds its variable to.
+        if (signature->collectsItsArgument() && !providedArgs.empty()) {
+            const Expr* collected = providedArgs.front();
+            expr->setListShape(ListShape::collecting(collected->getType(), collected->getListShape()));
+        }
+
         if (signature->isAggregate()) {
             if (isAggregate) {
                 throwError(fmt::format("Aggregate functions may not be nested: the argument of "
@@ -963,6 +1015,8 @@ void ExprAnalyzer::analyzeListElements(Expr* expr, std::span<Expr* const> elemen
             expr->setAggregate();
         }
     }
+
+    expr->setListShape(sharedListShape(elements));
 }
 
 void ExprAnalyzer::analyzeMapEntries(Expr* expr, const MapLiteral* map) {

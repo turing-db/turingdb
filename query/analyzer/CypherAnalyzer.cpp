@@ -314,7 +314,9 @@ void CypherAnalyzer::openWithScope(Projection* projection) {
     for (const Projection::ReturnItem& returnItem : projection->items()) {
         if (const auto* declPtr = std::get_if<VarDecl*>(&returnItem)) {
             const VarDecl* decl = *declPtr;
-            projection->addPublishedDecl(scope->getOrCreateNamedVariable(_ast, decl->getType(), decl->getName()));
+            VarDecl* published = scope->getOrCreateNamedVariable(_ast, decl->getType(), decl->getName());
+            published->setListShape(decl->getListShape());
+            projection->addPublishedDecl(published);
             continue;
         }
 
@@ -322,7 +324,9 @@ void CypherAnalyzer::openWithScope(Projection* projection) {
         const std::optional<std::string_view> name = projection->getName(item);
         bioassert(name.has_value(), "Projected item of a WITH without a name.");
 
-        projection->addPublishedDecl(scope->getOrCreateNamedVariable(_ast, item->getType(), *name));
+        VarDecl* published = scope->getOrCreateNamedVariable(_ast, item->getType(), *name);
+        published->setListShape(item->getListShape());
+        projection->addPublishedDecl(published);
     }
 
     _ctxt = scope;
