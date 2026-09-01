@@ -351,6 +351,55 @@ TEST_F(VectorSearchTest, searchFiltersItsNeighboursWithTheYieldPredicate) {
     EXPECT_EQ(sink.getScores(), expectedScores);
 }
 
+// A predicate no neighbour satisfies cuts every row, so the search reports none rather
+// than the set it would have reported unfiltered.
+TEST_F(VectorSearchTest, searchYieldPredicateKeepingNoNeighbourReportsNoRow) {
+    loadFixtureVectors();
+
+    QueryStatus status;
+    VectorSearchSink sink;
+    runQuery("VECTOR SEARCH IN vectors FOR 3 (1.0, 0.0, 0.0, 0.0) YIELD ids, score WHERE score > 1000 "
+             "RETURN ids, score",
+             status,
+             sink);
+
+    ASSERT_TRUE(status.isOk()) << status.getError();
+
+    EXPECT_EQ(sink.getRowCount(), 0u);
+    EXPECT_TRUE(sink.getIDs().empty());
+}
+
+TEST_F(VectorSearchTest, searchYieldPredicateCutsTheColumnItAloneYielded) {
+    loadFixtureVectors();
+
+    QueryStatus status;
+    StringRowSink sink;
+    runQuery("VECTOR SEARCH IN vectors FOR 3 (1.0, 0.0, 0.0, 0.0) YIELD score WHERE score > 0.5 "
+             "RETURN score",
+             status,
+             sink);
+
+    ASSERT_TRUE(status.isOk()) << status.getError();
+
+    const std::vector<StringRowSink::Row> expected {{"1"}, {"9"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(VectorSearchTest, searchYieldPredicateConstrainsTheNeighbourItYielded) {
+    loadFixtureVectors();
+
+    QueryStatus status;
+    VectorSearchSink sink;
+    runQuery("VECTOR SEARCH IN vectors FOR 3 (1.0, 0.0, 0.0, 0.0) YIELD ids WHERE ids = 2 RETURN ids",
+             status,
+             sink);
+
+    ASSERT_TRUE(status.isOk()) << status.getError();
+
+    const std::vector<uint64_t> expectedIDs {2};
+    EXPECT_EQ(sink.getIDs(), expectedIDs);
+}
+
 // The predicate of a search's YIELD ... WHERE can read what a CALL written before it
 // yielded, so the statements of a part are generated in the order the query writes them
 // rather than every search ahead of every call.
@@ -406,6 +455,20 @@ TEST_F(VectorSearchTest, searchForAVectorOfTheWrongDimensionReportsIt) {
 
     EXPECT_EQ(status.getStatus(), QueryStatus::Status::EXEC_ERROR);
     EXPECT_NE(status.getError().find("dimension"), std::string::npos) << status.getError();
+}
+
+// A vector longer than the index dimension is refused too: the index reads exactly its
+// own dimension, so the elements past it would be dropped without a word.
+TEST_F(VectorSearchTest, searchForAVectorLongerThanTheIndexDimensionReportsIt) {
+    loadFixtureVectors();
+
+    QueryStatus status;
+    runQuery("VECTOR SEARCH IN vectors FOR 2 (1.0, 0.0, 0.0, 0.0, 0.0) YIELD ids RETURN ids", status);
+
+    EXPECT_EQ(status.getStatus(), QueryStatus::Status::EXEC_ERROR);
+    EXPECT_NE(status.getError().find("dimension 4, but the query searches for one of dimension 5"),
+              std::string::npos)
+        << status.getError();
 }
 
 // The documented shape: what the search yielded seeds the traversal through a MATCH's

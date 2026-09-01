@@ -347,6 +347,43 @@ target_link_libraries(test_query_ir_vector_search_composition PRIVATE
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_vector_search_composition PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# The metric / index-kind cases build one index per case, so they drive the whole engine
+# the way the other search tests do.
+add_turing_test(test_query_ir_vector_search_index_kind VectorSearchIndexKindTest.cpp)
+target_sources(test_query_ir_vector_search_index_kind PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_vector_search_index_kind PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_vector_search_index_kind PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# The write cases run their statements inside a change and submit it, so they need the
+# change management the system manager holds.
+add_turing_test(test_query_ir_vector_search_write VectorSearchWriteTest.cpp)
+target_sources(test_query_ir_vector_search_write PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_vector_search_write PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_vector_search_write PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_vector_search_rejection VectorSearchRejectionTest.cpp)
+target_sources(test_query_ir_vector_search_rejection PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_vector_search_rejection PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_vector_search_rejection PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_call_yield_group_aggregate CallYieldGroupAggregateTest.cpp)
 target_link_libraries(test_query_ir_call_yield_group_aggregate PRIVATE
         turing_db_s

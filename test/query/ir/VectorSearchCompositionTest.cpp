@@ -105,6 +105,15 @@ protected:
         ASSERT_TRUE(loadStatus.isOk()) << loadStatus.getError();
     }
 
+    void expectOrderedRows(std::string_view query, const std::vector<StringRowSink::Row>& expected) {
+        QueryStatus status;
+        StringRowSink sink;
+        runQuery(query, status, sink);
+
+        ASSERT_TRUE(status.isOk()) << status.getError();
+        EXPECT_EQ(sink.getRows(), expected);
+    }
+
     void expectRows(std::string_view query, const std::vector<StringRowSink::Row>& expected) {
         QueryStatus status;
         StringRowSink sink;
@@ -316,4 +325,43 @@ TEST_F(VectorSearchCompositionTest, countsTheCrossProductOfASearchAndAMatch) {
                "MATCH (n:Person) "
                "RETURN count(n)",
                {{expected}});
+}
+
+TEST_F(VectorSearchCompositionTest, returnsTheDistinctNeighboursOfTheExpansion) {
+    loadPeopleVectors();
+
+    expectRows(std::string(searchThree) + "YIELD ids "
+               "MATCH (ids)-[:INTERESTED_IN]->(m) "
+               "RETURN DISTINCT m.name",
+               {{"Ghosts"}, {"Computers"}, {"Eighties"}, {"Bio"}, {"Cooking"}, {"Padel"}});
+}
+
+TEST_F(VectorSearchCompositionTest, unwindsAListBesideTheNeighbour) {
+    loadPeopleVectors();
+
+    expectRows(std::string(searchTwo) + "YIELD ids "
+               "UNWIND [1, 2] AS rank "
+               "RETURN ids.name, rank",
+               {{"Remy", "1"}, {"Remy", "2"}, {"Adam", "1"}, {"Adam", "2"}});
+}
+
+TEST_F(VectorSearchCompositionTest, skipsTheNearestNeighbours) {
+    loadPeopleVectors();
+
+    expectOrderedRows(std::string(searchThree) + "YIELD ids RETURN ids.name SKIP 1",
+                      {{"Adam"}, {"Maxime"}});
+}
+
+TEST_F(VectorSearchCompositionTest, sortsTheNeighboursByAPropertyOfTheirOwn) {
+    loadPeopleVectors();
+
+    expectOrderedRows(std::string(searchThree) + "YIELD ids RETURN ids.name ORDER BY ids.name",
+                      {{"Adam"}, {"Maxime"}, {"Remy"}});
+}
+
+TEST_F(VectorSearchCompositionTest, readsTheLabelsOfTheNeighbour) {
+    loadPeopleVectors();
+
+    expectRows(std::string(searchOne) + "YIELD ids RETURN labels(ids)",
+               {{"Person, SoftwareEngineering, Founder"}});
 }
