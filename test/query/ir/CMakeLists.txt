@@ -334,6 +334,19 @@ target_link_libraries(test_query_ir_vector_search PRIVATE
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_vector_search PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# The composition cases drive the search through a WITH, a CALL and an aggregate, so they
+# need the procedure-driving engine the same way the search tests do.
+add_turing_test(test_query_ir_vector_search_composition VectorSearchCompositionTest.cpp)
+target_sources(test_query_ir_vector_search_composition PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_vector_search_composition PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_vector_search_composition PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_call_yield_group_aggregate CallYieldGroupAggregateTest.cpp)
 target_link_libraries(test_query_ir_call_yield_group_aggregate PRIVATE
         turing_db_s
