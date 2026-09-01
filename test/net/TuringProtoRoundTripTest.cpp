@@ -13,6 +13,8 @@
 #include "ChunkedBuffer.h"
 #include "TuringException.h"
 #include "TuringProtoDecoder.h"
+#include "TuringSink.h"
+#include "TuringSinkColumnContainer.h"
 #include "list/ListBuffer.h"
 #include "TuringProtoEncoder.h"
 #include "TuringProtoHeaders.h"
@@ -128,7 +130,9 @@ void decodeChunkPackets(const std::vector<FramedPacket>& packets,
     const size_t maxPayloadSize =
         std::transform_reduce(packets.begin(), packets.end(), size_t {0}, [](size_t lhs, size_t rhs) { return std::max(lhs, rhs); }, [](const FramedPacket& packet) { return packet._bytes.size() - net::proto::ProtoHeader::wireSize(); });
     net::proto::TuringProtoInBuf inBuf(maxPayloadSize);
-    net::proto::TuringProtoDecoder decoder(localMem, dfMan, &inBuf, embeddingBuffer, stringBuffer, listBuffer, *schemas);
+    net::proto::TuringSink sink(localMem, embeddingBuffer, stringBuffer, listBuffer);
+    net::proto::TuringSinkColumnContainer decodedContainer(decoded, dfMan);
+    net::proto::TuringProtoDecoder<net::proto::TuringSink> decoder(&inBuf, &sink, *schemas);
     schemas->clear();
 
     for (const auto& packet : packets) {
@@ -143,10 +147,10 @@ void decodeChunkPackets(const std::vector<FramedPacket>& packets,
 
         switch (packet._type) {
             case net::proto::MessageTypes::CHUNK_HEADER:
-                decoder.decodeIncomingChunkHeader(decoded);
+                decoder.decodeIncomingChunkHeader(&decodedContainer);
                 break;
             case net::proto::MessageTypes::CHUNK:
-                decoder.decodeIncomingChunk(decoded);
+                decoder.decodeIncomingChunk(&decodedContainer);
                 break;
             case net::proto::MessageTypes::END_CHUNK:
                 EXPECT_EQ(protoHeader._dataLen, 0u);
