@@ -3789,10 +3789,6 @@ NLGatherFunction NLExecutor::selectCountGatherFunction() {
     return &gatherColumn<uint64_t>;
 }
 
-NLGatherFunction NLExecutor::selectListGatherFunction() {
-    return &gatherColumn<ListView>;
-}
-
 NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(bool nullable) {
     if (nullable) {
         return &collectOptMaskSurvivors;
@@ -3968,10 +3964,6 @@ NLAppendFunction NLExecutor::selectAppendFunction(NLChunkKind kind) {
 
 NLAppendFunction NLExecutor::selectCountAppendFunction() {
     return &appendColumn<uint64_t>;
-}
-
-NLAppendFunction NLExecutor::selectListAppendFunction() {
-    return &appendColumn<ListView>;
 }
 
 // A nullable value chunk is a ColumnOptVector<Primitive> - that is,
