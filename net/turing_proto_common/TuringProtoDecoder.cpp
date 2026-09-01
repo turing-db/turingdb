@@ -13,14 +13,12 @@
 #include "TuringException.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnVector.h"
-#include "dataframe/Dataframe.h"
-#include "dataframe/DataframeManager.h"
-#include "dataframe/NamedColumn.h"
 #include "ID.h"
-#include "LocalMemory.h"
 #include "metadata/PropertyType.h"
 #include "versioning/ChangeID.h"
 #include "TuringProtoDecoderConcepts.h"
+#include "TuringSink.h"
+#include "TuringSinkColumnContainer.h"
 
 using namespace net::proto;
 
@@ -74,15 +72,16 @@ decltype(auto) dispatchColumnType(net::proto::ColumnInternalKind typeCode, net::
     throw TuringException("Unsupported incoming column type");
 }
 
+template<typename Sink>
 struct MakeColumnFn {
-    db::LocalMemory* _localMem {nullptr};
+    Sink* _sink {nullptr};
 
     template <typename T>
     db::Column* operator()(net::proto::ColumnKind encoding) const {
         switch (encoding) {
             case net::proto::ColumnKind::VECTOR: {
                 if constexpr (SupportedColumnVectorTypes<T>) {
-                    return _localMem->alloc<db::ColumnVector<T>>();
+                    return _sink->template alloc<typename Sink::template ColumnVector<T>>();
                 } else {
                     throw TuringException("Unsupported internal kind for type:Vector");
                 }
@@ -90,7 +89,7 @@ struct MakeColumnFn {
             break;
             case net::proto::ColumnKind::CONSTANT: {
                 if constexpr (SupportedColumnConstTypes<T>) {
-                    return _localMem->alloc<db::ColumnConst<T>>();
+                    return _sink->template alloc<typename Sink::template ColumnConst<T>>();
                 } else {
                     throw TuringException("Unsupported internal kind for type:Constant");
                 }
@@ -98,7 +97,7 @@ struct MakeColumnFn {
             break;
             case net::proto::ColumnKind::OPTIONAL_VECTOR: {
                 if constexpr (SupportedColumnOptVectorTypes<T>) {
-                    return _localMem->alloc<db::ColumnVector<std::optional<T>>>();
+                    return _sink->template alloc<typename Sink::template ColumnOptVector<T>>();
                 } else {
                     throw TuringException("Unsupported internal kind for type:Optional Vector");
                 }
@@ -106,7 +105,7 @@ struct MakeColumnFn {
             break;
             case net::proto::ColumnKind::OPTIONAL_CONSTANT: {
                 if constexpr (SupportedColumnOptConstTypes<T>) {
-                    return _localMem->alloc<db::ColumnConst<std::optional<T>>>();
+                    return _sink->template alloc<typename Sink::template ColumnOptConst<T>>();
                 } else {
                     throw TuringException("Unsupported internal kind for type:Optional Const");
                 }
@@ -119,8 +118,9 @@ struct MakeColumnFn {
     }
 };
 
+template<typename Sink>
 struct DecodeColumnFn {
-    TuringProtoDecoder* _decoder {nullptr};
+    TuringProtoDecoder<Sink>* _decoder {nullptr};
     db::Column* _column {nullptr};
     DfColumnState* _columnState {nullptr};
 
@@ -129,7 +129,7 @@ struct DecodeColumnFn {
         switch (encoding) {
             case net::proto::ColumnKind::VECTOR: {
                 if constexpr (SupportedColumnVectorTypes<T>) {
-                    auto* typedCol = static_cast<db::ColumnVector<T>*>(_column);
+                    auto* typedCol = static_cast<typename Sink::template ColumnVector<T>*>(_column);
                     return _decoder->decodeColumn(typedCol, _columnState);
                 } else {
                     throw TuringException("Unsupported type for Vector");
@@ -137,7 +137,7 @@ struct DecodeColumnFn {
             }
             case net::proto::ColumnKind::OPTIONAL_VECTOR: {
                 if constexpr (SupportedColumnOptVectorTypes<T>) {
-                    auto* typedCol = static_cast<db::ColumnVector<std::optional<T>>*>(_column);
+                    auto* typedCol = static_cast<typename Sink::template ColumnOptVector<T>*>(_column);
                     return _decoder->decodeColumn(typedCol, _columnState);
                 } else {
                     throw TuringException("Unsupported type for Optional Vector");
@@ -145,7 +145,7 @@ struct DecodeColumnFn {
             }
             case net::proto::ColumnKind::CONSTANT: {
                 if constexpr (SupportedColumnConstTypes<T>) {
-                    auto* typedCol = static_cast<db::ColumnConst<T>*>(_column);
+                    auto* typedCol = static_cast<typename Sink::template ColumnConst<T>*>(_column);
                     return _decoder->decodeColumn(typedCol);
                 } else {
                     throw TuringException("Unsupported type for Constant");
@@ -153,7 +153,7 @@ struct DecodeColumnFn {
             }
             case net::proto::ColumnKind::OPTIONAL_CONSTANT: {
                 if constexpr (SupportedColumnOptConstTypes<T>) {
-                    auto* typedCol = static_cast<db::ColumnConst<std::optional<T>>*>(_column);
+                    auto* typedCol = static_cast<typename Sink::template ColumnConst<std::optional<T>>*>(_column);
                     return _decoder->decodeColumn(typedCol);
                 } else {
                     throw TuringException("Unsupported type for Optional Constant");
@@ -167,8 +167,9 @@ struct DecodeColumnFn {
 
 }
 
+template <typename Sink>
 template <typename T>
-bool TuringProtoDecoder::decodeColumn(db::ColumnVector<T>* col, DfColumnState* colState) {
+bool TuringProtoDecoder<Sink>::decodeColumn(typename Sink::template ColumnVector<T>* col, DfColumnState* colState) {
     if (colState->getNumRows() == 0) {
         if (_ctxt._inBuf->readable() < sizeof(WireSize)) {
             return false;
@@ -178,11 +179,12 @@ bool TuringProtoDecoder::decodeColumn(db::ColumnVector<T>* col, DfColumnState* c
         colState->setNumRows(numRows);
     }
 
-    return decodeVector(&_ctxt, col, colState);
+    return decodeVector<T>(&_ctxt, _sink, col, colState);
 }
 
+template <typename Sink>
 template <typename T>
-bool TuringProtoDecoder::decodeColumn(db::ColumnVector<std::optional<T>>* col, DfColumnState* colState) {
+bool TuringProtoDecoder<Sink>::decodeColumn(typename Sink::template ColumnVector<std::optional<T>>* col, DfColumnState* colState) {
     //Check if this is the first row in the column we are decoding
     if (colState->getNumRows() == 0) {
         //if the wiresize length is not available in the input buffer continue later
@@ -218,46 +220,44 @@ bool TuringProtoDecoder::decodeColumn(db::ColumnVector<std::optional<T>>* col, D
         }
     }
 
-    return decodeOptVector(&_ctxt, col, colState);
+    return decodeOptVector<T>(&_ctxt, _sink, col, colState);
 }
 
+template <typename Sink>
 template <typename T>
-bool TuringProtoDecoder::decodeColumn(db::ColumnConst<T>* col) {
-    return decodeConst(&_ctxt, col);
+bool TuringProtoDecoder<Sink>::decodeColumn(typename Sink::template ColumnConst<T>* col) {
+    return decodeConst<T>(&_ctxt, _sink, col);
 }
 
+template <typename Sink>
 template <typename T>
-bool TuringProtoDecoder::decodeColumn(db::ColumnConst<std::optional<T>>* col) {
-    return decodeOptConst(&_ctxt, col);
+bool TuringProtoDecoder<Sink>::decodeColumn(typename Sink::template ColumnConst<std::optional<T>>* col) {
+    return decodeOptConst<T>(&_ctxt, _sink, col);
 }
 
-TuringProtoDecoder::TuringProtoDecoder(db::LocalMemory* localMem,
-                                       db::DataframeManager* dfMan,
-                                       TuringProtoInBuf* inBuf,
-                                       ChunkedBuffer<float>* embeddingBuffer,
-                                       ChunkedBuffer<char>* stringBuffer,
-                                       db::ListBuffer<>* listBuffer,
-                                       std::vector<DecodedColumnSchema>& colSchemas)
-    : _localMem(localMem),
-    _dfMan(dfMan),
-    _colSchemas(colSchemas)
+template <typename Sink>
+TuringProtoDecoder<Sink>::TuringProtoDecoder(TuringProtoInBuf* inBuf,
+                                             Sink* sink,
+                                             std::vector<DecodedColumnSchema>& colSchemas)
+    : _colSchemas(colSchemas),
+    _sink(sink)
 {
     _ctxt._inBuf = inBuf;
-    _ctxt._embeddingBuffer = embeddingBuffer;
-    _ctxt._stringBuffer = stringBuffer;
-    _ctxt._listBuffer = listBuffer;
 }
 
-void TuringProtoDecoder::reset() {
+template <typename Sink>
+void TuringProtoDecoder<Sink>::reset() {
     _ctxt.reset();
+    _sink->reset();
 }
 
-void TuringProtoDecoder::decodeIncomingData(db::Dataframe* df) {
-    bioassert(df->size() == _colSchemas.size(), "Dataframe should have the same number of columns as we have read from the packet");
+template<typename Sink>
+void TuringProtoDecoder<Sink>::decodeIncomingData(Sink::ColumnContainer* container) {
+    bioassert(container->size() == _colSchemas.size(), "Column container should have the same number of columns as we have read from the packet");
 
-    while (_ctxt._colIndex < df->size()) {
+    while (_ctxt._colIndex < container->size()) {
         auto& schema = _colSchemas[_ctxt._colIndex];
-        auto* col = df->cols()[_ctxt._colIndex]->getColumn();
+        auto* col = (*container)[_ctxt._colIndex];
 
         const bool completed = dispatchColumnType(
             net::proto::ColumnInternalKind(schema.getHeader()._typeCode),
@@ -273,8 +273,9 @@ void TuringProtoDecoder::decodeIncomingData(db::Dataframe* df) {
     }
 }
 
-void TuringProtoDecoder::decodeIncomingChunkHeader(db::Dataframe* df) {
-    bioassert(df, "decodeIncomingChunkHeader called with null dataframe");
+template<typename Sink>
+void TuringProtoDecoder<Sink>::decodeIncomingChunkHeader(Sink::ColumnContainer* container) {
+    bioassert(container, "decodeIncomingChunkHeader called with null column container");
 
     WireSize columnCount = 0;
     _ctxt._inBuf->readData(&columnCount, sizeof(columnCount));
@@ -292,17 +293,15 @@ void TuringProtoDecoder::decodeIncomingChunkHeader(db::Dataframe* df) {
         auto* column = dispatchColumnType(
             net::proto::ColumnInternalKind(schema.getHeader()._typeCode),
             net::proto::ColumnKind(schema.getHeader()._encoding),
-            MakeColumnFn {_localMem});
+            MakeColumnFn<Sink> {_sink});
 
-        db::NamedColumn* namedColumn = db::NamedColumn::create(_dfMan, column, _dfMan->allocTag());
-
-        namedColumn->rename(schema.getColName());
-        df->addColumn(namedColumn);
+        container->addColumn(column, schema.getColName());
     }
 }
 
-void TuringProtoDecoder::decodeIncomingChunk(db::Dataframe* df) {
-    bioassert(df, "decodeIncomingChunk called with null dataframe");
+template<typename Sink>
+void TuringProtoDecoder<Sink>::decodeIncomingChunk(Sink::ColumnContainer* container) {
+    bioassert(container, "decodeIncomingChunk called with null column container");
 
     if (_ctxt._bufferState._start != nullptr) {
         const size_t dataLeftToRead = _ctxt._bufferState._len - _ctxt._bufferState._offset;
@@ -320,5 +319,9 @@ void TuringProtoDecoder::decodeIncomingChunk(db::Dataframe* df) {
         return;
     }
 
-    decodeIncomingData(df);
+    decodeIncomingData(container);
 }
+
+// The decoder's member definitions live in this translation unit; every sink the
+// native build supports must be explicitly instantiated here.
+template class net::proto::TuringProtoDecoder<TuringSink>;

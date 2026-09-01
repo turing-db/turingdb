@@ -54,6 +54,10 @@ public:
         return _tagToColumnMap.lookup(tag.getValue());
     }
 
+    Column* getColumn(size_t idx) const {
+        return _cols.at(idx)->getColumn();
+    }
+
     bool hasColumn(ColumnTag tag) const {
         return getColumn(tag) != nullptr;
     }

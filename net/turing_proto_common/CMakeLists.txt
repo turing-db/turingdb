@@ -5,7 +5,9 @@ add_library(turing_db_proto_common_s STATIC
 	TuringProtoDecoder.cpp
 	TuringProtoHeaders.cpp
 	TuringProtoInBuf.cpp
-	TuringProtoOutBuf.cpp)
+	TuringProtoOutBuf.cpp
+	TuringSink.cpp
+	TuringSinkColumnContainer.cpp)
 
 target_include_directories(turing_db_proto_common_s
 	PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

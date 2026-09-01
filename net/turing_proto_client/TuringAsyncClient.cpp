@@ -19,6 +19,8 @@
 #include "TuringProtoDecoder.h"
 #include "TuringProtoHeaders.h"
 #include "TuringException.h"
+#include "TuringSink.h"
+#include "TuringSinkColumnContainer.h"
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
 
@@ -140,7 +142,7 @@ TuringAsyncClient::TuringAsyncClient(const std::string& remoteAddress,
     _inBuf(bufferCapacity),
     _dfMan(std::make_unique<db::DataframeManager>()),
     _df(std::make_unique<db::Dataframe>()),
-    _decoder(std::make_unique<TuringProtoDecoder>(_localMem, _dfMan.get(), &_inBuf, &_embeddingBuffer, &_stringBuffer, &_listBuffer, _colSchemas))
+    _decoder(std::make_unique<TuringProtoDecoder<TuringSink>>(&_inBuf, &_sink, _colSchemas))
 {
     _sendBuffer.reserve(256);
 }
@@ -374,13 +376,15 @@ void TuringAsyncClient::processProtoPacket() {
         throw TuringException("Proto header dataLen does not match chunk payload size");
     }
 
+    TuringSinkColumnContainer dataframeContainer(_df.get(), _dfMan.get());
+
     switch (responseHeader._type) {
         case MessageTypes::CHUNK_HEADER:
-            _decoder->decodeIncomingChunkHeader(_df.get());
+            _decoder->decodeIncomingChunkHeader(&dataframeContainer);
         break;
 
         case MessageTypes::CHUNK:
-            _decoder->decodeIncomingChunk(_df.get());
+            _decoder->decodeIncomingChunk(&dataframeContainer);
         break;
 
         case MessageTypes::END_CHUNK:
@@ -631,15 +635,12 @@ void TuringAsyncClient::reset() {
     _embeddingBuffer.clear();
     _stringBuffer.clear();
     _listBuffer.clear();
+    _sink.reset();
     _colSchemas.clear();
     _dfMan = std::make_unique<db::DataframeManager>();
     _df = std::make_unique<db::Dataframe>();
-    _decoder = std::make_unique<TuringProtoDecoder>(_localMem,
-                                                    _dfMan.get(),
-                                                    &_inBuf,
-                                                    &_embeddingBuffer,
-                                                    &_stringBuffer,
-                                                    &_listBuffer,
+    _decoder = std::make_unique<TuringProtoDecoder<TuringSink>>(&_inBuf,
+                                                    &_sink,
                                                     _colSchemas);
 
     // Per-query callback and accumulated result.
