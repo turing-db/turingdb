@@ -3171,9 +3171,9 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
         break;
         case BinaryOperator::Add:
             if (binExpr->getType() == EvaluatedType::String) {
-                _exprMap[expr] = _opBuilder.create<mlir::db::ConcatOp>(loc, noneType, lhs, rhs).getResult();
+                _part._exprMap[expr] = _opBuilder.create<mlir::db::ConcatOp>(loc, noneType, lhs, rhs).getResult();
             } else {
-                _exprMap[expr] = _opBuilder.create<mlir::db::AddOp>(loc, noneType, lhs, rhs).getResult();
+                _part._exprMap[expr] = _opBuilder.create<mlir::db::AddOp>(loc, noneType, lhs, rhs).getResult();
             }
         break;
         case BinaryOperator::Sub:
