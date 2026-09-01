@@ -4,6 +4,10 @@
 
 using namespace db;
 
+std::string_view StringBuffer::insert(std::string_view sv) {
+    return SpanBuffer::insert({sv.data(), sv.size()});
+}
+
 std::string_view StringBuffer::concatenate(std::string_view a, std::string_view b) {
     const size_t totalSize = a.size() + b.size();
 

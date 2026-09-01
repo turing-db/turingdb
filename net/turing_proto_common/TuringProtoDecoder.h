@@ -49,6 +49,7 @@ public:
         ChunkedBuffer<float>* _embeddingBuffer {nullptr};
         ChunkedBuffer<char>* _stringBuffer {nullptr};
         db::QueryListBuffer* _listBuffer {nullptr};
+        db::LocalMemory* _mem {nullptr};
 
         // Stack of write cursors into the preallocated list buffers. We always write the
         // latest element received on the wire through the cursor at the top of the stack.
