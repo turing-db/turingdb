@@ -398,6 +398,13 @@ private:
     // reads in turn.
     void rowAlignCutChunks(llvm::SmallVectorImpl<mlir::Value>& chunks);
 
+    // Follows the cardinality driver through a step that narrows the relation, from the
+    // chunk it read in @param inputChunks to the narrowed chunk standing for it in
+    // @param resultChunks. The driver stands for the relation a projection of constants
+    // alone is a projection of, so leaving it on the wider chunk would size that
+    // emission by the rows the step dropped.
+    void followCardinalityThrough(mlir::ValueRange inputChunks, mlir::ValueRange resultChunks);
+
     // The chunk a step that walks rows is handed for @param chunk: itself when it
     // carries rows, and its value laid out over the rows of @param cardinality - the
     // driving relation's chunk, null when no relation drives the projection - when it
