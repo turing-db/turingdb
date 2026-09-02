@@ -3,6 +3,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
@@ -399,6 +400,11 @@ private:
     // count a cut over constants alone charges, and the count every cut chained after it
     // reads in turn.
     void rowAlignCutChunks(llvm::SmallVectorImpl<mlir::Value>& chunks);
+
+    // The chunk whose rows the constants of a step are laid out over: the first of
+    // @param chunks carrying rows of its own, and the innermost loop's cardinality when
+    // every one of them is a constant, or there are none.
+    mlir::Value cardinalityDriver(llvm::ArrayRef<mlir::Value> chunks) const;
 
     // Follows the cardinality driver through a step that narrows the relation, from the
     // chunk it read in @param inputChunks to the narrowed chunk standing for it in

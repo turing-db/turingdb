@@ -997,9 +997,8 @@ void DBLowering::lowerUnwind(mlir::db::Unwind unwind) {
 
     // A constant source holds one cell standing for every row rather than one per row, so
     // it is laid out over the rows it expands - the carried ones, or the single row a
-    // scope of constants alone is when there are none.
-    const mlir::Value cardinality = carriedChunks.empty() ? _innermostCardinality
-                                                          : carriedChunks.front();
+    // scope of constants alone is.
+    const mlir::Value cardinality = cardinalityDriver(carriedChunks);
     const mlir::Value sourceChunk = rowAlignedChunk(mapValue(unwind.getSource()), cardinality);
 
     // Inserted into the deepest block, where every operand is bound - as lowerFilter's is
@@ -2776,14 +2775,7 @@ void DBLowering::lowerFilter(mlir::db::FilterOp filter) {
     // mask has exactly as many rows as they do - the driving relation's when a column of
     // it is what the cut carries, and the single row a projection of constants is when
     // nothing drives it.
-    mlir::Value maskDriver = _innermostCardinality;
-    for (const mlir::Value columnChunk : columnChunks) {
-        if (!yieldsConstantColumn(columnChunk)) {
-            maskDriver = columnChunk;
-            break;
-        }
-    }
-
+    const mlir::Value maskDriver = cardinalityDriver(columnChunks);
     const mlir::Value maskChunk = rowAlignedChunk(mapValue(filter.getMask()), maskDriver);
 
     // Inserted into the deepest block, where all operands are defined
@@ -3046,6 +3038,16 @@ mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
     }
 
     return _builder.create<nl::ToNullable>(_builder.getUnknownLoc(), resultType, chunk).getResult();
+}
+
+mlir::Value DBLowering::cardinalityDriver(llvm::ArrayRef<mlir::Value> chunks) const {
+    for (const mlir::Value chunk : chunks) {
+        if (!yieldsConstantColumn(chunk)) {
+            return chunk;
+        }
+    }
+
+    return _innermostCardinality;
 }
 
 mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinality) {
