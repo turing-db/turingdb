@@ -106,6 +106,49 @@ TEST_F(MatchSkipLimitTest, countsOnlyTheRowsTheCutLeft) {
     expectRowsInOrder("MATCH (n) LIMIT 3 RETURN count(n)", expected);
 }
 
+// A literal UNWIND after the cut spreads the window the cut left, so the cut applies to the
+// rows the match produced and not to the product the UNWIND made out of them
+TEST_F(MatchSkipLimitTest, spreadsTheLimitedRowsOverALiteralUnwind) {
+    const std::vector<StringRowSink::Row> expected {
+        {"Adam", "1"}, {"Adam", "2"}, {"Animals", "1"}, {"Animals", "2"},
+    };
+
+    expectRowsInOrder("MATCH (n) ORDER BY n.name LIMIT 2 UNWIND [1, 2] AS x "
+                      "RETURN n.name, x ORDER BY n.name, x",
+                      expected);
+}
+
+// Remy, Suhas and Travel are the three the order leaves once fifteen are passed, each
+// paired with both elements - the skipped names may not come back through the product
+TEST_F(MatchSkipLimitTest, spreadsTheRowsLeftBySkipOverALiteralUnwind) {
+    const std::vector<StringRowSink::Row> expected {
+        {"Remy", "1"}, {"Remy", "2"}, {"Suhas", "1"},
+        {"Suhas", "2"}, {"Travel", "1"}, {"Travel", "2"},
+    };
+
+    expectRowsInOrder("MATCH (n) ORDER BY n.name SKIP 15 UNWIND [1, 2] AS x "
+                      "RETURN n.name, x ORDER BY n.name, x",
+                      expected);
+}
+
+TEST_F(MatchSkipLimitTest, countsTheRowsALiteralUnwindSpreadsTheCutOver) {
+    const std::vector<StringRowSink::Row> expected {{"6"}};
+
+    expectRowsInOrder("MATCH (n) LIMIT 3 UNWIND [1, 2] AS x RETURN count(*)", expected);
+}
+
+// A WITH after the UNWIND does not stand in for the cut's own part: the product is already
+// made by the time it publishes
+TEST_F(MatchSkipLimitTest, spreadsTheLimitedRowsOverALiteralUnwindPublishedByAWith) {
+    const std::vector<StringRowSink::Row> expected {
+        {"Adam", "1"}, {"Adam", "2"}, {"Animals", "1"}, {"Animals", "2"},
+    };
+
+    expectRowsInOrder("MATCH (n) ORDER BY n.name LIMIT 2 UNWIND [1, 2] AS x "
+                      "WITH n.name AS name, x RETURN name, x ORDER BY name, x",
+                      expected);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

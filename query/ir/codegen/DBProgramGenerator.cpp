@@ -879,6 +879,13 @@ bool DBProgramGenerator::closesPartOnItsCut(const Stmt* stmt, std::span<Stmt* co
             return false;
         } else if (kind == Stmt::Kind::MATCH) {
             return true;
+        } else if (kind == Stmt::Kind::UNWIND) {
+            // A literal UNWIND opens a dataflow of its own, multiplying the rows the cut
+            // applies to exactly as a following MATCH does. One evaluated per row does not.
+            const UnwindStmt* unwindStmt = static_cast<const UnwindStmt*>(next);
+            if (unwindStmt->unwindsLiteral()) {
+                return true;
+            }
         }
     }
 

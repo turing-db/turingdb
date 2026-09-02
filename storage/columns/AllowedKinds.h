@@ -245,7 +245,13 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
         OptionalKindPairs<types::String::Primitive, types::String::OwningPrimitive>::Pairs,
         OptionalKindPairs<types::String::OwningPrimitive, types::String::Primitive>::Pairs,
-        OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs,
+
+        // A type-erased cell against a string, or against another cell, read by its tag
+        ListElementKindPairs<types::String::Primitive>::Pairs,
+        ListElementKindPairs<types::String::OwningPrimitive>::Pairs,
+
+        std::tuple<KindPair<ListElementView, ListElementView>>
     >;
 
     using AllowedMixed = AllowedMixedList<>;

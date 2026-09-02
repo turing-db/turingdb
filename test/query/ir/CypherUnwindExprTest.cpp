@@ -766,3 +766,11 @@ TEST_F(CypherUnwindExprTest, rejectsSummingANonNumericCell) {
 TEST_F(CypherUnwindExprTest, rejectsAnUnwoundVariableThatIsAlreadyDeclared) {
     expectRejected("MATCH (n) UNWIND n.age AS n RETURN n", "already declared");
 }
+
+// An aggregate folds the rows a projection groups, so it names no value an UNWIND could
+// spread: the list has to be published by a WITH first
+TEST_F(CypherUnwindExprTest, rejectsAnAggregateUnwindArgument) {
+    expectRejected("MATCH (n) UNWIND collect(n.name) AS x RETURN x", "aggregate");
+    expectRejected("MATCH (n) UNWIND count(n) AS x RETURN x", "aggregate");
+    expectRejected("MATCH (n) UNWIND count(n) + 1 AS x RETURN x", "aggregate");
+}

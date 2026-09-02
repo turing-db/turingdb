@@ -665,11 +665,21 @@ void ExprAnalyzer::analyzeStringExpr(StringExpr* expr) {
     analyzeExpr(lhs);
     analyzeExpr(rhs);
 
-    if (lhs->getType() != EvaluatedType::String || rhs->getType() != EvaluatedType::String) {
+    const EvaluatedType lhsType = lhs->getType();
+    const EvaluatedType rhsType = rhs->getType();
+
+    // A type-erased cell carries its own type, so the characters it holds are read row by
+    // row, exactly as an equality against one is. Only the MLIR engine runs such a test.
+    const bool lhsReadsAsString = lhsType == EvaluatedType::String
+                               || (_isV3 && lhsType == EvaluatedType::ListItem);
+    const bool rhsReadsAsString = rhsType == EvaluatedType::String
+                               || (_isV3 && rhsType == EvaluatedType::ListItem);
+
+    if (!lhsReadsAsString || !rhsReadsAsString) {
         const std::string error = fmt::format(
             "String expressions operands must be strings, not '{}' and '{}'",
-            EvaluatedTypeName::value(lhs->getType()),
-            EvaluatedTypeName::value(rhs->getType()));
+            EvaluatedTypeName::value(lhsType),
+            EvaluatedTypeName::value(rhsType));
 
         throwError(error, expr);
     }

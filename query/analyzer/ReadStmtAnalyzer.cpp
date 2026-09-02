@@ -620,6 +620,10 @@ void ReadStmtAnalyzer::analyze(UnwindStmt* unwind) {
 
     _exprAnalyzer->analyzeExpr(arg);
 
+    if (arg->isAggregate()) {
+        throwError("Invalid use of aggregate expression in this context", unwind);
+    }
+
     const Symbol* symbol = unwind->symbol();
     bioassert(symbol, "Invalid symbol.");
 
