@@ -1828,12 +1828,17 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
     }
 
     // A reduction beside the lists reads its input as a nullable value chunk, as it does
-    // under a grouped aggregation; a count tallies rows and takes the chunk as it is.
+    // under a grouped aggregation; a count tallies rows and takes the chunk as it is, and
+    // so does a type-erased column of tagged cells, which has no one value type to be read
+    // as.
     for (size_t aggregateIndex = 0; aggregateIndex < kinds.size(); aggregateIndex++) {
         const auto kind = static_cast<storage::GroupAggregateKind>(kinds[aggregateIndex]);
+        const size_t chunkIndex = keyCount + valueCount + aggregateIndex;
 
-        if (reducesValues(kind)) {
-            const size_t chunkIndex = keyCount + valueCount + aggregateIndex;
+        const mlir::Type aggregateElement = mlir::cast<nl::ChunkType>(chunks[chunkIndex].getType()).getElementType();
+        const bool taggedCells = mlir::isa<storage::ListElementType>(aggregateElement);
+
+        if (reducesValues(kind) && !taggedCells) {
             chunks[chunkIndex] = nullableValueChunk(chunks[chunkIndex]);
         }
     }
