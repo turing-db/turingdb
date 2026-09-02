@@ -467,24 +467,59 @@ struct TuringXor {
     }
 };
 
-struct StringStartsWith {
+// The characters a string predicate reads out of one operand. A type-erased cell holds
+// them only when it is tagged as a string: one holding a number, a nested list or a null
+// has none, so no string predicate can match it.
+inline std::optional<types::String::Primitive> predicateText(const types::String::Primitive value) {
+    return value;
+}
+
+inline std::optional<types::String::Primitive> predicateText(const types::String::OwningPrimitive& value) {
+    return value;
+}
+
+inline std::optional<types::String::Primitive> predicateText(const ListElementView element) {
+    if (element.getTag() != ListBufferTypeTag::String) {
+        return std::nullopt;
+    }
+
+    return element.getAs<types::String::Primitive>();
+}
+
+/**
+ * @brief Applies a string test @param F to the characters each operand holds, whichever of
+ * the string column kinds - or type-erased cells - the operands are.
+ */
+template <typename F>
+struct StringPredicate {
     template <typename T, typename U>
-    bool operator()(const T& text, U&& prefix) const {
-        return text.starts_with(std::forward<U>(prefix));
+    bool operator()(const T& text, const U& pattern) const {
+        const std::optional<types::String::Primitive> textView = predicateText(text);
+        const std::optional<types::String::Primitive> patternView = predicateText(pattern);
+
+        if (!textView || !patternView) {
+            return false;
+        }
+
+        return F {}(*textView, *patternView);
+    }
+};
+
+struct StringStartsWith {
+    bool operator()(const types::String::Primitive text, const types::String::Primitive prefix) const {
+        return text.starts_with(prefix);
     }
 };
 
 struct StringEndsWith {
-    template <typename T, typename U>
-    bool operator()(const T& text, U&& suffix) const {
-        return text.ends_with(std::forward<U>(suffix));
+    bool operator()(const types::String::Primitive text, const types::String::Primitive suffix) const {
+        return text.ends_with(suffix);
     }
 };
 
 struct StringContains {
-    template <typename T, typename U>
-    bool operator()(const T& text, U&& pattern) const {
-        return text.find(std::forward<U>(pattern)) != T::npos;
+    bool operator()(const types::String::Primitive text, const types::String::Primitive pattern) const {
+        return text.find(pattern) != types::String::Primitive::npos;
     }
 };
 
@@ -503,8 +538,8 @@ using And = BinaryPredicate<std::logical_and<>>;
 using Or = BinaryPredicate<std::logical_or<>>;
 using Xor = BinaryPredicate<TuringXor>;
 
-using StartsWith = BinaryPredicate<StringStartsWith>;
-using EndsWith = BinaryPredicate<StringEndsWith>;
-using Contains = BinaryPredicate<StringContains>;
+using StartsWith = BinaryPredicate<StringPredicate<StringStartsWith>>;
+using EndsWith = BinaryPredicate<StringPredicate<StringEndsWith>>;
+using Contains = BinaryPredicate<StringPredicate<StringContains>>;
 
 }

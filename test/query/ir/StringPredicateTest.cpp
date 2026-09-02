@@ -220,6 +220,34 @@ TEST_F(StringPredicateTest, aggregatesOverDobStringPredicates) {
                {{"2", "32"}});
 }
 
+TEST_F(StringPredicateTest, taggedListElementOperands) {
+    // A heterogeneous list hands out cells that carry their own type, so the predicate is
+    // tested per row: a cell holding a string matches on its characters, and a cell holding
+    // anything else has none to match.
+    expectRows("UNWIND ['C', 5] AS v MATCH (n) WHERE n.name STARTS WITH v RETURN n.name",
+               {{"Computers"}, {"Cooking"}, {"Cyrus"}});
+
+    expectRows("UNWIND ['ties', 7] AS v MATCH (n) WHERE n.name ENDS WITH v RETURN n.name",
+               {{"Eighties"}});
+
+    expectRows("UNWIND ['oo', 7] AS v MATCH (n) WHERE n.name CONTAINS v RETURN n.name",
+               {{"Cooking"}});
+
+    expectRows("UNWIND [1, 2.5] AS v MATCH (n) WHERE n.name STARTS WITH v RETURN n.name", {});
+}
+
+TEST_F(StringPredicateTest, taggedListElementOnBothSides) {
+    expectRows("UNWIND ['Remy', 1] AS a UNWIND ['Rem', 2] AS b "
+               "MATCH (n) WHERE n.name = a AND n.name STARTS WITH b RETURN n.name",
+               {{"Remy"}});
+}
+
+TEST_F(StringPredicateTest, taggedListElementAgainstALiteral) {
+    expectRows("UNWIND ['Remy', 1] AS v MATCH (n) WHERE n.name = v AND v STARTS WITH 'Rem' "
+               "RETURN n.name",
+               {{"Remy"}});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
