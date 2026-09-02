@@ -4815,7 +4815,8 @@ NLGroupAggregateGrowFunction NLExecutor::selectGroupAggregateGrow(GroupAggregate
 
 // The grouped reduction of a type-erased column: sum and avg only, both into the f64
 // accumulator mixed numeric tags reduce to - the grouped sibling of
-// selectTaggedAggregateUpdate.
+// selectTaggedAggregateUpdate. A switch (not a default) over every kind so a new one is a
+// compile error here rather than being reported as an unsupported min/max.
 NLGroupAggregateFoldFunction NLExecutor::selectTaggedGroupAggregateFold(GroupAggregateKind kind) {
     switch (kind) {
         case GroupAggregateKind::Sum:
@@ -4834,11 +4835,19 @@ NLGroupAggregateFoldFunction NLExecutor::selectTaggedGroupAggregateFold(GroupAgg
             return &groupFoldNumericTagged</*CountsRows=*/true, /*Distinct=*/true>;
         break;
 
-        default:
+        case GroupAggregateKind::Min:
+        case GroupAggregateKind::Max:
             throw IRException("min/max over type-erased cells is not supported");
+        break;
+
+        case GroupAggregateKind::Count:
+        case GroupAggregateKind::CountDistinct:
+        case GroupAggregateKind::CountRows:
+            bioassert(false, "A tally of type-erased cells has its own fold");
         break;
     }
 
+    bioassert(false, "Unhandled group aggregate kind");
     return nullptr;
 }
 

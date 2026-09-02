@@ -728,6 +728,23 @@ TEST_F(CypherUnwindExprTest, sumsAHeterogeneousElementOutOfACollect) {
                {{"3.500000"}});
 }
 
+// The distinct siblings of the reduction above, charged once per distinct cell of the
+// group: 1, 2.5 and 1 again reduce as the two values they are.
+TEST_F(CypherUnwindExprTest, reducesTheDistinctCellsOfAHeterogeneousElementPerGroup) {
+    expectRows("UNWIND [1, 2.5, 1] AS v MATCH (n:Person) WHERE n.name = 'Remy' "
+               "RETURN n.name, sum(DISTINCT v), avg(DISTINCT v)",
+               {{"Remy", "3.500000", "1.750000"}});
+}
+
+// min and max name no type a static result column could be, so a tagged cell is no
+// argument for them: it is the signature that turns the query away, ahead of the
+// reduction that has no fold for the pair.
+TEST_F(CypherUnwindExprTest, rejectsMinMaxOverAHeterogeneousElement) {
+    expectRejected("UNWIND [10, 'a'] AS v RETURN min(v)", "Invalid arguments for function 'min'");
+    expectRejected("MATCH (n) UNWIND [10, 'a'] AS v RETURN n.name, max(v)",
+                   "Invalid arguments for function 'max'");
+}
+
 TEST_F(CypherUnwindExprTest, sumsAHeterogeneousElementPerGroup) {
     expectRows("UNWIND [1, 2.5] AS v MATCH (n:Person) WHERE n.name = 'Remy' "
                "RETURN n.name, sum(v), avg(v)",
