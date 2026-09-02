@@ -38,6 +38,9 @@ NLProcedureState::~NLProcedureState() {
     }
 }
 
+NLShortestPathState::~NLShortestPathState() {
+}
+
 void NLProcedureState::prepareOrResetForNewDrive() {
     // A procedure reads its argument columns in its prepare step - gnn.neighbourhoodSample
     // builds its sampling iterator over the input nodes there - so the call is prepared

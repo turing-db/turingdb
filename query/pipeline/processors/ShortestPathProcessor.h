@@ -38,7 +38,7 @@ struct HeapMapValues {
 };
 
 template <typename T>
-struct DjistrakaNodeCompartor {
+struct DjistrakaNodeComparator {
     bool operator()(const DjistrakaNode<T> l, const DjistrakaNode<T> r) const {
         return l.distance > r.distance;
     }
@@ -52,7 +52,7 @@ public:
     using EdgePropType = T::Primitive;
     using DjistrakaHeap = std::priority_queue<DjistrakaNode<EdgePropType>,
                                               std::vector<DjistrakaNode<EdgePropType>>,
-                                              DjistrakaNodeCompartor<EdgePropType>>;
+                                              DjistrakaNodeComparator<EdgePropType>>;
 
     using DjistrakaValueMap = std::unordered_map<NodeID, HeapMapValues<EdgePropType>>;
 
