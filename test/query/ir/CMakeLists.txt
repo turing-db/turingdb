@@ -161,6 +161,7 @@ add_call_v3_test(test_query_ir_call_carried_scalar CallCarriedScalarTest.cpp)
 add_call_v3_test(test_query_ir_call_writes CallWritesTest.cpp)
 add_call_v3_test(test_query_ir_call_boolean_predicates CallBooleanPredicatesTest.cpp)
 add_call_v3_test(test_query_ir_call_show_indexes CallShowIndexesTest.cpp)
+add_call_v3_test(test_query_ir_scan_by_node_ids_v3 ScanByNodeIDsV3Test.cpp)
 
 # The crossing-call tests hop twice from the column a CALL yielded and then call again,
 # once with a constant argument alone and once reading the chain's tail, from the query
@@ -226,6 +227,27 @@ target_link_libraries(test_query_ir_cypher_collect_input PRIVATE
 
 add_ir_tests(test_query_ir_dbdialect DBDialectTest.cpp)
 add_ir_tests(test_query_ir_push_down_filter PushDownFilterTest.cpp)
+add_ir_tests(test_query_ir_fuse_scan_by_node_ids FuseScanByNodeIDsTest.cpp)
+
+# The codegen-level cases compile Cypher through the parser, analyzer and DBProgramGenerator
+# against the shared SimpleGraph fixture and read the db program the pass pipeline leaves.
+add_turing_test(test_query_ir_fuse_scan_by_node_ids_codegen FuseScanByNodeIDsCodegenTest.cpp)
+target_link_libraries(test_query_ir_fuse_scan_by_node_ids_codegen PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s
+        turing_db_ir_dbdialect_s
+        turing_db_ir_nldialect_s
+        turing_db_ir_storagedialect_s
+        turing_db_ir_common_s
+        turing_db_storage_s)
+target_include_directories(test_query_ir_fuse_scan_by_node_ids_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 add_ir_tests(test_query_ir_nldialect NLDialectTest.cpp)
 
 # The keyless collect drain emits its one group whether or not a row arrived, against the
