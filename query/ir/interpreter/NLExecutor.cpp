@@ -1,5 +1,6 @@
 #include "NLExecutor.h"
 
+#include <stdint.h>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -2337,143 +2338,173 @@ void runProcedureDrive(NLExecutionContext* context,
 }
 
 template <typename T>
-struct ShortestPathHeapNode {
+struct DjistrakaNode {
     NodeID id;
-    NodeID previous;
+    NodeID prevNode;
     EdgeID edge;
     T distance {0};
 };
 
 template <typename T>
-struct ShortestPathBest {
-    NodeID previous;
+struct HeapMapValues {
+    NodeID prevNode;
     EdgeID edge;
     T distance {0};
 };
 
 template <typename T>
-struct ShortestPathHeapOrder {
-    bool operator()(const ShortestPathHeapNode<T>& left, const ShortestPathHeapNode<T>& right) const {
-        return left.distance > right.distance;
+struct DjistrakaNodeCompartor {
+    bool operator()(const DjistrakaNode<T> l, const DjistrakaNode<T> r) const {
+        return l.distance > r.distance;
     }
 };
 
-// Weighted Dijkstra over out-edges from the buffered source set to the buffered target
-// set, summing the resolved weight property. Emits one row - the total weight and the
-// back-traced path (target-first, alternating node and edge IDs) - or no row when no
-// target is reachable. Ported from the V2 ShortestPathProcessor.
+// The weighted search, ported from the V2 ShortestPathProcessor: the source and target
+// sets and the per-hop scratch are the accumulator and the loop data, and the one result
+// row goes to the loop's output columns, but the algorithm and its comments are unchanged.
 template <SupportedType T>
 void shortestPathSearch(NLExecutionContext* context, NLShortestPathLoopData* loopData) {
-    using Weight = typename T::Primitive;
+    using EdgePropType = typename T::Primitive;
+    using DjistrakaHeap = std::priority_queue<DjistrakaNode<EdgePropType>,
+                                              std::vector<DjistrakaNode<EdgePropType>>,
+                                              DjistrakaNodeCompartor<EdgePropType>>;
+    using DjistrakaValueMap = std::unordered_map<NodeID, HeapMapValues<EdgePropType>>;
 
     const GraphView& view = *context->getView();
     NLShortestPathState* state = loopData->getState();
 
-    ColumnNodeIDs* expansionInput = loopData->getExpansionInput();
-    ColumnEdgeIDs* expandedEdges = loopData->getExpandedEdges();
-    ColumnNodeIDs* expandedTargets = loopData->getExpandedTargets();
-    ColumnVector<size_t>* expandedIndices = loopData->getExpandedIndices();
-    ColumnVector<size_t>* weightIndices = loopData->getWeightIndices();
-    ColumnVector<Weight>* weightValues = static_cast<ColumnVector<Weight>*>(loopData->getWeightValues());
+    ColumnNodeIDs* input = loopData->getExpansionInput();
+    ColumnEdgeIDs* outputEdges = loopData->getExpandedEdges();
+    ColumnNodeIDs* outputNodes = loopData->getExpandedTargets();
+    ColumnVector<size_t>* outputIndices = loopData->getExpandedIndices();
+    ColumnVector<size_t>* propertyIndices = loopData->getWeightIndices();
+    Column* weightValues = loopData->getWeightValues();
+    auto* properties = static_cast<ColumnVector<EdgePropType>*>(weightValues);
 
-    GetOutEdgesChunkWriter edgeWriter(view, expansionInput);
-    edgeWriter.setIndices(expandedIndices);
-    edgeWriter.setEdgeIDs(expandedEdges);
-    edgeWriter.setTgtIDs(expandedTargets);
+    GetOutEdgesChunkWriter getOutEdgesWriter(view, input);
+    getOutEdgesWriter.setIndices(outputIndices);
+    getOutEdgesWriter.setEdgeIDs(outputEdges);
+    getOutEdgesWriter.setTgtIDs(outputNodes);
 
-    GetPropertiesChunkWriter<EdgeID, T> weightWriter(view, loopData->getPropertyTypeID(), expandedEdges);
-    weightWriter.setOutput(weightValues);
-    weightWriter.setIndices(weightIndices);
+    const PropertyTypeID propID = loopData->getPropertyTypeID();
+    GetPropertiesChunkWriter<EdgeID, T> getPropertiesWriter(view, propID, outputEdges);
+    getPropertiesWriter.setOutput(properties);
+    getPropertiesWriter.setIndices(propertyIndices);
 
-    const std::unordered_set<NodeID>& targets = state->targets();
+    const std::unordered_set<NodeID>& targetNodes = state->targets();
 
-    std::priority_queue<ShortestPathHeapNode<Weight>,
-                        std::vector<ShortestPathHeapNode<Weight>>,
-                        ShortestPathHeapOrder<Weight>> heap;
-    std::unordered_map<NodeID, ShortestPathBest<Weight>> best;
-
-    for (const NodeID id : state->sources()) {
-        heap.push({id, NodeID(), EdgeID(), 0});
-        best.insert({id, {NodeID(), EdgeID(), 0}});
+    DjistrakaHeap heap;
+    DjistrakaValueMap heapValueMap;
+    for (const NodeID val : state->sources()) {
+        heap.push({val, NodeID(), EdgeID(), 0});
+        heapValueMap.insert({
+            val, {NodeID(), EdgeID(), 0}
+        });
     }
 
-    const size_t wholeChunk = std::numeric_limits<size_t>::max();
-
     while (!heap.empty()) {
-        const ShortestPathHeapNode<Weight> node = heap.top();
+        const DjistrakaNode<EdgePropType> val = heap.top();
 
-        if (targets.contains(node.id)) {
+        if (targetNodes.contains(val.id)) {
+            // target found
             break;
         }
 
         heap.pop();
 
-        // A node re-pushed at a shorter distance leaves its old entry behind; the best map
-        // records the current distance, so a heap entry that disagrees is stale - skip it.
-        const auto bestIt = best.find(node.id);
-        if (bestIt != best.end() && bestIt->second.distance != node.distance) {
+        // We only need to confirm if the distance value is stale
+        // as we only add a new value to the heap when we find a shorter
+        // path to a node.
+        const auto it = heapValueMap.find(val.id);
+        if (it != heapValueMap.end() && it->second.distance != val.distance) {
+            // remove stale value
             continue;
         }
 
-        expansionInput->clear();
-        expansionInput->push_back(node.id);
+        // Set up the input columns and iterators
+        input->clear();
+        input->push_back(val.id);
+        getOutEdgesWriter.reset();
+        // We set the chunk size to SIZE_MAX so that we expand the iterators
+        // completely in 1 chunk
+        getOutEdgesWriter.fill(std::numeric_limits<size_t>::max());
 
-        edgeWriter.reset();
-        edgeWriter.fill(wholeChunk);
+        getPropertiesWriter.reset();
+        getPropertiesWriter.fill(SIZE_MAX);
 
-        weightWriter.reset();
-        weightWriter.fill(wholeChunk);
+        // loop over all the edge properties
+        for (size_t i = 0; i < properties->size(); ++i) {
 
-        const std::vector<Weight>& weights = weightValues->getRaw();
-        for (size_t weight = 0; weight < weights.size(); weight++) {
-            if constexpr (std::is_signed_v<Weight>) {
-                if (weights[weight] < 0) {
-                    throw IRException("Cannot compute a shortest path with negative edge weights");
+            if constexpr (std::is_signed_v<EdgePropType>) {
+                if ((*properties)[i] < 0) {
+                    throw IRException("Cannot Do Shortest Path With Negative Weights");
                 }
             }
 
-            const size_t edgeIndex = (*weightIndices)[weight];
-            const NodeID neighbour = (*expandedTargets)[edgeIndex];
-            const EdgeID edge = (*expandedEdges)[edgeIndex];
-            const Weight distance = node.distance + weights[weight];
+            // Using the indices we for each edge we have the:
+            // 1.Target Node
+            // 2.EdgeID
+            // 3.Edge Property
+            const auto outputNodeId = (*outputNodes)[(*propertyIndices)[i]];
+            const auto outputEdgeId = (*outputEdges)[(*propertyIndices)[i]];
+            const auto dist = val.distance + (*properties)[i];
 
-            const auto neighbourIt = best.find(neighbour);
-            const bool unseen = neighbourIt == best.end();
-            if (unseen || distance < neighbourIt->second.distance) {
-                heap.push({neighbour, node.id, edge, distance});
-                best[neighbour] = {node.id, edge, distance};
+            const auto it = heapValueMap.find(outputNodeId);
+            if (it == heapValueMap.end()) {
+                // If the node is not in the heapValueMap
+                // then it is an unexplored node so we add it into heap
+                // directly
+                heap.push({outputNodeId, val.id, outputEdgeId, dist});
+                heapValueMap[outputNodeId] = {val.id, outputEdgeId, dist};
+            } else {
+                // If we have come across this nodeID before we check if the new path
+                // to the node is shorter than the current shortest path for the node
+                // If so we replace it by pushing the new djistraka node into the heap
+                // and changing the heapValueMap value to match the new shortest distance.
+                //
+                // The old path's node will still exist in the heap but if we ever pop
+                // it from the heap we can compare it to the latest value in the heapValueMap
+                // to invalidate it.
+                if (dist < it->second.distance) {
+                    heap.push({outputNodeId, val.id, outputEdgeId, dist});
+                    heapValueMap[outputNodeId] = {val.id, outputEdgeId, dist};
+                }
             }
         }
     }
 
-    ColumnVector<Weight>* distanceOutput = static_cast<ColumnVector<Weight>*>(loopData->getDistanceOutput());
-    ColumnVector<Path>* pathOutput = loopData->getPathOutput();
+    // Once we are out of the while loop if there are no values in the heap that means
+    // no path was found between the source and target sets.
 
-    distanceOutput->clear();
-    pathOutput->clear();
-
-    // The heap empties only when no target was reachable from any source: emit no row.
     if (heap.empty()) {
         return;
     }
 
-    const ShortestPathHeapNode<Weight> reached = heap.top();
-    distanceOutput->push_back(reached.distance);
+    // After the loop the top value in the heap is the target node with the shortest
+    // distance from the source set.
 
-    // Walk the best-predecessor chain back from the reached target to a source, so the
-    // path is stored target-first as alternating node and edge IDs.
-    Path& path = pathOutput->emplace_back();
-    path.push_back(reached.id.getValue());
+    Column* dist = loopData->getDistanceOutput();
+    auto* distCol = static_cast<ColumnVector<EdgePropType>*>(dist);
+    ColumnVector<Path>* pathCol = loopData->getPathOutput();
 
-    NodeID previous = reached.previous;
-    EdgeID edge = reached.edge;
-    while (previous.isValid()) {
-        path.push_back(edge.getValue());
-        path.push_back(previous.getValue());
+    // Get the total length of the path
+    distCol->push_back(heap.top().distance);
+    auto& pathVec = pathCol->emplace_back();
 
-        const ShortestPathBest<Weight>& step = best[previous];
-        previous = step.previous;
-        edge = step.edge;
+    // In the heap all the (non-stale) values represent the shortest path to that
+    // nodeID from the source set. So we can find the shortet path by following the
+    // previousNode back from the target node that we have found.
+    auto lastNode = heap.top().prevNode;
+    auto edge = heap.top().edge;
+    pathVec.push_back(heap.top().id.getValue());
+
+    while (lastNode.isValid()) {
+        pathVec.push_back(edge.getValue());
+        pathVec.push_back(lastNode.getValue());
+
+        const auto& pathInfo = heapValueMap[lastNode];
+        lastNode = pathInfo.prevNode;
+        edge = pathInfo.edge;
     }
 
     runBody(context, loopData->getStmts());
