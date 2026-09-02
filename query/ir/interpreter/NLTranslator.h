@@ -77,8 +77,6 @@ private:
 
         NLShortestPathState* _shortestPathState {nullptr};
 
-        llvm::StringRef _shortestPathProperty;
-
         // The call a ProcedureInit iterator drives; null for the other kinds.
         NLProcedureState* _procedureState {nullptr};
 
@@ -454,6 +452,10 @@ private:
     void translateShortestPathUpdate(mlir::nl::ShortestPathUpdate update, NLStmtContainer* body);
 
     NLShortestPathState* shortestPathStateFor(mlir::Value handle) const;
+
+    PropertyType resolveShortestPathWeight(mlir::Value stateHandle) const;
+
+    NLShortestPathState* allocShortestPathStateFor(const PropertyType& weight);
 
     void translateShortestPathLoop(const IteratorConfig& config,
                                    mlir::Block& loopBody,

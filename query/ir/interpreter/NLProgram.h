@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <memory>
 #include <optional>
+#include <queue>
 #include <span>
 #include <string>
 #include <string_view>
@@ -31,6 +32,7 @@ namespace db {
 
 class NLExecutionContext;
 class NLFunctionData;
+class NLShortestPathLoopData;
 class Procedure;
 class ProcedureContext;
 class ProcedureData;
@@ -2091,23 +2093,87 @@ private:
     NLStmtContainer _stmts;
 };
 
-/// Accumulates src/tgt sets
+template <typename T>
+struct DjistrakaNode {
+    NodeID id;
+    NodeID prevNode;
+    EdgeID edge;
+    T distance {0};
+};
+
+template <typename T>
+struct HeapMapValues {
+    NodeID prevNode;
+    EdgeID edge;
+    T distance {0};
+};
+
+template <typename T>
+struct DjistrakaNodeComparator {
+    bool operator()(const DjistrakaNode<T> l, const DjistrakaNode<T> r) const {
+        return l.distance > r.distance;
+    }
+};
+
 class NLShortestPathState {
 public:
-    void reset() {
-        _sources.clear();
-        _targets.clear();
+    NLShortestPathState(ValueType valueType, PropertyTypeID propertyType)
+        : _valueType(valueType),
+        _propertyType(propertyType)
+    {
     }
 
-    std::unordered_set<NodeID>& sources() { return _sources; }
-    std::unordered_set<NodeID>& targets() { return _targets; }
+    virtual ~NLShortestPathState();
 
-    const std::unordered_set<NodeID>& sources() const { return _sources; }
-    const std::unordered_set<NodeID>& targets() const { return _targets; }
+    ValueType getValueType() const { return _valueType; }
+    PropertyTypeID getPropertyType() const { return _propertyType; }
+
+    std::unordered_set<NodeID>& targets() { return _targetNodes; }
+
+    // Reset the whole accumulator, and seed the frontier with a producing step's source nodes
+    // (each at distance zero). Typed on the weight, so implemented by the templated impl; the
+    // drain reaches the typed frontier through the impl's accessors.
+    virtual void reset() = 0;
+    virtual void addSources(const std::vector<NodeID>& nodes) = 0;
+
+protected:
+    ValueType _valueType {ValueType::Invalid};
+    PropertyTypeID _propertyType;
+    std::unordered_set<NodeID> _targetNodes;
+};
+
+template <SupportedType T>
+class NLShortestPathStateImpl final : public NLShortestPathState {
+public:
+    using EdgePropType = typename T::Primitive;
+    using DjistrakaHeap = std::priority_queue<DjistrakaNode<EdgePropType>,
+                                              std::vector<DjistrakaNode<EdgePropType>>,
+                                              DjistrakaNodeComparator<EdgePropType>>;
+    using DjistrakaValueMap = std::unordered_map<NodeID, HeapMapValues<EdgePropType>>;
+
+    using NLShortestPathState::NLShortestPathState;
+
+    void reset() override {
+        _heap = DjistrakaHeap();
+        _heapValueMap.clear();
+        _targetNodes.clear();
+    }
+
+    void addSources(const std::vector<NodeID>& nodes) override {
+        for (const NodeID val : nodes) {
+            _heap.push({val, NodeID(), EdgeID(), 0});
+            _heapValueMap.insert({
+                val, {NodeID(), EdgeID(), 0}
+            });
+        }
+    }
+
+    DjistrakaHeap& heap() { return _heap; }
+    DjistrakaValueMap& heapValueMap() { return _heapValueMap; }
 
 private:
-    std::unordered_set<NodeID> _sources;
-    std::unordered_set<NodeID> _targets;
+    DjistrakaHeap _heap;
+    DjistrakaValueMap _heapValueMap;
 };
 
 // nl.shortest_path_buffer data: empties the accumulator each time the block it lives
@@ -2153,14 +2219,6 @@ public:
 
     NLShortestPathState* getState() const { return _state; }
 
-    void setEdgeProperty(PropertyTypeID propertyTypeID, ValueType valueType) {
-        _propertyTypeID = propertyTypeID;
-        _valueType = valueType;
-    }
-
-    PropertyTypeID getPropertyTypeID() const { return _propertyTypeID; }
-    ValueType getValueType() const { return _valueType; }
-
     void setDistanceOutput(Column* distance) { _distance = distance; }
     void setPathOutput(ColumnVector<Path>* path) { _path = path; }
 
@@ -2192,8 +2250,6 @@ public:
 
 private:
     NLShortestPathState* _state {nullptr};
-    PropertyTypeID _propertyTypeID;
-    ValueType _valueType {ValueType::Invalid};
 
     Column* _distance {nullptr};
     ColumnVector<Path>* _path {nullptr};
@@ -2575,13 +2631,12 @@ public:
         return statePtr;
     }
 
-    // Allocate one SHORTESTPATH's runtime accumulator, owned by the program; the
-    // reset, update and drain statements that share it hold a borrowed pointer.
-    NLShortestPathState* allocShortestPathState() {
-        auto state = std::make_unique<NLShortestPathState>();
-        NLShortestPathState* statePtr = state.get();
-        _shortestPathStates.push_back(std::move(state));
-        return statePtr;
+    template <SupportedType T>
+    NLShortestPathState* allocShortestPathState(ValueType valueType, PropertyTypeID propertyType) {
+        _shortestPathStates.emplace_back(
+            std::make_unique<NLShortestPathStateImpl<T>>(valueType, propertyType));
+        NLShortestPathState* ptr = _shortestPathStates.back().get();
+        return ptr;
     }
 
     // Allocate one CALL's runtime state, owned by the program; the statements that

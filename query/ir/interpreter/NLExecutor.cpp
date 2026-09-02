@@ -2337,70 +2337,33 @@ void runProcedureDrive(NLExecutionContext* context,
     }
 }
 
-template <typename T>
-struct DjistrakaNode {
-    NodeID id;
-    NodeID prevNode;
-    EdgeID edge;
-    T distance {0};
-};
-
-template <typename T>
-struct HeapMapValues {
-    NodeID prevNode;
-    EdgeID edge;
-    T distance {0};
-};
-
-template <typename T>
-struct DjistrakaNodeCompartor {
-    bool operator()(const DjistrakaNode<T> l, const DjistrakaNode<T> r) const {
-        return l.distance > r.distance;
-    }
-};
-
-// The weighted search, ported from the V2 ShortestPathProcessor: the source and target
-// sets and the per-hop scratch are the accumulator and the loop data, and the one result
-// row goes to the loop's output columns, but the algorithm and its comments are unchanged.
 template <SupportedType T>
 void shortestPathSearch(NLExecutionContext* context, NLShortestPathLoopData* loopData) {
     using EdgePropType = typename T::Primitive;
-    using DjistrakaHeap = std::priority_queue<DjistrakaNode<EdgePropType>,
-                                              std::vector<DjistrakaNode<EdgePropType>>,
-                                              DjistrakaNodeCompartor<EdgePropType>>;
-    using DjistrakaValueMap = std::unordered_map<NodeID, HeapMapValues<EdgePropType>>;
 
     const GraphView& view = *context->getView();
-    NLShortestPathState* state = loopData->getState();
+    NLShortestPathStateImpl<T>* state = static_cast<NLShortestPathStateImpl<T>*>(loopData->getState());
 
     ColumnNodeIDs* input = loopData->getExpansionInput();
     ColumnEdgeIDs* outputEdges = loopData->getExpandedEdges();
     ColumnNodeIDs* outputNodes = loopData->getExpandedTargets();
     ColumnVector<size_t>* outputIndices = loopData->getExpandedIndices();
     ColumnVector<size_t>* propertyIndices = loopData->getWeightIndices();
-    Column* weightValues = loopData->getWeightValues();
-    auto* properties = static_cast<ColumnVector<EdgePropType>*>(weightValues);
+    ColumnVector<EdgePropType>* properties = static_cast<ColumnVector<EdgePropType>*>(loopData->getWeightValues());
 
     GetOutEdgesChunkWriter getOutEdgesWriter(view, input);
     getOutEdgesWriter.setIndices(outputIndices);
     getOutEdgesWriter.setEdgeIDs(outputEdges);
     getOutEdgesWriter.setTgtIDs(outputNodes);
 
-    const PropertyTypeID propID = loopData->getPropertyTypeID();
-    GetPropertiesChunkWriter<EdgeID, T> getPropertiesWriter(view, propID, outputEdges);
+    GetPropertiesChunkWriter<EdgeID, T> getPropertiesWriter(view, state->getPropertyType(), outputEdges);
     getPropertiesWriter.setOutput(properties);
     getPropertiesWriter.setIndices(propertyIndices);
 
     const std::unordered_set<NodeID>& targetNodes = state->targets();
 
-    DjistrakaHeap heap;
-    DjistrakaValueMap heapValueMap;
-    for (const NodeID val : state->sources()) {
-        heap.push({val, NodeID(), EdgeID(), 0});
-        heapValueMap.insert({
-            val, {NodeID(), EdgeID(), 0}
-        });
-    }
+    typename NLShortestPathStateImpl<T>::DjistrakaHeap& heap = state->heap();
+    typename NLShortestPathStateImpl<T>::DjistrakaValueMap& heapValueMap = state->heapValueMap();
 
     while (!heap.empty()) {
         const DjistrakaNode<EdgePropType> val = heap.top();
@@ -4086,15 +4049,20 @@ void NLExecutor::runShortestPathUpdate(NLExecutionContext* context, NLFunctionDa
     NLShortestPathState* state = update->getState();
 
     const std::vector<NodeID>& nodes = update->getNodes()->getRaw();
-    std::unordered_set<NodeID>& set = update->isTarget() ? state->targets() : state->sources();
 
-    set.insert(nodes.begin(), nodes.end());
+    // A target only needs to be a member; a source seeds the frontier at distance zero, so it
+    // goes through the typed accumulator.
+    if (update->isTarget()) {
+        state->targets().insert(nodes.begin(), nodes.end());
+    } else {
+        state->addSources(nodes);
+    }
 }
 
 void NLExecutor::runShortestPathLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLShortestPathLoopData* loopData = static_cast<NLShortestPathLoopData*>(data);
 
-    switch (loopData->getValueType()) {
+    switch (loopData->getState()->getValueType()) {
         case ValueType::Double:
             return shortestPathSearch<types::Double>(context, loopData);
         break;

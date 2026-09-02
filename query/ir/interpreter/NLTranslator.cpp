@@ -458,7 +458,6 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             IteratorConfig config;
             config._kind = IteratorKind::ShortestPath;
             config._shortestPathState = shortestPathStateFor(shortestPath.getState());
-            config._shortestPathProperty = propertyTypeName(shortestPath.getEdgeProperty());
             _iteratorConfigs[shortestPath.getResult()] = config;
         } else if (nl::UnwindConst unwindConst = mlir::dyn_cast<nl::UnwindConst>(operation)) {
             IteratorConfig config;
@@ -2449,11 +2448,56 @@ NLCollectState* NLTranslator::collectStateFor(mlir::Value handle) const {
     return stateIt->second;
 }
 
+PropertyType NLTranslator::resolveShortestPathWeight(mlir::Value stateHandle) const {
+    nl::ShortestPath drain;
+    for (mlir::Operation* user : stateHandle.getUsers()) {
+        if (nl::ShortestPath found = mlir::dyn_cast<nl::ShortestPath>(user)) {
+            drain = found;
+            break;
+        }
+    }
+
+    if (!drain) {
+        throw IRException("nl.shortest_path_buffer must feed an nl.shortest_path drain");
+    }
+
+    const llvm::StringRef name = propertyTypeName(drain.getEdgeProperty());
+    const std::optional<PropertyType> weight = _view->metadata().propTypes().get(name);
+    if (!weight) {
+        throw IRException("Unknown property '" + name.str() + "'");
+    }
+
+    return *weight;
+}
+
+NLShortestPathState* NLTranslator::allocShortestPathStateFor(const PropertyType& weight) {
+    switch (weight._valueType) {
+        case ValueType::Double:
+            return _program->allocShortestPathState<types::Double>(weight._valueType, weight._id);
+        break;
+
+        case ValueType::Int64:
+            return _program->allocShortestPathState<types::Int64>(weight._valueType, weight._id);
+        break;
+
+        case ValueType::UInt64:
+            return _program->allocShortestPathState<types::UInt64>(weight._valueType, weight._id);
+        break;
+
+        default:
+            throw IRException("SHORTESTPATH weight must be an Int64, UInt64 or Double property");
+        break;
+    }
+}
+
 void NLTranslator::translateShortestPathBuffer(nl::ShortestPathBuffer buffer, NLStmtContainer* body) {
-    NLShortestPathState* state = _program->allocShortestPathState();
+    // Resolve the weight before the accumulator is built, so it is typed by the weight and the
+    // updates can seed the frontier directly. The weight type is chosen once, here.
+    const PropertyType weight = resolveShortestPathWeight(buffer.getState());
+    NLShortestPathState* state = allocShortestPathStateFor(weight);
     _shortestPathStates[buffer.getState()] = state;
 
-    // The reset empties both node sets each time the block holding this
+    // The reset empties the accumulator each time the block holding this
     // nl.shortest_path_buffer runs: once at function scope.
     NLShortestPathResetData* resetData = _program->allocFunctionData<NLShortestPathResetData>(state);
     body->emplaceStmt(&NLExecutor::runShortestPathReset, resetData);
@@ -2491,14 +2535,6 @@ void NLTranslator::translateShortestPathLoop(const IteratorConfig& config,
 
     NLShortestPathLoopData* loopData = _program->allocFunctionData<NLShortestPathLoopData>(state);
 
-    const llvm::StringRef propertyName = config._shortestPathProperty;
-    const std::optional<PropertyType> propertyType = _view->metadata().propTypes().get(std::string_view(propertyName.data(), propertyName.size()));
-    if (!propertyType) {
-        throw IRException("Unknown property '" + propertyName.str() + "'");
-    }
-
-    loopData->setEdgeProperty(propertyType->_id, propertyType->_valueType);
-
     const mlir::Value distanceVariable = loopBody.getArgument(0);
     const mlir::Value pathVariable = loopBody.getArgument(1);
 
@@ -2513,7 +2549,7 @@ void NLTranslator::translateShortestPathLoop(const IteratorConfig& config,
     ColumnNodeIDs* expansionInput = _memory->alloc<ColumnNodeIDs>();
     ColumnEdgeIDs* expandedEdges = _memory->alloc<ColumnEdgeIDs>();
     ColumnNodeIDs* expandedTargets = _memory->alloc<ColumnNodeIDs>();
-    Column* weightValues = allocValueColumnForValueType(propertyType->_valueType);
+    Column* weightValues = allocValueColumnForValueType(state->getValueType());
     loopData->setExpansionScratch(expansionInput, expandedEdges, expandedTargets, weightValues);
 
     body->emplaceStmt(&NLExecutor::runShortestPathLoop, loopData);
