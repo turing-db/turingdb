@@ -13,11 +13,15 @@
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/OwningOpRef.h"
 
+#include "llvm/Support/raw_ostream.h"
+
 #include "DBDialect.h"
 #include "DBDialectInterpreter.h"
+#include "DBLowering.h"
 #include "DBProgramGenerator.h"
 #include "LocalMemory.h"
 #include "NLDialect.h"
+#include "NLOps.h"
 #include "NLOutputSink.h"
 #include "StorageDialect.h"
 
@@ -91,13 +95,11 @@ protected:
         SimpleGraph::createSimpleGraph(_graph);
     }
 
-    void runQuery(std::string_view query, NLOutputSink* sink) {
-        SystemAccessor system = _env->getSystemManager().accessUnique();
-        const ProcedureManager* procedures = system.getProcedures();
-
-        const FrozenCommitTx transaction = _graph->openTransaction();
-        const GraphView view = transaction.viewGraph();
-
+    void generateProgram(std::string_view query,
+                         const GraphView& view,
+                         const ProcedureManager* procedures,
+                         mlir::MLIRContext& context,
+                         mlir::OwningOpRef<mlir::ModuleOp>& module) {
         CypherAST ast(procedures, query);
 
         CypherParser parser(&ast);
@@ -107,22 +109,62 @@ protected:
         analyzer.setV3();
         analyzer.analyze();
 
-        mlir::MLIRContext context;
         context.getOrLoadDialect<mlir::func::FuncDialect>();
         context.getOrLoadDialect<mlir::storage::Storage>();
         context.getOrLoadDialect<mlir::db::DB>();
         context.getOrLoadDialect<mlir::nl::NL>();
 
         mlir::OpBuilder builder(&context);
-        mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(builder.getUnknownLoc());
+        module = mlir::ModuleOp::create(builder.getUnknownLoc());
         mlir::ModuleOp moduleOp = module.get();
 
         DBProgramGenerator generator(&moduleOp);
         generator.generate(&ast);
+    }
+
+    void runQuery(std::string_view query, NLOutputSink* sink) {
+        SystemAccessor system = _env->getSystemManager().accessUnique();
+        const ProcedureManager* procedures = system.getProcedures();
+
+        const FrozenCommitTx transaction = _graph->openTransaction();
+        const GraphView view = transaction.viewGraph();
+
+        mlir::MLIRContext context;
+        mlir::OwningOpRef<mlir::ModuleOp> module;
+        generateProgram(query, view, procedures, context, module);
 
         LocalMemory memory;
-        DBDialectInterpreter interpreter(moduleOp, &view, sink, &memory);
+        DBDialectInterpreter interpreter(module.get(), &view, sink, &memory);
         interpreter.run();
+    }
+
+    std::string concatResultType(std::string_view query) {
+        SystemAccessor system = _env->getSystemManager().accessUnique();
+        const ProcedureManager* procedures = system.getProcedures();
+
+        const FrozenCommitTx transaction = _graph->openTransaction();
+        const GraphView view = transaction.viewGraph();
+
+        mlir::MLIRContext context;
+        mlir::OwningOpRef<mlir::ModuleOp> module;
+        generateProgram(query, view, procedures, context, module);
+
+        const mlir::func::FuncOp dbFunction = module.get().lookupSymbol<mlir::func::FuncOp>("main");
+        EXPECT_TRUE(dbFunction);
+
+        mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+        DBLowering lowering(&context, &view);
+        lowering.lower(dbFunction, *nlModule);
+
+        mlir::nl::Concat concat;
+        nlModule->walk([&](mlir::nl::Concat op) { concat = op; });
+        EXPECT_TRUE(concat);
+
+        std::string printed;
+        llvm::raw_string_ostream stream(printed);
+        concat.getResult().getType().print(stream);
+
+        return printed;
     }
 
     std::vector<types::Int64::Primitive> evalList(std::string_view query) {
@@ -151,6 +193,16 @@ TEST_F(ListConcatTest, singletons) {
 TEST_F(ListConcatTest, chainedConcatenation) {
     const std::vector<types::Int64::Primitive> expected {1, 2, 3};
     EXPECT_EQ(evalList("MATCH (n) WHERE n.name = 'Remy' RETURN [1] + [2] + [3]"), expected);
+}
+
+TEST_F(ListConcatTest, homogeneousListsStayHomogeneous) {
+    const std::string resultType = concatResultType("MATCH (n) WHERE n.name = 'Remy' RETURN [1, 2] + [3, 4]");
+    EXPECT_NE(resultType.find("list<i64>"), std::string::npos) << "concat result type: " << resultType;
+}
+
+TEST_F(ListConcatTest, mixedElementListsAreTypeErased) {
+    const std::string resultType = concatResultType("MATCH (n) WHERE n.name = 'Remy' RETURN [1, 2] + ['a', 'b']");
+    EXPECT_NE(resultType.find("list_element"), std::string::npos) << "concat result type: " << resultType;
 }
 
 TEST_F(ListConcatTest, subtractionOfListsRejected) {
