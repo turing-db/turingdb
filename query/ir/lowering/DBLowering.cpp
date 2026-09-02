@@ -1348,6 +1348,8 @@ void DBLowering::lowerLimit(mlir::db::Limit limit) {
     for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
         _valueMap[dbResults[resultIndex]] = truncatedChunks[resultIndex];
     }
+
+    followCardinalityThrough(chunks, truncatedChunks);
 }
 
 void DBLowering::lowerSkip(mlir::db::Skip skip) {
@@ -1399,6 +1401,8 @@ void DBLowering::lowerSkip(mlir::db::Skip skip) {
     for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
         _valueMap[dbResults[resultIndex]] = truncatedChunks[resultIndex];
     }
+
+    followCardinalityThrough(chunks, truncatedChunks);
 }
 
 void DBLowering::detectTopKFusion(mlir::func::FuncOp dbFunction) {
@@ -2677,17 +2681,7 @@ void DBLowering::lowerFilter(mlir::db::FilterOp filter) {
         _valueMap[filteredCol] = outputChunk;
     }
 
-    // The cardinality driver stands for the relation a projection of constants alone is a
-    // projection of, and this filter is what narrows that relation: leaving the driver on
-    // the unfiltered chunk would size the emission by the rows the filter dropped.
-    for (size_t columnIndex = 0; columnIndex < columnChunks.size(); columnIndex++) {
-        if (columnChunks[columnIndex] != _innermostCardinality) {
-            continue;
-        }
-
-        _innermostCardinality = nlFilter.getResult(columnIndex);
-        break;
-    }
+    followCardinalityThrough(columnChunks, nlFilter.getResults());
 }
 
 mlir::Block* DBLowering::deeperBlock(mlir::Value first, mlir::Value second) {
@@ -2861,6 +2855,17 @@ mlir::Value DBLowering::mapValue(mlir::Value dbValue) const {
     }
 
     return slotIt->second;
+}
+
+void DBLowering::followCardinalityThrough(mlir::ValueRange inputChunks, mlir::ValueRange resultChunks) {
+    for (size_t chunkIndex = 0; chunkIndex < inputChunks.size(); chunkIndex++) {
+        if (inputChunks[chunkIndex] != _innermostCardinality) {
+            continue;
+        }
+
+        _innermostCardinality = resultChunks[chunkIndex];
+        return;
+    }
 }
 
 void DBLowering::rowAlignCutChunks(llvm::SmallVectorImpl<mlir::Value>& chunks) {
