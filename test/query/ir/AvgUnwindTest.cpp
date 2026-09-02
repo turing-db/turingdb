@@ -227,6 +227,20 @@ TEST_F(AvgUnwindTest, averagesEachGroupOfAMixedUnwoundCell) {
     expectRows("UNWIND [1, 1.0, 2.5] AS x RETURN x, avg(x)", expected);
 }
 
+// The cells beside a collect of the rows they were paired with: the keyless form reduces
+// every pair, so the two elements average as they do on their own.
+TEST_F(AvgUnwindTest, averagesTheMixedCellsBesideAKeylessCollect) {
+    const Rows expected = {{"Remy, Remy", "1.75"}};
+    expectRows("UNWIND [1, 2.5] AS x MATCH (n) WHERE n.name = 'Remy' RETURN collect(n.name), avg(x)", expected);
+}
+
+// The same beside a grouped collect: the cell is the grouping key, so each group collects
+// the row it was paired with and averages the one value it holds.
+TEST_F(AvgUnwindTest, averagesTheMixedCellsBesideAGroupedCollect) {
+    const Rows expected = {{"1", "Remy", "1"}, {"2.5", "Remy", "2.5"}};
+    expectRows("UNWIND [1, 2.5] AS x MATCH (n) WHERE n.name = 'Remy' RETURN x, collect(n.name), avg(x)", expected);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
