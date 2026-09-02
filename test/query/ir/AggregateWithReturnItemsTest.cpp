@@ -85,6 +85,29 @@ TEST_F(AggregateWithReturnItemsTest, averagesWithinTheGroupOfEachReturnedNode) {
     expectRows("MATCH (n) RETURN avg(n.age), n", expected);
 }
 
+// The mirror of the average above with the key written first: the item order moves the
+// columns, not the grouping, so each node still averages its own age alone
+TEST_F(AggregateWithReturnItemsTest, averagesWithinTheGroupOfEachReturnedNodeWithTheKeyFirst) {
+    std::vector<StringRowSink::Row> expected;
+    for (size_t node = 0; node < nodeCount; node++) {
+        const std::string age = node <= 1 ? "32" : "null";
+        expected.push_back({std::to_string(node), age});
+    }
+
+    expectRows("MATCH (n) RETURN n, avg(n.age)", expected);
+}
+
+// count(*) beside a grouping key tallies the rows of that key's group, which for a single
+// pattern is the one row each node matched - not the eighteen the whole match holds
+TEST_F(AggregateWithReturnItemsTest, countsTheOneRowOfEachReturnedNode) {
+    std::vector<StringRowSink::Row> expected;
+    for (size_t node = 0; node < nodeCount; node++) {
+        expected.push_back({std::to_string(node), "1"});
+    }
+
+    expectRows("MATCH (n) RETURN n, count(*)", expected);
+}
+
 // count-m-return-n: the two patterns cross into a row per pair of nodes, so each of the
 // eighteen groups counts the eighteen m it was paired with
 TEST_F(AggregateWithReturnItemsTest, countsThePairsOfEachReturnedNode) {
@@ -112,6 +135,14 @@ TEST_F(AggregateWithReturnItemsTest, countsEveryPairOnceWhenBothItemsAggregate) 
     std::vector<StringRowSink::Row> expected {{"324", "324"}};
 
     expectRows("MATCH (n), (m) RETURN COUNT(n), COUNT(m)", expected);
+}
+
+// The ungrouped baseline of the two above: with no item beside it, the tally is the whole
+// cross product rather than one group of it
+TEST_F(AggregateWithReturnItemsTest, countsEveryPairWithoutAGroupingKey) {
+    std::vector<StringRowSink::Row> expected {{"324"}};
+
+    expectRows("MATCH (n), (m) RETURN count(*)", expected);
 }
 
 int main(int argc, char** argv) {

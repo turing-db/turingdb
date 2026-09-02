@@ -76,6 +76,42 @@ TEST_F(PatternLoopTest, matchesNothingWhenNoLoopIsThatLong) {
     expectRows("MATCH (a)-->(b)-->(c)-->(a) RETURN a, b, c;", {});
 }
 
+// The tally of the rows above, so the loop is read once through its rows and once through
+// the count they are charged to
+TEST_F(PatternLoopTest, countsTheRowsTheLoopCloses) {
+    const std::vector<StringRowSink::Row> expected {{"4"}};
+
+    expectRows("MATCH (a)-->(b)-->(a) RETURN count(*)", expected);
+}
+
+// Naming the two legs shows each is bound to an edge of its own: the hop out to b and the
+// hop back to a are answered by different edges, never one edge read twice.
+TEST_F(PatternLoopTest, bindsTheTwoLegsToDifferentEdges) {
+    const std::vector<StringRowSink::Row> expected {{"0", "1", "0", "4"},
+                                                    {"0", "6", "1", "7"},
+                                                    {"1", "0", "4", "0"},
+                                                    {"6", "0", "7", "1"}};
+
+    expectRows("MATCH (a)-[e]->(b)-[f]->(a) RETURN a, b, e, f", expected);
+}
+
+TEST_F(PatternLoopTest, namesTheNodesTheLoopRunsThrough) {
+    const std::vector<StringRowSink::Row> expected {{"Adam", "Remy"},
+                                                    {"Ghosts", "Remy"},
+                                                    {"Remy", "Adam"},
+                                                    {"Remy", "Ghosts"}};
+
+    expectRows("MATCH (a)-->(b)-->(a) RETURN a.name, b.name", expected);
+}
+
+// A loop of one hop is a self-edge, which simpledb holds none of - so the shape is matched
+// rather than waved through, as the three-hop one above is
+TEST_F(PatternLoopTest, matchesNoSelfEdge) {
+    const std::vector<StringRowSink::Row> expected {{"0"}};
+
+    expectRows("MATCH (a)-->(a) RETURN count(*)", expected);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
