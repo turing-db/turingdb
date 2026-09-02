@@ -503,8 +503,13 @@ private:
     void translateListElements(const ListLiteral* list,
                                llvm::SmallVectorImpl<mlir::Attribute>& elements);
 
-    // The attribute one list element rides on: a typed attribute for a scalar, a unit
-    // attribute for a null, a nested array attribute for a nested list
+    // The attribute a literal rides on: a typed attribute for a scalar, a unit attribute
+    // for a null, a dense array for an embedding, a nested array attribute for a list -
+    // and a null attribute for a literal kind no attribute carries
+    mlir::Attribute literalAttr(const Literal* literal);
+
+    // The same attribute, for a literal written as one element of a list, which every
+    // element has to have
     mlir::Attribute listElementAttr(const Literal* literal);
 
     // The column holding a list literal's value: the one list, standing for every row

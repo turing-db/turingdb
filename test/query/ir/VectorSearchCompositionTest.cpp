@@ -264,6 +264,23 @@ TEST_F(VectorSearchCompositionTest, searchDrivesTwoChainedCalls) {
                 {"Ghosts", "Remy"}});
 }
 
+// Both statements ahead of the MATCH bind variables of their own, so the root the
+// traversal is driven from is looked for across a VECTOR SEARCH's YIELD and a CALL's
+// alike: Remy is the neighbour, its out-neighbours are what the sample hands the MATCH,
+// and the MATCH walks one hop on from each of them.
+TEST_F(VectorSearchCompositionTest, aSearchAndACallTogetherDriveTheMatchTheyYieldInto) {
+    loadPeopleVectors();
+
+    expectRows(std::string(searchOne) + "YIELD ids "
+               + std::string(sampleWhole) +
+               "MATCH (tgt)-->(m) "
+               "RETURN tgt.name, m.name",
+               {{"Adam", "Remy"},
+                {"Adam", "Bio"},
+                {"Adam", "Cooking"},
+                {"Ghosts", "Remy"}});
+}
+
 TEST_F(VectorSearchCompositionTest, countsTheNeighboursTheSearchReported) {
     loadPeopleVectors();
 
