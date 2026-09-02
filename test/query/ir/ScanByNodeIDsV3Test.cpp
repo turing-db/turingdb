@@ -116,3 +116,93 @@ TEST_F(ScanByNodeIDsV3Test, labelledDisjunctionOnAnExpandedRootMatchesThePropert
     EXPECT_FALSE(byIDRows.empty());
     EXPECT_EQ(byIDRows, byNameRows);
 }
+
+TEST_F(ScanByNodeIDsV3Test, multiMatchFilteredClauseCrossedWithASecondClause) {
+    StringRowSink sink;
+    runQuery("MATCH (n) WHERE n = 0 OR n = 1 MATCH (m) RETURN count(*)", sink);
+
+    // Two listed nodes crossed with simpledb's 18 nodes.
+    const std::vector<StringRowSink::Row> expected {{"36"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(ScanByNodeIDsV3Test, multiMatchLaterClausePredicateOnAnEarlierVariable) {
+    StringRowSink sink;
+    runQuery("MATCH (n) MATCH (m) WHERE n = 0 OR n = 1 RETURN count(*)", sink);
+
+    const std::vector<StringRowSink::Row> expected {{"36"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(ScanByNodeIDsV3Test, multiMatchBothClausesFiltered) {
+    StringRowSink sink;
+    runQuery("MATCH (n) WHERE n = 0 OR n = 1 MATCH (m) WHERE m = 4 OR m = 2 OR m = 3 RETURN n, m", sink);
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<StringRowSink::Row> expected {{"0", "2"}, {"0", "3"}, {"0", "4"},
+                                                    {"1", "2"}, {"1", "3"}, {"1", "4"}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(ScanByNodeIDsV3Test, multiMatchFilteredClauseExpandedByALaterClause) {
+    StringRowSink sink;
+    runQuery("MATCH (n) WHERE n = 0 OR n = 1 MATCH (n)-->(m) RETURN m", sink);
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+
+    // Remy's neighbours are Adam, Computers, Eighties and Ghosts; Adam's are Remy, Bio and Cooking.
+    const std::vector<StringRowSink::Row> expected {{"0"}, {"1"}, {"2"}, {"3"}, {"4"}, {"5"}, {"6"}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(ScanByNodeIDsV3Test, multiMatchTraversalThenFilteredClauseOnTheSharedVariable) {
+    StringRowSink sink;
+    runQuery("MATCH (n)-->(m) MATCH (m) WHERE m = 2 OR m = 4 RETURN n", sink);
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+
+    // Computers is reached from Remy (0) and Luc (9), Bio from Adam (1) and Maxime (8).
+    const std::vector<StringRowSink::Row> expected {{"0"}, {"1"}, {"8"}, {"9"}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(ScanByNodeIDsV3Test, multiMatchLabelledFilteredClauseCrossedWithALabelledClause) {
+    StringRowSink sink;
+    runQuery("MATCH (n:Person) WHERE n = 0 OR n = 2 MATCH (m:Interest) RETURN count(*)", sink);
+
+    // Only Remy is a Person among the two listed; simpledb has 10 Interests.
+    const std::vector<StringRowSink::Row> expected {{"10"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(ScanByNodeIDsV3Test, multiMatchThreeClausesChainedFromAConstScan) {
+    StringRowSink sink;
+    runQuery("MATCH (a) WHERE a = 0 MATCH (a)-->(b) MATCH (b)-->(c) RETURN c", sink);
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+
+    // From Remy: Adam leads to Remy, Bio and Cooking; Ghosts leads back to Remy.
+    const std::vector<StringRowSink::Row> expected {{"0"}, {"0"}, {"4"}, {"5"}};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(ScanByNodeIDsV3Test, multiMatchJoinedClauseMatchesThePropertyForm) {
+    StringRowSink byID;
+    runQuery("MATCH (n) WHERE n = 0 OR n = 9 MATCH (n)-[:INTERESTED_IN]->(i) RETURN i.name", byID);
+
+    StringRowSink byName;
+    runQuery("MATCH (n) WHERE n.name = 'Remy' OR n.name = 'Luc' MATCH (n)-[:INTERESTED_IN]->(i) RETURN i.name", byName);
+
+    std::vector<StringRowSink::Row> byIDRows;
+    byID.sortedRows(byIDRows);
+    std::vector<StringRowSink::Row> byNameRows;
+    byName.sortedRows(byNameRows);
+
+    EXPECT_FALSE(byIDRows.empty());
+    EXPECT_EQ(byIDRows, byNameRows);
+}
