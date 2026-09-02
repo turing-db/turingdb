@@ -57,6 +57,6 @@ def ColumnOwnedStrings : ColumnOf<"::mlir::storage::OwnedStringType", "owned_str
 
 // The distance a vector search scored a neighbour at; the neighbour itself is a node,
 // so it rides the node ID column above.
-def ColumnDoubles : ColumnOf<"::mlir::FloatType", "f64">;
+def ColumnDoubles : ColumnOf<"::mlir::Float64Type", "f64">;
 
 #endif // TURINGDB_TYPES

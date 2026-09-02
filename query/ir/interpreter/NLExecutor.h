@@ -44,13 +44,14 @@ public:
     size_t getChunkSize() const { return _chunkSize; }
     CommitWriteBuffer* getWriteBuffer() const { return _writeBuffer; }
 
-    // The server-level facilities only the system commands reach for; null for a
-    // program with none, which is every ordinary query
+    // The server-level facilities the system commands reach for. Every query the server
+    // runs carries one, ordinary reads included; it is null only for a caller that hands
+    // the interpreter none, as the IR tests do.
     const NLSystemContext* getSystem() const { return _system; }
 
     // The vector indexes a search reads, borrowed from the session's accessor. They are
     // the one store outside the graph an ordinary query reaches, so - unlike the rest of
-    // the system context - a dataflow loop reads them; null for a session that opened no
+    // the system context - a dataflow loop reads them; null when the session opened no
     // accessor, which the search reports as a user-facing error.
     vec::VectorDatabase* getVectorDatabase() const;
 

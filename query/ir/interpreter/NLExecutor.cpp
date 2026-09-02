@@ -3217,10 +3217,16 @@ void NLExecutor::runUnwindLoop(NLExecutionContext* context, NLFunctionData* data
         rowsRaw.clear();
         positionsRaw.clear();
 
-        // Fill up to chunkSize rows, each the next (row, element) pair.
+        // Fill up to chunkSize rows, each the next (row, element) pair. Which element of
+        // its cell a row took is the emit handler's to read, so a source without one -
+        // whose cells are the elements already - has no position to record.
         while (rowsRaw.size() < chunkSize && sourceRow < sourceRows) {
             rowsRaw.push_back(sourceRow);
-            positionsRaw.push_back(elementIndex);
+
+            if (elementEmit) {
+                positionsRaw.push_back(elementIndex);
+            }
+
             elementIndex++;
 
             if (elementIndex == rowElements) {

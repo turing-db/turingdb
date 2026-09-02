@@ -2271,8 +2271,8 @@ void DBProgramGenerator::generateVectorSearch(const VectorSearchStmt* vectorSear
     const mlir::DenseF32ArrayAttr queryVectorAttr =
         _opBuilder.getDenseF32ArrayAttr(llvm::ArrayRef<float> {queryValues.data(), queryValues.size()});
 
-    const llvm::StringRef indexName {vectorSearchStmt->getIndexName().data(),
-                                     vectorSearchStmt->getIndexName().size()};
+    const std::string_view searchedIndex = vectorSearchStmt->getIndexName();
+    const llvm::StringRef indexName {searchedIndex.data(), searchedIndex.size()};
     const uint64_t neighbourCount = vectorSearchStmt->getK();
 
     const mlir::db::ColumnType idType = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));

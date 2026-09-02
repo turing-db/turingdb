@@ -556,9 +556,7 @@ bool dropsRows(mlir::Operation* operation) {
 bool drainsToItsOwnElementType(mlir::Type listElement) {
     if (mlir::isa<storage::NodeIDType, storage::EdgeIDType, storage::StringType, storage::ListType>(listElement)) {
         return true;
-    }
-
-    if (mlir::isa<mlir::Float64Type>(listElement)) {
+    } else if (mlir::isa<mlir::Float64Type>(listElement)) {
         return true;
     }
 
