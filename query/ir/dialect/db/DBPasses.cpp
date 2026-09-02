@@ -1,5 +1,6 @@
 #include "DBPasses.h"
 
+#include <algorithm>
 #include <optional>
 
 #include "mlir/IR/Builders.h"
@@ -18,6 +19,7 @@ namespace mlir::db {
 
 #define GEN_PASS_DEF_FUSESCANBYLABEL
 #define GEN_PASS_DEF_PUSHDOWNFILTERS
+#define GEN_PASS_DEF_FUSESCANBYNODEIDS
 #include "DBPasses.h.inc"
 
 namespace {
@@ -343,6 +345,146 @@ struct PushDownFilters : public impl::PushDownFiltersBase<PushDownFilters> {
             }
 
             pushDownPredicate(filter, *pushable, builder);
+        }
+    }
+};
+
+bool collectNodeIDDisjunction(Value mask, Value scanColumn, llvm::SmallVectorImpl<int64_t>& nodeIDs) {
+    if (OrOp disjunction = mask.getDefiningOp<OrOp>()) {
+        return collectNodeIDDisjunction(disjunction.getLhs(), scanColumn, nodeIDs)
+            && collectNodeIDDisjunction(disjunction.getRhs(), scanColumn, nodeIDs);
+    }
+
+    EqOp equality = mask.getDefiningOp<EqOp>();
+    if (!equality) {
+        return false;
+    }
+
+    const Value lhs = equality.getLhs();
+    const Value rhs = equality.getRhs();
+
+    Value constantSide;
+    if (lhs == scanColumn) {
+        constantSide = rhs;
+    } else if (rhs == scanColumn) {
+        constantSide = lhs;
+    } else {
+        return false;
+    }
+
+    ConstantOp constant = constantSide.getDefiningOp<ConstantOp>();
+    if (!constant) {
+        return false;
+    }
+
+    const IntegerAttr literal = dyn_cast<IntegerAttr>(constant.getValue());
+    if (!literal || !literal.getType().isSignlessInteger(64)) {
+        return false;
+    }
+
+    const int64_t nodeID = literal.getInt();
+    if (nodeID < 0) {
+        return false;
+    }
+
+    nodeIDs.push_back(nodeID);
+    return true;
+}
+
+struct NodeIDScanChain {
+    Operation* _source {nullptr};
+    ArrayAttr _labels;
+    llvm::SmallVector<int64_t> _nodeIDs;
+};
+
+bool matchNodeIDScanChain(FilterOp filter, NodeIDScanChain& chain) {
+    const Operation::operand_range columns = filter.getColumnsToFilter();
+    if (columns.empty()) {
+        return false;
+    }
+
+    const Value scanColumn = columns.front();
+    chain._source = scanColumn.getDefiningOp();
+    if (!chain._source || !isa<ScanNodes, ScanNodesByLabel>(chain._source)) {
+        return false;
+    }
+
+    if (ScanNodesByLabel scanByLabel = dyn_cast<ScanNodesByLabel>(chain._source)) {
+        chain._labels = scanByLabel.getLabels();
+    }
+
+    // A carried column other than the scan is row-aligned with it and would be left
+    // behind by a source that reads nothing.
+    const bool carriesScanOnly = llvm::all_of(columns, [&](const Value column) {
+        return column == scanColumn;
+    });
+    if (!carriesScanOnly) {
+        return false;
+    }
+
+    if (!collectNodeIDDisjunction(filter.getMask(), scanColumn, chain._nodeIDs)) {
+        return false;
+    }
+
+    // A scan yields each node once in ID order, so the filter did too.
+    llvm::sort(chain._nodeIDs);
+    chain._nodeIDs.erase(std::unique(chain._nodeIDs.begin(), chain._nodeIDs.end()), chain._nodeIDs.end());
+
+    return true;
+}
+
+void fuseScanByNodeIDs(FilterOp filter, const NodeIDScanChain& chain, mlir::OpBuilder& builder) {
+    const mlir::Location loc = filter.getLoc();
+    const Type nodeColumnType = chain._source->getResult(0).getType();
+
+    builder.setInsertionPoint(filter);
+    ConstScanNodes constScan = builder.create<ConstScanNodes>(loc, nodeColumnType, chain._nodeIDs);
+    Value fused = constScan.getResult();
+
+    if (chain._labels) {
+        MLIRContext* const context = builder.getContext();
+        const Type labelSetType = ColumnType::get(context, storage::LabelSetIDType::get(context));
+        const Type boolType = ColumnType::get(context, storage::BoolType::get(context));
+
+        GetNodeLabelSet labelSet = builder.create<GetNodeLabelSet>(loc, labelSetType, fused);
+        CheckLabelConstraint check = builder.create<CheckLabelConstraint>(loc, boolType, labelSet.getResult(), chain._labels);
+
+        const llvm::SmallVector<Type> resultTypes {nodeColumnType};
+        const llvm::SmallVector<Value> columns {fused};
+        FilterOp labelFilter = builder.create<FilterOp>(loc, resultTypes, check.getResult(), columns);
+        fused = labelFilter.getResult(0);
+    }
+
+    const MaskCone cone = collectMaskCone(filter.getMask());
+
+    for (Value filtered : filter.getFilteredColumns()) {
+        filtered.replaceAllUsesWith(fused);
+    }
+    filter.erase();
+
+    for (Operation* const coneOp : llvm::reverse(cone._ops)) {
+        eraseIfUnused(coneOp);
+    }
+    eraseIfUnused(chain._source);
+}
+
+struct FuseScanByNodeIDs : public impl::FuseScanByNodeIDsBase<FuseScanByNodeIDs> {
+    void runOnOperation() override {
+        Operation* const root = getOperation();
+
+        llvm::SmallVector<FilterOp> filters;
+        root->walk([&](FilterOp filter) {
+            filters.push_back(filter);
+        });
+
+        mlir::OpBuilder builder(&getContext());
+        for (FilterOp filter : filters) {
+            NodeIDScanChain chain;
+            if (!matchNodeIDScanChain(filter, chain)) {
+                continue;
+            }
+
+            fuseScanByNodeIDs(filter, chain, builder);
         }
     }
 };
