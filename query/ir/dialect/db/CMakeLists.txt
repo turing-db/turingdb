@@ -45,6 +45,7 @@ add_mlir_library(turing_db_ir_dbdialect_s
   MLIRFuncDialect
   MLIRBuiltinToLLVMIRTranslation
   turing_db_ir_storagedialect_s
+  turing_db_ir_common_s
 )
 
 # Ensure we have MLIR and LLVM includes, as well as the headers in current dir

@@ -8,11 +8,14 @@
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/ValueRange.h"
 
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 
+#include "IRConstantColumn.h"
 #include "DBOps.h"
 
 namespace mlir::db {
@@ -20,6 +23,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSESCANBYLABEL
 #define GEN_PASS_DEF_PUSHDOWNFILTERS
 #define GEN_PASS_DEF_FUSESCANBYNODEIDS
+#define GEN_PASS_DEF_TRIMCARRIEDCOLUMNS
 #include "DBPasses.h.inc"
 
 namespace {
@@ -110,6 +114,8 @@ bool isReverseHop(Operation* op) {
     return isa<GetInEdges, GetInEdgesByType>(op);
 }
 
+constexpr size_t hopFixedResultCount = 4;
+
 // The columns a cross_product factor yields, in result order.
 Operation::operand_range factorYieldColumns(mlir::Region& factor) {
     mlir::Block& factorBlock = factor.front();
@@ -159,7 +165,6 @@ Value climbToLineageAnchor(Value column) {
             const size_t resultIndex = cast<OpResult>(column).getResultNumber();
             constexpr size_t srcResultIndex = 0;
             constexpr size_t tgtResultIndex = 3;
-            constexpr size_t fixedResultCount = 4;
 
             // The input node re-surfaces as srcids (forward) or tgtids (reverse) and each
             // carried column passes through: those continue a variable that existed before
@@ -169,9 +174,9 @@ Value climbToLineageAnchor(Value column) {
 
             if (resultIndex == inputResultIndex) {
                 column = def->getOperand(0);
-            } else if (resultIndex >= fixedResultCount) {
+            } else if (resultIndex >= hopFixedResultCount) {
                 // Carried columns follow input_nodes (operand 0) in operand order.
-                column = def->getOperand(1 + (resultIndex - fixedResultCount));
+                column = def->getOperand(1 + (resultIndex - hopFixedResultCount));
             } else {
                 return column;
             }
@@ -479,6 +484,314 @@ struct FuseScanByNodeIDs : public impl::FuseScanByNodeIDsBase<FuseScanByNodeIDs>
             }
 
             fuseScanByNodeIDs(filter, chain, builder);
+        }
+    }
+};
+
+// Where an op's carry set sits: the carried operands start at _operandOffset and each comes
+// back as the result at the same position from _resultOffset.
+struct CarrySetLayout {
+    size_t _operandOffset {0};
+    size_t _resultOffset {0};
+};
+
+std::optional<CarrySetLayout> carrySetLayout(Operation* op) {
+    if (isEdgeHop(op)) {
+        return CarrySetLayout {._operandOffset = 1, ._resultOffset = hopFixedResultCount};
+    } else if (isa<FilterOp>(op)) {
+        return CarrySetLayout {._operandOffset = 1, ._resultOffset = 0};
+    } else if (isa<Limit, Skip, Sort, GroupAggregate, Collect>(op)) {
+        return CarrySetLayout {._operandOffset = 0, ._resultOffset = 0};
+    }
+
+    return std::nullopt;
+}
+
+bool trimsColumns(Operation* op) {
+    return carrySetLayout(op).has_value() || isa<CrossProduct>(op);
+}
+
+size_t carriedCount(Operation* op, const CarrySetLayout& layout) {
+    return op->getNumOperands() - layout._operandOffset;
+}
+
+size_t collectValueCount(Collect collect) {
+    const size_t aggregateCount = collect.getKinds().value_or(llvm::ArrayRef<int64_t> {}).size();
+
+    return collect.getColumns().size() - collect.getKeyCount() - aggregateCount;
+}
+
+void keepOneOf(llvm::SmallBitVector& keep, size_t begin, size_t end) {
+    for (size_t index = begin; index < end; index++) {
+        if (keep[index]) {
+            return;
+        }
+    }
+
+    keep.set(begin);
+}
+
+// A sort orders by its keys and a grouping op groups by them whether or not anything reads
+// them; a group aggregate still has to reduce something and a collect to gather something.
+void keepRequiredColumns(Operation* op, llvm::SmallBitVector& keep) {
+    if (Sort sort = dyn_cast<Sort>(op)) {
+        for (const int64_t keyColumn : sort.getKeyColumns()) {
+            keep.set(static_cast<unsigned>(keyColumn));
+        }
+    } else if (GroupAggregate groupAggregate = dyn_cast<GroupAggregate>(op)) {
+        const size_t keyCount = groupAggregate.getKeyCount();
+        keep.set(0, keyCount);
+        keepOneOf(keep, keyCount, keep.size());
+    } else if (Collect collect = dyn_cast<Collect>(op)) {
+        const size_t keyCount = collect.getKeyCount();
+        keep.set(0, keyCount);
+        keepOneOf(keep, keyCount, keyCount + collectValueCount(collect));
+    }
+}
+
+// An op standing for a relation is sized by a row-carrying column of it during lowering, so
+// one has to survive whenever the op had one.
+void keepRowCarryingColumn(ValueRange columns, size_t firstIndex, llvm::SmallBitVector& keep) {
+    std::optional<size_t> firstRowCarrying;
+    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        if (::db::yieldsConstantColumn(columns[columnIndex])) {
+            continue;
+        }
+
+        if (keep[firstIndex + columnIndex]) {
+            return;
+        }
+
+        if (!firstRowCarrying) {
+            firstRowCarrying = columnIndex;
+        }
+    }
+
+    if (firstRowCarrying) {
+        keep.set(firstIndex + *firstRowCarrying);
+    } else if (!columns.empty()) {
+        keepOneOf(keep, firstIndex, firstIndex + columns.size());
+    }
+}
+
+void selectKeptCarriedColumns(Operation* op, const CarrySetLayout& layout, llvm::SmallVectorImpl<size_t>& kept) {
+    const size_t count = carriedCount(op, layout);
+
+    llvm::SmallBitVector keep(count);
+    for (size_t carriedIndex = 0; carriedIndex < count; carriedIndex++) {
+        if (!op->getResult(layout._resultOffset + carriedIndex).use_empty()) {
+            keep.set(carriedIndex);
+        }
+    }
+
+    keepRequiredColumns(op, keep);
+
+    const bool standsForItsRows = layout._resultOffset == 0;
+    if (standsForItsRows) {
+        keepRowCarryingColumn(op->getOperands().drop_front(layout._operandOffset), 0, keep);
+    }
+
+    for (size_t carriedIndex = 0; carriedIndex < count; carriedIndex++) {
+        if (keep[carriedIndex]) {
+            kept.push_back(carriedIndex);
+        }
+    }
+}
+
+void setOrEraseIndices(OperationState& state, StringAttr name, llvm::ArrayRef<int64_t> indices, mlir::OpBuilder& builder) {
+    if (indices.empty()) {
+        state.attributes.erase(name);
+    } else {
+        state.attributes.set(name, builder.getDenseI64ArrayAttr(indices));
+    }
+}
+
+void renumberSortKeys(Sort sort, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
+    llvm::SmallVector<int64_t> keyColumns;
+    for (const int64_t keyColumn : sort.getKeyColumns()) {
+        const auto keptIt = llvm::find(kept, static_cast<size_t>(keyColumn));
+        keyColumns.push_back(static_cast<int64_t>(keptIt - kept.begin()));
+    }
+
+    state.attributes.set(sort.getKeyColumnsAttrName(), builder.getDenseI64ArrayAttr(keyColumns));
+}
+
+void trimGroupAggregateKinds(GroupAggregate groupAggregate, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
+    const size_t keyCount = groupAggregate.getKeyCount();
+    const llvm::ArrayRef<int64_t> kinds = groupAggregate.getKinds();
+
+    llvm::SmallVector<int64_t> keptKinds;
+    for (const size_t columnIndex : kept) {
+        if (columnIndex >= keyCount) {
+            keptKinds.push_back(kinds[columnIndex - keyCount]);
+        }
+    }
+
+    state.attributes.set(groupAggregate.getKindsAttrName(), builder.getDenseI64ArrayAttr(keptKinds));
+}
+
+void trimCollectAttributes(Collect collect, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
+    const size_t keyCount = collect.getKeyCount();
+    const size_t valueEnd = keyCount + collectValueCount(collect);
+    const llvm::ArrayRef<int64_t> kinds = collect.getKinds().value_or(llvm::ArrayRef<int64_t> {});
+
+    llvm::SmallVector<int64_t> keptKinds;
+    llvm::SmallVector<int64_t> keptValues;
+    for (const size_t columnIndex : kept) {
+        if (columnIndex >= valueEnd) {
+            keptKinds.push_back(kinds[columnIndex - valueEnd]);
+        } else if (columnIndex >= keyCount) {
+            keptValues.push_back(static_cast<int64_t>(columnIndex - keyCount));
+        }
+    }
+
+    llvm::SmallVector<int64_t> distinctValues;
+    for (const int64_t valueIndex : collect.getDistinctValues().value_or(llvm::ArrayRef<int64_t> {})) {
+        const auto keptIt = llvm::find(keptValues, valueIndex);
+        if (keptIt != keptValues.end()) {
+            distinctValues.push_back(static_cast<int64_t>(keptIt - keptValues.begin()));
+        }
+    }
+
+    setOrEraseIndices(state, collect.getKindsAttrName(), keptKinds, builder);
+    setOrEraseIndices(state, collect.getDistinctValuesAttrName(), distinctValues, builder);
+}
+
+void trimAttributes(Operation* op, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
+    if (Sort sort = dyn_cast<Sort>(op)) {
+        renumberSortKeys(sort, kept, state, builder);
+    } else if (GroupAggregate groupAggregate = dyn_cast<GroupAggregate>(op)) {
+        trimGroupAggregateKinds(groupAggregate, kept, state, builder);
+    } else if (Collect collect = dyn_cast<Collect>(op)) {
+        trimCollectAttributes(collect, kept, state, builder);
+    }
+}
+
+void trimCarrySet(Operation* op, const CarrySetLayout& layout, llvm::ArrayRef<size_t> kept, mlir::OpBuilder& builder) {
+    const Operation::operand_range operands = op->getOperands();
+    const Operation::result_range results = op->getResults();
+
+    llvm::SmallVector<Value> trimmedOperands;
+    llvm::append_range(trimmedOperands, operands.take_front(layout._operandOffset));
+
+    llvm::SmallVector<Type> trimmedTypes;
+    llvm::append_range(trimmedTypes, results.take_front(layout._resultOffset).getTypes());
+
+    for (const size_t carriedIndex : kept) {
+        trimmedOperands.push_back(operands[layout._operandOffset + carriedIndex]);
+        trimmedTypes.push_back(results[layout._resultOffset + carriedIndex].getType());
+    }
+
+    OperationState state(op->getLoc(), op->getName());
+    state.addOperands(trimmedOperands);
+    state.addTypes(trimmedTypes);
+    state.addAttributes(op->getAttrs());
+    trimAttributes(op, kept, state, builder);
+
+    builder.setInsertionPoint(op);
+    Operation* const trimmed = builder.create(state);
+
+    for (size_t resultIndex = 0; resultIndex < layout._resultOffset; resultIndex++) {
+        results[resultIndex].replaceAllUsesWith(trimmed->getResult(resultIndex));
+    }
+
+    for (size_t keptIndex = 0; keptIndex < kept.size(); keptIndex++) {
+        Value carried = results[layout._resultOffset + kept[keptIndex]];
+        carried.replaceAllUsesWith(trimmed->getResult(layout._resultOffset + keptIndex));
+    }
+
+    op->erase();
+}
+
+void eraseUnkeptYields(Yield yield, const llvm::SmallBitVector& keep, size_t firstIndex) {
+    llvm::BitVector erased(yield.getNumOperands());
+    for (size_t columnIndex = 0; columnIndex < erased.size(); columnIndex++) {
+        if (!keep[firstIndex + columnIndex]) {
+            erased.set(columnIndex);
+        }
+    }
+
+    yield->eraseOperands(erased);
+}
+
+// A product's results are the columns its two factors yield; a result nobody reads leaves
+// the yield, and each factor keeps a row-carrying column to be sized by.
+void trimCrossProduct(CrossProduct product, mlir::OpBuilder& builder) {
+    Yield leftYield = cast<Yield>(product.getLeftFactor().front().getTerminator());
+    Yield rightYield = cast<Yield>(product.getRightFactor().front().getTerminator());
+    const size_t leftCount = leftYield.getNumOperands();
+
+    const Operation::result_range results = product.getResults();
+
+    llvm::SmallBitVector keep(results.size());
+    for (size_t resultIndex = 0; resultIndex < results.size(); resultIndex++) {
+        if (!results[resultIndex].use_empty()) {
+            keep.set(resultIndex);
+        }
+    }
+
+    keepRowCarryingColumn(leftYield.getColumns(), 0, keep);
+    keepRowCarryingColumn(rightYield.getColumns(), leftCount, keep);
+
+    if (keep.all()) {
+        return;
+    }
+
+    llvm::SmallVector<Type> trimmedTypes;
+    for (size_t resultIndex = 0; resultIndex < results.size(); resultIndex++) {
+        if (keep[resultIndex]) {
+            trimmedTypes.push_back(results[resultIndex].getType());
+        }
+    }
+
+    builder.setInsertionPoint(product);
+    CrossProduct trimmed = builder.create<CrossProduct>(product.getLoc(), trimmedTypes);
+    trimmed.getLeftFactor().takeBody(product.getLeftFactor());
+    trimmed.getRightFactor().takeBody(product.getRightFactor());
+
+    eraseUnkeptYields(leftYield, keep, 0);
+    eraseUnkeptYields(rightYield, keep, leftCount);
+
+    size_t trimmedIndex = 0;
+    for (size_t resultIndex = 0; resultIndex < results.size(); resultIndex++) {
+        if (keep[resultIndex]) {
+            results[resultIndex].replaceAllUsesWith(trimmed.getResult(trimmedIndex++));
+        }
+    }
+
+    product.erase();
+}
+
+struct TrimCarriedColumns : public impl::TrimCarriedColumnsBase<TrimCarriedColumns> {
+    void runOnOperation() override {
+        Operation* const root = getOperation();
+
+        llvm::SmallVector<Operation*> carriers;
+        root->walk([&](Operation* op) {
+            if (trimsColumns(op)) {
+                carriers.push_back(op);
+            }
+        });
+
+        // The walk lists a producer before its readers, so sweeping it backwards trims a
+        // reader before the op feeding it and a chain of hops settles in one pass.
+        mlir::OpBuilder builder(&getContext());
+        for (Operation* const op : llvm::reverse(carriers)) {
+            if (CrossProduct product = dyn_cast<CrossProduct>(op)) {
+                trimCrossProduct(product, builder);
+                continue;
+            }
+
+            const CarrySetLayout layout = *carrySetLayout(op);
+
+            llvm::SmallVector<size_t> kept;
+            selectKeptCarriedColumns(op, layout, kept);
+
+            if (kept.size() == carriedCount(op, layout)) {
+                continue;
+            }
+
+            trimCarrySet(op, layout, kept, builder);
         }
     }
 };
