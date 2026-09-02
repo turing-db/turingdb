@@ -436,3 +436,108 @@ TEST_F(FuseScanByNodeIDsTest, fusesFilterPushedDownToScan) {
     EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
 }
+
+// MATCH (n) WHERE n = 0 OR n = 1 MATCH (m) WHERE m = 3 OR m = 2 RETURN n, m, each filter in its factor
+const char* const disjunctionInBothFactors = R"mlir(
+func.func @main() {
+  %0:2 = db.cross_product factor {
+    %n = db.scan_nodes() : !db.column<!storage.node_id>
+    %k0 = db.constant(0 : i64)
+    %e1 = db.eq %n, %k0 : (!db.column<!storage.node_id>, !db.column<i64>) -> !db.column<!storage.bool>
+    %k1 = db.constant(1 : i64)
+    %e2 = db.eq %n, %k1 : (!db.column<!storage.node_id>, !db.column<i64>) -> !db.column<!storage.bool>
+    %mask = db.or %e1, %e2 : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+    %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+    db.yield %nf : !db.column<!storage.node_id>
+  } factor {
+    %m = db.scan_nodes() : !db.column<!storage.node_id>
+    %k3 = db.constant(3 : i64)
+    %e3 = db.eq %m, %k3 : (!db.column<!storage.node_id>, !db.column<i64>) -> !db.column<!storage.bool>
+    %k2 = db.constant(2 : i64)
+    %e4 = db.eq %m, %k2 : (!db.column<!storage.node_id>, !db.column<i64>) -> !db.column<!storage.bool>
+    %mask2 = db.or %e3, %e4 : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+    %mf = db.filter(%mask2, {%m}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+    db.yield %mf : !db.column<!storage.node_id>
+  }
+  db.output(%0#0, %0#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(FuseScanByNodeIDsTest, fusesBothFactorsOfACrossProduct) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(disjunctionInBothFactors);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runFuse(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::ConstScanNodes> constScans = collect<mlir::db::ConstScanNodes>(*module);
+    ASSERT_EQ(constScans.size(), 2u);
+
+    const llvm::ArrayRef<int64_t> leftIDs = constScans[0].getNodeIDs();
+    const std::vector<int64_t> expectedLeft {0, 1};
+    EXPECT_EQ(std::vector<int64_t>(leftIDs.begin(), leftIDs.end()), expectedLeft);
+
+    const llvm::ArrayRef<int64_t> rightIDs = constScans[1].getNodeIDs();
+    const std::vector<int64_t> expectedRight {2, 3};
+    EXPECT_EQ(std::vector<int64_t>(rightIDs.begin(), rightIDs.end()), expectedRight);
+
+    // Each factor yields its own const scan.
+    llvm::SmallVector<mlir::db::CrossProduct> products = collect<mlir::db::CrossProduct>(*module);
+    ASSERT_EQ(products.size(), 1u);
+    mlir::db::CrossProduct product = products.front();
+
+    mlir::db::Yield leftYield = mlir::cast<mlir::db::Yield>(product.getLeftFactor().front().getTerminator());
+    EXPECT_EQ(leftYield.getColumns().front().getDefiningOp(), constScans[0].getOperation());
+    mlir::db::Yield rightYield = mlir::cast<mlir::db::Yield>(product.getRightFactor().front().getTerminator());
+    EXPECT_EQ(rightYield.getColumns().front().getDefiningOp(), constScans[1].getOperation());
+
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
+}
+
+// MATCH (n) MATCH (m) WHERE n = 0 OR n = 1 RETURN n, m, as codegen emits it: filtered after the product
+const char* const disjunctionAfterCrossProduct = R"mlir(
+func.func @main() {
+  %0:2 = db.cross_product factor {
+    %n = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %n : !db.column<!storage.node_id>
+  } factor {
+    %m = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %m : !db.column<!storage.node_id>
+  }
+  %k0 = db.constant(0 : i64)
+  %e1 = db.eq %0#0, %k0 : (!db.column<!storage.node_id>, !db.column<i64>) -> !db.column<!storage.bool>
+  %k1 = db.constant(1 : i64)
+  %e2 = db.eq %0#0, %k1 : (!db.column<!storage.node_id>, !db.column<i64>) -> !db.column<!storage.bool>
+  %mask = db.or %e1, %e2 : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  %nf, %mf = db.filter(%mask, {%0#0, %0#1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%nf, %mf) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(FuseScanByNodeIDsTest, fusesDisjunctionPushedIntoCrossProductFactor) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(disjunctionAfterCrossProduct);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runPushDownThenFuse(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::ConstScanNodes> constScans = collect<mlir::db::ConstScanNodes>(*module);
+    ASSERT_EQ(constScans.size(), 1u);
+    mlir::db::ConstScanNodes constScan = constScans.front();
+
+    const llvm::ArrayRef<int64_t> nodeIDs = constScan.getNodeIDs();
+    const std::vector<int64_t> expected {0, 1};
+    EXPECT_EQ(std::vector<int64_t>(nodeIDs.begin(), nodeIDs.end()), expected);
+
+    // The filter sank into the left factor and fused there; the right factor keeps its scan.
+    llvm::SmallVector<mlir::db::CrossProduct> products = collect<mlir::db::CrossProduct>(*module);
+    ASSERT_EQ(products.size(), 1u);
+    mlir::db::CrossProduct product = products.front();
+
+    mlir::db::Yield leftYield = mlir::cast<mlir::db::Yield>(product.getLeftFactor().front().getTerminator());
+    EXPECT_EQ(leftYield.getColumns().front().getDefiningOp(), constScan.getOperation());
+
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
+}
