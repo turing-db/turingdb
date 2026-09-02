@@ -18,4 +18,9 @@ def FuseScanByNodeIDs : Pass<"fuse_scan_by_node_ids"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def TrimCarriedColumns : Pass<"trim_carried_columns"> {
+    let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products and grouping ops";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 #endif // TURINGDB_PASSES

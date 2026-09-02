@@ -14,6 +14,7 @@
 #include "NLOps.h"
 
 #include "IRConstantColumn.h"
+#include "IRRowAlignment.h"
 #include "Procedure.h"
 #include "ProcedureManager.h"
 #include "ProcedureTypeVector.h"
@@ -2858,8 +2859,14 @@ mlir::Value DBLowering::mapValue(mlir::Value dbValue) const {
 }
 
 void DBLowering::followCardinalityThrough(mlir::ValueRange inputChunks, mlir::ValueRange resultChunks) {
+    if (!_innermostCardinality) {
+        return;
+    }
+
+    // Any chunk of the driver's relation stands for it: a cut trimmed down to a column other
+    // than the driver itself still narrows the relation the driver counts.
     for (size_t chunkIndex = 0; chunkIndex < inputChunks.size(); chunkIndex++) {
-        if (inputChunks[chunkIndex] != _innermostCardinality) {
+        if (!rowAlignedWith(inputChunks[chunkIndex], _innermostCardinality)) {
             continue;
         }
 
