@@ -216,6 +216,37 @@ typename T::Primitive constantValueAs(mlir::Attribute value) {
     }
 }
 
+// Coerces a property-value scan's literal to the property's stored type. The analyzer
+// admits an integer literal against an Int64, UInt64 or Double property and every other
+// literal only against its own type, so those are the pairs bound here; a negative
+// integer against a UInt64 property can equal no stored value and stays unbound.
+void bindPropertyScanLiteral(NLScanByPropertyValueLoopData& loopData,
+                             const PropertyType& propertyType,
+                             mlir::TypedAttr literal) {
+    const PropertyTypeID id = propertyType._id;
+    const ValueType valueType = propertyType._valueType;
+
+    const mlir::IntegerAttr integer = mlir::dyn_cast<mlir::IntegerAttr>(literal);
+    const mlir::FloatAttr floating = mlir::dyn_cast<mlir::FloatAttr>(literal);
+    const mlir::StringAttr string = mlir::dyn_cast<mlir::StringAttr>(literal);
+    const bool isBoolLiteral = integer && integer.getType().isSignlessInteger(1);
+    const bool isIntegerLiteral = integer && !isBoolLiteral;
+
+    if (valueType == ValueType::Int64 && isIntegerLiteral) {
+        loopData.bind(id, valueType, integer.getInt());
+    } else if (valueType == ValueType::UInt64 && isIntegerLiteral && integer.getInt() >= 0) {
+        loopData.bind(id, valueType, static_cast<uint64_t>(integer.getInt()));
+    } else if (valueType == ValueType::Double && floating) {
+        loopData.bind(id, valueType, floating.getValueAsDouble());
+    } else if (valueType == ValueType::Double && isIntegerLiteral) {
+        loopData.bind(id, valueType, static_cast<double>(integer.getInt()));
+    } else if (valueType == ValueType::Bool && isBoolLiteral) {
+        loopData.bind(id, valueType, CustomBool(integer.getInt() != 0));
+    } else if (valueType == ValueType::String && string) {
+        loopData.bind(id, valueType, std::string(string.getValue()));
+    }
+}
+
 // The runtime reduction the interpreter dispatches on, from the MLIR one the op
 // carries. The two enums are kept separate so the runtime (NLProgram / NLExecutor)
 // stays free of the MLIR dialect headers; this is the one place they meet.
@@ -399,6 +430,16 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             IteratorConfig config {IteratorKind::ConstScanNodes, {}, {}};
             config._nodeIDs = constScanNodes.getNodeIDs();
             _iteratorConfigs[constScanNodes.getResult()] = config;
+        } else if (nl::ScanNodesByPropertyValue scanByValue = mlir::dyn_cast<nl::ScanNodesByPropertyValue>(operation)) {
+            IteratorConfig config {IteratorKind::ScanNodesByPropertyValue, {}, {}};
+            config._property = scanByValue.getProperty();
+            config._propertyValue = scanByValue.getValue();
+            if (const std::optional<mlir::ArrayAttr> labels = scanByValue.getLabels()) {
+                for (const mlir::Attribute label : *labels) {
+                    config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
+                }
+            }
+            _iteratorConfigs[scanByValue.getResult()] = config;
         } else if (nl::ScanEdges scanEdges = mlir::dyn_cast<nl::ScanEdges>(operation)) {
             _iteratorConfigs[scanEdges.getResult()] = IteratorConfig {IteratorKind::ScanEdges, {}, {}};
         } else if (nl::ScanEdgesByType scanEdgesByType = mlir::dyn_cast<nl::ScanEdgesByType>(operation)) {
@@ -653,6 +694,8 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         translateScanByLabelLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::ConstScanNodes) {
         translateConstScanLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::ScanNodesByPropertyValue) {
+        translateScanByPropertyValueLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::ScanEdges) {
         translateScanEdgesLoop(loopBody, limit, body);
     } else if (config._kind == IteratorKind::ScanEdgesByType) {
@@ -712,24 +755,10 @@ void NLTranslator::translateScanByLabelLoop(const IteratorConfig& config,
     const mlir::Value nodeChunk = loopBody.getArgument(0);
     ColumnNodeIDs* nodeIDs = static_cast<ColumnNodeIDs*>(allocColumn(nodeChunk));
 
-    // Resolve the label names into the LabelSet the scan filters by. A node
-    // matches when its label set is a superset of this one, so the requested
-    // labels are ANDed. If any name is absent from the schema, no node can
-    // carry it: the conjunction is unsatisfiable and the scan is marked
-    // unmatchable (it emits nothing) rather than dropping the name and matching
-    // a weaker set.
+    // An unmatchable scan emits nothing rather than dropping the absent name and
+    // matching a weaker set.
     LabelSet labelset;
-    bool matchable = true;
-    const LabelMap& labels = _view->metadata().labels();
-    for (const llvm::StringRef label : config._labels) {
-        const std::optional<LabelID> id = labels.get(label);
-        if (!id) {
-            matchable = false;
-            break;
-        }
-
-        labelset.set(*id);
-    }
+    const bool matchable = resolveLabelSet(config._labels, labelset);
 
     NLScanByLabelLoopData* loopData = _program->allocFunctionData<NLScanByLabelLoopData>(nodeIDs, labelset, matchable);
     loopData->setLimit(limit);
@@ -763,6 +792,49 @@ void NLTranslator::translateConstScanLoop(const IteratorConfig& config,
     body->emplaceStmt(&NLExecutor::runConstScanNodesLoop, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateScanByPropertyValueLoop(const IteratorConfig& config,
+                                                    mlir::Block& loopBody,
+                                                    NLLimitState* limit,
+                                                    NLStmtContainer* body) {
+    const mlir::Value nodeChunk = loopBody.getArgument(0);
+    ColumnNodeIDs* nodeIDs = static_cast<ColumnNodeIDs*>(allocColumn(nodeChunk));
+
+    NLScanByPropertyValueLoopData* loopData = _program->allocFunctionData<NLScanByPropertyValueLoopData>(nodeIDs);
+    loopData->setLimit(limit);
+
+    bool matchable = true;
+    if (!config._labels.empty()) {
+        LabelSet labelset;
+        matchable = resolveLabelSet(config._labels, labelset);
+        loopData->setLabelSet(labelset);
+    }
+
+    const llvm::StringRef property = config._property;
+    const std::optional<PropertyType> propertyType = _view->metadata().propTypes().get(std::string_view(property.data(), property.size()));
+    if (matchable && propertyType) {
+        bindPropertyScanLiteral(*loopData, *propertyType, config._propertyValue);
+    }
+
+    body->emplaceStmt(&NLExecutor::runScanNodesByPropertyValueLoop, loopData);
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+bool NLTranslator::resolveLabelSet(llvm::ArrayRef<llvm::StringRef> labels, LabelSet& labelset) const {
+    const LabelMap& labelMap = _view->metadata().labels();
+
+    for (const llvm::StringRef label : labels) {
+        const std::optional<LabelID> id = labelMap.get(label);
+        if (!id) {
+            return false;
+        }
+
+        labelset.set(*id);
+    }
+
+    return true;
 }
 
 void NLTranslator::translateUnwindConstLoop(const IteratorConfig& config,

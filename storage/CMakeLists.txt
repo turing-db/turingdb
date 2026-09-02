@@ -50,6 +50,7 @@ set(storage_sources
         iterators/ScanNodePropertiesIterator.cpp
         iterators/ScanNodePropertiesByLabelIterator.cpp
         iterators/ScanNodesByLabelIterator.cpp
+        iterators/ScanNodesByPropertyValueIterator.cpp
         iterators/ScanNodesIterator.cpp
         iterators/ScanLabelsIterator.cpp
         iterators/ScanEdgeTypesIterator.cpp

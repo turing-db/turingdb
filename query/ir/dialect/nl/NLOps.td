@@ -71,6 +71,34 @@ def ConstScanNodes : NLOp<"const_scan_nodes", [Pure, InferTypeOpAdaptor]> {
 }
 
 /**
+* ScanNodesByPropertyValue
+*/
+def ScanNodesByPropertyValue : NLOp<"scan_nodes_by_property_value", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create a database iterator over the nodes whose named property equals a literal";
+  let description = [{
+    Imperative counterpart of db.scan_nodes_by_property_value. Each step of an
+    enclosing nl.for fills one chunk of the node IDs whose `property` holds
+    exactly `value`, among the nodes carrying every label in `labels` when the
+    list is given:
+
+      %nodes = nl.scan_nodes_by_property_value("age", 32 : i64)
+      %people = nl.scan_nodes_by_property_value("age", 32 : i64, ["Person"])
+
+    `property`, `value` and `labels` are the same name, literal and label list
+    the db op carried; translation resolves the names against the schema and
+    coerces the literal to the stored type, the same way an nl.get_property_type
+    name is resolved by the property fetch that consumes it. A property or label
+    absent from the schema is carried by no node, so the loop yields no chunk.
+    Filtering by value narrows only the rows, never their shape, so - like
+    nl.scan_nodes - the result is always !nl.iter<!nl.chunk<!storage.node_id>>
+    and is inferred, not spelled out.
+  }];
+  let arguments = (ins StrAttr:$property, TypedAttrInterface:$value, OptionalAttr<StrArrayAttr>:$labels);
+  let results   = (outs NLIterator:$result);
+  let assemblyFormat = "`(` $property `,` $value (`,` $labels^)? `)` attr-dict";
+}
+
+/**
 * UnwindConst
 */
 // Pure: emitting a fixed list is deterministic; the per-element fan-out is in the nl.for.

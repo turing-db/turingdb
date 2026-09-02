@@ -23,6 +23,7 @@
 #include "iterators/ScanEdgesIterator.h"
 #include "iterators/ScanNodesIterator.h"
 #include "iterators/ScanNodesByLabelIterator.h"
+#include "iterators/ScanNodesByPropertyValueIterator.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnMask.h"
 #include "columns/ColumnConst.h"
@@ -581,6 +582,15 @@ void runBody(NLExecutionContext* context, const NLStmtContainer* body) {
         const auto func = descriptor.getFunction();
         NLFunctionData* funcData = descriptor.getData();
         func(context, funcData);
+    }
+}
+
+template <SupportedType T>
+typename T::Primitive propertyScanLiteralAs(const NLScanByPropertyValueLoopData::Literal& literal) {
+    if constexpr (std::same_as<T, types::String>) {
+        return std::get<std::string>(literal);
+    } else {
+        return std::get<typename T::Primitive>(literal);
     }
 }
 
@@ -2907,6 +2917,72 @@ void NLExecutor::runScanNodesByLabelLoop(NLExecutionContext* context, NLFunction
         while (chunkWriter.isValid()) {
             runIteration();
         }
+    }
+}
+
+template <SupportedType T>
+void NLExecutor::runScanNodesByPropertyValueLoopAs(NLExecutionContext* context, NLScanByPropertyValueLoopData* loopData) {
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    ColumnNodeIDs* nodeIDs = loopData->getNodeIDs();
+    const size_t chunkSize = context->getChunkSize();
+    const NLLimitState* limit = loopData->getLimit();
+    const GraphView& view = *context->getView();
+
+    // The literal and the label set are owned by the loop data, which lives for the whole
+    // program, so a string view of the one and a handle on the other stay valid for
+    // every fill below. An invalid handle leaves the scan unconstrained by label.
+    const typename T::Primitive value = propertyScanLiteralAs<T>(loopData->getLiteral());
+    const LabelSetHandle labelset = loopData->isByLabel() ? LabelSetHandle(loopData->getLabelSet()) : LabelSetHandle();
+
+    ScanNodesByPropertyValueChunkWriter<T> chunkWriter(view, loopData->getPropertyTypeID(), value, labelset);
+    chunkWriter.setNodeIDs(nodeIDs);
+
+    const auto runIteration = [&]() {
+        chunkWriter.fill(chunkSize);
+
+        if (nodeIDs->empty()) {
+            return;
+        }
+
+        runBody(context, loopBody);
+    };
+
+    if (limit) {
+        while (chunkWriter.isValid() && limit->getRemaining() > 0) {
+            runIteration();
+        }
+    } else {
+        while (chunkWriter.isValid()) {
+            runIteration();
+        }
+    }
+}
+
+void NLExecutor::runScanNodesByPropertyValueLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLScanByPropertyValueLoopData* loopData = static_cast<NLScanByPropertyValueLoopData*>(data);
+    if (!loopData->isMatchable()) {
+        return;
+    }
+
+    switch (loopData->getValueType()) {
+        case ValueType::Int64:
+            runScanNodesByPropertyValueLoopAs<types::Int64>(context, loopData);
+        break;
+        case ValueType::UInt64:
+            runScanNodesByPropertyValueLoopAs<types::UInt64>(context, loopData);
+        break;
+        case ValueType::Double:
+            runScanNodesByPropertyValueLoopAs<types::Double>(context, loopData);
+        break;
+        case ValueType::Bool:
+            runScanNodesByPropertyValueLoopAs<types::Bool>(context, loopData);
+        break;
+        case ValueType::String:
+            runScanNodesByPropertyValueLoopAs<types::String>(context, loopData);
+        break;
+        default:
+            throw IRException("scan_nodes_by_property_value cannot scan this property type");
+        break;
     }
 }
 

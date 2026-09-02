@@ -102,6 +102,55 @@ def ConstScanNodes : TuringOp<"const_scan_nodes", [Pure]> {
 }
 
 /**
+* ScanNodesByPropertyValue
+*/
+def ScanNodesByPropertyValue : TuringOp<"scan_nodes_by_property_value", [Pure]> {
+  let summary = "Produce the nodes whose named property equals a literal";
+
+  let description = [{
+    The property-equality counterpart of db.scan_nodes_by_label: where that
+    produces the nodes carrying a label, this produces the nodes whose named
+    property holds exactly the given literal, optionally among the nodes
+    carrying every listed label:
+
+      %a = db.scan_nodes_by_property_value("age", 32 : i64) : !db.column<!storage.node_id>
+      %b = db.scan_nodes_by_property_value("age", 32 : i64, ["Person"]) : !db.column<!storage.node_id>
+
+    It is what a `WHERE n.age = 32` filter over a plain or labelled scan fuses
+    into (FuseScanByPropertyValue): rather than scanning every node, fetching the
+    property of each and masking, the scan walks each part's property column in
+    place - only the ranges of the matching label sets when labels are given -
+    and emits only the matching node IDs. A node that lacks the property never
+    appears, exactly as the filter dropped it on a null value.
+
+    `property` is the property name as spelled in the query; `value` is the
+    literal it is compared against - the typed attribute db.constant carried,
+    which is one of the literal kinds the query language can spell: a signless
+    i64 integer, an f64 double, an i1 boolean or a !storage.string. Lowering
+    forwards both as-is; translation resolves the name against the schema and
+    coerces the literal to the stored type. A property absent from the schema is
+    carried by no node, so the scan yields no rows - not an error, matching the
+    empty result the filter form produces. `labels`, when present, is the label
+    list db.scan_nodes_by_label carried, with the same superset semantics: a
+    label absent from the schema likewise yields no rows.
+
+    Like db.scan_nodes it reads no column and takes no input, so it opens a
+    dataflow rather than consuming one. Scanning the graph is a deterministic
+    read, so the op is Pure.
+  }];
+
+  let arguments = (ins StrAttr:$property, TypedAttrInterface:$value, OptionalAttr<StrArrayAttr>:$labels);
+  let results   = (outs ColumnNodeIDs:$result);
+  let hasVerifier = 1;
+
+  // The name, literal and optional labels print inside the parens as
+  // `"age", 32 : i64, ["Person"]`, ahead of the colon, the same place
+  // db.get_node_properties prints its name; the result type follows, qualified,
+  // as db.scan_nodes prints it.
+  let assemblyFormat = "`(` $property `,` $value (`,` $labels^)? `)` attr-dict `:` qualified(type($result))";
+}
+
+/**
 * UnwindConst
 */
 def UnwindConst : TuringOp<"unwind_const", [Pure]> {

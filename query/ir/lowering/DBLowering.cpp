@@ -513,6 +513,7 @@ bool opensSourceLoop(mlir::Operation* operation) {
                      mlir::db::VectorSearch,
                      mlir::db::Unwind,
                      mlir::db::ScanNodesByLabel,
+                     mlir::db::ScanNodesByPropertyValue,
                      mlir::db::ScanEdges,
                      mlir::db::ScanEdgesByType,
                      mlir::db::GetOutEdges,
@@ -696,6 +697,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerScanNodesByLabel(scanNodesByLabel);
     } else if (mlir::db::ConstScanNodes constScanNodes = mlir::dyn_cast<mlir::db::ConstScanNodes>(operation)) {
         lowerConstScanNodes(constScanNodes);
+    } else if (mlir::db::ScanNodesByPropertyValue scanNodesByPropertyValue = mlir::dyn_cast<mlir::db::ScanNodesByPropertyValue>(operation)) {
+        lowerScanNodesByPropertyValue(scanNodesByPropertyValue);
     } else if (mlir::db::UnwindConst unwindConst = mlir::dyn_cast<mlir::db::UnwindConst>(operation)) {
         lowerUnwindConst(unwindConst);
     } else if (mlir::db::LoadCSV loadCSV = mlir::dyn_cast<mlir::db::LoadCSV>(operation)) {
@@ -891,6 +894,16 @@ void DBLowering::lowerConstScanNodes(mlir::db::ConstScanNodes constScanNodes) {
     nl::ConstScanNodes nodes = _builder.create<nl::ConstScanNodes>(_builder.getUnknownLoc(),
                                                                    constScanNodes.getNodeIDsAttr());
     buildLoopForSource(nodes.getResult(), constScanNodes.getOperation());
+}
+
+void DBLowering::lowerScanNodesByPropertyValue(mlir::db::ScanNodesByPropertyValue scanNodesByPropertyValue) {
+    setInsertionInto(_rootBlock);
+
+    nl::ScanNodesByPropertyValue nodes = _builder.create<nl::ScanNodesByPropertyValue>(_builder.getUnknownLoc(),
+                                                                                       scanNodesByPropertyValue.getPropertyAttr(),
+                                                                                       scanNodesByPropertyValue.getValue(),
+                                                                                       scanNodesByPropertyValue.getLabelsAttr());
+    buildLoopForSource(nodes.getResult(), scanNodesByPropertyValue.getOperation());
 }
 
 void DBLowering::lowerUnwindConst(mlir::db::UnwindConst unwindConst) {

@@ -27,6 +27,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_PUSHDOWNFILTERS
 #define GEN_PASS_DEF_FUSEUNWINDEQUALITY
 #define GEN_PASS_DEF_FUSESCANBYNODEIDS
+#define GEN_PASS_DEF_FUSESCANBYPROPERTYVALUE
 #define GEN_PASS_DEF_FUSESCANEDGES
 #define GEN_PASS_DEF_FUSEEDGESBYTYPE
 #define GEN_PASS_DEF_FUSESCANEDGESBYTYPE
@@ -110,7 +111,7 @@ struct FuseScanByLabel : public impl::FuseScanByLabelBase<FuseScanByLabel> {
 };
 
 bool isNodeSource(Operation* op) {
-    return isa<ScanNodes, ScanNodesByLabel, ConstScanNodes>(op);
+    return isa<ScanNodes, ScanNodesByLabel, ConstScanNodes, ScanNodesByPropertyValue>(op);
 }
 
 bool isEdgeHop(Operation* op) {
@@ -360,6 +361,68 @@ struct PushDownFilters : public impl::PushDownFiltersBase<PushDownFilters> {
         }
     }
 };
+
+// A filter whose only carried column is a plain or labelled node scan: the shape a
+// source op can take the place of. Any other carried column (a property read before the
+// WHERE, say) has no filtered counterpart in that source to be rewired to, so such a
+// filter has to stay.
+struct ScanSource {
+    Operation* _op {nullptr};
+    ArrayAttr _labels;
+    Value _column;
+};
+
+bool matchSoleScanSource(FilterOp filter, ScanSource& source) {
+    const Operation::operand_range columns = filter.getColumnsToFilter();
+    if (columns.size() != 1) {
+        return false;
+    }
+
+    source._column = columns.front();
+    source._op = source._column.getDefiningOp();
+    if (!source._op || !isa<ScanNodes, ScanNodesByLabel>(source._op)) {
+        return false;
+    }
+
+    if (ScanNodesByLabel scanByLabel = dyn_cast<ScanNodesByLabel>(source._op)) {
+        source._labels = scanByLabel.getLabels();
+    }
+
+    return true;
+}
+
+// Re-applies the label test a fused labelled scan carried, as a check over the fused source.
+Value filterByLabels(Value nodes, ArrayAttr labels, mlir::Location loc, mlir::OpBuilder& builder) {
+    MLIRContext* const context = builder.getContext();
+    const Type nodeColumnType = nodes.getType();
+    const Type labelSetType = ColumnType::get(context, storage::LabelSetIDType::get(context));
+    const Type boolType = ColumnType::get(context, storage::BoolType::get(context));
+
+    GetNodeLabelSet labelSet = builder.create<GetNodeLabelSet>(loc, labelSetType, nodes);
+    CheckLabelConstraint check = builder.create<CheckLabelConstraint>(loc, boolType, labelSet.getResult(), labels);
+
+    const llvm::SmallVector<Type> resultTypes {nodeColumnType};
+    const llvm::SmallVector<Value> columns {nodes};
+    FilterOp labelFilter = builder.create<FilterOp>(loc, resultTypes, check.getResult(), columns);
+
+    return labelFilter.getResult(0);
+}
+
+// Rewires the filter's readers to the fused source and drops the filter, its mask cone
+// and the scan it replaced, each only once nothing else reads it.
+void replaceFilterWithSource(FilterOp filter, Value fused, Operation* source) {
+    const MaskCone cone = collectMaskCone(filter.getMask());
+
+    for (Value filtered : filter.getFilteredColumns()) {
+        filtered.replaceAllUsesWith(fused);
+    }
+    filter.erase();
+
+    for (Operation* const coneOp : llvm::reverse(cone._ops)) {
+        eraseIfUnused(coneOp);
+    }
+    eraseIfUnused(source);
+}
 
 bool collectNodeIDDisjunction(Value mask, Value scanColumn, llvm::SmallVectorImpl<int64_t>& nodeIDs) {
     if (OrOp disjunction = mask.getDefiningOp<OrOp>()) {
@@ -690,31 +753,16 @@ struct FuseUnwindEquality : public impl::FuseUnwindEqualityBase<FuseUnwindEquali
 };
 
 struct NodeIDScanChain {
-    Operation* _source {nullptr};
-    ArrayAttr _labels;
+    ScanSource _source;
     llvm::SmallVector<int64_t> _nodeIDs;
 };
 
 bool matchNodeIDScanChain(FilterOp filter, NodeIDScanChain& chain) {
-    // The filter is replaced by a source, which yields the listed nodes and nothing else.
-    // Any other column it carries (a property read before the WHERE, say) has no filtered
-    // counterpart in that source to be rewired to, so such a filter has to stay.
-    const Operation::operand_range columns = filter.getColumnsToFilter();
-    if (columns.size() != 1) {
+    if (!matchSoleScanSource(filter, chain._source)) {
         return false;
     }
 
-    const Value scanColumn = columns.front();
-    chain._source = scanColumn.getDefiningOp();
-    if (!chain._source || !isa<ScanNodes, ScanNodesByLabel>(chain._source)) {
-        return false;
-    }
-
-    if (ScanNodesByLabel scanByLabel = dyn_cast<ScanNodesByLabel>(chain._source)) {
-        chain._labels = scanByLabel.getLabels();
-    }
-
-    if (!collectNodeIDDisjunction(filter.getMask(), scanColumn, chain._nodeIDs)) {
+    if (!collectNodeIDDisjunction(filter.getMask(), chain._source._column, chain._nodeIDs)) {
         return false;
     }
 
@@ -727,37 +775,17 @@ bool matchNodeIDScanChain(FilterOp filter, NodeIDScanChain& chain) {
 
 void fuseScanByNodeIDs(FilterOp filter, const NodeIDScanChain& chain, mlir::OpBuilder& builder) {
     const mlir::Location loc = filter.getLoc();
-    const Type nodeColumnType = chain._source->getResult(0).getType();
+    const Type nodeColumnType = chain._source._column.getType();
 
     builder.setInsertionPoint(filter);
     ConstScanNodes constScan = builder.create<ConstScanNodes>(loc, nodeColumnType, chain._nodeIDs);
+
     Value fused = constScan.getResult();
-
-    if (chain._labels) {
-        MLIRContext* const context = builder.getContext();
-        const Type labelSetType = ColumnType::get(context, storage::LabelSetIDType::get(context));
-        const Type boolType = ColumnType::get(context, storage::BoolType::get(context));
-
-        GetNodeLabelSet labelSet = builder.create<GetNodeLabelSet>(loc, labelSetType, fused);
-        CheckLabelConstraint check = builder.create<CheckLabelConstraint>(loc, boolType, labelSet.getResult(), chain._labels);
-
-        const llvm::SmallVector<Type> resultTypes {nodeColumnType};
-        const llvm::SmallVector<Value> columns {fused};
-        FilterOp labelFilter = builder.create<FilterOp>(loc, resultTypes, check.getResult(), columns);
-        fused = labelFilter.getResult(0);
+    if (chain._source._labels) {
+        fused = filterByLabels(fused, chain._source._labels, loc, builder);
     }
 
-    const MaskCone cone = collectMaskCone(filter.getMask());
-
-    for (Value filtered : filter.getFilteredColumns()) {
-        filtered.replaceAllUsesWith(fused);
-    }
-    filter.erase();
-
-    for (Operation* const coneOp : llvm::reverse(cone._ops)) {
-        eraseIfUnused(coneOp);
-    }
-    eraseIfUnused(chain._source);
+    replaceFilterWithSource(filter, fused, chain._source._op);
 }
 
 struct FuseScanByNodeIDs : public impl::FuseScanByNodeIDsBase<FuseScanByNodeIDs> {
@@ -1402,6 +1430,100 @@ struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns>
             }
 
             trimCarrySet(op, layout, kept, builder);
+        }
+    }
+};
+
+// The literal kinds a property column can be scanned against, and the only ones the
+// query language spells: an integer, a double, a boolean or a string.
+bool isPropertyScanLiteral(TypedAttr literal) {
+    const Type type = literal.getType();
+    const bool isInteger = type.isSignlessInteger(64);
+    const bool isBool = type.isSignlessInteger(1);
+    const bool isDouble = type.isF64();
+    const bool isString = isa<storage::StringType>(type);
+
+    return isInteger || isBool || isDouble || isString;
+}
+
+struct PropertyValueScanChain {
+    ScanSource _source;
+    StringAttr _property;
+    TypedAttr _value;
+};
+
+// eq(get_node_properties(scan, property), constant), with the constant on either side
+bool matchPropertyEquality(EqOp equality, Value scanColumn, PropertyValueScanChain& chain) {
+    GetNodeProperties read = equality.getLhs().getDefiningOp<GetNodeProperties>();
+    Value constantSide = equality.getRhs();
+    if (!read) {
+        read = equality.getRhs().getDefiningOp<GetNodeProperties>();
+        constantSide = equality.getLhs();
+    }
+
+    if (!read || read.getInputNodes() != scanColumn) {
+        return false;
+    }
+
+    ConstantOp constant = constantSide.getDefiningOp<ConstantOp>();
+    if (!constant) {
+        return false;
+    }
+
+    const TypedAttr literal = dyn_cast<TypedAttr>(constant.getValue());
+    if (!literal || !isPropertyScanLiteral(literal)) {
+        return false;
+    }
+
+    chain._property = read.getPropertyAttr();
+    chain._value = literal;
+    return true;
+}
+
+bool matchPropertyValueScanChain(FilterOp filter, PropertyValueScanChain& chain) {
+    if (!matchSoleScanSource(filter, chain._source)) {
+        return false;
+    }
+
+    EqOp equality = filter.getMask().getDefiningOp<EqOp>();
+    if (!equality) {
+        return false;
+    }
+
+    return matchPropertyEquality(equality, chain._source._column, chain);
+}
+
+void fuseScanByPropertyValue(FilterOp filter, const PropertyValueScanChain& chain, mlir::OpBuilder& builder) {
+    const mlir::Location loc = filter.getLoc();
+    const Type nodeColumnType = chain._source._column.getType();
+
+    builder.setInsertionPoint(filter);
+    ScanNodesByPropertyValue scan = builder.create<ScanNodesByPropertyValue>(loc,
+                                                                             nodeColumnType,
+                                                                             chain._property,
+                                                                             chain._value,
+                                                                             chain._source._labels);
+
+    replaceFilterWithSource(filter, scan.getResult(), chain._source._op);
+}
+
+struct FuseScanByPropertyValue : public impl::FuseScanByPropertyValueBase<FuseScanByPropertyValue> {
+    void runOnOperation() override {
+        Operation* const root = getOperation();
+
+        llvm::SmallVector<FilterOp> filters;
+        root->walk([&](FilterOp filter) {
+            filters.push_back(filter);
+        });
+
+        mlir::OpBuilder builder(&getContext());
+        for (FilterOp filter : filters) {
+            PropertyValueScanChain chain;
+            if (!matchPropertyValueScanChain(filter, chain)) {
+                continue;
+            }
+
+            fuseScanByPropertyValue(filter, chain, builder);
         }
     }
 };

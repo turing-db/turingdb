@@ -9,6 +9,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <variant>
 #include <vector>
 
 #include "ID.h"
@@ -344,6 +345,48 @@ public:
 
 private:
     std::vector<NodeID> _constNodeIDs;
+};
+
+// nl.scan_nodes_by_property_value loop data: a node scan restricted to the nodes whose
+// property holds one literal value. Reuses the plain scan's node chunk, limit and body;
+// adds the resolved property, the literal coerced to its stored type and, for a labelled
+// scan, the owned label set whose property ranges alone are walked. Nothing is bound
+// while the property or a label is absent from the schema, so the loop emits no row.
+class NLScanByPropertyValueLoopData : public NLScanLoopData {
+public:
+    using Literal = std::variant<int64_t, uint64_t, double, CustomBool, std::string>;
+
+    NLScanByPropertyValueLoopData(ColumnNodeIDs* nodeIDs)
+        : NLScanLoopData(nodeIDs)
+    {
+    }
+
+    void bind(PropertyTypeID propertyTypeID, ValueType valueType, const Literal& literal) {
+        _propertyTypeID = propertyTypeID;
+        _valueType = valueType;
+        _literal = literal;
+        _matchable = true;
+    }
+
+    void setLabelSet(const LabelSet& labelset) {
+        _labelset = labelset;
+        _byLabel = true;
+    }
+
+    PropertyTypeID getPropertyTypeID() const { return _propertyTypeID; }
+    ValueType getValueType() const { return _valueType; }
+    const Literal& getLiteral() const { return _literal; }
+    bool isMatchable() const { return _matchable; }
+    const LabelSet& getLabelSet() const { return _labelset; }
+    bool isByLabel() const { return _byLabel; }
+
+private:
+    PropertyTypeID _propertyTypeID;
+    ValueType _valueType {ValueType::Invalid};
+    Literal _literal;
+    bool _matchable {false};
+    LabelSet _labelset;
+    bool _byLabel {false};
 };
 
 // The literal-list sibling of NLConstScanLoopData: streams a fixed ListView one chunk

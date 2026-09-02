@@ -111,6 +111,17 @@ LogicalResult ConstScanNodes::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+// A property-value scan filters the rows a plain scan would produce, never their
+// shape, so it produces the same single chunk of node IDs per step - the name and
+// literal are a filter, not a result type.
+LogicalResult ScanNodesByPropertyValue::inferReturnTypes(MLIRContext* context,
+                                                         std::optional<Location> location,
+                                                         ScanNodesByPropertyValue::Adaptor adaptor,
+                                                         SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(IteratorType::get(context, {getNodeIDChunkType(context)}));
+    return success();
+}
+
 // A vector search produces the two fixed neighbour chunks per step - the nodes the index
 // holds the vectors under and the distances they scored - and reads no input, so the
 // iterator has exactly those two chunks and no carried tail. The neighbours ride the same
