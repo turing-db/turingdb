@@ -155,6 +155,27 @@ func.func @main() {
 }
 )mlir";
 
+// VECTOR SEARCH IN people FOR 2 (1.0, 0.0) YIELD ids, score: the distances the index
+// scored the neighbours at are f64, the one width the lowering and the interpreter build
+// the score column as.
+const char* const vectorSearchProgram = R"mlir(
+func.func @main() {
+  %ids, %scores = db.vector_search("people", 2, [1.000000e+00, 0.000000e+00]) : !db.column<!storage.node_id>, !db.column<f64>
+  db.output(%ids, %scores) : !db.column<!storage.node_id>, !db.column<f64>
+  return
+}
+)mlir";
+
+// The same search declaring its scores one float width narrower, which nothing downstream
+// would honour.
+const char* const narrowScoreVectorSearchProgram = R"mlir(
+func.func @main() {
+  %ids, %scores = db.vector_search("people", 2, [1.000000e+00, 0.000000e+00]) : !db.column<!storage.node_id>, !db.column<f32>
+  db.output(%ids, %scores) : !db.column<!storage.node_id>, !db.column<f32>
+  return
+}
+)mlir";
+
 // A factor whose region does not end in a db.yield: the parser cannot recover
 // the result types and rejects it.
 const char* const missingYieldProgram = R"mlir(
@@ -416,6 +437,27 @@ TEST_F(DBDialectTest, rejectsZeroYieldFactor) {
 
 TEST_F(DBDialectTest, rejectsFactorWithoutYield) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(missingYieldProgram);
+    EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, acceptsAVectorSearchScoringInF64) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(vectorSearchProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::VectorSearch search;
+    module.get().walk([&](mlir::db::VectorSearch found) {
+        search = found;
+    });
+    ASSERT_TRUE(search);
+
+    const mlir::Type doubleColumnType = mlir::db::ColumnType::get(&_context, mlir::Float64Type::get(&_context));
+    EXPECT_EQ(search.getScores().getType(), doubleColumnType);
+}
+
+// The score column names the width the whole path is built for, so a narrower float is
+// rejected here rather than silently discarded on the way to the interpreter.
+TEST_F(DBDialectTest, rejectsAVectorSearchScoringInANarrowerFloat) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(narrowScoreVectorSearchProgram);
     EXPECT_FALSE(module);
 }
 

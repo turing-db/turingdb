@@ -62,6 +62,17 @@ protected:
     std::unique_ptr<QueryInterpreterV3> _interpreter;
 };
 
+// A codegen rejection is a TuringException and reaches the user as it was written: an
+// expression kind the generator has no column for names itself, rather than being dressed
+// up as the internal failure the case below is.
+TEST_F(QueryInterpreterV3ErrorTest, reportsUnsupportedExpressionRejectionAsIs) {
+    QueryStatus status;
+    runQuery("MATCH (n) RETURN n:Person", status);
+
+    EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
+    EXPECT_EQ(status.getError(), "Unsupported expression: ENTITY_TYPES");
+}
+
 // An internal generator failure is a FatalException and must keep reading as
 // one, rather than being dressed up as a deliberate rejection. A map literal
 // reading a row is one: the key varies, so it is not dropped as a constant, and
