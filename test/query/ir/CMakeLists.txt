@@ -166,6 +166,7 @@ add_call_v3_test(test_query_ir_standalone_call StandaloneCallTest.cpp)
 add_call_v3_test(test_query_ir_empty_result_column_names EmptyResultColumnNamesTest.cpp)
 add_call_v3_test(test_query_ir_scan_by_node_ids_v3 ScanByNodeIDsV3Test.cpp)
 add_call_v3_test(test_query_ir_unwind_node_seed_v3 UnwindNodeSeedV3Test.cpp)
+add_call_v3_test(test_query_ir_scan_by_property_value_v3 ScanByPropertyValueV3Test.cpp)
 
 # The crossing-call tests hop twice from the column a CALL yielded and then call again,
 # once with a constant argument alone and once reading the chain's tail, from the query
@@ -232,6 +233,7 @@ target_link_libraries(test_query_ir_cypher_collect_input PRIVATE
 add_ir_tests(test_query_ir_dbdialect DBDialectTest.cpp)
 add_ir_tests(test_query_ir_push_down_filter PushDownFilterTest.cpp)
 add_ir_tests(test_query_ir_fuse_scan_by_node_ids FuseScanByNodeIDsTest.cpp)
+add_ir_tests(test_query_ir_fuse_scan_by_property_value FuseScanByPropertyValueTest.cpp)
 add_ir_tests(test_query_ir_trim_unread_columns TrimUnreadColumnsTest.cpp)
 
 # The edge-scan fusion tests check the rewritten db program, then lower and run it
@@ -302,6 +304,24 @@ target_link_libraries(test_query_ir_fuse_scan_by_node_ids_codegen PRIVATE
         turing_db_ir_common_s
         turing_db_storage_s)
 target_include_directories(test_query_ir_fuse_scan_by_node_ids_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_fuse_scan_by_property_value_codegen FuseScanByPropertyValueCodegenTest.cpp)
+target_link_libraries(test_query_ir_fuse_scan_by_property_value_codegen PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s
+        turing_db_ir_dbdialect_s
+        turing_db_ir_nldialect_s
+        turing_db_ir_storagedialect_s
+        turing_db_ir_common_s
+        turing_db_storage_s)
+target_include_directories(test_query_ir_fuse_scan_by_property_value_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The db program an UNWIND seeding a pattern node compiles to, read against the shared
 # SimpleGraph fixture the same way.

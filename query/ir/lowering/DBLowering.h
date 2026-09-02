@@ -179,6 +179,7 @@ private:
     void lowerScanNodes(mlir::db::ScanNodes scanNodes);
     void lowerScanNodesByLabel(mlir::db::ScanNodesByLabel scanNodesByLabel);
     void lowerConstScanNodes(mlir::db::ConstScanNodes constScanNodes);
+    void lowerScanNodesByPropertyValue(mlir::db::ScanNodesByPropertyValue scanNodesByPropertyValue);
     void lowerUnwindConst(mlir::db::UnwindConst unwindConst);
     void lowerLoadCSV(mlir::db::LoadCSV loadCSV);
     void lowerVectorSearch(mlir::db::VectorSearch vectorSearch);

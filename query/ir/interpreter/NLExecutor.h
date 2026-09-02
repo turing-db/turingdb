@@ -83,6 +83,10 @@ public:
     static void runScanNodesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runScanNodesByLabelLoop(NLExecutionContext* context, NLFunctionData* data);
 
+    // The property-equality sibling of runScanNodesByLabelLoop: emit the nodes whose
+    // property holds the loop data's literal, scanning each part's property column in place.
+    static void runScanNodesByPropertyValueLoop(NLExecutionContext* context, NLFunctionData* data);
+
     // The fixed sibling of runScanNodesLoop: emit the loop data's constant node ID
     // list one chunk at a time - no graph walk - running the body over each slice.
     static void runConstScanNodesLoop(NLExecutionContext* context, NLFunctionData* data);
@@ -516,6 +520,9 @@ private:
     // Search the index the loop names and keep its neighbours on the loop data, in the
     // types the two chunks carry. Holds the index' reader lock for the search alone.
     static void searchVectorIndex(NLExecutionContext* context, NLVectorSearchLoopData* loopData);
+
+    template <SupportedType T>
+    static void runScanNodesByPropertyValueLoopAs(NLExecutionContext* context, NLScanByPropertyValueLoopData* loopData);
 };
 
 }

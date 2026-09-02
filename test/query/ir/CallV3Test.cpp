@@ -53,6 +53,13 @@ void CallV3Test::runQuery(std::string_view query, NLOutputSink& sink) {
     ASSERT_TRUE(status.isOk()) << query << ": " << status.getError();
 }
 
+void CallV3Test::runQueryExpectingError(std::string_view query) {
+    NullSink sink;
+    QueryStatus status;
+    _interpreter->execute(status, query, _graphName, CommitHash::head(), ChangeID::head(), &_env->getMem(), &sink);
+    EXPECT_FALSE(status.isOk()) << "accepted: " << query;
+}
+
 void CallV3Test::runWrite(std::string_view query) {
     ChangeID changeID;
     newChange(changeID);

@@ -43,6 +43,7 @@ private:
         ScanNodes,
         ScanNodesByLabel,
         ConstScanNodes,
+        ScanNodesByPropertyValue,
         ScanEdges,
         ScanEdgesByType,
         GetOutEdges,
@@ -83,8 +84,8 @@ private:
         // declaration order; empty for the other kinds (and for a source call).
         llvm::SmallVector<mlir::Value, 4> _procedureInputs;
 
-        // The label names a ScanNodesByLabel iterator filters by; empty for the
-        // other kinds. These are views into the op's interned StringAttr storage,
+        // The label names a ScanNodesByLabel or ScanNodesByPropertyValue iterator
+        // filters by; empty for the other kinds. These are views into the op's interned StringAttr storage,
         // which the MLIRContext keeps alive for the whole translation; they are
         // resolved to a LabelSet as soon as the loop is translated.
         llvm::SmallVector<llvm::StringRef, 4> _labels;
@@ -101,6 +102,12 @@ private:
         // keeps alive for the whole translation; resolved to owned NodeIDs when the
         // loop is translated.
         llvm::ArrayRef<int64_t> _nodeIDs;
+
+        // The property name and literal a ScanNodesByPropertyValue iterator matches on;
+        // empty and null for the other kinds. Like _labels, views into the op's interned
+        // attribute storage; resolved against the schema when the loop is translated.
+        llvm::StringRef _property;
+        mlir::TypedAttr _propertyValue;
 
         // The literal list an UnwindConst iterator emits; a null (empty) ListView
         // for the other kinds. Materialized by materializeListView into the
@@ -209,6 +216,19 @@ private:
                                 mlir::Block& loopBody,
                                 NLLimitState* limit,
                                 NLStmtContainer* body);
+
+    // Translate the nl.for over an nl.scan_nodes_by_property_value iterator: resolve
+    // the config's property name against the schema, coerce its literal to the stored
+    // type, allocate the node loop variable, and record the scan loop statement in body
+    void translateScanByPropertyValueLoop(const IteratorConfig& config,
+                                          mlir::Block& loopBody,
+                                          NLLimitState* limit,
+                                          NLStmtContainer* body);
+
+    // Resolve label names into the LabelSet a scan filters by. A node matches when its
+    // label set is a superset of this one, so the names are ANDed; false when a name is
+    // absent from the schema, which leaves the conjunction unsatisfiable.
+    bool resolveLabelSet(llvm::ArrayRef<llvm::StringRef> labels, LabelSet& labelset) const;
 
     // Translate the nl.for over an nl.unwind_const iterator: allocate the single
     // value loop variable (a nullable value column for a homogeneous list, a
