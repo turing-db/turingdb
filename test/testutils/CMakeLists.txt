@@ -15,8 +15,8 @@ function(add_turing_test exe_name cpp_file)
     add_executable(${exe_name} ${cpp_file})
     target_link_libraries(${exe_name} PRIVATE turing_testutils_s)
     gtest_discover_tests(${exe_name}
-          DISCOVERY_TIMEOUT 10
-          DISCOVER_MODE PRE_TEST
+          DISCOVERY_TIMEOUT 60
+          DISCOVERY_MODE PRE_TEST
           PROPERTIES ENVIRONMENT
               "TURING_EXTENSIONS_DIR=${CMAKE_BINARY_DIR}/lib/turingdb/extensions")
 endfunction()

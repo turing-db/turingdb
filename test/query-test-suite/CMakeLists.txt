@@ -23,8 +23,8 @@ add_query_suite_target(test_query_test_suite
     QueryResultFormatter.cpp)
 
 gtest_discover_tests(test_query_test_suite
-      DISCOVERY_TIMEOUT 10
-      DISCOVER_MODE PRE_TEST)
+      DISCOVERY_TIMEOUT 60
+      DISCOVERY_MODE PRE_TEST)
 
 add_query_suite_target(test_remote_query_test_suite
     RemoteQueryTestSuite.cpp
@@ -37,8 +37,8 @@ target_link_libraries(test_remote_query_test_suite
             turing_db_proto_client_s)
 
 gtest_discover_tests(test_remote_query_test_suite
-      DISCOVERY_TIMEOUT 10
-      DISCOVER_MODE PRE_TEST)
+      DISCOVERY_TIMEOUT 60
+      DISCOVERY_MODE PRE_TEST)
 
 add_query_suite_target(query_test_suite_cli
     QueryTestSuiteCLI.cpp
