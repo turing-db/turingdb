@@ -175,6 +175,17 @@ TEST_F(ConstantPredicateProjectionTest, emitsTheConstantForEveryMatchedRowWhenTh
     expectRows("MATCH (n) WHERE NOT FALSE RETURN NOT FALSE", expected);
 }
 
+// The other literal under the same two predicates: which constant the projection computes
+// leaves untouched how many rows the filter keeps
+TEST_F(ConstantPredicateProjectionTest, emitsTheOtherConstantForEveryMatchedRowThePredicateKeeps) {
+    const BoolRows expected(18, {false});
+    expectRows("MATCH (n) WHERE NOT FALSE RETURN NOT TRUE", expected);
+}
+
+TEST_F(ConstantPredicateProjectionTest, emitsNothingWhenTheExcludingPredicateProjectsTheOtherConstant) {
+    expectRows("MATCH (n) WHERE NOT TRUE RETURN NOT TRUE", {});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
