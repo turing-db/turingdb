@@ -208,9 +208,13 @@ void collectYieldVariables(const YieldClause* yield, llvm::SmallVectorImpl<const
 
 // The YIELD of a statement that binds variables of its own: a CALL or a VECTOR SEARCH.
 const YieldClause* yieldClauseOf(const Stmt* stmt) {
-    if (stmt->getKind() == Stmt::Kind::CALL) {
+    const Stmt::Kind kind = stmt->getKind();
+
+    if (kind == Stmt::Kind::CALL) {
         return static_cast<const CallStmt*>(stmt)->getYield();
     }
+
+    bioassert(kind == Stmt::Kind::VECTOR_SEARCH, "Only a CALL or a VECTOR SEARCH binds a YIELD.");
 
     return static_cast<const VectorSearchStmt*>(stmt)->getYield();
 }
@@ -578,7 +582,13 @@ void DBProgramGenerator::addUnwindConst(const VariableDependency* var, const Unw
     if (literalKind == Literal::Kind::LIST) {
         translateListElements(static_cast<const ListLiteral*>(literal), elements);
     } else if (literalKind != Literal::Kind::NULL_LITERAL) {
-        elements.push_back(listElementAttr(literal));
+        const mlir::Attribute argument = literalAttr(literal);
+        if (!argument) {
+            throw TuringException("Only booleans, integers, floats, strings, nulls, embeddings and "
+                                  "lists are supported as an UNWIND argument.");
+        }
+
+        elements.push_back(argument);
     }
 
     const mlir::Type sharedType = sharedAttrType(elements);
@@ -610,7 +620,7 @@ void DBProgramGenerator::translateListElements(const ListLiteral* list,
     }
 }
 
-mlir::Attribute DBProgramGenerator::listElementAttr(const Literal* literal) {
+mlir::Attribute DBProgramGenerator::literalAttr(const Literal* literal) {
     const Literal::Kind kind = literal->getKind();
 
     if (kind == Literal::Kind::NULL_LITERAL) {
@@ -626,13 +636,17 @@ mlir::Attribute DBProgramGenerator::listElementAttr(const Literal* literal) {
         return _opBuilder.getArrayAttr(nestedElements);
     }
 
-    const mlir::TypedAttr scalarAttr = scalarLiteralAttr(literal);
-    if (!scalarAttr) {
+    return scalarLiteralAttr(literal);
+}
+
+mlir::Attribute DBProgramGenerator::listElementAttr(const Literal* literal) {
+    const mlir::Attribute element = literalAttr(literal);
+    if (!element) {
         throw TuringException("Only booleans, integers, floats, strings, nulls, embeddings and "
                               "lists are supported as list elements.");
     }
 
-    return scalarAttr;
+    return element;
 }
 
 mlir::Value DBProgramGenerator::translateListLiteral(const ListLiteral* list) {

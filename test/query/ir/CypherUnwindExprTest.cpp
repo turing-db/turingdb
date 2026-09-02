@@ -767,6 +767,16 @@ TEST_F(CypherUnwindExprTest, rejectsAnUnwoundVariableThatIsAlreadyDeclared) {
     expectRejected("MATCH (n) UNWIND n.age AS n RETURN n", "already declared");
 }
 
+// The argument is not a list here, so what is rejected is the argument itself: a message
+// about the elements of a list would send the reader looking for a list they never wrote
+TEST_F(CypherUnwindExprTest, rejectsAnUnrepresentableUnwindArgumentAsTheArgument) {
+    expectRejected("UNWIND {a: 1} AS x RETURN x", "as an UNWIND argument");
+}
+
+TEST_F(CypherUnwindExprTest, rejectsAnUnrepresentableListElementAsAnElement) {
+    expectRejected("UNWIND [{a: 1}] AS x RETURN x", "as list elements");
+}
+
 // An aggregate folds the rows a projection groups, so it names no value an UNWIND could
 // spread: the list has to be published by a WITH first
 TEST_F(CypherUnwindExprTest, rejectsAnAggregateUnwindArgument) {
