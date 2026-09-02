@@ -1,0 +1,4 @@
+# Scratch output the query test CLI writes under the server's working directory
+query_test_suite_cli/
+query_test_suite_cli_remote/
+query_test_suite_cli_v3/

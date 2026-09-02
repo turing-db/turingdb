@@ -16,12 +16,14 @@ export type ExpectedOutput = {
 	plan: string;
 	result: string;
 	resultJson: string;
+	mlir: string;
 };
 
 export type UpdateTestOptions = {
 	plan?: string;
 	result?: string;
 	resultJson?: string;
+	mlir?: string;
 	query?: string;
 	newName?: string;
 	tags?: string[];
@@ -173,6 +175,7 @@ export async function loadMainExpected(
 		plan: typeof expect.plan === "string" ? expect.plan : "",
 		result: typeof expect.result === "string" ? expect.result : "",
 		resultJson: typeof expect.resultJson === "string" ? expect.resultJson : "",
+		mlir: typeof expect.mlir === "string" ? expect.mlir : "",
 	};
 }
 
@@ -211,6 +214,7 @@ export async function loadExpectedFromFile(
 		plan: typeof expect.plan === "string" ? expect.plan : "",
 		result: typeof expect.result === "string" ? expect.result : "",
 		resultJson: typeof expect.resultJson === "string" ? expect.resultJson : "",
+		mlir: typeof expect.mlir === "string" ? expect.mlir : "",
 	};
 }
 
@@ -273,6 +277,9 @@ export async function updateTestFile(
 		}
 		if (typeof options.resultJson === "string") {
 			expect.resultJson = options.resultJson;
+		}
+		if (typeof options.mlir === "string") {
+			expect.mlir = options.mlir;
 		}
 		if (typeof options.query === "string") {
 			data.query = options.query;
@@ -337,6 +344,7 @@ export async function createTestFile(
 			plan: "",
 			result: "",
 			resultJson: "",
+			mlir: "",
 		},
 		tags: [] as string[],
 		"write-required": false,
