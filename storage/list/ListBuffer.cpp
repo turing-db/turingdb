@@ -11,17 +11,9 @@ using namespace db;
 
 namespace {
 
-struct ElementValueSize {
-    template <typename T>
-    size_t operator()(const ListElementView&) const {
-        return sizeof(T);
-    }
-};
-
 size_t elementValueSize(const ListElementView element) {
-    const ListTagDispatcher dispatcher {element.getTag()};
-
-    return dispatcher.execute(ElementValueSize {}, element);
+    const ListTagDispatcher dispatch {element.getTag()};
+    return dispatch.execute([]<typename T>(auto&&) { return sizeof(T); }, element);
 }
 
 }
@@ -93,13 +85,14 @@ ListView ListBuffer<N>::concatenate(ListView a, ListView b) {
     }
 
     ListWriteCursor cursor = reserveList(numElements, valueBytes);
+    constexpr size_t tagSize = decltype(_elements)::tagSize();
 
     for (const ListElementView element : a) {
-        const size_t numBytes = ListByteBuffer<N>::tagSize() + elementValueSize(element);
+        const size_t numBytes = tagSize + elementValueSize(element);
         cursor.writeRaw(element.getData(), numBytes);
     }
     for (const ListElementView element : b) {
-        const size_t numBytes = ListByteBuffer<N>::tagSize() + elementValueSize(element);
+        const size_t numBytes = tagSize + elementValueSize(element);
         cursor.writeRaw(element.getData(), numBytes);
     }
 
