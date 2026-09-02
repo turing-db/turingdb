@@ -398,8 +398,11 @@ struct NodeIDScanChain {
 };
 
 bool matchNodeIDScanChain(FilterOp filter, NodeIDScanChain& chain) {
+    // The filter is replaced by a source, which yields the listed nodes and nothing else.
+    // Any other column it carries (a property read before the WHERE, say) has no filtered
+    // counterpart in that source to be rewired to, so such a filter has to stay.
     const Operation::operand_range columns = filter.getColumnsToFilter();
-    if (columns.empty()) {
+    if (columns.size() != 1) {
         return false;
     }
 
@@ -411,16 +414,6 @@ bool matchNodeIDScanChain(FilterOp filter, NodeIDScanChain& chain) {
 
     if (ScanNodesByLabel scanByLabel = dyn_cast<ScanNodesByLabel>(chain._source)) {
         chain._labels = scanByLabel.getLabels();
-    }
-
-    // The filter is replaced by a source, which yields the listed nodes and nothing else.
-    // Any other column it carries (a property read before the WHERE, say) has no filtered
-    // counterpart in that source to be rewired to, so such a filter has to stay.
-    const bool carriesScanOnly = llvm::all_of(columns, [&](const Value column) {
-        return column == scanColumn;
-    });
-    if (!carriesScanOnly) {
-        return false;
     }
 
     if (!collectNodeIDDisjunction(filter.getMask(), scanColumn, chain._nodeIDs)) {
