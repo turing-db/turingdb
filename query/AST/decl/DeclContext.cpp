@@ -56,6 +56,22 @@ VarDecl* DeclContext::getOrCreateNamedVariable(CypherAST* ast, EvaluatedType typ
     return decl;
 }
 
+VarDecl* DeclContext::getOrCreateNodePatternVariable(CypherAST* ast, std::string_view name) {
+    VarDecl* declared = getDecl(name);
+
+    const bool holdsUnwoundIntegers = declared
+                                      && declared->getType() == EvaluatedType::Integer
+                                      && declared->isUnwound();
+
+    if (holdsUnwoundIntegers) {
+        declared->setType(EvaluatedType::NodePattern);
+
+        return declared;
+    }
+
+    return getOrCreateNamedVariable(ast, EvaluatedType::NodePattern, name);
+}
+
 VarDecl* DeclContext::declareProjectedVariable(CypherAST* ast, EvaluatedType type, std::string_view name) {
     VarDecl* declared = getDecl(name);
     if (declared && declared->getType() == type) {

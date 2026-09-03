@@ -106,6 +106,30 @@ TEST_F(VariableTypeConflictTest, rejectsANodeVariableReusedAsAnEdge) {
                                 "Variable 'n' is already declared with type 'NodePattern'");
 }
 
+// An UNWIND of node IDs may name a pattern node, which seeds the traversal from them, so
+// only a list whose items are not node IDs conflicts with the pattern.
+TEST_F(VariableTypeConflictTest, rejectsAStringUnwoundIntoANodePattern) {
+    expectTypeConflictRejection("UNWIND ['a', 'b'] AS x MATCH (x) RETURN x;",
+                                "Variable 'x' is already declared with type 'String'");
+}
+
+TEST_F(VariableTypeConflictTest, rejectsAHeterogeneousListUnwoundIntoANodePattern) {
+    expectTypeConflictRejection("UNWIND [1, 'a'] AS x MATCH (x) RETURN x;",
+                                "Variable 'x' is already declared with type 'ListItem'");
+}
+
+TEST_F(VariableTypeConflictTest, rejectsAnEmptyListUnwoundIntoANodePattern) {
+    expectTypeConflictRejection("UNWIND [] AS x MATCH (x) RETURN x;",
+                                "Variable 'x' is already declared with type 'ListItem'");
+}
+
+// The seed must be in scope before the pattern names it: an UNWIND naming a variable the
+// pattern already bound would rebind it.
+TEST_F(VariableTypeConflictTest, rejectsAnUnwindOverAPatternNode) {
+    expectTypeConflictRejection("MATCH (x)-->(w) UNWIND [1, 2] AS x RETURN w;",
+                                "Variable 'x' is already declared");
+}
+
 // The valid neighbour of those two: 'm' stays a node in both patterns and joins them on it.
 // Luc reaches Animals and Computers; Animals is entered by Luc alone, Computers by Remy and
 // Luc.

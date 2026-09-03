@@ -149,6 +149,22 @@ const std::unordered_map<std::string_view, BinaryFunctionEmitter> binaryFunction
     {"euclidean_distance", &emitBinaryFunction<mlir::db::EuclideanDistance>},
 };
 
+// The analyzer restricts UNWIND to a literal list, so anything else here is a statement
+// it let through and neither of the sources built from one can lower.
+const ListLiteral* unwindListOrThrow(const UnwindStmt* unwind) {
+    const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(unwind->arg());
+    if (!literalExpr) {
+        throw TuringException("Non-literal UNWIND expressions are not yet supported.");
+    }
+
+    const ListLiteral* list = dynamic_cast<const ListLiteral*>(literalExpr->getLiteral());
+    if (!list) {
+        throw TuringException("Non-list arguments to UNWIND are not yet supported.");
+    }
+
+    return list;
+}
+
 // True when a value is one of `columns` or is computed from one.
 bool readsAnyColumn(mlir::ValueRange values, llvm::ArrayRef<mlir::Value> columns) {
     llvm::DenseSet<mlir::Value> columnSet;
@@ -513,20 +529,40 @@ void DBProgramGenerator::addYieldedColumn(const VariableDependency* var, mlir::V
     std::erase_if(_part._yieldedColumns, declaresVar);
 }
 
+void DBProgramGenerator::addConstScanNodes(const VariableDependency* var, const UnwindStmt* unwind) {
+    bioassert(!_part._varMap.contains(var), "ConstScanNodes for registered variable");
+
+    const ListLiteral* list = unwindListOrThrow(unwind);
+
+    llvm::SmallVector<mlir::Attribute> elements;
+    translateListElements(list, elements);
+
+    llvm::SmallVector<int64_t> nodeIDs;
+    nodeIDs.reserve(elements.size());
+
+    for (const mlir::Attribute element : elements) {
+        const mlir::IntegerAttr nodeID = mlir::dyn_cast<mlir::IntegerAttr>(element);
+        if (!nodeID) {
+            throw TuringException("Only node IDs can be unwound into a node pattern.");
+        }
+
+        nodeIDs.push_back(nodeID.getInt());
+    }
+
+    const mlir::db::ColumnType nodeColumnType = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
+
+    mlir::db::ConstScanNodes constScan = _opBuilder.create<mlir::db::ConstScanNodes>(_opBuilder.getUnknownLoc(),
+                                                                                    nodeColumnType,
+                                                                                    nodeIDs);
+
+    registerValue(var, constScan.getResult());
+    _part._seededVars.insert(var);
+}
+
 void DBProgramGenerator::addUnwindConst(const VariableDependency* var, const UnwindStmt* unwind) {
     bioassert(!_part._varMap.contains(var), "UnwindConst for registered variable");
 
-    // The analyzer restricts UNWIND to a literal list, so anything else here is a
-    // statement it let through and this path cannot lower.
-    const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(unwind->arg());
-    if (!literalExpr) {
-        throw TuringException("Non-literal UNWIND expressions are not yet supported.");
-    }
-
-    const ListLiteral* list = dynamic_cast<const ListLiteral*>(literalExpr->getLiteral());
-    if (!list) {
-        throw TuringException("Non-list arguments to UNWIND are not yet supported.");
-    }
+    const ListLiteral* list = unwindListOrThrow(unwind);
 
     llvm::SmallVector<mlir::Attribute> elements;
     translateListElements(list, elements);
@@ -841,6 +877,7 @@ void DBProgramGenerator::generatePart(std::span<Stmt* const> stmts) {
     generateLeadingYields(stmts);
     generateTraversal(stmts);
     throwOnUnboundPatternVariable();
+    throwOnDroppedUnwindSeed();
     closeBoundMerges();
     resolveEdgeIdentities();
     generateCSVLoads(stmts);
@@ -1255,6 +1292,22 @@ void DBProgramGenerator::throwOnUnboundPatternVariable() const {
     }
 }
 
+void DBProgramGenerator::throwOnDroppedUnwindSeed() const {
+    for (const auto& [var, unwind] : _vdg.unwindSources()) {
+        const VarDecl* const decl = var->getDecl();
+        const bool namesAPatternNode = decl && decl->getType() == EvaluatedType::NodePattern;
+
+        if (!namesAPatternNode || _part._seededVars.contains(var)) {
+            continue;
+        }
+
+        throw TuringException(fmt::format("Unwinding node IDs into the pattern variable '{}' is "
+                                          "not yet supported where the pattern reaches it from "
+                                          "elsewhere.",
+                                          var->getName()));
+    }
+}
+
 void DBProgramGenerator::extendBoundDataflow(DefinedVars& defined,
                                              std::vector<const VariableDependency*>& dataflowVars) {
     const VariableDependencyGraph::BoundVars& bound = _vdg.boundVars();
@@ -1449,7 +1502,16 @@ void DBProgramGenerator::translateComponent(const VariableDependency* root,
     if (yieldedColumn) {
         addYieldedColumn(root, yieldedColumn);
     } else if (unwindIt != unwindSources.end()) {
-        addUnwindConst(root, unwindIt->second);
+        const VarDecl* const decl = root->getDecl();
+        const bool seedsAPatternNode = decl && decl->getType() == EvaluatedType::NodePattern;
+
+        // A pattern naming the unwound variable makes its list a set of node IDs rather
+        // than a column of values, so the nodes themselves open the dataflow.
+        if (seedsAPatternNode) {
+            addConstScanNodes(root, unwindIt->second);
+        } else {
+            addUnwindConst(root, unwindIt->second);
+        }
     } else {
         addScanNodes(root);
     }
