@@ -2160,31 +2160,37 @@ private:
 
 class NLDeleteNodeData : public NLFunctionData {
 public:
-    NLDeleteNodeData(const ColumnNodeIDs* input, bool detaching)
+    NLDeleteNodeData(const ColumnNodeIDs* input, bool inputIsPending, bool detaching)
         : _input(input),
+        _inputIsPending(inputIsPending),
         _detaching(detaching)
     {
     }
 
     const ColumnNodeIDs* getInput() const { return _input; }
+    bool isInputPending() const { return _inputIsPending; }
     bool isDetaching() const { return _detaching; }
 
 private:
     const ColumnNodeIDs* _input {nullptr};
+    bool _inputIsPending {false};
     bool _detaching {false};
 };
 
 class NLDeleteEdgeData : public NLFunctionData {
 public:
-    NLDeleteEdgeData(const ColumnEdgeIDs* input)
-        : _input(input)
+    NLDeleteEdgeData(const ColumnEdgeIDs* input, bool inputIsPending)
+        : _input(input),
+        _inputIsPending(inputIsPending)
     {
     }
 
     const ColumnEdgeIDs* getInput() const { return _input; }
+    bool isInputPending() const { return _inputIsPending; }
 
 private:
     const ColumnEdgeIDs* _input {nullptr};
+    bool _inputIsPending {false};
 };
 
 // nl.output data
