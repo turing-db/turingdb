@@ -1,5 +1,6 @@
 #pragma once
 
+#include <span>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,13 @@ public:
     // Read up to maxRows into output. Returns number of rows read (0 at EOF).
     size_t readChunk(size_t maxRows, ColumnStringTable* output);
 
+    // Read up to maxRows into output, keeping only the fields fieldIndices names:
+    // field fieldIndices[i] of each record fills output's field column i, so output
+    // holds one field column per entry of fieldIndices. Returns rows read (0 at EOF).
+    size_t readChunk(size_t maxRows,
+                     std::span<const size_t> fieldIndices,
+                     ColumnStringTable* output);
+
     size_t getLinesRead() const { return _linesRead; }
     size_t getLinesSkipped() const { return _linesSkipped; }
 
@@ -42,6 +50,14 @@ public:
                                   CSVFileInfo& info);
 
 private:
+    // What pulling one record off the file left in _fields: a record to store, one the
+    // error mode dropped, or nothing because the file is exhausted
+    enum class RecordStatus {
+        Read,
+        Skipped,
+        Finished,
+    };
+
     fs::Path _path;
     bool _hasHeaders {false};
     CSVErrorMode _errorMode {CSVErrorMode::Fail};
@@ -69,6 +85,11 @@ private:
     std::vector<std::string> _fields;
 
     void openFile();
+
+    // Parse the next record into _fields, reporting whether it is one to store. Throws
+    // on a malformed record under CSVErrorMode::Fail.
+    RecordStatus readRecord();
+
     void mapNextChunk();
     void unmapCurrentChunk();
     bool readLine();
