@@ -507,6 +507,7 @@ bool opensSourceLoop(mlir::Operation* operation) {
     return mlir::isa<mlir::db::ScanNodes,
                      mlir::db::ConstScanNodes,
                      mlir::db::UnwindConst,
+                     mlir::db::LoadCSV,
                      mlir::db::VectorSearch,
                      mlir::db::ScanNodesByLabel,
                      mlir::db::ScanEdges,
@@ -676,6 +677,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerConstScanNodes(constScanNodes);
     } else if (mlir::db::UnwindConst unwindConst = mlir::dyn_cast<mlir::db::UnwindConst>(operation)) {
         lowerUnwindConst(unwindConst);
+    } else if (mlir::db::LoadCSV loadCSV = mlir::dyn_cast<mlir::db::LoadCSV>(operation)) {
+        lowerLoadCSV(loadCSV);
     } else if (mlir::db::VectorSearch vectorSearch = mlir::dyn_cast<mlir::db::VectorSearch>(operation)) {
         lowerVectorSearch(vectorSearch);
     } else if (mlir::db::ScanEdges scanEdges = mlir::dyn_cast<mlir::db::ScanEdges>(operation)) {
@@ -896,6 +899,29 @@ void DBLowering::lowerUnwindConst(mlir::db::UnwindConst unwindConst) {
                                                             iteratorType,
                                                             unwindConst.getElementsAttr());
     buildLoopForSource(rows.getResult(), unwindConst.getOperation());
+}
+
+void DBLowering::lowerLoadCSV(mlir::db::LoadCSV loadCSV) {
+    // The file sibling of lowerUnwindConst: a source reads no column, so its loop sits at
+    // the top of the current root block. The path, the field list and the flags are
+    // forwarded as-is; the path and the header names are resolved when the loop runs. One
+    // owning string chunk per field, so - like nl.unwind_const - the iterator type is
+    // spelled here rather than inferred.
+    setInsertionInto(_rootBlock);
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const nl::ChunkType chunk = nl::ChunkType::get(context, storage::OwnedStringType::get(context));
+
+    const llvm::SmallVector<mlir::Type> chunks(loadCSV.getResults().size(), chunk);
+    const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunks);
+
+    nl::LoadCSV records = _builder.create<nl::LoadCSV>(_builder.getUnknownLoc(),
+                                                       iteratorType,
+                                                       loadCSV.getPathAttr(),
+                                                       loadCSV.getFieldsAttr(),
+                                                       loadCSV.getWithHeadersAttr(),
+                                                       loadCSV.getSkipOnErrorAttr());
+    buildLoopForSource(records.getResult(), loadCSV.getOperation());
 }
 
 void DBLowering::lowerVectorSearch(mlir::db::VectorSearch vectorSearch) {

@@ -79,6 +79,7 @@
 #include "stmt/DeleteStmt.h"
 #include "expr/ExprChain.h"
 #include "stmt/Limit.h"
+#include "stmt/LoadCSVStmt.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/OrderBy.h"
 #include "stmt/OrderByItem.h"
@@ -842,6 +843,7 @@ void DBProgramGenerator::generatePart(std::span<Stmt* const> stmts) {
     throwOnUnboundPatternVariable();
     closeBoundMerges();
     resolveEdgeIdentities();
+    generateCSVLoads(stmts);
     generatePropertyConstraints(stmts);
     generateFiltersCallsAndSearches(stmts);
     resolveYieldedIdentities();
@@ -2033,6 +2035,120 @@ void DBProgramGenerator::generateCall(const CallStmt* callStmt) {
     generateYieldFilter(yieldItems);
 }
 
+void DBProgramGenerator::generateCSVLoads(std::span<Stmt* const> stmts) {
+    for (const Stmt* stmt : stmts) {
+        if (stmt->getKind() == Stmt::Kind::LOAD_CSV) {
+            generateLoadCSV(static_cast<const LoadCSVStmt*>(stmt));
+        }
+    }
+}
+
+void DBProgramGenerator::generateLoadCSV(const LoadCSVStmt* loadCSVStmt) {
+    const std::span<const LoadCSVStmt::Field> fields = loadCSVStmt->fields();
+
+    const auto positionAttr = [this](size_t index) -> mlir::Attribute {
+        return mlir::IntegerAttr::get(_opBuilder.getIntegerType(64, /*isSigned=*/false), index);
+    };
+
+    llvm::SmallVector<mlir::Attribute> fieldAttrs;
+    llvm::SmallVector<const VarDecl*> fieldDecls;
+    for (const LoadCSVStmt::Field& field : fields) {
+        if (field._byHeader) {
+            const llvm::StringRef header {field._header.data(), field._header.size()};
+            fieldAttrs.push_back(_opBuilder.getStringAttr(header));
+        } else {
+            fieldAttrs.push_back(positionAttr(field._index));
+        }
+
+        fieldDecls.push_back(field._decl);
+    }
+
+    // A query naming no field still runs over the file's records - one CREATE per record,
+    // a tally of them - and a row set needs a column to ride: the first field stands for
+    // them, since every record carries one. No access names it, so it is published under
+    // no declaration - only the rows it holds are read.
+    if (fieldAttrs.empty()) {
+        fieldAttrs.push_back(positionAttr(0));
+        fieldDecls.push_back(nullptr);
+    }
+
+    const std::string_view path = loadCSVStmt->getFilePath().get();
+    const mlir::StringAttr pathAttr = _opBuilder.getStringAttr(llvm::StringRef {path.data(), path.size()});
+    const mlir::ArrayAttr fieldsAttr = _opBuilder.getArrayAttr(fieldAttrs);
+
+    const mlir::db::ColumnType fieldType = allocColumnType(mlir::storage::OwnedStringType::get(_mlirCtxt));
+    const llvm::SmallVector<mlir::Type> fieldTypes(fieldAttrs.size(), fieldType);
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+    const auto emitLoad = [&]() -> mlir::db::LoadCSV {
+        return _opBuilder.create<mlir::db::LoadCSV>(loc,
+                                                    fieldTypes,
+                                                    pathAttr,
+                                                    fieldsAttr,
+                                                    loadCSVStmt->hasHeaders(),
+                                                    loadCSVStmt->skipOnError());
+    };
+
+    InFlightColumns inFlight;
+    collectInFlightColumns(inFlight);
+
+    if (inFlight._columns.empty()) {
+        publishLoadCSVFields(loadCSVStmt, fieldDecls, emitLoad().getResults());
+        return;
+    }
+
+    // The load reads no column at all, so it produces the same records for every row
+    // already in flight: their cartesian product, which is what a search reading none of
+    // them is paired with too.
+    mlir::Block* const currentBlock = _opBuilder.getInsertionBlock();
+
+    llvm::SmallVector<mlir::Type> resultTypes;
+    for (const mlir::Value column : inFlight._columns) {
+        resultTypes.push_back(column.getType());
+    }
+
+    resultTypes.append(fieldTypes.begin(), fieldTypes.end());
+
+    _opBuilder.setInsertionPointToEnd(currentBlock);
+    mlir::db::CrossProduct crossProduct = _opBuilder.create<mlir::db::CrossProduct>(loc, resultTypes);
+
+    mlir::Block* const leftBlock = &crossProduct.getLeftFactor().front();
+    mlir::Block* const rightBlock = &crossProduct.getRightFactor().front();
+
+    moveDataflowIntoLeftFactor(crossProduct);
+    hoistConstantsOutOfLeftFactor(crossProduct);
+
+    _opBuilder.setInsertionPointToEnd(leftBlock);
+    _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {inFlight._columns});
+
+    _opBuilder.setInsertionPointToEnd(rightBlock);
+    mlir::db::LoadCSV load = emitLoad();
+    _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {load.getResults()});
+
+    // Anything generated from here on reads the product's results, not the factors'.
+    _opBuilder.setInsertionPointToEnd(currentBlock);
+
+    const mlir::Operation::result_range results = crossProduct.getResults();
+    rebindInFlightColumns(results, /*firstResult=*/0, inFlight);
+
+    publishLoadCSVFields(loadCSVStmt, fieldDecls, results.drop_front(inFlight._columns.size()));
+}
+
+void DBProgramGenerator::publishLoadCSVFields(const LoadCSVStmt* loadCSVStmt,
+                                              llvm::ArrayRef<const VarDecl*> fieldDecls,
+                                              mlir::ResultRange fields) {
+    bioassert(fieldDecls.size() == fields.size(), "One declaration per loaded field expected");
+
+    // The row a load bound has no column of its own, so the field columns are named after
+    // it: what the projection prints for an unaliased row[0] is the item's own text, so
+    // these names are only what a standalone load and a WITH read them under.
+    const std::string_view alias = loadCSVStmt->getAliasDecl()->getName();
+
+    for (size_t index = 0; index < fieldDecls.size(); index++) {
+        _part._yieldedColumns.push_back({fieldDecls[index], alias, fields[index]});
+    }
+}
+
 void DBProgramGenerator::generateVectorSearch(const VectorSearchStmt* vectorSearchStmt) {
     const EmbeddingLiteral* queryVector = vectorSearchStmt->getQueryVector();
     if (!queryVector) {
@@ -2629,7 +2745,7 @@ void DBProgramGenerator::generateOutput(const Projection* projection) {
 // A standalone CALL ends no projection, so what it yielded is the result: the columns go
 // out in yield order, under the names the YIELD gave them. A query that writes is not
 // standalone whatever it yielded - its result is its RETURN, and it has none - so a CALL
-// feeding a CREATE reports no row rather than every row it wrote one for.
+// or a LOAD CSV feeding a CREATE reports no row rather than every row it wrote one for.
 void DBProgramGenerator::generateYieldedOutput(const SinglePartQuery* query) {
     const StmtContainer* updateStmts = query->getUpdateStmts();
     if (updateStmts && !updateStmts->stmts().empty()) {
@@ -3276,7 +3392,18 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
                 }
             }
 
-            bioassert(_part._exprMap.contains(expr), "Symbol refers to unknown variable: {}", varName);
+            const bool bound = _part._exprMap.contains(expr);
+
+            // The row a LOAD CSV bound is not a column of its own: the load publishes one
+            // per field the query reads, and nothing stands for the whole record
+            const bool namesACSVRow = decl->getType() == EvaluatedType::StringTable;
+            if (!bound && namesACSVRow) {
+                throw TuringException(fmt::format("A CSV row cannot be read as a whole: "
+                                                  "read a field of '{}' as {}[<index>] or {}.<header>",
+                                                  varName, varName, varName));
+            }
+
+            bioassert(bound, "Symbol refers to unknown variable: {}", varName);
         }
         break;
 
@@ -3297,7 +3424,22 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         }
         break;
 
-        case Expr::Kind::INDEX:
+        case Expr::Kind::INDEX: {
+            const IndexExpr* indexExpr = static_cast<const IndexExpr*>(expr);
+            const mlir::Value fieldColumn = findYieldedColumn(indexExpr->getCSVFieldDecl());
+
+            // A load publishes one column per field its accesses named, and only a
+            // constant index names one: which field a computed index reads is known no
+            // earlier than the row it reads it from
+            if (!fieldColumn) {
+                throw TuringException("Only a constant index selects a CSV field: "
+                                      "row[i] with a computed index is not supported yet.");
+            }
+
+            _part._exprMap[expr] = fieldColumn;
+        }
+        break;
+
         case Expr::Kind::LIST:
         case Expr::Kind::ENTITY_TYPES:
         case Expr::Kind::PATH:
@@ -3557,6 +3699,15 @@ mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propEx
     const VarDecl* entityDecl = propExpr->getEntityVarDecl();
     const std::string_view varName = entityDecl->getName();
     const std::string_view propName = propExpr->getPropName();
+
+    // A header access reads a field of a loaded record rather than a property of an
+    // entity: the load published its column under the declaration the access carries
+    if (propExpr->isStringTableHeaderAccess()) {
+        const mlir::Value fieldColumn = findYieldedColumn(propExpr->getCSVFieldDecl());
+        bioassert(fieldColumn, "CSV header access on a row no load published: {}.{}", varName, propName);
+
+        return fieldColumn;
+    }
 
     // A created entity holds a provisional ID, which the graph a fetch reads knows nothing
     // about: the value of one of its properties is the one the CREATE wrote there, and

@@ -146,6 +146,70 @@ def UnwindConst : TuringOp<"unwind_const", [Pure]> {
 }
 
 /**
+* LoadCSV
+*/
+def LoadCSV : TuringOp<"load_csv", [Pure]> {
+  let summary = "Produce one row per record of a CSV file, a column per field the query reads";
+
+  let description = [{
+    The source op for `LOAD CSV 'people.csv' AS row`. The file is fixed by the query, so
+    it reads no column and opens a dataflow of its own, the way db.unwind_const opens one
+    from a literal list - one row per record of the file:
+
+      %name, %age = db.load_csv("people.csv", [0 : ui64, 1 : ui64])
+        : !db.column<!storage.owned_string>, !db.column<!storage.owned_string>
+
+    A record is many values, and an op has a fixed number of results, so the row is not
+    one column: `fields` names the fields the query reads and the op produces one column
+    per name, in that order. A positional entry is the index `row[2]` names; a string
+    entry is the header `row.age` names, which only a `with_headers` load can resolve.
+    Every access to the same field reads the same column, so a field appears once
+    however many times the query names it, and a field the query never names is not
+    produced at all - the 768 columns of an embedding file cost nothing to skip. At least
+    one field is named even so: a query reading none still runs over the records, and a
+    row set needs a column to ride, so the first field stands for them.
+
+      %age = db.load_csv("people.csv", ["age"]) with_headers
+        : !db.column<!storage.owned_string>
+
+    Every field is a string: a CSV file carries no types, so a record's fields are the
+    characters as written and a query converts them itself (`toInteger(row[1])`). The
+    characters live in the column that parsed them rather than in the graph, so the
+    columns own their strings.
+
+    `with_headers` consumes the first record as the header line - it names the fields
+    rather than holding a row - and is what lets a string entry of `fields` resolve.
+    `skip_on_error` is `ON ERROR SKIP`: a malformed record (an unterminated quote, a
+    field count differing from the file's) is dropped with a warning instead of failing
+    the query.
+
+    Reading a file is deterministic, so the op is Pure. With incoming rows
+    (`LOAD CSV ... MATCH (a)`) it is crossed with them through db.cross_product, the way
+    a search reading no column is; there is no expanding variant of this op.
+  }];
+
+  // The file to read and the fields to produce, each entry a ui64 index or a header
+  // name. Being attributes and not SSA values they are absent from `operands`; the
+  // path is resolved against the data directory, and a header name against the file's
+  // header line, when the load runs.
+  let arguments = (ins StrAttr:$path,
+                       ArrayAttr:$fields,
+                       UnitAttr:$with_headers,
+                       UnitAttr:$skip_on_error);
+  let results   = (outs Variadic<ColumnOwnedStrings>:$results);
+  let hasVerifier = 1;
+
+  // The path and the field list print inside the parens, ahead of the colon, the same
+  // place db.unwind_const prints its literals; the flags print as their keywords after
+  // it, as db.count's do. The result types follow, qualified, as db.scan_nodes prints
+  // its one.
+  let assemblyFormat = [{
+    `(` $path `,` $fields `)` (`with_headers` $with_headers^)? (`skip_on_error` $skip_on_error^)?
+    attr-dict `:` qualified(type($results))
+  }];
+}
+
+/**
 * VectorSearch
 */
 def VectorSearch : TuringOp<"vector_search", [Pure]> {

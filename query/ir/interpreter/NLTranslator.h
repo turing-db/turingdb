@@ -54,6 +54,7 @@ private:
         UnwindCollect,
         Collect,
         UnwindConst,
+        LoadCSV,
         VectorSearch,
         ProcedureInit,
     };
@@ -111,6 +112,15 @@ private:
         llvm::StringRef _indexName;
         size_t _neighbourCount {0};
         llvm::ArrayRef<float> _queryVector;
+
+        // What a LoadCSV iterator reads: the file, the fields it produces - each a
+        // position or a header name - and the two flags the load carries. Empty and false
+        // for the other kinds. Views into the op's interned attribute storage too, so the
+        // path and the header names outlive the translation.
+        llvm::StringRef _csvPath;
+        mlir::ArrayAttr _csvFields;
+        bool _csvHasHeaders {false};
+        bool _csvSkipOnError {false};
     };
 
     NLProgram* _program {nullptr};
@@ -204,6 +214,16 @@ private:
                                   mlir::Block& loopBody,
                                   NLLimitState* limit,
                                   NLStmtContainer* body);
+
+    // Translate the nl.for over an nl.load_csv iterator: allocate one owning string loop
+    // variable per field the load produces, gather them into the row the parser fills,
+    // and record the load loop statement in body. The file sibling of
+    // translateUnwindConstLoop - a source loop whose rows come from a CSV file rather
+    // than from a fixed list.
+    void translateLoadCSVLoop(const IteratorConfig& config,
+                              mlir::Block& loopBody,
+                              NLLimitState* limit,
+                              NLStmtContainer* body);
 
     // Translate the nl.for over an nl.vector_search iterator: allocate the two nullable
     // value loop variables (the neighbour IDs and the distances they scored) and record

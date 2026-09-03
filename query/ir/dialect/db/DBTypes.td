@@ -51,6 +51,10 @@ def ColumnBools : ColumnOf<"::mlir::storage::BoolType", "bool">;
 def ColumnStrings : ColumnOf<"::mlir::storage::StringType", "string">;
 def ColumnCounts : ColumnOf<"::mlir::IntegerType", "ui64">;
 
+// The characters of a CSV field live in the column that parsed them rather than
+// in the graph, so a loaded field is an owning string column.
+def ColumnOwnedStrings : ColumnOf<"::mlir::storage::OwnedStringType", "owned_string">;
+
 // The distance a vector search scored a neighbour at; the neighbour itself is a node,
 // so it rides the node ID column above.
 def ColumnDoubles : ColumnOf<"::mlir::FloatType", "f64">;

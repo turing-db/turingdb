@@ -696,6 +696,39 @@ LogicalResult UnwindConst::verify() {
     return verifyHomogeneousElements(getOperation(), getElements());
 }
 
+// One column per field, and a field is named either by position or by header - a
+// header only where a header line was read, since nothing else resolves the name.
+LogicalResult LoadCSV::verify() {
+    const ArrayAttr fields = getFieldsAttr();
+
+    // A load producing no column produces no rows either: nothing downstream could read
+    // the records it opened, and its loop would have no chunk to size a step from
+    if (fields.empty()) {
+        return emitOpError("requires at least one field");
+    }
+
+    if (fields.size() != getResults().size()) {
+        return emitOpError("produces one column per field, but names ")
+               << fields.size() << " fields for " << getResults().size() << " columns";
+    }
+
+    for (const Attribute field : fields) {
+        if (const auto header = llvm::dyn_cast<StringAttr>(field)) {
+            if (!getWithHeaders()) {
+                return emitOpError("names field '") << header.getValue()
+                                                    << "' by header, which only a with_headers load resolves";
+            }
+        } else {
+            const auto index = llvm::dyn_cast<IntegerAttr>(field);
+            if (!index || !index.getType().isUnsignedInteger(64)) {
+                return emitOpError("field must be a ui64 position or a header name");
+            }
+        }
+    }
+
+    return success();
+}
+
 // A search reporting no neighbour, or searching for no vector, is a query that asked for
 // nothing: neither is a shape the index can be asked for, so both are rejected here rather
 // than left to return an empty result the query would read as "no match".

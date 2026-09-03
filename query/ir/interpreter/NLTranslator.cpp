@@ -313,12 +313,20 @@ bool isUntypedNullChunk(mlir::Type chunkType) {
     return nullableType && mlir::isa<mlir::NoneType>(nullableType.getValueType());
 }
 
+// The property value type a chunk writes, which is not quite the shape it holds: a
+// column that owns its strings - a loaded CSV field - writes a String property like a
+// borrowed one, so it is recognised here and not in valueTypeFromElementType, which
+// answers what nullable value column a chunk needs.
 ValueType valueTypeFromChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         return valueTypeFromElementType(nullableType.getValueType());
+    }
+
+    if (mlir::isa<storage::OwnedStringType>(elementType)) {
+        return ValueType::String;
     }
 
     return valueTypeFromElementType(elementType);
@@ -442,6 +450,14 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._kind = IteratorKind::UnwindConst;
             config._list = materializeListView(unwindConst.getElements());
             _iteratorConfigs[unwindConst.getResult()] = config;
+        } else if (nl::LoadCSV loadCSV = mlir::dyn_cast<nl::LoadCSV>(operation)) {
+            IteratorConfig config;
+            config._kind = IteratorKind::LoadCSV;
+            config._csvPath = loadCSV.getPath();
+            config._csvFields = loadCSV.getFieldsAttr();
+            config._csvHasHeaders = loadCSV.getWithHeaders();
+            config._csvSkipOnError = loadCSV.getSkipOnError();
+            _iteratorConfigs[loadCSV.getResult()] = config;
         } else if (nl::VectorSearch vectorSearch = mlir::dyn_cast<nl::VectorSearch>(operation)) {
             IteratorConfig config;
             config._kind = IteratorKind::VectorSearch;
@@ -640,6 +656,11 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         // A const unwind is a plain source, so - like a scan - a downstream LIMIT can
         // bound its loop through the ordinary early-exit.
         translateUnwindConstLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::LoadCSV) {
+        // A CSV load is a plain source too, so a downstream LIMIT can bound its loop
+        // through the ordinary early-exit - the file is then read only as far as the
+        // budget reaches.
+        translateLoadCSVLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::VectorSearch) {
         // A vector search is a plain source too, so a downstream LIMIT can bound its
         // loop through the ordinary early-exit.
@@ -757,6 +778,44 @@ void NLTranslator::translateUnwindConstLoop(const IteratorConfig& config,
     loopData->setLimit(limit);
 
     body->emplaceStmt(&NLExecutor::runUnwindConstLoop, loopData);
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateLoadCSVLoop(const IteratorConfig& config,
+                                        mlir::Block& loopBody,
+                                        NLLimitState* limit,
+                                        NLStmtContainer* body) {
+    // A CSV load binds one owning string chunk per field it produces. The parser fills a
+    // row of field columns, so the chunks are gathered into one - the chunk a downstream
+    // op reads is the very column the parser wrote.
+    ColumnStringTable* const row = _memory->alloc<ColumnStringTable>();
+
+    for (const mlir::Value fieldChunk : loopBody.getArguments()) {
+        Column* const field = allocColumn(fieldChunk);
+        row->addFieldColumn(static_cast<ColumnStringTable::StringColumn*>(field));
+    }
+
+    const std::string_view path {config._csvPath.data(), config._csvPath.size()};
+
+    NLLoadCSVLoopData* loopData = _program->allocFunctionData<NLLoadCSVLoopData>(row,
+                                                                                path,
+                                                                                config._csvHasHeaders,
+                                                                                config._csvSkipOnError);
+    loopData->setLimit(limit);
+
+    for (const mlir::Attribute field : config._csvFields) {
+        if (const auto header = mlir::dyn_cast<mlir::StringAttr>(field)) {
+            const llvm::StringRef name = header.getValue();
+            loopData->addField({._header = std::string_view {name.data(), name.size()},
+                                ._byHeader = true});
+        } else {
+            const auto index = mlir::cast<mlir::IntegerAttr>(field);
+            loopData->addField({._index = index.getValue().getZExtValue()});
+        }
+    }
+
+    body->emplaceStmt(&NLExecutor::runLoadCSVLoop, loopData);
 
     translateBlock(loopBody, loopData->getStmts());
 }
