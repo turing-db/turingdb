@@ -406,6 +406,45 @@ target_link_libraries(test_query_ir_vector_search_rejection PRIVATE
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_vector_search_rejection PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# LOAD CSV reads a file out of the data directory, which the system manager's config
+# names, so the load tests drive the whole engine the way the search tests do.
+add_turing_test(test_query_ir_load_csv_source LoadCSVSourceTest.cpp)
+target_sources(test_query_ir_load_csv_source PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_load_csv_source PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_load_csv_source PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# The join cases cross a load with the SimpleGraph fixture, so they need the graph the
+# search composition cases do.
+add_turing_test(test_query_ir_load_csv_match LoadCSVMatchTest.cpp)
+target_sources(test_query_ir_load_csv_match PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_load_csv_match PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_load_csv_match PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# The import cases run their statements inside a change and submit it, so they need the
+# change management the system manager holds.
+add_turing_test(test_query_ir_load_csv_write LoadCSVWriteTest.cpp)
+target_sources(test_query_ir_load_csv_write PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_load_csv_write PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_load_csv_write PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_call_yield_group_aggregate CallYieldGroupAggregateTest.cpp)
 target_link_libraries(test_query_ir_call_yield_group_aggregate PRIVATE
         turing_db_s
