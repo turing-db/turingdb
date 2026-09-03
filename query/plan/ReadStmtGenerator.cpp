@@ -131,6 +131,7 @@ void ReadStmtGenerator::generateStmt(const Stmt* stmt) {
         break;
 
         case Stmt::Kind::CREATE:
+        case Stmt::Kind::MERGE:
         case Stmt::Kind::SET:
         case Stmt::Kind::DELETE:
         case Stmt::Kind::RETURN:

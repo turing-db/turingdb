@@ -26,6 +26,7 @@
 #include "stmt/SetItem.h"
 #include "stmt/Stmt.h"
 #include "stmt/CreateStmt.h"
+#include "stmt/MergeStmt.h"
 #include "stmt/SetStmt.h"
 
 using namespace db;
@@ -44,6 +45,10 @@ void WriteStmtAnalyzer::analyze(const Stmt* stmt) {
     switch (stmt->getKind()) {
         case Stmt::Kind::CREATE:
             analyze(static_cast<const CreateStmt*>(stmt));
+            break;
+
+        case Stmt::Kind::MERGE:
+            analyze(static_cast<const MergeStmt*>(stmt));
             break;
 
         case Stmt::Kind::SET:
@@ -66,6 +71,24 @@ void WriteStmtAnalyzer::analyze(const CreateStmt* createStmt) {
     _hasCreate = true;
     if (createStmt->getPattern()) {
         analyze(createStmt->getPattern());
+    }
+}
+
+void WriteStmtAnalyzer::analyze(const MergeStmt* mergeStmt) {
+    if (!_isV3) {
+        throwError("MERGE is only supported by the MLIR query engine.", mergeStmt);
+    }
+
+    analyze(mergeStmt->getPattern());
+
+    for (const SetStmt* actions : {mergeStmt->getOnCreate(), mergeStmt->getOnMatch()}) {
+        if (!actions) {
+            continue;
+        }
+
+        for (SetItem* item : actions->getItems()) {
+            analyze(item);
+        }
     }
 }
 

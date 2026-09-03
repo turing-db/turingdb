@@ -16,6 +16,7 @@
 #include "stmt/Limit.h"
 #include "stmt/Skip.h"
 #include "stmt/CreateStmt.h"
+#include "stmt/MergeStmt.h"
 #include "stmt/ShortestPathStmt.h"
 #include "Projection.h"
 #include "Pattern.h"
@@ -215,6 +216,13 @@ void CypherASTDumper::dump(std::ostream& out, const SinglePartQuery* query) {
                     const CreateStmt* createStmt = static_cast<const CreateStmt*>(stmt);
                     out << "    _" << std::hex << query << " ||--o{ _" << std::hex << createStmt << " : \"\"\n";
                     dump(out, createStmt);
+                }
+                break;
+
+                case Stmt::Kind::MERGE: {
+                    const MergeStmt* mergeStmt = static_cast<const MergeStmt*>(stmt);
+                    out << "    _" << std::hex << query << " ||--o{ _" << std::hex << mergeStmt << " : \"\"\n";
+                    dump(out, mergeStmt);
                 }
                 break;
 
@@ -453,6 +461,27 @@ void CypherASTDumper::dump(std::ostream& out, const MatchStmt* match) {
         const Skip* skip = match->getSkip();
         out << "    _" << std::hex << match << " ||--o{ _" << std::hex << skip << " : \"\"\n";
         dump(out, skip);
+    }
+}
+
+void CypherASTDumper::dump(std::ostream& out, const MergeStmt* merge) {
+    out << "    _" << std::hex << merge << " {\n";
+    out << "        ASTType MERGE\n";
+    out << "    }\n";
+
+    const Pattern* pattern = merge->getPattern();
+    out << "    _" << std::hex << merge << " ||--o{ _" << std::hex << pattern << " : \"\"\n";
+
+    dump(out, pattern);
+
+    if (const SetStmt* onCreate = merge->getOnCreate()) {
+        out << "    _" << std::hex << merge << " ||--o{ _" << std::hex << onCreate << " : \"ON CREATE\"\n";
+        dump(out, onCreate);
+    }
+
+    if (const SetStmt* onMatch = merge->getOnMatch()) {
+        out << "    _" << std::hex << merge << " ||--o{ _" << std::hex << onMatch << " : \"ON MATCH\"\n";
+        dump(out, onMatch);
     }
 }
 

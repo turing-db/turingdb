@@ -113,6 +113,7 @@ void ReadStmtAnalyzer::analyze(Stmt* stmt) {
         break;
 
         case Stmt::Kind::CREATE:
+        case Stmt::Kind::MERGE:
         case Stmt::Kind::SET:
         case Stmt::Kind::DELETE:
         case Stmt::Kind::RETURN:
