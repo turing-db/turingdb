@@ -268,7 +268,7 @@ private:
     void generateOutput(const Projection* projection);
 
     // A standalone CALL ends no projection: what it yielded is the result
-    void generateYieldedOutput();
+    void generateYieldedOutput(const SinglePartQuery* query);
 
     // Emits each MATCH's WHERE, each CALL and each VECTOR SEARCH of a part in the order the
     // query writes them, so a predicate or an argument reading what a statement yielded is
