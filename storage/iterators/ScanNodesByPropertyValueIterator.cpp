@@ -1,18 +1,14 @@
 #include "ScanNodesByPropertyValueIterator.h"
 
 #include <stdint.h>
-#include <string.h>
 #include <algorithm>
 #include <iterator>
 #include <span>
-#include <type_traits>
-
-#if defined(__AVX2__)
-#include <immintrin.h>
-#endif
 
 #include "datapart/DataPart.h"
 #include "properties/PropertyManager.h"
+
+#include "PropertyValueScan.h"
 
 #include "BioAssert.h"
 #include "FatalException.h"
@@ -20,185 +16,6 @@
 using namespace db;
 
 namespace {
-
-template <typename Lane>
-struct EqualityLanes;
-
-template <>
-struct EqualityLanes<int64_t> {
-    using Vector = int64_t __attribute__((vector_size(32)));
-};
-
-template <>
-struct EqualityLanes<uint64_t> {
-    using Vector = uint64_t __attribute__((vector_size(32)));
-};
-
-template <>
-struct EqualityLanes<double> {
-    using Vector = double __attribute__((vector_size(32)));
-};
-
-template <typename Lane>
-concept VectorisedLane = requires { typename EqualityLanes<Lane>::Vector; };
-
-using EqualityMask = int64_t __attribute__((vector_size(32)));
-
-constexpr size_t equalityLaneCount = 4;
-
-// Every row's ID is stored and the cursor advances by the comparison, so a run of
-// misses costs no mispredicted branch.
-template <typename Primitive>
-size_t scanEqualScalar(const Primitive* values, const EntityID* ids, size_t rows, const Primitive& needle, NodeID* hits) {
-    size_t count = 0;
-
-    for (size_t row = 0; row < rows; row++) {
-        hits[count] = NodeID {ids[row].getValue()};
-        count += static_cast<size_t>(values[row] == needle);
-    }
-
-    return count;
-}
-
-#if defined(__AVX2__)
-
-static_assert(std::is_trivially_copyable_v<EntityID>);
-static_assert(std::is_trivially_copyable_v<NodeID>);
-static_assert(sizeof(EntityID) == sizeof(uint64_t));
-static_assert(sizeof(NodeID) == sizeof(uint64_t));
-
-constexpr size_t vectorsPerBlock = 8;
-
-struct CompactionTable {
-    uint32_t _lanes[1 << equalityLaneCount][2 * equalityLaneCount] {};
-};
-
-constexpr CompactionTable makeCompactionTable() {
-    CompactionTable table {};
-
-    for (size_t mask = 0; mask < (1u << equalityLaneCount); mask++) {
-        size_t write = 0;
-
-        for (size_t lane = 0; lane < equalityLaneCount; lane++) {
-            if ((mask & (1u << lane)) == 0) {
-                continue;
-            }
-
-            table._lanes[mask][2 * write] = static_cast<uint32_t>(2 * lane);
-            table._lanes[mask][2 * write + 1] = static_cast<uint32_t>(2 * lane + 1);
-            write++;
-        }
-
-        for (; write < equalityLaneCount; write++) {
-            table._lanes[mask][2 * write] = 0;
-            table._lanes[mask][2 * write + 1] = 1;
-        }
-    }
-
-    return table;
-}
-
-constexpr CompactionTable compactionTable = makeCompactionTable();
-
-bool anyLaneMatches(EqualityMask matches) {
-    const __m256i lanes = (__m256i)matches;
-    return _mm256_testz_si256(lanes, lanes) == 0;
-}
-
-// The whole vector of IDs is stored and the cursor advances by the population count, so
-// the misses trailing the last match are overwritten by the next group. The cursor never
-// runs ahead of the rows already read, which keeps that store inside the caller's buffer.
-size_t compactMatchedIDs(const EntityID* ids, EqualityMask matches, NodeID* hits) {
-    const int mask = _mm256_movemask_pd(_mm256_castsi256_pd((__m256i)matches));
-
-    const __m256i loaded = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(ids));
-    const __m256i lanes = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(compactionTable._lanes[mask]));
-
-    _mm256_storeu_si256(reinterpret_cast<__m256i*>(hits), _mm256_permutevar8x32_epi32(loaded, lanes));
-
-    return static_cast<size_t>(__builtin_popcount(static_cast<unsigned>(mask)));
-}
-
-template <VectorisedLane Lane>
-size_t scanEqualVectorised(const Lane* values, const EntityID* ids, size_t rows, Lane needle, NodeID* hits) {
-    using Vector = EqualityLanes<Lane>::Vector;
-    static_assert(sizeof(Vector) / sizeof(Lane) == equalityLaneCount);
-
-    constexpr size_t blockRows = vectorsPerBlock * equalityLaneCount;
-
-    Vector needles {};
-    for (size_t lane = 0; lane < equalityLaneCount; lane++) {
-        needles[lane] = needle;
-    }
-
-    size_t count = 0;
-    size_t row = 0;
-
-    for (; row + blockRows <= rows; row += blockRows) {
-        EqualityMask matches[vectorsPerBlock];
-        EqualityMask any {};
-
-        for (size_t block = 0; block < vectorsPerBlock; block++) {
-            Vector chunk;
-            memcpy(&chunk, values + row + block * equalityLaneCount, sizeof(Vector));
-
-            matches[block] = (chunk == needles);
-            any |= matches[block];
-        }
-
-        if (!anyLaneMatches(any)) {
-            continue;
-        }
-
-        for (size_t block = 0; block < vectorsPerBlock; block++) {
-            count += compactMatchedIDs(ids + row + block * equalityLaneCount, matches[block], hits + count);
-        }
-    }
-
-    return count + scanEqualScalar(values + row, ids + row, rows - row, needle, hits + count);
-}
-
-#else
-
-template <VectorisedLane Lane>
-size_t scanEqualVectorised(const Lane* values, const EntityID* ids, size_t rows, Lane needle, NodeID* hits) {
-    using Vector = EqualityLanes<Lane>::Vector;
-    static_assert(sizeof(Vector) / sizeof(Lane) == equalityLaneCount);
-
-    constexpr size_t blockRows = 2 * equalityLaneCount;
-
-    Vector needles {};
-    for (size_t lane = 0; lane < equalityLaneCount; lane++) {
-        needles[lane] = needle;
-    }
-
-    size_t count = 0;
-    size_t row = 0;
-
-    for (; row + blockRows <= rows; row += blockRows) {
-        Vector low;
-        Vector high;
-        memcpy(&low, values + row, sizeof(Vector));
-        memcpy(&high, values + row + equalityLaneCount, sizeof(Vector));
-
-        const EqualityMask lowHits = (low == needles);
-        const EqualityMask highHits = (high == needles);
-
-        for (size_t lane = 0; lane < equalityLaneCount; lane++) {
-            hits[count] = NodeID {ids[row + lane].getValue()};
-            count += static_cast<size_t>(lowHits[lane] != 0);
-        }
-
-        for (size_t lane = 0; lane < equalityLaneCount; lane++) {
-            hits[count] = NodeID {ids[row + equalityLaneCount + lane].getValue()};
-            count += static_cast<size_t>(highHits[lane] != 0);
-        }
-    }
-
-    return count + scanEqualScalar(values + row, ids + row, rows - row, needle, hits + count);
-}
-
-#endif
 
 // The candidates come from one ascending slice of a sorted container, so one cursor gallops
 // through the newer part's IDs instead of hashing every candidate. Disjoint ID ranges — a
@@ -249,15 +66,6 @@ size_t dropHitsInContainer(const TypedPropertyContainer<T>& container, NodeID* h
     }
 
     return write;
-}
-
-template <typename Primitive>
-size_t scanEqual(const Primitive* values, const EntityID* ids, size_t rows, const Primitive& needle, NodeID* hits) {
-    if constexpr (VectorisedLane<Primitive>) {
-        return scanEqualVectorised(values, ids, rows, needle, hits);
-    } else {
-        return scanEqualScalar(values, ids, rows, needle, hits);
-    }
 }
 
 }
@@ -435,7 +243,7 @@ void ScanNodesByPropertyValueChunkWriter<T>::fill(size_t maxCount) {
             hits.resize(count + rows);
         }
 
-        const size_t candidates = scanEqual(_values.data() + _offset, _ids.data() + _offset, rows, _value, hits.data() + count);
+        const size_t candidates = PropertyValueScan::equal(_values.data() + _offset, _ids.data() + _offset, rows, _value, hits.data() + count);
 
         count += dropOverriddenHits(hits.data() + count, candidates);
         _offset += rows;
