@@ -216,16 +216,13 @@ typename T::Primitive constantValueAs(mlir::Attribute value) {
     }
 }
 
-// Coerces a property-value scan's literal to the property's stored type. The analyzer
-// admits an integer literal against an Int64, UInt64 or Double property and every other
-// literal only against its own type, so those are the pairs bound here; a negative
-// integer against a UInt64 property can equal no stored value and stays unbound.
-void bindPropertyScanLiteral(NLScanByPropertyValueLoopData& loopData,
-                             const PropertyType& propertyType,
-                             mlir::TypedAttr literal) {
-    const PropertyTypeID id = propertyType._id;
-    const ValueType valueType = propertyType._valueType;
-
+// Resolves a property-value scan's literal to the property's stored type: each type
+// matches its own literal kind, UInt64 taking the non-negative integers since there is no
+// unsigned literal. Any other pairing - a negative integer against UInt64, or a mix the
+// op admits but no stored value can equal - leaves the scan unmatchable.
+bool resolvePropertyScanLiteral(ValueType valueType,
+                                mlir::TypedAttr literal,
+                                NLScanByPropertyValueLoopData::Literal& value) {
     const mlir::IntegerAttr integer = mlir::dyn_cast<mlir::IntegerAttr>(literal);
     const mlir::FloatAttr floating = mlir::dyn_cast<mlir::FloatAttr>(literal);
     const mlir::StringAttr string = mlir::dyn_cast<mlir::StringAttr>(literal);
@@ -233,18 +230,23 @@ void bindPropertyScanLiteral(NLScanByPropertyValueLoopData& loopData,
     const bool isIntegerLiteral = integer && !isBoolLiteral;
 
     if (valueType == ValueType::Int64 && isIntegerLiteral) {
-        loopData.bind(id, valueType, integer.getInt());
+        value = integer.getInt();
+        return true;
     } else if (valueType == ValueType::UInt64 && isIntegerLiteral && integer.getInt() >= 0) {
-        loopData.bind(id, valueType, static_cast<uint64_t>(integer.getInt()));
+        value = static_cast<uint64_t>(integer.getInt());
+        return true;
     } else if (valueType == ValueType::Double && floating) {
-        loopData.bind(id, valueType, floating.getValueAsDouble());
-    } else if (valueType == ValueType::Double && isIntegerLiteral) {
-        loopData.bind(id, valueType, static_cast<double>(integer.getInt()));
+        value = floating.getValueAsDouble();
+        return true;
     } else if (valueType == ValueType::Bool && isBoolLiteral) {
-        loopData.bind(id, valueType, CustomBool(integer.getInt() != 0));
+        value = CustomBool(integer.getInt() != 0);
+        return true;
     } else if (valueType == ValueType::String && string) {
-        loopData.bind(id, valueType, std::string(string.getValue()));
+        value = std::string(string.getValue());
+        return true;
     }
+
+    return false;
 }
 
 // The runtime reduction the interpreter dispatches on, from the MLIR one the op
@@ -801,21 +803,32 @@ void NLTranslator::translateScanByPropertyValueLoop(const IteratorConfig& config
     const mlir::Value nodeChunk = loopBody.getArgument(0);
     ColumnNodeIDs* nodeIDs = static_cast<ColumnNodeIDs*>(allocColumn(nodeChunk));
 
-    NLScanByPropertyValueLoopData* loopData = _program->allocFunctionData<NLScanByPropertyValueLoopData>(nodeIDs);
-    loopData->setLimit(limit);
-
-    bool matchable = true;
-    if (!config._labels.empty()) {
-        LabelSet labelset;
-        matchable = resolveLabelSet(config._labels, labelset);
-        loopData->setLabelSet(labelset);
-    }
+    LabelSet labelset;
+    const bool byLabel = !config._labels.empty();
+    const bool labelsResolved = !byLabel || resolveLabelSet(config._labels, labelset);
 
     const llvm::StringRef property = config._property;
     const std::optional<PropertyType> propertyType = _view->metadata().propTypes().get(std::string_view(property.data(), property.size()));
-    if (matchable && propertyType) {
-        bindPropertyScanLiteral(*loopData, *propertyType, config._propertyValue);
+
+    PropertyTypeID propertyTypeID;
+    ValueType valueType = ValueType::Invalid;
+    NLScanByPropertyValueLoopData::Literal literal;
+    bool matchable = false;
+
+    if (labelsResolved && propertyType) {
+        propertyTypeID = propertyType->_id;
+        valueType = propertyType->_valueType;
+        matchable = resolvePropertyScanLiteral(valueType, config._propertyValue, literal);
     }
+
+    NLScanByPropertyValueLoopData* loopData = _program->allocFunctionData<NLScanByPropertyValueLoopData>(nodeIDs,
+                                                                                                         propertyTypeID,
+                                                                                                         valueType,
+                                                                                                         literal,
+                                                                                                         labelset,
+                                                                                                         byLabel,
+                                                                                                         matchable);
+    loopData->setLimit(limit);
 
     body->emplaceStmt(&NLExecutor::runScanNodesByPropertyValueLoop, loopData);
 

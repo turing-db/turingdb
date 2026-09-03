@@ -9,6 +9,7 @@
 #include "properties/PropertyManager.h"
 
 #include "BioAssert.h"
+#include "FatalException.h"
 
 using namespace db;
 
@@ -71,16 +72,6 @@ size_t scanEqualVectorised(const Lane* values, const EntityID* ids, size_t rows,
 
         const auto lowHits = (low == needles);
         const auto highHits = (high == needles);
-        const auto anyHits = lowHits | highHits;
-
-        int64_t any = 0;
-        for (size_t lane = 0; lane < laneCount; lane++) {
-            any |= anyHits[lane];
-        }
-
-        if (any == 0) {
-            continue;
-        }
 
         for (size_t lane = 0; lane < laneCount; lane++) {
             hits[count] = NodeID {ids[row + lane].getValue()};
@@ -136,11 +127,7 @@ ScanNodesByPropertyValueChunkWriter<T>::~ScanNodesByPropertyValueChunkWriter() =
 
 template <SupportedType T>
 void ScanNodesByPropertyValueChunkWriter<T>::next() {
-    _offset++;
-
-    if (_offset == _values.size()) {
-        nextSlice();
-    }
+    throw FatalException("ScanNodesByPropertyValueChunkWriter is filled by chunk, not stepped");
 }
 
 template <SupportedType T>
@@ -151,6 +138,8 @@ bool ScanNodesByPropertyValueChunkWriter<T>::startPart() {
         return false;
     }
 
+    collectNewerContainers();
+
     if (!_labelset.isValid()) {
         _wholeContainer.assign(1, PropertyRange {._offset = 0, ._count = _container->size()});
         _rangeIt = _wholeContainer.begin();
@@ -158,8 +147,12 @@ bool ScanNodesByPropertyValueChunkWriter<T>::startPart() {
         return true;
     }
 
-    const LabelSetPropertyIndexer& indexer = properties.getIndexer(_propTypeID);
-    _labelsetIt = indexer.matchIterate(_labelset);
+    const LabelSetPropertyIndexer* indexer = properties.tryGetIndexer(_propTypeID);
+    if (!indexer) {
+        return false;
+    }
+
+    _labelsetIt = indexer->matchIterate(_labelset);
     if (!_labelsetIt.isValid()) {
         return false;
     }
@@ -168,6 +161,20 @@ bool ScanNodesByPropertyValueChunkWriter<T>::startPart() {
     _rangeIt = ranges.begin();
     _rangeEnd = ranges.end();
     return true;
+}
+
+template <SupportedType T>
+void ScanNodesByPropertyValueChunkWriter<T>::collectNewerContainers() {
+    _newerContainers.clear();
+
+    const DataPartIterator end = _partIt.getEndIterator();
+    for (DataPartIterator newer = std::next(_partIt.getIterator()); newer != end; ++newer) {
+        const PropertyManager& properties = newer->get()->nodeProperties();
+        const TypedPropertyContainer<T>* container = properties.tryGetContainer<T>(_propTypeID);
+        if (container) {
+            _newerContainers.push_back(container);
+        }
+    }
 }
 
 template <SupportedType T>
@@ -225,12 +232,9 @@ template <SupportedType T>
 size_t ScanNodesByPropertyValueChunkWriter<T>::dropOverriddenHits(NodeID* hits, size_t count) const {
     size_t kept = count;
 
-    const DataPartIterator end = _partIt.getEndIterator();
-    for (DataPartIterator newer = std::next(_partIt.getIterator()); kept > 0 && newer != end; ++newer) {
-        const PropertyManager& properties = newer->get()->nodeProperties();
-        const TypedPropertyContainer<T>* container = properties.tryGetContainer<T>(_propTypeID);
-        if (!container) {
-            continue;
+    for (const TypedPropertyContainer<T>* container : _newerContainers) {
+        if (kept == 0) {
+            return 0;
         }
 
         size_t write = 0;
@@ -258,12 +262,16 @@ void ScanNodesByPropertyValueChunkWriter<T>::fill(size_t maxCount) {
     bioassert(_nodeIDs, "ScanNodesByPropertyValueChunkWriter must be initialized with a valid column");
 
     std::vector<NodeID>& hits = _nodeIDs->getRaw();
-    hits.resize(maxCount);
 
     size_t count = 0;
     while (isValid() && count < maxCount) {
         const size_t available = _values.size() - _offset;
         const size_t rows = std::min(available, maxCount - count);
+
+        if (hits.size() < count + rows) {
+            hits.resize(count + rows);
+        }
+
         const size_t candidates = scanEqual(_values.data() + _offset, _ids.data() + _offset, rows, _value, hits.data() + count);
 
         count += dropOverriddenHits(hits.data() + count, candidates);

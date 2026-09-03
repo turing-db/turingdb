@@ -289,12 +289,124 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(FuseScanByPropertyValueTest, leavesConjunctionAlone) {
+TEST_F(FuseScanByPropertyValueTest, fusesOneConjunctAndRebuildsTheOtherOverTheFusedScan) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(conjunction);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runFuse(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::ScanNodesByPropertyValue> scans = collect<mlir::db::ScanNodesByPropertyValue>(*module);
+    ASSERT_EQ(scans.size(), 1u);
+    mlir::db::ScanNodesByPropertyValue scan = scans.front();
+    EXPECT_EQ(scan.getProperty(), "age");
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
+
+    llvm::SmallVector<mlir::db::FilterOp> filters = collect<mlir::db::FilterOp>(*module);
+    ASSERT_EQ(filters.size(), 1u);
+    mlir::db::FilterOp residual = filters.front();
+    ASSERT_EQ(residual.getColumnsToFilter().size(), 1u);
+    EXPECT_EQ(residual.getColumnsToFilter().front().getDefiningOp(), scan.getOperation());
+
+    // The residual predicate reads the other property off the fused rows.
+    llvm::SmallVector<mlir::db::GetNodeProperties> reads = collect<mlir::db::GetNodeProperties>(*module);
+    ASSERT_EQ(reads.size(), 1u);
+    EXPECT_EQ(reads.front().getProperty(), "isFrench");
+    EXPECT_EQ(reads.front().getInputNodes().getDefiningOp(), scan.getOperation());
+
+    EXPECT_EQ(countOps<mlir::db::AndOp>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::EqOp>(*module), 1u);
+
+    llvm::SmallVector<mlir::db::Output> outputs = collect<mlir::db::Output>(*module);
+    ASSERT_EQ(outputs.size(), 1u);
+    ASSERT_EQ(outputs.front().getColumns().size(), 1u);
+    EXPECT_EQ(outputs.front().getColumns().front().getDefiningOp(), residual.getOperation());
+}
+
+// MATCH (n) WHERE n.name = 'Remy' AND n.age = 32 AND n.isFrench = true RETURN n
+const char* const threeConjuncts = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %name = db.get_node_properties(%n, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %r = db.constant("Remy" : !storage.string)
+  %e1 = db.eq %name, %r : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %k = db.constant(32 : i64)
+  %e2 = db.eq %age, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %french = db.get_node_properties(%n, "isFrench") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %t = db.constant(true)
+  %e3 = db.eq %french, %t : (!db.column<none>, !db.column<i1>) -> !db.column<!storage.bool>
+  %m1 = db.and %e1, %e2 : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  %mask = db.and %m1, %e3 : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%nf) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(FuseScanByPropertyValueTest, fusesTheFirstConjunctAndConjoinsTheRest) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(threeConjuncts);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runFuse(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::ScanNodesByPropertyValue> scans = collect<mlir::db::ScanNodesByPropertyValue>(*module);
+    ASSERT_EQ(scans.size(), 1u);
+    EXPECT_EQ(scans.front().getProperty(), "name");
+
+    // Two conjuncts are left, so one db.and remains to join them.
+    EXPECT_EQ(countOps<mlir::db::EqOp>(*module), 2u);
+    EXPECT_EQ(countOps<mlir::db::AndOp>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
+}
+
+// The same equality masks two filters, so fusing one of them would leave the other
+// reading a cone this rewrite means to erase.
+const char* const sharedMask = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %k = db.constant(32 : i64)
+  %mask = db.eq %age, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  %ns = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%nf, %ns) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(FuseScanByPropertyValueTest, leavesASharedMaskAlone) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(sharedMask);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runFuse(*module));
+
+    EXPECT_EQ(countOps<mlir::db::ScanNodesByPropertyValue>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 2u);
+    EXPECT_EQ(countOps<mlir::db::GetNodeProperties>(*module), 1u);
+}
+
+// The property read feeding the equality is also projected, so it must keep reading the
+// unfiltered scan and the filter cannot become a scan.
+const char* const readAlsoProjected = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %k = db.constant(32 : i64)
+  %mask = db.eq %age, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%nf, %age) : !db.column<!storage.node_id>, !db.column<none>
+  return
+}
+)mlir";
+
+TEST_F(FuseScanByPropertyValueTest, leavesAProjectedPropertyReadAlone) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(readAlsoProjected);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runFuse(*module));
 
     expectUntouched(*module);
+    EXPECT_EQ(countOps<mlir::db::GetNodeProperties>(*module), 1u);
 }
 
 // MATCH (n) WITH n, n.name AS name WHERE n.age = 32 RETURN n, name

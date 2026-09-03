@@ -43,6 +43,7 @@ private:
     Primitive _value {};
     LabelSetHandle _labelset;
     const TypedPropertyContainer<T>* _container {nullptr};
+    std::vector<const TypedPropertyContainer<T>*> _newerContainers;
     std::vector<PropertyRange> _wholeContainer;
     LabelSetPropertyIndexer::MatchIterator _labelsetIt;
     std::vector<PropertyRange>::const_iterator _rangeIt;
@@ -55,6 +56,7 @@ private:
     TombstoneFilter _filter;
 
     bool startPart();
+    void collectNewerContainers();
     bool nextSliceInPart();
     void seekSliceAcrossParts();
     void nextSlice();
