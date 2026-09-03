@@ -82,7 +82,7 @@ void ReadStmtAnalyzer::analyze(Stmt* stmt) {
         break;
 
         case Stmt::Kind::SHORTESTPATH:
-            analyze(static_cast<const ShortestPathStmt*>(stmt));
+            analyze(static_cast<ShortestPathStmt*>(stmt));
         break;
 
         case Stmt::Kind::UNWIND:
@@ -573,7 +573,7 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
     analyzeYieldFilter(yieldItems);
 }
 
-void ReadStmtAnalyzer::analyze(const ShortestPathStmt* spSt) {
+void ReadStmtAnalyzer::analyze(ShortestPathStmt* spSt) {
     const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
     const std::string_view propName = spSt->getEdgeProperty()->getName();
 
@@ -586,11 +586,19 @@ void ReadStmtAnalyzer::analyze(const ShortestPathStmt* spSt) {
     const Symbol* pathVar = spSt->getPathVar();
     bioassert(distVar && pathVar, "Null variables.");
 
+    const ValueType weightPropType = propType->_valueType;
+    const auto maybeEvalType = toEvaluatedType(weightPropType);
+    bioassert(maybeEvalType.has_value(), "Invalid value type.");
+    const EvaluatedType evalType = maybeEvalType.value();
+
     const std::string_view distName = distVar->getName();
     const std::string_view pathName = pathVar->getName();
 
-    _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::Integer, distName);
-    _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::GraphPath, pathName);
+    VarDecl* distDecl = _ctxt->getOrCreateNamedVariable(_ast, evalType, distName);
+    VarDecl* pathDecl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::GraphPath, pathName);
+
+    spSt->setDistDecl(distDecl);
+    spSt->setPathDecl(pathDecl);
 }
 
 void ReadStmtAnalyzer::analyze(UnwindStmt* unwind) {

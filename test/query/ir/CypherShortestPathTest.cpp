@@ -57,6 +57,23 @@ protected:
         return rows;
     }
 
+    void expectRejected(std::string_view query, std::string_view reason) {
+        StringRowSink sink;
+        QueryStatus status;
+        _interpreter->execute(status,
+                              query,
+                              _graphName,
+                              CommitHash::head(),
+                              ChangeID::head(),
+                              &_env->getMem(),
+                              &sink);
+
+        EXPECT_EQ(status.getStatus(), QueryStatus::Status::ANALYZE_ERROR) << "query: " << query;
+
+        const std::string error = status.getError();
+        EXPECT_NE(error.find(reason), std::string::npos) << "query: " << query << "\nerror: " << error;
+    }
+
     const std::string _graphName = "roads";
     const std::string _doubleGraphName = "roadsDouble";
     std::unique_ptr<TuringTestEnv> _env;
@@ -206,6 +223,16 @@ TEST_F(CypherShortestPathTest, handlesDoubleWeights) {
                   "MATCH (a {name: 'A'}), (b {name: 'C'}) "
                   "SHORTESTPATH(a, b, weight, d, p) RETURN d, p"),
               expected);
+}
+
+TEST_F(CypherShortestPathTest, rejectsReturningAMatchedNode) {
+    expectRejected("MATCH (a), (b) SHORTESTPATH(a, b, weight, d, p) RETURN a, d, p",
+                   "SHORTESTPATH");
+}
+
+TEST_F(CypherShortestPathTest, rejectsReturningAMatchedNodeProperty) {
+    expectRejected("MATCH (a), (b) SHORTESTPATH(a, b, weight, d, p) RETURN d, p, a.name",
+                   "SHORTESTPATH");
 }
 
 int main(int argc, char** argv) {

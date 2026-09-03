@@ -52,7 +52,7 @@ public:
     void analyze(OrderBy* orderBySt);
     void analyze(Skip* skipSt);
     void analyze(Limit* limitSt);
-    void analyze(const ShortestPathStmt* spSt);
+    void analyze(ShortestPathStmt* spSt);
     void analyze(UnwindStmt* unwind);
 
     // Pattern

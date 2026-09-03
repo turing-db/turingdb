@@ -2545,6 +2545,16 @@ void DBProgramGenerator::generateCreate(const SinglePartQuery* query) {
     }
 }
 
+const VarDecl* DBProgramGenerator::declForVariableName(std::string_view name) const {
+    for (const VariableDependency& var : _vdg.vars()) {
+        if (var.getName() == name) {
+            return var.getDecl();
+        }
+    }
+
+    return nullptr;
+}
+
 mlir::Value DBProgramGenerator::resolveEntityColumn(const VarDecl* decl) {
     for (const auto& [var, values] : _part._varMap) {
         if (var->getDecl() == decl && !values.empty()) {
@@ -2751,10 +2761,12 @@ void DBProgramGenerator::generateShortestPath(std::span<Stmt* const> stmts) {
     const std::string_view distName = stmt->getDistVar()->getName();
     const std::string_view pathName = stmt->getPathVar()->getName();
 
-    const mlir::Value sourceColumn = resolveEntityColumn(sourceName);
+    const VarDecl* sourceDecl = declForVariableName(sourceName);
+    const mlir::Value sourceColumn = sourceDecl ? resolveEntityColumn(sourceDecl) : mlir::Value {};
     bioassert(sourceColumn, "SHORTESTPATH source not bound: {}", sourceName);
 
-    const mlir::Value targetColumn = resolveEntityColumn(targetName);
+    const VarDecl* targetDecl = declForVariableName(targetName);
+    const mlir::Value targetColumn = targetDecl ? resolveEntityColumn(targetDecl) : mlir::Value {};
     bioassert(targetColumn, "SHORTESTPATH target not bound: {}", targetName);
 
     // The distance column is a none placeholder resolved to the weight property's value
@@ -2770,8 +2782,8 @@ void DBProgramGenerator::generateShortestPath(std::span<Stmt* const> stmts) {
                                                                   targetColumn,
                                                                   propertyAttr);
 
-    _part._yieldedColumns.emplace_back(distName, shortestPath.getDistance());
-    _part._yieldedColumns.emplace_back(pathName, shortestPath.getPath());
+    _part._yieldedColumns.push_back({stmt->getDistDecl(), distName, shortestPath.getDistance()});
+    _part._yieldedColumns.push_back({stmt->getPathDecl(), pathName, shortestPath.getPath()});
 }
 
 void DBProgramGenerator::generateOutput(const Projection* projection) {
