@@ -958,22 +958,17 @@ void DBProgramGenerator::generateTraversal(std::span<Stmt* const> stmts) {
 
     DefinedVars defined;
 
-    // A driven traversal is generated straight into the main block rather than into a
-    // region spliced in afterwards: its root is a column the leading calls bound there, and
-    // a filter over the rows flowing past it can only take the columns this block binds.
-    if (_part._drivenRoot) {
-        std::vector<const VariableDependency*> vars;
-        translateComponent(_part._drivenRoot, defined, vars);
-        return;
-    }
-
-    // The dataflow a barrier left behind, extended by the hops of this part
-    TranslatedComponent boundComponent;
+    // The dataflow already standing in the main block: the component a leading call drives
+    // from a column it bound there, or the one a barrier left behind, extended by the hops
+    // of this part.
+    TranslatedComponent mainComponent;
 
     const VariableDependencyGraph::BoundVars& bound = _vdg.boundVars();
-    if (!bound.empty()) {
+    if (_part._drivenRoot) {
+        translateComponent(_part._drivenRoot, defined, mainComponent._vars);
+    } else if (!bound.empty()) {
         throwOnRematchedBoundEdge();
-        extendBoundDataflow(defined, boundComponent._vars);
+        extendBoundDataflow(defined, mainComponent._vars);
     }
 
     // Connected components
@@ -1008,12 +1003,12 @@ void DBProgramGenerator::generateTraversal(std::span<Stmt* const> stmts) {
         return;
     }
 
-    // A pattern naming none of the bound variables matches on its own, so its rows are
-    // crossed with the ones the barrier published. A scope of constants alone carries no
-    // rows to cross: one value stands for every row of either factor
-    if (!boundComponent._vars.empty()) {
-        takeBoundDataflow(mainBlock, boundComponent);
-        components.insert(components.begin(), std::move(boundComponent));
+    // A pattern naming none of the variables already flowing matches on its own, so its
+    // rows are crossed with theirs. A scope of constants alone carries no rows to cross:
+    // one value stands for every row of either factor
+    if (!mainComponent._vars.empty()) {
+        takeMainDataflow(mainBlock, mainComponent);
+        components.insert(components.begin(), std::move(mainComponent));
     }
 
     // Single connected component, no need to X prod any islands
@@ -1676,9 +1671,9 @@ void DBProgramGenerator::expandComponent(const VariableDependency* root,
     }
 }
 
-void DBProgramGenerator::takeBoundDataflow(mlir::Block* mainBlock, TranslatedComponent& component) {
+void DBProgramGenerator::takeMainDataflow(mlir::Block* mainBlock, TranslatedComponent& component) {
     for (const VariableDependency* var : component._vars) {
-        bioassert(holdsColumn(var), "Bound dataflow var {} not registered", var->getName());
+        bioassert(holdsColumn(var), "Main dataflow var {} not registered", var->getName());
         component._columns.push_back(_part._varMap.at(var).back());
     }
 
@@ -1809,13 +1804,6 @@ void DBProgramGenerator::generateLeadingYields(std::span<Stmt* const> stmts) {
     llvm::SmallVector<const VariableDependency*> componentRoots;
     collectComponentRoots(componentRoots);
 
-    // Only a traversal of a single connected component can be driven. A second component
-    // would have to be paired with the first, and what the statements yielded is one row
-    // set to expand rather than a factor of a product.
-    if (componentRoots.size() != 1) {
-        return;
-    }
-
     llvm::SmallVector<const VarDecl*> yieldedVariables;
     for (const Stmt* stmt : leading) {
         collectYieldVariables(yieldClauseOf(stmt), yieldedVariables);
@@ -1836,6 +1824,17 @@ void DBProgramGenerator::generateLeadingYields(std::span<Stmt* const> stmts) {
     }
 
     if (!drivenRoot) {
+        return;
+    }
+
+    // Crossing a second component with the driven one leaves anything else the statements
+    // yielded inside a factor of that product, out of reach of the clause that reads it, so
+    // only the root coming out of them alone makes the island safe to cross.
+    const bool hasIslands = componentRoots.size() > 1;
+    const bool yieldsTheRootAlone = yieldedVariables.size() == 1
+                                    && yieldedVariables.front() == drivenRoot->getDecl();
+
+    if (hasIslands && !yieldsTheRootAlone) {
         return;
     }
 
