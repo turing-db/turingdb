@@ -12,6 +12,7 @@
 #include "list/ListBufferTypeTag.h"
 #include "list/ListElementView.h"
 #include "list/ListView.h"
+#include "metadata/PropertyType.h"
 
 using namespace db;
 using namespace turing::test;
@@ -37,6 +38,16 @@ bool textOfPlain(const Column* chunk, size_t rowIndex, std::string& text) {
     }
 
     text = fmt::format("{}", column->getRaw()[rowIndex]);
+    return true;
+}
+
+bool textOfValueType(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnVector<ValueType>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    text = ValueTypeName::value(column->getRaw()[rowIndex]);
     return true;
 }
 
@@ -165,6 +176,8 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfID<PropertyTypeID>(chunk, rowIndex, text)) {
         return text;
     } else if (textOfID<EdgeTypeID>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfValueType(chunk, rowIndex, text)) {
         return text;
     } else if (textOfPlain<uint64_t>(chunk, rowIndex, text)) {
         return text;
