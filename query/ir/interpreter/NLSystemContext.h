@@ -2,6 +2,10 @@
 
 #include <string_view>
 
+namespace fs {
+class Path;
+}
+
 namespace db {
 
 class CommitBuilder;
@@ -28,6 +32,14 @@ public:
     Transaction* getTransaction() const { return _transaction; }
     CommitBuilder* getCommitBuilder() const { return _commitBuilder; }
     std::string_view getGraphName() const { return _graphName; }
+
+    // Resolve a path the query gave relative to @param dataDir, the one directory a
+    // command or a load may read or write in. Throws when the path reaches out of it.
+    // Static, since the caller has already found the directory - a command through the
+    // system manager it requires, a dataflow loop through the execution context.
+    static void resolveInDataDir(fs::Path& resolved,
+                                 const fs::Path& dataDir,
+                                 std::string_view path);
 
     void setSystemManager(SystemManager* systemManager) { _systemManager = systemManager; }
     void setAccessor(SystemAccessor* accessor) { _accessor = accessor; }
