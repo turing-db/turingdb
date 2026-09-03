@@ -1,7 +1,6 @@
 #include "DBPasses.h"
 
 #include <algorithm>
-#include <optional>
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
@@ -42,30 +41,30 @@ struct LabelScanChain {
     CheckLabelConstraint check;
 };
 
-std::optional<LabelScanChain> matchLabelScanChain(FilterOp filter) {
+bool matchLabelScanChain(FilterOp filter, LabelScanChain& chain) {
     const Operation::operand_range columns = filter.getColumnsToFilter();
     if (columns.size() != 1) {
-        return std::nullopt;
+        return false;
     }
 
     const Value scanColumn = columns[0];
 
-    auto check = filter.getMask().getDefiningOp<CheckLabelConstraint>();
-    if (!check) {
-        return std::nullopt;
+    chain.check = filter.getMask().getDefiningOp<CheckLabelConstraint>();
+    if (!chain.check) {
+        return false;
     }
 
-    auto labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
-    if (!labelSet || labelSet.getInputNodes() != scanColumn) {
-        return std::nullopt;
+    chain.labelSet = chain.check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+    if (!chain.labelSet || chain.labelSet.getInputNodes() != scanColumn) {
+        return false;
     }
 
-    auto scan = scanColumn.getDefiningOp<ScanNodes>();
-    if (!scan) {
-        return std::nullopt;
+    chain.scan = scanColumn.getDefiningOp<ScanNodes>();
+    if (!chain.scan) {
+        return false;
     }
 
-    return LabelScanChain {.scan = scan, .labelSet = labelSet, .check = check};
+    return true;
 }
 
 void eraseIfUnused(Operation* op) {
@@ -74,39 +73,52 @@ void eraseIfUnused(Operation* op) {
     }
 }
 
+// The driver every filter pass shares: collect the filters first, since rewriting erases
+// ops and would invalidate the walk, then rewrite each one that matches.
+template <typename Match>
+void runFilterPass(Operation* root,
+                   bool (*matchFilter)(FilterOp, Match&),
+                   void (*rewriteFilter)(FilterOp, const Match&, mlir::OpBuilder&),
+                   mlir::OpBuilder& builder) {
+    llvm::SmallVector<FilterOp> filters;
+    root->walk([&](FilterOp filter) {
+        filters.push_back(filter);
+    });
+
+    for (FilterOp filter : filters) {
+        Match match;
+        if (!matchFilter(filter, match)) {
+            continue;
+        }
+
+        rewriteFilter(filter, match, builder);
+    }
+}
+
+void fuseScanByLabel(FilterOp filter, const LabelScanChain& chain, mlir::OpBuilder& builder) {
+    ScanNodes scan = chain.scan;
+    GetNodeLabelSet labelSet = chain.labelSet;
+    CheckLabelConstraint check = chain.check;
+
+    builder.setInsertionPoint(filter);
+    ScanNodesByLabel scanByLabel = builder.create<ScanNodesByLabel>(filter.getLoc(),
+                                                                    scan.getResult().getType(),
+                                                                    check.getLabels());
+
+    Operation* const filterOp = filter.getOperation();
+    filterOp->getResult(0).replaceAllUsesWith(scanByLabel.getResult());
+    filterOp->erase();
+
+    // Drop the now-dead chain, consumer to producer, each only if unused.
+    eraseIfUnused(check);
+    eraseIfUnused(labelSet);
+    eraseIfUnused(scan);
+}
+
 struct FuseScanByLabel : public impl::FuseScanByLabelBase<FuseScanByLabel> {
     void runOnOperation() override {
-        Operation* const root = getOperation();
-
-        // Collect matches first: fusing erases ops, which would invalidate the walk.
-        llvm::SmallVector<FilterOp> filters;
-        root->walk([&](FilterOp filter) {
-            if (matchLabelScanChain(filter)) {
-                filters.push_back(filter);
-            }
-        });
-
         mlir::OpBuilder builder(&getContext());
-        for (FilterOp filter : filters) {
-            std::optional<LabelScanChain> chain = matchLabelScanChain(filter);
-            if (!chain) {
-                continue;
-            }
-
-            builder.setInsertionPoint(filter);
-            auto scanByLabel = builder.create<ScanNodesByLabel>(filter.getLoc(),
-                                                                chain->scan.getResult().getType(),
-                                                                chain->check.getLabels());
-
-            Operation* const filterOp = filter.getOperation();
-            filterOp->getResult(0).replaceAllUsesWith(scanByLabel.getResult());
-            filterOp->erase();
-
-            // Drop the now-dead chain, consumer to producer, each only if unused.
-            eraseIfUnused(chain->check);
-            eraseIfUnused(chain->labelSet);
-            eraseIfUnused(chain->scan);
-        }
+        runFilterPass<LabelScanChain>(getOperation(), matchLabelScanChain, fuseScanByLabel, builder);
     }
 };
 
@@ -245,30 +257,29 @@ struct PushablePredicate {
     MaskCone _cone;
 };
 
-std::optional<PushablePredicate> matchPushablePredicate(FilterOp filter) {
+bool matchPushablePredicate(FilterOp filter, PushablePredicate& pushable) {
     Operation* const maskDef = filter.getMask().getDefiningOp();
     if (!maskDef || !isMaskComputeOp(maskDef)) {
-        return std::nullopt;
+        return false;
     }
 
-    MaskCone cone = collectMaskCone(filter.getMask());
-    if (cone._inputs.empty()) {
-        return std::nullopt;
+    pushable._cone = collectMaskCone(filter.getMask());
+    if (pushable._cone._inputs.empty()) {
+        return false;
     }
 
-    Value anchor;
     bool reachedAnchor = true;
-    for (const Value input : cone._inputs) {
+    for (const Value input : pushable._cone._inputs) {
         const Value inputAnchor = climbToLineageAnchor(input);
         if (!inputAnchor) {
-            return std::nullopt;
+            return false;
         }
 
-        if (!anchor) {
-            anchor = inputAnchor;
-        } else if (anchor != inputAnchor) {
+        if (!pushable._anchor) {
+            pushable._anchor = inputAnchor;
+        } else if (pushable._anchor != inputAnchor) {
             // More than one lineage feeds the mask: not a single-variable predicate.
-            return std::nullopt;
+            return false;
         }
 
         if (input != inputAnchor) {
@@ -277,11 +288,7 @@ std::optional<PushablePredicate> matchPushablePredicate(FilterOp filter) {
     }
 
     // Filter already maximally pushed down
-    if (reachedAnchor) {
-        return std::nullopt;
-    }
-
-    return PushablePredicate {._anchor = anchor, ._cone = std::move(cone)};
+    return !reachedAnchor;
 }
 
 void pushDownPredicate(FilterOp filter, const PushablePredicate& pushable, mlir::OpBuilder& builder) {
@@ -343,35 +350,19 @@ void pushDownPredicate(FilterOp filter, const PushablePredicate& pushable, mlir:
 
 struct PushDownFilters : public impl::PushDownFiltersBase<PushDownFilters> {
     void runOnOperation() override {
-        Operation* const root = getOperation();
-
-        llvm::SmallVector<FilterOp> filters;
-        root->walk([&](FilterOp filter) {
-            filters.push_back(filter);
-        });
-
         mlir::OpBuilder builder(&getContext());
-        for (FilterOp filter : filters) {
-            std::optional<PushablePredicate> pushable = matchPushablePredicate(filter);
-            if (!pushable) {
-                continue;
-            }
-
-            pushDownPredicate(filter, *pushable, builder);
-        }
+        runFilterPass<PushablePredicate>(getOperation(), matchPushablePredicate, pushDownPredicate, builder);
     }
 };
 
-// A filter whose only carried column is a plain or labelled node scan: the shape a
-// source op can take the place of. Any other carried column (a property read before the
-// WHERE, say) has no filtered counterpart in that source to be rewired to, so such a
-// filter has to stay.
 struct ScanSource {
     Operation* _op {nullptr};
     ArrayAttr _labels;
     Value _column;
 };
 
+// Any carried column beyond the scan's own (a property read before the WHERE, say) has no
+// filtered counterpart in a source op to be rewired to, so such a filter has to stay.
 bool matchSoleScanSource(FilterOp filter, ScanSource& source) {
     const Operation::operand_range columns = filter.getColumnsToFilter();
     if (columns.size() != 1) {
@@ -391,7 +382,6 @@ bool matchSoleScanSource(FilterOp filter, ScanSource& source) {
     return true;
 }
 
-// Re-applies the label test a fused labelled scan carried, as a check over the fused source.
 Value filterByLabels(Value nodes, ArrayAttr labels, mlir::Location loc, mlir::OpBuilder& builder) {
     MLIRContext* const context = builder.getContext();
     const Type nodeColumnType = nodes.getType();
@@ -408,8 +398,6 @@ Value filterByLabels(Value nodes, ArrayAttr labels, mlir::Location loc, mlir::Op
     return labelFilter.getResult(0);
 }
 
-// Rewires the filter's readers to the fused source and drops the filter, its mask cone
-// and the scan it replaced, each only once nothing else reads it.
 void replaceFilterWithSource(FilterOp filter, Value fused, Operation* source) {
     const MaskCone cone = collectMaskCone(filter.getMask());
 
@@ -790,22 +778,8 @@ void fuseScanByNodeIDs(FilterOp filter, const NodeIDScanChain& chain, mlir::OpBu
 
 struct FuseScanByNodeIDs : public impl::FuseScanByNodeIDsBase<FuseScanByNodeIDs> {
     void runOnOperation() override {
-        Operation* const root = getOperation();
-
-        llvm::SmallVector<FilterOp> filters;
-        root->walk([&](FilterOp filter) {
-            filters.push_back(filter);
-        });
-
         mlir::OpBuilder builder(&getContext());
-        for (FilterOp filter : filters) {
-            NodeIDScanChain chain;
-            if (!matchNodeIDScanChain(filter, chain)) {
-                continue;
-            }
-
-            fuseScanByNodeIDs(filter, chain, builder);
-        }
+        runFilterPass<NodeIDScanChain>(getOperation(), matchNodeIDScanChain, fuseScanByNodeIDs, builder);
     }
 };
 
@@ -1434,31 +1408,26 @@ struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns>
     }
 };
 
-// The literal kinds a property column can be scanned against, and the only ones the
-// query language spells: an integer, a double, a boolean or a string.
-bool isPropertyScanLiteral(TypedAttr literal) {
-    const Type type = literal.getType();
-    const bool isInteger = type.isSignlessInteger(64);
-    const bool isBool = type.isSignlessInteger(1);
-    const bool isDouble = type.isF64();
-    const bool isString = isa<storage::StringType>(type);
-
-    return isInteger || isBool || isDouble || isString;
-}
-
+// A property equality fuses into the scan and every other conjunct of the mask is rebuilt
+// over the fused rows, so the whole cone is cloned or dropped: it must read nothing but
+// the scanned column, and nothing outside it may read a part of it.
 struct PropertyValueScanChain {
     ScanSource _source;
     StringAttr _property;
     TypedAttr _value;
+    llvm::SmallVector<Value> _residual;
 };
 
 // eq(get_node_properties(scan, property), constant), with the constant on either side
 bool matchPropertyEquality(EqOp equality, Value scanColumn, PropertyValueScanChain& chain) {
-    GetNodeProperties read = equality.getLhs().getDefiningOp<GetNodeProperties>();
-    Value constantSide = equality.getRhs();
+    const Value lhs = equality.getLhs();
+    const Value rhs = equality.getRhs();
+
+    GetNodeProperties read = lhs.getDefiningOp<GetNodeProperties>();
+    Value constantSide = rhs;
     if (!read) {
-        read = equality.getRhs().getDefiningOp<GetNodeProperties>();
-        constantSide = equality.getLhs();
+        read = rhs.getDefiningOp<GetNodeProperties>();
+        constantSide = lhs;
     }
 
     if (!read || read.getInputNodes() != scanColumn) {
@@ -1480,17 +1449,95 @@ bool matchPropertyEquality(EqOp equality, Value scanColumn, PropertyValueScanCha
     return true;
 }
 
+// The conjuncts of a mask, as an `and` tree spells them: the predicates that all have to
+// hold, one of which can become the fused scan while the others stay a filter.
+void collectConjuncts(Value mask, llvm::SmallVectorImpl<Value>& conjuncts) {
+    if (AndOp conjunction = mask.getDefiningOp<AndOp>()) {
+        collectConjuncts(conjunction.getLhs(), conjuncts);
+        collectConjuncts(conjunction.getRhs(), conjuncts);
+        return;
+    }
+
+    conjuncts.push_back(mask);
+}
+
+bool maskConeIsPrivateTo(const MaskCone& cone, FilterOp filter) {
+    llvm::SmallPtrSet<Operation*, 8> coneOps;
+    for (Operation* const coneOp : cone._ops) {
+        coneOps.insert(coneOp);
+    }
+
+    Operation* const filterOp = filter.getOperation();
+    for (Operation* const coneOp : cone._ops) {
+        for (Operation* const user : coneOp->getUsers()) {
+            if (user != filterOp && !coneOps.contains(user)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 bool matchPropertyValueScanChain(FilterOp filter, PropertyValueScanChain& chain) {
     if (!matchSoleScanSource(filter, chain._source)) {
         return false;
     }
 
-    EqOp equality = filter.getMask().getDefiningOp<EqOp>();
-    if (!equality) {
+    const MaskCone cone = collectMaskCone(filter.getMask());
+    const bool readsTheScannedColumnAlone = cone._inputs.size() == 1 && cone._inputs.front() == chain._source._column;
+    if (!readsTheScannedColumnAlone || !maskConeIsPrivateTo(cone, filter)) {
         return false;
     }
 
-    return matchPropertyEquality(equality, chain._source._column, chain);
+    llvm::SmallVector<Value> conjuncts;
+    collectConjuncts(filter.getMask(), conjuncts);
+
+    for (size_t candidate = 0; candidate < conjuncts.size(); candidate++) {
+        EqOp equality = conjuncts[candidate].getDefiningOp<EqOp>();
+        if (!equality || !matchPropertyEquality(equality, chain._source._column, chain)) {
+            continue;
+        }
+
+        for (size_t other = 0; other < conjuncts.size(); other++) {
+            if (other != candidate) {
+                chain._residual.push_back(conjuncts[other]);
+            }
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+// Rebuilds the conjuncts the fused scan does not carry over its rows, as the mask of the
+// filter that stays. The clone reads the fused column wherever the original read the scan.
+Value cloneResidualMask(llvm::ArrayRef<Value> residual,
+                        Value scanColumn,
+                        Value fused,
+                        Type maskType,
+                        mlir::Location loc,
+                        mlir::OpBuilder& builder) {
+    MaskCone cone;
+    llvm::SmallPtrSet<Operation*, 8> visited;
+    for (const Value conjunct : residual) {
+        collectConePostOrder(conjunct, visited, cone);
+    }
+
+    mlir::IRMapping mapping;
+    mapping.map(scanColumn, fused);
+    for (Operation* const coneOp : cone._ops) {
+        builder.clone(*coneOp, mapping);
+    }
+
+    Value mask = mapping.lookup(residual.front());
+    for (const Value conjunct : residual.drop_front()) {
+        AndOp conjunction = builder.create<AndOp>(loc, maskType, mask, mapping.lookup(conjunct));
+        mask = conjunction.getResult();
+    }
+
+    return mask;
 }
 
 void fuseScanByPropertyValue(FilterOp filter, const PropertyValueScanChain& chain, mlir::OpBuilder& builder) {
@@ -1504,27 +1551,31 @@ void fuseScanByPropertyValue(FilterOp filter, const PropertyValueScanChain& chai
                                                                              chain._value,
                                                                              chain._source._labels);
 
-    replaceFilterWithSource(filter, scan.getResult(), chain._source._op);
+    Value fused = scan.getResult();
+    if (!chain._residual.empty()) {
+        const Value mask = cloneResidualMask(chain._residual,
+                                             chain._source._column,
+                                             fused,
+                                             filter.getMask().getType(),
+                                             loc,
+                                             builder);
+
+        const llvm::SmallVector<Type> resultTypes {nodeColumnType};
+        const llvm::SmallVector<Value> columns {fused};
+        FilterOp residualFilter = builder.create<FilterOp>(loc, resultTypes, mask, columns);
+        fused = residualFilter.getResult(0);
+    }
+
+    replaceFilterWithSource(filter, fused, chain._source._op);
 }
 
 struct FuseScanByPropertyValue : public impl::FuseScanByPropertyValueBase<FuseScanByPropertyValue> {
     void runOnOperation() override {
-        Operation* const root = getOperation();
-
-        llvm::SmallVector<FilterOp> filters;
-        root->walk([&](FilterOp filter) {
-            filters.push_back(filter);
-        });
-
         mlir::OpBuilder builder(&getContext());
-        for (FilterOp filter : filters) {
-            PropertyValueScanChain chain;
-            if (!matchPropertyValueScanChain(filter, chain)) {
-                continue;
-            }
-
-            fuseScanByPropertyValue(filter, chain, builder);
-        }
+        runFilterPass<PropertyValueScanChain>(getOperation(),
+                                              matchPropertyValueScanChain,
+                                              fuseScanByPropertyValue,
+                                              builder);
     }
 };
 

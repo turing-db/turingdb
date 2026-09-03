@@ -323,21 +323,23 @@ LogicalResult ScanNodesByLabel::verify() {
     return success();
 }
 
-// The literal is one the query language can spell against a stored property: an
-// integer, a double, a boolean or a string. An embedding, a list or a node ID has
-// no property column to be scanned against.
+bool mlir::db::isPropertyScanLiteral(TypedAttr literal) {
+    const Type type = literal.getType();
+    const bool isInteger = type.isSignlessInteger(64);
+    const bool isBool = type.isSignlessInteger(1);
+    const bool isDouble = type.isF64();
+    const bool isString = isa<storage::StringType>(type);
+
+    return isInteger || isBool || isDouble || isString;
+}
+
 LogicalResult ScanNodesByPropertyValue::verify() {
     if (getProperty().empty()) {
         return emitOpError("requires a non-empty property name");
     }
 
-    const Type valueType = getValue().getType();
-    const bool isInteger = valueType.isSignlessInteger(64);
-    const bool isBool = valueType.isSignlessInteger(1);
-    const bool isDouble = valueType.isF64();
-    const bool isString = isa<storage::StringType>(valueType);
-    if (!isInteger && !isBool && !isDouble && !isString) {
-        return emitOpError("requires an i64, f64, i1 or !storage.string literal, got ") << valueType;
+    if (!isPropertyScanLiteral(getValue())) {
+        return emitOpError("requires an i64, f64, i1 or !storage.string literal, got ") << getValue().getType();
     }
 
     const std::optional<ArrayAttr> labels = getLabels();

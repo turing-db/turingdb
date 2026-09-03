@@ -241,6 +241,10 @@ add_ir_tests(test_query_ir_trim_unread_columns TrimUnreadColumnsTest.cpp)
 add_ir_tests(test_query_ir_fuse_scan_edges FuseScanEdgesTest.cpp)
 target_link_libraries(test_query_ir_fuse_scan_edges PRIVATE turing_db_examples_s)
 
+# The literal kinds a property scan resolves, including the f64 pairing the analyzer keeps
+# out of Cypher's reach, run end to end from written db IR.
+add_ir_tests(test_query_ir_scan_by_property_value_lowering ScanByPropertyValueLoweringTest.cpp)
+
 # The codegen-level cases compile Cypher through the parser, analyzer and DBProgramGenerator
 # against the shared SimpleGraph fixture and read the db program the pass pipeline leaves.
 add_turing_test(test_query_ir_fuse_scan_edges_codegen FuseScanEdgesCodegenTest.cpp)

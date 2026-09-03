@@ -30,7 +30,7 @@ public:
 
 protected:
     void runQuery(std::string_view query, db::NLOutputSink& sink);
-    void runQueryExpectingError(std::string_view query);
+    void runQueryExpectingError(std::string_view query, std::string_view reason);
     void runWrite(std::string_view query);
     void runWriteExpectingError(std::string_view query, std::string_view reason);
     void runLegacyWrite(std::string_view query);

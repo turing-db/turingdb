@@ -58,17 +58,20 @@ TEST_F(ScanByPropertyValueV3Test, yieldsInScanOrder) {
 // The analyzer refuses equality on doubles outright and admits every other literal only
 // against a property of its own kind, so the fused scan never sees another pairing.
 TEST_F(ScanByPropertyValueV3Test, literalOfAnotherKindIsRejectedBeforeTheScan) {
-    runQueryExpectingError("MATCH (n) WHERE n.age = 32.0 RETURN n.name");
-    runQueryExpectingError("MATCH (n) WHERE n.age = 'thirty-two' RETURN n.name");
-    runQueryExpectingError("MATCH (n) WHERE n.name = 32 RETURN n.name");
-    runQueryExpectingError("MATCH (n) WHERE n.isFrench = 1 RETURN n.name");
+    const std::string_view incompatible = "Operands are not valid or compatible types";
+
+    runQueryExpectingError("MATCH (n) WHERE n.age = 32.0 RETURN n.name", incompatible);
+    runQueryExpectingError("MATCH (n) WHERE n.age = 'thirty-two' RETURN n.name", incompatible);
+    runQueryExpectingError("MATCH (n) WHERE n.name = 32 RETURN n.name", incompatible);
+    runQueryExpectingError("MATCH (n) WHERE n.isFrench = 1 RETURN n.name", incompatible);
 }
 
 TEST_F(ScanByPropertyValueV3Test, doubleEqualityIsRejectedBeforeTheScan) {
     runWrite("MATCH (n {name: 'Remy'}) SET n.height = 1.8");
 
-    runQueryExpectingError("MATCH (n) WHERE n.height = 1.8 RETURN n.name");
-    runQueryExpectingError("MATCH (n) WHERE n.height = 2 RETURN n.name");
+    runQueryExpectingError("MATCH (n) WHERE n.height = 1.8 RETURN n.name", "Equality of types");
+    runQueryExpectingError("MATCH (n) WHERE n.height = 2 RETURN n.name",
+                           "Operands are not valid or compatible types");
 }
 
 TEST_F(ScanByPropertyValueV3Test, labelledScanKeepsOnlyTheLabelledNodes) {
@@ -85,7 +88,7 @@ TEST_F(ScanByPropertyValueV3Test, labelConjunctionNarrowsTheScan) {
 }
 
 TEST_F(ScanByPropertyValueV3Test, labelAbsentFromTheSchemaIsRejectedBeforeTheScan) {
-    runQueryExpectingError("MATCH (n:Nobody) WHERE n.age = 32 RETURN n.name");
+    runQueryExpectingError("MATCH (n:Nobody) WHERE n.age = 32 RETURN n.name", "Unknown label: Nobody");
 }
 
 TEST_F(ScanByPropertyValueV3Test, labelledScanYieldsInScanOrder) {
