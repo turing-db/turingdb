@@ -790,6 +790,8 @@ std::optional<CarrySetLayout> carrySetLayout(Operation* op) {
         return CarrySetLayout {._operandOffset = 1, ._resultOffset = hopFixedResultCount};
     } else if (isa<FilterOp>(op)) {
         return CarrySetLayout {._operandOffset = 1, ._resultOffset = 0};
+    } else if (isa<Unwind>(op)) {
+        return CarrySetLayout {._operandOffset = 1, ._resultOffset = 1};
     } else if (isa<Limit, Skip, Sort, GroupAggregate, Collect>(op)) {
         return CarrySetLayout {._operandOffset = 0, ._resultOffset = 0};
     }
