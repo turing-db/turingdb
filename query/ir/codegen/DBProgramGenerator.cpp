@@ -863,7 +863,7 @@ void DBProgramGenerator::runPasses() {
     passManager.addPass(mlir::db::createFuseScanByLabel());
     passManager.addPass(mlir::db::createPushDownFilters());
     passManager.addPass(mlir::db::createFuseScanByNodeIDs());
-    passManager.addPass(mlir::db::createTrimCarriedColumns());
+    passManager.addPass(mlir::db::createTrimUnreadColumns());
 
     if (mlir::failed(passManager.run(*_module))) {
         throw FatalException("DB pass pipeline failed");

@@ -30,9 +30,9 @@ llvm::SmallVector<OpType> collect(mlir::ModuleOp module) {
 
 }
 
-class TrimCarriedColumnsTest : public ::testing::Test {
+class TrimUnreadColumnsTest : public ::testing::Test {
 protected:
-    TrimCarriedColumnsTest() {
+    TrimUnreadColumnsTest() {
         _context.getOrLoadDialect<mlir::func::FuncDialect>();
         _context.getOrLoadDialect<mlir::storage::Storage>();
         _context.getOrLoadDialect<mlir::db::DB>();
@@ -44,7 +44,7 @@ protected:
 
     bool runTrim(mlir::ModuleOp module) {
         mlir::PassManager passManager(&_context);
-        passManager.addPass(mlir::db::createTrimCarriedColumns());
+        passManager.addPass(mlir::db::createTrimUnreadColumns());
 
         return mlir::succeeded(passManager.run(module));
     }
@@ -63,7 +63,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, dropsTheCarrySetOfAHopNothingReads) {
+TEST_F(TrimUnreadColumnsTest, dropsTheCarrySetOfAHopNothingReads) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(twoHopTail);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
@@ -105,7 +105,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, trimsAFilterToTheColumnsReadAfterIt) {
+TEST_F(TrimUnreadColumnsTest, trimsAFilterToTheColumnsReadAfterIt) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(filteredTarget);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
@@ -148,7 +148,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, trimsThroughAFilterIntoTheHopBeforeIt) {
+TEST_F(TrimUnreadColumnsTest, trimsThroughAFilterIntoTheHopBeforeIt) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(typedHopIntoUntyped);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
@@ -192,7 +192,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, keepsOneRowCarryingColumnInAFilterNothingReads) {
+TEST_F(TrimUnreadColumnsTest, keepsOneRowCarryingColumnInAFilterNothingReads) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(filterNothingReads);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
@@ -229,7 +229,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, prefersARowCarryingColumnWhenAFilterKeepsOne) {
+TEST_F(TrimUnreadColumnsTest, prefersARowCarryingColumnWhenAFilterKeepsOne) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(filterWithLeadingConstant);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
@@ -257,7 +257,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, leavesACarrySetThatIsReadAlone) {
+TEST_F(TrimUnreadColumnsTest, leavesACarrySetThatIsReadAlone) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(twoHopAllRead);
     ASSERT_TRUE(module);
 
@@ -286,7 +286,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, keepsTheEdgeTypeOfAByTypeHop) {
+TEST_F(TrimUnreadColumnsTest, keepsTheEdgeTypeOfAByTypeHop) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(typedSecondHop);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
@@ -321,7 +321,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, trimsAChainOfHopsInOneRun) {
+TEST_F(TrimUnreadColumnsTest, trimsAChainOfHopsInOneRun) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(threeHopChain);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
@@ -362,7 +362,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, trimsALimitToTheColumnsReadAfterIt) {
+TEST_F(TrimUnreadColumnsTest, trimsALimitToTheColumnsReadAfterIt) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(limitInAWith);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
@@ -396,7 +396,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, trimsASkipToTheColumnsReadAfterIt) {
+TEST_F(TrimUnreadColumnsTest, trimsASkipToTheColumnsReadAfterIt) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(skipInAWith);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
@@ -431,7 +431,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, keepsOneRowCarryingColumnInALimitNothingReads) {
+TEST_F(TrimUnreadColumnsTest, keepsOneRowCarryingColumnInALimitNothingReads) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(limitNothingReads);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
@@ -463,7 +463,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, trimsTheNonKeyColumnsOfASortAndRenumbersItsKeys) {
+TEST_F(TrimUnreadColumnsTest, trimsTheNonKeyColumnsOfASortAndRenumbersItsKeys) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(sortInAWith);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
@@ -508,7 +508,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, leavesASortWhoseOnlyUnreadColumnIsAKeyAlone) {
+TEST_F(TrimUnreadColumnsTest, leavesASortWhoseOnlyUnreadColumnIsAKeyAlone) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(sortOnAnUnreadKey);
     ASSERT_TRUE(module);
 
@@ -541,7 +541,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, trimsTheYieldsOfACrossProductToTheColumnsReadAfterIt) {
+TEST_F(TrimUnreadColumnsTest, trimsTheYieldsOfACrossProductToTheColumnsReadAfterIt) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(productOfTwoHops);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
@@ -589,7 +589,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, keepsOneRowCarryingYieldPerFactorOfAProductNothingReads) {
+TEST_F(TrimUnreadColumnsTest, keepsOneRowCarryingYieldPerFactorOfAProductNothingReads) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(productNothingReads);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
@@ -629,7 +629,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, keepsARowCarryingYieldBesideAReadConstant) {
+TEST_F(TrimUnreadColumnsTest, keepsARowCarryingYieldBesideAReadConstant) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(productReadingAConstantOnly);
     ASSERT_TRUE(module);
 
@@ -657,7 +657,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, dropsTheUnreadAggregatesOfAGroupAggregate) {
+TEST_F(TrimUnreadColumnsTest, dropsTheUnreadAggregatesOfAGroupAggregate) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(groupAggregateWithAnUnreadAggregate);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
@@ -700,7 +700,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, keepsTheKeyAndOneAggregateOfAGroupAggregateNothingReads) {
+TEST_F(TrimUnreadColumnsTest, keepsTheKeyAndOneAggregateOfAGroupAggregateNothingReads) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(groupAggregateNothingReads);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
@@ -729,7 +729,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, leavesAGroupAggregateWhoseOnlyUnreadColumnIsAKeyAlone) {
+TEST_F(TrimUnreadColumnsTest, leavesAGroupAggregateWhoseOnlyUnreadColumnIsAKeyAlone) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(groupAggregateWithAnUnreadKey);
     ASSERT_TRUE(module);
 
@@ -759,7 +759,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, dropsTheUnreadValuesAndAggregatesOfACollectAndRenumbersDistinct) {
+TEST_F(TrimUnreadColumnsTest, dropsTheUnreadValuesAndAggregatesOfACollectAndRenumbersDistinct) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(collectWithUnreadValuesAndAggregate);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
@@ -797,7 +797,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, leavesACollectWhoseOnlyUnreadColumnsAreItsKeyAndValueAlone) {
+TEST_F(TrimUnreadColumnsTest, leavesACollectWhoseOnlyUnreadColumnsAreItsKeyAndValueAlone) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(collectReadingTheCountOnly);
     ASSERT_TRUE(module);
 
@@ -824,7 +824,7 @@ func.func @main() {
 }
 )mlir";
 
-TEST_F(TrimCarriedColumnsTest, dropsTheUnreadListOfAnUngroupedCollect) {
+TEST_F(TrimUnreadColumnsTest, dropsTheUnreadListOfAnUngroupedCollect) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(ungroupedCollectWithAnUnreadList);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runTrim(*module));
