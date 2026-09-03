@@ -162,6 +162,7 @@ add_call_v3_test(test_query_ir_call_writes CallWritesTest.cpp)
 add_call_v3_test(test_query_ir_call_boolean_predicates CallBooleanPredicatesTest.cpp)
 add_call_v3_test(test_query_ir_call_show_indexes CallShowIndexesTest.cpp)
 add_call_v3_test(test_query_ir_standalone_call StandaloneCallTest.cpp)
+add_call_v3_test(test_query_ir_empty_result_column_names EmptyResultColumnNamesTest.cpp)
 add_call_v3_test(test_query_ir_scan_by_node_ids_v3 ScanByNodeIDsV3Test.cpp)
 
 # The crossing-call tests hop twice from the column a CALL yielded and then call again,
