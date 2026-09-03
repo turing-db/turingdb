@@ -37,6 +37,7 @@
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
+#include "reader/GraphReader.h"
 #include "versioning/CommitWriteBuffer.h"
 #include "views/GraphView.h"
 
@@ -2167,12 +2168,31 @@ void extractColumnProperties(const Column* column,
     }
 }
 
+size_t committedNodeCount(const GraphView* view) {
+    if (!view || !view->isValid()) {
+        return 0;
+    }
+
+    const GraphReader reader = view->read();
+    return reader.getTotalNodesAllocated();
+}
+
+size_t committedEdgeCount(const GraphView* view) {
+    if (!view || !view->isValid()) {
+        return 0;
+    }
+
+    const GraphReader reader = view->read();
+    return reader.getTotalEdgesAllocated();
+}
+
 CommitWriteBuffer::ExistingOrPendingNode resolveNode(const ColumnNodeIDs* column,
                                                      size_t row,
-                                                     bool isPending) {
+                                                     bool isPending,
+                                                     size_t firstPendingNodeID) {
     const NodeID nodeID = (*column)[row];
     if (isPending) {
-        return CommitWriteBuffer::PendingNodeOffset(nodeID.getValue());
+        return CommitWriteBuffer::PendingNodeOffset(nodeID.getValue() - firstPendingNodeID);
     } else {
         return nodeID;
     }
@@ -2333,8 +2353,10 @@ void NLExecutor::runCreateNode(NLExecutionContext* context, NLFunctionData* data
     bioassert(writeBuffer, "nl.create_node requires an active write transaction");
 
     const size_t rowCount = createData->getRowCount();
-    const size_t firstOffset = writeBuffer->numPendingNodes();
     const LabelSetHandle labelsetHandle = createData->getLabelSetHandle();
+
+    // Must extract this value before adding in the loop
+    const size_t numPendingNodes = writeBuffer->numPendingNodes();
 
     for (size_t row = 0; row < rowCount; row++) {
         CommitWriteBuffer::PendingNode& node = writeBuffer->newPendingNode();
@@ -2348,17 +2370,20 @@ void NLExecutor::runCreateNode(NLExecutionContext* context, NLFunctionData* data
 
         for (size_t row = 0; row < rowCount; row++) {
             CommitWriteBuffer::PendingNode& pendingNode =
-                writeBuffer->getPendingNode(firstOffset + row);
+                writeBuffer->getPendingNode(numPendingNodes + row);
             CommitWriteBuffer::UntypedProperties& properties = pendingNode.properties;
             properties.push_back(propsBuffer[row]);
         }
     }
 
+    const GraphView* view = context->getView();
+    const NodeID nextNodeID = committedNodeCount(view) + numPendingNodes;
+
     ColumnNodeIDs* result = createData->getResult();
     result->resize(rowCount);
     auto& raw = result->getRaw();
     for (size_t row = 0; row < rowCount; row++) {
-        raw[row] = NodeID(firstOffset + row);
+        raw[row] = NodeID(nextNodeID + row);
     }
 }
 
@@ -2374,29 +2399,38 @@ void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data
     const size_t rowCount = src->size();
     const EdgeTypeID edgeTypeID = createData->getEdgeTypeID();
 
+    const GraphView* view = context->getView();
+    const size_t firstPendingNodeID = committedNodeCount(view);
+
+    // Must extract this value before adding in the loop
+    const size_t numPendingEdges = writeBuffer->numPendingEdges();
+
     for (size_t row = 0; row < rowCount; row++) {
-        const CommitWriteBuffer::ExistingOrPendingNode srcNode = resolveNode(src, row, srcIsPending);
-        const CommitWriteBuffer::ExistingOrPendingNode tgtNode = resolveNode(tgt, row, tgtIsPending);
+        const CommitWriteBuffer::ExistingOrPendingNode srcNode =
+            resolveNode(src, row, srcIsPending, firstPendingNodeID);
+        const CommitWriteBuffer::ExistingOrPendingNode tgtNode =
+            resolveNode(tgt, row, tgtIsPending, firstPendingNodeID);
 
         CommitWriteBuffer::PendingEdge& edge = writeBuffer->newPendingEdge(srcNode, tgtNode);
         edge.edgeType = edgeTypeID;
     }
 
     CommitWriteBuffer::UntypedProperties propsBuffer;
-    const size_t firstEdgeOffset = writeBuffer->numPendingEdges() - rowCount;
 
     for (const NLCreateEdgeData::Property& prop : createData->properties()) {
         extractColumnProperties(prop._values, rowCount, prop._propertyTypeID, propsBuffer);
 
         for (size_t row = 0; row < rowCount; row++) {
-            writeBuffer->getPendingEdge(firstEdgeOffset + row).properties.push_back(propsBuffer[row]);
+            writeBuffer->getPendingEdge(numPendingEdges + row).properties.push_back(propsBuffer[row]);
         }
     }
+
+    const EdgeID nextEdgeID = committedEdgeCount(view) + numPendingEdges;
 
     ColumnEdgeIDs* result = createData->getResult();
     result->resize(rowCount);
     for (size_t row = 0; row < rowCount; row++) {
-        (*result)[row] = EdgeID(firstEdgeOffset + row);
+        (*result)[row] = EdgeID(nextEdgeID + row);
     }
 }
 
