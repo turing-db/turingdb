@@ -188,9 +188,28 @@ TEST_F(UnwindNodeSeedCodegenTest, rejectsASeedUsedAsANodeAfterAWith) {
 }
 
 // An UNWIND naming no pattern node still binds a column of values, whatever the query then
-// compares it to.
-TEST_F(UnwindNodeSeedCodegenTest, valueUnwindStaysAnUnwindConst) {
+// compares it to - so codegen crosses that column with the scan and filters. Comparing it
+// to the node itself makes the filter a node-ID disjunction once fuse_unwind_equality has
+// folded the elements into it, which fuse_scan_by_node_ids then reads: the seed a pattern
+// naming the variable spells out directly, reached from the other side.
+TEST_F(UnwindNodeSeedCodegenTest, aValueUnwindComparedToTheNodeFusesIntoAConstScan) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = generate("UNWIND [5, 2] AS x MATCH (n) WHERE n = x RETURN n");
+
+    EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ConstScanNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
+
+    std::vector<int64_t> nodeIDs;
+    nodeIDsOf(collect<mlir::db::ConstScanNodes>(*module).front(), nodeIDs);
+    const std::vector<int64_t> expected {2, 5};
+    EXPECT_EQ(nodeIDs, expected);
+}
+
+// The elements are read as well as compared here, and a node column cannot stand in for
+// them: it equals a node ID by the number it carries, so the projection would print the
+// node rather than the integer the query unwound.
+TEST_F(UnwindNodeSeedCodegenTest, aProjectedValueUnwindStaysAnUnwindConst) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = generate("UNWIND [5, 2] AS x MATCH (n) WHERE n = x RETURN n, x");
 
     EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 1u);
     EXPECT_EQ(countOps<mlir::db::ConstScanNodes>(*module), 0u);
