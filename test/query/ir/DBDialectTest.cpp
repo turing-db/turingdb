@@ -1119,6 +1119,46 @@ func.func @main() {
 }
 )mlir";
 
+// LOAD CSV 'people.csv' AS row RETURN row[0], row[2]: a source over the records of a
+// file, one owning string column per field the query names.
+const char* const loadCSVProgram = R"mlir(
+func.func @main() {
+  %0:2 = db.load_csv("people.csv", [0 : ui64, 2 : ui64]) : !db.column<!storage.owned_string>, !db.column<!storage.owned_string>
+  db.output(%0#0, %0#1) : !db.column<!storage.owned_string>, !db.column<!storage.owned_string>
+  return
+}
+)mlir";
+
+// The same load naming its fields by header, which only a with_headers load resolves,
+// and dropping a malformed record rather than failing.
+const char* const headedLoadCSVProgram = R"mlir(
+func.func @main() {
+  %0 = db.load_csv("people.csv", ["city"]) with_headers skip_on_error : !db.column<!storage.owned_string>
+  db.output(%0) : !db.column<!storage.owned_string>
+  return
+}
+)mlir";
+
+// A header name on a load that reads no header line: nothing resolves it, so the
+// verifier rejects it.
+const char* const headerlessLoadCSVProgram = R"mlir(
+func.func @main() {
+  %0 = db.load_csv("people.csv", ["city"]) : !db.column<!storage.owned_string>
+  db.output(%0) : !db.column<!storage.owned_string>
+  return
+}
+)mlir";
+
+// Two columns for one named field: the op produces one column per field, so the counts
+// must agree.
+const char* const mismatchedLoadCSVProgram = R"mlir(
+func.func @main() {
+  %0:2 = db.load_csv("people.csv", [0 : ui64]) : !db.column<!storage.owned_string>, !db.column<!storage.owned_string>
+  db.output(%0#0, %0#1) : !db.column<!storage.owned_string>, !db.column<!storage.owned_string>
+  return
+}
+)mlir";
+
 // UNWIND [1, 2, 3] AS x RETURN x: a source over a homogeneous literal list, so the
 // elements share one type and the result is a typed i64 column.
 const char* const unwindConstProgram = R"mlir(
@@ -1368,6 +1408,97 @@ TEST_F(DBDialectTest, constScanNodesWithoutNodeIDsIsValid) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyConstScanNodesProgram);
     ASSERT_TRUE(module);
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
+}
+
+TEST_F(DBDialectTest, parsesLoadCSV) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(loadCSVProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::LoadCSV load;
+    module.get().walk([&](mlir::db::LoadCSV op) {
+        load = op;
+    });
+    ASSERT_TRUE(load);
+
+    // The path and the two positions come back as written, both flags absent, and each
+    // field is an owning string column - the characters were parsed, not borrowed.
+    EXPECT_EQ(load.getPath(), "people.csv");
+    ASSERT_EQ(load.getFields().size(), 2u);
+    EXPECT_FALSE(load.getWithHeaders());
+    EXPECT_FALSE(load.getSkipOnError());
+
+    const mlir::Type ownedStringColumnType =
+        mlir::db::ColumnType::get(&_context, mlir::storage::OwnedStringType::get(&_context));
+    EXPECT_EQ(load.getResult(0).getType(), ownedStringColumnType);
+    EXPECT_EQ(load.getResult(1).getType(), ownedStringColumnType);
+}
+
+TEST_F(DBDialectTest, parsesLoadCSVFlagsAndHeaderFields) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(headedLoadCSVProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::LoadCSV load;
+    module.get().walk([&](mlir::db::LoadCSV op) {
+        load = op;
+    });
+    ASSERT_TRUE(load);
+
+    EXPECT_TRUE(load.getWithHeaders());
+    EXPECT_TRUE(load.getSkipOnError());
+    ASSERT_EQ(load.getFields().size(), 1u);
+    EXPECT_EQ(mlir::cast<mlir::StringAttr>(load.getFields()[0]).getValue(), "city");
+}
+
+TEST_F(DBDialectTest, loadCSVRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(headedLoadCSVProgram);
+    ASSERT_TRUE(module);
+
+    // Printing then re-parsing yields a module that still verifies, so the db.load_csv
+    // printer and parser are inverses - the flags and the field list included.
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, verifierRejectsAHeaderFieldWithoutAHeaderLine) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(headerlessLoadCSVProgram);
+    EXPECT_FALSE(module);
+}
+
+// A load naming no field produces no column, so nothing downstream could read the records
+// it opened. Built rather than parsed: with no result there is no type list to spell, so
+// the shape has no textual form - only a builder reaches it.
+TEST_F(DBDialectTest, verifierRejectsALoadCSVNamingNoField) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    builder.create<mlir::db::LoadCSV>(loc,
+                                      mlir::TypeRange {},
+                                      builder.getStringAttr("people.csv"),
+                                      builder.getArrayAttr({}),
+                                      mlir::UnitAttr(),
+                                      mlir::UnitAttr());
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+
+    EXPECT_TRUE(mlir::failed(mlir::verify(function)));
+}
+
+TEST_F(DBDialectTest, verifierRejectsMoreLoadCSVColumnsThanFields) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(mismatchedLoadCSVProgram);
+    EXPECT_FALSE(module);
 }
 
 TEST_F(DBDialectTest, parsesUnwindConst) {
