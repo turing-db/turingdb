@@ -27,9 +27,17 @@ public:
         _stringTableHeaderAccess = csvHeaderAccess;
     }
 
+    // The field of the loaded row a header access reads, under the declaration the load
+    // publishes its column with. Null on a property access, and on a header access whose
+    // row no load bound. Kept apart from the expression's own declaration, since an alias
+    // on the item replaces that one.
+    VarDecl* getCSVFieldDecl() const { return _csvFieldDecl; }
+    void setCSVFieldDecl(VarDecl* decl) { _csvFieldDecl = decl; }
+
 private:
     QualifiedName* _fullName {nullptr};
     VarDecl* _entityDecl {nullptr};
+    VarDecl* _csvFieldDecl {nullptr};
     std::string_view _propName;
     bool _stringTableHeaderAccess {false};
 

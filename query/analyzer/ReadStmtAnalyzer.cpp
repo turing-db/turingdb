@@ -198,6 +198,8 @@ void ReadStmtAnalyzer::analyze(LoadCSVStmt* loadCSV) {
                                                      alias->getName());
 
     loadCSV->setAliasDecl(decl);
+
+    _exprAnalyzer->registerCSVSource(decl, loadCSV);
 }
 
 void ReadStmtAnalyzer::analyze(const FunctionInvocation& func, const YieldClause* yield) {

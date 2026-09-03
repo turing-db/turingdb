@@ -13,6 +13,7 @@
 #include "QualifiedName.h"
 #include "Symbol.h"
 #include "Literal.h"
+#include "stmt/LoadCSVStmt.h"
 #include "decl/DeclContext.h"
 #include "decl/EvaluatedType.h"
 #include "decl/VarDecl.h"
@@ -463,8 +464,24 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         expr->setStringTableHeaderAccess(true);
         expr->setType(EvaluatedType::String);
         expr->setDynamic();
-        auto* exprDecl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::String);
-        expr->setExprVarDecl(exprDecl);
+
+        LoadCSVStmt* const loadCSV = findCSVSource(varDecl);
+        if (loadCSV) {
+            // Without a header line the file names no field, so there is nothing for a
+            // header access to resolve against - only a position reaches a field
+            if (!loadCSV->hasHeaders()) {
+                throwError(fmt::format("'{}' was loaded without WITH HEADERS, so it has no field "
+                                       "named '{}': read it by position, as {}[<index>]",
+                                       varName->getName(), propName->getName(), varName->getName()),
+                           expr);
+            }
+
+            const size_t slot = loadCSV->declareField(propName->getName());
+            expr->setCSVFieldDecl(declareCSVField(*loadCSV, slot));
+        }
+
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::String));
+
         return ValueType::String;
     }
 
@@ -558,8 +575,42 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
 
     expr->setType(EvaluatedType::String);
     expr->setDynamic();
-    auto* varDecl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::String);
-    expr->setExprVarDecl(varDecl);
+
+    // A computed index names no field of the load: which column it reads is only known
+    // once the row is in hand, so it keeps an access of its own and the engine that
+    // cannot build one reports the gap
+    LoadCSVStmt* const loadCSV = findCSVSource(base->getExprVarDecl());
+    if (loadCSV && expr->hasLiteralIndex()) {
+        const size_t slot = loadCSV->declareField(expr->getLiteralIndex());
+        expr->setCSVFieldDecl(declareCSVField(*loadCSV, slot));
+    }
+
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::String));
+}
+
+void ExprAnalyzer::registerCSVSource(const VarDecl* alias, LoadCSVStmt* loadCSV) {
+    _csvSources[alias] = loadCSV;
+}
+
+LoadCSVStmt* ExprAnalyzer::findCSVSource(const VarDecl* alias) const {
+    const auto foundIt = _csvSources.find(alias);
+    if (foundIt == end(_csvSources)) {
+        return nullptr;
+    }
+
+    return foundIt->second;
+}
+
+VarDecl* ExprAnalyzer::declareCSVField(LoadCSVStmt& loadCSV, size_t slot) {
+    VarDecl* decl = loadCSV.getField(slot)._decl;
+    if (decl) {
+        return decl;
+    }
+
+    decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::String);
+    loadCSV.setFieldDecl(slot, decl);
+
+    return decl;
 }
 
 void ExprAnalyzer::analyzeStringExpr(StringExpr* expr) {

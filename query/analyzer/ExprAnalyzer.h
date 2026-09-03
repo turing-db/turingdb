@@ -17,6 +17,8 @@ namespace db {
 class CypherAST;
 class DeclContext;
 class FunctionResolver;
+class LoadCSVStmt;
+class VarDecl;
 class Expr;
 class BinaryExpr;
 class UnaryExpr;
@@ -46,6 +48,10 @@ public:
 
     void setDeclContext(DeclContext* ctxt) { _ctxt = ctxt; }
     void setV3() { _isV3 = true; }
+
+    // Declares the statement a CSV row variable is loaded by, so `row[2]` and `row.age`
+    // resolve to fields of that statement rather than to accesses of their own
+    void registerCSVSource(const VarDecl* alias, LoadCSVStmt* loadCSV);
 
     // Expressions
     void analyzeRootExpr(Expr* expr);
@@ -84,8 +90,17 @@ private:
 
     std::unordered_map<std::string_view, ValueType> _toBeCreatedTypes;
 
+    // The LOAD CSV each row variable in scope was bound by
+    std::unordered_map<const VarDecl*, LoadCSVStmt*> _csvSources;
+
     void analyzeListElements(Expr* expr, std::span<Expr* const> elements);
     void analyzeMapEntries(Expr* expr, const MapLiteral* map);
+
+    LoadCSVStmt* findCSVSource(const VarDecl* alias) const;
+
+    // The declaration the load publishes field @param slot under, created by the first
+    // access to reach that field so every later one resolves to the same column
+    VarDecl* declareCSVField(LoadCSVStmt& loadCSV, size_t slot);
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };
