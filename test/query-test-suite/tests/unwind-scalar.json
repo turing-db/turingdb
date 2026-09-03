@@ -4,9 +4,9 @@
   "graph": "simpledb",
   "query": "UNWIND 5 AS x RETURN x",
   "expect": {
-    "plan": "PLAN ERROR\n-------* Query error\n     1 | UNWIND 5 AS x RETURN x\n       |        ^\n-------* UNWIND of a value that is not a list is only supported by the MLIR query engine.",
-    "result": "PLAN ERROR\n-------* Query error\n     1 | UNWIND 5 AS x RETURN x\n       |        ^\n-------* UNWIND of a value that is not a list is only supported by the MLIR query engine.",
-    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"-------* Query error\\n     1 | UNWIND 5 AS x RETURN x\\n       |        ^\\n-------* UNWIND of a value that is not a list is only supported by the MLIR query engine.\"}"
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | UNWIND 5 AS x RETURN x\n       |        ^\n-------* UNWIND requires a list, not 'Integer'",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | UNWIND 5 AS x RETURN x\n       |        ^\n-------* UNWIND requires a list, not 'Integer'",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | UNWIND 5 AS x RETURN x\\n       |        ^\\n-------* UNWIND requires a list, not 'Integer'\"}"
   },
   "tags": [
     "errors",

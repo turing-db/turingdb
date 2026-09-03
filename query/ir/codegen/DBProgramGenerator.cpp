@@ -149,15 +149,21 @@ const std::unordered_map<std::string_view, BinaryFunctionEmitter> binaryFunction
     {"euclidean_distance", &emitBinaryFunction<mlir::db::EuclideanDistance>},
 };
 
-// The analyzer restricts UNWIND to a literal list, so anything else here is a statement
-// it let through and neither of the sources built from one can lower.
-const ListLiteral* unwindListOrThrow(const UnwindStmt* unwind) {
+// The list a literal UNWIND spreads, null for the one literal that is no list and still
+// analyzes - `UNWIND null`, which spreads into no row. Anything else here is a statement
+// the analyzer let through and neither of the sources built from one can lower.
+const ListLiteral* literalUnwindList(const UnwindStmt* unwind) {
     const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(unwind->arg());
     if (!literalExpr) {
         throw TuringException("Non-literal UNWIND expressions are not yet supported.");
     }
 
-    const ListLiteral* list = dynamic_cast<const ListLiteral*>(literalExpr->getLiteral());
+    const Literal* literal = literalExpr->getLiteral();
+    if (literal->getKind() == Literal::Kind::NULL_LITERAL) {
+        return nullptr;
+    }
+
+    const ListLiteral* list = dynamic_cast<const ListLiteral*>(literal);
     if (!list) {
         throw TuringException("Non-list arguments to UNWIND are not yet supported.");
     }
@@ -536,10 +542,12 @@ void DBProgramGenerator::addYieldedColumn(const VariableDependency* var, mlir::V
 void DBProgramGenerator::addConstScanNodes(const VariableDependency* var, const UnwindStmt* unwind) {
     bioassert(!_part._varMap.contains(var), "ConstScanNodes for registered variable");
 
-    const ListLiteral* list = unwindListOrThrow(unwind);
+    const ListLiteral* list = literalUnwindList(unwind);
 
     llvm::SmallVector<mlir::Attribute> elements;
-    translateListElements(list, elements);
+    if (list) {
+        translateListElements(list, elements);
+    }
 
     llvm::SmallVector<int64_t> nodeIDs;
     nodeIDs.reserve(elements.size());
@@ -566,29 +574,11 @@ void DBProgramGenerator::addConstScanNodes(const VariableDependency* var, const 
 void DBProgramGenerator::addUnwindConst(const VariableDependency* var, const UnwindStmt* unwind) {
     bioassert(!_part._varMap.contains(var), "UnwindConst for registered variable");
 
-    // Only a literal UNWIND opens a dataflow of its own, and the dependency graph roots no
-    // other kind here, so anything else is hand-built input this path cannot lower.
-    const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(unwind->arg());
-    if (!literalExpr) {
-        throw TuringException("A non-literal UNWIND expression does not open a dataflow of its own.");
-    }
-
-    // A list unwinds into its elements; any other literal is the single row that value is,
-    // and a null into no row at all.
-    const Literal* literal = literalExpr->getLiteral();
-    const Literal::Kind literalKind = literal->getKind();
+    const ListLiteral* list = literalUnwindList(unwind);
 
     llvm::SmallVector<mlir::Attribute> elements;
-    if (literalKind == Literal::Kind::LIST) {
-        translateListElements(static_cast<const ListLiteral*>(literal), elements);
-    } else if (literalKind != Literal::Kind::NULL_LITERAL) {
-        const mlir::Attribute argument = literalAttr(literal);
-        if (!argument) {
-            throw TuringException("Only booleans, integers, floats, strings, nulls, embeddings and "
-                                  "lists are supported as an UNWIND argument.");
-        }
-
-        elements.push_back(argument);
+    if (list) {
+        translateListElements(list, elements);
     }
 
     const mlir::Type sharedType = sharedAttrType(elements);
@@ -935,6 +925,7 @@ void DBProgramGenerator::runPasses() {
     mlir::PassManager passManager(_mlirCtxt);
     passManager.addPass(mlir::db::createFuseScanByLabel());
     passManager.addPass(mlir::db::createPushDownFilters());
+    passManager.addPass(mlir::db::createFuseUnwindEquality());
     passManager.addPass(mlir::db::createFuseScanByNodeIDs());
     passManager.addPass(mlir::db::createTrimUnreadColumns());
 
