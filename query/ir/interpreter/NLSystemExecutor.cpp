@@ -128,14 +128,9 @@ vec::VectorDatabase& requireVectorDatabase(NLExecutionContext* context) {
 // may read or write outside of.
 fs::Path resolveInDataDir(NLExecutionContext* context, std::string_view path) {
     const SystemManager& manager = requireSystemManager(context);
-    const fs::Path& dataDir = manager.getConfig()->getDataDir();
-    const fs::Path resolved = dataDir / path;
 
-    if (!resolved.isSubDirectory(dataDir)) {
-        throw IRException(fmt::format("Invalid file path '{}': it must be relative to '{}'",
-                                      path,
-                                      dataDir.get()));
-    }
+    fs::Path resolved;
+    NLSystemContext::resolveInDataDir(resolved, manager.getConfig()->getDataDir(), path);
 
     return resolved;
 }
