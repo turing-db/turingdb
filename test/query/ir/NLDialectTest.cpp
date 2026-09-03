@@ -553,6 +553,73 @@ TEST_F(NLDialectTest, unwindConstRoundTripsThroughTextualForm) {
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
 }
 
+// nl.load_csv spells its iterator type rather than inferring it - one chunk per field the
+// load produces, however many the query named - and every field rides an owning string
+// chunk, since the characters were parsed here rather than borrowed from the graph.
+TEST_F(NLDialectTest, loadCSVBuildsOneOwningStringChunkPerField) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    const mlir::Type chunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::OwnedStringType::get(&_context));
+    const mlir::Type iteratorType = mlir::nl::IteratorType::get(&_context, {chunkType, chunkType});
+
+    const mlir::ArrayAttr fields = builder.getArrayAttr({builder.getStringAttr("name"),
+                                                         builder.getStringAttr("city")});
+    mlir::nl::LoadCSV load = builder.create<mlir::nl::LoadCSV>(loc,
+                                                               iteratorType,
+                                                               builder.getStringAttr("people.csv"),
+                                                               fields,
+                                                               builder.getUnitAttr(),
+                                                               mlir::UnitAttr());
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    EXPECT_EQ(load.getResult().getType(), iteratorType);
+    EXPECT_EQ(load.getPath(), "people.csv");
+    EXPECT_EQ(load.getFields().size(), 2u);
+    EXPECT_TRUE(load.getWithHeaders());
+    EXPECT_FALSE(load.getSkipOnError());
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+}
+
+// Building an nl.load_csv, printing the module and re-parsing it yields a module that
+// still verifies, so the nl.load_csv printer and parser are inverses - the flags and the
+// field list included.
+TEST_F(NLDialectTest, loadCSVRoundTripsThroughTextualForm) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    const mlir::Type chunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::OwnedStringType::get(&_context));
+    const mlir::Type iteratorType = mlir::nl::IteratorType::get(&_context, {chunkType});
+
+    const mlir::IntegerAttr position = mlir::IntegerAttr::get(builder.getIntegerType(64, /*isSigned=*/false), 2);
+    builder.create<mlir::nl::LoadCSV>(loc,
+                                      iteratorType,
+                                      builder.getStringAttr("people.csv"),
+                                      builder.getArrayAttr({position}),
+                                      mlir::UnitAttr(),
+                                      builder.getUnitAttr());
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module->print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed =
+        mlir::parseSourceString<mlir::ModuleOp>(printed, mlir::ParserConfig(&_context));
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
 // A list literal is an nl.constant value: it holds the whole list rather than spreading it
 // over rows, so it produces a chunk of that list type - inferred from the elements, since an
 // array attribute carries none of its own. A nested list rides one element as an array.
