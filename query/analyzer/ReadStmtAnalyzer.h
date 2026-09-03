@@ -8,6 +8,7 @@ class CypherAST;
 class ExprAnalyzer;
 class DeclContext;
 class VarDecl;
+class Symbol;
 class Stmt;
 class MatchStmt;
 class YieldClause;
@@ -74,6 +75,8 @@ private:
     // The predicate a YIELD ... WHERE filters the rows its statement produced with. Shared
     // by every statement that yields, since what a yield binds is what the predicate reads.
     void analyzeYieldFilter(const YieldItems* yieldItems);
+
+    VarDecl* resolveShortestPathEndpoint(const Symbol* endpoint, const ShortestPathStmt* spSt) const;
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

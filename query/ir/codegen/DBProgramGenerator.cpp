@@ -2545,16 +2545,6 @@ void DBProgramGenerator::generateCreate(const SinglePartQuery* query) {
     }
 }
 
-const VarDecl* DBProgramGenerator::declForVariableName(std::string_view name) const {
-    for (const VariableDependency& var : _vdg.vars()) {
-        if (var.getName() == name) {
-            return var.getDecl();
-        }
-    }
-
-    return nullptr;
-}
-
 mlir::Value DBProgramGenerator::resolveEntityColumn(const VarDecl* decl) {
     for (const auto& [var, values] : _part._varMap) {
         if (var->getDecl() == decl && !values.empty()) {
@@ -2761,12 +2751,10 @@ void DBProgramGenerator::generateShortestPath(std::span<Stmt* const> stmts) {
     const std::string_view distName = stmt->getDistVar()->getName();
     const std::string_view pathName = stmt->getPathVar()->getName();
 
-    const VarDecl* sourceDecl = declForVariableName(sourceName);
-    const mlir::Value sourceColumn = sourceDecl ? resolveEntityColumn(sourceDecl) : mlir::Value {};
+    const mlir::Value sourceColumn = resolveEntityColumn(stmt->getSourceDecl());
     bioassert(sourceColumn, "SHORTESTPATH source not bound: {}", sourceName);
 
-    const VarDecl* targetDecl = declForVariableName(targetName);
-    const mlir::Value targetColumn = targetDecl ? resolveEntityColumn(targetDecl) : mlir::Value {};
+    const mlir::Value targetColumn = resolveEntityColumn(stmt->getTargetDecl());
     bioassert(targetColumn, "SHORTESTPATH target not bound: {}", targetName);
 
     // The distance column is a none placeholder resolved to the weight property's value

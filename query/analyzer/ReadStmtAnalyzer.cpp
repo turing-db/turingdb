@@ -582,6 +582,13 @@ void ReadStmtAnalyzer::analyze(ShortestPathStmt* spSt) {
         throwError(fmt::format("Unknown property: {}", propName));
     }
 
+    const Symbol* source = spSt->getSource();
+    const Symbol* target = spSt->getTarget();
+    bioassert(source && target, "Null endpoints.");
+
+    spSt->setSourceDecl(resolveShortestPathEndpoint(source, spSt));
+    spSt->setTargetDecl(resolveShortestPathEndpoint(target, spSt));
+
     const Symbol* distVar = spSt->getDistVar();
     const Symbol* pathVar = spSt->getPathVar();
     bioassert(distVar && pathVar, "Null variables.");
@@ -599,6 +606,25 @@ void ReadStmtAnalyzer::analyze(ShortestPathStmt* spSt) {
 
     spSt->setDistDecl(distDecl);
     spSt->setPathDecl(pathDecl);
+}
+
+VarDecl* ReadStmtAnalyzer::resolveShortestPathEndpoint(const Symbol* endpoint, const ShortestPathStmt* spSt) const {
+    const std::string_view name = endpoint->getName();
+
+    VarDecl* decl = _ctxt->getDecl(name);
+    if (!decl) {
+        throwError(fmt::format("Variable '{}' not found", name), spSt);
+    }
+
+    const EvaluatedType type = decl->getType();
+    if (type != EvaluatedType::NodePattern) {
+        throwError(fmt::format("SHORTESTPATH endpoint '{}' must be a node, but is {} instead",
+                               name,
+                               EvaluatedTypeName::value(type)),
+                   spSt);
+    }
+
+    return decl;
 }
 
 void ReadStmtAnalyzer::analyze(UnwindStmt* unwind) {

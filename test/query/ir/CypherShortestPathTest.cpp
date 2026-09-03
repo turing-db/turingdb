@@ -235,6 +235,16 @@ TEST_F(CypherShortestPathTest, rejectsReturningAMatchedNodeProperty) {
                    "SHORTESTPATH");
 }
 
+TEST_F(CypherShortestPathTest, rejectsUndeclaredEndpoint) {
+    expectRejected("MATCH (a) SHORTESTPATH(a, zzz, weight, d, p) RETURN d, p",
+                   "Variable 'zzz' not found");
+}
+
+TEST_F(CypherShortestPathTest, rejectsEdgeEndpoint) {
+    expectRejected("MATCH ()-[e]->() SHORTESTPATH(e, e, weight, d, p) RETURN d, p",
+                   "SHORTESTPATH endpoint 'e' must be a node, but is EdgePattern instead");
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

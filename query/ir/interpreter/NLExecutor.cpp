@@ -2393,7 +2393,7 @@ void shortestPathSearch(NLExecutionContext* context, NLShortestPathLoopData* loo
         getOutEdgesWriter.fill(std::numeric_limits<size_t>::max());
 
         getPropertiesWriter.reset();
-        getPropertiesWriter.fill(SIZE_MAX);
+        getPropertiesWriter.fill(std::numeric_limits<size_t>::max());
 
         // loop over all the edge properties
         for (size_t i = 0; i < properties->size(); ++i) {
@@ -2449,6 +2449,9 @@ void shortestPathSearch(NLExecutionContext* context, NLShortestPathLoopData* loo
     Column* dist = loopData->getDistanceOutput();
     auto* distCol = static_cast<ColumnVector<EdgePropType>*>(dist);
     ColumnVector<Path>* pathCol = loopData->getPathOutput();
+
+    distCol->clear();
+    pathCol->clear();
 
     // Get the total length of the path
     distCol->push_back(heap.top().distance);

@@ -427,8 +427,6 @@ private:
 
     mlir::Value resolveEntityColumn(const VarDecl* decl);
 
-    const VarDecl* declForVariableName(std::string_view name) const;
-
     mlir::Value nullConstantColumn();
 
     // Taken in the order the query declares its variables, so the choice is the query's
