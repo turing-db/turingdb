@@ -18,6 +18,8 @@
 #include "IRConstantColumn.h"
 #include "DBOps.h"
 
+#include "BioAssert.h"
+
 namespace mlir::db {
 
 #define GEN_PASS_DEF_FUSESCANBYLABEL
@@ -522,6 +524,10 @@ size_t collectValueCount(Collect collect) {
 }
 
 void keepOneOf(llvm::SmallBitVector& keep, size_t begin, size_t end) {
+    if (begin >= end) {
+        return;
+    }
+
     for (size_t index = begin; index < end; index++) {
         if (keep[index]) {
             return;
@@ -610,6 +616,8 @@ void renumberSortKeys(Sort sort, llvm::ArrayRef<size_t> kept, OperationState& st
     llvm::SmallVector<int64_t> keyColumns;
     for (const int64_t keyColumn : sort.getKeyColumns()) {
         const auto keptIt = llvm::find(kept, static_cast<size_t>(keyColumn));
+        bioassert(keptIt != kept.end(), "Sort key column {} is not in the trimmed carry set", keyColumn);
+
         keyColumns.push_back(static_cast<int64_t>(keptIt - kept.begin()));
     }
 
