@@ -231,7 +231,7 @@ target_link_libraries(test_query_ir_cypher_collect_input PRIVATE
 add_ir_tests(test_query_ir_dbdialect DBDialectTest.cpp)
 add_ir_tests(test_query_ir_push_down_filter PushDownFilterTest.cpp)
 add_ir_tests(test_query_ir_fuse_scan_by_node_ids FuseScanByNodeIDsTest.cpp)
-add_ir_tests(test_query_ir_trim_carried_columns TrimCarriedColumnsTest.cpp)
+add_ir_tests(test_query_ir_trim_unread_columns TrimUnreadColumnsTest.cpp)
 
 # The codegen-level cases compile Cypher through the parser, analyzer and DBProgramGenerator
 # against the shared SimpleGraph fixture and read the db program the pass pipeline leaves.
@@ -1557,13 +1557,13 @@ target_link_libraries(test_query_ir_anonymous_match PRIVATE
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_anonymous_match PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-add_turing_test(test_query_ir_trim_carried_columns_cypher TrimCarriedColumnsCypherTest.cpp)
-target_sources(test_query_ir_trim_carried_columns_cypher PRIVATE StringRowSink.cpp)
-target_link_libraries(test_query_ir_trim_carried_columns_cypher PRIVATE
+add_turing_test(test_query_ir_trim_unread_columns_cypher TrimUnreadColumnsCypherTest.cpp)
+target_sources(test_query_ir_trim_unread_columns_cypher PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_trim_unread_columns_cypher PRIVATE
         turing_db_s
         turing_testenv_s
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
         turing_db_interpreter_v3_s)
-target_include_directories(test_query_ir_trim_carried_columns_cypher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(test_query_ir_trim_unread_columns_cypher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

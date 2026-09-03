@@ -23,7 +23,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSESCANBYLABEL
 #define GEN_PASS_DEF_PUSHDOWNFILTERS
 #define GEN_PASS_DEF_FUSESCANBYNODEIDS
-#define GEN_PASS_DEF_TRIMCARRIEDCOLUMNS
+#define GEN_PASS_DEF_TRIMUNREADCOLUMNS
 #include "DBPasses.h.inc"
 
 namespace {
@@ -762,7 +762,7 @@ void trimCrossProduct(CrossProduct product, mlir::OpBuilder& builder) {
     product.erase();
 }
 
-struct TrimCarriedColumns : public impl::TrimCarriedColumnsBase<TrimCarriedColumns> {
+struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns> {
     void runOnOperation() override {
         Operation* const root = getOperation();
 

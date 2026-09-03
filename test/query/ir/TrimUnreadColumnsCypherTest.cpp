@@ -56,7 +56,7 @@ const std::vector<StringRowSink::Row> personOutDegrees {
 
 // The hop and filter shapes whose carry sets the trim pass cuts down, run on simpledb: the
 // rows have to come out as they did with every column carried.
-class TrimCarriedColumnsCypherTest : public TuringTest {
+class TrimUnreadColumnsCypherTest : public TuringTest {
 public:
     void initialize() override {
         _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
@@ -105,11 +105,11 @@ protected:
     std::unique_ptr<QueryInterpreterV3> _interpreter;
 };
 
-TEST_F(TrimCarriedColumnsCypherTest, readsTheTailOfATwoHopChain) {
+TEST_F(TrimUnreadColumnsCypherTest, readsTheTailOfATwoHopChain) {
     expectRows("MATCH (a)-->(b)-->(c) RETURN c.name", twoHopTailNames);
 }
 
-TEST_F(TrimCarriedColumnsCypherTest, readsTheTailOfAThreeHopChain) {
+TEST_F(TrimUnreadColumnsCypherTest, readsTheTailOfAThreeHopChain) {
     expectRows("MATCH (a)-->(b)-->(c)-->(d) RETURN d.name",
                {{"Remy"}, {"Bio"}, {"Cooking"}, {"Remy"}, {"Bio"}, {"Cooking"},
                 {"Adam"}, {"Ghosts"}, {"Computers"}, {"Eighties"},
@@ -118,21 +118,21 @@ TEST_F(TrimCarriedColumnsCypherTest, readsTheTailOfAThreeHopChain) {
 }
 
 // Remy and Adam are the only nodes aged 32; Remy has two edges in, Adam one.
-TEST_F(TrimCarriedColumnsCypherTest, readsTheTargetAFilterKept) {
+TEST_F(TrimUnreadColumnsCypherTest, readsTheTargetAFilterKept) {
     expectRows("MATCH (a)-->(b) WHERE b.age = 32 RETURN b.name", {{"Remy"}, {"Remy"}, {"Adam"}});
 }
 
-TEST_F(TrimCarriedColumnsCypherTest, projectsAConstantOverTheRowsAFilterKept) {
+TEST_F(TrimUnreadColumnsCypherTest, projectsAConstantOverTheRowsAFilterKept) {
     expectRowCount("MATCH (a)-->(b) WHERE b.age = 32 RETURN 1", 3);
 }
 
-TEST_F(TrimCarriedColumnsCypherTest, countsTheRowsAFilterKept) {
+TEST_F(TrimUnreadColumnsCypherTest, countsTheRowsAFilterKept) {
     expectRows("MATCH (a)-->(b) WHERE b.age = 32 RETURN count(*)", {{"3"}});
 }
 
 // KNOWS_WELL runs Remy -> Adam, Adam -> Remy and Ghosts -> Remy; the second hop then walks
 // Adam's three edges once and Remy's four edges twice.
-TEST_F(TrimCarriedColumnsCypherTest, hopsFromATypedEdgeIntoAnUntypedOne) {
+TEST_F(TrimUnreadColumnsCypherTest, hopsFromATypedEdgeIntoAnUntypedOne) {
     expectRows("MATCH (a)-[:KNOWS_WELL]->(b)-->(c) RETURN c.name",
                {{"Remy"}, {"Bio"}, {"Cooking"},
                 {"Adam"}, {"Ghosts"}, {"Computers"}, {"Eighties"},
@@ -141,33 +141,33 @@ TEST_F(TrimCarriedColumnsCypherTest, hopsFromATypedEdgeIntoAnUntypedOne) {
 
 // A cut or a sort in a WITH that publishes the root column too, which the second pattern
 // never reads.
-TEST_F(TrimCarriedColumnsCypherTest, hopsFromALimitedWith) {
+TEST_F(TrimUnreadColumnsCypherTest, hopsFromALimitedWith) {
     expectRows("MATCH (a)-->(b) WITH a, b LIMIT 100 MATCH (b)-->(c) RETURN c.name", twoHopTailNames);
 }
 
-TEST_F(TrimCarriedColumnsCypherTest, hopsFromASkippedWith) {
+TEST_F(TrimUnreadColumnsCypherTest, hopsFromASkippedWith) {
     expectRows("MATCH (a)-->(b) WITH a, b SKIP 0 MATCH (b)-->(c) RETURN c.name", twoHopTailNames);
 }
 
-TEST_F(TrimCarriedColumnsCypherTest, hopsFromASortedWith) {
+TEST_F(TrimUnreadColumnsCypherTest, hopsFromASortedWith) {
     expectRows("MATCH (a)-->(b) WITH a, b ORDER BY b.name MATCH (b)-->(c) RETURN c.name", twoHopTailNames);
 }
 
 // Sorted by target name, the first two rows land on Adam and Animals; only Adam has edges out.
-TEST_F(TrimCarriedColumnsCypherTest, hopsFromASortedAndLimitedWith) {
+TEST_F(TrimUnreadColumnsCypherTest, hopsFromASortedAndLimitedWith) {
     expectRows("MATCH (a)-->(b) WITH a, b ORDER BY b.name LIMIT 2 MATCH (b)-->(c) RETURN c.name",
                {{"Remy"}, {"Bio"}, {"Cooking"}});
 }
 
 // Sorted by target name, the last two of the 18 rows land on Remy and Travel; only Remy has
 // edges out.
-TEST_F(TrimCarriedColumnsCypherTest, hopsFromASortedAndSkippedWith) {
+TEST_F(TrimUnreadColumnsCypherTest, hopsFromASortedAndSkippedWith) {
     expectRows("MATCH (a)-->(b) WITH a, b ORDER BY b.name SKIP 16 MATCH (b)-->(c) RETURN c.name",
                {{"Adam"}, {"Ghosts"}, {"Computers"}, {"Eighties"}});
 }
 
 // KNOWS_WELL runs Remy -> Adam, Adam -> Remy and Ghosts -> Remy on each side of the product.
-TEST_F(TrimCarriedColumnsCypherTest, crossesTwoTypedHopsReadingTheirTargets) {
+TEST_F(TrimUnreadColumnsCypherTest, crossesTwoTypedHopsReadingTheirTargets) {
     expectRows("MATCH (a)-[:KNOWS_WELL]->(b), (c)-[:KNOWS_WELL]->(d) RETURN b.name, d.name",
                {{"Adam", "Adam"}, {"Adam", "Remy"}, {"Adam", "Remy"},
                 {"Remy", "Adam"}, {"Remy", "Adam"},
@@ -175,27 +175,27 @@ TEST_F(TrimCarriedColumnsCypherTest, crossesTwoTypedHopsReadingTheirTargets) {
 }
 
 // 18 nodes crossed with 18 edges.
-TEST_F(TrimCarriedColumnsCypherTest, countsAProductNothingReads) {
+TEST_F(TrimUnreadColumnsCypherTest, countsAProductNothingReads) {
     expectRows("MATCH (a), (b)-->(c) RETURN count(*)", {{"324"}});
 }
 
-TEST_F(TrimCarriedColumnsCypherTest, groupsWithAnUnreadAggregate) {
+TEST_F(TrimUnreadColumnsCypherTest, groupsWithAnUnreadAggregate) {
     expectRows("MATCH (p:Person)-->(x) WITH p.name AS name, count(x) AS c, sum(x.age) AS s RETURN name, c",
                personOutDegrees);
 }
 
-TEST_F(TrimCarriedColumnsCypherTest, groupsByAnUnreadKey) {
+TEST_F(TrimUnreadColumnsCypherTest, groupsByAnUnreadKey) {
     expectRows("MATCH (p:Person)-->(x) WITH p.name AS name, count(x) AS c RETURN c",
                {{"4"}, {"3"}, {"2"}, {"2"}, {"1"}, {"2"}, {"1"}, {"2"}});
 }
 
-TEST_F(TrimCarriedColumnsCypherTest, collectsWithAnUnreadList) {
+TEST_F(TrimUnreadColumnsCypherTest, collectsWithAnUnreadList) {
     expectRows("MATCH (p:Person)-->(x) WITH p.name AS name, collect(x.name) AS xs, count(x) AS c RETURN name, c",
                personOutDegrees);
 }
 
 // Remy and Adam are the only Persons with an age; collect skips the nulls of the others.
-TEST_F(TrimCarriedColumnsCypherTest, collectsUngroupedWithAnUnreadList) {
+TEST_F(TrimUnreadColumnsCypherTest, collectsUngroupedWithAnUnreadList) {
     expectRows("MATCH (p:Person) WITH collect(p.name) AS names, collect(p.age) AS ages RETURN ages",
                {{"32, 32"}});
 }
