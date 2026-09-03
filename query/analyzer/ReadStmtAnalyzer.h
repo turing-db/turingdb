@@ -8,6 +8,7 @@ class CypherAST;
 class ExprAnalyzer;
 class DeclContext;
 class VarDecl;
+class Symbol;
 class Stmt;
 class MatchStmt;
 class YieldClause;
@@ -80,6 +81,8 @@ private:
     // plan time, so anything but a list - null aside, which unwinds into no row - is a
     // type error rather than a value to spread over rows
     void throwOnNonListLiteral(const Expr* arg) const;
+
+    VarDecl* resolveShortestPathEndpoint(const Symbol* endpoint, const ShortestPathStmt* spSt) const;
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

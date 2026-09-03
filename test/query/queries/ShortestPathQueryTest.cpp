@@ -203,14 +203,14 @@ TEST_F(ShortestPathQueryTest, returningInputBranchNode) {
         "RETURN n";
 
     bool callbackCalled = false;
-    auto res = query(QUERY, _graphName, [&](const Dataframe* df) {
+    auto res = query(QUERY, _graphName, [&](const Dataframe*) {
         callbackCalled = true;
     });
 
     EXPECT_FALSE(callbackCalled);
     EXPECT_FALSE(res);
     ASSERT_TRUE(res.hasErrorMessage());
-    EXPECT_TRUE(res.getError().find("not found in output column") != std::string::npos);
+    EXPECT_TRUE(res.getError().find("Cannot return n after SHORTESTPATH.") != std::string::npos);
 }
 
 TEST_F(ShortestPathQueryTest, unsupportedJoinWithShortestPath) {
