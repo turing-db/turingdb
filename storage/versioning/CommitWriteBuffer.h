@@ -170,6 +170,15 @@ public:
     void addEdgeUpdate(EdgeID id, UntypedProperty& updatedProperty);
 
     /**
+     * @brief Writes @param property onto a node this commit has yet to create, replacing
+     * the value its create wrote for the same property: the update sets an entity that
+     * has no ID for @ref addNodeUpdate to name yet.
+     */
+    void setPendingNodeProperty(PendingNodeOffset nodeOffset, const UntypedProperty& property);
+
+    void setPendingEdgeProperty(size_t edgeOffset, const UntypedProperty& property);
+
+    /**
      * @brief Adds a single EdgeID contained in @param newDeletedEdge to the member @ref
      * _deletedEdges
      */
@@ -238,6 +247,8 @@ private:
 
     PendingNodes& pendingNodes() { return _pendingNodes; }
     PendingEdges& pendingEdges() { return _pendingEdges; }
+
+    static void setPendingProperty(UntypedProperties& properties, const UntypedProperty& property);
 
     static bool isPendingNodeOffset(const ExistingOrPendingNode& node, PendingNodeOffset offset);
 

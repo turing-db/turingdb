@@ -2423,7 +2423,16 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
     const Column* nodeCol = setData->getValue();
     extractColumnProperties(nodeCol, rowCount, propID, propsBuffer);
 
-    const auto& raw = nodes->getRaw();
+    const std::vector<NodeID>& raw = nodes->getRaw();
+
+    if (setData->isInputPending()) {
+        for (size_t row = 0; row < rowCount; row++) {
+            writeBuffer->setPendingNodeProperty(raw[row].getValue(), propsBuffer[row]);
+        }
+
+        return;
+    }
+
     for (size_t row = 0; row < rowCount; row++) {
         writeBuffer->addNodeUpdate(raw[row], propsBuffer[row]);
     }
@@ -2442,7 +2451,16 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
     CommitWriteBuffer::UntypedProperties propsBuffer;
     extractColumnProperties(edgeCol, rowCount, propID, propsBuffer);
 
-    const auto& raw = edges->getRaw();
+    const std::vector<EdgeID>& raw = edges->getRaw();
+
+    if (setData->isInputPending()) {
+        for (size_t row = 0; row < rowCount; row++) {
+            writeBuffer->setPendingEdgeProperty(raw[row].getValue(), propsBuffer[row]);
+        }
+
+        return;
+    }
+
     for (size_t row = 0; row < rowCount; row++) {
         writeBuffer->addEdgeUpdate(raw[row], propsBuffer[row]);
     }

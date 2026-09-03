@@ -50,7 +50,6 @@ private:
     ExprAnalyzer* _exprAnalyzer {nullptr};
     std::unordered_set<const VarDecl*> _toBeCreated;
     const GraphMetadata& _graphMetadata;
-    bool _hasCreate {false};
 
     void analyze(const CreateStmt* createStmt);
     void analyze(const SetStmt* setStmt);

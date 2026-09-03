@@ -2120,42 +2120,50 @@ class NLSetNodePropertyData : public NLFunctionData {
 public:
     NLSetNodePropertyData(PropertyTypeID propertyTypeID,
                           const ColumnNodeIDs* input,
+                          bool inputIsPending,
                           const Column* value)
         : _input(input),
         _value(value),
-        _propertyTypeID(propertyTypeID)
+        _propertyTypeID(propertyTypeID),
+        _inputIsPending(inputIsPending)
     {
     }
 
     PropertyTypeID getPropertyTypeID() const { return _propertyTypeID; }
     const ColumnNodeIDs* getInput() const { return _input; }
+    bool isInputPending() const { return _inputIsPending; }
     const Column* getValue() const { return _value; }
 
 private:
     const ColumnNodeIDs* _input {nullptr};
     const Column* _value {nullptr};
     PropertyTypeID _propertyTypeID;
+    bool _inputIsPending {false};
 };
 
 class NLSetEdgePropertyData : public NLFunctionData {
 public:
     NLSetEdgePropertyData(PropertyTypeID propertyTypeID,
                           const ColumnEdgeIDs* input,
+                          bool inputIsPending,
                           const Column* value)
         : _input(input),
         _value(value),
-        _propertyTypeID(propertyTypeID)
+        _propertyTypeID(propertyTypeID),
+        _inputIsPending(inputIsPending)
     {
     }
 
     PropertyTypeID getPropertyTypeID() const { return _propertyTypeID; }
     const ColumnEdgeIDs* getInput() const { return _input; }
+    bool isInputPending() const { return _inputIsPending; }
     const Column* getValue() const { return _value; }
 
 private:
     const ColumnEdgeIDs* _input {nullptr};
     const Column* _value {nullptr};
     PropertyTypeID _propertyTypeID;
+    bool _inputIsPending {false};
 };
 
 class NLDeleteNodeData : public NLFunctionData {

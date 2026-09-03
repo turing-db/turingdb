@@ -1,5 +1,6 @@
 #include "CommitWriteBuffer.h"
 
+#include <algorithm>
 #include <variant>
 #include <vector>
 
@@ -146,6 +147,33 @@ bool CommitWriteBuffer::pendingNodesHaveEdges(std::span<const PendingNodeOffset>
     }
 
     return false;
+}
+
+void CommitWriteBuffer::setPendingProperty(UntypedProperties& properties,
+                                           const UntypedProperty& property) {
+    // A pending entity's properties are read first-wins when it is built, so an update
+    // has to take the place of the value the create wrote rather than follow it.
+    const auto samePropertyType = [&property](const UntypedProperty& existing) {
+        return existing.propertyID == property.propertyID;
+    };
+
+    const auto existing = std::ranges::find_if(properties, samePropertyType);
+    if (existing != properties.end()) {
+        *existing = property;
+        return;
+    }
+
+    properties.push_back(property);
+}
+
+void CommitWriteBuffer::setPendingNodeProperty(PendingNodeOffset nodeOffset,
+                                               const UntypedProperty& property) {
+    setPendingProperty(getPendingNode(nodeOffset).properties, property);
+}
+
+void CommitWriteBuffer::setPendingEdgeProperty(size_t edgeOffset,
+                                               const UntypedProperty& property) {
+    setPendingProperty(getPendingEdge(edgeOffset).properties, property);
 }
 
 void CommitWriteBuffer::addHangingEdges(const GraphView& view) {
