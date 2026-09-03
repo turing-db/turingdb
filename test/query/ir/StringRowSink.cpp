@@ -6,6 +6,7 @@
 
 #include <spdlog/fmt/bundled/format.h>
 
+#include "GraphPath.h"
 #include "ID.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
@@ -126,6 +127,24 @@ bool textOfList(const Column* chunk, size_t rowIndex, std::string& text) {
     return true;
 }
 
+bool textOfPath(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnVector<Path>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    text.clear();
+    for (const EntityID entity : column->getRaw()[rowIndex]) {
+        if (!text.empty()) {
+            text += ", ";
+        }
+
+        text += fmt::format("{}", entity.getValue());
+    }
+
+    return true;
+}
+
 template <typename Primitive>
 bool textOfOptional(const Column* chunk, size_t rowIndex, std::string& text) {
     const auto* column = dynamic_cast<const ColumnOptVector<Primitive>*>(chunk);
@@ -200,6 +219,8 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfListElement(chunk, rowIndex, text)) {
         return text;
     } else if (textOfList(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfPath(chunk, rowIndex, text)) {
         return text;
     }
 

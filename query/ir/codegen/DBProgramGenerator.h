@@ -44,6 +44,7 @@ class MatchStmt;
 class Projection;
 class PropertyExpr;
 class ReturnStmt;
+class ShortestPathStmt;
 class UnwindStmt;
 class VarDecl;
 class VectorSearchStmt;
@@ -282,6 +283,15 @@ private:
     // query writes them, so a predicate or an argument reading what a statement yielded is
     // generated once that statement has bound it.
     void generateFiltersCallsAndSearches(std::span<Stmt* const> stmts);
+
+    // Emit db.shortest_path for a SHORTESTPATH statement in this part: feed it the source
+    // and target columns bound by the preceding matches and publish its distance and path
+    // results under the declared variable names. A no-op when the part has no such statement.
+    void generateShortestPath(std::span<Stmt* const> stmts);
+
+    // The SHORTESTPATH statement among the part's statements, or null.
+    const ShortestPathStmt* findShortestPathStmt(std::span<Stmt* const> stmts) const;
+
     void generateMatchFilter(const MatchStmt* matchStmt);
 
     // Emits the Sort a MATCH's ORDER BY asks for, over everything in flight: the rows the

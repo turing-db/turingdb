@@ -10,6 +10,7 @@ namespace db {
 
 class CypherAST;
 class Expr;
+class VarDecl;
 class ReadStmtAnalyzer;
 class WriteStmtAnalyzer;
 class ExprAnalyzer;
@@ -104,6 +105,11 @@ private:
     void analyzeAggregateOrderBy(const Projection* projection) const;
     bool isGroupWise(const Expr* expr, const Projection* projection) const;
     bool isGroupWise(std::span<const Expr* const> exprs, const Projection* projection) const;
+
+    void analyzeShortestPathReturn(const SinglePartQuery* query) const;
+    const VarDecl* findConsumedVariable(const Expr* expr,
+                                        const VarDecl* distDecl,
+                                        const VarDecl* pathDecl) const;
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

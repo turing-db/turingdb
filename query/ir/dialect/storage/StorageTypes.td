@@ -133,6 +133,13 @@ def ListElement : StorageType<"ListElement", "list_element"> {
     }];
 }
 
+def Path : StorageType<"Path", "path"> {
+    let summary = "A graph path value";
+    let description = [{
+        Chunk representation of ColumnVector<Path>.
+    }];
+}
+
 def List : StorageType<"List", "list"> {
     let summary = "A list value";
     let description = [{

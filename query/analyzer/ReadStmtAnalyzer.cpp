@@ -82,7 +82,7 @@ void ReadStmtAnalyzer::analyze(Stmt* stmt) {
         break;
 
         case Stmt::Kind::SHORTESTPATH:
-            analyze(static_cast<const ShortestPathStmt*>(stmt));
+            analyze(static_cast<ShortestPathStmt*>(stmt));
         break;
 
         case Stmt::Kind::UNWIND:
@@ -573,7 +573,7 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
     analyzeYieldFilter(yieldItems);
 }
 
-void ReadStmtAnalyzer::analyze(const ShortestPathStmt* spSt) {
+void ReadStmtAnalyzer::analyze(ShortestPathStmt* spSt) {
     const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
     const std::string_view propName = spSt->getEdgeProperty()->getName();
 
@@ -582,15 +582,49 @@ void ReadStmtAnalyzer::analyze(const ShortestPathStmt* spSt) {
         throwError(fmt::format("Unknown property: {}", propName));
     }
 
+    const Symbol* source = spSt->getSource();
+    const Symbol* target = spSt->getTarget();
+    bioassert(source && target, "Null endpoints.");
+
+    spSt->setSourceDecl(resolveShortestPathEndpoint(source, spSt));
+    spSt->setTargetDecl(resolveShortestPathEndpoint(target, spSt));
+
     const Symbol* distVar = spSt->getDistVar();
     const Symbol* pathVar = spSt->getPathVar();
     bioassert(distVar && pathVar, "Null variables.");
 
+    const ValueType weightPropType = propType->_valueType;
+    const auto maybeEvalType = toEvaluatedType(weightPropType);
+    bioassert(maybeEvalType.has_value(), "Invalid value type.");
+    const EvaluatedType evalType = maybeEvalType.value();
+
     const std::string_view distName = distVar->getName();
     const std::string_view pathName = pathVar->getName();
 
-    _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::Integer, distName);
-    _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::GraphPath, pathName);
+    VarDecl* distDecl = _ctxt->getOrCreateNamedVariable(_ast, evalType, distName);
+    VarDecl* pathDecl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::GraphPath, pathName);
+
+    spSt->setDistDecl(distDecl);
+    spSt->setPathDecl(pathDecl);
+}
+
+VarDecl* ReadStmtAnalyzer::resolveShortestPathEndpoint(const Symbol* endpoint, const ShortestPathStmt* spSt) const {
+    const std::string_view name = endpoint->getName();
+
+    VarDecl* decl = _ctxt->getDecl(name);
+    if (!decl) {
+        throwError(fmt::format("Variable '{}' not found", name), spSt);
+    }
+
+    const EvaluatedType type = decl->getType();
+    if (type != EvaluatedType::NodePattern) {
+        throwError(fmt::format("SHORTESTPATH endpoint '{}' must be a node, but is {} instead",
+                               name,
+                               EvaluatedTypeName::value(type)),
+                   spSt);
+    }
+
+    return decl;
 }
 
 void ReadStmtAnalyzer::analyze(UnwindStmt* unwind) {

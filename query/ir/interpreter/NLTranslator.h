@@ -53,6 +53,7 @@ private:
         GroupAggregate,
         UnwindCollect,
         Collect,
+        ShortestPath,
         UnwindConst,
         LoadCSV,
         VectorSearch,
@@ -73,6 +74,8 @@ private:
 
         // The accumulator an UnwindCollect / Collect iterator drains; null otherwise.
         NLCollectState* _collectState {nullptr};
+
+        NLShortestPathState* _shortestPathState {nullptr};
 
         // The call a ProcedureInit iterator drives; null for the other kinds.
         NLProcedureState* _procedureState {nullptr};
@@ -176,6 +179,8 @@ private:
     // nl.collect_update (and later the drain) that name the handle find the same group
     // table and per-group lists
     llvm::DenseMap<mlir::Value, NLCollectState*> _collectStates;
+
+    llvm::DenseMap<mlir::Value, NLShortestPathState*> _shortestPathStates;
 
     // nl.procedure handle SSA value -> the runtime call it produces, so every op that
     // names the handle - the nl.for over nl.procedure_init - drives the same procedure
@@ -441,6 +446,20 @@ private:
     void translateCollectLoop(const IteratorConfig& config,
                               mlir::Block& loopBody,
                               NLStmtContainer* body);
+
+    void translateShortestPathBuffer(mlir::nl::ShortestPathBuffer buffer, NLStmtContainer* body);
+
+    void translateShortestPathUpdate(mlir::nl::ShortestPathUpdate update, NLStmtContainer* body);
+
+    NLShortestPathState* shortestPathStateFor(mlir::Value handle) const;
+
+    PropertyType resolveShortestPathWeight(mlir::Value stateHandle) const;
+
+    NLShortestPathState* allocShortestPathStateFor(const PropertyType& weight);
+
+    void translateShortestPathLoop(const IteratorConfig& config,
+                                   mlir::Block& loopBody,
+                                   NLStmtContainer* body);
 
     // Pool-allocate the flat value buffer for a collected value type: a plain
     // ColumnVector<Primitive> (not nullable - collect drops nulls) that grows as

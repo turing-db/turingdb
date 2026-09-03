@@ -1556,4 +1556,30 @@ def UnwindCollect : TuringOp<"unwind_collect", [Pure]> {
   let hasVerifier = 1;
 }
 
+/**
+* ShortestPath
+*/
+def ShortestPath : TuringOp<"shortest_path", [Pure]> {
+  let summary = "Weighted shortest path from a source node set to a target node set";
+  let description = [{
+    TuringDB's `SHORTESTPATH(source, target, edgeProperty, distVar, pathVar)`: the
+    minimum-weight directed path from any source node to any target node
+
+      %dist, %path = db.shortest_path(%a, %b) weight "cost"
+                       : (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+                         -> (!db.column<none>, !db.column<!storage.path>)
+
+    Pipeline breaker as both node columns are consumed in full. The distance column
+    is typed `none` here and resolved to the weight property's value type at lowering.
+  }];
+
+  let arguments = (ins ColumnNodeIDs:$source, ColumnNodeIDs:$target, StrAttr:$edgeProperty);
+  let results   = (outs Column:$distance, ColumnPath:$path);
+
+  let assemblyFormat = [{
+    `(` $source `,` $target `)` `weight` $edgeProperty attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
 #endif //TURINGDB_OPS

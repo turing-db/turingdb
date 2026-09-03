@@ -1,12 +1,16 @@
 #include "NLExecutor.h"
 
+#include <stdint.h>
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <queue>
 #include <span>
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <unordered_map>
+#include <unordered_set>
 
 #include <spdlog/fmt/bundled/format.h>
 
@@ -18,6 +22,7 @@
 #include "iterators/GetNodeLabelSetIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/GetOutEdgesByTypeIterator.h"
+#include "iterators/GetPropertiesIterator.h"
 #include "iterators/GetPropertiesWithNullIterator.h"
 #include "iterators/ScanEdgesIterator.h"
 #include "iterators/ScanNodesIterator.h"
@@ -2332,6 +2337,145 @@ void runProcedureDrive(NLExecutionContext* context,
     }
 }
 
+template <SupportedType T>
+void shortestPathSearch(NLExecutionContext* context, NLShortestPathLoopData* loopData) {
+    using EdgePropType = typename T::Primitive;
+
+    const GraphView& view = *context->getView();
+    NLShortestPathStateImpl<T>* state = static_cast<NLShortestPathStateImpl<T>*>(loopData->getState());
+
+    ColumnNodeIDs* input = loopData->getExpansionInput();
+    ColumnEdgeIDs* outputEdges = loopData->getExpandedEdges();
+    ColumnNodeIDs* outputNodes = loopData->getExpandedTargets();
+    ColumnVector<size_t>* outputIndices = loopData->getExpandedIndices();
+    ColumnVector<size_t>* propertyIndices = loopData->getWeightIndices();
+    ColumnVector<EdgePropType>* properties = static_cast<ColumnVector<EdgePropType>*>(loopData->getWeightValues());
+
+    GetOutEdgesChunkWriter getOutEdgesWriter(view, input);
+    getOutEdgesWriter.setIndices(outputIndices);
+    getOutEdgesWriter.setEdgeIDs(outputEdges);
+    getOutEdgesWriter.setTgtIDs(outputNodes);
+
+    GetPropertiesChunkWriter<EdgeID, T> getPropertiesWriter(view, state->getPropertyType(), outputEdges);
+    getPropertiesWriter.setOutput(properties);
+    getPropertiesWriter.setIndices(propertyIndices);
+
+    const std::unordered_set<NodeID>& targetNodes = state->targets();
+
+    typename NLShortestPathStateImpl<T>::DjistrakaHeap& heap = state->heap();
+    typename NLShortestPathStateImpl<T>::DjistrakaValueMap& heapValueMap = state->heapValueMap();
+
+    while (!heap.empty()) {
+        const DjistrakaNode<EdgePropType> val = heap.top();
+
+        if (targetNodes.contains(val.id)) {
+            // target found
+            break;
+        }
+
+        heap.pop();
+
+        // We only need to confirm if the distance value is stale
+        // as we only add a new value to the heap when we find a shorter
+        // path to a node.
+        const auto it = heapValueMap.find(val.id);
+        if (it != heapValueMap.end() && it->second.distance != val.distance) {
+            // remove stale value
+            continue;
+        }
+
+        // Set up the input columns and iterators
+        input->clear();
+        input->push_back(val.id);
+        getOutEdgesWriter.reset();
+        // We set the chunk size to SIZE_MAX so that we expand the iterators
+        // completely in 1 chunk
+        getOutEdgesWriter.fill(std::numeric_limits<size_t>::max());
+
+        getPropertiesWriter.reset();
+        getPropertiesWriter.fill(std::numeric_limits<size_t>::max());
+
+        // loop over all the edge properties
+        for (size_t i = 0; i < properties->size(); ++i) {
+
+            if constexpr (std::is_signed_v<EdgePropType>) {
+                if ((*properties)[i] < 0) {
+                    throw IRException("Cannot Do Shortest Path With Negative Weights");
+                }
+            }
+
+            // Using the indices we for each edge we have the:
+            // 1.Target Node
+            // 2.EdgeID
+            // 3.Edge Property
+            const auto outputNodeId = (*outputNodes)[(*propertyIndices)[i]];
+            const auto outputEdgeId = (*outputEdges)[(*propertyIndices)[i]];
+            const auto dist = val.distance + (*properties)[i];
+
+            const auto it = heapValueMap.find(outputNodeId);
+            if (it == heapValueMap.end()) {
+                // If the node is not in the heapValueMap
+                // then it is an unexplored node so we add it into heap
+                // directly
+                heap.push({outputNodeId, val.id, outputEdgeId, dist});
+                heapValueMap[outputNodeId] = {val.id, outputEdgeId, dist};
+            } else {
+                // If we have come across this nodeID before we check if the new path
+                // to the node is shorter than the current shortest path for the node
+                // If so we replace it by pushing the new djistraka node into the heap
+                // and changing the heapValueMap value to match the new shortest distance.
+                //
+                // The old path's node will still exist in the heap but if we ever pop
+                // it from the heap we can compare it to the latest value in the heapValueMap
+                // to invalidate it.
+                if (dist < it->second.distance) {
+                    heap.push({outputNodeId, val.id, outputEdgeId, dist});
+                    heapValueMap[outputNodeId] = {val.id, outputEdgeId, dist};
+                }
+            }
+        }
+    }
+
+    // Once we are out of the while loop if there are no values in the heap that means
+    // no path was found between the source and target sets.
+
+    if (heap.empty()) {
+        return;
+    }
+
+    // After the loop the top value in the heap is the target node with the shortest
+    // distance from the source set.
+
+    Column* dist = loopData->getDistanceOutput();
+    auto* distCol = static_cast<ColumnVector<EdgePropType>*>(dist);
+    ColumnVector<Path>* pathCol = loopData->getPathOutput();
+
+    distCol->clear();
+    pathCol->clear();
+
+    // Get the total length of the path
+    distCol->push_back(heap.top().distance);
+    auto& pathVec = pathCol->emplace_back();
+
+    // In the heap all the (non-stale) values represent the shortest path to that
+    // nodeID from the source set. So we can find the shortet path by following the
+    // previousNode back from the target node that we have found.
+    auto lastNode = heap.top().prevNode;
+    auto edge = heap.top().edge;
+    pathVec.push_back(heap.top().id.getValue());
+
+    while (lastNode.isValid()) {
+        pathVec.push_back(edge.getValue());
+        pathVec.push_back(lastNode.getValue());
+
+        const auto& pathInfo = heapValueMap[lastNode];
+        lastNode = pathInfo.prevNode;
+        edge = pathInfo.edge;
+    }
+
+    runBody(context, loopData->getStmts());
+}
+
 }
 
 vec::VectorDatabase* NLExecutionContext::getVectorDatabase() const {
@@ -3898,6 +4042,48 @@ void NLExecutor::runCollectLoop(NLExecutionContext* context, NLFunctionData* dat
     }
 }
 
+void NLExecutor::runShortestPathReset(NLExecutionContext* context, NLFunctionData* data) {
+    const NLShortestPathResetData* reset = static_cast<NLShortestPathResetData*>(data);
+    reset->getState()->reset();
+}
+
+void NLExecutor::runShortestPathUpdate(NLExecutionContext* context, NLFunctionData* data) {
+    NLShortestPathUpdateData* update = static_cast<NLShortestPathUpdateData*>(data);
+    NLShortestPathState* state = update->getState();
+
+    const std::vector<NodeID>& nodes = update->getNodes()->getRaw();
+
+    // A target only needs to be a member; a source seeds the frontier at distance zero, so it
+    // goes through the typed accumulator.
+    if (update->isTarget()) {
+        state->targets().insert(nodes.begin(), nodes.end());
+    } else {
+        state->addSources(nodes);
+    }
+}
+
+void NLExecutor::runShortestPathLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLShortestPathLoopData* loopData = static_cast<NLShortestPathLoopData*>(data);
+
+    switch (loopData->getState()->getValueType()) {
+        case ValueType::Double:
+            return shortestPathSearch<types::Double>(context, loopData);
+        break;
+
+        case ValueType::Int64:
+            return shortestPathSearch<types::Int64>(context, loopData);
+        break;
+
+        case ValueType::UInt64:
+            return shortestPathSearch<types::UInt64>(context, loopData);
+        break;
+
+        default:
+            throw IRException("SHORTESTPATH weight must be an Int64, UInt64 or Double property");
+        break;
+    }
+}
+
 void NLExecutor::runProcedureInitLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLProcedureLoopData* loopData = static_cast<NLProcedureLoopData*>(data);
     NLProcedureState* state = loopData->getState();
@@ -4173,6 +4359,10 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
 
         case NLChunkKind::List:
             throw IRException("A list column cannot be a DISTINCT or grouping key: a list has no scalar value to key on");
+        break;
+
+        case NLChunkKind::Path:
+            throw IRException("A path column cannot be a DISTINCT or grouping key: a path has no scalar value to key on");
         break;
     }
 
@@ -4508,6 +4698,10 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctChunkFold(NLChu
         case NLChunkKind::List:
             throw IRException("count(DISTINCT) cannot key on a list column: a list has no scalar value to count distinct");
         break;
+
+        case NLChunkKind::Path:
+            throw IRException("count(DISTINCT) cannot key on a path column: a path has no scalar value to count distinct");
+        break;
     }
 
     bioassert(false, "Unknown NLChunkKind");
@@ -4784,6 +4978,10 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
 
         case NLChunkKind::List:
             throw IRException("A list column cannot be a sort key: a list has no order here");
+        break;
+
+        case NLChunkKind::Path:
+            throw IRException("A path column cannot be a sort key: a path has no order here");
         break;
     }
 

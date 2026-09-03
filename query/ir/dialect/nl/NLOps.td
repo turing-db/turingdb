@@ -1812,6 +1812,57 @@ def Collect : NLOp<"collect", [Pure]> {
   let assemblyFormat = "`(` $state `)` attr-dict `:` qualified(type($result))";
 }
 
+/**
+* ShortestPathBuffer
+*/
+def ShortestPathBuffer : NLOp<"shortest_path_buffer", []> {
+  let summary = "Create (and reset) a shortest-path search accumulator";
+  let description = [{
+    Hoisted above the loops; produces the !nl.shortest_path_state handle the updates
+    append node sets to and the drain runs the search over. The result type is buildable
+    and omitted.
+
+      %buf = nl.shortest_path_buffer
+  }];
+
+  let results = (outs NLShortestPathState:$state);
+
+  let assemblyFormat = "attr-dict";
+}
+
+/**
+* ShortestPathUpdate
+*/
+def ShortestPathUpdate : NLOp<"shortest_path_update", []> {
+  let summary = "Append this step's nodes to the source or target node set";
+  let description = [{
+    Appends the step's node chunk to the target set when `target` is present, else the
+    source set. Source and target are filled by separate updates, each in its own loop.
+
+      nl.shortest_path_update %buf, %a
+      nl.shortest_path_update %buf, %b target
+  }];
+
+  let arguments = (ins NLShortestPathStateHandle:$state, NLNodeIDChunk:$nodes, UnitAttr:$target);
+
+  let assemblyFormat = "$state `,` $nodes (`target` $target^)? attr-dict";
+}
+
+/**
+* ShortestPath
+*/
+def ShortestPath : NLOp<"shortest_path", [Pure]> {
+  let summary = "Create a database iterator that runs the weighted search and drains its one result row";
+  let description = [{
+      %rows = nl.shortest_path(%buf, %cost) : !nl.iter<!nl.chunk<f64>, !nl.chunk<!storage.path>>
+  }];
+
+  let arguments = (ins NLShortestPathStateHandle:$state, NLPropertyTypeHandle:$edgeProperty);
+  let results   = (outs NLIterator:$result);
+
+  let assemblyFormat = "`(` $state `,` $edgeProperty `)` attr-dict `:` qualified(type($result))";
+}
+
 def CreateNode : NLOp<"create_node", [AttrSizedOperandSegments]> {
   let summary = "Write one node per input row into the open transaction's write buffer";
   let description = [{

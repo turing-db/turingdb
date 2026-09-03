@@ -321,6 +321,8 @@ private:
     // element) plus its nl.for - the list never materializes.
     void lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect);
 
+    void lowerShortestPath(mlir::db::ShortestPath shortestPath);
+
     void lowerCallProcedure(mlir::db::CallProcedure call);
 
     void lowerOutput(mlir::db::Output output);

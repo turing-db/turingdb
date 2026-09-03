@@ -145,6 +145,15 @@ llvm::StringRef edgeTypeName(mlir::Value handle) {
     return handleOp.getName();
 }
 
+llvm::StringRef propertyTypeName(mlir::Value handle) {
+    nl::GetPropertyType handleOp = handle.getDefiningOp<nl::GetPropertyType>();
+    if (!handleOp) {
+        throw IRException("edge_property operand must come from nl.get_property_type");
+    }
+
+    return handleOp.getName();
+}
+
 // The with-null fetch handler for a property's value type, on the node side
 // when isNode is true and the edge side otherwise. Selecting it here keeps the
 // value-type dispatch with the rest of translation; the handler bodies live in
@@ -445,6 +454,11 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._kind = IteratorKind::Collect;
             config._collectState = collectStateFor(collect.getState());
             _iteratorConfigs[collect.getResult()] = config;
+        } else if (nl::ShortestPath shortestPath = mlir::dyn_cast<nl::ShortestPath>(operation)) {
+            IteratorConfig config;
+            config._kind = IteratorKind::ShortestPath;
+            config._shortestPathState = shortestPathStateFor(shortestPath.getState());
+            _iteratorConfigs[shortestPath.getResult()] = config;
         } else if (nl::UnwindConst unwindConst = mlir::dyn_cast<nl::UnwindConst>(operation)) {
             IteratorConfig config;
             config._kind = IteratorKind::UnwindConst;
@@ -593,6 +607,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateCollectBuffer(collectBuffer, body);
         } else if (nl::CollectUpdate collectUpdate = mlir::dyn_cast<nl::CollectUpdate>(operation)) {
             translateCollectUpdate(collectUpdate, body);
+        } else if (nl::ShortestPathBuffer shortestPathBuffer = mlir::dyn_cast<nl::ShortestPathBuffer>(operation)) {
+            translateShortestPathBuffer(shortestPathBuffer, body);
+        } else if (nl::ShortestPathUpdate shortestPathUpdate = mlir::dyn_cast<nl::ShortestPathUpdate>(operation)) {
+            translateShortestPathUpdate(shortestPathUpdate, body);
         } else if (nl::CreateNode createNode = mlir::dyn_cast<nl::CreateNode>(operation)) {
             translateCreateNode(createNode, body);
         } else if (nl::CreateEdge createEdge = mlir::dyn_cast<nl::CreateEdge>(operation)) {
@@ -652,6 +670,8 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         translateUnwindCollectLoop(config, loopBody, body);
     } else if (config._kind == IteratorKind::Collect) {
         translateCollectLoop(config, loopBody, body);
+    } else if (config._kind == IteratorKind::ShortestPath) {
+        translateShortestPathLoop(config, loopBody, body);
     } else if (config._kind == IteratorKind::UnwindConst) {
         // A const unwind is a plain source, so - like a scan - a downstream LIMIT can
         // bound its loop through the ordinary early-exit.
@@ -2428,6 +2448,115 @@ NLCollectState* NLTranslator::collectStateFor(mlir::Value handle) const {
     return stateIt->second;
 }
 
+PropertyType NLTranslator::resolveShortestPathWeight(mlir::Value stateHandle) const {
+    nl::ShortestPath drain;
+    for (mlir::Operation* user : stateHandle.getUsers()) {
+        if (nl::ShortestPath found = mlir::dyn_cast<nl::ShortestPath>(user)) {
+            drain = found;
+            break;
+        }
+    }
+
+    if (!drain) {
+        throw IRException("nl.shortest_path_buffer must feed an nl.shortest_path drain");
+    }
+
+    const llvm::StringRef name = propertyTypeName(drain.getEdgeProperty());
+    const std::optional<PropertyType> weight = _view->metadata().propTypes().get(name);
+    if (!weight) {
+        throw IRException("Unknown property '" + name.str() + "'");
+    }
+
+    return *weight;
+}
+
+NLShortestPathState* NLTranslator::allocShortestPathStateFor(const PropertyType& weight) {
+    switch (weight._valueType) {
+        case ValueType::Double:
+            return _program->allocShortestPathState<types::Double>(weight._valueType, weight._id);
+        break;
+
+        case ValueType::Int64:
+            return _program->allocShortestPathState<types::Int64>(weight._valueType, weight._id);
+        break;
+
+        case ValueType::UInt64:
+            return _program->allocShortestPathState<types::UInt64>(weight._valueType, weight._id);
+        break;
+
+        default:
+            throw IRException("SHORTESTPATH weight must be an Int64, UInt64 or Double property");
+        break;
+    }
+}
+
+void NLTranslator::translateShortestPathBuffer(nl::ShortestPathBuffer buffer, NLStmtContainer* body) {
+    // Resolve the weight before the accumulator is built, so it is typed by the weight and the
+    // updates can seed the frontier directly. The weight type is chosen once, here.
+    const PropertyType weight = resolveShortestPathWeight(buffer.getState());
+    NLShortestPathState* state = allocShortestPathStateFor(weight);
+    _shortestPathStates[buffer.getState()] = state;
+
+    // The reset empties the accumulator each time the block holding this
+    // nl.shortest_path_buffer runs: once at function scope.
+    NLShortestPathResetData* resetData = _program->allocFunctionData<NLShortestPathResetData>(state);
+    body->emplaceStmt(&NLExecutor::runShortestPathReset, resetData);
+}
+
+void NLTranslator::translateShortestPathUpdate(nl::ShortestPathUpdate update, NLStmtContainer* body) {
+    NLShortestPathState* state = shortestPathStateFor(update.getState());
+
+    const ColumnNodeIDs* nodes = static_cast<const ColumnNodeIDs*>(getColumn(update.getNodes()));
+
+    NLShortestPathUpdateData* data = _program->allocFunctionData<NLShortestPathUpdateData>(state, nodes, update.getTarget());
+    body->emplaceStmt(&NLExecutor::runShortestPathUpdate, data);
+}
+
+NLShortestPathState* NLTranslator::shortestPathStateFor(mlir::Value handle) const {
+    const auto stateIt = _shortestPathStates.find(handle);
+    if (stateIt == _shortestPathStates.end()) {
+        throw IRException("shortest path handle must be produced by an nl.shortest_path_buffer");
+    }
+
+    return stateIt->second;
+}
+
+void NLTranslator::translateShortestPathLoop(const IteratorConfig& config,
+                                             mlir::Block& loopBody,
+                                             NLStmtContainer* body) {
+    NLShortestPathState* state = config._shortestPathState;
+    if (!state) {
+        throw IRException("nl.shortest_path iterator must carry a shortest-path accumulator");
+    }
+
+    if (loopBody.getNumArguments() != 2) {
+        throw IRException("nl.shortest_path loop must bind a distance and a path variable");
+    }
+
+    NLShortestPathLoopData* loopData = _program->allocFunctionData<NLShortestPathLoopData>(state);
+
+    const mlir::Value distanceVariable = loopBody.getArgument(0);
+    const mlir::Value pathVariable = loopBody.getArgument(1);
+
+    Column* distanceOutput = allocColumnForChunkType(distanceVariable.getType());
+    _valueSlots[distanceVariable] = distanceOutput;
+    loopData->setDistanceOutput(distanceOutput);
+
+    ColumnVector<Path>* pathOutput = static_cast<ColumnVector<Path>*>(allocColumnForChunkType(pathVariable.getType()));
+    _valueSlots[pathVariable] = pathOutput;
+    loopData->setPathOutput(pathOutput);
+
+    ColumnNodeIDs* expansionInput = _memory->alloc<ColumnNodeIDs>();
+    ColumnEdgeIDs* expandedEdges = _memory->alloc<ColumnEdgeIDs>();
+    ColumnNodeIDs* expandedTargets = _memory->alloc<ColumnNodeIDs>();
+    Column* weightValues = allocValueColumnForValueType(state->getValueType());
+    loopData->setExpansionScratch(expansionInput, expandedEdges, expandedTargets, weightValues);
+
+    body->emplaceStmt(&NLExecutor::runShortestPathLoop, loopData);
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
 void NLTranslator::translateUnwindCollectLoop(const IteratorConfig& config,
                                        mlir::Block& loopBody,
                                        NLStmtContainer* body) {
@@ -3304,6 +3433,8 @@ NLChunkKind NLTranslator::chunkKindFromElementType(mlir::Type elementType) {
         return NLChunkKind::OwnedString;
     } else if (mlir::isa<storage::ListType>(elementType)) {
         return NLChunkKind::List;
+    } else if (mlir::isa<storage::PathType>(elementType)) {
+        return NLChunkKind::Path;
     } else if (mlir::isa<storage::BoolType>(elementType)) {
         return NLChunkKind::Bool;
     } else if (mlir::isa<mlir::Float64Type>(elementType)) {

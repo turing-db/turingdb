@@ -25,12 +25,26 @@ public:
     Symbol* getDistVar() const { return _distVar; }
     Symbol* getPathVar() const { return _pathVar; }
 
+    VarDecl* getSourceDecl() const { return _sourceDecl; }
+    VarDecl* getTargetDecl() const { return _targetDecl; }
+    VarDecl* getDistDecl() const { return _distDecl; }
+    VarDecl* getPathDecl() const { return _pathDecl; }
+
+    void setSourceDecl(VarDecl* decl) { _sourceDecl = decl; }
+    void setTargetDecl(VarDecl* decl) { _targetDecl = decl; }
+    void setDistDecl(VarDecl* decl) { _distDecl = decl; }
+    void setPathDecl(VarDecl* decl) { _pathDecl = decl; }
+
 private:
     Symbol* _source {nullptr};
     Symbol* _target {nullptr};
     Symbol* _edgeProperty {nullptr};
     Symbol* _distVar {nullptr};
     Symbol* _pathVar {nullptr};
+    VarDecl* _sourceDecl {nullptr};
+    VarDecl* _targetDecl {nullptr};
+    VarDecl* _distDecl {nullptr};
+    VarDecl* _pathDecl {nullptr};
 
     ShortestPathStmt(Symbol* source,
                      Symbol* target,

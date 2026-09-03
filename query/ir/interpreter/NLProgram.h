@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <memory>
 #include <optional>
+#include <queue>
 #include <span>
 #include <string>
 #include <string_view>
@@ -11,6 +12,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "GraphPath.h"
 #include "ID.h"
 #include "LocalMemory.h"
 #include "ProcedureState.h"
@@ -30,6 +32,7 @@ namespace db {
 
 class NLExecutionContext;
 class NLFunctionData;
+class NLShortestPathLoopData;
 class Procedure;
 class ProcedureContext;
 class ProcedureData;
@@ -57,6 +60,7 @@ enum class NLChunkKind {
     String,
     OwnedString,
     List,
+    Path,
 };
 
 // Invoke handler with the column element type a chunk kind stands for, so the families of
@@ -119,6 +123,10 @@ void dispatchChunkKind(NLChunkKind kind, Handler&& handler) {
 
         case NLChunkKind::List:
             return handler.template operator()<ListView>();
+        break;
+
+        case NLChunkKind::Path:
+            return handler.template operator()<Path>();
         break;
     }
 
@@ -2085,6 +2093,177 @@ private:
     NLStmtContainer _stmts;
 };
 
+template <typename T>
+struct DjistrakaNode {
+    NodeID id;
+    NodeID prevNode;
+    EdgeID edge;
+    T distance {0};
+};
+
+template <typename T>
+struct HeapMapValues {
+    NodeID prevNode;
+    EdgeID edge;
+    T distance {0};
+};
+
+template <typename T>
+struct DjistrakaNodeComparator {
+    bool operator()(const DjistrakaNode<T> l, const DjistrakaNode<T> r) const {
+        return l.distance > r.distance;
+    }
+};
+
+class NLShortestPathState {
+public:
+    NLShortestPathState(ValueType valueType, PropertyTypeID propertyType)
+        : _valueType(valueType),
+        _propertyType(propertyType)
+    {
+    }
+
+    virtual ~NLShortestPathState();
+
+    ValueType getValueType() const { return _valueType; }
+    PropertyTypeID getPropertyType() const { return _propertyType; }
+
+    std::unordered_set<NodeID>& targets() { return _targetNodes; }
+
+    // Reset the whole accumulator, and seed the frontier with a producing step's source nodes
+    // (each at distance zero). Typed on the weight, so implemented by the templated impl; the
+    // drain reaches the typed frontier through the impl's accessors.
+    virtual void reset() = 0;
+    virtual void addSources(const std::vector<NodeID>& nodes) = 0;
+
+protected:
+    ValueType _valueType {ValueType::Invalid};
+    PropertyTypeID _propertyType;
+    std::unordered_set<NodeID> _targetNodes;
+};
+
+template <SupportedType T>
+class NLShortestPathStateImpl final : public NLShortestPathState {
+public:
+    using EdgePropType = typename T::Primitive;
+    using DjistrakaHeap = std::priority_queue<DjistrakaNode<EdgePropType>,
+                                              std::vector<DjistrakaNode<EdgePropType>>,
+                                              DjistrakaNodeComparator<EdgePropType>>;
+    using DjistrakaValueMap = std::unordered_map<NodeID, HeapMapValues<EdgePropType>>;
+
+    using NLShortestPathState::NLShortestPathState;
+
+    void reset() override {
+        _heap = DjistrakaHeap();
+        _heapValueMap.clear();
+        _targetNodes.clear();
+    }
+
+    void addSources(const std::vector<NodeID>& nodes) override {
+        for (const NodeID val : nodes) {
+            _heap.push({val, NodeID(), EdgeID(), 0});
+            _heapValueMap.insert({
+                val, {NodeID(), EdgeID(), 0}
+            });
+        }
+    }
+
+    DjistrakaHeap& heap() { return _heap; }
+    DjistrakaValueMap& heapValueMap() { return _heapValueMap; }
+
+private:
+    DjistrakaHeap _heap;
+    DjistrakaValueMap _heapValueMap;
+};
+
+// nl.shortest_path_buffer data: empties the accumulator each time the block it lives
+// in runs - once at function scope
+class NLShortestPathResetData : public NLFunctionData {
+public:
+    NLShortestPathResetData(NLShortestPathState* state)
+        : _state(state)
+    {
+    }
+
+    NLShortestPathState* getState() const { return _state; }
+
+private:
+    NLShortestPathState* _state {nullptr};
+};
+
+class NLShortestPathUpdateData : public NLFunctionData {
+public:
+    NLShortestPathUpdateData(NLShortestPathState* state, const ColumnNodeIDs* nodes, bool target)
+        : _state(state),
+        _nodes(nodes),
+        _target(target)
+    {
+    }
+
+    NLShortestPathState* getState() const { return _state; }
+    const ColumnNodeIDs* getNodes() const { return _nodes; }
+    bool isTarget() const { return _target; }
+
+private:
+    NLShortestPathState* _state {nullptr};
+    const ColumnNodeIDs* _nodes {nullptr};
+    bool _target {false};
+};
+
+class NLShortestPathLoopData : public NLFunctionData {
+public:
+    NLShortestPathLoopData(NLShortestPathState* state)
+        : _state(state)
+    {
+    }
+
+    NLShortestPathState* getState() const { return _state; }
+
+    void setDistanceOutput(Column* distance) { _distance = distance; }
+    void setPathOutput(ColumnVector<Path>* path) { _path = path; }
+
+    Column* getDistanceOutput() const { return _distance; }
+    ColumnVector<Path>* getPathOutput() const { return _path; }
+
+    // The scratch the search reuses to expand one popped node's out-edges and read their
+    // weights, allocated once at translation. The edge/node/weight columns are LocalMemory
+    // columns; the index columns are plain scratch, as on NLEdgeLoopData / NLSortLoopData.
+    void setExpansionScratch(ColumnNodeIDs* input,
+                             ColumnEdgeIDs* edges,
+                             ColumnNodeIDs* targets,
+                             Column* weights) {
+        _expansionInput = input;
+        _expandedEdges = edges;
+        _expandedTargets = targets;
+        _weightValues = weights;
+    }
+
+    ColumnNodeIDs* getExpansionInput() const { return _expansionInput; }
+    ColumnEdgeIDs* getExpandedEdges() const { return _expandedEdges; }
+    ColumnNodeIDs* getExpandedTargets() const { return _expandedTargets; }
+    Column* getWeightValues() const { return _weightValues; }
+    ColumnVector<size_t>* getExpandedIndices() { return &_expandedIndices; }
+    ColumnVector<size_t>* getWeightIndices() { return &_weightIndices; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
+    NLShortestPathState* _state {nullptr};
+
+    Column* _distance {nullptr};
+    ColumnVector<Path>* _path {nullptr};
+
+    ColumnNodeIDs* _expansionInput {nullptr};
+    ColumnEdgeIDs* _expandedEdges {nullptr};
+    ColumnNodeIDs* _expandedTargets {nullptr};
+    Column* _weightValues {nullptr};
+    ColumnVector<size_t> _expandedIndices;
+    ColumnVector<size_t> _weightIndices;
+
+    NLStmtContainer _stmts;
+};
+
 class NLCreateNodeData : public NLFunctionData {
 public:
     struct Property {
@@ -2452,6 +2631,14 @@ public:
         return statePtr;
     }
 
+    template <SupportedType T>
+    NLShortestPathState* allocShortestPathState(ValueType valueType, PropertyTypeID propertyType) {
+        _shortestPathStates.emplace_back(
+            std::make_unique<NLShortestPathStateImpl<T>>(valueType, propertyType));
+        NLShortestPathState* ptr = _shortestPathStates.back().get();
+        return ptr;
+    }
+
     // Allocate one CALL's runtime state, owned by the program; the statements that
     // prepare and drive the call hold a borrowed pointer. Releasing the
     // procedure's data is this state's business, so it outlives every statement
@@ -2489,6 +2676,7 @@ private:
     std::vector<std::unique_ptr<NLAggregateState>> _aggregateStates;
     std::vector<std::unique_ptr<NLGroupAggregateState>> _groupAggregateStates;
     std::vector<std::unique_ptr<NLCollectState>> _collectStates;
+    std::vector<std::unique_ptr<NLShortestPathState>> _shortestPathStates;
     std::vector<std::unique_ptr<NLProcedureState>> _procedureStates;
     NLStmtContainer _stmts;
 };

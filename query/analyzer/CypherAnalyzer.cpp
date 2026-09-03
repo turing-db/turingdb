@@ -82,6 +82,8 @@ const FunctionSignature* aggregateSignatureOf(const Expr* expr) {
     return signature;
 }
 
+constexpr std::string_view shortestPathErr = "Cannot return {} after SHORTESTPATH.";
+
 }
 
 CypherAnalyzer::CypherAnalyzer(CypherAST* ast, GraphView graphView)
@@ -224,6 +226,8 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
     if (returnStmt) {
         analyze(returnStmt);
     }
+
+    analyzeShortestPathReturn(query);
 }
 
 void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
@@ -684,6 +688,106 @@ bool CypherAnalyzer::isGroupWise(std::span<const Expr* const> exprs, const Proje
     }
 
     return true;
+}
+
+void CypherAnalyzer::analyzeShortestPathReturn(const SinglePartQuery* query) const {
+    const StmtContainer* readStmts = query->getReadStmts();
+    if (!readStmts) {
+        return;
+    }
+
+    const ShortestPathStmt* shortestPath = nullptr;
+    for (const Stmt* stmt : readStmts->stmts()) {
+        if (stmt->getKind() == Stmt::Kind::SHORTESTPATH) {
+            shortestPath = static_cast<const ShortestPathStmt*>(stmt);
+            break;
+        }
+    }
+
+    if (!shortestPath) {
+        return;
+    }
+
+    const ReturnStmt* returnStmt = query->getReturnStmt();
+    if (!returnStmt) {
+        return;
+    }
+
+    const Projection* projection = returnStmt->getProjection();
+    if (!projection) {
+        return;
+    }
+
+    const std::string_view distName = shortestPath->getDistVar()->getName();
+    const std::string_view pathName = shortestPath->getPathVar()->getName();
+
+    const VarDecl* distDecl = _ctxt->getDecl(distName);
+    const VarDecl* pathDecl = _ctxt->getDecl(pathName);
+
+    for (const Projection::ReturnItem& item : projection->items()) {
+        const VarDecl* consumed = nullptr;
+        const void* location = shortestPath;
+
+        VarDecl* const* declItem = std::get_if<VarDecl*>(&item);
+        Expr* const* exprItem = std::get_if<Expr*>(&item);
+
+        if (declItem) {
+            const VarDecl* decl = *declItem;
+            const bool isOutput = decl == distDecl || decl == pathDecl;
+            if (decl && !isOutput) {
+                consumed = decl;
+            }
+        } else if (exprItem) {
+            consumed = findConsumedVariable(*exprItem, distDecl, pathDecl);
+            location = *exprItem;
+        }
+
+        if (consumed) {
+            throwError(fmt::format(shortestPathErr, consumed->getName()), location);
+        }
+    }
+}
+
+const VarDecl* CypherAnalyzer::findConsumedVariable(const Expr* expr,
+                                                    const VarDecl* distDecl,
+                                                    const VarDecl* pathDecl) const {
+    if (!expr) {
+        return nullptr;
+    }
+
+    const auto consumedDecl = [distDecl, pathDecl](const VarDecl* decl) -> const VarDecl* {
+        if (!decl || decl == distDecl || decl == pathDecl) {
+            return nullptr;
+        }
+
+        return decl;
+    };
+
+    const Expr::Kind kind = expr->getKind();
+
+    if (kind == Expr::Kind::SYMBOL) {
+        return consumedDecl(expr->getExprVarDecl());
+    } else if (kind == Expr::Kind::PROPERTY) {
+        const PropertyExpr* property = static_cast<const PropertyExpr*>(expr);
+        return consumedDecl(property->getEntityVarDecl());
+    } else if (kind == Expr::Kind::ENTITY_TYPES) {
+        const EntityTypeExpr* entityType = static_cast<const EntityTypeExpr*>(expr);
+        return consumedDecl(entityType->getEntityVarDecl());
+    }
+
+    std::vector<const Expr*> children;
+    if (!ExprChildren::collect(expr, children)) {
+        return nullptr;
+    }
+
+    for (const Expr* child : children) {
+        const VarDecl* consumed = findConsumedVariable(child, distDecl, pathDecl);
+        if (consumed) {
+            return consumed;
+        }
+    }
+
+    return nullptr;
 }
 
 void CypherAnalyzer::analyze(OrderBy* orderBySt, const Projection* projection) {
