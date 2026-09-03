@@ -145,7 +145,11 @@ TEST_F(CreateReturnTest, multiCreate) {
     expectWriteRows("CREATE (n:Tag) CREATE (m:Tag) RETURN n, m", {{"18", "19"}});
     expectWriteRows("CREATE (n:Tag) CREATE (m:Tag) RETURN n, m", {{"20", "21"}});
     expectWriteRows("CREATE (s:Src)-[e:E]->(t:Tgt) RETURN s, e, t", {{"22", "18", "23"}});
-    expectWriteRows("MATCH (n:Src), (m:Tgt) CREATE (n)<-[e:New]-(m) RETURN e", {{"19"}});
+    expectWriteRows("CREATE (a:A) CREATE (a)-[e:E]->(b:B) RETURN a, e, b", {{"24", "19", "25"}});
+    expectWriteRows("MATCH (n:Src), (m:Tgt) CREATE (n)<-[e:New]-(m) RETURN e", {{"20"}});
+
+    expectWriteRows("commit", {});
+    expectWriteRows("MATCH (a:A)-[e:E]->(b:B) RETURN *", {{"24", "19", "25"}});
 }
 
 // The CREATE wrote no age, and a property it did not write is null rather than whatever
@@ -190,5 +194,6 @@ TEST_F(CreateReturnTest, returnsTheNodeTheChangeKept) {
 }
 
 int main(int argc, char** argv) {
-    return turing::test::turingTestMain(argc, argv);
+    return turing::test::turingTestMain(argc, argv,
+                                        [] { testing::GTEST_FLAG(repeat) = 5; });
 }
