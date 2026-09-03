@@ -207,6 +207,17 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
         status.setStatus(QueryStatus::Status::EXEC_ERROR);
         status.setMessage(e.what());
         return;
+    } catch (const FatalException& e) {
+        status.setStatus(QueryStatus::Status::EXEC_ERROR);
+        status.setMessage(std::string("Unexpected exception: ") + e.what());
+        return;
+    } catch (const TuringException& e) {
+        // What a loop reads outside the graph rejects malformed input with a plain
+        // TuringException - a CSV record whose fields do not match the file's, say:
+        // those are deliberate user-input rejections, not internal errors
+        status.setStatus(QueryStatus::Status::EXEC_ERROR);
+        status.setMessage(e.what());
+        return;
     } catch (const std::exception& e) {
         status.setStatus(QueryStatus::Status::EXEC_ERROR);
         status.setMessage(std::string("Unexpected exception: ") + e.what());
