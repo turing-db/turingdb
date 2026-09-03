@@ -57,8 +57,11 @@ public:
     IDs& ids() { return _ids; }
     const IDs& ids() const { return _ids; }
 
+    bool isSorted() const { return _sorted; }
+
 protected:
     IDs _ids;
+    bool _sorted {false};
 
 private:
     ValueType _valueType {ValueType::Invalid};
@@ -86,6 +89,7 @@ public:
         _values.emplace_back(std::forward<Args>(args)...);
         _ids.emplace_back(entityID);
         _entityIndexMap[entityID] = index;
+        _sorted = false;
     }
 
     bool has(EntityID entityID) const override {
@@ -153,6 +157,8 @@ public:
         for (size_t i = 0; i < _ids.size(); i++) {
             _entityIndexMap[_ids[i]] = i;
         }
+
+        _sorted = true;
     }
 
     Values& values() { return _values; }
@@ -186,6 +192,7 @@ public:
         _values.alloc(v);
         _ids.emplace_back(entityID);
         _entityIndexMap[entityID] = index;
+        _sorted = false;
     }
 
     bool has(EntityID entityID) const override {
@@ -273,6 +280,7 @@ public:
         _values.alloc(v);
         _ids.emplace_back(entityID);
         _entityIndexMap[entityID] = index;
+        _sorted = false;
     }
 
     bool has(EntityID entityID) const override {

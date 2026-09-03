@@ -8,6 +8,8 @@
 using namespace db;
 
 void TypedPropertyContainer<types::String>::sort() {
+    _sorted = true;
+
     if (_ids.empty()) {
         return;
     }
@@ -39,6 +41,8 @@ void TypedPropertyContainer<types::String>::sort() {
 }
 
 void TypedPropertyContainer<types::Embedding>::sort() {
+    _sorted = true;
+
     if (_ids.empty()) {
         return;
     }

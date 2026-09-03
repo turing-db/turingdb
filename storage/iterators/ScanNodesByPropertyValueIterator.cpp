@@ -4,6 +4,7 @@
 #include <string.h>
 #include <algorithm>
 #include <iterator>
+#include <span>
 #include <type_traits>
 
 #if defined(__AVX2__)
@@ -199,6 +200,57 @@ size_t scanEqualVectorised(const Lane* values, const EntityID* ids, size_t rows,
 
 #endif
 
+// The candidates come from one ascending slice of a sorted container, so one cursor gallops
+// through the newer part's IDs instead of hashing every candidate. Disjoint ID ranges — a
+// newer part that only added nodes — are rejected outright by the bounds test.
+size_t dropHitsInSortedIDs(std::span<const EntityID> ids, NodeID* hits, size_t count) {
+    if (count == 0 || ids.empty()) {
+        return count;
+    }
+
+    const EntityID first {hits[0].getValue()};
+    const EntityID last {hits[count - 1].getValue()};
+
+    if (last < ids.front() || first > ids.back()) {
+        return count;
+    }
+
+    const EntityID* const end = ids.data() + ids.size();
+    const EntityID* cursor = ids.data();
+
+    size_t write = 0;
+    for (size_t read = 0; read < count; read++) {
+        const NodeID hit = hits[read];
+        const EntityID wanted {hit.getValue()};
+
+        const size_t remaining = static_cast<size_t>(end - cursor);
+        size_t step = 1;
+        while (step < remaining && cursor[step] < wanted) {
+            step *= 2;
+        }
+
+        cursor = std::lower_bound(cursor, cursor + std::min(step + 1, remaining), wanted);
+
+        hits[write] = hit;
+        write += static_cast<size_t>(cursor == end || *cursor != wanted);
+    }
+
+    return write;
+}
+
+template <SupportedType T>
+size_t dropHitsInContainer(const TypedPropertyContainer<T>& container, NodeID* hits, size_t count) {
+    size_t write = 0;
+
+    for (size_t read = 0; read < count; read++) {
+        const NodeID hit = hits[read];
+        hits[write] = hit;
+        write += static_cast<size_t>(!container.has(EntityID {hit.getValue()}));
+    }
+
+    return write;
+}
+
 template <typename Primitive>
 size_t scanEqual(const Primitive* values, const EntityID* ids, size_t rows, const Primitive& needle, NodeID* hits) {
     if constexpr (VectorisedLane<Primitive>) {
@@ -342,6 +394,8 @@ void ScanNodesByPropertyValueChunkWriter<T>::nextSlice() {
 // so a hit on the value stored here is stale and must not be emitted.
 template <SupportedType T>
 size_t ScanNodesByPropertyValueChunkWriter<T>::dropOverriddenHits(NodeID* hits, size_t count) const {
+    const bool candidatesAscend = _container->isSorted();
+
     size_t kept = count;
 
     for (const TypedPropertyContainer<T>* container : _newerContainers) {
@@ -349,14 +403,11 @@ size_t ScanNodesByPropertyValueChunkWriter<T>::dropOverriddenHits(NodeID* hits, 
             return 0;
         }
 
-        size_t write = 0;
-        for (size_t read = 0; read < kept; read++) {
-            const NodeID hit = hits[read];
-            hits[write] = hit;
-            write += static_cast<size_t>(!container->has(EntityID {hit.getValue()}));
+        if (candidatesAscend && container->isSorted()) {
+            kept = dropHitsInSortedIDs(container->ids(), hits, kept);
+        } else {
+            kept = dropHitsInContainer(*container, hits, kept);
         }
-
-        kept = write;
     }
 
     return kept;
