@@ -223,6 +223,38 @@ TEST_F(UnwindValueFilterCodegenTest, repeatedElementsEmitOneRowEach) {
                {{"Remy", "32"}, {"Remy", "32"}, {"Adam", "32"}, {"Adam", "32"}});
 }
 
+// Node IDs compared against the node itself fold the same way, and the disjunction that
+// leaves is what fuse_scan_by_node_ids reads: the listed nodes are scanned directly rather
+// than every node being crossed with the list and filtered back down.
+TEST_F(UnwindValueFilterCodegenTest, nodeIDElementsFuseIntoAConstScan) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module =
+        generate("UNWIND [0, 1] AS x MATCH (n) WHERE n = x RETURN n");
+
+    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ConstScanNodes>(*module), 1u);
+}
+
+TEST_F(UnwindValueFilterCodegenTest, scansTheListedNodes) {
+    expectRows("UNWIND [0, 1] AS x MATCH (n) WHERE n = x RETURN n.name",
+               {{"Remy"}, {"Adam"}});
+}
+
+// A node equals a node ID by the number it carries, not by type, so a projection of the
+// element cannot read the node column that matched it: the product stands instead.
+TEST_F(UnwindValueFilterCodegenTest, projectedNodeIDElementsKeepTheProduct) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module =
+        generate("UNWIND [0, 1] AS x MATCH (n) WHERE n = x RETURN n.name, x");
+
+    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 1u);
+}
+
+TEST_F(UnwindValueFilterCodegenTest, projectsTheNodeIDElementsBesideWhatTheyMatched) {
+    expectRows("UNWIND [0, 1] AS x MATCH (n) WHERE n = x RETURN n.name, x",
+               {{"Remy", "0"}, {"Adam", "1"}});
+}
+
 // A mixed list rides the type-erased column whose cells are compared by their own tag, so
 // a string cell simply matches no age - which one typed comparison per element, against a
 // column of integers, cannot express.

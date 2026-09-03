@@ -454,6 +454,16 @@ bool elementsCompareDistinctly(UnwindConst unwind) {
     return true;
 }
 
+// Whether the rows can go on reading the elements through the column they were compared
+// to. On every row the filter keeps the two hold the same value, so a property column
+// stands in for the elements it matched; an entity column does not, since a node equals a
+// node ID by the number it carries and a projection would print the node instead.
+bool standsInForTheElements(Value comparedColumn) {
+    const ColumnType column = cast<ColumnType>(comparedColumn.getType());
+
+    return !isa<storage::NodeIDType, storage::EdgeIDType>(column.getType());
+}
+
 // The one equality among the users of @param unwoundColumn, provided nothing else reads it
 // but the filter that equality masks - so dropping the unwind leaves no other reader behind.
 EqOp matchSoleEquality(Value unwoundColumn, FilterOp& filter) {
@@ -527,15 +537,41 @@ std::optional<UnwindEqualityCross> matchUnwindEqualityCross(CrossProduct product
     const Value lhs = match._equality.getLhs();
     match._comparedColumn = lhs == match._unwoundColumn ? match._equality.getRhs() : lhs;
 
-    // The compared column has to outlive the product: one the product yields is replaced
-    // as the factor is inlined, and one defined inside a factor is dropped with it. A value
-    // computed from a yielded column - a property fetch - is neither.
+    // The compared column has to be one the rows still carry once the product is gone:
+    // a column the relation yields, or a value computed from one. A column defined inside
+    // a factor is dropped with it.
     Operation* const comparedDef = match._comparedColumn.getDefiningOp();
-    const bool outlivesTheProduct = comparedDef
-                                    && comparedDef != product.getOperation()
+    const bool survivesTheProduct = comparedDef
                                     && comparedDef->getParentRegion() == product->getParentRegion();
 
-    if (!outlivesTheProduct) {
+    if (!survivesTheProduct) {
+        return std::nullopt;
+    }
+
+    // Codegen carries every column in flight, so the filter holding the elements does not
+    // mean anything reads them: an unused result is dropped rather than stood in for, and
+    // only a column something does read has to be one the compared column can replace.
+    const Operation::operand_range carried = match._filter.getColumnsToFilter();
+    const ResultRange filtered = match._filter.getFilteredColumns();
+
+    size_t survivingColumns = 0;
+    for (size_t index = 0; index < carried.size(); index++) {
+        const bool holdsTheElements = carried[index] == match._unwoundColumn;
+
+        if (holdsTheElements && filtered[index].use_empty()) {
+            continue;
+        }
+
+        if (holdsTheElements && !standsInForTheElements(match._comparedColumn)) {
+            return std::nullopt;
+        }
+
+        survivingColumns++;
+    }
+
+    // A filter of nothing cuts nothing, so the elements were all it carried and the rows
+    // it kept are read from the relation directly.
+    if (survivingColumns == 0) {
         return std::nullopt;
     }
 
@@ -590,25 +626,40 @@ Value buildElementDisjunction(UnwindEqualityCross& match, mlir::OpBuilder& build
 void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
     inlineRelationFactor(match._product, *match._relationFactor, match._unwindOnTheLeft);
 
+    // Inlining rewired every use of the columns the relation contributed, the equality's
+    // own operand among them, so the compared column is read back rather than remembered.
+    const Value lhs = match._equality.getLhs();
+    match._comparedColumn = lhs == match._unwoundColumn ? match._equality.getRhs() : lhs;
+
     const Value mask = buildElementDisjunction(match, builder);
 
-    // The elements the rows carried are gone, and on every row the filter keeps they were
-    // the compared value: it takes their place, so a projection of the unwound variable
-    // still reads what that row matched.
+    // The elements the rows carried are gone. On every row the filter keeps they were the
+    // compared value, so that column takes their place where something still reads them,
+    // and the slot goes away where nothing does.
+    const Operation::operand_range carried = match._filter.getColumnsToFilter();
+    const ResultRange filtered = match._filter.getFilteredColumns();
+
     llvm::SmallVector<Value> columns;
     llvm::SmallVector<Type> resultTypes;
-    for (const Value column : match._filter.getColumnsToFilter()) {
-        const Value kept = column == match._unwoundColumn ? match._comparedColumn : column;
+    llvm::SmallVector<size_t> keptColumns;
+    for (size_t index = 0; index < carried.size(); index++) {
+        const bool holdsTheElements = carried[index] == match._unwoundColumn;
+        if (holdsTheElements && filtered[index].use_empty()) {
+            continue;
+        }
+
+        const Value kept = holdsTheElements ? match._comparedColumn : carried[index];
 
         columns.push_back(kept);
         resultTypes.push_back(kept.getType());
+        keptColumns.push_back(index);
     }
 
     builder.setInsertionPoint(match._filter);
     FilterOp fused = builder.create<FilterOp>(match._filter.getLoc(), resultTypes, mask, columns);
 
-    for (size_t index = 0; index < resultTypes.size(); index++) {
-        match._filter.getResult(index).replaceAllUsesWith(fused.getResult(index));
+    for (size_t index = 0; index < keptColumns.size(); index++) {
+        filtered[keptColumns[index]].replaceAllUsesWith(fused.getResult(index));
     }
 
     match._filter.erase();
