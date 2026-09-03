@@ -137,10 +137,15 @@ TEST_F(CreateReturnTest, returnsAPropertyOfTheNodeItCreated) {
     expectWriteRows("CREATE (n:Tag {name: 'x'}) RETURN n.name", {{"x"}});
 }
 
-// The ID a created node carries is the provisional one its change wrote, not the one the
-// graph hands it at submit, so the row count is what this pins down
 TEST_F(CreateReturnTest, returnsTheNodeItCreated) {
-    expectWriteRowCount("CREATE (n:Tag) RETURN n", 1);
+    expectWriteRows("CREATE (n:Tag) RETURN n", {{"18"}});
+}
+
+TEST_F(CreateReturnTest, multiCreate) {
+    expectWriteRows("CREATE (n:Tag) CREATE (m:Tag) RETURN n, m", {{"18", "19"}});
+    expectWriteRows("CREATE (n:Tag) CREATE (m:Tag) RETURN n, m", {{"20", "21"}});
+    expectWriteRows("CREATE (s:Src)-[e:E]->(t:Tgt) RETURN s, e, t", {{"22", "18", "23"}});
+    expectWriteRows("MATCH (n:Src), (m:Tgt) CREATE (n)<-[e:New]-(m) RETURN e", {{"19"}});
 }
 
 // The CREATE wrote no age, and a property it did not write is null rather than whatever
