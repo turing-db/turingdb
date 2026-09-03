@@ -209,9 +209,9 @@ private:
     void extendBoundDataflow(DefinedVars& defined,
                              std::vector<const VariableDependency*>& dataflowVars);
 
-    // Turns the dataflow the barrier left behind into a cross product factor: every op
-    // emitted into @param mainBlock so far, bar the ones binding a constant
-    void takeBoundDataflow(mlir::Block* mainBlock, TranslatedComponent& component);
+    // Turns the dataflow already standing in @param mainBlock into a cross product factor:
+    // every op emitted into it so far, bar the ones binding a constant
+    void takeMainDataflow(mlir::Block* mainBlock, TranslatedComponent& component);
 
     // The columns in flight at the current insertion point, and what each belongs to so the
     // results of an op taking them all can be rebound: the latest value of every Cypher

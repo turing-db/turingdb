@@ -273,6 +273,26 @@ target_link_libraries(test_query_ir_unwind_node_seed_codegen PRIVATE
         turing_db_storage_s)
 target_include_directories(test_query_ir_unwind_node_seed_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# The db program a CALL feeding a MATCH compiles to when the pattern holds a second
+# component, read against the shared SimpleGraph fixture the same way.
+add_turing_test(test_query_ir_call_driven_island_codegen CallDrivenIslandCodegenTest.cpp)
+target_link_libraries(test_query_ir_call_driven_island_codegen PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s
+        turing_db_ir_dbdialect_s
+        turing_db_ir_nldialect_s
+        turing_db_ir_storagedialect_s
+        turing_db_ir_common_s
+        turing_db_storage_s)
+target_include_directories(test_query_ir_call_driven_island_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_ir_tests(test_query_ir_nldialect NLDialectTest.cpp)
 
 # The keyless collect drain emits its one group whether or not a row arrived, against the
