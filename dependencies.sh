@@ -548,3 +548,25 @@ cmake "${LLVM_CMAKE_ARGS[@]}" $LLVM_CMAKE_DIR
 # program cc1plus").
 cmake --build $LLVM_BUILD_DIR -j $NUM_JOBS -t mlir-opt mlir-translate mlir-transform-opt mlir-runner
 cmake --build $LLVM_BUILD_DIR -j $NUM_JOBS -t install
+
+# ============================================================
+# Install Emscripten SDK (toolchain for the wasm decoder)
+# ============================================================
+EMSCRIPTEN_VERSION="5.0.2"
+EMSDK_DIR=$DEPENDENCIES_DIR/emsdk
+
+if [[ ! -d "$EMSDK_DIR" ]]; then
+    echo "Cloning emsdk..."
+    git clone https://github.com/emscripten-core/emsdk.git $EMSDK_DIR
+else
+    # Refresh the release list so a bumped EMSCRIPTEN_VERSION resolves.
+    git -C $EMSDK_DIR pull --ff-only
+fi
+
+echo "Installing Emscripten ${EMSCRIPTEN_VERSION}..."
+$EMSDK_DIR/emsdk install $EMSCRIPTEN_VERSION
+$EMSDK_DIR/emsdk activate $EMSCRIPTEN_VERSION
+
+# The wasm decoder (wasm/) builds against this toolchain:
+#   source external/dependencies/emsdk/emsdk_env.sh
+#   mkdir -p wasm/build && cd wasm/build && emcmake cmake .. && make

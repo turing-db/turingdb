@@ -76,7 +76,9 @@ private:
 
     static_assert(N != 0);
     static_assert(N < std::numeric_limits<int64_t>::max());
-    static_assert(_viewSize == 8, "View changed size; class needs updating.");
+    // A view is exactly one pointer (the tag pointer) on every platform, 32-bit wasm
+    // included; a grown view means the chunk memory math needs revisiting.
+    static_assert(_viewSize == sizeof(std::byte*), "View changed size; class needs updating.");
 };
 
 /**
