@@ -225,6 +225,17 @@ const YieldClause* yieldClauseOf(const Stmt* stmt) {
     return static_cast<const VectorSearchStmt*>(stmt)->getYield();
 }
 
+// The variables a statement binds of its own: the return values a YIELD names, and the
+// element an UNWIND spreads.
+void collectStatementVariables(const Stmt* stmt, llvm::SmallVectorImpl<const VarDecl*>& variables) {
+    if (stmt->getKind() == Stmt::Kind::UNWIND) {
+        variables.push_back(static_cast<const UnwindStmt*>(stmt)->getDecl());
+        return;
+    }
+
+    collectYieldVariables(yieldClauseOf(stmt), variables);
+}
+
 // The ops values are transitively defined by: the chain that has to travel with them for
 // them to stay usable where they land.
 void collectDefiningOps(mlir::ValueRange values, llvm::DenseSet<mlir::Operation*>& ops) {
@@ -734,6 +745,27 @@ void DBProgramGenerator::walkEdge(const VariableDependency* src,
         results.push_back(column.getType());
     }
 
+    // A column a barrier published rides the expansion too, when the traversal it drives is
+    // generated where that column was bound: the hop replicates a row once per edge, so it
+    // comes along or it stops matching the rows beside it. A published pattern variable is
+    // walked by the component instead and is already in the carry set.
+    llvm::SmallVector<const VariableDependency*> carriedBound;
+    for (const VariableDependency* var : _vdg.boundVars()) {
+        const bool walkedHere = var == src || llvm::is_contained(carrySet, var);
+        if (walkedHere) {
+            continue;
+        }
+
+        const mlir::Value column = _part._varMap[var].back();
+        if (!isRowAlignedHere(column) || yieldsConstantColumn(column)) {
+            continue;
+        }
+
+        carriedBound.push_back(var);
+        operands.push_back(column);
+        results.push_back(column.getType());
+    }
+
     const auto loc = _opBuilder.getUnknownLoc();
     auto op = _opBuilder.create<EdgeOp>(loc, results, operands);
 
@@ -775,6 +807,11 @@ void DBProgramGenerator::walkEdge(const VariableDependency* src,
     const size_t yieldOffset = edgeTypeOffset + carriedEdgeTypes.size();
     for (size_t i = 0; i < carriedYields.size(); i++) {
         _part._yieldedColumns[carriedYields[i]]._column = op.getResult(yieldOffset + i);
+    }
+
+    const size_t boundOffset = yieldOffset + carriedYields.size();
+    for (size_t i = 0; i < carriedBound.size(); i++) {
+        registerValue(carriedBound[i], op.getResult(boundOffset + i));
     }
 }
 
@@ -990,6 +1027,17 @@ void DBProgramGenerator::generateTraversal(std::span<Stmt* const> stmts) {
 
     const VariableDependencyGraph::BoundVars& bound = _vdg.boundVars();
     if (_part._drivenRoot) {
+        // A column the barrier published holds its rows already, so it opens no component
+        // of its own: it stands in the main block beside the rows the leading statements
+        // bound, and rides with them into any island crossed with them.
+        for (const VariableDependency* var : bound) {
+            defined.insert(var);
+
+            if (!yieldsConstantColumn(_part._varMap.at(var).back())) {
+                mainComponent._vars.push_back(var);
+            }
+        }
+
         translateComponent(_part._drivenRoot, defined, mainComponent._vars);
     } else if (!bound.empty()) {
         throwOnRematchedBoundEdge();
@@ -1804,10 +1852,18 @@ void DBProgramGenerator::generateLeadingYields(std::span<Stmt* const> stmts) {
         return;
     }
 
-    // A part that continues from a WITH already has a dataflow to extend, so what a
-    // statement yields is paired with the rows of that one after the traversal rather than
-    // driving it
-    if (!_vdg.boundVars().empty()) {
+    // A pattern variable a barrier published is a dataflow this part extends, so what a
+    // statement binds is paired with its rows after the traversal rather than driving it.
+    // A published value is no such dataflow - it is read, the way an UNWIND reads the list
+    // it spreads - and the rows a statement turns it into can drive.
+    const auto bindsAValue = [](const VariableDependency* bound) {
+        const VarDecl* decl = bound->getDecl();
+        const EvaluatedType type = decl ? decl->getType() : EvaluatedType::Invalid;
+
+        return type != EvaluatedType::NodePattern && type != EvaluatedType::EdgePattern;
+    };
+
+    if (!std::ranges::all_of(_vdg.boundVars(), bindsAValue)) {
         return;
     }
 
@@ -1819,6 +1875,13 @@ void DBProgramGenerator::generateLeadingYields(std::span<Stmt* const> stmts) {
             break;
         } else if (kind == Stmt::Kind::CALL || kind == Stmt::Kind::VECTOR_SEARCH) {
             leading.push_back(stmt);
+        } else if (kind == Stmt::Kind::UNWIND) {
+            // A literal UNWIND is a dataflow of its own that the dependency graph already
+            // roots, and seeds the pattern node it names from there.
+            const UnwindStmt* unwindStmt = static_cast<const UnwindStmt*>(stmt);
+            if (!unwindStmt->unwindsLiteral()) {
+                leading.push_back(stmt);
+            }
         }
     }
 
@@ -1829,9 +1892,17 @@ void DBProgramGenerator::generateLeadingYields(std::span<Stmt* const> stmts) {
     llvm::SmallVector<const VariableDependency*> componentRoots;
     collectComponentRoots(componentRoots);
 
+    // A published value opens no traversal: it rides the rows as a column of its own, so
+    // it is no island for the driven component to be crossed with.
+    const auto opensNoTraversal = [this](const VariableDependency* root) {
+        return llvm::is_contained(_vdg.boundVars(), root);
+    };
+
+    llvm::erase_if(componentRoots, opensNoTraversal);
+
     llvm::SmallVector<const VarDecl*> yieldedVariables;
     for (const Stmt* stmt : leading) {
-        collectYieldVariables(yieldClauseOf(stmt), yieldedVariables);
+        collectStatementVariables(stmt, yieldedVariables);
     }
 
     // Any variable they bound can open the component, not only the one the graph lists
@@ -1864,10 +1935,14 @@ void DBProgramGenerator::generateLeadingYields(std::span<Stmt* const> stmts) {
     }
 
     for (const Stmt* stmt : leading) {
-        if (stmt->getKind() == Stmt::Kind::CALL) {
+        const Stmt::Kind kind = stmt->getKind();
+
+        if (kind == Stmt::Kind::CALL) {
             generateCall(static_cast<const CallStmt*>(stmt));
-        } else {
+        } else if (kind == Stmt::Kind::VECTOR_SEARCH) {
             generateVectorSearch(static_cast<const VectorSearchStmt*>(stmt));
+        } else {
+            generateUnwind(static_cast<const UnwindStmt*>(stmt));
         }
     }
 
@@ -1896,7 +1971,7 @@ void DBProgramGenerator::generateStatementOperations(std::span<Stmt* const> stmt
             generateCall(static_cast<const CallStmt*>(stmt));
         } else if (kind == Stmt::Kind::VECTOR_SEARCH && !drivesTheTraversal) {
             generateVectorSearch(static_cast<const VectorSearchStmt*>(stmt));
-        } else if (kind == Stmt::Kind::UNWIND) {
+        } else if (kind == Stmt::Kind::UNWIND && !drivesTheTraversal) {
             const UnwindStmt* unwindStmt = static_cast<const UnwindStmt*>(stmt);
 
             // A literal UNWIND opened a dataflow of its own during the traversal, which
