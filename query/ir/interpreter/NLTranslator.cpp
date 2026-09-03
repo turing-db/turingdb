@@ -1053,7 +1053,7 @@ void NLTranslator::translateCheckEdgeTypeConstraint(nl::CheckEdgeTypeConstraint 
 
 void NLTranslator::translateCreateNode(nl::CreateNode createNode, NLStmtContainer* body) {
     if (!_metadataBuilder) {
-        throw IRException("nl.create_node requires a MetadataBuilder (write transaction)");
+        throw IRException("Cannot perform CREATE outside of a write transaction.");
     }
 
     LabelSet labelset;
@@ -1095,7 +1095,7 @@ void NLTranslator::translateCreateNode(nl::CreateNode createNode, NLStmtContaine
 
 void NLTranslator::translateCreateEdge(nl::CreateEdge createEdge, NLStmtContainer* body) {
     if (!_metadataBuilder) {
-        throw IRException("nl.create_edge requires a MetadataBuilder (write transaction)");
+        throw IRException("Cannot perform CREATE outside of a write transaction.");
     }
 
     const llvm::StringRef edgeTypeName = createEdge.getEdgeType();
@@ -1139,7 +1139,7 @@ void NLTranslator::translateCreateEdge(nl::CreateEdge createEdge, NLStmtContaine
 
 void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty, NLStmtContainer* body) {
     if (!_metadataBuilder) {
-        throw IRException("nl.set_node_property requires a MetadataBuilder (write transaction)");
+        throw IRException("Cannot perform SET outside of a write transaction.");
     }
 
     const llvm::StringRef propName = setNodeProperty.getProperty();
@@ -1162,7 +1162,7 @@ void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty,
 
 void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty, NLStmtContainer* body) {
     if (!_metadataBuilder) {
-        throw IRException("nl.set_edge_property requires a MetadataBuilder (write transaction)");
+        throw IRException("Cannot perform SET outside of a write transaction.");
     }
 
     const llvm::StringRef propName = setEdgeProperty.getProperty();
@@ -1184,6 +1184,10 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
 }
 
 void NLTranslator::translateDeleteNode(nl::DeleteNode deleteNode, NLStmtContainer* body) {
+    if (!_metadataBuilder) {
+        throw IRException("Cannot perform DELETE outside of a write transaction.");
+    }
+
     const mlir::Value inputValue = deleteNode.getInputNodes();
     const ColumnNodeIDs* inputColumn = static_cast<const ColumnNodeIDs*>(getColumn(inputValue));
 
@@ -1195,6 +1199,10 @@ void NLTranslator::translateDeleteNode(nl::DeleteNode deleteNode, NLStmtContaine
 }
 
 void NLTranslator::translateDeleteEdge(nl::DeleteEdge deleteEdge, NLStmtContainer* body) {
+    if (!_metadataBuilder) {
+        throw IRException("Cannot perform DELETE outside of a write transaction.");
+    }
+
     const mlir::Value inputValue = deleteEdge.getInputEdges();
     const ColumnEdgeIDs* inputColumn = static_cast<const ColumnEdgeIDs*>(getColumn(inputValue));
 

@@ -73,3 +73,28 @@ TEST_F(QueryInterpreterV3ErrorTest, reportsInternalGeneratorFailureAsUnexpected)
     EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
     EXPECT_EQ(status.getError(), "Unexpected exception: Unsupported literal kind in WHERE clause expression.");
 }
+
+TEST_F(QueryInterpreterV3ErrorTest, deleteOutsideWrite) {
+    QueryStatus status;
+    runQuery("MATCH (n) DELETE n", status);
+
+    EXPECT_EQ(status.getStatus(), QueryStatus::Status::EXEC_ERROR);
+    EXPECT_EQ(status.getError(), "Cannot perform DELETE outside of a write transaction.");
+}
+
+TEST_F(QueryInterpreterV3ErrorTest, setOutsideWrite) {
+    QueryStatus status;
+    runQuery("MATCH (n) SET n.age = 0", status);
+
+    EXPECT_EQ(status.getStatus(), QueryStatus::Status::EXEC_ERROR);
+    EXPECT_EQ(status.getError(), "Cannot perform SET outside of a write transaction.");
+}
+
+TEST_F(QueryInterpreterV3ErrorTest, createOutsideWrite) {
+    QueryStatus status;
+    runQuery("MATCH (n) CREATE (m:M)", status);
+
+    EXPECT_EQ(status.getStatus(), QueryStatus::Status::EXEC_ERROR);
+    EXPECT_EQ(status.getError(), "Cannot perform CREATE outside of a write transaction.");
+}
+
