@@ -771,7 +771,7 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
     if (projection) {
         generateOutput(projection);
     } else {
-        generateYieldedOutput();
+        generateYieldedOutput(query);
     }
 
     _opBuilder.create<mlir::func::ReturnOp>(uloc);
@@ -2627,8 +2627,15 @@ void DBProgramGenerator::generateOutput(const Projection* projection) {
 }
 
 // A standalone CALL ends no projection, so what it yielded is the result: the columns go
-// out in yield order, under the names the YIELD gave them
-void DBProgramGenerator::generateYieldedOutput() {
+// out in yield order, under the names the YIELD gave them. A query that writes is not
+// standalone whatever it yielded - its result is its RETURN, and it has none - so a CALL
+// feeding a CREATE reports no row rather than every row it wrote one for.
+void DBProgramGenerator::generateYieldedOutput(const SinglePartQuery* query) {
+    const StmtContainer* updateStmts = query->getUpdateStmts();
+    if (updateStmts && !updateStmts->stmts().empty()) {
+        return;
+    }
+
     llvm::SmallVector<mlir::Value> yielded;
     llvm::SmallVector<llvm::StringRef> yieldedNames;
     for (const YieldedColumn& yieldedColumn : _part._yieldedColumns) {
