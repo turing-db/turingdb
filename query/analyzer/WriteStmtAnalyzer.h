@@ -14,6 +14,7 @@ class DeclContext;
 class ExprAnalyzer;
 class Stmt;
 class CreateStmt;
+class MergeStmt;
 class SetStmt;
 class SetItem;
 class DeleteStmt;
@@ -40,6 +41,8 @@ public:
         _exprAnalyzer = exprAnalyzer;
     }
 
+    void setV3() { _isV3 = true; }
+
     // Statements
     void analyze(const Stmt* stmt);
 
@@ -51,8 +54,10 @@ private:
     std::unordered_set<const VarDecl*> _toBeCreated;
     const GraphMetadata& _graphMetadata;
     bool _hasCreate {false};
+    bool _isV3 {false};
 
     void analyze(const CreateStmt* createStmt);
+    void analyze(const MergeStmt* mergeStmt);
     void analyze(const SetStmt* setStmt);
     void analyze(const DeleteStmt* deleteStmt);
     void analyze(const Pattern* pattern);

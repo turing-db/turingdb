@@ -23,6 +23,8 @@ add_mlir_library(turing_db_ir_storagedialect_s
   StorageDialect.cpp
   StorageTypes.cpp
   GroupAggregateKindsFormat.cpp
+  EdgeDirectionsFormat.cpp
+  MergePatternShape.cpp
   ColumnIndicesFormat.cpp
   PropertyScanLiteral.cpp
 
