@@ -130,6 +130,12 @@ TEST_F(TrimUnreadColumnsCypherTest, countsTheRowsAFilterKept) {
     expectRows("MATCH (a)-->(b) WHERE b.age = 32 RETURN count(*)", {{"3"}});
 }
 
+// The cut keeps the target column, not the loop's own first chunk, and must still size the
+// constant.
+TEST_F(TrimUnreadColumnsCypherTest, projectsAConstantOverTheRowsALimitKept) {
+    expectRowCount("MATCH (a)-->(b) WITH b, a LIMIT 3 RETURN 1", 3);
+}
+
 // KNOWS_WELL runs Remy -> Adam, Adam -> Remy and Ghosts -> Remy; the second hop then walks
 // Adam's three edges once and Remy's four edges twice.
 TEST_F(TrimUnreadColumnsCypherTest, hopsFromATypedEdgeIntoAnUntypedOne) {
