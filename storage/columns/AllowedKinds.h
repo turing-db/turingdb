@@ -147,7 +147,13 @@ struct PairRestrictions<Op> {
         ListElementKindPairs<types::Double::Primitive>::Pairs,
         ListElementKindPairs<types::String::Primitive>::Pairs,
         ListElementKindPairs<types::Bool::Primitive>::Pairs,
+
+        // A loaded CSV field owns its characters, so a comparison against a string
+        // property meets a borrowed view on one side and an owned string on the other -
+        // either way round, since which side the query writes it on is its choice
         OptionalKindPairs<types::String::Primitive, types::String::OwningPrimitive>::Pairs,
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::Primitive>::Pairs,
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs,
 
         std::tuple<
             KindPair<ListElementView, ListElementView>,
@@ -238,6 +244,7 @@ struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
         OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
         OptionalKindPairs<types::String::Primitive, types::String::OwningPrimitive>::Pairs,
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::Primitive>::Pairs,
         OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs
     >;
 
