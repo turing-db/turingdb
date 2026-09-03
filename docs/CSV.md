@@ -765,7 +765,8 @@ This is called from `duplicateDataframeShape()` after each `allocSame()` to ensu
 
 ### Restrictions
 
-**Phase 1 restrictions:**
+**Phase 1 restrictions** (the pipeline engine; see [Implementation State](#implementation-state)
+for what the MLIR engine reaches):
 - Single `LOAD CSV` per query (no Cartesian product / join semantics)
 - Dynamic index expressions (`row[i]` where `i` is not a literal) throw at plan time
 - Local files only (no S3/HTTP)
@@ -902,11 +903,12 @@ CREATE (a)-[:RELATED]->(b)
 
 ## Future Work
 
-1. **WITH Clause Support**: Enable filtering during CSV processing
+1. **WITH Clause Support**: Enable filtering during CSV processing. Done in the MLIR
+   engine, which runs `WITH`; the pipeline engine does not.
    ```cypher
    LOAD CSV 'file.csv' AS row
-   WITH row WHERE toInteger(row.age) > 18
-   CREATE (n:Adult {name: row.name})
+   WITH row.name AS name, toInteger(row.age) AS age WHERE age > 18
+   CREATE (n:Adult {name: name})
    ```
 
 2. **Remote File Sources**: S3, HTTP URLs
@@ -924,53 +926,91 @@ CREATE (a)-[:RELATED]->(b)
 
 ## Implementation State
 
-Phase 1 status as of the `load-csv` branch.
+Two engines run `LOAD CSV`, and they reach different distances.
 
-### What's Implemented
+### The MLIR engine (v3)
 
-The full pipeline is wired across all layers:
+`LOAD CSV` is a source op of its own - `db.load_csv`, lowered to `nl.load_csv` - so its
+records are rows the rest of the query reads like any other. That is what makes it
+compose: a load reads no column of the graph, so a `MATCH` beside it is crossed with the
+records and the predicates cut the pairs.
 
-- **Parser/Grammar**: `LOAD CSV` as a `readingStatement` — all syntax variants (`WITH HEADERS`, `ON ERROR SKIP/FAIL`)
-- **AST**: `LoadCSVStmt`, `IndexExpr` (with literal index optimization)
-- **Analyzer**: `ReadStmtAnalyzer` types alias as `StringTable`; `ExprAnalyzer` handles `row[i]` and `row.name`
-- **Plan**: `LoadCSVNode` produced by `ReadStmtGenerator`
-- **Pipeline**: `CSVSourceProcessor` (mmap chunked reading), `CSVParser` (RFC 4180), `ColumnStringTable` storage
-- **Expressions**: `ExprProgramGenerator` resolves `row[i]` to field columns and `row.name` via header lookup
-- **Type conversions**: `toInteger()`, `toFloat()`, `toBoolean()`
+A record is many values and an op has a fixed number of results, so the row is not one
+column: the op names the fields the query reads and produces one column per name. The
+analyzer resolves each `row[2]` / `row.age` to a field of the statement, so a field named
+twice is loaded once and a field the query never names is not loaded at all - the 768
+columns of an embedding file cost nothing to skip. A field the query never names still
+leaves the records as rows, so `count(*)` counts them and a `CREATE` runs once per record.
 
-### What's Tested
+Every field is a string, since a CSV file carries no types; the characters live in the
+column that parsed them, so a field is an owning string column (`!storage.owned_string`)
+rather than the borrowed view a property fetch produces. The two compare either way round.
 
-Only standalone `LOAD CSV + RETURN` queries (two regression test suites):
+The load's parser is local to each entry of its loop, so a load nested under a cross
+product reopens the file on every outer step, and a `LIMIT` stops the loop - the file is
+read only as far as the budget reaches.
 
-- `regress/load_csv/` — index access, header access, LIMIT
-- `regress/load_csv_stations/` — real-world 42KB CSV, all cells validated against Python `csv.reader`
+Layers: `LoadCSVStmt` (fields resolved by `ExprAnalyzer`), `DBProgramGenerator::generateLoadCSV`,
+`DBLowering::lowerLoadCSV`, `NLTranslator::translateLoadCSVLoop`, `NLExecutor::runLoadCSVLoop`,
+`CSVParser::readChunk` with a field selection.
+
+Tested by `test/query/ir/LoadCSVSourceTest.cpp` (the source), `LoadCSVMatchTest.cpp` (the
+join against the graph), `LoadCSVWriteTest.cpp` (the imports), plus the dialect cases in
+`DBDialectTest.cpp` / `NLDialectTest.cpp` and the `samples/mlir/load_csv*.mlir` pairs.
+
+### The pipeline engine (v2)
+
+`LOAD CSV` reaches a `LoadCSVNode` and a `CSVSourceProcessor` that fills a
+`ColumnStringTable`; `ExprProgramGenerator` resolves `row[i]` to a field column and
+`row.name` through a header lookup. A load composes with `CREATE` but not with `MATCH`:
+`ReadStmtGenerator` rejects a second reading statement beside it ("Non-standalone LOAD CSV
+in read statements not yet supported"), and `ORDER BY` over a field fails at execution.
+
+Tested by `regress/load_csv/`, `regress/load_csv_stations/` (a real-world 42KB CSV, every
+cell validated against Python's `csv.reader`) and `test/query/queries/LoadCSVTest.cpp`,
+whose `MATCH` cases are disabled for the gap above.
 
 ### Feature Matrix
 
-| Feature | Spec | Implemented | Tested |
-|---------|------|-------------|--------|
+| Feature | Spec | v3 (MLIR) | v2 (pipeline) |
+|---------|------|-----------|---------------|
 | `LOAD CSV ... RETURN` | Yes | Yes | Yes |
 | `WITH HEADERS` | Yes | Yes | Yes |
-| `ON ERROR SKIP/FAIL` | Yes | Yes | No |
+| `ON ERROR SKIP/FAIL` | Yes | Yes | Yes, untested |
 | `row[i]` (literal index) | Yes | Yes | Yes |
-| `row[expr]` (dynamic index) | Yes | No (throws) | — |
+| `row[expr]` (computed index) | Yes | No (rejected at plan time) | No (rejected at plan time) |
+| `row` (the whole record) | — | No (rejected at plan time) | No (internal error) |
 | `row.name` (header access) | Yes | Yes | Yes |
-| `toInteger/toFloat/toBoolean` | Yes | Yes | No |
-| `LOAD CSV + CREATE` | Yes | Untested | No |
-| `LOAD CSV + MATCH` | Yes | Untested | No |
-| `LOAD CSV + MATCH + CREATE` | Yes | Untested | No |
-| `LIMIT` | Implicit | Yes | Yes |
-| Multiple `LOAD CSV` per query | Phase 2 | No | — |
-| `WITH` clause filtering | Phase 2 | No | — |
-| Remote sources (S3/HTTP) | Phase 2 | No | — |
-| Custom delimiters | Phase 2 | No | — |
-| `LOAD EMBEDDING CSV` | Phase 2 | No | — |
+| `toInteger/toFloat/toBoolean` | Yes | Yes | Yes, untested |
+| `LOAD CSV + CREATE` | Yes | Yes | Yes |
+| `LOAD CSV + MATCH` | Yes | Yes | No (rejected) |
+| `LOAD CSV + MATCH + CREATE` | Yes | Yes | No (rejected) |
+| `LOAD CSV + SET / DELETE` | Yes | Yes | No (rejected) |
+| `SKIP` / `LIMIT` | Implicit | Yes | `LIMIT` only |
+| `ORDER BY` a field | Implicit | Yes | No (fails at execution) |
+| `DISTINCT`, aggregates, grouping | Implicit | Yes | Partly |
+| `WITH` clause filtering | Phase 2 | Yes | No (`WITH` is v3-only) |
+| Multiple `LOAD CSV` per query | Phase 2 | Yes (a cartesian product) | No (rejected) |
+| Remote sources (S3/HTTP) | Phase 2 | No | No |
+| Custom delimiters | Phase 2 | No | No |
+| `LOAD EMBEDDING CSV` | Phase 2 | No | No |
 
 ### Key Gaps
 
-1. **Graph composability untested**: `LOAD CSV` parses as a `readingStatement` and should compose with `MATCH`/`CREATE`, but no regression test exercises this path.
-2. **Dynamic indexing**: `row[expr]` where `expr` is not a literal integer throws at plan time.
-3. **Error mode and type conversions**: Implemented but not covered by regression tests.
+1. **The join is a product**: a load crossed with a `MATCH` is emitted as a cross product
+   and a filter, so a file joined against the graph on a property costs
+   O(records x nodes). That is the straightforward, obviously-correct emission; turning it
+   into a lookup on the property index belongs in an optimisation pass over the db
+   dialect, not in codegen.
+2. **Computed indexing**: `row[expr]` where `expr` is not an integer literal names no
+   field at plan time, so it is rejected. Reaching it needs a field-selection op that
+   reads the position per row.
+3. **The whole record**: `RETURN row` is rejected. Neo4j reports a list (or a map, with
+   headers); TuringDB has no map value, and a list per record would cost an allocation per
+   row on a path whose point is bulk loading.
+4. **No server route**: the MLIR engine is reached through the shell's `#v3` prefix and
+   the C++ interpreter, not through the REST or binary protocol, so the v3 behaviour has
+   unit coverage rather than regression coverage.
 
 ---
 
