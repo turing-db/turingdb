@@ -91,6 +91,37 @@ TEST_F(TrimUnreadColumnsTest, dropsTheCarrySetOfAHopNothingReads) {
     EXPECT_EQ(outputs.front().getColumns().front(), secondHop.getTgtids());
 }
 
+// MATCH (n) WITH collect(n) AS l UNWIND l AS x MATCH (x)-->(b) RETURN b, with the list the
+// unwind spread riding beside the elements it hands out
+const char* const unwoundListCarry = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %list = db.collect(%n) keys 0 : (!db.column<!storage.node_id>) -> !db.column<!storage.list<!storage.node_id>>
+  %x, %lc = db.unwind(%list, {%list}) : (!db.column<!storage.list<!storage.node_id>>, !db.column<!storage.list<!storage.node_id>>) -> (!db.column<!storage.node_id>, !db.column<!storage.list<!storage.node_id>>)
+  %s, %e, %et, %t = db.get_out_edges(%x, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  db.output(%t) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// An unwind replicates each carried cell once per element it hands out, so a list nothing
+// reads past it is work done for no column.
+TEST_F(TrimUnreadColumnsTest, dropsTheCarrySetOfAnUnwindNothingReads) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(unwoundListCarry);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runTrim(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::Unwind> unwinds = collect<mlir::db::Unwind>(*module);
+    ASSERT_EQ(unwinds.size(), 1u);
+    mlir::db::Unwind unwind = unwinds.front();
+
+    // The elements it hands out are its one result; the list rides no further.
+    EXPECT_EQ(unwind.getColumnsToFilter().size(), 0u);
+    EXPECT_EQ(unwind->getNumResults(), 1u);
+    EXPECT_TRUE(unwind.getElement().hasOneUse());
+}
+
 // MATCH (a)-->(b) WHERE b.age > 3 RETURN b
 const char* const filteredTarget = R"mlir(
 func.func @main() {
