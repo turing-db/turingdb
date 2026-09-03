@@ -23,6 +23,7 @@ target_link_libraries(turing_db_ir_interpreter_s
     PRIVATE
         turing_db_ir_common_s
         turing_db_system_s
+        turing_db_io_csv_s
         turing_db_io_parquet_s)
 
 target_include_directories(turing_db_ir_interpreter_s PUBLIC

@@ -179,6 +179,7 @@ private:
     void lowerScanNodesByLabel(mlir::db::ScanNodesByLabel scanNodesByLabel);
     void lowerConstScanNodes(mlir::db::ConstScanNodes constScanNodes);
     void lowerUnwindConst(mlir::db::UnwindConst unwindConst);
+    void lowerLoadCSV(mlir::db::LoadCSV loadCSV);
     void lowerVectorSearch(mlir::db::VectorSearch vectorSearch);
     void lowerScanEdges(mlir::db::ScanEdges scanEdges);
     void lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges);

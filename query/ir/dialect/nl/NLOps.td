@@ -102,6 +102,42 @@ def UnwindConst : NLOp<"unwind_const", [Pure]> {
 }
 
 /**
+* LoadCSV
+*/
+// Pure: reading a file is deterministic; the per-record fan-out is in the nl.for.
+def LoadCSV : NLOp<"load_csv", [Pure]> {
+  let summary = "Create a database iterator over the records of a CSV file";
+  let description = [{
+    Imperative counterpart of db.load_csv. Each step of an enclosing nl.for parses the
+    next chunk of records, filling one chunk per field the load produces:
+
+      %name, %age = nl.load_csv("people.csv", [0 : ui64, 1 : ui64])
+        : !nl.iter<!nl.chunk<!storage.owned_string>, !nl.chunk<!storage.owned_string>>
+
+    The path, the field list and the two flags are the ones db.load_csv carried,
+    forwarded as-is; the path is resolved against the data directory, and a header name
+    against the file's header line, when the loop first runs - the file is the one thing
+    a loop of this family reads outside the graph. Like nl.unwind_const it reads no
+    input chunk and carries nothing: it opens the dataflow.
+
+    Every field rides an owning string chunk - the characters were parsed here, not
+    borrowed from the graph, and a record carries no type to read them as. The number of
+    chunks is the number of fields, so the iterator type is spelled after the colon
+    rather than inferred.
+  }];
+
+  let arguments = (ins StrAttr:$path,
+                       ArrayAttr:$fields,
+                       UnitAttr:$with_headers,
+                       UnitAttr:$skip_on_error);
+  let results   = (outs NLIterator:$result);
+  let assemblyFormat = [{
+    `(` $path `,` $fields `)` (`with_headers` $with_headers^)? (`skip_on_error` $skip_on_error^)?
+    attr-dict `:` qualified(type($result))
+  }];
+}
+
+/**
 * VectorSearch
 */
 // Pure: reading the index is deterministic; the per-neighbour fan-out is in the nl.for.

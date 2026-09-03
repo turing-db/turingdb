@@ -7,6 +7,10 @@
 
 #include "NLProgram.h"
 
+namespace fs {
+class Path;
+}
+
 namespace vec {
 class VectorDatabase;
 }
@@ -50,6 +54,11 @@ public:
     // accessor, which the search reports as a user-facing error.
     vec::VectorDatabase* getVectorDatabase() const;
 
+    // The directory a file the query names is resolved against - the one place outside
+    // the graph a dataflow loop reads from. Null for a session that opened no system
+    // manager, which the load reports as a user-facing error.
+    const fs::Path* getDataDir() const;
+
 private:
     const GraphView* _view {nullptr};
     NLOutputSink* _sink {nullptr};
@@ -82,6 +91,13 @@ public:
     // for a homogeneous list, a ColumnVector<ListElementView> for a heterogeneous one -
     // running the body over each slice. A null limit leaves it unbounded.
     static void runUnwindConstLoop(NLExecutionContext* context, NLFunctionData* data);
+
+    // The file sibling of runUnwindConstLoop: resolve the loop data's path against the
+    // data directory and its header names against the file's header line, then stream the
+    // records one chunk at a time into the field columns, running the body over each
+    // slice. A null limit leaves it unbounded; a bounded loop stops reading the file as
+    // soon as the budget is spent.
+    static void runLoadCSVLoop(NLExecutionContext* context, NLFunctionData* data);
 
     // The neighbour sibling of runUnwindConstLoop: search the named vector index for the
     // loop data's query vector, then stream the neighbours it found one chunk at a time

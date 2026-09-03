@@ -17,6 +17,7 @@
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnMask.h"
+#include "columns/ColumnStringTable.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
 #include "list/ListBuffer.h"
@@ -378,6 +379,58 @@ private:
     bool _heterogeneous {false};
     ValueType _valueType {ValueType::Invalid};
     NLLimitState* _limit {nullptr};
+    NLStmtContainer _stmts;
+};
+
+// The file sibling of NLUnwindConstLoopData: parses a CSV file one chunk of records at a
+// time into one owning string column per field the load produces. The path and the field
+// selectors are views into the module's attribute storage, which the MLIRContext keeps
+// alive for the whole execution; the path is resolved against the data directory, and a
+// header name against the file's header line, when the loop runs. The output columns are
+// the field columns of _row, which is what the parser fills. A plain source, so a
+// downstream LIMIT can bound it.
+class NLLoadCSVLoopData : public NLFunctionData {
+public:
+    // One field the load produces: the position `row[2]` named, or the header `row.age`
+    // named, which _index is resolved to against the header line.
+    struct Field {
+        std::string_view _header;
+        size_t _index {0};
+        bool _byHeader {false};
+    };
+
+    NLLoadCSVLoopData(ColumnStringTable* row,
+                      std::string_view path,
+                      bool hasHeaders,
+                      bool skipOnError)
+        : _row(row),
+        _path(path),
+        _hasHeaders(hasHeaders),
+        _skipOnError(skipOnError)
+    {
+    }
+
+    ColumnStringTable* getRow() const { return _row; }
+    std::string_view getPath() const { return _path; }
+    bool hasHeaders() const { return _hasHeaders; }
+    bool skipOnError() const { return _skipOnError; }
+
+    const std::vector<Field>& fields() const { return _fields; }
+    void addField(const Field& field) { _fields.push_back(field); }
+
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
+    ColumnStringTable* _row {nullptr};
+    std::string_view _path;
+    std::vector<Field> _fields;
+    NLLimitState* _limit {nullptr};
+    bool _hasHeaders {false};
+    bool _skipOnError {false};
     NLStmtContainer _stmts;
 };
 

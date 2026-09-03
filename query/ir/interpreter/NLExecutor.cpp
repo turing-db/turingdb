@@ -40,7 +40,11 @@
 #include "versioning/CommitWriteBuffer.h"
 #include "views/GraphView.h"
 
+#include "CSVParser.h"
+
 #include "SystemAccessor.h"
+#include "SystemManager.h"
+#include "TuringConfig.h"
 #include "VecLibAccessor.h"
 #include "VectorDatabase.h"
 #include "VectorSearchQuery.h"
@@ -449,6 +453,40 @@ void runBody(NLExecutionContext* context, const NLStmtContainer* body) {
         const auto func = descriptor.getFunction();
         NLFunctionData* funcData = descriptor.getData();
         func(context, funcData);
+    }
+}
+
+// The position of each field a CSV load produces, in field order: the one it named, or
+// the one its header sits at in the file's header line. A position past the file's last
+// field, or a header the file does not carry, is a query naming a field that is not
+// there, so it is reported rather than left to read an absent column.
+void resolveCSVFieldIndices(const NLLoadCSVLoopData& loopData,
+                            const CSVFileInfo& fileInfo,
+                            std::vector<size_t>& indices) {
+    const std::vector<std::string>& headers = fileInfo._headers;
+
+    indices.reserve(loopData.fields().size());
+
+    for (const NLLoadCSVLoopData::Field& field : loopData.fields()) {
+        if (field._byHeader) {
+            const auto foundIt = std::ranges::find(headers, field._header);
+            if (foundIt == end(headers)) {
+                throw IRException(fmt::format("CSV header '{}' not found in '{}'",
+                                              field._header,
+                                              loopData.getPath()));
+            }
+
+            indices.push_back(static_cast<size_t>(std::distance(begin(headers), foundIt)));
+        } else {
+            if (field._index >= fileInfo._fieldCount) {
+                throw IRException(fmt::format("CSV field {} is out of range: '{}' carries {} fields",
+                                              field._index,
+                                              loopData.getPath(),
+                                              fileInfo._fieldCount));
+            }
+
+            indices.push_back(field._index);
+        }
     }
 }
 
@@ -2302,6 +2340,15 @@ vec::VectorDatabase* NLExecutionContext::getVectorDatabase() const {
     return accessor ? accessor->getVectorDatabase() : nullptr;
 }
 
+const fs::Path* NLExecutionContext::getDataDir() const {
+    const SystemManager* const manager = _system ? _system->getSystemManager() : nullptr;
+    if (!manager) {
+        return nullptr;
+    }
+
+    return &manager->getConfig()->getDataDir();
+}
+
 NLExecutor::NLExecutor(const GraphView* view,
                        const NLProgram* prog,
                        NLOutputSink* sink,
@@ -2628,6 +2675,69 @@ void NLExecutor::runUnwindConstLoop(NLExecutionContext* context, NLFunctionData*
         }
     } else {
         while (cursor < totalCount) {
+            runIteration();
+        }
+    }
+}
+
+void NLExecutor::runLoadCSVLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLLoadCSVLoopData* loopData = static_cast<NLLoadCSVLoopData*>(data);
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    ColumnStringTable* row = loopData->getRow();
+    const size_t chunkSize = context->getChunkSize();
+
+    // A null limit leaves the loop unbounded, exactly as in runConstScanNodesLoop.
+    const NLLimitState* limit = loopData->getLimit();
+
+    const fs::Path* const dataDir = context->getDataDir();
+    if (!dataDir) {
+        throw IRException("Reading a CSV file needs a data directory, which this session has not opened");
+    }
+
+    fs::Path path;
+    NLSystemContext::resolveInDataDir(path, *dataDir, loopData->getPath());
+
+    // The file's shape decides what the fields the query named resolve to: a header line
+    // names them, and the first record fixes how many a record carries - which is also
+    // the count a malformed record is caught against.
+    CSVFileInfo fileInfo;
+    CSVParser::peekFileStructure(path, loopData->hasHeaders(), fileInfo);
+
+    // A file holding no record names no field, so there is nothing to resolve a position
+    // or a header against - and no row to run the body over either
+    if (fileInfo._fieldCount == 0) {
+        return;
+    }
+
+    std::vector<size_t> fieldIndices;
+    resolveCSVFieldIndices(*loopData, fileInfo, fieldIndices);
+
+    const CSVErrorMode errorMode = loopData->skipOnError() ? CSVErrorMode::Skip : CSVErrorMode::Fail;
+    CSVParser parser(path, loopData->hasHeaders(), errorMode, fileInfo._fieldCount);
+
+    // Parse the file one chunk of records at a time: each step fills the field columns
+    // with the next records and runs the body over them. The parser is local to this
+    // call, so a load nested in a cross product reopens the file on every outer step -
+    // the same way runScanNodesLoop opens a fresh chunk writer each call.
+    bool exhausted = false;
+
+    const auto runIteration = [&]() {
+        const size_t rows = parser.readChunk(chunkSize, fieldIndices, row);
+
+        if (rows == 0) {
+            exhausted = true;
+            return;
+        }
+
+        runBody(context, loopBody);
+    };
+
+    if (limit) {
+        while (!exhausted && limit->getRemaining() > 0) {
+            runIteration();
+        }
+    } else {
+        while (!exhausted) {
             runIteration();
         }
     }

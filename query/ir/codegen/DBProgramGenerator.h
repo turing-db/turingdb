@@ -36,8 +36,10 @@ class CallStmt;
 class CypherAST;
 class EmbeddingLiteral;
 class Expr;
+class IndexExpr;
 class Literal;
 class ListLiteral;
+class LoadCSVStmt;
 class MatchStmt;
 class Projection;
 class PropertyExpr;
@@ -154,6 +156,12 @@ private:
 
     // One query part: the statements between two WITH barriers
     void generatePart(std::span<Stmt* const> stmts);
+
+    // Emits the source op of every LOAD CSV of this part. A load reads no column, so it
+    // is generated ahead of the predicates - a pattern constraint reading a field
+    // (MATCH (n {name: row[0]})) then has its column - and crossed with whatever the
+    // traversal bound.
+    void generateCSVLoads(std::span<Stmt* const> stmts);
 
     // Whether this statement closes a part on the cut it carries: a MATCH whose ORDER BY,
     // SKIP or LIMIT reads the rows that MATCH produced, which a later MATCH of the same
@@ -286,6 +294,17 @@ private:
     void generateCall(const CallStmt* callStmt);
 
     void generateVectorSearch(const VectorSearchStmt* vectorSearchStmt);
+
+    // Emits the source op a LOAD CSV opens its rows with, one column per field the query
+    // reads, and names each of them as the query knows it. A load reading a file that the
+    // rows already in flight have nothing to do with is crossed with them, the way a
+    // search reading no column is.
+    void generateLoadCSV(const LoadCSVStmt* loadCSVStmt);
+
+    // Names the columns a load produced under the declarations its accesses share
+    void publishLoadCSVFields(const LoadCSVStmt* loadCSVStmt,
+                              llvm::ArrayRef<const VarDecl*> fieldDecls,
+                              mlir::ResultRange fields);
 
     // Names the two columns a search produced as the query knows them - the yielded
     // variables of the statement, in the order it wrote them
