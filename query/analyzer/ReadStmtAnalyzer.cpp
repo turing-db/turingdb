@@ -339,9 +339,7 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
     VarDecl* decl = nullptr;
 
     if (Symbol* symbol = nodePattern->getSymbol()) {
-        decl = _ctxt->getOrCreateNamedVariable(_ast,
-                                               EvaluatedType::NodePattern,
-                                               symbol->getName());
+        decl = _ctxt->getOrCreateNodePatternVariable(_ast, symbol->getName());
         nodePattern->setDecl(decl);
     } else {
         decl = _ctxt->createUnnamedVariable(_ast, EvaluatedType::NodePattern);
@@ -661,7 +659,9 @@ void ReadStmtAnalyzer::analyze(UnwindStmt* unwind) {
         throwError(fmt::format("Variable '{}' is already declared", symName), unwind);
     }
 
-    const VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast, itemType, symName);
+    VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast, itemType, symName);
+    decl->setIsUnwound(true);
+
     unwind->setDecl(decl);
 }
 

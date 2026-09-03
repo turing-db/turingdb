@@ -136,6 +136,11 @@ private:
         // otherwise, which leaves every call after the traversal and every root opening
         // with a scan.
         const VariableDependency* _drivenRoot {nullptr};
+
+        // The pattern variables a const scan opened from an UNWIND's node IDs. A seeded
+        // variable the traversal reached some other way holds rows that are not the listed
+        // nodes, so what it was seeded with has to be checked against what was walked
+        std::unordered_set<const VariableDependency*> _seededVars;
     };
 
     PartScope _part;
@@ -171,6 +176,10 @@ private:
     // Rejects a pattern variable the traversal left without a column: a shape it cannot
     // walk from the variables in scope
     void throwOnUnboundPatternVariable() const;
+
+    // Rejects a variable an UNWIND seeds with node IDs that the traversal reached some
+    // other way, its list left unmatched: only the node a component opens from is seeded
+    void throwOnDroppedUnwindSeed() const;
 
     void closeBoundJoins(std::vector<const VariableDependency*>& carriedSet,
                          std::vector<const VariableDependency*>& dataflowVars);
@@ -485,6 +494,11 @@ private:
     // Opens a dataflow from an UNWIND's literal list, the way addScanNodes opens one
     // from the graph's nodes
     void addUnwindConst(const VariableDependency* var, const UnwindStmt* unwind);
+
+    // Opens a dataflow from the nodes an UNWIND's literal list names, for a variable a
+    // pattern uses as a node: the list seeds the traversal instead of feeding it values
+    void addConstScanNodes(const VariableDependency* var, const UnwindStmt* unwind);
+
     void filterAllColumns(mlir::Value predicate);
 
     // Such a scope is the single row those constants are: the predicate and the columns

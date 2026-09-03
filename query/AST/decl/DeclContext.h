@@ -31,6 +31,11 @@ public:
 
     VarDecl* getOrCreateNamedVariable(CypherAST* ast, EvaluatedType type, std::string_view name);
 
+    // The name a node of a pattern binds. An integer already in scope is the node IDs an
+    // UNWIND bound, and a pattern naming it seeds itself from those nodes, so the variable
+    // becomes the pattern node it is used as rather than conflicting with it
+    VarDecl* getOrCreateNodePatternVariable(CypherAST* ast, std::string_view name);
+
     // The name a projected item publishes its column under. What follows the projection
     // reads that column, so the name binds to the item even when the query already used
     // it for a variable of another type
