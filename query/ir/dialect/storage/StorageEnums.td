@@ -117,6 +117,17 @@ def VectorIndexKind : I64EnumAttr<"VectorIndexKind", "The implementation of a ve
     let cppNamespace = "::mlir::storage";
 }
 
+// Which way a MERGE pattern's hop points, from the chain node ahead of it to the one
+// behind. `undirected` is Cypher's `-[r:T]-`: it matches a hop either way round and
+// writes a forward one when the pattern has to be created.
+def EdgeDirection : I64EnumAttr<"EdgeDirection", "The direction of a pattern hop", [
+    I64EnumAttrCase<"Undirected", 0, "undirected">,
+    I64EnumAttrCase<"Backward", 1, "backward">,
+    I64EnumAttrCase<"Forward", 2, "forward">,
+]> {
+    let cppNamespace = "::mlir::storage";
+}
+
 // Whether a property index covers nodes or edges.
 def IndexedEntity : I64EnumAttr<"IndexedEntity", "The entity a property index covers", [
     I64EnumAttrCase<"Node", 0, "node">,

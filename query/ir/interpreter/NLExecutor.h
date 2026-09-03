@@ -242,6 +242,10 @@ public:
 
     static void runCreateEdge(NLExecutionContext* context, NLFunctionData* data);
 
+    // Bind one MERGE pattern per row of the op's input chunks, writing the pattern for
+    // the rows the graph and this query's earlier writes do not already hold it for.
+    static void runMerge(NLExecutionContext* context, NLFunctionData* data);
+
     static void runSetNodeProperty(NLExecutionContext* context, NLFunctionData* data);
 
     static void runSetEdgeProperty(NLExecutionContext* context, NLFunctionData* data);
@@ -325,6 +329,15 @@ public:
     static NLBroadcastFunction selectPlainBlockRepeatFunction(ValueType valueType);
     static NLBroadcastFunction selectPlainTileFunction(ValueType valueType);
     static NLKeyAppendFunction selectPlainKeyAppendFunction(ValueType valueType);
+
+    // The appenders that key one row of a merge's property value column. A merge keys
+    // the value a row asks for against the value the graph holds, and those arrive in a
+    // plain (or constant) column and a nullable one respectively, so these write the
+    // present-value tag byte selectOptKeyAppendFunction' appenders write - which is the
+    // nullable shape's selector, reused as is.
+    static NLKeyAppendFunction selectPlainMergeKeyAppendFunction(NLChunkKind kind);
+    static NLKeyAppendFunction selectConstMergeKeyAppendFunction(ValueType valueType);
+    static NLKeyAppendFunction selectNullMergeKeyAppendFunction();
     static NLGroupKeyGatherFunction selectPlainGroupKeyGather(ValueType valueType);
 
     // Block-repeat for an ID chunk of this kind (outer column).

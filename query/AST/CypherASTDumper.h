@@ -42,6 +42,7 @@ class LoadGraphQuery;
 class ListGraphQuery;
 class ListAvailableGraphsQuery;
 class MergeDataPartsQuery;
+class MergeStmt;
 class CreateGraphQuery;
 class LoadGMLQuery;
 class LoadParquetQuery;
@@ -88,6 +89,7 @@ private:
     void dump(std::ostream& out, const S3TransferQuery* query);
     void dump(std::ostream& out, const MatchStmt* match);
     void dump(std::ostream& out, const CreateStmt* create);
+    void dump(std::ostream& out, const MergeStmt* merge);
     void dump(std::ostream& out, const CallStmt* call);
     void dump(std::ostream& out, const YieldClause* yield);
     void dump(std::ostream& out, const DeleteStmt* deleteStmt);

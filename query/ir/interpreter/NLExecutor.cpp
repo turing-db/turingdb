@@ -2518,6 +2518,35 @@ CommitWriteBuffer::ExistingOrPendingNode resolveNode(const ColumnNodeIDs* column
     }
 }
 
+// A column a merge produced mixes the two ID spaces, so its mask answers row by row;
+// one with no mask is pending in every row or in none.
+bool isPendingRow(const ColumnMask* pending, bool isPendingColumn, size_t row) {
+    if (pending) {
+        return (*pending)[row];
+    }
+
+    return isPendingColumn;
+}
+
+// The write buffer builds one column per property of a pending entity, so a second entry
+// for the same property would be a second value for the same cell: ON CREATE writes over
+// the value the pattern wrote a moment earlier rather than beside it.
+void setPendingProperty(CommitWriteBuffer::UntypedProperties& properties,
+                        const CommitWriteBuffer::UntypedProperty& property) {
+    for (CommitWriteBuffer::UntypedProperty& held : properties) {
+        if (held.propertyID == property.propertyID) {
+            held.value = property.value;
+            return;
+        }
+    }
+
+    properties.push_back(property);
+}
+
+bool writeTouchesRow(const ColumnMask* rows, size_t row) {
+    return !rows || (*rows)[row];
+}
+
 void throwIfNodesHaveEdges(const GraphView& view, const ColumnNodeIDs* nodes) {
     const Tombstones& tombstones = view.tombstones();
 
@@ -2533,6 +2562,621 @@ void throwIfNodesHaveEdges(const GraphView& view, const ColumnNodeIDs* nodes) {
         if (!tombstones.containsEdge(record._edgeID)) {
             throw IRException("Cannot delete a node with relationships; use DETACH DELETE");
         }
+    }
+}
+
+// A merge keys the value a row asks for against the value the graph holds, and those
+// arrive in a plain and a nullable column respectively: the two have to serialize alike,
+// which is why a plain row writes the tag byte the nullable one writes for a value.
+template <typename ElementType>
+void mergeKeyAppendPlainColumn(const Column* column, size_t row, std::string& key) {
+    const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
+
+    key.push_back('\1');
+    distinctAppendValueBytes(key, raw[row]);
+}
+
+template <typename ElementType>
+void mergeKeyAppendConstColumn(const Column* column, size_t row, std::string& key) {
+    key.push_back('\1');
+    distinctAppendValueBytes(key, (*static_cast<const ColumnConst<ElementType>*>(column))[row]);
+}
+
+// Keys the way a nullable column's null row does, so a merge on a null value binds the
+// nodes that lack the property
+void mergeKeyAppendConstNull(const Column* column, size_t row, std::string& key) {
+    key.push_back('\0');
+}
+
+template <typename Property>
+void appendMergeKey(const std::vector<Property>& properties, size_t row, std::string& key) {
+    for (const Property& property : properties) {
+        property._keyAppend(property._values, row, key);
+    }
+}
+
+template <typename ID, typename T>
+void fetchMergeProperty(const GraphView& view,
+                        PropertyTypeID propertyTypeID,
+                        const ColumnVector<ID>* ids,
+                        Column* output) {
+    auto* typed = static_cast<ColumnOptVector<typename T::Primitive>*>(output);
+
+    GetPropertiesWithNullChunkWriter<ID, T> writer(view, propertyTypeID, ids);
+    writer.setOutput(typed);
+    writer.fill(ids->size());
+}
+
+void fetchMergeNodeProperty(const GraphView& view,
+                            const NLMergeScanProperty& property,
+                            const ColumnNodeIDs* nodes) {
+    const auto fetch = [&]<SupportedType T>() {
+        fetchMergeProperty<NodeID, T>(view, property._propertyType._id, nodes, property._values);
+    };
+
+    ValueTypeDispatcher(property._propertyType._valueType).execute(fetch);
+}
+
+void fetchMergeEdgeProperty(const GraphView& view,
+                            const NLMergeScanProperty& property,
+                            const ColumnEdgeIDs* edges) {
+    const auto fetch = [&]<SupportedType T>() {
+        fetchMergeProperty<EdgeID, T>(view, property._propertyType._id, edges, property._values);
+    };
+
+    ValueTypeDispatcher(property._propertyType._valueType).execute(fetch);
+}
+
+// One scan of the spec's label set with one property fetch per key property per chunk,
+// rather than a lookup per row of the merge
+void buildMergeNodeIndex(NLExecutionContext* context, NLMergeNodeIndex* index) {
+    index->markBuilt();
+
+    if (!index->isMatchable()) {
+        return;
+    }
+
+    const GraphView& view = *context->getView();
+    const LabelSetHandle labelset(index->getLabels());
+    const std::vector<NLMergeScanProperty>& scanProperties = index->scanProperties();
+    ColumnNodeIDs* nodes = index->getScanNodes();
+
+    ScanNodesByLabelChunkWriter scan(view, labelset);
+    scan.setNodeIDs(nodes);
+
+    std::string key;
+    while (scan.isValid()) {
+        scan.fill(context->getChunkSize());
+
+        const size_t rowCount = nodes->size();
+        if (rowCount == 0) {
+            continue;
+        }
+
+        for (const NLMergeScanProperty& property : scanProperties) {
+            fetchMergeNodeProperty(view, property, nodes);
+        }
+
+        for (size_t row = 0; row < rowCount; row++) {
+            key.clear();
+            appendMergeKey(scanProperties, row, key);
+
+            index->add(key, {._id=(*nodes)[row].getValue(), ._pending=false});
+        }
+    }
+}
+
+// One step of an nl.merge: the rows its input chunks hold, each looked up against the
+// graph and against the entities this query already wrote, then written where the
+// pattern is missing.
+class MergeStep {
+public:
+    MergeStep(NLExecutionContext* context, NLMergeData* data)
+        : _context(context),
+        _data(data),
+        _writeBuffer(context->getWriteBuffer()),
+        _view(context->getView()),
+        _firstPendingNodeID(committedNodeCount(_view)),
+        _firstPendingEdgeID(committedEdgeCount(_view))
+    {
+    }
+
+    void run();
+
+private:
+    // A chain matched as far as one node, and the entities it bound getting there
+    struct PartialMatch {
+        std::vector<NLMergeRef> _nodes;
+        std::vector<NLMergeRef> _edges;
+    };
+
+    struct Extension {
+        NLMergeRef _source;
+        NLMergeRef _edge;
+        NLMergeRef _target;
+    };
+
+    NLExecutionContext* _context {nullptr};
+    NLMergeData* _data {nullptr};
+    CommitWriteBuffer* _writeBuffer {nullptr};
+    const GraphView* _view {nullptr};
+
+    // A ref this step holds names a pending entity by its write-buffer offset, while the
+    // columns it reads and fills name one by the ID it will commit as: one past the last
+    // the graph holds, plus that offset
+    size_t _firstPendingNodeID {0};
+    size_t _firstPendingEdgeID {0};
+
+    // Per chain node, the current row's candidates, and their refs as a set for the
+    // membership test each hop's far end has to pass
+    std::vector<std::vector<NLMergeRef>> _candidates;
+    std::vector<std::unordered_set<uint64_t>> _candidateKeys;
+
+    // Extracted once for the whole chunk, so a written row picks its values by row index
+    std::vector<std::vector<CommitWriteBuffer::UntypedProperties>> _nodeProperties;
+    std::vector<std::vector<CommitWriteBuffer::UntypedProperties>> _hopProperties;
+
+    // The frontier of the chain walk and the one the current hop extends it into
+    std::vector<PartialMatch> _matches;
+    std::vector<PartialMatch> _extended;
+
+    // The current hop's candidate graph edges, and where each source node's run of them
+    // starts and ends once they are grouped
+    std::vector<Extension> _extensions;
+    std::unordered_map<uint64_t, std::pair<size_t, size_t>> _extensionRuns;
+
+    std::string _key;
+    std::string _hopKey;
+
+    void extractProperties(size_t rowCount);
+    void clearResults();
+
+    void collectCandidates(size_t row);
+    void matchRow(size_t row);
+    void extendHop(size_t hopIndex);
+
+    void collectGraphExtensions(const NLMergeData::Hop& hop, size_t hopIndex);
+    void collectDirectedExtensions(const NLMergeData::Hop& hop, size_t hopIndex, bool outgoing);
+    void dropExtensionsWithOtherProperties(const NLMergeData::Hop& hop);
+    void groupExtensionsBySource();
+
+    void emitRow(const PartialMatch& match, size_t row, bool created);
+    void writeRow(size_t row);
+
+    NLMergeRef writeNode(const NLMergeData::Node& node, size_t nodeIndex, size_t row);
+    NLMergeRef writeEdge(const NLMergeData::Hop& hop,
+                         size_t hopIndex,
+                         size_t row,
+                         const NLMergeRef& source,
+                         const NLMergeRef& target);
+
+    static CommitWriteBuffer::ExistingOrPendingNode asWriteBufferNode(const NLMergeRef& ref);
+
+    void gatherCarriedColumns();
+};
+
+void MergeStep::run() {
+    bioassert(_writeBuffer, "nl.merge requires an active write transaction");
+
+    const Column* rowCarrier = _data->getRowCarrier();
+
+    // A pattern reading no column at all stands on its own, and runs over the single
+    // row its literals are - the row db.create_node writes without a cardinality
+    const size_t rowCount = rowCarrier ? rowCarrier->size() : 1;
+
+    clearResults();
+    extractProperties(rowCount);
+
+    _candidates.assign(_data->nodes().size(), {});
+    _candidateKeys.assign(_data->nodes().size(), {});
+
+    for (size_t row = 0; row < rowCount; row++) {
+        matchRow(row);
+    }
+
+    gatherCarriedColumns();
+}
+
+void MergeStep::clearResults() {
+    for (const NLMergeData::Node& node : _data->nodes()) {
+        node._output->clear();
+        node._outputPending->clear();
+    }
+
+    for (const NLMergeData::Hop& hop : _data->hops()) {
+        hop._output->clear();
+        hop._outputPending->clear();
+    }
+
+    _data->getCreated()->clear();
+    _data->getIndices()->clear();
+}
+
+void MergeStep::extractProperties(size_t rowCount) {
+    const std::vector<NLMergeData::Node>& nodes = _data->nodes();
+    const std::vector<NLMergeData::Hop>& hops = _data->hops();
+
+    _nodeProperties.assign(nodes.size(), {});
+    for (size_t nodeIndex = 0; nodeIndex < nodes.size(); nodeIndex++) {
+        const std::vector<NLMergeProperty>& properties = nodes[nodeIndex]._properties;
+        _nodeProperties[nodeIndex].resize(properties.size());
+
+        for (size_t index = 0; index < properties.size(); index++) {
+            extractColumnProperties(properties[index]._values,
+                                    rowCount,
+                                    properties[index]._propertyType._id,
+                                    _nodeProperties[nodeIndex][index]);
+        }
+    }
+
+    _hopProperties.assign(hops.size(), {});
+    for (size_t hopIndex = 0; hopIndex < hops.size(); hopIndex++) {
+        const std::vector<NLMergeProperty>& properties = hops[hopIndex]._properties;
+        _hopProperties[hopIndex].resize(properties.size());
+
+        for (size_t index = 0; index < properties.size(); index++) {
+            extractColumnProperties(properties[index]._values,
+                                    rowCount,
+                                    properties[index]._propertyType._id,
+                                    _hopProperties[hopIndex][index]);
+        }
+    }
+}
+
+void MergeStep::collectCandidates(size_t row) {
+    const std::vector<NLMergeData::Node>& nodes = _data->nodes();
+
+    for (size_t nodeIndex = 0; nodeIndex < nodes.size(); nodeIndex++) {
+        const NLMergeData::Node& node = nodes[nodeIndex];
+        std::vector<NLMergeRef>& candidates = _candidates[nodeIndex];
+        candidates.clear();
+
+        if (node._boundColumn) {
+            const bool pending = node._boundPending && (*node._boundPending)[row];
+            const uint64_t boundID = (*node._boundColumn)[row].getValue();
+            const uint64_t id = pending ? boundID - _firstPendingNodeID : boundID;
+
+            candidates.push_back({._id=id, ._pending=pending});
+        } else {
+            NLMergeNodeIndex* index = node._index;
+            if (!index->isBuilt()) {
+                buildMergeNodeIndex(_context, index);
+            }
+
+            _key.clear();
+            appendMergeKey(node._properties, row, _key);
+
+            const std::span<const NLMergeRef> committed = index->find(_key);
+            candidates.insert(candidates.end(), committed.begin(), committed.end());
+
+            _key.insert(0, node._signature);
+            const std::span<const NLMergeRef> pending = _data->getPendingNodes()->find(_key);
+            candidates.insert(candidates.end(), pending.begin(), pending.end());
+        }
+
+        std::unordered_set<uint64_t>& keys = _candidateKeys[nodeIndex];
+        keys.clear();
+        for (const NLMergeRef& candidate : candidates) {
+            keys.insert(candidate.asKey());
+        }
+    }
+}
+
+void MergeStep::matchRow(size_t row) {
+    collectCandidates(row);
+
+    _matches.clear();
+    for (const NLMergeRef& candidate : _candidates.front()) {
+        PartialMatch match;
+        match._nodes.push_back(candidate);
+        _matches.push_back(match);
+    }
+
+    const std::vector<NLMergeData::Hop>& hops = _data->hops();
+    for (size_t hopIndex = 0; hopIndex < hops.size() && !_matches.empty(); hopIndex++) {
+        _hopKey.clear();
+        appendMergeKey(hops[hopIndex]._properties, row, _hopKey);
+
+        extendHop(hopIndex);
+    }
+
+    if (_matches.empty()) {
+        writeRow(row);
+        return;
+    }
+
+    for (const PartialMatch& match : _matches) {
+        emitRow(match, row, /*created=*/false);
+    }
+}
+
+void MergeStep::extendHop(size_t hopIndex) {
+    const NLMergeData::Hop& hop = _data->hops()[hopIndex];
+    const std::unordered_set<uint64_t>& targets = _candidateKeys[hopIndex + 1];
+    const NLMergePendingEdges* pendingEdges = _data->getPendingEdges();
+
+    collectGraphExtensions(hop, hopIndex);
+
+    const bool followsOutgoing = hop._direction != NLMergeDirection::Backward;
+    const bool followsIncoming = hop._direction != NLMergeDirection::Forward;
+
+    _extended.clear();
+    for (const PartialMatch& match : _matches) {
+        const NLMergeRef source = match._nodes.back();
+
+        const auto extendWith = [&](const NLMergeRef& edge, const NLMergeRef& target) {
+            PartialMatch extended = match;
+            extended._edges.push_back(edge);
+            extended._nodes.push_back(target);
+            _extended.push_back(extended);
+        };
+
+        const auto runIt = _extensionRuns.find(source.asKey());
+        if (runIt != end(_extensionRuns)) {
+            const auto [first, last] = runIt->second;
+            for (size_t index = first; index < last; index++) {
+                extendWith(_extensions[index]._edge, _extensions[index]._target);
+            }
+        }
+
+        const auto extendWithPending = [&](std::span<const NLMergePendingEdges::Entry> entries) {
+            for (const NLMergePendingEdges::Entry& entry : entries) {
+                const bool sameType = entry._edgeType == hop._writeEdgeType;
+                const bool sameProperties = entry._propertyKey == _hopKey;
+                const bool onACandidate = targets.contains(entry._other.asKey());
+
+                if (sameType && sameProperties && onACandidate) {
+                    extendWith({._id=entry._offset, ._pending=true}, entry._other);
+                }
+            }
+        };
+
+        if (followsOutgoing) {
+            extendWithPending(pendingEdges->outOf(source));
+        }
+
+        if (followsIncoming) {
+            extendWithPending(pendingEdges->into(source));
+        }
+    }
+
+    _matches.swap(_extended);
+}
+
+void MergeStep::collectGraphExtensions(const NLMergeData::Hop& hop, size_t hopIndex) {
+    _extensions.clear();
+    _extensionRuns.clear();
+
+    // A type the schema does not have is on no committed edge, so only a pending one can
+    // extend the match
+    if (!hop._matchEdgeType.isValid()) {
+        return;
+    }
+
+    ColumnNodeIDs* sources = hop._scanSources;
+    sources->clear();
+
+    for (const PartialMatch& match : _matches) {
+        const NLMergeRef source = match._nodes.back();
+        if (!source._pending) {
+            sources->push_back(NodeID(source._id));
+        }
+    }
+
+    if (sources->empty()) {
+        return;
+    }
+
+    const bool followsOutgoing = hop._direction != NLMergeDirection::Backward;
+    const bool followsIncoming = hop._direction != NLMergeDirection::Forward;
+
+    if (followsOutgoing) {
+        collectDirectedExtensions(hop, hopIndex, /*outgoing=*/true);
+    }
+
+    if (followsIncoming) {
+        collectDirectedExtensions(hop, hopIndex, /*outgoing=*/false);
+    }
+
+    dropExtensionsWithOtherProperties(hop);
+    groupExtensionsBySource();
+}
+
+void MergeStep::collectDirectedExtensions(const NLMergeData::Hop& hop, size_t hopIndex, bool outgoing) {
+    const std::unordered_set<uint64_t>& targets = _candidateKeys[hopIndex + 1];
+    const Tombstones& tombstones = _view->tombstones();
+    const ColumnNodeIDs* sources = hop._scanSources;
+
+    const auto collect = [&](const EdgeRecord& record) {
+        if (record._edgeTypeID != hop._matchEdgeType || tombstones.containsEdge(record._edgeID)) {
+            return;
+        }
+
+        const NLMergeRef target {._id=record._otherID.getValue(), ._pending=false};
+        if (!targets.contains(target.asKey())) {
+            return;
+        }
+
+        _extensions.push_back({._source={._id=record._nodeID.getValue(), ._pending=false},
+                               ._edge={._id=record._edgeID.getValue(), ._pending=false},
+                               ._target=target});
+    };
+
+    if (outgoing) {
+        const GetOutEdgesRange outEdges(*_view, sources);
+        for (const EdgeRecord& record : outEdges) {
+            collect(record);
+        }
+    } else {
+        const GetInEdgesRange inEdges(*_view, sources);
+        for (const EdgeRecord& record : inEdges) {
+            collect(record);
+        }
+    }
+}
+
+void MergeStep::dropExtensionsWithOtherProperties(const NLMergeData::Hop& hop) {
+    const std::vector<NLMergeScanProperty>& scanProperties = hop._scanProperties;
+    if (scanProperties.empty() || _extensions.empty()) {
+        return;
+    }
+
+    ColumnEdgeIDs* edges = hop._scanEdges;
+    edges->clear();
+    for (const Extension& extension : _extensions) {
+        edges->push_back(EdgeID(extension._edge._id));
+    }
+
+    for (const NLMergeScanProperty& property : scanProperties) {
+        fetchMergeEdgeProperty(*_view, property, edges);
+    }
+
+    std::vector<Extension> kept;
+    std::string key;
+    for (size_t index = 0; index < _extensions.size(); index++) {
+        key.clear();
+        appendMergeKey(scanProperties, index, key);
+
+        if (key == _hopKey) {
+            kept.push_back(_extensions[index]);
+        }
+    }
+
+    _extensions.swap(kept);
+}
+
+void MergeStep::groupExtensionsBySource() {
+    std::ranges::stable_sort(_extensions, [](const Extension& lhs, const Extension& rhs) {
+        return lhs._source.asKey() < rhs._source.asKey();
+    });
+
+    size_t first = 0;
+    while (first < _extensions.size()) {
+        const uint64_t sourceKey = _extensions[first]._source.asKey();
+
+        size_t last = first + 1;
+        while (last < _extensions.size() && _extensions[last]._source.asKey() == sourceKey) {
+            last++;
+        }
+
+        _extensionRuns[sourceKey] = {first, last};
+        first = last;
+    }
+}
+
+void MergeStep::emitRow(const PartialMatch& match, size_t row, bool created) {
+    const std::vector<NLMergeData::Node>& nodes = _data->nodes();
+    const std::vector<NLMergeData::Hop>& hops = _data->hops();
+
+    for (size_t nodeIndex = 0; nodeIndex < nodes.size(); nodeIndex++) {
+        const NLMergeRef& node = match._nodes[nodeIndex];
+        const uint64_t nodeID = node._pending ? node._id + _firstPendingNodeID : node._id;
+
+        nodes[nodeIndex]._output->push_back(NodeID(nodeID));
+        nodes[nodeIndex]._outputPending->push_back(node._pending);
+    }
+
+    for (size_t hopIndex = 0; hopIndex < hops.size(); hopIndex++) {
+        const NLMergeRef& edge = match._edges[hopIndex];
+        const uint64_t edgeID = edge._pending ? edge._id + _firstPendingEdgeID : edge._id;
+
+        hops[hopIndex]._output->push_back(EdgeID(edgeID));
+        hops[hopIndex]._outputPending->push_back(edge._pending);
+    }
+
+    _data->getCreated()->push_back(created);
+    _data->getIndices()->push_back(row);
+}
+
+void MergeStep::writeRow(size_t row) {
+    const std::vector<NLMergeData::Node>& nodes = _data->nodes();
+    const std::vector<NLMergeData::Hop>& hops = _data->hops();
+
+    PartialMatch written;
+    for (size_t nodeIndex = 0; nodeIndex < nodes.size(); nodeIndex++) {
+        const NLMergeData::Node& node = nodes[nodeIndex];
+
+        if (node._boundColumn) {
+            written._nodes.push_back(_candidates[nodeIndex].front());
+        } else {
+            written._nodes.push_back(writeNode(node, nodeIndex, row));
+        }
+    }
+
+    for (size_t hopIndex = 0; hopIndex < hops.size(); hopIndex++) {
+        const NLMergeData::Hop& hop = hops[hopIndex];
+
+        // An undirected hop is written pointing forward, the way Cypher writes it
+        const bool backward = hop._direction == NLMergeDirection::Backward;
+        const NLMergeRef& source = backward ? written._nodes[hopIndex + 1] : written._nodes[hopIndex];
+        const NLMergeRef& target = backward ? written._nodes[hopIndex] : written._nodes[hopIndex + 1];
+
+        written._edges.push_back(writeEdge(hop, hopIndex, row, source, target));
+    }
+
+    emitRow(written, row, /*created=*/true);
+}
+
+NLMergeRef MergeStep::writeNode(const NLMergeData::Node& node, size_t nodeIndex, size_t row) {
+    const uint64_t offset = _writeBuffer->numPendingNodes();
+
+    CommitWriteBuffer::PendingNode& pending = _writeBuffer->newPendingNode();
+    pending.labelsetHandle = node._labelSetHandle;
+
+    for (const CommitWriteBuffer::UntypedProperties& values : _nodeProperties[nodeIndex]) {
+        pending.properties.push_back(values[row]);
+    }
+
+    const NLMergeRef ref {._id=offset, ._pending=true};
+
+    // A later row asking for the same values binds this node rather than writing a
+    // second one, which is what makes a merge over many rows idempotent
+    _key.assign(node._signature);
+    appendMergeKey(node._properties, row, _key);
+    _data->getPendingNodes()->add(_key, ref);
+
+    return ref;
+}
+
+NLMergeRef MergeStep::writeEdge(const NLMergeData::Hop& hop,
+                                size_t hopIndex,
+                                size_t row,
+                                const NLMergeRef& source,
+                                const NLMergeRef& target) {
+    const uint64_t offset = _writeBuffer->numPendingEdges();
+
+    CommitWriteBuffer::PendingEdge& pending = _writeBuffer->newPendingEdge(asWriteBufferNode(source),
+                                                                           asWriteBufferNode(target));
+    pending.edgeType = hop._writeEdgeType;
+
+    for (const CommitWriteBuffer::UntypedProperties& values : _hopProperties[hopIndex]) {
+        pending.properties.push_back(values[row]);
+    }
+
+    // Keyed by its own hop's values, not by whichever hop the match reached before it
+    // gave up: a later row looks each hop of the chain up under its own key
+    _hopKey.clear();
+    appendMergeKey(hop._properties, row, _hopKey);
+
+    _data->getPendingEdges()->add(source, target, hop._writeEdgeType, offset, _hopKey);
+
+    return {._id=offset, ._pending=true};
+}
+
+CommitWriteBuffer::ExistingOrPendingNode MergeStep::asWriteBufferNode(const NLMergeRef& ref) {
+    if (ref._pending) {
+        return CommitWriteBuffer::PendingNodeOffset(ref._id);
+    }
+
+    return NodeID(ref._id);
+}
+
+void MergeStep::gatherCarriedColumns() {
+    const ColumnVector<size_t>* indices = _data->getIndices();
+
+    for (const NLCarriedColumn& carried : _data->carriedColumns()) {
+        const NLGatherFunction gather = carried.getGatherFunc();
+        gather(carried.getInput(), indices, carried.getOutput());
     }
 }
 
@@ -2716,6 +3360,11 @@ void NLExecutor::runCreateNode(NLExecutionContext* context, NLFunctionData* data
     }
 }
 
+void NLExecutor::runMerge(NLExecutionContext* context, NLFunctionData* data) {
+    MergeStep step(context, static_cast<NLMergeData*>(data));
+    step.run();
+}
+
 void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data) {
     NLCreateEdgeData* createData = static_cast<NLCreateEdgeData*>(data);
     CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
@@ -2728,6 +3377,9 @@ void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data
     const size_t rowCount = src->size();
     const EdgeTypeID edgeTypeID = createData->getEdgeTypeID();
 
+    const ColumnMask* srcPending = createData->getSrcPendingMask();
+    const ColumnMask* tgtPending = createData->getTgtPendingMask();
+
     const GraphView* view = context->getView();
     const size_t firstPendingNodeID = committedNodeCount(view);
 
@@ -2736,9 +3388,9 @@ void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data
 
     for (size_t row = 0; row < rowCount; row++) {
         const CommitWriteBuffer::ExistingOrPendingNode srcNode =
-            resolveNode(src, row, srcIsPending, firstPendingNodeID);
+            resolveNode(src, row, isPendingRow(srcPending, srcIsPending, row), firstPendingNodeID);
         const CommitWriteBuffer::ExistingOrPendingNode tgtNode =
-            resolveNode(tgt, row, tgtIsPending, firstPendingNodeID);
+            resolveNode(tgt, row, isPendingRow(tgtPending, tgtIsPending, row), firstPendingNodeID);
 
         CommitWriteBuffer::PendingEdge& edge = writeBuffer->newPendingEdge(srcNode, tgtNode);
         edge.edgeType = edgeTypeID;
@@ -2776,9 +3428,24 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
     const Column* nodeCol = setData->getValue();
     extractColumnProperties(nodeCol, rowCount, propID, propsBuffer);
 
+    const ColumnMask* pending = setData->getPending();
+    const ColumnMask* rows = setData->getRows();
+
+    const size_t firstPendingNodeID = committedNodeCount(context->getView());
+
     const auto& raw = nodes->getRaw();
     for (size_t row = 0; row < rowCount; row++) {
-        writeBuffer->addNodeUpdate(raw[row], propsBuffer[row]);
+        if (!writeTouchesRow(rows, row)) {
+            continue;
+        }
+
+        if (pending && (*pending)[row]) {
+            CommitWriteBuffer::PendingNode& node =
+                writeBuffer->getPendingNode(raw[row].getValue() - firstPendingNodeID);
+            setPendingProperty(node.properties, propsBuffer[row]);
+        } else {
+            writeBuffer->addNodeUpdate(raw[row], propsBuffer[row]);
+        }
     }
 }
 
@@ -2795,9 +3462,24 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
     CommitWriteBuffer::UntypedProperties propsBuffer;
     extractColumnProperties(edgeCol, rowCount, propID, propsBuffer);
 
+    const ColumnMask* pending = setData->getPending();
+    const ColumnMask* rows = setData->getRows();
+
+    const size_t firstPendingEdgeID = committedEdgeCount(context->getView());
+
     const auto& raw = edges->getRaw();
     for (size_t row = 0; row < rowCount; row++) {
-        writeBuffer->addEdgeUpdate(raw[row], propsBuffer[row]);
+        if (!writeTouchesRow(rows, row)) {
+            continue;
+        }
+
+        if (pending && (*pending)[row]) {
+            CommitWriteBuffer::PendingEdge& edge =
+                writeBuffer->getPendingEdge(raw[row].getValue() - firstPendingEdgeID);
+            setPendingProperty(edge.properties, propsBuffer[row]);
+        } else {
+            writeBuffer->addEdgeUpdate(raw[row], propsBuffer[row]);
+        }
     }
 }
 
@@ -5214,6 +5896,87 @@ NLCopyFunction NLExecutor::selectPlainCopyFunction(ValueType valueType) {
     }
 }
 
+NLKeyAppendFunction NLExecutor::selectPlainMergeKeyAppendFunction(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::UInt64:
+            return &mergeKeyAppendPlainColumn<types::UInt64::Primitive>;
+        break;
+
+        case NLChunkKind::Int64:
+            return &mergeKeyAppendPlainColumn<types::Int64::Primitive>;
+        break;
+
+        case NLChunkKind::Double:
+            return &mergeKeyAppendPlainColumn<types::Double::Primitive>;
+        break;
+
+        case NLChunkKind::Bool:
+            return &mergeKeyAppendPlainColumn<types::Bool::Primitive>;
+        break;
+
+        case NLChunkKind::String:
+            return &mergeKeyAppendPlainColumn<types::String::Primitive>;
+        break;
+
+        case NLChunkKind::OwnedString:
+            return &mergeKeyAppendPlainColumn<std::string>;
+        break;
+
+        case NLChunkKind::NodeID:
+        case NLChunkKind::EdgeID:
+        case NLChunkKind::EdgeTypeID:
+        case NLChunkKind::LabelID:
+        case NLChunkKind::PropertyTypeID:
+        case NLChunkKind::ValueTypeCode:
+        case NLChunkKind::List:
+            throw IRException("a MERGE pattern cannot constrain a property to this value");
+        break;
+    }
+
+    bioassert(false, "Unknown NLChunkKind");
+    return nullptr;
+}
+
+NLKeyAppendFunction NLExecutor::selectConstMergeKeyAppendFunction(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &mergeKeyAppendConstColumn<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &mergeKeyAppendConstColumn<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &mergeKeyAppendConstColumn<types::Double::Primitive>;
+        break;
+
+        case ValueType::Bool:
+            return &mergeKeyAppendConstColumn<types::Bool::Primitive>;
+        break;
+
+        case ValueType::String:
+            return &mergeKeyAppendConstColumn<types::String::Primitive>;
+        break;
+
+        case ValueType::Embedding:
+            throw IRException("a MERGE pattern cannot constrain a property to an embedding");
+        break;
+
+        case ValueType::Invalid:
+        case ValueType::_SIZE:
+            throw IRException("invalid MERGE property value type");
+        break;
+    }
+
+    bioassert(false, "Unhandled value type");
+    return nullptr;
+}
+
+NLKeyAppendFunction NLExecutor::selectNullMergeKeyAppendFunction() {
+    return &mergeKeyAppendConstNull;
+}
+
 NLKeyAppendFunction NLExecutor::selectPlainKeyAppendFunction(ValueType valueType) {
     switch (valueType) {
         case ValueType::Int64:
@@ -5409,6 +6172,21 @@ void NLExecutor::runPropertyFetch(NLExecutionContext* context, NLFunctionData* d
     GetPropertiesWithNullChunkWriter<ID, T> writer(view, propertyTypeID, inputIDs);
     writer.setOutput(output);
     writer.fill(inputIDs->size());
+
+    // A pending row's ID is an offset into the write buffer, which the fetch above read
+    // as an ID of the graph: whatever it found belongs to another entity, so the value
+    // the query sees is the absent one a written entity's unwritten property has.
+    const ColumnMask* pending = fetchData->getPending();
+    if (!pending) {
+        return;
+    }
+
+    auto& raw = output->getRaw();
+    for (size_t row = 0; row < raw.size(); row++) {
+        if ((*pending)[row]) {
+            raw[row] = std::nullopt;
+        }
+    }
 }
 
 // The translator selects among these by the value type the property resolves

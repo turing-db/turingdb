@@ -57,6 +57,7 @@ class MatchStmt;
 class ShortestPathStmt;
 class CallStmt;
 class CreateStmt;
+class MergeStmt;
 class SetStmt;
 class DeleteStmt;
 class QueryCommand;
@@ -149,6 +150,7 @@ public:
     friend ShortestPathStmt;
     friend CallStmt;
     friend CreateStmt;
+    friend MergeStmt;
     friend SetStmt;
     friend DeleteStmt;
     friend ReturnStmt;

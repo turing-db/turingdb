@@ -576,20 +576,27 @@ def GetNodeProperties : TuringOp<"get_node_properties", [Pure]> {
     node is dropped - the lowering uses the with-null property fetch. One op
     reads one property; `RETURN a.name, a.age` is two ops sharing %a. Reading a
     property is a deterministic read of the graph, so the op is Pure.
+
+    `pending`, when present, is the mask a db.merge produced beside its node
+    column: those rows hold an offset into the change's write buffer rather than
+    an ID the graph knows, so their value reads null instead of whatever node the
+    offset would collide with.
+
+      %v = db.get_node_properties(%n, "age") pending %mask
+             : (!db.column<!storage.node_id>, !db.column<!storage.bool>) -> !db.column<none>
   }];
 
   // `property` is the symbolic property name, the same `name`/`age` spelled in
   // the query. Being an attribute and not an SSA value, it is absent from
   // `operands` below; lowering resolves it to a storage PropertyTypeID.
-  let arguments = (ins Column:$input_nodes, StrAttr:$property);
+  let arguments = (ins Column:$input_nodes, StrAttr:$property, Optional<Column>:$pending);
   let results   = (outs Column:$result);
 
-  // One operand and one result, so functional-type(operands, results) prints the
-  // `(!db.column<...>) -> !db.column<...>` form, as get_out_edges does; the
-  // string attribute prints inside the parens, ahead of the colon, and MLIR
-  // elides it from attr-dict because the format already names it.
+  // The string attribute prints inside the parens, ahead of the colon, and MLIR
+  // elides it from attr-dict because the format already names it. The optional
+  // mask prints after a `pending` keyword, which anchors its group.
   let assemblyFormat = [{
-    `(` $input_nodes `,` $property `)` attr-dict `:`
+    `(` $input_nodes `,` $property `)` (`pending` $pending^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
@@ -612,13 +619,16 @@ def GetEdgeProperties : TuringOp<"get_edge_properties", [Pure]> {
     op chosen (get_node_properties vs get_edge_properties) selects which side of
     the graph the property is read from. The value column is left typed none: the
     property's value type is only resolved against the schema during lowering.
+
+    `pending` is get_node_properties' mask, over edges: a row a db.merge wrote
+    holds a write-buffer offset, and its value reads null.
   }];
 
-  let arguments = (ins Column:$input_edges, StrAttr:$property);
+  let arguments = (ins Column:$input_edges, StrAttr:$property, Optional<Column>:$pending);
   let results   = (outs Column:$result);
 
   let assemblyFormat = [{
-    `(` $input_edges `,` $property `)` attr-dict `:`
+    `(` $input_edges `,` $property `)` (`pending` $pending^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
@@ -1385,7 +1395,7 @@ def CreateNode : TuringOp<"create_node", [AttrSizedOperandSegments]> {
   }];
 }
 
-def CreateEdge : TuringOp<"create_edge"> {
+def CreateEdge : TuringOp<"create_edge", [AttrSizedOperandSegments]> {
   let summary = "Create one edge per input row between corresponding source and target nodes";
 
   let description = [{
@@ -1408,17 +1418,104 @@ def CreateEdge : TuringOp<"create_edge"> {
                        Column:$tgt_ids,
                        StrAttr:$edge_type,
                        StrArrayAttr:$prop_names,
-                       Variadic<Column>:$prop_values);
+                       Variadic<Column>:$prop_values,
+                       Optional<Column>:$src_pending,
+                       Optional<Column>:$tgt_pending);
   let results   = (outs ColumnEdgeIDs:$result);
   let hasVerifier = 1;
 
+  // The two optional masks say, row by row, which endpoints are entities this change
+  // wrote and has not committed - what a db.merge's node column mixes. A column a
+  // db.create_node produced is pending in every row and carries no mask; one a scan or a
+  // traversal bound is pending in none and carries none either.
   let assemblyFormat = [{
-    `(` $src_ids `,` $tgt_ids `,` $edge_type `,` $prop_names `,` `{` $prop_values `}` `)` attr-dict `:`
+    `(` $src_ids `,` $tgt_ids `,` $edge_type `,` $prop_names `,` `{` $prop_values `}` `)`
+    (`src_pending` $src_pending^)? (`tgt_pending` $tgt_pending^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
 
-def SetNodeProperty : TuringOp<"set_node_property"> {
+def Merge : TuringOp<"merge", [AttrSizedOperandSegments]> {
+  let summary = "Bind one MERGE path pattern per input row, writing it when the graph does not hold it";
+
+  let description = [{
+    The declarative counterpart of Cypher's MERGE. The pattern is one path - a chain
+    of nodes joined by hops - and it is matched and written as a unit: for each input
+    row the op looks the whole chain up, emits one row per match it finds, and only
+    when it finds none writes the entities the pattern does not already have bound
+    and emits that one row. That whole-pattern rule is what keeps MERGE from being a
+    sequence of per-entity merges: `MERGE (a:P {n: 1})-[:K]->(b:P {n: 2})` writes a
+    fresh `a` and `b` when no such hop exists, even when nodes matching each end do.
+
+    The chain is spelled out by the attributes, one entry per entity in pattern order:
+
+      %n, %n_pending, %created = db.merge nodes [["Person"]] props [["name"]]
+                                         edges [] props [] dirs []
+                                         bound {} pending {} values {%name} {} carrying {}
+        : (!db.column<!storage.string>)
+          -> (!db.column<!storage.node_id>, !db.column<!storage.bool>, !db.column<!storage.bool>)
+
+    `node_labels` carries each chain node's label set. An empty one marks a node the
+    query already bound - `MATCH (a) MERGE (a)-[:K]->(b:Bot)` - whose column comes in
+    through `bound_nodes` instead, in chain order; every other node is matched by its
+    labels (a superset match, as db.scan_nodes_by_label) and its `node_prop_names`
+    values, and written with exactly those when the pattern is missing. A node the
+    op writes needs a label, so a node with neither labels nor a bound column is
+    rejected.
+
+    `bound_pending` is empty, or holds one boolean column per bound node saying which
+    of its rows are entities this change has written but not committed - what an
+    earlier db.merge or db.create_node produced. Such a row is in no graph the match
+    reads, so the pattern under it can never be found and is written instead.
+
+    `edge_types`, `edge_prop_names` and `edge_directions` carry one entry per hop,
+    each hop joining the chain node ahead of it to the one behind. A hop's direction
+    is read from the query; `undirected` matches a hop either way round and writes a
+    forward one.
+
+    The results pair each chain entity with a boolean mask, nodes in chain order then
+    hops: the entity's ID column, then the rows of it that are pending - written by this
+    change and not committed, so an offset into the write buffer rather than an ID the
+    graph holds. A bound node's mask is the one it came in under, re-indexed; every
+    other entity's says whether this row wrote it or bound one an earlier merge wrote.
+    After those pairs comes the boolean column saying which rows the op wrote the whole
+    pattern for - what ON CREATE and ON MATCH select on - then the carry set.
+    `carried_columns` mirrors db.get_out_edges': the columns in flight, handed back
+    re-indexed onto the rows the merge emitted, so a row the op emitted twice repeats
+    them and one it emitted nothing for drops them.
+  }];
+
+  let arguments = (ins StrArrayArrayAttr:$node_labels,
+                       StrArrayArrayAttr:$node_prop_names,
+                       StrArrayAttr:$edge_types,
+                       StrArrayArrayAttr:$edge_prop_names,
+                       DenseI64ArrayAttr:$edge_directions,
+                       DenseI64ArrayAttr:$pending_nodes,
+                       Variadic<Column>:$bound_nodes,
+                       Variadic<Column>:$bound_pending,
+                       Variadic<Column>:$node_prop_values,
+                       Variadic<Column>:$edge_prop_values,
+                       Variadic<Column>:$carried_columns);
+
+  let results = (outs Variadic<Column>:$results);
+
+  let hasVerifier = 1;
+
+  // The five attribute lists print ahead of the operands, each under the keyword
+  // naming what it describes, so a chain reads left to right. The directions go
+  // through the shared custom directive so they print as keywords rather than as
+  // the raw integers the DenseI64ArrayAttr stores.
+  let assemblyFormat = [{
+    `nodes` $node_labels `props` $node_prop_names
+    `edges` $edge_types `props` $edge_prop_names `dirs` custom<EdgeDirections>($edge_directions)
+    `bound` `{` $bound_nodes `}` `pending` custom<ColumnIndices>($pending_nodes) `{` $bound_pending `}`
+    `values` `{` $node_prop_values `}` `{` $edge_prop_values `}`
+    `carrying` `{` $carried_columns `}`
+    attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+def SetNodeProperty : TuringOp<"set_node_property", [AttrSizedOperandSegments]> {
   let summary = "Set one named property on each input node to a row-aligned value";
 
   let description = [{
@@ -1430,17 +1527,25 @@ def SetNodeProperty : TuringOp<"set_node_property"> {
     Node variable keeps its existing column.
   }];
 
-  let arguments = (ins Column:$input_nodes, StrAttr:$property, Column:$value);
+  let arguments = (ins Column:$input_nodes,
+                       StrAttr:$property,
+                       Column:$value,
+                       Optional<Column>:$pending,
+                       Optional<Column>:$rows);
 
+  // `pending` says, row by row, which entities this change wrote and has not committed -
+  // those are written in the write buffer rather than recorded as an update to a
+  // committed entity. `rows` narrows which rows are written at all: Cypher's ON CREATE
+  // passes the merge's created mask, ON MATCH its negation, and a plain SET passes none.
   let assemblyFormat = [{
-    `(` $input_nodes `,` $property `,` $value `)` attr-dict `:`
-    functional-type(operands, results)
+    `(` $input_nodes `,` $property `,` $value `)` (`pending` $pending^)? (`rows` $rows^)?
+    attr-dict `:` functional-type(operands, results)
   }];
 
   let hasVerifier = 1;
 }
 
-def SetEdgeProperty : TuringOp<"set_edge_property"> {
+def SetEdgeProperty : TuringOp<"set_edge_property", [AttrSizedOperandSegments]> {
   let summary = "Set one named property on each input edge to a row-aligned value";
 
   let description = [{
@@ -1450,11 +1555,15 @@ def SetEdgeProperty : TuringOp<"set_edge_property"> {
     Edge variable keeps its existing column.
   }];
 
-  let arguments = (ins Column:$input_edges, StrAttr:$property, Column:$value);
+  let arguments = (ins Column:$input_edges,
+                       StrAttr:$property,
+                       Column:$value,
+                       Optional<Column>:$pending,
+                       Optional<Column>:$rows);
 
   let assemblyFormat = [{
-    `(` $input_edges `,` $property `,` $value `)` attr-dict `:`
-    functional-type(operands, results)
+    `(` $input_edges `,` $property `,` $value `)` (`pending` $pending^)? (`rows` $rows^)?
+    attr-dict `:` functional-type(operands, results)
   }];
 
   let hasVerifier = 1;

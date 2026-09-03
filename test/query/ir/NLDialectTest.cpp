@@ -799,7 +799,7 @@ TEST_F(NLDialectTest, verifierAcceptsSetNodeProperty) {
     const mlir::Value nodeChunk = entryBlock.getArgument(0);
     const mlir::Value valueChunk = entryBlock.getArgument(1);
 
-    mlir::nl::SetNodeProperty setNode = builder.create<mlir::nl::SetNodeProperty>(loc, nodeChunk, builder.getStringAttr("age"), valueChunk);
+    mlir::nl::SetNodeProperty setNode = builder.create<mlir::nl::SetNodeProperty>(loc, nodeChunk, builder.getStringAttr("age"), valueChunk, mlir::Value(), mlir::Value());
     builder.create<mlir::func::ReturnOp>(loc);
 
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
@@ -826,7 +826,7 @@ TEST_F(NLDialectTest, verifierAcceptsSetEdgeProperty) {
     const mlir::Value edgeChunk = entryBlock.getArgument(0);
     const mlir::Value valueChunk = entryBlock.getArgument(1);
 
-    mlir::nl::SetEdgeProperty setEdge = builder.create<mlir::nl::SetEdgeProperty>(loc, edgeChunk, builder.getStringAttr("weight"), valueChunk);
+    mlir::nl::SetEdgeProperty setEdge = builder.create<mlir::nl::SetEdgeProperty>(loc, edgeChunk, builder.getStringAttr("weight"), valueChunk, mlir::Value(), mlir::Value());
     builder.create<mlir::func::ReturnOp>(loc);
 
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
@@ -853,7 +853,7 @@ TEST_F(NLDialectTest, verifierRejectsEmptySetProperty) {
     const mlir::Value nodeChunk = entryBlock.getArgument(0);
     const mlir::Value valueChunk = entryBlock.getArgument(1);
 
-    builder.create<mlir::nl::SetNodeProperty>(loc, nodeChunk, builder.getStringAttr(""), valueChunk);
+    builder.create<mlir::nl::SetNodeProperty>(loc, nodeChunk, builder.getStringAttr(""), valueChunk, mlir::Value(), mlir::Value());
     builder.create<mlir::func::ReturnOp>(loc);
 
     // The diagnostics are swallowed so the deliberate verifier failure does not

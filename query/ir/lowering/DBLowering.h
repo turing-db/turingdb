@@ -197,6 +197,8 @@ private:
     void lowerCheckEdgeTypeConstraint(mlir::db::CheckEdgeTypeConstraint checkEdgeTypeConstraint);
     void lowerCreateNode(mlir::db::CreateNode createNode);
     void lowerCreateEdge(mlir::db::CreateEdge createEdge);
+
+    void lowerMerge(mlir::db::Merge merge);
     void lowerSetNodeProperty(mlir::db::SetNodeProperty setNodeProperty);
     void lowerSetEdgeProperty(mlir::db::SetEdgeProperty setEdgeProperty);
     void lowerDeleteNode(mlir::db::DeleteNode deleteNode);
@@ -385,6 +387,13 @@ private:
     // Point the builder just before the terminator of block, where the next
     // lowered op belongs
     void setInsertionInto(mlir::Block* block);
+
+    // The chunks one group of a db op's column operands lowered to, in order
+    void mapColumns(mlir::OperandRange columns, llvm::SmallVectorImpl<mlir::Value>& chunks);
+
+    // The chunk an optional mask operand lowered to, or a null Value for an absent one -
+    // which is what the nl op then carries in its place
+    mlir::Value mapOptionalMask(mlir::Value mask);
 
     // Point the builder just after the loop nest that @param updateBlock belongs to,
     // where an accumulator filled from that block holds its final value. A drain loop

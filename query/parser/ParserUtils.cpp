@@ -8,6 +8,7 @@
 
 #include "expr/ListExpr.h"
 #include "expr/LiteralExpr.h"
+#include "stmt/SetStmt.h"
 #include "Literal.h"
 #include "ParserException.h"
 
@@ -32,6 +33,21 @@ void ParserUtils::listExprToFloatVector(const ListLiteral* list, std::vector<flo
             }
             out.push_back(static_cast<float>(val));
         }
+    }
+}
+
+void ParserUtils::mergeSetClauses(SetStmt*& held, SetStmt* addition) {
+    if (!addition) {
+        return;
+    }
+
+    if (!held) {
+        held = addition;
+        return;
+    }
+
+    for (SetItem* item : addition->getItems()) {
+        held->addItem(item);
     }
 }
 

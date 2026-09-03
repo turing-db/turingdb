@@ -76,6 +76,7 @@
 #include "expr/SymbolExpr.h"
 #include "expr/UnaryExpr.h"
 #include "stmt/CreateStmt.h"
+#include "stmt/MergeStmt.h"
 #include "stmt/DeleteStmt.h"
 #include "expr/ExprChain.h"
 #include "stmt/Limit.h"
@@ -851,6 +852,10 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
 
     const ReturnStmt* returnStmt = query->getReturnStmt();
     const Projection* projection = returnStmt ? returnStmt->getProjection() : nullptr;
+
+    // The merge runs ahead of the grouping: it is what the rows the projection groups
+    // come from, since a merge fans a row out over every match it binds
+    generateMerge(query);
 
     if (projection) {
         generateGroupAggregate(projection);
@@ -2610,6 +2615,306 @@ void DBProgramGenerator::publishCreatedEntity(const VarDecl* decl,
     }
 }
 
+void DBProgramGenerator::publishMergedEntity(const VarDecl* decl,
+                                             mlir::Value column,
+                                             mlir::Value pending,
+                                             llvm::ArrayRef<llvm::StringRef> propNames,
+                                             llvm::ArrayRef<mlir::Value> propValues) {
+    publishCreatedEntity(decl, column, propNames, propValues);
+    _part._createdEntities[decl]._pending = pending;
+}
+
+mlir::Value DBProgramGenerator::findPendingMask(const VarDecl* decl) const {
+    const auto findIt = _part._createdEntities.find(decl);
+    if (findIt == end(_part._createdEntities)) {
+        return mlir::Value {};
+    }
+
+    return findIt->second._pending;
+}
+
+void DBProgramGenerator::generateMerge(const SinglePartQuery* query) {
+    const StmtContainer* updateStmts = query->getUpdateStmts();
+    if (!updateStmts) {
+        return;
+    }
+
+    for (const Stmt* stmt : updateStmts->stmts()) {
+        if (stmt->getKind() != Stmt::Kind::MERGE) {
+            continue;
+        }
+
+        generateMergeStmt(static_cast<const MergeStmt*>(stmt));
+    }
+}
+
+void DBProgramGenerator::generateMergeStmt(const MergeStmt* mergeStmt) {
+    MergePattern pattern;
+    collectMergePattern(mergeStmt, pattern);
+
+    MergeCarrySet carrySet;
+    collectMergeCarrySet(carrySet);
+
+    llvm::SmallVector<mlir::Type> resultTypes;
+    const mlir::db::ColumnType nodeIDType = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
+    const mlir::db::ColumnType edgeIDType = allocColumnType(mlir::storage::EdgeIDType::get(_mlirCtxt));
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+
+    for (size_t nodeIndex = 0; nodeIndex < pattern._nodes.size(); nodeIndex++) {
+        resultTypes.push_back(nodeIDType);
+        resultTypes.push_back(boolType);
+    }
+
+    for (size_t hopIndex = 0; hopIndex < pattern._hops.size(); hopIndex++) {
+        resultTypes.push_back(edgeIDType);
+        resultTypes.push_back(boolType);
+    }
+
+    resultTypes.push_back(boolType);
+
+    for (const mlir::Value column : carrySet._columns) {
+        resultTypes.push_back(column.getType());
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    mlir::db::Merge merge = _opBuilder.create<mlir::db::Merge>(loc,
+                                                               resultTypes,
+                                                               _opBuilder.getArrayAttr(pattern._nodeLabels),
+                                                               _opBuilder.getArrayAttr(pattern._nodePropNames),
+                                                               _opBuilder.getArrayAttr(pattern._edgeTypes),
+                                                               _opBuilder.getArrayAttr(pattern._edgePropNames),
+                                                               _opBuilder.getDenseI64ArrayAttr(pattern._directions),
+                                                               _opBuilder.getDenseI64ArrayAttr(pattern._pendingNodes),
+                                                               pattern._boundNodes,
+                                                               pattern._boundPending,
+                                                               pattern._nodePropValues,
+                                                               pattern._edgePropValues,
+                                                               carrySet._columns);
+
+    const mlir::Operation::result_range results = merge.getResults();
+    const mlir::Value created = results[2 * (pattern._nodes.size() + pattern._hops.size())];
+
+    // A bound node keeps the binding it came in under, which the carry set hands back
+    // re-indexed onto the rows the merge emitted; every other entity of the pattern is
+    // published under the column and mask the merge produced for it.
+    for (size_t nodeIndex = 0; nodeIndex < pattern._nodes.size(); nodeIndex++) {
+        const MergeEntity& node = pattern._nodes[nodeIndex];
+        if (node._bound) {
+            continue;
+        }
+
+        publishMergedEntity(node._decl,
+                            results[2 * nodeIndex],
+                            results[2 * nodeIndex + 1],
+                            node._propNames,
+                            node._propValues);
+    }
+
+    const size_t firstHopResult = 2 * pattern._nodes.size();
+    for (size_t hopIndex = 0; hopIndex < pattern._hops.size(); hopIndex++) {
+        const MergeEntity& hop = pattern._hops[hopIndex];
+        if (!hop._decl) {
+            continue;
+        }
+
+        publishMergedEntity(hop._decl,
+                            results[firstHopResult + 2 * hopIndex],
+                            results[firstHopResult + 2 * hopIndex + 1],
+                            hop._propNames,
+                            hop._propValues);
+    }
+
+    rebindMergeCarrySet(results, carrySet);
+
+    generateMergeActions(mergeStmt, created);
+}
+
+void DBProgramGenerator::collectMergePattern(const MergeStmt* mergeStmt, MergePattern& pattern) {
+    const Pattern* patternAst = mergeStmt->getPattern();
+    bioassert(patternAst->elements().size() == 1, "MERGE carries a single path pattern");
+
+    const PatternElement* element = patternAst->elements().front();
+    const std::vector<EntityPattern*>& entities = element->getEntities();
+
+    for (size_t index = 0; index < entities.size(); index++) {
+        const bool isNode = index % 2 == 0;
+
+        if (isNode) {
+            collectMergeNode(static_cast<const NodePattern*>(entities[index]), pattern);
+        } else {
+            collectMergeHop(static_cast<const EdgePattern*>(entities[index]), pattern);
+        }
+    }
+}
+
+void DBProgramGenerator::collectMergeNode(const NodePattern* nodePattern, MergePattern& pattern) {
+    MergeEntity node;
+    node._decl = nodePattern->getDecl();
+
+    const NodePatternData* data = nodePattern->getData();
+
+    // The analyzer leaves a node the query already bound without pattern data: its rows
+    // come in through a column rather than from labels and property values
+    node._bound = data == nullptr;
+
+    if (node._bound) {
+        // Every merge of a part is generated ahead of its creates, so a bound node with
+        // no column is one a CREATE of the same part writes. Its entities are
+        // provisional and in no graph a merge reads, so binding one would leave the
+        // merge matching against whichever committed node the provisional ID collides
+        // with.
+        const mlir::Value column = resolveEntityColumn(node._decl);
+        if (!column) {
+            throw TuringException(fmt::format("MERGE cannot bind '{}': a CREATE in the same query "
+                                              "writes it, and what a CREATE writes is not visible "
+                                              "to a MERGE",
+                                              node._decl->getName()));
+        }
+
+        const mlir::Value pending = findPendingMask(node._decl);
+        if (pending) {
+            pattern._pendingNodes.push_back(static_cast<int64_t>(pattern._nodes.size()));
+            pattern._boundPending.push_back(pending);
+        }
+
+        pattern._boundNodes.push_back(column);
+        pattern._nodeLabels.push_back(_opBuilder.getStrArrayAttr({}));
+        pattern._nodePropNames.push_back(_opBuilder.getStrArrayAttr({}));
+        pattern._nodes.push_back(node);
+        return;
+    }
+
+    llvm::SmallVector<llvm::StringRef> labelNames;
+    for (const std::string_view label : data->labelConstraints()) {
+        labelNames.push_back(llvm::StringRef(label.data(), label.size()));
+    }
+
+    collectMergeProperties(data, node);
+
+    pattern._nodeLabels.push_back(_opBuilder.getStrArrayAttr(labelNames));
+    pattern._nodePropNames.push_back(_opBuilder.getStrArrayAttr(node._propNames));
+    pattern._nodePropValues.append(node._propValues.begin(), node._propValues.end());
+    pattern._nodes.push_back(node);
+}
+
+void DBProgramGenerator::collectMergeHop(const EdgePattern* edgePattern, MergePattern& pattern) {
+    const EdgePatternData* data = edgePattern->getData();
+    bioassert(data && !data->edgeTypeConstraints().empty(), "MERGE hop must have an edge type");
+
+    MergeEntity hop;
+    const VarDecl* decl = edgePattern->getDecl();
+    if (decl && !decl->isUnnamed()) {
+        hop._decl = decl;
+    }
+
+    collectMergeProperties(data, hop);
+
+    const std::string_view edgeType = data->edgeTypeConstraints().front();
+
+    pattern._edgeTypes.push_back(_opBuilder.getStringAttr(llvm::StringRef(edgeType.data(), edgeType.size())));
+    pattern._edgePropNames.push_back(_opBuilder.getStrArrayAttr(hop._propNames));
+    pattern._edgePropValues.append(hop._propValues.begin(), hop._propValues.end());
+    pattern._directions.push_back(static_cast<int64_t>(mergeDirectionOf(edgePattern)));
+    pattern._hops.push_back(hop);
+}
+
+void DBProgramGenerator::collectMergeProperties(const PatternData* data, MergeEntity& entity) {
+    for (const EntityPropertyConstraint& constraint : data->exprConstraints()) {
+        translateExpr(constraint._expr);
+
+        const std::string_view propName = constraint._propTypeName;
+        entity._propNames.push_back(llvm::StringRef(propName.data(), propName.size()));
+        entity._propValues.push_back(_part._exprMap.at(constraint._expr));
+    }
+}
+
+mlir::storage::EdgeDirection DBProgramGenerator::mergeDirectionOf(const EdgePattern* edgePattern) {
+    switch (edgePattern->getDirection()) {
+        case EdgePattern::Direction::Undirected:
+            return mlir::storage::EdgeDirection::Undirected;
+        break;
+
+        case EdgePattern::Direction::Backward:
+            return mlir::storage::EdgeDirection::Backward;
+        break;
+
+        case EdgePattern::Direction::Forward:
+            return mlir::storage::EdgeDirection::Forward;
+        break;
+    }
+
+    bioassert(false, "Unhandled edge pattern direction");
+    return mlir::storage::EdgeDirection::Forward;
+}
+
+void DBProgramGenerator::collectMergeCarrySet(MergeCarrySet& carrySet) {
+    collectInFlightColumns(carrySet._inFlight);
+    carrySet._columns.append(carrySet._inFlight._columns.begin(), carrySet._inFlight._columns.end());
+
+    // What an earlier CREATE or MERGE wrote is in flight too, and no VDG variable, so
+    // collectInFlightColumns knows nothing of it: a merge that fans the rows out has to
+    // take those columns along or they would stop matching the rows beside them.
+    for (const auto& [decl, written] : _part._createdEntities) {
+        if (isRowAlignedHere(written._column)) {
+            carrySet._writtenDecls.push_back(decl);
+        }
+    }
+
+    // Ordered by the name the query gave each entity, so the carry set a program carries
+    // is the query's choice and not the addresses'
+    std::ranges::sort(carrySet._writtenDecls, [](const VarDecl* lhs, const VarDecl* rhs) {
+        return lhs->getName() < rhs->getName();
+    });
+
+    for (const VarDecl* decl : carrySet._writtenDecls) {
+        const PartScope::CreatedEntity& written = _part._createdEntities.at(decl);
+
+        carrySet._columns.push_back(written._column);
+
+        if (written._pending) {
+            carrySet._columns.push_back(written._pending);
+        }
+    }
+}
+
+void DBProgramGenerator::rebindMergeCarrySet(mlir::Operation::result_range results,
+                                             const MergeCarrySet& carrySet) {
+    const size_t firstCarried = results.size() - carrySet._columns.size();
+
+    rebindInFlightColumns(results, firstCarried, carrySet._inFlight);
+
+    size_t resultIndex = firstCarried + carrySet._inFlight._columns.size();
+    for (const VarDecl* decl : carrySet._writtenDecls) {
+        PartScope::CreatedEntity& written = _part._createdEntities.at(decl);
+
+        written._column = results[resultIndex];
+        resultIndex++;
+
+        if (written._pending) {
+            written._pending = results[resultIndex];
+            resultIndex++;
+        }
+    }
+}
+
+void DBProgramGenerator::generateMergeActions(const MergeStmt* mergeStmt, mlir::Value created) {
+    const SetStmt* onCreate = mergeStmt->getOnCreate();
+    if (onCreate) {
+        generateSetItems(onCreate, created);
+    }
+
+    const SetStmt* onMatch = mergeStmt->getOnMatch();
+    if (!onMatch) {
+        return;
+    }
+
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+    const mlir::Value matched =
+        _opBuilder.create<mlir::db::NotOp>(_opBuilder.getUnknownLoc(), boolType, created).getResult();
+
+    generateSetItems(onMatch, matched);
+}
+
 void DBProgramGenerator::generateCreate(const SinglePartQuery* query) {
     const StmtContainer* updateStmts = query->getUpdateStmts();
     if (!updateStmts) {
@@ -2630,6 +2935,10 @@ void DBProgramGenerator::generateCreate(const SinglePartQuery* query) {
         if (yieldedColumn._decl && isRowAlignedHere(yieldedColumn._column)) {
             knownVars[yieldedColumn._decl] = yieldedColumn._column;
         }
+    }
+
+    for (const auto& [writtenDecl, written] : _part._createdEntities) {
+        knownVars[writtenDecl] = written._column;
     }
 
     // The pattern's own order picks the column, since reading an arbitrary bucket of
@@ -2730,10 +3039,11 @@ void DBProgramGenerator::generateCreate(const SinglePartQuery* query) {
                           "CREATE edge must have an edge type");
                 const std::string_view edgeType = edgeData->edgeTypeConstraints().front();
 
-                const mlir::Value srcValue =
-                    edge->getDirection() == EdgePattern::Direction::Backward ? rhsValue : lhsValue;
-                const mlir::Value tgtValue =
-                    edge->getDirection() == EdgePattern::Direction::Backward ? lhsValue : rhsValue;
+                const bool backward = edge->getDirection() == EdgePattern::Direction::Backward;
+                const NodePattern* srcNode = backward ? targetNode : nodePtn;
+                const NodePattern* tgtNode = backward ? nodePtn : targetNode;
+                const mlir::Value srcValue = backward ? rhsValue : lhsValue;
+                const mlir::Value tgtValue = backward ? lhsValue : rhsValue;
 
                 mlir::db::CreateEdge createEdge = _opBuilder.create<mlir::db::CreateEdge>(
                     loc,
@@ -2742,7 +3052,9 @@ void DBProgramGenerator::generateCreate(const SinglePartQuery* query) {
                     tgtValue,
                     _opBuilder.getStringAttr(edgeType),
                     _opBuilder.getStrArrayAttr(propNames),
-                    mlir::ValueRange{propValues});
+                    mlir::ValueRange{propValues},
+                    findPendingMask(srcNode->getDecl()),
+                    findPendingMask(tgtNode->getDecl()));
 
                 const VarDecl* edgeDecl = edge->getDecl();
                 if (edgeDecl && !edgeDecl->isUnnamed()) {
@@ -2853,42 +3165,48 @@ void DBProgramGenerator::generateSet(const SinglePartQuery* query) {
         return;
     }
 
-    const mlir::Location loc = _opBuilder.getUnknownLoc();
-
     for (const Stmt* stmt : updateStmts->stmts()) {
         if (stmt->getKind() != Stmt::Kind::SET) {
             continue;
         }
 
-        const SetStmt* setStmt = static_cast<const SetStmt*>(stmt);
+        generateSetItems(static_cast<const SetStmt*>(stmt), mlir::Value {});
+    }
+}
 
-        for (const SetItem* item : setStmt->getItems()) {
-            const SetItem::PropertyExprAssign* assign =
-                std::get_if<SetItem::PropertyExprAssign>(&item->item());
-            bioassert(assign, "Only property-assignment SET items are supported");
+void DBProgramGenerator::generateSetItems(const SetStmt* setStmt, mlir::Value rows) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
 
-            const PropertyExpr* propertyExpr = assign->_propTypeExpr;
-            const VarDecl* entityDecl = propertyExpr->getEntityVarDecl();
-            const std::string_view varName = entityDecl->getName();
-            const std::string_view propName = propertyExpr->getPropName();
+    for (const SetItem* item : setStmt->getItems()) {
+        const SetItem::PropertyExprAssign* assign =
+            std::get_if<SetItem::PropertyExprAssign>(&item->item());
+        bioassert(assign, "Only property-assignment SET items are supported");
 
-            const mlir::Value entityColumn = resolveEntityColumn(entityDecl);
-            bioassert(entityColumn, "SET on unknown variable: {}", varName);
+        const PropertyExpr* propertyExpr = assign->_propTypeExpr;
+        const VarDecl* entityDecl = propertyExpr->getEntityVarDecl();
+        const std::string_view varName = entityDecl->getName();
+        const std::string_view propName = propertyExpr->getPropName();
 
-            translateExpr(assign->_propValueExpr);
-            const mlir::Value valueColumn = _part._exprMap.at(assign->_propValueExpr);
+        const mlir::Value entityColumn = resolveEntityColumn(entityDecl);
+        bioassert(entityColumn, "SET on unknown variable: {}", varName);
 
-            const mlir::StringAttr propAttr = _opBuilder.getStringAttr(propName);
-            const EvaluatedType entityType = entityDecl->getType();
-            const bool isNode = entityType == EvaluatedType::NodePattern;
-            const bool isEdge = entityType == EvaluatedType::EdgePattern;
-            bioassert(isNode || isEdge, "SET on non-entity variable: {}", varName);
+        translateExpr(assign->_propValueExpr);
+        const mlir::Value valueColumn = _part._exprMap.at(assign->_propValueExpr);
 
-            if (isNode) {
-                _opBuilder.create<mlir::db::SetNodeProperty>(loc, entityColumn, propAttr, valueColumn);
-            } else /* (isEdge) */ {
-                _opBuilder.create<mlir::db::SetEdgeProperty>(loc, entityColumn, propAttr, valueColumn);
-            }
+        // A merge's rows mix entities it wrote with entities it bound, and the two are
+        // written to differently: the mask says which is which
+        const mlir::Value pending = findPendingMask(entityDecl);
+
+        const mlir::StringAttr propAttr = _opBuilder.getStringAttr(propName);
+        const EvaluatedType entityType = entityDecl->getType();
+        const bool isNode = entityType == EvaluatedType::NodePattern;
+        const bool isEdge = entityType == EvaluatedType::EdgePattern;
+        bioassert(isNode || isEdge, "SET on non-entity variable: {}", varName);
+
+        if (isNode) {
+            _opBuilder.create<mlir::db::SetNodeProperty>(loc, entityColumn, propAttr, valueColumn, pending, rows);
+        } else /* (isEdge) */ {
+            _opBuilder.create<mlir::db::SetEdgeProperty>(loc, entityColumn, propAttr, valueColumn, pending, rows);
         }
     }
 }
@@ -2922,6 +3240,16 @@ void DBProgramGenerator::generateDelete(const SinglePartQuery* query) {
             const mlir::Value entityColumn = resolveEntityColumn(decl);
             if (!entityColumn) {
                 throw TuringException("Cannot delete unbound variable: " + std::string(varName));
+            }
+
+            // A merge's rows mix entities the graph holds with entities this change
+            // wrote, and a tombstone names a committed ID: deleting the mixture would
+            // tombstone whichever committed entity a provisional ID collides with
+            if (findPendingMask(decl)) {
+                throw TuringException(fmt::format("DELETE cannot take '{}': a MERGE in the same "
+                                                  "query binds it, and what a MERGE writes is not "
+                                                  "committed yet",
+                                                  varName));
             }
 
             const EvaluatedType entityType = decl->getType();
@@ -3929,11 +4257,18 @@ mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propEx
         const auto& properties = createdIt->second._properties;
         const auto propertyIt = properties.find(propName);
 
+        // A property the write set is that value in every row: a MERGE's bound rows
+        // matched on it as much as its written rows carry it
         if (propertyIt != end(properties)) {
             return propertyIt->second;
         }
 
-        return nullConstantColumn();
+        // Every row a CREATE wrote is provisional, so a property it did not write is
+        // null. A MERGE's rows are read off the graph instead, its provisional ones
+        // reading null there.
+        if (!createdIt->second._pending) {
+            return nullConstantColumn();
+        }
     }
 
     const mlir::Value entityColumn = resolveEntityColumn(entityDecl);
@@ -3950,11 +4285,13 @@ mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propEx
     const bool isEdge = entityType == EvaluatedType::EdgePattern;
     bioassert(isNode || isEdge, "Property access on non-entity variable: {}", varName);
 
+    const mlir::Value pending = findPendingMask(entityDecl);
+
     if (isNode) {
-        auto op = _opBuilder.create<mlir::db::GetNodeProperties>(loc, resultType, entityColumn, propAttr);
+        auto op = _opBuilder.create<mlir::db::GetNodeProperties>(loc, resultType, entityColumn, propAttr, pending);
         return op.getResult();
     } else {
-        auto op = _opBuilder.create<mlir::db::GetEdgeProperties>(loc, resultType, entityColumn, propAttr);
+        auto op = _opBuilder.create<mlir::db::GetEdgeProperties>(loc, resultType, entityColumn, propAttr, pending);
         return op.getResult();
     }
 }

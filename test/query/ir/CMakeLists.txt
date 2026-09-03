@@ -345,6 +345,10 @@ target_include_directories(test_query_ir_call_driven_island_codegen PRIVATE ${CM
 
 add_ir_tests(test_query_ir_nldialect NLDialectTest.cpp)
 
+# The db.merge / nl.merge textual form and the shape rules the two ops share.
+add_ir_tests(test_query_ir_merge_dialect MergeDialectTest.cpp)
+target_link_libraries(test_query_ir_merge_dialect PRIVATE turing_db_ir_nldialect_s)
+
 # The keyless collect drain emits its one group whether or not a row arrived, against the
 # shared SimpleGraph fixture and an empty graph.
 add_ir_tests(test_query_ir_keyless_collect_empty_input KeylessCollectEmptyInputTest.cpp)
@@ -1295,6 +1299,38 @@ target_link_libraries(test_query_ir_with_scope PRIVATE
         turing_db_interpreter_v3_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_with_scope PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_merge_node MergeNodeTest.cpp)
+target_link_libraries(test_query_ir_merge_node PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_merge_node PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_merge_rejection MergeRejectionTest.cpp)
+target_link_libraries(test_query_ir_merge_rejection PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_merge_rejection PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_merge_edge MergeEdgeTest.cpp)
+target_link_libraries(test_query_ir_merge_edge PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_merge_edge PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_create_return CreateReturnTest.cpp)
 target_link_libraries(test_query_ir_create_return PRIVATE

@@ -32,6 +32,7 @@
     #include "stmt/ShortestPathStmt.h"
     #include "stmt/CallStmt.h"
     #include "stmt/CreateStmt.h"
+    #include "stmt/MergeStmt.h"
     #include "stmt/SetStmt.h"
     #include "stmt/DeleteStmt.h"
     #include "expr/All.h"
@@ -371,6 +372,9 @@
 %type<db::ShortestPathStmt*> shortestPathSt
 %type<db::CallStmt*> callSt
 %type<db::CreateStmt*> createSt
+%type<db::MergeStmt*> mergeSt
+%type<std::pair<db::SetStmt*, db::SetStmt*>> mergeActionChain
+%type<std::pair<db::SetStmt*, db::SetStmt*>> mergeAction
 %type<db::SetStmt*> setSt
 %type<db::SetItem*> setItem
 %type<db::LoadCSVStmt*> loadCSVSt
@@ -856,7 +860,7 @@ readingStatement
 
 updatingStatement
     : createSt { $$ = $1; }
-    | mergeSt { scanner.notImplemented(@$, "MERGE"); }
+    | mergeSt { $$ = $1; }
     | deleteSt { $$ = $1; }
     | setSt { $$ = $1; }
     | removeSt { scanner.notImplemented(@$, "REMOVE"); }
@@ -965,18 +969,36 @@ yieldItem
     ;
 
 mergeSt
-    : MERGE patternPart { scanner.notImplemented(@$, "MERGE"); }
-    | MERGE patternPart mergeActionChain { scanner.notImplemented(@$, "MERGE"); }
+    : MERGE patternPart {
+        Pattern* pattern = Pattern::create(ast);
+        pattern->addElement($2);
+        $$ = MergeStmt::create(ast, pattern);
+        LOC(pattern, @2);
+        LOC($$, @$);
+      }
+    | MERGE patternPart mergeActionChain {
+        Pattern* pattern = Pattern::create(ast);
+        pattern->addElement($2);
+        $$ = MergeStmt::create(ast, pattern);
+        $$->setOnCreate($3.first);
+        $$->setOnMatch($3.second);
+        LOC(pattern, @2);
+        LOC($$, @$);
+      }
     ;
 
 mergeActionChain
-    : mergeAction
-    | mergeActionChain mergeAction
+    : mergeAction { $$ = $1; }
+    | mergeActionChain mergeAction {
+        $$ = $1;
+        ParserUtils::mergeSetClauses($$.first, $2.first);
+        ParserUtils::mergeSetClauses($$.second, $2.second);
+      }
     ;
 
 mergeAction
-    : ON MATCH setSt
-    | ON CREATE setSt
+    : ON MATCH setSt { $$ = std::make_pair(nullptr, $3); }
+    | ON CREATE setSt { $$ = std::make_pair($3, nullptr); }
     ;
 
 setSt

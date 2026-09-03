@@ -8,6 +8,8 @@
 #include "IRLiteralList.h"
 #include "StorageEnums.h"
 #include "ColumnIndicesFormat.h"
+#include "EdgeDirectionsFormat.h"
+#include "MergePatternShape.h"
 #include "GroupAggregateKindsFormat.h"
 
 using namespace mlir;
@@ -292,6 +294,32 @@ LogicalResult CreateEdge::verify() {
     if (getPropNames().size() != getPropValues().size()) {
         return emitOpError("prop_names and prop_values must have the same count, but has ")
                << getPropNames().size() << " names and " << getPropValues().size() << " values";
+    }
+
+    return success();
+}
+
+LogicalResult Merge::verify() {
+    const LogicalResult pattern = verifyMergePattern(getOperation(),
+                                                     getNodeLabels(),
+                                                     getNodePropNames(),
+                                                     getEdgeTypes(),
+                                                     getEdgePropNames(),
+                                                     getEdgeDirectionsAttr(),
+                                                     getPendingNodesAttr(),
+                                                     getBoundNodes().size(),
+                                                     getBoundPending().size(),
+                                                     getNodePropValues().size(),
+                                                     getEdgePropValues().size());
+    if (failed(pattern)) {
+        return pattern;
+    }
+
+    const size_t expectedResults = mergeResultCount(getNodeLabels(), getCarriedColumns().size());
+    if (getResults().size() != expectedResults) {
+        return emitOpError("must produce one column per chain entity, the created mask and one "
+                           "per carried column - ")
+               << expectedResults << " in all, but produces " << getResults().size();
     }
 
     return success();

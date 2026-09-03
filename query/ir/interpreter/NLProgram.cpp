@@ -306,3 +306,90 @@ void NLSortState::sort() {
 
     _sorted = true;
 }
+
+NLMergeNodeIndex::NLMergeNodeIndex(const LabelSet& labels, bool matchable, ColumnNodeIDs* scanNodes)
+    : _labels(labels),
+    _scanNodes(scanNodes),
+    _matchable(matchable)
+{
+}
+
+NLMergeNodeIndex::~NLMergeNodeIndex() {
+}
+
+std::span<const NLMergeRef> NLMergeNodeIndex::find(const std::string& key) const {
+    const auto findIt = _byKey.find(key);
+    if (findIt == end(_byKey)) {
+        return {};
+    }
+
+    return findIt->second;
+}
+
+NLMergePendingNodes::NLMergePendingNodes() {
+}
+
+NLMergePendingNodes::~NLMergePendingNodes() {
+}
+
+std::span<const NLMergeRef> NLMergePendingNodes::find(const std::string& key) const {
+    const auto findIt = _byKey.find(key);
+    if (findIt == end(_byKey)) {
+        return {};
+    }
+
+    return findIt->second;
+}
+
+NLMergePendingEdges::NLMergePendingEdges() {
+}
+
+NLMergePendingEdges::~NLMergePendingEdges() {
+}
+
+void NLMergePendingEdges::add(const NLMergeRef& source,
+                              const NLMergeRef& target,
+                              EdgeTypeID edgeType,
+                              uint64_t offset,
+                              const std::string& propertyKey) {
+    _outgoing[source.asKey()].push_back({._other=target,
+                                         ._edgeType=edgeType,
+                                         ._offset=offset,
+                                         ._propertyKey=propertyKey});
+
+    _incoming[target.asKey()].push_back({._other=source,
+                                        ._edgeType=edgeType,
+                                        ._offset=offset,
+                                        ._propertyKey=propertyKey});
+}
+
+std::span<const NLMergePendingEdges::Entry> NLMergePendingEdges::outOf(const NLMergeRef& node) const {
+    return lookup(_outgoing, node);
+}
+
+std::span<const NLMergePendingEdges::Entry> NLMergePendingEdges::into(const NLMergeRef& node) const {
+    return lookup(_incoming, node);
+}
+
+std::span<const NLMergePendingEdges::Entry> NLMergePendingEdges::lookup(
+        const std::unordered_map<uint64_t, std::vector<Entry>>& edges,
+        const NLMergeRef& node) {
+    const auto findIt = edges.find(node.asKey());
+    if (findIt == end(edges)) {
+        return {};
+    }
+
+    return findIt->second;
+}
+
+NLMergeData::NLMergeData(NLMergePendingNodes* pendingNodes,
+                         NLMergePendingEdges* pendingEdges,
+                         ColumnMask* created)
+    : _pendingNodes(pendingNodes),
+    _pendingEdges(pendingEdges),
+    _created(created)
+{
+}
+
+NLMergeData::~NLMergeData() {
+}
