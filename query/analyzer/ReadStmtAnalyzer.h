@@ -27,6 +27,7 @@ class ShortestPathStmt;
 class GraphMetadata;
 class UnwindStmt;
 class YieldItems;
+class Expr;
 
 class ReadStmtAnalyzer {
 public:
@@ -74,6 +75,11 @@ private:
     // The predicate a YIELD ... WHERE filters the rows its statement produced with. Shared
     // by every statement that yields, since what a yield binds is what the predicate reads.
     void analyzeYieldFilter(const YieldItems* yieldItems);
+
+    // Rejects a literal UNWIND argument that is no list: a literal carries its type at
+    // plan time, so anything but a list - null aside, which unwinds into no row - is a
+    // type error rather than a value to spread over rows
+    void throwOnNonListLiteral(const Expr* arg) const;
 
     [[noreturn]] void throwError(std::string_view msg, const void* obj = 0) const;
 };

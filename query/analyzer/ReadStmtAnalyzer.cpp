@@ -624,6 +624,8 @@ void ReadStmtAnalyzer::analyze(UnwindStmt* unwind) {
         throwError("Invalid use of aggregate expression in this context", unwind);
     }
 
+    throwOnNonListLiteral(arg);
+
     const Symbol* symbol = unwind->symbol();
     bioassert(symbol, "Invalid symbol.");
 
@@ -643,6 +645,25 @@ void ReadStmtAnalyzer::analyze(UnwindStmt* unwind) {
     // Unwinding a list of lists leaves a list, so the variable carries the shape it has
     // left: what a second UNWIND of it reads to know its own elements.
     itemDecl->setListShape(arg->getListShape().unwound());
+}
+
+void ReadStmtAnalyzer::throwOnNonListLiteral(const Expr* arg) const {
+    if (arg->getKind() != Expr::Kind::LITERAL) {
+        return;
+    }
+
+    const Literal::Kind literalKind = static_cast<const LiteralExpr*>(arg)->getLiteral()->getKind();
+    const bool unwindsAList = literalKind == Literal::Kind::LIST;
+
+    // Unwinding null yields no row rather than a type error, so it is the one literal
+    // that is no list and still passes
+    const bool unwindsNull = literalKind == Literal::Kind::NULL_LITERAL;
+
+    if (!unwindsAList && !unwindsNull) {
+        throwError(fmt::format("UNWIND requires a list, not '{}'",
+                               EvaluatedTypeName::value(arg->getType())),
+                   arg);
+    }
 }
 
 void ReadStmtAnalyzer::throwError(std::string_view msg, const void* obj) const {
