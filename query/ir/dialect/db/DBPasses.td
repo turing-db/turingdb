@@ -13,6 +13,11 @@ def PushDownFilters : Pass<"push_down_filters"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseUnwindEquality : Pass<"fuse_unwind_equality"> {
+    let summary = "Replace a constant unwind crossed into one equality by that equality's disjunction";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseScanByNodeIDs : Pass<"fuse_scan_by_node_ids"> {
     let summary = "Fuse a node scan and its node-ID disjunction filter into a const_scan_nodes";
     let dependentDialects = ["mlir::db::DB"];

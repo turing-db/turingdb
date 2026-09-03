@@ -10,6 +10,7 @@
 
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -24,6 +25,7 @@ namespace mlir::db {
 
 #define GEN_PASS_DEF_FUSESCANBYLABEL
 #define GEN_PASS_DEF_PUSHDOWNFILTERS
+#define GEN_PASS_DEF_FUSEUNWINDEQUALITY
 #define GEN_PASS_DEF_FUSESCANBYNODEIDS
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
 #include "DBPasses.h.inc"
@@ -397,6 +399,241 @@ bool collectNodeIDDisjunction(Value mask, Value scanColumn, llvm::SmallVectorImp
     nodeIDs.push_back(nodeID);
     return true;
 }
+
+// The unwind factor of a cross product whose elements reach nothing but one equality
+// against a column of the other factor, and the ops that equality is rebuilt from.
+struct UnwindEqualityCross {
+    CrossProduct _product {nullptr};
+    UnwindConst _unwind {nullptr};
+    Region* _relationFactor {nullptr};
+    bool _unwindOnTheLeft {false};
+    Value _unwoundColumn;
+    Value _comparedColumn;
+    EqOp _equality {nullptr};
+    FilterOp _filter {nullptr};
+};
+
+// The constant unwind a factor is nothing but, null for any other factor. Anything else
+// in the region would be dropped along with it, so the unwind has to be all there is
+// besides the yield of its one column.
+UnwindConst matchUnwindFactor(Region& factor) {
+    Block& block = factor.front();
+    if (block.getOperations().size() != 2) {
+        return nullptr;
+    }
+
+    Yield yield = dyn_cast<Yield>(block.getTerminator());
+    if (!yield || yield.getColumns().size() != 1) {
+        return nullptr;
+    }
+
+    return yield.getColumns().front().getDefiningOp<UnwindConst>();
+}
+
+// Whether one comparison per element stands in for what the unwound column is compared to.
+// A heterogeneous list rides the type-erased column whose cells are compared by the tag
+// each carries, which no set of typed comparisons reproduces, and a repeated element emits
+// the rows it matches once per copy, which a membership test does not express.
+bool elementsCompareDistinctly(UnwindConst unwind) {
+    const ColumnType column = cast<ColumnType>(unwind.getResult().getType());
+    if (isa<storage::ListElementType>(column.getType())) {
+        return false;
+    }
+
+    llvm::SmallDenseSet<Attribute, 8> seen;
+    for (const Attribute element : unwind.getElements()) {
+        if (!isa<IntegerAttr, FloatAttr, StringAttr>(element)) {
+            return false;
+        }
+
+        if (!seen.insert(element).second) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// The one equality among the users of @param unwoundColumn, provided nothing else reads it
+// but the filter that equality masks - so dropping the unwind leaves no other reader behind.
+EqOp matchSoleEquality(Value unwoundColumn, FilterOp& filter) {
+    EqOp equality;
+    for (Operation* const user : unwoundColumn.getUsers()) {
+        const EqOp candidate = dyn_cast<EqOp>(user);
+        if (!candidate) {
+            continue;
+        }
+
+        if (equality) {
+            return nullptr;
+        }
+
+        equality = candidate;
+    }
+
+    if (!equality || !equality.getResult().hasOneUse()) {
+        return nullptr;
+    }
+
+    filter = dyn_cast<FilterOp>(*equality.getResult().getUsers().begin());
+    if (!filter || filter.getMask() != equality.getResult()) {
+        return nullptr;
+    }
+
+    for (Operation* const user : unwoundColumn.getUsers()) {
+        const bool testsTheColumn = user == equality.getOperation();
+        const bool carriesTheColumn = user == filter.getOperation();
+
+        if (!testsTheColumn && !carriesTheColumn) {
+            return nullptr;
+        }
+    }
+
+    return equality;
+}
+
+std::optional<UnwindEqualityCross> matchUnwindEqualityCross(CrossProduct product) {
+    Region& leftFactor = product.getLeftFactor();
+    Region& rightFactor = product.getRightFactor();
+
+    const UnwindConst leftUnwind = matchUnwindFactor(leftFactor);
+    const UnwindConst rightUnwind = matchUnwindFactor(rightFactor);
+
+    // Two unwind factors have no relation between them to fold either into.
+    if (static_cast<bool>(leftUnwind) == static_cast<bool>(rightUnwind)) {
+        return std::nullopt;
+    }
+
+    UnwindEqualityCross match;
+    match._product = product;
+    match._unwind = leftUnwind ? leftUnwind : rightUnwind;
+    match._relationFactor = leftUnwind ? &rightFactor : &leftFactor;
+    match._unwindOnTheLeft = static_cast<bool>(leftUnwind);
+
+    if (!elementsCompareDistinctly(match._unwind)) {
+        return std::nullopt;
+    }
+
+    // The results are the left factor's yielded columns followed by the right factor's, so
+    // an unwind on the left contributes the first and one on the right the last.
+    const size_t unwoundIndex = match._unwindOnTheLeft ? 0 : product.getResults().size() - 1;
+    match._unwoundColumn = product.getResult(unwoundIndex);
+
+    match._equality = matchSoleEquality(match._unwoundColumn, match._filter);
+    if (!match._equality) {
+        return std::nullopt;
+    }
+
+    const Value lhs = match._equality.getLhs();
+    match._comparedColumn = lhs == match._unwoundColumn ? match._equality.getRhs() : lhs;
+
+    // The compared column has to outlive the product: one the product yields is replaced
+    // as the factor is inlined, and one defined inside a factor is dropped with it. A value
+    // computed from a yielded column - a property fetch - is neither.
+    Operation* const comparedDef = match._comparedColumn.getDefiningOp();
+    const bool outlivesTheProduct = comparedDef
+                                    && comparedDef != product.getOperation()
+                                    && comparedDef->getParentRegion() == product->getParentRegion();
+
+    if (!outlivesTheProduct) {
+        return std::nullopt;
+    }
+
+    return match;
+}
+
+// Moves the relation factor's ops out to where the product stood and rewires the results
+// it contributed to the columns it yielded, leaving the product's own results unread.
+void inlineRelationFactor(CrossProduct product, Region& relationFactor, bool unwindOnTheLeft) {
+    Block& relationBlock = relationFactor.front();
+    Yield relationYield = cast<Yield>(relationBlock.getTerminator());
+
+    const llvm::SmallVector<Value> yielded(relationYield.getColumns().begin(),
+                                           relationYield.getColumns().end());
+
+    Block* const parentBlock = product->getBlock();
+    parentBlock->getOperations().splice(Block::iterator(product),
+                                        relationBlock.getOperations(),
+                                        relationBlock.begin(),
+                                        Block::iterator(relationYield));
+
+    // The unwound column is the product's first result or its last, so the relation's run
+    // from the other end.
+    const size_t firstRelationResult = unwindOnTheLeft ? 1 : 0;
+    for (size_t index = 0; index < yielded.size(); index++) {
+        product.getResult(firstRelationResult + index).replaceAllUsesWith(yielded[index]);
+    }
+}
+
+Value buildElementDisjunction(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
+    const Location loc = match._equality.getLoc();
+    const Type boolColumnType = match._equality.getResult().getType();
+
+    builder.setInsertionPoint(match._equality);
+
+    Value mask;
+    for (const Attribute element : match._unwind.getElements()) {
+        ConstantOp constant = builder.create<ConstantOp>(loc, element);
+        EqOp equality = builder.create<EqOp>(loc, boolColumnType, match._comparedColumn, constant.getResult());
+
+        if (!mask) {
+            mask = equality.getResult();
+            continue;
+        }
+
+        mask = builder.create<OrOp>(loc, boolColumnType, mask, equality.getResult()).getResult();
+    }
+
+    return mask;
+}
+
+void fuseUnwindEquality(UnwindEqualityCross& match, mlir::OpBuilder& builder) {
+    inlineRelationFactor(match._product, *match._relationFactor, match._unwindOnTheLeft);
+
+    const Value mask = buildElementDisjunction(match, builder);
+
+    // The elements the rows carried are gone, and on every row the filter keeps they were
+    // the compared value: it takes their place, so a projection of the unwound variable
+    // still reads what that row matched.
+    llvm::SmallVector<Value> columns;
+    llvm::SmallVector<Type> resultTypes;
+    for (const Value column : match._filter.getColumnsToFilter()) {
+        const Value kept = column == match._unwoundColumn ? match._comparedColumn : column;
+
+        columns.push_back(kept);
+        resultTypes.push_back(kept.getType());
+    }
+
+    builder.setInsertionPoint(match._filter);
+    FilterOp fused = builder.create<FilterOp>(match._filter.getLoc(), resultTypes, mask, columns);
+
+    for (size_t index = 0; index < resultTypes.size(); index++) {
+        match._filter.getResult(index).replaceAllUsesWith(fused.getResult(index));
+    }
+
+    match._filter.erase();
+    match._equality.erase();
+    match._product.erase();
+}
+
+struct FuseUnwindEquality : public impl::FuseUnwindEqualityBase<FuseUnwindEquality> {
+    void runOnOperation() override {
+        Operation* const root = getOperation();
+
+        // Collect matches first: fusing erases ops, which would invalidate the walk.
+        llvm::SmallVector<UnwindEqualityCross> matches;
+        root->walk([&matches](CrossProduct product) {
+            if (const std::optional<UnwindEqualityCross> match = matchUnwindEqualityCross(product)) {
+                matches.push_back(*match);
+            }
+        });
+
+        mlir::OpBuilder builder(&getContext());
+        for (UnwindEqualityCross& match : matches) {
+            fuseUnwindEquality(match, builder);
+        }
+    }
+};
 
 struct NodeIDScanChain {
     Operation* _source {nullptr};
