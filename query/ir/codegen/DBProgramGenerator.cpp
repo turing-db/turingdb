@@ -3186,7 +3186,10 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
         // ORDER BY 1, n.name orders by n.name alone. An alias is only another spelling of
         // the item it was given to, so a key naming the alias of a constant item is that
         // same constant key - and the sort was handed no column to key it on either
-        const bool isConstantKey = !keyExpr->isDynamic();
+        //
+        // An aggregate is not constant however it spells its argument: count(*) reads no
+        // row and still takes a value per group, which is what orders the groups
+        const bool isConstantKey = !keyExpr->isDynamic() && !keyExpr->isAggregate();
         const bool namesAConstantItem = isProjected && sortedItem == sortedItems.end();
 
         if (isConstantKey || namesAConstantItem) {
