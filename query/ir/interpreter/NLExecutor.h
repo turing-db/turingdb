@@ -333,10 +333,14 @@ public:
     // The appenders that key one row of a merge's property value column. A merge keys
     // the value a row asks for against the value the graph holds, and those arrive in a
     // plain (or constant) column and a nullable one respectively, so these write the
-    // present-value tag byte selectOptKeyAppendFunction' appenders write - which is the
-    // nullable shape's selector, reused as is.
-    static NLKeyAppendFunction selectPlainMergeKeyAppendFunction(NLChunkKind kind);
-    static NLKeyAppendFunction selectConstMergeKeyAppendFunction(ValueType valueType);
+    // present-value tag byte selectOptKeyAppendFunction' appenders write.
+    //
+    // @param keyType is the type the schema holds the property as, which the row's own
+    // value is keyed in: the analyzer lets an integer constrain a double-typed property,
+    // and the graph side keys the double it reads back.
+    static NLKeyAppendFunction selectPlainMergeKeyAppendFunction(NLChunkKind kind, ValueType keyType);
+    static NLKeyAppendFunction selectConstMergeKeyAppendFunction(ValueType valueType, ValueType keyType);
+    static NLKeyAppendFunction selectOptMergeKeyAppendFunction(ValueType valueType, ValueType keyType);
     static NLKeyAppendFunction selectNullMergeKeyAppendFunction();
     static NLGroupKeyGatherFunction selectPlainGroupKeyGather(ValueType valueType);
 

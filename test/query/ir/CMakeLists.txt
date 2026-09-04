@@ -21,6 +21,20 @@ target_link_libraries(turing_ir_test_rows_s
             turing_db_interpreter_v3_s)
 target_include_directories(turing_ir_test_rows_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
+# The change / write / read plumbing every test of a writing query needs, over the shared
+# SimpleGraph fixture.
+add_library(turing_ir_test_write_query_s STATIC WriteQueryTest.cpp)
+target_link_libraries(turing_ir_test_write_query_s
+    PUBLIC  turing_ir_test_rows_s
+            turing_testutils_s
+            turing_testenv_s
+            turing_db_s
+            turing_db_examples_s
+            turing_db_system_s
+            turing_db_storage_s
+            turing_db_interpreter_v3_s)
+target_include_directories(turing_ir_test_write_query_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_ir_tests(test_query_ir_nlexecutor NLExecutorTest.cpp)
 add_ir_tests(test_query_ir_create_node_edge CreateNodeEdgeTest.cpp)
 add_ir_tests(test_query_ir_dblowering DBLoweringTest.cpp)
@@ -1301,58 +1315,34 @@ target_link_libraries(test_query_ir_with_scope PRIVATE
 target_include_directories(test_query_ir_with_scope PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_merge_node MergeNodeTest.cpp)
-target_link_libraries(test_query_ir_merge_node PRIVATE
-        turing_db_s
-        turing_testenv_s
-        turing_db_examples_s
-        turing_db_system_s
-        turing_db_storage_s
-        turing_db_interpreter_v3_s
-        turing_ir_test_rows_s)
-target_include_directories(test_query_ir_merge_node PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(test_query_ir_merge_node PRIVATE turing_ir_test_write_query_s)
 
 add_turing_test(test_query_ir_merge_rejection MergeRejectionTest.cpp)
-target_link_libraries(test_query_ir_merge_rejection PRIVATE
-        turing_db_s
-        turing_testenv_s
-        turing_db_examples_s
-        turing_db_system_s
-        turing_db_storage_s
-        turing_db_interpreter_v3_s)
-target_include_directories(test_query_ir_merge_rejection PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(test_query_ir_merge_rejection PRIVATE turing_ir_test_write_query_s)
 
 add_turing_test(test_query_ir_merge_edge MergeEdgeTest.cpp)
-target_link_libraries(test_query_ir_merge_edge PRIVATE
-        turing_db_s
-        turing_testenv_s
-        turing_db_examples_s
-        turing_db_system_s
-        turing_db_storage_s
-        turing_db_interpreter_v3_s
-        turing_ir_test_rows_s)
-target_include_directories(test_query_ir_merge_edge PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(test_query_ir_merge_edge PRIVATE turing_ir_test_write_query_s)
+
+# What the rows around a merge look like once it has fanned them out over the matches it
+# bound, and where an update statement beside it writes.
+add_turing_test(test_query_ir_merge_fan_out MergeFanOutTest.cpp)
+target_link_libraries(test_query_ir_merge_fan_out PRIVATE turing_ir_test_write_query_s)
+
+# The matches a merge chain enumerates when several paths share a node, and when a hop is
+# a self-loop taken either way round.
+add_turing_test(test_query_ir_merge_chain_match MergeChainMatchTest.cpp)
+target_link_libraries(test_query_ir_merge_chain_match PRIVATE turing_ir_test_write_query_s)
+
+# What a merge keys its entities on: the properties one spec names, told apart from
+# another's, and compared against the type the schema holds them as.
+add_turing_test(test_query_ir_merge_key MergeKeyTest.cpp)
+target_link_libraries(test_query_ir_merge_key PRIVATE turing_ir_test_write_query_s)
 
 add_turing_test(test_query_ir_create_return CreateReturnTest.cpp)
-target_link_libraries(test_query_ir_create_return PRIVATE
-        turing_db_s
-        turing_testenv_s
-        turing_db_examples_s
-        turing_db_system_s
-        turing_db_storage_s
-        turing_db_interpreter_v3_s
-        turing_ir_test_rows_s)
-target_include_directories(test_query_ir_create_return PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(test_query_ir_create_return PRIVATE turing_ir_test_write_query_s)
 
 add_turing_test(test_query_ir_with_write WithWriteTest.cpp)
-target_link_libraries(test_query_ir_with_write PRIVATE
-        turing_db_s
-        turing_testenv_s
-        turing_db_examples_s
-        turing_db_system_s
-        turing_db_storage_s
-        turing_db_interpreter_v3_s
-        turing_ir_test_rows_s)
-target_include_directories(test_query_ir_with_write PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(test_query_ir_with_write PRIVATE turing_ir_test_write_query_s)
 
 add_turing_test(test_query_ir_order_by_aggregate_unprojected_key OrderByAggregateUnprojectedKeyTest.cpp)
 target_link_libraries(test_query_ir_order_by_aggregate_unprojected_key PRIVATE
@@ -1706,15 +1696,7 @@ target_link_libraries(test_query_ir_avg_literal PRIVATE
 target_include_directories(test_query_ir_avg_literal PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_multi_match MultiMatchTest.cpp)
-target_link_libraries(test_query_ir_multi_match PRIVATE
-        turing_db_s
-        turing_testenv_s
-        turing_db_examples_s
-        turing_db_system_s
-        turing_db_storage_s
-        turing_db_interpreter_v3_s
-        turing_ir_test_rows_s)
-target_include_directories(test_query_ir_multi_match PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(test_query_ir_multi_match PRIVATE turing_ir_test_write_query_s)
 
 add_turing_test(test_query_ir_anonymous_match AnonymousMatchTest.cpp)
 target_sources(test_query_ir_anonymous_match PRIVATE StringRowSink.cpp)

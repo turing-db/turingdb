@@ -443,6 +443,11 @@ private:
     static mlir::Block* ownerBlock(mlir::Value chunkValue);
     static size_t blockNestingDepth(mlir::Block* block);
 
+    // The chunk of @param chunks bound deepest - the one whose block every other is
+    // valid in, which is where an op reading all of them belongs. A null Value for an
+    // empty range, which is an op reading no chunk at all.
+    mlir::Value deepestBoundChunk(llvm::ArrayRef<mlir::Value> chunks);
+
     // Find the first place where both @param first and @param second are valid
     mlir::Block* deeperBlock(mlir::Value first, mlir::Value second);
 };

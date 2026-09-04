@@ -25,9 +25,13 @@ LogicalResult verifyMergePattern(Operation* op,
                                  size_t nodePropValues,
                                  size_t edgePropValues);
 
+// How many of @param nodeLabels' chain nodes the merge looks up rather than takes a
+// bound column for: the ones carrying a label set.
+size_t mergeMatchedNodeCount(ArrayAttr nodeLabels);
+
 // The result count a merge of @param nodeLabels' chain produces: an ID column and a
-// pending mask per chain node and per hop, the created mask, then one per carried
-// column.
+// pending mask per looked-up chain node and per hop, the created mask, then one per
+// carried column.
 size_t mergeResultCount(ArrayAttr nodeLabels, size_t carriedColumns);
 
 }

@@ -36,6 +36,8 @@ class CallStmt;
 class CypherAST;
 class EdgePattern;
 class EmbeddingLiteral;
+class CreateStmt;
+class DeleteStmt;
 class Expr;
 class IndexExpr;
 class Literal;
@@ -323,17 +325,27 @@ private:
         llvm::SmallVector<mlir::Value> _edgePropValues;
     };
 
-    // What a merge takes along past its fan-out: the columns in flight, then the column
-    // and mask of every entity an earlier write bound, which are in no VDG variable and
-    // so in no in-flight set
+    // One entity an earlier write bound that a merge takes along past its fan-out: its
+    // ID column, its pending mask when it has one, then the value column of each
+    // property the write recorded, under the names sorted here
+    struct CarriedEntity {
+        const VarDecl* _decl {nullptr};
+        llvm::SmallVector<std::string_view> _propNames;
+    };
+
+    // What a merge takes along past its fan-out: the columns in flight, then the columns
+    // of every entity an earlier write bound, which are in no VDG variable and so in no
+    // in-flight set
     struct MergeCarrySet {
         InFlightColumns _inFlight;
         llvm::SmallVector<mlir::Value> _columns;
-        llvm::SmallVector<const VarDecl*> _writtenDecls;
+        llvm::SmallVector<CarriedEntity> _writtenEntities;
     };
 
-    void generateCreate(const SinglePartQuery* query);
-    void generateMerge(const SinglePartQuery* query);
+    // Emits each update statement of a part in the order the query writes them, so a
+    // statement reading what an earlier one wrote is generated behind it
+    void generateUpdates(const SinglePartQuery* query);
+    void generateCreateStmt(const CreateStmt* createStmt);
     void generateMergeStmt(const MergeStmt* mergeStmt);
 
     void collectMergePattern(const MergeStmt* mergeStmt, MergePattern& pattern);
@@ -363,12 +375,10 @@ private:
     // for a variable no write bound and for one a CREATE bound - whose every row does
     mlir::Value findPendingMask(const VarDecl* decl) const;
 
-    void generateSet(const SinglePartQuery* query);
-
     // The property writes of one SET clause, over the rows @param rows selects - every
     // row for a plain SET, which passes a null mask
     void generateSetItems(const SetStmt* setStmt, mlir::Value rows);
-    void generateDelete(const SinglePartQuery* query);
+    void generateDeleteStmt(const DeleteStmt* deleteStmt);
     void generateOutput(const Projection* projection);
 
     // A standalone CALL ends no projection: what it yielded is the result

@@ -1970,7 +1970,9 @@ def Merge : NLOp<"merge", [AttrSizedOperandSegments]> {
 
     A node chunk the op produces mixes node IDs the graph holds with offsets into the
     write buffer, and the mask beside it says which rows are which - the same mask a
-    following nl.set_node_property or nl.merge reads to know how to resolve a row.
+    following nl.set_node_property or nl.merge reads to know how to resolve a row. A
+    bound node has no chunk of its own: it came in through `bound_nodes` and comes back
+    through the carry set, gathered onto the emitted rows like every other chunk.
     The graph the match reads is the commit the change sits on, so a pattern this
     query wrote is invisible to it; what the op wrote itself it does remember, so
     merging the same node twice in one query writes it once.

@@ -1473,13 +1473,14 @@ def Merge : TuringOp<"merge", [AttrSizedOperandSegments]> {
     is read from the query; `undirected` matches a hop either way round and writes a
     forward one.
 
-    The results pair each chain entity with a boolean mask, nodes in chain order then
-    hops: the entity's ID column, then the rows of it that are pending - written by this
-    change and not committed, so an offset into the write buffer rather than an ID the
-    graph holds. A bound node's mask is the one it came in under, re-indexed; every
-    other entity's says whether this row wrote it or bound one an earlier merge wrote.
-    After those pairs comes the boolean column saying which rows the op wrote the whole
-    pattern for - what ON CREATE and ON MATCH select on - then the carry set.
+    The results pair each entity the op looks up with a boolean mask, nodes in chain
+    order then hops: the entity's ID column, then the rows of it that are pending -
+    written by this change and not committed, so an offset into the write buffer rather
+    than an ID the graph holds. A bound node has no pair of its own: its rows came in
+    through `bound_nodes` and come back through the carry set, re-indexed like every
+    other column in flight. After those pairs comes the boolean column saying which rows
+    the op wrote the whole pattern for - what ON CREATE and ON MATCH select on - then the
+    carry set.
     `carried_columns` mirrors db.get_out_edges': the columns in flight, handed back
     re-indexed onto the rows the merge emitted, so a row the op emitted twice repeats
     them and one it emitted nothing for drops them.

@@ -4,6 +4,7 @@
 #include <limits>
 #include <numeric>
 
+#include "NLMergeWorkingSet.h"
 #include "Procedure.h"
 #include "ProcedureData.h"
 
@@ -19,6 +20,26 @@ NLProgram::~NLProgram() {
 
 void NLProgram::setColumnNames(std::span<const std::string_view> names) {
     _columnNames.assign(names.begin(), names.end());
+}
+
+NLMergeNodeIndex* NLProgram::findMergeNodeIndex(const std::string& signature) const {
+    const auto findIt = _mergeNodeIndexes.find(signature);
+    if (findIt == end(_mergeNodeIndexes)) {
+        return nullptr;
+    }
+
+    return findIt->second.get();
+}
+
+NLMergeNodeIndex* NLProgram::addMergeNodeIndex(const std::string& signature,
+                                               const LabelSet& labels,
+                                               bool matchable,
+                                               ColumnNodeIDs* scanNodes) {
+    auto index = std::make_unique<NLMergeNodeIndex>(labels, matchable, scanNodes);
+    NLMergeNodeIndex* indexPtr = index.get();
+    _mergeNodeIndexes.emplace(signature, std::move(index));
+
+    return indexPtr;
 }
 
 NLProcedureState::NLProcedureState(const Procedure* procedure,
@@ -387,7 +408,8 @@ NLMergeData::NLMergeData(NLMergePendingNodes* pendingNodes,
                          ColumnMask* created)
     : _pendingNodes(pendingNodes),
     _pendingEdges(pendingEdges),
-    _created(created)
+    _created(created),
+    _workingSet(std::make_unique<NLMergeWorkingSet>())
 {
 }
 

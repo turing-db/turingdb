@@ -526,8 +526,11 @@ private:
     static NLGatherFunction selectGatherForChunkType(mlir::Type chunkType);
 
     // The appender that keys one row of a merge's property value column, chosen from the
-    // shape the column comes in: a nullable value chunk, a constant, or a plain chunk.
-    static NLKeyAppendFunction selectMergeKeyAppend(mlir::Type chunkType, const Column* column);
+    // shape the column comes in - a nullable value chunk, a constant, or a plain chunk -
+    // and keying in @param keyType, the type the schema holds the property as.
+    static NLKeyAppendFunction selectMergeKeyAppend(mlir::Type chunkType,
+                                                    const Column* column,
+                                                    ValueType keyType);
     static NLCompareFunction selectCompareForChunkType(mlir::Type chunkType);
     static NLKeyAppendFunction selectKeyAppendForChunkType(mlir::Type chunkType);
 

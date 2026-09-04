@@ -1,63 +1,24 @@
 #include <gtest/gtest.h>
 
-#include <memory>
-#include <span>
 #include <string>
 #include <string_view>
 
-#include "NLOutputSink.h"
 #include "QueryInterpreterV3.h"
 #include "QueryStatus.h"
 
-#include "Graph.h"
-#include "QueryConfig.h"
-#include "SimpleGraph.h"
-#include "SystemAccessor.h"
-#include "SystemManager.h"
 #include "TuringDB.h"
 #include "dataframe/Dataframe.h"
-#include "versioning/Change.h"
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
-#include "TuringTest.h"
-#include "TuringTestEnv.h"
+#include "WriteQueryTest.h"
 
 using namespace db;
 using namespace turing::test;
 
-namespace {
-
-// Discards output - the queries under test are rejected before producing rows.
-class NullSink : public NLOutputSink {
-public:
-    void appendChunks(std::span<const Column* const>, size_t, size_t) override {}
-};
-
-}
-
 // The MERGE patterns the engine turns away, and what it says about them.
-class MergeRejectionTest : public TuringTest {
-public:
-    void initialize() override {
-        _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
-
-        SystemAccessor system = _env->getSystemManager().accessUnique();
-        Graph* graph = system.createGraph(_graphName);
-        SimpleGraph::createSimpleGraph(graph);
-
-        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
-    }
-
+class MergeRejectionTest : public WriteQueryTest {
 protected:
-    void openChange(ChangeID& changeID) {
-        SystemAccessor system = _env->getSystemManager().accessUnique();
-        const auto res = system.newChange(_graphName);
-        ASSERT_TRUE(res);
-
-        changeID = res.value()->id();
-    }
-
     // Runs a writing query in its own change, leaving the change open: a rejected query
     // writes nothing, so nothing needs submitting
     void runQuery(std::string_view query, QueryStatus& status) {
@@ -91,11 +52,6 @@ protected:
 
         return _env->getDB().query(query, state);
     }
-
-    const std::string _graphName = "simpledb";
-    std::unique_ptr<TuringTestEnv> _env;
-    std::unique_ptr<QueryInterpreterV3> _interpreter;
-    QueryConfig _queryConfig;
 };
 
 // Every node carries at least one label, so a pattern that would have to write a
@@ -151,6 +107,31 @@ TEST_F(MergeRejectionTest, rejectsMergeOnThePipelineEngine) {
     EXPECT_FALSE(status.isOk());
     EXPECT_NE(status.getError().find("MERGE is only supported by the MLIR query engine"), std::string::npos)
         << status.getError();
+}
+
+// MERGE writes the pattern it does not find, and a variable-length hop names no one
+// path to write: Cypher has no such write pattern, so it is turned away rather than
+// silently written as a single hop
+TEST_F(MergeRejectionTest, rejectsAVariableLengthHop) {
+    QueryStatus status;
+    runQuery("MATCH (a:Person), (b:Person) MERGE (a)-[:KNOWS_WELL]->{1,3}(b)", status);
+
+    EXPECT_FALSE(status.isOk()) << status.getError();
+    EXPECT_NE(status.getError().find("Variable length relationships cannot be used in a write pattern"),
+              std::string::npos)
+        << status.getError();
+}
+
+// A CREATE's rows hold provisional IDs this change has not committed and a tombstone
+// names a committed ID, so deleting them is turned away rather than tombstoning
+// whichever committed node a provisional ID collides with
+TEST_F(MergeRejectionTest, rejectsADeleteOfWhatACreateWrote) {
+    QueryStatus status;
+    runQuery("CREATE (n:Tag {name: 'x'}) DELETE n", status);
+
+    EXPECT_FALSE(status.isOk()) << status.getError();
+    EXPECT_NE(status.getError().find("a CREATE in the same query writes it"), std::string::npos)
+        << "status: " << status.getError();
 }
 
 int main(int argc, char** argv) {

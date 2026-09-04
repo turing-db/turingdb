@@ -358,6 +358,17 @@ NLMergeDirection mergeDirectionFromValue(int64_t raw) {
     return NLMergeDirection::Forward;
 }
 
+void appendMergePropertySignature(const std::vector<NLMergeProperty>& properties,
+                                  std::string& signature) {
+    for (const NLMergeProperty& property : properties) {
+        const PropertyTypeID::Type id = property._propertyType._id.getValue();
+        const ValueType valueType = property._propertyType._valueType;
+
+        signature.append(reinterpret_cast<const char*>(&id), sizeof(id));
+        signature.append(reinterpret_cast<const char*>(&valueType), sizeof(valueType));
+    }
+}
+
 // What the pending log's keys for one chain-node spec start with: its label set and the
 // property it keys on, in order. Two specs writing the same pattern share the prefix, so
 // each binds what the other wrote; two that differ never collide.
@@ -370,13 +381,7 @@ void appendMergeNodeSignature(const LabelSet& labels,
         signature.append(reinterpret_cast<const char*>(&integer), sizeof(integer));
     }
 
-    for (const NLMergeProperty& property : properties) {
-        const PropertyTypeID::Type id = property._propertyType._id.getValue();
-        const ValueType valueType = property._propertyType._valueType;
-
-        signature.append(reinterpret_cast<const char*>(&id), sizeof(id));
-        signature.append(reinterpret_cast<const char*>(&valueType), sizeof(valueType));
-    }
+    appendMergePropertySignature(properties, signature);
 }
 
 bool isConstantColumn(const Column* column) {
@@ -1414,6 +1419,8 @@ void NLTranslator::translateMerge(nl::Merge merge, NLStmtContainer* body) {
     const size_t nodeCount = nodeLabels.size();
     const size_t hopCount = nodeCount - 1;
 
+    // A bound node has no result pair of its own: its rows come back through the carry set
+    size_t resultIndex = 0;
     size_t boundIndex = 0;
     size_t nodeValueIndex = 0;
     for (size_t nodeIndex = 0; nodeIndex < nodeCount; nodeIndex++) {
@@ -1427,12 +1434,13 @@ void NLTranslator::translateMerge(nl::Merge merge, NLStmtContainer* body) {
             boundIndex++;
         } else {
             translateMergeNodeSpec(labels, propNames, nodePropValues.slice(nodeValueIndex, propNames.size()), node);
+
+            node._output = static_cast<ColumnNodeIDs*>(allocColumn(results[resultIndex]));
+            node._outputPending = static_cast<ColumnMask*>(allocColumn(results[resultIndex + 1]));
+            resultIndex += 2;
         }
 
         nodeValueIndex += propNames.size();
-
-        node._output = static_cast<ColumnNodeIDs*>(allocColumn(results[2 * nodeIndex]));
-        node._outputPending = static_cast<ColumnMask*>(allocColumn(results[2 * nodeIndex + 1]));
 
         data->addNode(node);
     }
@@ -1479,24 +1487,26 @@ void NLTranslator::translateMerge(nl::Merge merge, NLStmtContainer* body) {
 
         edgeValueIndex += propNames.size();
 
+        appendMergePropertySignature(hop._properties, hop._signature);
+
         hop._scanSources = _memory->alloc<ColumnNodeIDs>();
         hop._scanEdges = _memory->alloc<ColumnEdgeIDs>();
 
-        const size_t hopResult = 2 * nodeCount + 2 * hopIndex;
-        hop._output = static_cast<ColumnEdgeIDs*>(allocColumn(results[hopResult]));
-        hop._outputPending = static_cast<ColumnMask*>(allocColumn(results[hopResult + 1]));
+        hop._output = static_cast<ColumnEdgeIDs*>(allocColumn(results[resultIndex]));
+        hop._outputPending = static_cast<ColumnMask*>(allocColumn(results[resultIndex + 1]));
+        resultIndex += 2;
 
         data->addHop(hop);
     }
 
-    _valueSlots[results[2 * (nodeCount + hopCount)]] = created;
+    _valueSlots[results[resultIndex]] = created;
+    resultIndex++;
 
-    const size_t firstCarried = 2 * (nodeCount + hopCount) + 1;
     for (size_t index = 0; index < carriedColumns.size(); index++) {
         const mlir::Value input = carriedColumns[index];
 
         data->addCarriedColumn({getColumn(input),
-                                allocColumn(results[firstCarried + index]),
+                                allocColumn(results[resultIndex + index]),
                                 selectGatherForChunkType(input.getType())});
     }
 
@@ -1551,13 +1561,20 @@ void NLTranslator::translateMergeNodeSpec(mlir::ArrayAttr labels,
         scanProperties.clear();
     }
 
+    appendMergeNodeSignature(writeLabels, node._properties, node._signature);
+
+    // Every chain node of the same signature looks its candidates up in one index, so
+    // the label set is scanned once however many times the query merges the pattern
+    node._index = _program->findMergeNodeIndex(node._signature);
+    if (node._index) {
+        return;
+    }
+
     ColumnNodeIDs* scanNodes = _memory->alloc<ColumnNodeIDs>();
-    node._index = _program->allocMergeNodeIndex(matchLabels, matchable, scanNodes);
+    node._index = _program->addMergeNodeIndex(node._signature, matchLabels, matchable, scanNodes);
     for (const NLMergeScanProperty& scanProperty : scanProperties) {
         node._index->addScanProperty(scanProperty);
     }
-
-    appendMergeNodeSignature(writeLabels, node._properties, node._signature);
 }
 
 void NLTranslator::translateMergeProperty(llvm::StringRef propName,
@@ -1568,11 +1585,16 @@ void NLTranslator::translateMergeProperty(llvm::StringRef propName,
     const ValueType valueType = valueTypeFromChunkType(propValue.getType());
     const Column* column = getColumn(propValue);
 
-    // Created where the schema lacks it, since a written pattern carries the property
+    // Created where the schema lacks it, since a written pattern carries the property.
+    // Both sides of the key serialize in its registered type: the analyzer lets an
+    // integer constrain a double-typed property, and 5 keys like the 5.0 the graph side
+    // reads back only once converted to it.
     const PropertyType writeType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
     properties.push_back({._propertyType=writeType,
                           ._values=column,
-                          ._keyAppend=selectMergeKeyAppend(propValue.getType(), column)});
+                          ._keyAppend=selectMergeKeyAppend(propValue.getType(),
+                                                           column,
+                                                           writeType._valueType)});
 
     // The graph's own property, which is what a candidate's value is read back through.
     // Absent means no committed entity carries it, so nothing there can match.
@@ -3368,22 +3390,25 @@ const ColumnMask* NLTranslator::getMaskColumn(mlir::Value chunkValue) const {
     return static_cast<const ColumnMask*>(getColumn(chunkValue));
 }
 
-NLKeyAppendFunction NLTranslator::selectMergeKeyAppend(mlir::Type chunkType, const Column* column) {
+NLKeyAppendFunction NLTranslator::selectMergeKeyAppend(mlir::Type chunkType,
+                                                      const Column* column,
+                                                      ValueType keyType) {
     if (isUntypedNullChunk(chunkType)) {
         return NLExecutor::selectNullMergeKeyAppendFunction();
     }
 
     if (isConstantColumn(column)) {
-        return NLExecutor::selectConstMergeKeyAppendFunction(valueTypeFromChunkType(chunkType));
+        return NLExecutor::selectConstMergeKeyAppendFunction(valueTypeFromChunkType(chunkType), keyType);
     }
 
     const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        return NLExecutor::selectOptKeyAppendFunction(valueTypeFromElementType(nullableType.getValueType()));
+        const ValueType nullableValueType = valueTypeFromElementType(nullableType.getValueType());
+        return NLExecutor::selectOptMergeKeyAppendFunction(nullableValueType, keyType);
     }
 
-    return NLExecutor::selectPlainMergeKeyAppendFunction(chunkKindFromElementType(elementType));
+    return NLExecutor::selectPlainMergeKeyAppendFunction(chunkKindFromElementType(elementType), keyType);
 }
 
 NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkType) {

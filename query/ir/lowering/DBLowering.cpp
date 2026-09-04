@@ -15,6 +15,7 @@
 
 #include "IRConstantColumn.h"
 #include "IRRowAlignment.h"
+#include "MergePatternShape.h"
 #include "Procedure.h"
 #include "ProcedureManager.h"
 #include "ProcedureTypeVector.h"
@@ -2190,18 +2191,7 @@ void DBLowering::lowerCallProcedure(mlir::db::CallProcedure call) {
 
     // Anchored on the deepest-bound operand, so a loop-bound argument or carried column
     // is found wherever it sits in the operand list, behind any hoisted constants.
-    mlir::Value anchorChunk;
-    for (const mlir::Value operandChunk : operandChunks) {
-        if (!anchorChunk) {
-            anchorChunk = operandChunk;
-            continue;
-        }
-
-        mlir::Block* const block = deeperBlock(anchorChunk, operandChunk);
-        if (ownerBlock(operandChunk) == block) {
-            anchorChunk = operandChunk;
-        }
-    }
+    const mlir::Value anchorChunk = deepestBoundChunk(operandChunks);
 
     mlir::Block* insertionBlock = _rootBlock;
     if (anchorChunk) {
@@ -2528,19 +2518,10 @@ void DBLowering::lowerCreateEdge(mlir::db::CreateEdge createEdge) {
         propChunks.push_back(mapValue(propValue));
     }
 
-    mlir::Value reference = srcChunk;
-    {
-        mlir::Block* const block = deeperBlock(reference, tgtChunk);
-        if (ownerBlock(tgtChunk) == block) {
-            reference = tgtChunk;
-        }
-    }
-    for (const mlir::Value propChunk : propChunks) {
-        mlir::Block* const block = deeperBlock(reference, propChunk);
-        if (ownerBlock(propChunk) == block) {
-            reference = propChunk;
-        }
-    }
+    llvm::SmallVector<mlir::Value, 8> operandChunks {srcChunk, tgtChunk};
+    operandChunks.append(propChunks.begin(), propChunks.end());
+
+    const mlir::Value reference = deepestBoundChunk(operandChunks);
     setInsertionInto(ownerBlock(reference));
 
     nl::CreateEdge create = _builder.create<nl::CreateEdge>(
@@ -2583,24 +2564,16 @@ void DBLowering::lowerMerge(mlir::db::Merge merge) {
     mapColumns(merge.getEdgePropValues(), edgePropValues);
     mapColumns(merge.getCarriedColumns(), carriedColumns);
 
+    llvm::SmallVector<mlir::Value, 8> operandChunks(boundNodes);
+    operandChunks.append(boundPending.begin(), boundPending.end());
+    operandChunks.append(nodePropValues.begin(), nodePropValues.end());
+    operandChunks.append(edgePropValues.begin(), edgePropValues.end());
+    operandChunks.append(carriedColumns.begin(), carriedColumns.end());
+
     // Inserted into the deepest block, where all the operands are defined. A merge over
     // literals alone reads no chunk, and so opens where the program does.
     mlir::Block* targetBlock = _entryBlock;
-    mlir::Value insertionReference;
-    for (const mlir::Value operand : merge->getOperands()) {
-        const mlir::Value operandChunk = mapValue(operand);
-        if (!insertionReference) {
-            insertionReference = operandChunk;
-            continue;
-        }
-
-        mlir::Block* const block = deeperBlock(insertionReference, operandChunk);
-        if (ownerBlock(operandChunk) == block) {
-            insertionReference = operandChunk;
-        }
-    }
-
-    if (insertionReference) {
+    if (const mlir::Value insertionReference = deepestBoundChunk(operandChunks)) {
         targetBlock = ownerBlock(insertionReference);
     }
 
@@ -2611,11 +2584,12 @@ void DBLowering::lowerMerge(mlir::db::Merge merge) {
     const mlir::Type edgeChunkType = nl::ChunkType::get(context, storage::EdgeIDType::get(context));
     const mlir::Type maskChunkType = nl::ChunkType::get(context, storage::BoolType::get(context));
 
-    const size_t nodeCount = merge.getNodeLabels().size();
-    const size_t hopCount = nodeCount - 1;
+    const mlir::ArrayAttr nodeLabels = merge.getNodeLabels();
+    const size_t hopCount = nodeLabels.size() - 1;
+    const size_t matchedNodeCount = mlir::mergeMatchedNodeCount(nodeLabels);
 
     llvm::SmallVector<mlir::Type, 8> resultTypes;
-    for (size_t nodeIndex = 0; nodeIndex < nodeCount; nodeIndex++) {
+    for (size_t nodeIndex = 0; nodeIndex < matchedNodeCount; nodeIndex++) {
         resultTypes.push_back(nodeChunkType);
         resultTypes.push_back(maskChunkType);
     }
@@ -2930,6 +2904,23 @@ void DBLowering::lowerFilter(mlir::db::FilterOp filter) {
     }
 
     followCardinalityThrough(columnChunks, nlFilter.getResults());
+}
+
+mlir::Value DBLowering::deepestBoundChunk(llvm::ArrayRef<mlir::Value> chunks) {
+    mlir::Value deepest;
+    for (const mlir::Value chunk : chunks) {
+        if (!deepest) {
+            deepest = chunk;
+            continue;
+        }
+
+        mlir::Block* const block = deeperBlock(deepest, chunk);
+        if (ownerBlock(chunk) == block) {
+            deepest = chunk;
+        }
+    }
+
+    return deepest;
 }
 
 mlir::Block* DBLowering::deeperBlock(mlir::Value first, mlir::Value second) {

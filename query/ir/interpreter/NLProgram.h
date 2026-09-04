@@ -30,6 +30,7 @@ namespace db {
 
 class NLExecutionContext;
 class NLFunctionData;
+struct NLMergeWorkingSet;
 class Procedure;
 class ProcedureContext;
 class ProcedureData;
@@ -2381,7 +2382,10 @@ private:
 
 // Every edge this query's merges wrote, under each of the two nodes it joins: a pending
 // edge is in no graph the match reads, so this is where a later row's hop finds it. One
-// log per program, shared by every merge op in it.
+// log per program, shared by every merge op in it. The entries under one pair of
+// endpoints come from every hop spec the query has, so each carries its hop's signature
+// ahead of its property values - two hops constraining different properties to values
+// with the same bytes would otherwise bind each other's edge.
 class NLMergePendingEdges {
 public:
     struct Entry {
@@ -2417,7 +2421,8 @@ class NLMergeData : public NLFunctionData {
 public:
     // One node of the chain. A bound node reads its rows from _boundColumn and is never
     // written; every other one is looked up through _index and, when the pattern is
-    // missing, written under _labelSetHandle with _properties' values.
+    // missing, written under _labelSetHandle with _properties' values. Only a looked-up
+    // node holds output chunks: a bound one's rows come back through the carry set.
     struct Node {
         std::vector<NLMergeProperty> _properties;
 
@@ -2441,6 +2446,12 @@ public:
     struct Hop {
         std::vector<NLMergeProperty> _properties;
         std::vector<NLMergeScanProperty> _scanProperties;
+
+        // What the pending log's keys for this spec start with, the sibling of Node's:
+        // the edge log is keyed by the endpoints alone, so without it two hops
+        // constraining different properties to values with the same bytes would collide
+        std::string _signature;
+
         EdgeTypeID _matchEdgeType;
         EdgeTypeID _writeEdgeType;
         NLMergeDirection _direction {NLMergeDirection::Forward};
@@ -2478,6 +2489,10 @@ public:
 
     ColumnVector<size_t>* getIndices() { return &_indices; }
 
+    // The scratch every step of the op works in, allocated once with the op rather than
+    // once per chunk
+    NLMergeWorkingSet* getWorkingSet() const { return _workingSet.get(); }
+
 private:
     std::vector<Node> _nodes;
     std::vector<Hop> _hops;
@@ -2486,6 +2501,7 @@ private:
     NLMergePendingEdges* _pendingEdges {nullptr};
     ColumnMask* _created {nullptr};
     const Column* _rowCarrier {nullptr};
+    std::unique_ptr<NLMergeWorkingSet> _workingSet;
 
     // This step's row map, from each emitted row to the input row behind it, fed to the
     // per-column gather that rebuilds the carry set
@@ -2809,15 +2825,18 @@ public:
         return statePtr;
     }
 
-    // Allocate one merge signature's candidate index, owned by the program; every
-    // merge op carrying that signature holds a borrowed pointer, which is how a later
-    // MERGE of the same pattern binds what an earlier one wrote.
-    NLMergeNodeIndex* allocMergeNodeIndex(const LabelSet& labels, bool matchable, ColumnNodeIDs* scanNodes) {
-        auto index = std::make_unique<NLMergeNodeIndex>(labels, matchable, scanNodes);
-        NLMergeNodeIndex* indexPtr = index.get();
-        _mergeNodeIndexes.push_back(std::move(index));
-        return indexPtr;
-    }
+    // The candidate index one chain-node signature already has, or a null pointer for a
+    // signature no chain node of the program has reached yet. Two nodes of the same
+    // labels and key properties look their candidates up in one index, so the label set
+    // is scanned once however many times the query merges the pattern.
+    NLMergeNodeIndex* findMergeNodeIndex(const std::string& signature) const;
+
+    // Adds the index of a signature findMergeNodeIndex found none for, owned by the
+    // program; every chain node of that signature holds a borrowed pointer.
+    NLMergeNodeIndex* addMergeNodeIndex(const std::string& signature,
+                                        const LabelSet& labels,
+                                        bool matchable,
+                                        ColumnNodeIDs* scanNodes);
 
     // The log of every edge this program's merges wrote, owned by the program and
     // shared by all of them: one merge's pending edge is what another's hop extends
@@ -2853,7 +2872,7 @@ private:
     std::vector<std::unique_ptr<NLGroupAggregateState>> _groupAggregateStates;
     std::vector<std::unique_ptr<NLCollectState>> _collectStates;
     std::vector<std::unique_ptr<NLProcedureState>> _procedureStates;
-    std::vector<std::unique_ptr<NLMergeNodeIndex>> _mergeNodeIndexes;
+    std::unordered_map<std::string, std::unique_ptr<NLMergeNodeIndex>> _mergeNodeIndexes;
     NLMergePendingEdges _mergePendingEdges;
     NLMergePendingNodes _mergePendingNodes;
     NLStmtContainer _stmts;

@@ -230,6 +230,10 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
     edgePattern->setDecl(decl);
     edgePattern->setData(data);
 
+    if (edgePattern->getQuantifiedPath()) {
+        throwError("Variable length relationships cannot be used in a write pattern", edgePattern);
+    }
+
     if (edgePattern->types() == nullptr) {
         throwError("Edge pattern must have at least one edge type", edgePattern);
     }
