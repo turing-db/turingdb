@@ -401,6 +401,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             _iteratorConfigs[constScanNodes.getResult()] = config;
         } else if (nl::ScanEdges scanEdges = mlir::dyn_cast<nl::ScanEdges>(operation)) {
             _iteratorConfigs[scanEdges.getResult()] = IteratorConfig {IteratorKind::ScanEdges, {}, {}};
+        } else if (nl::ScanEdgesByType scanEdgesByType = mlir::dyn_cast<nl::ScanEdgesByType>(operation)) {
+            IteratorConfig config {IteratorKind::ScanEdgesByType, {}, {}};
+            config._edgeType = edgeTypeName(scanEdgesByType.getEdgeType());
+            _iteratorConfigs[scanEdgesByType.getResult()] = config;
         } else if (nl::GetOutEdges getOutEdges = mlir::dyn_cast<nl::GetOutEdges>(operation)) {
             IteratorConfig config {IteratorKind::GetOutEdges, getOutEdges.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getOutEdges.getColumnsToFilter();
@@ -651,6 +655,8 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         translateConstScanLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::ScanEdges) {
         translateScanEdgesLoop(loopBody, limit, body);
+    } else if (config._kind == IteratorKind::ScanEdgesByType) {
+        translateScanEdgesByTypeLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::Sort) {
         translateSortLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::GroupAggregate) {
@@ -1033,6 +1039,37 @@ void NLTranslator::translateScanEdgesLoop(mlir::Block& loopBody, NLLimitState* l
     loopData->setLimit(limit);
 
     body->addStmt(NLFunctionDescriptor {&NLExecutor::runScanEdgesLoop, loopData});
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateScanEdgesByTypeLoop(const IteratorConfig& config,
+                                                mlir::Block& loopBody,
+                                                NLLimitState* limit,
+                                                NLStmtContainer* body) {
+    ColumnNodeIDs* sources = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(0)));
+    ColumnEdgeIDs* edgeIDs = static_cast<ColumnEdgeIDs*>(allocColumn(loopBody.getArgument(1)));
+    ColumnEdgeTypes* edgeTypes = static_cast<ColumnEdgeTypes*>(allocColumn(loopBody.getArgument(2)));
+    ColumnNodeIDs* targets = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(3)));
+
+    // Resolve the edge type name against the schema, exactly as translateEdgeLoop
+    // does for a by-type hop. A name absent from the schema matches no edge, so the
+    // loop is marked unmatchable and emits nothing rather than scanning for a bogus
+    // type.
+    const std::optional<EdgeTypeID> edgeTypeID = _view->metadata().edgeTypes().get(config._edgeType);
+    const bool matchable = edgeTypeID.has_value();
+    const EdgeTypeID resolvedType = matchable ? *edgeTypeID : EdgeTypeID();
+
+    NLScanEdgesByTypeLoopData* loopData =
+        _program->allocFunctionData<NLScanEdgesByTypeLoopData>(sources,
+                                                               edgeIDs,
+                                                               edgeTypes,
+                                                               targets,
+                                                               resolvedType,
+                                                               matchable);
+    loopData->setLimit(limit);
+
+    body->addStmt(NLFunctionDescriptor {&NLExecutor::runScanEdgesByTypeLoop, loopData});
 
     translateBlock(loopBody, loopData->getStmts());
 }

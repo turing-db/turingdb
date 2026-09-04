@@ -112,6 +112,7 @@ public:
     static void runUnwindLoop(NLExecutionContext* context, NLFunctionData* data);
 
     static void runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
+    static void runScanEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
 

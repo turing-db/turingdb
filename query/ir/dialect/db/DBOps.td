@@ -341,6 +341,46 @@ def ScanEdges : TuringOp<"scan_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpI
 }
 
 /**
+* ScanEdgesByType
+*/
+def ScanEdgesByType : TuringOp<"scan_edges_by_type", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+  let summary = "Produce every edge of one type in the graph as four row-aligned columns";
+
+  let description = [{
+    The by-type sibling of db.scan_edges: where that produces every edge, this
+    produces every edge of the named type, in the same four row-aligned columns -
+    the source node, the edge, its type and the target node:
+
+      %srcs, %eids, %etypes, %tgts = db.scan_edges_by_type("KNOWS") : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+
+    An edge carries exactly one type, so the filter is an equality on that type,
+    not a set match. `edge_type` is the type name spelled the same as in the query,
+    resolved against the graph schema; a name absent from the schema matches no
+    edge, so the scan yields no rows. Like db.scan_edges it reads no column and
+    takes no input, so it opens a dataflow rather than consuming one, and the
+    result shape is identical - only the rows are narrowed.
+  }];
+
+  // `edge_type` is the symbolic relationship-type name. Being an attribute and
+  // not an SSA value, the op still has no operands; lowering hoists it into an
+  // nl.get_edge_type handle so the name is resolved once above the loops.
+  let arguments = (ins StrAttr:$edge_type);
+
+  let results = (outs ColumnNodeIDs:$srcids,
+                      ColumnEdgeIDs:$eids,
+                      ColumnEdgeTypes:$etypes,
+                      ColumnNodeIDs:$tgtids);
+
+  // The type name prints inside the parens where db.scan_edges prints nothing;
+  // the result types follow the colon, as on db.scan_edges, since a source op has
+  // no meaningful operand arrow.
+  let assemblyFormat = [{
+    `(` $edge_type `)` attr-dict `:` qualified(type($srcids)) `,` qualified(type($eids)) `,`
+    qualified(type($etypes)) `,` qualified(type($tgtids))
+  }];
+}
+
+/**
 * GetOutEdges
 */
 def GetOutEdges : TuringOp<"get_out_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {

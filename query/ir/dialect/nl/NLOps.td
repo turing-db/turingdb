@@ -226,6 +226,31 @@ def ScanEdges : NLOp<"scan_edges", [Pure, InferTypeOpAdaptor]> {
 }
 
 /**
+* ScanEdgesByType
+*/
+def ScanEdgesByType : NLOp<"scan_edges_by_type", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create a database iterator over all edges of one type in the graph";
+  let description = [{
+    Imperative counterpart of db.scan_edges_by_type. Each step of an enclosing
+    nl.for fills the same four chunks nl.scan_edges fills - source node IDs, edge
+    IDs, edge type IDs and target node IDs - but only for the edges whose type is
+    `edge_type`:
+
+      %knows = nl.get_edge_type("KNOWS")
+      %edges = nl.scan_edges_by_type(%knows)
+
+    `edge_type` is an !nl.edge_type handle produced by nl.get_edge_type, not a name
+    on the op, exactly as on nl.get_out_edges_by_type: the name is resolved once
+    above the loops. Narrowing by type changes only the rows, never their shape, so
+    the result is the same four-chunk edge iterator nl.scan_edges produces and is
+    inferred, not spelled out.
+  }];
+  let arguments = (ins NLEdgeTypeHandle:$edge_type);
+  let results   = (outs NLIterator:$result);
+  let assemblyFormat = "`(` $edge_type `)` attr-dict";
+}
+
+/**
 * GetOutEdges
 */
 def GetOutEdges : NLOp<"get_out_edges", [Pure, InferTypeOpAdaptor]> {

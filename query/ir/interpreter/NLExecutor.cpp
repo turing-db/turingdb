@@ -19,6 +19,7 @@
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/GetOutEdgesByTypeIterator.h"
 #include "iterators/GetPropertiesWithNullIterator.h"
+#include "iterators/ScanEdgesByTypeIterator.h"
 #include "iterators/ScanEdgesIterator.h"
 #include "iterators/ScanNodesIterator.h"
 #include "iterators/ScanNodesByLabelIterator.h"
@@ -3290,6 +3291,49 @@ void NLExecutor::runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* d
 
         // The four columns are row-aligned, so the source column measures the
         // step; an empty fill means the scan is drained and there is nothing to emit.
+        if (sources->empty()) {
+            return;
+        }
+
+        runBody(context, loopBody);
+    };
+
+    if (limit) {
+        while (chunkWriter.isValid() && limit->getRemaining() > 0) {
+            runIteration();
+        }
+    } else {
+        while (chunkWriter.isValid()) {
+            runIteration();
+        }
+    }
+}
+
+void NLExecutor::runScanEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLScanEdgesByTypeLoopData* loopData = static_cast<NLScanEdgesByTypeLoopData*>(data);
+
+    // An edge type absent from the schema matches no edge, so the loop body never runs.
+    if (!loopData->isMatchable()) {
+        return;
+    }
+
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    ColumnNodeIDs* sources = loopData->getSources();
+    const size_t chunkSize = context->getChunkSize();
+
+    const NLLimitState* limit = loopData->getLimit();
+
+    ScanEdgesByTypeChunkWriter chunkWriter(*context->getView(), loopData->getEdgeType());
+    chunkWriter.setSrcIDs(sources);
+    chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
+    chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
+    chunkWriter.setTgtIDs(loopData->getTargets());
+
+    // A fill stops only once it has a full chunk of matches or the scan is drained,
+    // so an empty step means drained - the same measure runScanEdgesLoop uses.
+    const auto runIteration = [&]() {
+        chunkWriter.fill(chunkSize);
+
         if (sources->empty()) {
             return;
         }
