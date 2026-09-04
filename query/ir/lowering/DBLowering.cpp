@@ -348,6 +348,26 @@ bool isNullableChunk(mlir::Type chunkType) {
     return mlir::isa<storage::NullableType>(chunk.getElementType());
 }
 
+bool isListChunk(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        return false;
+    }
+
+    return mlir::isa<storage::ListType>(chunk.getElementType());
+}
+
+// Internal type of listChunk
+mlir::Type listInternalType(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        return {};
+    }
+
+    const auto listType = mlir::dyn_cast<storage::ListType>(chunk.getElementType());
+    return listType ? listType.getElementType() : mlir::Type {};
+}
+
 // The null literal's chunk: nullable with no value type of its own.
 bool isUntypedNullChunk(mlir::Type chunkType) {
     const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
@@ -764,7 +784,7 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
     } else if (mlir::isa<mlir::db::AddOp>(operation)) {
         lowerBinaryOp<nl::Add>(operation, BinaryResultKind::Numeric);
     } else if (mlir::isa<mlir::db::ConcatOp>(operation)) {
-        lowerBinaryOp<nl::Concat>(operation, BinaryResultKind::String);
+        lowerBinaryOp<nl::Concat>(operation, BinaryResultKind::Concat);
     } else if (mlir::isa<mlir::db::SubOp>(operation)) {
         lowerBinaryOp<nl::Sub>(operation, BinaryResultKind::Numeric);
     } else if (mlir::isa<mlir::db::MulOp>(operation)) {
@@ -2636,9 +2656,23 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
         }
         break;
 
-        case BinaryResultKind::String: {
-            const mlir::Type stringElement = storage::StringType::get(ctx);
-            return operandNullable ? storage::NullableType::get(ctx, stringElement) : stringElement;
+        case BinaryResultKind::Concat: {
+            if (!isListChunk(lhsType) || !isListChunk(rhsType)) {
+                // string concat
+                const mlir::Type stringElement = storage::StringType::get(ctx);
+                return operandNullable ? storage::NullableType::get(ctx, stringElement)
+                                       : stringElement;
+            }
+
+            // list concat
+            const mlir::Type lhsInnerType = listInternalType(lhsType);
+            const mlir::Type rhsInnerType = listInternalType(rhsType);
+
+            const bool sharedType = lhsInnerType == rhsInnerType;
+            const mlir::Type resultInnerType =
+                sharedType ? lhsInnerType : storage::ListElementType::get(ctx);
+            return storage::ListType::get(ctx, resultInnerType);
+
         }
         break;
     }

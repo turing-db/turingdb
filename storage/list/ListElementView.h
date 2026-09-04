@@ -7,10 +7,6 @@
 
 #include "ListBufferTypeTag.h"
 
-#include "metadata/PropertyType.h"
-
-#include "FatalException.h"
-
 namespace db {
 
 /**
@@ -34,6 +30,9 @@ public:
 
         return ListBufferTypeTag {tagValue};
     }
+
+    /// Returns a pointer to the raw element bytes: the tag, followed by the value bytes.
+    const std::byte* getData() const { return _tag; }
 
     /**
      * @brief Attempts to read the viewed element as a @param T.

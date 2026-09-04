@@ -309,7 +309,8 @@ template <ColumnOperator Op>
     requires (Op == OP_CONCAT)
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
-        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs
+        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
+        std::tuple<KindPair<ListView, ListView>>
     >;
 
     using AllowedMixed = AllowedMixedList<>;

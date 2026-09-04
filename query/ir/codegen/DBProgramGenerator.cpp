@@ -3731,12 +3731,16 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
         case BinaryOperator::Or:
             _part._exprMap[expr] = _opBuilder.create<mlir::db::OrOp>(loc, boolType, lhs, rhs).getResult();
         break;
-        case BinaryOperator::Add:
-            if (binExpr->getType() == EvaluatedType::String) {
+        case BinaryOperator::Add: {
+            const EvaluatedType resultType = binExpr->getType();
+            const bool isConcatenation = resultType == EvaluatedType::String || resultType == EvaluatedType::List;
+
+            if (isConcatenation) {
                 _part._exprMap[expr] = _opBuilder.create<mlir::db::ConcatOp>(loc, noneType, lhs, rhs).getResult();
             } else {
                 _part._exprMap[expr] = _opBuilder.create<mlir::db::AddOp>(loc, noneType, lhs, rhs).getResult();
             }
+        }
         break;
         case BinaryOperator::Sub:
             _part._exprMap[expr] = _opBuilder.create<mlir::db::SubOp>(loc, noneType, lhs, rhs).getResult();

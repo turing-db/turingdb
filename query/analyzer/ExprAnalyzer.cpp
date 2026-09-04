@@ -278,6 +278,14 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
+            if (pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)) {
+                if (not _isV3) {
+                    throwError("List concatenation is only supported in V3", expr);
+                }
+                type = EvaluatedType::List;
+                break;
+            }
+
             const std::string error = fmt::format(
                 "Operands are not valid and compatible types for '+': '{}' and '{}'",
                 EvaluatedTypeName::value(a),

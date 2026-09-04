@@ -3,10 +3,11 @@
 #include <algorithm>
 #include <type_traits>
 
-#include "ListView.h"
 #include "ListElementView.h"
+#include "ListView.h"
 
 #include "metadata/PropertyNull.h"
+#include "metadata/PropertyType.h"
 
 using namespace db;
 
