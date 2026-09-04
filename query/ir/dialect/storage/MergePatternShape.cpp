@@ -125,10 +125,22 @@ LogicalResult mlir::verifyMergePattern(Operation* op,
     return success();
 }
 
+size_t mlir::mergeMatchedNodeCount(ArrayAttr nodeLabels) {
+    size_t matched = 0;
+    for (const Attribute labels : nodeLabels) {
+        if (!cast<ArrayAttr>(labels).empty()) {
+            matched++;
+        }
+    }
+
+    return matched;
+}
+
 size_t mlir::mergeResultCount(ArrayAttr nodeLabels, size_t carriedColumns) {
     const size_t nodeCount = nodeLabels.size();
     const size_t hopCount = nodeCount > 0 ? nodeCount - 1 : 0;
 
-    // An ID column and a pending mask per chain entity, then the created mask
-    return 2 * (nodeCount + hopCount) + 1 + carriedColumns;
+    // An ID column and a pending mask per hop and per node the merge looks up, then the
+    // created mask
+    return 2 * (mergeMatchedNodeCount(nodeLabels) + hopCount) + 1 + carriedColumns;
 }
