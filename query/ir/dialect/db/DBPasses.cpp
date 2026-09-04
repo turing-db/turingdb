@@ -27,6 +27,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_PUSHDOWNFILTERS
 #define GEN_PASS_DEF_FUSEUNWINDEQUALITY
 #define GEN_PASS_DEF_FUSESCANBYNODEIDS
+#define GEN_PASS_DEF_FUSESCANEDGES
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
 #include "DBPasses.h.inc"
 
@@ -774,6 +775,73 @@ struct FuseScanByNodeIDs : public impl::FuseScanByNodeIDsBase<FuseScanByNodeIDs>
             }
 
             fuseScanByNodeIDs(filter, chain, builder);
+        }
+    }
+};
+
+// A hop over a whole-graph node scan walks every node's edges, which is the whole edge
+// set - what a scan_edges produces on its own.
+bool matchWholeEdgeSetHop(Operation* hop, ScanNodes& scan) {
+    // get_edges walks both directions, so over every node it reports each edge twice, once
+    // from each endpoint, and the by-type hops keep one type. Only the directed untyped
+    // hops read the edge set a scan_edges produces.
+    if (!isa<GetOutEdges, GetInEdges>(hop)) {
+        return false;
+    }
+
+    // Operand 0 is the input node column and anything after it is a carry set, row-aligned
+    // with the scan and with no counterpart in a scan_edges to be rewired to.
+    if (hop->getNumOperands() != 1) {
+        return false;
+    }
+
+    scan = hop->getOperand(0).getDefiningOp<ScanNodes>();
+    if (!scan) {
+        return false;
+    }
+
+    // The fused form drops the node column, so a second reader of it keeps the scan alive.
+    return scan.getResult().hasOneUse();
+}
+
+void fuseScanEdges(Operation* hop, ScanNodes scan, mlir::OpBuilder& builder) {
+    builder.setInsertionPoint(hop);
+
+    // Both directed hops fill srcids and tgtids with the edge's own source and target -
+    // the direction only decided which side was walked from - so the hop's four results
+    // map one-for-one onto the edge scan's, which are declared in the same order.
+    ScanEdges edgeScan = builder.create<ScanEdges>(hop->getLoc(),
+                                                   hop->getResult(0).getType(),
+                                                   hop->getResult(1).getType(),
+                                                   hop->getResult(2).getType(),
+                                                   hop->getResult(3).getType());
+
+    hop->replaceAllUsesWith(edgeScan.getOperation());
+    hop->erase();
+    scan.erase();
+}
+
+struct FuseScanEdges : public impl::FuseScanEdgesBase<FuseScanEdges> {
+    void runOnOperation() override {
+        Operation* const root = getOperation();
+
+        // Collect first: fusing erases the hop and its scan, which would invalidate the walk.
+        llvm::SmallVector<Operation*> hops;
+        root->walk([&](Operation* op) {
+            ScanNodes scan;
+            if (matchWholeEdgeSetHop(op, scan)) {
+                hops.push_back(op);
+            }
+        });
+
+        mlir::OpBuilder builder(&getContext());
+        for (Operation* const hop : hops) {
+            ScanNodes scan;
+            if (!matchWholeEdgeSetHop(hop, scan)) {
+                continue;
+            }
+
+            fuseScanEdges(hop, scan, builder);
         }
     }
 };

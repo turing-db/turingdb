@@ -140,7 +140,8 @@ TEST_F(CallDrivenIslandCodegenTest, secondYieldedColumnDeclinesTheDrivenPath) {
         generate("CALL db.getNodes([0]) YIELD id AS a, inEdgeCount MATCH (a)-->(m), (x) RETURN a, m, x, inEdgeCount");
 
     EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 2u);
-    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 2u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ScanEdges>(*module), 1u);
     EXPECT_EQ(countOps<mlir::db::EqOp>(*module), 1u);
 }
 
@@ -149,7 +150,8 @@ TEST_F(CallDrivenIslandCodegenTest, yieldedPatternEndpointsDeclineTheDrivenPath)
         generate("CALL db.getEdges([0]) YIELD src, tgt MATCH (src)-->(tgt), (x) RETURN src, tgt, x");
 
     EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 2u);
-    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 2u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ScanEdges>(*module), 1u);
     EXPECT_EQ(countOps<mlir::db::EqOp>(*module), 2u);
 }
 
