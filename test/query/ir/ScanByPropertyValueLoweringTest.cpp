@@ -172,6 +172,9 @@ TEST_F(ScanByPropertyValueLoweringTest, scansAnUnsignedPropertyAgainstANonNegati
     expectRows("\"count\", 4 : i64", {4});
 }
 
+// The unfused filter converts instead: `WHERE n.count = -1` matches a node holding
+// 18446744073709551615, since the comparison promotes the literal. The analyzer admits
+// the pairing, so this one value is where the fused scan is the stricter of the two.
 TEST_F(ScanByPropertyValueLoweringTest, anUnsignedPropertyDoesNotMatchANegativeLiteral) {
     expectRows("\"count\", -1 : i64", {});
 }

@@ -78,6 +78,129 @@ TEST_F(PropertyContainerDumperTest, manyInts) {
     ASSERT_TRUE(dumper.dump(container));
 }
 
+// A container is dumped in its own order, so a loader reads the IDs back sorted whenever
+// the dumped ones were. The flag has to come back with them: it is what picks the
+// galloping override drop in the property value scan.
+TEST_F(PropertyContainerDumperTest, sortedIntsAreLoadedAsSorted) {
+    fs::Path outDir(_outDir.c_str());
+    const fs::Path path = outDir / "sorted_ints";
+
+    TypedPropertyContainer<types::Int64> original;
+    for (EntityID id = 0; id < 1000; id++) {
+        original.add(id, static_cast<types::Int64::Primitive>(id.getValue()));
+    }
+    original.sort();
+    ASSERT_TRUE(original.isSorted());
+
+    {
+        auto writer = fs::FilePageWriter::open(path);
+        ASSERT_TRUE(writer);
+        TrivialPropertyContainerDumper<types::Int64> dumper(writer.value());
+        ASSERT_TRUE(dumper.dump(original));
+    }
+
+    auto reader = fs::FilePageReader::open(path, DumpConfig::PAGE_SIZE);
+    ASSERT_TRUE(reader);
+    TrivialPropertyContainerLoader<types::Int64> loader(reader.value());
+    auto result = loader.load();
+    ASSERT_TRUE(result);
+
+    const auto& loaded = result.value()->cast<types::Int64>();
+    EXPECT_TRUE(loaded.isSorted());
+    EXPECT_TRUE(PropertyContainerComparator::same(&original, &loaded));
+}
+
+TEST_F(PropertyContainerDumperTest, unsortedIntsAreLoadedAsUnsorted) {
+    fs::Path outDir(_outDir.c_str());
+    const fs::Path path = outDir / "unsorted_ints";
+
+    TypedPropertyContainer<types::Int64> original;
+    for (size_t index = 1000; index > 0; index--) {
+        original.add(EntityID(index - 1), static_cast<types::Int64::Primitive>(index));
+    }
+    ASSERT_FALSE(original.isSorted());
+
+    {
+        auto writer = fs::FilePageWriter::open(path);
+        ASSERT_TRUE(writer);
+        TrivialPropertyContainerDumper<types::Int64> dumper(writer.value());
+        ASSERT_TRUE(dumper.dump(original));
+    }
+
+    auto reader = fs::FilePageReader::open(path, DumpConfig::PAGE_SIZE);
+    ASSERT_TRUE(reader);
+    TrivialPropertyContainerLoader<types::Int64> loader(reader.value());
+    auto result = loader.load();
+    ASSERT_TRUE(result);
+
+    EXPECT_FALSE(result.value()->isSorted());
+}
+
+TEST_F(PropertyContainerDumperTest, sortedStringsAreLoadedAsSorted) {
+    fs::Path outDir(_outDir.c_str());
+    const fs::Path path = outDir / "sorted_strings";
+
+    TypedPropertyContainer<types::String> original;
+    for (EntityID id = 0; id < 1000; id++) {
+        const std::string value = "s" + std::to_string(id.getValue());
+        original.add(id, value);
+    }
+    original.sort();
+    ASSERT_TRUE(original.isSorted());
+
+    {
+        auto writer = fs::FilePageWriter::open(path);
+        ASSERT_TRUE(writer);
+        StringPropertyContainerDumper dumper(writer.value());
+        ASSERT_TRUE(dumper.dump(original));
+    }
+
+    auto reader = fs::FilePageReader::open(path, DumpConfig::PAGE_SIZE);
+    ASSERT_TRUE(reader);
+    StringPropertyContainerLoader loader(reader.value());
+    auto result = loader.load();
+    ASSERT_TRUE(result);
+
+    const auto& loaded = result.value()->cast<types::String>();
+    EXPECT_TRUE(loaded.isSorted());
+    EXPECT_TRUE(PropertyContainerComparator::same(&original, &loaded));
+}
+
+TEST_F(PropertyContainerDumperTest, sortedEmbeddingsAreLoadedAsSorted) {
+    fs::Path outDir(_outDir.c_str());
+    const fs::Path path = outDir / "sorted_embeddings";
+    const size_t dimension = 4;
+
+    TypedPropertyContainer<types::Embedding> original(dimension);
+
+    std::vector<float> embedding(dimension);
+    for (EntityID id = 0; id < 100; id++) {
+        for (size_t d = 0; d < dimension; d++) {
+            embedding[d] = static_cast<float>(id.getValue() * dimension + d);
+        }
+        original.add(id, embedding);
+    }
+    original.sort();
+    ASSERT_TRUE(original.isSorted());
+
+    {
+        auto writer = fs::FilePageWriter::open(path);
+        ASSERT_TRUE(writer);
+        EmbeddingPropertyContainerDumper dumper(writer.value());
+        ASSERT_TRUE(dumper.dump(original));
+    }
+
+    auto reader = fs::FilePageReader::open(path, DumpConfig::PAGE_SIZE);
+    ASSERT_TRUE(reader);
+    EmbeddingPropertyContainerLoader loader(reader.value());
+    auto result = loader.load();
+    ASSERT_TRUE(result);
+
+    const auto& loaded = result.value()->cast<types::Embedding>();
+    EXPECT_TRUE(loaded.isSorted());
+    EXPECT_TRUE(PropertyContainerComparator::same(&original, &loaded));
+}
+
 TEST_F(PropertyContainerDumperTest, emptyEmbeddingRoundTrip) {
     fs::Path outDir(_outDir.c_str());
     const fs::Path path = outDir / "embeddings_empty";

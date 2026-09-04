@@ -2930,7 +2930,7 @@ void NLExecutor::runScanNodesByPropertyValueLoopAs(NLExecutionContext* context, 
 
     // The literal and the label set are owned by the loop data, which lives for the whole
     // program, so a string view of the one and a handle on the other stay valid for
-    // every fill below. An invalid handle leaves the scan unconstrained by label.
+    // every fill below.
     const typename T::Primitive value = propertyScanLiteralAs<T>(loopData->getLiteral());
     const LabelSetHandle labelset = loopData->isByLabel() ? LabelSetHandle(loopData->getLabelSet()) : LabelSetHandle();
 

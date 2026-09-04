@@ -84,9 +84,9 @@ private:
         // declaration order; empty for the other kinds (and for a source call).
         llvm::SmallVector<mlir::Value, 4> _procedureInputs;
 
-        // The label names a ScanNodesByLabel or ScanNodesByPropertyValue iterator
-        // filters by; empty for the other kinds. These are views into the op's interned StringAttr storage,
-        // which the MLIRContext keeps alive for the whole translation; they are
+        // The label names a ScanNodesByLabel or ScanNodesByPropertyValue iterator filters
+        // by; empty for the other kinds. These are views into the op's interned StringAttr
+        // storage, which the MLIRContext keeps alive for the whole translation; they are
         // resolved to a LabelSet as soon as the loop is translated.
         llvm::SmallVector<llvm::StringRef, 4> _labels;
 
@@ -217,9 +217,6 @@ private:
                                 NLLimitState* limit,
                                 NLStmtContainer* body);
 
-    // Translate the nl.for over an nl.scan_nodes_by_property_value iterator: resolve
-    // the config's property name against the schema, coerce its literal to the stored
-    // type, allocate the node loop variable, and record the scan loop statement in body
     void translateScanByPropertyValueLoop(const IteratorConfig& config,
                                           mlir::Block& loopBody,
                                           NLLimitState* limit,

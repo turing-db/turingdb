@@ -128,11 +128,14 @@ def ScanNodesByPropertyValue : TuringOp<"scan_nodes_by_property_value", [Pure]> 
     which is one of the literal kinds the query language can spell: a signless
     i64 integer, an f64 double, an i1 boolean or a !storage.string. Lowering
     forwards both as-is; translation resolves the name against the schema and
-    coerces the literal to the stored type. A property absent from the schema is
-    carried by no node, so the scan yields no rows - not an error, matching the
-    empty result the filter form produces. `labels`, when present, is the label
-    list db.scan_nodes_by_label carried, with the same superset semantics: a
-    label absent from the schema likewise yields no rows.
+    coerces the literal to the stored type. A name the schema does not hold, or
+    a literal no stored value of that property could equal, deliberately scans
+    nothing rather than raising: the fusion is more permissive than the filter
+    form, which throws on both. Neither shape reaches here from Cypher - the
+    analyzer rejects an unknown property and a mismatched literal type before
+    codegen. `labels`, when present, is the label list db.scan_nodes_by_label
+    carried, with the same superset semantics: a label absent from the schema
+    likewise yields no rows.
 
     Like db.scan_nodes it reads no column and takes no input, so it opens a
     dataflow rather than consuming one. Scanning the graph is a deterministic

@@ -347,12 +347,10 @@ private:
     std::vector<NodeID> _constNodeIDs;
 };
 
-// nl.scan_nodes_by_property_value loop data: a node scan restricted to the nodes whose
-// property holds one literal value, and for a labelled scan to the label sets whose
-// property ranges alone are walked. The label set and the literal are owned here so the
-// handle and the view the executor builds each run stay valid; _matchable is false when
-// the property or a label is absent from the schema, or when no stored value can equal
-// the literal, so the loop emits no row.
+// nl.scan_nodes_by_property_value loop data. The label set and the literal are owned here
+// so the handle and the view the executor builds stay valid for every run; _matchable is
+// false when the property or a label is absent from the schema, or when no stored value
+// can equal the literal, and the loop then emits no row.
 class NLScanByPropertyValueLoopData : public NLScanLoopData {
 public:
     using Literal = std::variant<int64_t, uint64_t, double, CustomBool, std::string>;

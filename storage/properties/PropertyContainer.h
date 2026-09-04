@@ -54,8 +54,14 @@ public:
     virtual bool has(EntityID entityID) const = 0;
     ValueType getValueType() const { return _valueType; }
 
-    IDs& ids() { return _ids; }
     const IDs& ids() const { return _ids; }
+
+    // Handing the IDs out for writing forfeits the ordering claim: whoever reorders them
+    // sorts again, and a scan that gallops over them must not read a stale true.
+    IDs& getMutableIDs() {
+        _sorted = false;
+        return _ids;
+    }
 
     bool isSorted() const { return _sorted; }
 
@@ -142,6 +148,9 @@ public:
     size_t size() const override {
         return _values.size();
     }
+
+    // One index per ID: a container an entity was added to twice holds fewer.
+    bool hasDistinctIDs() const { return _entityIndexMap.size() == _ids.size(); }
 
     void sort() override {
         ranges::sort(
@@ -249,6 +258,8 @@ public:
     size_t size() const override {
         return _values.size();
     }
+
+    bool hasDistinctIDs() const { return _entityIndexMap.size() == _ids.size(); }
 
     void sort() override;
 
