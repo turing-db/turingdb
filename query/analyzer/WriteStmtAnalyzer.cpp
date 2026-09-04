@@ -79,6 +79,10 @@ void WriteStmtAnalyzer::analyze(const SetStmt* setStmt) {
 }
 
 void WriteStmtAnalyzer::analyze(const DeleteStmt* deleteStmt) {
+    if (_hasCreate) {
+        throwError("CREATE ... DELETE is not yet supported.", deleteStmt);
+    }
+
     const ExprChain* exprs = deleteStmt->getExpressions();
     for (Expr* expr : *exprs) {
         _exprAnalyzer->analyzeRootExpr(expr);
