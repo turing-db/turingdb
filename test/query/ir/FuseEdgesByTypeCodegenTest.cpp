@@ -188,14 +188,15 @@ TEST_F(FuseEdgesByTypeCodegenTest, bothHopsOfATypedChainFuse) {
     EXPECT_EQ(hops[1].getInputNodes(), hops[0].getTgtids());
 }
 
-// A whole-graph scan and its hop are the edge set, which the edge-scan fusion takes first;
-// the type check then narrows that scan rather than the walk.
-TEST_F(FuseEdgesByTypeCodegenTest, typedHopOffAWholeGraphScanStaysAnEdgeScan) {
+// A whole-graph scan and its hop are the edge set, which the edge-scan fusion takes first,
+// so the type lands on that scan as a scan_edges_by_type rather than on the walk.
+TEST_F(FuseEdgesByTypeCodegenTest, typedHopOffAWholeGraphScanBecomesAByTypeEdgeScan) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (a)-[:KNOWS_WELL]->(b) RETURN a, b");
 
-    EXPECT_EQ(countOps<mlir::db::ScanEdges>(*module), 1u);
+    expectFusedToTypedHop(*module);
+    EXPECT_EQ(countOps<mlir::db::ScanEdges>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::GetOutEdgesByType>(*module), 0u);
-    EXPECT_EQ(countOps<mlir::db::CheckEdgeTypeConstraint>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ScanEdgesByType>(*module), 1u);
 }
 
 TEST_F(FuseEdgesByTypeCodegenTest, undirectedTypedHopKeepsItsTypeCheck) {

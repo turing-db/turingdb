@@ -41,6 +41,7 @@ set(storage_sources
         iterators/GetOutEdgesIterator.cpp
         iterators/GetOutEdgesByTypeIterator.cpp
         iterators/GetEdgesIterator.cpp
+        iterators/ScanEdgesByTypeIterator.cpp
         iterators/GetNodeViewsIterator.cpp
         iterators/PartIterator.cpp
         iterators/ScanEdgesIterator.cpp
