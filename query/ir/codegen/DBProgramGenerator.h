@@ -169,8 +169,8 @@ private:
     void generateCSVLoads(std::span<Stmt* const> stmts);
 
     // Whether this statement closes a part on the cut it carries: a MATCH whose ORDER BY,
-    // SKIP or LIMIT reads the rows that MATCH produced, which a later MATCH of the same
-    // part would otherwise have crossed into them first
+    // SKIP or LIMIT reads the rows that MATCH produced, which a later MATCH or UNWIND of
+    // the same part would otherwise have crossed into them first
     bool closesPartOnItsCut(const Stmt* stmt, std::span<Stmt* const> following) const;
 
     void generateTraversal(std::span<Stmt* const> stmts);

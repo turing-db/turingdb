@@ -863,7 +863,7 @@ bool DBProgramGenerator::closesPartOnItsCut(const Stmt* stmt, std::span<Stmt* co
 
         if (kind == Stmt::Kind::WITH) {
             return false;
-        } else if (kind == Stmt::Kind::MATCH) {
+        } else if (kind == Stmt::Kind::MATCH || kind == Stmt::Kind::UNWIND) {
             return true;
         }
     }
