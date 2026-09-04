@@ -2,7 +2,6 @@
 
 #include <stdint.h>
 #include <algorithm>
-#include <iterator>
 #include <span>
 
 #include "datapart/DataPart.h"
@@ -17,9 +16,8 @@ using namespace db;
 
 namespace {
 
-// The candidates come from one ascending slice of a sorted container, so one cursor gallops
-// through the newer part's IDs instead of hashing every candidate. Disjoint ID ranges — a
-// newer part that only added nodes — are rejected outright by the bounds test.
+// The candidates must ascend: one cursor gallops through the newer part's IDs rather than
+// restarting the search for each of them.
 size_t dropHitsInSortedIDs(std::span<const EntityID> ids, NodeID* hits, size_t count) {
     if (count == 0 || ids.empty()) {
         return count;
@@ -53,6 +51,18 @@ size_t dropHitsInSortedIDs(std::span<const EntityID> ids, NodeID* hits, size_t c
     }
 
     return write;
+}
+
+// Sorted, distinct and gap-free: the slice then holds first, first + 1, ... and nothing
+// else, which is the one shape the ID of a row can be computed from its index. Distinct
+// matters: over ascending IDs alone, a repeat and a gap cancel out in the span.
+template <SupportedType T>
+bool hasDenseIDs(const TypedPropertyContainer<T>& container, std::span<const EntityID> ids) {
+    if (ids.empty() || !container.isSorted() || !container.hasDistinctIDs()) {
+        return false;
+    }
+
+    return ids.back().getValue() - ids.front().getValue() + 1 == ids.size();
 }
 
 template <SupportedType T>
@@ -91,6 +101,7 @@ ScanNodesByPropertyValueChunkWriter<T>::ScanNodesByPropertyValueChunkWriter(cons
     _labelset(labelset),
     _filter(view.tombstones())
 {
+    collectPartContainers();
     seekSliceAcrossParts();
 }
 
@@ -103,14 +114,40 @@ void ScanNodesByPropertyValueChunkWriter<T>::next() {
 }
 
 template <SupportedType T>
+void ScanNodesByPropertyValueChunkWriter<T>::collectPartContainers() {
+    const DataPartSpan parts = _view.dataparts();
+
+    _partContainers.clear();
+    _partContainers.reserve(parts.size());
+
+    for (const WeakArc<DataPart>& part : parts) {
+        const PropertyManager& properties = part->nodeProperties();
+        const TypedPropertyContainer<T>* container = properties.tryGetContainer<T>(_propTypeID);
+
+        PartContainer entry;
+        if (container && container->size() > 0) {
+            const PropertyContainer::IDs& ids = container->ids();
+
+            entry._container = container;
+            entry._first = ids.front();
+            entry._last = ids.back();
+            entry._sorted = container->isSorted();
+        }
+
+        _partContainers.push_back(entry);
+    }
+}
+
+template <SupportedType T>
 bool ScanNodesByPropertyValueChunkWriter<T>::startPart() {
-    const PropertyManager& properties = _partIt.get()->nodeProperties();
-    _container = properties.tryGetContainer<T>(_propTypeID);
-    if (!_container || _container->size() == 0) {
+    const size_t partIndex = static_cast<size_t>(_partIt.getIterator() - _view.dataparts().begin());
+
+    _container = _partContainers[partIndex]._container;
+    if (!_container) {
         return false;
     }
 
-    collectNewerContainers();
+    collectNewerContainers(partIndex);
 
     if (!_labelset.isValid()) {
         _wholeContainer.assign(1, PropertyRange {._offset = 0, ._count = _container->size()});
@@ -119,10 +156,9 @@ bool ScanNodesByPropertyValueChunkWriter<T>::startPart() {
         return true;
     }
 
+    const PropertyManager& properties = _partIt.get()->nodeProperties();
     const LabelSetPropertyIndexer* indexer = properties.tryGetIndexer(_propTypeID);
-    if (!indexer) {
-        return false;
-    }
+    bioassert(indexer, "A part holding a property container has no label set indexer for it");
 
     _labelsetIt = indexer->matchIterate(_labelset);
     if (!_labelsetIt.isValid()) {
@@ -135,16 +171,25 @@ bool ScanNodesByPropertyValueChunkWriter<T>::startPart() {
     return true;
 }
 
+// A newer part whose IDs cannot reach this one's holds no override of any hit found here,
+// so the whole part is dropped once rather than tested against every chunk of candidates.
 template <SupportedType T>
-void ScanNodesByPropertyValueChunkWriter<T>::collectNewerContainers() {
+void ScanNodesByPropertyValueChunkWriter<T>::collectNewerContainers(size_t partIndex) {
     _newerContainers.clear();
 
-    const DataPartIterator end = _partIt.getEndIterator();
-    for (DataPartIterator newer = std::next(_partIt.getIterator()); newer != end; ++newer) {
-        const PropertyManager& properties = newer->get()->nodeProperties();
-        const TypedPropertyContainer<T>* container = properties.tryGetContainer<T>(_propTypeID);
-        if (container) {
-            _newerContainers.push_back(container);
+    const PartContainer& current = _partContainers[partIndex];
+
+    for (size_t newer = partIndex + 1; newer < _partContainers.size(); newer++) {
+        const PartContainer& candidate = _partContainers[newer];
+        if (!candidate._container) {
+            continue;
+        }
+
+        const bool bounded = current._sorted && candidate._sorted;
+        const bool disjoint = bounded && (candidate._last < current._first || candidate._first > current._last);
+
+        if (!disjoint) {
+            _newerContainers.push_back(candidate);
         }
     }
 }
@@ -160,6 +205,7 @@ bool ScanNodesByPropertyValueChunkWriter<T>::nextSliceInPart() {
                 _values = _container->getSpan(range._offset, range._count);
                 _ids = std::span<const EntityID>(_container->ids()).subspan(range._offset, range._count);
                 _offset = 0;
+                _denseIDs = hasDenseIDs(*_container, _ids);
                 return true;
             }
         }
@@ -206,15 +252,15 @@ size_t ScanNodesByPropertyValueChunkWriter<T>::dropOverriddenHits(NodeID* hits, 
 
     size_t kept = count;
 
-    for (const TypedPropertyContainer<T>* container : _newerContainers) {
+    for (const PartContainer& newer : _newerContainers) {
         if (kept == 0) {
             return 0;
         }
 
-        if (candidatesAscend && container->isSorted()) {
-            kept = dropHitsInSortedIDs(container->ids(), hits, kept);
+        if (candidatesAscend && newer._sorted) {
+            kept = dropHitsInSortedIDs(newer._container->ids(), hits, kept);
         } else {
-            kept = dropHitsInContainer(*container, hits, kept);
+            kept = dropHitsInContainer(*newer._container, hits, kept);
         }
     }
 
@@ -229,8 +275,18 @@ void ScanNodesByPropertyValueChunkWriter<T>::filterTombstones() {
 }
 
 template <SupportedType T>
+size_t ScanNodesByPropertyValueChunkWriter<T>::scanSlice(size_t rows, NodeID* hits) const {
+    if (_denseIDs) {
+        return PropertyValueScan::equalDenseIDs(_values.data() + _offset, _ids[_offset].getValue(), rows, _value, hits);
+    } else {
+        return PropertyValueScan::equal(_values.data() + _offset, _ids.data() + _offset, rows, _value, hits);
+    }
+}
+
+template <SupportedType T>
 void ScanNodesByPropertyValueChunkWriter<T>::fill(size_t maxCount) {
     bioassert(_nodeIDs, "ScanNodesByPropertyValueChunkWriter must be initialized with a valid column");
+    bioassert(maxCount > 0, "ScanNodesByPropertyValueChunkWriter cannot fill an empty chunk");
 
     std::vector<NodeID>& hits = _nodeIDs->getRaw();
 
@@ -243,7 +299,7 @@ void ScanNodesByPropertyValueChunkWriter<T>::fill(size_t maxCount) {
             hits.resize(count + rows);
         }
 
-        const size_t candidates = PropertyValueScan::equal(_values.data() + _offset, _ids.data() + _offset, rows, _value, hits.data() + count);
+        const size_t candidates = scanSlice(rows, hits.data() + count);
 
         count += dropOverriddenHits(hits.data() + count, candidates);
         _offset += rows;

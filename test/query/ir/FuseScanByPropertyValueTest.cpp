@@ -582,3 +582,79 @@ TEST_F(FuseScanByPropertyValueTest, leavesHopTargetEqualityAlone) {
     EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
     EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u);
 }
+
+// The scanned column feeds the output beside the filtered one - a shape codegen does not
+// emit, since the two are not row aligned
+const char* const scanReadBesideTheFilter = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %k = db.constant(32 : i64)
+  %mask = db.eq %age, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+  %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%n, %nf) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(FuseScanByPropertyValueTest, keepsTheScanAliveWhenSomethingElseReadsIt) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(scanReadBesideTheFilter);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runFuse(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::ScanNodesByPropertyValue> scans = collect<mlir::db::ScanNodesByPropertyValue>(*module);
+    ASSERT_EQ(scans.size(), 1u);
+
+    // The other reader keeps the original scan alive, so the program now opens two.
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
+
+    llvm::SmallVector<mlir::db::Output> outputs = collect<mlir::db::Output>(*module);
+    ASSERT_EQ(outputs.size(), 1u);
+    ASSERT_EQ(outputs.front().getColumns().size(), 2u);
+    EXPECT_TRUE(mlir::isa<mlir::db::ScanNodes>(outputs.front().getColumns()[0].getDefiningOp()));
+    EXPECT_EQ(outputs.front().getColumns()[1].getDefiningOp(), scans.front().getOperation());
+}
+
+// The filter sits in a factor region while the scan it reads is in the enclosing block
+const char* const factorFilterOverAnOuterScan = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %p:2 = db.cross_product factor {
+    %age = db.get_node_properties(%n, "age") : (!db.column<!storage.node_id>) -> !db.column<none>
+    %k = db.constant(32 : i64)
+    %mask = db.eq %age, %k : (!db.column<none>, !db.column<i64>) -> !db.column<!storage.bool>
+    %nf = db.filter(%mask, {%n}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+    db.yield %nf : !db.column<!storage.node_id>
+  } factor {
+    %m = db.scan_nodes() : !db.column<!storage.node_id>
+    db.yield %m : !db.column<!storage.node_id>
+  }
+  db.output(%p#0, %p#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(FuseScanByPropertyValueTest, fusesAFactorFilterOverAnOuterScan) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(factorFilterOverAnOuterScan);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runFuse(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::ScanNodesByPropertyValue> scans = collect<mlir::db::ScanNodesByPropertyValue>(*module);
+    ASSERT_EQ(scans.size(), 1u);
+
+    // The fused scan takes the filter's place inside the factor, so the source the factor
+    // reads is now its own; the enclosing scan had no other reader and is gone.
+    llvm::SmallVector<mlir::db::CrossProduct> products = collect<mlir::db::CrossProduct>(*module);
+    ASSERT_EQ(products.size(), 1u);
+    EXPECT_EQ(scans.front().getOperation()->getParentOp(), products.front().getOperation());
+
+    mlir::db::Yield leftYield = mlir::cast<mlir::db::Yield>(products.front().getLeftFactor().front().getTerminator());
+    ASSERT_EQ(leftYield.getColumns().size(), 1u);
+    EXPECT_EQ(leftYield.getColumns().front().getDefiningOp(), scans.front().getOperation());
+
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
+}

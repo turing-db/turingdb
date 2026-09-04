@@ -945,6 +945,49 @@ TEST_F(NLDialectTest, verifierRejectsCollectUpdateWithADistinctIndexPastTheValue
     EXPECT_FALSE(parses(collectsDistinctPastTheValues));
 }
 
+// A property-value scan needs a literal one of the stored types can hold. The db op
+// verifies that; a hand-written .nl.mlir skips the db dialect entirely, so the nl op
+// verifies it too rather than scanning nothing for a needle no value can equal.
+constexpr const char* scansAPropertyValueAgainstAnInteger = R"mlir(
+func.func @main() {
+  %nodes = nl.scan_nodes_by_property_value("age", 32 : i64, ["Person"])
+  nl.for %node in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    nl.output(%node) names ["n"] : !nl.chunk<!storage.node_id>
+  }
+  return
+}
+)mlir";
+
+constexpr const char* scansAPropertyValueAgainstAnI32 = R"mlir(
+func.func @main() {
+  %nodes = nl.scan_nodes_by_property_value("age", 32 : i32)
+  nl.for %node in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    nl.output(%node) names ["n"] : !nl.chunk<!storage.node_id>
+  }
+  return
+}
+)mlir";
+
+constexpr const char* scansAnUnnamedProperty = R"mlir(
+func.func @main() {
+  %nodes = nl.scan_nodes_by_property_value("", 32 : i64)
+  nl.for %node in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    nl.output(%node) names ["n"] : !nl.chunk<!storage.node_id>
+  }
+  return
+}
+)mlir";
+
+constexpr const char* scansAPropertyValueUnderNoLabel = R"mlir(
+func.func @main() {
+  %nodes = nl.scan_nodes_by_property_value("age", 32 : i64, [])
+  nl.for %node in %nodes : !nl.iter<!nl.chunk<!storage.node_id>> {
+    nl.output(%node) names ["n"] : !nl.chunk<!storage.node_id>
+  }
+  return
+}
+)mlir";
+
 // The shapes db.vector_search rejects reach faiss through the nl sibling otherwise: a
 // search reporting no neighbour sizes its output buffers at zero, and a query vector of
 // no dimension has nothing to score against.
@@ -966,6 +1009,34 @@ TEST_F(NLDialectTest, verifierRejectsVectorSearchForAVectorOfNoDimension) {
     });
 
     EXPECT_FALSE(parses(searchesForAVectorOfNoDimension));
+}
+
+TEST_F(NLDialectTest, verifierAcceptsAPropertyValueScan) {
+    EXPECT_TRUE(parses(scansAPropertyValueAgainstAnInteger));
+}
+
+TEST_F(NLDialectTest, verifierRejectsAPropertyValueScanOnAnUnstorableLiteral) {
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+
+    EXPECT_FALSE(parses(scansAPropertyValueAgainstAnI32));
+}
+
+TEST_F(NLDialectTest, verifierRejectsAPropertyValueScanWithoutAPropertyName) {
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+
+    EXPECT_FALSE(parses(scansAnUnnamedProperty));
+}
+
+TEST_F(NLDialectTest, verifierRejectsAPropertyValueScanUnderAnEmptyLabelList) {
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+
+    EXPECT_FALSE(parses(scansAPropertyValueUnderNoLabel));
 }
 
 }

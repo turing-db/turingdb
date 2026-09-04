@@ -188,7 +188,7 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
         }
 
         for (auto& [ptID, container] : nodeProperties->_map) {
-            for (auto& id : container->ids()) {
+            for (auto& id : container->getMutableIDs()) {
                 id = _idRebaser->rebaseNodeID(id.getValue()).getValue();
             }
             container->sort();
@@ -266,7 +266,7 @@ bool DataPartRebaser::rebase(const MetadataRebaser& metadata,
         }
 
         for (auto& [ptID, container] : edgeProperties->_map) {
-            for (auto& id : container->ids()) {
+            for (auto& id : container->getMutableIDs()) {
                 id = _idRebaser->rebaseEdgeID(id.getValue()).getValue();
             }
             container->sort();

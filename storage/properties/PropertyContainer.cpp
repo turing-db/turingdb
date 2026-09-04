@@ -8,9 +8,8 @@
 using namespace db;
 
 void TypedPropertyContainer<types::String>::sort() {
-    _sorted = true;
-
     if (_ids.empty()) {
+        _sorted = true;
         return;
     }
 
@@ -38,12 +37,13 @@ void TypedPropertyContainer<types::String>::sort() {
     for (size_t i = 0; i < _ids.size(); i++) {
         _entityIndexMap[_ids[i]] = i;
     }
+
+    _sorted = true;
 }
 
 void TypedPropertyContainer<types::Embedding>::sort() {
-    _sorted = true;
-
     if (_ids.empty()) {
+        _sorted = true;
         return;
     }
 
@@ -72,4 +72,6 @@ void TypedPropertyContainer<types::Embedding>::sort() {
     for (size_t i = 0; i < _ids.size(); i++) {
         _entityIndexMap[_ids[i]] = i;
     }
+
+    _sorted = true;
 }

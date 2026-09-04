@@ -240,3 +240,46 @@ TEST_F(FuseScanByPropertyValueCodegenTest, hopTargetEqualityKeepsItsFilter) {
     EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
     EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u);
 }
+
+TEST_F(FuseScanByPropertyValueCodegenTest, negatedEqualityKeepsItsFilter) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (n) WHERE NOT n.age = 32 RETURN n");
+
+    EXPECT_EQ(countOps<mlir::db::ScanNodesByPropertyValue>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u);
+}
+
+TEST_F(FuseScanByPropertyValueCodegenTest, inequalityKeepsItsFilter) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (n) WHERE n.age <> 32 RETURN n");
+
+    EXPECT_EQ(countOps<mlir::db::ScanNodesByPropertyValue>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u);
+}
+
+// A null is no value a property column holds, so IS NULL is not an equality to fuse.
+TEST_F(FuseScanByPropertyValueCodegenTest, isNullKeepsItsFilter) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (n) WHERE n.age IS NULL RETURN n");
+
+    EXPECT_EQ(countOps<mlir::db::ScanNodesByPropertyValue>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u);
+}
+
+// The second WHERE reads an already fused scan, which is no source the pass fuses into,
+// so it stays the filter it was.
+TEST_F(FuseScanByPropertyValueCodegenTest, equalityAfterAWithKeepsItsFilter) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (n) WHERE n.age = 32 WITH n WHERE n.name = 'Remy' RETURN n");
+
+    mlir::db::ScanNodesByPropertyValue scan = expectSoleFusedScan(*module, "age");
+    ASSERT_TRUE(scan);
+
+    llvm::SmallVector<mlir::db::FilterOp> filters = collect<mlir::db::FilterOp>(*module);
+    ASSERT_EQ(filters.size(), 1u);
+    ASSERT_EQ(filters.front().getColumnsToFilter().size(), 1u);
+    EXPECT_EQ(filters.front().getColumnsToFilter().front().getDefiningOp(), scan.getOperation());
+
+    llvm::SmallVector<mlir::db::GetNodeProperties> reads = collect<mlir::db::GetNodeProperties>(*module);
+    ASSERT_EQ(reads.size(), 1u);
+    EXPECT_EQ(reads.front().getProperty(), "name");
+}

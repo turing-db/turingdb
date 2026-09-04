@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <memory>
 
 #include "Profiler.h"
@@ -111,6 +112,8 @@ public:
         for (size_t i = 0; i < ids.size(); i++) {
             entityIndexMap[ids[i]] = i;
         }
+
+        container->_sorted = std::is_sorted(ids.begin(), ids.end());
 
         return {std::unique_ptr<PropertyContainer> {container}};
     }
@@ -275,6 +278,8 @@ public:
         for (size_t i = 0; i < ids.size(); i++) {
             entityIndexMap[ids[i]] = i;
         }
+
+        container->_sorted = std::is_sorted(ids.begin(), ids.end());
 
         return {std::unique_ptr<PropertyContainer> {container}};
     }

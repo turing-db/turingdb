@@ -219,6 +219,7 @@ template <SupportedType T>
 struct PropertyRun {
     std::span<const typename T::Primitive> _values;
     std::span<const EntityID> _ids;
+    bool _sorted {false};
 };
 
 template <SupportedType T>
@@ -233,16 +234,39 @@ void collectRuns(const GraphView& view, PropertyTypeID property, std::vector<Pro
             continue;
         }
 
-        runs.push_back(PropertyRun<T> {._values = container->all(), ._ids = std::span<const EntityID>(container->ids())});
+        runs.push_back(PropertyRun<T> {._values = container->all(),
+                                       ._ids = std::span<const EntityID>(container->ids()),
+                                       ._sorted = container->isSorted()});
     }
 }
 
-// Times one kernel over every run of the column. `vectorised` selects the AVX2 kernel;
-// otherwise the branchless scalar fallback runs.
+// Which of the three kernels a timing run measures.
+enum class ScanKernel {
+    Scalar,
+    Vectorised,
+    DenseIDs,
+};
+
+// True when every run holds first, first + 1, ..., the shape the dense-ID kernel needs.
+template <SupportedType T>
+bool runsHaveDenseIDs(const std::vector<PropertyRun<T>>& runs) {
+    for (const PropertyRun<T>& run : runs) {
+        const std::span<const EntityID> ids = run._ids;
+        const bool dense = !ids.empty() && ids.back().getValue() - ids.front().getValue() + 1 == ids.size();
+
+        if (!run._sorted || !dense) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Times one kernel over every run of the column.
 template <SupportedType T>
 double runKernelOnce(const std::vector<PropertyRun<T>>& runs,
                      const typename T::Primitive& needle,
-                     bool vectorised,
+                     ScanKernel kernel,
                      std::vector<NodeID>& hits,
                      size_t& matchCountOut) {
     size_t matches = 0;
@@ -250,8 +274,21 @@ double runKernelOnce(const std::vector<PropertyRun<T>>& runs,
     const TimePoint start = Clock::now();
     for (const PropertyRun<T>& run : runs) {
         const size_t rows = run._values.size();
-        matches += vectorised ? PropertyValueScan::equalVectorised(run._values.data(), run._ids.data(), rows, needle, hits.data())
-                              : PropertyValueScan::equalScalar(run._values.data(), run._ids.data(), rows, needle, hits.data());
+        if (rows == 0) {
+            continue;
+        }
+
+        switch (kernel) {
+            case ScanKernel::Scalar:
+                matches += PropertyValueScan::equalScalar(run._values.data(), run._ids.data(), rows, needle, hits.data());
+            break;
+            case ScanKernel::Vectorised:
+                matches += PropertyValueScan::equalVectorised(run._values.data(), run._ids.data(), rows, needle, hits.data());
+            break;
+            case ScanKernel::DenseIDs:
+                matches += PropertyValueScan::equalDenseIDs(run._values.data(), run._ids.front().getValue(), rows, needle, hits.data());
+            break;
+        }
     }
     const TimePoint end = Clock::now();
 
@@ -319,6 +356,8 @@ int main(int argc, char** argv) {
 
         std::vector<NodeID> hits(nodeCount);
 
+        const bool denseScoreRuns = runsHaveDenseIDs(scoreRuns);
+
         const std::vector<int64_t> needles {0, 3, 7, 11, 16};
 
         std::vector<std::vector<std::string>> endToEndRows;
@@ -355,27 +394,36 @@ int main(int argc, char** argv) {
 
             size_t scalarMatches = 0;
             size_t vectorisedMatches = 0;
+            size_t denseMatches = 0;
             size_t doubleScalarMatches = 0;
             size_t doubleVectorisedMatches = 0;
-            runKernelOnce<types::Int64>(scoreRuns, needle, false, hits, scalarMatches);
-            runKernelOnce<types::Int64>(scoreRuns, needle, true, hits, vectorisedMatches);
+            runKernelOnce<types::Int64>(scoreRuns, needle, ScanKernel::Scalar, hits, scalarMatches);
+            runKernelOnce<types::Int64>(scoreRuns, needle, ScanKernel::Vectorised, hits, vectorisedMatches);
 
             std::vector<double> scalarSamples;
             std::vector<double> vectorisedSamples;
+            std::vector<double> denseSamples;
             std::vector<double> doubleScalarSamples;
             std::vector<double> doubleVectorisedSamples;
             const double ratioNeedle = static_cast<double>(needle) / 4.0;
             for (int iteration = 0; iteration < iterations; iteration++) {
-                scalarSamples.push_back(runKernelOnce<types::Int64>(scoreRuns, needle, false, hits, scalarMatches));
-                vectorisedSamples.push_back(runKernelOnce<types::Int64>(scoreRuns, needle, true, hits, vectorisedMatches));
-                doubleScalarSamples.push_back(runKernelOnce<types::Double>(ratioRuns, ratioNeedle, false, hits, doubleScalarMatches));
-                doubleVectorisedSamples.push_back(runKernelOnce<types::Double>(ratioRuns, ratioNeedle, true, hits, doubleVectorisedMatches));
+                scalarSamples.push_back(runKernelOnce<types::Int64>(scoreRuns, needle, ScanKernel::Scalar, hits, scalarMatches));
+                vectorisedSamples.push_back(runKernelOnce<types::Int64>(scoreRuns, needle, ScanKernel::Vectorised, hits, vectorisedMatches));
+                doubleScalarSamples.push_back(runKernelOnce<types::Double>(ratioRuns, ratioNeedle, ScanKernel::Scalar, hits, doubleScalarMatches));
+                doubleVectorisedSamples.push_back(runKernelOnce<types::Double>(ratioRuns, ratioNeedle, ScanKernel::Vectorised, hits, doubleVectorisedMatches));
+
+                if (denseScoreRuns) {
+                    denseSamples.push_back(runKernelOnce<types::Int64>(scoreRuns, needle, ScanKernel::DenseIDs, hits, denseMatches));
+                }
             }
 
             const double scalarMilliseconds = median(scalarSamples);
             const double vectorisedMilliseconds = median(vectorisedSamples);
+            const double denseMilliseconds = median(denseSamples);
             const double doubleScalarMilliseconds = median(doubleScalarSamples);
             const double doubleVectorisedMilliseconds = median(doubleVectorisedSamples);
+
+            const bool denseAgrees = denseScoreRuns && denseMatches == vectorisedMatches;
 
             kernelRows.push_back({
                 std::to_string(needle),
@@ -383,6 +431,8 @@ int main(int argc, char** argv) {
                 formatFixed(scalarMilliseconds, 2),
                 formatFixed(vectorisedMilliseconds, 2),
                 formatFixed(scalarMilliseconds / vectorisedMilliseconds, 2) + "x",
+                denseAgrees ? formatFixed(denseMilliseconds, 2) : "n/a",
+                denseAgrees ? formatFixed(vectorisedMilliseconds / denseMilliseconds, 2) + "x" : "n/a",
                 formatFixed(doubleScalarMilliseconds, 2),
                 formatFixed(doubleVectorisedMilliseconds, 2),
                 formatFixed(doubleScalarMilliseconds / doubleVectorisedMilliseconds, 2) + "x",
@@ -393,7 +443,17 @@ int main(int argc, char** argv) {
         printAsciiTable({"needle", "selectivity", "rows", "scan + filter (ms)", "fused scan (ms)", "speedup"}, endToEndRows);
 
         std::cout << "\n==== equality kernel over the same property columns, whole column per call ====\n";
-        printAsciiTable({"needle", "matches", "Int64 scalar (ms)", "Int64 vectorised (ms)", "speedup", "Double scalar (ms)", "Double vectorised (ms)", "speedup"}, kernelRows);
+        printAsciiTable({"needle",
+                         "matches",
+                         "Int64 scalar (ms)",
+                         "Int64 vectorised (ms)",
+                         "speedup",
+                         "Int64 dense IDs (ms)",
+                         "speedup",
+                         "Double scalar (ms)",
+                         "Double vectorised (ms)",
+                         "speedup"},
+                        kernelRows);
 
     } catch (const std::exception& error) {
         std::cerr << "error: " << error.what() << "\n";

@@ -398,9 +398,7 @@ Value filterByLabels(Value nodes, ArrayAttr labels, mlir::Location loc, mlir::Op
     return labelFilter.getResult(0);
 }
 
-void replaceFilterWithSource(FilterOp filter, Value fused, Operation* source) {
-    const MaskCone cone = collectMaskCone(filter.getMask());
-
+void replaceFilterWithSource(FilterOp filter, Value fused, Operation* source, const MaskCone& cone) {
     for (Value filtered : filter.getFilteredColumns()) {
         filtered.replaceAllUsesWith(fused);
     }
@@ -773,7 +771,7 @@ void fuseScanByNodeIDs(FilterOp filter, const NodeIDScanChain& chain, mlir::OpBu
         fused = filterByLabels(fused, chain._source._labels, loc, builder);
     }
 
-    replaceFilterWithSource(filter, fused, chain._source._op);
+    replaceFilterWithSource(filter, fused, chain._source._op, collectMaskCone(filter.getMask()));
 }
 
 struct FuseScanByNodeIDs : public impl::FuseScanByNodeIDsBase<FuseScanByNodeIDs> {
@@ -1413,6 +1411,7 @@ struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns>
 // the scanned column, and nothing outside it may read a part of it.
 struct PropertyValueScanChain {
     ScanSource _source;
+    MaskCone _cone;
     StringAttr _property;
     TypedAttr _value;
     llvm::SmallVector<Value> _residual;
@@ -1484,7 +1483,9 @@ bool matchPropertyValueScanChain(FilterOp filter, PropertyValueScanChain& chain)
         return false;
     }
 
-    const MaskCone cone = collectMaskCone(filter.getMask());
+    chain._cone = collectMaskCone(filter.getMask());
+
+    const MaskCone& cone = chain._cone;
     const bool readsTheScannedColumnAlone = cone._inputs.size() == 1 && cone._inputs.front() == chain._source._column;
     if (!readsTheScannedColumnAlone || !maskConeIsPrivateTo(cone, filter)) {
         return false;
@@ -1493,6 +1494,9 @@ bool matchPropertyValueScanChain(FilterOp filter, PropertyValueScanChain& chain)
     llvm::SmallVector<Value> conjuncts;
     collectConjuncts(filter.getMask(), conjuncts);
 
+    // The first property equality in the mask wins, not the most selective one: there are
+    // no column statistics to choose with, so `n.gender = 'M' AND n.ssn = '...'` fuses the
+    // unselective conjunct and leaves the selective one a residual filter.
     for (size_t candidate = 0; candidate < conjuncts.size(); candidate++) {
         EqOp equality = conjuncts[candidate].getDefiningOp<EqOp>();
         if (!equality || !matchPropertyEquality(equality, chain._source._column, chain)) {
@@ -1500,9 +1504,17 @@ bool matchPropertyValueScanChain(FilterOp filter, PropertyValueScanChain& chain)
         }
 
         for (size_t other = 0; other < conjuncts.size(); other++) {
-            if (other != candidate) {
-                chain._residual.push_back(conjuncts[other]);
+            if (other == candidate) {
+                continue;
             }
+
+            // Only a conjunct the cone built can be rebuilt over the fused rows.
+            Operation* const conjunctDef = conjuncts[other].getDefiningOp();
+            if (!conjunctDef || !isMaskComputeOp(conjunctDef)) {
+                return false;
+            }
+
+            chain._residual.push_back(conjuncts[other]);
         }
 
         return true;
@@ -1566,7 +1578,7 @@ void fuseScanByPropertyValue(FilterOp filter, const PropertyValueScanChain& chai
         fused = residualFilter.getResult(0);
     }
 
-    replaceFilterWithSource(filter, fused, chain._source._op);
+    replaceFilterWithSource(filter, fused, chain._source._op, chain._cone);
 }
 
 struct FuseScanByPropertyValue : public impl::FuseScanByPropertyValueBase<FuseScanByPropertyValue> {

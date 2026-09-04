@@ -95,6 +95,7 @@ def ScanNodesByPropertyValue : NLOp<"scan_nodes_by_property_value", [Pure, Infer
   }];
   let arguments = (ins StrAttr:$property, TypedAttrInterface:$value, OptionalAttr<StrArrayAttr>:$labels);
   let results   = (outs NLIterator:$result);
+  let hasVerifier = 1;
   let assemblyFormat = "`(` $property `,` $value (`,` $labels^)? `)` attr-dict";
 }
 

@@ -1,6 +1,8 @@
 #include "NLOps.h"
 #include "NLDialect.h"
 
+#include <optional>
+
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
@@ -108,6 +110,29 @@ LogicalResult ConstScanNodes::inferReturnTypes(MLIRContext* context,
                                                ConstScanNodes::Adaptor adaptor,
                                                SmallVectorImpl<Type>& inferredReturnTypes) {
     inferredReturnTypes.push_back(IteratorType::get(context, {getNodeIDChunkType(context)}));
+    return success();
+}
+
+LogicalResult ScanNodesByPropertyValue::verify() {
+    if (getProperty().empty()) {
+        return emitOpError("requires a non-empty property name");
+    }
+
+    const Type literalType = getValue().getType();
+    const bool isInteger = literalType.isSignlessInteger(64);
+    const bool isBool = literalType.isSignlessInteger(1);
+    const bool isDouble = literalType.isF64();
+    const bool isString = isa<storage::StringType>(literalType);
+
+    if (!isInteger && !isBool && !isDouble && !isString) {
+        return emitOpError("requires an i64, f64, i1 or !storage.string literal, got ") << literalType;
+    }
+
+    const std::optional<ArrayAttr> labels = getLabels();
+    if (labels && labels->empty()) {
+        return emitOpError("requires at least one label when labels are given");
+    }
+
     return success();
 }
 

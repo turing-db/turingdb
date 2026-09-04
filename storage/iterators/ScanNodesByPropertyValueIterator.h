@@ -39,11 +39,20 @@ public:
     void fill(size_t maxCount);
 
 private:
+    // A part's property column and the ID range it covers, which bounds it only when sorted.
+    struct PartContainer {
+        const TypedPropertyContainer<T>* _container {nullptr};
+        EntityID _first;
+        EntityID _last;
+        bool _sorted {false};
+    };
+
     PropertyTypeID _propTypeID;
     Primitive _value {};
     LabelSetHandle _labelset;
     const TypedPropertyContainer<T>* _container {nullptr};
-    std::vector<const TypedPropertyContainer<T>*> _newerContainers;
+    std::vector<PartContainer> _partContainers;
+    std::vector<PartContainer> _newerContainers;
     std::vector<PropertyRange> _wholeContainer;
     LabelSetPropertyIndexer::MatchIterator _labelsetIt;
     std::vector<PropertyRange>::const_iterator _rangeIt;
@@ -51,15 +60,18 @@ private:
     std::span<const Primitive> _values;
     std::span<const EntityID> _ids;
     size_t _offset {0};
+    bool _denseIDs {false};
     ColumnNodeIDs* _nodeIDs {nullptr};
 
     TombstoneFilter _filter;
 
+    void collectPartContainers();
     bool startPart();
-    void collectNewerContainers();
+    void collectNewerContainers(size_t partIndex);
     bool nextSliceInPart();
     void seekSliceAcrossParts();
     void nextSlice();
+    size_t scanSlice(size_t rows, NodeID* hits) const;
     size_t dropOverriddenHits(NodeID* hits, size_t count) const;
     void filterTombstones();
 };
