@@ -1004,6 +1004,13 @@ void distinctKeyAppendListElementColumn(const Column* column, size_t row, std::s
     distinctAppendElementBytes(key, raw[row]);
 }
 
+// Serialize one row of a list column into the row key, so two rows key alike when their
+// lists hold equal elements - the equality Cypher gives two lists.
+void distinctKeyAppendListColumn(const Column* column, size_t row, std::string& key) {
+    const auto& raw = static_cast<const ColumnVector<ListView>*>(column)->getRaw();
+    distinctAppendListBytes(key, raw[row]);
+}
+
 // Count the non-null cells of a type-erased column of tagged scalars, so count(x) over a
 // heterogeneous unwind charges the same rows a nullable value column would.
 size_t countNonNullElementsColumn(const Column* column) {
@@ -4206,7 +4213,7 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
         break;
 
         case NLChunkKind::List:
-            throw IRException("A list column cannot be a DISTINCT or grouping key: a list has no scalar value to key on");
+            return &distinctKeyAppendListColumn;
         break;
     }
 
