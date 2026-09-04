@@ -264,6 +264,9 @@ target_include_directories(test_query_ir_fuse_scan_edges_codegen PRIVATE ${CMAKE
 add_ir_tests(test_query_ir_fuse_edges_by_type FuseEdgesByTypeTest.cpp)
 target_link_libraries(test_query_ir_fuse_edges_by_type PRIVATE turing_db_examples_s)
 
+add_ir_tests(test_query_ir_fuse_scan_edges_by_type FuseScanEdgesByTypeTest.cpp)
+target_link_libraries(test_query_ir_fuse_scan_edges_by_type PRIVATE turing_db_examples_s)
+
 add_turing_test(test_query_ir_fuse_edges_by_type_codegen FuseEdgesByTypeCodegenTest.cpp)
 target_link_libraries(test_query_ir_fuse_edges_by_type_codegen PRIVATE
         turing_db_s

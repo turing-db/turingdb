@@ -514,6 +514,7 @@ bool opensSourceLoop(mlir::Operation* operation) {
                      mlir::db::Unwind,
                      mlir::db::ScanNodesByLabel,
                      mlir::db::ScanEdges,
+                     mlir::db::ScanEdgesByType,
                      mlir::db::GetOutEdges,
                      mlir::db::GetInEdges,
                      mlir::db::GetEdges,
@@ -705,6 +706,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerUnwind(unwind);
     } else if (mlir::db::ScanEdges scanEdges = mlir::dyn_cast<mlir::db::ScanEdges>(operation)) {
         lowerScanEdges(scanEdges);
+    } else if (mlir::db::ScanEdgesByType scanEdgesByType = mlir::dyn_cast<mlir::db::ScanEdgesByType>(operation)) {
+        lowerScanEdgesByType(scanEdgesByType);
     } else if (mlir::db::GetOutEdges getOutEdges = mlir::dyn_cast<mlir::db::GetOutEdges>(operation)) {
         lowerGetOutEdges(getOutEdges);
     } else if (mlir::db::GetInEdges getInEdges = mlir::dyn_cast<mlir::db::GetInEdges>(operation)) {
@@ -1038,6 +1041,18 @@ void DBLowering::lowerScanEdges(mlir::db::ScanEdges scanEdges) {
 
     nl::ScanEdges edges = _builder.create<nl::ScanEdges>(_builder.getUnknownLoc());
     buildLoopForSource(edges.getResult(), scanEdges.getOperation());
+}
+
+void DBLowering::lowerScanEdgesByType(mlir::db::ScanEdgesByType scanEdgesByType) {
+    // The by-type sibling of lowerScanEdges: same placement at the top of the root
+    // block, with the type name hoisted into the nl.get_edge_type handle the
+    // by-type hops already share.
+    const mlir::Value edgeTypeHandle = getOrCreateEdgeTypeHandle(scanEdgesByType.getEdgeType());
+
+    setInsertionInto(_rootBlock);
+
+    nl::ScanEdgesByType edges = _builder.create<nl::ScanEdgesByType>(_builder.getUnknownLoc(), edgeTypeHandle);
+    buildLoopForSource(edges.getResult(), scanEdgesByType.getOperation());
 }
 
 void DBLowering::lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges) {

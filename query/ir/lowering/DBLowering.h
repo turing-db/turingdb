@@ -184,6 +184,7 @@ private:
     void lowerVectorSearch(mlir::db::VectorSearch vectorSearch);
     void lowerUnwind(mlir::db::Unwind unwind);
     void lowerScanEdges(mlir::db::ScanEdges scanEdges);
+    void lowerScanEdgesByType(mlir::db::ScanEdgesByType scanEdgesByType);
     void lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges);
     void lowerGetInEdges(mlir::db::GetInEdges getInEdges);
     void lowerGetEdges(mlir::db::GetEdges getEdges);

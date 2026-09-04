@@ -152,6 +152,16 @@ LogicalResult ScanEdges::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+// Keeping one edge type narrows only the rows, never their shape, so a by-type
+// scan produces the same four-chunk edge iterator as ScanEdges.
+LogicalResult ScanEdgesByType::inferReturnTypes(MLIRContext* context,
+                                                std::optional<Location> location,
+                                                ScanEdgesByType::Adaptor adaptor,
+                                                SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(getEdgeIteratorType(context, {}));
+    return success();
+}
+
 // An out-edges fetch produces one row of edge chunks per step, then one
 // filtered chunk per carried column, mirroring db.get_out_edges
 LogicalResult GetOutEdges::inferReturnTypes(MLIRContext* context,
