@@ -23,6 +23,11 @@ def FuseScanByNodeIDs : Pass<"fuse_scan_by_node_ids"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseScanEdges : Pass<"fuse_scan_edges"> {
+    let summary = "Fuse a whole-graph node scan and its directed untyped hop into a scan_edges";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def TrimUnreadColumns : Pass<"trim_unread_columns"> {
     let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products and grouping ops";
     let dependentDialects = ["mlir::db::DB"];

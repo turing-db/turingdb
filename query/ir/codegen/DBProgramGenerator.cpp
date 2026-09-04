@@ -964,6 +964,7 @@ void DBProgramGenerator::runPasses() {
     passManager.addPass(mlir::db::createPushDownFilters());
     passManager.addPass(mlir::db::createFuseUnwindEquality());
     passManager.addPass(mlir::db::createFuseScanByNodeIDs());
+    passManager.addPass(mlir::db::createFuseScanEdges());
     passManager.addPass(mlir::db::createTrimUnreadColumns());
 
     if (mlir::failed(passManager.run(*_module))) {
