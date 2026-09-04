@@ -206,6 +206,29 @@ void FunctionDecls::initDefault() {
     maxDouble->setReturnTypes({{EvaluatedType::Double}});
     maxDouble->setIsAggregate(true);
 
+    // An extremum asks only that the group's values be ordered against each other, which
+    // Cypher orders strings and booleans by as much as numbers: min(n.name) is the least
+    // name of the group, and false orders below true.
+    FunctionSignature* minString = createFunction("min");
+    minString->setArguments({EvaluatedType::String});
+    minString->setReturnTypes({{EvaluatedType::String}});
+    minString->setIsAggregate(true);
+
+    FunctionSignature* maxString = createFunction("max");
+    maxString->setArguments({EvaluatedType::String});
+    maxString->setReturnTypes({{EvaluatedType::String}});
+    maxString->setIsAggregate(true);
+
+    FunctionSignature* minBool = createFunction("min");
+    minBool->setArguments({EvaluatedType::Bool});
+    minBool->setReturnTypes({{EvaluatedType::Bool}});
+    minBool->setIsAggregate(true);
+
+    FunctionSignature* maxBool = createFunction("max");
+    maxBool->setArguments({EvaluatedType::Bool});
+    maxBool->setReturnTypes({{EvaluatedType::Bool}});
+    maxBool->setIsAggregate(true);
+
     FunctionSignature* avgInt = createFunction("avg");
     avgInt->setArguments({EvaluatedType::Integer});
     avgInt->setReturnTypes({{EvaluatedType::Double}});
