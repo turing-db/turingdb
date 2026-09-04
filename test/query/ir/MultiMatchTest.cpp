@@ -1,28 +1,6 @@
 #include <gtest/gtest.h>
 
-#include <algorithm>
-#include <memory>
-#include <string>
-#include <string_view>
-
-#include "NLOutputSink.h"
-#include "QueryInterpreterV3.h"
-#include "QueryStatus.h"
-
-#include "Graph.h"
-#include "QueryConfig.h"
-#include "SimpleGraph.h"
-#include "SystemAccessor.h"
-#include "SystemManager.h"
-#include "TuringDB.h"
-#include "dataframe/Dataframe.h"
-#include "versioning/Change.h"
-#include "versioning/ChangeID.h"
-#include "versioning/CommitHash.h"
-
-#include "IRTestRows.h"
-#include "TuringTest.h"
-#include "TuringTestEnv.h"
+#include "WriteQueryTest.h"
 
 using namespace db;
 using namespace turing::test;
@@ -31,111 +9,7 @@ using namespace turing::test;
 // WITH between them: the clauses that share a variable join on it, and the ones that share
 // nothing cross. simpledb holds 18 nodes - 8 Persons and 10 Interests - over 18 edges, 3
 // of them KNOWS_WELL and 15 INTERESTED_IN.
-class MultiMatchTest : public TuringTest {
-protected:
-    void initialize() override {
-        _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
-        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
-
-        SystemAccessor system = _env->getSystemManager().accessUnique();
-        Graph* graph = system.createGraph(_graphName);
-        SimpleGraph::createSimpleGraph(graph);
-    }
-
-    QueryStatus runQuery(std::string_view query, NLOutputSink* sink) {
-        QueryStatus status;
-        _interpreter->execute(status,
-                              query,
-                              _graphName,
-                              CommitHash::head(),
-                              ChangeID::head(),
-                              &_env->getMem(),
-                              sink);
-
-        return status;
-    }
-
-    void openChange(ChangeID& changeID) {
-        SystemAccessor system = _env->getSystemManager().accessUnique();
-        const auto res = system.newChange(_graphName);
-        ASSERT_TRUE(res);
-
-        changeID = res.value()->id();
-    }
-
-    // Runs a writing query in its own change and submits it, so a following read sees it
-    void applyWrite(std::string_view query) {
-        ChangeID changeID;
-        openChange(changeID);
-
-        NullSink sink;
-        QueryStatus status;
-        _interpreter->execute(status,
-                              query,
-                              _graphName,
-                              CommitHash::head(),
-                              changeID,
-                              &_env->getMem(),
-                              &sink);
-
-        ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
-
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData([](const Dataframe*) {});
-
-        const QueryState submitState(_graphName,
-                                     &_env->getMem(),
-                                     &_queryConfig,
-                                     &callbacks,
-                                     CommitHash::head(),
-                                     changeID);
-        const QueryStatus submitStatus = _env->getDB().query("CHANGE SUBMIT", submitState);
-        ASSERT_TRUE(submitStatus.isOk()) << "CHANGE SUBMIT failed";
-    }
-
-    void expectRows(std::string_view query, const Rows& expected) {
-        RowSink sink;
-        const QueryStatus status = runQuery(query, &sink);
-        ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
-
-        Rows actual;
-        sink.sortedRows(actual);
-
-        Rows sortedExpected = expected;
-        std::sort(sortedExpected.begin(), sortedExpected.end());
-
-        std::string actualText;
-        describeRows(actual, actualText);
-
-        EXPECT_EQ(actual, sortedExpected) << "query: " << query << "\ngot:\n" << actualText;
-    }
-
-    void expectRowsInOrder(std::string_view query, const Rows& expected) {
-        RowSink sink;
-        const QueryStatus status = runQuery(query, &sink);
-        ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
-
-        std::string actualText;
-        describeRows(sink.rows(), actualText);
-
-        EXPECT_EQ(sink.rows(), expected) << "query: " << query << "\ngot:\n" << actualText;
-    }
-
-    void expectCounts(std::string_view query, const Counts& expected) {
-        CountSink sink;
-        const QueryStatus status = runQuery(query, &sink);
-        ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
-
-        Counts actual;
-        sink.sortedCounts(actual);
-
-        EXPECT_EQ(actual, expected) << "query: " << query;
-    }
-
-    const std::string _graphName = "simpledb";
-    std::unique_ptr<TuringTestEnv> _env;
-    std::unique_ptr<QueryInterpreterV3> _interpreter;
-    QueryConfig _queryConfig;
+class MultiMatchTest : public WriteQueryTest {
 };
 
 // Two clauses sharing no variable and carrying no filter cross into every ordered pair of

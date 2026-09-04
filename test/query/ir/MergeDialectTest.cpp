@@ -70,18 +70,18 @@ func.func @main() {
 )mlir";
 
 // A hop between one bound end and one the pattern describes, carrying the bound
-// column past the merge
+// column past the merge. The bound end has no result pair: it comes back through the
+// carry set.
 constexpr const char* mergesAHopOntoABoundNode = R"mlir(
 func.func @main() {
   %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
   %tag = db.constant("x" : !storage.string)
-  %m, %m_pending, %b, %b_pending, %e, %e_pending, %created, %carried
+  %b, %b_pending, %e, %e_pending, %created, %carried
     = db.merge nodes [[], ["Tag"]] props [[], ["name"]]
                edges ["TAGGED"] props [["weight"]] dirs [forward]
                bound {%a} pending [] {} values {%tag} {%tag} carrying {%a}
     : (!db.column<!storage.node_id>, !db.column<!storage.string>, !db.column<!storage.string>, !db.column<!storage.node_id>)
       -> (!db.column<!storage.node_id>, !db.column<!storage.bool>,
-          !db.column<!storage.node_id>, !db.column<!storage.bool>,
           !db.column<!storage.edge_id>, !db.column<!storage.bool>,
           !db.column<!storage.bool>, !db.column<!storage.node_id>)
   db.output(%b) : !db.column<!storage.node_id>
@@ -109,10 +109,10 @@ func.func @main() {
 // through `bound`
 constexpr const char* mergesALabellessNodeWithNoBoundColumn = R"mlir(
 func.func @main() {
-  %n, %n_pending, %created = db.merge nodes [[]] props [[]]
-                                      edges [] props [] dirs []
-                                      bound {} pending [] {} values {} {} carrying {}
-    : () -> (!db.column<!storage.node_id>, !db.column<!storage.bool>, !db.column<!storage.bool>)
+  %created = db.merge nodes [[]] props [[]]
+                      edges [] props [] dirs []
+                      bound {} pending [] {} values {} {} carrying {}
+    : () -> (!db.column<!storage.bool>)
   return
 }
 )mlir";
@@ -148,15 +148,13 @@ constexpr const char* mergesTwoBoundNodesWithOutOfOrderPendingMasks = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %mask = db.check_label_constraint(%a, ["Person"]) : (!db.column<!storage.node_id>) -> !db.column<!storage.bool>
-  %n, %n_pending, %m, %m_pending, %e, %e_pending, %created
+  %e, %e_pending, %created
     = db.merge nodes [[], []] props [[], []]
                edges ["KNOWS"] props [[]] dirs [forward]
                bound {%a, %a} pending [1, 0] {%mask, %mask} values {} {} carrying {}
     : (!db.column<!storage.node_id>, !db.column<!storage.node_id>,
        !db.column<!storage.bool>, !db.column<!storage.bool>)
-      -> (!db.column<!storage.node_id>, !db.column<!storage.bool>,
-          !db.column<!storage.node_id>, !db.column<!storage.bool>,
-          !db.column<!storage.edge_id>, !db.column<!storage.bool>,
+      -> (!db.column<!storage.edge_id>, !db.column<!storage.bool>,
           !db.column<!storage.bool>)
   return
 }
