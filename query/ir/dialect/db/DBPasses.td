@@ -28,6 +28,11 @@ def FuseScanEdges : Pass<"fuse_scan_edges"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseEdgesByType : Pass<"fuse_edges_by_type"> {
+    let summary = "Fuse a directed hop and the edge-type filter over it into a by-type hop";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def TrimUnreadColumns : Pass<"trim_unread_columns"> {
     let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products and grouping ops";
     let dependentDialects = ["mlir::db::DB"];
