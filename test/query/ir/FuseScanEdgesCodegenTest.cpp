@@ -160,20 +160,20 @@ TEST_F(FuseScanEdgesCodegenTest, labelledEndpointKeepsItsNodeScan) {
     EXPECT_EQ(countOps<mlir::db::GetOutEdges>(*module), 1u);
 }
 
-// A relationship type compiles to a plain hop and a type check over its edge column, not
-// to a get_out_edges_by_type, so the hop fuses and the check narrows the edge scan.
-TEST_F(FuseScanEdgesCodegenTest, typedEdgeFusesAndKeepsItsTypeCheck) {
+// A relationship type compiles to a plain hop and a type check over its edge column, so the
+// hop fuses to an edge scan and the by-type scan fusion then folds the check into it.
+TEST_F(FuseScanEdgesCodegenTest, typedEdgeFusesIntoAByTypeEdgeScan) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (a)-[:KNOWS_WELL]->(b) RETURN a, b");
 
-    expectFusedToEdgeScan(*module);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::GetOutEdges>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::GetOutEdgesByType>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ScanEdges>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::CheckEdgeTypeConstraint>(*module), 0u);
 
-    llvm::SmallVector<mlir::db::ScanEdges> edgeScans = collect<mlir::db::ScanEdges>(*module);
+    llvm::SmallVector<mlir::db::ScanEdgesByType> edgeScans = collect<mlir::db::ScanEdgesByType>(*module);
     ASSERT_EQ(edgeScans.size(), 1u);
-
-    llvm::SmallVector<mlir::db::CheckEdgeTypeConstraint> checks = collect<mlir::db::CheckEdgeTypeConstraint>(*module);
-    ASSERT_EQ(checks.size(), 1u);
-    EXPECT_EQ(checks.front().getEdgeTypeIds(), edgeScans.front().getEtypes());
+    EXPECT_EQ(edgeScans.front().getEdgeType(), "KNOWS_WELL");
 }
 
 TEST_F(FuseScanEdgesCodegenTest, undirectedHopKeepsItsNodeScan) {

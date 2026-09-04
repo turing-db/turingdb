@@ -601,6 +601,33 @@ private:
     NLStmtContainer _stmts;
 };
 
+// nl.scan_edges_by_type loop data: the edge scan restricted to one type. Reuses
+// the plain edge scan's chunks, limit and body; adds the resolved EdgeTypeID the
+// ScanEdgesByTypeChunkWriter filters by. _matchable is false when the type name
+// was absent from the schema, so no edge can match and the loop emits no row -
+// the scan sibling of NLEdgeByTypeLoopData.
+class NLScanEdgesByTypeLoopData : public NLScanEdgesLoopData {
+public:
+    NLScanEdgesByTypeLoopData(ColumnNodeIDs* sources,
+                              ColumnEdgeIDs* edgeIDs,
+                              ColumnEdgeTypes* edgeTypes,
+                              ColumnNodeIDs* targets,
+                              EdgeTypeID edgeType,
+                              bool matchable)
+        : NLScanEdgesLoopData(sources, edgeIDs, edgeTypes, targets),
+        _edgeType(edgeType),
+        _matchable(matchable)
+    {
+    }
+
+    EdgeTypeID getEdgeType() const { return _edgeType; }
+    bool isMatchable() const { return _matchable; }
+
+private:
+    EdgeTypeID _edgeType;
+    bool _matchable {true};
+};
+
 // nl.get_out_edges and nl.get_in_edges loop data
 // The state is the same for get_out_edges/get_in_edges
 class NLEdgeLoopData : public NLFunctionData {

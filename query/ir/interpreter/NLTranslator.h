@@ -44,6 +44,7 @@ private:
         ScanNodesByLabel,
         ConstScanNodes,
         ScanEdges,
+        ScanEdgesByType,
         GetOutEdges,
         GetInEdges,
         GetEdges,
@@ -88,7 +89,7 @@ private:
         // resolved to a LabelSet as soon as the loop is translated.
         llvm::SmallVector<llvm::StringRef, 4> _labels;
 
-        // The edge type name a GetOutEdgesByType / GetInEdgesByType iterator
+        // The edge type name a ScanEdgesByType / GetOutEdgesByType / GetInEdgesByType iterator
         // filters by; empty for the other kinds. Like _labels, a view into the
         // op's interned StringAttr storage, which the MLIRContext keeps alive for
         // the whole translation; resolved to an EdgeTypeID when the loop is
@@ -270,6 +271,7 @@ private:
     // record the edge-scan loop statement in body. The edge sibling of
     // translateScanLoop - a source loop with no input chunk and no carry set.
     void translateScanEdgesLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
+    void translateScanEdgesByTypeLoop(const IteratorConfig& config, mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
 
     void translateEdgeLoop(const IteratorConfig& config,
                            mlir::Block& loopBody,

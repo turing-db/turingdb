@@ -29,6 +29,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSESCANBYNODEIDS
 #define GEN_PASS_DEF_FUSESCANEDGES
 #define GEN_PASS_DEF_FUSEEDGESBYTYPE
+#define GEN_PASS_DEF_FUSESCANEDGESBYTYPE
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
 #include "DBPasses.h.inc"
 
@@ -974,6 +975,117 @@ struct FuseEdgesByType : public impl::FuseEdgesByTypeBase<FuseEdgesByType> {
             }
 
             fuseEdgesByType(filter, typedHop, builder);
+        }
+    }
+};
+
+// An edge scan whose rows are then cut down to one edge type: the by-type scan spelled the
+// long way, since the scan itself can keep the edges of that type and never build the rows
+// the filter goes on to drop.
+struct TypedEdgeScan {
+    ScanEdges _scan;
+    CheckEdgeTypeConstraint _check;
+    StringAttr _edgeType;
+};
+
+bool matchTypedEdgeScan(FilterOp filter, TypedEdgeScan& typedScan) {
+    CheckEdgeTypeConstraint check = filter.getMask().getDefiningOp<CheckEdgeTypeConstraint>();
+    if (!check) {
+        return false;
+    }
+
+    const ArrayAttr edgeTypes = check.getEdgeTypes();
+    if (edgeTypes.size() != 1) {
+        return false;
+    }
+
+    StringAttr edgeType = dyn_cast<StringAttr>(edgeTypes[0]);
+    if (!edgeType) {
+        return false;
+    }
+
+    const Value edgeTypeIds = check.getEdgeTypeIds();
+    ScanEdges scan = edgeTypeIds.getDefiningOp<ScanEdges>();
+    if (!scan) {
+        return false;
+    }
+
+    if (edgeTypeIds != scan.getEtypes()) {
+        return false;
+    }
+
+    for (const Value column : filter.getColumnsToFilter()) {
+        if (column.getDefiningOp() != scan.getOperation()) {
+            return false;
+        }
+    }
+
+    Operation* const filterOp = filter.getOperation();
+    Operation* const checkOp = check.getOperation();
+    for (const Value result : scan->getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            const bool readsThePair = user == filterOp || user == checkOp;
+            if (!readsThePair) {
+                return false;
+            }
+        }
+    }
+
+    typedScan = TypedEdgeScan {._scan = scan, ._check = check, ._edgeType = edgeType};
+
+    return true;
+}
+
+void fuseScanEdgesByType(FilterOp filter, const TypedEdgeScan& typedScan, mlir::OpBuilder& builder) {
+    ScanEdges scan = typedScan._scan;
+    Operation* const scanOp = scan.getOperation();
+
+    builder.setInsertionPoint(scanOp);
+
+    // A by-type scan declares the same four results in the same order, so the plain scan's
+    // map onto it one for one.
+    ScanEdgesByType byTypeScan = builder.create<ScanEdgesByType>(scan.getLoc(),
+                                                                 scan.getSrcids().getType(),
+                                                                 scan.getEids().getType(),
+                                                                 scan.getEtypes().getType(),
+                                                                 scan.getTgtids().getType(),
+                                                                 typedScan._edgeType);
+
+    scanOp->replaceAllUsesWith(byTypeScan.getOperation());
+
+    const Operation::operand_range columns = filter.getColumnsToFilter();
+    const mlir::ResultRange filtered = filter.getFilteredColumns();
+    for (size_t index = 0; index < filtered.size(); index++) {
+        filtered[index].replaceAllUsesWith(columns[index]);
+    }
+
+    filter.erase();
+    eraseIfUnused(typedScan._check);
+    scanOp->erase();
+}
+
+struct FuseScanEdgesByType : public impl::FuseScanEdgesByTypeBase<FuseScanEdgesByType> {
+    void runOnOperation() override {
+        Operation* const root = getOperation();
+
+        // Collect first: fusing erases the filter, its check and its scan, which would
+        // invalidate the walk.
+        llvm::SmallVector<FilterOp> filters;
+        root->walk([&](FilterOp filter) {
+            TypedEdgeScan typedScan;
+            if (matchTypedEdgeScan(filter, typedScan)) {
+                filters.push_back(filter);
+            }
+        });
+
+        mlir::OpBuilder builder(&getContext());
+        for (FilterOp filter : filters) {
+            TypedEdgeScan typedScan;
+            if (!matchTypedEdgeScan(filter, typedScan)) {
+                continue;
+            }
+
+            fuseScanEdgesByType(filter, typedScan, builder);
         }
     }
 };
