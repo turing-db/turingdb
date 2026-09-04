@@ -53,6 +53,7 @@ add_subdirectory(mlir)
 add_subdirectory(query_bench)
 add_subdirectory(scan_bench)
 add_subdirectory(vardeps)
+add_subdirectory(match-brute-force)
 
 set (SCRIPT_LIST_CONTENT "")
 list (LENGTH SAMPLE_LIST SAMPLE_COUNT)
