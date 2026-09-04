@@ -441,7 +441,7 @@ def GetEdges : TuringOp<"get_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInt
 /**
 * GetOutEdgesByType
 */
-def GetOutEdgesByType : TuringOp<"get_out_edges_by_type", [Pure]> {
+def GetOutEdgesByType : TuringOp<"get_out_edges_by_type", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Fetch the out-edges of one edge type, filtering carried columns alongside";
 
   let description = [{
@@ -487,7 +487,7 @@ def GetOutEdgesByType : TuringOp<"get_out_edges_by_type", [Pure]> {
 /**
 * GetInEdgesByType
 */
-def GetInEdgesByType : TuringOp<"get_in_edges_by_type", [Pure]> {
+def GetInEdgesByType : TuringOp<"get_in_edges_by_type", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Fetch the in-edges of one edge type, filtering carried columns alongside";
 
   let description = [{
