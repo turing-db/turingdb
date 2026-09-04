@@ -187,9 +187,11 @@ TEST_F(FuseScanEdgesCodegenTest, undirectedHopKeepsItsNodeScan) {
 TEST_F(FuseScanEdgesCodegenTest, sourcePredicateSinksToTheScanAndKeepsIt) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (a)-->(b) WHERE a.name = 'Remy' RETURN a, b");
 
-    // The predicate sank onto a's scan, so the hop no longer expands the raw scan.
+    // The predicate sank onto a's scan and fused into it, so the hop expands the property
+    // scan rather than the raw one.
     EXPECT_EQ(countOps<mlir::db::ScanEdges>(*module), 0u);
-    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodesByPropertyValue>(*module), 1u);
     EXPECT_EQ(countOps<mlir::db::GetOutEdges>(*module), 1u);
 }
 

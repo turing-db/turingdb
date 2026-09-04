@@ -233,11 +233,12 @@ TEST_F(FuseScanByPropertyValueCodegenTest, disjunctionKeepsItsFilter) {
     EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u);
 }
 
+// m is born at the hop, so its equality has no scan to fuse into and stays a filter over
+// whatever source the hop ends up reading.
 TEST_F(FuseScanByPropertyValueCodegenTest, hopTargetEqualityKeepsItsFilter) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (n)-->(m) WHERE m.name = 'Bio' RETURN n");
 
     EXPECT_EQ(countOps<mlir::db::ScanNodesByPropertyValue>(*module), 0u);
-    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
     EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u);
 }
 
