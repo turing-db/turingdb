@@ -169,8 +169,8 @@ TEST_F(UnwindCollectSeedTest, theUnwoundNodeIsTheHopsInput) {
     });
     ASSERT_TRUE(unwind);
 
-    mlir::db::GetOutEdges hop;
-    module->walk([&hop](mlir::db::GetOutEdges found) {
+    mlir::db::GetOutEdgesByType hop;
+    module->walk([&hop](mlir::db::GetOutEdgesByType found) {
         hop = found;
     });
     ASSERT_TRUE(hop);

@@ -28,6 +28,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSEUNWINDEQUALITY
 #define GEN_PASS_DEF_FUSESCANBYNODEIDS
 #define GEN_PASS_DEF_FUSESCANEDGES
+#define GEN_PASS_DEF_FUSEEDGESBYTYPE
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
 #include "DBPasses.h.inc"
 
@@ -842,6 +843,137 @@ struct FuseScanEdges : public impl::FuseScanEdgesBase<FuseScanEdges> {
             }
 
             fuseScanEdges(hop, scan, builder);
+        }
+    }
+};
+
+// A directed hop whose rows are then cut down to one edge type: the by-type hop spelled the
+// long way, since the walk itself can keep the edges of that type and never build the rows
+// the filter goes on to drop.
+struct TypedHop {
+    Operation* _hop {nullptr};
+    CheckEdgeTypeConstraint _check;
+    StringAttr _edgeType;
+};
+
+bool matchTypedHop(FilterOp filter, TypedHop& typedHop) {
+    CheckEdgeTypeConstraint check = filter.getMask().getDefiningOp<CheckEdgeTypeConstraint>();
+    if (!check) {
+        return false;
+    }
+
+    // An edge carries exactly one type, so a single required type is an equality a hop can
+    // walk; several of them are a set match no one hop expresses.
+    const ArrayAttr edgeTypes = check.getEdgeTypes();
+    if (edgeTypes.size() != 1) {
+        return false;
+    }
+
+    StringAttr edgeType = dyn_cast<StringAttr>(edgeTypes[0]);
+    if (!edgeType) {
+        return false;
+    }
+
+    const Value edgeTypeIds = check.getEdgeTypeIds();
+    Operation* const hop = edgeTypeIds.getDefiningOp();
+    if (!hop || !isa<GetOutEdges, GetInEdges>(hop)) {
+        return false;
+    }
+
+    constexpr size_t etypesResultIndex = 2;
+    if (edgeTypeIds != hop->getResult(etypesResultIndex)) {
+        return false;
+    }
+
+    // Every column the filter cuts has to be one the hop bound, or the fused hop has nothing
+    // of its own to hand back in its place.
+    for (const Value column : filter.getColumnsToFilter()) {
+        if (column.getDefiningOp() != hop) {
+            return false;
+        }
+    }
+
+    // And nothing outside the pair may read the hop, or that reader would go on seeing the
+    // rows the type turns away.
+    for (const Value result : hop->getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            const bool readsThePair = user == filter.getOperation() || user == check.getOperation();
+            if (!readsThePair) {
+                return false;
+            }
+        }
+    }
+
+    typedHop = TypedHop {._hop = hop, ._check = check, ._edgeType = edgeType};
+
+    return true;
+}
+
+template <typename ByTypeOp>
+Operation* createByTypeHop(Operation* hop, StringAttr edgeType, mlir::OpBuilder& builder) {
+    const Operation::result_range results = hop->getResults();
+
+    ByTypeOp byTypeHop = builder.create<ByTypeOp>(hop->getLoc(),
+                                                  results[0].getType(),
+                                                  results[1].getType(),
+                                                  results[2].getType(),
+                                                  results[3].getType(),
+                                                  results.drop_front(hopFixedResultCount).getTypes(),
+                                                  hop->getOperand(0),
+                                                  edgeType,
+                                                  hop->getOperands().drop_front());
+
+    return byTypeHop.getOperation();
+}
+
+void fuseEdgesByType(FilterOp filter, const TypedHop& typedHop, mlir::OpBuilder& builder) {
+    Operation* const hop = typedHop._hop;
+
+    builder.setInsertionPoint(hop);
+
+    // A by-type hop declares the same four fixed results and the same carry set behind them,
+    // so the plain hop's results map onto it one for one.
+    Operation* const byTypeHop = isa<GetOutEdges>(hop)
+                                     ? createByTypeHop<GetOutEdgesByType>(hop, typedHop._edgeType, builder)
+                                     : createByTypeHop<GetInEdgesByType>(hop, typedHop._edgeType, builder);
+
+    hop->replaceAllUsesWith(byTypeHop);
+
+    // The hop now yields the rows the filter used to leave, so each column the filter handed
+    // on is the one it was given.
+    const Operation::operand_range columns = filter.getColumnsToFilter();
+    const mlir::ResultRange filtered = filter.getFilteredColumns();
+    for (size_t index = 0; index < filtered.size(); index++) {
+        filtered[index].replaceAllUsesWith(columns[index]);
+    }
+
+    filter.erase();
+    eraseIfUnused(typedHop._check);
+    hop->erase();
+}
+
+struct FuseEdgesByType : public impl::FuseEdgesByTypeBase<FuseEdgesByType> {
+    void runOnOperation() override {
+        Operation* const root = getOperation();
+
+        // Collect first: fusing erases the filter, its check and its hop, which would
+        // invalidate the walk.
+        llvm::SmallVector<FilterOp> filters;
+        root->walk([&](FilterOp filter) {
+            TypedHop typedHop;
+            if (matchTypedHop(filter, typedHop)) {
+                filters.push_back(filter);
+            }
+        });
+
+        mlir::OpBuilder builder(&getContext());
+        for (FilterOp filter : filters) {
+            TypedHop typedHop;
+            if (!matchTypedHop(filter, typedHop)) {
+                continue;
+            }
+
+            fuseEdgesByType(filter, typedHop, builder);
         }
     }
 };
