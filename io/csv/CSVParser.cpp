@@ -6,6 +6,11 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <span>
+#include <string>
+#include <vector>
+
 #include <spdlog/spdlog.h>
 
 #include "columns/ColumnStringTable.h"
@@ -66,6 +71,16 @@ void skipBOMInline(const char*& cursor, const char* end) {
         && static_cast<unsigned char>(cursor[1]) == 0xBB
         && static_cast<unsigned char>(cursor[2]) == 0xBF) {
         cursor += 3;
+    }
+}
+
+void markLastFieldReaders(std::span<const size_t> fieldIndices, std::vector<bool>& lastReaders) {
+    lastReaders.assign(fieldIndices.size(), true);
+
+    for (size_t column = 0; column + 1 < fieldIndices.size(); column++) {
+        const std::span<const size_t> laterColumns = fieldIndices.subspan(column + 1);
+
+        lastReaders[column] = std::ranges::find(laterColumns, fieldIndices[column]) == laterColumns.end();
     }
 }
 
@@ -445,6 +460,11 @@ size_t CSVParser::readChunk(size_t maxRows,
 
     output->clear();
 
+    // Two accesses to one field - row[0] beside row.name - resolve to the same index, so
+    // a column takes the field's characters only when no later column reads it too.
+    std::vector<bool> lastReaders;
+    markLastFieldReaders(fieldIndices, lastReaders);
+
     size_t rowsRead = 0;
 
     while (rowsRead < maxRows) {
@@ -456,7 +476,14 @@ size_t CSVParser::readChunk(size_t maxRows,
         }
 
         for (size_t i = 0; i < fieldIndices.size(); i++) {
-            output->getFieldColumn(i)->push_back(std::move(_fields[fieldIndices[i]]));
+            std::string& field = _fields[fieldIndices[i]];
+            ColumnStringTable::StringColumn* const column = output->getFieldColumn(i);
+
+            if (lastReaders[i]) {
+                column->push_back(std::move(field));
+            } else {
+                column->push_back(field);
+            }
         }
         rowsRead++;
     }
