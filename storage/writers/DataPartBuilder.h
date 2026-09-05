@@ -52,6 +52,15 @@ public:
                          T::Primitive value,
                          LabelSetHandle srcLblSet = {});
 
+    // A list arrives from the write buffer as its owning encoding rather than as a
+    // ListView, which only names elements the buffer that built it still owns.
+    void addNodeProperty(NodeID nodeID, PropertyTypeID ptID, const EncodedList& value);
+
+    void addEdgeProperty(const EdgeRecord& edge,
+                         PropertyTypeID ptID,
+                         const EncodedList& value,
+                         LabelSetHandle srcLblSet = {});
+
     const EdgeRecord& addEdge(EdgeTypeID typeID, NodeID srcID, NodeID tgtID);
 
     NodeID firstNodeID() const { return _firstNodeID; }

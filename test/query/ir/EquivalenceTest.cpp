@@ -137,6 +137,8 @@ std::string valueToString(const std::span<const float> value) {
     return result;
 }
 
+std::string valueToString(ListView view);
+
 template <typename T>
 std::string valueToString(const T& value) {
     return fmt::format("{}", value);

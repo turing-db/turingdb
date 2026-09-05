@@ -6,6 +6,9 @@
 
 #include "ID.h"
 #include "JsonlImportResult.h"
+#include "list/ListContainer.h"
+#include "list/ListView.h"
+#include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "versioning/ChangeAccessor.h"
 #include "versioning/CommitBuilder.h"
@@ -77,6 +80,39 @@ JsonlImportResult<void> tryFillEmbedding(const json& arr,
     return {};
 }
 
+// Copies a JSON array into @param lists as a list value, nested arrays and all. An element
+// with no list counterpart - an object - is stored as its JSON text, the fallback a
+// property of that shape already takes.
+ListView fillList(const json& array, ListContainer& lists) {
+    std::vector<ListContainer::ListItemVariant> elements;
+    elements.reserve(array.size());
+
+    // The views above name characters this owns, and the reservation keeps them put until
+    // the container copies them in.
+    std::vector<std::string> dumped;
+    dumped.reserve(array.size());
+
+    for (const json& element : array) {
+        if (element.is_array()) {
+            elements.push_back(fillList(element, lists));
+        } else if (element.is_null()) {
+            elements.push_back(PropertyNull {});
+        } else if (element.is_number_float()) {
+            elements.push_back(element.get<double>());
+        } else if (element.is_boolean()) {
+            elements.push_back(types::Bool::Primitive(element.get<bool>()));
+        } else if (element.is_number()) {
+            elements.push_back(element.get<int64_t>());
+        } else if (element.is_string()) {
+            elements.push_back(element.get<std::string_view>());
+        } else {
+            elements.push_back(types::String::Primitive {dumped.emplace_back(element.dump())});
+        }
+    }
+
+    return lists.insert(elements);
+}
+
 std::optional<size_t> tryGetEmbDim(std::string_view name,
                                    const json& value,
                                    const EmbeddingsSpec& embeddingSpecs) {
@@ -109,9 +145,16 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
     LabelSet labelset;
 
     std::vector<float> embBacking;
+    ListContainer listBacking;
 
     while (std::getline(stream, line)) {
         ++lineNumber;
+
+        // Each list the last line built has been copied into the datapart, so the scratch
+        // is released here rather than growing into a second copy of the whole file.
+        if (listBacking.size() > 0) {
+            listBacking.clear();
+        }
 
         // If empty line, skip
         if (line.empty()) {
@@ -178,6 +221,8 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                             vt = ValueType::Int64;
                         } else if (valueIsEmbedding) {
                             vt = ValueType::Embedding;
+                        } else if (value.is_array()) {
+                            vt = ValueType::List;
                         } else {
                             vt = ValueType::String;
                         }
@@ -204,6 +249,8 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                             }
 
                             builder.addNodeProperty<types::Embedding>(nodeID, pt._id, embBacking);
+                        } else if (value.is_array()) {
+                            builder.addNodeProperty<types::List>(nodeID, pt._id, fillList(value, listBacking));
                         } else {
                             builder.addNodeProperty<types::String>(nodeID, pt._id, value.dump());
                         }
@@ -279,6 +326,8 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                             vt = ValueType::Int64;
                         } else if (valueIsEmbedding) {
                             vt = ValueType::Embedding;
+                        } else if (value.is_array()) {
+                            vt = ValueType::List;
                         } else {
                             vt = ValueType::String;
                         }
@@ -305,6 +354,8 @@ JsonlImportResult<void> JsonlParser::parse(ChangeAccessor& change,
                             }
 
                             builder.addEdgeProperty<types::Embedding>(edge, pt._id, embBacking);
+                        } else if (value.is_array()) {
+                            builder.addEdgeProperty<types::List>(edge, pt._id, fillList(value, listBacking));
                         } else {
                             builder.addEdgeProperty<types::String>(edge, pt._id, value.dump());
                         }

@@ -25,4 +25,5 @@ BufferChunk<T, N>::~BufferChunk() {
 
 namespace db {
 template class BufferChunk<char>;
+template class BufferChunk<float>;
 }

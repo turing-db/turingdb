@@ -551,6 +551,9 @@ void asString(std::string& out, std::span<const float> embedding) {
 }
 
 void asString(std::string& out, const ListElementView v);
+
+// Forward declared so the generic and optional overloads below resolve a list to this
+// one, and so the ListElementView overload sees it: an element may be a list itself
 void asString(std::string& out, ListView lv);
 
 template <typename T>

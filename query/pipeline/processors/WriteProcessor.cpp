@@ -164,6 +164,29 @@ public:
         }
     }
 
+    /// Convert view to owning encoding; required as WriteBuffer outlives any one query
+    void operator()(const ColumnVector<ListView>* typed) {
+        _buf.clear();
+
+        for (const ListView val : *typed) {
+            _buf.emplace_back(_propID, types::List::OwningPrimitive(val));
+        }
+    }
+
+    /// Convert view to owning encoding; required as WriteBuffer outlives any one query
+    void operator()(const ColumnOptVector<ListView>* typed) {
+        _buf.clear();
+
+        for (const std::optional<ListView>& val : *typed) {
+            if (!val.has_value()) {
+                throw PipelineException(
+                    "Setting properties to NULL is not yet supported.");
+            }
+
+            _buf.emplace_back(_propID, types::List::OwningPrimitive(*val));
+        }
+    }
+
 private:
     CommitWriteBuffer::UntypedProperties& _buf;
     PropertyTypeID _propID;
@@ -209,6 +232,11 @@ public:
         const types::Embedding::Primitive span = typed->getRaw();
         const types::Embedding::OwningPrimitive vec(begin(span), end(span));
         _prop.value = vec;
+        _prop.propertyID = _propID;
+    }
+
+    void operator()(const ColumnConst<ListView>* typed) {
+        _prop.value = types::List::OwningPrimitive(typed->getRaw());
         _prop.propertyID = _propID;
     }
 

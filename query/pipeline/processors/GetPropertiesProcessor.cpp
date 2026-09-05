@@ -101,6 +101,7 @@ template class GetPropertiesProcessor<EntityType::Node, types::Double>;
 template class GetPropertiesProcessor<EntityType::Node, types::String>;
 template class GetPropertiesProcessor<EntityType::Node, types::Bool>;
 template class GetPropertiesProcessor<EntityType::Node, types::Embedding>;
+template class GetPropertiesProcessor<EntityType::Node, types::List>;
 
 template class GetPropertiesProcessor<EntityType::Edge, types::Int64>;
 template class GetPropertiesProcessor<EntityType::Edge, types::UInt64>;
@@ -108,5 +109,6 @@ template class GetPropertiesProcessor<EntityType::Edge, types::Double>;
 template class GetPropertiesProcessor<EntityType::Edge, types::String>;
 template class GetPropertiesProcessor<EntityType::Edge, types::Bool>;
 template class GetPropertiesProcessor<EntityType::Edge, types::Embedding>;
+template class GetPropertiesProcessor<EntityType::Edge, types::List>;
 
 }

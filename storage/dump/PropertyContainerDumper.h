@@ -276,4 +276,15 @@ private:
     fs::FilePageWriter& _writer;
 };
 
+class ListPropertyContainerDumper {
+public:
+    explicit ListPropertyContainerDumper(fs::FilePageWriter& writer);
+    ~ListPropertyContainerDumper();
+
+    [[nodiscard]] DumpResult<void> dump(const TypedPropertyContainer<types::List>& props);
+
+private:
+    fs::FilePageWriter& _writer;
+};
+
 }

@@ -18,6 +18,9 @@
 #include "TuringException.h"
 #include "comparators/GraphComparator.h"
 #include "datapart/EdgeRecord.h"
+#include "list/ListBufferTypeTag.h"
+#include "list/ListElementView.h"
+#include "list/ListView.h"
 #include "metadata/GraphMetadata.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
@@ -279,6 +282,40 @@ TEST_F(ParquetImporterTest, ImportsStringPropertySpanningManyPages) {
     std::ranges::sort(expected);
 
     ASSERT_EQ(names, expected);
+}
+
+// A repeated (LIST) property column: the values arrive flat with the repetition levels
+// that group them, and the property that lands is one list per row, named after the field
+// rather than after the leaf path Parquet nests it under.
+TEST_F(ParquetImporterTest, ImportsListProperty) {
+    constexpr std::string_view graphName = "listprop";
+
+    SystemAccessor system = _env->getSystemManager().accessUnique();
+    Graph* imported = importSplit(system,
+                                  graphName,
+                                  "list_property_nodes.parquet",
+                                  "minimal_edges.parquet");
+    ASSERT_NE(imported, nullptr);
+
+    const GraphReader reader = imported->openTransaction().readGraph();
+    const GraphMetadata& metadata = reader.getMetadata();
+
+    const auto tagsType = metadata.propTypes().get("tags");
+    ASSERT_TRUE(tagsType.has_value());
+    ASSERT_EQ(tagsType->_valueType, ValueType::List);
+
+    std::vector<std::vector<int64_t>> tags;
+    for (const ListView list : reader.scanNodeProperties<types::List>(tagsType->_id)) {
+        std::vector<int64_t>& elements = tags.emplace_back();
+        for (const ListElementView element : list) {
+            ASSERT_EQ(element.getTag(), ListBufferTypeTag::Int);
+            elements.push_back(element.getAs<int64_t>());
+        }
+    }
+    std::ranges::sort(tags);
+
+    const std::vector<std::vector<int64_t>> expected = {{1, 2}, {3}, {4, 5, 6}};
+    ASSERT_EQ(tags, expected);
 }
 
 int main(int argc, char** argv) {

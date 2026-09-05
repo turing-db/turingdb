@@ -17,9 +17,12 @@ set(storage_sources
         embedding/EmbeddingBucket.cpp
         embedding/EmbeddingContainer.cpp
 
+        list/EncodedList.cpp
         list/ListByteBuffer.cpp
         list/ListBuffer.cpp
+        list/ListContainer.cpp
         list/ListElementOrder.cpp
+        list/ListHash.cpp
         list/ListElementViewBuffer.cpp
         list/ListWriteCursor.cpp
 
@@ -138,7 +141,9 @@ set(storage_sources
         dump/StringIndexerDumper.cpp
         dump/StringIndexerLoader.cpp
         dump/EmbeddingPropertyContainerDumper.cpp
+        dump/ListPropertyContainerDumper.cpp
         dump/EmbeddingPropertyContainerLoader.cpp
+        dump/ListPropertyContainerLoader.cpp
         dump/CommitJournalDumper.cpp
         dump/CommitJournalLoader.cpp
         dump/CommitMetaDataDumper.cpp

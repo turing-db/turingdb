@@ -63,6 +63,11 @@ void PropertyManager::fillEntityPropertyView(EntityID entityID,
         fill(container, ptID);
     }
 
+    for (const auto& [ptID, rawContainer] : _lists) {
+        const auto& container = rawContainer->cast<types::List>();
+        fill(container, ptID);
+    }
+
 }
 
 const LabelSetPropertyIndexer* PropertyManager::tryGetIndexer(PropertyTypeID ptID) const {
