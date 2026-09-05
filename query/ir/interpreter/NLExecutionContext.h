@@ -2,6 +2,8 @@
 
 #include <stddef.h>
 
+#include <memory>
+
 namespace fs {
 class Path;
 }
@@ -16,6 +18,7 @@ class CommitWriteBuffer;
 class GraphView;
 class NLOutputSink;
 class NLSystemContext;
+class NLWrittenValues;
 
 // What every handler of a running NLProgram reads the world through: the graph it runs
 // against, where its rows go, and the change it writes into.
@@ -49,12 +52,16 @@ public:
     // manager, which the load reports as a user-facing error.
     const fs::Path* getDataDir() const;
 
+    // What the change has written so far, as a read later in the same program sees it
+    NLWrittenValues& getWrittenValues() const { return *_writtenValues; }
+
 private:
     const GraphView* _view {nullptr};
     NLOutputSink* _sink {nullptr};
     size_t _chunkSize {0};
     CommitWriteBuffer* _writeBuffer {nullptr};
     const NLSystemContext* _system {nullptr};
+    std::unique_ptr<NLWrittenValues> _writtenValues;
 };
 
 }

@@ -2679,7 +2679,10 @@ void DBLowering::lowerDeleteNode(mlir::db::DeleteNode deleteNode) {
     // The delete runs where its node chunk is live - the block that owns it.
     setInsertionInto(ownerBlock(inputChunk));
 
-    _builder.create<nl::DeleteNode>(loc, inputChunk, deleteNode.getDetach());
+    _builder.create<nl::DeleteNode>(loc,
+                                    inputChunk,
+                                    deleteNode.getDetach(),
+                                    mapOptionalMask(deleteNode.getPending()));
 }
 
 void DBLowering::lowerDeleteEdge(mlir::db::DeleteEdge deleteEdge) {
@@ -2688,7 +2691,7 @@ void DBLowering::lowerDeleteEdge(mlir::db::DeleteEdge deleteEdge) {
 
     setInsertionInto(ownerBlock(inputChunk));
 
-    _builder.create<nl::DeleteEdge>(loc, inputChunk);
+    _builder.create<nl::DeleteEdge>(loc, inputChunk, mapOptionalMask(deleteEdge.getPending()));
 }
 
 void DBLowering::lowerConstant(mlir::db::ConstantOp constant) {

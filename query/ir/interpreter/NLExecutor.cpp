@@ -57,6 +57,7 @@
 #include "NLProgram.h"
 #include "NLMergeExecutor.h"
 #include "NLWriteProperties.h"
+#include "NLWrittenValues.h"
 #include "NLMergeWorkingSet.h"
 #include "NLOutputSink.h"
 
@@ -2395,13 +2396,24 @@ bool writeTouchesRow(const ColumnMask* rows, size_t row) {
     return !rows || (*rows)[row];
 }
 
-// One property of an entity this change wrote and has not committed, read back out of
-// the write buffer. The value the pattern wrote is held as whatever type the row's own
-// column carried, so it is converted to the type the schema holds the property as -
-// which is the type of the column the fetch is filling.
+// A column of strings or embeddings borrows what it holds, and the change rewrites its
+// own values as the query runs, so those are copied where the column can outlive them
 template <typename T>
-std::optional<typename T::Primitive> readPendingProperty(const CommitWriteBuffer::UntypedProperties& properties,
-                                                         PropertyTypeID propertyTypeID) {
+const CommitWriteBuffer::SupportedTypeVariant& retainIfBorrowed(NLWrittenValues& written,
+                                                                const CommitWriteBuffer::SupportedTypeVariant& value) {
+    if constexpr (std::is_same_v<T, types::String> || std::is_same_v<T, types::Embedding>) {
+        return written.retain(value);
+    } else {
+        return value;
+    }
+}
+
+// One value this change wrote, as the column the fetch is filling holds it. The value is
+// held as whatever type the row's own column carried, so it is converted to the type the
+// schema holds the property as - which is the column's element type.
+template <typename T>
+std::optional<typename T::Primitive> readWrittenValue(NLWrittenValues& written,
+                                                      const CommitWriteBuffer::SupportedTypeVariant& value) {
     using Primitive = typename T::Primitive;
 
     const auto convert = [](const auto& held) -> std::optional<Primitive> {
@@ -2414,9 +2426,16 @@ std::optional<typename T::Primitive> readPendingProperty(const CommitWriteBuffer
         }
     };
 
+    return std::visit(convert, retainIfBorrowed<T>(written, value));
+}
+
+template <typename T>
+std::optional<typename T::Primitive> readPendingProperty(NLWrittenValues& written,
+                                                         const CommitWriteBuffer::UntypedProperties& properties,
+                                                         PropertyTypeID propertyTypeID) {
     for (const CommitWriteBuffer::UntypedProperty& property : properties) {
         if (property.propertyID == propertyTypeID) {
-            return std::visit(convert, property.value);
+            return readWrittenValue<T>(written, property.value);
         }
     }
 
@@ -2427,15 +2446,27 @@ std::optional<typename T::Primitive> readPendingProperty(const CommitWriteBuffer
 // indexed by what is left once the committed space is taken off
 template <typename ID, typename T>
 std::optional<typename T::Primitive> readPendingEntityProperty(CommitWriteBuffer* writeBuffer,
+                                                               NLWrittenValues& written,
                                                                const GraphView* view,
                                                                uint64_t id,
                                                                PropertyTypeID propertyTypeID) {
     if constexpr (std::is_same_v<ID, NodeID>) {
         const size_t offset = id - committedNodeCount(view);
-        return readPendingProperty<T>(writeBuffer->getPendingNode(offset).properties, propertyTypeID);
+        return readPendingProperty<T>(written, writeBuffer->getPendingNode(offset).properties, propertyTypeID);
     } else {
         const size_t offset = id - committedEdgeCount(view);
-        return readPendingProperty<T>(writeBuffer->getPendingEdge(offset).properties, propertyTypeID);
+        return readPendingProperty<T>(written, writeBuffer->getPendingEdge(offset).properties, propertyTypeID);
+    }
+}
+
+template <typename ID>
+const CommitWriteBuffer::SupportedTypeVariant* findEntityUpdate(const NLWrittenValues& written,
+                                                                ID id,
+                                                                PropertyTypeID propertyTypeID) {
+    if constexpr (std::is_same_v<ID, NodeID>) {
+        return written.findNodeUpdate(id, propertyTypeID);
+    } else {
+        return written.findEdgeUpdate(id, propertyTypeID);
     }
 }
 
@@ -2858,13 +2889,48 @@ void NLExecutor::runDeleteNode(NLExecutionContext* context, NLFunctionData* data
 
     const ColumnNodeIDs* nodes = deleteData->getInput();
     const GraphView* view = context->getView();
+    const ColumnMask* pending = deleteData->getPending();
+    const bool allPending = deleteData->isAllPending();
+    const bool detaching = deleteData->isDetaching();
 
-    if (deleteData->isDetaching()) {
-        writeBuffer->addDeletedNodes(nodes->getRaw());
-        writeBuffer->addHangingEdges(*view);
-    } else {
-        throwIfNodesHaveEdges(*view, nodes);
-        writeBuffer->addDeletedNodes(nodes->getRaw());
+    ColumnNodeIDs* committed = deleteData->getCommitted();
+    committed->clear();
+
+    const size_t firstPendingNodeID = committedNodeCount(view);
+
+    const auto& raw = nodes->getRaw();
+    bool droppedAPendingNode = false;
+
+    for (size_t row = 0; row < raw.size(); row++) {
+        if (!isPendingRow(pending, allPending, row)) {
+            committed->push_back(raw[row]);
+            continue;
+        }
+
+        const CommitWriteBuffer::PendingNodeOffset offset = raw[row].getValue() - firstPendingNodeID;
+
+        if (!detaching && writeBuffer->pendingNodeHasEdges(offset)) {
+            throw IRException("Cannot delete a node with relationships; use DETACH DELETE");
+        }
+
+        writeBuffer->addDeletedPendingNode(offset);
+        droppedAPendingNode = true;
+    }
+
+    if (!detaching) {
+        throwIfNodesHaveEdges(*view, committed);
+    }
+
+    writeBuffer->addDeletedNodes(committed->getRaw());
+
+    if (!detaching) {
+        return;
+    }
+
+    writeBuffer->addHangingEdges(*view);
+
+    if (droppedAPendingNode) {
+        writeBuffer->addHangingPendingEdges();
     }
 }
 
@@ -2874,7 +2940,24 @@ void NLExecutor::runDeleteEdge(NLExecutionContext* context, NLFunctionData* data
     bioassert(writeBuffer, "nl.delete_edge requires an active write transaction");
 
     const ColumnEdgeIDs* edges = deleteData->getInput();
-    writeBuffer->addDeletedEdges(edges->getRaw());
+    const ColumnMask* pending = deleteData->getPending();
+    const bool allPending = deleteData->isAllPending();
+
+    ColumnEdgeIDs* committed = deleteData->getCommitted();
+    committed->clear();
+
+    const size_t firstPendingEdgeID = committedEdgeCount(context->getView());
+
+    const auto& raw = edges->getRaw();
+    for (size_t row = 0; row < raw.size(); row++) {
+        if (isPendingRow(pending, allPending, row)) {
+            writeBuffer->addDeletedPendingEdge(raw[row].getValue() - firstPendingEdgeID);
+        } else {
+            committed->push_back(raw[row]);
+        }
+    }
+
+    writeBuffer->addDeletedEdges(committed->getRaw());
 }
 
 void NLExecutor::runScanNodesLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -5567,25 +5650,40 @@ void NLExecutor::runPropertyFetch(NLExecutionContext* context, NLFunctionData* d
     writer.setOutput(output);
     writer.fill(inputIDs->size());
 
-    // A pending row's ID is an offset into the write buffer, which the fetch above read
-    // as an ID of the graph: whatever it found belongs to another entity, so the value
-    // is read out of the write buffer instead - null there when the write set none.
+    // The fetch above read the graph, which holds this change's writes nowhere: a row
+    // whose entity the change wrote holds a write-buffer offset rather than an ID the
+    // graph knows, and a row it merely updated still reads the value from before.
     const ColumnMask* pending = fetchData->getPending();
-    if (!pending) {
+    CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
+
+    if (!writeBuffer) {
+        bioassert(!pending, "a property fetch over written entities requires an active write transaction");
         return;
     }
 
-    CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
-    bioassert(writeBuffer, "a property fetch over written entities requires an active write transaction");
+    NLWrittenValues& written = context->getWrittenValues();
+    written.indexUpdates(writeBuffer);
+
+    if (!pending && !written.hasUpdates()) {
+        return;
+    }
 
     auto& raw = output->getRaw();
     const auto& inputRaw = inputIDs->getRaw();
     for (size_t row = 0; row < raw.size(); row++) {
-        if ((*pending)[row]) {
+        if (pending && (*pending)[row]) {
             raw[row] = readPendingEntityProperty<ID, T>(writeBuffer,
+                                                        written,
                                                         &view,
                                                         inputRaw[row].getValue(),
                                                         propertyTypeID);
+            continue;
+        }
+
+        const CommitWriteBuffer::SupportedTypeVariant* update =
+            findEntityUpdate<ID>(written, inputRaw[row], propertyTypeID);
+        if (update) {
+            raw[row] = readWrittenValue<T>(written, *update);
         }
     }
 }

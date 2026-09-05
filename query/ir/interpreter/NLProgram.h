@@ -2573,8 +2573,9 @@ private:
 
 class NLDeleteNodeData : public NLFunctionData {
 public:
-    NLDeleteNodeData(const ColumnNodeIDs* input, bool detaching)
+    NLDeleteNodeData(const ColumnNodeIDs* input, bool detaching, ColumnNodeIDs* committed)
         : _input(input),
+        _committed(committed),
         _detaching(detaching)
     {
     }
@@ -2582,22 +2583,51 @@ public:
     const ColumnNodeIDs* getInput() const { return _input; }
     bool isDetaching() const { return _detaching; }
 
+    // The rows naming a node this change wrote and has not committed - a write-buffer
+    // offset rather than an ID the graph holds - or null when no row does. A column a
+    // create produced is such a row throughout, which is what _allPending says.
+    const ColumnMask* getPending() const { return _pending; }
+    void setPending(const ColumnMask* pending) { _pending = pending; }
+
+    bool isAllPending() const { return _allPending; }
+    void setAllPending(bool allPending) { _allPending = allPending; }
+
+    // The scratch the committed rows of a mixed column are gathered into, since the
+    // deletion of those goes through the graph's own IDs
+    ColumnNodeIDs* getCommitted() const { return _committed; }
+
 private:
     const ColumnNodeIDs* _input {nullptr};
+    const ColumnMask* _pending {nullptr};
+    ColumnNodeIDs* _committed {nullptr};
     bool _detaching {false};
+    bool _allPending {false};
 };
 
 class NLDeleteEdgeData : public NLFunctionData {
 public:
-    NLDeleteEdgeData(const ColumnEdgeIDs* input)
-        : _input(input)
+    NLDeleteEdgeData(const ColumnEdgeIDs* input, ColumnEdgeIDs* committed)
+        : _input(input),
+        _committed(committed)
     {
     }
+
+    // The edge siblings of NLDeleteNodeData's
+    const ColumnMask* getPending() const { return _pending; }
+    void setPending(const ColumnMask* pending) { _pending = pending; }
+
+    bool isAllPending() const { return _allPending; }
+    void setAllPending(bool allPending) { _allPending = allPending; }
+
+    ColumnEdgeIDs* getCommitted() const { return _committed; }
 
     const ColumnEdgeIDs* getInput() const { return _input; }
 
 private:
     const ColumnEdgeIDs* _input {nullptr};
+    const ColumnMask* _pending {nullptr};
+    ColumnEdgeIDs* _committed {nullptr};
+    bool _allPending {false};
 };
 
 // nl.output data

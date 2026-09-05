@@ -1578,12 +1578,16 @@ def DeleteNode : TuringOp<"delete_node"> {
     `detach` carries the DETACH keyword
 
       db.delete_node(%n) detach : (!db.column<!storage.node_id>) -> ()
+
+    `pending` is the mask a db.merge produced beside its node column: those rows
+    hold an offset into the change's write buffer rather than an ID the graph
+    knows, so the change drops the write instead of tombstoning an ID.
   }];
 
-  let arguments = (ins Column:$input_nodes, UnitAttr:$detach);
+  let arguments = (ins Column:$input_nodes, UnitAttr:$detach, Optional<Column>:$pending);
 
   let assemblyFormat = [{
-    `(` $input_nodes `)` (`detach` $detach^)? attr-dict `:`
+    `(` $input_nodes `)` (`detach` $detach^)? (`pending` $pending^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
@@ -1593,12 +1597,14 @@ def DeleteEdge : TuringOp<"delete_edge"> {
 
   let description = [{
       db.delete_edge(%e) : (!db.column<!storage.edge_id>) -> ()
+
+    `pending` is delete_node's mask, over edges.
   }];
 
-  let arguments = (ins Column:$input_edges);
+  let arguments = (ins Column:$input_edges, Optional<Column>:$pending);
 
   let assemblyFormat = [{
-    `(` $input_edges `)` attr-dict `:` functional-type(operands, results)
+    `(` $input_edges `)` (`pending` $pending^)? attr-dict `:` functional-type(operands, results)
   }];
 }
 

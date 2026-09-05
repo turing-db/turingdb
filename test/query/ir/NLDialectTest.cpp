@@ -875,7 +875,7 @@ TEST_F(NLDialectTest, verifierAcceptsDeleteNodeDetach) {
     mlir::Block& entryBlock = function.getBody().front();
     const mlir::Value chunk = entryBlock.getArgument(0);
 
-    mlir::nl::DeleteNode deleteNode = builder.create<mlir::nl::DeleteNode>(loc, chunk, /*detach=*/true);
+    mlir::nl::DeleteNode deleteNode = builder.create<mlir::nl::DeleteNode>(loc, chunk, /*detach=*/true, mlir::Value {});
     builder.create<mlir::func::ReturnOp>(loc);
 
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
@@ -894,7 +894,7 @@ TEST_F(NLDialectTest, verifierAcceptsDeleteNodeNoDetach) {
     mlir::Block& entryBlock = function.getBody().front();
     const mlir::Value chunk = entryBlock.getArgument(0);
 
-    mlir::nl::DeleteNode deleteNode = builder.create<mlir::nl::DeleteNode>(loc, chunk, /*detach=*/false);
+    mlir::nl::DeleteNode deleteNode = builder.create<mlir::nl::DeleteNode>(loc, chunk, /*detach=*/false, mlir::Value {});
     builder.create<mlir::func::ReturnOp>(loc);
 
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
@@ -914,7 +914,7 @@ TEST_F(NLDialectTest, verifierAcceptsDeleteEdge) {
     builder.setInsertionPointToStart(function.addEntryBlock());
     const mlir::Value edgeChunk = function.getBody().front().getArgument(0);
 
-    mlir::nl::DeleteEdge deleteEdge = builder.create<mlir::nl::DeleteEdge>(loc, edgeChunk);
+    mlir::nl::DeleteEdge deleteEdge = builder.create<mlir::nl::DeleteEdge>(loc, edgeChunk, mlir::Value {});
     builder.create<mlir::func::ReturnOp>(loc);
 
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));

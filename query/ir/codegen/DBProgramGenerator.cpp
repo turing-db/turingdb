@@ -3251,29 +3251,20 @@ void DBProgramGenerator::generateDeleteStmt(const DeleteStmt* deleteStmt) {
             throw TuringException("Cannot delete unbound variable: " + std::string(varName));
         }
 
-        // A write's rows hold provisional IDs this change has not committed and a
-        // tombstone names a committed ID: deleting them would tombstone whichever
-        // committed entity a provisional ID collides with
-        if (findPendingMask(decl)) {
-            throw TuringException(fmt::format("DELETE cannot take '{}': a MERGE in the same "
-                                              "query binds it, and what a MERGE writes is not "
-                                              "committed yet",
-                                              varName));
-        } else if (_part._createdEntities.contains(decl)) {
-            throw TuringException(fmt::format("DELETE cannot take '{}': a CREATE in the same "
-                                              "query writes it, and what a CREATE writes is not "
-                                              "committed yet",
-                                              varName));
-        }
+        // A merge's rows mix entities the graph holds with entities this change wrote,
+        // and the two are deleted differently: the mask says which is which. A CREATE's
+        // rows are provisional throughout and carry no mask, which the write buffer
+        // reads off the column the create produced.
+        const mlir::Value pending = findPendingMask(decl);
 
         const EvaluatedType entityType = decl->getType();
         const bool isNode = entityType == EvaluatedType::NodePattern;
         const bool isEdge = entityType == EvaluatedType::EdgePattern;
 
         if (isNode) {
-            _opBuilder.create<mlir::db::DeleteNode>(loc, entityColumn, detach);
+            _opBuilder.create<mlir::db::DeleteNode>(loc, entityColumn, detach, pending);
         } else if (isEdge) {
-            _opBuilder.create<mlir::db::DeleteEdge>(loc, entityColumn);
+            _opBuilder.create<mlir::db::DeleteEdge>(loc, entityColumn, pending);
         } else {
             throw TuringException("Can only delete nodes or edges");
         }

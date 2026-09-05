@@ -147,6 +147,7 @@ private:
 
     // Set of nl.create_node result SSA values
     llvm::DenseSet<mlir::Value> _pendingNodeValues;
+    llvm::DenseSet<mlir::Value> _pendingEdgeValues;
 
     // nl.limit handle SSA value -> the runtime counter it produces, so the loops,
     // nl.limit_update and nl.output that name the handle find the same counter

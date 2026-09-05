@@ -1354,6 +1354,14 @@ target_link_libraries(test_query_ir_create_return PRIVATE turing_ir_test_write_q
 add_turing_test(test_query_ir_create_chain CreateChainTest.cpp)
 target_link_libraries(test_query_ir_create_chain PRIVATE turing_ir_test_write_query_s)
 
+# DELETE of an entity the same query wrote, which the change holds as a pending write.
+add_turing_test(test_query_ir_delete_written DeleteWrittenTest.cpp)
+target_link_libraries(test_query_ir_delete_written PRIVATE turing_ir_test_write_query_s)
+
+# What a projection behind a SET reads back for the property it wrote.
+add_turing_test(test_query_ir_set_readback SetReadbackTest.cpp)
+target_link_libraries(test_query_ir_set_readback PRIVATE turing_ir_test_write_query_s)
+
 add_turing_test(test_query_ir_with_write WithWriteTest.cpp)
 target_link_libraries(test_query_ir_with_write PRIVATE turing_ir_test_write_query_s)
 
