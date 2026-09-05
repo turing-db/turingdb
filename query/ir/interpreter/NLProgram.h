@@ -736,7 +736,7 @@ public:
     PropertyTypeID getPropertyTypeID() const { return _propertyTypeID; }
 
     // The rows holding a write-buffer offset rather than an ID the graph knows, or null
-    // for an input no merge produced. Such a row reads null.
+    // for an input no merge produced. Such a row reads its value out of the write buffer.
     const ColumnMask* getPending() const { return _pending; }
     void setPending(const ColumnMask* pending) { _pending = pending; }
 

@@ -10,10 +10,9 @@ using namespace turing::test;
 class MergeFanOutTest : public WriteQueryTest {
 };
 
-// The value the first merge wrote for t.name is a column of the rows that reached it,
-// and the second merge fans those rows out over the eight Persons it binds: the
-// projection reads the property off that column, so it has to be re-indexed onto the
-// emitted rows along with t's own ID column
+// The second merge fans the rows the first emitted out over the eight Persons it binds,
+// and the projection reads t.name off the node column and the mask the first produced:
+// both have to be re-indexed onto the emitted rows for the read to land on t
 TEST_F(MergeFanOutTest, carriesAWrittenPropertyPastAMergeThatFansTheRowsOut) {
     const Rows remyPerPerson(8, Row {"Remy"});
 

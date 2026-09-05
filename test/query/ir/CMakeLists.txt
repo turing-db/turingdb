@@ -1338,8 +1338,21 @@ target_link_libraries(test_query_ir_merge_chain_match PRIVATE turing_ir_test_wri
 add_turing_test(test_query_ir_merge_key MergeKeyTest.cpp)
 target_link_libraries(test_query_ir_merge_key PRIVATE turing_ir_test_write_query_s)
 
+# Where a merge's rows read a property: off the graph for a row it bound, out of the
+# change for a row it wrote.
+add_turing_test(test_query_ir_merge_property_read MergePropertyReadTest.cpp)
+target_link_libraries(test_query_ir_merge_property_read PRIVATE turing_ir_test_write_query_s)
+
+# The relationship-isomorphism rule a merge chain binds under.
+add_turing_test(test_query_ir_merge_relationship_uniqueness MergeRelationshipUniquenessTest.cpp)
+target_link_libraries(test_query_ir_merge_relationship_uniqueness PRIVATE turing_ir_test_write_query_s)
+
 add_turing_test(test_query_ir_create_return CreateReturnTest.cpp)
 target_link_libraries(test_query_ir_create_return PRIVATE turing_ir_test_write_query_s)
+
+# The ends each hop of a CREATE chain is written between.
+add_turing_test(test_query_ir_create_chain CreateChainTest.cpp)
+target_link_libraries(test_query_ir_create_chain PRIVATE turing_ir_test_write_query_s)
 
 add_turing_test(test_query_ir_with_write WithWriteTest.cpp)
 target_link_libraries(test_query_ir_with_write PRIVATE turing_ir_test_write_query_s)

@@ -1,7 +1,10 @@
 set(ir_interpreter_sources
     NLProgram.cpp
     NLOutputSink.cpp
+    NLExecutionContext.cpp
+    NLWriteProperties.cpp
     NLExecutor.cpp
+    NLMergeExecutor.cpp
     NLMergeWorkingSet.cpp
     NLTranslator.cpp
     NLInterpreter.cpp

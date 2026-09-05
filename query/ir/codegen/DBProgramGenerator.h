@@ -363,13 +363,11 @@ private:
 
     static mlir::storage::EdgeDirection mergeDirectionOf(const EdgePattern* edgePattern);
 
-    // Records what a MERGE bound for one named entity of its pattern: the same as a
-    // CREATE, plus the mask telling the rows it wrote from the rows it bound
-    void publishMergedEntity(const VarDecl* decl,
-                             mlir::Value column,
-                             mlir::Value pending,
-                             llvm::ArrayRef<llvm::StringRef> propNames,
-                             llvm::ArrayRef<mlir::Value> propValues);
+    // Records what a MERGE bound for one named entity of its pattern: its column and the
+    // mask telling the rows it wrote from the rows it bound. Its properties are not
+    // recorded the way a CREATE's are - a merge row reads them where its own entity
+    // lives, off the graph or out of the write buffer.
+    void publishMergedEntity(const VarDecl* decl, mlir::Value column, mlir::Value pending);
 
     // The mask saying which of a variable's rows hold a provisional ID, or a null Value
     // for a variable no write bound and for one a CREATE bound - whose every row does

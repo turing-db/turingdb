@@ -579,8 +579,9 @@ def GetNodeProperties : TuringOp<"get_node_properties", [Pure]> {
 
     `pending`, when present, is the mask a db.merge produced beside its node
     column: those rows hold an offset into the change's write buffer rather than
-    an ID the graph knows, so their value reads null instead of whatever node the
-    offset would collide with.
+    an ID the graph knows, so their value is read out of that buffer instead of off
+    whatever node the offset would collide with - null there when the write set the
+    property on none of them.
 
       %v = db.get_node_properties(%n, "age") pending %mask
              : (!db.column<!storage.node_id>, !db.column<!storage.bool>) -> !db.column<none>
@@ -621,7 +622,7 @@ def GetEdgeProperties : TuringOp<"get_edge_properties", [Pure]> {
     property's value type is only resolved against the schema during lowering.
 
     `pending` is get_node_properties' mask, over edges: a row a db.merge wrote
-    holds a write-buffer offset, and its value reads null.
+    holds a write-buffer offset, and its value is read out of the write buffer.
   }];
 
   let arguments = (ins Column:$input_edges, StrAttr:$property, Optional<Column>:$pending);

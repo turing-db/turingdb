@@ -2608,11 +2608,11 @@ void DBProgramGenerator::publishCreatedEntity(const VarDecl* decl,
 
 void DBProgramGenerator::publishMergedEntity(const VarDecl* decl,
                                              mlir::Value column,
-                                             mlir::Value pending,
-                                             llvm::ArrayRef<llvm::StringRef> propNames,
-                                             llvm::ArrayRef<mlir::Value> propValues) {
-    publishCreatedEntity(decl, column, propNames, propValues);
-    _part._createdEntities[decl]._pending = pending;
+                                             mlir::Value pending) {
+    PartScope::CreatedEntity& merged = _part._createdEntities[decl];
+
+    merged._column = column;
+    merged._pending = pending;
 }
 
 mlir::Value DBProgramGenerator::findPendingMask(const VarDecl* decl) const {
@@ -2716,21 +2716,13 @@ void DBProgramGenerator::generateMergeStmt(const MergeStmt* mergeStmt) {
             continue;
         }
 
-        publishMergedEntity(node._decl,
-                            results[resultIndex],
-                            results[resultIndex + 1],
-                            node._propNames,
-                            node._propValues);
+        publishMergedEntity(node._decl, results[resultIndex], results[resultIndex + 1]);
         resultIndex += 2;
     }
 
     for (const MergeEntity& hop : pattern._hops) {
         if (hop._decl) {
-            publishMergedEntity(hop._decl,
-                                results[resultIndex],
-                                results[resultIndex + 1],
-                                hop._propNames,
-                                hop._propValues);
+            publishMergedEntity(hop._decl, results[resultIndex], results[resultIndex + 1]);
         }
 
         resultIndex += 2;
@@ -2874,12 +2866,12 @@ void DBProgramGenerator::collectMergeCarrySet(MergeCarrySet& carrySet) {
     // What an earlier CREATE or MERGE wrote is in flight too, and no VDG variable, so
     // collectInFlightColumns knows nothing of it: a merge that fans the rows out has to
     // take those columns along or they would stop matching the rows beside them. The
-    // value columns of the properties it recorded go along for the same reason - a
-    // projection reads a written property off them rather than off the graph.
+    // value columns of the properties a CREATE recorded go along for the same reason - a
+    // projection reads a created property off them rather than off the graph.
     for (const auto& [decl, written] : _part._createdEntities) {
-        if (!isRowAlignedHere(written._column)) {
-            continue;
-        }
+        bioassert(isRowAlignedHere(written._column),
+                  "MERGE cannot carry '{}' along: what wrote it holds another row set here",
+                  decl->getName());
 
         CarriedEntity carried;
         carried._decl = decl;
@@ -2887,10 +2879,16 @@ void DBProgramGenerator::collectMergeCarrySet(MergeCarrySet& carrySet) {
         for (const auto& [propName, propColumn] : written._properties) {
             // A constant holds one value standing for every row rather than rows of its
             // own, so the fan-out leaves it as it is
-            const bool carriesRows = isRowAlignedHere(propColumn) && !yieldsConstantColumn(propColumn);
-            if (carriesRows) {
-                carried._propNames.push_back(propName);
+            if (yieldsConstantColumn(propColumn)) {
+                continue;
             }
+
+            bioassert(isRowAlignedHere(propColumn),
+                      "MERGE cannot carry '{}.{}' along: what wrote it holds another row set here",
+                      decl->getName(),
+                      propName);
+
+            carried._propNames.push_back(propName);
         }
 
         std::ranges::sort(carried._propNames);
@@ -3055,6 +3053,7 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
         const auto* nodePtn = dynamic_cast<const NodePattern*>(entPtn);
         bioassert(nodePtn, "Unknown root entity");
 
+        const NodePattern* lhsNode = nodePtn;
         mlir::Value lhsValue = resolveOrCreateNode(nodePtn);
 
         for (auto [edge, targetNode] : element->getElementChain()) {
@@ -3077,8 +3076,8 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
             const std::string_view edgeType = edgeData->edgeTypeConstraints().front();
 
             const bool backward = edge->getDirection() == EdgePattern::Direction::Backward;
-            const NodePattern* srcNode = backward ? targetNode : nodePtn;
-            const NodePattern* tgtNode = backward ? nodePtn : targetNode;
+            const NodePattern* srcNode = backward ? targetNode : lhsNode;
+            const NodePattern* tgtNode = backward ? lhsNode : targetNode;
             const mlir::Value srcValue = backward ? rhsValue : lhsValue;
             const mlir::Value tgtValue = backward ? lhsValue : rhsValue;
 
@@ -3098,6 +3097,7 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
                 publishCreatedEntity(edgeDecl, createEdge.getResult(), propNames, propValues);
             }
 
+            lhsNode = targetNode;
             lhsValue = rhsValue;
         }
     }
@@ -4262,26 +4262,21 @@ mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propEx
         return fieldColumn;
     }
 
-    // A created entity holds a provisional ID, which the graph a fetch reads knows nothing
-    // about: the value of one of its properties is the one the CREATE wrote there, and
-    // every property it did not write is null
+    // Every row a CREATE wrote holds a provisional ID, which the graph a fetch reads knows
+    // nothing about: the value of one of its properties is the one the CREATE wrote there,
+    // and a property it did not write is null. A MERGE's rows are a mixture, so they go
+    // through the fetch below, which reads each row where its own entity lives.
     const auto createdIt = _part._createdEntities.find(entityDecl);
-    if (createdIt != end(_part._createdEntities)) {
+    const bool writtenByACreate = createdIt != end(_part._createdEntities) && !createdIt->second._pending;
+    if (writtenByACreate) {
         const auto& properties = createdIt->second._properties;
         const auto propertyIt = properties.find(propName);
 
-        // A property the write set is that value in every row: a MERGE's bound rows
-        // matched on it as much as its written rows carry it
         if (propertyIt != end(properties)) {
             return propertyIt->second;
         }
 
-        // Every row a CREATE wrote is provisional, so a property it did not write is
-        // null. A MERGE's rows are read off the graph instead, its provisional ones
-        // reading null there.
-        if (!createdIt->second._pending) {
-            return nullConstantColumn();
-        }
+        return nullConstantColumn();
     }
 
     const mlir::Value entityColumn = resolveEntityColumn(entityDecl);
