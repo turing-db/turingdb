@@ -13,8 +13,8 @@
 using namespace db;
 using namespace turing::test;
 
-// DELETE of an entity the same query wrote. The change holds it as a pending write
-// rather than as a committed ID, so deleting it is dropping that write.
+// DELETE beside the writes of the same query: of an entity the change holds as a pending
+// write rather than as a committed ID, and of one the query has given a relationship to.
 class DeleteWrittenTest : public WriteQueryTest {
 protected:
     void runQuery(std::string_view query, QueryStatus& status) {
@@ -76,6 +76,29 @@ TEST_F(DeleteWrittenTest, refusesToDeleteAJoinedNodeWithoutDetach) {
     EXPECT_FALSE(status.isOk()) << status.getError();
     EXPECT_NE(status.getError().find("DETACH DELETE"), std::string::npos)
         << "status: " << status.getError();
+}
+
+// The node is committed but the relationship hanging off it is not, and a relationship
+// is a relationship: the delete is refused the same way one on a committed edge is
+TEST_F(DeleteWrittenTest, refusesToDeleteACommittedNodeTheQueryJoinedWithoutDetach) {
+    expectWriteRowCount("CREATE (t:Tag {name: 'x'})", 0);
+
+    QueryStatus status;
+    runQuery("MATCH (t:Tag) CREATE (t)-[:LINKS]->(b:Tag {name: 'b'}) DELETE t", status);
+
+    EXPECT_FALSE(status.isOk()) << status.getError();
+    EXPECT_NE(status.getError().find("DETACH DELETE"), std::string::npos)
+        << "status: " << status.getError();
+}
+
+// With DETACH the same query drops the relationship it wrote along with the node
+TEST_F(DeleteWrittenTest, detachDeletesACommittedNodeTheQueryJoined) {
+    expectWriteRowCount("CREATE (t:Tag {name: 'x'})", 0);
+
+    expectWriteRowCount("MATCH (t:Tag) CREATE (t)-[:LINKS]->(b:Tag {name: 'b'}) DETACH DELETE t", 0);
+
+    expectRows("MATCH (t:Tag) RETURN t.name", {{"b"}});
+    expectRows("MATCH (a:Tag)-[:LINKS]->(b:Tag) RETURN a.name", {});
 }
 
 int main(int argc, char** argv) {

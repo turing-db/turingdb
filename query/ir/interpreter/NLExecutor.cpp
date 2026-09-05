@@ -2899,22 +2899,23 @@ void NLExecutor::runDeleteNode(NLExecutionContext* context, NLFunctionData* data
     const size_t firstPendingNodeID = committedNodeCount(view);
 
     const auto& raw = nodes->getRaw();
-    bool droppedAPendingNode = false;
 
     for (size_t row = 0; row < raw.size(); row++) {
-        if (!isPendingRow(pending, allPending, row)) {
-            committed->push_back(raw[row]);
-            continue;
-        }
+        const bool isPending = isPendingRow(pending, allPending, row);
+        const CommitWriteBuffer::ExistingOrPendingNode node =
+            resolveNode(nodes, row, isPending, firstPendingNodeID);
 
-        const CommitWriteBuffer::PendingNodeOffset offset = raw[row].getValue() - firstPendingNodeID;
-
-        if (!detaching && writeBuffer->pendingNodeHasEdges(offset)) {
+        // A relationship this query wrote counts as much as one the graph holds, whether
+        // it hangs off a node the query wrote or off one already committed
+        if (!detaching && writeBuffer->hasPendingEdgesOn(node)) {
             throw IRException("Cannot delete a node with relationships; use DETACH DELETE");
         }
 
-        writeBuffer->addDeletedPendingNode(offset);
-        droppedAPendingNode = true;
+        if (isPending) {
+            writeBuffer->addDeletedPendingNode(std::get<CommitWriteBuffer::PendingNodeOffset>(node));
+        } else {
+            committed->push_back(raw[row]);
+        }
     }
 
     if (!detaching) {
@@ -2928,10 +2929,7 @@ void NLExecutor::runDeleteNode(NLExecutionContext* context, NLFunctionData* data
     }
 
     writeBuffer->addHangingEdges(*view);
-
-    if (droppedAPendingNode) {
-        writeBuffer->addHangingPendingEdges();
-    }
+    writeBuffer->addHangingPendingEdges();
 }
 
 void NLExecutor::runDeleteEdge(NLExecutionContext* context, NLFunctionData* data) {

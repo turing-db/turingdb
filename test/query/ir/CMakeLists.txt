@@ -1358,6 +1358,10 @@ target_link_libraries(test_query_ir_create_chain PRIVATE turing_ir_test_write_qu
 add_turing_test(test_query_ir_delete_written DeleteWrittenTest.cpp)
 target_link_libraries(test_query_ir_delete_written PRIVATE turing_ir_test_write_query_s)
 
+# The pending edges a submit checks its ends for, and the deleted ones it must not.
+add_turing_test(test_query_ir_deleted_pending_edge_conflict DeletedPendingEdgeConflictTest.cpp)
+target_link_libraries(test_query_ir_deleted_pending_edge_conflict PRIVATE turing_ir_test_write_query_s)
+
 # What a projection behind a SET reads back for the property it wrote.
 add_turing_test(test_query_ir_set_readback SetReadbackTest.cpp)
 target_link_libraries(test_query_ir_set_readback PRIVATE turing_ir_test_write_query_s)
