@@ -93,6 +93,7 @@ const llvm::StringMap<llvm::StringRef> systemCommandSiblings = {
     {mlir::db::LoadEmbedding::getOperationName(),       nl::LoadEmbedding::getOperationName()},
     {mlir::db::CreatePropertyIndex::getOperationName(), nl::CreatePropertyIndex::getOperationName()},
     {mlir::db::DropIndex::getOperationName(),           nl::DropIndex::getOperationName()},
+    {mlir::db::Explain::getOperationName(),             nl::Explain::getOperationName()},
 };
 
 enum class ResultNullability {

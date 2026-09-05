@@ -171,4 +171,12 @@ module {
     nl.drop_index("byName")
     return
   }
+
+  func.func @explain() {
+    %stages, %dumps = nl.explain(["codegen", "db"], ["module {...}", "module {...}"])
+       : !nl.chunk<!storage.string>, !nl.chunk<!storage.string>
+    nl.output(%stages, %dumps) names ["stage", "dump"]
+       : !nl.chunk<!storage.string>, !nl.chunk<!storage.string>
+    return
+  }
 }

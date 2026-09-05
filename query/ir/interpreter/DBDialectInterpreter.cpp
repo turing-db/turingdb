@@ -4,6 +4,7 @@
 #include "mlir/IR/SymbolTable.h"
 
 #include "DBLowering.h"
+#include "ExplainReport.h"
 #include "NLProgram.h"
 #include "NLTranslator.h"
 #include "NLExecutor.h"
@@ -39,11 +40,7 @@ DBDialectInterpreter::~DBDialectInterpreter() {
 }
 
 DBDialectInterpreter::Status DBDialectInterpreter::run() {
-    // Get main function
-    const mlir::func::FuncOp dbFunction = _module.lookupSymbol<mlir::func::FuncOp>("main");
-    if (!dbFunction) {
-        throw IRException("db module has no 'main' function to interpret");
-    }
+    const mlir::func::FuncOp dbFunction = requireMain();
 
     mlir::MLIRContext* context = _module.getContext();
     mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(context));
@@ -57,14 +54,7 @@ DBDialectInterpreter::Status DBDialectInterpreter::run() {
     {
         const TimePoint start = Clock::now();
 
-        // The registry lives on the procedure context, which is also what the
-        // procedure's callbacks read at execution time, so a caller passes one object
-        // rather than a registry here and a context there.
-        const ProcedureManager* procedures = _procedureContext ? _procedureContext->getProcedures()
-                                                               : nullptr;
-
-        DBLowering lowering(context, _view, procedures);
-        nlFunction = lowering.lower(dbFunction, *nlModule);
+        nlFunction = lower(dbFunction, *nlModule);
 
         const TimePoint end = Clock::now();
         lowerMilliseconds = duration<Milliseconds>(start, end);
@@ -96,4 +86,38 @@ DBDialectInterpreter::Status DBDialectInterpreter::run() {
     }
 
     return Status(lowerMilliseconds, translateMilliseconds, executeMilliseconds);
+}
+
+void DBDialectInterpreter::explain(ExplainReport& report) {
+    if (!report.isRequested(ExplainStage::NL)) {
+        return;
+    }
+
+    mlir::MLIRContext* context = _module.getContext();
+    mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(context));
+
+    lower(requireMain(), *nlModule);
+
+    report.addModule(ExplainStage::NL, *nlModule);
+}
+
+mlir::func::FuncOp DBDialectInterpreter::requireMain() {
+    const mlir::func::FuncOp dbFunction = _module.lookupSymbol<mlir::func::FuncOp>("main");
+    if (!dbFunction) {
+        throw IRException("db module has no 'main' function to interpret");
+    }
+
+    return dbFunction;
+}
+
+mlir::func::FuncOp DBDialectInterpreter::lower(mlir::func::FuncOp dbFunction, mlir::ModuleOp nlModule) {
+    // The registry lives on the procedure context, which is also what the procedure's
+    // callbacks read at execution time, so a caller passes one object rather than a
+    // registry here and a context there.
+    const ProcedureManager* procedures = _procedureContext ? _procedureContext->getProcedures()
+                                                           : nullptr;
+
+    DBLowering lowering(_module.getContext(), _view, procedures);
+
+    return lowering.lower(dbFunction, nlModule);
 }

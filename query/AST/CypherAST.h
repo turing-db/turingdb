@@ -102,6 +102,7 @@ class DropIndexQuery;
 class MergeDataPartsQuery;
 class UnwindStmt;
 class WithStmt;
+class ExplainRequest;
 
 class CypherAST {
 public:
@@ -221,6 +222,12 @@ public:
     ProcedureLookup* getProcedureLookup() { return _procedureLookup.get(); }
     const ProcedureLookup* getProcedureLookup() const { return _procedureLookup.get(); }
 
+    // What the query's EXPLAIN prefix asks the engine to report, created by the first
+    // call. Null for a query carrying no prefix, which is what tells the engine to run
+    // it rather than explain it.
+    ExplainRequest& explainRequest();
+    const ExplainRequest* getExplainRequest() const { return _explainRequest.get(); }
+
 private:
     SourceManager* _sourceManager {nullptr};
     DiagnosticsManager* _diagnosticsManager {nullptr};
@@ -255,6 +262,7 @@ private:
 
     std::unique_ptr<FunctionDecls> _functionDecls;
     std::unique_ptr<ProcedureLookup> _procedureLookup;
+    std::unique_ptr<ExplainRequest> _explainRequest;
 
     void addSymbol(Symbol* symbol);
     void addSymbolChain(SymbolChain* symbol);

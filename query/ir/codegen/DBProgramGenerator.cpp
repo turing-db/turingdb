@@ -1,11 +1,15 @@
 #include "DBProgramGenerator.h"
 
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <optional>
+#include <sstream>
+#include <string>
 #include <string_view>
 #include <type_traits>
 #include <variant>
+#include <vector>
 
 #include "EntityPattern.h"
 #include "NodePattern.h"
@@ -20,6 +24,7 @@
 #include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
@@ -35,11 +40,13 @@
 #include "StorageEnums.h"
 #include "StorageTypes.h"
 #include "IRConstantColumn.h"
+#include "ExplainReport.h"
 
 #include "DependencyEdge.h"
 #include "EdgeMetadata.h"
 #include "VariableDependency.h"
 #include "VariableDependencyGraph.h"
+#include "VariableDependencyGraphDumper.h"
 
 #include "CypherAST.h"
 #include "FunctionInvocation.h"
@@ -107,6 +114,40 @@ namespace {
 // The name a VECTOR SEARCH gives the metric column; anything else it yields is the
 // neighbour ID column, the analyzer having rejected every other name.
 constexpr std::string_view vectorSearchScoreYield = "score";
+
+std::string_view toStringView(llvm::StringRef text) {
+    return std::string_view(text.data(), text.size());
+}
+
+using DBPassFactory = std::unique_ptr<mlir::Pass> (*)();
+
+// The optimisation pipeline every query runs through, in order. An EXPLAIN prefix
+// reporting on a pass walks the same table one pass at a time, which is what keeps the
+// pipeline it reports on and the pipeline that runs the same one.
+const std::array<DBPassFactory, 9> dbPassPipeline = {
+    &mlir::db::createFuseScanByLabel,
+    &mlir::db::createPushDownFilters,
+    &mlir::db::createFuseUnwindEquality,
+    &mlir::db::createFuseScanByNodeIDs,
+    &mlir::db::createFuseScanByPropertyValue,
+    &mlir::db::createFuseScanEdges,
+    &mlir::db::createFuseEdgesByType,
+    &mlir::db::createFuseScanEdgesByType,
+    &mlir::db::createTrimUnreadColumns,
+};
+
+// The stage a dump of one pass is reported under: "after fuse_scan_edges"
+void makePassLabel(std::string_view selector, std::string_view passName, std::string& label) {
+    label = selector;
+    label += passName;
+}
+
+void fillPipelinePassNames(std::vector<std::string_view>& passNames) {
+    for (const DBPassFactory factory : dbPassPipeline) {
+        const std::unique_ptr<mlir::Pass> pass = factory();
+        passNames.push_back(toStringView(pass->getArgument()));
+    }
+}
 
 using UnaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder,
                                              mlir::Location loc,
@@ -501,10 +542,11 @@ void collectProjectedCollects(const Projection* projection,
 
 }
 
-DBProgramGenerator::DBProgramGenerator(mlir::ModuleOp* mainModule)
+DBProgramGenerator::DBProgramGenerator(mlir::ModuleOp* mainModule, ExplainReport* explain)
     : _module(mainModule),
     _mlirCtxt(_module->getContext()),
-    _opBuilder(_module->getBodyRegion())
+    _opBuilder(_module->getBodyRegion()),
+    _explain(explain)
 {
 }
 
@@ -815,25 +857,33 @@ void DBProgramGenerator::walkEdge(const VariableDependency* src,
     }
 }
 
-void DBProgramGenerator::generate(const CypherAST* ast) {
+void DBProgramGenerator::createMain() {
     bioassert(_module, "Null module");
     bioassert(_mlirCtxt, "Null context");
 
     _mlirCtxt->loadDialect<mlir::db::DB>();
     _mlirCtxt->loadDialect<mlir::storage::Storage>();
     _mlirCtxt->loadDialect<mlir::func::FuncDialect>();
-    const mlir::Location uloc = _opBuilder.getUnknownLoc();
 
-    { // Create main
-        _opBuilder.setInsertionPointToEnd(_module->getBody());
-        const mlir::FunctionType funcType = mlir::FunctionType::get(_mlirCtxt, {}, {});
-        auto func = _opBuilder.create<mlir::func::FuncOp>(uloc, "main", funcType);
-        mlir::Block& block = *func.addEntryBlock();
-        _opBuilder.setInsertionPointToStart(&block);
-    }
+    _opBuilder.setInsertionPointToEnd(_module->getBody());
+
+    const mlir::FunctionType funcType = mlir::FunctionType::get(_mlirCtxt, {}, {});
+    auto func = _opBuilder.create<mlir::func::FuncOp>(_opBuilder.getUnknownLoc(), "main", funcType);
+    mlir::Block& block = *func.addEntryBlock();
+
+    _opBuilder.setInsertionPointToStart(&block);
+}
+
+void DBProgramGenerator::generate(const CypherAST* ast) {
+    createMain();
+
+    const mlir::Location uloc = _opBuilder.getUnknownLoc();
 
     if (generateSystemCommand(ast)) {
         _opBuilder.create<mlir::func::ReturnOp>(uloc);
+
+        explainModule(ExplainStage::CODEGEN);
+        explainModule(ExplainStage::DB);
         return;
     }
 
@@ -868,7 +918,58 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
 
     _opBuilder.create<mlir::func::ReturnOp>(uloc);
 
+    explainModule(ExplainStage::CODEGEN);
+
     runPasses();
+
+    explainModule(ExplainStage::DB);
+}
+
+void DBProgramGenerator::generateExplainResult(const ExplainReport& report) {
+    createMain();
+
+    const mlir::Location uloc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType stringColumn = allocColumnType(mlir::storage::StringType::get(_mlirCtxt));
+
+    const std::vector<std::string>& stages = report.getStages();
+    const std::vector<std::string>& dumps = report.getDumps();
+
+    const llvm::SmallVector<llvm::StringRef> stageNames(stages.begin(), stages.end());
+    const llvm::SmallVector<llvm::StringRef> stageDumps(dumps.begin(), dumps.end());
+
+    mlir::db::Explain explain = _opBuilder.create<mlir::db::Explain>(uloc,
+                                                                     stringColumn,
+                                                                     stringColumn,
+                                                                     _opBuilder.getStrArrayAttr(stageNames),
+                                                                     _opBuilder.getStrArrayAttr(stageDumps));
+
+    _opBuilder.create<mlir::db::Output>(uloc,
+                                        mlir::ValueRange {explain.getStages(), explain.getDumps()},
+                                        _opBuilder.getStrArrayAttr({"stage", "dump"}));
+
+    _opBuilder.create<mlir::func::ReturnOp>(uloc);
+}
+
+void DBProgramGenerator::explainModule(ExplainStage stage) {
+    if (!_explain) {
+        return;
+    }
+
+    _explain->addModule(stage, *_module);
+}
+
+void DBProgramGenerator::explainDependencyGraph() {
+    if (!_explain || !_explain->isRequested(ExplainStage::VDG)) {
+        return;
+    }
+
+    _explainedParts++;
+
+    std::ostringstream graph;
+    VariableDependencyGraphDumper::dumpMermaid(_vdg, graph);
+
+    const std::string label = "vdg " + std::to_string(_explainedParts);
+    _explain->addText(label, graph.str());
 }
 
 void DBProgramGenerator::generateQueryParts(const SinglePartQuery* query) {
@@ -936,6 +1037,8 @@ bool DBProgramGenerator::closesPartOnItsCut(const Stmt* stmt, std::span<Stmt* co
 void DBProgramGenerator::generatePart(std::span<Stmt* const> stmts) {
     _vdg.build(stmts);
 
+    explainDependencyGraph();
+
     generateLeadingYields(stmts);
     generateTraversal(stmts);
     throwOnUnboundPatternVariable();
@@ -959,20 +1062,92 @@ bool DBProgramGenerator::generateSystemCommand(const CypherAST* ast) {
 }
 
 void DBProgramGenerator::runPasses() {
+    if (explainsPasses()) {
+        runExplainedPasses();
+        return;
+    }
+
     mlir::PassManager passManager(_mlirCtxt);
-    passManager.addPass(mlir::db::createFuseScanByLabel());
-    passManager.addPass(mlir::db::createPushDownFilters());
-    passManager.addPass(mlir::db::createFuseUnwindEquality());
-    passManager.addPass(mlir::db::createFuseScanByNodeIDs());
-    passManager.addPass(mlir::db::createFuseScanByPropertyValue());
-    passManager.addPass(mlir::db::createFuseScanEdges());
-    passManager.addPass(mlir::db::createFuseEdgesByType());
-    passManager.addPass(mlir::db::createFuseScanEdgesByType());
-    passManager.addPass(mlir::db::createTrimUnreadColumns());
+    for (const DBPassFactory factory : dbPassPipeline) {
+        passManager.addPass(factory());
+    }
 
     if (mlir::failed(passManager.run(*_module))) {
         throw FatalException("DB pass pipeline failed");
     }
+}
+
+bool DBProgramGenerator::explainsPasses() const {
+    if (!_explain) {
+        return false;
+    }
+
+    return _explain->isRequested(ExplainStage::PASSES) || _explain->hasNamedPasses();
+}
+
+void DBProgramGenerator::runExplainedPasses() {
+    throwOnUnknownExplainPass();
+
+    const bool printsEveryPass = _explain->isRequested(ExplainStage::PASSES);
+
+    std::string module;
+    ExplainReport::renderModule(*_module, module);
+
+    for (const DBPassFactory factory : dbPassPipeline) {
+        std::unique_ptr<mlir::Pass> pass = factory();
+        const std::string_view passName = toStringView(pass->getArgument());
+
+        if (_explain->isPassPrintedBefore(passName)) {
+            std::string label;
+            makePassLabel("before ", passName, label);
+
+            _explain->addText(label, module);
+        }
+
+        mlir::PassManager passManager(_mlirCtxt);
+        passManager.addPass(std::move(pass));
+
+        if (mlir::failed(passManager.run(*_module))) {
+            throw FatalException("DB pass pipeline failed");
+        }
+
+        std::string rewritten;
+        ExplainReport::renderModule(*_module, rewritten);
+
+        const bool changedTheModule = rewritten != module;
+        if (_explain->isPassPrintedAfter(passName) || (printsEveryPass && changedTheModule)) {
+            std::string label;
+            makePassLabel("after ", passName, label);
+
+            _explain->addText(label, rewritten);
+        }
+
+        module = rewritten;
+    }
+}
+
+void DBProgramGenerator::throwOnUnknownExplainPass() const {
+    std::vector<std::string_view> pipelinePasses;
+    fillPipelinePassNames(pipelinePasses);
+
+    const std::string_view unknownPass = _explain->findUnknownPass(pipelinePasses);
+    if (unknownPass.empty()) {
+        return;
+    }
+
+    std::string message = "Unknown EXPLAIN pass '";
+    message += unknownPass;
+    message += "'. The pipeline runs: ";
+
+    for (size_t index = 0; index < pipelinePasses.size(); index++) {
+        if (index > 0) {
+            message += ", ";
+        }
+
+        message += pipelinePasses[index];
+    }
+
+    throw TuringException(std::move(message));
 }
 
 bool DBProgramGenerator::isValidRoot(const VariableDependency& var) const {

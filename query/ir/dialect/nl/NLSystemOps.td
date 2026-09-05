@@ -400,4 +400,26 @@ def DropIndex : NLSystemOp<"drop_index"> {
   let assemblyFormat = "`(` $index_name `)` attr-dict";
 }
 
+/**
+* Explain
+*/
+def Explain : NLSystemOp<"explain"> {
+  let summary = "Report the compilation stages an EXPLAIN prefix asked for";
+  let description = [{
+    Imperative counterpart of db.explain. Fills its two row-aligned chunks with
+    one row per dump the compilation of the explained query produced.
+
+      %stages, %dumps = nl.explain(["db"], ["module {...}"])
+        : !nl.chunk<!storage.string>, !nl.chunk<!storage.string>
+  }];
+
+  let arguments = (ins StrArrayAttr:$stage_names, StrArrayAttr:$stage_dumps);
+  let results   = (outs NLChunk:$stages, NLChunk:$dumps);
+
+  let assemblyFormat = [{
+    `(` $stage_names `,` $stage_dumps `)` attr-dict `:`
+    qualified(type($stages)) `,` qualified(type($dumps))
+  }];
+}
+
 #endif // TURINGDB_NL_SYSTEM_OPS

@@ -1,7 +1,8 @@
 
 set(common_sources
     CompilerException.cpp
-    CardinalityEstimation.cpp)
+    CardinalityEstimation.cpp
+    ExplainRequest.cpp)
 
 add_library(turing_db_query_common_s STATIC ${common_sources})
 

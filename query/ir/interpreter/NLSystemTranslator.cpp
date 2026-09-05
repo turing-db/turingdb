@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "llvm/ADT/StringRef.h"
 #include "mlir/IR/Attributes.h"
@@ -133,6 +134,21 @@ std::string_view importStatement(storage::GraphImportFormat format) {
     }
 
     throw IRException("Unhandled graph import format");
+}
+
+// The strings an op's array attribute holds, as views into the module that interned
+// them
+void fillStrings(mlir::ArrayAttr attribute, std::vector<std::string_view>& strings) {
+    strings.reserve(attribute.size());
+
+    for (const mlir::Attribute entry : attribute) {
+        const auto text = mlir::dyn_cast<mlir::StringAttr>(entry);
+        if (!text) {
+            throw IRException("A string array attribute must hold strings");
+        }
+
+        strings.push_back(toStringView(text.getValue()));
+    }
 }
 
 // The WITH EMBEDDINGS clause of a LOAD JSONL, as the importer takes it: one entry
@@ -287,6 +303,18 @@ bool NLSystemTranslator::translate(mlir::Operation& operation, NLStmtContainer* 
         NLDropIndexData* data =
             _program->allocFunctionData<NLDropIndexData>(toStringView(dropIndex.getIndexName()));
         body->emplaceStmt(&NLSystemExecutor::runDropIndex, data);
+    } else if (nl::Explain explain = mlir::dyn_cast<nl::Explain>(operation)) {
+        std::vector<std::string_view> stageNames;
+        std::vector<std::string_view> stageDumps;
+        fillStrings(explain.getStageNames(), stageNames);
+        fillStrings(explain.getStageDumps(), stageDumps);
+
+        NLExplainData* data =
+            _program->allocFunctionData<NLExplainData>(stageNames,
+                                                       stageDumps,
+                                                       allocResult<NLViewColumn>(explain.getStages()),
+                                                       allocResult<NLViewColumn>(explain.getDumps()));
+        body->emplaceStmt(&NLSystemExecutor::runExplain, data);
     } else {
         return false;
     }

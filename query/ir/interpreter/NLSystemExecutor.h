@@ -41,6 +41,8 @@ public:
 
     static void runCreatePropertyIndex(NLExecutionContext* context, NLFunctionData* data);
     static void runDropIndex(NLExecutionContext* context, NLFunctionData* data);
+
+    static void runExplain(NLExecutionContext* context, NLFunctionData* data);
 };
 
 }

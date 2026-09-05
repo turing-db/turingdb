@@ -640,3 +640,13 @@ void NLSystemExecutor::runDropIndex(NLExecutionContext* context, NLFunctionData*
 
     commitBuilder.writeBuffer().addDroppedIndex(*foundIt);
 }
+
+void NLSystemExecutor::runExplain(NLExecutionContext* context, NLFunctionData* data) {
+    const NLExplainData* command = static_cast<NLExplainData*>(data);
+
+    NLViewColumn* const stages = command->getStages();
+    NLViewColumn* const dumps = command->getDumps();
+
+    stages->getRaw() = command->getStageNames();
+    dumps->getRaw() = command->getStageDumps();
+}

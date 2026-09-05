@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "EmbeddingsSpec.h"
 #include "Path.h"
@@ -411,6 +412,34 @@ public:
 
 private:
     std::string_view _indexName;
+};
+
+// EXPLAIN: the dumps the compilation of the explained query produced, and the two
+// row-aligned columns they are reported in. The text is held by the module the command
+// was built into, which outlives the run, so it is emitted as views.
+class NLExplainData : public NLFunctionData {
+public:
+    NLExplainData(const std::vector<std::string_view>& stageNames,
+                  const std::vector<std::string_view>& stageDumps,
+                  NLViewColumn* stages,
+                  NLViewColumn* dumps)
+        : _stageNames(stageNames),
+        _stageDumps(stageDumps),
+        _stages(stages),
+        _dumps(dumps)
+    {
+    }
+
+    const std::vector<std::string_view>& getStageNames() const { return _stageNames; }
+    const std::vector<std::string_view>& getStageDumps() const { return _stageDumps; }
+    NLViewColumn* getStages() const { return _stages; }
+    NLViewColumn* getDumps() const { return _dumps; }
+
+private:
+    std::vector<std::string_view> _stageNames;
+    std::vector<std::string_view> _stageDumps;
+    NLViewColumn* _stages {nullptr};
+    NLViewColumn* _dumps {nullptr};
 };
 
 }

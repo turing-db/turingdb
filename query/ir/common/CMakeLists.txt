@@ -1,6 +1,7 @@
 
 set(ir_common_sources 
     IRModuleInspector.cpp
+    ExplainReport.cpp
     IRConstantColumn.cpp
     IRRowAlignment.cpp
     IRException.cpp)

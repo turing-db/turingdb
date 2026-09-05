@@ -31,6 +31,7 @@ target_link_libraries(turing_db_interpreter_v3_s
         turing_common_s
     PRIVATE
         turing_db_ir_dbdialect_s
+        turing_db_ir_common_s
         turing_db_ir_codegen_s
         turing_db_frontend_cypher_s
         turing_db_parser_s

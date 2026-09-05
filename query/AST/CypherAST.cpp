@@ -24,6 +24,7 @@
 #include "stmt/StmtContainer.h"
 #include "stmt/OrderByItem.h"
 #include "stmt/SetItem.h"
+#include "ExplainRequest.h"
 #include "QueryCommand.h"
 #include "decl/DeclContext.h"
 #include "decl/VarDecl.h"
@@ -38,6 +39,14 @@ CypherAST::CypherAST(const ProcedureManager* procedures,
     _functionDecls(std::make_unique<FunctionDecls>()),
     _procedureLookup(std::make_unique<ProcedureLookup>(procedures))
 {
+}
+
+ExplainRequest& CypherAST::explainRequest() {
+    if (!_explainRequest) {
+        _explainRequest = std::make_unique<ExplainRequest>();
+    }
+
+    return *_explainRequest;
 }
 
 CypherAST::~CypherAST() {
