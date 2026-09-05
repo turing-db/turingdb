@@ -24,6 +24,7 @@ add_mlir_library(turing_db_ir_storagedialect_s
   StorageTypes.cpp
   GroupAggregateKindsFormat.cpp
   ColumnIndicesFormat.cpp
+  PropertyScanLiteral.cpp
 
   DEPENDS
   StorageDialectIncGen
