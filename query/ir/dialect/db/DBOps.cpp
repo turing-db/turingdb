@@ -9,6 +9,7 @@
 #include "StorageEnums.h"
 #include "ColumnIndicesFormat.h"
 #include "GroupAggregateKindsFormat.h"
+#include "PropertyScanLiteral.h"
 
 using namespace mlir;
 using namespace mlir::db;
@@ -323,23 +324,14 @@ LogicalResult ScanNodesByLabel::verify() {
     return success();
 }
 
-bool mlir::db::isPropertyScanLiteral(TypedAttr literal) {
-    const Type type = literal.getType();
-    const bool isInteger = type.isSignlessInteger(64);
-    const bool isBool = type.isSignlessInteger(1);
-    const bool isDouble = type.isF64();
-    const bool isString = isa<storage::StringType>(type);
-
-    return isInteger || isBool || isDouble || isString;
-}
-
 LogicalResult ScanNodesByPropertyValue::verify() {
     if (getProperty().empty()) {
         return emitOpError("requires a non-empty property name");
     }
 
-    if (!isPropertyScanLiteral(getValue())) {
-        return emitOpError("requires an i64, f64, i1 or !storage.string literal, got ") << getValue().getType();
+    const TypedAttr literal = getValue();
+    if (!storage::isPropertyScanLiteral(literal)) {
+        return emitOpError(storage::propertyScanLiteralKinds()) << literal.getType();
     }
 
     const std::optional<ArrayAttr> labels = getLabels();

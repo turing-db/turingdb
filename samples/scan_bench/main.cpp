@@ -8,6 +8,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <argparse.hpp>
@@ -80,8 +81,8 @@ private:
     size_t _rowCount {0};
 };
 
-// Median of a copy-sorted vector of millisecond samples.
-double median(std::vector<double> samples) {
+// Median of a vector of millisecond samples, sorting it in place.
+double median(std::vector<double>& samples) {
     std::sort(samples.begin(), samples.end());
     const size_t count = samples.size();
 
@@ -94,11 +95,19 @@ double median(std::vector<double> samples) {
     }
 }
 
-// A double formatted to a fixed number of decimals, as a string.
-std::string formatFixed(double value, int decimals) {
+// Writes a double formatted to a fixed number of decimals.
+void formatFixed(std::string& text, double value, int decimals) {
     std::ostringstream stream;
     stream << std::fixed << std::setprecision(decimals) << value;
-    return stream.str();
+    text = stream.str();
+}
+
+// Appends a table cell holding a fixed-decimal value and an optional unit suffix.
+void appendFixed(std::vector<std::string>& row, double value, int decimals, std::string_view suffix = {}) {
+    std::string& cell = row.emplace_back();
+
+    formatFixed(cell, value, decimals);
+    cell.append(suffix);
 }
 
 // Prints a bordered ASCII table with auto-sized, left-aligned columns.
@@ -334,7 +343,9 @@ int main(int argc, char** argv) {
         const TimePoint buildStart = Clock::now();
         buildGraph(*graph, jobSystem, nodeCount, scoreID, ratioID);
         const double buildMilliseconds = duration<Milliseconds>(buildStart, Clock::now());
-        std::cout << "Built in " << formatFixed(buildMilliseconds / 1000.0, 2) << " s\n\n";
+        std::string buildSeconds;
+        formatFixed(buildSeconds, buildMilliseconds / 1000.0, 2);
+        std::cout << "Built in " << buildSeconds << " s\n\n";
 
         const FrozenCommitTx transaction = graph->openTransaction();
         const GraphReader reader = transaction.readGraph();
@@ -383,14 +394,13 @@ int main(int argc, char** argv) {
             const double fusedMilliseconds = median(fusedSamples);
             const double selectivity = static_cast<double>(fusedRows) / static_cast<double>(nodeCount);
 
-            endToEndRows.push_back({
-                std::to_string(needle),
-                formatFixed(100.0 * selectivity, 4) + "%",
-                std::to_string(unfusedRows) + (unfusedRows == fusedRows ? "" : " MISMATCH"),
-                formatFixed(unfusedMilliseconds, 2),
-                formatFixed(fusedMilliseconds, 2),
-                formatFixed(unfusedMilliseconds / fusedMilliseconds, 2) + "x",
-            });
+            std::vector<std::string>& endToEndRow = endToEndRows.emplace_back();
+            endToEndRow.push_back(std::to_string(needle));
+            appendFixed(endToEndRow, 100.0 * selectivity, 4, "%");
+            endToEndRow.push_back(std::to_string(unfusedRows) + (unfusedRows == fusedRows ? "" : " MISMATCH"));
+            appendFixed(endToEndRow, unfusedMilliseconds, 2);
+            appendFixed(endToEndRow, fusedMilliseconds, 2);
+            appendFixed(endToEndRow, unfusedMilliseconds / fusedMilliseconds, 2, "x");
 
             size_t scalarMatches = 0;
             size_t vectorisedMatches = 0;
@@ -425,18 +435,24 @@ int main(int argc, char** argv) {
 
             const bool denseAgrees = denseScoreRuns && denseMatches == vectorisedMatches;
 
-            kernelRows.push_back({
-                std::to_string(needle),
-                std::to_string(scalarMatches) + (scalarMatches == vectorisedMatches ? "" : " MISMATCH"),
-                formatFixed(scalarMilliseconds, 2),
-                formatFixed(vectorisedMilliseconds, 2),
-                formatFixed(scalarMilliseconds / vectorisedMilliseconds, 2) + "x",
-                denseAgrees ? formatFixed(denseMilliseconds, 2) : "n/a",
-                denseAgrees ? formatFixed(vectorisedMilliseconds / denseMilliseconds, 2) + "x" : "n/a",
-                formatFixed(doubleScalarMilliseconds, 2),
-                formatFixed(doubleVectorisedMilliseconds, 2),
-                formatFixed(doubleScalarMilliseconds / doubleVectorisedMilliseconds, 2) + "x",
-            });
+            std::vector<std::string>& kernelRow = kernelRows.emplace_back();
+            kernelRow.push_back(std::to_string(needle));
+            kernelRow.push_back(std::to_string(scalarMatches) + (scalarMatches == vectorisedMatches ? "" : " MISMATCH"));
+            appendFixed(kernelRow, scalarMilliseconds, 2);
+            appendFixed(kernelRow, vectorisedMilliseconds, 2);
+            appendFixed(kernelRow, scalarMilliseconds / vectorisedMilliseconds, 2, "x");
+
+            if (denseAgrees) {
+                appendFixed(kernelRow, denseMilliseconds, 2);
+                appendFixed(kernelRow, vectorisedMilliseconds / denseMilliseconds, 2, "x");
+            } else {
+                kernelRow.push_back("n/a");
+                kernelRow.push_back("n/a");
+            }
+
+            appendFixed(kernelRow, doubleScalarMilliseconds, 2);
+            appendFixed(kernelRow, doubleVectorisedMilliseconds, 2);
+            appendFixed(kernelRow, doubleScalarMilliseconds / doubleVectorisedMilliseconds, 2, "x");
         }
 
         std::cout << "==== MATCH (n) WHERE n.score = <needle> RETURN n, end to end through the interpreter ====\n";

@@ -74,6 +74,24 @@ TEST_F(ScanByPropertyValueV3Test, doubleEqualityIsRejectedBeforeTheScan) {
                            "Operands are not valid or compatible types");
 }
 
+// Two layers gate an inline constraint: constraintTypeCompatible rejects the pairings
+// propTypeCompatible rules out, and the equality the constraint is desugared into rejects
+// the one it lets through - an integer literal against a Double property. So no admitted
+// constraint reaches the fused scan with a literal of another kind.
+TEST_F(ScanByPropertyValueV3Test, inlineConstraintOfAnotherKindIsRejectedBeforeTheScan) {
+    runWrite("MATCH (n {name: 'Remy'}) SET n.height = 1.8");
+
+    const std::string_view incompatible = "Operands are not valid or compatible types";
+    const std::string_view unevaluable = "Cannot evaluate node property";
+
+    runQueryExpectingError("MATCH (n {height: 2}) RETURN n.name", incompatible);
+    runQueryExpectingError("MATCH (n {height: 1.8}) RETURN n.name", "Equality of types");
+    runQueryExpectingError("MATCH (n {age: 32.0}) RETURN n.name", unevaluable);
+    runQueryExpectingError("MATCH (n {name: 32}) RETURN n.name", unevaluable);
+
+    expectSortedRows("MATCH (n {age: 32}) RETURN n.name", {{"Adam"}, {"Remy"}});
+}
+
 TEST_F(ScanByPropertyValueV3Test, labelledScanKeepsOnlyTheLabelledNodes) {
     expectSortedRows("MATCH (n:Person) WHERE n.isFrench = false RETURN n.name",
                      {{"Cyrus"}, {"Doruk"}, {"Martina"}, {"Suhas"}});

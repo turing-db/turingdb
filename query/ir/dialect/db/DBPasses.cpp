@@ -16,6 +16,7 @@
 #include "llvm/ADT/SmallVector.h"
 
 #include "IRConstantColumn.h"
+#include "PropertyScanLiteral.h"
 #include "DBOps.h"
 
 #include "BioAssert.h"
@@ -554,7 +555,7 @@ EqOp matchSoleEquality(Value unwoundColumn, FilterOp& filter) {
     return equality;
 }
 
-std::optional<UnwindEqualityCross> matchUnwindEqualityCross(CrossProduct product) {
+bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) {
     Region& leftFactor = product.getLeftFactor();
     Region& rightFactor = product.getRightFactor();
 
@@ -563,17 +564,16 @@ std::optional<UnwindEqualityCross> matchUnwindEqualityCross(CrossProduct product
 
     // Two unwind factors have no relation between them to fold either into.
     if (static_cast<bool>(leftUnwind) == static_cast<bool>(rightUnwind)) {
-        return std::nullopt;
+        return false;
     }
 
-    UnwindEqualityCross match;
     match._product = product;
     match._unwind = leftUnwind ? leftUnwind : rightUnwind;
     match._relationFactor = leftUnwind ? &rightFactor : &leftFactor;
     match._unwindOnTheLeft = static_cast<bool>(leftUnwind);
 
     if (!elementsCompareDistinctly(match._unwind)) {
-        return std::nullopt;
+        return false;
     }
 
     // The results are the left factor's yielded columns followed by the right factor's, so
@@ -583,7 +583,7 @@ std::optional<UnwindEqualityCross> matchUnwindEqualityCross(CrossProduct product
 
     match._equality = matchSoleEquality(match._unwoundColumn, match._filter);
     if (!match._equality) {
-        return std::nullopt;
+        return false;
     }
 
     const Value lhs = match._equality.getLhs();
@@ -597,7 +597,7 @@ std::optional<UnwindEqualityCross> matchUnwindEqualityCross(CrossProduct product
                                     && comparedDef->getParentRegion() == product->getParentRegion();
 
     if (!survivesTheProduct) {
-        return std::nullopt;
+        return false;
     }
 
     // Codegen carries every column in flight, so the filter holding the elements does not
@@ -615,7 +615,7 @@ std::optional<UnwindEqualityCross> matchUnwindEqualityCross(CrossProduct product
         }
 
         if (holdsTheElements && !standsInForTheElements(match._comparedColumn)) {
-            return std::nullopt;
+            return false;
         }
 
         survivingColumns++;
@@ -624,10 +624,10 @@ std::optional<UnwindEqualityCross> matchUnwindEqualityCross(CrossProduct product
     // A filter of nothing cuts nothing, so the elements were all it carried and the rows
     // it kept are read from the relation directly.
     if (survivingColumns == 0) {
-        return std::nullopt;
+        return false;
     }
 
-    return match;
+    return true;
 }
 
 // Moves the relation factor's ops out to where the product stood and rewires the results
@@ -726,8 +726,9 @@ struct FuseUnwindEquality : public impl::FuseUnwindEqualityBase<FuseUnwindEquali
         // Collect matches first: fusing erases ops, which would invalidate the walk.
         llvm::SmallVector<UnwindEqualityCross> matches;
         root->walk([&matches](CrossProduct product) {
-            if (const std::optional<UnwindEqualityCross> match = matchUnwindEqualityCross(product)) {
-                matches.push_back(*match);
+            UnwindEqualityCross match;
+            if (matchUnwindEqualityCross(product, match)) {
+                matches.push_back(match);
             }
         });
 
@@ -1097,22 +1098,28 @@ struct CarrySetLayout {
     size_t _resultOffset {0};
 };
 
-std::optional<CarrySetLayout> carrySetLayout(Operation* op) {
+bool matchCarrySetLayout(Operation* op, CarrySetLayout& layout) {
     if (isEdgeHop(op)) {
-        return CarrySetLayout {._operandOffset = 1, ._resultOffset = hopFixedResultCount};
+        layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = hopFixedResultCount};
+        return true;
     } else if (isa<FilterOp>(op)) {
-        return CarrySetLayout {._operandOffset = 1, ._resultOffset = 0};
+        layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = 0};
+        return true;
     } else if (isa<Unwind>(op)) {
-        return CarrySetLayout {._operandOffset = 1, ._resultOffset = 1};
+        layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = 1};
+        return true;
     } else if (isa<Limit, Skip, Sort, GroupAggregate, Collect>(op)) {
-        return CarrySetLayout {._operandOffset = 0, ._resultOffset = 0};
+        layout = CarrySetLayout {._operandOffset = 0, ._resultOffset = 0};
+        return true;
     }
 
-    return std::nullopt;
+    return false;
 }
 
 bool trimsColumns(Operation* op) {
-    return carrySetLayout(op).has_value() || isa<CrossProduct>(op);
+    CarrySetLayout layout;
+
+    return matchCarrySetLayout(op, layout) || isa<CrossProduct>(op);
 }
 
 size_t carriedCount(Operation* op, const CarrySetLayout& layout) {
@@ -1392,7 +1399,9 @@ struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns>
                 continue;
             }
 
-            const CarrySetLayout layout = *carrySetLayout(op);
+            CarrySetLayout layout;
+            const bool carries = matchCarrySetLayout(op, layout);
+            bioassert(carries, "A trimming op that is not a cross product has a carry set");
 
             llvm::SmallVector<size_t> kept;
             selectKeptCarriedColumns(op, layout, kept);
@@ -1439,7 +1448,7 @@ bool matchPropertyEquality(EqOp equality, Value scanColumn, PropertyValueScanCha
     }
 
     const TypedAttr literal = dyn_cast<TypedAttr>(constant.getValue());
-    if (!literal || !isPropertyScanLiteral(literal)) {
+    if (!literal || !storage::isPropertyScanLiteral(literal)) {
         return false;
     }
 
