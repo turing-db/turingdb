@@ -2,6 +2,7 @@
 set(turingdb_sources
     TuringDBTool.cpp
     TuringShell.cpp
+    ShellTable.cpp
     LineNoiseHandle.cpp
     ProtectedLineNoiseSink.cpp
     StartCmd.cpp
@@ -18,7 +19,6 @@ target_link_libraries(turingdb PUBLIC
     turing_db_proto_client_s
     turing_db_interpreter_v3_s
     argparse
-    tabulate
     linenoise_s
     termcolor)
 

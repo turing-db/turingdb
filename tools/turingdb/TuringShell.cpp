@@ -13,7 +13,6 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/base_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
-#include <tabulate/table.hpp>
 #include <termcolor/termcolor.hpp>
 #include <range/v3/view/drop.hpp>
 
@@ -21,6 +20,7 @@
 #include "Graph.h"
 #include "SystemManager.h"
 #include "LineNoiseHandle.h"
+#include "ShellTable.h"
 #include "LocalMemory.h"
 
 #include "NLOutputSink.h"
@@ -592,64 +592,60 @@ void asString(std::string& out, const ListView lv) {
 }
 
 template <typename T>
-void tabulateWrite(tabulate::RowStream& rs, const T& value) {
+void writeValue(ShellTable& table, const T& value) {
     std::string out;
     asString(out, value);
-    rs << out;
+    table.addCell(out);
 }
 
-struct TabulateCell {
-    tabulate::RowStream& _rowStream;
+struct CellWriter {
+    ShellTable& _table;
     size_t _row {0};
 
     template <typename T>
     void operator()(const ColumnVector<T>* column) {
-        tabulateWrite(_rowStream, column->at(_row));
+        writeValue(_table, column->at(_row));
     }
 
     template <typename T>
     void operator()(const ColumnConst<T>* column) {
-        tabulateWrite(_rowStream, column->at(_row));
+        writeValue(_table, column->at(_row));
     }
 };
 
-void tabulateCell(tabulate::RowStream& rs, const Column* column, size_t row) {
-    TabulateCell cell(rs, row);
+void writeColumnCell(ShellTable& table, const Column* column, size_t row) {
+    CellWriter cell(table, row);
 
     using Dispatcher = ColumnSingleDispatcher<OutputtedTypes::Allowed,
-                                              TabulateCell,
+                                              CellWriter,
                                               OutputtedTypes::Excluded>;
 
     Dispatcher::dispatch(column, cell);
 }
 
-void queryCallback(size_t execCount, const Dataframe* df, tabulate::Table& table) {
+void queryCallback(size_t execCount, const Dataframe* df, ShellTable& table) {
     const size_t rowCount = df->getLogicalRowCount();
 
     if (execCount == 0) {
         // Write header row
-        tabulate::RowStream headerRow;
+        table.startRow();
         for (const NamedColumn* namedCol : df->cols()) {
             const std::string_view name = namedCol->getName();
             if (name.empty()) {
                 const ColumnTag tag = namedCol->getTag();
-                headerRow << "$" + std::to_string(tag.getValue());
+                table.addCell("$" + std::to_string(tag.getValue()));
             } else {
-                headerRow << name;
+                table.addCell(name);
             }
         }
-
-        table.add_row(std::move(headerRow));
     }
 
     // Write data rows
     for (size_t i = 0; i < rowCount; ++i) {
-        tabulate::RowStream rs;
+        table.startRow();
         for (const NamedColumn* namedCol : df->cols()) {
-            tabulateCell(rs, namedCol->getColumn(), i);
+            writeColumnCell(table, namedCol->getColumn(), i);
         }
-
-        table.add_row(std::move(rs));
     }
 }
 
@@ -669,14 +665,13 @@ public:
             return;
         }
 
-        tabulate::RowStream headerRow;
+        _table.startRow();
         std::string header;
         for (size_t columnIndex = 0; columnIndex < _columnNames.size(); columnIndex++) {
             columnHeader(header, columnIndex);
-            headerRow << header;
+            _table.addCell(header);
         }
 
-        _table.add_row(std::move(headerRow));
         _headerWritten = true;
     }
 
@@ -687,33 +682,31 @@ public:
         }
 
         if (!_headerWritten) {
-            tabulate::RowStream headerRow;
+            _table.startRow();
             std::string header;
             for (size_t columnIndex = 0; columnIndex < chunks.size(); columnIndex++) {
                 columnHeader(header, columnIndex);
-                headerRow << header;
+                _table.addCell(header);
             }
 
-            _table.add_row(std::move(headerRow));
             _headerWritten = true;
         }
 
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            tabulate::RowStream rs;
+            _table.startRow();
             for (const Column* col : chunks) {
-                tabulateCell(rs, col, rowIndex);
+                writeColumnCell(_table, col, rowIndex);
             }
 
-            _table.add_row(std::move(rs));
             _rowCount++;
         }
     }
 
-    tabulate::Table& getTable() { return _table; }
+    ShellTable& getTable() { return _table; }
     size_t getRowCount() const { return _rowCount; }
 
 private:
-    tabulate::Table _table;
+    ShellTable _table;
     std::vector<std::string> _columnNames;
     size_t _rowCount {0};
     bool _headerWritten {false};
@@ -758,7 +751,8 @@ void TuringShell::runMLIRQuery(std::string_view query) {
     }
 
     if (!_quiet) {
-        std::cout << sink.getTable() << "\n";
+        sink.getTable().print(std::cout);
+        std::cout << "\n";
     }
 
     std::cout << "Query returned " << sink.getRowCount() << " rows.\n";
@@ -817,7 +811,7 @@ void TuringShell::processLine(std::string& line) {
     }
 
     // Execute query
-    tabulate::Table table;
+    ShellTable table;
     size_t rowCount = 0;
 
     QueryStatus res;
@@ -876,7 +870,8 @@ void TuringShell::processLine(std::string& line) {
     }
 
     if (!_quiet) {
-        std::cout << table << "\n";
+        table.print(std::cout);
+        std::cout << "\n";
     }
 
     {
