@@ -149,6 +149,37 @@ void DataPartBuilder::addEdgeProperty<types::Embedding>(const EdgeRecord& edge,
     _edgeProperties->add<types::Embedding>(ptID, edge._edgeID.getValue(), value);
 }
 
+void DataPartBuilder::addNodeProperty(NodeID nodeID, PropertyTypeID ptID, const EncodedList& value) {
+    if (!_nodeProperties->hasPropertyType(ptID)) {
+        _nodeProperties->registerPropertyType<types::List>(ptID);
+    }
+
+    if (nodeID < _firstNodeID) {
+        _patchNodeLabelSets.emplace(nodeID, LabelSetHandle {});
+    }
+
+    _nodeProperties->add<types::List>(ptID, nodeID.getValue(), value);
+}
+
+void DataPartBuilder::addEdgeProperty(const EdgeRecord& edge,
+                                      PropertyTypeID ptID,
+                                      const EncodedList& value,
+                                      LabelSetHandle srcLblSet/*={}*/) {
+    if (!_edgeProperties->hasPropertyType(ptID)) {
+        _edgeProperties->registerPropertyType<types::List>(ptID);
+    }
+
+    if (edge._edgeID < _firstEdgeID) {
+        _patchedEdges.emplace(edge._edgeID, edge);
+    }
+
+    if (edge._nodeID < _firstNodeID) {
+        _patchNodeLabelSets.emplace(edge._nodeID, srcLblSet);
+    }
+
+    _edgeProperties->add<types::List>(ptID, edge._edgeID.getValue(), value);
+}
+
 template bool DataPartBuilder::hasProperty<types::Embedding>(NodeID id, PropertyTypeID pid);
 template bool DataPartBuilder::hasProperty<types::Embedding>(EdgeID id, PropertyTypeID pid);
 
@@ -168,3 +199,4 @@ INSTANTIATE(types::UInt64);
 INSTANTIATE(types::Double);
 INSTANTIATE(types::String);
 INSTANTIATE(types::Bool);
+INSTANTIATE(types::List);

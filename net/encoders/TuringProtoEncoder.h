@@ -322,6 +322,12 @@ public:
                 _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
                 _outBuf->copyVarLenData(val->data(), columnByteSize);
             }
+        } else if constexpr (db::IsListView<T>) {
+            // A row with no list still carries the [count][listByteSize] header, empty, so
+            // every row is the same shape on the wire and the mask alone says which is null.
+            for (const auto& val : *col) {
+                writeListView(val.has_value() ? *val : db::ListView {});
+            }
         } else if constexpr (db::IsEntityList<T>) {
             // EntityList is only used as ColumnVector<EntityList>, never optional.
             // sizeof(T) == 0 (never true) keeps the assert dependent on T so it only
@@ -411,6 +417,8 @@ public:
             const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(float));
             _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
             _outBuf->copyVarLenData(val.data(), columnByteSize);
+        } else if constexpr (db::IsListView<T>) {
+            writeListView(*opt);
         } else if constexpr (db::IsEntityList<T>) {
             // EntityList is only used as ColumnVector<EntityList>, never optional.
             // Dependent condition (see the ColumnOptVector<EntityList> branch above).

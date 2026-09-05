@@ -60,12 +60,7 @@ bool ParquetEdgeVisitor::onFileStart(const parquet::FileMetaData& metadata) {
 
             _edgetypeColIdx = columnIndex;
         } else {
-            const bool isListProperty = maxRepLevel >= 1;
-            if (isListProperty) {
-                throw TuringException(fmt::format(
-                    "List properties are not supported; properties must be scalar-valued (column: {}).", path));
-            }
-            discoverPropertyColumn(columnIndex, path, type, maxDefLevel);
+            discoverPropertyColumn(columnIndex, path, type, maxDefLevel, maxRepLevel);
         }
     }
 
@@ -96,7 +91,7 @@ bool ParquetEdgeVisitor::onLevels(size_t columnIndex,
                                   std::span<const int16_t> repLevels,
                                   std::span<const int16_t> defLevels) {
     if (_propertyColumns.contains(columnIndex)) {
-        capturePropertyLevels(columnIndex, defLevels);
+        capturePropertyLevels(columnIndex, repLevels, defLevels);
     }
     return true;
 }
@@ -178,6 +173,11 @@ void ParquetEdgeVisitor::applyEdgeProperties(size_t numRows) {
     bioassert(_chunkEdgeRecords.size() == numRows, "Edge count does not match chunk rows");
 
     for (const auto& [columnIndex, prop] : _propertyColumns) {
+        if (prop.valueType == ValueType::List) {
+            applyEdgeListProperty(columnIndex, prop, numRows);
+            continue;
+        }
+
         const auto defLevelsIt = _propDefLevels.find(columnIndex);
         // Non-optional columns do not have an entry
         const bool haveDefLevels = defLevelsIt != end(_propDefLevels);
@@ -212,6 +212,22 @@ void ParquetEdgeVisitor::applyEdgeProperties(size_t numRows) {
             addEdgeProperty(edgeRecord, prop, columnIndex, valueIndex);
             valueIndex++;
         }
+    }
+}
+
+void ParquetEdgeVisitor::applyEdgeListProperty(size_t columnIndex,
+                                               const PropertyColumn& prop,
+                                               size_t numRows) {
+    DataPartBuilder& builder = _builder->getCurrentBuilder();
+
+    buildListProperties(columnIndex, prop, numRows);
+
+    for (size_t row = 0; row < numRows; row++) {
+        if (!_chunkLists[row]) {
+            continue;
+        }
+
+        builder.addEdgeProperty<types::List>(_chunkEdgeRecords[row], prop.propertyTypeID, *_chunkLists[row]);
     }
 }
 
@@ -251,6 +267,9 @@ void ParquetEdgeVisitor::addEdgeProperty(const EdgeRecord& edge,
         }
         break;
 
+        // Handled by applyEdgeListProperty, which groups the repeated values into lists
+        // before any row reaches here
+        case ValueType::List:
         // ValueTypes that aren't represented in Parquet
         case ValueType::UInt64:
         case ValueType::Embedding:

@@ -8,6 +8,10 @@
 #include "ID.h"
 #include "SupportedType.h"
 
+#include "list/EncodedList.h"
+#include "list/ListHash.h"
+#include "list/ListView.h"
+
 #include "FatalException.h"
 
 namespace db {
@@ -20,6 +24,7 @@ enum class ValueType : uint8_t {
     String,
     Bool,
     Embedding,
+    List,
 
     _SIZE,
 };
@@ -31,7 +36,8 @@ using ValueTypeName = EnumToString<ValueType>::Create<
     EnumStringPair<ValueType::Double, "Double">,
     EnumStringPair<ValueType::String, "String">,
     EnumStringPair<ValueType::Bool, "Bool">,
-    EnumStringPair<ValueType::Embedding, "Embedding">>;
+    EnumStringPair<ValueType::Embedding, "Embedding">,
+    EnumStringPair<ValueType::List, "List">>;
 
 struct CustomBool {
     CustomBool() = default;
@@ -119,12 +125,21 @@ struct Embedding : public PropertyType {
     static constexpr auto _valueType = ValueType::Embedding;
 };
 
+struct List : public PropertyType {
+    using Primitive = ListView;
+    using OwningPrimitive = EncodedList;
+    using MandatorySpan = std::span<const Primitive>;
+    using OptionalSpan = std::span<const std::optional<Primitive>>;
+    static constexpr auto _valueType = ValueType::List;
+};
+
 }
 
 template <typename T>
 concept TrivialSupportedType = SupportedType<T>
     && !std::same_as<T, types::String>
-    && !std::same_as<T, types::Embedding>;
+    && !std::same_as<T, types::Embedding>
+    && !std::same_as<T, types::List>;
 
 enum class PropertyImportance : uint8_t {
     Mandatory = 0,
@@ -168,6 +183,9 @@ struct ValueTypeDispatcher {
             case ValueType::Embedding:
                 executor.template operator()<types::Embedding>();
             break;
+            case ValueType::List:
+                executor.template operator()<types::List>();
+            break;
             case ValueType::_SIZE:
             case ValueType::Invalid: {
                 throw FatalException("Unsupported property type");
@@ -191,6 +209,13 @@ struct std::hash<db::PropertyType> {
     std::size_t operator()(const db::PropertyType& pt) const noexcept {
         return std::hash<unsigned short> {}(pt._id.getValue())
              + std::hash<uint8_t> {}(static_cast<uint8_t>(pt._valueType));
+    }
+};
+
+template <>
+struct std::hash<db::ListView> {
+    std::size_t operator()(const db::ListView& list) const noexcept {
+        return db::hashList(list);
     }
 };
 

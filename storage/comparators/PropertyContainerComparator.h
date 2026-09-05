@@ -4,6 +4,7 @@
 
 #include <range/v3/view/zip.hpp>
 
+#include "list/ListElementOrder.h"
 #include "properties/PropertyContainer.h"
 
 namespace db {
@@ -122,6 +123,15 @@ public:
                     if (std::memcmp(viewsA[i].data(), viewsB[i].data(), dimension * sizeof(float)) != 0) {
                         return false;
                     }
+                }
+                break;
+            }
+
+            case ValueType::List: {
+                if (!TypedPropertyContainerComparator<types::List>::same(
+                        a->cast<types::List>(),
+                        b->cast<types::List>())) {
+                    return false;
                 }
                 break;
             }

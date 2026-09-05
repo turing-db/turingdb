@@ -180,6 +180,10 @@ mlir::Type valueTypeToElementType(mlir::OpBuilder& builder, ValueType valueType)
             return storage::EmbeddingType::get(builder.getContext());
         break;
 
+        case ValueType::List:
+            return storage::ListType::get(builder.getContext(), builder.getNoneType());
+        break;
+
         case ValueType::Invalid:
         case ValueType::_SIZE:
             throw IRException("Invalid property value type");
@@ -964,9 +968,15 @@ void DBLowering::lowerVectorSearch(mlir::db::VectorSearch vectorSearch) {
 }
 
 mlir::Type DBLowering::unwoundElementType(mlir::MLIRContext* context, mlir::Type sourceElement) {
+    // A list read out of a property rides a nullable chunk, the way every property value
+    // does; its elements are the list's all the same, and a row holding no list drains
+    // into no row rather than into a null.
+    const auto nullableType = mlir::dyn_cast<storage::NullableType>(sourceElement);
+    const mlir::Type unwrapped = nullableType ? nullableType.getValueType() : sourceElement;
+
     // Any source but a list keeps the column it already rides - its cells are the
     // elements, and a tagged cell holding a list gives up tagged scalars again.
-    const auto listType = mlir::dyn_cast<storage::ListType>(sourceElement);
+    const auto listType = mlir::dyn_cast<storage::ListType>(unwrapped);
     if (!listType) {
         return sourceElement;
     }

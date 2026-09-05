@@ -7,6 +7,7 @@
 #include <range/v3/view/zip.hpp>
 
 #include "embedding/EmbeddingContainer.h"
+#include "list/ListContainer.h"
 #include "StringContainer.h"
 #include "metadata/PropertyType.h"
 
@@ -22,6 +23,7 @@ class TrivialPropertyContainerLoader;
 
 class StringPropertyContainerLoader;
 class EmbeddingPropertyContainerLoader;
+class ListPropertyContainerLoader;
 
 class PropertyContainer {
 public:
@@ -322,6 +324,84 @@ private:
     friend DataPartMerger;
 
     EmbeddingContainer _values;
+    std::unordered_map<EntityID, size_t> _entityIndexMap;
+};
+
+template <>
+class TypedPropertyContainer<types::List> : public PropertyContainer {
+public:
+    TypedPropertyContainer()
+        : PropertyContainer(types::List::_valueType)
+    {
+    }
+
+    TypedPropertyContainer(const TypedPropertyContainer&) = delete;
+    TypedPropertyContainer(TypedPropertyContainer&&) noexcept = default;
+    TypedPropertyContainer& operator=(const TypedPropertyContainer&) = delete;
+    TypedPropertyContainer& operator=(TypedPropertyContainer&&) noexcept = default;
+    ~TypedPropertyContainer() override = default;
+
+    void add(EntityID entityID, ListView v) {
+        const size_t index = _values.size();
+        _values.alloc(v);
+        _ids.emplace_back(entityID);
+        _entityIndexMap[entityID] = index;
+    }
+
+    void add(EntityID entityID, const EncodedList& v) {
+        const size_t index = _values.size();
+        _values.append(v.decodeInto(_values));
+        _ids.emplace_back(entityID);
+        _entityIndexMap[entityID] = index;
+    }
+
+    bool has(EntityID entityID) const override {
+        return _entityIndexMap.contains(entityID);
+    }
+
+    types::List::Primitive get(EntityID entityID) const {
+        const auto it = _entityIndexMap.find(entityID);
+        return _values.getView(it->second);
+    }
+
+    types::List::Primitive get(size_t offset) const {
+        return _values.getView(offset);
+    }
+
+    const types::List::Primitive* tryGet(EntityID entityID) const {
+        const auto it = _entityIndexMap.find(entityID);
+        if (it == _entityIndexMap.end()) {
+            return nullptr;
+        }
+        const auto& views = _values.get();
+        return &views[it->second];
+    }
+
+    std::span<const types::List::Primitive> all() const {
+        const auto& views = _values.get();
+        return views;
+    }
+
+    std::span<const types::List::Primitive> getSpan(size_t first, size_t count) const {
+        const auto& views = _values.get();
+        return std::span {views}.subspan(first, count);
+    }
+
+    const ListContainer& getRawContainer() const {
+        return _values;
+    }
+
+    auto zipped() const { return ranges::views::zip(_ids, _values.get()); }
+
+    size_t size() const override { return _values.size(); }
+
+    void sort() override;
+
+private:
+    friend ListPropertyContainerLoader;
+    friend DataPartMerger;
+
+    ListContainer _values;
     std::unordered_map<EntityID, size_t> _entityIndexMap;
 };
 

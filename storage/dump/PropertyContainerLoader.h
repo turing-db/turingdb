@@ -294,4 +294,15 @@ private:
     fs::FilePageReader& _reader;
 };
 
+class ListPropertyContainerLoader {
+public:
+    explicit ListPropertyContainerLoader(fs::FilePageReader& reader);
+    ~ListPropertyContainerLoader();
+
+    [[nodiscard]] DumpResult<std::unique_ptr<PropertyContainer>> load();
+
+private:
+    fs::FilePageReader& _reader;
+};
+
 }

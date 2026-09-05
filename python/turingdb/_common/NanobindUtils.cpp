@@ -363,6 +363,20 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 dtypeName = "Embedding";
                 break;
             }
+            case db::ColumnOptVector<db::ListView>::staticKind(): {
+                const auto& src = static_cast<const db::ColumnOptVector<db::ListView>*>(col)->getRaw();
+                nb::list lst;
+                for (const std::optional<db::ListView>& listView : src) {
+                    if (!listView) {
+                        lst.append(nb::none());
+                    } else {
+                        lst.append(listVisitor.view(*listView));
+                    }
+                }
+                value = lst;
+                dtypeName = "List";
+                break;
+            }
 
             case db::ColumnConst<db::types::UInt64::Primitive>::staticKind(): {
                 const auto& v = static_cast<const db::ColumnConst<db::types::UInt64::Primitive>*>(col)->getRaw();

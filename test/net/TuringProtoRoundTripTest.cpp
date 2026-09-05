@@ -298,6 +298,77 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalStringColumnsAcrossChunkSizes) 
 // must split it. Asserts that at least 5 CHUNK packets were emitted (proves
 // the split actually happened) and that the full string round-trips to the
 // decoder side with no loss.
+// A property column of lists: every row carries a list header, so a null one is read and
+// reserved like any other and simply leaves its entry empty. Small chunk sizes force the
+// header and the elements of one row to land in different packets.
+TEST(TuringProtoRoundTripTest, RoundTripsOptionalListColumnsAcrossChunkSizes) {
+    using OptionalList = std::optional<db::ListView>;
+    using namespace std::string_view_literals;
+
+    for (const size_t chunkSize : std::array<size_t, 4> {48, 63, 95, 192}) {
+        SCOPED_TRACE(::testing::Message() << "chunkSize=" << chunkSize);
+
+        db::LocalMemory localMem;
+        db::DataframeManager dfMan;
+        db::Dataframe source;
+
+        std::vector<db::ListBuffer<>::ListItemVariant> firstItems;
+        firstItems.emplace_back(Int64 {1});
+        firstItems.emplace_back(StringView {"this element is deliberately long enough to cross chunk boundaries"sv});
+        const db::ListView first = localMem.listBuffer().insert(firstItems);
+
+        const std::vector<db::ListBuffer<>::ListItemVariant> emptyItems;
+        const db::ListView empty = localMem.listBuffer().insert(emptyItems);
+
+        std::vector<db::ListBuffer<>::ListItemVariant> lastItems;
+        lastItems.emplace_back(Int64 {7});
+        lastItems.emplace_back(Int64 {8});
+        const db::ListView last = localMem.listBuffer().insert(lastItems);
+
+        auto* tags = localMem.alloc<db::ColumnOptVector<db::ListView>>();
+        tags->push_back(OptionalList {first});
+        tags->push_back(std::nullopt);
+        tags->push_back(OptionalList {empty});
+        tags->push_back(OptionalList {last});
+        addColumn(&dfMan, &source, "tags", tags);
+
+        const auto packets = encodeDataframeWithChunkSize(source, chunkSize);
+        expectPacketSequence(packets, true);
+
+        net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<char> stringBuffer;
+        db::ListBuffer<> listBuffer;
+        db::Dataframe decoded;
+        std::vector<net::proto::DecodedColumnSchema> schemas;
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
+
+        ASSERT_EQ(decoded.cols().size(), 1u);
+        EXPECT_EQ(decoded.getLogicalRowCount(), 4u);
+
+        const auto* decodedTags = decoded.cols().at(0)->as<db::ColumnOptVector<db::ListView>>();
+        ASSERT_NE(decodedTags, nullptr);
+
+        const std::vector<OptionalList>& rows = decodedTags->getRaw();
+        ASSERT_EQ(rows.size(), 4u);
+
+        ASSERT_TRUE(rows[0].has_value());
+        ASSERT_EQ(rows[0]->size(), 2u);
+        EXPECT_EQ(rows[0]->front().getAs<Int64>(), 1);
+        EXPECT_EQ(rows[0]->back().getAs<StringView>(),
+                  "this element is deliberately long enough to cross chunk boundaries"sv);
+
+        EXPECT_FALSE(rows[1].has_value());
+
+        ASSERT_TRUE(rows[2].has_value());
+        EXPECT_EQ(rows[2]->size(), 0u);
+
+        ASSERT_TRUE(rows[3].has_value());
+        ASSERT_EQ(rows[3]->size(), 2u);
+        EXPECT_EQ(rows[3]->front().getAs<Int64>(), 7);
+        EXPECT_EQ(rows[3]->back().getAs<Int64>(), 8);
+    }
+}
+
 TEST(TuringProtoRoundTripTest, RoundTripsHugeStringsAcrossMultipleBuffers) {
     for (const size_t chunkSize : std::array<size_t, 2> {64, 96}) {
         SCOPED_TRACE(::testing::Message() << "chunkSize=" << chunkSize);

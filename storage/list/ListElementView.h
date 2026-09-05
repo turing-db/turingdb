@@ -7,10 +7,6 @@
 
 #include "ListBufferTypeTag.h"
 
-#include "metadata/PropertyType.h"
-
-#include "FatalException.h"
-
 namespace db {
 
 /**

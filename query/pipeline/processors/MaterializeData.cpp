@@ -116,3 +116,4 @@ INSTANTIATE(ColumnOptVector<types::Double::Primitive>);
 INSTANTIATE(ColumnOptVector<types::String::Primitive>);
 INSTANTIATE(ColumnOptVector<types::Bool::Primitive>);
 INSTANTIATE(ColumnOptVector<types::Embedding::Primitive>);
+INSTANTIATE(ColumnOptVector<ListView>);

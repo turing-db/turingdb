@@ -78,7 +78,7 @@ These are structural properties of the graph model, not validation rules layered
 
 - **Every node has at least one label.** An empty label set is not representable; there is no "unlabeled node". An import file with a node whose label list is empty/null is malformed input, not a node to be created label-less.
 - **Every edge has exactly one edge type.** A null/empty edge type is not representable; an edge cannot exist without a type. A null `__type` in an import file is malformed input.
-- **Properties are scalar-valued; there is no list/array property container.** Property values are single scalars (see `ValueType`: Int64, Double, Bool, String, …). **Lists exist only in the query language**, never as a stored node/edge property. A LIST-typed column in an import file is unsupported input, not a property to ingest.
+- **A property value is a scalar or a list.** The scalar types are `ValueType`'s Int64, UInt64, Double, Bool, String and Embedding; `ValueType::List` is the list one, held by `TypedPropertyContainer<types::List>` over a `ListContainer` that owns its elements (see `docs/lists.md`). A stored list may be heterogeneous and may hold nested lists, so a LIST-typed column in an import file is a property to ingest, not unsupported input. There is still no map/struct property type.
 
 ### Server (`server/`, `net/`)
 - Single TCP listener with two response strategies selected at startup by `USE_TURING_PROTO`:

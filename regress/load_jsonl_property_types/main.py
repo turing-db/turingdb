@@ -17,13 +17,13 @@ def test_property_types(client: turingdb.TuringDB) -> None:
     result = result.sort_values("propertyType").reset_index(drop=True)
 
     expected = {
-        "arrProp": "String",    # homogeneous array, turned to string
+        "arrProp": "List",      # homogeneous array, stored as a list
         "boolProp": "Bool",
         "embProp": "Embedding", # integer array, specified as embedding, parsed as embedding
         "floatProp": "Double",
-        "intArrProp": "String", # integer array, not specified as embedding, turned to string
+        "intArrProp": "List",   # integer array, not specified as embedding, stored as a list
         "intProp": "Int64",
-        "mixedArrProp": "String", # hetereogeneous array, turned to string
+        "mixedArrProp": "List", # heterogeneous array, stored as a list
         "mixedNumEmbProp": "Embedding", # mixed float/int array, specified as embedding
         "strProp": "String",
     }
@@ -38,6 +38,25 @@ def test_property_types(client: turingdb.TuringDB) -> None:
             f"Type mismatch for '{name}': expected {expected[name]}, got {row['valueType']}"
 
     print("* test_property_types: PASSED")
+
+
+def test_list_property_values(client: turingdb.TuringDB) -> None:
+    client.set_graph(GRAPH_NAME)
+
+    result = client.query("MATCH (n:TypeTest) RETURN n.strProp, n.intArrProp, n.mixedArrProp")
+    print(f"List property values:\n{result}")
+
+    rows = {row["n.strProp"]: (row["n.intArrProp"], row["n.mixedArrProp"])
+            for _, row in result.iterrows()}
+
+    expected = {
+        "hello": ([10, 20, 30], [1, "foo"]),
+        "world": ([40, 50, 60], [2, "baz"]),
+    }
+
+    assert rows == expected, f"List values mismatch: {rows}"
+
+    print("* test_list_property_values: PASSED")
 
 
 def test_non_numeric_property_as_embedding(client: turingdb.TuringDB) -> None:
@@ -70,6 +89,7 @@ def main() -> None:
     print("Connected to TuringDB")
 
     test_property_types(client)
+    test_list_property_values(client)
     test_non_numeric_property_as_embedding(client)
     test_wrong_embedding_dimension(client)
 

@@ -178,6 +178,7 @@ template class ScanNodePropertiesIterator<types::Double>;
 template class ScanNodePropertiesIterator<types::String>;
 template class ScanNodePropertiesIterator<types::Bool>;
 template class ScanNodePropertiesIterator<types::Embedding>;
+template class ScanNodePropertiesIterator<types::List>;
 
 template class ScanNodePropertiesChunkWriter<types::Int64>;
 template class ScanNodePropertiesChunkWriter<types::UInt64>;
@@ -185,6 +186,7 @@ template class ScanNodePropertiesChunkWriter<types::Double>;
 template class ScanNodePropertiesChunkWriter<types::String>;
 template class ScanNodePropertiesChunkWriter<types::Bool>;
 template class ScanNodePropertiesChunkWriter<types::Embedding>;
+template class ScanNodePropertiesChunkWriter<types::List>;
 
 }
 

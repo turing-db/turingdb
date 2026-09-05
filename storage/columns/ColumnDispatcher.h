@@ -51,6 +51,7 @@ using AllValueTypes = TypeList<
     const Change*,
     EntityList,
     ListView,
+    std::optional<ListView>,
     ListElementView
 >;
 template <ColumnKind::Code K, typename... TypeList>

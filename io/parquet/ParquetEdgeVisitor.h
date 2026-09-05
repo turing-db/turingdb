@@ -58,6 +58,7 @@ private:
     void createEdges(DataPartBuilder* builder);
 
     void applyEdgeProperties(size_t numRows);
+    void applyEdgeListProperty(size_t columnIndex, const PropertyColumn& prop, size_t numRows);
 
     void addEdgeProperty(const EdgeRecord& edge,
                          const PropertyColumn& prop,

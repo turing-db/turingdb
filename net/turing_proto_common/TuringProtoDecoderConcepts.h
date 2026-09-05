@@ -52,6 +52,7 @@ concept SupportedColumnOptVectorTypes = std::is_same_v<T, db::types::UInt64::Pri
 || std::is_same_v<T, db::types::Double::Primitive>
 || std::is_same_v<T, db::types::Bool::Primitive>
 || std::is_same_v<T, db::types::Embedding::Primitive>
+|| std::is_same_v<T, db::ListView>
 || std::is_same_v<T, std::string>;
 
 template <typename T>

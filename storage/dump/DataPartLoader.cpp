@@ -233,6 +233,19 @@ DumpResult<WeakArc<DataPart>> DataPartLoader::load(DataPartID partID,
                 manager._embeddings.emplace(pt->_id, static_cast<PropertyContainer*>(container));
                 break;
             }
+            case ValueType::List: {
+                ListPropertyContainerLoader loader(reader.value());
+
+                auto props = loader.load();
+                if (!props) {
+                    return props.get_unexpected();
+                }
+
+                auto* container = props.value().release();
+                manager._map.emplace(pt->_id, static_cast<PropertyContainer*>(container));
+                manager._lists.emplace(pt->_id, static_cast<PropertyContainer*>(container));
+                break;
+            }
             case ValueType::Invalid:
             case ValueType::_SIZE:
                 bioassert(false, "Invalid value type");

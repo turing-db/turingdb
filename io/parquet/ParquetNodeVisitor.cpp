@@ -53,12 +53,7 @@ bool ParquetNodeVisitor::onFileStart(const parquet::FileMetaData& metadata) {
             _lblColIdx = columnIndex;
             _lblMaxDefLevel = maxDefLevel;
         } else {
-            const bool isListProperty = maxRepLevel >= 1;
-            if (isListProperty) {
-                throw TuringException(fmt::format(
-                    "List properties are not supported; properties must be scalar-valued (column: {}).", path));
-            }
-            discoverPropertyColumn(columnIndex, path, type, maxDefLevel);
+            discoverPropertyColumn(columnIndex, path, type, maxDefLevel, maxRepLevel);
         }
     }
 
@@ -90,7 +85,7 @@ bool ParquetNodeVisitor::onLevels(size_t columnIndex,
     }
 
     if (_propertyColumns.contains(columnIndex)) {
-        capturePropertyLevels(columnIndex, defLevels);
+        capturePropertyLevels(columnIndex, repLevels, defLevels);
     }
 
     return true;
@@ -184,6 +179,11 @@ void ParquetNodeVisitor::applyNodeProperties(size_t numRows) {
     bioassert(_chunkNodeIds.size() == numRows, "Node id count does not match chunk rows");
 
     for (const auto& [columnIndex, prop] : _propertyColumns) {
+        if (prop.valueType == ValueType::List) {
+            applyNodeListProperty(columnIndex, prop, numRows);
+            continue;
+        }
+
         const auto defLevelsIt = _propDefLevels.find(columnIndex);
         // Non-optional columns do not have an entry
         const bool haveDefLevels = defLevelsIt != end(_propDefLevels);
@@ -218,6 +218,23 @@ void ParquetNodeVisitor::applyNodeProperties(size_t numRows) {
             addNodeProperty(nodeID, prop, columnIndex, valueIndex);
             valueIndex++;
         }
+    }
+}
+
+void ParquetNodeVisitor::applyNodeListProperty(size_t columnIndex,
+                                               const PropertyColumn& prop,
+                                               size_t numRows) {
+    DataPartBuilder& builder = _builder->getCurrentBuilder();
+
+    buildListProperties(columnIndex, prop, numRows);
+
+    for (size_t row = 0; row < numRows; row++) {
+        if (!_chunkLists[row]) {
+            continue;
+        }
+
+        const NodeID nodeID = _nodeIDs.at(_chunkNodeIds[row]);
+        builder.addNodeProperty<types::List>(nodeID, prop.propertyTypeID, *_chunkLists[row]);
     }
 }
 
@@ -257,6 +274,9 @@ void ParquetNodeVisitor::addNodeProperty(NodeID id,
         }
         break;
 
+        // Handled by applyNodeListProperty, which groups the repeated values into lists
+        // before any row reaches here
+        case ValueType::List:
         // ValueTypes that aren't represented in Parquet
         case ValueType::UInt64:
         case ValueType::Embedding:

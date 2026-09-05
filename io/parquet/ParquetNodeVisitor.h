@@ -66,6 +66,7 @@ private:
     void createNodes(DataPartBuilder* builder);
 
     void applyNodeProperties(size_t numRows);
+    void applyNodeListProperty(size_t columnIndex, const PropertyColumn& prop, size_t numRows);
 
     void addNodeProperty(NodeID id,
                          const PropertyColumn& prop,

@@ -467,6 +467,7 @@ struct OutputtedTypes {
         EntityList,
 
         ListView,
+        std::optional<ListView>,
         ListElementView
     >>;
 
@@ -517,6 +518,7 @@ struct WriteProcessorPropertyTypes {
         types::String::Primitive,
         types::Bool::Primitive,
         types::Embedding::Primitive,
+        ListView,
 
         std::optional<types::Int64::Primitive>,
         std::optional<types::UInt64::Primitive>,
@@ -524,6 +526,7 @@ struct WriteProcessorPropertyTypes {
         std::optional<types::String::Primitive>,
         std::optional<types::Bool::Primitive>,
         std::optional<types::Embedding::Primitive>,
+        std::optional<ListView>,
 
         std::string // For LOAD CSV inputs
     >>;
@@ -536,6 +539,7 @@ struct WriteProcessorPropertyTypes {
         types::String::Primitive,
         types::Bool::Primitive,
         types::Embedding::Primitive,
+        ListView,
 
         std::string // For LOAD CSV inputs
     >>;

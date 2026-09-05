@@ -531,6 +531,10 @@ void asString(std::string& out, std::span<const float> embedding) {
     out += "]";
 }
 
+// Forward declared so the generic and optional overloads below resolve a list to this
+// one, and so the ListElementView overload sees it: an element may be a list itself
+void asString(std::string& out, ListView lv);
+
 template <typename T>
 void asString(std::string& out, const T& value) {
     // @_ref HistoryStep uses double escaped new line (\\n) so that it is valid JSON
@@ -557,9 +561,6 @@ void asString(std::string& out, const std::optional<T>& value) {
         out += "null";
     }
 }
-
-// Forward declare so ListElementView overload sees this: an element may be a ListView itself
-void asString(std::string& out, ListView lv);
 
 void asString(std::string& out, const ListElementView v) {
     const auto writeTyped = [&out]<typename T>(const ListElementView ele) {

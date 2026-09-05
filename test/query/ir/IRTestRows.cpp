@@ -151,6 +151,17 @@ void turing::test::renderCell(const Column* column, size_t row, std::string& out
         out = std::to_string((*edgeTypes)[row].getValue());
     } else if (dynamic_cast<const ColumnConst<PropertyNull>*>(column)) {
         out = "null";
+    } else if (const auto* constList = dynamic_cast<const ColumnConst<ListView>*>(column)) {
+        out.clear();
+        renderList(constList->at(0), out);
+    } else if (const auto* optLists = dynamic_cast<const ColumnOptVector<ListView>*>(column)) {
+        const std::optional<ListView>& list = (*optLists)[row];
+        out.clear();
+        if (list) {
+            renderList(*list, out);
+        } else {
+            out = "null";
+        }
     } else if (const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(column)) {
         out.clear();
         renderList((*lists)[row], out);

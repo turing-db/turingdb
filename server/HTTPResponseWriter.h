@@ -3,6 +3,9 @@
 #include "Endpoints.h"
 #include "HTTP.h"
 #include "HTTPWriter.h"
+#include "list/ListUtils.h"
+#include "list/ListView.h"
+#include "metadata/PropertyNull.h"
 #include "metadata/PropertyTypeMap.h"
 #include "views/NodeView.h"
 #include "QueryStatus.h"
@@ -299,6 +302,42 @@ public:
                 write(std::to_string(v[i]));
             }
         }
+        write(']');
+    }
+
+    void writeValue(PropertyNull) {
+        write("null");
+    }
+
+    void writeValue(NodeID v) {
+        write(std::to_string(v.getValue()));
+    }
+
+    void writeValue(EdgeID v) {
+        write(std::to_string(v.getValue()));
+    }
+
+    void writeValue(ListElementView element) {
+        const auto writeTyped = [this]<typename T>(const ListElementView view) {
+            this->writeValue(view.getAs<T>());
+        };
+
+        const ListTagDispatcher dispatcher {element.getTag()};
+        dispatcher.execute(writeTyped, element);
+    }
+
+    void writeValue(ListView list) {
+        write('[');
+
+        bool first = true;
+        for (const ListElementView element : list) {
+            if (!first) {
+                write(',');
+            }
+            first = false;
+            writeValue(element);
+        }
+
         write(']');
     }
 

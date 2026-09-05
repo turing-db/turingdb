@@ -174,6 +174,8 @@ ValueType valueTypeFromElementType(mlir::Type elementType) {
         return ValueType::String;
     } else if (mlir::isa<storage::EmbeddingType>(elementType)) {
         return ValueType::Embedding;
+    } else if (mlir::isa<storage::ListType>(elementType)) {
+        return ValueType::List;
     } else if (mlir::isa<mlir::Float64Type>(elementType)) {
         return ValueType::Double;
     } else if (const auto intType = mlir::dyn_cast<mlir::IntegerType>(elementType)) {
@@ -865,20 +867,21 @@ void NLTranslator::translateVectorSearchLoop(const IteratorConfig& config,
     translateBlock(loopBody, loopData->getStmts());
 }
 
-NLUnwindElementEmitFunction NLTranslator::selectListUnwindEmit(mlir::Type chunkType) {
+NLUnwindElementEmitFunction NLTranslator::selectListUnwindEmit(mlir::Type chunkType, bool sourceIsNullable) {
     const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        return NLExecutor::selectListUnwindValueEmit(valueTypeFromElementType(nullableType.getValueType()));
+        return NLExecutor::selectListUnwindValueEmit(sourceIsNullable,
+                                                     valueTypeFromElementType(nullableType.getValueType()));
     } else if (mlir::isa<storage::NodeIDType>(elementType)) {
-        return NLExecutor::selectListUnwindNodeEmit();
+        return NLExecutor::selectListUnwindNodeEmit(sourceIsNullable);
     } else if (mlir::isa<storage::EdgeIDType>(elementType)) {
-        return NLExecutor::selectListUnwindEdgeEmit();
+        return NLExecutor::selectListUnwindEdgeEmit(sourceIsNullable);
     } else if (mlir::isa<storage::ListType>(elementType)) {
-        return NLExecutor::selectListUnwindListEmit();
+        return NLExecutor::selectListUnwindListEmit(sourceIsNullable);
     }
 
-    return NLExecutor::selectListUnwindElementEmit();
+    return NLExecutor::selectListUnwindElementEmit(sourceIsNullable);
 }
 
 void NLTranslator::translateUnwindLoop(const IteratorConfig& config,
@@ -901,14 +904,17 @@ void NLTranslator::translateUnwindLoop(const IteratorConfig& config,
     NLUnwindElementCountFunction elementCount = nullptr;
     NLUnwindElementEmitFunction elementEmit = nullptr;
 
-    if (llvm::isa<storage::ListType>(sourceElement)) {
-        elementCount = NLExecutor::selectListUnwindElementCount();
-        elementEmit = selectListUnwindEmit(elementValue.getType());
+    const auto sourceNullable = mlir::dyn_cast<storage::NullableType>(sourceElement);
+    const bool unwindsNullableList = sourceNullable && llvm::isa<storage::ListType>(sourceNullable.getValueType());
+
+    if (llvm::isa<storage::ListType>(sourceElement) || unwindsNullableList) {
+        elementCount = NLExecutor::selectListUnwindElementCount(unwindsNullableList);
+        elementEmit = selectListUnwindEmit(elementValue.getType(), unwindsNullableList);
     } else if (llvm::isa<storage::ListElementType>(sourceElement)) {
         elementCount = NLExecutor::selectTaggedUnwindElementCount();
         elementEmit = NLExecutor::selectTaggedUnwindElementEmit();
-    } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(sourceElement)) {
-        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+    } else if (sourceNullable) {
+        const ValueType valueType = valueTypeFromElementType(sourceNullable.getValueType());
         elementCount = NLExecutor::selectOptUnwindElementCount(valueType);
     } else {
         elementCount = NLExecutor::selectValueUnwindElementCount();

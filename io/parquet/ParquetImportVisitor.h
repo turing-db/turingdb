@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -13,6 +14,8 @@
 #include "ParquetReader.h"
 
 #include "ID.h"
+#include "list/ListContainer.h"
+#include "list/ListView.h"
 #include "metadata/PropertyType.h"
 
 namespace parquet {
@@ -48,7 +51,9 @@ protected:
         std::string name;
         ValueType valueType {ValueType::Invalid};
         PropertyTypeID propertyTypeID;
+        parquet::Type::type physicalType {parquet::Type::UNDEFINED};
         int16_t maxDefLevel {0};
+        int16_t maxRepLevel {0};
     };
 
     CommitBuilder* _builder {nullptr};
@@ -70,6 +75,22 @@ protected:
     // Used to encode null/nans for simple types.
     std::unordered_map<size_t, std::vector<int16_t>> _propDefLevels;
 
+    // A repeated column is drained sub-batch by sub-batch, each delivery invalidating the
+    // last, so a list column's levels and values are accumulated over the whole row group
+    // rather than viewed.
+    std::unordered_map<size_t, std::vector<int16_t>> _propRepLevels;
+    std::unordered_map<size_t, std::vector<int64_t>> _propListInt64Vals;
+    std::unordered_map<size_t, std::vector<double>> _propListDoubleVals;
+    std::unordered_map<size_t, std::vector<uint8_t>> _propListBoolVals;
+
+    // Owns the elements of the lists built for one chunk; each list is deep-copied into
+    // the datapart as it is added, so the scratch is cleared with the chunk.
+    ListContainer _listScratch;
+
+    // One entry per row of the chunk, filled by @ref buildListProperties, empty where the
+    // row has no value for the column being built
+    std::vector<std::optional<ListView>> _chunkLists;
+
     static constexpr size_t INVALID_COL_IDX = std::numeric_limits<size_t>::max();
 
     static constexpr std::string_view NODE_COL_PATH = "__id";
@@ -86,13 +107,24 @@ protected:
     void discoverPropertyColumn(size_t columnIndex,
                                 const std::string& path,
                                 parquet::Type::type physicalType,
-                                int16_t maxDefLevel);
+                                int16_t maxDefLevel,
+                                int16_t maxRepLevel);
 
     // Capture helpers for property columns, called by the derived value callbacks
     // once they have handled their entity-specific columns.
-    void capturePropertyLevels(size_t columnIndex, std::span<const int16_t> defLevels);
+    void capturePropertyLevels(size_t columnIndex,
+                               std::span<const int16_t> repLevels,
+                               std::span<const int16_t> defLevels);
     void capturePropertyInt64(size_t columnIndex, std::span<const int64_t> values);
     void capturePropertyByteArray(size_t columnIndex, std::span<const parquet::ByteArray> values);
+
+    // Groups a list column's captured levels and values into one list per row, storing the
+    // elements in @ref _listScratch and the per-row views in @ref _chunkLists.
+    void buildListProperties(size_t columnIndex, const PropertyColumn& prop, size_t numRows);
+
+    ListContainer::ListItemVariant listElement(const PropertyColumn& prop,
+                                               size_t columnIndex,
+                                               size_t valueIndex);
 
     void resetPropertyChunk();
 };

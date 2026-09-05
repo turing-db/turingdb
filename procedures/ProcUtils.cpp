@@ -17,10 +17,85 @@
 #include "list/ListView.h"
 #include "list/ListElementView.h"
 #include "list/ListBufferTypeTag.h"
+#include "ID.h"
 
 using namespace db;
 
 namespace {
+
+void appendListValue(std::string& out, ListView list);
+
+// Append a double as JSON; there are no nan/inf tokens, so those become null.
+void appendDouble(std::string& out, double value) {
+    if (std::isfinite(value)) {
+        out += fmt::format("{}", value);
+    } else {
+        out += "null";
+    }
+}
+
+// Append a single element of a list as its typed JSON representation.
+void appendListElement(std::string& out, ListElementView element) {
+    switch (element.getTag()) {
+        case ListBufferTypeTag::Int:
+            out += fmt::format("{}", element.getAs<types::Int64::Primitive>());
+        break;
+        case ListBufferTypeTag::UInt:
+            out += fmt::format("{}", element.getAs<types::UInt64::Primitive>());
+        break;
+        case ListBufferTypeTag::Double:
+            appendDouble(out, element.getAs<types::Double::Primitive>());
+        break;
+        case ListBufferTypeTag::Bool:
+            out += (static_cast<bool>(element.getAs<types::Bool::Primitive>()) ? "true" : "false");
+        break;
+        case ListBufferTypeTag::String:
+            ProcUtils::appendJsonString(out, element.getAs<types::String::Primitive>());
+        break;
+        case ListBufferTypeTag::Embedding: {
+            out += '[';
+            bool firstElem = true;
+            for (const float f : element.getAs<types::Embedding::Primitive>()) {
+                if (!firstElem) {
+                    out += ',';
+                }
+                firstElem = false;
+                appendDouble(out, f);
+            }
+            out += ']';
+        }
+        break;
+        case ListBufferTypeTag::ListView:
+            appendListValue(out, element.getAs<ListView>());
+        break;
+        case ListBufferTypeTag::NodeID:
+            out += fmt::format("{}", element.getAs<NodeID>().getValue());
+        break;
+        case ListBufferTypeTag::EdgeID:
+            out += fmt::format("{}", element.getAs<EdgeID>().getValue());
+        break;
+        case ListBufferTypeTag::Null:
+        case ListBufferTypeTag::INVALID:
+            out += "null";
+        break;
+    }
+}
+
+// Append a list as a JSON array of its elements.
+void appendListValue(std::string& out, ListView list) {
+    out += '[';
+
+    bool firstElem = true;
+    for (const ListElementView element : list) {
+        if (!firstElem) {
+            out += ',';
+        }
+        firstElem = false;
+        appendListElement(out, element);
+    }
+
+    out += ']';
+}
 
 // Append a single property value as its typed JSON representation.
 void appendPropertyValue(std::string& out, const PropertyVariant& value) {
@@ -33,6 +108,8 @@ void appendPropertyValue(std::string& out, const PropertyVariant& value) {
                 ProcUtils::appendJsonString(out, *ptr);
             } else if constexpr (std::is_same_v<V, CustomBool>) {
                 out += (static_cast<bool>(*ptr) ? "true" : "false");
+            } else if constexpr (std::is_same_v<V, ListView>) {
+                appendListValue(out, *ptr);
             } else if constexpr (std::is_same_v<V, std::span<const float>>) {
                 out += '[';
                 bool firstElem = true;

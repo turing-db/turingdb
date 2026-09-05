@@ -95,6 +95,7 @@ public:
         const Change*,
         Column*,
         ListView,
+        std::optional<ListView>,
         ListElementView
     >;
 

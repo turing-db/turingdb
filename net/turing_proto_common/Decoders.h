@@ -464,6 +464,45 @@ inline bool decodeOptVector(TuringProtoDecoder::DecodeContext* ctx,
     return true;
 }
 
+// The nullable sibling of decodeVector<db::ListView>: every row carries a list header, so
+// a null one is read and reserved like any other and simply leaves its entry empty.
+template <>
+inline bool decodeOptVector<db::ListView>(TuringProtoDecoder::DecodeContext* ctx,
+                                          db::ColumnOptVector<db::ListView>* typedCol,
+                                          DfColumnState* columnState) {
+    auto& stack = ctx->_listStack;
+
+    while (ctx->_rowIndex < columnState->getNumRows()) {
+        // A cursor left on the stack is this row's, resumed mid-element; an empty stack
+        // means the row's header is still to come.
+        if (stack.empty()) {
+            if (ctx->_inBuf->readable() < 2 * sizeof(WireSize)) {
+                return false;
+            }
+
+            WireSize elementCount = 0;
+            WireSize listByteSize = 0;
+            ctx->_inBuf->readData(&elementCount, sizeof(elementCount));
+            ctx->_inBuf->readData(&listByteSize, sizeof(listByteSize));
+
+            stack.emplace(ctx->_listBuffer->reserveList(elementCount, listByteSize));
+
+            if (columnState->getBitMask().test(ctx->_rowIndex)) {
+                (*typedCol)[ctx->_rowIndex] = stack.top().getView();
+            }
+        }
+
+        const auto onTopLevelElement = [](size_t, const db::ListElementView&) {};
+        if (!drainListStack(ctx, onTopLevelElement)) {
+            return false;
+        }
+
+        ++ctx->_rowIndex;
+    }
+
+    return true;
+}
+
 template <>
 inline bool decodeOptVector<std::string>(TuringProtoDecoder::DecodeContext* ctx,
                                          db::ColumnOptVector<std::string>* typedCol,

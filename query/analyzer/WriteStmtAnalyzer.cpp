@@ -312,11 +312,12 @@ db::ValueType WriteStmtAnalyzer::evaluatedToValueType(EvaluatedType type) {
             return ValueType::Int64;
         case EvaluatedType::Embedding:
             return ValueType::Embedding;
+        case EvaluatedType::List:
+            return ValueType::List;
         case EvaluatedType::Null:
         case EvaluatedType::NodePattern:
         case EvaluatedType::EdgePattern:
         case EvaluatedType::StringTable:
-        case EvaluatedType::List:
         case EvaluatedType::Map:
         case EvaluatedType::Invalid:
         case EvaluatedType::Wildcard:

@@ -467,7 +467,7 @@ public:
     // elements, a type-erased column drains a cell tagged as a list and drops one tagged
     // null, a nullable value column drops its nulls, and a column holding a value in every
     // row spreads each of them to the single row it is.
-    static NLUnwindElementCountFunction selectListUnwindElementCount();
+    static NLUnwindElementCountFunction selectListUnwindElementCount(bool sourceIsNullable);
     static NLUnwindElementCountFunction selectTaggedUnwindElementCount();
     static NLUnwindElementCountFunction selectOptUnwindElementCount(ValueType valueType);
     static NLUnwindElementCountFunction selectValueUnwindElementCount();
@@ -476,11 +476,11 @@ public:
     // than the element: a drained list fills the column its own element type names, and
     // only one whose elements share no type fills the type-erased column. A scalar column
     // needs none - its cells are the elements, gathered through the carry set.
-    static NLUnwindElementEmitFunction selectListUnwindElementEmit();
-    static NLUnwindElementEmitFunction selectListUnwindValueEmit(ValueType valueType);
-    static NLUnwindElementEmitFunction selectListUnwindNodeEmit();
-    static NLUnwindElementEmitFunction selectListUnwindEdgeEmit();
-    static NLUnwindElementEmitFunction selectListUnwindListEmit();
+    static NLUnwindElementEmitFunction selectListUnwindElementEmit(bool sourceIsNullable);
+    static NLUnwindElementEmitFunction selectListUnwindValueEmit(bool sourceIsNullable, ValueType valueType);
+    static NLUnwindElementEmitFunction selectListUnwindNodeEmit(bool sourceIsNullable);
+    static NLUnwindElementEmitFunction selectListUnwindEdgeEmit(bool sourceIsNullable);
+    static NLUnwindElementEmitFunction selectListUnwindListEmit(bool sourceIsNullable);
     static NLUnwindElementEmitFunction selectTaggedUnwindElementEmit();
     static NLCollectListEmitFunction selectCollectListEmit(ValueType valueType);
 

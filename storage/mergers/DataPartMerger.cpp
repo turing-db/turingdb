@@ -184,6 +184,36 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
                         _nodePropertiesCount[propertyID] += size;
                     }
 
+                } else if constexpr (std::is_same_v<Type, types::List>) {
+                    if (!nodePropertyManager.hasPropertyType(propertyID)) {
+                        if (_nodePropertiesCount[propertyID] == 0) {
+                            emptyNodeProperties.insert(propertyID);
+                            return;
+                        }
+                        nodePropertyManager.registerPropertyType<types::List>(propertyID);
+
+                        auto& propertyContainer = nodePropertyManager.getMutableContainer<types::List>(propertyID);
+                        propertyContainer._values._views.resize(_nodePropertiesCount[propertyID]);
+                        propertyContainer.ids().resize(_nodePropertiesCount[propertyID]);
+
+                        // Re-use for offsets;
+                        _nodePropertiesCount[propertyID] = 0;
+                    }
+
+                    auto& oldContainer = propertyContainer->cast<types::List>();
+                    auto& newContainer = nodePropertyManager.getMutableContainer<types::List>(propertyID);
+
+                    const TombstoneRanges& keptRanges = nodeRangesPerPart.at(idx).at(propertyID);
+                    for (const auto& [start, size] : keptRanges) {
+                        std::memcpy(newContainer._values._views.data() + _nodePropertiesCount[propertyID],
+                                    oldContainer._values._views.data() + start,
+                                    (size * sizeof(ListView)));
+                        std::memcpy(newContainer.ids().data() + _nodePropertiesCount[propertyID],
+                                    oldContainer.ids().data() + start,
+                                    (size * sizeof(EntityID)));
+                        _nodePropertiesCount[propertyID] += size;
+                    }
+
                 } else {
                     if (!nodePropertyManager.hasPropertyType(propertyID)) {
                         if (_nodePropertiesCount[propertyID] == 0) {
@@ -282,6 +312,36 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
                         std::memcpy(newContainer._values._views.data() + _edgePropertiesCount[propertyID],
                                     oldContainer._values._views.data() + start,
                                     (size * sizeof(std::span<const float>)));
+                        std::memcpy(newContainer.ids().data() + _edgePropertiesCount[propertyID],
+                                    oldContainer.ids().data() + start,
+                                    (size * sizeof(EntityID)));
+                        _edgePropertiesCount[propertyID] += size;
+                    }
+
+                } else if constexpr (std::is_same_v<Type, types::List>) {
+                    if (!edgePropertyManager.hasPropertyType(propertyID)) {
+                        if (_edgePropertiesCount[propertyID] == 0) {
+                            emptyEdgeProperties.insert(propertyID);
+                            return;
+                        }
+                        edgePropertyManager.registerPropertyType<types::List>(propertyID);
+
+                        auto& propertyContainer = edgePropertyManager.getMutableContainer<types::List>(propertyID);
+                        propertyContainer._values._views.resize(_edgePropertiesCount[propertyID]);
+                        propertyContainer.ids().resize(_edgePropertiesCount[propertyID]);
+
+                        // Re-use for offsets;
+                        _edgePropertiesCount[propertyID] = 0;
+                    }
+
+                    auto& oldContainer = propertyContainer->cast<types::List>();
+                    auto& newContainer = edgePropertyManager.getMutableContainer<types::List>(propertyID);
+
+                    const TombstoneRanges& keptRanges = edgeRangesPerPart.at(idx).at(propertyID);
+                    for (const auto& [start, size] : keptRanges) {
+                        std::memcpy(newContainer._values._views.data() + _edgePropertiesCount[propertyID],
+                                    oldContainer._values._views.data() + start,
+                                    (size * sizeof(ListView)));
                         std::memcpy(newContainer.ids().data() + _edgePropertiesCount[propertyID],
                                     oldContainer.ids().data() + start,
                                     (size * sizeof(EntityID)));

@@ -136,6 +136,8 @@ std::string valueToString(const std::span<const float> value) {
     return result;
 }
 
+std::string valueToString(ListView view);
+
 template <typename T>
 std::string valueToString(const T& value) {
     return fmt::format("{}", value);
@@ -169,8 +171,6 @@ std::string valueToString(const EntityList& value) {
     result += "]";
     return result;
 }
-
-std::string valueToString(ListView view);
 
 std::string valueToString(const ListElementView element) {
     const auto writeTyped = []<typename T>(const ListElementView element) -> std::string {

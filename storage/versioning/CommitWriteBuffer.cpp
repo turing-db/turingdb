@@ -49,6 +49,62 @@ template <>
 struct PrimitiveToTag<types::Embedding::OwningPrimitive> {
     using Type = types::Embedding;
 };
+template <>
+struct PrimitiveToTag<types::List::OwningPrimitive> {
+    using Type = types::List;
+};
+
+// Registers one staged property on the builder, unless a more recent update already
+// registered it - the updates are replayed newest first, so the first registration wins.
+//
+// A list arrives as its owning encoding rather than as a value of the property's
+// Primitive, so it takes an overload of its own instead of the template that passes
+// T::Primitive straight through.
+template <typename T>
+void addNodePropertyValue(DataPartBuilder& builder, NodeID nodeID, PropertyTypeID propID, const T& value) {
+    using Type = typename PrimitiveToTag<T>::Type;
+
+    if (builder.hasProperty<Type>(nodeID, propID)) {
+        return;
+    }
+
+    builder.addNodeProperty<Type>(nodeID, propID, value);
+}
+
+void addNodePropertyValue(DataPartBuilder& builder, NodeID nodeID, PropertyTypeID propID, const EncodedList& value) {
+    if (builder.hasProperty<types::List>(nodeID, propID)) {
+        return;
+    }
+
+    builder.addNodeProperty(nodeID, propID, value);
+}
+
+template <typename T>
+void addEdgePropertyValue(DataPartBuilder& builder,
+                          const EdgeRecord& edge,
+                          PropertyTypeID propID,
+                          const T& value,
+                          LabelSetHandle srcLblSet = {}) {
+    using Type = typename PrimitiveToTag<T>::Type;
+
+    if (builder.hasProperty<Type>(edge._edgeID, propID)) {
+        return;
+    }
+
+    builder.addEdgeProperty<Type>(edge, propID, value, srcLblSet);
+}
+
+void addEdgePropertyValue(DataPartBuilder& builder,
+                          const EdgeRecord& edge,
+                          PropertyTypeID propID,
+                          const EncodedList& value,
+                          LabelSetHandle srcLblSet = {}) {
+    if (builder.hasProperty<types::List>(edge._edgeID, propID)) {
+        return;
+    }
+
+    builder.addEdgeProperty(edge, propID, value, srcLblSet);
+}
 
 }
 
@@ -137,13 +193,7 @@ void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
     for (const auto& [propID, value] : node.properties) {
         std::visit(
             [&](const auto& val) {
-                using T = std::decay_t<decltype(val)>;
-                using Type = typename PrimitiveToTag<T>::Type;
-                // A more recent update already registered this property; skip.
-                if (builder.hasProperty<Type>(nodeID, propID)) {
-                    return;
-                }
-                builder.addNodeProperty<Type>(nodeID, propID, val);
+                addNodePropertyValue(builder, nodeID, propID, val);
             },
             value);
         _journal.addWrittenNodeProperty(propID);
@@ -198,14 +248,7 @@ void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
     for (const auto& [propID, value] : edge.properties) {
         std::visit(
             [&](const auto& val) {
-                using T = std::decay_t<decltype(val)>;
-                using Type = typename PrimitiveToTag<T>::Type;
-                // A more recent update already registered this property; skip.
-                if (builder.hasProperty<Type>(newEdgeID, propID)) {
-                    return;
-                }
-                builder.addEdgeProperty<Type>({newEdgeID, srcID, tgtID, edgeTypeID},
-                                              propID, val);
+                addEdgePropertyValue(builder, {newEdgeID, srcID, tgtID, edgeTypeID}, propID, val);
             },
             value);
         _journal.addWrittenEdgeProperty(propID);
@@ -232,13 +275,7 @@ void CommitWriteBuffer::applyNodeUpdates(DataPartBuilder& builder) {
         const auto& [propID, value] = property;
         std::visit(
             [&](const auto& val) {
-                using T = std::decay_t<decltype(val)>;
-                using Type = typename PrimitiveToTag<T>::Type;
-                // A more recent update already registered this property; skip.
-                if (builder.hasProperty<Type>(nodeID, propID)) {
-                    return;
-                }
-                builder.addNodeProperty<Type>(nodeID, propID, val);
+                addNodePropertyValue(builder, nodeID, propID, val);
             },
             value);
 
@@ -254,13 +291,7 @@ void CommitWriteBuffer::applyExistingEdgeUpdate(DataPartBuilder& builder,
     const auto& [pid, val] = prop;
     std::visit(
         [&](const auto& value) {
-            using T = std::decay_t<decltype(value)>;
-            using Type = typename PrimitiveToTag<T>::Type;
-            // A more recent update already registered this property; skip.
-            if (builder.hasProperty<Type>(record._edgeID, pid)) {
-                return;
-            }
-            builder.addEdgeProperty<Type>(record, pid, value);
+            addEdgePropertyValue(builder, record, pid, value);
         },
         val);
 
@@ -317,13 +348,7 @@ void CommitWriteBuffer::applyPendingEdgeUpdate(DataPartBuilder& builder,
 
     std::visit(
         [&](const auto& value) {
-            using T = std::decay_t<decltype(value)>;
-            using Type = typename PrimitiveToTag<T>::Type;
-            // A more recent update already registered this property; skip.
-            if (builder.hasProperty<Type>(pendingEdgeRecord._edgeID, pid)) {
-                return;
-            }
-            builder.addEdgeProperty<Type>(pendingEdgeRecord, pid, value, srcLblSet);
+            addEdgePropertyValue(builder, pendingEdgeRecord, pid, value, srcLblSet);
         },
         val);
     _journal.addWrittenEdgeProperty(pid);

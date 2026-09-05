@@ -22,11 +22,11 @@
 using namespace db;
 using namespace turing::test;
 
-// A list exists only in the query language: property values are scalars and the storage
-// layer cannot represent a list one. A list literal is the expression that would violate
-// that, so every property position has to turn it away - in the analyzer, with a message
-// naming the type, rather than downstream where it would read as an engine failure.
-// Parsing and analysis are enough to reach all three rejections.
+// A list literal in a property position: a list is a stored property value, so the
+// analyzer types it as one - the property it creates holds lists, and the mismatches it
+// still turns away are the ordinary ones between a property's type and a value of
+// another. What the values then store is ListPropertyTest's subject; parsing and analysis
+// are enough to reach every verdict here.
 class ListLiteralPropertyValueTest : public TuringTest {
 protected:
     void initialize() override {
@@ -54,6 +54,14 @@ protected:
         analyzer.analyze();
     }
 
+    void expectAccepted(std::string_view query) {
+        try {
+            analyzeQuery(query);
+        } catch (const TuringException& error) {
+            ADD_FAILURE() << "query was rejected: " << query << "\nerror: " << error.what();
+        }
+    }
+
     void expectRejected(std::string_view query, std::string_view reason) {
         try {
             analyzeQuery(query);
@@ -72,28 +80,34 @@ protected:
     Graph* _graph {nullptr};
 };
 
-TEST_F(ListLiteralPropertyValueTest, rejectsAListAsANewNodesProperty) {
-    // No property type holds a list, so there is none to write the value as - the
-    // property is new here, so nothing but the value's own type decides it.
-    expectRejected("CREATE (x:Thing {vals: [1, 2]})",
-                   "Cannot evaluate node property: unsupported type 'List'");
+TEST_F(ListLiteralPropertyValueTest, acceptsAListAsANewNodesProperty) {
+    // The property is new here, so nothing but the value's own type decides it: a list
+    // value makes a list property.
+    expectAccepted("CREATE (x:Thing {vals: [1, 2]})");
 }
 
-TEST_F(ListLiteralPropertyValueTest, rejectsAListAssignedToANodeProperty) {
-    expectRejected("MATCH (n) WHERE n.name = 'Remy' SET n.vals = [1, 2]",
-                   "Cannot evaluate property: types 'Invalid' and 'List' are incompatible");
+TEST_F(ListLiteralPropertyValueTest, acceptsAListAssignedToANodeProperty) {
+    expectAccepted("MATCH (n) WHERE n.name = 'Remy' SET n.vals = [1, 2]");
 }
 
-TEST_F(ListLiteralPropertyValueTest, rejectsAListMatchedAgainstANodeProperty) {
-    // The read side of the same invariant: name is a stored string, and a list is not a
-    // value it can be compared against.
+TEST_F(ListLiteralPropertyValueTest, acceptsAnEmptyListAsANodeProperty) {
+    // The type-erased form of the literal, which carries no element to read a type from,
+    // still names a list - an empty one, not an absent value.
+    expectAccepted("CREATE (x:Thing {vals: []})");
+}
+
+TEST_F(ListLiteralPropertyValueTest, acceptsAHeterogeneousListAsANodeProperty) {
+    // A stored list is not held to one element type, so the elements need not agree.
+    expectAccepted("CREATE (x:Thing {vals: [1, 'two', true]})");
+}
+
+TEST_F(ListLiteralPropertyValueTest, rejectsAListMatchedAgainstAStringProperty) {
+    // name is a stored string, and a list is not a value it can be compared against.
     expectRejected("MATCH (n {name: [1, 2]}) RETURN n",
                    "Cannot evaluate node property: types 'String' and 'List' are incompatible");
 }
 
-TEST_F(ListLiteralPropertyValueTest, rejectsAnEmptyListAsANodeProperty) {
-    // The type-erased form of the literal, which carries no element to read a type from,
-    // is turned away by the same rule rather than slipping through as an absent value.
-    expectRejected("CREATE (x:Thing {vals: []})",
-                   "Cannot evaluate node property: unsupported type 'List'");
+TEST_F(ListLiteralPropertyValueTest, rejectsAListAssignedToAStringProperty) {
+    expectRejected("MATCH (n) WHERE n.name = 'Remy' SET n.name = [1, 2]",
+                   "Cannot evaluate property: types 'String' and 'List' are incompatible");
 }

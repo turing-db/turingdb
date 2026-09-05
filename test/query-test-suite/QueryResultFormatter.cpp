@@ -90,6 +90,8 @@ template <int I>
     return value ? "change_ptr" : "null";
 }
 
+[[maybe_unused]] std::string valueToString(db::ListView view);
+
 template <typename T>
 [[maybe_unused]] std::string valueToString(const T& value) {
     return fmt::format("{}", value);
@@ -140,8 +142,6 @@ template <typename T>
     result += "]";
     return result;
 }
-
-[[maybe_unused]] std::string valueToString(db::ListView view);
 
 [[maybe_unused]] std::string valueToString(const db::ListElementView element) {
     const auto writeTyped = []<typename T>(const db::ListElementView element) -> std::string {

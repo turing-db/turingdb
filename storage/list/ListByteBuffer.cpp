@@ -7,6 +7,7 @@
 #include "ListElementView.h"
 
 #include "metadata/PropertyNull.h"
+#include "metadata/PropertyType.h"
 
 using namespace db;
 
