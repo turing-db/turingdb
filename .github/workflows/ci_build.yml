@@ -31,7 +31,11 @@ jobs:
       # trees and poison the per-OS cache. Letting jobs finish keeps caches clean.
       fail-fast: false
       matrix:
-        os: ${{ fromJson(inputs.os_list || '["ubuntu-24.04-turing", "macos15-turing"]') }}
+        # PR and main-push builds are Linux-only: macOS is the slow half of the
+        # matrix and has not caught a Linux-clean regression. macOS is still a
+        # shipped platform, built by the release matrix in ci_release.yml and by
+        # ci_full_matrix_build.yml, the pre-tag check to run before a release.
+        os: ${{ fromJson(inputs.os_list || '["ubuntu-24.04-turing"]') }}
         python_version: ${{ fromJson(inputs.python_version_list || '["3.14"]') }}
 
     # Each matrix.os value is the literal runner label it dispatches to: the ubuntu-*-turing
