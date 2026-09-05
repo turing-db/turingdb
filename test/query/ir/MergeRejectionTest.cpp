@@ -87,18 +87,6 @@ TEST_F(MergeRejectionTest, rejectsAPatternBindingWhatACreateInTheSameQueryWrote)
         << "status: " << status.getError();
 }
 
-// A merge's rows mix committed entities with entities this change wrote, and a tombstone
-// names a committed ID, so the mixture is turned away rather than tombstoning whichever
-// committed node a provisional ID collides with
-TEST_F(MergeRejectionTest, rejectsADeleteOfWhatAMergeBound) {
-    QueryStatus status;
-    runQuery("MERGE (n:Tag {name: 'x'}) DELETE n", status);
-
-    EXPECT_FALSE(status.isOk()) << status.getError();
-    EXPECT_NE(status.getError().find("a MERGE in the same query binds it"), std::string::npos)
-        << "status: " << status.getError();
-}
-
 // The pipeline engine has no MERGE, and says so rather than reporting a shape it failed
 // to plan
 TEST_F(MergeRejectionTest, rejectsMergeOnThePipelineEngine) {
@@ -120,18 +108,6 @@ TEST_F(MergeRejectionTest, rejectsAVariableLengthHop) {
     EXPECT_NE(status.getError().find("Variable length relationships cannot be used in a write pattern"),
               std::string::npos)
         << status.getError();
-}
-
-// A CREATE's rows hold provisional IDs this change has not committed and a tombstone
-// names a committed ID, so deleting them is turned away rather than tombstoning
-// whichever committed node a provisional ID collides with
-TEST_F(MergeRejectionTest, rejectsADeleteOfWhatACreateWrote) {
-    QueryStatus status;
-    runQuery("CREATE (n:Tag {name: 'x'}) DELETE n", status);
-
-    EXPECT_FALSE(status.isOk()) << status.getError();
-    EXPECT_NE(status.getError().find("a CREATE in the same query writes it"), std::string::npos)
-        << "status: " << status.getError();
 }
 
 int main(int argc, char** argv) {

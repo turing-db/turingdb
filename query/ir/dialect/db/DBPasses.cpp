@@ -1651,6 +1651,20 @@ bool matchPropertyRead(Operation* op, StringAttr& property, bool& nodeProperty) 
     return false;
 }
 
+bool matchPropertyWrite(Operation* op, StringAttr& property, bool& nodeProperty) {
+    if (SetNodeProperty write = dyn_cast<SetNodeProperty>(op)) {
+        property = write.getPropertyAttr();
+        nodeProperty = true;
+        return true;
+    } else if (SetEdgeProperty write = dyn_cast<SetEdgeProperty>(op)) {
+        property = write.getPropertyAttr();
+        nodeProperty = false;
+        return true;
+    }
+
+    return false;
+}
+
 // Widens an op's carry set by one column and hands back the result it comes out as. A carry
 // set is the trailing operands and the trailing results of the op holding it, so the column
 // appends to both; an op's arity is fixed once built, hence the rebuild.
@@ -1732,9 +1746,20 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
         Operation* const root = getOperation();
 
         llvm::SmallVector<Operation*> reads;
+        llvm::DenseSet<Attribute> writtenNodeProperties;
+        llvm::DenseSet<Attribute> writtenEdgeProperties;
         root->walk([&](Operation* op) {
+            StringAttr writtenProperty;
+            bool writesNodes = false;
+
             if (isa<GetNodeProperties, GetEdgeProperties>(op)) {
                 reads.push_back(op);
+            } else if (matchPropertyWrite(op, writtenProperty, writesNodes)) {
+                if (writesNodes) {
+                    writtenNodeProperties.insert(writtenProperty);
+                } else {
+                    writtenEdgeProperties.insert(writtenProperty);
+                }
             }
         });
 
@@ -1744,6 +1769,13 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
             bool nodeProperty = false;
             const bool isPropertyRead = matchPropertyRead(read, property, nodeProperty);
             bioassert(isPropertyRead, "A collected op is a property read");
+
+            // A read standing before this one saw what the property held before the write,
+            // and a projection behind a SET reads what the statement wrote
+            const llvm::DenseSet<Attribute>& written = nodeProperty ? writtenNodeProperties : writtenEdgeProperties;
+            if (written.contains(property)) {
+                continue;
+            }
 
             const Value reused = propertyColumnOf(read->getOperand(0), property, nodeProperty, read, builder);
             if (!reused) {
