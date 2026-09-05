@@ -1177,6 +1177,7 @@ bool ExprAnalyzer::propTypeCompatible(ValueType vt, EvaluatedType exprType) {
         case EvaluatedType::Embedding:
             return vt == ValueType::Embedding;
         case EvaluatedType::List:
+            return vt == ValueType::List;
         case EvaluatedType::Map:
         case EvaluatedType::Wildcard:
         case EvaluatedType::Invalid:

@@ -27,6 +27,8 @@ struct PropertyTypeDispatcher {
                 return executor.template operator()<types::String>();
             case ValueType::Embedding:
                 return executor.template operator()<types::Embedding>();
+            case ValueType::List:
+                return executor.template operator()<types::List>();
             case ValueType::_SIZE:
             case ValueType::Invalid: {
                 throw TuringException("Unsupported property type");

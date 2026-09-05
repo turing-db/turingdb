@@ -2,6 +2,7 @@
 
 #include <cstring>
 
+#include <span>
 #include <string_view>
 
 using namespace db;
@@ -28,4 +29,5 @@ void SpanBuffer<E, V, N>::clear() {
 
 namespace db {
 template class SpanBuffer<char, std::string_view>;
+template class SpanBuffer<float, std::span<const float>>;
 }

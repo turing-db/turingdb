@@ -3,6 +3,7 @@
 #include <range/v3/view/reverse.hpp>
 
 #include "datapart/DataPart.h"
+#include "list/ListElementOrder.h"
 #include "metadata/PropertyType.h"
 #include "properties/PropertyManager.h"
 
@@ -216,6 +217,7 @@ template class PropertyHashIndex<types::Double, NodeID>;
 template class PropertyHashIndex<types::String, NodeID>;
 template class PropertyHashIndex<types::Bool, NodeID>;
 template class PropertyHashIndex<types::Embedding, NodeID>;
+template class PropertyHashIndex<types::List, NodeID>;
 
 template class PropertyHashIndex<types::Int64, EdgeID>;
 template class PropertyHashIndex<types::UInt64, EdgeID>;
@@ -223,4 +225,5 @@ template class PropertyHashIndex<types::Double, EdgeID>;
 template class PropertyHashIndex<types::String, EdgeID>;
 template class PropertyHashIndex<types::Bool, EdgeID>;
 template class PropertyHashIndex<types::Embedding, EdgeID>;
+template class PropertyHashIndex<types::List, EdgeID>;
 }

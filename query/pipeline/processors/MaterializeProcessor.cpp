@@ -52,6 +52,7 @@ inline void copyChunkImpl(const Column* srcPtr,
         COPY_CHUNK_CASE(ColumnVector<ValueType>)
 
         COPY_CHUNK_CASE(ColumnVector<ListView>)
+        COPY_CHUNK_CASE(ColumnOptVector<ListView>)
         COPY_CHUNK_CASE(ColumnVector<ListElementView>)
 
         COPY_CHUNK_CASE(ColumnVector<std::string>)
@@ -98,6 +99,7 @@ inline void copyTransformedChunkImpl(const ColumnVector<size_t>* transform,
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<ValueType>)
 
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<ListView>)
+        COPY_TRANSFORMED_CHUNK_CASE(ColumnOptVector<ListView>)
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<ListElementView>)
 
         COPY_TRANSFORMED_CHUNK_CASE(ColumnVector<std::string>)

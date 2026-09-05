@@ -1100,9 +1100,14 @@ mlir::Type DBLowering::unwoundElementType(mlir::MLIRContext* context, mlir::Type
         return nullableSource.getValueType();
     }
 
+    // A list read out of a property rides a nullable chunk, the way every property value
+    // does; its elements are the list's all the same, and a row holding no list drains
+    // into no row rather than into a null.
+    const mlir::Type unwrapped = nullableSource ? nullableSource.getValueType() : sourceElement;
+
     // Any source but a list keeps the column it already rides - its cells are the
     // elements, and a tagged cell holding a list gives up tagged scalars again.
-    const auto listType = mlir::dyn_cast<storage::ListType>(sourceElement);
+    const auto listType = mlir::dyn_cast<storage::ListType>(unwrapped);
     if (!listType) {
         return sourceElement;
     }

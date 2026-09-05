@@ -52,6 +52,15 @@ public:
         }
     }
 
+    void operator()(const ColumnConst<ListView>* typed) {
+        _buf.clear();
+        _buf.reserve(_rowCount);
+        const types::List::OwningPrimitive encoded(typed->getRaw());
+        for (size_t i = 0; i < _rowCount; i++) {
+            _buf.emplace_back(_propID, encoded);
+        }
+    }
+
 private:
     CommitWriteBuffer::UntypedProperties& _buf;
     PropertyTypeID _propID;
@@ -92,6 +101,14 @@ public:
         }
     }
 
+    void operator()(const ColumnVector<ListView>* typed) {
+        _buf.clear();
+        _buf.reserve(typed->size());
+        for (const ListView val : *typed) {
+            _buf.emplace_back(_propID, types::List::OwningPrimitive(val));
+        }
+    }
+
     template <typename T>
     void operator()(const ColumnVector<std::optional<T>>* typed) {
         _buf.clear();
@@ -123,6 +140,17 @@ public:
                 throw IRException("Cannot set a property to NULL in CREATE.");
             }
             _buf.emplace_back(_propID, types::Embedding::OwningPrimitive(val->begin(), val->end()));
+        }
+    }
+
+    void operator()(const ColumnVector<std::optional<ListView>>* typed) {
+        _buf.clear();
+        _buf.reserve(typed->size());
+        for (const std::optional<ListView>& val : *typed) {
+            if (!val) {
+                throw IRException("Cannot set a property to NULL in CREATE.");
+            }
+            _buf.emplace_back(_propID, types::List::OwningPrimitive(*val));
         }
     }
 

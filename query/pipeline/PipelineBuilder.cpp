@@ -1664,6 +1664,8 @@ template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<Entity
 template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Edge, db::types::Bool>(PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Node, db::types::Embedding>(PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Edge, db::types::Embedding>(PropertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Node, db::types::List>(PropertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetProperties<EntityType::Edge, db::types::List>(PropertyType);
 
 template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::Int64>(ColumnTag, PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::UInt64>(ColumnTag, PropertyType);
@@ -1677,6 +1679,8 @@ template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNul
 template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::Bool>(ColumnTag, PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::Embedding>(ColumnTag, PropertyType);
 template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::Embedding>(ColumnTag, PropertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Node, db::types::List>(ColumnTag, PropertyType);
+template PipelineValuesOutputInterface& PipelineBuilder::addGetPropertiesWithNull<EntityType::Edge, db::types::List>(ColumnTag, PropertyType);
 
 template PipelineBlockOutputInterface& PipelineBuilder::addShortestPath<db::types::Double>(PipelineOutputInterface*,
                                                                                            ColumnTag,
@@ -1707,6 +1711,7 @@ template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::D
 template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::Bool::Primitive, NodeID>(const Index*);
 template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::String::Primitive, NodeID>(const Index*);
 template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::Embedding::Primitive, NodeID>(const Index*);
+template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::List::Primitive, NodeID>(const Index*);
 
 template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::Int64::Primitive, EdgeID>(const Index*);
 template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::UInt64::Primitive, EdgeID>(const Index*);
@@ -1714,6 +1719,7 @@ template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::D
 template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::Bool::Primitive, EdgeID>(const Index*);
 template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::String::Primitive, EdgeID>(const Index*);
 template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::Embedding::Primitive, EdgeID>(const Index*);
+template PipelineValuesOutputInterface& PipelineBuilder::addIndexLookup<types::List::Primitive, EdgeID>(const Index*);
 
 template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::Int64>(ListView list, ValueType homogeneity);
 template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::UInt64>(ListView list, ValueType homogeneity);
@@ -1721,3 +1727,4 @@ template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::Double
 template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::Bool>(ListView list, ValueType homogeneity);
 template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::String>(ListView list, ValueType homogeneity);
 template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::Embedding>(ListView list, ValueType homogeneity);
+template PipelineValuesOutputInterface& PipelineBuilder::addUnwind<types::List>(ListView list, ValueType homogeneity);

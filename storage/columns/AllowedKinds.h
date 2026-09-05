@@ -588,7 +588,8 @@ struct OutputtedTypes {
 
         ListView,
         ListElementView,
-        std::optional<ListElementView>
+        std::optional<ListElementView>,
+        std::optional<ListView>
     >>;
 
     using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>()>;
@@ -637,6 +638,7 @@ struct WriteProcessorPropertyTypes {
         types::String::Primitive,
         types::Bool::Primitive,
         types::Embedding::Primitive,
+        ListView,
 
         std::optional<types::Int64::Primitive>,
         std::optional<types::UInt64::Primitive>,
@@ -644,6 +646,7 @@ struct WriteProcessorPropertyTypes {
         std::optional<types::String::Primitive>,
         std::optional<types::Bool::Primitive>,
         std::optional<types::Embedding::Primitive>,
+        std::optional<ListView>,
 
         std::string, // For LOAD CSV inputs
         std::optional<std::string> // For labels() and type(), which own their strings
@@ -657,6 +660,7 @@ struct WriteProcessorPropertyTypes {
         types::String::Primitive,
         types::Bool::Primitive,
         types::Embedding::Primitive,
+        ListView,
 
         std::string // For LOAD CSV inputs
     >>;

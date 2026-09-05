@@ -252,6 +252,7 @@ template WeakArc<Index> VersionController::createNodePropertyIndex<types::Double
 template WeakArc<Index> VersionController::createNodePropertyIndex<types::String>(std::string_view indexName, PropertyTypeID ptID);
 template WeakArc<Index> VersionController::createNodePropertyIndex<types::Bool>(std::string_view indexName, PropertyTypeID ptID);
 template WeakArc<Index> VersionController::createNodePropertyIndex<types::Embedding>(std::string_view indexName, PropertyTypeID ptID);
+template WeakArc<Index> VersionController::createNodePropertyIndex<types::List>(std::string_view indexName, PropertyTypeID ptID);
 
 template WeakArc<Index> VersionController::createEdgePropertyIndex<types::Int64>(std::string_view indexName, PropertyTypeID ptID);
 template WeakArc<Index> VersionController::createEdgePropertyIndex<types::UInt64>(std::string_view indexName, PropertyTypeID ptID);
@@ -259,4 +260,5 @@ template WeakArc<Index> VersionController::createEdgePropertyIndex<types::Double
 template WeakArc<Index> VersionController::createEdgePropertyIndex<types::String>(std::string_view indexName, PropertyTypeID ptID);
 template WeakArc<Index> VersionController::createEdgePropertyIndex<types::Bool>(std::string_view indexName, PropertyTypeID ptID);
 template WeakArc<Index> VersionController::createEdgePropertyIndex<types::Embedding>(std::string_view indexName, PropertyTypeID ptID);
+template WeakArc<Index> VersionController::createEdgePropertyIndex<types::List>(std::string_view indexName, PropertyTypeID ptID);
 }

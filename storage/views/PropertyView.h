@@ -12,7 +12,8 @@ using PropertyVariant = std::variant<const types::Int64::Primitive*,
                                      const types::Double::Primitive*,
                                      const types::String::Primitive*,
                                      const types::Bool::Primitive*,
-                                     const types::Embedding::Primitive*>;
+                                     const types::Embedding::Primitive*,
+                                     const types::List::Primitive*>;
 
 struct PropertyView {
     PropertyTypeID _id;

@@ -96,7 +96,8 @@ public:
         Column*,
         ListView,
         ListElementView,
-        std::optional<ListElementView>
+        std::optional<ListElementView>,
+        std::optional<ListView>
     >;
 
     using Code = uint8_t;

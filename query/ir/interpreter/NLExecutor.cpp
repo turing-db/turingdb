@@ -123,11 +123,28 @@ void fillHomogeneousChunk(Column* output, ValueType valueType, const ListView li
     ValueTypeDispatcher {valueType}.execute(fill);
 }
 
+// The list one row of an unwind source holds. A plain list column has one in every row; a
+// nullable one - a list read back out of a property - has none where the property is
+// absent, and those rows never reach an emit because the count function skips them.
+ListView sourceList(const ColumnVector<ListView>* source, size_t row) {
+    return source->getRaw()[row];
+}
+
+ListView sourceList(const ColumnOptVector<ListView>* source, size_t row) {
+    return *source->getRaw()[row];
+}
+
 // The rows one cell of a list column unwinds into: one per element, so an empty list
 // contributes none.
 size_t unwindListElementCount(const Column* source, size_t row) {
     const auto* lists = static_cast<const ColumnVector<ListView>*>(source);
     return (*lists)[row].size();
+}
+
+// The nullable sibling: an absent list unwinds into no row at all, as a null value does.
+size_t unwindOptListElementCount(const Column* source, size_t row) {
+    const std::optional<ListView>& list = static_cast<const ColumnOptVector<ListView>*>(source)->getRaw()[row];
+    return list.has_value() ? list->size() : 0;
 }
 
 // The rows one cell of a nullable value column unwinds into: the single row a present
@@ -147,11 +164,12 @@ size_t unwindValueElementCount(const Column* source, size_t row) {
 // Copy the tagged elements one step covers out of a list column into the type-erased
 // element column: each output row is the element at its position in the list its source
 // row holds.
+template <typename SourceColumn>
 void unwindListElementEmit(const Column* source,
                            const ColumnVector<size_t>* rows,
                            const ColumnVector<size_t>* positions,
                            Column* output) {
-    const std::vector<ListView>& lists = static_cast<const ColumnVector<ListView>*>(source)->getRaw();
+    const SourceColumn* lists = static_cast<const SourceColumn*>(source);
     const std::vector<size_t>& rowsRaw = rows->getRaw();
     const std::vector<size_t>& positionsRaw = positions->getRaw();
 
@@ -159,7 +177,7 @@ void unwindListElementEmit(const Column* source,
     outputRaw.resize(rowsRaw.size());
 
     for (size_t index = 0; index < rowsRaw.size(); index++) {
-        outputRaw[index] = lists[rowsRaw[index]].elements()[positionsRaw[index]];
+        outputRaw[index] = sourceList(lists, rowsRaw[index]).elements()[positionsRaw[index]];
     }
 }
 
@@ -168,12 +186,12 @@ void unwindListElementEmit(const Column* source,
 // element type is the column's, so every element either carries that type or is the null
 // a list built out of a column with an absent cell holds - the tag check is what holds a
 // list whose elements disagree with both to that promise.
-template <typename Primitive>
+template <typename SourceColumn, typename Primitive>
 void unwindListValueEmit(const Column* source,
                          const ColumnVector<size_t>* rows,
                          const ColumnVector<size_t>* positions,
                          Column* output) {
-    const std::vector<ListView>& lists = static_cast<const ColumnVector<ListView>*>(source)->getRaw();
+    const SourceColumn* lists = static_cast<const SourceColumn*>(source);
     const std::vector<size_t>& rowsRaw = rows->getRaw();
     const std::vector<size_t>& positionsRaw = positions->getRaw();
 
@@ -183,7 +201,7 @@ void unwindListValueEmit(const Column* source,
     constexpr ListBufferTypeTag expectedTag = TypeToListBufferTag<Primitive>::Tag;
 
     for (size_t index = 0; index < rowsRaw.size(); index++) {
-        const ListElementView element = lists[rowsRaw[index]].elements()[positionsRaw[index]];
+        const ListElementView element = sourceList(lists, rowsRaw[index]).elements()[positionsRaw[index]];
         const ListBufferTypeTag tag = element.getTag();
 
         if (tag == ListBufferTypeTag::Null) {
@@ -199,12 +217,12 @@ void unwindListValueEmit(const Column* source,
 
 // The present-in-every-row sibling of unwindListValueEmit: a nested list is always there,
 // so the elements drain into a plain column rather than a nullable one.
-template <typename Element>
+template <typename SourceColumn, typename Element>
 void unwindListPlainEmit(const Column* source,
                          const ColumnVector<size_t>* rows,
                          const ColumnVector<size_t>* positions,
                          Column* output) {
-    const std::vector<ListView>& lists = static_cast<const ColumnVector<ListView>*>(source)->getRaw();
+    const SourceColumn* lists = static_cast<const SourceColumn*>(source);
     const std::vector<size_t>& rowsRaw = rows->getRaw();
     const std::vector<size_t>& positionsRaw = positions->getRaw();
 
@@ -214,7 +232,7 @@ void unwindListPlainEmit(const Column* source,
     constexpr ListBufferTypeTag expectedTag = TypeToListBufferTag<Element>::Tag;
 
     for (size_t index = 0; index < rowsRaw.size(); index++) {
-        const ListElementView element = lists[rowsRaw[index]].elements()[positionsRaw[index]];
+        const ListElementView element = sourceList(lists, rowsRaw[index]).elements()[positionsRaw[index]];
         bioassert(element.getTag() == expectedTag, "Unwound element does not have the unwound list's element type.");
 
         outputRaw[index] = element.getAs<Element>();
@@ -224,12 +242,12 @@ void unwindListPlainEmit(const Column* source,
 // The entity sibling of unwindListPlainEmit: an ID column spells a null entity as an
 // invalid ID, so the tagged null a list holds drains back into one rather than tripping
 // the tag check.
-template <typename IDType>
+template <typename SourceColumn, typename IDType>
 void unwindListValidIDEmit(const Column* source,
                            const ColumnVector<size_t>* rows,
                            const ColumnVector<size_t>* positions,
                            Column* output) {
-    const std::vector<ListView>& lists = static_cast<const ColumnVector<ListView>*>(source)->getRaw();
+    const SourceColumn* lists = static_cast<const SourceColumn*>(source);
     const std::vector<size_t>& rowsRaw = rows->getRaw();
     const std::vector<size_t>& positionsRaw = positions->getRaw();
 
@@ -239,7 +257,7 @@ void unwindListValidIDEmit(const Column* source,
     constexpr ListBufferTypeTag expectedTag = TypeToListBufferTag<IDType>::Tag;
 
     for (size_t index = 0; index < rowsRaw.size(); index++) {
-        const ListElementView element = lists[rowsRaw[index]].elements()[positionsRaw[index]];
+        const ListElementView element = sourceList(lists, rowsRaw[index]).elements()[positionsRaw[index]];
         const ListBufferTypeTag tag = element.getTag();
 
         if (tag == ListBufferTypeTag::Null) {
@@ -1580,6 +1598,20 @@ void distinctKeyAppendListColumn(const Column* column, size_t row, std::string& 
     distinctAppendListBytes(key, raw[row]);
 }
 
+// The nullable counterpart, for a list read out of a property.
+void distinctKeyAppendOptListColumn(const Column* column, size_t row, std::string& key) {
+    const auto& raw = static_cast<const ColumnOptVector<ListView>*>(column)->getRaw();
+    const std::optional<ListView>& value = raw[row];
+
+    if (!value.has_value()) {
+        key.push_back('\0');
+        return;
+    }
+
+    key.push_back('\1');
+    distinctAppendListBytes(key, *value);
+}
+
 // The 64-bit finalizer of MurmurHash3, so a key's bits spread over every bucket
 uint64_t mixKeyBits(uint64_t bits) {
     bits ^= bits >> 33;
@@ -1677,6 +1709,24 @@ void hashListKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
     });
 }
 
+// The nullable sibling, for a list read out of a property: an absent list hashes to the
+// zero a null key takes everywhere else, and a present one hashes as a plain column's does.
+void hashOptListKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
+    const auto& raw = static_cast<const ColumnOptVector<ListView>*>(column)->getRaw();
+    hashes.resize(raw.size());
+
+    std::string bytes;
+    std::transform(raw.begin(), raw.end(), hashes.begin(), [&bytes](const std::optional<ListView>& list) {
+        if (!list.has_value()) {
+            return uint64_t {0};
+        }
+
+        bytes.clear();
+        distinctAppendListBytes(bytes, *list);
+        return hashKeyValue(std::string_view(bytes));
+    });
+}
+
 template <typename ElementType>
 bool keyValuesEqual(const ElementType& probe, const ElementType& build) {
     return probe == build;
@@ -1710,6 +1760,11 @@ NLJoinKeyFunctions joinKeyFunctions() {
 template <typename Primitive>
 NLJoinKeyFunctions optJoinKeyFunctions() {
     return {&hashOptKeyColumn<Primitive>, &keyEqualOptColumn<Primitive>};
+}
+
+template <>
+NLJoinKeyFunctions optJoinKeyFunctions<ListView>() {
+    return {&hashOptListKeyColumn, &keyEqualOptColumn<ListView>};
 }
 
 // The group of build rows carrying a key, or noRow when no indexed row carries it. One
@@ -2511,6 +2566,32 @@ void groupFoldCountDistinctListElement(Column* accumulator,
 
         distinct.beginKey(group);
         distinctAppendElementBytes(distinct.getKey(), *element);
+
+        if (distinct.insertIfNew()) {
+            counts[group]++;
+        }
+    }
+}
+
+// Tally each group's distinct present lists, keying on the elements rather than on the
+// view, so two rows count once when their lists are equal.
+void groupFoldCountDistinctPresentList(Column* accumulator,
+                                       std::vector<uint64_t>& counts,
+                                       const Column* input,
+                                       const std::vector<size_t>& groups,
+                                       NLGroupDistinctTally& distinct) {
+    const auto& inputRaw = static_cast<const ColumnOptVector<ListView>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const std::optional<ListView>& value = inputRaw[row];
+        if (!value.has_value()) {
+            continue;
+        }
+
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendListBytes(distinct.getKey(), *value);
 
         if (distinct.insertIfNew()) {
             counts[group]++;
@@ -5910,8 +5991,8 @@ NLCollectFoldFunction NLExecutor::selectCollectDistinctFold(ValueType valueType)
     return nullptr;
 }
 
-NLUnwindElementCountFunction NLExecutor::selectListUnwindElementCount() {
-    return &unwindListElementCount;
+NLUnwindElementCountFunction NLExecutor::selectListUnwindElementCount(bool sourceIsNullable) {
+    return sourceIsNullable ? &unwindOptListElementCount : &unwindListElementCount;
 }
 
 NLUnwindElementCountFunction NLExecutor::selectOptUnwindElementCount(ValueType valueType) {
@@ -5929,31 +6010,37 @@ NLUnwindElementCountFunction NLExecutor::selectValueUnwindElementCount() {
     return &unwindValueElementCount;
 }
 
-NLUnwindElementEmitFunction NLExecutor::selectListUnwindElementEmit() {
-    return &unwindListElementEmit;
+NLUnwindElementEmitFunction NLExecutor::selectListUnwindElementEmit(bool sourceIsNullable) {
+    return sourceIsNullable ? &unwindListElementEmit<ColumnOptVector<ListView>>
+                            : &unwindListElementEmit<ColumnVector<ListView>>;
 }
 
-NLUnwindElementEmitFunction NLExecutor::selectListUnwindValueEmit(ValueType valueType) {
+NLUnwindElementEmitFunction NLExecutor::selectListUnwindValueEmit(bool sourceIsNullable, ValueType valueType) {
     NLUnwindElementEmitFunction selected = nullptr;
 
     const auto select = [&]<SupportedType T>() {
-        selected = &unwindListValueEmit<typename T::Primitive>;
+        selected = sourceIsNullable
+                       ? &unwindListValueEmit<ColumnOptVector<ListView>, typename T::Primitive>
+                       : &unwindListValueEmit<ColumnVector<ListView>, typename T::Primitive>;
     };
     ValueTypeDispatcher(valueType).execute(select);
 
     return selected;
 }
 
-NLUnwindElementEmitFunction NLExecutor::selectListUnwindNodeEmit() {
-    return &unwindListValidIDEmit<NodeID>;
+NLUnwindElementEmitFunction NLExecutor::selectListUnwindNodeEmit(bool sourceIsNullable) {
+    return sourceIsNullable ? &unwindListValidIDEmit<ColumnOptVector<ListView>, NodeID>
+                            : &unwindListValidIDEmit<ColumnVector<ListView>, NodeID>;
 }
 
-NLUnwindElementEmitFunction NLExecutor::selectListUnwindEdgeEmit() {
-    return &unwindListValidIDEmit<EdgeID>;
+NLUnwindElementEmitFunction NLExecutor::selectListUnwindEdgeEmit(bool sourceIsNullable) {
+    return sourceIsNullable ? &unwindListValidIDEmit<ColumnOptVector<ListView>, EdgeID>
+                            : &unwindListValidIDEmit<ColumnVector<ListView>, EdgeID>;
 }
 
-NLUnwindElementEmitFunction NLExecutor::selectListUnwindListEmit() {
-    return &unwindListPlainEmit<ListView>;
+NLUnwindElementEmitFunction NLExecutor::selectListUnwindListEmit(bool sourceIsNullable) {
+    return sourceIsNullable ? &unwindListPlainEmit<ColumnOptVector<ListView>, ListView>
+                            : &unwindListPlainEmit<ColumnVector<ListView>, ListView>;
 }
 
 NLUnwindElementCountFunction NLExecutor::selectTaggedUnwindElementCount() {
@@ -6704,6 +6791,10 @@ NLKeyAppendFunction NLExecutor::selectOptKeyAppendFunction(ValueType valueType) 
             throw IRException("cannot remove duplicates on an embedding column");
         break;
 
+        case ValueType::List:
+            return &distinctKeyAppendOptListColumn;
+        break;
+
         case ValueType::Invalid:
         case ValueType::_SIZE:
             throw IRException("invalid distinct key value type");
@@ -7139,6 +7230,10 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctFold(ValueType 
             throw IRException("cannot count the distinct values of an embedding column");
         break;
 
+        case ValueType::List:
+            return &groupFoldCountDistinctPresentList;
+        break;
+
         case ValueType::Invalid:
         case ValueType::_SIZE:
             throw IRException("invalid count(DISTINCT) value type");
@@ -7427,6 +7522,10 @@ NLKeyAppendFunction NLExecutor::selectConstMergeKeyAppendFunction(ValueType valu
             throw IRException("a MERGE pattern cannot constrain a property to an embedding");
         break;
 
+        case ValueType::List:
+            throw IRException("a MERGE pattern cannot constrain a property to a list");
+        break;
+
         case ValueType::Invalid:
         case ValueType::_SIZE:
             throw IRException("invalid MERGE property value type");
@@ -7641,6 +7740,10 @@ NLCompareFunction NLExecutor::selectOptCompareFunction(ValueType valueType) {
             throw IRException("cannot sort by an embedding column");
         break;
 
+        case ValueType::List:
+            throw IRException("cannot sort by a list column");
+        break;
+
         case ValueType::Invalid:
         case ValueType::_SIZE:
             throw IRException("invalid sort key value type");
@@ -7722,12 +7825,14 @@ template void NLExecutor::runPropertyFetch<NodeID, types::Double>(NLExecutionCon
 template void NLExecutor::runPropertyFetch<NodeID, types::Bool>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<NodeID, types::String>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<NodeID, types::Embedding>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runPropertyFetch<NodeID, types::List>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::Int64>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::UInt64>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::Double>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::Bool>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::String>(NLExecutionContext*, NLFunctionData*);
 template void NLExecutor::runPropertyFetch<EdgeID, types::Embedding>(NLExecutionContext*, NLFunctionData*);
+template void NLExecutor::runPropertyFetch<EdgeID, types::List>(NLExecutionContext*, NLFunctionData*);
 
 void NLExecutor::runGetNodeLabelSet(NLExecutionContext* context, NLFunctionData* data) {
     NLGetNodeLabelSetData* fetchData = static_cast<NLGetNodeLabelSetData*>(data);

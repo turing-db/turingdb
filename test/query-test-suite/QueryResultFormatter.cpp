@@ -91,6 +91,8 @@ template <int I>
     return value ? "change_ptr" : "null";
 }
 
+[[maybe_unused]] std::string valueToString(db::ListView view);
+
 template <typename T>
 [[maybe_unused]] std::string valueToString(const T& value) {
     return fmt::format("{}", value);
