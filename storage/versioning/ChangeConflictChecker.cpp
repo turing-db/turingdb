@@ -139,7 +139,17 @@ void ChangeConflictChecker::checkPendingEdgeConflicts(const ConflictCheckSets& w
                                                       const CommitWriteBuffer& writeBuffer) {
     // Check for pending edges to see if their source or target has write conflict
     const CommitWriteBuffer::PendingEdges& pendingEdges = writeBuffer.pendingEdges();
-    for (const CommitWriteBuffer::PendingEdge& edge : pendingEdges) {
+    const CommitWriteBuffer::DeletedPendingEntities& deleted = writeBuffer.deletedPendingEdges();
+
+    for (size_t offset = 0; offset < pendingEdges.size(); offset++) {
+        // An edge this change deletes again is never created, so what happened to the
+        // nodes it would have joined cannot conflict with it
+        if (deleted.contains(offset)) {
+            continue;
+        }
+
+        const CommitWriteBuffer::PendingEdge& edge = pendingEdges[offset];
+
         // Check if source node was modified
         if (const NodeID* oldSrcID = std::get_if<NodeID>(&edge.src)) {
             const NodeID newSrc = {_entityIDRebaser.rebaseNodeID(*oldSrcID)};

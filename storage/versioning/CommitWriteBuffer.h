@@ -176,16 +176,17 @@ public:
     const DeletedPendingEntities& deletedPendingEdges() const { return _deletedPendingEdges; }
 
     /**
-     * @brief Marks every pending edge incident to a deleted pending node as deleted too,
-     * the pending counterpart of @ref addHangingEdges.
+     * @brief Marks every pending edge incident to a node this commit deletes - one it
+     * created or one already committed - as deleted too, the pending counterpart of
+     * @ref addHangingEdges.
      */
     void addHangingPendingEdges();
 
     /**
-     * @brief Whether any pending edge is incident to the pending node at @param offset,
-     * which a DELETE without DETACH must refuse.
+     * @brief Whether any pending edge this commit has not deleted is incident to
+     * @param node, which a DELETE without DETACH must refuse.
      */
-    bool pendingNodeHasEdges(PendingNodeOffset offset) const;
+    bool hasPendingEdgesOn(const ExistingOrPendingNode& node) const;
 
     void addNodeUpdate(NodeID id, UntypedProperty& updatedProperty);
     void addEdgeUpdate(EdgeID id, UntypedProperty& updatedProperty);
@@ -257,7 +258,7 @@ private:
 
     EdgeID buildPendingEdge(DataPartBuilder& builder, const PendingEdge& edge, bool deleted);
 
-    bool touchesDeletedPendingNode(const PendingEdge& edge) const;
+    bool touchesDeletedNode(const PendingEdge& edge) const;
 
     void applyNodeUpdates(DataPartBuilder& builder);
     void applyEdgeUpdates(DataPartBuilder& builder);

@@ -270,25 +270,20 @@ void CommitWriteBuffer::addDeletedPendingEdge(size_t offset) {
 
 void CommitWriteBuffer::addHangingPendingEdges() {
     for (size_t offset = 0; offset < _pendingEdges.size(); offset++) {
-        if (touchesDeletedPendingNode(_pendingEdges[offset])) {
+        if (touchesDeletedNode(_pendingEdges[offset])) {
             _deletedPendingEdges.insert(offset);
         }
     }
 }
 
-bool CommitWriteBuffer::pendingNodeHasEdges(PendingNodeOffset offset) const {
-    for (size_t edgeOffset = 0; edgeOffset < _pendingEdges.size(); edgeOffset++) {
-        if (_deletedPendingEdges.contains(edgeOffset)) {
+bool CommitWriteBuffer::hasPendingEdgesOn(const ExistingOrPendingNode& node) const {
+    for (size_t offset = 0; offset < _pendingEdges.size(); offset++) {
+        if (_deletedPendingEdges.contains(offset)) {
             continue;
         }
 
-        const PendingEdge& edge = _pendingEdges[edgeOffset];
-        const bool isSource = std::holds_alternative<PendingNodeOffset>(edge.src)
-            && std::get<PendingNodeOffset>(edge.src) == offset;
-        const bool isTarget = std::holds_alternative<PendingNodeOffset>(edge.tgt)
-            && std::get<PendingNodeOffset>(edge.tgt) == offset;
-
-        if (isSource || isTarget) {
+        const PendingEdge& edge = _pendingEdges[offset];
+        if (edge.src == node || edge.tgt == node) {
             return true;
         }
     }
@@ -296,11 +291,13 @@ bool CommitWriteBuffer::pendingNodeHasEdges(PendingNodeOffset offset) const {
     return false;
 }
 
-bool CommitWriteBuffer::touchesDeletedPendingNode(const PendingEdge& edge) const {
+bool CommitWriteBuffer::touchesDeletedNode(const PendingEdge& edge) const {
     const auto isDeleted = [this](const ExistingOrPendingNode& node) {
-        const PendingNodeOffset* offset = std::get_if<PendingNodeOffset>(&node);
+        if (const PendingNodeOffset* offset = std::get_if<PendingNodeOffset>(&node)) {
+            return _deletedPendingNodes.contains(*offset);
+        }
 
-        return offset && _deletedPendingNodes.contains(*offset);
+        return _deletedNodes.contains(std::get<NodeID>(node));
     };
 
     return isDeleted(edge.src) || isDeleted(edge.tgt);
