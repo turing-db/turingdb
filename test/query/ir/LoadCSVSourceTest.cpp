@@ -162,6 +162,23 @@ TEST_F(LoadCSVSourceTest, readsAFieldNamedTwiceOnce) {
                {{"Alice", "Alice"}, {"Bob", "Bob"}, {"Charlie", "Charlie"}});
 }
 
+// A position and a header naming the same field are declared apart - positions against
+// positions, headers against headers - so the load reads that field once per access.
+// Both accesses still carry the characters the file holds.
+TEST_F(LoadCSVSourceTest, readsAFieldNamedByPositionAndByHeader) {
+    expectRows("LOAD CSV 'headed.csv' WITH HEADERS AS row "
+               "RETURN row[0] AS byPosition, row.name AS byHeader",
+               {{"Alice", "Alice"}, {"Bob", "Bob"}, {"Charlie", "Charlie"}});
+
+    expectRows("LOAD CSV 'headed.csv' WITH HEADERS AS row "
+               "RETURN row.name AS byHeader, row[0] AS byPosition",
+               {{"Alice", "Alice"}, {"Bob", "Bob"}, {"Charlie", "Charlie"}});
+
+    expectRows("LOAD CSV 'headed.csv' WITH HEADERS AS row "
+               "RETURN row[1] AS byPosition, row.age AS byHeader, row[2] AS city",
+               {{"30", "30", "London"}, {"25", "25", "Paris"}, {"35", "35", "Berlin"}});
+}
+
 // An unaliased item is named after the text the query wrote, as every other projected
 // expression is.
 TEST_F(LoadCSVSourceTest, namesAnUnaliasedFieldAfterItsText) {
