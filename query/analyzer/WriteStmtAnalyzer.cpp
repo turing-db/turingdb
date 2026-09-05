@@ -102,7 +102,7 @@ void WriteStmtAnalyzer::analyze(const SetStmt* setStmt) {
 }
 
 void WriteStmtAnalyzer::analyze(const DeleteStmt* deleteStmt) {
-    if (_hasCreate) {
+    if (_hasCreate && !_isV3) {
         throwError("CREATE ... DELETE is not yet supported.", deleteStmt);
     }
 

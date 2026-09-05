@@ -6,6 +6,7 @@
 #include "VectorDatabase.h"
 
 #include "NLSystemContext.h"
+#include "NLWrittenValues.h"
 
 using namespace db;
 
@@ -18,7 +19,8 @@ NLExecutionContext::NLExecutionContext(const GraphView* view,
     _sink(sink),
     _chunkSize(chunkSize),
     _writeBuffer(writeBuffer),
-    _system(system)
+    _system(system),
+    _writtenValues(std::make_unique<NLWrittenValues>())
 {
 }
 

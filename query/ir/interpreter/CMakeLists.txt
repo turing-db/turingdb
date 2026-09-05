@@ -3,6 +3,7 @@ set(ir_interpreter_sources
     NLOutputSink.cpp
     NLExecutionContext.cpp
     NLWriteProperties.cpp
+    NLWrittenValues.cpp
     NLExecutor.cpp
     NLMergeExecutor.cpp
     NLMergeWorkingSet.cpp

@@ -2157,10 +2157,13 @@ def DeleteNode : NLOp<"delete_node"> {
       }
   }];
 
-  let arguments = (ins NLNodeIDChunk:$input_nodes, UnitAttr:$detach);
+  // `pending` is the mask an nl.merge produced beside its node chunk: such a row names
+  // a node this change wrote and has not committed, which is dropped from the write
+  // buffer rather than tombstoned by an ID the graph does not hold.
+  let arguments = (ins NLNodeIDChunk:$input_nodes, UnitAttr:$detach, Optional<NLBoolChunk>:$pending);
 
   let assemblyFormat = [{
-    $input_nodes (`detach` $detach^)? attr-dict
+    $input_nodes (`detach` $detach^)? (`pending` $pending^)? attr-dict
   }];
 }
 
@@ -2172,10 +2175,10 @@ def DeleteEdge : NLOp<"delete_edge"> {
       }
   }];
 
-  let arguments = (ins NLEdgeIDChunk:$input_edges);
+  let arguments = (ins NLEdgeIDChunk:$input_edges, Optional<NLBoolChunk>:$pending);
 
   let assemblyFormat = [{
-    $input_edges attr-dict
+    $input_edges (`pending` $pending^)? attr-dict
   }];
 }
 
