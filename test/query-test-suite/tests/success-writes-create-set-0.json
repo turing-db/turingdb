@@ -3,9 +3,9 @@
   "graph": "simpledb",
   "query": "CREATE (n:Person) SET n.age = \"Node\"",
   "expect": {
-    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n:Person) SET n.age = \"Node\"\n       |                   ^^^^^^^^^^^^^^^^^^\n-------* CREATE ... SET is not yet supported. Please use brace initialisation.",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n:Person) SET n.age = \"Node\"\n       |                   ^^^^^^^^^^^^^^^^^^\n-------* CREATE ... SET is not yet supported. Please use brace initialisation.",
-    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | CREATE (n:Person) SET n.age = \\\"Node\\\"\\n       |                   ^^^^^^^^^^^^^^^^^^\\n-------* CREATE ... SET is not yet supported. Please use brace initialisation.\"}"
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n:Person) SET n.age = \"Node\"\n       |                       ^^^^^^^^^^^^^^\n-------* Cannot evaluate property: types 'Int64' and 'String' are incompatible",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n:Person) SET n.age = \"Node\"\n       |                       ^^^^^^^^^^^^^^\n-------* Cannot evaluate property: types 'Int64' and 'String' are incompatible",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | CREATE (n:Person) SET n.age = \\\"Node\\\"\\n       |                       ^^^^^^^^^^^^^^\\n-------* Cannot evaluate property: types 'Int64' and 'String' are incompatible\"}"
   },
   "tags": [
     "success",

@@ -2518,6 +2518,16 @@ CommitWriteBuffer::ExistingOrPendingNode resolveNode(const ColumnNodeIDs* column
     }
 }
 
+// The IDs a create wrote into its result column are offsets into the change's write
+// buffer, so a delete of what the same query created reads them back as such
+template <typename IDT>
+void collectPendingOffsets(const ColumnVector<IDT>* column, std::vector<size_t>& offsets) {
+    const std::vector<IDT>& raw = column->getRaw();
+
+    offsets.resize(raw.size());
+    std::transform(raw.begin(), raw.end(), offsets.begin(), [](IDT id) { return id.getValue(); });
+}
+
 void throwIfNodesHaveEdges(const GraphView& view, const ColumnNodeIDs* nodes) {
     const Tombstones& tombstones = view.tombstones();
 
@@ -2776,7 +2786,16 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
     const Column* nodeCol = setData->getValue();
     extractColumnProperties(nodeCol, rowCount, propID, propsBuffer);
 
-    const auto& raw = nodes->getRaw();
+    const std::vector<NodeID>& raw = nodes->getRaw();
+
+    if (setData->isInputPending()) {
+        for (size_t row = 0; row < rowCount; row++) {
+            writeBuffer->setPendingNodeProperty(raw[row].getValue(), propsBuffer[row]);
+        }
+
+        return;
+    }
+
     for (size_t row = 0; row < rowCount; row++) {
         writeBuffer->addNodeUpdate(raw[row], propsBuffer[row]);
     }
@@ -2795,7 +2814,16 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
     CommitWriteBuffer::UntypedProperties propsBuffer;
     extractColumnProperties(edgeCol, rowCount, propID, propsBuffer);
 
-    const auto& raw = edges->getRaw();
+    const std::vector<EdgeID>& raw = edges->getRaw();
+
+    if (setData->isInputPending()) {
+        for (size_t row = 0; row < rowCount; row++) {
+            writeBuffer->setPendingEdgeProperty(raw[row].getValue(), propsBuffer[row]);
+        }
+
+        return;
+    }
+
     for (size_t row = 0; row < rowCount; row++) {
         writeBuffer->addEdgeUpdate(raw[row], propsBuffer[row]);
     }
@@ -2807,9 +2835,28 @@ void NLExecutor::runDeleteNode(NLExecutionContext* context, NLFunctionData* data
     bioassert(writeBuffer, "nl.delete_node requires an active write transaction");
 
     const ColumnNodeIDs* nodes = deleteData->getInput();
+    const bool detaching = deleteData->isDetaching();
+
+    if (deleteData->isInputPending()) {
+        std::vector<size_t> offsets;
+        collectPendingOffsets(nodes, offsets);
+
+        if (!detaching && writeBuffer->pendingNodesHaveEdges(offsets)) {
+            throw IRException("Cannot delete a node with relationships; use DETACH DELETE");
+        }
+
+        writeBuffer->addDeletedPendingNodes(offsets);
+
+        if (detaching) {
+            writeBuffer->addHangingPendingEdges();
+        }
+
+        return;
+    }
+
     const GraphView* view = context->getView();
 
-    if (deleteData->isDetaching()) {
+    if (detaching) {
         writeBuffer->addDeletedNodes(nodes->getRaw());
         writeBuffer->addHangingEdges(*view);
     } else {
@@ -2824,6 +2871,16 @@ void NLExecutor::runDeleteEdge(NLExecutionContext* context, NLFunctionData* data
     bioassert(writeBuffer, "nl.delete_edge requires an active write transaction");
 
     const ColumnEdgeIDs* edges = deleteData->getInput();
+
+    if (deleteData->isInputPending()) {
+        std::vector<size_t> offsets;
+        collectPendingOffsets(edges, offsets);
+
+        writeBuffer->addDeletedPendingEdges(offsets);
+
+        return;
+    }
+
     writeBuffer->addDeletedEdges(edges->getRaw());
 }
 

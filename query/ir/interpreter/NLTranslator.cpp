@@ -1304,6 +1304,7 @@ void NLTranslator::translateCreateEdge(nl::CreateEdge createEdge, NLStmtContaine
 
     ColumnEdgeIDs* result = _memory->alloc<ColumnEdgeIDs>();
     _valueSlots[createEdge.getResult()] = result;
+    _pendingEdgeValues.insert(createEdge.getResult());
 
     NLCreateEdgeData* data = _program->allocFunctionData<NLCreateEdgeData>(
         edgeTypeID,
@@ -1342,12 +1343,14 @@ void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty,
     const ValueType valueType = valueTypeFromChunkType(propValue.getType());
     const PropertyType propType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
 
+    const bool inputIsPending = _pendingNodeValues.contains(inputValue);
     const ColumnNodeIDs* inputColumn = static_cast<const ColumnNodeIDs*>(getColumn(inputValue));
     const Column* valueColumn = getColumn(propValue);
 
     NLSetNodePropertyData* data = _program->allocFunctionData<NLSetNodePropertyData>(
         propType._id,
         inputColumn,
+        inputIsPending,
         valueColumn);
 
     body->emplaceStmt(&NLExecutor::runSetNodeProperty, data);
@@ -1365,12 +1368,14 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
     const ValueType valueType = valueTypeFromChunkType(propValue.getType());
     const PropertyType propType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
 
+    const bool inputIsPending = _pendingEdgeValues.contains(inputValue);
     const ColumnEdgeIDs* inputColumn = static_cast<const ColumnEdgeIDs*>(getColumn(inputValue));
     const Column* valueColumn = getColumn(propValue);
 
     NLSetEdgePropertyData* data = _program->allocFunctionData<NLSetEdgePropertyData>(
         propType._id,
         inputColumn,
+        inputIsPending,
         valueColumn);
 
     body->emplaceStmt(&NLExecutor::runSetEdgeProperty, data);
@@ -1378,10 +1383,12 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
 
 void NLTranslator::translateDeleteNode(nl::DeleteNode deleteNode, NLStmtContainer* body) {
     const mlir::Value inputValue = deleteNode.getInputNodes();
+    const bool inputIsPending = _pendingNodeValues.contains(inputValue);
     const ColumnNodeIDs* inputColumn = static_cast<const ColumnNodeIDs*>(getColumn(inputValue));
 
     NLDeleteNodeData* data = _program->allocFunctionData<NLDeleteNodeData>(
         inputColumn,
+        inputIsPending,
         deleteNode.getDetach());
 
     body->emplaceStmt(&NLExecutor::runDeleteNode, data);
@@ -1389,9 +1396,11 @@ void NLTranslator::translateDeleteNode(nl::DeleteNode deleteNode, NLStmtContaine
 
 void NLTranslator::translateDeleteEdge(nl::DeleteEdge deleteEdge, NLStmtContainer* body) {
     const mlir::Value inputValue = deleteEdge.getInputEdges();
+    const bool inputIsPending = _pendingEdgeValues.contains(inputValue);
     const ColumnEdgeIDs* inputColumn = static_cast<const ColumnEdgeIDs*>(getColumn(inputValue));
 
-    NLDeleteEdgeData* data = _program->allocFunctionData<NLDeleteEdgeData>(inputColumn);
+    NLDeleteEdgeData* data = _program->allocFunctionData<NLDeleteEdgeData>(inputColumn,
+                                                                          inputIsPending);
 
     body->emplaceStmt(&NLExecutor::runDeleteEdge, data);
 }

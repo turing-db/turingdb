@@ -3,9 +3,9 @@
   "graph": "simpledb",
   "query": "CREATE (n:Person) SET n.age = 32 RETURN n, n.age",
   "expect": {
-    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n:Person) SET n.age = 32 RETURN n, n.age\n       |                   ^^^^^^^^^^^^^^\n-------* CREATE ... SET is not yet supported. Please use brace initialisation.",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n:Person) SET n.age = 32 RETURN n, n.age\n       |                   ^^^^^^^^^^^^^^\n-------* CREATE ... SET is not yet supported. Please use brace initialisation.",
-    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | CREATE (n:Person) SET n.age = 32 RETURN n, n.age\\n       |                   ^^^^^^^^^^^^^^\\n-------* CREATE ... SET is not yet supported. Please use brace initialisation.\"}"
+    "plan": "PLAN ERROR\n-------* Query error\n     1 | CREATE (n:Person) SET n.age = 32 RETURN n, n.age\n       |                                            ^^^^^\n-------* Could not return properties from variable with ambiguous source.",
+    "result": "PLAN ERROR\n-------* Query error\n     1 | CREATE (n:Person) SET n.age = 32 RETURN n, n.age\n       |                                            ^^^^^\n-------* Could not return properties from variable with ambiguous source.",
+    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"-------* Query error\\n     1 | CREATE (n:Person) SET n.age = 32 RETURN n, n.age\\n       |                                            ^^^^^\\n-------* Could not return properties from variable with ambiguous source.\"}"
   },
   "tags": [
     "create",

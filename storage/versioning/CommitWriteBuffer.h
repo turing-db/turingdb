@@ -1,5 +1,6 @@
 #pragma once
 
+#include <span>
 #include <unordered_set>
 #include <variant>
 #include <vector>
@@ -53,6 +54,10 @@ public:
      using PendingEdges = std::vector<PendingEdge>;
      using DeletedNodes = std::unordered_set<NodeID>;
      using DeletedEdges = std::unordered_set<EdgeID>;
+     /// Offsets into @ref _pendingNodes / @ref _pendingEdges, not IDs: the creates
+     /// this commit cancels because a query deleted what it had just created
+     using DeletedPendingNodes = std::unordered_set<PendingNodeOffset>;
+     using DeletedPendingEdges = std::unordered_set<size_t>;
      using UpdatedNodes = std::vector<NodeUpdate>;
      using UpdatedEdges = std::vector<EdgeUpdate>;
      using PendingIndexes = std::vector<WeakArc<Index>>;
@@ -104,7 +109,7 @@ public:
       * as registering all newly created nodes/edges in the associated @ref WriteSet of
       * @ref _journal
       */
-     void buildPending(DataPartBuilder& builder);
+     void buildPending(DataPartBuilder& builder, Tombstones& tombstones);
 
      void applyUpdates(DataPartBuilder& builder);
 
@@ -165,12 +170,33 @@ public:
     void addEdgeUpdate(EdgeID id, UntypedProperty& updatedProperty);
 
     /**
+     * @brief Writes @param property onto a node this commit has yet to create, replacing
+     * the value its create wrote for the same property: the update sets an entity that
+     * has no ID for @ref addNodeUpdate to name yet.
+     */
+    void setPendingNodeProperty(PendingNodeOffset nodeOffset, const UntypedProperty& property);
+
+    void setPendingEdgeProperty(size_t edgeOffset, const UntypedProperty& property);
+
+    /**
      * @brief Adds a single EdgeID contained in @param newDeletedEdge to the member @ref
      * _deletedEdges
      */
     void addDeletedEdge(const EdgeID& newDeletedEdge);
 
     void addHangingEdges(const GraphView& view);
+
+    void addDeletedPendingNodes(std::span<const PendingNodeOffset> nodeOffsets);
+    void addDeletedPendingEdges(std::span<const size_t> edgeOffsets);
+
+    /**
+     * @brief The counterpart of @ref addHangingEdges over the pending edges, which no
+     * graph view holds yet: cancels every one of them incident to a cancelled pending
+     * node.
+     */
+    void addHangingPendingEdges();
+
+    bool pendingNodesHaveEdges(std::span<const PendingNodeOffset> nodeOffsets) const;
 
     void addPendingIndex(const WeakArc<Index>& index);
     void addDroppedIndex(const WeakArc<Index>& index);
@@ -209,6 +235,10 @@ private:
     // Edges to be deleted when this commit commits
     DeletedEdges _deletedEdges;
 
+    // Pending nodes and edges this commit creates and then deletes
+    DeletedPendingNodes _deletedPendingNodes;
+    DeletedPendingEdges _deletedPendingEdges;
+
     UpdatedNodes _updatedNodes;
     UpdatedEdges _updatedEdges;
 
@@ -218,14 +248,23 @@ private:
     PendingNodes& pendingNodes() { return _pendingNodes; }
     PendingEdges& pendingEdges() { return _pendingEdges; }
 
-    // Collection of methods to write the buffer to the provided datapart builder
-    void buildPendingNodes(DataPartBuilder& builder);
-    void buildPendingEdges(DataPartBuilder& builder);
+    static void setPendingProperty(UntypedProperties& properties, const UntypedProperty& property);
 
-    void buildPendingNode(DataPartBuilder& builder, const PendingNode& node);
+    static bool isPendingNodeOffset(const ExistingOrPendingNode& node, PendingNodeOffset offset);
+
+    static bool isPendingEdgeIncidentTo(const PendingEdge& edge,
+                                        std::span<const PendingNodeOffset> nodeOffsets);
+
+    // Collection of methods to write the buffer to the provided datapart builder
+    void buildPendingNodes(DataPartBuilder& builder, Tombstones& tombstones);
+    void buildPendingEdges(DataPartBuilder& builder, Tombstones& tombstones);
+
+    NodeID buildPendingNode(DataPartBuilder& builder, const PendingNode& node);
     void addPendingNodeProperties(DataPartBuilder& builder, const PendingNode& node);
 
-    void buildPendingEdge(DataPartBuilder& builder, const PendingEdge& edge);
+    /// The ID the edge was built with, or an invalid one when it was skipped because an
+    /// endpoint of it is gone
+    EdgeID buildPendingEdge(DataPartBuilder& builder, const PendingEdge& edge);
 
     void applyNodeUpdates(DataPartBuilder& builder);
     void applyEdgeUpdates(DataPartBuilder& builder);

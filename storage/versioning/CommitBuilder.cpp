@@ -160,7 +160,7 @@ void CommitBuilder::flushWriteBuffer([[maybe_unused]] JobSystem& jobsystem) {
         // We create a single datapart when flushing the buffer,
         // to ensure it is synced with the metadata provided when rebasing main
         DataPartBuilder& dpBuilder = newBuilder();
-        wb.buildPending(dpBuilder);
+        wb.buildPending(dpBuilder, tombstones);
     }
 
     if (wb.containsUpdates()) {
