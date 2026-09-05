@@ -17,7 +17,9 @@
 %code requires {
 
     #include <optional>
+    #include <string_view>
     #include <utility>
+    #include <vector>
 
     // Inspired by https://github.com/antlr/grammars-v4/blob/master/cypher/CypherParser.g4
 
@@ -100,6 +102,7 @@
     #include "QualifiedName.h"
     #include "ParserException.h"
     #include "ParserUtils.h"
+    #include "ExplainRequest.h"
 
     #undef yylex
     #define yylex scanner.lex
@@ -152,6 +155,7 @@
 %token<std::string_view> OPTIONAL
 %token<std::string_view> CONTAINS
 %token<std::string_view> DISTINCT
+%token<std::string_view> EXPLAIN
 %token<std::string_view> EXTRACT
 %token<std::string_view> REQUIRE
 %token<std::string_view> COLLECT
@@ -356,6 +360,8 @@
 %type<db::Expr*> listLitItem
 %type<db::QueryCommand*> singleQuery
 %type<db::QueryCommand*> query
+%type<db::QueryCommand*> explainQuery
+%type<std::vector<std::string_view>> explainPassNames
 %type<db::LoadGraphQuery*> loadGraph
 %type<db::LoadGMLQuery*> loadGML
 %type<db::LoadParquetQuery*> loadParquet
@@ -410,6 +416,59 @@ queries
 query
     : singleQuery
     | singleQuery unionList { scanner.notImplemented(@$, "Query + Unions"); }
+    | explainQuery
+    ;
+
+explainQuery
+    : EXPLAIN singleQuery {
+        ast->explainRequest().requestDefaults();
+        $$ = $2;
+      }
+    | EXPLAIN OPAREN explainOptions CPAREN singleQuery { $$ = $5; }
+    ;
+
+explainOptions
+    : explainOption
+    | explainOptions COMMA explainOption
+    ;
+
+explainOption
+    : ID {
+        if (!ast->explainRequest().requestStage($1)) {
+            std::string message;
+            ExplainRequest::describeOptions($1, message);
+            scanner.syntaxError(@1, message);
+        }
+      }
+    | ALL { ast->explainRequest().requestAll(); }
+    | ID ID {
+        if (!ast->explainRequest().requestPass($1, $2)) {
+            std::string message;
+            ExplainRequest::describeOptions($1, message);
+            scanner.syntaxError(@1, message);
+        }
+      }
+    | ID OBRACK explainPassNames CBRACK {
+        ExplainRequest& explain = ast->explainRequest();
+
+        for (const std::string_view passName : $3) {
+            if (!explain.requestPass($1, passName)) {
+                std::string message;
+                ExplainRequest::describeOptions($1, message);
+                scanner.syntaxError(@1, message);
+            }
+        }
+      }
+    ;
+
+explainPassNames
+    : ID {
+        $$.push_back($1);
+      }
+    | explainPassNames COMMA ID {
+        $$ = std::move($1);
+        $$.push_back($3);
+      }
     ;
 
 unionList
@@ -1655,6 +1714,7 @@ reservedWord
     | DROP { $$ = Symbol::create(ast, $1); }
     | SHOW { $$ = Symbol::create(ast, $1); }
     | INSTALL { $$ = Symbol::create(ast, $1); }
+    | EXPLAIN { $$ = Symbol::create(ast, $1); }
     | EXTENSIONS { $$ = Symbol::create(ast, $1); }
     | SKIP { $$ = Symbol::create(ast, $1); }
     | WITH { $$ = Symbol::create(ast, $1); }

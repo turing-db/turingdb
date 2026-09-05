@@ -17,6 +17,8 @@
 #include "DBOps.h"
 #include "DBTypes.h"
 
+#include "ExplainRequest.h"
+
 #include "VariableDependencyGraph.h"
 
 namespace mlir {
@@ -29,6 +31,7 @@ class Region;
 namespace db {
 
 class BinaryExpr;
+class ExplainReport;
 class FunctionInvocationExpr;
 class FunctionInvocation;
 class UnaryExpr;
@@ -95,15 +98,27 @@ public:
     // the grouping keys and the aggregate results
     using GroupedColumns = llvm::SmallVector<std::pair<const Expr*, mlir::Value>>;
 
-    explicit DBProgramGenerator(mlir::ModuleOp* mainModule);
+    // A null report is a query to run: nothing is dumped and the compilation is the
+    // one an unprefixed query gets
+    explicit DBProgramGenerator(mlir::ModuleOp* mainModule, ExplainReport* explain = nullptr);
     ~DBProgramGenerator();
 
     void generate(const CypherAST* ast);
+
+    // Emits the program that reports a finished EXPLAIN: the db.explain holding the
+    // dumps its compilation collected, and the db.output naming its two columns
+    void generateExplainResult(const ExplainReport& report);
 
 private:
     mlir::ModuleOp* _module {nullptr};
     mlir::MLIRContext* _mlirCtxt {nullptr};
     mlir::OpBuilder _opBuilder;
+
+    ExplainReport* _explain {nullptr};
+
+    // How many query parts have had their dependency graph dumped, which numbers the
+    // graphs a multi-part query reports
+    size_t _explainedParts {0};
 
     // A WITH drops this whole object rather than naming its members one at a time, so a
     // map added here is one the next part cannot read a stale binding out of
@@ -159,6 +174,8 @@ private:
         std::vector<const VariableDependency*> _vars;
         llvm::SmallVector<mlir::Value> _columns;
     };
+
+    void createMain();
 
     void generateQueryParts(const SinglePartQuery* query);
 
@@ -421,6 +438,22 @@ private:
                                         llvm::SmallVectorImpl<mlir::Value>& projected);
 
     void runPasses();
+
+    // Whether the EXPLAIN prefix asked about a pass at all, which is what decides
+    // between running the pipeline in one go and running it a pass at a time
+    bool explainsPasses() const;
+
+    // The pipeline of runPasses, one pass at a time, rendering the module on the sides
+    // of each pass the prefix asked about
+    void runExplainedPasses();
+
+    void throwOnUnknownExplainPass() const;
+
+    // Offers the module under construction, and the dependency graph of the part being
+    // generated, to the report. Both drop the stages the prefix did not ask for, and
+    // both are no-ops for a query with no prefix at all
+    void explainModule(ExplainStage stage);
+    void explainDependencyGraph();
 
     void translateOrderBy(const Projection* projection,
                           const VariableColumnMap& variableColumns,

@@ -201,4 +201,14 @@ module {
     db.drop_index("byName")
     return
   }
+
+  // EXPLAIN MATCH (n) RETURN n: the dumps the explained query's compilation produced,
+  // one row apiece, reported by the small program built once that compilation is over
+  func.func @explain() {
+    %stages, %dumps = db.explain(["codegen", "db"], ["module {...}", "module {...}"])
+       : !db.column<!storage.string>, !db.column<!storage.string>
+    db.output(%stages, %dumps) names ["stage", "dump"]
+       : !db.column<!storage.string>, !db.column<!storage.string>
+    return
+  }
 }

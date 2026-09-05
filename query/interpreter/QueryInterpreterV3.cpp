@@ -1,5 +1,8 @@
 #include "QueryInterpreterV3.h"
 
+#include <optional>
+#include <sstream>
+
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -9,12 +12,14 @@
 #include "DBDialect.h"
 #include "DBDialectInterpreter.h"
 #include "DBProgramGenerator.h"
+#include "ExplainReport.h"
 #include "NLSystemContext.h"
 #include "NLDialect.h"
 #include "StorageDialect.h"
 #include "iterators/ChunkConfig.h"
 
 #include "CypherAST.h"
+#include "CypherASTDumper.h"
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
 
@@ -147,6 +152,22 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
         return;
     }
 
+    std::optional<ExplainReport> explainReport;
+    const ExplainRequest* const explainRequest = ast.getExplainRequest();
+    if (explainRequest) {
+        explainReport.emplace(explainRequest);
+
+        if (explainRequest->isRequested(ExplainStage::AST)) {
+            std::ostringstream tree;
+            CypherASTDumper dumper(&ast);
+            dumper.dump(tree);
+
+            explainReport->addText(ExplainRequest::getStageName(ExplainStage::AST), tree.str());
+        }
+    }
+
+    ExplainReport* const explain = explainRequest ? &explainReport.value() : nullptr;
+
     mlir::MLIRContext context;
     context.getOrLoadDialect<mlir::func::FuncDialect>();
     context.getOrLoadDialect<mlir::storage::Storage>();
@@ -157,7 +178,7 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
     mlir::OwningOpRef<mlir::ModuleOp> owningModule = mlir::ModuleOp::create(builder.getUnknownLoc());
     mlir::ModuleOp module = owningModule.get();
 
-    DBProgramGenerator generator(&module);
+    DBProgramGenerator generator(&module, explain);
     try {
         generator.generate(&ast);
     } catch (const CompilerException& e) {
@@ -202,7 +223,12 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
                                      &procedureContext,
                                      &systemContext);
     try {
-        interpreter.run();
+        if (explain) {
+            interpreter.explain(*explain);
+            reportExplain(*explain, &context, &view, mem, sink);
+        } else {
+            interpreter.run();
+        }
     } catch (const CompilerException& e) {
         status.setStatus(QueryStatus::Status::EXEC_ERROR);
         status.setMessage(e.what());
@@ -227,4 +253,20 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
         status.setMessage("Unknown exception occurred");
         return;
     }
+}
+
+void QueryInterpreterV3::reportExplain(const ExplainReport& report,
+                                       mlir::MLIRContext* context,
+                                       const GraphView* view,
+                                       LocalMemory* memory,
+                                       NLOutputSink* sink) {
+    mlir::OpBuilder builder(context);
+    mlir::OwningOpRef<mlir::ModuleOp> owningModule = mlir::ModuleOp::create(builder.getUnknownLoc());
+    mlir::ModuleOp module = owningModule.get();
+
+    DBProgramGenerator generator(&module);
+    generator.generateExplainResult(report);
+
+    DBDialectInterpreter interpreter(module, view, sink, memory);
+    interpreter.run();
 }

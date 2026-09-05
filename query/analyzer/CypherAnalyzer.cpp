@@ -100,6 +100,10 @@ CypherAnalyzer::~CypherAnalyzer() {
 }
 
 void CypherAnalyzer::analyze() {
+    if (!_isV3 && _ast->getExplainRequest()) {
+        throwError("EXPLAIN is only supported by the MLIR engine.");
+    }
+
     _ast->getFunctionDecls()->initDefault();
 
     for (QueryCommand* query : _ast->queries()) {

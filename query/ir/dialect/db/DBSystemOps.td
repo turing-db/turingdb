@@ -434,4 +434,29 @@ def DropIndex : SystemOp<"drop_index"> {
   let assemblyFormat = "`(` $index_name `)` attr-dict";
 }
 
+/**
+* Explain
+*/
+def Explain : SystemOp<"explain"> {
+  let summary = "Report the compilation stages an EXPLAIN prefix asked for";
+  let description = [{
+    `EXPLAIN <query>`. The stages are rendered while the explained query is
+    compiled - its dependency graphs, its db program before and after each
+    optimisation pass, the nl program it lowers to - so the op reports text the
+    compiler already produced rather than computing anything. Its two columns are
+    row-aligned: one row per dump, in the order the compilation produced them.
+
+      %stages, %dumps = db.explain(["db"], ["module {...}"])
+        : !db.column<!storage.string>, !db.column<!storage.string>
+  }];
+
+  let arguments = (ins StrArrayAttr:$stage_names, StrArrayAttr:$stage_dumps);
+  let results   = (outs ColumnStrings:$stages, ColumnStrings:$dumps);
+
+  let assemblyFormat = [{
+    `(` $stage_names `,` $stage_dumps `)` attr-dict `:`
+    qualified(type($stages)) `,` qualified(type($dumps))
+  }];
+}
+
 #endif // TURINGDB_SYSTEM_OPS

@@ -3,6 +3,7 @@
 #include <stddef.h>
 
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 
 #include "iterators/ChunkConfig.h"
 
@@ -15,6 +16,7 @@ class CommitWriteBuffer;
 class MetadataBuilder;
 class NLSystemContext;
 class ProcedureContext;
+class ExplainReport;
 
 class DBDialectInterpreter {
 public:
@@ -58,6 +60,11 @@ public:
 
     Status run();
 
+    // Reports the stages of this module an EXPLAIN prefix asked for that only exist
+    // past codegen - the nl program it lowers to - without executing anything. A
+    // report asking for none of them lowers nothing.
+    void explain(ExplainReport& report);
+
 private:
     mlir::ModuleOp _module;
     const GraphView* _view {nullptr};
@@ -68,6 +75,9 @@ private:
     MetadataBuilder* _metadataBuilder {nullptr};
     const ProcedureContext* _procedureContext {nullptr};
     const NLSystemContext* _system {nullptr};
+
+    mlir::func::FuncOp requireMain();
+    mlir::func::FuncOp lower(mlir::func::FuncOp dbFunction, mlir::ModuleOp nlModule);
 };
 
 }
