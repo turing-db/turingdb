@@ -290,6 +290,12 @@ public:
     template <typename Functor>
     static NLUnaryFunctionKernel selectFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
+    // A conversion reads whichever element the argument column holds, so the functor is
+    // picked from that column rather than fixed by the op: the string form named here is
+    // what a column of strings converts through.
+    template <typename StringFunctor>
+    static NLUnaryFunctionKernel selectConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
 
     // Gather for a nullable value chunk of this value type (sort emit re-chunk).

@@ -528,10 +528,12 @@ struct ResultAllocator {
             using ResultType = typename UnaryColumnCombination<Not, T>::ResultColumnType;
             _resultCol = _gen->memory().alloc<ResultType>();
         } else if constexpr (Op == OP_TO_INTEGER) {
-            using ResultType = FunctionColumnResult<toIntegerFunction, T>::ResultColumnType;
+            using Functor = ConversionFunctorFor<toIntegerFunction, ConversionArgument<T>>::Type;
+            using ResultType = FunctionColumnResult<Functor, T>::ResultColumnType;
             _resultCol = _gen->memory().alloc<ResultType>();
         } else if constexpr (Op == OP_TO_FLOAT) {
-            using ResultType = FunctionColumnResult<toFloatFunction, T>::ResultColumnType;
+            using Functor = ConversionFunctorFor<toFloatFunction, ConversionArgument<T>>::Type;
+            using ResultType = FunctionColumnResult<Functor, T>::ResultColumnType;
             _resultCol = _gen->memory().alloc<ResultType>();
         } else if constexpr (Op == OP_TO_BOOLEAN) {
             using ResultType = FunctionColumnResult<toBoolFunction, T>::ResultColumnType;

@@ -43,20 +43,21 @@ struct UnaryEval {
 
             ColumnFunctions::exec<EdgeTypesFunction>(result, arg, _view);
         } else if constexpr (Op == OP_TO_INTEGER) {
-            using ResultType =
-                FunctionColumnResult<toIntegerFunction, T>::ResultColumnType;
+            using Functor = ConversionFunctorFor<toIntegerFunction, ConversionArgument<T>>::Type;
+            using ResultType = FunctionColumnResult<Functor, T>::ResultColumnType;
 
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid cast to result column for toInteger().");
 
-            ColumnFunctions::exec<toIntegerFunction>(result, arg);
+            ColumnFunctions::exec<Functor>(result, arg);
         } else if constexpr (Op == OP_TO_FLOAT) {
-            using ResultType = FunctionColumnResult<toFloatFunction, T>::ResultColumnType;
+            using Functor = ConversionFunctorFor<toFloatFunction, ConversionArgument<T>>::Type;
+            using ResultType = FunctionColumnResult<Functor, T>::ResultColumnType;
 
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid cast to result column for toFloat().");
 
-            ColumnFunctions::exec<toFloatFunction>(result, arg);
+            ColumnFunctions::exec<Functor>(result, arg);
         } else if constexpr (Op == OP_TO_BOOLEAN) {
             using ResultType = FunctionColumnResult<toBoolFunction, T>::ResultColumnType;
 
