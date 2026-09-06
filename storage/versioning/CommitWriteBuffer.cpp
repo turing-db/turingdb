@@ -129,9 +129,16 @@ void CommitWriteBuffer::addHangingEdges(const GraphView& view) {
     }
 }
 
-void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
-                                         const PendingNode& node) {
+NodeID CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
+                                          const PendingNode& node,
+                                          bool deleted) {
     const NodeID nodeID = builder.addNode(node.labelsetHandle);
+
+    // A node this commit deletes again keeps its slot, so the offsets a pending edge
+    // names stay valid; the caller tombstones it rather than filling it in
+    if (deleted) {
+        return nodeID;
+    }
 
     // Adding node properties
     for (const auto& [propID, value] : node.properties) {
@@ -150,26 +157,38 @@ void CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
     }
 
     _journal.addWrittenNode(nodeID);
+
+    return nodeID;
 }
 
-void CommitWriteBuffer::buildPendingNodes(DataPartBuilder& builder) {
-    for (const auto& node : pendingNodes()) {
-        buildPendingNode(builder, node);
+void CommitWriteBuffer::buildPendingNodes(DataPartBuilder& builder, Tombstones& tombstones) {
+    std::vector<NodeID> deleted;
+
+    for (size_t offset = 0; offset < _pendingNodes.size(); offset++) {
+        const bool isDeleted = _deletedPendingNodes.contains(offset);
+        const NodeID nodeID = buildPendingNode(builder, _pendingNodes[offset], isDeleted);
+
+        if (isDeleted) {
+            deleted.push_back(nodeID);
+        }
     }
+
+    tombstones.addNodeTombstones(deleted);
 }
 
-void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
-                                         const PendingEdge& edge) {
+EdgeID CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
+                                          const PendingEdge& edge,
+                                          bool deleted) {
     // If this edge has source or target which is a node in a previous datapart, check
     // if it has been deleted.
     if (const NodeID* srcID = std::get_if<NodeID>(&edge.src)) {
         if (deletedNodes().contains(*srcID)) {
-            return;
+            return EdgeID::max();
         }
     }
     if (const NodeID* tgtID = std::get_if<NodeID>(&edge.tgt)) {
         if (deletedNodes().contains(*tgtID)) {
-            return;
+            return EdgeID::max();
         }
     }
 
@@ -195,6 +214,11 @@ void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
 
     const EdgeID newEdgeID = newEdgeRecord._edgeID;
 
+    // The edge sibling of buildPendingNode's deleted slot
+    if (deleted) {
+        return newEdgeID;
+    }
+
     for (const auto& [propID, value] : edge.properties) {
         std::visit(
             [&](const auto& val) {
@@ -212,17 +236,71 @@ void CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
     }
 
     _journal.addWrittenEdge(newEdgeID);
+
+    return newEdgeID;
 }
 
-void CommitWriteBuffer::buildPendingEdges(DataPartBuilder& builder) {
-    for (const PendingEdge& edge : pendingEdges()) {
-        buildPendingEdge(builder, edge);
+void CommitWriteBuffer::buildPendingEdges(DataPartBuilder& builder, Tombstones& tombstones) {
+    std::vector<EdgeID> deleted;
+
+    for (size_t offset = 0; offset < _pendingEdges.size(); offset++) {
+        const bool isDeleted = _deletedPendingEdges.contains(offset);
+        const EdgeID edgeID = buildPendingEdge(builder, _pendingEdges[offset], isDeleted);
+
+        if (isDeleted && edgeID.isValid()) {
+            deleted.push_back(edgeID);
+        }
+    }
+
+    tombstones.addEdgeTombstones(deleted);
+}
+
+void CommitWriteBuffer::buildPending(DataPartBuilder& builder, Tombstones& tombstones) {
+    buildPendingNodes(builder, tombstones);
+    buildPendingEdges(builder, tombstones);
+}
+
+void CommitWriteBuffer::addDeletedPendingNode(PendingNodeOffset offset) {
+    _deletedPendingNodes.insert(offset);
+}
+
+void CommitWriteBuffer::addDeletedPendingEdge(size_t offset) {
+    _deletedPendingEdges.insert(offset);
+}
+
+void CommitWriteBuffer::addHangingPendingEdges() {
+    for (size_t offset = 0; offset < _pendingEdges.size(); offset++) {
+        if (touchesDeletedNode(_pendingEdges[offset])) {
+            _deletedPendingEdges.insert(offset);
+        }
     }
 }
 
-void CommitWriteBuffer::buildPending(DataPartBuilder& builder) {
-    buildPendingNodes(builder);
-    buildPendingEdges(builder);
+bool CommitWriteBuffer::hasPendingEdgesOn(const ExistingOrPendingNode& node) const {
+    for (size_t offset = 0; offset < _pendingEdges.size(); offset++) {
+        if (_deletedPendingEdges.contains(offset)) {
+            continue;
+        }
+
+        const PendingEdge& edge = _pendingEdges[offset];
+        if (edge.src == node || edge.tgt == node) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool CommitWriteBuffer::touchesDeletedNode(const PendingEdge& edge) const {
+    const auto isDeleted = [this](const ExistingOrPendingNode& node) {
+        if (const PendingNodeOffset* offset = std::get_if<PendingNodeOffset>(&node)) {
+            return _deletedPendingNodes.contains(*offset);
+        }
+
+        return _deletedNodes.contains(std::get<NodeID>(node));
+    };
+
+    return isDeleted(edge.src) || isDeleted(edge.tgt);
 }
 
 void CommitWriteBuffer::applyNodeUpdates(DataPartBuilder& builder) {

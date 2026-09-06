@@ -31,6 +31,7 @@ namespace db {
 
 class NLExecutionContext;
 class NLFunctionData;
+struct NLMergeWorkingSet;
 class Procedure;
 class ProcedureContext;
 class ProcedureData;
@@ -776,9 +777,15 @@ public:
     Column* getOutput() const { return _output; }
     PropertyTypeID getPropertyTypeID() const { return _propertyTypeID; }
 
+    // The rows holding a write-buffer offset rather than an ID the graph knows, or null
+    // for an input no merge produced. Such a row reads its value out of the write buffer.
+    const ColumnMask* getPending() const { return _pending; }
+    void setPending(const ColumnMask* pending) { _pending = pending; }
+
 private:
     const Column* _input {nullptr};
     Column* _output {nullptr};
+    const ColumnMask* _pending {nullptr};
     PropertyTypeID _propertyTypeID;
 };
 
@@ -2290,6 +2297,15 @@ public:
 
     bool isTgtPending() const { return _tgtIsPending; }
 
+    // Row by row, which endpoints are pending, for a column a merge produced and so
+    // mixed. Null for a column that is pending in every row or in none, which the two
+    // flags above then answer for.
+    const ColumnMask* getSrcPendingMask() const { return _srcPendingMask; }
+    const ColumnMask* getTgtPendingMask() const { return _tgtPendingMask; }
+
+    void setSrcPendingMask(const ColumnMask* mask) { _srcPendingMask = mask; }
+    void setTgtPendingMask(const ColumnMask* mask) { _tgtPendingMask = mask; }
+
     ColumnEdgeIDs* getResult() const { return _result; }
 
     const std::vector<Property>& properties() const { return _properties; }
@@ -2303,9 +2319,235 @@ private:
     EdgeTypeID _edgeTypeID;
     const ColumnNodeIDs* _src {nullptr};
     const ColumnNodeIDs* _tgt {nullptr};
+    const ColumnMask* _srcPendingMask {nullptr};
+    const ColumnMask* _tgtPendingMask {nullptr};
     ColumnEdgeIDs* _result {nullptr};
     bool _srcIsPending {false};
     bool _tgtIsPending {false};
+};
+
+// Which way a merge pattern's hop points, from the chain node ahead of it to the one
+// behind. The interpreter's copy of the storage-dialect EdgeDirection, set during
+// translation so execution never reaches into MLIR.
+enum class NLMergeDirection {
+    Undirected = 0,
+    Backward,
+    Forward,
+};
+
+// A node or edge one row of a merge bound: an ID the graph holds, or - when pending -
+// an offset into the change's write buffer for an entity this query wrote and has not
+// committed. The two spaces overlap numerically, so the flag is what tells them apart.
+struct NLMergeRef {
+    uint64_t _id {0};
+    bool _pending {false};
+
+    bool operator==(const NLMergeRef& other) const {
+        return _id == other._id && _pending == other._pending;
+    }
+
+    // The two spaces packed into one integer, so a ref can key a map or a set
+    uint64_t asKey() const { return (_id << 1) | static_cast<uint64_t>(_pending); }
+};
+
+// One property constraint a merge pattern's node or hop puts on a row: the property it
+// names and the column the row's asked-for value comes from, with the appender that
+// turns that value into its part of the key the match looks up.
+struct NLMergeProperty {
+    PropertyType _propertyType;
+    const Column* _values {nullptr};
+    NLKeyAppendFunction _keyAppend {nullptr};
+};
+
+// The graph side of that key: the same property, read out of the graph into a scratch
+// column. Its appender keys a fetched (and so nullable) value the way the row's own
+// appender keys the asked-for one, which is what lets the two keys be compared.
+struct NLMergeScanProperty {
+    PropertyType _propertyType;
+    Column* _values {nullptr};
+    NLKeyAppendFunction _keyAppend {nullptr};
+};
+
+// The nodes the graph holds under one chain-node spec, indexed by the spec's property
+// values. Scanned once, on first use, so a merge driven by many rows pays for one pass
+// over its label set rather than a lookup per row.
+class NLMergeNodeIndex {
+public:
+    NLMergeNodeIndex(const LabelSet& labels, bool matchable, ColumnNodeIDs* scanNodes);
+    ~NLMergeNodeIndex();
+
+    const LabelSet& getLabels() const { return _labels; }
+
+    // False when a label or a key property of the spec is absent from the graph's
+    // schema: no committed node can carry it, so the graph offers no candidate and only
+    // the pending nodes this query wrote can match
+    bool isMatchable() const { return _matchable; }
+
+    bool isBuilt() const { return _built; }
+    void markBuilt() { _built = true; }
+
+    ColumnNodeIDs* getScanNodes() const { return _scanNodes; }
+
+    const std::vector<NLMergeScanProperty>& scanProperties() const { return _scanProperties; }
+    void addScanProperty(const NLMergeScanProperty& property) { _scanProperties.push_back(property); }
+
+    void add(const std::string& key, const NLMergeRef& ref) { _byKey[key].push_back(ref); }
+
+    std::span<const NLMergeRef> find(const std::string& key) const;
+
+private:
+    LabelSet _labels;
+    std::vector<NLMergeScanProperty> _scanProperties;
+    std::unordered_map<std::string, std::vector<NLMergeRef>> _byKey;
+    ColumnNodeIDs* _scanNodes {nullptr};
+    bool _matchable {false};
+    bool _built {false};
+};
+
+// The nodes this query's merges wrote, by the spec that wrote them: a chain node's
+// signature - its label set and key property types - followed by the row's key values.
+// A pending node is in no graph the match reads, so this is where a later row, of this
+// merge or of another one writing the same pattern, binds it rather than writing a
+// second copy. One log per program, shared by every merge op in it.
+class NLMergePendingNodes {
+public:
+    NLMergePendingNodes();
+    ~NLMergePendingNodes();
+
+    void add(const std::string& key, const NLMergeRef& ref) { _byKey[key].push_back(ref); }
+
+    std::span<const NLMergeRef> find(const std::string& key) const;
+
+private:
+    std::unordered_map<std::string, std::vector<NLMergeRef>> _byKey;
+};
+
+// Every edge this query's merges wrote, under each of the two nodes it joins: a pending
+// edge is in no graph the match reads, so this is where a later row's hop finds it. One
+// log per program, shared by every merge op in it. The entries under one pair of
+// endpoints come from every hop spec the query has, so each carries its hop's signature
+// ahead of its property values - two hops constraining different properties to values
+// with the same bytes would otherwise bind each other's edge.
+class NLMergePendingEdges {
+public:
+    struct Entry {
+        NLMergeRef _other;
+        EdgeTypeID _edgeType;
+        uint64_t _offset {0};
+        std::string _propertyKey;
+    };
+
+    NLMergePendingEdges();
+    ~NLMergePendingEdges();
+
+    void add(const NLMergeRef& source,
+             const NLMergeRef& target,
+             EdgeTypeID edgeType,
+             uint64_t offset,
+             const std::string& propertyKey);
+
+    std::span<const Entry> outOf(const NLMergeRef& node) const;
+    std::span<const Entry> into(const NLMergeRef& node) const;
+
+private:
+    std::unordered_map<uint64_t, std::vector<Entry>> _outgoing;
+    std::unordered_map<uint64_t, std::vector<Entry>> _incoming;
+
+    static std::span<const Entry> lookup(const std::unordered_map<uint64_t, std::vector<Entry>>& edges,
+                                         const NLMergeRef& node);
+};
+
+// nl.merge data: one entry per chain node and one per hop of the pattern, the columns
+// each row's values and bound entities come from, and the chunks the op fills.
+class NLMergeData : public NLFunctionData {
+public:
+    // One node of the chain. A bound node reads its rows from _boundColumn and is never
+    // written; every other one is looked up through _index and, when the pattern is
+    // missing, written under _labelSetHandle with _properties' values. Only a looked-up
+    // node holds output chunks: a bound one's rows come back through the carry set.
+    struct Node {
+        std::vector<NLMergeProperty> _properties;
+
+        // What the pending log's keys for this spec start with, so two specs writing
+        // under the same labels and key properties share their entries and two that
+        // do not never collide
+        std::string _signature;
+
+        const ColumnNodeIDs* _boundColumn {nullptr};
+        const ColumnMask* _boundPending {nullptr};
+        NLMergeNodeIndex* _index {nullptr};
+        LabelSetHandle _labelSetHandle;
+        ColumnNodeIDs* _output {nullptr};
+        ColumnMask* _outputPending {nullptr};
+    };
+
+    // One hop of the chain, joining the node ahead of it to the one behind. The match
+    // edge type is invalid when the graph's schema does not have it, which leaves only
+    // the pending edges to match. The scratch chunks below are what a hop constraining
+    // properties reads its candidates' values through.
+    struct Hop {
+        std::vector<NLMergeProperty> _properties;
+        std::vector<NLMergeScanProperty> _scanProperties;
+
+        // What the pending log's keys for this spec start with, the sibling of Node's:
+        // the edge log is keyed by the endpoints alone, so without it two hops
+        // constraining different properties to values with the same bytes would collide
+        std::string _signature;
+
+        EdgeTypeID _matchEdgeType;
+        EdgeTypeID _writeEdgeType;
+        NLMergeDirection _direction {NLMergeDirection::Forward};
+        ColumnNodeIDs* _scanSources {nullptr};
+        ColumnEdgeIDs* _scanEdges {nullptr};
+        ColumnEdgeIDs* _output {nullptr};
+        ColumnMask* _outputPending {nullptr};
+    };
+
+    NLMergeData(NLMergePendingNodes* pendingNodes,
+                NLMergePendingEdges* pendingEdges,
+                ColumnMask* created);
+    ~NLMergeData() override;
+
+    const std::vector<Node>& nodes() const { return _nodes; }
+    const std::vector<Hop>& hops() const { return _hops; }
+    const std::vector<NLCarriedColumn>& carriedColumns() const { return _carriedColumns; }
+
+    std::vector<Node>& nodes() { return _nodes; }
+    std::vector<Hop>& hops() { return _hops; }
+
+    NLMergePendingNodes* getPendingNodes() const { return _pendingNodes; }
+    NLMergePendingEdges* getPendingEdges() const { return _pendingEdges; }
+    ColumnMask* getCreated() const { return _created; }
+
+    // The column whose length is the number of rows the op runs over: a chunk some part
+    // of the pattern reads. Null for a pattern reading none, which is the single row a
+    // MERGE standing on its own writes.
+    const Column* getRowCarrier() const { return _rowCarrier; }
+    void setRowCarrier(const Column* rowCarrier) { _rowCarrier = rowCarrier; }
+
+    void addNode(const Node& node) { _nodes.push_back(node); }
+    void addHop(const Hop& hop) { _hops.push_back(hop); }
+    void addCarriedColumn(const NLCarriedColumn& carried) { _carriedColumns.push_back(carried); }
+
+    ColumnVector<size_t>* getIndices() { return &_indices; }
+
+    // The scratch every step of the op works in, allocated once with the op rather than
+    // once per chunk
+    NLMergeWorkingSet* getWorkingSet() const { return _workingSet.get(); }
+
+private:
+    std::vector<Node> _nodes;
+    std::vector<Hop> _hops;
+    std::vector<NLCarriedColumn> _carriedColumns;
+    NLMergePendingNodes* _pendingNodes {nullptr};
+    NLMergePendingEdges* _pendingEdges {nullptr};
+    ColumnMask* _created {nullptr};
+    const Column* _rowCarrier {nullptr};
+    std::unique_ptr<NLMergeWorkingSet> _workingSet;
+
+    // This step's row map, from each emitted row to the input row behind it, fed to the
+    // per-column gather that rebuilds the carry set
+    ColumnVector<size_t> _indices;
 };
 
 class NLSetNodePropertyData : public NLFunctionData {
@@ -2323,9 +2565,22 @@ public:
     const ColumnNodeIDs* getInput() const { return _input; }
     const Column* getValue() const { return _value; }
 
+    // The rows whose node this change wrote and has not committed: those are updated in
+    // the write buffer's pending node rather than recorded as an update to a committed
+    // one. Null for an input no merge produced.
+    const ColumnMask* getPending() const { return _pending; }
+    void setPending(const ColumnMask* pending) { _pending = pending; }
+
+    // The rows the write touches, or null for a write that touches every one: Cypher's
+    // ON CREATE hands over the merge's created mask and ON MATCH its negation.
+    const ColumnMask* getRows() const { return _rows; }
+    void setRows(const ColumnMask* rows) { _rows = rows; }
+
 private:
     const ColumnNodeIDs* _input {nullptr};
     const Column* _value {nullptr};
+    const ColumnMask* _pending {nullptr};
+    const ColumnMask* _rows {nullptr};
     PropertyTypeID _propertyTypeID;
 };
 
@@ -2344,16 +2599,25 @@ public:
     const ColumnEdgeIDs* getInput() const { return _input; }
     const Column* getValue() const { return _value; }
 
+    const ColumnMask* getPending() const { return _pending; }
+    void setPending(const ColumnMask* pending) { _pending = pending; }
+
+    const ColumnMask* getRows() const { return _rows; }
+    void setRows(const ColumnMask* rows) { _rows = rows; }
+
 private:
     const ColumnEdgeIDs* _input {nullptr};
     const Column* _value {nullptr};
+    const ColumnMask* _pending {nullptr};
+    const ColumnMask* _rows {nullptr};
     PropertyTypeID _propertyTypeID;
 };
 
 class NLDeleteNodeData : public NLFunctionData {
 public:
-    NLDeleteNodeData(const ColumnNodeIDs* input, bool detaching)
+    NLDeleteNodeData(const ColumnNodeIDs* input, bool detaching, ColumnNodeIDs* committed)
         : _input(input),
+        _committed(committed),
         _detaching(detaching)
     {
     }
@@ -2361,22 +2625,51 @@ public:
     const ColumnNodeIDs* getInput() const { return _input; }
     bool isDetaching() const { return _detaching; }
 
+    // The rows naming a node this change wrote and has not committed - a write-buffer
+    // offset rather than an ID the graph holds - or null when no row does. A column a
+    // create produced is such a row throughout, which is what _allPending says.
+    const ColumnMask* getPending() const { return _pending; }
+    void setPending(const ColumnMask* pending) { _pending = pending; }
+
+    bool isAllPending() const { return _allPending; }
+    void setAllPending(bool allPending) { _allPending = allPending; }
+
+    // The scratch the committed rows of a mixed column are gathered into, since the
+    // deletion of those goes through the graph's own IDs
+    ColumnNodeIDs* getCommitted() const { return _committed; }
+
 private:
     const ColumnNodeIDs* _input {nullptr};
+    const ColumnMask* _pending {nullptr};
+    ColumnNodeIDs* _committed {nullptr};
     bool _detaching {false};
+    bool _allPending {false};
 };
 
 class NLDeleteEdgeData : public NLFunctionData {
 public:
-    NLDeleteEdgeData(const ColumnEdgeIDs* input)
-        : _input(input)
+    NLDeleteEdgeData(const ColumnEdgeIDs* input, ColumnEdgeIDs* committed)
+        : _input(input),
+        _committed(committed)
     {
     }
+
+    // The edge siblings of NLDeleteNodeData's
+    const ColumnMask* getPending() const { return _pending; }
+    void setPending(const ColumnMask* pending) { _pending = pending; }
+
+    bool isAllPending() const { return _allPending; }
+    void setAllPending(bool allPending) { _allPending = allPending; }
+
+    ColumnEdgeIDs* getCommitted() const { return _committed; }
 
     const ColumnEdgeIDs* getInput() const { return _input; }
 
 private:
     const ColumnEdgeIDs* _input {nullptr};
+    const ColumnMask* _pending {nullptr};
+    ColumnEdgeIDs* _committed {nullptr};
+    bool _allPending {false};
 };
 
 // nl.output data
@@ -2604,6 +2897,28 @@ public:
         return statePtr;
     }
 
+    // The candidate index one chain-node signature already has, or a null pointer for a
+    // signature no chain node of the program has reached yet. Two nodes of the same
+    // labels and key properties look their candidates up in one index, so the label set
+    // is scanned once however many times the query merges the pattern.
+    NLMergeNodeIndex* findMergeNodeIndex(const std::string& signature) const;
+
+    // Adds the index of a signature findMergeNodeIndex found none for, owned by the
+    // program; every chain node of that signature holds a borrowed pointer.
+    NLMergeNodeIndex* addMergeNodeIndex(const std::string& signature,
+                                        const LabelSet& labels,
+                                        bool matchable,
+                                        ColumnNodeIDs* scanNodes);
+
+    // The log of every edge this program's merges wrote, owned by the program and
+    // shared by all of them: one merge's pending edge is what another's hop extends
+    // a candidate with.
+    NLMergePendingEdges* getMergePendingEdges() { return &_mergePendingEdges; }
+
+    // The log of every node this program's merges wrote, the node sibling of the edge
+    // log above and shared the same way.
+    NLMergePendingNodes* getMergePendingNodes() { return &_mergePendingNodes; }
+
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
 
@@ -2629,6 +2944,9 @@ private:
     std::vector<std::unique_ptr<NLGroupAggregateState>> _groupAggregateStates;
     std::vector<std::unique_ptr<NLCollectState>> _collectStates;
     std::vector<std::unique_ptr<NLProcedureState>> _procedureStates;
+    std::unordered_map<std::string, std::unique_ptr<NLMergeNodeIndex>> _mergeNodeIndexes;
+    NLMergePendingEdges _mergePendingEdges;
+    NLMergePendingNodes _mergePendingNodes;
     NLStmtContainer _stmts;
 };
 

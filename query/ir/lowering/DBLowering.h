@@ -198,6 +198,8 @@ private:
     void lowerCheckEdgeTypeConstraint(mlir::db::CheckEdgeTypeConstraint checkEdgeTypeConstraint);
     void lowerCreateNode(mlir::db::CreateNode createNode);
     void lowerCreateEdge(mlir::db::CreateEdge createEdge);
+
+    void lowerMerge(mlir::db::Merge merge);
     void lowerSetNodeProperty(mlir::db::SetNodeProperty setNodeProperty);
     void lowerSetEdgeProperty(mlir::db::SetEdgeProperty setEdgeProperty);
     void lowerDeleteNode(mlir::db::DeleteNode deleteNode);
@@ -387,6 +389,13 @@ private:
     // lowered op belongs
     void setInsertionInto(mlir::Block* block);
 
+    // The chunks one group of a db op's column operands lowered to, in order
+    void mapColumns(mlir::OperandRange columns, llvm::SmallVectorImpl<mlir::Value>& chunks);
+
+    // The chunk an optional mask operand lowered to, or a null Value for an absent one -
+    // which is what the nl op then carries in its place
+    mlir::Value mapOptionalMask(mlir::Value mask);
+
     // Point the builder just after the loop nest that @param updateBlock belongs to,
     // where an accumulator filled from that block holds its final value. A drain loop
     // lowered before this one sits further down the entry block and may read the
@@ -434,6 +443,11 @@ private:
     mlir::Value mapValue(mlir::Value dbValue) const;
     static mlir::Block* ownerBlock(mlir::Value chunkValue);
     static size_t blockNestingDepth(mlir::Block* block);
+
+    // The chunk of @param chunks bound deepest - the one whose block every other is
+    // valid in, which is where an op reading all of them belongs. A null Value for an
+    // empty range, which is an op reading no chunk at all.
+    mlir::Value deepestBoundChunk(llvm::ArrayRef<mlir::Value> chunks);
 
     // Find the first place where both @param first and @param second are valid
     mlir::Block* deeperBlock(mlir::Value first, mlir::Value second);

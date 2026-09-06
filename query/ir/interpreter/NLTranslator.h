@@ -154,6 +154,7 @@ private:
 
     // Set of nl.create_node result SSA values
     llvm::DenseSet<mlir::Value> _pendingNodeValues;
+    llvm::DenseSet<mlir::Value> _pendingEdgeValues;
 
     // nl.limit handle SSA value -> the runtime counter it produces, so the loops,
     // nl.limit_update and nl.output that name the handle find the same counter
@@ -541,6 +542,13 @@ private:
     Column* allocColumnForChunkType(mlir::Type chunkType);
     static NLAppendFunction selectAppendForChunkType(mlir::Type chunkType);
     static NLGatherFunction selectGatherForChunkType(mlir::Type chunkType);
+
+    // The appender that keys one row of a merge's property value column, chosen from the
+    // shape the column comes in - a nullable value chunk, a constant, or a plain chunk -
+    // and keying in @param keyType, the type the schema holds the property as.
+    static NLKeyAppendFunction selectMergeKeyAppend(mlir::Type chunkType,
+                                                    const Column* column,
+                                                    ValueType keyType);
     static NLCompareFunction selectCompareForChunkType(mlir::Type chunkType);
     static NLKeyAppendFunction selectKeyAppendForChunkType(mlir::Type chunkType);
 
@@ -560,6 +568,7 @@ private:
     // column, and record the with-null fetch statement in body
     void translatePropertyFetch(mlir::Value inputValue,
                                 mlir::Value propertyTypeValue,
+                                mlir::Value pendingValue,
                                 mlir::Value resultValue,
                                 bool isNode,
                                 NLStmtContainer* body);
@@ -572,6 +581,26 @@ private:
     void translateCreateNode(mlir::nl::CreateNode createNode, NLStmtContainer* body);
 
     void translateCreateEdge(mlir::nl::CreateEdge createEdge, NLStmtContainer* body);
+
+    void translateMerge(mlir::nl::Merge merge, NLStmtContainer* body);
+
+    // The label set, candidate index and property values of one chain node the merge
+    // looks up and writes, rather than one whose column the query already bound
+    void translateMergeNodeSpec(mlir::ArrayAttr labels,
+                                mlir::ArrayAttr propNames,
+                                mlir::OperandRange propValues,
+                                NLMergeData::Node& node);
+
+    // Resolves one property constraint of a merge pattern on both sides: the row's
+    // asked-for value column with the appender that keys it, and - when the graph's
+    // schema has the property - the scratch column a candidate's value is read back
+    // into. Clears @param matchable when it does not, since nothing committed can then
+    // carry the property.
+    void translateMergeProperty(llvm::StringRef propName,
+                                mlir::Value propValue,
+                                std::vector<NLMergeProperty>& properties,
+                                std::vector<NLMergeScanProperty>& scanProperties,
+                                bool& matchable);
 
     void translateSetNodeProperty(mlir::nl::SetNodeProperty setNodeProperty, NLStmtContainer* body);
 
@@ -661,6 +690,9 @@ private:
     Column* allocListElementColumn();
 
     Column* getColumn(mlir::Value chunkValue) const;
+
+    // The mask an optional boolean chunk operand resolves to, or null for an absent one
+    const ColumnMask* getMaskColumn(mlir::Value chunkValue) const;
     static NLChunkKind getChunkKind(mlir::Type chunkType);
     static NLChunkKind chunkKindFromElementType(mlir::Type elementType);
 };

@@ -12,6 +12,7 @@ public:
         MATCH = 0,
         CALL,
         CREATE,
+        MERGE,
         SET,
         DELETE,
         RETURN,

@@ -34,6 +34,7 @@ set(ast_sources
     stmt/SetItem.cpp
     stmt/CallStmt.cpp
     stmt/CreateStmt.cpp
+    stmt/MergeStmt.cpp
     stmt/DeleteStmt.cpp
     stmt/ReturnStmt.cpp
     stmt/ShortestPathStmt.cpp

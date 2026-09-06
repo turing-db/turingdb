@@ -365,6 +365,58 @@ ValueType valueTypeFromChunkType(mlir::Type chunkType) {
     return valueTypeFromElementType(elementType);
 }
 
+NLMergeDirection mergeDirectionFromValue(int64_t raw) {
+    const std::optional<storage::EdgeDirection> direction =
+        storage::symbolizeEdgeDirection(static_cast<uint64_t>(raw));
+
+    if (!direction) {
+        throw IRException("nl.merge carries an unknown edge direction");
+    }
+
+    switch (*direction) {
+        case storage::EdgeDirection::Undirected:
+            return NLMergeDirection::Undirected;
+        break;
+
+        case storage::EdgeDirection::Backward:
+            return NLMergeDirection::Backward;
+        break;
+
+        case storage::EdgeDirection::Forward:
+            return NLMergeDirection::Forward;
+        break;
+    }
+
+    bioassert(false, "Unhandled edge direction");
+    return NLMergeDirection::Forward;
+}
+
+void appendMergePropertySignature(const std::vector<NLMergeProperty>& properties,
+                                  std::string& signature) {
+    for (const NLMergeProperty& property : properties) {
+        const PropertyTypeID::Type id = property._propertyType._id.getValue();
+        const ValueType valueType = property._propertyType._valueType;
+
+        signature.append(reinterpret_cast<const char*>(&id), sizeof(id));
+        signature.append(reinterpret_cast<const char*>(&valueType), sizeof(valueType));
+    }
+}
+
+// What the pending log's keys for one chain-node spec start with: its label set and the
+// property it keys on, in order. Two specs writing the same pattern share the prefix, so
+// each binds what the other wrote; two that differ never collide.
+void appendMergeNodeSignature(const LabelSet& labels,
+                              const std::vector<NLMergeProperty>& properties,
+                              std::string& signature) {
+    signature.clear();
+
+    for (const LabelSet::IntegerType integer : labels.integers()) {
+        signature.append(reinterpret_cast<const char*>(&integer), sizeof(integer));
+    }
+
+    appendMergePropertySignature(properties, signature);
+}
+
 bool isConstantColumn(const Column* column) {
     return column->getContainerKind() == ContainerKind::code<ColumnConst>();
 }
@@ -592,12 +644,14 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
         } else if (nl::GetNodeProperties getNodeProperties = mlir::dyn_cast<nl::GetNodeProperties>(operation)) {
             translatePropertyFetch(getNodeProperties.getInputNodes(),
                                    getNodeProperties.getPropertyType(),
+                                   getNodeProperties.getPending(),
                                    getNodeProperties.getValues(),
                                    /*isNode=*/true,
                                    body);
         } else if (nl::GetEdgeProperties getEdgeProperties = mlir::dyn_cast<nl::GetEdgeProperties>(operation)) {
             translatePropertyFetch(getEdgeProperties.getInputEdges(),
                                    getEdgeProperties.getPropertyType(),
+                                   getEdgeProperties.getPending(),
                                    getEdgeProperties.getValues(),
                                    /*isNode=*/false,
                                    body);
@@ -653,6 +707,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateCreateNode(createNode, body);
         } else if (nl::CreateEdge createEdge = mlir::dyn_cast<nl::CreateEdge>(operation)) {
             translateCreateEdge(createEdge, body);
+        } else if (nl::Merge merge = mlir::dyn_cast<nl::Merge>(operation)) {
+            translateMerge(merge, body);
         } else if (nl::SetNodeProperty setNodeProperty = mlir::dyn_cast<nl::SetNodeProperty>(operation)) {
             translateSetNodeProperty(setNodeProperty, body);
         } else if (nl::SetEdgeProperty setEdgeProperty = mlir::dyn_cast<nl::SetEdgeProperty>(operation)) {
@@ -1250,6 +1306,7 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
 
 void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
                                           mlir::Value propertyTypeValue,
+                                          mlir::Value pendingValue,
                                           mlir::Value resultValue,
                                           bool isNode,
                                           NLStmtContainer* body) {
@@ -1277,6 +1334,7 @@ void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
     NLPropertyFetchData* fetchData = _program->allocFunctionData<NLPropertyFetchData>(input,
                                                                                       output,
                                                                                       propertyType->_id);
+    fetchData->setPending(getMaskColumn(pendingValue));
 
     const NLHandlerFunction handler = selectPropertyFetchHandler(isNode, valueType);
     body->emplaceStmt(handler, fetchData);
@@ -1389,6 +1447,7 @@ void NLTranslator::translateCreateEdge(nl::CreateEdge createEdge, NLStmtContaine
 
     ColumnEdgeIDs* result = _memory->alloc<ColumnEdgeIDs>();
     _valueSlots[createEdge.getResult()] = result;
+    _pendingEdgeValues.insert(createEdge.getResult());
 
     NLCreateEdgeData* data = _program->allocFunctionData<NLCreateEdgeData>(
         edgeTypeID,
@@ -1397,6 +1456,9 @@ void NLTranslator::translateCreateEdge(nl::CreateEdge createEdge, NLStmtContaine
         tgtColumn,
         tgtIsPending,
         result);
+
+    data->setSrcPendingMask(getMaskColumn(createEdge.getSrcPending()));
+    data->setTgtPendingMask(getMaskColumn(createEdge.getTgtPending()));
 
     const mlir::OperandRange propValues = createEdge.getPropValues();
     const mlir::ArrayAttr propNames = createEdge.getPropNames();
@@ -1413,6 +1475,224 @@ void NLTranslator::translateCreateEdge(nl::CreateEdge createEdge, NLStmtContaine
     }
 
     body->emplaceStmt(&NLExecutor::runCreateEdge, data);
+}
+
+void NLTranslator::translateMerge(nl::Merge merge, NLStmtContainer* body) {
+    if (!_metadataBuilder) {
+        throw IRException("nl.merge requires a MetadataBuilder (write transaction)");
+    }
+
+    const mlir::ArrayAttr nodeLabels = merge.getNodeLabels();
+    const mlir::ArrayAttr nodePropNames = merge.getNodePropNames();
+    const mlir::ArrayAttr edgeTypes = merge.getEdgeTypes();
+    const mlir::ArrayAttr edgePropNames = merge.getEdgePropNames();
+    const llvm::ArrayRef<int64_t> directions = merge.getEdgeDirections();
+
+    const mlir::OperandRange boundNodes = merge.getBoundNodes();
+    const mlir::OperandRange boundPending = merge.getBoundPending();
+    const mlir::OperandRange nodePropValues = merge.getNodePropValues();
+    const mlir::OperandRange edgePropValues = merge.getEdgePropValues();
+    const mlir::OperandRange carriedColumns = merge.getCarriedColumns();
+    const mlir::ResultRange results = merge.getResults();
+
+    ColumnMask* created = _memory->alloc<ColumnMask>();
+    created->reserve(_program->getChunkSize());
+
+    NLMergeData* data = _program->allocFunctionData<NLMergeData>(_program->getMergePendingNodes(),
+                                                                 _program->getMergePendingEdges(),
+                                                                 created);
+
+    const size_t nodeCount = nodeLabels.size();
+    const size_t hopCount = nodeCount - 1;
+
+    // A bound node has no result pair of its own: its rows come back through the carry set
+    size_t resultIndex = 0;
+    size_t boundIndex = 0;
+    size_t nodeValueIndex = 0;
+    for (size_t nodeIndex = 0; nodeIndex < nodeCount; nodeIndex++) {
+        const mlir::ArrayAttr labels = mlir::cast<mlir::ArrayAttr>(nodeLabels[nodeIndex]);
+        const mlir::ArrayAttr propNames = mlir::cast<mlir::ArrayAttr>(nodePropNames[nodeIndex]);
+
+        NLMergeData::Node node;
+
+        if (labels.empty()) {
+            node._boundColumn = static_cast<const ColumnNodeIDs*>(getColumn(boundNodes[boundIndex]));
+            boundIndex++;
+        } else {
+            translateMergeNodeSpec(labels, propNames, nodePropValues.slice(nodeValueIndex, propNames.size()), node);
+
+            node._output = static_cast<ColumnNodeIDs*>(allocColumn(results[resultIndex]));
+            node._outputPending = static_cast<ColumnMask*>(allocColumn(results[resultIndex + 1]));
+            resultIndex += 2;
+        }
+
+        nodeValueIndex += propNames.size();
+
+        data->addNode(node);
+    }
+
+    // Only a bound node whose column a merge produced carries a mask, so each one names
+    // the chain node it belongs to rather than leaving a hole in a per-node group
+    const llvm::ArrayRef<int64_t> pendingNodes = merge.getPendingNodes();
+    std::vector<NLMergeData::Node>& nodes = data->nodes();
+    for (size_t index = 0; index < pendingNodes.size(); index++) {
+        nodes[pendingNodes[index]]._boundPending = getMaskColumn(boundPending[index]);
+    }
+
+    size_t edgeValueIndex = 0;
+    for (size_t hopIndex = 0; hopIndex < hopCount; hopIndex++) {
+        const llvm::StringRef edgeTypeName = mlir::cast<mlir::StringAttr>(edgeTypes[hopIndex]).getValue();
+        const mlir::ArrayAttr propNames = mlir::cast<mlir::ArrayAttr>(edgePropNames[hopIndex]);
+
+        NLMergeData::Hop hop;
+        hop._writeEdgeType = _metadataBuilder->getOrCreateEdgeType(edgeTypeName);
+        hop._direction = mergeDirectionFromValue(directions[hopIndex]);
+
+        // A type the graph's schema does not have is on no committed edge, so the match
+        // reads the graph only when the name resolves there. It is created above all the
+        // same, since a written hop needs it.
+        const std::optional<EdgeTypeID> matchEdgeType = _view->metadata().edgeTypes().get(edgeTypeName);
+        if (matchEdgeType) {
+            hop._matchEdgeType = *matchEdgeType;
+        }
+
+        bool matchable = matchEdgeType.has_value();
+        for (size_t propIndex = 0; propIndex < propNames.size(); propIndex++) {
+            const llvm::StringRef propName = mlir::cast<mlir::StringAttr>(propNames[propIndex]).getValue();
+            const mlir::Value propValue = edgePropValues[edgeValueIndex + propIndex];
+
+            translateMergeProperty(propName, propValue, hop._properties, hop._scanProperties, matchable);
+        }
+
+        // A property the graph does not have is on no committed edge either, so the hop
+        // reads no candidate rather than reading one it cannot key
+        if (!matchable) {
+            hop._matchEdgeType = EdgeTypeID();
+            hop._scanProperties.clear();
+        }
+
+        edgeValueIndex += propNames.size();
+
+        appendMergePropertySignature(hop._properties, hop._signature);
+
+        hop._scanSources = _memory->alloc<ColumnNodeIDs>();
+        hop._scanEdges = _memory->alloc<ColumnEdgeIDs>();
+
+        hop._output = static_cast<ColumnEdgeIDs*>(allocColumn(results[resultIndex]));
+        hop._outputPending = static_cast<ColumnMask*>(allocColumn(results[resultIndex + 1]));
+        resultIndex += 2;
+
+        data->addHop(hop);
+    }
+
+    _valueSlots[results[resultIndex]] = created;
+    resultIndex++;
+
+    for (size_t index = 0; index < carriedColumns.size(); index++) {
+        const mlir::Value input = carriedColumns[index];
+
+        data->addCarriedColumn({getColumn(input),
+                                allocColumn(results[resultIndex + index]),
+                                selectGatherForChunkType(input.getType())});
+    }
+
+    // Every row the op runs over is a row of its inputs, so any of them holding rows of
+    // its own gives their count. A pattern reading only constants runs over one row.
+    for (const mlir::Value input : merge->getOperands()) {
+        const Column* column = getColumn(input);
+        if (!isConstantColumn(column)) {
+            data->setRowCarrier(column);
+            break;
+        }
+    }
+
+    body->emplaceStmt(&NLExecutor::runMerge, data);
+}
+
+void NLTranslator::translateMergeNodeSpec(mlir::ArrayAttr labels,
+                                          mlir::ArrayAttr propNames,
+                                          mlir::OperandRange propValues,
+                                          NLMergeData::Node& node) {
+    // The labels the node is written with, created where the schema lacks them, and the
+    // same set resolved against the graph for the match. A name the graph does not have
+    // is on no committed node, so the conjunction matches nothing there - the way
+    // nl.scan_nodes_by_label treats it - and only what this query wrote can match.
+    LabelSet writeLabels;
+    LabelSet matchLabels;
+    bool matchable = true;
+
+    const LabelMap& graphLabels = _view->metadata().labels();
+    for (const mlir::Attribute attr : labels) {
+        const llvm::StringRef labelName = mlir::cast<mlir::StringAttr>(attr).getValue();
+        writeLabels.set(_metadataBuilder->getOrCreateLabel(labelName));
+
+        const std::optional<LabelID> graphLabel = graphLabels.get(labelName);
+        if (graphLabel) {
+            matchLabels.set(*graphLabel);
+        } else {
+            matchable = false;
+        }
+    }
+
+    node._labelSetHandle = _metadataBuilder->getOrCreateLabelSet(writeLabels);
+
+    std::vector<NLMergeScanProperty> scanProperties;
+    for (size_t propIndex = 0; propIndex < propNames.size(); propIndex++) {
+        const llvm::StringRef propName = mlir::cast<mlir::StringAttr>(propNames[propIndex]).getValue();
+
+        translateMergeProperty(propName, propValues[propIndex], node._properties, scanProperties, matchable);
+    }
+
+    if (!matchable) {
+        scanProperties.clear();
+    }
+
+    appendMergeNodeSignature(writeLabels, node._properties, node._signature);
+
+    // Every chain node of the same signature looks its candidates up in one index, so
+    // the label set is scanned once however many times the query merges the pattern
+    node._index = _program->findMergeNodeIndex(node._signature);
+    if (node._index) {
+        return;
+    }
+
+    ColumnNodeIDs* scanNodes = _memory->alloc<ColumnNodeIDs>();
+    node._index = _program->addMergeNodeIndex(node._signature, matchLabels, matchable, scanNodes);
+    for (const NLMergeScanProperty& scanProperty : scanProperties) {
+        node._index->addScanProperty(scanProperty);
+    }
+}
+
+void NLTranslator::translateMergeProperty(llvm::StringRef propName,
+                                          mlir::Value propValue,
+                                          std::vector<NLMergeProperty>& properties,
+                                          std::vector<NLMergeScanProperty>& scanProperties,
+                                          bool& matchable) {
+    const ValueType valueType = valueTypeFromChunkType(propValue.getType());
+    const Column* column = getColumn(propValue);
+
+    // Created where the schema lacks it, since a written pattern carries the property.
+    // Both sides of the key serialize in its registered type: the analyzer lets an
+    // integer constrain a double-typed property, and 5 keys like the 5.0 the graph side
+    // reads back only once converted to it.
+    const PropertyType writeType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
+    properties.push_back({._propertyType=writeType,
+                          ._values=column,
+                          ._keyAppend=selectMergeKeyAppend(propValue.getType(),
+                                                           column,
+                                                           writeType._valueType)});
+
+    // The graph's own property, which is what a candidate's value is read back through.
+    // Absent means no committed entity carries it, so nothing there can match.
+    const std::optional<PropertyType> graphType = _view->metadata().propTypes().get(propName);
+    if (!graphType) {
+        matchable = false;
+        return;
+    }
+
+    scanProperties.push_back({._propertyType=*graphType,
+                              ._values=allocOptColumnForValueType(graphType->_valueType),
+                              ._keyAppend=NLExecutor::selectOptKeyAppendFunction(graphType->_valueType)});
 }
 
 void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty, NLStmtContainer* body) {
@@ -1434,6 +1714,9 @@ void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty,
         propType._id,
         inputColumn,
         valueColumn);
+
+    data->setPending(getMaskColumn(setNodeProperty.getPending()));
+    data->setRows(getMaskColumn(setNodeProperty.getRows()));
 
     body->emplaceStmt(&NLExecutor::runSetNodeProperty, data);
 }
@@ -1458,6 +1741,9 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
         inputColumn,
         valueColumn);
 
+    data->setPending(getMaskColumn(setEdgeProperty.getPending()));
+    data->setRows(getMaskColumn(setEdgeProperty.getRows()));
+
     body->emplaceStmt(&NLExecutor::runSetEdgeProperty, data);
 }
 
@@ -1467,7 +1753,11 @@ void NLTranslator::translateDeleteNode(nl::DeleteNode deleteNode, NLStmtContaine
 
     NLDeleteNodeData* data = _program->allocFunctionData<NLDeleteNodeData>(
         inputColumn,
-        deleteNode.getDetach());
+        deleteNode.getDetach(),
+        _memory->alloc<ColumnNodeIDs>());
+
+    data->setPending(getMaskColumn(deleteNode.getPending()));
+    data->setAllPending(_pendingNodeValues.contains(inputValue));
 
     body->emplaceStmt(&NLExecutor::runDeleteNode, data);
 }
@@ -1476,7 +1766,12 @@ void NLTranslator::translateDeleteEdge(nl::DeleteEdge deleteEdge, NLStmtContaine
     const mlir::Value inputValue = deleteEdge.getInputEdges();
     const ColumnEdgeIDs* inputColumn = static_cast<const ColumnEdgeIDs*>(getColumn(inputValue));
 
-    NLDeleteEdgeData* data = _program->allocFunctionData<NLDeleteEdgeData>(inputColumn);
+    NLDeleteEdgeData* data = _program->allocFunctionData<NLDeleteEdgeData>(
+        inputColumn,
+        _memory->alloc<ColumnEdgeIDs>());
+
+    data->setPending(getMaskColumn(deleteEdge.getPending()));
+    data->setAllPending(_pendingEdgeValues.contains(inputValue));
 
     body->emplaceStmt(&NLExecutor::runDeleteEdge, data);
 }
@@ -3180,6 +3475,35 @@ NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) 
     }
 
     return NLExecutor::selectCompareFunction(chunkKindFromElementType(elementType));
+}
+
+const ColumnMask* NLTranslator::getMaskColumn(mlir::Value chunkValue) const {
+    if (!chunkValue) {
+        return nullptr;
+    }
+
+    return static_cast<const ColumnMask*>(getColumn(chunkValue));
+}
+
+NLKeyAppendFunction NLTranslator::selectMergeKeyAppend(mlir::Type chunkType,
+                                                      const Column* column,
+                                                      ValueType keyType) {
+    if (isUntypedNullChunk(chunkType)) {
+        return NLExecutor::selectNullMergeKeyAppendFunction();
+    }
+
+    if (isConstantColumn(column)) {
+        return NLExecutor::selectConstMergeKeyAppendFunction(valueTypeFromChunkType(chunkType), keyType);
+    }
+
+    const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
+
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        const ValueType nullableValueType = valueTypeFromElementType(nullableType.getValueType());
+        return NLExecutor::selectOptMergeKeyAppendFunction(nullableValueType, keyType);
+    }
+
+    return NLExecutor::selectPlainMergeKeyAppendFunction(chunkKindFromElementType(elementType), keyType);
 }
 
 NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkType) {

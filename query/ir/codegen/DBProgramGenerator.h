@@ -37,13 +37,19 @@ class FunctionInvocation;
 class UnaryExpr;
 class CallStmt;
 class CypherAST;
+class EdgePattern;
 class EmbeddingLiteral;
+class CreateStmt;
+class DeleteStmt;
 class Expr;
 class IndexExpr;
 class Literal;
 class ListLiteral;
 class LoadCSVStmt;
 class MatchStmt;
+class MergeStmt;
+class NodePattern;
+class PatternData;
 class Projection;
 class PropertyExpr;
 class ReturnStmt;
@@ -52,6 +58,7 @@ class VarDecl;
 class VectorSearchStmt;
 class VariableDependency;
 class DependencyEdge;
+class SetStmt;
 class SinglePartQuery;
 class Stmt;
 class WhereClause;
@@ -146,6 +153,13 @@ private:
         // not in the graph a fetch would read - both come from here instead
         struct CreatedEntity {
             mlir::Value _column;
+
+            // Which rows of the column hold a provisional ID: null when every one does,
+            // which is what a CREATE writes. A MERGE mixes the entities it wrote with
+            // the ones it bound, so its rows are told apart by a mask - and a property
+            // it did not write is read off the graph rather than being null.
+            mlir::Value _pending;
+
             std::unordered_map<std::string_view, mlir::Value> _properties;
         };
 
@@ -299,9 +313,87 @@ private:
                               llvm::ArrayRef<llvm::StringRef> propNames,
                               llvm::ArrayRef<mlir::Value> propValues);
 
-    void generateCreate(const SinglePartQuery* query);
-    void generateSet(const SinglePartQuery* query);
-    void generateDelete(const SinglePartQuery* query);
+    // The chain of one MERGE pattern, as db.merge carries it: one entry per node and
+    // one per hop, with the attribute lists and operand groups they fill
+    struct MergeEntity {
+        const VarDecl* _decl {nullptr};
+        llvm::SmallVector<llvm::StringRef> _propNames;
+        llvm::SmallVector<mlir::Value> _propValues;
+
+        // A node the query already bound, whose rows come in through a column rather
+        // than from labels and property values. Never true of a hop.
+        bool _bound {false};
+    };
+
+    struct MergePattern {
+        llvm::SmallVector<MergeEntity> _nodes;
+        llvm::SmallVector<MergeEntity> _hops;
+
+        llvm::SmallVector<mlir::Attribute> _nodeLabels;
+        llvm::SmallVector<mlir::Attribute> _nodePropNames;
+        llvm::SmallVector<mlir::Attribute> _edgeTypes;
+        llvm::SmallVector<mlir::Attribute> _edgePropNames;
+        llvm::SmallVector<int64_t> _directions;
+        llvm::SmallVector<int64_t> _pendingNodes;
+
+        llvm::SmallVector<mlir::Value> _boundNodes;
+        llvm::SmallVector<mlir::Value> _boundPending;
+        llvm::SmallVector<mlir::Value> _nodePropValues;
+        llvm::SmallVector<mlir::Value> _edgePropValues;
+    };
+
+    // One entity an earlier write bound that a merge takes along past its fan-out: its
+    // ID column, its pending mask when it has one, then the value column of each
+    // property the write recorded, under the names sorted here
+    struct CarriedEntity {
+        const VarDecl* _decl {nullptr};
+        llvm::SmallVector<std::string_view> _propNames;
+    };
+
+    // What a merge takes along past its fan-out: the columns in flight, then the columns
+    // of every entity an earlier write bound, which are in no VDG variable and so in no
+    // in-flight set
+    struct MergeCarrySet {
+        InFlightColumns _inFlight;
+        llvm::SmallVector<mlir::Value> _columns;
+        llvm::SmallVector<CarriedEntity> _writtenEntities;
+    };
+
+    // Emits each update statement of a part in the order the query writes them, so a
+    // statement reading what an earlier one wrote is generated behind it
+    void generateUpdates(const SinglePartQuery* query);
+    void generateCreateStmt(const CreateStmt* createStmt);
+    void generateMergeStmt(const MergeStmt* mergeStmt);
+
+    void collectMergePattern(const MergeStmt* mergeStmt, MergePattern& pattern);
+    void collectMergeNode(const NodePattern* nodePattern, MergePattern& pattern);
+    void collectMergeHop(const EdgePattern* edgePattern, MergePattern& pattern);
+    void collectMergeProperties(const PatternData* data, MergeEntity& entity);
+
+    void collectMergeCarrySet(MergeCarrySet& carrySet);
+    void rebindMergeCarrySet(mlir::Operation::result_range results, const MergeCarrySet& carrySet);
+
+    // Emits the ON CREATE and ON MATCH clauses of a merge, each over the rows @param
+    // created selects: the rows the merge wrote, and - through its negation - the rows
+    // it bound
+    void generateMergeActions(const MergeStmt* mergeStmt, mlir::Value created);
+
+    static mlir::storage::EdgeDirection mergeDirectionOf(const EdgePattern* edgePattern);
+
+    // Records what a MERGE bound for one named entity of its pattern: its column and the
+    // mask telling the rows it wrote from the rows it bound. Its properties are not
+    // recorded the way a CREATE's are - a merge row reads them where its own entity
+    // lives, off the graph or out of the write buffer.
+    void publishMergedEntity(const VarDecl* decl, mlir::Value column, mlir::Value pending);
+
+    // The mask saying which of a variable's rows hold a provisional ID, or a null Value
+    // for a variable no write bound and for one a CREATE bound - whose every row does
+    mlir::Value findPendingMask(const VarDecl* decl) const;
+
+    // The property writes of one SET clause, over the rows @param rows selects - every
+    // row for a plain SET, which passes a null mask
+    void generateSetItems(const SetStmt* setStmt, mlir::Value rows);
+    void generateDeleteStmt(const DeleteStmt* deleteStmt);
     void generateOutput(const Projection* projection);
 
     // A standalone CALL ends no projection: what it yielded is the result

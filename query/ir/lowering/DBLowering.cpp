@@ -15,6 +15,7 @@
 
 #include "IRConstantColumn.h"
 #include "IRRowAlignment.h"
+#include "MergePatternShape.h"
 #include "Procedure.h"
 #include "ProcedureManager.h"
 #include "ProcedureTypeVector.h"
@@ -736,6 +737,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerCreateNode(createNode);
     } else if (mlir::db::CreateEdge createEdge = mlir::dyn_cast<mlir::db::CreateEdge>(operation)) {
         lowerCreateEdge(createEdge);
+    } else if (mlir::db::Merge merge = mlir::dyn_cast<mlir::db::Merge>(operation)) {
+        lowerMerge(merge);
     } else if (mlir::db::SetNodeProperty setNodeProperty = mlir::dyn_cast<mlir::db::SetNodeProperty>(operation)) {
         lowerSetNodeProperty(setNodeProperty);
     } else if (mlir::db::SetEdgeProperty setEdgeProperty = mlir::dyn_cast<mlir::db::SetEdgeProperty>(operation)) {
@@ -1177,7 +1180,8 @@ void DBLowering::lowerGetNodeProperties(mlir::db::GetNodeProperties getNodePrope
     nl::GetNodeProperties fetch = _builder.create<nl::GetNodeProperties>(_builder.getUnknownLoc(),
                                                                          valueChunkType,
                                                                          inputChunk,
-                                                                         handle);
+                                                                         handle,
+                                                                         mapOptionalMask(getNodeProperties.getPending()));
     _valueMap[getNodeProperties.getResult()] = fetch.getValues();
 }
 
@@ -1193,7 +1197,8 @@ void DBLowering::lowerGetEdgeProperties(mlir::db::GetEdgeProperties getEdgePrope
     nl::GetEdgeProperties fetch = _builder.create<nl::GetEdgeProperties>(_builder.getUnknownLoc(),
                                                                          valueChunkType,
                                                                          inputChunk,
-                                                                         handle);
+                                                                         handle,
+                                                                         mapOptionalMask(getEdgeProperties.getPending()));
     _valueMap[getEdgeProperties.getResult()] = fetch.getValues();
 }
 
@@ -2200,18 +2205,7 @@ void DBLowering::lowerCallProcedure(mlir::db::CallProcedure call) {
 
     // Anchored on the deepest-bound operand, so a loop-bound argument or carried column
     // is found wherever it sits in the operand list, behind any hoisted constants.
-    mlir::Value anchorChunk;
-    for (const mlir::Value operandChunk : operandChunks) {
-        if (!anchorChunk) {
-            anchorChunk = operandChunk;
-            continue;
-        }
-
-        mlir::Block* const block = deeperBlock(anchorChunk, operandChunk);
-        if (ownerBlock(operandChunk) == block) {
-            anchorChunk = operandChunk;
-        }
-    }
+    const mlir::Value anchorChunk = deepestBoundChunk(operandChunks);
 
     mlir::Block* insertionBlock = _rootBlock;
     if (anchorChunk) {
@@ -2538,19 +2532,10 @@ void DBLowering::lowerCreateEdge(mlir::db::CreateEdge createEdge) {
         propChunks.push_back(mapValue(propValue));
     }
 
-    mlir::Value reference = srcChunk;
-    {
-        mlir::Block* const block = deeperBlock(reference, tgtChunk);
-        if (ownerBlock(tgtChunk) == block) {
-            reference = tgtChunk;
-        }
-    }
-    for (const mlir::Value propChunk : propChunks) {
-        mlir::Block* const block = deeperBlock(reference, propChunk);
-        if (ownerBlock(propChunk) == block) {
-            reference = propChunk;
-        }
-    }
+    llvm::SmallVector<mlir::Value, 8> operandChunks {srcChunk, tgtChunk};
+    operandChunks.append(propChunks.begin(), propChunks.end());
+
+    const mlir::Value reference = deepestBoundChunk(operandChunks);
     setInsertionInto(ownerBlock(reference));
 
     nl::CreateEdge create = _builder.create<nl::CreateEdge>(
@@ -2559,8 +2544,104 @@ void DBLowering::lowerCreateEdge(mlir::db::CreateEdge createEdge) {
         tgtChunk,
         createEdge.getEdgeTypeAttr(),
         createEdge.getPropNamesAttr(),
-        propChunks);
+        propChunks,
+        mapOptionalMask(createEdge.getSrcPending()),
+        mapOptionalMask(createEdge.getTgtPending()));
     _valueMap[createEdge.getResult()] = create.getResult();
+}
+
+mlir::Value DBLowering::mapOptionalMask(mlir::Value mask) {
+    if (!mask) {
+        return mlir::Value();
+    }
+
+    return mapValue(mask);
+}
+
+void DBLowering::mapColumns(mlir::OperandRange columns, llvm::SmallVectorImpl<mlir::Value>& chunks) {
+    chunks.clear();
+    for (const mlir::Value column : columns) {
+        chunks.push_back(mapValue(column));
+    }
+}
+
+void DBLowering::lowerMerge(mlir::db::Merge merge) {
+    llvm::SmallVector<mlir::Value, 8> boundNodes;
+    llvm::SmallVector<mlir::Value, 8> boundPending;
+    llvm::SmallVector<mlir::Value, 8> nodePropValues;
+    llvm::SmallVector<mlir::Value, 8> edgePropValues;
+    llvm::SmallVector<mlir::Value, 8> carriedColumns;
+
+    mapColumns(merge.getBoundNodes(), boundNodes);
+    mapColumns(merge.getBoundPending(), boundPending);
+    mapColumns(merge.getNodePropValues(), nodePropValues);
+    mapColumns(merge.getEdgePropValues(), edgePropValues);
+    mapColumns(merge.getCarriedColumns(), carriedColumns);
+
+    llvm::SmallVector<mlir::Value, 8> operandChunks(boundNodes);
+    operandChunks.append(boundPending.begin(), boundPending.end());
+    operandChunks.append(nodePropValues.begin(), nodePropValues.end());
+    operandChunks.append(edgePropValues.begin(), edgePropValues.end());
+    operandChunks.append(carriedColumns.begin(), carriedColumns.end());
+
+    // Inserted into the deepest block, where all the operands are defined. A merge over
+    // literals alone reads no chunk, and so opens where the program does.
+    mlir::Block* targetBlock = _entryBlock;
+    if (const mlir::Value insertionReference = deepestBoundChunk(operandChunks)) {
+        targetBlock = ownerBlock(insertionReference);
+    }
+
+    setInsertionInto(targetBlock);
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const mlir::Type nodeChunkType = nl::ChunkType::get(context, storage::NodeIDType::get(context));
+    const mlir::Type edgeChunkType = nl::ChunkType::get(context, storage::EdgeIDType::get(context));
+    const mlir::Type maskChunkType = nl::ChunkType::get(context, storage::BoolType::get(context));
+
+    const mlir::ArrayAttr nodeLabels = merge.getNodeLabels();
+    const size_t hopCount = nodeLabels.size() - 1;
+    const size_t matchedNodeCount = mlir::mergeMatchedNodeCount(nodeLabels);
+
+    llvm::SmallVector<mlir::Type, 8> resultTypes;
+    for (size_t nodeIndex = 0; nodeIndex < matchedNodeCount; nodeIndex++) {
+        resultTypes.push_back(nodeChunkType);
+        resultTypes.push_back(maskChunkType);
+    }
+
+    for (size_t hopIndex = 0; hopIndex < hopCount; hopIndex++) {
+        resultTypes.push_back(edgeChunkType);
+        resultTypes.push_back(maskChunkType);
+    }
+
+    resultTypes.push_back(maskChunkType);
+
+    for (const mlir::Value carriedChunk : carriedColumns) {
+        resultTypes.push_back(carriedChunk.getType());
+    }
+
+    nl::Merge nlMerge = _builder.create<nl::Merge>(_builder.getUnknownLoc(),
+                                                   resultTypes,
+                                                   merge.getNodeLabelsAttr(),
+                                                   merge.getNodePropNamesAttr(),
+                                                   merge.getEdgeTypesAttr(),
+                                                   merge.getEdgePropNamesAttr(),
+                                                   merge.getEdgeDirectionsAttr(),
+                                                   merge.getPendingNodesAttr(),
+                                                   boundNodes,
+                                                   boundPending,
+                                                   nodePropValues,
+                                                   edgePropValues,
+                                                   carriedColumns);
+
+    const mlir::ResultRange dbResults = merge.getResults();
+    const mlir::ResultRange nlResults = nlMerge.getResults();
+    for (size_t index = 0; index < dbResults.size(); index++) {
+        _valueMap[dbResults[index]] = nlResults[index];
+    }
+
+    // The merge grows or shrinks the rows in flight, so from here on what sizes a
+    // projection of constants alone is its own node chunk
+    _innermostCardinality = nlResults.front();
 }
 
 void DBLowering::lowerSetNodeProperty(mlir::db::SetNodeProperty setNodeProperty) {
@@ -2579,7 +2660,9 @@ void DBLowering::lowerSetNodeProperty(mlir::db::SetNodeProperty setNodeProperty)
         loc,
         inputChunk,
         setNodeProperty.getPropertyAttr(),
-        valueChunk);
+        valueChunk,
+        mapOptionalMask(setNodeProperty.getPending()),
+        mapOptionalMask(setNodeProperty.getRows()));
 }
 
 void DBLowering::lowerSetEdgeProperty(mlir::db::SetEdgeProperty setEdgeProperty) {
@@ -2598,7 +2681,9 @@ void DBLowering::lowerSetEdgeProperty(mlir::db::SetEdgeProperty setEdgeProperty)
         loc,
         inputChunk,
         setEdgeProperty.getPropertyAttr(),
-        valueChunk);
+        valueChunk,
+        mapOptionalMask(setEdgeProperty.getPending()),
+        mapOptionalMask(setEdgeProperty.getRows()));
 }
 
 void DBLowering::lowerDeleteNode(mlir::db::DeleteNode deleteNode) {
@@ -2608,7 +2693,10 @@ void DBLowering::lowerDeleteNode(mlir::db::DeleteNode deleteNode) {
     // The delete runs where its node chunk is live - the block that owns it.
     setInsertionInto(ownerBlock(inputChunk));
 
-    _builder.create<nl::DeleteNode>(loc, inputChunk, deleteNode.getDetach());
+    _builder.create<nl::DeleteNode>(loc,
+                                    inputChunk,
+                                    deleteNode.getDetach(),
+                                    mapOptionalMask(deleteNode.getPending()));
 }
 
 void DBLowering::lowerDeleteEdge(mlir::db::DeleteEdge deleteEdge) {
@@ -2617,7 +2705,7 @@ void DBLowering::lowerDeleteEdge(mlir::db::DeleteEdge deleteEdge) {
 
     setInsertionInto(ownerBlock(inputChunk));
 
-    _builder.create<nl::DeleteEdge>(loc, inputChunk);
+    _builder.create<nl::DeleteEdge>(loc, inputChunk, mapOptionalMask(deleteEdge.getPending()));
 }
 
 void DBLowering::lowerConstant(mlir::db::ConstantOp constant) {
@@ -2702,8 +2790,14 @@ void DBLowering::lowerNot(mlir::db::NotOp notOp) {
     const mlir::Type operandType = operandChunk.getType();
     const bool resultNull = isNullableChunk(operandType);
 
-    const mlir::Type boolElement = _builder.getI1Type();
     mlir::MLIRContext* bldCtxt = _builder.getContext();
+
+    // A mask stays a mask through the negation - what nl.merge and the constraint checks
+    // produce - while a predicate over values keeps the i1 element they carry
+    const bool operandIsMask = isa<storage::BoolType>(mlir::cast<nl::ChunkType>(operandType).getElementType());
+    const mlir::Type boolElement = operandIsMask ? storage::BoolType::get(bldCtxt)
+                                                 : mlir::Type(_builder.getI1Type());
+
     mlir::Type resultElement = boolElement;
     if (resultNull) {
         resultElement = storage::NullableType::get(bldCtxt, boolElement);
@@ -2827,6 +2921,23 @@ void DBLowering::lowerFilter(mlir::db::FilterOp filter) {
     }
 
     followCardinalityThrough(columnChunks, nlFilter.getResults());
+}
+
+mlir::Value DBLowering::deepestBoundChunk(llvm::ArrayRef<mlir::Value> chunks) {
+    mlir::Value deepest;
+    for (const mlir::Value chunk : chunks) {
+        if (!deepest) {
+            deepest = chunk;
+            continue;
+        }
+
+        mlir::Block* const block = deeperBlock(deepest, chunk);
+        if (ownerBlock(chunk) == block) {
+            deepest = chunk;
+        }
+    }
+
+    return deepest;
 }
 
 mlir::Block* DBLowering::deeperBlock(mlir::Value first, mlir::Value second) {

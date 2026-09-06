@@ -56,6 +56,10 @@
 #include "NLSystemContext.h"
 
 #include "NLProgram.h"
+#include "NLMergeExecutor.h"
+#include "NLWriteProperties.h"
+#include "NLWrittenValues.h"
+#include "NLMergeWorkingSet.h"
 #include "NLOutputSink.h"
 
 #include "LocalMemory.h"
@@ -2361,161 +2365,6 @@ void runEdgeLoopSteps(NLExecutionContext* context,
     }
 }
 
-class ConstPropertyExtractor {
-public:
-    ConstPropertyExtractor(CommitWriteBuffer::UntypedProperties& buf,
-                           PropertyTypeID propID,
-                           size_t rowCount)
-        : _buf(buf),
-        _propID(propID),
-        _rowCount(rowCount)
-    {
-    }
-
-    template <typename T>
-    void operator()(const ColumnConst<T>* typed) {
-        _buf.clear();
-        _buf.reserve(_rowCount);
-        for (size_t i = 0; i < _rowCount; i++) {
-            _buf.emplace_back(_propID, typed->getRaw());
-        }
-    }
-
-    void operator()(const ColumnConst<types::String::Primitive>* typed) {
-        _buf.clear();
-        _buf.reserve(_rowCount);
-        for (size_t i = 0; i < _rowCount; i++) {
-            _buf.emplace_back(_propID, std::string(typed->getRaw()));
-        }
-    }
-
-    void operator()(const ColumnConst<types::Embedding::Primitive>* typed) {
-        _buf.clear();
-        _buf.reserve(_rowCount);
-        const types::Embedding::Primitive span = typed->getRaw();
-        for (size_t i = 0; i < _rowCount; i++) {
-            _buf.emplace_back(_propID, types::Embedding::OwningPrimitive(span.begin(), span.end()));
-        }
-    }
-
-private:
-    CommitWriteBuffer::UntypedProperties& _buf;
-    PropertyTypeID _propID;
-    size_t _rowCount;
-};
-
-class VectorPropertyExtractor {
-public:
-    VectorPropertyExtractor(CommitWriteBuffer::UntypedProperties& buf,
-                            PropertyTypeID propID)
-        : _buf(buf),
-        _propID(propID)
-    {
-    }
-
-    template <typename T>
-    void operator()(const ColumnVector<T>* typed) {
-        _buf.clear();
-        _buf.reserve(typed->size());
-        for (const T& val : *typed) {
-            _buf.emplace_back(_propID, val);
-        }
-    }
-
-    void operator()(const ColumnVector<types::String::Primitive>* typed) {
-        _buf.clear();
-        _buf.reserve(typed->size());
-        for (const types::String::Primitive val : *typed) {
-            _buf.emplace_back(_propID, std::string(val));
-        }
-    }
-
-    void operator()(const ColumnVector<types::Embedding::Primitive>* typed) {
-        _buf.clear();
-        _buf.reserve(typed->size());
-        for (const types::Embedding::Primitive val : *typed) {
-            _buf.emplace_back(_propID, types::Embedding::OwningPrimitive(val.begin(), val.end()));
-        }
-    }
-
-    template <typename T>
-    void operator()(const ColumnVector<std::optional<T>>* typed) {
-        _buf.clear();
-        _buf.reserve(typed->size());
-        for (const std::optional<T>& val : *typed) {
-            if (!val) {
-                throw IRException("Cannot set a property to NULL in CREATE.");
-            }
-            _buf.emplace_back(_propID, *val);
-        }
-    }
-
-    void operator()(const ColumnVector<std::optional<types::String::Primitive>>* typed) {
-        _buf.clear();
-        _buf.reserve(typed->size());
-        for (const std::optional<types::String::Primitive>& val : *typed) {
-            if (!val) {
-                throw IRException("Cannot set a property to NULL in CREATE.");
-            }
-            _buf.emplace_back(_propID, std::string(*val));
-        }
-    }
-
-    void operator()(const ColumnVector<std::optional<types::Embedding::Primitive>>* typed) {
-        _buf.clear();
-        _buf.reserve(typed->size());
-        for (const std::optional<types::Embedding::Primitive>& val : *typed) {
-            if (!val) {
-                throw IRException("Cannot set a property to NULL in CREATE.");
-            }
-            _buf.emplace_back(_propID, types::Embedding::OwningPrimitive(val->begin(), val->end()));
-        }
-    }
-
-private:
-    CommitWriteBuffer::UntypedProperties& _buf;
-    PropertyTypeID _propID;
-};
-
-void extractColumnProperties(const Column* column,
-                             size_t rowCount,
-                             PropertyTypeID propID,
-                             CommitWriteBuffer::UntypedProperties& buf) {
-    using Types = WriteProcessorPropertyTypes;
-
-    const ContainerKind::Code containerKind = ColumnKind::extractContainerKind(column->getKind());
-
-    if (containerKind == ContainerKind::code<ColumnConst>()) {
-        ConstPropertyExtractor extractor(buf, propID, rowCount);
-        ColumnSingleDispatcher<Types::AllowedConst,
-                               ConstPropertyExtractor,
-                               Types::ExcludedConst>::dispatch(column, extractor);
-    } else {
-        VectorPropertyExtractor extractor(buf, propID);
-        ColumnSingleDispatcher<Types::AllowedVector,
-                               VectorPropertyExtractor,
-                               Types::ExcludedVector>::dispatch(column, extractor);
-    }
-}
-
-size_t committedNodeCount(const GraphView* view) {
-    if (!view || !view->isValid()) {
-        return 0;
-    }
-
-    const GraphReader reader = view->read();
-    return reader.getTotalNodesAllocated();
-}
-
-size_t committedEdgeCount(const GraphView* view) {
-    if (!view || !view->isValid()) {
-        return 0;
-    }
-
-    const GraphReader reader = view->read();
-    return reader.getTotalEdgesAllocated();
-}
-
 CommitWriteBuffer::ExistingOrPendingNode resolveNode(const ColumnNodeIDs* column,
                                                      size_t row,
                                                      bool isPending,
@@ -2525,6 +2374,109 @@ CommitWriteBuffer::ExistingOrPendingNode resolveNode(const ColumnNodeIDs* column
         return CommitWriteBuffer::PendingNodeOffset(nodeID.getValue() - firstPendingNodeID);
     } else {
         return nodeID;
+    }
+}
+
+// A column a merge produced mixes the two ID spaces, so its mask answers row by row;
+// one with no mask is pending in every row or in none.
+bool isPendingRow(const ColumnMask* pending, bool isPendingColumn, size_t row) {
+    if (pending) {
+        return (*pending)[row];
+    }
+
+    return isPendingColumn;
+}
+
+// The write buffer builds one column per property of a pending entity, so a second entry
+// for the same property would be a second value for the same cell: ON CREATE writes over
+// the value the pattern wrote a moment earlier rather than beside it.
+void setPendingProperty(CommitWriteBuffer::UntypedProperties& properties,
+                        const CommitWriteBuffer::UntypedProperty& property) {
+    for (CommitWriteBuffer::UntypedProperty& held : properties) {
+        if (held.propertyID == property.propertyID) {
+            held.value = property.value;
+            return;
+        }
+    }
+
+    properties.push_back(property);
+}
+
+bool writeTouchesRow(const ColumnMask* rows, size_t row) {
+    return !rows || (*rows)[row];
+}
+
+// A column of strings or embeddings borrows what it holds, and the change rewrites its
+// own values as the query runs, so those are copied where the column can outlive them
+template <typename T>
+const CommitWriteBuffer::SupportedTypeVariant& retainIfBorrowed(NLWrittenValues& written,
+                                                                const CommitWriteBuffer::SupportedTypeVariant& value) {
+    if constexpr (std::is_same_v<T, types::String> || std::is_same_v<T, types::Embedding>) {
+        return written.retain(value);
+    } else {
+        return value;
+    }
+}
+
+// One value this change wrote, as the column the fetch is filling holds it. The value is
+// held as whatever type the row's own column carried, so it is converted to the type the
+// schema holds the property as - which is the column's element type.
+template <typename T>
+std::optional<typename T::Primitive> readWrittenValue(NLWrittenValues& written,
+                                                      const CommitWriteBuffer::SupportedTypeVariant& value) {
+    using Primitive = typename T::Primitive;
+
+    const auto convert = [](const auto& held) -> std::optional<Primitive> {
+        using Held = std::decay_t<decltype(held)>;
+
+        if constexpr (std::is_convertible_v<const Held&, Primitive>) {
+            return Primitive(held);
+        } else {
+            return std::nullopt;
+        }
+    };
+
+    return std::visit(convert, retainIfBorrowed<T>(written, value));
+}
+
+template <typename T>
+std::optional<typename T::Primitive> readPendingProperty(NLWrittenValues& written,
+                                                         const CommitWriteBuffer::UntypedProperties& properties,
+                                                         PropertyTypeID propertyTypeID) {
+    for (const CommitWriteBuffer::UntypedProperty& property : properties) {
+        if (property.propertyID == propertyTypeID) {
+            return readWrittenValue<T>(written, property.value);
+        }
+    }
+
+    return std::nullopt;
+}
+
+// A pending row names its entity by the ID it will commit as, so the write buffer is
+// indexed by what is left once the committed space is taken off
+template <typename ID, typename T>
+std::optional<typename T::Primitive> readPendingEntityProperty(CommitWriteBuffer* writeBuffer,
+                                                               NLWrittenValues& written,
+                                                               const GraphView* view,
+                                                               uint64_t id,
+                                                               PropertyTypeID propertyTypeID) {
+    if constexpr (std::is_same_v<ID, NodeID>) {
+        const size_t offset = id - committedNodeCount(view);
+        return readPendingProperty<T>(written, writeBuffer->getPendingNode(offset).properties, propertyTypeID);
+    } else {
+        const size_t offset = id - committedEdgeCount(view);
+        return readPendingProperty<T>(written, writeBuffer->getPendingEdge(offset).properties, propertyTypeID);
+    }
+}
+
+template <typename ID>
+const CommitWriteBuffer::SupportedTypeVariant* findEntityUpdate(const NLWrittenValues& written,
+                                                                ID id,
+                                                                PropertyTypeID propertyTypeID) {
+    if constexpr (std::is_same_v<ID, NodeID>) {
+        return written.findNodeUpdate(id, propertyTypeID);
+    } else {
+        return written.findEdgeUpdate(id, propertyTypeID);
     }
 }
 
@@ -2543,6 +2495,112 @@ void throwIfNodesHaveEdges(const GraphView& view, const ColumnNodeIDs* nodes) {
         if (!tombstones.containsEdge(record._edgeID)) {
             throw IRException("Cannot delete a node with relationships; use DETACH DELETE");
         }
+    }
+}
+
+// A merge keys the value a row asks for against the value the graph holds, and those
+// arrive in a plain and a nullable column respectively: the two have to serialize alike,
+// which is why a plain row writes the tag byte the nullable one writes for a value.
+template <typename ElementType>
+void mergeKeyAppendPlainColumn(const Column* column, size_t row, std::string& key) {
+    const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
+
+    key.push_back('\1');
+    distinctAppendValueBytes(key, raw[row]);
+}
+
+template <typename ElementType>
+void mergeKeyAppendConstColumn(const Column* column, size_t row, std::string& key) {
+    key.push_back('\1');
+    distinctAppendValueBytes(key, (*static_cast<const ColumnConst<ElementType>*>(column))[row]);
+}
+
+// The numeric siblings of the three above, keying the row's value in KeyType - the type
+// the schema holds the property as - rather than in the one its column holds. The
+// analyzer lets an integer constrain a double-typed property, and the graph side keys
+// the double it reads back, so the two only compare equal once the row's value is
+// converted to it.
+template <typename ElementType, typename KeyType>
+void mergeKeyAppendNumericPlainColumn(const Column* column, size_t row, std::string& key) {
+    const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
+
+    key.push_back('\1');
+    distinctAppendValueBytes(key, static_cast<KeyType>(raw[row]));
+}
+
+template <typename ElementType, typename KeyType>
+void mergeKeyAppendNumericConstColumn(const Column* column, size_t row, std::string& key) {
+    key.push_back('\1');
+    distinctAppendValueBytes(key, static_cast<KeyType>((*static_cast<const ColumnConst<ElementType>*>(column))[row]));
+}
+
+template <typename ElementType, typename KeyType>
+void mergeKeyAppendNumericOptColumn(const Column* column, size_t row, std::string& key) {
+    const auto& raw = static_cast<const ColumnVector<std::optional<ElementType>>*>(column)->getRaw();
+    const std::optional<ElementType>& value = raw[row];
+
+    if (!value.has_value()) {
+        key.push_back('\0');
+        return;
+    }
+
+    key.push_back('\1');
+    distinctAppendValueBytes(key, static_cast<KeyType>(*value));
+}
+
+// Keys the way a nullable column's null row does, so a merge on a null value binds the
+// nodes that lack the property
+void mergeKeyAppendConstNull(const Column* column, size_t row, std::string& key) {
+    key.push_back('\0');
+}
+
+// Which of the three shapes a merge property value column comes in, so one selector
+// serves all of them
+enum class MergeColumnShape {
+    Plain,
+    Const,
+    Opt,
+};
+
+template <typename ElementType, typename KeyType, MergeColumnShape Shape>
+NLKeyAppendFunction mergeKeyAppendFor() {
+    if constexpr (Shape == MergeColumnShape::Plain) {
+        return &mergeKeyAppendNumericPlainColumn<ElementType, KeyType>;
+    } else if constexpr (Shape == MergeColumnShape::Const) {
+        return &mergeKeyAppendNumericConstColumn<ElementType, KeyType>;
+    } else {
+        return &mergeKeyAppendNumericOptColumn<ElementType, KeyType>;
+    }
+}
+
+// The appender for a numeric value column, keying its rows in the type the schema holds
+// the property as. Identical types convert for free, so one path covers both.
+template <typename ElementType, MergeColumnShape Shape>
+NLKeyAppendFunction selectNumericMergeKeyAppend(ValueType keyType) {
+    switch (keyType) {
+        case ValueType::Int64:
+            return mergeKeyAppendFor<ElementType, types::Int64::Primitive, Shape>();
+        break;
+
+        case ValueType::UInt64:
+            return mergeKeyAppendFor<ElementType, types::UInt64::Primitive, Shape>();
+        break;
+
+        case ValueType::Double:
+            return mergeKeyAppendFor<ElementType, types::Double::Primitive, Shape>();
+        break;
+
+        default:
+            throw IRException("a MERGE pattern cannot constrain a non-numeric property to a number");
+        break;
+    }
+}
+
+// A non-numeric value converts to no other type the schema might hold the property as,
+// so it can only key against a property of its own type
+void throwUnlessKeyedAsItsOwnType(ValueType valueType, ValueType keyType) {
+    if (valueType != keyType) {
+        throw IRException("a MERGE pattern cannot constrain a property to a value of another type");
     }
 }
 
@@ -2646,21 +2704,6 @@ void runProcedureDrive(NLExecutionContext* context,
 
 }
 
-vec::VectorDatabase* NLExecutionContext::getVectorDatabase() const {
-    SystemAccessor* const accessor = _system ? _system->getAccessor() : nullptr;
-
-    return accessor ? accessor->getVectorDatabase() : nullptr;
-}
-
-const fs::Path* NLExecutionContext::getDataDir() const {
-    const SystemManager* const manager = _system ? _system->getSystemManager() : nullptr;
-    if (!manager) {
-        return nullptr;
-    }
-
-    return &manager->getConfig()->getDataDir();
-}
-
 NLExecutor::NLExecutor(const GraphView* view,
                        const NLProgram* prog,
                        NLOutputSink* sink,
@@ -2726,6 +2769,11 @@ void NLExecutor::runCreateNode(NLExecutionContext* context, NLFunctionData* data
     }
 }
 
+void NLExecutor::runMerge(NLExecutionContext* context, NLFunctionData* data) {
+    NLMergeExecutor merge(context, static_cast<NLMergeData*>(data));
+    merge.run();
+}
+
 void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data) {
     NLCreateEdgeData* createData = static_cast<NLCreateEdgeData*>(data);
     CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
@@ -2738,6 +2786,9 @@ void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data
     const size_t rowCount = src->size();
     const EdgeTypeID edgeTypeID = createData->getEdgeTypeID();
 
+    const ColumnMask* srcPending = createData->getSrcPendingMask();
+    const ColumnMask* tgtPending = createData->getTgtPendingMask();
+
     const GraphView* view = context->getView();
     const size_t firstPendingNodeID = committedNodeCount(view);
 
@@ -2746,9 +2797,9 @@ void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data
 
     for (size_t row = 0; row < rowCount; row++) {
         const CommitWriteBuffer::ExistingOrPendingNode srcNode =
-            resolveNode(src, row, srcIsPending, firstPendingNodeID);
+            resolveNode(src, row, isPendingRow(srcPending, srcIsPending, row), firstPendingNodeID);
         const CommitWriteBuffer::ExistingOrPendingNode tgtNode =
-            resolveNode(tgt, row, tgtIsPending, firstPendingNodeID);
+            resolveNode(tgt, row, isPendingRow(tgtPending, tgtIsPending, row), firstPendingNodeID);
 
         CommitWriteBuffer::PendingEdge& edge = writeBuffer->newPendingEdge(srcNode, tgtNode);
         edge.edgeType = edgeTypeID;
@@ -2786,9 +2837,24 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
     const Column* nodeCol = setData->getValue();
     extractColumnProperties(nodeCol, rowCount, propID, propsBuffer);
 
+    const ColumnMask* pending = setData->getPending();
+    const ColumnMask* rows = setData->getRows();
+
+    const size_t firstPendingNodeID = committedNodeCount(context->getView());
+
     const auto& raw = nodes->getRaw();
     for (size_t row = 0; row < rowCount; row++) {
-        writeBuffer->addNodeUpdate(raw[row], propsBuffer[row]);
+        if (!writeTouchesRow(rows, row)) {
+            continue;
+        }
+
+        if (pending && (*pending)[row]) {
+            CommitWriteBuffer::PendingNode& node =
+                writeBuffer->getPendingNode(raw[row].getValue() - firstPendingNodeID);
+            setPendingProperty(node.properties, propsBuffer[row]);
+        } else {
+            writeBuffer->addNodeUpdate(raw[row], propsBuffer[row]);
+        }
     }
 }
 
@@ -2805,9 +2871,24 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
     CommitWriteBuffer::UntypedProperties propsBuffer;
     extractColumnProperties(edgeCol, rowCount, propID, propsBuffer);
 
+    const ColumnMask* pending = setData->getPending();
+    const ColumnMask* rows = setData->getRows();
+
+    const size_t firstPendingEdgeID = committedEdgeCount(context->getView());
+
     const auto& raw = edges->getRaw();
     for (size_t row = 0; row < rowCount; row++) {
-        writeBuffer->addEdgeUpdate(raw[row], propsBuffer[row]);
+        if (!writeTouchesRow(rows, row)) {
+            continue;
+        }
+
+        if (pending && (*pending)[row]) {
+            CommitWriteBuffer::PendingEdge& edge =
+                writeBuffer->getPendingEdge(raw[row].getValue() - firstPendingEdgeID);
+            setPendingProperty(edge.properties, propsBuffer[row]);
+        } else {
+            writeBuffer->addEdgeUpdate(raw[row], propsBuffer[row]);
+        }
     }
 }
 
@@ -2818,14 +2899,47 @@ void NLExecutor::runDeleteNode(NLExecutionContext* context, NLFunctionData* data
 
     const ColumnNodeIDs* nodes = deleteData->getInput();
     const GraphView* view = context->getView();
+    const ColumnMask* pending = deleteData->getPending();
+    const bool allPending = deleteData->isAllPending();
+    const bool detaching = deleteData->isDetaching();
 
-    if (deleteData->isDetaching()) {
-        writeBuffer->addDeletedNodes(nodes->getRaw());
-        writeBuffer->addHangingEdges(*view);
-    } else {
-        throwIfNodesHaveEdges(*view, nodes);
-        writeBuffer->addDeletedNodes(nodes->getRaw());
+    ColumnNodeIDs* committed = deleteData->getCommitted();
+    committed->clear();
+
+    const size_t firstPendingNodeID = committedNodeCount(view);
+
+    const auto& raw = nodes->getRaw();
+
+    for (size_t row = 0; row < raw.size(); row++) {
+        const bool isPending = isPendingRow(pending, allPending, row);
+        const CommitWriteBuffer::ExistingOrPendingNode node =
+            resolveNode(nodes, row, isPending, firstPendingNodeID);
+
+        // A relationship this query wrote counts as much as one the graph holds, whether
+        // it hangs off a node the query wrote or off one already committed
+        if (!detaching && writeBuffer->hasPendingEdgesOn(node)) {
+            throw IRException("Cannot delete a node with relationships; use DETACH DELETE");
+        }
+
+        if (isPending) {
+            writeBuffer->addDeletedPendingNode(std::get<CommitWriteBuffer::PendingNodeOffset>(node));
+        } else {
+            committed->push_back(raw[row]);
+        }
     }
+
+    if (!detaching) {
+        throwIfNodesHaveEdges(*view, committed);
+    }
+
+    writeBuffer->addDeletedNodes(committed->getRaw());
+
+    if (!detaching) {
+        return;
+    }
+
+    writeBuffer->addHangingEdges(*view);
+    writeBuffer->addHangingPendingEdges();
 }
 
 void NLExecutor::runDeleteEdge(NLExecutionContext* context, NLFunctionData* data) {
@@ -2834,7 +2948,24 @@ void NLExecutor::runDeleteEdge(NLExecutionContext* context, NLFunctionData* data
     bioassert(writeBuffer, "nl.delete_edge requires an active write transaction");
 
     const ColumnEdgeIDs* edges = deleteData->getInput();
-    writeBuffer->addDeletedEdges(edges->getRaw());
+    const ColumnMask* pending = deleteData->getPending();
+    const bool allPending = deleteData->isAllPending();
+
+    ColumnEdgeIDs* committed = deleteData->getCommitted();
+    committed->clear();
+
+    const size_t firstPendingEdgeID = committedEdgeCount(context->getView());
+
+    const auto& raw = edges->getRaw();
+    for (size_t row = 0; row < raw.size(); row++) {
+        if (isPendingRow(pending, allPending, row)) {
+            writeBuffer->addDeletedPendingEdge(raw[row].getValue() - firstPendingEdgeID);
+        } else {
+            committed->push_back(raw[row]);
+        }
+    }
+
+    writeBuffer->addDeletedEdges(committed->getRaw());
 }
 
 void NLExecutor::runScanNodesLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -5290,6 +5421,113 @@ NLCopyFunction NLExecutor::selectPlainCopyFunction(ValueType valueType) {
     }
 }
 
+NLKeyAppendFunction NLExecutor::selectPlainMergeKeyAppendFunction(NLChunkKind kind, ValueType keyType) {
+    switch (kind) {
+        case NLChunkKind::UInt64:
+            return selectNumericMergeKeyAppend<types::UInt64::Primitive, MergeColumnShape::Plain>(keyType);
+        break;
+
+        case NLChunkKind::Int64:
+            return selectNumericMergeKeyAppend<types::Int64::Primitive, MergeColumnShape::Plain>(keyType);
+        break;
+
+        case NLChunkKind::Double:
+            return selectNumericMergeKeyAppend<types::Double::Primitive, MergeColumnShape::Plain>(keyType);
+        break;
+
+        case NLChunkKind::Bool:
+            throwUnlessKeyedAsItsOwnType(ValueType::Bool, keyType);
+            return &mergeKeyAppendPlainColumn<types::Bool::Primitive>;
+        break;
+
+        case NLChunkKind::String:
+            throwUnlessKeyedAsItsOwnType(ValueType::String, keyType);
+            return &mergeKeyAppendPlainColumn<types::String::Primitive>;
+        break;
+
+        case NLChunkKind::OwnedString:
+            throwUnlessKeyedAsItsOwnType(ValueType::String, keyType);
+            return &mergeKeyAppendPlainColumn<std::string>;
+        break;
+
+        case NLChunkKind::NodeID:
+        case NLChunkKind::EdgeID:
+        case NLChunkKind::EdgeTypeID:
+        case NLChunkKind::LabelID:
+        case NLChunkKind::PropertyTypeID:
+        case NLChunkKind::ValueTypeCode:
+        case NLChunkKind::List:
+            throw IRException("a MERGE pattern cannot constrain a property to this value");
+        break;
+    }
+
+    bioassert(false, "Unknown NLChunkKind");
+    return nullptr;
+}
+
+NLKeyAppendFunction NLExecutor::selectConstMergeKeyAppendFunction(ValueType valueType, ValueType keyType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return selectNumericMergeKeyAppend<types::Int64::Primitive, MergeColumnShape::Const>(keyType);
+        break;
+
+        case ValueType::UInt64:
+            return selectNumericMergeKeyAppend<types::UInt64::Primitive, MergeColumnShape::Const>(keyType);
+        break;
+
+        case ValueType::Double:
+            return selectNumericMergeKeyAppend<types::Double::Primitive, MergeColumnShape::Const>(keyType);
+        break;
+
+        case ValueType::Bool:
+            throwUnlessKeyedAsItsOwnType(ValueType::Bool, keyType);
+            return &mergeKeyAppendConstColumn<types::Bool::Primitive>;
+        break;
+
+        case ValueType::String:
+            throwUnlessKeyedAsItsOwnType(ValueType::String, keyType);
+            return &mergeKeyAppendConstColumn<types::String::Primitive>;
+        break;
+
+        case ValueType::Embedding:
+            throw IRException("a MERGE pattern cannot constrain a property to an embedding");
+        break;
+
+        case ValueType::Invalid:
+        case ValueType::_SIZE:
+            throw IRException("invalid MERGE property value type");
+        break;
+    }
+
+    bioassert(false, "Unhandled value type");
+    return nullptr;
+}
+
+NLKeyAppendFunction NLExecutor::selectOptMergeKeyAppendFunction(ValueType valueType, ValueType keyType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return selectNumericMergeKeyAppend<types::Int64::Primitive, MergeColumnShape::Opt>(keyType);
+        break;
+
+        case ValueType::UInt64:
+            return selectNumericMergeKeyAppend<types::UInt64::Primitive, MergeColumnShape::Opt>(keyType);
+        break;
+
+        case ValueType::Double:
+            return selectNumericMergeKeyAppend<types::Double::Primitive, MergeColumnShape::Opt>(keyType);
+        break;
+
+        default:
+            throwUnlessKeyedAsItsOwnType(valueType, keyType);
+            return selectOptKeyAppendFunction(valueType);
+        break;
+    }
+}
+
+NLKeyAppendFunction NLExecutor::selectNullMergeKeyAppendFunction() {
+    return &mergeKeyAppendConstNull;
+}
+
 NLKeyAppendFunction NLExecutor::selectPlainKeyAppendFunction(ValueType valueType) {
     switch (valueType) {
         case ValueType::Int64:
@@ -5485,6 +5723,43 @@ void NLExecutor::runPropertyFetch(NLExecutionContext* context, NLFunctionData* d
     GetPropertiesWithNullChunkWriter<ID, T> writer(view, propertyTypeID, inputIDs);
     writer.setOutput(output);
     writer.fill(inputIDs->size());
+
+    // The fetch above read the graph, which holds this change's writes nowhere: a row
+    // whose entity the change wrote holds a write-buffer offset rather than an ID the
+    // graph knows, and a row it merely updated still reads the value from before.
+    const ColumnMask* pending = fetchData->getPending();
+    CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
+
+    if (!writeBuffer) {
+        bioassert(!pending, "a property fetch over written entities requires an active write transaction");
+        return;
+    }
+
+    NLWrittenValues& written = context->getWrittenValues();
+    written.indexUpdates(writeBuffer);
+
+    if (!pending && !written.hasUpdates()) {
+        return;
+    }
+
+    auto& raw = output->getRaw();
+    const auto& inputRaw = inputIDs->getRaw();
+    for (size_t row = 0; row < raw.size(); row++) {
+        if (pending && (*pending)[row]) {
+            raw[row] = readPendingEntityProperty<ID, T>(writeBuffer,
+                                                        written,
+                                                        &view,
+                                                        inputRaw[row].getValue(),
+                                                        propertyTypeID);
+            continue;
+        }
+
+        const CommitWriteBuffer::SupportedTypeVariant* update =
+            findEntityUpdate<ID>(written, inputRaw[row], propertyTypeID);
+        if (update) {
+            raw[row] = readWrittenValue<T>(written, *update);
+        }
+    }
 }
 
 // The translator selects among these by the value type the property resolves

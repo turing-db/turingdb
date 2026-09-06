@@ -148,4 +148,9 @@ def List : StorageType<"List", "list"> {
     let assemblyFormat = "`<` $elementType `>`";
 }
 
+// One string array per entity of a MERGE pattern: the label set of each chain node,
+// or the property names of each node and each hop. Both db.merge and nl.merge carry
+// these lists, so the constraint lives beside the types the two dialects share.
+def StrArrayArrayAttr : TypedArrayAttrBase<StrArrayAttr, "array of string arrays">;
+
 #endif // STORAGE_TYPES
