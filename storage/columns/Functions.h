@@ -1,9 +1,12 @@
 #pragma once
 
+#include <math.h>
+
 #include <limits>
 #include <optional>
 #include <string>
 #include <system_error>
+#include <type_traits>
 
 #include "columns/ColumnConst.h"
 #include "columns/ColumnIDs.h"
@@ -169,6 +172,74 @@ private:
     std::string _buf; // Preallocated buffer to reuse over iterations
 
     static void strToLower(std::string& lower, std::string_view src);
+};
+
+// toInteger() and toFloat() over a number rather than a string. Every conversion keeps an
+// optional result so one column type carries it whatever the argument was, and so a double
+// that no integer can represent reads as null.
+template <typename Number>
+class toIntegerFromNumberFunction {
+public:
+    using ArgType = Number;
+    using ResultType = std::optional<types::Int64::Primitive>;
+
+    ResultType operator()(const Number value) {
+        if constexpr (std::is_floating_point_v<Number>) {
+            const types::Double::Primitive truncated = trunc(static_cast<types::Double::Primitive>(value));
+
+            // The smallest int64 converts to a double exactly; the largest does not, so the
+            // upper bound is the power of two just past it and the comparison excludes it
+            const types::Double::Primitive lowest
+                = static_cast<types::Double::Primitive>(std::numeric_limits<types::Int64::Primitive>::min());
+            const types::Double::Primitive pastHighest = -lowest;
+
+            const bool representable = truncated >= lowest && truncated < pastHighest;
+            if (!representable) {
+                return std::nullopt;
+            }
+
+            return static_cast<types::Int64::Primitive>(truncated);
+        } else {
+            return static_cast<types::Int64::Primitive>(value);
+        }
+    }
+};
+
+template <typename Number>
+class toFloatFromNumberFunction {
+public:
+    using ArgType = Number;
+    using ResultType = std::optional<types::Double::Primitive>;
+
+    ResultType operator()(const Number value) {
+        return static_cast<types::Double::Primitive>(value);
+    }
+};
+
+template <typename Argument>
+concept ConvertibleNumber = std::is_arithmetic_v<Argument>
+                            && !std::is_same_v<Argument, types::Bool::Primitive>;
+
+// The element a column of the given type converts, with any optional unwrapped: what a
+// conversion is applied to row by row.
+template <typename ColumnType>
+using ConversionArgument = TypeUtils::unwrap_inner_t<TypeUtils::decay_col_t<ColumnType>>;
+
+// The conversion a column of the given element type goes through. A conversion names its
+// string form, which stays the one every non-numeric element converts through.
+template <typename StringFunctor, typename Argument>
+struct ConversionFunctorFor {
+    using Type = StringFunctor;
+};
+
+template <ConvertibleNumber Argument>
+struct ConversionFunctorFor<toIntegerFunction, Argument> {
+    using Type = toIntegerFromNumberFunction<Argument>;
+};
+
+template <ConvertibleNumber Argument>
+struct ConversionFunctorFor<toFloatFunction, Argument> {
+    using Type = toFloatFromNumberFunction<Argument>;
 };
 
 class CosineSimilarityFunction {

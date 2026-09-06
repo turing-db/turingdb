@@ -275,9 +275,25 @@ void FunctionDecls::initDefault() {
     toInteger->setArguments({EvaluatedType::String});
     toInteger->setReturnTypes({{EvaluatedType::Integer}});
 
+    FunctionSignature* toIntegerOfInteger = createFunction("toInteger");
+    toIntegerOfInteger->setArguments({EvaluatedType::Integer});
+    toIntegerOfInteger->setReturnTypes({{EvaluatedType::Integer}});
+
+    FunctionSignature* toIntegerOfDouble = createFunction("toInteger");
+    toIntegerOfDouble->setArguments({EvaluatedType::Double});
+    toIntegerOfDouble->setReturnTypes({{EvaluatedType::Integer}});
+
     FunctionSignature* toFloat = createFunction("toFloat");
     toFloat->setArguments({EvaluatedType::String});
     toFloat->setReturnTypes({{EvaluatedType::Double}});
+
+    FunctionSignature* toFloatOfInteger = createFunction("toFloat");
+    toFloatOfInteger->setArguments({EvaluatedType::Integer});
+    toFloatOfInteger->setReturnTypes({{EvaluatedType::Double}});
+
+    FunctionSignature* toFloatOfDouble = createFunction("toFloat");
+    toFloatOfDouble->setArguments({EvaluatedType::Double});
+    toFloatOfDouble->setReturnTypes({{EvaluatedType::Double}});
 
     FunctionSignature* toBoolean = createFunction("toBoolean");
     toBoolean->setArguments({EvaluatedType::String});

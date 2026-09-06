@@ -121,9 +121,11 @@ template <typename T>
 concept TupleExact = IsTuple<T>::value;
 
 template <ColumnOperator Function>
-concept ConversionFunction = (Function == OP_TO_INTEGER)
-                          || (Function == OP_TO_FLOAT)
-                          || (Function == OP_TO_BOOLEAN);
+concept NumericConversionFunction = (Function == OP_TO_INTEGER)
+                                 || (Function == OP_TO_FLOAT);
+
+template <ColumnOperator Function>
+concept BooleanConversionFunction = (Function == OP_TO_BOOLEAN);
 
 // Restriction for Binary operators
 template <ColumnOperator Op>
@@ -406,7 +408,24 @@ struct TypeRestrictions<OP_FUNC_EDGE_TYPES> {
 };
 
 template <ColumnOperator Func>
-    requires ConversionFunction<Func>
+    requires NumericConversionFunction<Func>
+struct TypeRestrictions<Func> {
+    using Allowed = GenerateKindList<std::tuple<
+        std::string,
+        types::String::Primitive,
+        types::Int64::Primitive,
+        types::UInt64::Primitive,
+        types::Double::Primitive
+    >>;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
+};
+
+template <ColumnOperator Func>
+    requires BooleanConversionFunction<Func>
 struct TypeRestrictions<Func> {
     using Allowed = GenerateKindList<std::tuple<
         std::string,

@@ -327,6 +327,16 @@ void functionOptKernel(NLExecutionContext* context, Column* result, const Column
     }
 }
 
+// Whether a column holds this element, in any of the shapes a chunk column takes: a plain
+// vector, a nullable one, or a constant of either.
+template <typename Element>
+bool columnHoldsElement(const Column* column) {
+    return dynamic_cast<const ColumnVector<Element>*>(column)
+           || dynamic_cast<const ColumnVector<std::optional<Element>>*>(column)
+           || dynamic_cast<const ColumnConst<Element>*>(column)
+           || dynamic_cast<const ColumnConst<std::optional<Element>>*>(column);
+}
+
 template <ColumnOperator Op>
 struct BinaryOpTraits;
 
@@ -3752,11 +3762,31 @@ NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool input
     return &functionVectorKernel<Functor>;
 }
 
+template <typename StringFunctor>
+NLUnaryFunctionKernel NLExecutor::selectConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
+    if (columnHoldsElement<types::Int64::Primitive>(input)) {
+        using Functor = ConversionFunctorFor<StringFunctor, types::Int64::Primitive>::Type;
+
+        return selectFunction<Functor>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::UInt64::Primitive>(input)) {
+        using Functor = ConversionFunctorFor<StringFunctor, types::UInt64::Primitive>::Type;
+
+        return selectFunction<Functor>(input, inputNullable, memory, result);
+    } else if (columnHoldsElement<types::Double::Primitive>(input)) {
+        using Functor = ConversionFunctorFor<StringFunctor, types::Double::Primitive>::Type;
+
+        return selectFunction<Functor>(input, inputNullable, memory, result);
+    }
+
+    return selectFunction<StringFunctor>(input, inputNullable, memory, result);
+}
+
 template NLUnaryFunctionKernel NLExecutor::selectFunction<LabelsFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<EdgeTypesFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
-template NLUnaryFunctionKernel NLExecutor::selectFunction<toIntegerFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
-template NLUnaryFunctionKernel NLExecutor::selectFunction<toFloatFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<toBoolFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+
+template NLUnaryFunctionKernel NLExecutor::selectConversion<toIntegerFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectConversion<toFloatFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
 void NLExecutor::runSortReset(NLExecutionContext* context, NLFunctionData* data) {
     const NLSortResetData* reset = static_cast<NLSortResetData*>(data);
