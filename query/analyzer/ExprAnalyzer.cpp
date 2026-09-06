@@ -497,7 +497,13 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
     const Symbol* varName = qualifiedName->front();
     const Symbol* propName = qualifiedName->back();
 
-    VarDecl* varDecl = _ctxt->getDecl(varName->getName());
+    // An anonymous pattern's declaration carries no name the context can resolve, so the
+    // predicate its inline property map becomes arrives with that declaration already set
+    VarDecl* varDecl = expr->getEntityVarDecl();
+    if (!varDecl) {
+        varDecl = _ctxt->getDecl(varName->getName());
+    }
+
     if (!varDecl) {
         throwError(fmt::format("Variable '{}' not found", varName->getName()), expr);
     }
