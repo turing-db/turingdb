@@ -2829,6 +2829,10 @@ void NLTranslator::translateHashJoinProbe(nl::HashJoinProbe probe, NLStmtContain
 
     NLHashJoinProbeData* data = _program->allocFunctionData<NLHashJoinProbeData>(state);
 
+    // The optional limit handle is a separate operand group, so it never appears among
+    // the columns; null leaves the probe unbounded.
+    data->setLimit(limitStateFor(probe.getLimit()));
+
     // Reserve the matched-pair scratches so a step that matches no more than a chunk's
     // worth of rows stays allocation-free, the same as the edge and sort loops' indices.
     data->getProbeIndices()->reserve(_program->getChunkSize());

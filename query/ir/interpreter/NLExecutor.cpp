@@ -5061,8 +5061,12 @@ void NLExecutor::runHashJoinProbe(NLExecutionContext* context, NLFunctionData* d
 
     // One output row per matched pair, the probe rows walked in order and each row's
     // matches taken in build order. A key nothing can match - a null, a NaN - emits no
-    // row, as the equality this replaces kept none.
-    for (size_t row = 0; row < rowCount; row++) {
+    // row, as the equality this replaces kept none. A limit caps the pairs at the prefix
+    // it can emit this step, since the rows come out in the order they are paired in.
+    const NLLimitState* limit = probe->getLimit();
+    const size_t pairBudget = limit ? limit->getRemaining() : std::numeric_limits<size_t>::max();
+
+    for (size_t row = 0; row < rowCount && probeRaw.size() < pairBudget; row++) {
         if (!keyIsMatchable(key, row)) {
             continue;
         }
@@ -5073,6 +5077,10 @@ void NLExecutor::runHashJoinProbe(NLExecutionContext* context, NLFunctionData* d
         for (const size_t buildRow : state->rowsFor(*keyScratch)) {
             probeRaw.push_back(row);
             buildRaw.push_back(buildRow);
+
+            if (probeRaw.size() == pairBudget) {
+                break;
+            }
         }
     }
 

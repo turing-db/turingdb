@@ -1698,7 +1698,14 @@ void DBLowering::lowerHashJoin(mlir::db::HashJoin join) {
         resultTypes.push_back(column.getType());
     }
 
-    nl::HashJoinProbe probe = _builder.create<nl::HashJoinProbe>(loc, resultTypes, state, probeColumns);
+    // Null when no limit governs this join; otherwise the handle whose budget caps the
+    // probe, so it pairs only the prefix the limit can emit this step.
+    const mlir::Value limitHandle = _loopLimitHandle.lookup(join.getOperation());
+    nl::HashJoinProbe probe = _builder.create<nl::HashJoinProbe>(loc,
+                                                                 resultTypes,
+                                                                 state,
+                                                                 probeColumns,
+                                                                 limitHandle);
 
     // The join's results are the left factor's yielded columns followed by the right
     // factor's, which is how the probe lays its own out: probed side then built side.
@@ -2696,15 +2703,16 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
     bool reachedALoop = opensLoop || isCrossProduct || isHashJoin || emitsThroughLoop;
 
     // A loop's budget only stops it from taking another step, so bounding one never trims
-    // the step it is in. A cross product's budget cuts the product itself, which stands
-    // only while every row it makes reaches the output: an op below the cut that drops rows
-    // - a filter, a skip, a dedup - would leave it discarding rows that would have
-    // survived, and the cut short of its count. So the product keeps the handle only on a
-    // path that drops nothing; its factor loops take it either way.
+    // the step it is in. A cross product's or a hash join's budget cuts the rows it pairs,
+    // which stands only while every row it makes reaches the output: an op below the cut
+    // that drops rows - a filter, a skip, a dedup - would leave it discarding rows that
+    // would have survived, and the cut short of its count. So either keeps the handle only
+    // on a path that drops nothing; its factor loops take it either way.
     // Declining the handle is not the same as reaching no loop: a cross product is still a
     // producer the walk found, so reachedALoop stands and the cut keeps its nest.
     const bool boundsCrossProduct = isCrossProduct && !rowsDroppedBeforeTheCut;
-    const bool takesTheHandle = opensLoop || boundsCrossProduct || emitsThroughLoop;
+    const bool boundsHashJoin = isHashJoin && !rowsDroppedBeforeTheCut;
+    const bool takesTheHandle = opensLoop || boundsCrossProduct || boundsHashJoin || emitsThroughLoop;
 
     // The first limit, in program order, to claim a producer wins, so a loop
     // shared by two limits' nests carries the outer one and never two handles.

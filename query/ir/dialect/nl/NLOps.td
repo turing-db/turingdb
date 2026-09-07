@@ -1198,7 +1198,9 @@ def HashJoinCollect : NLOp<"hash_join_collect", []> {
 */
 // Pure: given a filled build side it deterministically produces the same matched
 // rows from the same probe chunk, and it writes only its own result chunks.
-def HashJoinProbe : NLOp<"hash_join_probe", [Pure]> {
+// AttrSizedOperandSegments: the probe columns and the optional limit handle are two
+// operand groups of independent size, as on nl.cross_product.
+def HashJoinProbe : NLOp<"hash_join_probe", [Pure, AttrSizedOperandSegments]> {
   let summary = "Emit each probe row paired with the build rows its key matches";
   let description = [{
     Runs in the probe loop body, once per step, and stands where nl.cross_product
@@ -1223,13 +1225,26 @@ def HashJoinProbe : NLOp<"hash_join_probe", [Pure]> {
     The build columns are not operands - they live in the handle - so their chunk
     types cannot be inferred and the whole result signature is spelled out, the
     way nl.sort spells its iterator's.
+
+    An optional `limit` operand carries an !nl.limit_state handle. When present,
+    only the first limit.getRemaining() matched pairs of this step are laid out:
+    the rows come out probe-row-major, so that prefix is exactly the prefix the
+    following nl.limit_update/nl.output can emit, and pairing the rest would be
+    wasted work. Absent, every match of the chunk is laid out. The bounded sibling
+    of nl.cross_product's own limit operand.
+
+      %n, %name, %m = nl.hash_join_probe %state, (%arg0, %key) limit %h
+          : (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>)
+         -> (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.node_id>)
   }];
 
-  let arguments = (ins NLHashJoinStateHandle:$state, Variadic<NLChunk>:$columns);
+  let arguments = (ins NLHashJoinStateHandle:$state,
+                       Variadic<NLChunk>:$columns,
+                       Optional<NLLimitStateHandle>:$limit);
   let results   = (outs Variadic<NLChunk>:$results);
 
   let assemblyFormat = [{
-    $state `,` `(` $columns `)` attr-dict `:`
+    $state `,` `(` $columns `)` (`limit` $limit^)? attr-dict `:`
     `(` qualified(type($columns)) `)` `->` `(` qualified(type($results)) `)`
   }];
   let hasVerifier = 1;

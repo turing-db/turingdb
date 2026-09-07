@@ -2005,13 +2005,15 @@ struct JoinKeySide {
 };
 
 // A cross product cut by one equality between a column of each factor, and the filter
-// applying it: what a hash join is made of.
+// applying it: what a hash join is made of. _buildsTheLeftFactor says which way round the
+// two go into the join, whose right factor is the built side.
 struct EqualityCross {
     CrossProduct _product {nullptr};
     EqOp _equality {nullptr};
     FilterOp _filter {nullptr};
     JoinKeySide _left;
     JoinKeySide _right;
+    bool _buildsTheLeftFactor {false};
 };
 
 // The property a one-op key cone reads, null for any other cone. A property column's
@@ -2138,6 +2140,22 @@ bool carriesProductColumnsOnly(FilterOp filter, CrossProduct product) {
     return true;
 }
 
+// Whether a factor's rows are the product of two relations'. The built side is buffered
+// whole while the probed side streams a chunk at a time, so a factor holding a product -
+// which is where the cascade of a comma pattern puts one - is the side to probe: its rows
+// multiply where a scan or a traversal contributes them linearly.
+bool factorHoldsAProduct(Region& factor) {
+    const WalkResult walked = factor.walk([](Operation* op) {
+        if (isa<CrossProduct, HashJoin>(op)) {
+            return WalkResult::interrupt();
+        }
+
+        return WalkResult::advance();
+    });
+
+    return walked.wasInterrupted();
+}
+
 bool matchEqualityCross(FilterOp filter, EqualityCross& match) {
     EqOp equality = filter.getMask().getDefiningOp<EqOp>();
     if (!equality || !equality.getResult().hasOneUse()) {
@@ -2190,7 +2208,20 @@ bool matchEqualityCross(FilterOp filter, EqualityCross& match) {
         return false;
     }
 
-    return carriesProductColumnsOnly(filter, product) && productRowsReachOnly(product, match);
+    const bool carriesProductColumns = carriesProductColumnsOnly(filter, product);
+    const bool rowsReachOnlyTheCut = productRowsReachOnly(product, match);
+    if (!carriesProductColumns || !rowsReachOnlyTheCut) {
+        return false;
+    }
+
+    // With neither side or both holding a product there is nothing to tell them apart -
+    // no cardinality is known here - so the right factor is built, the way db.hash_join
+    // reads its two regions.
+    const bool leftHoldsAProduct = factorHoldsAProduct(product.getLeftFactor());
+    const bool rightHoldsAProduct = factorHoldsAProduct(product.getRightFactor());
+    match._buildsTheLeftFactor = rightHoldsAProduct && !leftHoldsAProduct;
+
+    return true;
 }
 
 // Sinks the ops rebuilding a side's key into its factor, so the key becomes a column the
@@ -2230,24 +2261,38 @@ void fuseHashJoin(EqualityCross& match, mlir::OpBuilder& builder) {
     const size_t leftKey = sinkKeyIntoFactor(match._left, 0, builder);
     const size_t rightKey = sinkKeyIntoFactor(match._right, leftCount, builder);
 
+    // The join probes its left factor and builds its right, so the two sides go in the
+    // way round the match chose rather than the way round the product held them.
+    const bool buildsTheLeftFactor = match._buildsTheLeftFactor;
+    Yield probeYield = buildsTheLeftFactor ? rightYield : leftYield;
+    Yield buildYield = buildsTheLeftFactor ? leftYield : rightYield;
+    Region& probeFactor = buildsTheLeftFactor ? product.getRightFactor() : product.getLeftFactor();
+    Region& buildFactor = buildsTheLeftFactor ? product.getLeftFactor() : product.getRightFactor();
+
     llvm::SmallVector<Type> resultTypes;
-    llvm::append_range(resultTypes, leftYield.getColumns().getTypes());
-    llvm::append_range(resultTypes, rightYield.getColumns().getTypes());
+    llvm::append_range(resultTypes, probeYield.getColumns().getTypes());
+    llvm::append_range(resultTypes, buildYield.getColumns().getTypes());
+
+    const size_t probeKey = buildsTheLeftFactor ? rightKey : leftKey;
+    const size_t buildKey = buildsTheLeftFactor ? leftKey : rightKey;
 
     builder.setInsertionPoint(product);
-    HashJoin join = builder.create<HashJoin>(product.getLoc(), resultTypes, leftKey, rightKey);
-    join.getLeftFactor().takeBody(product.getLeftFactor());
-    join.getRightFactor().takeBody(product.getRightFactor());
+    HashJoin join = builder.create<HashJoin>(product.getLoc(), resultTypes, probeKey, buildKey);
+    join.getLeftFactor().takeBody(probeFactor);
+    join.getRightFactor().takeBody(buildFactor);
 
-    // Sinking a key widens that factor's yield, so a right-factor column sits further
-    // along in the join's results than it did in the product's.
-    const size_t joinLeftCount = leftYield.getNumOperands();
+    // Sinking a key widens that factor's yield, so a column of the side the join reads
+    // second sits further along in its results than it did in the product's.
+    const size_t joinProbeCount = probeYield.getNumOperands();
+    const size_t leftFirstResult = buildsTheLeftFactor ? joinProbeCount : 0;
+    const size_t rightFirstResult = buildsTheLeftFactor ? 0 : joinProbeCount;
+
     llvm::SmallVector<Value> joinColumns;
     for (size_t columnIndex = 0; columnIndex < leftCount; columnIndex++) {
-        joinColumns.push_back(join.getResult(columnIndex));
+        joinColumns.push_back(join.getResult(leftFirstResult + columnIndex));
     }
     for (size_t columnIndex = 0; columnIndex < rightCount; columnIndex++) {
-        joinColumns.push_back(join.getResult(joinLeftCount + columnIndex));
+        joinColumns.push_back(join.getResult(rightFirstResult + columnIndex));
     }
 
     // The join keeps only the rows the equality held on, so what the filter handed

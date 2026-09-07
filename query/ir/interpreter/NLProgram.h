@@ -1467,6 +1467,12 @@ public:
     void addProbeColumn(const NLCarriedColumn& column) { _probeColumns.push_back(column); }
     void addBuildColumn(const NLCarriedColumn& column) { _buildColumns.push_back(column); }
 
+    // The governing limit counter, or null for an unbounded probe. When set, only
+    // getRemaining() matched pairs are laid out; it never mutates the counter (the
+    // following nl.limit_update does).
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
     void setKeyColumn(const Column* key, NLKeyAppendFunction keyAppend, NLKeyIsMatchableFunction isMatchable) {
         _key = key;
         _keyAppend = keyAppend;
@@ -1490,6 +1496,7 @@ private:
     const Column* _key {nullptr};
     NLKeyAppendFunction _keyAppend {nullptr};
     NLKeyIsMatchableFunction _keyIsMatchable {nullptr};
+    NLLimitState* _limit {nullptr};
 
     std::string _keyScratch;
 
