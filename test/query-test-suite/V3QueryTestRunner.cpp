@@ -1,5 +1,6 @@
 #include "V3QueryTestRunner.h"
 
+#include <fstream>
 #include <memory>
 #include <optional>
 #include <span>
@@ -46,6 +47,7 @@
 #include "SimpleGraph.h"
 #include "SystemAccessor.h"
 #include "SystemManager.h"
+#include "TuringConfig.h"
 #include "TuringDB.h"
 #include "TuringTestEnv.h"
 #include "TuringTime.h"
@@ -62,6 +64,32 @@ using namespace db;
 namespace turing::test {
 
 namespace {
+
+// A LOAD CSV resolves its path inside the data directory of the running instance, which is
+// created empty per test: the files a query reads are copied in from the suite's own data
+// directory, so the query reads the same records wherever the test runs.
+void stageDataFiles(const fs::Path& dataDir) {
+    const fs::Path suiteDataDir {QUERY_TEST_SUITE_DATA_DIR};
+    if (!suiteDataDir.exists()) {
+        return;
+    }
+
+    const fs::Result<std::vector<fs::Path>> files = suiteDataDir.listDir();
+    if (!files.has_value()) {
+        throw TuringException(fmt::format("Cannot list the suite data directory {}", suiteDataDir.get()));
+    }
+
+    for (const fs::Path& file : files.value()) {
+        std::ifstream source(file.c_str(), std::ios::binary);
+        if (!source) {
+            throw TuringException(fmt::format("Cannot read the suite data file {}", file.get()));
+        }
+
+        const fs::Path target = dataDir / file.filename();
+        std::ofstream destination(target.c_str(), std::ios::binary);
+        destination << source.rdbuf();
+    }
+}
 
 class CollectingNLSink : public NLOutputSink {
 public:
@@ -178,6 +206,8 @@ V3QueryTestResult V3QueryTestRunner::runTest(const QueryTestSpec& spec, const fs
     result._name = spec._name;
 
     auto env = turing::test::TuringTestEnv::create(outDir);
+    stageDataFiles(env->getConfig().getDataDir());
+
     Graph* graph = nullptr;
     {
         SystemAccessor system = env->getSystemManager().accessUnique();
