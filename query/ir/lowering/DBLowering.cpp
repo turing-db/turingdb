@@ -546,10 +546,11 @@ bool opensSourceLoop(mlir::Operation* operation) {
 }
 
 // The db ops whose rows a projection is emitted over: a source, the nest a cross product
-// builds, and the emit loop a pipeline breaker opens over what it accumulated
+// or a hash join builds, and the emit loop a pipeline breaker opens over what it
+// accumulated
 bool opensRowLoop(mlir::Operation* operation) {
     return opensSourceLoop(operation)
-        || mlir::isa<mlir::db::CrossProduct, mlir::db::Sort, mlir::db::GroupAggregate>(operation);
+        || mlir::isa<mlir::db::CrossProduct, mlir::db::HashJoin, mlir::db::Sort, mlir::db::GroupAggregate>(operation);
 }
 
 // A reduction emits its one row at function scope, so what follows it walks no rows of the
@@ -566,6 +567,7 @@ bool reducesToOneRow(mlir::Operation* operation) {
 // are fewer than the rows a producer above it made
 bool dropsRows(mlir::Operation* operation) {
     return mlir::isa<mlir::db::FilterOp,
+                     mlir::db::HashJoin,
                      mlir::db::Skip,
                      mlir::db::Limit,
                      mlir::db::RemoveDuplicates>(operation);
@@ -766,6 +768,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerDeleteEdge(deleteEdge);
     } else if (mlir::db::CrossProduct crossProduct = mlir::dyn_cast<mlir::db::CrossProduct>(operation)) {
         lowerCrossProduct(crossProduct);
+    } else if (mlir::db::HashJoin hashJoin = mlir::dyn_cast<mlir::db::HashJoin>(operation)) {
+        lowerHashJoin(hashJoin);
     } else if (mlir::db::Limit limit = mlir::dyn_cast<mlir::db::Limit>(operation)) {
         lowerLimit(limit);
     } else if (mlir::db::Skip skip = mlir::dyn_cast<mlir::db::Skip>(operation)) {
@@ -1351,6 +1355,62 @@ void DBLowering::lowerCrossProduct(mlir::db::CrossProduct product) {
 
     // Cross prod result defines cardinality
     _innermostCardinality = crossResults.front();
+}
+
+void DBLowering::lowerHashJoin(mlir::db::HashJoin join) {
+    // Both nests root where this op stands - the entry block at top level, the enclosing
+    // factor's innermost loop body inside a product - so they are siblings rather than
+    // nested: the built side is read once, not once per chunk of the other.
+    mlir::Block* const rootBlock = _rootBlock;
+
+    llvm::SmallVector<mlir::Value, 4> buildColumns;
+    mlir::Block* const buildBody = lowerFactor(join.getRightFactor(), rootBlock, buildColumns);
+
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    // The build side is emptied at the top of the block the two nests are rooted in, which
+    // is also where it dominates them both: a join nested in a factor therefore starts
+    // fresh on each enclosing step rather than carrying the previous one's rows.
+    _builder.setInsertionPointToStart(rootBlock);
+    nl::HashJoinBuffer buffer = _builder.create<nl::HashJoinBuffer>(loc,
+                                                                    join.getRightKey(),
+                                                                    join.getLeftKey());
+    const mlir::Value state = buffer.getState();
+
+    // The collect sits in the built factor's innermost loop body, where all of its
+    // columns are bound together, so the buffers stay row-aligned with the key index.
+    setInsertionInto(buildBody);
+    _builder.create<nl::HashJoinCollect>(loc, state, buildColumns);
+
+    llvm::SmallVector<mlir::Value, 4> probeColumns;
+    mlir::Block* const probeBody = lowerFactor(join.getLeftFactor(), rootBlock, probeColumns);
+
+    // The probe stands where an nl.cross_product stands in a nested loop: at the deepest
+    // point of the side that walks, just before whatever consumes the joined rows.
+    setInsertionInto(probeBody);
+
+    llvm::SmallVector<mlir::Type, 8> resultTypes;
+    for (const mlir::Value column : probeColumns) {
+        resultTypes.push_back(column.getType());
+    }
+    for (const mlir::Value column : buildColumns) {
+        resultTypes.push_back(column.getType());
+    }
+
+    nl::HashJoinProbe probe = _builder.create<nl::HashJoinProbe>(loc, resultTypes, state, probeColumns);
+
+    // The join's results are the left factor's yielded columns followed by the right
+    // factor's, which is how the probe lays its own out: probed side then built side.
+    const mlir::ResultRange dbResults = join.getResults();
+    const mlir::ResultRange probeResults = probe.getResults();
+    for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
+        _valueMap[dbResults[resultIndex]] = probeResults[resultIndex];
+    }
+
+    // The joined columns live in probeBody, so a join nested in a factor stands in for
+    // that factor's innermost loop the way a cross product does.
+    _innermostLoopBody = probeBody;
+    _innermostCardinality = probeResults.front();
 }
 
 mlir::Block* DBLowering::lowerFactor(mlir::Region& factor,
@@ -2286,13 +2346,14 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
 
     const bool opensLoop = opensSourceLoop(definingOp);
     const bool isCrossProduct = mlir::isa<mlir::db::CrossProduct>(definingOp);
+    const bool isHashJoin = mlir::isa<mlir::db::HashJoin>(definingOp);
 
     // A pipeline breaker accumulates every row before emitting any, so the walk stops
     // here; the limit budgets its emit loop instead, when it opens one.
     const bool emitsThroughLoop = mlir::isa<mlir::db::Sort, mlir::db::GroupAggregate>(definingOp);
     const bool breaksPipeline = emitsThroughLoop || reducesToOneRow(definingOp);
 
-    bool reachedALoop = opensLoop || isCrossProduct || emitsThroughLoop;
+    bool reachedALoop = opensLoop || isCrossProduct || isHashJoin || emitsThroughLoop;
 
     // A loop's budget only stops it from taking another step, so bounding one never trims
     // the step it is in. A cross product's budget cuts the product itself, which stands
@@ -2317,7 +2378,16 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
 
     const bool rowsDropped = rowsDroppedBeforeTheCut || dropsRows(definingOp);
 
-    if (isCrossProduct) {
+    if (isHashJoin) {
+        // A hash join's built side has to be read whole - a build loop stopped short of
+        // its rows would leave the probe unable to match them - so the budget reaches only
+        // the probed factor's loops. That is the left factor, the one the probe walks.
+        mlir::db::HashJoin join = mlir::cast<mlir::db::HashJoin>(definingOp);
+        mlir::Operation* const probeYield = join.getLeftFactor().front().getTerminator();
+        for (const mlir::Value yielded : probeYield->getOperands()) {
+            reachedALoop |= assignProducerLoops(yielded, handle, rowsDropped);
+        }
+    } else if (isCrossProduct) {
         // A cross product takes no column operands - its factors are regions - so
         // recurse through each factor's db.yield operands to reach the factor
         // scans/edge loops that produce the crossed columns.
