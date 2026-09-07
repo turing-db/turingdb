@@ -3,9 +3,9 @@
   "graph": "simpledb",
   "query": "CREATE (n:Person) DELETE n",
   "expect": {
-    "plan": "PLAN ERROR\n-------* Query error\n     1 | CREATE (n:Person) DELETE n\n       |                          ^\n-------* Cannot delete pending node",
-    "result": "PLAN ERROR\n-------* Query error\n     1 | CREATE (n:Person) DELETE n\n       |                          ^\n-------* Cannot delete pending node",
-    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"-------* Query error\\n     1 | CREATE (n:Person) DELETE n\\n       |                          ^\\n-------* Cannot delete pending node\"}"
+    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n:Person) DELETE n\n       |                   ^^^^^^^^\n-------* CREATE ... DELETE is not yet supported.",
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n:Person) DELETE n\n       |                   ^^^^^^^^\n-------* CREATE ... DELETE is not yet supported.",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | CREATE (n:Person) DELETE n\\n       |                   ^^^^^^^^\\n-------* CREATE ... DELETE is not yet supported.\"}"
   },
   "tags": [
     "fail",
