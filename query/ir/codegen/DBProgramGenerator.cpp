@@ -124,7 +124,7 @@ using DBPassFactory = std::unique_ptr<mlir::Pass> (*)();
 // The optimisation pipeline every query runs through, in order. An EXPLAIN prefix
 // reporting on a pass walks the same table one pass at a time, which is what keeps the
 // pipeline it reports on and the pipeline that runs the same one.
-const std::array<DBPassFactory, 9> dbPassPipeline = {
+const std::array<DBPassFactory, 10> dbPassPipeline = {
     &mlir::db::createFuseScanByLabel,
     &mlir::db::createPushDownFilters,
     &mlir::db::createFuseUnwindEquality,
@@ -133,6 +133,7 @@ const std::array<DBPassFactory, 9> dbPassPipeline = {
     &mlir::db::createFuseScanEdges,
     &mlir::db::createFuseEdgesByType,
     &mlir::db::createFuseScanEdgesByType,
+    &mlir::db::createReusePropertyReads,
     &mlir::db::createTrimUnreadColumns,
 };
 

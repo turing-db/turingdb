@@ -43,6 +43,11 @@ def FuseScanEdgesByType : Pass<"fuse_scan_edges_by_type"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def ReusePropertyReads : Pass<"reuse_property_reads"> {
+    let summary = "Reuse a property already read of the same rows instead of reading it again";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def TrimUnreadColumns : Pass<"trim_unread_columns"> {
     let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products and grouping ops";
     let dependentDialects = ["mlir::db::DB"];
