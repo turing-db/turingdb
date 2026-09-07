@@ -29,6 +29,7 @@
 #include "iterators/GetOutEdgesByTypeIterator.h"
 #include "iterators/GetOutEdgesByLabelIterator.h"
 #include "iterators/GetPropertiesWithNullIterator.h"
+#include "iterators/PathDistanceIndex.h"
 #include "iterators/PathExplorator.h"
 #include "iterators/PathHopFilter.h"
 #include "iterators/ScanEdgesByTypeIterator.h"
@@ -5736,6 +5737,36 @@ private:
     ColumnVector<size_t> _indices;
 };
 
+// The distance index of an end-constrained exploration is built at most once per loop, the
+// first time the seeds seen over all its chunks make the enumeration costlier than the
+// index; null until then
+const PathDistanceIndex* pruningIndexFor(const GraphView& view,
+                                         NLExplorePathsLoopData* loopData,
+                                         uint64_t maxHops,
+                                         size_t seedCount) {
+    PathDistanceIndex* index = loopData->getDistanceIndex();
+    if (index->isBuilt()) {
+        return index;
+    }
+
+    loopData->addSeedsSeen(seedCount);
+
+    const PathExplorationDir direction = loopData->getDirection();
+    const bool worthBuilding = PathDistanceIndex::isWorthBuilding(view, direction, loopData->getSeedsSeen(), maxHops);
+    if (!worthBuilding) {
+        return nullptr;
+    }
+
+    std::optional<EdgeTypeID> edgeType;
+    if (loopData->filtersByType()) {
+        edgeType = loopData->getEdgeType();
+    }
+
+    index->build(view, loopData->getEndLabels(), direction, edgeType, maxHops);
+
+    return index;
+}
+
 }
 
 void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -5746,11 +5777,18 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
         return;
     }
 
+    // An end label absent from the schema is carried by no node, so no path can end
+    const bool filtersByEndLabels = loopData->filtersByEndLabels();
+    if (filtersByEndLabels && !loopData->isEndMatchable()) {
+        return;
+    }
+
     // An edge type absent from the schema matches no edge, so nothing is ever expanded;
     // the zero-length rows of a min of zero still come out, so this is not an early return
     const uint64_t maxHops = loopData->isMatchable() ? loopData->getMaxHops() : 0;
 
-    PathExplorator explorator(*context->getView(),
+    const GraphView& view = *context->getView();
+    PathExplorator explorator(view,
                               inputNodeIDs,
                               loopData->getDirection(),
                               loopData->getMinHops(),
@@ -5764,6 +5802,11 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
 
     if (loopData->filtersByType()) {
         explorator.setEdgeTypeFilter(loopData->getEdgeType());
+    }
+
+    if (filtersByEndLabels) {
+        explorator.setEndLabels(&loopData->getEndLabels());
+        explorator.setDistanceIndex(pruningIndexFor(view, loopData, maxHops, inputNodeIDs->size()));
     }
 
     std::optional<NLHopFilter> hopFilter;

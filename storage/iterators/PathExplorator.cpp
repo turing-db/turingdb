@@ -2,8 +2,9 @@
 
 #include <algorithm>
 
+#include "PathDistanceIndex.h"
 #include "PathHopFilter.h"
-#include "datapart/DataPart.h"
+#include "datapart/NodeContainer.h"
 #include "indexers/EdgeIndexer.h"
 #include "list/PathTrie.h"
 #include "versioning/Tombstones.h"
@@ -30,11 +31,11 @@ PathExplorator::PathExplorator(const GraphView& view,
     _direction(direction),
     _minHops(minHops),
     _maxHops(maxHops),
+    _parts(view),
     _tombstones(&view.tombstones()),
     _filterTombstones(view.tombstones().hasEdges()),
     _walkers(1)
 {
-    buildPartDirectory();
     reset();
 }
 
@@ -52,34 +53,14 @@ void PathExplorator::setEdgeTypeFilter(EdgeTypeID edgeType) {
     _edgeType = edgeType;
 }
 
+void PathExplorator::setEndLabels(const LabelSet* labels) {
+    _endLabels = labels ? LabelSetHandle(*labels) : LabelSetHandle();
+}
+
 void PathExplorator::setWalkerCount(size_t walkerCount) {
     bioassert(_activeWalkers == 0, "The walker count cannot change while seeds are being walked");
     _walkers.resize(std::max<size_t>(walkerCount, 1));
     _turn = 0;
-}
-
-void PathExplorator::buildPartDirectory() {
-    for (const WeakArc<DataPart>& arc : _view.dataparts()) {
-        const DataPart* part = arc.get();
-        const EdgeIndexer& indexer = part->edgeIndexer();
-        const NodeID firstNodeID = part->getFirstNodeID();
-
-        _parts.push_back({firstNodeID, &indexer});
-        _partFirstNodeIDs.push_back(firstNodeID);
-
-        if (indexer.getPatchNodeCount() > 0) {
-            _patchPartIndices.push_back(_parts.size() - 1);
-        }
-    }
-}
-
-size_t PathExplorator::ownerPartIndex(NodeID node) const {
-    const auto afterOwner = std::upper_bound(_partFirstNodeIDs.begin(), _partFirstNodeIDs.end(), node);
-    if (afterOwner == _partFirstNodeIDs.begin()) {
-        return _parts.size();
-    }
-
-    return static_cast<size_t>(afterOwner - _partFirstNodeIDs.begin()) - 1;
 }
 
 void PathExplorator::prefetchNodeData(NodeID node, size_t partIndex) const {
@@ -87,7 +68,7 @@ void PathExplorator::prefetchNodeData(NodeID node, size_t partIndex) const {
         return;
     }
 
-    const PartAdjacency& part = _parts[partIndex];
+    const PartDirectory::Entry& part = _parts.get(partIndex);
     const std::span<const NodeEdgeData> nodeData = part._indexer->getNodeData();
     const size_t offset = part._indexer->getPatchNodeCount() + (node - part._firstNodeID).getValue();
 
@@ -100,6 +81,25 @@ bool PathExplorator::hasWork() const {
     return _activeWalkers > 0 || _seedCursor < _input->size();
 }
 
+bool PathExplorator::isEnd(NodeID node) const {
+    if (_distances) {
+        return _distances->isEnd(node);
+    }
+
+    if (!_endLabels.isValid()) {
+        return true;
+    }
+
+    const size_t owner = _parts.ownerIndex(node);
+    if (owner == _parts.size()) {
+        return false;
+    }
+
+    const LabelSetHandle labels = _parts.get(owner)._nodes->getNodeLabelSet(node);
+
+    return labels.isValid() && labels.hasAtLeastLabels(_endLabels);
+}
+
 void PathExplorator::reset() {
     for (Walker& walker : _walkers) {
         walker = Walker {};
@@ -109,6 +109,7 @@ void PathExplorator::reset() {
     _activeWalkers = 0;
     _seedCursor = 0;
     _written = 0;
+    _candidateChecks = 0;
     _valid = hasWork();
 }
 
@@ -163,11 +164,12 @@ void PathExplorator::startSeed(Walker& walker, size_t row) {
 
     const NodeID seed = (*_input)[row];
 
-    if (_minHops == 0) {
+    if (_minHops == 0 && isEnd(seed)) {
         emit(row, seed, PathTrie::ROOT);
     }
 
-    if (_maxHops > 0) {
+    const bool doomed = _distances && !_distances->canReachEndWithin(seed, _maxHops);
+    if (_maxHops > 0 && !doomed) {
         walker._active = true;
         _activeWalkers++;
         requestDescent(walker, seed);
@@ -203,24 +205,30 @@ void PathExplorator::consume(Walker& walker) {
     frame._next++;
 
     const uint64_t depth = walker._frames.size();
+    const bool emits = depth >= _minHops && isEnd(node);
+    const bool expands = depth < _maxHops;
+
+    if (!emits && !expands) {
+        return;
+    }
 
     PathRef entry = PathTrie::ROOT;
     if (_paths) {
         entry = _trie->append(walker._pathEntries.back(), edge, node, depth);
     }
 
-    if (depth >= _minHops) {
+    if (emits) {
         emit(walker._seedRow, node, entry);
     }
 
-    if (depth >= _maxHops) {
+    if (!expands) {
         return;
     }
 
     const size_t ahead = candidate + _lookahead;
     if (_lookahead > 0 && ahead < frame._candidateEnd) {
         const NodeID aheadNode = walker._candidateNodes[ahead];
-        prefetchNodeData(aheadNode, ownerPartIndex(aheadNode));
+        prefetchNodeData(aheadNode, _parts.ownerIndex(aheadNode));
     }
 
     walker._pathEdges.push_back(edge);
@@ -253,7 +261,7 @@ void PathExplorator::popFrame(Walker& walker) {
 
 void PathExplorator::requestDescent(Walker& walker, NodeID node) {
     walker._pendingNode = node;
-    walker._pendingOwner = ownerPartIndex(node);
+    walker._pendingOwner = _parts.ownerIndex(node);
     prefetchNodeData(node, walker._pendingOwner);
     walker._stage = Stage::RangeRequested;
 }
@@ -263,7 +271,7 @@ void PathExplorator::readRanges(Walker& walker) {
     walker._pendingIns = {};
 
     if (walker._pendingOwner < _parts.size()) {
-        const EdgeIndexer& indexer = *_parts[walker._pendingOwner]._indexer;
+        const EdgeIndexer& indexer = *_parts.get(walker._pendingOwner)._indexer;
         const NodeID node = walker._pendingNode;
 
         if (_direction != PathExplorationDir::BACKWARD) {
@@ -287,9 +295,8 @@ void PathExplorator::pushFrame(Walker& walker) {
     generateCandidates(walker, walker._pendingOuts);
     generateCandidates(walker, walker._pendingIns);
 
-    const auto firstPatch = std::upper_bound(_patchPartIndices.begin(), _patchPartIndices.end(), walker._pendingOwner);
-    for (auto patchIt = firstPatch; patchIt != _patchPartIndices.end(); ++patchIt) {
-        const EdgeIndexer& indexer = *_parts[*patchIt]._indexer;
+    for (const size_t patchIndex : _parts.patchPartsAfter(walker._pendingOwner)) {
+        const EdgeIndexer& indexer = *_parts.get(patchIndex)._indexer;
 
         if (_direction != PathExplorationDir::BACKWARD) {
             generateCandidates(walker, indexer.getNodeOutEdges(node));
@@ -320,9 +327,14 @@ void PathExplorator::generateCandidates(Walker& walker, std::span<const EdgeReco
     const bool hasPathEdges = !walker._pathEdges.empty();
     const EdgeID lastEdge = hasPathEdges ? walker._pathEdges.back() : EdgeID();
 
+    // The hops a candidate may still take after the one that reaches it
+    const uint64_t remainingHops = _maxHops - (walker._pathEdges.size() + 1);
+
     const auto isOnPath = [&walker](EdgeID edge) {
         return std::find(walker._pathEdges.begin(), walker._pathEdges.end(), edge) != walker._pathEdges.end();
     };
+
+    _candidateChecks += edges.size();
 
     for (const EdgeRecord& record : edges) {
         const EdgeID edge = record._edgeID;
@@ -331,8 +343,9 @@ void PathExplorator::generateCandidates(Walker& walker, std::span<const EdgeReco
         const bool wrongType = _filterByType && record._edgeTypeID != _edgeType;
         const bool deleted = _filterTombstones && _tombstones->containsEdge(edge);
         const bool onTrail = (signature & signatureBit(edge)) != 0 && isOnPath(edge);
+        const bool doomed = _distances && !_distances->canReachEndWithin(record._otherID, remainingHops);
 
-        if (backtracks || wrongType || deleted || onTrail) {
+        if (backtracks || wrongType || deleted || onTrail || doomed) {
             continue;
         }
 

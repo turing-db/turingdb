@@ -329,6 +329,11 @@ LogicalResult ExplorePaths::verify() {
         return emitOpError("max_hops must be at least min_hops");
     }
 
+    const std::optional<ArrayAttr> endLabels = getEndLabels();
+    if (endLabels && endLabels->empty()) {
+        return emitOpError("end_labels must name at least one label");
+    }
+
     Region& hop = getHop();
     if (hop.empty()) {
         return success();

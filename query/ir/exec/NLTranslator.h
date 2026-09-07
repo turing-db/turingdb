@@ -119,9 +119,10 @@ private:
         llvm::SmallVector<mlir::Value, 4> _probeColumns;
 
         // The label names a ScanNodesByLabel, ScanNodesByPropertyValue or by-label edge
-        // iterator filters by; empty for the other kinds. These are views into the op's
-        // interned StringAttr storage, which the MLIRContext keeps alive for the whole
-        // translation; they are resolved to a LabelSet as soon as the loop is translated.
+        // iterator filters by, or the end labels an ExplorePaths iterator keeps to; empty
+        // for the other kinds. These are views into the op's interned StringAttr storage,
+        // which the MLIRContext keeps alive for the whole translation; they are resolved to
+        // a LabelSet as soon as the loop is translated.
         llvm::SmallVector<llvm::StringRef, 4> _labels;
 
         // The edge type names a ScanEdgesByType / GetOutEdgesByType / GetInEdgesByType
@@ -426,10 +427,10 @@ private:
     void collectMatchingLabelSets(const LabelSet& constraint, NLCheckLabelConstraintData* data) const;
 
     // Translate the nl.for over an nl.explore_paths iterator: allocate the seed, end and
-    // path loop variables, resolve the edge type name against the schema (marking the
-    // exploration unmatchable if it is absent), bind the carry set, translate the hop
-    // region - when there is one - into the loop data's hop statements over three
-    // loop-owned columns, and record the exploration loop statement in body
+    // path loop variables, resolve the edge type name and the end labels against the
+    // schema (marking the exploration unmatchable if one is absent), bind the carry set,
+    // translate the hop region - when there is one - into the loop data's hop statements
+    // over three loop-owned columns, and record the exploration loop statement in body
     void translateExplorePathsLoop(const IteratorConfig& config,
                                    mlir::Block& loopBody,
                                    NLLimitState* limit,

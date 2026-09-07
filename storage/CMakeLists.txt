@@ -59,6 +59,7 @@ set(storage_sources
         iterators/GetEdgesIterator.cpp
         iterators/ScanEdgesByTypeIterator.cpp
         iterators/GetNodeViewsIterator.cpp
+        iterators/PartDirectory.cpp
         iterators/PartIterator.cpp
         iterators/ScanEdgesIterator.cpp
         iterators/ScanEdgePropertiesIterator.cpp
@@ -74,6 +75,7 @@ set(storage_sources
         iterators/ScanOutEdgesBySourceLabelIterator.cpp
         iterators/MatchLabelSetIterator.cpp
         iterators/NeighbourhoodSampleIterator.cpp
+        iterators/PathDistanceIndex.cpp
         iterators/PathExplorator.cpp
         iterators/PathHopFilter.cpp
 

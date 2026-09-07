@@ -770,10 +770,10 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor]> {
       %paths = nl.explore_paths(%a, {%x}) forward hops 1 to 3 : !nl.chunk<!storage.node_id>
       nl.for %seeds, %ends, %p, %x2 in %paths { ... }
 
-    The direction, hop bounds and edge type are the db op's, carried through unchanged.
-    The optional `hop` region is the db op's hop predicate lowered: a block over the
-    source node, edge and end node chunks of one hop, yielding a boolean mask chunk.
-    The input chunk type and the three fixed result chunks are inferred; only the
+    The direction, hop bounds, edge type and end labels are the db op's, carried through
+    unchanged. The optional `hop` region is the db op's hop predicate lowered: a block
+    over the source node, edge and end node chunks of one hop, yielding a boolean mask
+    chunk. The input chunk type and the three fixed result chunks are inferred; only the
     carried chunk types are spelled out, after the colon.
   }];
 
@@ -782,15 +782,16 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor]> {
                        PathDirection:$direction,
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
-                       OptionalAttr<StrAttr>:$edge_type);
+                       OptionalAttr<StrAttr>:$edge_type,
+                       OptionalAttr<StrArrayAttr>:$end_labels);
   let results   = (outs NLIterator:$result);
 
   let regions = (region MaxSizedRegion<1>:$hop);
 
   let assemblyFormat = [{
     `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
-    (`to` $max_hops^)? (`edge_type` $edge_type^)? ($hop^)? attr-dict
-    ( `:` qualified(type($columns_to_filter))^ )?
+    (`to` $max_hops^)? (`edge_type` $edge_type^)? (`end_labels` $end_labels^)? ($hop^)?
+    attr-dict ( `:` qualified(type($columns_to_filter))^ )?
   }];
 
   let hasVerifier = 1;

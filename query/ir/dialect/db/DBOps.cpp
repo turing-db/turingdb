@@ -357,6 +357,18 @@ LogicalResult ExplorePaths::verify() {
         return emitOpError("edge_type must name an edge type");
     }
 
+    if (const std::optional<ArrayAttr> endLabels = getEndLabels()) {
+        if (endLabels->empty()) {
+            return emitOpError("end_labels must name at least one label");
+        }
+
+        for (const Attribute label : *endLabels) {
+            if (cast<StringAttr>(label).getValue().empty()) {
+                return emitOpError("end_labels must name labels");
+            }
+        }
+    }
+
     Region& hop = getHop();
     if (hop.empty()) {
         return success();

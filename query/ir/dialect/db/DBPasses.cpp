@@ -46,6 +46,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSEEDGESBYENDPOINTLABEL
 #define GEN_PASS_DEF_REUSEPROPERTYREADS
 #define GEN_PASS_DEF_FUSEHASHJOIN
+#define GEN_PASS_DEF_FUSEEXPLOREENDCONSTRAINT
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
 #define GEN_PASS_DEF_COUNTFROMMETADATA
 #include "DBPasses.h.inc"
@@ -1796,6 +1797,100 @@ struct FuseEdgesByEndpointLabel : public impl::FuseEdgesByEndpointLabelBase<Fuse
                                            matchEndpointLabelledHop,
                                            fuseEdgesByEndpointLabel,
                                            builder);
+    }
+};
+
+// A path exploration whose rows are then cut down to those ending on labelled nodes: the
+// end constraint spelled the long way, since the walk itself can keep to those ends and
+// never build the rows the filter goes on to drop.
+struct EndConstrainedExploration {
+    ExplorePaths _exploration;
+    GetNodeLabelSet _labelSet;
+    CheckLabelConstraint _check;
+};
+
+bool matchEndConstrainedExploration(FilterOp filter, EndConstrainedExploration& constrained) {
+    CheckLabelConstraint check = filter.getMask().getDefiningOp<CheckLabelConstraint>();
+    if (!check) {
+        return false;
+    }
+
+    GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+    if (!labelSet) {
+        return false;
+    }
+
+    const Value ends = labelSet.getInputNodes();
+    ExplorePaths exploration = ends.getDefiningOp<ExplorePaths>();
+    if (!exploration || ends != exploration.getTgtids()) {
+        return false;
+    }
+
+    // Every column the filter cuts has to be one the exploration bound, or the constrained
+    // exploration has nothing of its own to hand back in its place.
+    for (const Value column : filter.getColumnsToFilter()) {
+        if (column.getDefiningOp() != exploration.getOperation()) {
+            return false;
+        }
+    }
+
+    // And nothing outside the trio may read the exploration, or that reader would go on
+    // seeing the rows the end labels turn away.
+    for (const Value result : exploration.getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            const bool readsTheTrio = user == filter.getOperation() || user == labelSet.getOperation();
+            if (!readsTheTrio) {
+                return false;
+            }
+        }
+    }
+
+    constrained = EndConstrainedExploration {._exploration = exploration, ._labelSet = labelSet, ._check = check};
+
+    return true;
+}
+
+// The end labels the exploration already carries joined with the filter's, each once
+ArrayAttr mergedEndLabels(ExplorePaths exploration, ArrayAttr filterLabels, mlir::OpBuilder& builder) {
+    const std::optional<ArrayAttr> current = exploration.getEndLabels();
+    if (!current) {
+        return filterLabels;
+    }
+
+    llvm::SmallVector<Attribute> merged(current->begin(), current->end());
+    for (const Attribute label : filterLabels) {
+        if (!llvm::is_contained(merged, label)) {
+            merged.push_back(label);
+        }
+    }
+
+    return builder.getArrayAttr(merged);
+}
+
+void fuseExploreEndConstraint(FilterOp filter, const EndConstrainedExploration& constrained, mlir::OpBuilder& builder) {
+    ExplorePaths exploration = constrained._exploration;
+    GetNodeLabelSet labelSet = constrained._labelSet;
+    CheckLabelConstraint check = constrained._check;
+
+    exploration.setEndLabelsAttr(mergedEndLabels(exploration, check.getLabels(), builder));
+
+    // The exploration now yields the rows the filter used to leave, so each column the
+    // filter handed on is the one it was given.
+    const Operation::operand_range columns = filter.getColumnsToFilter();
+    const mlir::ResultRange filtered = filter.getFilteredColumns();
+    for (size_t index = 0; index < filtered.size(); index++) {
+        filtered[index].replaceAllUsesWith(columns[index]);
+    }
+
+    filter.erase();
+    eraseIfUnused(check);
+    eraseIfUnused(labelSet);
+}
+
+struct FuseExploreEndConstraint : public impl::FuseExploreEndConstraintBase<FuseExploreEndConstraint> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+        runFilterPass<EndConstrainedExploration>(getOperation(), matchEndConstrainedExploration, fuseExploreEndConstraint, builder);
     }
 };
 
