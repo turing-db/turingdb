@@ -2006,16 +2006,16 @@ void collectFoldDistinct(Column* values,
     }
 }
 
-// The entity sibling of collectFold: an ID chunk has no null rows, so every row of the
-// input joins its group's list.
-template <typename IDType>
-void collectEntityFold(Column* values,
-                       const Column* input,
-                       const std::vector<size_t>& groups,
-                       std::vector<std::vector<size_t>>& groupPositions,
-                       NLGroupDistinctTally& distinct) {
-    auto& valuesRaw = static_cast<ColumnVector<IDType>*>(values)->getRaw();
-    const auto& inputRaw = static_cast<const ColumnVector<IDType>*>(input)->getRaw();
+// The cell sibling of collectFold, for a chunk holding a value in every row: every row of
+// the input joins its group's list.
+template <typename Cell>
+void collectCellFold(Column* values,
+                     const Column* input,
+                     const std::vector<size_t>& groups,
+                     std::vector<std::vector<size_t>>& groupPositions,
+                     NLGroupDistinctTally& distinct) {
+    auto& valuesRaw = static_cast<ColumnVector<Cell>*>(values)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnVector<Cell>*>(input)->getRaw();
 
     const size_t base = valuesRaw.size();
     valuesRaw.insert(valuesRaw.end(), inputRaw.begin(), inputRaw.end());
@@ -2025,18 +2025,48 @@ void collectEntityFold(Column* values,
     }
 }
 
-// The entity sibling of collectFoldDistinct: an entity repeated within its group joins
-// the list once, keyed by the ID's underlying integer.
+// The ID sibling of collectFold: an entity an OPTIONAL MATCH did not match is an invalid
+// ID, which is how a null entity is spelled, so it is dropped the way collectFold drops an
+// absent optional rather than collected as the value 2^64-1.
 template <typename IDType>
-void collectEntityFoldDistinct(Column* values,
-                               const Column* input,
-                               const std::vector<size_t>& groups,
-                               std::vector<std::vector<size_t>>& groupPositions,
-                               NLGroupDistinctTally& distinct) {
+void collectValidIDFold(Column* values,
+                        const Column* input,
+                        const std::vector<size_t>& groups,
+                        std::vector<std::vector<size_t>>& groupPositions,
+                        NLGroupDistinctTally& distinct) {
+    auto& valuesRaw = static_cast<ColumnVector<IDType>*>(values)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnVector<IDType>*>(input)->getRaw();
+
+    valuesRaw.reserve(valuesRaw.size() + inputRaw.size());
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        if (!inputRaw[row].isValid()) {
+            continue;
+        }
+
+        const size_t position = valuesRaw.size();
+        valuesRaw.push_back(inputRaw[row]);
+        groupPositions[groups[row]].push_back(position);
+    }
+}
+
+// The ID sibling of collectFoldDistinct: an entity repeated within its group joins the
+// list once, keyed by the ID's underlying integer, and the null an unmatched pattern left
+// is no key of its own.
+template <typename IDType>
+void collectValidIDFoldDistinct(Column* values,
+                                const Column* input,
+                                const std::vector<size_t>& groups,
+                                std::vector<std::vector<size_t>>& groupPositions,
+                                NLGroupDistinctTally& distinct) {
     auto& valuesRaw = static_cast<ColumnVector<IDType>*>(values)->getRaw();
     const auto& inputRaw = static_cast<const ColumnVector<IDType>*>(input)->getRaw();
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
+        if (!inputRaw[row].isValid()) {
+            continue;
+        }
+
         const size_t group = groups[row];
 
         distinct.beginKey(group);
@@ -2185,7 +2215,7 @@ void collectTaggedListEmit(const Column* values,
     }
 }
 
-// The list sibling of collectEntityFoldDistinct: two cells are the same value when their
+// The list sibling of collectValidIDFoldDistinct: two cells are the same value when their
 // elements are, so a cell keys by the list serialized element by element rather than by
 // the ListView's own span, which two equal lists never share.
 void collectListFoldDistinct(Column* values,
@@ -2268,7 +2298,7 @@ template <typename IDType>
 void selectCollectIDHandlers(bool distinctValues,
                              NLCollectFoldFunction& fold,
                              NLCollectListEmitFunction& listEmit) {
-    fold = distinctValues ? &collectEntityFoldDistinct<IDType> : &collectEntityFold<IDType>;
+    fold = distinctValues ? &collectValidIDFoldDistinct<IDType> : &collectValidIDFold<IDType>;
     listEmit = &collectListEmit<IDType>;
 }
 
@@ -4935,12 +4965,12 @@ void NLExecutor::selectCollectEntityHandlers(NLChunkKind kind,
     }
 }
 
-// A list cell is present in every row, so it folds the way an entity ID does; only the
-// dedup differs, keying on the elements rather than on the cell.
+// A list cell is present in every row, so it folds with no null to drop; only the dedup
+// differs, keying on the elements rather than on the cell.
 void NLExecutor::selectCollectListHandlers(bool distinctValues,
                                            NLCollectFoldFunction& fold,
                                            NLCollectListEmitFunction& listEmit) {
-    fold = distinctValues ? &collectListFoldDistinct : &collectEntityFold<ListView>;
+    fold = distinctValues ? &collectListFoldDistinct : &collectCellFold<ListView>;
     listEmit = &collectListEmit<ListView>;
 }
 

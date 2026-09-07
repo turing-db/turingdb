@@ -322,3 +322,32 @@ TEST_F(OptionalMatchTest, CountsBesideACollectedListOverPaddedRows) {
                 {"Cyrus", "[]", "0"},
                 {"Doruk", "[]", "0"}});
 }
+
+// collect() drops a null, and an entity the pattern missed is one, so the group of a row
+// it padded collects an empty list rather than the invalid ID standing for the null
+TEST_F(OptionalMatchTest, CollectsAnEmptyListOfEntitiesForAnUnmatchedOptional) {
+    expectRows("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) "
+               "RETURN p.name, collect(f)",
+               {{"Remy", "[1]"},
+                {"Adam", "[0]"},
+                {"Maxime", "[]"},
+                {"Luc", "[]"},
+                {"Martina", "[]"},
+                {"Suhas", "[]"},
+                {"Cyrus", "[]"},
+                {"Doruk", "[]"}});
+}
+
+// The edge sibling: an unmatched relationship is a null too
+TEST_F(OptionalMatchTest, CollectsAnEmptyListOfEdgesForAnUnmatchedOptional) {
+    expectRows("MATCH (p:Person {name: 'Luc'}) OPTIONAL MATCH (p)-[r:KNOWS_WELL]->(f) "
+               "RETURN p.name, collect(r)",
+               {{"Luc", "[]"}});
+}
+
+// collect(DISTINCT n) keys on the ID, and the null the pattern left is no key of its own
+TEST_F(OptionalMatchTest, CollectsDistinctEntitiesWithoutTheUnmatchedNull) {
+    expectRows("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) "
+               "RETURN collect(DISTINCT f)",
+               {{"[1, 0]"}});
+}
