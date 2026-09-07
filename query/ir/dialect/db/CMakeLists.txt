@@ -46,6 +46,10 @@ add_mlir_library(turing_db_ir_dbdialect_s
   MLIRBuiltinToLLVMIRTranslation
   turing_db_ir_storagedialect_s
   turing_db_ir_common_s
+
+  # The join cost model estimates each side from the graph's node counts, which is what
+  # the v2 planner reads it from too
+  turing_db_query_common_s
 )
 
 # Ensure we have MLIR and LLVM includes, as well as the headers in current dir

@@ -47,6 +47,11 @@ protected:
         SimpleGraph::createSimpleGraph(graph);
 
         _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
+
+        // SimpleGraph is 18 nodes, so the cost model would leave every one of these cuts
+        // as the product it stands as - what the join does with a cut it takes is what
+        // these cases are about, so they force it, as the v2 join tests force theirs.
+        _interpreter->setForceValueHashJoin(true);
     }
 
     void runQuery(std::string_view query, StringRowSink& sink) {

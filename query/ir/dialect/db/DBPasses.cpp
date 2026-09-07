@@ -15,6 +15,11 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 
+#include "CardinalityEstimation.h"
+#include "metadata/GraphMetadata.h"
+#include "metadata/LabelSet.h"
+#include "views/GraphView.h"
+
 #include "IRConstantColumn.h"
 #include "PropertyScanLiteral.h"
 #include "DBOps.h"
@@ -2156,6 +2161,96 @@ bool factorHoldsAProduct(Region& factor) {
     return walked.wasInterrupted();
 }
 
+// The label set the rows of one side are scanned under, when the db level knows one: the
+// labels of a by-label node scan, and none at all otherwise - every node of the graph,
+// which is what the v2 planner estimates a variable with no label constraint at.
+void keySideLabels(const JoinKeySide& side,
+                   size_t factorFirstResult,
+                   const ::db::GraphMetadata& metadata,
+                   ::db::LabelSet& labels) {
+    Yield yield = cast<Yield>(side._factor->front().getTerminator());
+    const size_t columnIndex = cast<OpResult>(side._column).getResultNumber() - factorFirstResult;
+
+    ScanNodesByLabel scan = yield.getColumns()[columnIndex].getDefiningOp<ScanNodesByLabel>();
+    if (!scan) {
+        return;
+    }
+
+    const ::db::LabelMap& labelMap = metadata.labels();
+    for (const Attribute labelAttr : scan.getLabels()) {
+        const llvm::StringRef name = cast<StringAttr>(labelAttr).getValue();
+        const std::optional<::db::LabelID> label = labelMap.get(std::string_view(name.data(), name.size()));
+
+        if (label) {
+            labels.set(*label);
+        }
+    }
+}
+
+// The row budget a limit downstream of the cut puts on the rows the join would emit, and
+// zero when none governs them. A product stops as soon as the budget is met, where the
+// join reads its whole build side before it can emit a row, which is what tips a small
+// budget back towards the product.
+uint64_t limitOverTheCut(FilterOp filter) {
+    llvm::SmallVector<Operation*, 8> pending;
+    llvm::SmallPtrSet<Operation*, 8> visited;
+    for (const Value column : filter.getFilteredColumns()) {
+        for (Operation* const user : column.getUsers()) {
+            if (visited.insert(user).second) {
+                pending.push_back(user);
+            }
+        }
+    }
+
+    while (!pending.empty()) {
+        Operation* const op = pending.pop_back_val();
+        if (Limit limit = dyn_cast<Limit>(op)) {
+            return limit.getCount();
+        }
+
+        for (const Value result : op->getResults()) {
+            for (Operation* const user : result.getUsers()) {
+                if (visited.insert(user).second) {
+                    pending.push_back(user);
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
+// Whether the cut is better left as the product it stands as. The join reads its build
+// side whole before emitting a row and indexes every key it holds, which a small product
+// - or a small limit over a large one - never repays, so the shape alone does not settle
+// which form to run: this is the v2 planner's verdict (ReadStmtGenerator::
+// shouldPlaceValueHashJoin), answered by the same CardinalityEstimation over the node
+// counts of each side's labels.
+bool prefersTheProduct(const EqualityCross& match, const DBPassContext& context) {
+    if (context._forcesHashJoin) {
+        return false;
+    } else if (!context._usesHashJoin) {
+        return true;
+    } else if (!context._view) {
+        return false;
+    }
+
+    const ::db::GraphView& view = *context._view;
+    const ::db::GraphMetadata& metadata = view.metadata();
+
+    CrossProduct product = match._product;
+    const size_t leftFactorColumns = factorYieldColumns(product.getLeftFactor()).size();
+
+    ::db::LabelSet leftLabels;
+    ::db::LabelSet rightLabels;
+    keySideLabels(match._left, 0, metadata, leftLabels);
+    keySideLabels(match._right, leftFactorColumns, metadata, rightLabels);
+
+    const ::db::CardinalityEstimation estimation(view);
+
+    return estimation.shouldPreferCartesian(leftLabels, rightLabels, limitOverTheCut(match._filter));
+}
+
 bool matchEqualityCross(FilterOp filter, EqualityCross& match) {
     EqOp equality = filter.getMask().getDefiningOp<EqOp>();
     if (!equality || !equality.getResult().hasOneUse()) {
@@ -2322,14 +2417,22 @@ void fuseHashJoin(EqualityCross& match, mlir::OpBuilder& builder) {
 }
 
 struct FuseHashJoin : public impl::FuseHashJoinBase<FuseHashJoin> {
+    FuseHashJoin() {}
+
+    FuseHashJoin(const DBPassContext& context)
+        : _context(context)
+    {
+    }
+
     void runOnOperation() override {
         Operation* const root = getOperation();
 
         // Collect the matches first: fusing erases ops, which would invalidate the walk.
+        const DBPassContext& context = _context;
         llvm::SmallVector<EqualityCross, 2> matches;
-        root->walk([&matches](FilterOp filter) {
+        root->walk([&matches, &context](FilterOp filter) {
             EqualityCross match;
-            if (matchEqualityCross(filter, match)) {
+            if (matchEqualityCross(filter, match) && !prefersTheProduct(match, context)) {
                 matches.push_back(match);
             }
         });
@@ -2339,8 +2442,15 @@ struct FuseHashJoin : public impl::FuseHashJoinBase<FuseHashJoin> {
             fuseHashJoin(match, builder);
         }
     }
+
+private:
+    DBPassContext _context;
 };
 
+}
+
+std::unique_ptr<Pass> createFuseHashJoin(const DBPassContext& context) {
+    return std::make_unique<FuseHashJoin>(context);
 }
 
 }
