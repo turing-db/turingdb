@@ -245,6 +245,12 @@ TEST_F(CypherShortestPathTest, rejectsEdgeEndpoint) {
                    "SHORTESTPATH endpoint 'e' must be a node, but is EdgePattern instead");
 }
 
+TEST_F(CypherShortestPathTest, rejectsNonNumericWeightProperty) {
+    expectRejected("MATCH (a {name: 'A'}), (b {name: 'C'}) "
+                   "SHORTESTPATH(a, b, name, d, p) RETURN d, p",
+                   "SHORTESTPATH may only use numeric edge properties as weights");
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
