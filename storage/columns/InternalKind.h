@@ -54,6 +54,7 @@ public:
         EntityID,
         NodeID,
         EdgeID,
+        PathRef,
         Path,
         EntityList,
         LabelSetID,

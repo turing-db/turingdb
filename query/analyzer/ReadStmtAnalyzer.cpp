@@ -452,74 +452,153 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
         }
     }
 
-    const MapLiteral* properties = edgePattern->getProperties();
-    if (properties) {
-        const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
+    const QuantifiedPath* qp = edgePattern->getQuantifiedPath();
+    if (!qp) {
+        analyzeEdgeProperties(edgePattern, decl, data, false);
+        return;
+    }
 
-        for (const auto& [propName, expr] : *properties) {
-            _exprAnalyzer->analyzeRootExpr(expr);
+    const int64_t lhs = qp->getLhs();
+    const int64_t rhs = qp->getRhs();
 
-            if (expr->isAggregate()) {
-                throwError("Invalid use of aggregate expression in this context", edgePattern);
-            }
+    if (lhs < 0) {
+        throwError("Variable-length path minimum hops must be greater than or equal to 0",
+                   edgePattern);
+    }
 
-            const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
+    if (rhs < 1) {
+        throwError("Variable-length path maximum hops must be greater than or equal to 1",
+                   edgePattern);
+    }
 
-            const bool incompatibleValue = propType
-                                           && !constraintTypeCompatible(propType->_valueType, expr->getType());
-            if (incompatibleValue) {
-                throwError(fmt::format("Cannot evaluate edge property: types '{}' and '{}' are incompatible",
-                                       ValueTypeName::value(propType->_valueType),
-                                       EvaluatedTypeName::value(expr->getType())),
-                           edgePattern);
-            }
-
-            // Create a dummy Expr that represents the predicate evaluation
-            Symbol* varSymbol = Symbol::create(_ast, decl->getName());
-            QualifiedName* fullName = QualifiedName::create(_ast);
-
-            fullName->addName(varSymbol);
-            fullName->addName(propName);
-
-            PropertyExpr* propExpr = PropertyExpr::create(_ast, fullName);
-            propExpr->setEntityVarDecl(decl);
-            BinaryExpr* predExpr = BinaryExpr::create(_ast, BinaryOperator::Equal, propExpr, expr);
-            _exprAnalyzer->analyzeRootExpr(predExpr);
-
-            const ValueType constraintType = propType ? propType->_valueType : ValueType::Invalid;
-
-            data->addExprConstraint(propName->getName(), constraintType, predExpr);
+    if (!qp->isRhsUnbounded()) {
+        if (rhs < lhs) {
+            throwError("Variable-length path maximum hops must be "
+                       "greater than or equal to minimum hops",
+                       edgePattern);
         }
     }
 
-    // Validate QuantifiedPath
-    const QuantifiedPath* qp = edgePattern->getQuantifiedPath();
-    if (qp) {
-        const int64_t lhs = qp->getLhs();
-        const int64_t rhs = qp->getRhs();
+    decl->setIsQuantifiedPath(true);
 
-        if (lhs < 0) {
-            throwError("Variable-length path minimum hops must be greater than or equal to 0",
+    analyzeHop(edgePattern, data);
+}
+
+void ReadStmtAnalyzer::analyzeEdgeProperties(EdgePattern* edgePattern,
+                                             VarDecl* decl,
+                                             EdgePatternData* data,
+                                             bool asHopPredicates) {
+    const MapLiteral* properties = edgePattern->getProperties();
+    if (!properties) {
+        return;
+    }
+
+    const PropertyTypeMap& propTypeMap = _graphMetadata.propTypes();
+
+    for (const auto& [propName, expr] : *properties) {
+        _exprAnalyzer->analyzeRootExpr(expr);
+
+        if (expr->isAggregate()) {
+            throwError("Invalid use of aggregate expression in this context", edgePattern);
+        }
+
+        const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
+
+        const bool incompatibleValue = propType
+                                       && !constraintTypeCompatible(propType->_valueType, expr->getType());
+        if (incompatibleValue) {
+            throwError(fmt::format("Cannot evaluate edge property: types '{}' and '{}' are incompatible",
+                                   ValueTypeName::value(propType->_valueType),
+                                   EvaluatedTypeName::value(expr->getType())),
                        edgePattern);
         }
 
-        if (rhs < 1) {
-            throwError("Variable-length path maximum hops must be greater than or equal to 1",
-                       edgePattern);
+        // Create a dummy Expr that represents the predicate evaluation
+        Symbol* varSymbol = Symbol::create(_ast, decl->getName());
+        QualifiedName* fullName = QualifiedName::create(_ast);
+
+        fullName->addName(varSymbol);
+        fullName->addName(propName);
+
+        PropertyExpr* propExpr = PropertyExpr::create(_ast, fullName);
+        propExpr->setEntityVarDecl(decl);
+        BinaryExpr* predExpr = BinaryExpr::create(_ast, BinaryOperator::Equal, propExpr, expr);
+        _exprAnalyzer->analyzeRootExpr(predExpr);
+
+        const ValueType constraintType = propType ? propType->_valueType : ValueType::Invalid;
+
+        if (asHopPredicates) {
+            edgePattern->addHopPredicate(predExpr);
+        } else {
+            data->addExprConstraint(propName->getName(), constraintType, predExpr);
+        }
+    }
+}
+
+void ReadStmtAnalyzer::enterScope(DeclContext* scope) {
+    _ctxt = scope;
+    _exprAnalyzer->setDeclContext(scope);
+}
+
+void ReadStmtAnalyzer::analyzeHop(EdgePattern* edgePattern, EdgePatternData* data) {
+    DeclContext* outer = _ctxt;
+    DeclContext* hopScope = DeclContext::create(_ast, outer);
+    enterScope(hopScope);
+
+    VarDecl* hopDecl = nullptr;
+    if (const Symbol* symbol = edgePattern->getSymbol()) {
+        hopDecl = hopScope->getOrCreateNamedVariable(_ast, EvaluatedType::EdgePattern, symbol->getName());
+    } else {
+        hopDecl = hopScope->createUnnamedVariable(_ast, EvaluatedType::EdgePattern);
+    }
+    edgePattern->setHopDecl(hopDecl);
+
+    NodePattern* source = edgePattern->getHopSource();
+    if (source) {
+        analyze(source);
+    }
+
+    NodePattern* end = edgePattern->getHopEnd();
+    if (end) {
+        analyze(end);
+    }
+
+    analyzeEdgeProperties(edgePattern, hopDecl, data, true);
+
+    const WhereClause* sourceWhere = source ? source->getWhere() : nullptr;
+    const WhereClause* endWhere = end ? end->getWhere() : nullptr;
+    const std::initializer_list<const WhereClause*> wheres {edgePattern->getWhere(), edgePattern->getHopWhere(), sourceWhere, endWhere};
+    for (const WhereClause* where : wheres) {
+        if (!where) {
+            continue;
         }
 
-        if (!qp->isRhsUnbounded()) {
-            if (rhs < lhs) {
-                throwError("Variable-length path maximum hops must be "
-                           "greater than or equal to minimum hops",
-                           edgePattern);
-            }
+        Expr* predicate = where->getExpr();
+        _exprAnalyzer->analyzeRootExpr(predicate);
+
+        if (predicate->isAggregate()) {
+            throwError("Invalid use of aggregate expression in this context", edgePattern);
         }
 
-        // The db dialect has no path-explorer op, and the dependency graph reads an edge
-        // pattern without its quantifier: left to run, the engine would answer a one-hop
-        // query instead of the one that was asked.
-        throwError("Variable-length paths are not supported yet", edgePattern);
+        if (predicate->getType() != EvaluatedType::Bool) {
+            throwError("WHERE expression must be a boolean", edgePattern);
+        }
+
+        edgePattern->addHopPredicate(predicate);
+    }
+
+    enterScope(outer);
+
+    if (source && source->getSymbol()) {
+        VarDecl* group = outer->getOrCreateNamedVariable(_ast, EvaluatedType::NodePattern, source->getSymbol()->getName());
+        group->setIsQuantifiedPath(true);
+        edgePattern->setHopSourceGroup(group);
+    }
+
+    if (end && end->getSymbol()) {
+        VarDecl* group = outer->getOrCreateNamedVariable(_ast, EvaluatedType::NodePattern, end->getSymbol()->getName());
+        group->setIsQuantifiedPath(true);
+        edgePattern->setHopEndGroup(group);
     }
 }
 

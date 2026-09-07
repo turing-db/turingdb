@@ -221,6 +221,24 @@ private:
         // variable the traversal reached some other way holds rows that are not the listed
         // nodes, so what it was seeded with has to be checked against what was walked
         std::unordered_set<const VariableDependency*> _seededVars;
+
+        // The variables bound to a path column, with the list each one reads as, the
+        // variable holding the path and the seed variable a sources list opens with
+        struct PathBinding {
+            mlir::storage::PathExpansionKind _kind {mlir::storage::PathExpansionKind::Edges};
+            const VariableDependency* _seed {nullptr};
+            const VariableDependency* _path {nullptr};
+        };
+
+        std::unordered_map<const VarDecl*, PathBinding> _pathBindings;
+
+        // The quantified edge pattern each variable-length variable was declared by, whose
+        // hop constraints the exploration's region is generated from
+        std::unordered_map<const VarDecl*, const EdgePattern*> _quantifiedEdges;
+
+        // The block arguments of the hop region being generated, under the declarations of
+        // the hop's entities; empty outside a region
+        std::unordered_map<const VarDecl*, mlir::Value> _hopColumns;
     };
 
     PartScope _part;
@@ -981,6 +999,47 @@ private:
 
     void addMergeFilter(const VariableDependency* var,
                         std::vector<const VariableDependency*>& carriedSet);
+
+    // The columns a hop from @param src carries along: every variable of the carry set but
+    // the source, then the edge-type columns and the CALL-yielded columns in flight here
+    void collectHopCarrySet(const VariableDependency* src,
+                            const std::vector<const VariableDependency*>& carrySet,
+                            InFlightColumns& inFlight);
+
+    // Walks a variable-length hop: one db.explore_paths binding @param src to its seeds,
+    // @param edge to the path column and the far end to @param tgt, or to
+    // @param joinedTarget when the caller closes a join with it
+    void addExplorePaths(const VariableDependency* src,
+                         const VariableDependency* edge,
+                         const VariableDependency* tgt,
+                         const std::vector<const VariableDependency*>& carrySet,
+                         const EdgeMetadata& metadata,
+                         mlir::storage::PathDirection direction,
+                         mlir::Value* joinedTarget);
+
+    // Indexes the quantified edge patterns of a part by their declaration
+    void collectQuantifiedEdges(std::span<Stmt* const> stmts);
+
+    // Generates the hop region of an exploration from the pattern's hop constraints: the
+    // inner nodes' labels and properties and every hop predicate, over the region's three
+    // block arguments, yielding one mask
+    void generateHopRegion(mlir::db::ExplorePaths exploration, const EdgePattern* pattern);
+
+    // Appends the masks of one inner node's label and property constraints, read over the
+    // hop column that node is bound to
+    void collectHopNodeMasks(const NodePattern* node, mlir::Value column, llvm::SmallVectorImpl<mlir::Value>& masks);
+
+    // The column a consumer reading a list is handed for @param column: the column itself,
+    // or - when it holds paths - the list each path expands to for the variable of
+    // @param decl
+    mlir::Value listColumnOf(const VarDecl* decl, mlir::Value column);
+
+    // Expands every projected path column into its list, for the consumers that key on
+    // the projection's rows
+    void expandPathItems(const Projection* projection, llvm::SmallVectorImpl<mlir::Value>& projected);
+
+    // The column size() reads over a path column: the hop count of each path
+    mlir::Value pathLengthColumn(const Expr* argExpr, mlir::Value column);
 
     // @param joinedTarget is where the column the hop lands on is written when the caller
     // closes a join with it, and null when the hop binds it to @param tgt - the two forms

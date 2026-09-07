@@ -16,6 +16,7 @@
 
 #include "list/ListBuffer.h"
 #include "list/ListView.h"
+#include "list/PathTrie.h"
 
 #include "map/MapBuffer.h"
 #include "map/MapView.h"
@@ -47,6 +48,7 @@ public:
         MakeMemoryPool<ColumnVector<EntityID>>::type,
         MakeMemoryPool<ColumnVector<NodeID>>::type,
         MakeMemoryPool<ColumnVector<EdgeID>>::type,
+        MakeMemoryPool<ColumnVector<PathRef>>::type,
         MakeMemoryPool<ColumnVector<Path>>::type,
         MakeMemoryPool<ColumnVector<EntityList>>::type,
         MakeMemoryPool<ColumnVector<LabelID>>::type,
@@ -160,6 +162,7 @@ public:
         _pools.transform<ClearTransform>();
         _listBuffer.clear();
         _mapBuffer.clear();
+        _pathTrie.clear();
         _stringBuf.clear();
         _embeddingBuf.clear();
     }
@@ -167,6 +170,7 @@ public:
     QueryListBuffer& listBuffer() { return _listBuffer; }
 
     DefaultMapBuffer& mapBuffer() { return _mapBuffer; }
+    PathTrie& pathTrie() { return _pathTrie; }
 
     StringBuffer& stringBuffer() { return _stringBuf; }
 
@@ -178,6 +182,7 @@ private:
 
     QueryListBuffer _listBuffer;
     DefaultMapBuffer _mapBuffer;
+    PathTrie _pathTrie;
     StringBuffer _stringBuf;
     EmbeddingBuffer _embeddingBuf;
 };

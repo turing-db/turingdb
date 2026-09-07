@@ -52,6 +52,14 @@ public:
     template <typename T>
     ListElementView writeValue(ListBufferTypeTag tag, const T& value);
 
+    /**
+     * @brief Writes [tag][value] into slot @param index of a region whose elements are all
+     * the fixed-width @tparam T, so a caller can fill the region out of order. Does not move
+     * the sequential write position, so it is not mixed with @ref writeValue on one cursor.
+     */
+    template <typename T>
+    ListElementView writeValueAt(size_t index, ListBufferTypeTag tag, const T& value);
+
 private:
     ListView _view;
     std::byte* _elementWritePtr {nullptr};

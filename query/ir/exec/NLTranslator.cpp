@@ -217,6 +217,24 @@ NLHandlerFunction selectPropertyFetchHandler(bool isNode, ValueType valueType) {
 // keeps its input chunk's element type, so a crossed property column carries the
 // same !storage.nullable<...> the fetch produced, and this maps it back to allocate
 // the matching nullable value column and pick the broadcast.
+PathExplorationDir toPathExplorationDir(storage::PathDirection direction) {
+    switch (direction) {
+        case storage::PathDirection::Forward:
+            return PathExplorationDir::FORWARD;
+        break;
+
+        case storage::PathDirection::Backward:
+            return PathExplorationDir::BACKWARD;
+        break;
+
+        case storage::PathDirection::Both:
+            return PathExplorationDir::BOTH;
+        break;
+    }
+
+    throw IRException("Unknown path direction");
+}
+
 ValueType valueTypeFromElementType(mlir::Type elementType) {
     if (mlir::isa<storage::StringType>(elementType)) {
         return ValueType::String;
@@ -645,6 +663,16 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             bindGetEdgesByLabel(getOutEdgesByLabel, IteratorKind::GetOutEdgesByLabel);
         } else if (nl::GetInEdgesByLabel getInEdgesByLabel = mlir::dyn_cast<nl::GetInEdgesByLabel>(operation)) {
             bindGetEdgesByLabel(getInEdgesByLabel, IteratorKind::GetInEdgesByLabel);
+        } else if (nl::ExplorePaths explorePaths = mlir::dyn_cast<nl::ExplorePaths>(operation)) {
+            IteratorConfig config {IteratorKind::ExplorePaths, explorePaths.getInputNodes(), {}};
+            const mlir::OperandRange carriedColumns = explorePaths.getColumnsToFilter();
+            config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
+            config._edgeType = explorePaths.getEdgeType().value_or(llvm::StringRef());
+            config._direction = toPathExplorationDir(explorePaths.getDirection());
+            config._minHops = explorePaths.getMinHops();
+            config._maxHops = explorePaths.getMaxHops().value_or(std::numeric_limits<uint64_t>::max());
+            config._hopRegion = &explorePaths.getHop();
+            _iteratorConfigs[explorePaths.getResult()] = config;
         } else if (nl::Sort sort = mlir::dyn_cast<nl::Sort>(operation)) {
             _iteratorConfigs[sort.getResult()] = IteratorConfig {IteratorKind::Sort, {}, {}, sortStateFor(sort.getState())};
         } else if (nl::GroupAggregate groupAggregate = mlir::dyn_cast<nl::GroupAggregate>(operation)) {
@@ -810,6 +838,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
                                    getEdgeProperties.getValues(),
                                    /*isNode=*/false,
                                    body);
+        } else if (nl::ExpandPath expandPath = mlir::dyn_cast<nl::ExpandPath>(operation)) {
+            translateExpandPath(expandPath, body);
+        } else if (nl::PathLength pathLength = mlir::dyn_cast<nl::PathLength>(operation)) {
+            translatePathLength(pathLength, body);
         } else if (nl::GetNodeLabelSet getNodeLabelSet = mlir::dyn_cast<nl::GetNodeLabelSet>(operation)) {
             translateGetNodeLabelSet(getNodeLabelSet, body);
         } else if (nl::GetEdgeTypes getEdgeTypes = mlir::dyn_cast<nl::GetEdgeTypes>(operation)) {
@@ -1024,6 +1056,8 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         translateHashJoinProbeLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::EachRow) {
         translateEachRowLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::ExplorePaths) {
+        translateExplorePathsLoop(config, loopBody, limit, body);
     } else {
         translateEdgeLoop(config, loopBody, limit, body);
     }
@@ -1707,22 +1741,7 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
     // Reserve scratch indices column
     loopData->getIndices()->reserve(_program->getChunkSize());
 
-    // Allocate carried columns in the carried set
-    const size_t carriedCount = config._carriedColumns.size();
-    for (size_t carriedIndex = 0; carriedIndex < carriedCount; carriedIndex++) {
-        const mlir::Value carriedValue = config._carriedColumns[carriedIndex];
-
-        if (!rowAlignedWith(carriedValue, config._inputNodes)) {
-            throw IRException("Carried column is not row-aligned with the input chunk");
-        }
-
-        Column* carriedOutput = allocColumn(loopBody.getArgument(static_cast<unsigned>(4 + carriedIndex)));
-
-        const NLCarriedColumn carriedColumn(getColumn(carriedValue),
-                                            carriedOutput,
-                                            selectGatherForChunkType(carriedValue.getType()));
-        loopData->addCarriedColumn(carriedColumn);
-    }
+    bindCarriedColumns(config, loopBody, 4, loopData);
 
     NLHandlerFunction handler = nullptr;
     if (config._kind == IteratorKind::GetOutEdges) {
@@ -1749,6 +1768,146 @@ bool NLTranslator::isPendingValue(mlir::Value value, bool isNode) const {
     const llvm::DenseSet<mlir::Value>& pendingValues = isNode ? _pendingNodeValues : _pendingEdgeValues;
 
     return pendingValues.contains(value);
+}
+
+void NLTranslator::bindCarriedColumns(const IteratorConfig& config,
+                                      mlir::Block& loopBody,
+                                      size_t firstCarriedArgument,
+                                      NLExpansionLoopData* loopData) {
+    const size_t carriedCount = config._carriedColumns.size();
+    for (size_t carriedIndex = 0; carriedIndex < carriedCount; carriedIndex++) {
+        const mlir::Value carriedValue = config._carriedColumns[carriedIndex];
+
+        if (!rowAlignedWith(carriedValue, config._inputNodes)) {
+            throw IRException("Carried column is not row-aligned with the input chunk");
+        }
+
+        const unsigned argumentIndex = static_cast<unsigned>(firstCarriedArgument + carriedIndex);
+        Column* carriedOutput = allocColumn(loopBody.getArgument(argumentIndex));
+
+        const NLCarriedColumn carriedColumn(getColumn(carriedValue),
+                                            carriedOutput,
+                                            selectGatherForChunkType(carriedValue.getType()));
+        loopData->addCarriedColumn(carriedColumn);
+    }
+}
+
+void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
+                                             mlir::Block& loopBody,
+                                             NLLimitState* limit,
+                                             NLStmtContainer* body) {
+    // The three fixed chunks of an exploration step, in the block-argument order
+    // established by getPathIteratorType: seeds, ends, paths
+    ColumnNodeIDs* sources = static_cast<ColumnNodeIDs*>(allocColumnIfUsed(loopBody.getArgument(0)));
+    ColumnNodeIDs* targets = static_cast<ColumnNodeIDs*>(allocColumnIfUsed(loopBody.getArgument(1)));
+    ColumnVector<PathRef>* paths = static_cast<ColumnVector<PathRef>*>(allocColumnIfUsed(loopBody.getArgument(2)));
+
+    const ColumnNodeIDs* inputNodeIDs = static_cast<const ColumnNodeIDs*>(getColumn(config._inputNodes));
+
+    // An edge type is resolved as translateEdgeLoop resolves a by-type hop's: a name
+    // absent from the schema matches no edge, and the loop is marked unmatchable
+    const bool filtersByType = !config._edgeType.empty();
+    EdgeTypeID edgeType;
+    bool matchable = true;
+    if (filtersByType) {
+        const std::optional<EdgeTypeID> edgeTypeID = _view->metadata().edgeTypes().get(config._edgeType);
+        matchable = edgeTypeID.has_value();
+        edgeType = matchable ? *edgeTypeID : EdgeTypeID();
+    }
+
+    NLExplorePathsLoopData* loopData = _program->allocFunctionData<NLExplorePathsLoopData>(inputNodeIDs,
+                                                                                         sources,
+                                                                                         targets,
+                                                                                         paths,
+                                                                                         &_memory->pathTrie(),
+                                                                                         config._direction,
+                                                                                         config._minHops,
+                                                                                         config._maxHops,
+                                                                                         filtersByType,
+                                                                                         edgeType,
+                                                                                         matchable);
+    loopData->setLimit(limit);
+    loopData->getIndices()->reserve(_program->getChunkSize());
+
+    bindCarriedColumns(config, loopBody, 3, loopData);
+
+    if (config._hopRegion && !config._hopRegion->empty()) {
+        mlir::Block& hopBlock = config._hopRegion->front();
+        const size_t chunkSize = _program->getChunkSize();
+
+        ColumnNodeIDs* hopSources = _memory->alloc<ColumnNodeIDs>();
+        hopSources->reserve(chunkSize);
+        ColumnEdgeIDs* hopEdges = _memory->alloc<ColumnEdgeIDs>();
+        hopEdges->reserve(chunkSize);
+        ColumnNodeIDs* hopEnds = _memory->alloc<ColumnNodeIDs>();
+        hopEnds->reserve(chunkSize);
+
+        _valueSlots[hopBlock.getArgument(0)] = hopSources;
+        _valueSlots[hopBlock.getArgument(1)] = hopEdges;
+        _valueSlots[hopBlock.getArgument(2)] = hopEnds;
+
+        translateBlock(hopBlock, loopData->getHopStmts());
+
+        nl::Yield yield = mlir::cast<nl::Yield>(hopBlock.getTerminator());
+        const mlir::Value mask = yield.getColumns().front();
+        const auto maskChunk = mlir::cast<nl::ChunkType>(mask.getType());
+        const bool maskNullable = mlir::isa<storage::NullableType>(maskChunk.getElementType());
+        const bool maskIsUntypedNull = isUntypedNullChunk(mask.getType());
+
+        loopData->setHopFilter(hopSources,
+                               hopEdges,
+                               hopEnds,
+                               getColumn(mask),
+                               NLExecutor::selectMaskSurvivorFunction(maskNullable, maskIsUntypedNull));
+    }
+
+    body->emplaceStmt(&NLExecutor::runExplorePathsLoop, loopData);
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateExpandPath(nl::ExpandPath expand, NLStmtContainer* body) {
+    const ColumnVector<PathRef>* paths = static_cast<const ColumnVector<PathRef>*>(getColumn(expand.getPaths()));
+    const ColumnNodeIDs* seeds = nullptr;
+    if (const mlir::Value seedsValue = expand.getSrcids()) {
+        seeds = static_cast<const ColumnNodeIDs*>(getColumn(seedsValue));
+    }
+
+    ColumnVector<ListView>* output = static_cast<ColumnVector<ListView>*>(allocListColumn());
+    _valueSlots[expand.getResult()] = output;
+
+    PathExpansionKind kind = PathExpansionKind::Edges;
+    switch (expand.getKind()) {
+        case storage::PathExpansionKind::Edges:
+            kind = PathExpansionKind::Edges;
+        break;
+
+        case storage::PathExpansionKind::Sources:
+            kind = PathExpansionKind::Sources;
+        break;
+
+        case storage::PathExpansionKind::Ends:
+            kind = PathExpansionKind::Ends;
+        break;
+    }
+
+    NLExpandPathData* data = _program->allocFunctionData<NLExpandPathData>(paths,
+                                                                           seeds,
+                                                                           output,
+                                                                           kind,
+                                                                           &_memory->pathTrie(),
+                                                                           &_memory->listBuffer());
+    body->emplaceStmt(&NLExecutor::runExpandPath, data);
+}
+
+void NLTranslator::translatePathLength(nl::PathLength length, NLStmtContainer* body) {
+    const ColumnVector<PathRef>* paths = static_cast<const ColumnVector<PathRef>*>(getColumn(length.getPaths()));
+
+    ColumnVector<uint64_t>* output = allocCountColumn();
+    _valueSlots[length.getResult()] = output;
+
+    NLPathLengthData* data = _program->allocFunctionData<NLPathLengthData>(paths, output, &_memory->pathTrie());
+    body->emplaceStmt(&NLExecutor::runPathLength, data);
 }
 
 void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
@@ -3023,7 +3182,16 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
                               "nl.for, produced in this block, a constant, or a reduced row");
         }
 
-        outputData->addOutputColumn(getColumn(column), !isConstant && !isReducedRow);
+        const bool carriesRows = !isConstant && !isReducedRow;
+        const auto chunk = mlir::cast<nl::ChunkType>(column.getType());
+        if (mlir::isa<storage::PathRefType>(chunk.getElementType())) {
+            const ColumnVector<PathRef>* paths = static_cast<const ColumnVector<PathRef>*>(getColumn(column));
+            ColumnVector<ListView>* lists = static_cast<ColumnVector<ListView>*>(allocListColumn());
+            outputData->addExpandedPathColumn(paths, lists, carriesRows);
+            outputData->setTrie(&_memory->pathTrie());
+        } else {
+            outputData->addOutputColumn(getColumn(column), carriesRows);
+        }
     }
 
     _program->setOutputData(outputData);
@@ -6036,6 +6204,8 @@ NLChunkKind NLTranslator::chunkKindFromElementType(mlir::Type elementType) {
         return NLChunkKind::Path;
     } else if (mlir::isa<storage::DateTimeType>(elementType)) {
         return NLChunkKind::DateTime;
+    } else if (mlir::isa<storage::PathRefType>(elementType)) {
+        return NLChunkKind::PathRef;
     } else if (mlir::isa<storage::BoolType>(elementType)) {
         return NLChunkKind::Bool;
     } else if (mlir::isa<mlir::Float64Type>(elementType)) {

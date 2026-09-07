@@ -149,6 +149,18 @@ def Path : StorageType<"Path", "path"> {
     }];
 }
 
+def PathRef : StorageType<"PathRef", "path_ref"> {
+    let summary = "A path handle";
+    let description = [{
+        The element type of a chunk holding one path per row - storage's
+        ColumnVector<PathRef>. Each cell is a handle into the query-scoped PathTrie,
+        which stores every enumerated path as a chain of parent pointers, so a row
+        copies in O(1) whatever the path's length and a prefix shared by many paths is
+        stored once. Produced by db.explore_paths; expanded into a list of edge or node
+        IDs by db.expand_path where a list is consumed, and at output.
+    }];
+}
+
 def List : StorageType<"List", "list"> {
     let summary = "A list value";
     let description = [{

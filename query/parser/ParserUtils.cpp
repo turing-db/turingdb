@@ -166,6 +166,12 @@ void ParserUtils::foldEntityWheres(CypherAST* ast, Pattern* pattern) {
 
     for (const PatternElement* element : pattern->elements()) {
         for (const EntityPattern* entity : element->getEntities()) {
+            const EdgePattern* edge = dynamic_cast<const EdgePattern*>(entity);
+            const bool constrainsHops = edge && edge->getQuantifiedPath();
+            if (constrainsHops) {
+                continue;
+            }
+
             const WhereClause* entityWhere = entity->getWhere();
             if (!entityWhere) {
                 continue;

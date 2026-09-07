@@ -1,5 +1,6 @@
 #pragma once
 
+#include <limits>
 #include <stdint.h>
 #include <type_traits>
 
@@ -20,8 +21,19 @@ public:
         _SIZE
     };
 
+    static constexpr uint64_t UNBOUNDED_HOPS = std::numeric_limits<uint64_t>::max();
+
     explicit EdgeMetadata(EdgeType type)
         : _type(type)
+    {
+    }
+
+    // A variable-length hop: the edge stands for every trail of minHops to maxHops edges
+    EdgeMetadata(EdgeType type, uint64_t minHops, uint64_t maxHops)
+        : _type(type),
+        _quantified(true),
+        _minHops(minHops),
+        _maxHops(maxHops)
     {
     }
 
@@ -29,12 +41,22 @@ public:
 
     bool isMetaEdge() const { return _type == EdgeType::MERGE; }
 
+    bool isQuantified() const { return _quantified; }
+    uint64_t getMinHops() const { return _minHops; }
+    uint64_t getMaxHops() const { return _maxHops; }
+
     bool operator==(const EdgeMetadata& other) const {
-        return _type == other._type;
+        return _type == other._type
+            && _quantified == other._quantified
+            && _minHops == other._minHops
+            && _maxHops == other._maxHops;
     }
 
 private:
     EdgeType _type {EdgeType::_SIZE};
+    bool _quantified {false};
+    uint64_t _minHops {0};
+    uint64_t _maxHops {0};
 };
 
 static_assert(std::is_trivially_copyable_v<EdgeMetadata>);

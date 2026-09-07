@@ -30,6 +30,23 @@ ListElementView ListWriteCursor::writeValue(ListBufferTypeTag tag, const T& valu
     return recordView(start);
 }
 
+template <typename T>
+ListElementView ListWriteCursor::writeValueAt(size_t index, ListBufferTypeTag tag, const T& value) {
+    constexpr size_t tagSize = sizeof(ListBufferTypeTag);
+    constexpr size_t elementSize = tagSize + sizeof(T);
+
+    std::byte* start = _elementWritePtr + index * elementSize;
+
+    std::memcpy(start, &tag, tagSize);
+    std::memcpy(start + tagSize, &value, sizeof(T));
+
+    const ListElementView view(start);
+    _viewWritePtr[index] = view;
+    ++_written;
+
+    return view;
+}
+
 ListElementView ListWriteCursor::recordView(const std::byte* elementStart) {
     const ListElementView view(elementStart);
 
@@ -56,4 +73,7 @@ template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const ty
 template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const types::Double::Primitive&);
 template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const types::Bool::Primitive&);
 template ListElementView ListWriteCursor::writeValue(ListBufferTypeTag, const PropertyNull&);
+
+template ListElementView ListWriteCursor::writeValueAt(size_t, ListBufferTypeTag, const EdgeID&);
+template ListElementView ListWriteCursor::writeValueAt(size_t, ListBufferTypeTag, const NodeID&);
 }

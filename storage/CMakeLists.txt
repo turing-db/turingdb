@@ -25,6 +25,7 @@ set(storage_sources
         list/ListHash.cpp
         list/ListElementViewBuffer.cpp
         list/ListWriteCursor.cpp
+        list/PathTrie.cpp
 
         map/EncodedMap.cpp
         map/MapByteBuffer.cpp
@@ -73,6 +74,8 @@ set(storage_sources
         iterators/ScanOutEdgesBySourceLabelIterator.cpp
         iterators/MatchLabelSetIterator.cpp
         iterators/NeighbourhoodSampleIterator.cpp
+        iterators/PathExplorator.cpp
+        iterators/PathHopFilter.cpp
 
         iterators/TombstoneFilter.cpp
 

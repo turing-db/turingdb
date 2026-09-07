@@ -1446,6 +1446,14 @@ patternElemChain
         if ($2) $1->setQuantifiedPath($2);
         $$ = std::make_pair($1, $3);
     }
+    | OPAREN nodePattern edgePattern nodePattern opt_whereClause CPAREN quantifiedPath nodePattern {
+        EdgePattern* edge = $3;
+        edge->setQuantifiedPath($7);
+        edge->setHopSource($2);
+        edge->setHopEnd($4);
+        edge->setHopWhere($5);
+        $$ = std::make_pair(edge, $8);
+    }
     ;
 
 exprPatternElemChain
@@ -1530,13 +1538,13 @@ exprEdgePattern
     ;
 
 edgeDetail
-    : opt_symbol opt_edgeTypes opt_properties opt_whereClause { 
+    : opt_symbol opt_edgeTypes opt_properties opt_whereClause {
         $$ = EdgePattern::create(ast, nullptr, EdgePattern::Direction::Undirected);
         $$->setSymbol($1);
         $$->setTypes($2);
         $$->setProperties($3);
         $$->setWhere($4);
-        LOC($$, @$); 
+        LOC($$, @$);
       }
     ;
 

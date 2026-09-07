@@ -56,6 +56,7 @@ private:
         GetInEdgesByType,
         GetOutEdgesByLabel,
         GetInEdgesByLabel,
+        ExplorePaths,
         Sort,
         GroupAggregate,
         UnwindCollect,
@@ -129,6 +130,14 @@ private:
         // MLIRContext keeps alive for the whole translation; resolved to EdgeTypeIDs
         // when the loop is translated.
         llvm::SmallVector<llvm::StringRef, 4> _edgeTypes;
+
+        // What an ExplorePaths iterator walks: the direction, the hop bounds (an absent
+        // maximum is unbounded) and the hop predicate region, null when the op has none.
+        // The region is the op's own, which the module keeps alive for the translation.
+        PathExplorationDir _direction {PathExplorationDir::FORWARD};
+        uint64_t _minHops {0};
+        uint64_t _maxHops {0};
+        mlir::Region* _hopRegion {nullptr};
 
         // The node IDs a ConstScanNodes iterator emits; empty for the other kinds.
         // A view into the op's DenseI64ArrayAttr storage, which the MLIRContext
@@ -415,6 +424,28 @@ private:
     // Records on @param data the ID of every label set this change knows that a node must
     // carry at least @param constraint to be in
     void collectMatchingLabelSets(const LabelSet& constraint, NLCheckLabelConstraintData* data) const;
+
+    // Translate the nl.for over an nl.explore_paths iterator: allocate the seed, end and
+    // path loop variables, resolve the edge type name against the schema (marking the
+    // exploration unmatchable if it is absent), bind the carry set, translate the hop
+    // region - when there is one - into the loop data's hop statements over three
+    // loop-owned columns, and record the exploration loop statement in body
+    void translateExplorePathsLoop(const IteratorConfig& config,
+                                   mlir::Block& loopBody,
+                                   NLLimitState* limit,
+                                   NLStmtContainer* body);
+
+    // Allocate the filtered output of every carried column of an expansion loop, bound to
+    // the loop variables from firstCarriedArgument on, with the gather that fills it
+    void bindCarriedColumns(const IteratorConfig& config,
+                            mlir::Block& loopBody,
+                            size_t firstCarriedArgument,
+                            NLExpansionLoopData* loopData);
+
+    // Translate an nl.expand_path: allocate the list column its rows expand into, and an
+    // nl.path_length: allocate the count column its rows are read into
+    void translateExpandPath(mlir::nl::ExpandPath expand, NLStmtContainer* body);
+    void translatePathLength(mlir::nl::PathLength length, NLStmtContainer* body);
 
     // Translate an nl.limit: allocate its runtime counter, map the handle to it,
     // and record the reset statement (run each time the enclosing block runs)

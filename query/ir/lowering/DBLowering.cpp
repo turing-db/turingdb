@@ -795,6 +795,7 @@ bool opensSourceLoop(mlir::Operation* operation) {
                      mlir::db::GetInEdgesByType,
                      mlir::db::GetOutEdgesByLabel,
                      mlir::db::GetInEdgesByLabel,
+                     mlir::db::ExplorePaths,
                      mlir::db::CallProcedure>(operation);
 }
 
@@ -1085,6 +1086,12 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerGetOutEdgesByLabel(getOutEdgesByLabel);
     } else if (mlir::db::GetInEdgesByLabel getInEdgesByLabel = mlir::dyn_cast<mlir::db::GetInEdgesByLabel>(operation)) {
         lowerGetInEdgesByLabel(getInEdgesByLabel);
+    } else if (mlir::db::ExplorePaths explorePaths = mlir::dyn_cast<mlir::db::ExplorePaths>(operation)) {
+        lowerExplorePaths(explorePaths);
+    } else if (mlir::db::ExpandPath expandPath = mlir::dyn_cast<mlir::db::ExpandPath>(operation)) {
+        lowerExpandPath(expandPath);
+    } else if (mlir::db::PathLength pathLength = mlir::dyn_cast<mlir::db::PathLength>(operation)) {
+        lowerPathLength(pathLength);
     } else if (mlir::db::GetNodeProperties getNodeProperties = mlir::dyn_cast<mlir::db::GetNodeProperties>(operation)) {
         lowerGetNodeProperties(getNodeProperties);
     } else if (mlir::db::GetEdgeProperties getEdgeProperties = mlir::dyn_cast<mlir::db::GetEdgeProperties>(operation)) {
@@ -5171,6 +5178,95 @@ nl::Output DBLowering::lowerOutput(mlir::db::Output output) {
                                        mlir::Value(),
                                        cardinality,
                                        output.getColumnNamesAttr());
+}
+
+void DBLowering::lowerExplorePaths(mlir::db::ExplorePaths explorePaths) {
+    const mlir::Value inputChunk = mapValue(explorePaths.getInputNodes());
+
+    llvm::SmallVector<mlir::Value, 4> carriedChunks;
+    for (const mlir::Value carriedColumn : explorePaths.getColumnsToFilter()) {
+        carriedChunks.push_back(mapValue(carriedColumn));
+    }
+
+    setInsertionInto(ownerBlock(inputChunk));
+
+    nl::ExplorePaths exploration = _builder.create<nl::ExplorePaths>(_builder.getUnknownLoc(),
+                                                                     inputChunk,
+                                                                     carriedChunks,
+                                                                     explorePaths.getDirection(),
+                                                                     explorePaths.getMinHops(),
+                                                                     explorePaths.getMaxHopsAttr(),
+                                                                     explorePaths.getEdgeTypeAttr());
+
+    mlir::Region& dbHop = explorePaths.getHop();
+    if (!dbHop.empty()) {
+        const mlir::OpBuilder::InsertionGuard guard(_builder);
+        lowerHopRegion(dbHop.front(), exploration.getHop());
+    }
+
+    buildLoopForSource(exploration.getResult(), explorePaths.getOperation());
+}
+
+void DBLowering::lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop) {
+    mlir::MLIRContext* context = _builder.getContext();
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    const mlir::Type nodeChunk = nl::ChunkType::get(context, storage::NodeIDType::get(context));
+    const mlir::Type edgeChunk = nl::ChunkType::get(context, storage::EdgeIDType::get(context));
+    const llvm::SmallVector<mlir::Type, 3> argumentTypes {nodeChunk, edgeChunk, nodeChunk};
+    const llvm::SmallVector<mlir::Location, 3> argumentLocations {loc, loc, loc};
+
+    mlir::Block* nlBlock = _builder.createBlock(&nlHop, nlHop.end(), argumentTypes, argumentLocations);
+    for (unsigned argumentIndex = 0; argumentIndex < argumentTypes.size(); argumentIndex++) {
+        _valueMap[dbHop.getArgument(argumentIndex)] = nlBlock->getArgument(argumentIndex);
+    }
+
+    // The ops lowered into the block insert ahead of its terminator, so the block gets one
+    // before the mask that the real terminator yields exists
+    nl::Yield placeholder = _builder.create<nl::Yield>(loc);
+
+    mlir::Value mask;
+    for (mlir::Operation& operation : dbHop) {
+        if (mlir::db::Yield yield = mlir::dyn_cast<mlir::db::Yield>(operation)) {
+            mask = mapValue(yield.getColumns().front());
+        } else {
+            lowerOperation(operation);
+        }
+    }
+
+    _builder.setInsertionPoint(placeholder);
+    const mlir::Value maskChunk = rowAlignedChunk(mask, nlBlock->getArgument(1));
+    _builder.create<nl::Yield>(loc, mlir::ValueRange {maskChunk});
+    placeholder.erase();
+}
+
+void DBLowering::lowerExpandPath(mlir::db::ExpandPath expandPath) {
+    const mlir::Value pathsChunk = mapValue(expandPath.getPaths());
+    const mlir::Value seedsChunk = expandPath.getSrcids() ? mapValue(expandPath.getSrcids()) : mlir::Value();
+
+    setInsertionInto(ownerBlock(pathsChunk));
+
+    const auto resultColumn = mlir::cast<mlir::db::ColumnType>(expandPath.getResult().getType());
+    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultColumn.getType());
+
+    nl::ExpandPath expansion = _builder.create<nl::ExpandPath>(_builder.getUnknownLoc(),
+                                                               resultType,
+                                                               pathsChunk,
+                                                               seedsChunk,
+                                                               expandPath.getKind());
+    _valueMap[expandPath.getResult()] = expansion.getResult();
+}
+
+void DBLowering::lowerPathLength(mlir::db::PathLength pathLength) {
+    const mlir::Value pathsChunk = mapValue(pathLength.getPaths());
+
+    setInsertionInto(ownerBlock(pathsChunk));
+
+    mlir::MLIRContext* context = _builder.getContext();
+    const nl::ChunkType resultType = nl::ChunkType::get(context, mlir::IntegerType::get(context, 64, mlir::IntegerType::Unsigned));
+
+    nl::PathLength length = _builder.create<nl::PathLength>(_builder.getUnknownLoc(), resultType, pathsChunk);
+    _valueMap[pathLength.getResult()] = length.getResult();
 }
 
 void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp) {

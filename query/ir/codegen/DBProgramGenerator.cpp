@@ -521,6 +521,49 @@ void collectDefiningOps(mlir::ValueRange values, llvm::DenseSet<mlir::Operation*
     }
 }
 
+mlir::storage::PathDirection toPathDirection(EdgeMetadata::EdgeType type) {
+    switch (type) {
+        case EdgeMetadata::EdgeType::GET_OUT_EDGES:
+            return mlir::storage::PathDirection::Forward;
+        break;
+
+        case EdgeMetadata::EdgeType::GET_IN_EDGES:
+            return mlir::storage::PathDirection::Backward;
+        break;
+
+        case EdgeMetadata::EdgeType::GET_EDGES:
+            return mlir::storage::PathDirection::Both;
+        break;
+
+        default:
+            throw FatalException("Invalid attempt to explore paths along a non-traversal edge");
+        break;
+    }
+
+    throw FatalException("Uncaught edge type.");
+}
+
+bool constrainsHop(const NodePattern* node) {
+    if (!node) {
+        return false;
+    }
+
+    const NodePatternData* data = node->getData();
+    return data && (!data->labelConstraints().empty() || !data->exprConstraints().empty());
+}
+
+bool hasHopConstraints(const EdgePattern* pattern) {
+    return pattern
+        && (!pattern->hopPredicates().empty()
+            || constrainsHop(pattern->getHopSource())
+            || constrainsHop(pattern->getHopEnd()));
+}
+
+bool isPathColumn(mlir::Value column) {
+    const auto columnType = mlir::dyn_cast<mlir::db::ColumnType>(column.getType());
+    return columnType && mlir::isa<mlir::storage::PathRefType>(columnType.getType());
+}
+
 bool producesEdgeVar(const DependencyEdge* e) {
     const EdgeMetadata::EdgeType producedType = e->data().type();
     const bool getOut = producedType == EdgeMetadata::EdgeType::GET_OUT_EDGES;
@@ -1093,43 +1136,12 @@ void DBProgramGenerator::walkEdge(const VariableDependency* src,
 
     const mlir::Value input = _part._varMap[src].back();
 
-    llvm::SmallVector<const VariableDependency*> carried;
+    InFlightColumns carried;
+    collectHopCarrySet(src, carrySet, carried);
+
     llvm::SmallVector<mlir::Value> operands {input};
     llvm::SmallVector<mlir::Type> results {srcs, eids, etypes, tgts};
-    for (const VariableDependency* var : carrySet) {
-        // source variable is explicitly filtered by the edge op
-        if (var == src) {
-            continue;
-        }
-
-        const mlir::Value column = _part._varMap[var].back();
-        carried.push_back(var);
-        operands.push_back(column);
-        results.push_back(column.getType());
-    }
-
-    // Find the edge types to carry which were defined in this block
-    llvm::SmallVector<const VariableDependency*> carriedEdgeTypes;
-    for (auto& [edgeVar, column] : _part._edgeTypeMap) {
-        if (!isRowAlignedHere(column)) {
-            continue;
-        }
-        carriedEdgeTypes.push_back(edgeVar);
-        operands.push_back(column);
-        results.push_back(column.getType());
-    }
-
-    // A column a CALL driving this traversal yielded is in flight here too: the expansion
-    // replicates a row once per edge, so it comes along or it stops matching the rows beside
-    // it. Nothing yielded is in flight when a call has yet to run, which is every traversal
-    // the calls do not drive.
-    llvm::SmallVector<size_t> carriedYields;
-    for (size_t yieldedIndex = 0; yieldedIndex < _part._yieldedColumns.size(); yieldedIndex++) {
-        const mlir::Value column = _part._yieldedColumns[yieldedIndex]._column;
-        if (!isRowAlignedHere(column)) {
-            continue;
-        }
-        carriedYields.push_back(yieldedIndex);
+    for (const mlir::Value column : carried._columns) {
         operands.push_back(column);
         results.push_back(column.getType());
     }
@@ -1179,33 +1191,329 @@ void DBProgramGenerator::walkEdge(const VariableDependency* src,
         registerValue(tgt, targetColumn);
     }
 
-    // Register the new values of the carry set, appearing starting from index 4 in the
-    // result range
-    constexpr size_t GET_X_EDGES_RES_SIZE = 4;
-    for (size_t i = 0; i < carried.size(); i++) {
-        const size_t resultIndex = GET_X_EDGES_RES_SIZE + i;
-        registerValue(carried[i], op.getResult(resultIndex));
+    rebindInFlightColumns(op.getResults(), 4, carried);
+}
+
+void DBProgramGenerator::collectHopCarrySet(const VariableDependency* src,
+                                            const std::vector<const VariableDependency*>& carrySet,
+                                            InFlightColumns& inFlight) {
+    for (const VariableDependency* var : carrySet) {
+        // source variable is explicitly filtered by the edge op
+        if (var == src) {
+            continue;
+        }
+
+        inFlight._columns.push_back(_part._varMap[var].back());
+        inFlight._variables.push_back(var);
     }
 
-    // Update the new edge type vars for carried edges
-    const size_t edgeTypeOffset = GET_X_EDGES_RES_SIZE + carried.size();
-    for (size_t i = 0; i < carriedEdgeTypes.size(); i++) {
-        _part._edgeTypeMap[carriedEdgeTypes[i]] = op.getResult(edgeTypeOffset + i);
+    // A column a barrier published rides the expansion too, when the traversal it drives is
+    // generated where that column was bound: the hop replicates a row once per edge, so it
+    // comes along or it stops matching the rows beside it. A published pattern variable is
+    // walked by the component instead and is already in the carry set.
+    for (const VariableDependency* var : _vdg.boundVars()) {
+        const bool walkedHere = var == src || llvm::is_contained(carrySet, var);
+        if (walkedHere) {
+            continue;
+        }
+
+        const mlir::Value column = _part._varMap[var].back();
+        if (!isRowAlignedHere(column) || yieldsConstantColumn(column)) {
+            continue;
+        }
+
+        inFlight._columns.push_back(column);
+        inFlight._variables.push_back(var);
     }
 
-    const size_t yieldOffset = edgeTypeOffset + carriedEdgeTypes.size();
-    for (size_t i = 0; i < carriedYields.size(); i++) {
-        _part._yieldedColumns[carriedYields[i]]._column = op.getResult(yieldOffset + i);
+    // Find the edge types to carry which were defined in this block
+    for (auto& [edgeVar, column] : _part._edgeTypeMap) {
+        if (!isRowAlignedHere(column)) {
+            continue;
+        }
+
+        inFlight._columns.push_back(column);
+        inFlight._edgeTypeVariables.push_back(edgeVar);
     }
 
-    const size_t boundOffset = yieldOffset + carriedYields.size();
-    for (size_t i = 0; i < carriedBound.size(); i++) {
-        registerValue(carriedBound[i], op.getResult(boundOffset + i));
+    // A column a CALL driving this traversal yielded is in flight here too: the expansion
+    // replicates a row once per edge, so it comes along or it stops matching the rows beside
+    // it. Nothing yielded is in flight when a call has yet to run, which is every traversal
+    // the calls do not drive.
+    for (size_t yieldedIndex = 0; yieldedIndex < _part._yieldedColumns.size(); yieldedIndex++) {
+        const mlir::Value column = _part._yieldedColumns[yieldedIndex]._column;
+        if (!isRowAlignedHere(column)) {
+            continue;
+        }
+
+        inFlight._columns.push_back(column);
+        inFlight._yieldedIndices.push_back(yieldedIndex);
     }
 }
 
 void DBProgramGenerator::throwError(std::string_view msg, const void* obj) const {
     _ast->getDiagnosticsManager()->throwError(msg, obj);
+}
+
+void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
+                                         const VariableDependency* edge,
+                                         const VariableDependency* tgt,
+                                         const std::vector<const VariableDependency*>& carrySet,
+                                         const EdgeMetadata& metadata,
+                                         mlir::storage::PathDirection direction,
+                                         mlir::Value* joinedTarget) {
+    bioassert(src, "Null source");
+    bioassert(tgt, "Null target");
+    bioassert(_part._varMap.contains(src), "Path exploration without source");
+
+    // An anonymous edge variable carries its declaration; a named one is an occurrence the
+    // identity map lists under the declaration the query knows it by
+    const VarDecl* edgeDecl = edge->getDecl();
+    const VariableDependencyGraph::EdgeIdentityMap& edgeIdentities = _vdg.edgeIdentities();
+    for (const auto& [decl, occurrences] : edgeIdentities) {
+        if (std::ranges::find(occurrences, edge) != occurrences.end()) {
+            edgeDecl = decl;
+
+            if (occurrences.size() > 1) {
+                throw TuringException(fmt::format("Variable '{}' binds a variable-length path and cannot be matched by a second pattern",
+                                                  decl->getName()));
+            }
+        }
+    }
+    bioassert(edgeDecl, "Path exploration over an edge without a declaration");
+
+    const mlir::db::ColumnType nodeType = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
+    const mlir::db::ColumnType pathType = allocColumnType(mlir::storage::PathRefType::get(_mlirCtxt));
+
+    const mlir::Value input = _part._varMap[src].back();
+
+    InFlightColumns carried;
+    collectHopCarrySet(src, carrySet, carried);
+
+    llvm::SmallVector<mlir::Type> results {nodeType, nodeType, pathType};
+    for (const mlir::Value column : carried._columns) {
+        results.push_back(column.getType());
+    }
+
+    mlir::IntegerAttr maxHopsAttr;
+    if (metadata.getMaxHops() != EdgeMetadata::UNBOUNDED_HOPS) {
+        const mlir::IntegerType hopType = mlir::IntegerType::get(_mlirCtxt, 64, mlir::IntegerType::Unsigned);
+        maxHopsAttr = mlir::IntegerAttr::get(hopType, metadata.getMaxHops());
+    }
+
+    mlir::StringAttr edgeTypeAttr;
+    const std::optional<VariableDependency::Constraint>& constraints = edge->constraints();
+    if (constraints) {
+        const auto* edgeType = std::get_if<VariableDependency::EdgeType>(&*constraints);
+        if (edgeType && !edgeType->empty()) {
+            edgeTypeAttr = _opBuilder.getStringAttr(llvm::StringRef(edgeType->data(), edgeType->size()));
+        }
+    }
+
+    auto op = _opBuilder.create<mlir::db::ExplorePaths>(_opBuilder.getUnknownLoc(),
+                                                        results,
+                                                        input,
+                                                        carried._columns,
+                                                        direction,
+                                                        metadata.getMinHops(),
+                                                        maxHopsAttr,
+                                                        edgeTypeAttr);
+
+    registerValue(src, op.getSrcids());
+    registerValue(edge, op.getPaths());
+
+    if (joinedTarget) {
+        *joinedTarget = op.getTgtids();
+    } else {
+        registerValue(tgt, op.getTgtids());
+    }
+
+    rebindInFlightColumns(op.getResults(), 3, carried);
+
+    _part._pathBindings[edgeDecl] = PartScope::PathBinding {mlir::storage::PathExpansionKind::Edges, src, edge};
+
+    const auto patternIt = _part._quantifiedEdges.find(edgeDecl);
+    const EdgePattern* pattern = patternIt != end(_part._quantifiedEdges) ? patternIt->second : nullptr;
+    if (!pattern) {
+        return;
+    }
+
+    if (const VarDecl* sourceGroup = pattern->getHopSourceGroup()) {
+        _part._pathBindings[sourceGroup] = PartScope::PathBinding {mlir::storage::PathExpansionKind::Sources, src, edge};
+    }
+
+    if (const VarDecl* endGroup = pattern->getHopEndGroup()) {
+        _part._pathBindings[endGroup] = PartScope::PathBinding {mlir::storage::PathExpansionKind::Ends, src, edge};
+    }
+
+    if (hasHopConstraints(pattern)) {
+        generateHopRegion(op, pattern);
+    }
+}
+
+void DBProgramGenerator::collectQuantifiedEdges(std::span<Stmt* const> stmts) {
+    for (const Stmt* stmt : stmts) {
+        if (stmt->getKind() != Stmt::Kind::MATCH) {
+            continue;
+        }
+
+        const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt);
+        for (const PatternElement* element : matchStmt->getPattern()->elements()) {
+            for (auto [edgePattern, nodePattern] : element->getElementChain()) {
+                if (edgePattern->getQuantifiedPath()) {
+                    _part._quantifiedEdges[edgePattern->getDecl()] = edgePattern;
+                }
+            }
+        }
+    }
+}
+
+void DBProgramGenerator::collectHopNodeMasks(const NodePattern* node,
+                                             mlir::Value column,
+                                             llvm::SmallVectorImpl<mlir::Value>& masks) {
+    const NodePatternData* data = node->getData();
+    if (!data) {
+        return;
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+
+    const std::span<const std::string_view> labels = data->labelConstraints();
+    if (!labels.empty()) {
+        const mlir::db::ColumnType labelSetIDType = allocColumnType(mlir::storage::LabelSetIDType::get(_mlirCtxt));
+        const mlir::Value labelSetIDs = _opBuilder.create<mlir::db::GetNodeLabelSet>(loc, labelSetIDType, column).getResult();
+
+        llvm::SmallVector<llvm::StringRef> labelNames;
+        for (const std::string_view label : labels) {
+            labelNames.push_back(llvm::StringRef(label.data(), label.size()));
+        }
+
+        const mlir::ArrayAttr labelsAttr = _opBuilder.getStrArrayAttr(labelNames);
+        masks.push_back(_opBuilder.create<mlir::db::CheckLabelConstraint>(loc, boolType, labelSetIDs, labelsAttr).getResult());
+    }
+
+    for (const EntityPropertyConstraint& constraint : data->exprConstraints()) {
+        translateExpr(constraint._expr);
+        masks.push_back(_part._exprMap.at(constraint._expr));
+    }
+}
+
+void DBProgramGenerator::generateHopRegion(mlir::db::ExplorePaths exploration, const EdgePattern* pattern) {
+    const mlir::OpBuilder::InsertionGuard guard(_opBuilder);
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+    const mlir::db::ColumnType nodeType = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
+    const mlir::db::ColumnType edgeType = allocColumnType(mlir::storage::EdgeIDType::get(_mlirCtxt));
+    const llvm::SmallVector<mlir::Type, 3> argumentTypes {nodeType, edgeType, nodeType};
+    const llvm::SmallVector<mlir::Location, 3> argumentLocations {loc, loc, loc};
+
+    mlir::Region& hop = exploration.getHop();
+    mlir::Block* block = _opBuilder.createBlock(&hop, hop.end(), argumentTypes, argumentLocations);
+
+    const mlir::Value sourceColumn = block->getArgument(0);
+    const mlir::Value edgeColumn = block->getArgument(1);
+    const mlir::Value endColumn = block->getArgument(2);
+
+    _part._hopColumns.clear();
+    _part._hopColumns[pattern->getHopDecl()] = edgeColumn;
+
+    llvm::SmallVector<mlir::Value> masks;
+
+    if (const NodePattern* source = pattern->getHopSource()) {
+        _part._hopColumns[source->getDecl()] = sourceColumn;
+        collectHopNodeMasks(source, sourceColumn, masks);
+    }
+
+    if (const NodePattern* end = pattern->getHopEnd()) {
+        _part._hopColumns[end->getDecl()] = endColumn;
+        collectHopNodeMasks(end, endColumn, masks);
+    }
+
+    std::vector<const Expr*> conjuncts;
+    for (const Expr* predicate : pattern->hopPredicates()) {
+        conjuncts.clear();
+        flattenConjuncts(predicate, conjuncts);
+
+        for (const Expr* conjunct : conjuncts) {
+            translateExpr(conjunct);
+            masks.push_back(_part._exprMap.at(conjunct));
+        }
+    }
+
+    bioassert(!masks.empty(), "Hop region without a predicate");
+
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+    mlir::Value mask = masks.front();
+    for (size_t maskIndex = 1; maskIndex < masks.size(); maskIndex++) {
+        mask = _opBuilder.create<mlir::db::AndOp>(loc, boolType, mask, masks[maskIndex]).getResult();
+    }
+
+    _opBuilder.create<mlir::db::Yield>(loc, mlir::ValueRange {mask});
+
+    _part._hopColumns.clear();
+}
+
+mlir::Value DBProgramGenerator::listColumnOf(const VarDecl* decl, mlir::Value column) {
+    if (!isPathColumn(column)) {
+        return column;
+    }
+
+    // A path a WITH published carries no binding of its own: it reads as its edges
+    PartScope::PathBinding binding;
+    const auto bindingIt = _part._pathBindings.find(decl);
+    if (bindingIt != end(_part._pathBindings)) {
+        binding = bindingIt->second;
+    }
+
+    mlir::Value seeds;
+    if (binding._seed) {
+        seeds = _part._varMap.at(binding._seed).back();
+    }
+
+    const bool expandsEdges = binding._kind == mlir::storage::PathExpansionKind::Edges;
+    const mlir::Type elementType = expandsEdges
+                                     ? static_cast<mlir::Type>(mlir::storage::EdgeIDType::get(_mlirCtxt))
+                                     : static_cast<mlir::Type>(mlir::storage::NodeIDType::get(_mlirCtxt));
+    const mlir::db::ColumnType listType = allocColumnType(mlir::storage::ListType::get(_mlirCtxt, elementType));
+
+    return _opBuilder.create<mlir::db::ExpandPath>(_opBuilder.getUnknownLoc(), listType, column, seeds, binding._kind).getResult();
+}
+
+void DBProgramGenerator::expandPathItems(const Projection* projection, llvm::SmallVectorImpl<mlir::Value>& projected) {
+    const auto& items = projection->items();
+    bioassert(projected.size() == items.size(), "One projected column per return item expected");
+
+    const auto declOfItem = [](auto&& item) -> const VarDecl* {
+        using Type = std::remove_cvref_t<decltype(item)>;
+
+        if constexpr (std::is_same_v<Type, VarDecl*>) {
+            return item;
+        } else {
+            return item->getExprVarDecl();
+        }
+    };
+
+    size_t itemIndex = 0;
+    for (const Projection::ReturnItem& item : items) {
+        const mlir::Value column = projected[itemIndex];
+        if (isPathColumn(column)) {
+            projected[itemIndex] = listColumnOf(std::visit(declOfItem, item), column);
+        }
+
+        itemIndex++;
+    }
+}
+
+mlir::Value DBProgramGenerator::pathLengthColumn(const Expr* argExpr, mlir::Value column) {
+    if (!isPathColumn(column)) {
+        throw TuringException("size() reads the length of a variable-length path: its argument is a single entity");
+    }
+
+    const mlir::IntegerType countType = mlir::IntegerType::get(_mlirCtxt, 64, mlir::IntegerType::Unsigned);
+    const mlir::db::ColumnType resultType = allocColumnType(countType);
+
+    return _opBuilder.create<mlir::db::PathLength>(_opBuilder.getUnknownLoc(), resultType, column).getResult();
 }
 
 void DBProgramGenerator::createMain() {
@@ -1475,6 +1783,7 @@ bool DBProgramGenerator::closesPartOnItsCut(const Stmt* stmt, std::span<Stmt* co
 
 void DBProgramGenerator::generatePart(std::span<Stmt* const> stmts) {
     _vdg.build(stmts);
+    collectQuantifiedEdges(stmts);
 
     explainDependencyGraph();
 
@@ -2198,25 +2507,30 @@ void DBProgramGenerator::closeBoundJoin(const DependencyEdge* edgeProducer,
     const VariableDependency* source = edgeProducer->src();
 
     mlir::Value landed;
-    const EdgeMetadata::EdgeType direction = edgeProducer->data().type();
+    const EdgeMetadata& metadata = edgeProducer->data();
+    const EdgeMetadata::EdgeType direction = metadata.type();
 
-    switch (direction) {
-        case EdgeMetadata::EdgeType::GET_OUT_EDGES:
-            landed = addJoiningEdgeTraversal<mlir::db::GetOutEdges>(source, edge, target, carriedSet);
-        break;
+    if (metadata.isQuantified()) {
+        addExplorePaths(source, edge, target, carriedSet, metadata, toPathDirection(direction), &landed);
+    } else {
+        switch (direction) {
+            case EdgeMetadata::EdgeType::GET_OUT_EDGES:
+                landed = addJoiningEdgeTraversal<mlir::db::GetOutEdges>(source, edge, target, carriedSet);
+            break;
 
-        case EdgeMetadata::EdgeType::GET_IN_EDGES:
-            landed = addJoiningEdgeTraversal<mlir::db::GetInEdges>(source, edge, target, carriedSet);
-        break;
+            case EdgeMetadata::EdgeType::GET_IN_EDGES:
+                landed = addJoiningEdgeTraversal<mlir::db::GetInEdges>(source, edge, target, carriedSet);
+            break;
 
-        case EdgeMetadata::EdgeType::GET_EDGES:
-            landed = addJoiningEdgeTraversal<mlir::db::GetEdges>(source, edge, target, carriedSet);
-        break;
+            case EdgeMetadata::EdgeType::GET_EDGES:
+                landed = addJoiningEdgeTraversal<mlir::db::GetEdges>(source, edge, target, carriedSet);
+            break;
 
-        default:
-            throw FatalException(fmt::format("Attempted to close a join over {}",
-                                             EdgeTypeName::value(direction)));
-        break;
+            default:
+                throw FatalException(fmt::format("Attempted to close a join over {}",
+                                                 EdgeTypeName::value(direction)));
+            break;
+        }
     }
 
     const mlir::Value bound = findVarOrThrow(_part._varMap, target);
@@ -2225,7 +2539,9 @@ void DBProgramGenerator::closeBoundJoin(const DependencyEdge* edgeProducer,
     auto eq = _opBuilder.create<mlir::db::EqOp>(_opBuilder.getUnknownLoc(), boolType, landed, bound);
     filterAllColumns(eq.getResult());
 
-    applyConstraints(edge);
+    if (!metadata.isQuantified()) {
+        applyConstraints(edge);
+    }
 
     carriedSet.push_back(edge);
 
@@ -2407,43 +2723,52 @@ void DBProgramGenerator::expandComponent(const VariableDependency* root,
 
         // We may walk an edge backwards compared to the cypher pattern. In such a
         // case we emit the opposite traversal.
-        const EdgeMetadata::EdgeType prodType = edgeVarProd->data().type();
+        const EdgeMetadata& metadata = edgeVarProd->data();
+        const EdgeMetadata::EdgeType prodType = metadata.type();
         const EdgeMetadata::EdgeType logicalDir =
             edgeSrcDefined ? prodType : reverseEdge(prodType);
 
-        switch (logicalDir) {
-            case EdgeMetadata::EdgeType::GET_OUT_EDGES:
-                addGetOutEdges(src, edge, tgt, carriedSet);
-            break;
+        if (metadata.isQuantified()) {
+            addExplorePaths(src, edge, tgt, carriedSet, metadata, toPathDirection(logicalDir), nullptr);
+        } else {
+            switch (logicalDir) {
+                case EdgeMetadata::EdgeType::GET_OUT_EDGES:
+                    addGetOutEdges(src, edge, tgt, carriedSet);
+                break;
 
-            case EdgeMetadata::EdgeType::GET_IN_EDGES:
-                addGetInEdges(src, edge, tgt, carriedSet);
-            break;
+                case EdgeMetadata::EdgeType::GET_IN_EDGES:
+                    addGetInEdges(src, edge, tgt, carriedSet);
+                break;
 
-            case EdgeMetadata::EdgeType::MERGE:
-                throw TuringException("MERGE edges not yet supported.");
-            break;
+                case EdgeMetadata::EdgeType::MERGE:
+                    throw TuringException("MERGE edges not yet supported.");
+                break;
 
-            case EdgeMetadata::EdgeType::GET_EDGES:
-                addGetEdges(src, edge, tgt, carriedSet);
-            break;
+                case EdgeMetadata::EdgeType::GET_EDGES:
+                    addGetEdges(src, edge, tgt, carriedSet);
+                break;
 
-            case EdgeMetadata::EdgeType::GET_EDGE_TGT:
-            case EdgeMetadata::EdgeType::GET_EDGE_SRC:
-                throw FatalException(fmt::format("Attempted to translate {}",
-                                                 EdgeTypeName::value(logicalDir)));
-            break;
+                case EdgeMetadata::EdgeType::GET_EDGE_TGT:
+                case EdgeMetadata::EdgeType::GET_EDGE_SRC:
+                    throw FatalException(fmt::format("Attempted to translate {}",
+                                                     EdgeTypeName::value(logicalDir)));
+                break;
 
-            case EdgeMetadata::EdgeType::_SIZE:
-                throw FatalException("Attempted to translate invalid edge.");
-            break;
+                case EdgeMetadata::EdgeType::_SIZE:
+                    throw FatalException("Attempted to translate invalid edge.");
+                break;
+            }
         }
 
         markDefined(src);
         markDefined(edge);
         markDefined(tgt);
 
-        applyConstraints(edge);
+        // The type of a variable-length hop filters inside the exploration; a path has
+        // no single edge type column to check afterwards
+        if (!metadata.isQuantified()) {
+            applyConstraints(edge);
+        }
         applyConstraints(tgt);
 
         carriedSet.push_back(src);
@@ -3166,7 +3491,9 @@ void DBProgramGenerator::generateUnwind(const UnwindStmt* unwind) {
     VariableColumnMap variableColumns;
     collectVariableColumns(variableColumns);
 
-    const mlir::Value source = getOrTranslateExprColumn(variableColumns, unwind->arg());
+    // A path unwinds into its edges, so a path column is expanded into that list first
+    const Expr* arg = unwind->arg();
+    const mlir::Value source = listColumnOf(arg->getExprVarDecl(), getOrTranslateExprColumn(variableColumns, arg));
 
     // Everything already in flight rides through the carry set, replicated once per row
     // the cell beside it unwound into, so the rest of the query still reads it row-aligned
@@ -3928,6 +4255,11 @@ mlir::Value DBProgramGenerator::resolveEntityColumn(const VarDecl* decl) {
         return elementIt->second;
     }
 
+    const auto hopIt = _part._hopColumns.find(decl);
+    if (hopIt != end(_part._hopColumns)) {
+        return hopIt->second;
+    }
+
     for (const auto& [var, values] : _part._varMap) {
         if (var->getDecl() == decl && !values.empty()) {
             return values.back();
@@ -3945,6 +4277,13 @@ mlir::Value DBProgramGenerator::resolveEntityColumn(const VarDecl* decl) {
     const auto createdIt = _part._createdEntities.find(decl);
     if (createdIt != end(_part._createdEntities)) {
         return createdIt->second._column;
+    }
+
+    // A group variable of a quantified pattern is the list of one node per hop, read off
+    // the path the variable's edge binds
+    const auto pathIt = _part._pathBindings.find(decl);
+    if (pathIt != end(_part._pathBindings) && pathIt->second._path) {
+        return listColumnOf(decl, _part._varMap.at(pathIt->second._path).back());
     }
 
     return findYieldedColumn(decl);
@@ -5244,6 +5583,8 @@ void DBProgramGenerator::translateDistinct(const Projection* projection,
         return;
     }
 
+    expandPathItems(projection, projected);
+
     // A constant column holds the same value in every row, so it tells no two rows apart:
     // the dedup reads the columns that vary and a constant one rides along untouched, as
     // ORDER BY drops a constant key
@@ -5377,6 +5718,8 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
 
     const size_t projectedCount = projection->items().size();
 
+    expandPathItems(projection, projected);
+
     // A sort reorders the rows of every column it is given at once, so it is given the
     // projected columns that carry rows and they stay row-aligned. A key the projection
     // does not carry - the a.age of RETURN a ORDER BY a.age - is handed over as one more
@@ -5417,7 +5760,8 @@ void DBProgramGenerator::translateOrderBy(const Projection* projection,
         if (isProjected) {
             keyColumns.push_back(static_cast<int64_t>(std::distance(sortedItems.begin(), sortedItem)));
         } else {
-            const mlir::Value keyColumn = getOrTranslateExprColumn(variableColumns, keyExpr);
+            const mlir::Value keyColumn = listColumnOf(keyExpr->getExprVarDecl(),
+                                                       getOrTranslateExprColumn(variableColumns, keyExpr));
 
             // A key the projection does not carry is read into a column of its own, which
             // is constant when the key computes over constants alone: one value for every
@@ -6963,6 +7307,14 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
 
     if (funcName == "coalesce") {
         translateCoalesce(expr, args);
+        return;
+    } else if (funcName == "size") {
+        if (!args || args->size() != 1) {
+            throw TuringException("size() expects 1 argument.");
+        }
+
+        const Expr* argExpr = args->front();
+        _part._exprMap[expr] = pathLengthColumn(argExpr, translateArg(argExpr));
         return;
     }
 

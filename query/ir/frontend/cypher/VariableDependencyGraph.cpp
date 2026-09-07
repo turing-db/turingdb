@@ -16,6 +16,7 @@
 #include "VariableDependencyGraphDumper.h"
 #include "Pattern.h"
 #include "PatternElement.h"
+#include "QuantifiedPath.h"
 #include "stmt/MatchStmt.h"
 #include "stmt/UnwindStmt.h"
 #include "decl/PatternData.h"
@@ -210,7 +211,19 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
             edgeVar->setEdgeTypeConstraint(edgeData->edgeTypeConstraints());
         }
 
-        addDirected(src, edgeVar, EdgeMetadata {edgeType});
+        // The quantifier rides the edge-producing dependency: the node it lands on is
+        // the end of the whole path, reached like the far end of any hop
+        const QuantifiedPath* quantified = edge->getQuantifiedPath();
+        if (quantified) {
+            const uint64_t minHops = static_cast<uint64_t>(quantified->getLhs());
+            const uint64_t maxHops = quantified->isRhsUnbounded()
+                                       ? EdgeMetadata::UNBOUNDED_HOPS
+                                       : static_cast<uint64_t>(quantified->getRhs());
+            addDirected(src, edgeVar, EdgeMetadata {edgeType, minHops, maxHops});
+        } else {
+            addDirected(src, edgeVar, EdgeMetadata {edgeType});
+        }
+
         addDirected(edgeVar, tgt, EdgeMetadata {otherType});
 
         prev = tgt;

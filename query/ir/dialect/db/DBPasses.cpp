@@ -153,6 +153,9 @@ bool isReverseHop(Operation* op) {
 
 constexpr size_t hopFixedResultCount = 4;
 
+// srcids, tgtids and paths; the carry set follows
+constexpr size_t pathFixedResultCount = 3;
+
 // The columns a cross_product factor yields, in result order.
 Operation::operand_range factorYieldColumns(mlir::Region& factor) {
     mlir::Block& factorBlock = factor.front();
@@ -252,6 +255,20 @@ Value climbToLineageAnchor(Value column, bool& crossedProducer, llvm::SmallVecto
             } else if (resultIndex >= hopFixedResultCount) {
                 // Carried columns follow input_nodes (operand 0) in operand order.
                 column = def->getOperand(1 + (resultIndex - hopFixedResultCount));
+                crossedProducer = true;
+            } else {
+                return column;
+            }
+        } else if (isa<ExplorePaths>(def)) {
+            const size_t resultIndex = cast<OpResult>(column).getResultNumber();
+
+            // The seed re-surfaces as srcids and each carried column passes through; the end
+            // node and the path are born here, whichever direction the exploration walks.
+            if (resultIndex == 0) {
+                column = def->getOperand(0);
+                crossedProducer = true;
+            } else if (resultIndex >= pathFixedResultCount) {
+                column = def->getOperand(1 + (resultIndex - pathFixedResultCount));
                 crossedProducer = true;
             } else {
                 return column;
@@ -1793,6 +1810,9 @@ bool matchCarrySetLayout(Operation* op, CarrySetLayout& layout) {
     if (isEdgeHop(op)) {
         layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = hopFixedResultCount};
         return true;
+    } else if (isa<ExplorePaths>(op)) {
+        layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = pathFixedResultCount};
+        return true;
     } else if (isa<FilterOp>(op)) {
         layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = 0};
         return true;
@@ -2005,8 +2025,17 @@ void trimCarrySet(Operation* op, const CarrySetLayout& layout, llvm::ArrayRef<si
     state.addAttributes(op->getAttrs());
     trimAttributes(op, kept, state, builder);
 
+    const unsigned regionCount = op->getNumRegions();
+    for (unsigned regionIndex = 0; regionIndex < regionCount; regionIndex++) {
+        state.addRegion();
+    }
+
     builder.setInsertionPoint(op);
     Operation* const trimmed = builder.create(state);
+
+    for (unsigned regionIndex = 0; regionIndex < regionCount; regionIndex++) {
+        trimmed->getRegion(regionIndex).takeBody(op->getRegion(regionIndex));
+    }
 
     for (size_t resultIndex = 0; resultIndex < layout._resultOffset; resultIndex++) {
         results[resultIndex].replaceAllUsesWith(trimmed->getResult(resultIndex));

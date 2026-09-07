@@ -94,6 +94,17 @@ public:
     static void runGetOutEdgesByLabelLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetInEdgesByLabelLoop(NLExecutionContext* context, NLFunctionData* data);
 
+    // The variable-length hop: drive a PathExplorator over the input chunk the way the
+    // edge loops drive their chunk writers, the hop predicate - when the loop has one -
+    // evaluated over each frame of candidates through the loop data's hop statements.
+    // An unmatchable edge type never expands, so only a min of zero emits its rows.
+    static void runExplorePathsLoop(NLExecutionContext* context, NLFunctionData* data);
+
+    // Expand each path handle of a chunk into a list (nl.expand_path), and read each
+    // handle's hop count (nl.path_length)
+    static void runExpandPath(NLExecutionContext* context, NLFunctionData* data);
+    static void runPathLength(NLExecutionContext* context, NLFunctionData* data);
+
     static void runGetNodeLabelSet(NLExecutionContext* context, NLFunctionData* data);
     static void runGetEdgeTypes(NLExecutionContext* context, NLFunctionData* data);
 

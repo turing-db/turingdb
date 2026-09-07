@@ -19,7 +19,7 @@ public:
 
     ID() = default;
 
-    ID(T id)
+    constexpr ID(T id)
         : _id(id)
     {
     }
@@ -111,6 +111,7 @@ using EdgeTypeID = ID<uint64_t, 3>;
 using PropertyTypeID = ID<uint16_t, 4>;
 using LabelID = ID<uint64_t, 5>;
 using LabelSetID = ID<uint32_t, 6>;
+using PathRef = ID<uint64_t, 7>;
 
 template <typename T>
 concept TypedInternalID = std::is_same_v<T, NodeID> || std::is_same_v<T, EdgeID>;
