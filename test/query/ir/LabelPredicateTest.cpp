@@ -194,12 +194,41 @@ TEST_F(LabelPredicateTest, dedupsOnTheLabelTest) {
     expectRows("MATCH (n) RETURN DISTINCT n:Person", {{"false"}, {"true"}});
 }
 
-// A traversal publishes the type of each row's edge beside the edge, and a barrier
-// republishes only what its projection names: the type is not among those columns, so a
-// type test below one is turned away rather than answered against a column that is gone.
-TEST_F(LabelPredicateTest, rejectsATypeTestOnAnEdgeAWithPublished) {
-    expectError("MATCH (n)-[e]-(m) WITH e, n WHERE e:KNOWS_WELL RETURN n.name",
-                "Testing the type of the edge variable 'e' is not supported here");
+// A barrier republishes only the columns its projection names, so the type column a
+// traversal published is gone below one. The test reads the type of the edge the row
+// holds, which the edge ID is enough to answer.
+TEST_F(LabelPredicateTest, testsTheTypeOfAnEdgeAWithPublished) {
+    expectRows("MATCH (n)-[e]-(m) WITH e, n WHERE e:KNOWS_WELL RETURN n.name",
+               {{"Remy"}, {"Remy"}, {"Remy"}, {"Adam"}, {"Adam"}, {"Ghosts"}});
+}
+
+TEST_F(LabelPredicateTest, testsTheTypeOfARenamedEdge) {
+    expectRows("MATCH (n)-[e]-(m) WITH e AS r, n WHERE r:KNOWS_WELL RETURN n.name",
+               {{"Remy"}, {"Remy"}, {"Remy"}, {"Adam"}, {"Adam"}, {"Ghosts"}});
+}
+
+// A dedup drops rows, so a type column carried across it would answer for the wrong edge.
+// The three KNOWS_WELL edges of simpledb are what the count reports.
+TEST_F(LabelPredicateTest, testsTheTypeOfADedupedEdge) {
+    expectRows("MATCH (n)-[e]-(m) WITH DISTINCT e WHERE e:KNOWS_WELL RETURN count(*)", {{"3"}});
+}
+
+TEST_F(LabelPredicateTest, testsTheTypeOfASortedEdge) {
+    expectRows("MATCH (n)-[e]-(m) WITH e, n ORDER BY n.name WHERE e:KNOWS_WELL RETURN n.name",
+               {{"Remy"}, {"Remy"}, {"Remy"}, {"Adam"}, {"Adam"}, {"Ghosts"}});
+}
+
+// A grouping key is one row per group below the barrier, and the type test reads the edge
+// that key holds: each of the eighteen edges keys a group of its own.
+TEST_F(LabelPredicateTest, testsTheTypeOfAGroupingKeyEdge) {
+    expectRows("MATCH (n)-[e]->(m) WITH e, count(*) AS hops WHERE e:KNOWS_WELL RETURN count(*)",
+               {{"3"}});
+}
+
+TEST_F(LabelPredicateTest, projectsTheTypeTestOfAPublishedEdgeAsABoolean) {
+    expectRows("MATCH (n)-[e]->(m) WHERE n.name = 'Remy' WITH e, m "
+               "RETURN m.name, e:KNOWS_WELL ORDER BY m.name",
+               {{"Adam", "true"}, {"Computers", "false"}, {"Eighties", "false"}, {"Ghosts", "false"}});
 }
 
 int main(int argc, char** argv) {

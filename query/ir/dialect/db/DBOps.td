@@ -693,6 +693,27 @@ def GetNodeLabelSet : TuringOp<"get_node_label_set", [Pure]> {
   }];
 }
 
+def GetEdgeTypes : TuringOp<"get_edge_types", [Pure]> {
+  let summary = "Read the type ID of each edge as a column";
+
+  let description = [{
+    The edge counterpart of get_node_label_set: for each edge in the input column,
+    fetches its EdgeTypeID. A traversal already publishes this column beside the edges
+    it walks, so this reads the type of edges that reach it any other way - the ones a
+    barrier republished, whose type column the barrier did not carry.
+
+      %et = db.get_edge_types(%e) : (!db.column<!storage.edge_id>) -> !db.column<!storage.edge_type_id>
+      %ok = db.check_edge_type_constraint(%et, ["KNOWS"]) : (!db.column<!storage.edge_type_id>) -> !db.column<!storage.bool>
+  }];
+
+  let arguments = (ins Column:$input_edges);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = [{
+    `(` $input_edges `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 def CheckLabelConstraint : TuringOp<"check_label_constraint", [Pure]> {
   let summary = "Test each label-set ID against a required-label constraint";
 

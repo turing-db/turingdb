@@ -490,8 +490,13 @@ private:
     mlir::Value checkEdgeType(mlir::Value edgeTypeColumn, std::span<const std::string_view> edgeTypes);
 
     // A named edge variable has one occurrence per time the pattern walks it, all equated
-    // by the identity filter, so the first one's type column answers for the variable.
+    // by the identity filter, so the first one's type column answers for the variable. Null
+    // where no traversal published one, as below a barrier that republished only the edge.
     mlir::Value resolveEdgeTypeColumn(const VarDecl* decl) const;
+
+    // That column where a traversal published one, otherwise a read of the type of the
+    // edge each row holds
+    mlir::Value resolveOrFetchEdgeTypeColumn(const VarDecl* decl, std::string_view varName);
 
     mlir::Value nullConstantColumn();
 

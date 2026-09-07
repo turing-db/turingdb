@@ -555,6 +555,25 @@ def GetNodeLabelSet : NLOp<"get_node_label_set", [Pure, RowAlignedThroughOperand
   }];
 }
 
+def GetEdgeTypes : NLOp<"get_edge_types", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Read the type ID of each edge in a chunk";
+  let description = [{
+    For each edge ID in the input chunk, fetches its EdgeTypeID.
+
+      nl.for %edges in %scan {
+        %et = nl.get_edge_types(%edges) : !nl.chunk<!storage.edge_type_id>
+        ...
+      }
+  }];
+
+  let arguments = (ins NLEdgeIDChunk:$input_edges);
+  let results   = (outs NLChunk:$edge_type_ids);
+
+  let assemblyFormat = [{
+    `(` $input_edges `)` attr-dict `:` qualified(type($edge_type_ids))
+  }];
+}
+
 def CheckLabelConstraint : NLOp<"check_label_constraint", [Pure, RowAlignedThroughOperands]> {
   let summary = "Test each label-set ID against a precomputed matching set";
   let description = [{

@@ -129,6 +129,7 @@ public:
     static void runGetInEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data);
 
     static void runGetNodeLabelSet(NLExecutionContext* context, NLFunctionData* data);
+    static void runGetEdgeTypes(NLExecutionContext* context, NLFunctionData* data);
 
     // Fills a boolean mask
     static void runCheckLabelConstraint(NLExecutionContext* context, NLFunctionData* data);
