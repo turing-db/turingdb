@@ -491,10 +491,15 @@ public:
     static NLKeyAppendFunction selectKeyAppendFunction(NLChunkKind kind);
     static NLKeyAppendFunction selectOptKeyAppendFunction(ValueType valueType);
 
+    // The embedding key of a join, which selectOptKeyAppendFunction turns away: an
+    // embedding is no DISTINCT key, but two embedding columns do compare with `=`, so the
+    // vector serializes to the bytes a join matches on.
+    static NLKeyAppendFunction selectOptEmbeddingKeyAppendFunction();
+
     // Per-row test of whether a join key can match. An ID chunk holds neither a null nor
     // a NaN, so every row of it matches; a nullable value chunk reads its present flag, a
-    // type-erased cell its tag, and a double column of either shape also rejects a NaN,
-    // which no key equals - itself included. Used by nl.hash_join_collect to leave a key
+    // type-erased cell its tag, and a double or embedding column also rejects a NaN, which
+    // no key equals - itself included. Used by nl.hash_join_collect to leave a key
     // out of the index and by nl.hash_join_probe to leave a probe row unmatched.
     static NLKeyIsMatchableFunction everyKeyMatchable();
     static NLKeyIsMatchableFunction selectOptKeyMatchableFunction(ValueType valueType);

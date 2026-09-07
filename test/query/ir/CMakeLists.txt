@@ -1823,6 +1823,11 @@ target_link_libraries(test_query_ir_hash_join_chunked PRIVATE
 add_ir_tests(test_query_ir_hash_join_probe_results HashJoinProbeResultsTest.cpp)
 target_link_libraries(test_query_ir_hash_join_probe_results PRIVATE turing_db_examples_s)
 
+# The embedding key cases build their own graph of vectors and hold the join's rows against
+# the cross product and filter it replaces.
+add_ir_tests(test_query_ir_hash_join_embedding_key HashJoinEmbeddingKeyTest.cpp)
+target_link_libraries(test_query_ir_hash_join_embedding_key PRIVATE turing_ir_test_rows_s)
+
 # The hash join fusion is checked at both IR levels and run against the shared SimpleGraph,
 # so it needs the frontend engine beside the dialects.
 add_turing_test(test_query_ir_hash_join HashJoinTest.cpp)

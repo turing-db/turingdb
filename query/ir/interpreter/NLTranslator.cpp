@@ -2801,7 +2801,7 @@ void NLTranslator::translateHashJoinCollect(nl::HashJoinCollect collect, NLStmtC
     // a row no probe key can match - a null, a NaN - out of the index.
     const mlir::Value keyColumn = columns[buildKey];
     data->setKeyColumn(getColumn(keyColumn),
-                       selectKeyAppendForChunkType(keyColumn.getType()),
+                       selectJoinKeyAppendForChunkType(keyColumn.getType()),
                        selectKeyMatchableForChunkType(keyColumn.getType()));
 
     body->emplaceStmt(&NLExecutor::runHashJoinCollect, data);
@@ -2874,7 +2874,7 @@ void NLTranslator::translateHashJoinProbe(nl::HashJoinProbe probe, NLStmtContain
 
     const mlir::Value keyColumn = columns[probeKey];
     data->setKeyColumn(getColumn(keyColumn),
-                       selectKeyAppendForChunkType(keyColumn.getType()),
+                       selectJoinKeyAppendForChunkType(keyColumn.getType()),
                        selectKeyMatchableForChunkType(keyColumn.getType()));
 
     body->emplaceStmt(&NLExecutor::runHashJoinProbe, data);
@@ -4217,6 +4217,21 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
     }
 
     return NLExecutor::selectKeyAppendFunction(chunkKindFromElementType(elementType));
+}
+
+// The join's sibling of selectKeyAppendForChunkType. An embedding has no byte identity a
+// DISTINCT can group by, which is what that one answers for, but `=` between two embedding
+// columns compares the vectors - so a join on one serializes them rather than turning the
+// query away with a diagnostic about duplicates.
+NLKeyAppendFunction NLTranslator::selectJoinKeyAppendForChunkType(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+    const auto nullableType = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
+
+    if (nullableType && valueTypeFromElementType(nullableType.getValueType()) == ValueType::Embedding) {
+        return NLExecutor::selectOptEmbeddingKeyAppendFunction();
+    }
+
+    return selectKeyAppendForChunkType(chunkType);
 }
 
 // The gating sibling of selectKeyAppendForChunkType: a nullable value chunk reads its
