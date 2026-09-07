@@ -4,8 +4,8 @@
   "query": "MATCH (n) ORDER BY n.name RETURN n",
   "expect": {
     "plan": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n) ORDER BY n.name RETURN n\n       | ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* MATCH ... ORDER BY ... is not supported yet. Please use RETURN ... ORDER BY ... instead",
-    "result": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n) ORDER BY n.name RETURN n\n       | ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* MATCH ... ORDER BY ... is not supported yet. Please use RETURN ... ORDER BY ... instead",
-    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n) ORDER BY n.name RETURN n\\n       | ^^^^^^^^^^^^^^^^^^^^^^^^^\\n-------* MATCH ... ORDER BY ... is not supported yet. Please use RETURN ... ORDER BY ... instead\"}"
+    "result": "n\n1\n10\n4\n2\n5\n15\n17\n3\n6\n13\n16\n9\n11\n8\n7\n0\n12\n14",
+    "resultJson": "{\"header\":{\"column_names\":[\"n\"],\"column_types\":[\"UInt64\"]},\"data\":[[[1,10,4,2,5,15,17,3,6,13,16,9,11,8,7,0,12,14]]]}"
   },
   "tags": [
     "fail",

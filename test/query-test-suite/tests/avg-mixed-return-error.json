@@ -1,11 +1,11 @@
 {
   "enabled": true,
   "graph": "simpledb",
-  "query": "MATCH (n) RETURN avg(n.age), n",
+  "query": "MATCH (n) RETURN avg(n.age), n\nORDER BY n",
   "expect": {
-    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN avg(n.age), n\n       |           ^^^^^^^^^^^^^^^^^^^^\n-------* Aggregates may not yet be combined with multiple return items.",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN avg(n.age), n\n       |           ^^^^^^^^^^^^^^^^^^^^\n-------* Aggregates may not yet be combined with multiple return items.",
-    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n) RETURN avg(n.age), n\\n       |           ^^^^^^^^^^^^^^^^^^^^\\n-------* Aggregates may not yet be combined with multiple return items.\"}"
+    "plan": "ANALYZE ERROR\n-------* Query error\n       |           ⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄\n     1 | MATCH (n) RETURN avg(n.age), n\n     2 | ORDER BY n\n       | ^^^^^^^^^^^^\n-------* Aggregates may not yet be combined with multiple return items.",
+    "result": "avg(n.age),n\n32,0\n32,1\nnull,2\nnull,3\nnull,4\nnull,5\nnull,6\nnull,7\nnull,8\nnull,9\nnull,10\nnull,11\nnull,12\nnull,13\nnull,14\nnull,15\nnull,16\nnull,17",
+    "resultJson": "{\"header\":{\"column_names\":[\"avg(n.age)\",\"n\"],\"column_types\":[\"Double\",\"UInt64\"]},\"data\":[[[32.000000,32.000000,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]]]}"
   },
   "tags": [
     "avg",
