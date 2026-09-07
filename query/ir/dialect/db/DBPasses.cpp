@@ -147,7 +147,10 @@ Operation::operand_range factorYieldColumns(mlir::Region& factor) {
 }
 
 // Walk op chain until we reach a node/edge source or something we can't push down to
-Value climbToLineageAnchor(Value column) {
+// The column its variable was bound at, following every op that passes the column through.
+// Sets crossedProducer when one of those builds the rows - a hop or a cross product - as
+// opposed to a filter, which only drops them.
+Value climbToLineageAnchor(Value column, bool& crossedProducer) {
     for (;;) {
         Operation* const def = column.getDefiningOp();
         if (!def) {
@@ -158,10 +161,11 @@ Value climbToLineageAnchor(Value column) {
             return column;
         }
 
-        if (isa<FilterOp>(def)) {
-            // A filter passes each column through unchanged, so its result is the same
-            // variable one step on - a valid boundary to sit a further filter right after.
-            return column;
+        if (FilterOp filter = dyn_cast<FilterOp>(def)) {
+            const size_t resultIndex = cast<OpResult>(column).getResultNumber();
+            column = filter.getColumnsToFilter()[resultIndex];
+
+            continue;
         }
 
         if (CrossProduct product = dyn_cast<CrossProduct>(def)) {
@@ -180,6 +184,8 @@ Value climbToLineageAnchor(Value column) {
                 column = rightColumns[resultIndex - leftCount];
             }
 
+            crossedProducer = true;
+
             continue;
         }
 
@@ -196,9 +202,11 @@ Value climbToLineageAnchor(Value column) {
 
             if (resultIndex == inputResultIndex) {
                 column = def->getOperand(0);
+                crossedProducer = true;
             } else if (resultIndex >= hopFixedResultCount) {
                 // Carried columns follow input_nodes (operand 0) in operand order.
                 column = def->getOperand(1 + (resultIndex - hopFixedResultCount));
+                crossedProducer = true;
             } else {
                 return column;
             }
@@ -270,9 +278,9 @@ bool matchPushablePredicate(FilterOp filter, PushablePredicate& pushable) {
         return false;
     }
 
-    bool reachedAnchor = true;
+    bool crossedProducer = false;
     for (const Value input : pushable._cone._inputs) {
-        const Value inputAnchor = climbToLineageAnchor(input);
+        const Value inputAnchor = climbToLineageAnchor(input, crossedProducer);
         if (!inputAnchor) {
             return false;
         }
@@ -283,14 +291,12 @@ bool matchPushablePredicate(FilterOp filter, PushablePredicate& pushable) {
             // More than one lineage feeds the mask: not a single-variable predicate.
             return false;
         }
-
-        if (input != inputAnchor) {
-            reachedAnchor = false;
-        }
     }
 
-    // Filter already maximally pushed down
-    return !reachedAnchor;
+    // Crossing only filters leaves the predicate over the rows the anchor produced already:
+    // moving it would swap two filters over the same rows, or step between a constraint
+    // filter and the op that is about to absorb it.
+    return crossedProducer;
 }
 
 void pushDownPredicate(FilterOp filter, const PushablePredicate& pushable, mlir::OpBuilder& builder) {

@@ -370,3 +370,87 @@ TEST_F(PushDownFilterTest, sinksRootPredicateWithConstantPowExpression) {
     ASSERT_EQ(reads.size(), 1u);
     EXPECT_TRUE(mlir::isa<mlir::db::ScanNodes>(reads.front().getInputNodes().getDefiningOp()));
 }
+
+// MATCH (a:Reaction {stId: 'R-HSA-177934'})-->(b:Complex) RETURN b
+const char* const rootPredicateBehindLabelFilter = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes_by_label(["Reaction"]) : !db.column<!storage.node_id>
+  %s1, %e1, %et1, %t1 = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %ls = db.get_node_label_set(%t1) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %ok = db.check_label_constraint(%ls, ["Complex"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
+  %bl, %al = db.filter(%ok, {%t1, %s1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %id = db.get_node_properties(%al, "stId") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %k = db.constant("R-HSA-177934" : !storage.string)
+  %mask = db.eq %id, %k : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %bf = db.filter(%mask, {%bl}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%bf) names ["b"] : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(PushDownFilterTest, sinksRootPredicatePastAnInterveningFilter) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(rootPredicateBehindLabelFilter);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runPushDown(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::GetOutEdges> hops = collect<mlir::db::GetOutEdges>(*module);
+    ASSERT_EQ(hops.size(), 1u);
+    mlir::db::GetOutEdges hop = hops.front();
+
+    // The label filter stays where it is; the root predicate climbs past it to the scan.
+    llvm::SmallVector<mlir::db::FilterOp> filters = collect<mlir::db::FilterOp>(*module);
+    ASSERT_EQ(filters.size(), 2u);
+    mlir::db::FilterOp seedFilter = filters.front();
+    mlir::db::FilterOp labelFilter = filters.back();
+
+    EXPECT_TRUE(seedFilter.getOperation()->isBeforeInBlock(hop.getOperation()));
+    EXPECT_TRUE(hop.getOperation()->isBeforeInBlock(labelFilter.getOperation()));
+
+    ASSERT_EQ(seedFilter.getColumnsToFilter().size(), 1u);
+    EXPECT_TRUE(mlir::isa<mlir::db::ScanNodesByLabel>(seedFilter.getColumnsToFilter().front().getDefiningOp()));
+    EXPECT_EQ(hop.getInputNodes().getDefiningOp(), seedFilter.getOperation());
+
+    llvm::SmallVector<mlir::db::GetNodeProperties> reads = collect<mlir::db::GetNodeProperties>(*module);
+    ASSERT_EQ(reads.size(), 1u);
+    EXPECT_TRUE(mlir::isa<mlir::db::ScanNodesByLabel>(reads.front().getInputNodes().getDefiningOp()));
+}
+
+// MATCH (a:Complex {stId: 'R-HSA-8867037'})-[:hasComponent]->(b)-->(c) RETURN c
+const char* const rootPredicateBehindFilterAndHop = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes_by_label(["Complex"]) : !db.column<!storage.node_id>
+  %s1, %e1, %et1, %t1 = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %ok = db.check_edge_type_constraint(%et1, ["hasComponent"]) : (!db.column<!storage.edge_type_id>) -> !db.column<!storage.bool>
+  %bl, %al = db.filter(%ok, {%t1, %s1}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %s2, %e2, %et2, %t2, %ac = db.get_out_edges(%bl, {%al}) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %id = db.get_node_properties(%ac, "stId") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %k = db.constant("R-HSA-8867037" : !storage.string)
+  %mask = db.eq %id, %k : (!db.column<none>, !db.column<!storage.string>) -> !db.column<!storage.bool>
+  %cf = db.filter(%mask, {%t2}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%cf) names ["c"] : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(PushDownFilterTest, sinksRootPredicatePastAFilterAndASecondHop) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(rootPredicateBehindFilterAndHop);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runPushDown(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::GetOutEdges> hops = collect<mlir::db::GetOutEdges>(*module);
+    ASSERT_EQ(hops.size(), 2u);
+    mlir::db::GetOutEdges firstHop = hops.front();
+
+    llvm::SmallVector<mlir::db::FilterOp> filters = collect<mlir::db::FilterOp>(*module);
+    ASSERT_EQ(filters.size(), 2u);
+    mlir::db::FilterOp seedFilter = filters.front();
+
+    EXPECT_TRUE(seedFilter.getOperation()->isBeforeInBlock(firstHop.getOperation()));
+    EXPECT_EQ(firstHop.getInputNodes().getDefiningOp(), seedFilter.getOperation());
+
+    llvm::SmallVector<mlir::db::GetNodeProperties> reads = collect<mlir::db::GetNodeProperties>(*module);
+    ASSERT_EQ(reads.size(), 1u);
+    EXPECT_TRUE(mlir::isa<mlir::db::ScanNodesByLabel>(reads.front().getInputNodes().getDefiningOp()));
+}
