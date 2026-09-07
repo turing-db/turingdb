@@ -9,6 +9,17 @@
 
 using namespace db;
 
+namespace {
+
+// Each batch lays out one word per node per level, and writing one costs this many
+// candidate checks of the walk it spares: measured with samples/path_bench between 0.05
+// and 0.1, so the batches pay off only where the walk is expected to cost about as much
+// again. The words of one build stay under this many bytes, whatever the walk would cost.
+constexpr double wordCostInChecks = 0.1;
+constexpr double wordBytesLimit = 1024.0 * 1024.0 * 1024.0;
+
+}
+
 PathTargetIndex::PathTargetIndex() {
 }
 
@@ -60,10 +71,16 @@ bool PathTargetIndex::isWorthBuilding(const GraphView& view,
         return false;
     }
 
-    // Each batch is one pass of its own, so the enumeration has to pay for all of them
-    const size_t batchCount = (targetCount + targetsPerBatch - 1) / targetsPerBatch;
+    const PartDirectory parts(view);
+    const double batchCount = static_cast<double>((targetCount + targetsPerBatch - 1) / targetsPerBatch);
+    const double levelCount = static_cast<double>(std::min<uint64_t>(maxHops, PathDistanceIndex::farthest) + 1);
+    const double words = batchCount * levelCount * static_cast<double>(parts.getAllocatedNodeCount());
 
-    return PathDistanceIndex::isWorthBuilding(view, direction, seedCount / batchCount, maxHops);
+    if (words * static_cast<double>(sizeof(uint64_t)) > wordBytesLimit) {
+        return false;
+    }
+
+    return PathDistanceIndex::estimatedEnumerationChecks(parts, direction, seedCount, maxHops) > wordCostInChecks * words;
 }
 
 void PathTargetIndex::buildBatch(const PartDirectory& parts,
