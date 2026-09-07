@@ -2,12 +2,14 @@
 #include <algorithm>
 #include <map>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include <argparse.hpp>
+#include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
 #include "TuringDB.h"
@@ -85,11 +87,24 @@ using BoundEdge = EdgeID Binding::*;
 using MatchFunction = void (*)(std::vector<Binding>&, const MatchGraph&);
 using WherePredicate = bool (*)(const Binding&, const MatchGraph&);
 
+enum class Aggregate {
+    None,
+    Count,
+    CountRows,
+    Avg,
+};
+
 struct ReturnItem {
     BoundNode _node {nullptr};
     BoundEdge _edge {nullptr};
     std::string_view _property;
+    std::string_view _constant;
+    Aggregate _aggregate {Aggregate::None};
 };
+
+// Reads the value a query orders on out of a projected row, for the cases that assert an
+// ordering rather than a set of rows
+using RowKey = void (*)(std::string&, const Row&, const MatchGraph&);
 
 struct SuiteCase {
     std::string_view _test;
@@ -98,6 +113,7 @@ struct SuiteCase {
     WherePredicate _where {nullptr};
     std::span<const ReturnItem> _returnItems;
     size_t _limit {0};
+    RowKey _orderKey {nullptr};
 };
 
 void valueText(std::string& text, NodeID id) {
@@ -112,8 +128,19 @@ void valueText(std::string& text, int64_t value) {
     text = std::to_string(value);
 }
 
+// A count is an unsigned column, which needs an exact overload of its own: without one the
+// conversions to the signed, floating point and boolean overloads are all viable
+void valueText(std::string& text, uint64_t value) {
+    text = std::to_string(value);
+}
+
 void valueText(std::string& text, CustomBool value) {
     text = value ? "true" : "false";
+}
+
+// v3 renders a double the way fmt does, so 32.0 reads as "32" and not as "32.000000"
+void valueText(std::string& text, double value) {
+    text = fmt::format("{}", value);
 }
 
 template <typename T>
@@ -166,7 +193,11 @@ void TextRowSink::cellText(std::string& text, const Column* chunk, size_t rowInd
                    || readCell<int64_t>(text, chunk, rowIndex)
                    || readCell<std::optional<int64_t>>(text, chunk, rowIndex)
                    || readCell<CustomBool>(text, chunk, rowIndex)
-                   || readCell<std::optional<CustomBool>>(text, chunk, rowIndex);
+                   || readCell<std::optional<CustomBool>>(text, chunk, rowIndex)
+                   || readCell<double>(text, chunk, rowIndex)
+                   || readCell<std::optional<double>>(text, chunk, rowIndex)
+                   || readCell<uint64_t>(text, chunk, rowIndex)
+                   || readCell<std::optional<uint64_t>>(text, chunk, rowIndex);
 
     if (!read) {
         throw TuringException("The sample cannot read a column of type " + std::string(chunk->getTypeName()));
@@ -313,6 +344,18 @@ bool sameProperty(const MatchGraph& graph, EdgeID left, EdgeID right, std::strin
     return sameProperty(propertyOf(graph, left, name), propertyOf(graph, right, name));
 }
 
+// WHERE NOT TRUE, which no row satisfies.
+bool never(const Binding& binding, const MatchGraph& graph) {
+    return false;
+}
+
+// The name of the node a row returns first, which MATCH (n) ORDER BY n.name orders on.
+void nameOfFirstNode(std::string& text, const Row& row, const MatchGraph& graph) {
+    const NodeID node {std::stoull(row.front())};
+    const std::string* name = propertyOf(graph, node, "name");
+    text = name ? *name : "null";
+}
+
 // Extends every binding with one more node having an edge into its x, for a further (v)-->(x) pattern.
 void addNodeIntoX(std::vector<Binding>& bindings, const MatchGraph& graph, BoundNode variable) {
     std::vector<Binding> partials;
@@ -448,6 +491,53 @@ void matchTwoHopWalk(std::vector<Binding>& bindings, const MatchGraph& graph) {
     }
 }
 
+// Every node, bound to a.
+void matchEveryNode(std::vector<Binding>& bindings, const MatchGraph& graph) {
+    bindings.clear();
+
+    for (const NodeID node : graph._nodeIDs) {
+        Binding binding;
+        binding._a = node;
+        bindings.push_back(binding);
+    }
+}
+
+// Every ordered pair of nodes, for the uncorrelated (a), (b) cartesian product.
+void matchEveryNodePair(std::vector<Binding>& bindings, const MatchGraph& graph) {
+    bindings.clear();
+
+    for (const NodeID left : graph._nodeIDs) {
+        for (const NodeID right : graph._nodeIDs) {
+            Binding binding;
+            binding._a = left;
+            binding._b = right;
+            bindings.push_back(binding);
+        }
+    }
+}
+
+// The one row a query with no MATCH reads, which an aggregate with no input still reduces.
+void matchOneEmptyRow(std::vector<Binding>& bindings, const MatchGraph& graph) {
+    bindings.clear();
+    bindings.emplace_back();
+}
+
+// A two hop walk closing on the node it started from, for (a)-->(b)-->(a).
+void matchTwoHopLoop(std::vector<Binding>& bindings, const MatchGraph& graph) {
+    bindings.clear();
+
+    for (const NodeID a : graph._nodeIDs) {
+        for (const NodeID b : outOf(graph, a)) {
+            if (hasEdge(graph, b, a)) {
+                Binding binding;
+                binding._a = a;
+                binding._b = b;
+                bindings.push_back(binding);
+            }
+        }
+    }
+}
+
 void matchDiamond(std::vector<Binding>& bindings, const MatchGraph& graph) {
     bindings.clear();
 
@@ -558,7 +648,9 @@ void filter(std::vector<Binding>& bindings, const MatchGraph& graph, WherePredic
 }
 
 void returnText(std::string& text, const Binding& binding, const ReturnItem& item, const MatchGraph& graph) {
-    if (item._edge) {
+    if (!item._constant.empty()) {
+        text = item._constant;
+    } else if (item._edge) {
         const std::string* value = propertyOf(graph, binding.*item._edge, item._property);
         text = value ? *value : "null";
     } else if (item._property.empty()) {
@@ -578,6 +670,106 @@ void project(RowCounts& rows, std::span<const Binding> bindings, std::span<const
         for (const ReturnItem& item : returnItems) {
             returnText(row.emplace_back(), binding, item, graph);
         }
+        rows[row]++;
+    }
+}
+
+bool aggregates(std::span<const ReturnItem> returnItems) {
+    return std::ranges::any_of(returnItems, [](const ReturnItem& item) {
+        return item._aggregate != Aggregate::None;
+    });
+}
+
+// The value an aggregate reduces for one binding, null when the property is absent: a node
+// or edge variable itself is never null, so count over one counts the group's rows
+const std::string* aggregatedValue(const Binding& binding, const ReturnItem& item, const MatchGraph& graph) {
+    if (item._property.empty()) {
+        return nullptr;
+    }
+
+    return propertyOf(graph, binding.*item._node, item._property);
+}
+
+void aggregateText(std::string& text, const ReturnItem& item, std::span<const Binding> group, const MatchGraph& graph) {
+    switch (item._aggregate) {
+        case Aggregate::CountRows:
+            valueText(text, static_cast<int64_t>(group.size()));
+            return;
+        break;
+
+        case Aggregate::Count: {
+            size_t counted = 0;
+            for (const Binding& binding : group) {
+                const bool countsTheVariable = item._property.empty();
+                if (countsTheVariable || aggregatedValue(binding, item, graph)) {
+                    counted++;
+                }
+            }
+
+            valueText(text, static_cast<int64_t>(counted));
+            return;
+        }
+        break;
+
+        case Aggregate::Avg: {
+            double total = 0;
+            size_t counted = 0;
+            for (const Binding& binding : group) {
+                const std::string* value = aggregatedValue(binding, item, graph);
+                if (value) {
+                    total += std::stod(*value);
+                    counted++;
+                }
+            }
+
+            if (counted == 0) {
+                text = "null";
+                return;
+            }
+
+            valueText(text, total / static_cast<double>(counted));
+            return;
+        }
+        break;
+
+        case Aggregate::None:
+            throw TuringException("Not an aggregate");
+        break;
+    }
+}
+
+// Groups the bindings on the return items that are not aggregates, then reduces each
+// aggregate over the bindings of one group
+void projectGrouped(RowCounts& rows, std::span<const Binding> bindings, std::span<const ReturnItem> returnItems, const MatchGraph& graph) {
+    rows.clear();
+
+    std::map<Row, std::vector<Binding>> groups;
+
+    Row key;
+    for (const Binding& binding : bindings) {
+        key.clear();
+        for (const ReturnItem& item : returnItems) {
+            if (item._aggregate == Aggregate::None) {
+                returnText(key.emplace_back(), binding, item, graph);
+            }
+        }
+
+        groups[key].push_back(binding);
+    }
+
+    Row row;
+    for (const auto& [groupKey, group] : groups) {
+        row.clear();
+
+        size_t keyIndex = 0;
+        for (const ReturnItem& item : returnItems) {
+            if (item._aggregate == Aggregate::None) {
+                row.push_back(groupKey[keyIndex++]);
+            } else {
+                aggregateText(row.emplace_back(), item, group, graph);
+            }
+        }
+
         rows[row]++;
     }
 }
@@ -671,6 +863,30 @@ bool checkLimitedRows(const RowCounts& bruteForce, std::span<const Row> v3Rows, 
     return matched;
 }
 
+// A query with no total order may emit tied rows in any order, so an ordering is asserted
+// as the rows of the pattern read out in a non-decreasing key, not as one exact sequence
+bool checkOrderedRows(const RowCounts& bruteForce, std::span<const Row> v3Rows, RowKey rowKey, const MatchGraph& graph) {
+    RowCounts v3;
+    countRows(v3, v3Rows);
+
+    bool matched = compareRows(bruteForce, v3);
+
+    std::string previous;
+    std::string current;
+    for (const Row& row : v3Rows) {
+        rowKey(current, row, graph);
+        if (!previous.empty() && current < previous) {
+            spdlog::error("  key '{}' follows '{}'", current, previous);
+            matched = false;
+        }
+
+        previous = current;
+    }
+
+    spdlog::info("  {}", matched ? "ordered" : "OUT OF ORDER");
+    return matched;
+}
+
 constexpr ReturnItem returnID(BoundNode node) {
     return {node, nullptr, {}};
 }
@@ -681,6 +897,22 @@ constexpr ReturnItem returnProperty(BoundNode node, std::string_view property) {
 
 constexpr ReturnItem returnEdgeProperty(BoundEdge edge, std::string_view property) {
     return {nullptr, edge, property};
+}
+
+constexpr ReturnItem returnConstant(std::string_view value) {
+    return {nullptr, nullptr, {}, value};
+}
+
+constexpr ReturnItem countOf(BoundNode node) {
+    return {node, nullptr, {}, {}, Aggregate::Count};
+}
+
+constexpr ReturnItem countOfRows() {
+    return {nullptr, nullptr, {}, {}, Aggregate::CountRows};
+}
+
+constexpr ReturnItem averageOf(BoundNode node, std::string_view property) {
+    return {node, nullptr, property, {}, Aggregate::Avg};
 }
 
 constexpr ReturnItem returnA[] = {returnID(&Binding::_a)};
@@ -729,6 +961,13 @@ constexpr ReturnItem returnNamesABCDAndDuration[] = {returnProperty(&Binding::_a
 constexpr ReturnItem returnNamesABAndAge[] = {returnProperty(&Binding::_a, "name"),
                                               returnProperty(&Binding::_b, "name"),
                                               returnProperty(&Binding::_a, "age")};
+constexpr ReturnItem returnAB[] = {returnID(&Binding::_a), returnID(&Binding::_b)};
+constexpr ReturnItem returnACountB[] = {returnID(&Binding::_a), countOf(&Binding::_b)};
+constexpr ReturnItem returnCountAAndB[] = {countOf(&Binding::_a), returnID(&Binding::_b)};
+constexpr ReturnItem returnCountAAndCountB[] = {countOf(&Binding::_a), countOf(&Binding::_b)};
+constexpr ReturnItem returnAverageAgeAndA[] = {averageOf(&Binding::_a, "age"), returnID(&Binding::_a)};
+constexpr ReturnItem returnTrue[] = {returnConstant("true")};
+constexpr ReturnItem returnIncrementedCount[] = {returnConstant("109")};
 
 constexpr SuiteCase suiteCases[] = {
     {"success-reads-joins-on-filters-0",
@@ -802,6 +1041,38 @@ constexpr SuiteCase suiteCases[] = {
     {"large-double-diamond-join",
      "MATCH (a)-->(b),(c)-->(d)-->(e),(a)-->(f)-->(g),(c)-->(g),(h),(i),(e),(h),(c)-->(j) RETURN a,c,e,g LIMIT 10",
      matchDoubleDiamond, nullptr, returnACEG, 10},
+
+    {"fail-reads-loop-0",
+     "MATCH (a)-->(b)-->(a) RETURN a, b;",
+     matchTwoHopLoop, nullptr, returnAB},
+
+    {"where-not-true-return-not-false",
+     "MATCH (n) WHERE NOT TRUE RETURN NOT FALSE",
+     matchEveryNode, never, returnTrue},
+
+    {"count-m-return-n",
+     "MATCH (n), (m) RETURN n, count(m)",
+     matchEveryNodePair, nullptr, returnACountB},
+
+    {"count-n-return-m",
+     "MATCH (n), (m) RETURN count(n), m",
+     matchEveryNodePair, nullptr, returnCountAAndB},
+
+    {"return-count-n-count-m",
+     "MATCH (n), (m) RETURN COUNT(n), COUNT(m)",
+     matchEveryNodePair, nullptr, returnCountAAndCountB},
+
+    {"count-wildcard-increment-empty-input",
+     "RETURN ++++++++++++++++++++++++++++++++COUNT(*)++++++++9++++++++++++++++++++++++++++++99",
+     matchOneEmptyRow, nullptr, returnIncrementedCount},
+
+    {"avg-mixed-return-error",
+     "MATCH (n) RETURN avg(n.age), n",
+     matchEveryNode, nullptr, returnAverageAgeAndA},
+
+    {"fail-reads-order-by-0",
+     "MATCH (n) ORDER BY n.name RETURN n",
+     matchEveryNode, nullptr, returnA, 0, nameOfFirstNode},
 };
 
 }
@@ -861,7 +1132,11 @@ int main(int argc, const char** argv) {
         if (suiteCase._where) {
             filter(bindings, matchGraph, suiteCase._where);
         }
-        project(bruteForce, bindings, suiteCase._returnItems, matchGraph);
+        if (aggregates(suiteCase._returnItems)) {
+            projectGrouped(bruteForce, bindings, suiteCase._returnItems, matchGraph);
+        } else {
+            project(bruteForce, bindings, suiteCase._returnItems, matchGraph);
+        }
 
         if (!runV3(rows, interpreter, memory, suiteCase._query)) {
             return EXIT_FAILURE;
@@ -870,7 +1145,9 @@ int main(int argc, const char** argv) {
         spdlog::info("{}", suiteCase._test);
         spdlog::info("  {}", suiteCase._query);
 
-        if (suiteCase._limit == 0) {
+        if (suiteCase._orderKey) {
+            allMatched = checkOrderedRows(bruteForce, rows, suiteCase._orderKey, matchGraph) && allMatched;
+        } else if (suiteCase._limit == 0) {
             countRows(v3, rows);
             allMatched = compareRows(bruteForce, v3) && allMatched;
         } else {
