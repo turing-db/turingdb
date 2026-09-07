@@ -239,6 +239,20 @@ private:
     void lowerGetInEdgesByType(mlir::db::GetInEdgesByType getInEdgesByType);
     void lowerGetOutEdgesByLabel(mlir::db::GetOutEdgesByLabel getOutEdgesByLabel);
     void lowerGetInEdgesByLabel(mlir::db::GetInEdgesByLabel getInEdgesByLabel);
+
+    // Lower a db.explore_paths the way lowerGetOutEdges lowers a hop: the nl.explore_paths
+    // nests in the loop binding its input chunk, its attributes pass through, and its hop
+    // region - when there is one - is lowered into the nl op's, then buildLoopForSource
+    // binds the seed, end and path columns to the loop variables
+    void lowerExplorePaths(mlir::db::ExplorePaths explorePaths);
+
+    // Lower the hop predicate of a db.explore_paths into the nl op's region: one block over
+    // the source, edge and end chunks, its ops lowered as any other, ending in an nl.yield of
+    // the mask laid out over the hop's rows
+    void lowerHopRegion(mlir::Block& dbHop, mlir::Region& nlHop);
+
+    void lowerExpandPath(mlir::db::ExpandPath expandPath);
+    void lowerPathLength(mlir::db::PathLength pathLength);
     void lowerGetNodeProperties(mlir::db::GetNodeProperties getNodeProperties);
     void lowerGetEdgeProperties(mlir::db::GetEdgeProperties getEdgeProperties);
     void lowerGetNodeLabelSet(mlir::db::GetNodeLabelSet getNodeLabelSet);

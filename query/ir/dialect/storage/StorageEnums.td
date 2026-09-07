@@ -136,4 +136,24 @@ def IndexedEntity : I64EnumAttr<"IndexedEntity", "The entity a property index co
     let cppNamespace = "::mlir::storage";
 }
 
+// The direction a variable-length path exploration follows edges in: out-edges,
+// in-edges, or both (out then in per node, as the single-hop get_edges does).
+def PathDirection : I64EnumAttr<"PathDirection", "The direction a path exploration follows", [
+    I64EnumAttrCase<"Forward", 0, "forward">,
+    I64EnumAttrCase<"Backward", 1, "backward">,
+    I64EnumAttrCase<"Both", 2, "both">,
+]> {
+    let cppNamespace = "::mlir::storage";
+}
+
+// Which list a path expands to: its edges, the source node of each hop, or the end
+// node of each hop.
+def PathExpansionKind : I64EnumAttr<"PathExpansionKind", "The list a path expands to", [
+    I64EnumAttrCase<"Edges", 0, "edges">,
+    I64EnumAttrCase<"Sources", 1, "sources">,
+    I64EnumAttrCase<"Ends", 2, "ends">,
+]> {
+    let cppNamespace = "::mlir::storage";
+}
+
 #endif // STORAGE_ENUMS

@@ -21,6 +21,7 @@ public:
 
     void setIsUnnamed(bool isUnnamed) { _isUnnamed = isUnnamed; }
     void setIsUnwound(bool isUnwound) { _isUnwound = isUnwound; }
+    void setIsQuantifiedPath(bool isQuantifiedPath) { _isQuantifiedPath = isQuantifiedPath; }
     void setType(EvaluatedType type) { _type = type; }
 
     void setListShape(const ListShape& shape) { _listShape = shape; }
@@ -36,12 +37,17 @@ public:
     bool isUnnamed() const { return _isUnnamed; }
     bool isUnwound() const { return _isUnwound; }
 
+    // A variable of a variable-length pattern binds the whole path - a list, not one
+    // entity - so no property or label is read off it
+    bool isQuantifiedPath() const { return _isQuantifiedPath; }
+
 private:
     EvaluatedType _type {EvaluatedType::Invalid};
     ListShape _listShape;
     std::string_view _name;
     bool _isUnnamed {false};
     bool _isUnwound {false};
+    bool _isQuantifiedPath {false};
 
     VarDecl(EvaluatedType type, std::string_view name)
         : _type(type),

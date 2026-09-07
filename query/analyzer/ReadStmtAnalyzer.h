@@ -29,6 +29,8 @@ class GraphMetadata;
 class UnwindStmt;
 class YieldItems;
 class Expr;
+class EdgePatternData;
+class DeclContext;
 
 class ReadStmtAnalyzer {
 public:
@@ -70,6 +72,21 @@ private:
     const GraphMetadata& _graphMetadata;
 
     void yieldEveryReturnValue(const FunctionSignature& signature, YieldClause* yield);
+
+    // The property map of an edge pattern, each entry an equality predicate on @param decl:
+    // a constraint on the matched edge, or - for a quantified pattern - one more predicate
+    // every hop must pass
+    void analyzeEdgeProperties(EdgePattern* edgePattern,
+                               VarDecl* decl,
+                               EdgePatternData* data,
+                               bool asHopPredicates);
+
+    // The hop of a quantified pattern: its edge, inner nodes and predicates resolve in a
+    // scope of their own, where the names bind one entity; outside it the same names bind
+    // the whole path's lists
+    void analyzeHop(EdgePattern* edgePattern, EdgePatternData* data);
+
+    void enterScope(DeclContext* scope);
 
     // The predicate a YIELD ... WHERE filters the rows its statement produced with. Shared
     // by every statement that yields, since what a yield binds is what the predicate reads.

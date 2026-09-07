@@ -84,6 +84,19 @@ Type getEdgeIteratorType(MLIRContext* context, TypeRange carriedChunkTypes) {
     return IteratorType::get(context, chunkTypes);
 }
 
+// A path exploration exposes the seed node IDs, the end node IDs and the path handles,
+// followed by one filtered chunk per carried column, mirroring db.explore_paths
+Type getPathIteratorType(MLIRContext* context, TypeRange carriedChunkTypes) {
+    const Type seeds = getNodeIDChunkType(context);
+    const Type ends = getNodeIDChunkType(context);
+    const Type paths = ChunkType::get(context, storage::PathRefType::get(context));
+
+    llvm::SmallVector<Type> chunkTypes {seeds, ends, paths};
+    chunkTypes.append(carriedChunkTypes.begin(), carriedChunkTypes.end());
+
+    return IteratorType::get(context, chunkTypes);
+}
+
 }
 
 // A node scan always produces one chunk of node IDs per step
@@ -294,6 +307,55 @@ LogicalResult GetInEdgesByLabel::inferReturnTypes(MLIRContext* context,
                                                   GetInEdgesByLabel::Adaptor adaptor,
                                                   SmallVectorImpl<Type>& inferredReturnTypes) {
     inferredReturnTypes.push_back(getEdgeIteratorType(context, adaptor.getColumnsToFilter()));
+    return success();
+}
+
+void Yield::build(OpBuilder& builder, OperationState& state) {
+}
+
+LogicalResult ExplorePaths::inferReturnTypes(MLIRContext* context,
+                                             std::optional<Location> location,
+                                             ExplorePaths::Adaptor adaptor,
+                                             SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(getPathIteratorType(context, adaptor.getColumnsToFilter()));
+    return success();
+}
+
+// The hop region mirrors the db op's: one block over the source node, edge and end node
+// chunks of a hop, ending in an nl.yield of one mask chunk
+LogicalResult ExplorePaths::verify() {
+    const std::optional<uint64_t> maxHops = getMaxHops();
+    if (maxHops && *maxHops < getMinHops()) {
+        return emitOpError("max_hops must be at least min_hops");
+    }
+
+    Region& hop = getHop();
+    if (hop.empty()) {
+        return success();
+    }
+
+    Block& block = hop.front();
+    MLIRContext* context = getContext();
+    const Type nodeChunk = getNodeIDChunkType(context);
+    const Type edgeChunk = getEdgeIDChunkType(context);
+    const llvm::SmallVector<Type, 3> expectedArguments {nodeChunk, edgeChunk, nodeChunk};
+
+    if (block.getNumArguments() != expectedArguments.size()) {
+        return emitOpError("hop region must take the source node, edge and end node chunks");
+    }
+
+    for (size_t argumentIndex = 0; argumentIndex < expectedArguments.size(); argumentIndex++) {
+        if (block.getArgument(static_cast<unsigned>(argumentIndex)).getType() != expectedArguments[argumentIndex]) {
+            return emitOpError("hop region argument ") << argumentIndex << " must be "
+                                                       << expectedArguments[argumentIndex];
+        }
+    }
+
+    Yield yield = dyn_cast_or_null<Yield>(block.empty() ? nullptr : &block.back());
+    if (!yield || yield.getColumns().size() != 1) {
+        return emitOpError("hop region must end with an nl.yield of one mask chunk");
+    }
+
     return success();
 }
 

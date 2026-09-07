@@ -1139,6 +1139,104 @@ def GetInEdgesByLabel : TuringOp<"get_in_edges_by_label", [Pure, DeclareOpInterf
 }
 
 /**
+* ExplorePaths
+*/
+def ExplorePaths : TuringOp<"explore_paths", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+  let summary = "Enumerate the variable-length paths leaving each input node, filtering carried columns alongside";
+
+  let description = [{
+    The variable-length sibling of get_out_edges. In `MATCH (n)-[e]->{1,3}(m)` every
+    trail of one to three edges leaving `n` is one row: `srcids` is the seed `n`,
+    `tgtids` the node the path ends on, `paths` the path itself - a handle into the
+    query's path trie that db.expand_path turns into the list of edge IDs `e` binds to.
+    An edge appears at most once on a path; nodes may repeat. `min_hops` of zero emits
+    one zero-length path per seed (its end is the seed, its list empty); an absent
+    `max_hops` is unbounded, which trail semantics keep finite.
+
+      %s, %t, %p = db.explore_paths(%n, {}) forward hops 1 to 3
+      %s, %t, %p, %a2 = db.explore_paths(%n, {%a}) both hops 0 edge_type "KNOWS"
+
+    `direction` is which edges a hop follows; `srcids` is always the seed, whatever the
+    direction. `edge_type` restricts every hop to edges of that type. The optional `hop`
+    region is a predicate on each hop, evaluated over its source node, its edge and its
+    end node - the three block arguments - and yielding one boolean column; a hop that
+    fails it is neither emitted nor expanded. The region reads nothing from outside but
+    constants. `columns_to_filter` is the carry set, exactly as on get_out_edges.
+  }];
+
+  let arguments = (ins Column:$input_nodes,
+                       Variadic<Column>:$columns_to_filter,
+                       PathDirection:$direction,
+                       UI64Attr:$min_hops,
+                       OptionalAttr<UI64Attr>:$max_hops,
+                       OptionalAttr<StrAttr>:$edge_type);
+
+  let results   = (outs ColumnNodeIDs:$srcids,
+                        ColumnNodeIDs:$tgtids,
+                        ColumnPathRefs:$paths,
+                        Variadic<Column>:$filtered_columns);
+
+  let regions = (region MaxSizedRegion<1>:$hop);
+
+  let assemblyFormat = [{
+    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
+    (`to` $max_hops^)? (`edge_type` $edge_type^)? ($hop^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+
+  let hasVerifier = 1;
+}
+
+/**
+* ExpandPath
+*/
+def ExpandPath : TuringOp<"expand_path", [Pure]> {
+  let summary = "Expand each path handle into the list its variable binds to";
+
+  let description = [{
+    Turns a column of path handles into a column of lists, one per row: `kind edges`
+    is the ordered edge IDs the path variable binds to, `kind ends` the end node of each
+    hop and `kind sources` the source node of each hop (the seed, read from `srcids`,
+    followed by every end but the last) - the lists the group variables of a
+    quantified path pattern bind to.
+
+      %e = db.expand_path(%p, %s) kind edges
+             : (!db.column<!storage.path_ref>, !db.column<!storage.node_id>) -> !db.column<!storage.list<!storage.edge_id>>
+  }];
+
+  // The seeds are read by `kind sources` alone, so the other kinds leave them out
+  let arguments = (ins ColumnPathRefs:$paths, Optional<ColumnNodeIDs>:$srcids, PathExpansionKind:$kind);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = [{
+    `(` $paths (`,` $srcids^)? `)` `kind` $kind attr-dict `:` functional-type(operands, results)
+  }];
+
+  let hasVerifier = 1;
+}
+
+/**
+* PathLength
+*/
+def PathLength : TuringOp<"path_length", [Pure]> {
+  let summary = "Read the number of edges of each path";
+
+  let description = [{
+    The `size(e)` of a path variable: one unsigned count per row, read off the handle
+    without expanding the path.
+
+      %n = db.path_length(%p) : (!db.column<!storage.path_ref>) -> !db.column<ui64>
+  }];
+
+  let arguments = (ins ColumnPathRefs:$paths);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = [{
+    `(` $paths `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
 * GetNodeProperties
 */
 def GetNodeProperties : TuringOp<"get_node_properties", [Pure]> {
@@ -1435,7 +1533,7 @@ def HashJoin : TuringOp<"hash_join", [Pure]> {
 /**
 * Yield
 */
-def Yield : TuringOp<"yield", [Pure, Terminator, ParentOneOf<["CrossProduct", "HashJoin", "Union"]>]> {
+def Yield : TuringOp<"yield", [Pure, Terminator, ParentOneOf<["CrossProduct", "HashJoin", "Union", "ExplorePaths"]>]> {
   let summary = "Name the columns a region contributes to the result of the op holding it";
 
   let description = [{
@@ -1446,7 +1544,9 @@ def Yield : TuringOp<"yield", [Pure, Terminator, ParentOneOf<["CrossProduct", "H
     side's row count is read from its first yielded column.
 
     It also terminates each branch of a db.union that has results, naming the
-    rows that branch adds to them.
+    rows that branch adds to them, and the hop region of a db.explore_paths,
+    yielding the one boolean column that says which candidates of a hop pass its
+    predicate.
   }];
 
   let arguments = (ins Variadic<Column>:$columns);

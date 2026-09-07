@@ -226,6 +226,59 @@ LogicalResult verifyPassThrough(Operation* op,
     return success();
 }
 
+// The hop region of an explore_paths: one block over (source, edge, end) yielding a boolean
+// column, reading nothing defined outside it but constants
+LogicalResult verifyHopRegion(Operation* op, Region& hop) {
+    Block& block = hop.front();
+    MLIRContext* context = op->getContext();
+
+    const Type nodeColumn = ColumnType::get(context, storage::NodeIDType::get(context));
+    const Type edgeColumn = ColumnType::get(context, storage::EdgeIDType::get(context));
+    const llvm::SmallVector<Type, 3> expectedArguments {nodeColumn, edgeColumn, nodeColumn};
+
+    if (block.getNumArguments() != expectedArguments.size()) {
+        return op->emitOpError("hop region must take the source node, edge and end node columns");
+    }
+
+    for (size_t argumentIndex = 0; argumentIndex < expectedArguments.size(); argumentIndex++) {
+        if (block.getArgument(static_cast<unsigned>(argumentIndex)).getType() != expectedArguments[argumentIndex]) {
+            return op->emitOpError("hop region argument ") << argumentIndex << " must be "
+                                                           << expectedArguments[argumentIndex];
+        }
+    }
+
+    Yield yield = getFactorYield(hop);
+    if (!yield) {
+        return op->emitOpError("hop region must end with a db.yield");
+    }
+
+    const Type boolColumn = ColumnType::get(context, storage::BoolType::get(context));
+    const bool yieldsOneMask = yield.getColumns().size() == 1 && yield.getColumns().front().getType() == boolColumn;
+    if (!yieldsOneMask) {
+        return op->emitOpError("hop region must yield exactly one ") << boolColumn;
+    }
+
+    for (Operation& inner : block) {
+        for (const Value operand : inner.getOperands()) {
+            if (const auto argument = dyn_cast<BlockArgument>(operand)) {
+                if (argument.getOwner() != &block) {
+                    return op->emitOpError("hop region reads a block argument of another region");
+                }
+
+                continue;
+            }
+
+            Operation* const definingOp = operand.getDefiningOp();
+            const bool definedInside = definingOp->getBlock() == &block;
+            if (!definedInside && !isa<ConstantOp>(definingOp)) {
+                return op->emitOpError("hop region may only read constants from outside itself");
+            }
+        }
+    }
+
+    return success();
+}
+
 }
 
 // Ensures each variable has a numeric name
@@ -270,6 +323,69 @@ void GetOutEdges::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     for (Value result : getResults()) {
         setNameFn(result, "");
     }
+}
+
+void ExplorePaths::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    for (Value result : getResults()) {
+        setNameFn(result, "");
+    }
+}
+
+LogicalResult ExplorePaths::verify() {
+    const OperandRange carried = getColumnsToFilter();
+    const ResultRange filtered = getFilteredColumns();
+    if (carried.size() != filtered.size()) {
+        return emitOpError("expects one filtered column per carried column, but carries ")
+               << carried.size() << " and filters " << filtered.size();
+    }
+
+    for (size_t columnIndex = 0; columnIndex < carried.size(); columnIndex++) {
+        if (carried[columnIndex].getType() != filtered[columnIndex].getType()) {
+            return emitOpError("filtered column ") << columnIndex
+                                                   << " must have the type of carried column "
+                                                   << columnIndex;
+        }
+    }
+
+    const std::optional<uint64_t> maxHops = getMaxHops();
+    if (maxHops && *maxHops < getMinHops()) {
+        return emitOpError("max_hops must be at least min_hops");
+    }
+
+    const std::optional<llvm::StringRef> edgeType = getEdgeType();
+    if (edgeType && edgeType->empty()) {
+        return emitOpError("edge_type must name an edge type");
+    }
+
+    Region& hop = getHop();
+    if (hop.empty()) {
+        return success();
+    }
+
+    return verifyHopRegion(getOperation(), hop);
+}
+
+LogicalResult ExpandPath::verify() {
+    const auto column = dyn_cast<ColumnType>(getResult().getType());
+    const auto list = column ? dyn_cast<storage::ListType>(column.getType()) : storage::ListType();
+    if (!list) {
+        return emitOpError("must produce a list column");
+    }
+
+    const Type elementType = list.getElementType();
+    if (getKind() == storage::PathExpansionKind::Edges) {
+        if (!isa<storage::EdgeIDType>(elementType)) {
+            return emitOpError("kind edges expands to a list of edge IDs");
+        }
+    } else if (!isa<storage::NodeIDType>(elementType)) {
+        return emitOpError("kind sources and ends expand to a list of node IDs");
+    }
+
+    if (getKind() == storage::PathExpansionKind::Sources && !getSrcids()) {
+        return emitOpError("kind sources reads the seed of each path from srcids");
+    }
+
+    return success();
 }
 
 void GetInEdges::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

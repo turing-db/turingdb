@@ -29,6 +29,8 @@
 #include "iterators/GetOutEdgesByTypeIterator.h"
 #include "iterators/GetOutEdgesByLabelIterator.h"
 #include "iterators/GetPropertiesWithNullIterator.h"
+#include "iterators/PathExplorator.h"
+#include "iterators/PathHopFilter.h"
 #include "iterators/ScanEdgesByTypeIterator.h"
 #include "iterators/ScanEdgesIterator.h"
 #include "iterators/ScanInEdgesByTargetLabelIterator.h"
@@ -48,6 +50,7 @@
 #include "list/ListElementOrder.h"
 #include "list/ListUtils.h"
 #include "map/MapHash.h"
+#include "list/PathTrie.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
@@ -4117,7 +4120,7 @@ void runScanLoopSteps(NLExecutionContext* context,
 // Execute a get_out_edges/get_in_edges loop
 template <typename ChunkWriterType>
 void runEdgeLoopSteps(NLExecutionContext* context,
-                      NLEdgeLoopData* loopData,
+                      NLExpansionLoopData* loopData,
                       ChunkWriterType* chunkWriter,
                       NLPendingEdgeHop* pendingEdges,
                       ColumnNodeIDs* gatheredNodeIDs) {
@@ -5679,6 +5682,149 @@ void NLExecutor::runEachRowLoop(NLExecutionContext* context, NLFunctionData* dat
     }
 }
 
+namespace {
+
+// Runs the hop predicate of an nl.explore_paths over one frame of candidates: the frame is
+// copied a chunk at a time into the three columns the hop statements read, the statements
+// compute the mask, and the survivors are compacted to the front of the frame.
+class NLHopFilter : public PathHopFilter {
+public:
+    NLHopFilter(NLExecutionContext* context, NLExplorePathsLoopData* loopData)
+        : _context(context),
+        _loopData(loopData)
+    {
+        _indices.reserve(context->getChunkSize());
+    }
+
+    ~NLHopFilter() override {
+    }
+
+    size_t filter(NodeID source, std::span<NodeID> candidateNodes, std::span<EdgeID> candidateEdges) override {
+        const size_t chunkSize = _context->getChunkSize();
+        ColumnNodeIDs* sources = _loopData->getHopSources();
+        ColumnEdgeIDs* edges = _loopData->getHopEdges();
+        ColumnNodeIDs* ends = _loopData->getHopEnds();
+        const Column* mask = _loopData->getHopMask();
+        const NLMaskSurvivorFunction survivors = _loopData->getHopSurvivors();
+        const NLStmtContainer* stmts = _loopData->getHopStmts();
+
+        size_t kept = 0;
+        for (size_t begin = 0; begin < candidateNodes.size(); begin += chunkSize) {
+            const size_t count = std::min(chunkSize, candidateNodes.size() - begin);
+
+            sources->resize(count);
+            std::fill_n(sources->begin(), count, source);
+
+            edges->resize(count);
+            std::copy_n(candidateEdges.begin() + begin, count, edges->begin());
+
+            ends->resize(count);
+            std::copy_n(candidateNodes.begin() + begin, count, ends->begin());
+
+            runBody(_context, stmts);
+
+            _indices.getRaw().clear();
+            survivors(mask, &_indices);
+
+            for (const size_t survivor : _indices.getRaw()) {
+                candidateNodes[kept] = candidateNodes[begin + survivor];
+                candidateEdges[kept] = candidateEdges[begin + survivor];
+                kept++;
+            }
+        }
+
+        return kept;
+    }
+
+private:
+    NLExecutionContext* _context {nullptr};
+    NLExplorePathsLoopData* _loopData {nullptr};
+    ColumnVector<size_t> _indices;
+};
+
+}
+
+void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLExplorePathsLoopData* loopData = static_cast<NLExplorePathsLoopData*>(data);
+    const ColumnNodeIDs* inputNodeIDs = loopData->getInput();
+
+    if (inputNodeIDs->empty()) {
+        return;
+    }
+
+    // An edge type absent from the schema matches no edge, so nothing is ever expanded;
+    // the zero-length rows of a min of zero still come out, so this is not an early return
+    const uint64_t maxHops = loopData->isMatchable() ? loopData->getMaxHops() : 0;
+
+    PathExplorator explorator(*context->getView(),
+                              inputNodeIDs,
+                              loopData->getDirection(),
+                              loopData->getMinHops(),
+                              maxHops);
+    explorator.setIndices(loopData->getIndices());
+    explorator.setTargets(loopData->getTargets());
+
+    if (loopData->getPaths()) {
+        explorator.setPaths(loopData->getPaths(), loopData->getTrie());
+    }
+
+    if (loopData->filtersByType()) {
+        explorator.setEdgeTypeFilter(loopData->getEdgeType());
+    }
+
+    std::optional<NLHopFilter> hopFilter;
+    if (loopData->hasHopFilter()) {
+        hopFilter.emplace(context, loopData);
+        explorator.setHopFilter(&*hopFilter);
+    }
+
+    runEdgeLoopSteps(context, loopData, &explorator, loopData->getSources());
+}
+
+void NLExecutor::runExpandPath(NLExecutionContext* context, NLFunctionData* data) {
+    const NLExpandPathData* expand = static_cast<NLExpandPathData*>(data);
+    const std::vector<PathRef>& paths = expand->getPaths()->getRaw();
+    std::vector<ListView>& lists = expand->getOutput()->getRaw();
+    const PathTrie& trie = *expand->getTrie();
+    QueryListBuffer& listBuffer = *expand->getListBuffer();
+
+    lists.resize(paths.size());
+
+    switch (expand->getKind()) {
+        case PathExpansionKind::Edges:
+            for (size_t row = 0; row < paths.size(); row++) {
+                lists[row] = trie.expandEdges(paths[row], listBuffer);
+            }
+        break;
+
+        case PathExpansionKind::Sources: {
+            const std::vector<NodeID>& seeds = expand->getSeeds()->getRaw();
+            for (size_t row = 0; row < paths.size(); row++) {
+                lists[row] = trie.expandSources(paths[row], seeds[row], listBuffer);
+            }
+        }
+        break;
+
+        case PathExpansionKind::Ends:
+            for (size_t row = 0; row < paths.size(); row++) {
+                lists[row] = trie.expandEnds(paths[row], listBuffer);
+            }
+        break;
+    }
+}
+
+void NLExecutor::runPathLength(NLExecutionContext* context, NLFunctionData* data) {
+    const NLPathLengthData* length = static_cast<NLPathLengthData*>(data);
+    const std::vector<PathRef>& paths = length->getPaths()->getRaw();
+    std::vector<uint64_t>& lengths = length->getOutput()->getRaw();
+    const PathTrie& trie = *length->getTrie();
+
+    lengths.resize(paths.size());
+    for (size_t row = 0; row < paths.size(); row++) {
+        lengths[row] = trie.getDepth(paths[row]);
+    }
+}
+
 void NLExecutor::runCrossProductLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLCrossProductLoopData* loopData = static_cast<NLCrossProductLoopData*>(data);
 
@@ -5778,9 +5924,28 @@ void NLExecutor::runSkipTruncate(NLExecutionContext* context, NLFunctionData* da
 }
 
 void NLExecutor::runOutput(NLExecutionContext* context, NLFunctionData* data) {
-    const NLOutputData* output = static_cast<NLOutputData*>(data);
+    NLOutputData* output = static_cast<NLOutputData*>(data);
     const auto& cols = output->outputs();
     bioassert(!cols.empty(), "nl.output requires at least one column");
+
+    // A path chunk reaches the sink as the lists its handles stand for, expanded into a
+    // buffer of this emission alone: the sink reads them during the call and never again
+    const std::vector<NLOutputData::PathExpansion>& expansions = output->pathExpansions();
+    if (!expansions.empty()) {
+        QueryListBuffer& listBuffer = output->pathListBuffer();
+        listBuffer.clear();
+
+        const PathTrie& trie = *output->getTrie();
+        for (const NLOutputData::PathExpansion& expansion : expansions) {
+            const std::vector<PathRef>& paths = expansion._paths->getRaw();
+            std::vector<ListView>& lists = expansion._lists->getRaw();
+
+            lists.resize(paths.size());
+            for (size_t row = 0; row < paths.size(); row++) {
+                lists[row] = trie.expandEdges(paths[row], listBuffer);
+            }
+        }
+    }
 
     // Compute the [offset, offset + rowCount) window to emit, copy-free:
     //  - skip (the folded terminal-SKIP form): emit the surviving suffix at offset
@@ -8615,6 +8780,10 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
         case NLChunkKind::DateTime:
             return &distinctKeyAppendPlainColumn<types::DateTime::Primitive>;
         break;
+
+        case NLChunkKind::PathRef:
+            throw IRException("A path column cannot be a DISTINCT or grouping key: expand it into its list first");
+        break;
     }
 
     bioassert(false, "Unknown NLChunkKind");
@@ -9198,6 +9367,10 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctChunkFold(NLChu
         case NLChunkKind::DateTime:
             return &groupFoldCountDistinctValue<types::DateTime::Primitive>;
         break;
+
+        case NLChunkKind::PathRef:
+            throw IRException("count(DISTINCT) cannot key on a path column: expand it into its list first");
+        break;
     }
 
     bioassert(false, "Unknown NLChunkKind");
@@ -9380,6 +9553,7 @@ NLKeyAppendFunction NLExecutor::selectPlainMergeKeyAppendFunction(NLChunkKind ki
         case NLChunkKind::List:
         case NLChunkKind::Map:
         case NLChunkKind::Path:
+        case NLChunkKind::PathRef:
             throw IRException("a MERGE pattern cannot constrain a property to this value");
         break;
 
@@ -9619,6 +9793,10 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
 
         case NLChunkKind::DateTime:
             return &compareColumn<types::DateTime::Primitive>;
+        break;
+
+        case NLChunkKind::PathRef:
+            throw IRException("A path column cannot be a sort key: expand it into its list first");
         break;
     }
 

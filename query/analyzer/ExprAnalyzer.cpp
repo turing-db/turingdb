@@ -943,6 +943,13 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         throwError(error, expr);
     }
 
+    if (varDecl->isQuantifiedPath()) {
+        throwError(fmt::format("Variable '{}' binds the list of a variable-length path, "
+                               "not a single entity: it has no property '{}'",
+                               varName->getName(), propName->getName()),
+                   expr);
+    }
+
     const auto propTypeFound = _graphMetadata.propTypes().get(propName->getName());
 
     ValueType vt = ValueType::Invalid;
@@ -1187,6 +1194,13 @@ void ExprAnalyzer::analyzeEntityTypeExpr(EntityTypeExpr* expr) {
                                               decl->getName(), EvaluatedTypeName::value(decl->getType()));
 
         throwError(error, expr);
+    }
+
+    if (decl->isQuantifiedPath()) {
+        throwError(fmt::format("Variable '{}' binds the list of a variable-length path, "
+                               "not a single entity: it has no label or type",
+                               decl->getName()),
+                   expr);
     }
 
     expr->setEntityDecl(decl);

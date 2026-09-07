@@ -419,6 +419,13 @@ void FunctionDecls::initDefault() {
     range->setReturnTypes({{EvaluatedType::List}});
     range->setReturnedListShape(ListShape(EvaluatedType::Integer, 1));
 
+    // The hop count of a variable-length path; the legacy engine has no path column to
+    // read it from
+    FunctionSignature* sizePath = createFunction("size");
+    sizePath->setArguments({EvaluatedType::EdgePattern});
+    sizePath->setReturnTypes({{EvaluatedType::Integer}});
+    sizePath->setIsV3Only(true);
+
     // Conversion functions
     FunctionSignature* toInteger = createFunction("toInteger");
     toInteger->setArguments({EvaluatedType::String});

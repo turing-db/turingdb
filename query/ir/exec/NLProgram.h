@@ -25,9 +25,11 @@
 #include "columns/ColumnStringTable.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
+#include "iterators/PathExplorationDir.h"
 #include "list/ListBuffer.h"
 #include "list/ListView.h"
 #include "map/MapView.h"
+#include "list/PathTrie.h"
 #include "metadata/LabelSet.h"
 #include "metadata/LabelSetHandle.h"
 #include "metadata/PropertyType.h"
@@ -68,6 +70,7 @@ enum class NLChunkKind {
     Map,
     Path,
     DateTime,
+    PathRef,
 };
 
 // Invoke handler with the column element type a chunk kind stands for, so the families of
@@ -142,6 +145,10 @@ void dispatchChunkKind(NLChunkKind kind, Handler&& handler) {
 
         case NLChunkKind::DateTime:
             return handler.template operator()<types::DateTime::Primitive>();
+        break;
+
+        case NLChunkKind::PathRef:
+            return handler.template operator()<PathRef>();
         break;
     }
 
@@ -725,21 +732,18 @@ private:
     bool _matchable {true};
 };
 
-// nl.get_out_edges and nl.get_in_edges loop data
-// The state is the same for get_out_edges/get_in_edges
-class NLEdgeLoopData : public NLFunctionData {
+// The seed-expansion core shared by every loop that fans an input node chunk out: the
+// input, the seed and end node chunks a step fills, the row-to-input-row indices that
+// gather the carry set, the limit and the body
+class NLExpansionLoopData : public NLFunctionData {
 public:
     using CarriedColumns = std::vector<NLCarriedColumn>;
 
-    NLEdgeLoopData(const ColumnNodeIDs* input,
-                   ColumnNodeIDs* sources,
-                   ColumnEdgeIDs* edgeIDs,
-                   ColumnEdgeTypes* edgeTypes,
-                   ColumnNodeIDs* targets)
+    NLExpansionLoopData(const ColumnNodeIDs* input,
+                        ColumnNodeIDs* sources,
+                        ColumnNodeIDs* targets)
         : _inputNodeIDs(input),
         _sources(sources),
-        _edgeIDs(edgeIDs),
-        _edgeTypes(edgeTypes),
         _targets(targets)
     {
     }
@@ -747,8 +751,6 @@ public:
     const ColumnNodeIDs* getInput() const { return _inputNodeIDs; }
 
     ColumnNodeIDs* getSources() const { return _sources; }
-    ColumnEdgeIDs* getEdgeIDs() const { return _edgeIDs; }
-    ColumnEdgeTypes* getEdgeTypes() const { return _edgeTypes; }
     ColumnNodeIDs* getTargets() const { return _targets; }
 
     ColumnVector<size_t>* getIndices() { return &_indices; }
@@ -771,10 +773,7 @@ private:
     const ColumnNodeIDs* _inputNodeIDs {nullptr};
     NLLimitState* _limit {nullptr};
 
-    // The four fixed chunks of an edge iterator step, in loop-variable order
     ColumnNodeIDs* _sources {nullptr};
-    ColumnEdgeIDs* _edgeIDs {nullptr};
-    ColumnEdgeTypes* _edgeTypes {nullptr};
     ColumnNodeIDs* _targets {nullptr};
 
     CarriedColumns _carriedColumns;
@@ -782,6 +781,173 @@ private:
 
     // Scratch for the writer's row-to-input-row map, which drives the gathers
     ColumnVector<size_t> _indices;
+};
+
+// nl.get_out_edges and nl.get_in_edges loop data
+// The state is the same for get_out_edges/get_in_edges
+class NLEdgeLoopData : public NLExpansionLoopData {
+public:
+    NLEdgeLoopData(const ColumnNodeIDs* input,
+                   ColumnNodeIDs* sources,
+                   ColumnEdgeIDs* edgeIDs,
+                   ColumnEdgeTypes* edgeTypes,
+                   ColumnNodeIDs* targets)
+        : NLExpansionLoopData(input, sources, targets),
+        _edgeIDs(edgeIDs),
+        _edgeTypes(edgeTypes)
+    {
+    }
+
+    ColumnEdgeIDs* getEdgeIDs() const { return _edgeIDs; }
+    ColumnEdgeTypes* getEdgeTypes() const { return _edgeTypes; }
+
+private:
+    ColumnEdgeIDs* _edgeIDs {nullptr};
+    ColumnEdgeTypes* _edgeTypes {nullptr};
+};
+
+// nl.explore_paths loop data: the variable-length sibling of NLEdgeLoopData. On top of the
+// seed and end chunks it fills the path handle chunk out of the query's trie, and carries
+// the exploration's direction, hop bounds and resolved edge type. _matchable is false when
+// the type name was absent from the schema, so no hop can match: only the zero-length rows
+// of a min of zero are emitted. The hop predicate, when there is one, is the translated
+// body of the op's hop region over three loop-owned columns, ending in the mask chunk.
+class NLExplorePathsLoopData : public NLExpansionLoopData {
+public:
+    NLExplorePathsLoopData(const ColumnNodeIDs* input,
+                           ColumnNodeIDs* sources,
+                           ColumnNodeIDs* targets,
+                           ColumnVector<PathRef>* paths,
+                           PathTrie* trie,
+                           PathExplorationDir direction,
+                           uint64_t minHops,
+                           uint64_t maxHops,
+                           bool filtersByType,
+                           EdgeTypeID edgeType,
+                           bool matchable)
+        : NLExpansionLoopData(input, sources, targets),
+        _paths(paths),
+        _trie(trie),
+        _direction(direction),
+        _minHops(minHops),
+        _maxHops(maxHops),
+        _filtersByType(filtersByType),
+        _edgeType(edgeType),
+        _matchable(matchable)
+    {
+    }
+
+    ColumnVector<PathRef>* getPaths() const { return _paths; }
+    PathTrie* getTrie() const { return _trie; }
+    PathExplorationDir getDirection() const { return _direction; }
+    uint64_t getMinHops() const { return _minHops; }
+    uint64_t getMaxHops() const { return _maxHops; }
+    bool filtersByType() const { return _filtersByType; }
+    EdgeTypeID getEdgeType() const { return _edgeType; }
+    bool isMatchable() const { return _matchable; }
+
+    bool hasHopFilter() const { return _hopMask != nullptr; }
+
+    void setHopFilter(ColumnNodeIDs* hopSources,
+                      ColumnEdgeIDs* hopEdges,
+                      ColumnNodeIDs* hopEnds,
+                      const Column* hopMask,
+                      NLMaskSurvivorFunction hopSurvivors) {
+        _hopSources = hopSources;
+        _hopEdges = hopEdges;
+        _hopEnds = hopEnds;
+        _hopMask = hopMask;
+        _hopSurvivors = hopSurvivors;
+    }
+
+    ColumnNodeIDs* getHopSources() const { return _hopSources; }
+    ColumnEdgeIDs* getHopEdges() const { return _hopEdges; }
+    ColumnNodeIDs* getHopEnds() const { return _hopEnds; }
+    const Column* getHopMask() const { return _hopMask; }
+    NLMaskSurvivorFunction getHopSurvivors() const { return _hopSurvivors; }
+
+    NLStmtContainer* getHopStmts() { return &_hopStmts; }
+    const NLStmtContainer* getHopStmts() const { return &_hopStmts; }
+
+private:
+    ColumnVector<PathRef>* _paths {nullptr};
+    PathTrie* _trie {nullptr};
+    PathExplorationDir _direction {PathExplorationDir::FORWARD};
+    uint64_t _minHops {0};
+    uint64_t _maxHops {0};
+    bool _filtersByType {false};
+    EdgeTypeID _edgeType;
+    bool _matchable {true};
+
+    ColumnNodeIDs* _hopSources {nullptr};
+    ColumnEdgeIDs* _hopEdges {nullptr};
+    ColumnNodeIDs* _hopEnds {nullptr};
+    const Column* _hopMask {nullptr};
+    NLMaskSurvivorFunction _hopSurvivors {nullptr};
+    NLStmtContainer _hopStmts;
+};
+
+// The list a path handle expands to; the interpreter-side counterpart of the MLIR
+// storage::PathExpansionKind, which the translator maps onto this
+enum class PathExpansionKind {
+    Edges,
+    Sources,
+    Ends,
+};
+
+// nl.expand_path data: one list per row, written into the query's list buffer from the
+// trie the handles index. The seeds are read for the sources kind alone.
+class NLExpandPathData : public NLFunctionData {
+public:
+    NLExpandPathData(const ColumnVector<PathRef>* paths,
+                     const ColumnNodeIDs* seeds,
+                     ColumnVector<ListView>* output,
+                     PathExpansionKind kind,
+                     const PathTrie* trie,
+                     QueryListBuffer* listBuffer)
+        : _paths(paths),
+        _seeds(seeds),
+        _output(output),
+        _kind(kind),
+        _trie(trie),
+        _listBuffer(listBuffer)
+    {
+    }
+
+    const ColumnVector<PathRef>* getPaths() const { return _paths; }
+    const ColumnNodeIDs* getSeeds() const { return _seeds; }
+    ColumnVector<ListView>* getOutput() const { return _output; }
+    PathExpansionKind getKind() const { return _kind; }
+    const PathTrie* getTrie() const { return _trie; }
+    QueryListBuffer* getListBuffer() const { return _listBuffer; }
+
+private:
+    const ColumnVector<PathRef>* _paths {nullptr};
+    const ColumnNodeIDs* _seeds {nullptr};
+    ColumnVector<ListView>* _output {nullptr};
+    PathExpansionKind _kind {PathExpansionKind::Edges};
+    const PathTrie* _trie {nullptr};
+    QueryListBuffer* _listBuffer {nullptr};
+};
+
+// nl.path_length data: the depth of each handle's entry, read without expanding the path
+class NLPathLengthData : public NLFunctionData {
+public:
+    NLPathLengthData(const ColumnVector<PathRef>* paths, ColumnVector<uint64_t>* output, const PathTrie* trie)
+        : _paths(paths),
+        _output(output),
+        _trie(trie)
+    {
+    }
+
+    const ColumnVector<PathRef>* getPaths() const { return _paths; }
+    ColumnVector<uint64_t>* getOutput() const { return _output; }
+    const PathTrie* getTrie() const { return _trie; }
+
+private:
+    const ColumnVector<PathRef>* _paths {nullptr};
+    ColumnVector<uint64_t>* _output {nullptr};
+    const PathTrie* _trie {nullptr};
 };
 
 // nl.get_out_edges_by_type / nl.get_in_edges_by_type loop data: an edge hop
@@ -3269,7 +3435,33 @@ class NLOutputData : public NLFunctionData {
 public:
     using OutputColumns = std::vector<const Column*>;
 
+    // A path chunk emitted as the list of edge IDs each handle stands for
+    struct PathExpansion {
+        const ColumnVector<PathRef>* _paths {nullptr};
+        ColumnVector<ListView>* _lists {nullptr};
+    };
+
     const OutputColumns& outputs() const { return _columns; }
+
+    const std::vector<PathExpansion>& pathExpansions() const { return _pathExpansions; }
+
+    // The sink receives the expanded lists; the row count is still read off the handles
+    void addExpandedPathColumn(const ColumnVector<PathRef>* paths,
+                               ColumnVector<ListView>* lists,
+                               bool carriesRows) {
+        _columns.push_back(lists);
+        _pathExpansions.push_back({paths, lists});
+
+        if (carriesRows) {
+            _rowCountColumns.push_back(paths);
+        }
+    }
+
+    const PathTrie* getTrie() const { return _trie; }
+    void setTrie(const PathTrie* trie) { _trie = trie; }
+
+    // Holds the expanded lists of one emission and is emptied before the next
+    QueryListBuffer& pathListBuffer() { return _pathListBuffer; }
 
     // The columns a step's row count is read off. A constant column holds one value
     // standing for every row of the step, so it cannot say how many there are: only a
@@ -3304,6 +3496,9 @@ public:
 private:
     std::vector<const Column*> _columns;
     std::vector<const Column*> _rowCountColumns;
+    std::vector<PathExpansion> _pathExpansions;
+    const PathTrie* _trie {nullptr};
+    QueryListBuffer _pathListBuffer;
     NLLimitState* _limit {nullptr};
     NLSkipState* _skip {nullptr};
     // Column which may define the cardinality of the output

@@ -758,6 +758,86 @@ def GetInEdgesByLabel : NLOp<"get_in_edges_by_label", [Pure, InferTypeOpAdaptor]
 }
 
 /**
+* ExplorePaths
+*/
+def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create a database iterator over the variable-length paths leaving a chunk of nodes";
+  let description = [{
+    Imperative counterpart of db.explore_paths. Each step of an enclosing nl.for fills
+    one chunk of seed node IDs, end node IDs and path handles, then one filtered chunk
+    per carried column, exactly as nl.get_out_edges fills its edge chunks:
+
+      %paths = nl.explore_paths(%a, {%x}) forward hops 1 to 3 : !nl.chunk<!storage.node_id>
+      nl.for %seeds, %ends, %p, %x2 in %paths { ... }
+
+    The direction, hop bounds and edge type are the db op's, carried through unchanged.
+    The optional `hop` region is the db op's hop predicate lowered: a block over the
+    source node, edge and end node chunks of one hop, yielding a boolean mask chunk.
+    The input chunk type and the three fixed result chunks are inferred; only the
+    carried chunk types are spelled out, after the colon.
+  }];
+
+  let arguments = (ins NLNodeIDChunk:$input_nodes,
+                       Variadic<NLChunk>:$columns_to_filter,
+                       PathDirection:$direction,
+                       UI64Attr:$min_hops,
+                       OptionalAttr<UI64Attr>:$max_hops,
+                       OptionalAttr<StrAttr>:$edge_type);
+  let results   = (outs NLIterator:$result);
+
+  let regions = (region MaxSizedRegion<1>:$hop);
+
+  let assemblyFormat = [{
+    `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
+    (`to` $max_hops^)? (`edge_type` $edge_type^)? ($hop^)? attr-dict
+    ( `:` qualified(type($columns_to_filter))^ )?
+  }];
+
+  let hasVerifier = 1;
+}
+
+/**
+* ExpandPath
+*/
+def ExpandPath : NLOp<"expand_path", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Expand each path handle of a chunk into a list";
+  let description = [{
+    Imperative counterpart of db.expand_path: one list per row, of the path's edges, of
+    the end node of each hop, or of the source node of each hop (the seed chunk's row
+    then every end but the last).
+
+      %e = nl.expand_path(%p, %s) kind edges
+             : (!nl.chunk<!storage.path_ref>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.list<!storage.edge_id>>
+  }];
+
+  let arguments = (ins NLChunk:$paths, Optional<NLNodeIDChunk>:$srcids, PathExpansionKind:$kind);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = [{
+    `(` $paths (`,` $srcids^)? `)` `kind` $kind attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
+* PathLength
+*/
+def PathLength : NLOp<"path_length", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Read the number of edges of each path of a chunk";
+  let description = [{
+    Imperative counterpart of db.path_length: one unsigned count per row.
+
+      %n = nl.path_length(%p) : (!nl.chunk<!storage.path_ref>) -> !nl.chunk<ui64>
+  }];
+
+  let arguments = (ins NLChunk:$paths);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = [{
+    `(` $paths `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
 * GetPropertyType
 */
 def GetPropertyType : NLOp<"get_property_type", [Pure]> {
@@ -1018,9 +1098,22 @@ def For : NLOp<"for", [SingleBlockImplicitTerminator<"Yield">]> {
 /**
 * Yield
 */
-def Yield : NLOp<"yield", [Pure, Terminator, HasParent<"For">]> {
-  let summary = "End one step of an nl.for loop";
-  let assemblyFormat = "attr-dict";
+def Yield : NLOp<"yield", [Pure, Terminator, ParentOneOf<["For", "ExplorePaths"]>]> {
+  let summary = "End one step of an nl.for loop, or yield the mask of an explore_paths hop";
+  let description = [{
+    The implicit terminator of an nl.for body carries nothing. The terminator of an
+    nl.explore_paths hop region yields the one boolean mask chunk that says which
+    candidates of a hop pass its predicate.
+  }];
+
+  let arguments = (ins Variadic<NLChunk>:$columns);
+
+  let assemblyFormat = "( $columns^ `:` qualified(type($columns)) )? attr-dict";
+
+  // nl.for's implicit terminator is built with no operands
+  let builders = [
+      OpBuilder<(ins)>
+  ];
 }
 
 /**
