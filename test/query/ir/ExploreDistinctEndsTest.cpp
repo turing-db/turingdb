@@ -28,6 +28,8 @@
 #include "LocalMemory.h"
 #include "SimpleGraph.h"
 #include "iterators/ChunkConfig.h"
+#include "iterators/PathExplorationDir.h"
+#include "iterators/PathExplorator.h"
 #include "metadata/LabelSet.h"
 #include "reader/GraphReader.h"
 #include "versioning/Change.h"
@@ -207,6 +209,28 @@ func.func @main() {
     %ok = db.check_label_constraint(%ls, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
     db.yield %ok : !db.column<!storage.bool>
   } : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  %d:2 = db.remove_duplicates(%0#0, %0#1) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%d#0, %d#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// MATCH (n)-->(m) RETURN DISTINCT n, m over the generated graph as an exploration of one
+// hop, in both forms: a batch's balls hardly overlap there, so the executor walks it
+const char* const generatedOneHopEnumeratedProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %0:3 = db.explore_paths(%n, {}) forward hops 1 to 1 : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  %d:2 = db.remove_duplicates(%0#0, %0#1) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%d#0, %d#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+const char* const generatedOneHopDistinctProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %0:3 = db.explore_paths(%n, {}) forward hops 1 to 1 distinct : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
   %d:2 = db.remove_duplicates(%0#0, %0#1) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
   db.output(%d#0, %d#1) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
@@ -442,7 +466,14 @@ TEST_F(ExploreDistinctEndsSimpleGraphTest, passedProgramsEmitTheDeduplicatedRows
 TEST_F(ExploreDistinctEndsGeneratedGraphTest, distinctFormEmitsTheDeduplicatedRows) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
     ASSERT_EQ(reader.getNodeCount(), nodeCount);
 
-    expectSameRows(generatedEnumeratedProgram, generatedDistinctProgram, reader.getView());
+    // Three hops from sixty-four seeds cover the graph several times over, one hop barely a
+    // third of it: the executor searches the first and walks the second
+    EXPECT_TRUE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::FORWARD, 3));
+    EXPECT_FALSE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::FORWARD, 1));
+
+    expectSameRows(generatedEnumeratedProgram, generatedDistinctProgram, view);
+    expectSameRows(generatedOneHopEnumeratedProgram, generatedOneHopDistinctProgram, view);
 }
