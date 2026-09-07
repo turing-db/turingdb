@@ -162,7 +162,7 @@ protected:
 
         std::string printed;
         llvm::raw_string_ostream stream(printed);
-        concat.getResult().getType().print(stream);
+        concat.getResult().getType().getElementType().print(stream);
 
         return printed;
     }

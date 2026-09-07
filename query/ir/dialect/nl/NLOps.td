@@ -1364,7 +1364,7 @@ def Add : NLOp<"add", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
-def Concat : NLOp<"concat", [Pure, ConstantThroughOperands]> {
+def Concat : NLOp<"concat", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise concatenation of two string or two list chunks";
   let description = [{
       %r = nl.concat %x, %y : (!nl.chunk<!storage.string>, !nl.chunk<!storage.string>) -> !nl.chunk<!storage.string>
