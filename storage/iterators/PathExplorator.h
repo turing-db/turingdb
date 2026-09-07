@@ -94,19 +94,28 @@ private:
         std::span<const EdgeRecord> _pendingIns;
     };
 
-    // The multi-source search of the distinct mode: one bit per seed of the current batch
-    // in the seen and frontier words, the rows a level gained emitted before the next level
-    // is expanded, and the touched words cleared between batches
+    // One node's words in the multi-source search: the seeds that have reached it, those
+    // reaching it at the level being expanded, and those it gained at the level just closed.
+    // The batch that wrote them dates them: words of an earlier batch read as empty, so no
+    // batch clears what it touched.
+    struct ReachWords {
+        uint64_t _seen {0};
+        uint64_t _frontier {0};
+        uint64_t _gained {0};
+        uint64_t _batch {0};
+    };
+
+    // The multi-source search of the distinct mode: one bit per seed of the current batch in
+    // the words of every node, the rows a level gained emitted before the next level is
+    // expanded
     struct Reachability {
-        std::vector<uint64_t> _seen;
-        std::vector<uint64_t> _frontierWords;
-        std::vector<uint64_t> _gained;
+        std::vector<ReachWords> _words;
         std::vector<NodeID> _frontier;
         std::vector<NodeID> _next;
-        std::vector<NodeID> _touched;
         std::vector<NodeID> _candidateNodes;
         std::vector<EdgeID> _candidateEdges;
         size_t _batchFirstRow {0};
+        uint64_t _batch {0};
         uint64_t _level {0};
         size_t _emitNode {0};
         uint64_t _emitBits {0};
@@ -162,6 +171,7 @@ private:
     void emit(size_t seedRow, NodeID target, PathRef path);
 
     void fillDistinct(size_t maxCount);
+    ReachWords& wordsOf(NodeID node);
     void startBatch();
     void emitGainedRows(size_t maxCount);
     void expandLevel();
