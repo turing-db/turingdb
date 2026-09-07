@@ -572,7 +572,8 @@ int main(int argc, char** argv) {
             printAsciiTable(headers, rows);
             std::cout << "Gate verdict for " << seeds.size() << " seeds and " << distinctTargets.size()
                       << " targets in " << targetIndex.getBatchCount() << " batch(es): "
-                      << (worthBuilding ? "build" : "skip") << "\n\n";
+                      << (worthBuilding ? "build" : "skip") << " (" << (targetIndex.isDense() ? "dense" : "sparse")
+                      << " batches reaching " << targetIndex.getReachedCount() << " nodes in all)\n\n";
         }
 
         // --- Distinct ends: the enumeration against the multi-source search ---
