@@ -462,6 +462,34 @@ target_link_libraries(test_query_ir_system_command PRIVATE
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_system_command PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# LOAD PARQUET imports the split-export fixture pair the importer's own tests use, and
+# reads the graph it built back through the engine, so the rows come out as text.
+add_turing_test(test_query_ir_load_parquet_v3 LoadParquetV3Test.cpp)
+target_sources(test_query_ir_load_parquet_v3 PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_load_parquet_v3 PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_load_parquet_v3 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_definitions(test_query_ir_load_parquet_v3
+    PRIVATE PARQUET_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/import/parquet")
+
+# LOAD EMBEDDING writes the Parquet files it reads, so it needs the Parquet writer, which
+# the engine links privately.
+add_turing_test(test_query_ir_load_embedding_v3 LoadEmbeddingV3Test.cpp)
+target_link_libraries(test_query_ir_load_embedding_v3 PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_db_io_parquet_s)
+target_include_directories(test_query_ir_load_embedding_v3 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 # VECTOR SEARCH runs against the session's vector indexes, which the system manager
 # holds, so the search tests drive the whole engine the way the system-command ones do.
 add_turing_test(test_query_ir_vector_search VectorSearchTest.cpp)
