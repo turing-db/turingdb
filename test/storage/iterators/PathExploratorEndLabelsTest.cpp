@@ -12,14 +12,9 @@
 #include "iterators/PathDistanceIndex.h"
 #include "iterators/PathExplorationDir.h"
 #include "metadata/LabelSet.h"
-#include "metadata/LabelSetHandle.h"
 #include "reader/GraphReader.h"
-#include "versioning/Change.h"
-#include "versioning/CommitBuilder.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
-#include "writers/DataPartBuilder.h"
-#include "writers/MetadataBuilder.h"
 #include "JobSystem.h"
 
 using namespace db;
@@ -33,123 +28,17 @@ bool nothingPasses(uint64_t, uint64_t, uint64_t) {
 
 }
 
-// A hub with one live branch, hub->c1->c2->t ending on the T node t, and one dead one:
-// hub->dead fans out to four nodes of three leaves each, none of which reaches a T node.
-// t->hub is a type B edge closing a cycle. The second commit adds a node entering the hub
-// and a second T node reached from c2 through a patch edge. The first commit's N nodes may
-// be renumbered, so the hub and c2 are read off the graph before the second commit.
 class PathExploratorEndLabelsTest : public TuringTest {
 protected:
-    static constexpr size_t firstCommitNodeCount = 21;
-    static constexpr size_t nodeCount = 23;
+    static constexpr size_t nodeCount = HubGraph::nodeCount;
 
     void initialize() override {
         _jobSystem = std::make_unique<JobSystem>();
         _jobSystem->init();
         _graph = Graph::create();
 
-        {
-            auto change = _graph->newChange();
-            auto* commitBuilder = change->access().getTip();
-            auto& builder = commitBuilder->newBuilder();
-            auto& metadata = builder.getMetadata();
-
-            const LabelSet plain = LabelSet::fromList({metadata.getOrCreateLabel("N")});
-            _labelT = metadata.getOrCreateLabel("T");
-            const LabelSet end = LabelSet::fromList({_labelT});
-            _typeA = metadata.getOrCreateEdgeType("A");
-            _typeB = metadata.getOrCreateEdgeType("B");
-
-            const NodeID hub = builder.addNode(plain);
-            const NodeID chainOne = builder.addNode(plain);
-            const NodeID chainTwo = builder.addNode(plain);
-            const NodeID dead = builder.addNode(plain);
-
-            std::vector<NodeID> cluster;
-            for (size_t member = 0; member < 4; member++) {
-                cluster.push_back(builder.addNode(plain));
-            }
-
-            std::vector<NodeID> leaves;
-            for (size_t leaf = 0; leaf < 12; leaf++) {
-                leaves.push_back(builder.addNode(plain));
-            }
-
-            const NodeID target = builder.addNode(end);
-
-            builder.addEdge(_typeA, hub, chainOne);
-            builder.addEdge(_typeA, chainOne, chainTwo);
-            builder.addEdge(_typeA, chainTwo, target);
-            builder.addEdge(_typeB, target, hub);
-            builder.addEdge(_typeA, hub, dead);
-
-            for (size_t member = 0; member < cluster.size(); member++) {
-                builder.addEdge(_typeA, dead, cluster[member]);
-                for (size_t leaf = 0; leaf < 3; leaf++) {
-                    builder.addEdge(_typeA, cluster[member], leaves[member * 3 + leaf]);
-                }
-            }
-
-            const auto submitted = change->access().submit(*_jobSystem);
-            ASSERT_TRUE(submitted);
-        }
-
-        {
-            const FrozenCommitTx transaction = _graph->openTransaction();
-            const GraphReader reader = transaction.readGraph();
-            ASSERT_EQ(reader.getNodeCount(), firstCommitNodeCount);
-
-            Adjacency firstAdjacency;
-            buildAdjacency(reader.getView(), firstCommitNodeCount, firstAdjacency);
-
-            for (size_t node = 0; node < firstCommitNodeCount; node++) {
-                if (reader.getNodeLabelSet(NodeID(node)).hasLabel(_labelT)) {
-                    _target = node;
-                }
-            }
-
-            // The end's one out-edge returns to the hub and its one in-edge comes from c2
-            _hub = firstAdjacency._outs[_target].front()._other;
-            _chainTwo = firstAdjacency._ins[_target].front()._other;
-            _chainOne = firstAdjacency._ins[_chainTwo].front()._other;
-        }
-
-        {
-            auto change = _graph->newChange();
-            auto* commitBuilder = change->access().getTip();
-            auto& builder = commitBuilder->newBuilder();
-            auto& metadata = builder.getMetadata();
-
-            const LabelSet plain = LabelSet::fromList({metadata.getOrCreateLabel("N")});
-            const LabelSet end = LabelSet::fromList({_labelT});
-
-            const NodeID entrance = builder.addNode(plain);
-            const NodeID secondTarget = builder.addNode(end);
-
-            builder.addEdge(_typeA, entrance, NodeID(_hub));
-            builder.addEdge(_typeA, NodeID(_chainTwo), secondTarget);
-
-            const auto submitted = change->access().submit(*_jobSystem);
-            ASSERT_TRUE(submitted);
-        }
-
-        _endLabels = LabelSet::fromList({_labelT});
-
-        const FrozenCommitTx transaction = _graph->openTransaction();
-        const GraphReader reader = transaction.readGraph();
-        ASSERT_EQ(reader.getNodeCount(), nodeCount);
-        buildAdjacency(reader.getView(), nodeCount, _adjacency);
-
-        _ends.assign(nodeCount, false);
-        for (size_t node = 0; node < nodeCount; node++) {
-            _ends[node] = reader.getNodeLabelSet(NodeID(node)).hasLabel(_labelT);
-            if (_ends[node] && node != _target) {
-                _secondTarget = node;
-            }
-        }
-        ASSERT_EQ(std::count(_ends.begin(), _ends.end(), true), 2);
-        ASSERT_TRUE(_ends[_target]);
-        ASSERT_TRUE(_ends[_secondTarget]);
+        buildHubGraph(*_graph, *_jobSystem, _hubGraph);
+        _endLabels = LabelSet::fromList({_hubGraph._labelT});
     }
 
     void terminate() override {
@@ -171,8 +60,8 @@ protected:
                        uint64_t minHops,
                        uint64_t maxHops,
                        ExplorationOptions options) {
-        ReferenceEnumerator reference(_adjacency, direction, minHops, maxHops);
-        reference.setEnds(&_ends);
+        ReferenceEnumerator reference(_hubGraph._adjacency, direction, minHops, maxHops);
+        reference.setEnds(&_hubGraph._ends);
         if (options._edgeType) {
             reference.setEdgeType(options._edgeType->getValue());
         }
@@ -197,17 +86,8 @@ protected:
 
     std::unique_ptr<JobSystem> _jobSystem;
     std::unique_ptr<Graph> _graph;
-    Adjacency _adjacency;
-    std::vector<bool> _ends;
+    HubGraph _hubGraph;
     LabelSet _endLabels;
-    LabelID _labelT;
-    EdgeTypeID _typeA;
-    EdgeTypeID _typeB;
-    uint64_t _hub {0};
-    uint64_t _chainOne {0};
-    uint64_t _chainTwo {0};
-    uint64_t _target {0};
-    uint64_t _secondTarget {0};
 };
 
 TEST_F(PathExploratorEndLabelsTest, matchesTheReferenceWithAndWithoutTheIndex) {
@@ -245,7 +125,7 @@ TEST_F(PathExploratorEndLabelsTest, typeFilterAgreesWithTheReference) {
     ColumnNodeIDs input;
     allNodes(input);
 
-    for (const EdgeTypeID edgeType : {_typeA, _typeB}) {
+    for (const EdgeTypeID edgeType : {_hubGraph._typeA, _hubGraph._typeB}) {
         for (const PathExplorationDir direction : {PathExplorationDir::FORWARD, PathExplorationDir::BOTH}) {
             ExplorationOptions options;
             options._edgeType = edgeType;
@@ -297,8 +177,8 @@ TEST_F(PathExploratorEndLabelsTest, hopFilterRejectingEveryFrameLeavesTheZeroLen
     options._endLabels = &_endLabels;
 
     const std::vector<PathRow> expected {
-        {_target, _target, {}},
-        {_secondTarget, _secondTarget, {}},
+        {_hubGraph._target, _hubGraph._target, {}},
+        {_hubGraph._secondTarget, _hubGraph._secondTarget, {}},
     };
 
     std::vector<PathRow> rows;
@@ -324,7 +204,7 @@ TEST_F(PathExploratorEndLabelsTest, labelNoNodeCarriesEmitsNothing) {
     ColumnNodeIDs input;
     allNodes(input);
 
-    const LabelSet unused = LabelSet::fromList({LabelID(_labelT.getValue() + 1)});
+    const LabelSet unused = LabelSet::fromList({LabelID(_hubGraph._labelT.getValue() + 1)});
     ExplorationOptions options;
     options._endLabels = &unused;
 
@@ -349,17 +229,18 @@ TEST_F(PathExploratorEndLabelsTest, patchEdgeReachesTheSecondCommitEnd) {
     const GraphReader reader = transaction.readGraph();
     const GraphView& view = reader.getView();
 
-    const uint64_t first = edgeBetween(_adjacency, _hub, _chainOne);
-    const uint64_t second = edgeBetween(_adjacency, _chainOne, _chainTwo);
-    const uint64_t last = edgeBetween(_adjacency, _chainTwo, _target);
-    const uint64_t patch = edgeBetween(_adjacency, _chainTwo, _secondTarget);
+    const Adjacency& adjacency = _hubGraph._adjacency;
+    const uint64_t first = edgeBetween(adjacency, _hubGraph._hub, _hubGraph._chainOne);
+    const uint64_t second = edgeBetween(adjacency, _hubGraph._chainOne, _hubGraph._chainTwo);
+    const uint64_t last = edgeBetween(adjacency, _hubGraph._chainTwo, _hubGraph._target);
+    const uint64_t patch = edgeBetween(adjacency, _hubGraph._chainTwo, _hubGraph._secondTarget);
 
     const std::vector<PathRow> expected {
-        {0, _target, {first, second, last}},
-        {0, _secondTarget, {first, second, patch}},
+        {0, _hubGraph._target, {first, second, last}},
+        {0, _hubGraph._secondTarget, {first, second, patch}},
     };
 
-    const ColumnNodeIDs input {NodeID(_hub)};
+    const ColumnNodeIDs input {NodeID(_hubGraph._hub)};
     ExplorationOptions options;
     options._endLabels = &_endLabels;
 

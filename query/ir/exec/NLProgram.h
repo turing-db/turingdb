@@ -27,6 +27,7 @@
 #include "iterators/ChunkConfig.h"
 #include "iterators/PathDistanceIndex.h"
 #include "iterators/PathExplorationDir.h"
+#include "iterators/PathTargetIndex.h"
 #include "list/ListBuffer.h"
 #include "list/ListView.h"
 #include "map/MapView.h"
@@ -815,7 +816,8 @@ private:
 // body of the op's hop region over three loop-owned columns, ending in the mask chunk.
 // The end labels, when the op carries them, are resolved here too; _endMatchable is false
 // when one was absent from the schema, so no path can end and nothing is emitted. The
-// distance index that prunes the walk is owned here so every chunk of the loop shares it.
+// distance index that prunes the walk is owned here so every chunk of the loop shares it;
+// the target index of a bound end is owned here too, rebuilt for each chunk's targets.
 class NLExplorePathsLoopData : public NLExpansionLoopData {
 public:
     NLExplorePathsLoopData(const ColumnNodeIDs* input,
@@ -888,6 +890,13 @@ public:
     void addSeedsSeen(size_t count) { _seedsSeen += count; }
     size_t getSeedsSeen() const { return _seedsSeen; }
 
+    void setEndNodes(const ColumnNodeIDs* endNodes) { _endNodes = endNodes; }
+    const ColumnNodeIDs* getEndNodes() const { return _endNodes; }
+    PathTargetIndex* getTargetIndex() { return &_targetIndex; }
+
+    void setDistinctEnds() { _distinctEnds = true; }
+    bool isDistinctEnds() const { return _distinctEnds; }
+
 private:
     ColumnVector<PathRef>* _paths {nullptr};
     PathTrie* _trie {nullptr};
@@ -903,6 +912,10 @@ private:
     bool _endMatchable {true};
     PathDistanceIndex _distanceIndex;
     size_t _seedsSeen {0};
+
+    const ColumnNodeIDs* _endNodes {nullptr};
+    PathTargetIndex _targetIndex;
+    bool _distinctEnds {false};
 
     ColumnNodeIDs* _hopSources {nullptr};
     ColumnEdgeIDs* _hopEdges {nullptr};

@@ -93,6 +93,16 @@ def FuseExploreEndConstraint : Pass<"fuse_explore_end_constraint"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseExploreEndNodes : Pass<"fuse_explore_end_nodes"> {
+    let summary = "Fuse a path exploration and the equality filter binding its end nodes to a carried column into an exploration ending on that column";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
+def FuseExploreDistinctEnds : Pass<"fuse_explore_distinct_ends"> {
+    let summary = "Mark a path exploration whose path is unread and whose rows are only ever deduplicated as distinct, so it emits each end once";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def TrimUnreadColumns : Pass<"trim_unread_columns"> {
     let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops and calls";
     let dependentDialects = ["mlir::db::DB"];

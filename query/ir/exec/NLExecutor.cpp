@@ -31,6 +31,7 @@
 #include "iterators/GetPropertiesWithNullIterator.h"
 #include "iterators/PathDistanceIndex.h"
 #include "iterators/PathExplorator.h"
+#include "iterators/PathTargetIndex.h"
 #include "iterators/PathHopFilter.h"
 #include "iterators/ScanEdgesByTypeIterator.h"
 #include "iterators/ScanEdgesIterator.h"
@@ -5767,6 +5768,32 @@ const PathDistanceIndex* pruningIndexFor(const GraphView& view,
     return index;
 }
 
+// The target index of a bound end is a chunk's own: its distinct targets, batched 64 per
+// word, when the enumeration they imply is costlier than the batches; null otherwise
+const PathTargetIndex* targetIndexFor(const GraphView& view, NLExplorePathsLoopData* loopData, uint64_t maxHops) {
+    const std::vector<NodeID>& endNodes = loopData->getEndNodes()->getRaw();
+
+    std::vector<NodeID> targets(endNodes.begin(), endNodes.end());
+    std::sort(targets.begin(), targets.end());
+    targets.erase(std::unique(targets.begin(), targets.end()), targets.end());
+
+    const PathExplorationDir direction = loopData->getDirection();
+    const bool worthBuilding = PathTargetIndex::isWorthBuilding(view, direction, endNodes.size(), targets.size(), maxHops);
+    if (!worthBuilding) {
+        return nullptr;
+    }
+
+    std::optional<EdgeTypeID> edgeType;
+    if (loopData->filtersByType()) {
+        edgeType = loopData->getEdgeType();
+    }
+
+    PathTargetIndex* index = loopData->getTargetIndex();
+    index->build(view, targets, direction, edgeType, maxHops);
+
+    return index;
+}
+
 }
 
 void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -5804,9 +5831,22 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
         explorator.setEdgeTypeFilter(loopData->getEdgeType());
     }
 
+    const bool distinctEnds = loopData->isDistinctEnds();
+    explorator.setDistinctEnds(distinctEnds);
+
+    // The distinct mode is a breadth-first search already, so it prunes by no index
     if (filtersByEndLabels) {
         explorator.setEndLabels(&loopData->getEndLabels());
-        explorator.setDistanceIndex(pruningIndexFor(view, loopData, maxHops, inputNodeIDs->size()));
+        if (!distinctEnds) {
+            explorator.setDistanceIndex(pruningIndexFor(view, loopData, maxHops, inputNodeIDs->size()));
+        }
+    }
+
+    if (loopData->getEndNodes()) {
+        explorator.setEndNodes(loopData->getEndNodes());
+        if (!distinctEnds) {
+            explorator.setTargetIndex(targetIndexFor(view, loopData, maxHops));
+        }
     }
 
     std::optional<NLHopFilter> hopFilter;

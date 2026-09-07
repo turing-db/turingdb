@@ -3,17 +3,29 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <iterator>
+#include <sstream>
 #include <stdexcept>
 
+#include "Graph.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnVector.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/PathDistanceIndex.h"
 #include "iterators/PathExplorator.h"
+#include "iterators/PathTargetIndex.h"
 #include "list/ListBuffer.h"
 #include "list/ListElementView.h"
 #include "list/PathTrie.h"
+#include "metadata/LabelSetHandle.h"
+#include "reader/GraphReader.h"
+#include "versioning/Change.h"
+#include "versioning/CommitBuilder.h"
+#include "versioning/Transaction.h"
+#include "writers/DataPartBuilder.h"
+#include "writers/MetadataBuilder.h"
+#include "JobSystem.h"
 
 using namespace db;
 using namespace turing::test;
@@ -166,7 +178,8 @@ size_t turing::test::collectPaths(const GraphView& view,
     if (options._collectTargets) {
         explorator.setTargets(&targets);
     }
-    if (options._collectPaths) {
+    const bool collectPaths = options._collectPaths && !options._distinctEnds;
+    if (collectPaths) {
         explorator.setPaths(&paths, &trie);
     }
     if (options._edgeType) {
@@ -174,7 +187,10 @@ size_t turing::test::collectPaths(const GraphView& view,
     }
     explorator.setHopFilter(options._hopFilter);
     explorator.setEndLabels(options._endLabels);
+    explorator.setEndNodes(options._endNodes);
     explorator.setDistanceIndex(options._distanceIndex);
+    explorator.setTargetIndex(options._targetIndex);
+    explorator.setDistinctEnds(options._distinctEnds);
     explorator.setWalkerCount(options._walkerCount);
     explorator.setCandidateLookahead(options._lookahead);
 
@@ -187,7 +203,7 @@ size_t turing::test::collectPaths(const GraphView& view,
             emitted._index = indices[row];
             emitted._target = options._collectTargets ? targets[row].getValue() : 0;
 
-            if (options._collectPaths) {
+            if (collectPaths) {
                 const ListView edges = trie.expandEdges(paths[row], buffer);
                 for (const ListElementView& element : edges) {
                     emitted._edges.push_back(element.getAs<EdgeID>().getValue());
@@ -204,10 +220,44 @@ size_t turing::test::collectPaths(const GraphView& view,
     return explorator.getCandidateCheckCount();
 }
 
+namespace {
+
+void describeRows(const std::vector<PathRow>& rows, std::ostream& stream) {
+    size_t shown = 0;
+    for (const PathRow& row : rows) {
+        if (shown == 10) {
+            stream << "  ...";
+            break;
+        }
+
+        stream << "  row " << row._index << " -> " << row._target << " via [";
+        for (size_t edge = 0; edge < row._edges.size(); edge++) {
+            stream << (edge == 0 ? "" : ", ") << row._edges[edge];
+        }
+        stream << "]\n";
+        shown++;
+    }
+}
+
+}
+
 void turing::test::expectSameRows(std::vector<PathRow> expected, std::vector<PathRow> actual) {
     std::sort(expected.begin(), expected.end());
     std::sort(actual.begin(), actual.end());
-    EXPECT_EQ(expected, actual);
+
+    std::vector<PathRow> missing;
+    std::set_difference(expected.begin(), expected.end(), actual.begin(), actual.end(), std::back_inserter(missing));
+
+    std::vector<PathRow> extra;
+    std::set_difference(actual.begin(), actual.end(), expected.begin(), expected.end(), std::back_inserter(extra));
+
+    std::ostringstream report;
+    report << missing.size() << " expected row(s) missing:\n";
+    describeRows(missing, report);
+    report << extra.size() << " unexpected row(s) present:\n";
+    describeRows(extra, report);
+
+    EXPECT_TRUE(missing.empty() && extra.empty()) << report.str();
 }
 
 size_t turing::test::countRowsThrough(const std::vector<PathRow>& rows, uint64_t edge) {
@@ -219,4 +269,107 @@ size_t turing::test::countRowsThrough(const std::vector<PathRow>& rows, uint64_t
     }
 
     return count;
+}
+
+void turing::test::buildHubGraph(Graph& graph, JobSystem& jobSystem, HubGraph& hubGraph) {
+    {
+        auto change = graph.newChange();
+        auto* commitBuilder = change->access().getTip();
+        auto& builder = commitBuilder->newBuilder();
+        auto& metadata = builder.getMetadata();
+
+        const LabelSet plain = LabelSet::fromList({metadata.getOrCreateLabel("N")});
+        hubGraph._labelT = metadata.getOrCreateLabel("T");
+        const LabelSet end = LabelSet::fromList({hubGraph._labelT});
+        hubGraph._typeA = metadata.getOrCreateEdgeType("A");
+        hubGraph._typeB = metadata.getOrCreateEdgeType("B");
+
+        const NodeID hub = builder.addNode(plain);
+        const NodeID chainOne = builder.addNode(plain);
+        const NodeID chainTwo = builder.addNode(plain);
+        const NodeID dead = builder.addNode(plain);
+
+        std::vector<NodeID> cluster;
+        for (size_t member = 0; member < 4; member++) {
+            cluster.push_back(builder.addNode(plain));
+        }
+
+        std::vector<NodeID> leaves;
+        for (size_t leaf = 0; leaf < 12; leaf++) {
+            leaves.push_back(builder.addNode(plain));
+        }
+
+        const NodeID target = builder.addNode(end);
+
+        builder.addEdge(hubGraph._typeA, hub, chainOne);
+        builder.addEdge(hubGraph._typeA, chainOne, chainTwo);
+        builder.addEdge(hubGraph._typeA, chainTwo, target);
+        builder.addEdge(hubGraph._typeB, target, hub);
+        builder.addEdge(hubGraph._typeA, hub, dead);
+
+        for (size_t member = 0; member < cluster.size(); member++) {
+            builder.addEdge(hubGraph._typeA, dead, cluster[member]);
+            for (size_t leaf = 0; leaf < 3; leaf++) {
+                builder.addEdge(hubGraph._typeA, cluster[member], leaves[member * 3 + leaf]);
+            }
+        }
+
+        const auto submitted = change->access().submit(jobSystem);
+        ASSERT_TRUE(submitted);
+    }
+
+    {
+        const FrozenCommitTx transaction = graph.openTransaction();
+        const GraphReader reader = transaction.readGraph();
+        ASSERT_EQ(reader.getNodeCount(), HubGraph::firstCommitNodeCount);
+
+        Adjacency firstAdjacency;
+        buildAdjacency(reader.getView(), HubGraph::firstCommitNodeCount, firstAdjacency);
+
+        for (size_t node = 0; node < HubGraph::firstCommitNodeCount; node++) {
+            if (reader.getNodeLabelSet(NodeID(node)).hasLabel(hubGraph._labelT)) {
+                hubGraph._target = node;
+            }
+        }
+
+        // The end's one out-edge returns to the hub and its one in-edge comes from c2
+        hubGraph._hub = firstAdjacency._outs[hubGraph._target].front()._other;
+        hubGraph._chainTwo = firstAdjacency._ins[hubGraph._target].front()._other;
+        hubGraph._chainOne = firstAdjacency._ins[hubGraph._chainTwo].front()._other;
+    }
+
+    {
+        auto change = graph.newChange();
+        auto* commitBuilder = change->access().getTip();
+        auto& builder = commitBuilder->newBuilder();
+        auto& metadata = builder.getMetadata();
+
+        const LabelSet plain = LabelSet::fromList({metadata.getOrCreateLabel("N")});
+        const LabelSet end = LabelSet::fromList({hubGraph._labelT});
+
+        const NodeID entrance = builder.addNode(plain);
+        const NodeID secondTarget = builder.addNode(end);
+
+        builder.addEdge(hubGraph._typeA, entrance, NodeID(hubGraph._hub));
+        builder.addEdge(hubGraph._typeA, NodeID(hubGraph._chainTwo), secondTarget);
+
+        const auto submitted = change->access().submit(jobSystem);
+        ASSERT_TRUE(submitted);
+    }
+
+    const FrozenCommitTx transaction = graph.openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    ASSERT_EQ(reader.getNodeCount(), HubGraph::nodeCount);
+    buildAdjacency(reader.getView(), HubGraph::nodeCount, hubGraph._adjacency);
+
+    hubGraph._ends.assign(HubGraph::nodeCount, false);
+    for (size_t node = 0; node < HubGraph::nodeCount; node++) {
+        hubGraph._ends[node] = reader.getNodeLabelSet(NodeID(node)).hasLabel(hubGraph._labelT);
+        if (hubGraph._ends[node] && node != hubGraph._target) {
+            hubGraph._secondTarget = node;
+        }
+    }
+    ASSERT_EQ(std::count(hubGraph._ends.begin(), hubGraph._ends.end(), true), 2);
+    ASSERT_TRUE(hubGraph._ends[hubGraph._target]);
+    ASSERT_TRUE(hubGraph._ends[hubGraph._secondTarget]);
 }

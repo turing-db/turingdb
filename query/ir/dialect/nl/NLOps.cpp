@@ -334,6 +334,20 @@ LogicalResult ExplorePaths::verify() {
         return emitOpError("end_labels must name at least one label");
     }
 
+    const std::optional<uint64_t> endColumn = getEndColumn();
+    if (endColumn && *endColumn >= getColumnsToFilter().size()) {
+        return emitOpError("end_column ") << *endColumn << " is not a carried column";
+    }
+
+    if (getDistinct() && getMinHops() > 1) {
+        return emitOpError("distinct is exact for a min_hops of at most one");
+    }
+
+    const bool undirected = getDirection() == storage::PathDirection::Both;
+    if (getDistinct() && undirected && getMinHops() != 0) {
+        return emitOpError("distinct over both directions is exact for a min_hops of zero alone");
+    }
+
     Region& hop = getHop();
     if (hop.empty()) {
         return success();

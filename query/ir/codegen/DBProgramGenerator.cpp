@@ -245,9 +245,11 @@ const std::array<DBPassFactory, 19> dbPassPipeline = {
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanEdgesByEndpointLabel(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseEdgesByEndpointLabel(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreEndConstraint(); },
+    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreEndNodes(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createReusePropertyReads(); },
     [](const mlir::db::DBPassContext& context) { return mlir::db::createFuseHashJoin(context); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createTrimUnreadColumns(); },
+    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseExploreDistinctEnds(); },
     [](const mlir::db::DBPassContext& context) { return mlir::db::createCountFromMetadata(context); },
 };
 
@@ -1319,7 +1321,9 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
                                                         metadata.getMinHops(),
                                                         maxHopsAttr,
                                                         edgeTypeAttr,
-                                                        mlir::ArrayAttr());
+                                                        mlir::ArrayAttr(),
+                                                        mlir::IntegerAttr(),
+                                                        false);
 
     registerValue(src, op.getSrcids());
     registerValue(edge, op.getPaths());
