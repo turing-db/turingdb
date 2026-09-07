@@ -195,6 +195,15 @@ TEST_F(CypherShortestPathTest, multiTargetMatchStopsAtNearest) {
               expected);
 }
 
+TEST_F(CypherShortestPathTest, multiSourceMultiTargetPicksGlobalCheapest) {
+    const std::vector<StringRowSink::Row> expected {{"3", "3, 4, 2, 2, 1"}};
+    EXPECT_EQ(run(_graphName,
+                  "MATCH (a), (b) WHERE (a.name = 'A' OR a.name = 'B') "
+                  "AND (b.name = 'D' OR b.name = 'E') "
+                  "SHORTESTPATH(a, b, weight, d, p) RETURN d, p"),
+              expected);
+}
+
 TEST_F(CypherShortestPathTest, zeroLengthPathWhenSourceIsTarget) {
     const std::vector<StringRowSink::Row> expected {{"0", "0"}};
     EXPECT_EQ(run(_graphName,

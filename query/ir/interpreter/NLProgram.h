@@ -2300,10 +2300,13 @@ public:
 
     void addSources(const std::vector<NodeID>& nodes) override {
         for (const NodeID val : nodes) {
-            _heap.push({val, NodeID(), EdgeID(), 0});
-            _heapValueMap.insert({
+            const auto [slot, inserted] = _heapValueMap.insert({
                 val, {NodeID(), EdgeID(), 0}
             });
+
+            if (inserted) {
+                _heap.push({val, NodeID(), EdgeID(), 0});
+            }
         }
     }
 
