@@ -169,11 +169,17 @@ private:
     // at each other
     VariableDependencyGraph _vdg;
 
+    // Held for the source locations its diagnostics manager resolves, so a rejection
+    // names the span of the query it came from
+    const CypherAST* _ast {nullptr};
+
     struct TranslatedComponent {
         std::unique_ptr<mlir::Region> _region;
         std::vector<const VariableDependency*> _vars;
         llvm::SmallVector<mlir::Value> _columns;
     };
+
+    [[noreturn]] void throwError(std::string_view msg, const void* obj = nullptr) const;
 
     void createMain();
 

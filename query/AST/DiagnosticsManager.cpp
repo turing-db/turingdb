@@ -1,5 +1,6 @@
 #include "DiagnosticsManager.h"
 
+#include "CompilerException.h"
 #include "CypherError.h"
 #include "SourceLocation.h"
 #include "SourceManager.h"
@@ -28,4 +29,11 @@ void DiagnosticsManager::createErrorString(std::string_view msg,
     }
 
     err.generate(result);
+}
+
+void DiagnosticsManager::throwError(std::string_view msg, const void* obj) const {
+    std::string errorStr;
+    createErrorString(msg, obj, errorStr);
+
+    throw CompilerException(std::move(errorStr));
 }

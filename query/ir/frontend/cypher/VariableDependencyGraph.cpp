@@ -25,8 +25,8 @@
 #include "VariableDependency.h"
 
 #include "BioAssert.h"
+#include "DiagnosticsManager.h"
 #include "FatalException.h"
-#include "TuringException.h"
 
 using namespace db;
 
@@ -59,6 +59,14 @@ static EdgeMetadata::EdgeType edgeTypeToNodeType(EdgeMetadata::EdgeType t) {
 
 VariableDependencyGraph::VariableDependencyGraph()
 {
+}
+
+void VariableDependencyGraph::setDiagnosticsManager(const DiagnosticsManager* diagnostics) {
+    _diagnostics = diagnostics;
+}
+
+void VariableDependencyGraph::throwError(std::string_view msg, const void* obj) const {
+    _diagnostics->throwError(msg, obj);
 }
 
 VariableDependencyGraph::~VariableDependencyGraph() {
@@ -142,7 +150,7 @@ void VariableDependencyGraph::registerPatternElement(const PatternElement* ptn) 
         const bool alreadyInElement =
             std::ranges::find(edgesInElement, edgeDecl) != edgesInElement.end();
         if (alreadyInElement) {
-            throw TuringException("Re-using the same edge variable in a single pattern is not supported");
+            throwError("Re-using the same edge variable in a single pattern is not supported", edge);
         }
 
         edgesInElement.push_back(edgeDecl);

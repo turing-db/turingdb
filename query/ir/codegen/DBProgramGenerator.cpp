@@ -49,6 +49,7 @@
 #include "VariableDependencyGraphDumper.h"
 
 #include "CypherAST.h"
+#include "DiagnosticsManager.h"
 #include "FunctionInvocation.h"
 #include "FunctionSignature.h"
 #include "Pattern.h"
@@ -193,10 +194,10 @@ const std::unordered_map<std::string_view, BinaryFunctionEmitter> binaryFunction
 // The list a literal UNWIND spreads, null for the one literal that is no list and still
 // analyzes - `UNWIND null`, which spreads into no row. Anything else here is a statement
 // the analyzer let through and neither of the sources built from one can lower.
-const ListLiteral* literalUnwindList(const UnwindStmt* unwind) {
+const ListLiteral* literalUnwindList(const DiagnosticsManager* diagnostics, const UnwindStmt* unwind) {
     const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(unwind->arg());
     if (!literalExpr) {
-        throw TuringException("Non-literal UNWIND expressions are not yet supported.");
+        diagnostics->throwError("Non-literal UNWIND expressions are not yet supported.", unwind);
     }
 
     const Literal* literal = literalExpr->getLiteral();
@@ -206,7 +207,7 @@ const ListLiteral* literalUnwindList(const UnwindStmt* unwind) {
 
     const ListLiteral* list = dynamic_cast<const ListLiteral*>(literal);
     if (!list) {
-        throw TuringException("Non-list arguments to UNWIND are not yet supported.");
+        diagnostics->throwError("Non-list arguments to UNWIND are not yet supported.", unwind);
     }
 
     return list;
@@ -416,7 +417,10 @@ void flattenConjuncts(const Expr* expr, std::vector<const Expr*>& conjuncts) {
     conjuncts.push_back(expr);
 }
 
-int64_t applyConstantUnary(UnaryOperator op, int64_t operand) {
+int64_t applyConstantUnary(const DiagnosticsManager* diagnostics,
+                           const Expr* expr,
+                           UnaryOperator op,
+                           int64_t operand) {
     switch (op) {
         case UnaryOperator::Plus:
             return operand;
@@ -427,13 +431,18 @@ int64_t applyConstantUnary(UnaryOperator op, int64_t operand) {
         break;
 
         default:
-            throw TuringException(fmt::format("Unsupported unary operator in SKIP/LIMIT expression: {}",
-                                              UnaryOperatorDescription::value(op)));
+            diagnostics->throwError(fmt::format("Unsupported unary operator in SKIP/LIMIT expression: {}",
+                                                UnaryOperatorDescription::value(op)),
+                                    expr);
         break;
     }
 }
 
-int64_t applyConstantBinary(BinaryOperator op, int64_t lhs, int64_t rhs) {
+int64_t applyConstantBinary(const DiagnosticsManager* diagnostics,
+                            const Expr* expr,
+                            BinaryOperator op,
+                            int64_t lhs,
+                            int64_t rhs) {
     switch (op) {
         case BinaryOperator::Add:
             return Add {}(lhs, rhs);
@@ -456,13 +465,14 @@ int64_t applyConstantBinary(BinaryOperator op, int64_t lhs, int64_t rhs) {
         break;
 
         default:
-            throw TuringException(fmt::format("Unsupported operator in SKIP/LIMIT expression: {}",
-                                              BinaryOperatorDescription::value(op)));
+            diagnostics->throwError(fmt::format("Unsupported operator in SKIP/LIMIT expression: {}",
+                                                BinaryOperatorDescription::value(op)),
+                                    expr);
         break;
     }
 }
 
-int64_t evaluateConstantInteger(const Expr* expr) {
+int64_t evaluateConstantInteger(const DiagnosticsManager* diagnostics, const Expr* expr) {
     const Expr::Kind kind = expr->getKind();
 
     switch (kind) {
@@ -471,7 +481,7 @@ int64_t evaluateConstantInteger(const Expr* expr) {
             const Literal* literal = literalExpr->getLiteral();
 
             if (literal->getKind() != Literal::Kind::INTEGER) {
-                throw TuringException("SKIP/LIMIT expression must evaluate to an integer");
+                diagnostics->throwError("SKIP/LIMIT expression must evaluate to an integer", expr);
             }
 
             const IntegerLiteral* integerLiteral = static_cast<const IntegerLiteral*>(literal);
@@ -481,22 +491,23 @@ int64_t evaluateConstantInteger(const Expr* expr) {
 
         case Expr::Kind::UNARY: {
             const UnaryExpr* unaryExpr = static_cast<const UnaryExpr*>(expr);
-            const int64_t operand = evaluateConstantInteger(unaryExpr->getSubExpr());
-            return applyConstantUnary(unaryExpr->getOperator(), operand);
+            const int64_t operand = evaluateConstantInteger(diagnostics, unaryExpr->getSubExpr());
+            return applyConstantUnary(diagnostics, expr, unaryExpr->getOperator(), operand);
         }
         break;
 
         case Expr::Kind::BINARY: {
             const BinaryExpr* binaryExpr = static_cast<const BinaryExpr*>(expr);
-            const int64_t lhs = evaluateConstantInteger(binaryExpr->getLHS());
-            const int64_t rhs = evaluateConstantInteger(binaryExpr->getRHS());
-            return applyConstantBinary(binaryExpr->getOperator(), lhs, rhs);
+            const int64_t lhs = evaluateConstantInteger(diagnostics, binaryExpr->getLHS());
+            const int64_t rhs = evaluateConstantInteger(diagnostics, binaryExpr->getRHS());
+            return applyConstantBinary(diagnostics, expr, binaryExpr->getOperator(), lhs, rhs);
         }
         break;
 
         default:
-            throw TuringException(fmt::format("Unsupported expression in SKIP/LIMIT: {}",
-                                              ExprKindDescription::value(kind)));
+            diagnostics->throwError(fmt::format("Unsupported expression in SKIP/LIMIT: {}",
+                                                ExprKindDescription::value(kind)),
+                                    expr);
         break;
     }
 }
@@ -595,7 +606,7 @@ void DBProgramGenerator::addYieldedColumn(const VariableDependency* var, mlir::V
 void DBProgramGenerator::addConstScanNodes(const VariableDependency* var, const UnwindStmt* unwind) {
     bioassert(!_part._varMap.contains(var), "ConstScanNodes for registered variable");
 
-    const ListLiteral* list = literalUnwindList(unwind);
+    const ListLiteral* list = literalUnwindList(_ast->getDiagnosticsManager(), unwind);
 
     llvm::SmallVector<mlir::Attribute> elements;
     if (list) {
@@ -608,7 +619,7 @@ void DBProgramGenerator::addConstScanNodes(const VariableDependency* var, const 
     for (const mlir::Attribute element : elements) {
         const mlir::IntegerAttr nodeID = mlir::dyn_cast<mlir::IntegerAttr>(element);
         if (!nodeID) {
-            throw TuringException("Only node IDs can be unwound into a node pattern.");
+            throwError("Only node IDs can be unwound into a node pattern.", unwind);
         }
 
         nodeIDs.push_back(nodeID.getInt());
@@ -627,7 +638,7 @@ void DBProgramGenerator::addConstScanNodes(const VariableDependency* var, const 
 void DBProgramGenerator::addUnwindConst(const VariableDependency* var, const UnwindStmt* unwind) {
     bioassert(!_part._varMap.contains(var), "UnwindConst for registered variable");
 
-    const ListLiteral* list = literalUnwindList(unwind);
+    const ListLiteral* list = literalUnwindList(_ast->getDiagnosticsManager(), unwind);
 
     llvm::SmallVector<mlir::Attribute> elements;
     if (list) {
@@ -656,7 +667,7 @@ void DBProgramGenerator::translateListElements(const ListLiteral* list,
     for (const Expr* item : items) {
         const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(item);
         if (!literalExpr) {
-            throw TuringException("Only literal elements are supported in a list.");
+            throwError("Only literal elements are supported in a list.", item);
         }
 
         elements.push_back(listElementAttr(literalExpr->getLiteral()));
@@ -685,8 +696,9 @@ mlir::Attribute DBProgramGenerator::literalAttr(const Literal* literal) {
 mlir::Attribute DBProgramGenerator::listElementAttr(const Literal* literal) {
     const mlir::Attribute element = literalAttr(literal);
     if (!element) {
-        throw TuringException("Only booleans, integers, floats, strings, nulls, embeddings and "
-                              "lists are supported as list elements.");
+        throwError("Only booleans, integers, floats, strings, nulls, embeddings and "
+                   "lists are supported as list elements.",
+                   literal);
     }
 
     return element;
@@ -857,6 +869,10 @@ void DBProgramGenerator::walkEdge(const VariableDependency* src,
     }
 }
 
+void DBProgramGenerator::throwError(std::string_view msg, const void* obj) const {
+    _ast->getDiagnosticsManager()->throwError(msg, obj);
+}
+
 void DBProgramGenerator::createMain() {
     bioassert(_module, "Null module");
     bioassert(_mlirCtxt, "Null context");
@@ -875,6 +891,9 @@ void DBProgramGenerator::createMain() {
 }
 
 void DBProgramGenerator::generate(const CypherAST* ast) {
+    _ast = ast;
+    _vdg.setDiagnosticsManager(ast->getDiagnosticsManager());
+
     createMain();
 
     const mlir::Location uloc = _opBuilder.getUnknownLoc();
@@ -889,12 +908,12 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
 
     const CypherAST::QueryCommands& queries = ast->queries();
     if (queries.size() != 1) {
-        throw TuringException("Multiple queries not yet supported.");
+        throwError("Multiple queries not yet supported.", queries.front());
     }
 
     const SinglePartQuery* query = dynamic_cast<const SinglePartQuery*>(queries.front());
     if (!query) {
-        throw TuringException("Non-single part queries are not yet supported.");
+        throwError("Non-single part queries are not yet supported.", queries.front());
     }
 
     generateQueryParts(query);
@@ -1053,7 +1072,7 @@ void DBProgramGenerator::generatePart(std::span<Stmt* const> stmts) {
 bool DBProgramGenerator::generateSystemCommand(const CypherAST* ast) {
     const CypherAST::QueryCommands& queries = ast->queries();
     if (queries.size() != 1) {
-        throw TuringException("Multiple queries not yet supported.");
+        throwError("Multiple queries not yet supported.", queries.front());
     }
 
     DBSystemProgramGenerator systemGenerator(&_opBuilder);
@@ -1515,9 +1534,10 @@ void DBProgramGenerator::throwOnRematchedBoundEdge() const {
 
     for (const VariableDependency* var : _vdg.boundVars()) {
         if (identities.contains(var->getDecl())) {
-            throw TuringException(fmt::format("Matching the edge variable '{}' again after a "
-                                              "WITH is not yet supported.",
-                                              var->getName()));
+            throwError(fmt::format("Matching the edge variable '{}' again after a "
+                                   "WITH is not yet supported.",
+                                   var->getName()),
+                       var->getDecl());
         }
     }
 }
@@ -1534,9 +1554,10 @@ void DBProgramGenerator::throwOnUnboundPatternVariable() const {
             continue;
         }
 
-        throw TuringException(fmt::format("Reaching the pattern variable '{}' from the rest "
-                                          "of the query is not yet supported.",
-                                          var.getName()));
+        throwError(fmt::format("Reaching the pattern variable '{}' from the rest "
+                               "of the query is not yet supported.",
+                               var.getName()),
+                   var.getDecl());
     }
 }
 
@@ -1549,10 +1570,11 @@ void DBProgramGenerator::throwOnDroppedUnwindSeed() const {
             continue;
         }
 
-        throw TuringException(fmt::format("Unwinding node IDs into the pattern variable '{}' is "
-                                          "not yet supported where the pattern reaches it from "
-                                          "elsewhere.",
-                                          var->getName()));
+        throwError(fmt::format("Unwinding node IDs into the pattern variable '{}' is "
+                               "not yet supported where the pattern reaches it from "
+                               "elsewhere.",
+                               var->getName()),
+                   var->getDecl());
     }
 }
 
@@ -2241,20 +2263,22 @@ void DBProgramGenerator::generateMatchOrderBy(const MatchStmt* matchStmt) {
 
 void DBProgramGenerator::generateMatchWindow(const MatchStmt* matchStmt) {
     if (matchStmt->hasSkip()) {
-        const int64_t skipValue = evaluateConstantInteger(matchStmt->getSkip()->getExpr());
+        const int64_t skipValue = evaluateConstantInteger(_ast->getDiagnosticsManager(),
+                                                         matchStmt->getSkip()->getExpr());
 
         if (skipValue < 0) {
-            throw TuringException("SKIP expression must be a non-negative integer");
+            throwError("SKIP expression must be a non-negative integer", matchStmt->getSkip());
         }
 
         cutAllColumns<mlir::db::Skip>(static_cast<uint64_t>(skipValue));
     }
 
     if (matchStmt->hasLimit()) {
-        const int64_t limitValue = evaluateConstantInteger(matchStmt->getLimit()->getExpr());
+        const int64_t limitValue = evaluateConstantInteger(_ast->getDiagnosticsManager(),
+                                                          matchStmt->getLimit()->getExpr());
 
         if (limitValue < 0) {
-            throw TuringException("LIMIT expression must be a non-negative integer");
+            throwError("LIMIT expression must be a non-negative integer", matchStmt->getLimit());
         }
 
         cutAllColumns<mlir::db::Limit>(static_cast<uint64_t>(limitValue));
@@ -2284,17 +2308,17 @@ void DBProgramGenerator::cutAllColumns(uint64_t count) {
 void DBProgramGenerator::generateCall(const CallStmt* callStmt) {
     const FunctionInvocationExpr* funcExpr = callStmt->getFunc();
     if (!funcExpr) {
-        throw TuringException("CALL statement has no procedure invocation.");
+        throwError("CALL statement has no procedure invocation.", callStmt);
     }
 
     const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
     if (!invocation) {
-        throw TuringException("CALL statement has no function invocation.");
+        throwError("CALL statement has no function invocation.", callStmt);
     }
 
     const FunctionSignature* signature = invocation->getSignature();
     if (!signature) {
-        throw TuringException("CALL statement has an unresolved procedure name.");
+        throwError("CALL statement has an unresolved procedure name.", callStmt);
     }
 
     const std::string_view procedureName = signature->getFullName();
@@ -2503,13 +2527,13 @@ void DBProgramGenerator::publishLoadCSVFields(const LoadCSVStmt* loadCSVStmt,
 void DBProgramGenerator::generateVectorSearch(const VectorSearchStmt* vectorSearchStmt) {
     const EmbeddingLiteral* queryVector = vectorSearchStmt->getQueryVector();
     if (!queryVector) {
-        throw TuringException("VECTOR SEARCH statement has no query vector.");
+        throwError("VECTOR SEARCH statement has no query vector.", vectorSearchStmt);
     }
 
     const YieldClause* yield = vectorSearchStmt->getYield();
     const YieldItems* yieldItems = yield ? yield->getItems() : nullptr;
     if (!yieldItems || yieldItems->getItems().empty()) {
-        throw TuringException("VECTOR SEARCH statement names no yielded value.");
+        throwError("VECTOR SEARCH statement names no yielded value.", vectorSearchStmt);
     }
 
     const std::span<const float> queryValues = queryVector->getValue();
@@ -3087,7 +3111,7 @@ void DBProgramGenerator::generateDelete(const SinglePartQuery* query) {
 
         for (const Expr* expr : *deleteStmt->getExpressions()) {
             if (expr->getKind() != Expr::Kind::SYMBOL) {
-                throw TuringException("Expressions in DELETE statements can only be symbols");
+                throwError("Expressions in DELETE statements can only be symbols", expr);
             }
 
             const SymbolExpr* symbolExpr = static_cast<const SymbolExpr*>(expr);
@@ -3097,7 +3121,7 @@ void DBProgramGenerator::generateDelete(const SinglePartQuery* query) {
 
             const mlir::Value entityColumn = resolveEntityColumn(decl);
             if (!entityColumn) {
-                throw TuringException("Cannot delete unbound variable: " + std::string(varName));
+                throwError("Cannot delete unbound variable: " + std::string(varName), expr);
             }
 
             const EvaluatedType entityType = decl->getType();
@@ -3109,7 +3133,7 @@ void DBProgramGenerator::generateDelete(const SinglePartQuery* query) {
             } else if (isEdge) {
                 _opBuilder.create<mlir::db::DeleteEdge>(loc, entityColumn);
             } else {
-                throw TuringException("Can only delete nodes or edges");
+                throwError("Can only delete nodes or edges", expr);
             }
         }
     }
@@ -3397,10 +3421,10 @@ void DBProgramGenerator::translateCut(const Projection* projection,
                                       const Expr* countExpr,
                                       std::string_view clauseName,
                                       llvm::SmallVectorImpl<mlir::Value>& projected) {
-    const int64_t countValue = evaluateConstantInteger(countExpr);
+    const int64_t countValue = evaluateConstantInteger(_ast->getDiagnosticsManager(), countExpr);
 
     if (countValue < 0) {
-        throw TuringException(fmt::format("{} expression must be a non-negative integer", clauseName));
+        throwError(fmt::format("{} expression must be a non-negative integer", clauseName), countExpr);
     }
 
     llvm::SmallVector<size_t> cutItems;
@@ -3786,9 +3810,10 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
             // per field the query reads, and nothing stands for the whole record
             const bool namesACSVRow = decl->getType() == EvaluatedType::StringTable;
             if (!bound && namesACSVRow) {
-                throw TuringException(fmt::format("A CSV row cannot be read as a whole: "
-                                                  "read a field of '{}' as {}[<index>] or {}.<header>",
-                                                  varName, varName, varName));
+                throwError(fmt::format("A CSV row cannot be read as a whole: "
+                                       "read a field of '{}' as {}[<index>] or {}.<header>",
+                                       varName, varName, varName),
+                           expr);
             }
 
             bioassert(bound, "Symbol refers to unknown variable: {}", varName);
@@ -3820,8 +3845,9 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
             // constant index names one: which field a computed index reads is known no
             // earlier than the row it reads it from
             if (!fieldColumn) {
-                throw TuringException("Only a constant index selects a CSV field: "
-                                      "row[i] with a computed index is not supported yet.");
+                throwError("Only a constant index selects a CSV field: "
+                           "row[i] with a computed index is not supported yet.",
+                           expr);
             }
 
             _part._exprMap[expr] = fieldColumn;
@@ -3831,8 +3857,9 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         case Expr::Kind::LIST:
         case Expr::Kind::ENTITY_TYPES:
         case Expr::Kind::PATH:
-            throw TuringException(fmt::format("Unsupported expression: {}",
-                                              ExprKindDescription::value(kind)));
+            throwError(fmt::format("Unsupported expression: {}",
+                                   ExprKindDescription::value(kind)),
+                       expr);
         break;
 
         case Expr::Kind::_SIZE:
@@ -3876,7 +3903,7 @@ void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* u
         break;
 
         case UnaryOperator::_SIZE:
-            throw TuringException("Unknown unary operator.");
+            throwError("Unknown unary operator.", expr);
         break;
     }
 }
@@ -3954,8 +3981,9 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
             _part._exprMap[expr] = _opBuilder.create<mlir::db::PowOp>(loc, noneType, lhs, rhs).getResult();
         break;
         case BinaryOperator::In:
-            throw TuringException(fmt::format("Unsupported operation: {}",
-                                              BinaryOperatorDescription::value(op)));
+            throwError(fmt::format("Unsupported operation: {}",
+                                   BinaryOperatorDescription::value(op)),
+                       expr);
         break;
 
         case BinaryOperator::_SIZE:
@@ -3993,7 +4021,7 @@ void DBProgramGenerator::translateStringExpr(const Expr* expr) {
             _part._exprMap[expr] = _opBuilder.create<mlir::db::ContainsOp>(loc, boolType, lhs, rhs).getResult();
         break;
         case StringOperator::_SIZE:
-            throw TuringException("Unknown string operator.");
+            throwError("Unknown string operator.", expr);
         break;
     }
 }
@@ -4186,7 +4214,7 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
         mlir::db::Collect collectOp = createCollect({}, {inputColumn}, distinctValues);
         _part._exprMap[expr] = collectOp.getResults().back();
     } else {
-        throw TuringException(fmt::format("Unsupported aggregate function: {}", funcName));
+        throwError(fmt::format("Unsupported aggregate function: {}", funcName), expr);
     }
 }
 
@@ -4207,7 +4235,7 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     const auto unaryIt = unaryFunctionEmitters.find(funcName);
     if (unaryIt != end(unaryFunctionEmitters)) {
         if (!args || args->size() != 1) {
-            throw TuringException(fmt::format("{}() expects 1 argument.", funcName));
+            throwError(fmt::format("{}() expects 1 argument.", funcName), expr);
         }
 
         const mlir::Value input = translateArg(args->front());
@@ -4218,7 +4246,7 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     const auto binaryIt = binaryFunctionEmitters.find(funcName);
     if (binaryIt != end(binaryFunctionEmitters)) {
         if (!args || args->size() != 2) {
-            throw TuringException(fmt::format("{}() expects 2 arguments.", funcName));
+            throwError(fmt::format("{}() expects 2 arguments.", funcName), expr);
         }
 
         const mlir::Value lhs = translateArg(args->getExprs()[0]);
@@ -4227,7 +4255,7 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
         return;
     }
 
-    throw TuringException(fmt::format("Unsupported function: {}", funcName));
+    throwError(fmt::format("Unsupported function: {}", funcName), expr);
 }
 
 mlir::db::Collect DBProgramGenerator::createCollect(llvm::ArrayRef<mlir::Value> keyColumns,
@@ -4433,7 +4461,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
         // around them is left for the projection to compute over the results.
         if (!collectAggregateInvocations(item, itemInvocations)) {
             const std::string_view itemName = item->getName();
-            throw TuringException(fmt::format("Nested aggregates are not supported: {}", itemName));
+            throwError(fmt::format("Nested aggregates are not supported: {}", itemName), item);
         }
     }
 
@@ -4505,7 +4533,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
 
         const std::optional<mlir::storage::GroupAggregateKind> kind = mlir::storage::symbolizeGroupAggregateKind(kindName);
         if (!kind) {
-            throw TuringException(fmt::format("Unsupported aggregate function: {}", funcName));
+            throwError(fmt::format("Unsupported aggregate function: {}", funcName), argExpr);
         }
 
         const mlir::Value inputColumn = translateAggregateInput(argExpr, &variableColumns);

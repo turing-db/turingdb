@@ -13,6 +13,7 @@
 namespace db {
 
 class CypherAST;
+class DiagnosticsManager;
 class EntityPattern;
 class PatternElement;
 class Stmt;
@@ -56,6 +57,10 @@ public:
     /// Drops every variable and edge, so the graph can be rebuilt for the next query part
     void clear();
 
+    /// Held for the source locations it resolves, so a rejection names the span of the
+    /// query it came from
+    void setDiagnosticsManager(const DiagnosticsManager* diagnostics);
+
     /// Given a pattern (e.g. (n)-[e]->(m)), inserts all vars into the dependency graph
     void registerPatternElement(const PatternElement* ptn);
 
@@ -94,6 +99,10 @@ private:
 
     // The variables a preceding WITH bound, in the order that WITH projects them
     BoundVars _boundVars;
+
+    const DiagnosticsManager* _diagnostics {nullptr};
+
+    [[noreturn]] void throwError(std::string_view msg, const void* obj = nullptr) const;
 
     VariableDependency* getOrCreateVariable(const EntityPattern* entity);
     VariableDependency* newVariable(const VarDecl* decl);
