@@ -72,6 +72,7 @@ struct linenoiseState {
 typedef struct linenoiseCompletions {
   size_t len;
   char **cvec;
+  size_t *cursor; /* Cursor position within each completion. */
 } linenoiseCompletions;
 
 /* Non blocking API. */
@@ -85,7 +86,8 @@ void linenoiseShow(struct linenoiseState *l);
 char *linenoise(const char *prompt);
 void linenoiseFree(void *ptr);
 
-/* Completion API. */
+/* Completion API. The callback only receives the text before the cursor, and a
+ * completion replaces that text: whatever follows the cursor is kept. */
 typedef void(linenoiseCompletionCallback)(const char *, linenoiseCompletions *);
 typedef char*(linenoiseHintsCallback)(const char *, int *color, int *bold);
 typedef void(linenoiseFreeHintsCallback)(void *);
@@ -93,6 +95,20 @@ void linenoiseSetCompletionCallback(linenoiseCompletionCallback *);
 void linenoiseSetHintsCallback(linenoiseHintsCallback *);
 void linenoiseSetFreeHintsCallback(linenoiseFreeHintsCallback *);
 void linenoiseAddCompletion(linenoiseCompletions *, const char *);
+void linenoiseAddCompletionWithCursor(linenoiseCompletions *, const char *, size_t cursor);
+
+/* Key API. The callback sees every key before linenoise handles it, so the
+ * embedder can edit the line itself with the linenoiseEdit* primitives below.
+ * Returning non-zero means the key was consumed. */
+typedef int(linenoiseKeyCallback)(struct linenoiseState *, int key);
+void linenoiseSetKeyCallback(linenoiseKeyCallback *);
+
+/* Line editing primitives, for use from the key callback. */
+int linenoiseEditInsert(struct linenoiseState *l, const char *c, size_t clen);
+void linenoiseEditMoveLeft(struct linenoiseState *l);
+void linenoiseEditMoveRight(struct linenoiseState *l);
+void linenoiseEditDelete(struct linenoiseState *l);
+void linenoiseEditBackspace(struct linenoiseState *l);
 
 /* History API. */
 int linenoiseHistoryAdd(const char *line);

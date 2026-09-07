@@ -3,6 +3,7 @@ set(turingdb_sources
     TuringDBTool.cpp
     TuringShell.cpp
     ShellTable.cpp
+    ShellCompletion.cpp
     LineNoiseHandle.cpp
     ProtectedLineNoiseSink.cpp
     StartCmd.cpp

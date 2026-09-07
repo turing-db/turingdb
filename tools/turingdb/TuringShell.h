@@ -13,6 +13,8 @@
 
 #include "TuringClient.h"
 
+#include "ShellCompletion.h"
+
 namespace db {
 
 class TuringDB;
@@ -62,6 +64,7 @@ private:
     std::atomic<bool> _running {true};
     LineNoiseHandle* _lineNoiseHandle {nullptr};
     std::unordered_map<std::string_view, Command> _localCommands;
+    ShellCompletion _completion;
 
     void processLine(std::string& line);
     void runMLIRQuery(std::string_view query);

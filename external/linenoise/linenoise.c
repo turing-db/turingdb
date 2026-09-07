@@ -124,6 +124,7 @@ static char *unsupported_term[] = {"dumb","cons25","emacs",NULL};
 static linenoiseCompletionCallback *completionCallback = NULL;
 static linenoiseHintsCallback *hintsCallback = NULL;
 static linenoiseFreeHintsCallback *freeHintsCallback = NULL;
+static linenoiseKeyCallback *keyCallback = NULL;
 static char *linenoiseNoTTY(void);
 static void refreshLineWithCompletion(struct linenoiseState *ls, linenoiseCompletions *lc, int flags);
 static void refreshLineWithFlags(struct linenoiseState *l, int flags);
@@ -667,6 +668,30 @@ static void freeCompletions(linenoiseCompletions *lc) {
         free(lc->cvec[i]);
     if (lc->cvec != NULL)
         free(lc->cvec);
+    if (lc->cursor != NULL)
+        free(lc->cursor);
+}
+
+/* Ask the callback to complete the text before the cursor. */
+static void callCompletionCallback(struct linenoiseState *ls, linenoiseCompletions *lc) {
+    char prefix[LINENOISE_MAX_LINE];
+    size_t prefixlen = ls->pos;
+
+    if (prefixlen >= sizeof(prefix)) prefixlen = sizeof(prefix)-1;
+    memcpy(prefix,ls->buf,prefixlen);
+    prefix[prefixlen] = '\0';
+    completionCallback(prefix,lc);
+}
+
+/* Join a completion with the text the user typed after the cursor, and return where
+ * the cursor goes once the completion is applied. */
+static size_t buildCompletedLine(struct linenoiseState *ls, linenoiseCompletions *lc, size_t idx, char *line, size_t linelen) {
+    const size_t cursor = lc->cursor[idx];
+    size_t joinedlen;
+
+    snprintf(line,linelen,"%s%s",lc->cvec[idx],ls->buf+ls->pos);
+    joinedlen = strlen(line);
+    return cursor < joinedlen ? cursor : joinedlen;
 }
 
 /* Called by completeLine() and linenoiseShow() to render the current
@@ -677,17 +702,21 @@ static void freeCompletions(linenoiseCompletions *lc) {
  * Flags are the same as refreshLine*(), that is REFRESH_* macros. */
 static void refreshLineWithCompletion(struct linenoiseState *ls, linenoiseCompletions *lc, int flags) {
     /* Obtain the table of completions if the caller didn't provide one. */
-    linenoiseCompletions ctable = { 0, NULL };
+    linenoiseCompletions ctable = { 0, NULL, NULL };
     if (lc == NULL) {
-        completionCallback(ls->buf,&ctable);
+        callCompletionCallback(ls,&ctable);
         lc = &ctable;
     }
 
     /* Show the edited line with completion if possible, or just refresh. */
     if (ls->completion_idx < lc->len) {
+        char line[LINENOISE_MAX_LINE];
+        const size_t cursor = buildCompletedLine(ls,lc,ls->completion_idx,line,sizeof(line));
         struct linenoiseState saved = *ls;
-        ls->len = ls->pos = strlen(lc->cvec[ls->completion_idx]);
-        ls->buf = lc->cvec[ls->completion_idx];
+
+        ls->buf = line;
+        ls->len = strlen(line);
+        ls->pos = cursor;
         refreshLineWithFlags(ls,flags);
         ls->len = saved.len;
         ls->pos = saved.pos;
@@ -715,11 +744,10 @@ static void refreshLineWithCompletion(struct linenoiseState *ls, linenoiseComple
  * possible completions, and the caller should read for the next characters
  * from stdin. */
 static int completeLine(struct linenoiseState *ls, int keypressed) {
-    linenoiseCompletions lc = { 0, NULL };
-    int nwritten;
+    linenoiseCompletions lc = { 0, NULL, NULL };
     char c = keypressed;
 
-    completionCallback(ls->buf,&lc);
+    callCompletionCallback(ls,&lc);
     if (lc.len == 0) {
         linenoiseBeep();
         ls->in_completion = 0;
@@ -745,9 +773,12 @@ static int completeLine(struct linenoiseState *ls, int keypressed) {
             default:
                 /* Update buffer and return */
                 if (ls->completion_idx < lc.len) {
-                    nwritten = snprintf(ls->buf,ls->buflen,"%s",
-                        lc.cvec[ls->completion_idx]);
-                    ls->len = ls->pos = nwritten;
+                    char line[LINENOISE_MAX_LINE];
+                    const size_t cursor = buildCompletedLine(ls,&lc,ls->completion_idx,line,sizeof(line));
+
+                    snprintf(ls->buf,ls->buflen,"%s",line);
+                    ls->len = strlen(ls->buf);
+                    ls->pos = cursor < ls->len ? cursor : ls->len;
                 }
                 ls->in_completion = 0;
                 break;
@@ -770,6 +801,11 @@ void linenoiseSetCompletionCallback(linenoiseCompletionCallback *fn) {
     completionCallback = fn;
 }
 
+/* Register a callback function to be called for every key press. */
+void linenoiseSetKeyCallback(linenoiseKeyCallback *fn) {
+    keyCallback = fn;
+}
+
 /* Register a hits function to be called to show hits to the user at the
  * right of the prompt. */
 void linenoiseSetHintsCallback(linenoiseHintsCallback *fn) {
@@ -787,8 +823,15 @@ void linenoiseSetFreeHintsCallback(linenoiseFreeHintsCallback *fn) {
  * user typed <tab>. See the example.c source code for a very easy to
  * understand example. */
 void linenoiseAddCompletion(linenoiseCompletions *lc, const char *str) {
+    linenoiseAddCompletionWithCursor(lc,str,strlen(str));
+}
+
+/* Same, but the cursor lands at 'cursor' characters into the completion instead
+ * of at its end, so a completion can leave the cursor inside what it inserted. */
+void linenoiseAddCompletionWithCursor(linenoiseCompletions *lc, const char *str, size_t cursor) {
     size_t len = strlen(str);
     char *copy, **cvec;
+    size_t *cursors;
 
     copy = malloc(len+1);
     if (copy == NULL) return;
@@ -799,6 +842,13 @@ void linenoiseAddCompletion(linenoiseCompletions *lc, const char *str) {
         return;
     }
     lc->cvec = cvec;
+    cursors = realloc(lc->cursor,sizeof(size_t)*(lc->len+1));
+    if (cursors == NULL) {
+        free(copy);
+        return;
+    }
+    lc->cursor = cursors;
+    lc->cursor[lc->len] = cursor > len ? len : cursor;
     lc->cvec[lc->len++] = copy;
 }
 
@@ -1339,6 +1389,9 @@ char *linenoiseEditFeed(struct linenoiseState *l) {
         if (retval == 0) return linenoiseEditMore;
         c = retval;
     }
+
+    /* Let the embedder edit the line itself for the keys it cares about. */
+    if (keyCallback != NULL && keyCallback(l,(unsigned char)c)) return linenoiseEditMore;
 
     switch(c) {
     case ENTER:    /* enter */
