@@ -1155,6 +1155,7 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, DeclareOpInterfaceMethods<Op
 
       %s, %t, %p = db.explore_paths(%n, {}) forward hops 1 to 3
       %s, %t, %p, %a2 = db.explore_paths(%n, {%a}) both hops 0 edge_type "KNOWS"
+      %s, %t, %p = db.explore_paths(%n, {}) forward hops 2 to 4 end_labels ["Interest"]
 
     `direction` is which edges a hop follows; `srcids` is always the seed, whatever the
     direction. `edge_type` restricts every hop to edges of that type. The optional `hop`
@@ -1162,6 +1163,12 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, DeclareOpInterfaceMethods<Op
     end node - the three block arguments - and yielding one boolean column; a hop that
     fails it is neither emitted nor expanded. The region reads nothing from outside but
     constants. `columns_to_filter` is the carry set, exactly as on get_out_edges.
+
+    `end_labels` keeps only the paths ending on a node carrying every listed label, the
+    way `(m:Interest)` constrains the end of `MATCH (n)-[e]->{2,4}(m:Interest)`. The
+    fuse_explore_end_constraint pass sets it from the label filter codegen leaves over
+    `tgtids`. A path ending elsewhere is walked through but never emitted, and a prefix
+    that cannot reach such a node within the hops it has left is not walked at all.
   }];
 
   let arguments = (ins Column:$input_nodes,
@@ -1169,7 +1176,8 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, DeclareOpInterfaceMethods<Op
                        PathDirection:$direction,
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
-                       OptionalAttr<StrAttr>:$edge_type);
+                       OptionalAttr<StrAttr>:$edge_type,
+                       OptionalAttr<StrArrayAttr>:$end_labels);
 
   let results   = (outs ColumnNodeIDs:$srcids,
                         ColumnNodeIDs:$tgtids,
@@ -1180,8 +1188,8 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, DeclareOpInterfaceMethods<Op
 
   let assemblyFormat = [{
     `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
-    (`to` $max_hops^)? (`edge_type` $edge_type^)? ($hop^)? attr-dict `:`
-    functional-type(operands, results)
+    (`to` $max_hops^)? (`edge_type` $edge_type^)? (`end_labels` $end_labels^)? ($hop^)?
+    attr-dict `:` functional-type(operands, results)
   }];
 
   let hasVerifier = 1;

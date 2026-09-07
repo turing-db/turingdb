@@ -88,6 +88,11 @@ def CountFromMetadata : Pass<"count_from_metadata"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseExploreEndConstraint : Pass<"fuse_explore_end_constraint"> {
+    let summary = "Fuse a path exploration and the label filter over its end nodes into an exploration constrained to those ends";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def TrimUnreadColumns : Pass<"trim_unread_columns"> {
     let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops and calls";
     let dependentDialects = ["mlir::db::DB"];

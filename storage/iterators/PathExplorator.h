@@ -6,22 +6,26 @@
 #include <vector>
 
 #include "ChunkWriter.h"
+#include "PartDirectory.h"
 #include "PathExplorationDir.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "datapart/EdgeRecord.h"
+#include "metadata/LabelSetHandle.h"
 #include "views/GraphView.h"
 #include "ID.h"
 
 namespace db {
 
-class EdgeIndexer;
+class PathDistanceIndex;
 class PathHopFilter;
 class PathTrie;
 class Tombstones;
 
 // Enumerates every trail of minHops to maxHops edges leaving each input node, depth first,
 // as a chunk writer: each fill emits up to maxCount rows of (input row, end node, path).
+// With end labels set only the paths ending on a node carrying them are emitted, and with a
+// distance index set the prefixes that cannot reach such a node in time are not walked.
 class PathExplorator {
 public:
     PathExplorator(const GraphView& view,
@@ -36,6 +40,8 @@ public:
     void setPaths(ColumnVector<PathRef>* paths, PathTrie* trie);
     void setHopFilter(PathHopFilter* filter) { _hopFilter = filter; }
     void setEdgeTypeFilter(EdgeTypeID edgeType);
+    void setEndLabels(const LabelSet* labels);
+    void setDistanceIndex(const PathDistanceIndex* index) { _distances = index; }
     void setWalkerCount(size_t walkerCount);
     void setCandidateLookahead(size_t lookahead) { _lookahead = lookahead; }
 
@@ -43,16 +49,14 @@ public:
     void fill(size_t maxCount);
     bool isValid() const { return _valid; }
 
+    // How many edge records the walk has examined since the last reset
+    size_t getCandidateCheckCount() const { return _candidateChecks; }
+
 private:
     enum class Stage : uint8_t {
         Idle,
         RangeRequested,
         SpanRequested,
-    };
-
-    struct PartAdjacency {
-        NodeID _firstNodeID;
-        const EdgeIndexer* _indexer {nullptr};
     };
 
     // The candidates of one node on the path, a range of the walker's candidate stacks
@@ -95,11 +99,11 @@ private:
     PathHopFilter* _hopFilter {nullptr};
     bool _filterByType {false};
     EdgeTypeID _edgeType;
+    LabelSetHandle _endLabels;
+    const PathDistanceIndex* _distances {nullptr};
     size_t _lookahead {1};
 
-    std::vector<PartAdjacency> _parts;
-    std::vector<NodeID> _partFirstNodeIDs;
-    std::vector<size_t> _patchPartIndices;
+    PartDirectory _parts;
     const Tombstones* _tombstones {nullptr};
     bool _filterTombstones {false};
 
@@ -108,12 +112,12 @@ private:
     size_t _activeWalkers {0};
     size_t _seedCursor {0};
     size_t _written {0};
+    size_t _candidateChecks {0};
     bool _valid {false};
 
-    void buildPartDirectory();
-    size_t ownerPartIndex(NodeID node) const;
     void prefetchNodeData(NodeID node, size_t partIndex) const;
     bool hasWork() const;
+    bool isEnd(NodeID node) const;
 
     void startSeed(Walker& walker, size_t row);
     void advance(Walker& walker);

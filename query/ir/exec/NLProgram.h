@@ -25,6 +25,7 @@
 #include "columns/ColumnStringTable.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
+#include "iterators/PathDistanceIndex.h"
 #include "iterators/PathExplorationDir.h"
 #include "list/ListBuffer.h"
 #include "list/ListView.h"
@@ -812,6 +813,9 @@ private:
 // the type name was absent from the schema, so no hop can match: only the zero-length rows
 // of a min of zero are emitted. The hop predicate, when there is one, is the translated
 // body of the op's hop region over three loop-owned columns, ending in the mask chunk.
+// The end labels, when the op carries them, are resolved here too; _endMatchable is false
+// when one was absent from the schema, so no path can end and nothing is emitted. The
+// distance index that prunes the walk is owned here so every chunk of the loop shares it.
 class NLExplorePathsLoopData : public NLExpansionLoopData {
 public:
     NLExplorePathsLoopData(const ColumnNodeIDs* input,
@@ -869,6 +873,21 @@ public:
     NLStmtContainer* getHopStmts() { return &_hopStmts; }
     const NLStmtContainer* getHopStmts() const { return &_hopStmts; }
 
+    void setEndLabels(const LabelSet& endLabels, bool matchable) {
+        _endLabels = endLabels;
+        _filtersByEndLabels = true;
+        _endMatchable = matchable;
+    }
+
+    bool filtersByEndLabels() const { return _filtersByEndLabels; }
+    const LabelSet& getEndLabels() const { return _endLabels; }
+    bool isEndMatchable() const { return _endMatchable; }
+
+    PathDistanceIndex* getDistanceIndex() { return &_distanceIndex; }
+
+    void addSeedsSeen(size_t count) { _seedsSeen += count; }
+    size_t getSeedsSeen() const { return _seedsSeen; }
+
 private:
     ColumnVector<PathRef>* _paths {nullptr};
     PathTrie* _trie {nullptr};
@@ -878,6 +897,12 @@ private:
     bool _filtersByType {false};
     EdgeTypeID _edgeType;
     bool _matchable {true};
+
+    LabelSet _endLabels;
+    bool _filtersByEndLabels {false};
+    bool _endMatchable {true};
+    PathDistanceIndex _distanceIndex;
+    size_t _seedsSeen {0};
 
     ColumnNodeIDs* _hopSources {nullptr};
     ColumnEdgeIDs* _hopEdges {nullptr};

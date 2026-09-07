@@ -678,6 +678,11 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             config._minHops = explorePaths.getMinHops();
             config._maxHops = explorePaths.getMaxHops().value_or(std::numeric_limits<uint64_t>::max());
             config._hopRegion = &explorePaths.getHop();
+            if (const std::optional<mlir::ArrayAttr> endLabels = explorePaths.getEndLabels()) {
+                for (const mlir::Attribute label : *endLabels) {
+                    config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
+                }
+            }
             _iteratorConfigs[explorePaths.getResult()] = config;
         } else if (nl::Sort sort = mlir::dyn_cast<nl::Sort>(operation)) {
             _iteratorConfigs[sort.getResult()] = IteratorConfig {IteratorKind::Sort, {}, {}, sortStateFor(sort.getState())};
@@ -1834,6 +1839,14 @@ void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
                                                                                          matchable);
     loopData->setLimit(limit);
     loopData->getIndices()->reserve(_program->getChunkSize());
+
+    // The end labels resolve as a label scan's do: a name absent from the schema is carried
+    // by no node, so no path can end on one and the loop is marked unmatchable
+    if (!config._labels.empty()) {
+        LabelSet endLabels;
+        const bool endMatchable = resolveLabelSet(config._labels, endLabels);
+        loopData->setEndLabels(endLabels, endMatchable);
+    }
 
     bindCarriedColumns(config, loopBody, 3, loopData);
 

@@ -61,6 +61,8 @@ add_ir_tests(test_query_ir_create_node_edge CreateNodeEdgeTest.cpp)
 add_ir_tests(test_query_ir_dblowering DBLoweringTest.cpp)
 add_ir_tests(test_query_ir_explore_paths_dialect ExplorePathsDialectTest.cpp)
 target_link_libraries(test_query_ir_explore_paths_dialect PRIVATE turing_ir_test_rows_s turing_db_examples_s)
+add_ir_tests(test_query_ir_explore_end_constraint ExploreEndConstraintTest.cpp)
+target_link_libraries(test_query_ir_explore_end_constraint PRIVATE turing_ir_test_rows_s turing_db_examples_s)
 # The nested cross product execution tests run against the shared SimpleGraph fixture.
 target_link_libraries(test_query_ir_dblowering PRIVATE turing_db_examples_s)
 add_ir_tests(test_query_ir_shortest_path ShortestPathLoweringTest.cpp)
@@ -249,6 +251,7 @@ add_call_v3_test(test_query_ir_gnn_frontier_union GnnFrontierUnionTest.cpp)
 add_call_v3_test(test_query_ir_collect_concatenation CollectConcatenationTest.cpp)
 add_call_v3_test(test_query_ir_concatenated_list_seed ConcatenatedListSeedTest.cpp)
 add_call_v3_test(test_query_ir_explore_paths_cypher ExplorePathsCypherTest.cpp)
+add_call_v3_test(test_query_ir_explore_end_constraint_cypher ExploreEndConstraintCypherTest.cpp)
 
 # The crossing-call tests hop twice from the column a CALL yielded and then call again,
 # once with a constant argument alone and once reading the chain's tail, from the query
