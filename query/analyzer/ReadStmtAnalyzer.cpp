@@ -523,6 +523,13 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
             }
         }
 
+        // The db dialect has no path-explorer op, and the dependency graph reads an edge
+        // pattern without its quantifier: left to run, the MLIR engine would answer a
+        // one-hop query instead of the one that was asked.
+        if (_isV3) {
+            throwError("Variable-length paths are not supported yet", edgePattern);
+        }
+
         const auto& types = edgePattern->types();
         if (types && !types->empty()) {
             throwError("Edge type filters are not supported with "
