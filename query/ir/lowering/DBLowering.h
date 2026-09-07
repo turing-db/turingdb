@@ -454,6 +454,12 @@ private:
     // reads in turn.
     void rowAlignCutChunks(llvm::SmallVectorImpl<mlir::Value>& chunks);
 
+    // Lays the constants among a hash join factor's yielded chunks over the rows that
+    // factor walks. The build side appends its chunks to growing buffers and the probe
+    // gathers both sides by matched row, so neither can read a chunk holding one value
+    // for every row rather than a row of its own.
+    void rowAlignFactorChunks(llvm::SmallVectorImpl<mlir::Value>& chunks);
+
     // The chunk whose rows the constants of a step are laid out over: the first of
     // @param chunks carrying rows of its own, and the innermost loop's cardinality when
     // every one of them is a constant, or there are none.

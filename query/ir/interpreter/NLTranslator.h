@@ -179,6 +179,13 @@ private:
     // nl.hash_join_collect and nl.hash_join_probe find the same buffers and index
     llvm::DenseMap<mlir::Value, NLHashJoinState*> _hashJoinStates;
 
+    // nl.hash_join_buffer handle SSA value -> the chunk types the collect appended, which
+    // are what its buffers were allocated as. The probe declares the build columns among
+    // its own results, so this is what those are checked against: the buffers are read
+    // back through a gather chosen for their element type, and a result declaring another
+    // would read one column's rows as another's.
+    llvm::DenseMap<mlir::Value, llvm::SmallVector<mlir::Type, 4>> _hashJoinBuildTypes;
+
     // nl.distinct handle SSA value -> the runtime seen-set it produces, so the
     // nl.distinct_filter that names the handle finds the same set
     llvm::DenseMap<mlir::Value, NLDistinctState*> _distinctStates;
@@ -376,14 +383,14 @@ private:
     void translateHashJoinBuffer(mlir::nl::HashJoinBuffer buffer, NLStmtContainer* body);
 
     // Translate an nl.hash_join_collect: allocate one growing buffer per build
-    // column (mapped into the build side), bake the key serializer and null test
-    // from the key column the nl.hash_join_buffer names, and record the per-step
-    // append-and-index statement
+    // column (mapped into the build side), bake the key serializer and the match
+    // gate from the key column the nl.hash_join_buffer names, and record the
+    // per-step append-and-index statement
     void translateHashJoinCollect(mlir::nl::HashJoinCollect collect, NLStmtContainer* body);
 
     // Translate an nl.hash_join_probe: allocate one fresh output column per probe
     // and per build column, map each result to its output, bake the probe key's
-    // serializer and null test, and record the per-step probe statement
+    // serializer and match gate, and record the per-step probe statement
     void translateHashJoinProbe(mlir::nl::HashJoinProbe probe, NLStmtContainer* body);
 
     // The runtime build side a hash join handle names. The handle is a required
@@ -631,7 +638,7 @@ private:
                                                     ValueType keyType);
     static NLCompareFunction selectCompareForChunkType(mlir::Type chunkType);
     static NLKeyAppendFunction selectKeyAppendForChunkType(mlir::Type chunkType);
-    static NLIsNullFunction selectIsNullForChunkType(mlir::Type chunkType);
+    static NLKeyIsMatchableFunction selectKeyMatchableForChunkType(mlir::Type chunkType);
 
     // The non-null row count handler for a chunk type - the all-rows count for an
     // ID chunk, the present-value count for a !storage.nullable<...> chunk. Used by

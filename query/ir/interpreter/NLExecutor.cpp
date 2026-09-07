@@ -1384,27 +1384,46 @@ void distinctAppendElementBytes(std::string& key, const ListElementView element)
     bioassert(false, "Unknown ListBufferTypeTag");
 }
 
-// A chunk of this kind holds no null row - an ID column, a plainly-held value - so every
-// row of it carries a key a join can match on.
-bool neverNullColumn(const Column* column, size_t row) {
-    return false;
+// A chunk of this kind holds neither a null nor a NaN - an ID column, a plainly-held
+// value of any other type - so every row of it carries a key a join can match on.
+bool everyRowMatchable(const Column* column, size_t row) {
+    return true;
 }
 
-// Whether one row of a nullable value column is null, which keeps it out of a join: `=`
-// against a null gives null, and the filter this join replaces kept only the true rows.
+// Whether one row of a nullable value column carries a key a join can match. A null does
+// not: `=` against a null gives null, and the filter this join replaces kept only the
+// true rows.
 template <typename Primitive>
-bool optColumnIsNull(const Column* column, size_t row) {
+bool optColumnRowMatchable(const Column* column, size_t row) {
     const auto& raw = static_cast<const ColumnVector<std::optional<Primitive>>*>(column)->getRaw();
 
-    return !raw[row].has_value();
+    return raw[row].has_value();
 }
 
-// Whether one row of a type-erased column of tagged scalars is null - the cell's own tag
-// says so, where a nullable column has a present flag.
-bool listElementColumnIsNull(const Column* column, size_t row) {
+// The double sibling, which rejects a NaN as well: NaN = NaN is false, so a NaN key
+// matches nothing - not even another NaN. The key bytes cannot say so, since the
+// serializer maps every NaN payload to one canonical NaN so that DISTINCT groups them.
+bool optDoubleColumnRowMatchable(const Column* column, size_t row) {
+    const auto& raw = static_cast<const ColumnVector<std::optional<types::Double::Primitive>>*>(column)->getRaw();
+    const std::optional<types::Double::Primitive>& value = raw[row];
+
+    return value.has_value() && !std::isnan(*value);
+}
+
+// The plainly-held double sibling: no row of such a column is null, so only a NaN keeps
+// one out of the join.
+bool plainDoubleColumnRowMatchable(const Column* column, size_t row) {
+    const auto& raw = static_cast<const ColumnVector<types::Double::Primitive>*>(column)->getRaw();
+
+    return !std::isnan(raw[row]);
+}
+
+// Whether one row of a type-erased column of tagged scalars carries a matchable key - the
+// cell's own tag says whether it is null, where a nullable column has a present flag.
+bool listElementColumnRowMatchable(const Column* column, size_t row) {
     const auto& raw = static_cast<const ColumnVector<ListElementView>*>(column)->getRaw();
 
-    return raw[row].getTag() == ListBufferTypeTag::Null;
+    return raw[row].getTag() != ListBufferTypeTag::Null;
 }
 
 // Serialize one row of a type-erased column of tagged scalars into the row key.
@@ -4996,14 +5015,14 @@ void NLExecutor::runHashJoinCollect(NLExecutionContext* context, NLFunctionData*
     const size_t firstRow = state->getRowCount();
 
     // Row r of this chunk becomes build row firstRow + r, which is what the buffers will
-    // hold it at once appended. A null key is indexed under nothing, so no probe row can
-    // match it.
+    // hold it at once appended. A key no probe key can match - a null, a NaN - is indexed
+    // under nothing, so no probe row reaches it.
     const NLKeyAppendFunction keyAppend = collect->getKeyAppend();
-    const NLIsNullFunction keyIsNull = collect->getKeyIsNull();
+    const NLKeyIsMatchableFunction keyIsMatchable = collect->getKeyIsMatchable();
     std::string* keyScratch = collect->getKeyScratch();
 
     for (size_t row = 0; row < rowCount; row++) {
-        if (keyIsNull(key, row)) {
+        if (!keyIsMatchable(key, row)) {
             continue;
         }
 
@@ -5030,7 +5049,7 @@ void NLExecutor::runHashJoinProbe(NLExecutionContext* context, NLFunctionData* d
     const size_t rowCount = key->size();
 
     const NLKeyAppendFunction keyAppend = probe->getKeyAppend();
-    const NLIsNullFunction keyIsNull = probe->getKeyIsNull();
+    const NLKeyIsMatchableFunction keyIsMatchable = probe->getKeyIsMatchable();
     std::string* keyScratch = probe->getKeyScratch();
 
     ColumnVector<size_t>* probeIndices = probe->getProbeIndices();
@@ -5041,10 +5060,10 @@ void NLExecutor::runHashJoinProbe(NLExecutionContext* context, NLFunctionData* d
     buildRaw.clear();
 
     // One output row per matched pair, the probe rows walked in order and each row's
-    // matches taken in build order - the order the nested loop this replaces emitted the
-    // surviving pairs in. A null key matches nothing, as the equality it replaces did.
+    // matches taken in build order. A key nothing can match - a null, a NaN - emits no
+    // row, as the equality this replaces kept none.
     for (size_t row = 0; row < rowCount; row++) {
-        if (keyIsNull(key, row)) {
+        if (!keyIsMatchable(key, row)) {
             continue;
         }
 
@@ -6186,25 +6205,39 @@ NLKeyAppendFunction NLExecutor::selectOptKeyAppendFunction(ValueType valueType) 
     return nullptr;
 }
 
-NLIsNullFunction NLExecutor::neverNull() {
-    return &neverNullColumn;
+NLKeyIsMatchableFunction NLExecutor::everyKeyMatchable() {
+    return &everyRowMatchable;
 }
 
 // Selected per column from its value type. Every value type carries a present flag, so -
 // unlike selectOptKeyAppendFunction - an embedding dispatches fine here; a key column of
 // one is rejected by the serializer, not by this.
-NLIsNullFunction NLExecutor::selectOptIsNullFunction(ValueType valueType) {
-    NLIsNullFunction isNull = nullptr;
+NLKeyIsMatchableFunction NLExecutor::selectOptKeyMatchableFunction(ValueType valueType) {
+    if (valueType == ValueType::Double) {
+        return &optDoubleColumnRowMatchable;
+    }
+
+    NLKeyIsMatchableFunction isMatchable = nullptr;
     const auto select = [&]<SupportedType T>() {
-        isNull = &optColumnIsNull<typename T::Primitive>;
+        isMatchable = &optColumnRowMatchable<typename T::Primitive>;
     };
     ValueTypeDispatcher(valueType).execute(select);
 
-    return isNull;
+    return isMatchable;
 }
 
-NLIsNullFunction NLExecutor::selectListElementIsNullFunction() {
-    return &listElementColumnIsNull;
+// A plainly-held value carries no present flag, so a double is the only such column with
+// a row a join cannot match on.
+NLKeyIsMatchableFunction NLExecutor::selectPlainKeyMatchableFunction(ValueType valueType) {
+    if (valueType == ValueType::Double) {
+        return &plainDoubleColumnRowMatchable;
+    }
+
+    return &everyRowMatchable;
+}
+
+NLKeyIsMatchableFunction NLExecutor::selectListElementKeyMatchableFunction() {
+    return &listElementColumnRowMatchable;
 }
 
 // An ID chunk (node/edge/edge-type IDs) has no null rows, so every row counts,

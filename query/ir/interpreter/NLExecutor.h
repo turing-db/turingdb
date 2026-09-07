@@ -491,13 +491,15 @@ public:
     static NLKeyAppendFunction selectKeyAppendFunction(NLChunkKind kind);
     static NLKeyAppendFunction selectOptKeyAppendFunction(ValueType valueType);
 
-    // Per-row null test for a join key. A chunk that cannot hold a null answers false for
-    // every row, so the ID kinds and the plainly-held values share one handle; a nullable
-    // value chunk reads its present flag and a type-erased cell its tag. Used by
-    // nl.hash_join_collect and nl.hash_join_probe to leave a null key unmatched.
-    static NLIsNullFunction neverNull();
-    static NLIsNullFunction selectOptIsNullFunction(ValueType valueType);
-    static NLIsNullFunction selectListElementIsNullFunction();
+    // Per-row test of whether a join key can match. An ID chunk holds neither a null nor
+    // a NaN, so every row of it matches; a nullable value chunk reads its present flag, a
+    // type-erased cell its tag, and a double column of either shape also rejects a NaN,
+    // which no key equals - itself included. Used by nl.hash_join_collect to leave a key
+    // out of the index and by nl.hash_join_probe to leave a probe row unmatched.
+    static NLKeyIsMatchableFunction everyKeyMatchable();
+    static NLKeyIsMatchableFunction selectOptKeyMatchableFunction(ValueType valueType);
+    static NLKeyIsMatchableFunction selectPlainKeyMatchableFunction(ValueType valueType);
+    static NLKeyIsMatchableFunction selectListElementKeyMatchableFunction();
 
     // Non-null row count for a COUNT. An ID chunk has no null rows, so countAllRows
     // is its handle (the row count); a nullable value chunk of this value type

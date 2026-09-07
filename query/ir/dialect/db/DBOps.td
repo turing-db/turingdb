@@ -898,8 +898,13 @@ def HashJoin : TuringOp<"hash_join", [Pure]> {
     `=` against a null gives null and the filter keeps only the true rows.
 
     The right factor is the built side and the left the probed one, so a left
-    row's matches come out together and in right-factor order - the order the
-    nested loop this replaces emitted the surviving rows in.
+    row's matches come out together and in right-factor order, however either
+    side was chunked. That is not the order the product and its filter emitted
+    the surviving rows in: the product re-runs its right factor once per chunk
+    of the left, so a right side spanning several chunks interleaves them. Row
+    order is what an ORDER BY is for, so the fusion is free to change it - but
+    a LIMIT with no ORDER BY over a join can keep other rows than the same
+    LIMIT over the product.
 
     As on db.cross_product the result types are not spelled after the regions;
     the parser recovers them from the two yields and the verifier checks they line

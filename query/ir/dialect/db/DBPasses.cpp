@@ -2036,12 +2036,15 @@ StringAttr conePropertyName(const MaskCone& cone) {
 // key against a probe key by the bytes each serializes to, so two columns that could
 // serialize differently - an integer property against a string one, a node against a
 // number - would answer a comparison the equality did not. A db column type is concrete
-// only for the entity and metadata columns; a property column is typed none until
-// lowering resolves the name against the schema, so for those the name is what the two
-// sides have to share.
+// only for the entity and metadata columns; a column typed none carries no type at all
+// until lowering resolves it, so two of those are only provably alike when both are read
+// from one property name.
 bool keysShareAColumnType(const JoinKeySide& left, const JoinKeySide& right) {
     if (left._cone._ops.empty() && right._cone._ops.empty()) {
-        return left._key.getType() == right._key.getType();
+        const Type leftType = left._key.getType();
+        const bool typeIsResolved = !isa<mlir::NoneType>(cast<ColumnType>(leftType).getType());
+
+        return typeIsResolved && leftType == right._key.getType();
     }
 
     const StringAttr leftProperty = conePropertyName(left._cone);
