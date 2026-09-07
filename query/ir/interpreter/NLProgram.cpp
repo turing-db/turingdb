@@ -196,6 +196,21 @@ void NLSortState::reset() {
     _sorted = false;
 }
 
+void NLHashJoinState::reset() {
+    for (Column* buffer : _buffers) {
+        buffer->clear();
+    }
+
+    _rowsByKey.clear();
+    _rowCount = 0;
+}
+
+const std::vector<size_t>& NLHashJoinState::rowsFor(const std::string& key) const {
+    const auto rows = _rowsByKey.find(key);
+
+    return rows == _rowsByKey.end() ? _noRows : rows->second;
+}
+
 NLGroupTable::Assignment NLGroupTable::assign(const std::string& key) {
     const size_t nextGroup = _groups.size();
     const auto [slot, inserted] = _groups.try_emplace(key, nextGroup);

@@ -1336,6 +1336,168 @@ private:
 // collide by concatenation (e.g. "a"+"b" versus "ab"+"").
 using NLKeyAppendFunction = void (*)(const Column* column, size_t row, std::string& key);
 
+// Type of handle that answers whether one row of a column is null. One per column kind /
+// value type, selected during translation the same way the key-append family is; a column
+// that cannot hold a null answers false for every row. A null row serializes to a key like
+// any other, so this is what tells the two apart where nulls must not match - a join key,
+// where Cypher gives null rather than true for `=` against a null.
+using NLIsNullFunction = bool (*)(const Column* column, size_t row);
+
+// Runtime state of one hash join's build side: the build rows, materialized column by
+// column, and the index from a row's serialized key to the rows carrying it.
+// nl.hash_join_buffer empties it, nl.hash_join_collect grows it once per build-loop step,
+// and nl.hash_join_probe reads it once per probe-loop step. The joining sibling of
+// NLSortState: it indexes the rows it accumulates rather than ordering them, and they
+// come back out through the probe rather than through a loop of its own.
+class NLHashJoinState {
+public:
+    // Empty the buffers and the key index, so the build side starts fresh. Runs each time
+    // nl.hash_join_buffer's block runs - once at function scope for a top-level join.
+    void reset();
+
+    // Record one build column's buffer. Kept in collect order, so the key column index
+    // the nl.hash_join_buffer carries indexes this list too.
+    void addColumnBuffer(Column* buffer) { _buffers.push_back(buffer); }
+
+    const std::vector<Column*>& buffers() const { return _buffers; }
+    Column* buffer(size_t index) const { return _buffers[index]; }
+
+    // Index a build row under its serialized key. The rows of one key keep collect order,
+    // so a probe row's matches come out in the order the build side produced them.
+    void indexRow(const std::string& key, size_t row) { _rowsByKey[key].push_back(row); }
+
+    // The build rows carrying a key, empty when none does.
+    const std::vector<size_t>& rowsFor(const std::string& key) const;
+
+    // How many rows the buffers hold, which is what the next collected chunk's rows are
+    // numbered from.
+    size_t getRowCount() const { return _rowCount; }
+    void addRows(size_t rows) { _rowCount += rows; }
+
+private:
+    // One buffer per collected build column, row-aligned, grown by nl.hash_join_collect.
+    std::vector<Column*> _buffers;
+
+    // Serialized key -> the build rows holding it, in collect order.
+    std::unordered_map<std::string, std::vector<size_t>> _rowsByKey;
+
+    // Rows collected so far, so each chunk's rows are numbered from where the last ended.
+    size_t _rowCount {0};
+
+    // Answered for a key no build row carries, so the probe reads an empty range rather
+    // than testing for a miss.
+    std::vector<size_t> _noRows;
+};
+
+// nl.hash_join_buffer data: empties a build side each time the block it lives in runs -
+// once at function scope for a top-level join, once per enclosing step for a nested one.
+class NLHashJoinResetData : public NLFunctionData {
+public:
+    NLHashJoinResetData(NLHashJoinState* state)
+        : _state(state)
+    {
+    }
+
+    NLHashJoinState* getState() const { return _state; }
+
+private:
+    NLHashJoinState* _state {nullptr};
+};
+
+// nl.hash_join_collect data: appends the current chunk of every build column to its
+// buffer and indexes each row's key. The appends share NLSortCollectData::Append's shape;
+// the key is one of those columns, read again through the serializer and the null test.
+class NLHashJoinCollectData : public NLFunctionData {
+public:
+    NLHashJoinCollectData(NLHashJoinState* state)
+        : _state(state)
+    {
+    }
+
+    NLHashJoinState* getState() const { return _state; }
+
+    const std::vector<NLSortCollectData::Append>& appends() const { return _appends; }
+
+    void addAppend(const NLSortCollectData::Append& append) {
+        _appends.push_back(append);
+    }
+
+    void setKeyColumn(const Column* key, NLKeyAppendFunction keyAppend, NLIsNullFunction isNull) {
+        _key = key;
+        _keyAppend = keyAppend;
+        _keyIsNull = isNull;
+    }
+
+    const Column* getKeyColumn() const { return _key; }
+    NLKeyAppendFunction getKeyAppend() const { return _keyAppend; }
+    NLIsNullFunction getKeyIsNull() const { return _keyIsNull; }
+
+    std::string* getKeyScratch() { return &_keyScratch; }
+
+private:
+    NLHashJoinState* _state {nullptr};
+    std::vector<NLSortCollectData::Append> _appends;
+
+    const Column* _key {nullptr};
+    NLKeyAppendFunction _keyAppend {nullptr};
+    NLIsNullFunction _keyIsNull {nullptr};
+
+    // Scratch reused to build each row's key, cleared once per row
+    std::string _keyScratch;
+};
+
+// nl.hash_join_probe data: per probe column its input chunk, the fresh output chunk and
+// the gather that repeats a row once per match; per build column its buffer, the fresh
+// output chunk and the gather that reads the matched rows back - both in the
+// NLCarriedColumn (input, output, gather) shape the edge and sort loops use. The two
+// index scratches hold this step's matched pairs, one row of each side per output row.
+class NLHashJoinProbeData : public NLFunctionData {
+public:
+    NLHashJoinProbeData(NLHashJoinState* state)
+        : _state(state)
+    {
+    }
+
+    NLHashJoinState* getState() const { return _state; }
+
+    const std::vector<NLCarriedColumn>& probeColumns() const { return _probeColumns; }
+    const std::vector<NLCarriedColumn>& buildColumns() const { return _buildColumns; }
+
+    void addProbeColumn(const NLCarriedColumn& column) { _probeColumns.push_back(column); }
+    void addBuildColumn(const NLCarriedColumn& column) { _buildColumns.push_back(column); }
+
+    void setKeyColumn(const Column* key, NLKeyAppendFunction keyAppend, NLIsNullFunction isNull) {
+        _key = key;
+        _keyAppend = keyAppend;
+        _keyIsNull = isNull;
+    }
+
+    const Column* getKeyColumn() const { return _key; }
+    NLKeyAppendFunction getKeyAppend() const { return _keyAppend; }
+    NLIsNullFunction getKeyIsNull() const { return _keyIsNull; }
+
+    std::string* getKeyScratch() { return &_keyScratch; }
+
+    ColumnVector<size_t>* getProbeIndices() { return &_probeIndices; }
+    ColumnVector<size_t>* getBuildIndices() { return &_buildIndices; }
+
+private:
+    NLHashJoinState* _state {nullptr};
+    std::vector<NLCarriedColumn> _probeColumns;
+    std::vector<NLCarriedColumn> _buildColumns;
+
+    const Column* _key {nullptr};
+    NLKeyAppendFunction _keyAppend {nullptr};
+    NLIsNullFunction _keyIsNull {nullptr};
+
+    std::string _keyScratch;
+
+    // This step's matched pairs: output row i reads _probeIndices[i] of the probe chunk
+    // and _buildIndices[i] of the buffers.
+    ColumnVector<size_t> _probeIndices;
+    ColumnVector<size_t> _buildIndices;
+};
+
 // Runtime state of one DISTINCT: the set of serialized row keys already emitted.
 // nl.distinct resets it (once at function scope for a top-level or mid-query
 // DISTINCT), and nl.distinct_filter is the sole reader and mutator - it looks up
@@ -3288,6 +3450,16 @@ public:
         return statePtr;
     }
 
+    // Allocate one hash join's runtime build side, owned by the program; the reset,
+    // collect and probe statements that share it hold a borrowed pointer. The joining
+    // sibling of allocSortState.
+    NLHashJoinState* allocHashJoinState() {
+        auto state = std::make_unique<NLHashJoinState>();
+        NLHashJoinState* statePtr = state.get();
+        _hashJoinStates.push_back(std::move(state));
+        return statePtr;
+    }
+
     // Allocate one COUNT's runtime tally, owned by the program; the reset, update
     // and emit statements that share it hold a borrowed pointer. The count sibling
     // of allocSortState.
@@ -3400,6 +3572,7 @@ private:
     std::vector<std::unique_ptr<NLLimitState>> _limitStates;
     std::vector<std::unique_ptr<NLSkipState>> _skipStates;
     std::vector<std::unique_ptr<NLSortState>> _sortStates;
+    std::vector<std::unique_ptr<NLHashJoinState>> _hashJoinStates;
     std::vector<std::unique_ptr<NLDistinctState>> _distinctStates;
     std::vector<std::unique_ptr<NLCountState>> _countStates;
     std::vector<std::unique_ptr<NLAggregateState>> _aggregateStates;

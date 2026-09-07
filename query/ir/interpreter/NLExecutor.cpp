@@ -1384,6 +1384,29 @@ void distinctAppendElementBytes(std::string& key, const ListElementView element)
     bioassert(false, "Unknown ListBufferTypeTag");
 }
 
+// A chunk of this kind holds no null row - an ID column, a plainly-held value - so every
+// row of it carries a key a join can match on.
+bool neverNullColumn(const Column* column, size_t row) {
+    return false;
+}
+
+// Whether one row of a nullable value column is null, which keeps it out of a join: `=`
+// against a null gives null, and the filter this join replaces kept only the true rows.
+template <typename Primitive>
+bool optColumnIsNull(const Column* column, size_t row) {
+    const auto& raw = static_cast<const ColumnVector<std::optional<Primitive>>*>(column)->getRaw();
+
+    return !raw[row].has_value();
+}
+
+// Whether one row of a type-erased column of tagged scalars is null - the cell's own tag
+// says so, where a nullable column has a present flag.
+bool listElementColumnIsNull(const Column* column, size_t row) {
+    const auto& raw = static_cast<const ColumnVector<ListElementView>*>(column)->getRaw();
+
+    return raw[row].getTag() == ListBufferTypeTag::Null;
+}
+
 // Serialize one row of a type-erased column of tagged scalars into the row key.
 void distinctKeyAppendListElementColumn(const Column* column, size_t row, std::string& key) {
     const auto& raw = static_cast<const ColumnVector<ListElementView>*>(column)->getRaw();
@@ -4959,6 +4982,94 @@ void NLExecutor::runDistinctFilter(NLExecutionContext* context, NLFunctionData* 
     }
 }
 
+void NLExecutor::runHashJoinReset(NLExecutionContext* context, NLFunctionData* data) {
+    const NLHashJoinResetData* reset = static_cast<NLHashJoinResetData*>(data);
+    reset->getState()->reset();
+}
+
+void NLExecutor::runHashJoinCollect(NLExecutionContext* context, NLFunctionData* data) {
+    NLHashJoinCollectData* collect = static_cast<NLHashJoinCollectData*>(data);
+    NLHashJoinState* state = collect->getState();
+
+    const Column* key = collect->getKeyColumn();
+    const size_t rowCount = key->size();
+    const size_t firstRow = state->getRowCount();
+
+    // Row r of this chunk becomes build row firstRow + r, which is what the buffers will
+    // hold it at once appended. A null key is indexed under nothing, so no probe row can
+    // match it.
+    const NLKeyAppendFunction keyAppend = collect->getKeyAppend();
+    const NLIsNullFunction keyIsNull = collect->getKeyIsNull();
+    std::string* keyScratch = collect->getKeyScratch();
+
+    for (size_t row = 0; row < rowCount; row++) {
+        if (keyIsNull(key, row)) {
+            continue;
+        }
+
+        keyScratch->clear();
+        keyAppend(key, row, *keyScratch);
+
+        state->indexRow(*keyScratch, firstRow + row);
+    }
+
+    // The columns are appended together, so the buffers stay row-aligned with each other
+    // and with the rows just indexed.
+    for (const NLSortCollectData::Append& append : collect->appends()) {
+        append._append(append._input, append._buffer);
+    }
+
+    state->addRows(rowCount);
+}
+
+void NLExecutor::runHashJoinProbe(NLExecutionContext* context, NLFunctionData* data) {
+    NLHashJoinProbeData* probe = static_cast<NLHashJoinProbeData*>(data);
+    const NLHashJoinState* state = probe->getState();
+
+    const Column* key = probe->getKeyColumn();
+    const size_t rowCount = key->size();
+
+    const NLKeyAppendFunction keyAppend = probe->getKeyAppend();
+    const NLIsNullFunction keyIsNull = probe->getKeyIsNull();
+    std::string* keyScratch = probe->getKeyScratch();
+
+    ColumnVector<size_t>* probeIndices = probe->getProbeIndices();
+    ColumnVector<size_t>* buildIndices = probe->getBuildIndices();
+    std::vector<size_t>& probeRaw = probeIndices->getRaw();
+    std::vector<size_t>& buildRaw = buildIndices->getRaw();
+    probeRaw.clear();
+    buildRaw.clear();
+
+    // One output row per matched pair, the probe rows walked in order and each row's
+    // matches taken in build order - the order the nested loop this replaces emitted the
+    // surviving pairs in. A null key matches nothing, as the equality it replaces did.
+    for (size_t row = 0; row < rowCount; row++) {
+        if (keyIsNull(key, row)) {
+            continue;
+        }
+
+        keyScratch->clear();
+        keyAppend(key, row, *keyScratch);
+
+        for (const size_t buildRow : state->rowsFor(*keyScratch)) {
+            probeRaw.push_back(row);
+            buildRaw.push_back(buildRow);
+        }
+    }
+
+    // The probe side reads its own chunk, the build side the buffers; both gather by the
+    // matched pairs, so every output column is row-aligned with the joined rows.
+    for (const NLCarriedColumn& column : probe->probeColumns()) {
+        const NLGatherFunction gather = column.getGatherFunc();
+        gather(column.getInput(), probeIndices, column.getOutput());
+    }
+
+    for (const NLCarriedColumn& column : probe->buildColumns()) {
+        const NLGatherFunction gather = column.getGatherFunc();
+        gather(column.getInput(), buildIndices, column.getOutput());
+    }
+}
+
 void NLExecutor::runFilter(NLExecutionContext* context, NLFunctionData* data) {
     NLFilterData* filter = static_cast<NLFilterData*>(data);
 
@@ -6073,6 +6184,27 @@ NLKeyAppendFunction NLExecutor::selectOptKeyAppendFunction(ValueType valueType) 
 
     bioassert(false, "Unhandled value type");
     return nullptr;
+}
+
+NLIsNullFunction NLExecutor::neverNull() {
+    return &neverNullColumn;
+}
+
+// Selected per column from its value type. Every value type carries a present flag, so -
+// unlike selectOptKeyAppendFunction - an embedding dispatches fine here; a key column of
+// one is rejected by the serializer, not by this.
+NLIsNullFunction NLExecutor::selectOptIsNullFunction(ValueType valueType) {
+    NLIsNullFunction isNull = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        isNull = &optColumnIsNull<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return isNull;
+}
+
+NLIsNullFunction NLExecutor::selectListElementIsNullFunction() {
+    return &listElementColumnIsNull;
 }
 
 // An ID chunk (node/edge/edge-type IDs) has no null rows, so every row counts,

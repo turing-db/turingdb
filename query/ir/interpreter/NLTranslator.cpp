@@ -728,6 +728,12 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateSortBuffer(sortBuffer, body);
         } else if (nl::SortCollect sortCollect = mlir::dyn_cast<nl::SortCollect>(operation)) {
             translateSortCollect(sortCollect, body);
+        } else if (nl::HashJoinBuffer hashJoinBuffer = mlir::dyn_cast<nl::HashJoinBuffer>(operation)) {
+            translateHashJoinBuffer(hashJoinBuffer, body);
+        } else if (nl::HashJoinCollect hashJoinCollect = mlir::dyn_cast<nl::HashJoinCollect>(operation)) {
+            translateHashJoinCollect(hashJoinCollect, body);
+        } else if (nl::HashJoinProbe hashJoinProbe = mlir::dyn_cast<nl::HashJoinProbe>(operation)) {
+            translateHashJoinProbe(hashJoinProbe, body);
         } else if (nl::Distinct distinct = mlir::dyn_cast<nl::Distinct>(operation)) {
             translateDistinctState(distinct, body);
         } else if (nl::DistinctFilter distinctFilter = mlir::dyn_cast<nl::DistinctFilter>(operation)) {
@@ -2739,6 +2745,140 @@ NLSortState* NLTranslator::sortStateFor(mlir::Value handle) const {
     return stateIt->second;
 }
 
+void NLTranslator::translateHashJoinBuffer(nl::HashJoinBuffer buffer, NLStmtContainer* body) {
+    // Allocate the runtime build side and map the handle to it, so the collect and the
+    // probe that name the handle share the same buffers and index. The buffer columns
+    // themselves are allocated by the collect, which knows their types.
+    NLHashJoinState* state = _program->allocHashJoinState();
+    _hashJoinStates[buffer.getState()] = state;
+
+    // The reset empties the buffers and the index each time the block holding this
+    // nl.hash_join_buffer runs: once at function scope for a top-level join.
+    NLHashJoinResetData* resetData = _program->allocFunctionData<NLHashJoinResetData>(state);
+    body->emplaceStmt(&NLExecutor::runHashJoinReset, resetData);
+}
+
+void NLTranslator::translateHashJoinCollect(nl::HashJoinCollect collect, NLStmtContainer* body) {
+    const mlir::Value collectState = collect.getState();
+    NLHashJoinState* state = hashJoinStateFor(collectState);
+
+    // The buffers are allocated once, by the single collect feeding a build side.
+    // Generated IR has exactly one collect per build side; a second would append to the
+    // same buffers and index the same rows twice, so it is rejected here.
+    if (!state->buffers().empty()) {
+        throw IRException("an nl.hash_join_buffer must be fed by a single nl.hash_join_collect");
+    }
+
+    const mlir::OperandRange columns = collect.getColumns();
+    const uint64_t buildKey = hashJoinBufferOf(collectState).getBuildKey();
+    if (buildKey >= columns.size()) {
+        throw IRException("hash join build key column index is out of range");
+    }
+
+    NLHashJoinCollectData* data = _program->allocFunctionData<NLHashJoinCollectData>(state);
+
+    // One growing buffer per build column, row-aligned. The buffer keeps the column's
+    // element type; the append copies a chunk's rows onto its tail, exactly as a sort
+    // accumulates them.
+    for (const mlir::Value column : columns) {
+        Column* bufferColumn = allocColumnForChunkType(column.getType());
+        state->addColumnBuffer(bufferColumn);
+
+        const NLSortCollectData::Append append {getColumn(column),
+                                                bufferColumn,
+                                                selectAppendForChunkType(column.getType())};
+        data->addAppend(append);
+    }
+
+    // The key is one of those columns, read a second time to index each row: the
+    // serializer turns a row into the bytes the probe looks up, and the null test keeps a
+    // null row out of the index.
+    const mlir::Value keyColumn = columns[buildKey];
+    data->setKeyColumn(getColumn(keyColumn),
+                       selectKeyAppendForChunkType(keyColumn.getType()),
+                       selectIsNullForChunkType(keyColumn.getType()));
+
+    body->emplaceStmt(&NLExecutor::runHashJoinCollect, data);
+}
+
+void NLTranslator::translateHashJoinProbe(nl::HashJoinProbe probe, NLStmtContainer* body) {
+    const mlir::Value probeState = probe.getState();
+    NLHashJoinState* state = hashJoinStateFor(probeState);
+
+    const mlir::OperandRange columns = probe.getColumns();
+    const mlir::ResultRange results = probe.getResults();
+
+    // The build buffers are allocated by the collect, which the lowering places in the
+    // build loop ahead of this probe, so by here they say how many columns the build side
+    // contributes - and the results are the probe columns followed by those.
+    const size_t buildCount = state->buffers().size();
+    if (results.size() != columns.size() + buildCount) {
+        throw IRException("nl.hash_join_probe emits one column per probe column and per build column");
+    }
+
+    const uint64_t probeKey = hashJoinBufferOf(probeState).getProbeKey();
+    if (probeKey >= columns.size()) {
+        throw IRException("hash join probe key column index is out of range");
+    }
+
+    NLHashJoinProbeData* data = _program->allocFunctionData<NLHashJoinProbeData>(state);
+
+    // Reserve the matched-pair scratches so a step that matches no more than a chunk's
+    // worth of rows stays allocation-free, the same as the edge and sort loops' indices.
+    data->getProbeIndices()->reserve(_program->getChunkSize());
+    data->getBuildIndices()->reserve(_program->getChunkSize());
+
+    // A probe column is read from this step's chunk and repeated once per match; a build
+    // column is read back from its buffer at the matched row. Both are the gather the
+    // edge and sort loops use, over the pair of index scratches the probe fills.
+    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        const mlir::Value column = columns[columnIndex];
+
+        Column* output = allocColumnForChunkType(column.getType());
+        _valueSlots[results[columnIndex]] = output;
+
+        data->addProbeColumn(NLCarriedColumn(getColumn(column),
+                                             output,
+                                             selectGatherForChunkType(column.getType())));
+    }
+
+    for (size_t columnIndex = 0; columnIndex < buildCount; columnIndex++) {
+        const mlir::Value result = results[columns.size() + columnIndex];
+
+        Column* output = allocColumnForChunkType(result.getType());
+        _valueSlots[result] = output;
+
+        data->addBuildColumn(NLCarriedColumn(state->buffer(columnIndex),
+                                             output,
+                                             selectGatherForChunkType(result.getType())));
+    }
+
+    const mlir::Value keyColumn = columns[probeKey];
+    data->setKeyColumn(getColumn(keyColumn),
+                       selectKeyAppendForChunkType(keyColumn.getType()),
+                       selectIsNullForChunkType(keyColumn.getType()));
+
+    body->emplaceStmt(&NLExecutor::runHashJoinProbe, data);
+}
+
+NLHashJoinState* NLTranslator::hashJoinStateFor(mlir::Value handle) const {
+    const auto stateIt = _hashJoinStates.find(handle);
+    if (stateIt == _hashJoinStates.end()) {
+        throw IRException("hash join handle must be produced by an nl.hash_join_buffer");
+    }
+
+    return stateIt->second;
+}
+
+nl::HashJoinBuffer NLTranslator::hashJoinBufferOf(mlir::Value handle) {
+    nl::HashJoinBuffer buffer = handle.getDefiningOp<nl::HashJoinBuffer>();
+    if (!buffer) {
+        throw IRException("hash join handle must be produced by an nl.hash_join_buffer");
+    }
+
+    return buffer;
+}
+
 void NLTranslator::translateDistinctState(nl::Distinct distinct, NLStmtContainer* body) {
     // Allocate the runtime seen-set and map the handle to it, so the filter that
     // names the handle finds the same set.
@@ -4058,6 +4198,22 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
     }
 
     return NLExecutor::selectKeyAppendFunction(chunkKindFromElementType(elementType));
+}
+
+// The null-testing sibling of selectKeyAppendForChunkType: a nullable value chunk reads
+// its present flag and a type-erased cell its tag; every other chunk holds no null row, so
+// one handle answers false for all of them.
+NLIsNullFunction NLTranslator::selectIsNullForChunkType(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+    const mlir::Type elementType = chunk.getElementType();
+
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        return NLExecutor::selectOptIsNullFunction(valueTypeFromElementType(nullableType.getValueType()));
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        return NLExecutor::selectListElementIsNullFunction();
+    }
+
+    return NLExecutor::neverNull();
 }
 
 // The value-reduction sibling of selectCountForChunkType: a type-erased column of tagged

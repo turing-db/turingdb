@@ -354,6 +354,43 @@ LogicalResult SortCollect::verify() {
     return success();
 }
 
+// An nl.hash_join_collect must append at least one column: the build side's row
+// count is read from the first buffer, and one of the columns is the key the
+// buffer op names.
+LogicalResult HashJoinCollect::verify() {
+    if (getColumns().empty()) {
+        return emitOpError("requires at least one column to collect");
+    }
+
+    return success();
+}
+
+// An nl.hash_join_probe reads at least one probe column - one of them is the key -
+// and emits the probe columns unchanged followed by the build ones, so it has at
+// least as many results as columns and the first of them keep the probe types.
+LogicalResult HashJoinProbe::verify() {
+    if (getColumns().empty()) {
+        return emitOpError("requires at least one column to probe with");
+    }
+
+    const OperandRange columns = getColumns();
+    const ResultRange results = getResults();
+    if (results.size() < columns.size()) {
+        return emitOpError("expects a result per probe column and per build column, but has ")
+               << results.size() << " results for " << columns.size() << " probe columns";
+    }
+
+    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        if (columns[columnIndex].getType() != results[columnIndex].getType()) {
+            return emitOpError("result ") << columnIndex
+                                          << " must have the same type as probe column "
+                                          << columnIndex;
+        }
+    }
+
+    return success();
+}
+
 // A distinct filter passes its columns through unchanged - only duplicate rows
 // are removed - so each result keeps its input column's chunk type, the same as
 // nl.limit_truncate.
