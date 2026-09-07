@@ -1,11 +1,11 @@
 {
   "enabled": true,
   "graph": "simpledb",
-  "query": "MATCH (a)-->(b)-->(a) RETURN a, b;",
+  "query": "MATCH (a)-->(b)-->(a) RETURN a, b\nORDER BY a, b;",
   "expect": {
-    "plan": "PLAN ERROR\n-------* Query error\n     1 | MATCH (a)-->(b)-->(a) RETURN a, b;\n       |                   ^^^\n-------* Loop detected. This is not supported yet",
-    "result": "PLAN ERROR\n-------* Query error\n     1 | MATCH (a)-->(b)-->(a) RETURN a, b;\n       |                   ^^^\n-------* Loop detected. This is not supported yet",
-    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (a)-->(b)-->(a) RETURN a, b;\\n       |                   ^^^\\n-------* Loop detected. This is not supported yet\"}"
+    "plan": "PLAN ERROR\n-------* Query error\n     1 | MATCH (a)-->(b)-->(a) RETURN a, b\n       |                   ^^^\n-------* Loop detected. This is not supported yet",
+    "result": "a,b\n0,1\n0,6\n1,0\n6,0",
+    "resultJson": "{\"header\":{\"column_names\":[\"a\",\"b\"],\"column_types\":[\"UInt64\",\"UInt64\"]},\"data\":[[[0,0,1,6],[1,6,0,0]]]}"
   },
   "tags": [
     "fail",

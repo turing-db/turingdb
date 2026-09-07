@@ -1,11 +1,11 @@
 {
   "enabled": true,
   "graph": "simpledb",
-  "query": "MATCH (n), (m) RETURN n, count(m)",
+  "query": "MATCH (n), (m) RETURN n, count(m)\nORDER BY n",
   "expect": {
-    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n), (m) RETURN n, count(m)\n       |                ^^^^^^^^^^^^^^^^^^\n-------* Aggregates may not yet be combined with multiple return items.",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n), (m) RETURN n, count(m)\n       |                ^^^^^^^^^^^^^^^^^^\n-------* Aggregates may not yet be combined with multiple return items.",
-    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n), (m) RETURN n, count(m)\\n       |                ^^^^^^^^^^^^^^^^^^\\n-------* Aggregates may not yet be combined with multiple return items.\"}"
+    "plan": "ANALYZE ERROR\n-------* Query error\n       |                ⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄\n     1 | MATCH (n), (m) RETURN n, count(m)\n     2 | ORDER BY n\n       | ^^^^^^^^^^^^\n-------* Aggregates may not yet be combined with multiple return items.",
+    "result": "n,count(m)\n0,18\n1,18\n2,18\n3,18\n4,18\n5,18\n6,18\n7,18\n8,18\n9,18\n10,18\n11,18\n12,18\n13,18\n14,18\n15,18\n16,18\n17,18",
+    "resultJson": "{\"header\":{\"column_names\":[\"n\",\"count(m)\"],\"column_types\":[\"UInt64\",\"UInt64\"]},\"data\":[[[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17],[18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18]]]}"
   },
   "tags": [
     "count",

@@ -4,8 +4,8 @@
   "query": "MATCH (n), (m) RETURN COUNT(n), COUNT(m)",
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n), (m) RETURN COUNT(n), COUNT(m)\n       |                ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Aggregates may not yet be combined with multiple return items.",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n), (m) RETURN COUNT(n), COUNT(m)\n       |                ^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Aggregates may not yet be combined with multiple return items.",
-    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n), (m) RETURN COUNT(n), COUNT(m)\\n       |                ^^^^^^^^^^^^^^^^^^^^^^^^^\\n-------* Aggregates may not yet be combined with multiple return items.\"}"
+    "result": "COUNT(n),COUNT(m)\n324,324",
+    "resultJson": "{\"header\":{\"column_names\":[\"COUNT(n)\",\"COUNT(m)\"],\"column_types\":[\"UInt64\",\"UInt64\"]},\"data\":[[[324],[324]]]}"
   },
   "tags": [
     "count",
