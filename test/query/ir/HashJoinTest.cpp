@@ -287,6 +287,47 @@ TEST_F(HashJoinTest, keepsTheProductWhenNeitherKeyHasAResolvedType) {
     EXPECT_FALSE(contains(program, "db.hash_join")) << program;
 }
 
+// The built side is buffered whole while the probed side streams, so the join builds the
+// plain scan and probes the factor holding the cascade's product: buffering that one would
+// hold every pair of b and c where the scan holds one row per node.
+TEST_F(HashJoinTest, buildsTheFactorWithNoProductAndProbesTheOther) {
+    std::string program;
+    explainStage("EXPLAIN (nl) MATCH (a), (b), (c) WHERE a.name = c.name RETURN a, b, c", "nl", program);
+
+    // The collect fills the build side, so what stands after it is on the probed side.
+    const size_t collect = program.find("nl.hash_join_collect");
+    const size_t product = program.find("nl.cross_product");
+    ASSERT_NE(collect, std::string::npos) << program;
+    ASSERT_NE(product, std::string::npos) << program;
+    EXPECT_LT(collect, product) << program;
+}
+
+// Every node's name is its own, so the equality is the diagonal and b is crossed with it:
+// 18 pairs of a and c, each against all 18 nodes.
+TEST_F(HashJoinTest, joinsThreePatternsOnAPropertyOfTwoOfThem) {
+    expectCount("MATCH (a), (b), (c) WHERE a.name = c.name RETURN count(*)", 324);
+}
+
+// A LIMIT over a join bounds the probe, so a step pairs only the rows the cut can emit
+// rather than every match of its chunk.
+TEST_F(HashJoinTest, boundsTheProbeWithALimit) {
+    std::string program;
+    explainStage("EXPLAIN (nl) MATCH (n), (m) WHERE n.name = m.name RETURN n, m LIMIT 3", "nl", program);
+
+    const size_t probe = program.find("nl.hash_join_probe");
+    ASSERT_NE(probe, std::string::npos) << program;
+
+    const std::string_view probeLine(program.data() + probe, program.find('\n', probe) - probe);
+    EXPECT_TRUE(contains(probeLine, "limit")) << program;
+}
+
+// The budget runs out inside a probe row's matches, not on a row boundary: the four French
+// people all match Remy (0), so the fifth row is the first match of Adam (1).
+TEST_F(HashJoinTest, cutsTheMatchesOfOneProbeRowWithALimit) {
+    const Rows expected {{"0", "0"}, {"0", "1"}, {"0", "8"}, {"0", "9"}, {"1", "0"}};
+    expectRows("MATCH (n), (m) WHERE n.isFrench = m.isFrench RETURN n, m LIMIT 5", expected);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
