@@ -8,7 +8,9 @@
 #include "CypherAST.h"
 #include "Literal.h"
 #include "Symbol.h"
+#include "SymbolChain.h"
 #include "expr/BinaryExpr.h"
+#include "expr/EntityTypeExpr.h"
 #include "expr/Expr.h"
 #include "expr/ListExpr.h"
 #include "expr/LiteralExpr.h"
@@ -49,6 +51,15 @@ protected:
         }
 
         return expr;
+    }
+
+    EntityTypeExpr* typeTest(std::string_view variable, const std::vector<std::string_view>& types) {
+        SymbolChain* chain = SymbolChain::create(&_ast);
+        for (const std::string_view type : types) {
+            chain->add(Symbol::create(&_ast, type));
+        }
+
+        return EntityTypeExpr::create(&_ast, Symbol::create(&_ast, variable), chain);
     }
 
     CypherAST _ast;
@@ -149,4 +160,27 @@ TEST_F(StructuralExpressionComparatorTest, nullOperandsAreHandled) {
     EXPECT_TRUE(StructuralExpressionComparator::equal(nullptr, nullptr));
     EXPECT_FALSE(StructuralExpressionComparator::equal(integer(1), nullptr));
     EXPECT_FALSE(StructuralExpressionComparator::equal(nullptr, integer(1)));
+}
+
+// A label test compares by the variable it tests and the types it names, so the n:Person
+// of a RETURN matches the n:Person of the ORDER BY that keys on it.
+TEST_F(StructuralExpressionComparatorTest, labelTestsCompareByVariableAndTypes) {
+    // Neither is resolved, so both carry a null declaration and the types decide
+    EXPECT_TRUE(StructuralExpressionComparator::equal(typeTest("n", {"Person"}),
+                                                      typeTest("n", {"Person"})));
+}
+
+TEST_F(StructuralExpressionComparatorTest, labelTestsOfDifferentTypesDiffer) {
+    EXPECT_FALSE(StructuralExpressionComparator::equal(typeTest("n", {"Person"}),
+                                                       typeTest("n", {"Interest"})));
+
+    EXPECT_FALSE(StructuralExpressionComparator::equal(typeTest("n", {"Person"}),
+                                                       typeTest("n", {"Person", "Founder"})));
+}
+
+// The chain is compared in the order it was written, so two spellings of one conjunction
+// are left unequal rather than being reordered to match.
+TEST_F(StructuralExpressionComparatorTest, labelTestsCompareTheChainInOrder) {
+    EXPECT_FALSE(StructuralExpressionComparator::equal(typeTest("n", {"Person", "Founder"}),
+                                                       typeTest("n", {"Founder", "Person"})));
 }

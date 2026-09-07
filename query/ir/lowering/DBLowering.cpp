@@ -1240,22 +1240,32 @@ void DBLowering::lowerCheckLabelConstraint(mlir::db::CheckLabelConstraint checkL
     const LabelMap& labelMap = _view->metadata().labels();
 
     LabelSet constraintLabelSet;
+    bool graphHasEveryLabel = true;
     for (const mlir::Attribute labelAttr : checkLabelConstraint.getLabels()) {
         const llvm::StringRef labelName = mlir::cast<mlir::StringAttr>(labelAttr).getValue();
         const std::optional<LabelID> labelID = labelMap.get(
             std::string_view(labelName.data(), labelName.size()));
 
-        bioassert(labelID.has_value(), "Invalid label passed analyzer.");
+        if (!labelID) {
+            graphHasEveryLabel = false;
+            break;
+        }
 
         constraintLabelSet.set(*labelID);
     }
 
+    // The labels are a conjunction, so one the graph never assigned makes the whole test
+    // false: matching no label set is that answer, where skipping the missing label would
+    // test a weaker constraint than the query wrote.
     llvm::SmallVector<int64_t> matchingIDs;
-    const LabelSetHandle constraintHandle(constraintLabelSet);
-    for (const LabelSetMap::Pair& pair : _view->metadata().labelsets()) {
-        const LabelSetHandle candidate(*pair._value);
-        if (candidate.hasAtLeastLabels(constraintHandle)) {
-            matchingIDs.push_back(static_cast<int64_t>(pair._id.getValue()));
+    if (graphHasEveryLabel) {
+        const LabelSetHandle constraintHandle(constraintLabelSet);
+
+        for (const LabelSetMap::Pair& pair : _view->metadata().labelsets()) {
+            const LabelSetHandle candidate(*pair._value);
+            if (candidate.hasAtLeastLabels(constraintHandle)) {
+                matchingIDs.push_back(static_cast<int64_t>(pair._id.getValue()));
+            }
         }
     }
 
@@ -1279,13 +1289,16 @@ void DBLowering::lowerCheckLabelConstraint(mlir::db::CheckLabelConstraint checkL
 void DBLowering::lowerCheckEdgeTypeConstraint(mlir::db::CheckEdgeTypeConstraint checkEdgeTypeConstraint) {
     const EdgeTypeMap& edgeTypeMap = _view->metadata().edgeTypes();
 
+    // The types are a disjunction, so one the graph never assigned drops out of it
     llvm::SmallVector<int64_t> matchingIDs;
     for (const mlir::Attribute typeAttr : checkEdgeTypeConstraint.getEdgeTypes()) {
         const llvm::StringRef typeName = mlir::cast<mlir::StringAttr>(typeAttr).getValue();
         const std::optional<EdgeTypeID> edgeTypeID = edgeTypeMap.get(
             std::string_view(typeName.data(), typeName.size()));
 
-        bioassert(edgeTypeID.has_value(), "Invalid edge type passed analyzer.");
+        if (!edgeTypeID) {
+            continue;
+        }
 
         matchingIDs.push_back(static_cast<int64_t>(edgeTypeID->getValue()));
     }

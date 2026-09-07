@@ -62,19 +62,19 @@ protected:
     std::unique_ptr<QueryInterpreterV3> _interpreter;
 };
 
-// A codegen rejection carries the span of the query it came from, so an expression kind
-// the generator has no column for is reported under the caret naming it, rather than being
-// dressed up as the internal failure the case below is.
-TEST_F(QueryInterpreterV3ErrorTest, reportsUnsupportedExpressionRejectionWithItsLocation) {
+// A codegen rejection carries the span of the query it came from, so an expression the
+// generator turns away is reported under the caret naming it, rather than being dressed up
+// as the internal failure the case below is.
+TEST_F(QueryInterpreterV3ErrorTest, reportsRejectedExpressionWithItsLocation) {
     QueryStatus status;
-    runQuery("MATCH (n) RETURN n:Person", status);
+    runQuery("MATCH (n) DELETE n.name", status);
 
     EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
     EXPECT_EQ(status.getError(),
               "-------* Query error\n"
-              "     1 | MATCH (n) RETURN n:Person\n"
-              "       |                  ^^^^^^^^\n"
-              "-------* Unsupported expression: ENTITY_TYPES");
+              "     1 | MATCH (n) DELETE n.name\n"
+              "       |                  ^^^^^^\n"
+              "-------* Expressions in DELETE statements can only be symbols");
 }
 
 // An internal generator failure is a FatalException and must keep reading as

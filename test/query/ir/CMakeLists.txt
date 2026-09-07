@@ -1913,3 +1913,32 @@ target_link_libraries(test_query_ir_mask_comparison PRIVATE
         turing_db_interpreter_v3_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_mask_comparison PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_label_predicate LabelPredicateTest.cpp)
+target_link_libraries(test_query_ir_label_predicate PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_label_predicate PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_label_predicate_codegen LabelPredicateCodegenTest.cpp)
+target_link_libraries(test_query_ir_label_predicate_codegen PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s
+        turing_db_ir_dbdialect_s
+        turing_db_ir_nldialect_s
+        turing_db_ir_storagedialect_s
+        turing_db_ir_common_s
+        turing_db_storage_s)
+target_include_directories(test_query_ir_label_predicate_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

@@ -38,6 +38,7 @@ class UnaryExpr;
 class CallStmt;
 class CypherAST;
 class EmbeddingLiteral;
+class EntityTypeExpr;
 class Expr;
 class IndexExpr;
 class Literal;
@@ -483,6 +484,15 @@ private:
 
     mlir::Value resolveEntityColumn(const VarDecl* decl);
 
+    // Whether the entity of each row carries the named types: every one of them for a
+    // node, since labels are a conjunction, any one of them for an edge.
+    mlir::Value checkNodeLabels(mlir::Value nodeColumn, std::span<const std::string_view> labels);
+    mlir::Value checkEdgeType(mlir::Value edgeTypeColumn, std::span<const std::string_view> edgeTypes);
+
+    // A named edge variable has one occurrence per time the pattern walks it, all equated
+    // by the identity filter, so the first one's type column answers for the variable.
+    mlir::Value resolveEdgeTypeColumn(const VarDecl* decl) const;
+
     mlir::Value nullConstantColumn();
 
     // Taken in the order the query declares its variables, so the choice is the query's
@@ -538,6 +548,7 @@ private:
     mlir::Value translateArg(const Expr* argExpr);
     mlir::Value translateLiteralExpr(const Literal* literal);
     mlir::Value translatePropertyExpr(const PropertyExpr* propExpr);
+    mlir::Value translateEntityTypeExpr(const EntityTypeExpr* typeExpr);
 
     // The attribute carrying a scalar literal's value and type, or a null attribute for
     // any other literal kind

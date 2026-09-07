@@ -11,6 +11,7 @@
 #include "columns/ColumnConst.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
+#include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/Dataframe.h"
@@ -149,6 +150,8 @@ void turing::test::renderCell(const Column* column, size_t row, std::string& out
         out = std::to_string((*edgeIDs)[row].getValue());
     } else if (const auto* edgeTypes = dynamic_cast<const ColumnEdgeTypes*>(column)) {
         out = std::to_string((*edgeTypes)[row].getValue());
+    } else if (const auto* mask = dynamic_cast<const ColumnMask*>(column)) {
+        out = (*mask)[row] ? "true" : "false";
     } else if (dynamic_cast<const ColumnConst<PropertyNull>*>(column)) {
         out = "null";
     } else if (const auto* lists = dynamic_cast<const ColumnVector<ListView>*>(column)) {
