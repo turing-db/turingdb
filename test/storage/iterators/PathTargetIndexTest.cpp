@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "PathExplorationReference.h"
@@ -89,6 +90,8 @@ protected:
                                    PathExplorationDir direction,
                                    std::optional<EdgeTypeID> edgeType,
                                    uint64_t maxHops) {
+        SCOPED_TRACE("direction " + std::to_string(static_cast<int>(direction)) + " max " + std::to_string(maxHops) + " type " + std::to_string(edgeType ? edgeType->getValue() : 999));
+
         PathTargetIndex index;
         index.build(view, targets, direction, edgeType, maxHops);
         ASSERT_TRUE(index.isBuilt());
@@ -142,6 +145,48 @@ TEST_F(PathTargetIndexTest, matchesTheReferenceInEveryConfiguration) {
     }
 }
 
+TEST_F(PathTargetIndexTest, choosesTheLayoutByTheBoundAndTheGraph) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+
+    const std::vector<NodeID> targets {NodeID(_hubGraph._target)};
+
+    // A shallow bound on this small graph writes a few words per node, cheaper than a probe
+    // per node reached; an unbounded one would write a word per node per level
+    PathTargetIndex shallow;
+    shallow.build(view, targets, PathExplorationDir::FORWARD, std::nullopt, 3);
+    EXPECT_TRUE(shallow.isDense());
+
+    PathTargetIndex deep;
+    deep.build(view, targets, PathExplorationDir::FORWARD, std::nullopt, unbounded);
+    EXPECT_FALSE(deep.isDense());
+
+    // Both count the nodes they reach the same way
+    EXPECT_EQ(shallow.getReachedCount(), 4u);
+    EXPECT_EQ(deep.getReachedCount(), 5u);
+}
+
+TEST_F(PathTargetIndexTest, growsTheTablePastItsFirstCapacity) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+
+    // The bound is deep enough for one batch to reach every node, more slots than a fresh
+    // table holds when the graph is repeated
+    std::vector<NodeID> targets;
+    for (size_t node = 0; node < nodeCount; node++) {
+        targets.push_back(NodeID(node));
+    }
+
+    PathTargetIndex index;
+    index.build(view, targets, PathExplorationDir::BOTH, std::nullopt, unbounded);
+    EXPECT_EQ(index.getBatchCount(), 1u);
+    EXPECT_EQ(index.getReachedCount(), nodeCount);
+
+    expectMatchesTheReference(view, targets, PathExplorationDir::BOTH, std::nullopt, unbounded);
+}
+
 TEST_F(PathTargetIndexTest, batchesSixtyFourTargetsPerWord) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
@@ -173,6 +218,9 @@ TEST_F(PathTargetIndexTest, unindexedTargetsPruneNothing) {
     PathTargetIndex index;
     EXPECT_FALSE(index.isBuilt());
     index.build(view, targets, PathExplorationDir::FORWARD, std::nullopt, unbounded);
+
+    // The end, the three nodes of the live branch and the entrance: nothing else gets a slot
+    EXPECT_EQ(index.getReachedCount(), 5u);
 
     const PathTargetHandle other = index.find(NodeID(_hubGraph._hub));
     EXPECT_FALSE(other.isValid());
