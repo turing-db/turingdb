@@ -1381,6 +1381,16 @@ target_link_libraries(test_query_ir_ldbc_bi11 PRIVATE
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_ldbc_bi11 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_turing_test(test_query_ir_ldbc_is7 LdbcIs7Test.cpp)
+target_link_libraries(test_query_ir_ldbc_is7 PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_ldbc_is7 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_with_multi_part WithMultiPartTest.cpp)
 target_link_libraries(test_query_ir_with_multi_part PRIVATE
         turing_db_s
