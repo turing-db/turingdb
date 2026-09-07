@@ -16,10 +16,7 @@ template <typename T>
 concept StringLike = std::same_as<T, std::string> || std::same_as<T, std::string_view>;
 
 template <typename T, typename U>
-concept Stringy = (std::same_as<T, std::string_view> && std::same_as<std::string, U>)
-               || (std::same_as<std::string_view, U> && std::same_as<T, std::string>)
-               || (std::same_as<std::string_view, U> && std::same_as<T, std::string_view>)
-               || (std::same_as<std::string, U> && std::same_as<T, std::string>);
+concept Stringy = StringLike<T> and StringLike<U>;
 
 struct TypeUtils {
     template <typename T>
@@ -110,8 +107,8 @@ concept OptionallyInvokable =
 template <typename Func, typename... Args>
 concept TuringPredicate =
     std::same_as<ColumnMask::Bool_t, std::invoke_result_t<Func, Args...>>
-    || std::same_as<CustomBool,  std::invoke_result_t<Func, Args...>>
-    || std::same_as<bool,  std::invoke_result_t<Func, Args...>>;
+    || std::same_as<CustomBool, std::invoke_result_t<Func, Args...>>
+    || std::same_as<bool, std::invoke_result_t<Func, Args...>>;
 
 /**
  * @brief Predicate that can be invoked, but one or both arguments may be wrapped in
