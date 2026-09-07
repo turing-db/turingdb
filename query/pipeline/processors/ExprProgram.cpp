@@ -14,8 +14,9 @@
 
 using namespace db;
 
-ExprProgram* ExprProgram::create(PipelineV2* pipeline) {
+ExprProgram* ExprProgram::create(PipelineV2* pipeline, StringBuffer* stringBuffer) {
     ExprProgram* prog = new ExprProgram();
+    prog->_stringBuffer = stringBuffer;
     pipeline->addExprProgram(prog);
 
     return prog;
@@ -229,11 +230,11 @@ void ExprProgram::evalFunction(const Instruction& instr) {
         break;
 
         case OP_FUNC_LABELS:
-            EvalFunction::eval<OP_FUNC_LABELS>(res, arg, _view);
+            EvalFunction::eval<OP_FUNC_LABELS>(res, arg, _view, _stringBuffer);
         break;
 
         case OP_FUNC_EDGE_TYPES:
-            EvalFunction::eval<OP_FUNC_EDGE_TYPES>(res, arg, _view);
+            EvalFunction::eval<OP_FUNC_EDGE_TYPES>(res, arg, _view, _stringBuffer);
         break;
 
         case OP_FUNC_COSINE_SIMILARITY:

@@ -55,6 +55,10 @@ mlir::Type ownedStringFunctionElement(mlir::OpBuilder& builder) {
     return storage::OwnedStringType::get(builder.getContext());
 }
 
+mlir::Type stringFunctionElement(mlir::OpBuilder& builder) {
+    return storage::StringType::get(builder.getContext());
+}
+
 mlir::Type integerFunctionElement(mlir::OpBuilder& builder) {
     return builder.getI64Type();
 }
@@ -108,7 +112,7 @@ struct UnaryFunctionLowering {
 };
 
 const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionLowerings = {
-    {"db.labels",     {&emitNLUnaryFunction<nl::Labels>,    &ownedStringFunctionElement, ResultNullability::FollowsInput}},
+    {"db.labels",     {&emitNLUnaryFunction<nl::Labels>,    &stringFunctionElement,      ResultNullability::FollowsInput}},
     {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>,  &ownedStringFunctionElement, ResultNullability::FollowsInput}},
     {"db.to_integer", {&emitNLUnaryFunction<nl::ToInteger>, &integerFunctionElement,     ResultNullability::AlwaysNullable}},
     {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,       ResultNullability::AlwaysNullable}},

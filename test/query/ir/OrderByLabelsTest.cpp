@@ -48,12 +48,12 @@ public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* strings = dynamic_cast<const ColumnVector<std::string>*>(chunks[0]);
+        const auto* strings = dynamic_cast<const ColumnVector<std::string_view>*>(chunks[0]);
         ASSERT_NE(strings, nullptr);
 
         const auto& raw = strings->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _values.push_back(raw[rowIndex]);
+            _values.emplace_back(raw[rowIndex]);
         }
     }
 

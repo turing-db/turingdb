@@ -2,8 +2,6 @@
 
 #include <math.h>
 
-#include <range/v3/view/drop.hpp>
-
 #include "metadata/LabelMap.h"
 #include "reader/GraphReader.h"
 #include "views/GraphView.h"
@@ -12,37 +10,27 @@
 
 using namespace db;
 
-namespace rg = ranges;
-namespace rv = rg::views;
-
-void LabelsFunction::getLabelString(std::string& out, GraphView view, NodeID n) {
-    out.clear();
-    const LabelSetHandle lblset = view.read().getNodeLabelSet(n);
+std::string_view LabelsFunction::getLabelString(NodeID n) {
+    const LabelSetHandle lblset = _view.read().getNodeLabelSet(n);
 
     std::vector<LabelID> labels;
     lblset.decompose(labels);
 
     bioassert(!labels.empty(), "Could not retrieve labels for node {}.", n.getValue());
 
-    const LabelMap& lblMap = view.metadata().labels();
+    const LabelMap& lblMap = _view.metadata().labels();
 
-    {
-        const LabelID fstLbl = labels.front();
-        const std::optional<std::string_view> fstName = lblMap.getName(fstLbl);
-        bioassert(fstName, "Could not get name of LabelID {}.", fstLbl.getValue());
-        const std::string_view fstNameUnwrapped = *fstName;
+    _names.clear();
+    _names.reserve(labels.size());
 
-        out = std::string {fstNameUnwrapped};
-    }
-
-    for (const LabelID label : labels | rv::drop(1)) {
-        out += ", ";
-
+    for (const LabelID label : labels) {
         const std::optional<std::string_view> name = lblMap.getName(label);
         bioassert(name, "Could not get name of LabelID {}.", label.getValue());
 
-        out += *name;
+        _names.emplace_back(*name);
     }
+
+    return _buffer->join(_names, ", ");
 }
 
 void EdgeTypesFunction::getEdgeTypeString(std::string& out, GraphView view, EdgeID e) {

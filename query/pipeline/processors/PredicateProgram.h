@@ -8,7 +8,7 @@ class Column;
 
 class PredicateProgram final : public ExprProgram {
 public:
-    static PredicateProgram* create(PipelineV2* pipeline);
+    static PredicateProgram* create(PipelineV2* pipeline, StringBuffer* stringBuffer);
 
     void addTopLevelPredicate(Column* resultCol) {
         _topLevelPredicates.push_back(resultCol);
