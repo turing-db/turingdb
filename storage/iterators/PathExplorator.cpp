@@ -16,6 +16,11 @@ using namespace db;
 
 namespace {
 
+// Interleaved walks stop paying off once a core's outstanding cache misses are all in use:
+// measured with samples/path_bench, the walk plateaus at sixteen on every shape tried and
+// loses nothing in cache
+constexpr size_t defaultWalkerCount = 16;
+
 uint64_t signatureBit(EdgeID edge) {
     return 1ull << ((edge.getValue() * 0x9E3779B97F4A7C15ull) >> 58);
 }
@@ -35,7 +40,7 @@ PathExplorator::PathExplorator(const GraphView& view,
     _parts(view),
     _tombstones(&view.tombstones()),
     _filterTombstones(view.tombstones().hasEdges()),
-    _walkers(1)
+    _walkers(defaultWalkerCount)
 {
     reset();
 }
