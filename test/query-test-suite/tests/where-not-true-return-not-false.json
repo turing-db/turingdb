@@ -4,8 +4,8 @@
   "query": "MATCH (n) WHERE NOT TRUE RETURN NOT FALSE",
   "expect": {
     "plan": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n) WHERE NOT TRUE RETURN NOT FALSE\n       |                 ^^^^^^^^\n-------* Predicates without dependencies are not supported yet",
-    "result": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n) WHERE NOT TRUE RETURN NOT FALSE\n       |                 ^^^^^^^^\n-------* Predicates without dependencies are not supported yet",
-    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n) WHERE NOT TRUE RETURN NOT FALSE\\n       |                 ^^^^^^^^\\n-------* Predicates without dependencies are not supported yet\"}"
+    "result": "NOT FALSE",
+    "resultJson": "{\"header\":{\"column_names\":[\"NOT FALSE\"],\"column_types\":[\"Bool\"]},\"data\":[[[]]]}"
   },
   "tags": [
     "operators",

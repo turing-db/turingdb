@@ -1,12 +1,15 @@
 {
   "enabled": true,
   "graph": "simpledb",
-  "query": "MATCH (n), (m) RETURN count(n), m",
+  "query": "MATCH (n), (m) RETURN count(n), m\nORDER BY m",
   "expect": {
-    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n), (m) RETURN count(n), m\n       |                ^^^^^^^^^^^^^^^^^^\n-------* Aggregates may not yet be combined with multiple return items.",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n), (m) RETURN count(n), m\n       |                ^^^^^^^^^^^^^^^^^^\n-------* Aggregates may not yet be combined with multiple return items.",
-    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n), (m) RETURN count(n), m\\n       |                ^^^^^^^^^^^^^^^^^^\\n-------* Aggregates may not yet be combined with multiple return items.\"}"
+    "plan": "ANALYZE ERROR\n-------* Query error\n       |                ⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄\n     1 | MATCH (n), (m) RETURN count(n), m\n     2 | ORDER BY m\n       | ^^^^^^^^^^^^\n-------* Aggregates may not yet be combined with multiple return items.",
+    "result": "count(n),m\n18,0\n18,1\n18,2\n18,3\n18,4\n18,5\n18,6\n18,7\n18,8\n18,9\n18,10\n18,11\n18,12\n18,13\n18,14\n18,15\n18,16\n18,17",
+    "resultJson": "{\"header\":{\"column_names\":[\"count(n)\",\"m\"],\"column_types\":[\"UInt64\",\"UInt64\"]},\"data\":[[[18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18],[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]]]}"
   },
-  "tags": ["count", "return"],
+  "tags": [
+    "count",
+    "return"
+  ],
   "write-required": false
 }
