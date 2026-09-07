@@ -175,6 +175,10 @@ private:
     // nl.sort_collect and the nl.for over nl.sort find the same buffers
     llvm::DenseMap<mlir::Value, NLSortState*> _sortStates;
 
+    // nl.hash_join_buffer handle SSA value -> the runtime build side it produces, so
+    // nl.hash_join_collect and nl.hash_join_probe find the same buffers and index
+    llvm::DenseMap<mlir::Value, NLHashJoinState*> _hashJoinStates;
+
     // nl.distinct handle SSA value -> the runtime seen-set it produces, so the
     // nl.distinct_filter that names the handle finds the same set
     llvm::DenseMap<mlir::Value, NLDistinctState*> _distinctStates;
@@ -366,6 +370,30 @@ private:
     // The runtime accumulator a sort handle names. Throws if the handle was not
     // produced by an nl.sort_buffer translated earlier.
     NLSortState* sortStateFor(mlir::Value handle) const;
+
+    // Translate an nl.hash_join_buffer: allocate its runtime build side, map the
+    // handle to it, and record the reset statement (run each time the block runs)
+    void translateHashJoinBuffer(mlir::nl::HashJoinBuffer buffer, NLStmtContainer* body);
+
+    // Translate an nl.hash_join_collect: allocate one growing buffer per build
+    // column (mapped into the build side), bake the key serializer and null test
+    // from the key column the nl.hash_join_buffer names, and record the per-step
+    // append-and-index statement
+    void translateHashJoinCollect(mlir::nl::HashJoinCollect collect, NLStmtContainer* body);
+
+    // Translate an nl.hash_join_probe: allocate one fresh output column per probe
+    // and per build column, map each result to its output, bake the probe key's
+    // serializer and null test, and record the per-step probe statement
+    void translateHashJoinProbe(mlir::nl::HashJoinProbe probe, NLStmtContainer* body);
+
+    // The runtime build side a hash join handle names. The handle is a required
+    // operand of nl.hash_join_collect and nl.hash_join_probe, so this throws if it
+    // was not produced by an nl.hash_join_buffer.
+    NLHashJoinState* hashJoinStateFor(mlir::Value handle) const;
+
+    // The nl.hash_join_buffer that produced a handle, which carries the two key
+    // column indices; throws when the handle came from anything else.
+    static mlir::nl::HashJoinBuffer hashJoinBufferOf(mlir::Value handle);
 
     // Translate an nl.distinct: allocate its runtime seen-set, map the handle to
     // it, and record the reset statement (run each time the block runs)
@@ -603,6 +631,7 @@ private:
                                                     ValueType keyType);
     static NLCompareFunction selectCompareForChunkType(mlir::Type chunkType);
     static NLKeyAppendFunction selectKeyAppendForChunkType(mlir::Type chunkType);
+    static NLIsNullFunction selectIsNullForChunkType(mlir::Type chunkType);
 
     // The non-null row count handler for a chunk type - the all-rows count for an
     // ID chunk, the present-value count for a !storage.nullable<...> chunk. Used by

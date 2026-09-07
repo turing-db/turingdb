@@ -27,6 +27,9 @@ namespace {
 // `db.cross_product factor { ... } factor { ... }`.
 const char* const factorKeyword = "factor";
 
+// The keyword db.hash_join spells its two key column indices after.
+const char* const keysKeyword = "on";
+
 // The db.yield that terminates a factor region, or a null Yield if the region
 // is empty or does not end with one. A factor's yield names the columns that
 // factor contributes to the product.
@@ -50,7 +53,7 @@ ParseResult appendFactorYieldTypes(OpAsmParser& parser,
     Yield yield = getFactorYield(factor);
     if (!yield) {
         return parser.emitError(parser.getCurrentLocation(),
-                                "cross_product factor must end with a db.yield");
+                                "factor must end with a db.yield");
     }
 
     for (const Type columnType : yield.getColumns().getTypes()) {
@@ -70,6 +73,49 @@ ParseResult parseFactorRegion(OpAsmParser& parser, OperationState& result) {
 
     Region* factor = result.addRegion();
     return parser.parseRegion(*factor, {});
+}
+
+// The results of a two-factor op - db.cross_product, db.hash_join - must be exactly the
+// columns the two factors yield: the left factor's yielded columns followed by the right
+// factor's. The yields drive the result types during parsing, so this guards the
+// programmatic builder path and re-checks parsed IR. Shared by both verifiers.
+LogicalResult verifyFactorResults(Operation* op, Region& leftFactor, Region& rightFactor) {
+    Yield leftYield = getFactorYield(leftFactor);
+    Yield rightYield = getFactorYield(rightFactor);
+    if (!leftYield || !rightYield) {
+        return op->emitOpError("each factor region must end with a db.yield");
+    }
+
+    // Each factor must contribute at least one column. A side's row count is read
+    // from its first yielded column during lowering, so a factor that surfaces no
+    // column (an empty db.yield) cannot be sized - reject it here at the db level.
+    if (leftYield.getColumns().empty() || rightYield.getColumns().empty()) {
+        return op->emitOpError("each factor must yield at least one column");
+    }
+
+    llvm::SmallVector<Type> expectedResultTypes;
+    for (const Type columnType : leftYield.getColumns().getTypes()) {
+        expectedResultTypes.push_back(columnType);
+    }
+    for (const Type columnType : rightYield.getColumns().getTypes()) {
+        expectedResultTypes.push_back(columnType);
+    }
+
+    const Operation::result_type_range resultTypes = op->getResultTypes();
+    if (resultTypes.size() != expectedResultTypes.size()) {
+        return op->emitOpError("expects ") << expectedResultTypes.size()
+                                           << " results, the columns yielded by the two factors, but has "
+                                           << resultTypes.size();
+    }
+
+    for (size_t resultIndex = 0; resultIndex < expectedResultTypes.size(); resultIndex++) {
+        if (resultTypes[resultIndex] != expectedResultTypes[resultIndex]) {
+            return op->emitOpError("result ") << resultIndex << " must be the yielded column type "
+                                              << expectedResultTypes[resultIndex];
+        }
+    }
+
+    return success();
 }
 
 // A literal list typed as homogeneous - db.unwind_const's typed column, db.const_list's
@@ -231,44 +277,104 @@ void CrossProduct::print(OpAsmPrinter& printer) {
     printer.printOptionalAttrDict((*this)->getAttrs());
 }
 
-// The results must be exactly the columns yielded by the two factors: the left
-// factor's yielded columns followed by the right factor's. The yields drive the
-// result types during parsing, so this guards the programmatic builder path and
-// re-checks parsed IR.
 LogicalResult CrossProduct::verify() {
-    Yield leftYield = getFactorYield(getLeftFactor());
-    Yield rightYield = getFactorYield(getRightFactor());
-    if (!leftYield || !rightYield) {
-        return emitOpError("each factor region must end with a db.yield");
+    return verifyFactorResults(getOperation(), getLeftFactor(), getRightFactor());
+}
+
+// Builds the op from the result types - the left factor's yielded columns followed
+// by the right factor's - and the two key column indices, and creates the two empty
+// factor blocks. The cross product's sibling builder, with the join keys added.
+void HashJoin::build(OpBuilder& builder,
+                     OperationState& state,
+                     TypeRange resultTypes,
+                     uint64_t leftKey,
+                     uint64_t rightKey) {
+    const OpBuilder::InsertionGuard guard(builder);
+
+    state.addTypes(resultTypes);
+
+    const Type keyIndexType = builder.getIntegerType(64, /*isSigned=*/false);
+    state.addAttribute(getLeftKeyAttrName(state.name), builder.getIntegerAttr(keyIndexType, leftKey));
+    state.addAttribute(getRightKeyAttrName(state.name), builder.getIntegerAttr(keyIndexType, rightKey));
+
+    Region* leftFactor = state.addRegion();
+    builder.createBlock(leftFactor);
+
+    Region* rightFactor = state.addRegion();
+    builder.createBlock(rightFactor);
+}
+
+// Custom syntax, the cross product's with the join keys spelled after the regions:
+//
+//   %a, %ka, %b, %kb = db.hash_join factor { ... db.yield %x, %k : ... }
+//                                   factor { ... db.yield %y, %k : ... } on 1, 1
+//
+// The result types are recovered from the two factors' yields, exactly as
+// db.cross_product recovers them.
+ParseResult HashJoin::parse(OpAsmParser& parser, OperationState& result) {
+    if (parseFactorRegion(parser, result) || parseFactorRegion(parser, result)) {
+        return failure();
     }
 
-    // Each factor must contribute at least one column. A side's row count is read
-    // from its first yielded column during lowering, so a factor that surfaces no
-    // column (an empty db.yield) cannot be sized - reject it here at the db level.
-    if (leftYield.getColumns().empty() || rightYield.getColumns().empty()) {
-        return emitOpError("each factor must yield at least one column");
+    uint64_t leftKey = 0;
+    uint64_t rightKey = 0;
+    const bool keysFailed = parser.parseKeyword(keysKeyword)
+                            || parser.parseInteger(leftKey)
+                            || parser.parseComma()
+                            || parser.parseInteger(rightKey);
+    if (keysFailed) {
+        return failure();
     }
 
-    llvm::SmallVector<Type> expectedResultTypes;
-    for (const Type columnType : leftYield.getColumns().getTypes()) {
-        expectedResultTypes.push_back(columnType);
-    }
-    for (const Type columnType : rightYield.getColumns().getTypes()) {
-        expectedResultTypes.push_back(columnType);
+    if (parser.parseOptionalAttrDict(result.attributes)) {
+        return failure();
     }
 
-    const Operation::result_type_range resultTypes = getOperation()->getResultTypes();
-    if (resultTypes.size() != expectedResultTypes.size()) {
-        return emitOpError("expects ") << expectedResultTypes.size()
-                                       << " results, the columns yielded by the two factors, but has "
-                                       << resultTypes.size();
+    const Type keyIndexType = parser.getBuilder().getIntegerType(64, /*isSigned=*/false);
+    result.addAttribute(getLeftKeyAttrName(result.name), IntegerAttr::get(keyIndexType, leftKey));
+    result.addAttribute(getRightKeyAttrName(result.name), IntegerAttr::get(keyIndexType, rightKey));
+
+    Region& leftFactor = *result.regions[0];
+    Region& rightFactor = *result.regions[1];
+    if (appendFactorYieldTypes(parser, leftFactor, result.types)
+        || appendFactorYieldTypes(parser, rightFactor, result.types)) {
+        return failure();
     }
 
-    for (size_t resultIndex = 0; resultIndex < expectedResultTypes.size(); resultIndex++) {
-        if (resultTypes[resultIndex] != expectedResultTypes[resultIndex]) {
-            return emitOpError("result ") << resultIndex << " must be the yielded column type "
-                                          << expectedResultTypes[resultIndex];
-        }
+    return success();
+}
+
+void HashJoin::print(OpAsmPrinter& printer) {
+    printer << " " << factorKeyword << " ";
+    printer.printRegion(getLeftFactor());
+
+    printer << " " << factorKeyword << " ";
+    printer.printRegion(getRightFactor());
+
+    printer << " " << keysKeyword << " " << getLeftKey() << ", " << getRightKey();
+
+    printer.printOptionalAttrDict((*this)->getAttrs(), {getLeftKeyAttrName(), getRightKeyAttrName()});
+}
+
+// The results line up with the two factors' yields exactly as a cross product's do, and
+// each key index has to name a column of its own factor's yield - it is what the join
+// matches on, so a key past the end names no column to read.
+LogicalResult HashJoin::verify() {
+    if (failed(verifyFactorResults(getOperation(), getLeftFactor(), getRightFactor()))) {
+        return failure();
+    }
+
+    const size_t leftCount = getFactorYield(getLeftFactor()).getColumns().size();
+    const size_t rightCount = getFactorYield(getRightFactor()).getColumns().size();
+
+    if (getLeftKey() >= leftCount) {
+        return emitOpError("left key column ") << getLeftKey() << " is past the "
+                                               << leftCount << " columns the left factor yields";
+    }
+
+    if (getRightKey() >= rightCount) {
+        return emitOpError("right key column ") << getRightKey() << " is past the "
+                                                << rightCount << " columns the right factor yields";
     }
 
     return success();

@@ -47,6 +47,21 @@ def NLSortState : NLType<"SortState", "sort_state"> {
     }];
 }
 
+def NLHashJoinState : NLType<"HashJoinState", "hash_join_state"> {
+    let summary = "A hash join build side handle";
+    let description = [{
+        Stands for one equi-join's built side: the rows of the build factor,
+        materialized column by column, and the index from a row's serialized key
+        to the rows carrying it. Produced by nl.hash_join_buffer, filled by
+        nl.hash_join_collect once per build-loop step, and read by
+        nl.hash_join_probe once per probe-loop step. It is a handle, not a chunk:
+        it owns the growing per-column buffers and the key index, not a single
+        chunk of values. The joining sibling of !nl.sort_state - it indexes the
+        rows it accumulates rather than ordering them, and the rows come back out
+        through the probe rather than through an nl.for of its own.
+    }];
+}
+
 def NLDistinctState : NLType<"DistinctState", "distinct_state"> {
     let summary = "A DISTINCT seen-set handle";
     let description = [{
@@ -308,6 +323,16 @@ def NLSortStateHandle : Type<
         CPred<"::llvm::isa<::mlir::nl::SortStateType>($_self)">,
         "sort state handle", "::mlir::nl::SortStateType">,
     BuildableType<"::mlir::nl::SortStateType::get($_builder.getContext())">;
+
+// Constrains an operand to an !nl.hash_join_state handle, the same way
+// NLSortStateHandle constrains the sort handle. The single concrete type - there
+// is only ever !nl.hash_join_state - is what lets nl.hash_join_collect and
+// nl.hash_join_probe omit the handle's type in their assembly, building it from
+// this recipe instead.
+def NLHashJoinStateHandle : Type<
+        CPred<"::llvm::isa<::mlir::nl::HashJoinStateType>($_self)">,
+        "hash join state handle", "::mlir::nl::HashJoinStateType">,
+    BuildableType<"::mlir::nl::HashJoinStateType::get($_builder.getContext())">;
 
 // Constrains an operand to an !nl.distinct_state handle, the same way
 // NLSortStateHandle constrains the sort handle. The single concrete type - there

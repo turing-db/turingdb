@@ -135,6 +135,20 @@ public:
     // the pattern missed.
     static void runOptionalDrainLoop(NLExecutionContext* context, NLFunctionData* data);
 
+    // Empty the buffers and the key index of a hash join's build side; runs each time
+    // its block runs.
+    static void runHashJoinReset(NLExecutionContext* context, NLFunctionData* data);
+
+    // Append the current chunk of every build column to its buffer and index each row
+    // under its key. Runs once per build-loop step, growing the buffers row-aligned; a
+    // row whose key is null is buffered but left out of the index.
+    static void runHashJoinCollect(NLExecutionContext* context, NLFunctionData* data);
+
+    // Emit each probe row paired with the build rows its key matches: look each probe
+    // row's key up in the index, then gather the probe columns and the build buffers by
+    // the matched pairs into fresh output chunks. A null probe key matches nothing.
+    static void runHashJoinProbe(NLExecutionContext* context, NLFunctionData* data);
+
     // Empty the seen-set of a DISTINCT; runs each time its block runs.
     static void runDistinctReset(NLExecutionContext* context, NLFunctionData* data);
 
@@ -476,6 +490,14 @@ public:
     // as a key (an embedding), which cannot be a DISTINCT key.
     static NLKeyAppendFunction selectKeyAppendFunction(NLChunkKind kind);
     static NLKeyAppendFunction selectOptKeyAppendFunction(ValueType valueType);
+
+    // Per-row null test for a join key. A chunk that cannot hold a null answers false for
+    // every row, so the ID kinds and the plainly-held values share one handle; a nullable
+    // value chunk reads its present flag and a type-erased cell its tag. Used by
+    // nl.hash_join_collect and nl.hash_join_probe to leave a null key unmatched.
+    static NLIsNullFunction neverNull();
+    static NLIsNullFunction selectOptIsNullFunction(ValueType valueType);
+    static NLIsNullFunction selectListElementIsNullFunction();
 
     // Non-null row count for a COUNT. An ID chunk has no null rows, so countAllRows
     // is its handle (the row count); a nullable value chunk of this value type

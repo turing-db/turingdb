@@ -85,6 +85,13 @@ class ProcedureManager;
 // one nl.get_property_type above the loops, and the concrete value type is baked
 // into the nullable value chunk the fetch produces inside the binding loop.
 //
+// db.hash_join lowers to two sibling loop nests instead: an nl.hash_join_buffer
+// hoisted to the top of the block they are rooted in, the right (built) factor's
+// nest filling it through an nl.hash_join_collect, and the left (probed) factor's
+// nest behind it, bridged by an nl.hash_join_probe that answers each probe row
+// with the build rows its key matches. The memory is O(build side) rather than
+// bounded, and the build side is read once rather than once per outer chunk.
+//
 // db.cross_product lowers to two nested factor loop nests - the inner factor's
 // loops nested inside the outer factor's innermost loop body, so the inner
 // factor re-runs once per outer chunk (a nested-loop join, bounded memory) -
@@ -207,6 +214,7 @@ private:
     void lowerDeleteNode(mlir::db::DeleteNode deleteNode);
     void lowerDeleteEdge(mlir::db::DeleteEdge deleteEdge);
     void lowerCrossProduct(mlir::db::CrossProduct product);
+    void lowerHashJoin(mlir::db::HashJoin join);
 
     // Lower a db.optional_match into an nl.optional_buffer, the pattern's own loop nest,
     // an nl.optional_collect at its deepest point and an nl.optional_drain loop yielding
@@ -361,10 +369,10 @@ private:
 
     void lowerOutput(mlir::db::Output output);
 
-    // Lower one factor region of a db.cross_product into a loop nest rooted at
-    // rootBlock, collecting its db.yield columns (mapped to their nl chunks) in
-    // yieldedChunks and returning the factor's innermost loop body - where the
-    // cross product, or a deeper factor, nests.
+    // Lower one factor region of a db.cross_product or a db.hash_join into a loop
+    // nest rooted at rootBlock, collecting its db.yield columns (mapped to their nl
+    // chunks) in yieldedChunks and returning the factor's innermost loop body -
+    // where the cross product, the probe, or a deeper factor nests.
     mlir::Block* lowerFactor(mlir::Region& factor,
                              mlir::Block* rootBlock,
                              llvm::SmallVectorImpl<mlir::Value>& yieldedChunks);

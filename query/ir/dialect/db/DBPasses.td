@@ -48,6 +48,11 @@ def ReusePropertyReads : Pass<"reuse_property_reads"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseHashJoin : Pass<"fuse_hash_join"> {
+    let summary = "Fuse a cross product and the equality filter over it into a hash_join";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def TrimUnreadColumns : Pass<"trim_unread_columns"> {
     let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops and calls";
     let dependentDialects = ["mlir::db::DB"];

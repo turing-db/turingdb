@@ -32,6 +32,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSEEDGESBYTYPE
 #define GEN_PASS_DEF_FUSESCANEDGESBYTYPE
 #define GEN_PASS_DEF_REUSEPROPERTYREADS
+#define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
 #include "DBPasses.h.inc"
 
@@ -1242,7 +1243,7 @@ bool matchCarrySetLayout(Operation* op, CarrySetLayout& layout) {
 bool trimsColumns(Operation* op) {
     CarrySetLayout layout;
 
-    return matchCarrySetLayout(op, layout) || isa<CrossProduct>(op);
+    return matchCarrySetLayout(op, layout) || isa<CrossProduct, HashJoin>(op);
 }
 
 size_t carriedCount(Operation* op, const CarrySetLayout& layout) {
@@ -1458,52 +1459,134 @@ void eraseUnkeptYields(Yield yield, const llvm::SmallBitVector& keep, size_t fir
     yield->eraseOperands(erased);
 }
 
-// A product's results are the columns its two factors yield; a result nobody reads leaves
-// the yield, and each factor keeps a row-carrying column to be sized by.
-void trimCrossProduct(CrossProduct product, mlir::OpBuilder& builder) {
-    Yield leftYield = cast<Yield>(product.getLeftFactor().front().getTerminator());
-    Yield rightYield = cast<Yield>(product.getRightFactor().front().getTerminator());
+// The db.yield ending a factor region of a two-factor op - db.cross_product, db.hash_join.
+Yield factorYield(Operation* op, unsigned factorIndex) {
+    return cast<Yield>(op->getRegion(factorIndex).front().getTerminator());
+}
+
+// The results a two-factor op has to keep: the ones something reads, the ones the op
+// itself matches on, and - since lowering sizes each side by a column of it - one
+// row-carrying column per factor. False when that is every result, so the caller leaves
+// the op alone.
+bool selectKeptFactorColumns(Operation* op, llvm::SmallBitVector& keep) {
+    Yield leftYield = factorYield(op, 0);
+    Yield rightYield = factorYield(op, 1);
     const size_t leftCount = leftYield.getNumOperands();
 
-    const Operation::result_range results = product.getResults();
+    const Operation::result_range results = op->getResults();
 
-    llvm::SmallBitVector keep(results.size());
+    keep.resize(results.size());
     for (size_t resultIndex = 0; resultIndex < results.size(); resultIndex++) {
         if (!results[resultIndex].use_empty()) {
             keep.set(resultIndex);
         }
     }
 
+    // A join reads its two key columns to match on whether or not anything downstream
+    // reads them, the way a sort orders by its keys.
+    if (HashJoin join = dyn_cast<HashJoin>(op)) {
+        keep.set(join.getLeftKey());
+        keep.set(leftCount + join.getRightKey());
+    }
+
     keepRowCarryingColumn(leftYield.getColumns(), 0, keep);
     keepRowCarryingColumn(rightYield.getColumns(), leftCount, keep);
 
-    if (keep.all()) {
-        return;
-    }
+    return !keep.all();
+}
 
-    llvm::SmallVector<Type> trimmedTypes;
+void keptResultTypes(Operation* op, const llvm::SmallBitVector& keep, llvm::SmallVectorImpl<Type>& types) {
+    const Operation::result_range results = op->getResults();
     for (size_t resultIndex = 0; resultIndex < results.size(); resultIndex++) {
         if (keep[resultIndex]) {
-            trimmedTypes.push_back(results[resultIndex].getType());
+            types.push_back(results[resultIndex].getType());
+        }
+    }
+}
+
+// Where a factor's key column lands once that factor's unkept columns are gone: the kept
+// columns of the factor ahead of it. firstIndex is where the factor's columns start among
+// the op's results.
+size_t trimmedKeyColumn(const llvm::SmallBitVector& keep, size_t firstIndex, size_t keyColumn) {
+    size_t trimmed = 0;
+    for (size_t columnIndex = 0; columnIndex < keyColumn; columnIndex++) {
+        if (keep[firstIndex + columnIndex]) {
+            trimmed++;
         }
     }
 
-    builder.setInsertionPoint(product);
-    CrossProduct trimmed = builder.create<CrossProduct>(product.getLoc(), trimmedTypes);
-    trimmed.getLeftFactor().takeBody(product.getLeftFactor());
-    trimmed.getRightFactor().takeBody(product.getRightFactor());
+    return trimmed;
+}
+
+// Hands the two factors to the op built in its place, drops the columns their yields no
+// longer name, and rewires every kept result. Shared by the cross product and the hash
+// join, which differ only in the op the caller built.
+void replaceWithTrimmedFactors(Operation* op,
+                               Operation* trimmed,
+                               const llvm::SmallBitVector& keep,
+                               size_t leftCount) {
+    Yield leftYield = factorYield(op, 0);
+    Yield rightYield = factorYield(op, 1);
+
+    trimmed->getRegion(0).takeBody(op->getRegion(0));
+    trimmed->getRegion(1).takeBody(op->getRegion(1));
 
     eraseUnkeptYields(leftYield, keep, 0);
     eraseUnkeptYields(rightYield, keep, leftCount);
 
+    const Operation::result_range results = op->getResults();
     size_t trimmedIndex = 0;
     for (size_t resultIndex = 0; resultIndex < results.size(); resultIndex++) {
         if (keep[resultIndex]) {
-            results[resultIndex].replaceAllUsesWith(trimmed.getResult(trimmedIndex++));
+            results[resultIndex].replaceAllUsesWith(trimmed->getResult(trimmedIndex++));
         }
     }
 
-    product.erase();
+    op->erase();
+}
+
+// A product's results are the columns its two factors yield; a result nobody reads leaves
+// the yield, and each factor keeps a row-carrying column to be sized by.
+void trimCrossProduct(CrossProduct product, mlir::OpBuilder& builder) {
+    Operation* const productOp = product.getOperation();
+
+    llvm::SmallBitVector keep;
+    if (!selectKeptFactorColumns(productOp, keep)) {
+        return;
+    }
+
+    const size_t leftCount = factorYield(productOp, 0).getNumOperands();
+
+    llvm::SmallVector<Type> trimmedTypes;
+    keptResultTypes(productOp, keep, trimmedTypes);
+
+    builder.setInsertionPoint(product);
+    CrossProduct trimmed = builder.create<CrossProduct>(product.getLoc(), trimmedTypes);
+
+    replaceWithTrimmedFactors(productOp, trimmed.getOperation(), keep, leftCount);
+}
+
+// The product's sibling, with the two key columns kept on top of what is read and each
+// renumbered into the yield the trim leaves behind.
+void trimHashJoin(HashJoin join, mlir::OpBuilder& builder) {
+    Operation* const joinOp = join.getOperation();
+
+    llvm::SmallBitVector keep;
+    if (!selectKeptFactorColumns(joinOp, keep)) {
+        return;
+    }
+
+    const size_t leftCount = factorYield(joinOp, 0).getNumOperands();
+    const size_t leftKey = trimmedKeyColumn(keep, 0, join.getLeftKey());
+    const size_t rightKey = trimmedKeyColumn(keep, leftCount, join.getRightKey());
+
+    llvm::SmallVector<Type> trimmedTypes;
+    keptResultTypes(joinOp, keep, trimmedTypes);
+
+    builder.setInsertionPoint(join);
+    HashJoin trimmed = builder.create<HashJoin>(join.getLoc(), trimmedTypes, leftKey, rightKey);
+
+    replaceWithTrimmedFactors(joinOp, trimmed.getOperation(), keep, leftCount);
 }
 
 struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns> {
@@ -1524,11 +1607,14 @@ struct TrimUnreadColumns : public impl::TrimUnreadColumnsBase<TrimUnreadColumns>
             if (CrossProduct product = dyn_cast<CrossProduct>(op)) {
                 trimCrossProduct(product, builder);
                 continue;
+            } else if (HashJoin join = dyn_cast<HashJoin>(op)) {
+                trimHashJoin(join, builder);
+                continue;
             }
 
             CarrySetLayout layout;
             const bool carries = matchCarrySetLayout(op, layout);
-            bioassert(carries, "A trimming op that is not a cross product has a carry set");
+            bioassert(carries, "A trimming op that is neither a cross product nor a join has a carry set");
 
             llvm::SmallVector<size_t> kept;
             selectKeptCarriedColumns(op, layout, kept);
@@ -1904,6 +1990,312 @@ struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyRea
 
             read->getResult(0).replaceAllUsesWith(reused);
             read->erase();
+        }
+    }
+};
+
+// One side of a join: the factor supplying its key, the product column the key is read
+// from, the ops computing one from the other, and - once sunk - where the key sits in the
+// factor's yield.
+struct JoinKeySide {
+    Region* _factor {nullptr};
+    Value _key;
+    Value _column;
+    MaskCone _cone;
+};
+
+// A cross product cut by one equality between a column of each factor, and the filter
+// applying it: what a hash join is made of.
+struct EqualityCross {
+    CrossProduct _product {nullptr};
+    EqOp _equality {nullptr};
+    FilterOp _filter {nullptr};
+    JoinKeySide _left;
+    JoinKeySide _right;
+};
+
+// The property a one-op key cone reads, null for any other cone. A property column's
+// value type is resolved from the name during lowering, so two keys read from one name
+// are two columns of one type.
+StringAttr conePropertyName(const MaskCone& cone) {
+    if (cone._ops.size() != 1) {
+        return nullptr;
+    }
+
+    Operation* const read = cone._ops.front();
+    if (GetNodeProperties nodeRead = dyn_cast<GetNodeProperties>(read)) {
+        return nodeRead.getPropertyAttr();
+    } else if (GetEdgeProperties edgeRead = dyn_cast<GetEdgeProperties>(read)) {
+        return edgeRead.getPropertyAttr();
+    }
+
+    return nullptr;
+}
+
+// Whether the two sides' keys are provably columns of one type. The join matches a build
+// key against a probe key by the bytes each serializes to, so two columns that could
+// serialize differently - an integer property against a string one, a node against a
+// number - would answer a comparison the equality did not. A db column type is concrete
+// only for the entity and metadata columns; a property column is typed none until
+// lowering resolves the name against the schema, so for those the name is what the two
+// sides have to share.
+bool keysShareAColumnType(const JoinKeySide& left, const JoinKeySide& right) {
+    if (left._cone._ops.empty() && right._cone._ops.empty()) {
+        return left._key.getType() == right._key.getType();
+    }
+
+    const StringAttr leftProperty = conePropertyName(left._cone);
+
+    return leftProperty && leftProperty == conePropertyName(right._cone);
+}
+
+// Reads into side the one product column a key is computed over, along with the ops
+// computing one from the other. False when the key reads no column, more than one, or one
+// a different cross product made - product names the one already matched, null for the
+// first side, and is set to the one this side found.
+bool matchKeySide(Value key, JoinKeySide& side, CrossProduct& product) {
+    side._key = key;
+    side._cone = collectMaskCone(key);
+
+    if (side._cone._inputs.size() != 1) {
+        return false;
+    }
+
+    side._column = side._cone._inputs.front();
+
+    CrossProduct keyProduct = side._column.getDefiningOp<CrossProduct>();
+    if (!keyProduct || (product && keyProduct != product)) {
+        return false;
+    }
+
+    product = keyProduct;
+
+    return true;
+}
+
+// Whether nothing but the equality reads the ops rebuilding a key. The cone is sunk into
+// the factor and dropped from here, so a reader left behind would lose its operand.
+bool keyConeIsPrivateTo(const MaskCone& cone, EqOp equality) {
+    llvm::SmallPtrSet<Operation*, 8> coneOps;
+    for (Operation* const coneOp : cone._ops) {
+        coneOps.insert(coneOp);
+    }
+
+    Operation* const equalityOp = equality.getOperation();
+    for (Operation* const coneOp : cone._ops) {
+        for (Operation* const user : coneOp->getUsers()) {
+            if (user != equalityOp && !coneOps.contains(user)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+// Whether the product's rows reach nothing but the equality and the filter it masks. The
+// join emits the rows the filter kept, so a reader of the product's own rows would go
+// from seeing every pair to seeing only the matching ones.
+bool productRowsReachOnly(CrossProduct product, const EqualityCross& match) {
+    EqOp equality = match._equality;
+    FilterOp filter = match._filter;
+
+    llvm::SmallPtrSet<Operation*, 8> readers;
+    readers.insert(equality.getOperation());
+    readers.insert(filter.getOperation());
+
+    const JoinKeySide* const sides[] = {&match._left, &match._right};
+    for (const JoinKeySide* const side : sides) {
+        for (Operation* const coneOp : side->_cone._ops) {
+            readers.insert(coneOp);
+        }
+    }
+
+    for (const Value column : product.getResults()) {
+        for (Operation* const user : column.getUsers()) {
+            if (!readers.contains(user)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+// Whether every column the filter carries is a column of the product. The join hands each
+// of them back as a result of its own, which it can only do for a column the product made:
+// one computed from them outside was computed over the rows the join no longer produces.
+bool carriesProductColumnsOnly(FilterOp filter, CrossProduct product) {
+    for (const Value carried : filter.getColumnsToFilter()) {
+        if (carried.getDefiningOp<CrossProduct>() != product) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool matchEqualityCross(FilterOp filter, EqualityCross& match) {
+    EqOp equality = filter.getMask().getDefiningOp<EqOp>();
+    if (!equality || !equality.getResult().hasOneUse()) {
+        return false;
+    }
+
+    match._filter = filter;
+    match._equality = equality;
+
+    // Either operand may name either factor, so the two sides are told apart by the
+    // factor each key's column belongs to rather than by the order they are written in.
+    CrossProduct product;
+    JoinKeySide first;
+    JoinKeySide second;
+    if (!matchKeySide(equality.getLhs(), first, product)
+        || !matchKeySide(equality.getRhs(), second, product)) {
+        return false;
+    }
+
+    if (product->getBlock() != filter->getBlock()) {
+        return false;
+    }
+
+    match._product = product;
+
+    const size_t leftCount = factorYieldColumns(product.getLeftFactor()).size();
+    const auto yieldedByTheLeftFactor = [leftCount](const JoinKeySide& side) {
+        return cast<OpResult>(side._column).getResultNumber() < leftCount;
+    };
+
+    // One key on each side is what makes this a join; two keys of one factor are a
+    // single-variable predicate, which the filter applies where it already stands.
+    if (yieldedByTheLeftFactor(first) == yieldedByTheLeftFactor(second)) {
+        return false;
+    }
+
+    const bool firstIsOnTheLeft = yieldedByTheLeftFactor(first);
+    match._left = firstIsOnTheLeft ? first : second;
+    match._right = firstIsOnTheLeft ? second : first;
+    match._left._factor = &product.getLeftFactor();
+    match._right._factor = &product.getRightFactor();
+
+    if (!keysShareAColumnType(match._left, match._right)) {
+        return false;
+    }
+
+    const bool conesArePrivate = keyConeIsPrivateTo(match._left._cone, equality)
+                                 && keyConeIsPrivateTo(match._right._cone, equality);
+    if (!conesArePrivate) {
+        return false;
+    }
+
+    return carriesProductColumnsOnly(filter, product) && productRowsReachOnly(product, match);
+}
+
+// Sinks the ops rebuilding a side's key into its factor, so the key becomes a column the
+// factor yields and the join can index it as that side is read. Answers where the key
+// lands in the yield: the column's own place when the key is that column, a fresh last
+// place when it is computed from it.
+size_t sinkKeyIntoFactor(JoinKeySide& side, size_t factorFirstResult, mlir::OpBuilder& builder) {
+    Yield yield = cast<Yield>(side._factor->front().getTerminator());
+    const size_t columnIndex = cast<OpResult>(side._column).getResultNumber() - factorFirstResult;
+
+    if (side._cone._ops.empty()) {
+        return columnIndex;
+    }
+
+    mlir::IRMapping mapping;
+    mapping.map(side._column, yield.getColumns()[columnIndex]);
+
+    builder.setInsertionPoint(yield);
+    for (Operation* const coneOp : side._cone._ops) {
+        builder.clone(*coneOp, mapping);
+    }
+
+    const size_t keyColumn = yield.getNumOperands();
+    yield->insertOperands(static_cast<unsigned>(keyColumn), mapping.lookup(side._key));
+
+    return keyColumn;
+}
+
+void fuseHashJoin(EqualityCross& match, mlir::OpBuilder& builder) {
+    CrossProduct product = match._product;
+
+    Yield leftYield = cast<Yield>(product.getLeftFactor().front().getTerminator());
+    Yield rightYield = cast<Yield>(product.getRightFactor().front().getTerminator());
+    const size_t leftCount = leftYield.getNumOperands();
+    const size_t rightCount = rightYield.getNumOperands();
+
+    const size_t leftKey = sinkKeyIntoFactor(match._left, 0, builder);
+    const size_t rightKey = sinkKeyIntoFactor(match._right, leftCount, builder);
+
+    llvm::SmallVector<Type> resultTypes;
+    llvm::append_range(resultTypes, leftYield.getColumns().getTypes());
+    llvm::append_range(resultTypes, rightYield.getColumns().getTypes());
+
+    builder.setInsertionPoint(product);
+    HashJoin join = builder.create<HashJoin>(product.getLoc(), resultTypes, leftKey, rightKey);
+    join.getLeftFactor().takeBody(product.getLeftFactor());
+    join.getRightFactor().takeBody(product.getRightFactor());
+
+    // Sinking a key widens that factor's yield, so a right-factor column sits further
+    // along in the join's results than it did in the product's.
+    const size_t joinLeftCount = leftYield.getNumOperands();
+    llvm::SmallVector<Value> joinColumns;
+    for (size_t columnIndex = 0; columnIndex < leftCount; columnIndex++) {
+        joinColumns.push_back(join.getResult(columnIndex));
+    }
+    for (size_t columnIndex = 0; columnIndex < rightCount; columnIndex++) {
+        joinColumns.push_back(join.getResult(joinLeftCount + columnIndex));
+    }
+
+    // The join keeps only the rows the equality held on, so what the filter handed
+    // downstream now comes from the join directly.
+    const Operation::operand_range carried = match._filter.getColumnsToFilter();
+    const ResultRange filtered = match._filter.getFilteredColumns();
+    for (size_t columnIndex = 0; columnIndex < carried.size(); columnIndex++) {
+        const unsigned productIndex = cast<OpResult>(carried[columnIndex]).getResultNumber();
+        filtered[columnIndex].replaceAllUsesWith(joinColumns[productIndex]);
+    }
+
+    for (size_t columnIndex = 0; columnIndex < joinColumns.size(); columnIndex++) {
+        product.getResult(columnIndex).replaceAllUsesWith(joinColumns[columnIndex]);
+    }
+
+    match._filter.erase();
+    match._equality.erase();
+
+    const JoinKeySide* const sides[] = {&match._left, &match._right};
+    for (const JoinKeySide* const side : sides) {
+        for (Operation* const coneOp : llvm::reverse(side->_cone._ops)) {
+            eraseIfUnused(coneOp);
+        }
+    }
+
+    product.erase();
+}
+
+struct FuseHashJoin : public impl::FuseHashJoinBase<FuseHashJoin> {
+    void runOnOperation() override {
+        Operation* const root = getOperation();
+
+        // Collect the matches first: fusing erases ops, which would invalidate the walk.
+        // Fusing a product leaves nothing for a second filter over the same rows to match,
+        // so the first filter to reach a product is the one that takes it.
+        llvm::SmallVector<EqualityCross, 2> matches;
+        llvm::SmallPtrSet<Operation*, 4> matchedProducts;
+        root->walk([&matches, &matchedProducts](FilterOp filter) {
+            EqualityCross match;
+            if (!matchEqualityCross(filter, match)) {
+                return;
+            }
+
+            if (matchedProducts.insert(match._product.getOperation()).second) {
+                matches.push_back(match);
+            }
+        });
+
+        mlir::OpBuilder builder(&getContext());
+        for (EqualityCross& match : matches) {
+            fuseHashJoin(match, builder);
         }
     }
 };
