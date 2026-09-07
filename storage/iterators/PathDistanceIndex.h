@@ -42,6 +42,13 @@ public:
     bool canReachEndWithin(NodeID node, uint64_t hops) const;
     size_t getReachedCount() const { return _reached; }
 
+    // The candidate checks the unpruned walk is expected to make: the seeds fanning out over
+    // every hop of the bound, infinite past what a double holds
+    static double estimatedEnumerationChecks(const PartDirectory& parts,
+                                             PathExplorationDir direction,
+                                             size_t seedCount,
+                                             uint64_t maxHops);
+
     // Whether the enumeration the seeds imply is expected to cost more than the index
     static bool isWorthBuilding(const GraphView& view,
                                 PathExplorationDir direction,

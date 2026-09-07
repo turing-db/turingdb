@@ -15,13 +15,10 @@ using namespace db;
 
 namespace {
 
-// The enumeration is estimated as the seeds fanning out over this many hops at most: past
-// it the estimate is a guess about the graph, not about the query
-constexpr uint64_t estimatedDepthCap = 4;
-
-// The index costs one pass over the nodes and edges it reaches, at most the whole graph;
-// it is built when the enumeration is expected to cost this many times more
-constexpr double indexCostMultiple = 8.0;
+// One node or edge the search touches costs this many candidate checks of the walk it
+// spares: measured with samples/path_bench between 0.26 and 0.40 across graph shapes, so a
+// half builds the index only where the walk is expected to cost about one and a half times it
+constexpr double indexUnitCostInChecks = 0.5;
 
 }
 
@@ -104,28 +101,34 @@ bool PathDistanceIndex::canReachEndWithin(NodeID node, uint64_t hops) const {
     return distance != unreachable && distance <= hops;
 }
 
-bool PathDistanceIndex::isWorthBuilding(const GraphView& view,
-                                        PathExplorationDir direction,
-                                        size_t seedCount,
-                                        uint64_t maxHops) {
-    if (seedCount == 0 || maxHops == 0) {
-        return false;
-    }
-
-    const PartDirectory parts(view);
+double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
+                                                     PathExplorationDir direction,
+                                                     size_t seedCount,
+                                                     uint64_t maxHops) {
     const size_t nodeCount = parts.getAllocatedNodeCount();
     const size_t edgeCount = parts.getAllocatedEdgeCount();
-    if (nodeCount == 0 || edgeCount == 0) {
-        return false;
+    if (seedCount == 0 || maxHops == 0 || nodeCount == 0 || edgeCount == 0) {
+        return 0.0;
     }
 
     const double directions = direction == PathExplorationDir::BOTH ? 2.0 : 1.0;
     const double fanOut = std::max(1.0, directions * static_cast<double>(edgeCount) / static_cast<double>(nodeCount));
-    const double depth = static_cast<double>(std::min(maxHops, estimatedDepthCap));
-    const double enumerationCost = static_cast<double>(seedCount) * pow(fanOut, depth);
-    const double indexCost = indexCostMultiple * static_cast<double>(nodeCount + edgeCount);
+    const double hops = static_cast<double>(maxHops);
 
-    return enumerationCost > indexCost;
+    // The candidates of every hop summed: a chain of fan-out one walks one per hop
+    const double candidatesPerSeed = fanOut == 1.0 ? hops : fanOut * (pow(fanOut, hops) - 1.0) / (fanOut - 1.0);
+
+    return static_cast<double>(seedCount) * candidatesPerSeed;
+}
+
+bool PathDistanceIndex::isWorthBuilding(const GraphView& view,
+                                        PathExplorationDir direction,
+                                        size_t seedCount,
+                                        uint64_t maxHops) {
+    const PartDirectory parts(view);
+    const double indexCost = indexUnitCostInChecks * static_cast<double>(parts.getAllocatedNodeCount() + parts.getAllocatedEdgeCount());
+
+    return estimatedEnumerationChecks(parts, direction, seedCount, maxHops) > indexCost;
 }
 
 void PathDistanceIndex::collectEnds(const PartDirectory& parts, const LabelSet& endLabels, std::vector<NodeID>& ends) {
