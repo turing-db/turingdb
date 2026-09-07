@@ -243,6 +243,22 @@ TEST_F(OptionalMatchTest, IsNullKeepsTheRowsThePatternMissed) {
                {{"Maxime"}, {"Luc"}, {"Martina"}, {"Suhas"}, {"Cyrus"}, {"Doruk"}});
 }
 
+// A WHERE on the OPTIONAL MATCH is part of the pattern, not a filter over the rows it
+// produced: the predicate failing discards the match, so the row comes back padded rather
+// than dropped. Remy and Adam match a friend, fail the test, and are kept null like the rest.
+TEST_F(OptionalMatchTest, WhereOnTheOptionalMatchNullsTheMatchInsteadOfFiltering) {
+    expectRows("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) "
+               "WHERE f IS NULL RETURN p.name, f.name",
+               {{"Remy", "null"},
+                {"Adam", "null"},
+                {"Maxime", "null"},
+                {"Luc", "null"},
+                {"Martina", "null"},
+                {"Suhas", "null"},
+                {"Cyrus", "null"},
+                {"Doruk", "null"}});
+}
+
 // And IS NOT NULL keeps the ones it matched
 TEST_F(OptionalMatchTest, IsNotNullKeepsTheRowsThePatternMatched) {
     expectRows("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) "
