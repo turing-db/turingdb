@@ -8,7 +8,7 @@
     "resultJson": "{\"header\":{\"column_names\":[],\"column_types\":[]},\"data\":[],\"error\":\"EXEC_ERROR\",\"error_details\":\"Cannot delete a node with relationships; use DETACH DELETE\"}"
   },
   "tags": [
-    "success",
+    "fail",
     "writes",
     "delete"
   ],
