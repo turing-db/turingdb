@@ -7,6 +7,7 @@ namespace db {
 class Expr;
 class FunctionInvocation;
 class Literal;
+class SymbolChain;
 
 class StructuralExpressionComparator {
 public:
@@ -19,6 +20,7 @@ private:
     static bool equalLiterals(const Literal* lhs, const Literal* rhs);
     static bool equalInvocations(const FunctionInvocation* lhs, const FunctionInvocation* rhs);
     static bool equalExprLists(std::span<Expr* const> lhs, std::span<Expr* const> rhs);
+    static bool equalSymbolChains(const SymbolChain* lhs, const SymbolChain* rhs);
 };
 
 }

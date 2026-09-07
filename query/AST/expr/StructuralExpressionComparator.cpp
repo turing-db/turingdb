@@ -6,8 +6,10 @@
 #include "Literal.h"
 #include "QualifiedName.h"
 #include "Symbol.h"
+#include "SymbolChain.h"
 
 #include "BinaryExpr.h"
+#include "EntityTypeExpr.h"
 #include "Expr.h"
 #include "ExprChain.h"
 #include "FunctionInvocationExpr.h"
@@ -124,12 +126,38 @@ bool StructuralExpressionComparator::equal(const Expr* lhs, const Expr* rhs) {
         }
         break;
 
+        case Expr::Kind::ENTITY_TYPES: {
+            const EntityTypeExpr* lhsTypes = static_cast<const EntityTypeExpr*>(lhs);
+            const EntityTypeExpr* rhsTypes = static_cast<const EntityTypeExpr*>(rhs);
+
+            const bool sameEntity = lhsTypes->getEntityVarDecl() == rhsTypes->getEntityVarDecl();
+
+            return sameEntity && equalSymbolChains(lhsTypes->getTypes(), rhsTypes->getTypes());
+        }
+        break;
+
         default:
-            // ENTITY_TYPES and PATH carry a symbol chain and a pattern, neither of which
-            // this comparator takes apart, so such an expression equals only itself
+            // PATH carries a pattern, which this comparator does not take apart, so such
+            // an expression equals only itself
             return false;
         break;
     }
+}
+
+bool StructuralExpressionComparator::equalSymbolChains(const SymbolChain* lhs, const SymbolChain* rhs) {
+    if (lhs == rhs) {
+        return true;
+    }
+
+    if (!lhs || !rhs) {
+        return false;
+    }
+
+    const auto sameName = [](const Symbol* left, const Symbol* right) {
+        return left->getName() == right->getName();
+    };
+
+    return std::ranges::equal(*lhs, *rhs, sameName);
 }
 
 bool StructuralExpressionComparator::equalLiterals(const Literal* lhs, const Literal* rhs) {
