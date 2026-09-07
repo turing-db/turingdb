@@ -15,6 +15,7 @@
 #include "mlir/IR/Value.h"
 
 #include "DBOps.h"
+#include "DBPasses.h"
 #include "DBTypes.h"
 #include "expr/CaseExpr.h"
 
@@ -111,7 +112,12 @@ public:
 
     // A null report is a query to run: nothing is dumped and the compilation is the
     // one an unprefixed query gets
-    explicit DBProgramGenerator(mlir::ModuleOp* mainModule, ExplainReport* explain = nullptr);
+    // The pass context carries what the optimisation pipeline reads from outside the IR:
+    // the graph the join cost model estimates from, and its overrides. Its default holds
+    // no graph, which leaves every cut the join pass matches fused.
+    explicit DBProgramGenerator(mlir::ModuleOp* mainModule,
+                                ExplainReport* explain = nullptr,
+                                const mlir::db::DBPassContext& passContext = mlir::db::DBPassContext {});
     ~DBProgramGenerator();
 
     void generate(const CypherAST* ast);
@@ -126,6 +132,7 @@ private:
     mlir::OpBuilder _opBuilder;
 
     ExplainReport* _explain {nullptr};
+    mlir::db::DBPassContext _passContext;
 
     // How many query parts have had their dependency graph dumped, which numbers the
     // graphs a multi-part query reports

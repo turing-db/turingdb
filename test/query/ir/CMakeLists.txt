@@ -1823,6 +1823,16 @@ target_link_libraries(test_query_ir_hash_join_chunked PRIVATE
 add_ir_tests(test_query_ir_hash_join_probe_results HashJoinProbeResultsTest.cpp)
 target_link_libraries(test_query_ir_hash_join_probe_results PRIVATE turing_db_examples_s)
 
+# The cost model cases build graphs of their own size and read which form the pipeline
+# leaves the cut in, so they need the frontend and the codegen beside the dialects.
+add_ir_tests(test_query_ir_hash_join_cost_model HashJoinCostModelTest.cpp)
+target_link_libraries(test_query_ir_hash_join_cost_model PRIVATE
+        turing_db_ir_codegen_s
+        turing_db_frontend_cypher_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_ast_s)
+
 # The embedding key cases build their own graph of vectors and hold the join's rows against
 # the cross product and filter it replaces.
 add_ir_tests(test_query_ir_hash_join_embedding_key HashJoinEmbeddingKeyTest.cpp)
