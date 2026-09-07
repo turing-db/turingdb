@@ -459,7 +459,7 @@ int main(int argc, char** argv) {
             headers.insert(headers.end(), runHeaders.begin(), runHeaders.end());
 
             std::vector<std::vector<std::string>> rows;
-            for (const size_t walkers : {size_t {1}, size_t {2}, size_t {4}, size_t {8}, size_t {16}}) {
+            for (const size_t walkers : {size_t {1}, size_t {2}, size_t {4}, size_t {8}, size_t {16}, size_t {32}}) {
                 for (const size_t lookahead : {size_t {0}, size_t {1}, size_t {2}}) {
                     ExplorationSettings settings;
                     settings._walkers = walkers;
