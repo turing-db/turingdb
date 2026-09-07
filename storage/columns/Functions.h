@@ -7,15 +7,18 @@
 #include <string>
 #include <system_error>
 #include <type_traits>
+#include <vector>
 
 #include "columns/ColumnConst.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
-#include "TypeUtils.h"
 #include "metadata/PropertyType.h"
 #include "views/GraphView.h"
 
+#include "buffers/StringBuffer.h"
+
 #include "ID.h"
+#include "TypeUtils.h"
 
 #include "BioAssert.h"
 #include "TuringException.h"
@@ -53,23 +56,24 @@ auto optionalGenericFunc(T&& a, U&& b) -> TypeUtils::optional_invoke_result<Func
 class LabelsFunction {
 public:
     using ArgType = NodeID;
-    using ResultType = std::string;
+    using ResultType = std::string_view;
 
-    explicit LabelsFunction(GraphView view)
-        : _view(view)
+    LabelsFunction(GraphView view, StringBuffer* buffer)
+        : _view(view),
+        _buffer(buffer)
     {
     }
 
     ResultType operator()(const NodeID n) {
-        getLabelString(_tmp, _view, n);
-        return _tmp;
+        return getLabelString(n);
     }
 
 private:
     GraphView _view;
-    std::string _tmp;
+    StringBuffer* _buffer {nullptr};
+    std::vector<std::string_view> _names;
 
-    static void getLabelString(std::string& out, GraphView view, NodeID n);
+    std::string_view getLabelString(NodeID n);
 };
 
 class EdgeTypesFunction {
@@ -288,16 +292,17 @@ struct FunctionExecutor {
 /// Specialisation for labels()
 template <typename Res, typename Arg>
 struct FunctionExecutor<LabelsFunction, Res, Arg> {
-    static void apply(ColumnVector<std::string>* res,
+    static void apply(ColumnVector<std::string_view>* res,
                       const ColumnNodeIDs* arg,
-                      GraphView view) {
+                      GraphView view,
+                      StringBuffer* buffer) {
         const size_t size = arg->size();
         res->resize(size);
 
         const auto& argd = arg->getRaw();
         auto& resd = res->getRaw();
 
-        LabelsFunction labels(view);
+        LabelsFunction labels(view, buffer);
         for (size_t i = 0; i < size ; i ++) {
             resd[i] = labels(argd[i]);
         }
