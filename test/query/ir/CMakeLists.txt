@@ -1811,8 +1811,6 @@ target_link_libraries(test_query_ir_repeated_edge_variable PRIVATE
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_repeated_edge_variable PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-# The comma-pattern join key tests read the rows of a four-pattern MATCH as text, so they
-# need StringRowSink beside the v3 engine.
 # The chunked hash join cases run hand-written db IR through the lowering at several chunk
 # sizes against the shared SimpleGraph.
 add_ir_tests(test_query_ir_hash_join_chunked HashJoinChunkedTest.cpp)
@@ -1838,6 +1836,8 @@ target_link_libraries(test_query_ir_hash_join PRIVATE
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_hash_join PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# The comma-pattern join key tests read the rows of a four-pattern MATCH as text, so they
+# need StringRowSink beside the v3 engine.
 add_turing_test(test_query_ir_comma_pattern_join_keys CommaPatternJoinKeysTest.cpp)
 target_sources(test_query_ir_comma_pattern_join_keys PRIVATE StringRowSink.cpp)
 target_link_libraries(test_query_ir_comma_pattern_join_keys PRIVATE
