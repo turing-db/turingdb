@@ -770,11 +770,11 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor]> {
       %paths = nl.explore_paths(%a, {%x}) forward hops 1 to 3 : !nl.chunk<!storage.node_id>
       nl.for %seeds, %ends, %p, %x2 in %paths { ... }
 
-    The direction, hop bounds, edge type and end labels are the db op's, carried through
-    unchanged. The optional `hop` region is the db op's hop predicate lowered: a block
-    over the source node, edge and end node chunks of one hop, yielding a boolean mask
-    chunk. The input chunk type and the three fixed result chunks are inferred; only the
-    carried chunk types are spelled out, after the colon.
+    The direction, hop bounds, edge type, end labels, end column and distinct flag are the
+    db op's, carried through unchanged. The optional `hop` region is the db op's hop
+    predicate lowered: a block over the source node, edge and end node chunks of one hop,
+    yielding a boolean mask chunk. The input chunk type and the three fixed result chunks
+    are inferred; only the carried chunk types are spelled out, after the colon.
   }];
 
   let arguments = (ins NLNodeIDChunk:$input_nodes,
@@ -783,14 +783,17 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor]> {
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
                        OptionalAttr<StrAttr>:$edge_type,
-                       OptionalAttr<StrArrayAttr>:$end_labels);
+                       OptionalAttr<StrArrayAttr>:$end_labels,
+                       OptionalAttr<UI64Attr>:$end_column,
+                       UnitAttr:$distinct);
   let results   = (outs NLIterator:$result);
 
   let regions = (region MaxSizedRegion<1>:$hop);
 
   let assemblyFormat = [{
     `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
-    (`to` $max_hops^)? (`edge_type` $edge_type^)? (`end_labels` $end_labels^)? ($hop^)?
+    (`to` $max_hops^)? (`edge_type` $edge_type^)? (`end_labels` $end_labels^)?
+    (`end_column` $end_column^)? (`distinct` $distinct^)? ($hop^)?
     attr-dict ( `:` qualified(type($columns_to_filter))^ )?
   }];
 

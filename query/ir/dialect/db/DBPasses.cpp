@@ -47,6 +47,8 @@ namespace mlir::db {
 #define GEN_PASS_DEF_REUSEPROPERTYREADS
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_FUSEEXPLOREENDCONSTRAINT
+#define GEN_PASS_DEF_FUSEEXPLOREENDNODES
+#define GEN_PASS_DEF_FUSEEXPLOREDISTINCTENDS
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
 #define GEN_PASS_DEF_COUNTFROMMETADATA
 #include "DBPasses.h.inc"
@@ -1894,6 +1896,186 @@ struct FuseExploreEndConstraint : public impl::FuseExploreEndConstraintBase<Fuse
     }
 };
 
+// A path exploration whose rows are then cut down to those ending on the node a carried
+// column already holds: the bound end spelled the long way, since the walk itself can head
+// for that node and never build the rows the filter goes on to drop.
+struct EndBoundExploration {
+    ExplorePaths _exploration;
+    EqOp _equality;
+    uint64_t _endColumn {0};
+};
+
+bool matchEndBoundExploration(FilterOp filter, EndBoundExploration& bound) {
+    EqOp equality = filter.getMask().getDefiningOp<EqOp>();
+    if (!equality) {
+        return false;
+    }
+
+    // One side is the end node column, the other the carried copy of the bound variable
+    Value ends = equality.getLhs();
+    Value carried = equality.getRhs();
+    ExplorePaths exploration = ends.getDefiningOp<ExplorePaths>();
+    if (!exploration || ends != exploration.getTgtids()) {
+        std::swap(ends, carried);
+        exploration = ends.getDefiningOp<ExplorePaths>();
+    }
+
+    if (!exploration || ends != exploration.getTgtids() || exploration.getEndColumn()) {
+        return false;
+    }
+
+    const OpResult carriedResult = dyn_cast<OpResult>(carried);
+    if (!carriedResult || carriedResult.getOwner() != exploration.getOperation()) {
+        return false;
+    }
+
+    const size_t resultIndex = carriedResult.getResultNumber();
+    if (resultIndex < pathFixedResultCount) {
+        return false;
+    }
+
+    for (const Value column : filter.getColumnsToFilter()) {
+        if (column.getDefiningOp() != exploration.getOperation()) {
+            return false;
+        }
+    }
+
+    for (const Value result : exploration.getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            const bool readsThePair = user == filter.getOperation() || user == equality.getOperation();
+            if (!readsThePair) {
+                return false;
+            }
+        }
+    }
+
+    bound = EndBoundExploration {._exploration = exploration,
+                                 ._equality = equality,
+                                 ._endColumn = resultIndex - pathFixedResultCount};
+
+    return true;
+}
+
+IntegerAttr unsignedAttribute(uint64_t value, mlir::OpBuilder& builder) {
+    const IntegerType type = IntegerType::get(builder.getContext(), 64, IntegerType::Unsigned);
+
+    return IntegerAttr::get(type, value);
+}
+
+void fuseExploreEndNodes(FilterOp filter, const EndBoundExploration& bound, mlir::OpBuilder& builder) {
+    ExplorePaths exploration = bound._exploration;
+    EqOp equality = bound._equality;
+
+    exploration.setEndColumnAttr(unsignedAttribute(bound._endColumn, builder));
+
+    const Operation::operand_range columns = filter.getColumnsToFilter();
+    const mlir::ResultRange filtered = filter.getFilteredColumns();
+    for (size_t index = 0; index < filtered.size(); index++) {
+        filtered[index].replaceAllUsesWith(columns[index]);
+    }
+
+    filter.erase();
+    eraseIfUnused(equality);
+}
+
+struct FuseExploreEndNodes : public impl::FuseExploreEndNodesBase<FuseExploreEndNodes> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+        runFilterPass<EndBoundExploration>(getOperation(), matchEndBoundExploration, fuseExploreEndNodes, builder);
+    }
+};
+
+// A row-wise op: one output row per input row, computed from that row alone, so a relation
+// deduplicated before it yields the same set after it.
+bool isRowWiseOp(Operation* op) {
+    return isMaskComputeOp(op)
+        || isa<GetNodeLabelSet, CheckLabelConstraint, CheckEdgeTypeConstraint,
+               Labels, EdgeType, ToInteger, ToFloat, ToBoolean,
+               CosineSimilarity, EuclideanDistance>(op);
+}
+
+bool aggregatesDistinctly(GroupAggregate groupAggregate) {
+    for (const int64_t kind : groupAggregate.getKinds()) {
+        switch (static_cast<storage::GroupAggregateKind>(kind)) {
+            case storage::GroupAggregateKind::Min:
+            case storage::GroupAggregateKind::Max:
+            case storage::GroupAggregateKind::CountDistinct:
+            case storage::GroupAggregateKind::SumDistinct:
+            case storage::GroupAggregateKind::AvgDistinct:
+            break;
+
+            case storage::GroupAggregateKind::Count:
+            case storage::GroupAggregateKind::Sum:
+            case storage::GroupAggregateKind::Avg:
+            case storage::GroupAggregateKind::CountRows:
+                return false;
+            break;
+        }
+    }
+
+    return true;
+}
+
+// Whether every row the op ever emits is only ever read as a member of a set: a dedup or a
+// distinct aggregate settles it, a row-wise op, a filter or a further hop passes the question
+// on to its own users, and anything counting, cutting or outputting rows refuses.
+bool readsRowsAsASet(Operation* op, llvm::SmallPtrSetImpl<Operation*>& visited);
+
+bool usersReadRowsAsASet(Operation* op, llvm::SmallPtrSetImpl<Operation*>& visited) {
+    for (const Value result : op->getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            if (!readsRowsAsASet(user, visited)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+bool readsRowsAsASet(Operation* op, llvm::SmallPtrSetImpl<Operation*>& visited) {
+    if (!visited.insert(op).second) {
+        return true;
+    }
+
+    if (isa<RemoveDuplicates>(op)) {
+        return true;
+    } else if (Count count = dyn_cast<Count>(op)) {
+        return count.getDistinct();
+    } else if (GroupAggregate groupAggregate = dyn_cast<GroupAggregate>(op)) {
+        return aggregatesDistinctly(groupAggregate);
+    } else if (isRowWiseOp(op) || isa<FilterOp, ExplorePaths>(op) || isEdgeHop(op)) {
+        return usersReadRowsAsASet(op, visited);
+    }
+
+    return false;
+}
+
+bool matchDistinctEnds(ExplorePaths exploration) {
+    const uint64_t minHops = exploration.getMinHops();
+    const bool undirected = exploration.getDirection() == storage::PathDirection::Both;
+    const bool exact = minHops == 0 || (minHops == 1 && !undirected);
+    if (!exact || exploration.getDistinct() || !exploration.getPaths().use_empty()) {
+        return false;
+    }
+
+    llvm::SmallPtrSet<Operation*, 16> visited;
+
+    return usersReadRowsAsASet(exploration.getOperation(), visited);
+}
+
+struct FuseExploreDistinctEnds : public impl::FuseExploreDistinctEndsBase<FuseExploreDistinctEnds> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+
+        getOperation()->walk([&](ExplorePaths exploration) {
+            if (matchDistinctEnds(exploration)) {
+                exploration.setDistinctAttr(builder.getUnitAttr());
+            }
+        });
+    }
+};
+
 // Where an op's carry set sits: the carried operands start at _operandOffset and each comes
 // back as the result at the same position from _resultOffset.
 struct CarrySetLayout {
@@ -1963,6 +2145,10 @@ void keepRequiredColumns(Operation* op, llvm::SmallBitVector& keep) {
     if (Sort sort = dyn_cast<Sort>(op)) {
         for (const int64_t keyColumn : sort.getKeyColumns()) {
             keep.set(static_cast<unsigned>(keyColumn));
+        }
+    } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
+        if (const std::optional<uint64_t> endColumn = exploration.getEndColumn()) {
+            keep.set(static_cast<unsigned>(*endColumn));
         }
     } else if (GroupAggregate groupAggregate = dyn_cast<GroupAggregate>(op)) {
         const size_t keyCount = groupAggregate.getKeyCount();
@@ -2085,9 +2271,23 @@ void trimCollectAttributes(Collect collect, llvm::ArrayRef<size_t> kept, Operati
     setOrEraseIndices(state, collect.getDistinctValuesAttrName(), distinctValues, builder);
 }
 
+void renumberEndColumn(ExplorePaths exploration, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
+    const std::optional<uint64_t> endColumn = exploration.getEndColumn();
+    if (!endColumn) {
+        return;
+    }
+
+    const auto keptIt = llvm::find(kept, static_cast<size_t>(*endColumn));
+    bioassert(keptIt != kept.end(), "End column {} is not in the trimmed carry set", *endColumn);
+
+    state.attributes.set(exploration.getEndColumnAttrName(), unsignedAttribute(static_cast<uint64_t>(keptIt - kept.begin()), builder));
+}
+
 void trimAttributes(Operation* op, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
     if (Sort sort = dyn_cast<Sort>(op)) {
         renumberSortKeys(sort, kept, state, builder);
+    } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
+        renumberEndColumn(exploration, kept, state, builder);
     } else if (GroupAggregate groupAggregate = dyn_cast<GroupAggregate>(op)) {
         trimGroupAggregateKinds(groupAggregate, kept, state, builder);
     } else if (Collect collect = dyn_cast<Collect>(op)) {

@@ -683,6 +683,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
                     config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
                 }
             }
+            config._endColumn = explorePaths.getEndColumn();
+            config._distinctEnds = explorePaths.getDistinct();
             _iteratorConfigs[explorePaths.getResult()] = config;
         } else if (nl::Sort sort = mlir::dyn_cast<nl::Sort>(operation)) {
             _iteratorConfigs[sort.getResult()] = IteratorConfig {IteratorKind::Sort, {}, {}, sortStateFor(sort.getState())};
@@ -1849,6 +1851,16 @@ void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
     }
 
     bindCarriedColumns(config, loopBody, 3, loopData);
+
+    // The bound end is the carried column's input, row-aligned with the seeds
+    if (config._endColumn) {
+        const mlir::Value endValue = config._carriedColumns[*config._endColumn];
+        loopData->setEndNodes(static_cast<const ColumnNodeIDs*>(getColumn(endValue)));
+    }
+
+    if (config._distinctEnds) {
+        loopData->setDistinctEnds();
+    }
 
     if (config._hopRegion && !config._hopRegion->empty()) {
         mlir::Block& hopBlock = config._hopRegion->front();

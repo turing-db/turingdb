@@ -8,6 +8,7 @@
 #include "ChunkWriter.h"
 #include "PartDirectory.h"
 #include "PathExplorationDir.h"
+#include "PathTargetIndex.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "datapart/EdgeRecord.h"
@@ -24,8 +25,10 @@ class Tombstones;
 
 // Enumerates every trail of minHops to maxHops edges leaving each input node, depth first,
 // as a chunk writer: each fill emits up to maxCount rows of (input row, end node, path).
-// With end labels set only the paths ending on a node carrying them are emitted, and with a
-// distance index set the prefixes that cannot reach such a node in time are not walked.
+// With end labels or end nodes set only the paths ending on a node carrying them, or on the
+// seed's own target, are emitted, and with a distance or target index set the prefixes that
+// cannot reach such a node in time are not walked. In the distinct mode the walk is a
+// multi-source breadth-first search instead, emitting each (seed, end) pair once and no path.
 class PathExplorator {
 public:
     PathExplorator(const GraphView& view,
@@ -41,7 +44,10 @@ public:
     void setHopFilter(PathHopFilter* filter) { _hopFilter = filter; }
     void setEdgeTypeFilter(EdgeTypeID edgeType);
     void setEndLabels(const LabelSet* labels);
+    void setEndNodes(const ColumnNodeIDs* endNodes) { _endNodes = endNodes; }
     void setDistanceIndex(const PathDistanceIndex* index) { _distances = index; }
+    void setTargetIndex(const PathTargetIndex* index) { _targetIndex = index; }
+    void setDistinctEnds(bool distinct);
     void setWalkerCount(size_t walkerCount);
     void setCandidateLookahead(size_t lookahead) { _lookahead = lookahead; }
 
@@ -72,6 +78,8 @@ private:
         bool _active {false};
         Stage _stage {Stage::Idle};
         size_t _seedRow {0};
+        NodeID _targetNode;
+        PathTargetHandle _target;
 
         std::vector<EdgeID> _pathEdges;
         std::vector<PathRef> _pathEntries;
@@ -84,6 +92,25 @@ private:
         size_t _pendingOwner {0};
         std::span<const EdgeRecord> _pendingOuts;
         std::span<const EdgeRecord> _pendingIns;
+    };
+
+    // The multi-source search of the distinct mode: one bit per seed of the current batch
+    // in the seen and frontier words, the rows a level gained emitted before the next level
+    // is expanded, and the touched words cleared between batches
+    struct Reachability {
+        std::vector<uint64_t> _seen;
+        std::vector<uint64_t> _frontierWords;
+        std::vector<uint64_t> _gained;
+        std::vector<NodeID> _frontier;
+        std::vector<NodeID> _next;
+        std::vector<NodeID> _touched;
+        std::vector<NodeID> _candidateNodes;
+        std::vector<EdgeID> _candidateEdges;
+        size_t _batchFirstRow {0};
+        uint64_t _level {0};
+        size_t _emitNode {0};
+        uint64_t _emitBits {0};
+        bool _batchActive {false};
     };
 
     GraphView _view;
@@ -100,7 +127,10 @@ private:
     bool _filterByType {false};
     EdgeTypeID _edgeType;
     LabelSetHandle _endLabels;
+    const ColumnNodeIDs* _endNodes {nullptr};
     const PathDistanceIndex* _distances {nullptr};
+    const PathTargetIndex* _targetIndex {nullptr};
+    bool _distinctEnds {false};
     size_t _lookahead {1};
 
     PartDirectory _parts;
@@ -108,6 +138,7 @@ private:
     bool _filterTombstones {false};
 
     std::vector<Walker> _walkers;
+    Reachability _reach;
     size_t _turn {0};
     size_t _activeWalkers {0};
     size_t _seedCursor {0};
@@ -117,7 +148,8 @@ private:
 
     void prefetchNodeData(NodeID node, size_t partIndex) const;
     bool hasWork() const;
-    bool isEnd(NodeID node) const;
+    bool isEnd(size_t seedRow, NodeID node) const;
+    void resizeOutputs(size_t count);
 
     void startSeed(Walker& walker, size_t row);
     void advance(Walker& walker);
@@ -128,6 +160,14 @@ private:
     void pushFrame(Walker& walker);
     void generateCandidates(Walker& walker, std::span<const EdgeRecord> edges);
     void emit(size_t seedRow, NodeID target, PathRef path);
+
+    void fillDistinct(size_t maxCount);
+    void startBatch();
+    void emitGainedRows(size_t maxCount);
+    void expandLevel();
+    void collectReachCandidates(NodeID node);
+    void appendReachCandidates(std::span<const EdgeRecord> edges);
+    void finishBatch();
 };
 
 static_assert(NonRootChunkWriter<PathExplorator>);

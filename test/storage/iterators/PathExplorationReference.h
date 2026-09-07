@@ -17,7 +17,10 @@
 #include "ID.h"
 
 namespace db {
+class Graph;
+class JobSystem;
 class PathDistanceIndex;
+class PathTargetIndex;
 }
 
 namespace turing::test {
@@ -102,7 +105,10 @@ struct ExplorationOptions {
     std::optional<db::EdgeTypeID> _edgeType;
     db::PathHopFilter* _hopFilter {nullptr};
     const db::LabelSet* _endLabels {nullptr};
+    const db::ColumnNodeIDs* _endNodes {nullptr};
     const db::PathDistanceIndex* _distanceIndex {nullptr};
+    const db::PathTargetIndex* _targetIndex {nullptr};
+    bool _distinctEnds {false};
     bool _collectTargets {true};
     bool _collectPaths {true};
 };
@@ -120,5 +126,28 @@ size_t collectPaths(const db::GraphView& view,
 
 void expectSameRows(std::vector<PathRow> expected, std::vector<PathRow> actual);
 size_t countRowsThrough(const std::vector<PathRow>& rows, uint64_t edge);
+
+// The graph of the end-constraint tests. A hub with one live branch, hub->c1->c2->t ending
+// on the T node t, and one dead one: hub->dead fans out to four nodes of three leaves each,
+// none of which reaches a T node. t->hub is a type B edge closing a cycle. A second commit
+// adds a node entering the hub and a second T node reached from c2 through a patch edge.
+// The first commit's N nodes may be renumbered, so every node here is read off the graph.
+struct HubGraph {
+    static constexpr size_t firstCommitNodeCount = 21;
+    static constexpr size_t nodeCount = 23;
+
+    db::LabelID _labelT;
+    db::EdgeTypeID _typeA;
+    db::EdgeTypeID _typeB;
+    uint64_t _hub {0};
+    uint64_t _chainOne {0};
+    uint64_t _chainTwo {0};
+    uint64_t _target {0};
+    uint64_t _secondTarget {0};
+    Adjacency _adjacency;
+    std::vector<bool> _ends;
+};
+
+void buildHubGraph(db::Graph& graph, db::JobSystem& jobSystem, HubGraph& hubGraph);
 
 }

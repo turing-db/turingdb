@@ -1169,6 +1169,24 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, DeclareOpInterfaceMethods<Op
     fuse_explore_end_constraint pass sets it from the label filter codegen leaves over
     `tgtids`. A path ending elsewhere is walked through but never emitted, and a prefix
     that cannot reach such a node within the hops it has left is not walked at all.
+
+    `end_column` names, by its index in `columns_to_filter`, the carried node column
+    holding each seed row's own end: the way `(a)-->(b)` binds the end of
+    `MATCH (a)-[e]->+(b), (a)-->(b)` before the exploration runs. The
+    fuse_explore_end_nodes pass sets it from the equality filter codegen leaves between
+    `tgtids` and that column's carried copy; the copy still comes back, equal to `tgtids`
+    row by row. Only the paths ending on the row's target are emitted, and each seed prunes
+    the prefixes that cannot reach its target in time.
+
+      %s, %t, %p, %b2 = db.explore_paths(%a, {%b}) forward hops 1 end_column 0
+
+    `distinct` asks for each (seed, end) pair once and no path at all, which is what a
+    downstream DISTINCT or distinct aggregate reads out of an exploration whose path is
+    unread; the fuse_explore_distinct_ends pass sets it. It is exact when `min_hops` is
+    at most one - a walk of one to `max_hops` hops always shortens to a trail of as many -
+    and, over both directions, only when it is zero: walking one edge out and straight
+    back is a closed walk of two hops that is no trail, so the seed's own row cannot be
+    told from a cycle. The verifier requires both, and `paths` must have no use.
   }];
 
   let arguments = (ins Column:$input_nodes,
@@ -1177,7 +1195,9 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, DeclareOpInterfaceMethods<Op
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
                        OptionalAttr<StrAttr>:$edge_type,
-                       OptionalAttr<StrArrayAttr>:$end_labels);
+                       OptionalAttr<StrArrayAttr>:$end_labels,
+                       OptionalAttr<UI64Attr>:$end_column,
+                       UnitAttr:$distinct);
 
   let results   = (outs ColumnNodeIDs:$srcids,
                         ColumnNodeIDs:$tgtids,
@@ -1188,7 +1208,8 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, DeclareOpInterfaceMethods<Op
 
   let assemblyFormat = [{
     `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
-    (`to` $max_hops^)? (`edge_type` $edge_type^)? (`end_labels` $end_labels^)? ($hop^)?
+    (`to` $max_hops^)? (`edge_type` $edge_type^)? (`end_labels` $end_labels^)?
+    (`end_column` $end_column^)? (`distinct` $distinct^)? ($hop^)?
     attr-dict `:` functional-type(operands, results)
   }];
 
