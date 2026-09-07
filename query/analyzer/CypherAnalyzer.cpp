@@ -726,11 +726,8 @@ void CypherAnalyzer::analyzeShortestPathReturn(const SinglePartQuery* query) con
         return;
     }
 
-    const std::string_view distName = shortestPath->getDistVar()->getName();
-    const std::string_view pathName = shortestPath->getPathVar()->getName();
-
-    const VarDecl* distDecl = _ctxt->getDecl(distName);
-    const VarDecl* pathDecl = _ctxt->getDecl(pathName);
+    const VarDecl* distDecl = shortestPath->getDistDecl();
+    const VarDecl* pathDecl = shortestPath->getPathDecl();
 
     for (const Projection::ReturnItem& item : projection->items()) {
         const VarDecl* consumed = nullptr;
