@@ -806,6 +806,22 @@ private:
     ColumnLabelSetIDs* _output {nullptr};
 };
 
+class NLGetEdgeTypesData : public NLFunctionData {
+public:
+    NLGetEdgeTypesData(const ColumnEdgeIDs* input, ColumnEdgeTypes* output)
+        : _input(input),
+        _output(output)
+    {
+    }
+
+    const ColumnEdgeIDs* getInput() const { return _input; }
+    ColumnEdgeTypes* getOutput() const { return _output; }
+
+private:
+    const ColumnEdgeIDs* _input {nullptr};
+    ColumnEdgeTypes* _output {nullptr};
+};
+
 class NLCheckLabelConstraintData : public NLFunctionData {
 public:
     NLCheckLabelConstraintData(const ColumnLabelSetIDs* input, ColumnMask* output)

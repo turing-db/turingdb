@@ -2087,6 +2087,78 @@ TEST_F(DBDialectTest, deleteEdgeRoundTripsThroughTextualForm) {
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
 }
 
+// `MATCH (n)-[e]->(m) WITH e WHERE e:KNOWS_WELL RETURN e`: below the barrier the type of
+// each edge is read from the edge itself, no traversal having published it here.
+const char* const edgeTypeFetchProgram = R"mlir(
+func.func @main() {
+  %0, %1, %2, %3 = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  %4 = db.get_edge_types(%1) : (!db.column<!storage.edge_id>) -> !db.column<!storage.edge_type_id>
+  %5 = db.check_edge_type_constraint(%4, ["KNOWS_WELL"]) : (!db.column<!storage.edge_type_id>) -> !db.column<!storage.bool>
+  %6 = db.filter(%5, {%1}) : (!db.column<!storage.bool>, !db.column<!storage.edge_id>) -> !db.column<!storage.edge_id>
+  db.output(%6) : !db.column<!storage.edge_id>
+  return
+}
+)mlir";
+
+TEST_F(DBDialectTest, parsesGetEdgeTypes) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(edgeTypeFetchProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::GetEdgeTypes getEdgeTypes;
+    module.get().walk([&](mlir::db::GetEdgeTypes op) {
+        getEdgeTypes = op;
+    });
+    ASSERT_TRUE(getEdgeTypes);
+
+    const mlir::Type edgeIDColumnType =
+        mlir::db::ColumnType::get(&_context, mlir::storage::EdgeIDType::get(&_context));
+    const mlir::Type edgeTypeIDColumnType =
+        mlir::db::ColumnType::get(&_context, mlir::storage::EdgeTypeIDType::get(&_context));
+
+    EXPECT_EQ(getEdgeTypes.getInputEdges().getType(), edgeIDColumnType);
+    EXPECT_EQ(getEdgeTypes.getResult().getType(), edgeTypeIDColumnType);
+}
+
+TEST_F(DBDialectTest, getEdgeTypesRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(edgeTypeFetchProgram);
+    ASSERT_TRUE(module);
+
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+// A fetched type column comes from no traversal, so the by-type hop and scan fusions
+// leave the pair alone rather than folding it into a walk it does not sit on.
+TEST_F(DBDialectTest, fuseEdgesByTypeLeavesAFetchedTypeAlone) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(edgeTypeFetchProgram);
+    ASSERT_TRUE(module);
+
+    mlir::PassManager passManager(&_context);
+    passManager.addPass(mlir::db::createFuseEdgesByType());
+    passManager.addPass(mlir::db::createFuseScanEdgesByType());
+    ASSERT_TRUE(mlir::succeeded(passManager.run(*module)));
+
+    size_t fetches = 0;
+    size_t checks = 0;
+    module.get().walk([&](mlir::Operation* op) {
+        if (mlir::isa<mlir::db::GetEdgeTypes>(op)) {
+            fetches++;
+        } else if (mlir::isa<mlir::db::CheckEdgeTypeConstraint>(op)) {
+            checks++;
+        }
+    });
+
+    EXPECT_EQ(fetches, 1u);
+    EXPECT_EQ(checks, 1u);
+
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
+}
+
 // `MATCH (n:Person) RETURN n` with no optimisation applied
 const char* const labelScanChainProgram = R"mlir(
 func.func @main() {

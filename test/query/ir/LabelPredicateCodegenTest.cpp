@@ -178,6 +178,47 @@ TEST_F(LabelPredicateCodegenTest, anUnknownLabelCompilesLikeAnyOther) {
     EXPECT_EQ(labels, expected);
 }
 
+// The traversal already published the type of each edge it walked, so the check reads that
+// column - and the passes go further, collapsing the scan, the hop and the check into the
+// one by-type edge scan that walks only the edges the predicate keeps.
+TEST_F(LabelPredicateCodegenTest, anEdgeTypePredicateOnAHopFusesIntoAByTypeScan) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module =
+        generate("MATCH (n)-[e]->(m) WHERE e:KNOWS_WELL RETURN n");
+
+    EXPECT_EQ(countOps<mlir::db::ScanEdgesByType>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::CheckEdgeTypeConstraint>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::GetEdgeTypes>(*module), 0u);
+}
+
+// An undirected hop is no by-type hop, so the check stays - still reading the column the
+// traversal published rather than a read of its own.
+TEST_F(LabelPredicateCodegenTest, anEdgeTypePredicateReadsTheColumnAHopPublished) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module =
+        generate("MATCH (n)-[e]-(m) WHERE e:KNOWS_WELL RETURN n");
+
+    llvm::SmallVector<mlir::db::CheckEdgeTypeConstraint> checks =
+        collect<mlir::db::CheckEdgeTypeConstraint>(*module);
+    ASSERT_EQ(checks.size(), 1u);
+
+    EXPECT_TRUE(mlir::isa<mlir::db::GetEdges>(checks.front().getEdgeTypeIds().getDefiningOp()));
+    EXPECT_EQ(countOps<mlir::db::GetEdgeTypes>(*module), 0u);
+}
+
+// Below a barrier there is no such column, so the check reads the type of the edge the row
+// holds instead.
+TEST_F(LabelPredicateCodegenTest, anEdgeTypePredicateBelowABarrierFetchesTheType) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module =
+        generate("MATCH (n)-[e]->(m) WITH e, n WHERE e:KNOWS_WELL RETURN n");
+
+    llvm::SmallVector<mlir::db::GetEdgeTypes> fetches = collect<mlir::db::GetEdgeTypes>(*module);
+    ASSERT_EQ(fetches.size(), 1u);
+
+    llvm::SmallVector<mlir::db::CheckEdgeTypeConstraint> checks =
+        collect<mlir::db::CheckEdgeTypeConstraint>(*module);
+    ASSERT_EQ(checks.size(), 1u);
+    EXPECT_EQ(checks.front().getEdgeTypeIds().getDefiningOp(), fetches.front().getOperation());
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

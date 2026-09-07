@@ -3031,11 +3031,30 @@ mlir::Value DBProgramGenerator::resolveEdgeTypeColumn(const VarDecl* decl) const
     }
 
     const auto findIt = _part._edgeTypeMap.find(identityIt->second.front());
-    if (findIt == _part._edgeTypeMap.end()) {
+    if (findIt == _part._edgeTypeMap.end() || !isRowAlignedHere(findIt->second)) {
         return mlir::Value {};
     }
 
     return findIt->second;
+}
+
+mlir::Value DBProgramGenerator::resolveOrFetchEdgeTypeColumn(const VarDecl* decl,
+                                                             std::string_view varName) {
+    const mlir::Value published = resolveEdgeTypeColumn(decl);
+    if (published) {
+        return published;
+    }
+
+    const mlir::Value edgeColumn = resolveEntityColumn(decl);
+    bioassert(edgeColumn, "Type test on unknown edge variable: {}", varName);
+
+    const mlir::db::ColumnType edgeTypeIDType =
+        allocColumnType(mlir::storage::EdgeTypeIDType::get(_mlirCtxt));
+
+    return _opBuilder.create<mlir::db::GetEdgeTypes>(
+        _opBuilder.getUnknownLoc(),
+        edgeTypeIDType,
+        edgeColumn).getResult();
 }
 
 mlir::Value DBProgramGenerator::resolveColumnInScope(ColumnPredicate accept) const {
@@ -4263,15 +4282,7 @@ mlir::Value DBProgramGenerator::translateEntityTypeExpr(const EntityTypeExpr* ty
     bioassert(isNode || isEdge, "Type test on non-entity variable: {}", varName);
 
     if (isEdge) {
-        const mlir::Value edgeTypeColumn = resolveEdgeTypeColumn(entityDecl);
-        if (!edgeTypeColumn) {
-            throwError(fmt::format("Testing the type of the edge variable '{}' is not "
-                                   "supported here: its type is no longer in flight.",
-                                   varName),
-                       typeExpr);
-        }
-
-        return checkEdgeType(edgeTypeColumn, typeNames);
+        return checkEdgeType(resolveOrFetchEdgeTypeColumn(entityDecl, varName), typeNames);
     }
 
     const mlir::Value nodeColumn = resolveEntityColumn(entityDecl);

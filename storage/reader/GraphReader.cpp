@@ -108,6 +108,10 @@ GetNodeLabelSetRange GraphReader::getNodeLabelSets(const ColumnNodeIDs* inputNod
     return {_view, inputNodeIDs};
 }
 
+GetEdgeTypesRange GraphReader::getEdgeTypes(const ColumnEdgeIDs* inputEdgeIDs) const {
+    return {_view, inputEdgeIDs};
+}
+
 size_t GraphReader::getNodePropertyCount(PropertyTypeID ptID) const {
     size_t count = 0;
     for (const auto& part : _view.dataparts()) {

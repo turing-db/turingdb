@@ -748,6 +748,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerGetEdgeProperties(getEdgeProperties);
     } else if (mlir::db::GetNodeLabelSet getNodeLabelSet = mlir::dyn_cast<mlir::db::GetNodeLabelSet>(operation)) {
         lowerGetNodeLabelSet(getNodeLabelSet);
+    } else if (mlir::db::GetEdgeTypes getEdgeTypes = mlir::dyn_cast<mlir::db::GetEdgeTypes>(operation)) {
+        lowerGetEdgeTypes(getEdgeTypes);
     } else if (mlir::db::CheckLabelConstraint checkLabelConstraint = mlir::dyn_cast<mlir::db::CheckLabelConstraint>(operation)) {
         lowerCheckLabelConstraint(checkLabelConstraint);
     } else if (mlir::db::CheckEdgeTypeConstraint checkEdgeTypeConstraint = mlir::dyn_cast<mlir::db::CheckEdgeTypeConstraint>(operation)) {
@@ -1234,6 +1236,23 @@ void DBLowering::lowerGetNodeLabelSet(mlir::db::GetNodeLabelSet getNodeLabelSet)
         inputChunk);
 
     _valueMap[getNodeLabelSet.getResult()] = fetch.getLabelSetIds();
+}
+
+void DBLowering::lowerGetEdgeTypes(mlir::db::GetEdgeTypes getEdgeTypes) {
+    const mlir::Value inputChunk = mapValue(getEdgeTypes.getInputEdges());
+
+    setInsertionInto(ownerBlock(inputChunk));
+
+    const mlir::Type edgeTypeIDChunkType = nl::ChunkType::get(
+        _builder.getContext(),
+        storage::EdgeTypeIDType::get(_builder.getContext()));
+
+    nl::GetEdgeTypes fetch = _builder.create<nl::GetEdgeTypes>(
+        _builder.getUnknownLoc(),
+        edgeTypeIDChunkType,
+        inputChunk);
+
+    _valueMap[getEdgeTypes.getResult()] = fetch.getEdgeTypeIds();
 }
 
 void DBLowering::lowerCheckLabelConstraint(mlir::db::CheckLabelConstraint checkLabelConstraint) {

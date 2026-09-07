@@ -584,6 +584,7 @@ private:
                                 NLStmtContainer* body);
 
     void translateGetNodeLabelSet(mlir::nl::GetNodeLabelSet op, NLStmtContainer* body);
+    void translateGetEdgeTypes(mlir::nl::GetEdgeTypes op, NLStmtContainer* body);
 
     void translateCheckLabelConstraint(mlir::nl::CheckLabelConstraint op, NLStmtContainer* body);
     void translateCheckEdgeTypeConstraint(mlir::nl::CheckEdgeTypeConstraint op, NLStmtContainer* body);

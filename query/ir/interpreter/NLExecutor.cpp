@@ -17,6 +17,7 @@
 #include "TypeUtils.h"
 #include "iterators/GetEdgesIterator.h"
 #include "ID.h"
+#include "iterators/GetEdgeTypesIterator.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetInEdgesByTypeIterator.h"
 #include "iterators/GetNodeLabelSetIterator.h"
@@ -5740,6 +5741,18 @@ void NLExecutor::runGetNodeLabelSet(NLExecutionContext* context, NLFunctionData*
 
     GetNodeLabelSetChunkWriter writer(view, input);
     writer.setLabelSetIDs(output);
+    writer.fill(input->size());
+}
+
+void NLExecutor::runGetEdgeTypes(NLExecutionContext* context, NLFunctionData* data) {
+    NLGetEdgeTypesData* fetchData = static_cast<NLGetEdgeTypesData*>(data);
+
+    const GraphView& view = *context->getView();
+    const ColumnEdgeIDs* input = fetchData->getInput();
+    ColumnEdgeTypes* output = fetchData->getOutput();
+
+    GetEdgeTypesChunkWriter writer(view, input);
+    writer.setEdgeTypes(output);
     writer.fill(input->size());
 }
 
