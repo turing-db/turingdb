@@ -1174,8 +1174,9 @@ def HashJoinCollect : NLOp<"hash_join_collect", []> {
     build column to the matching buffer of the handle and records where each row's
     key lands, so that by the time the build loop is exhausted the buffers hold
     every build row and the index answers any probe key. The columns are taken
-    together so the buffers stay row-aligned. A row whose key is null is buffered
-    like any other but left out of the index: null matches nothing.
+    together so the buffers stay row-aligned. A row whose key can match nothing is
+    buffered like any other but left out of the index: a null matches nothing, and
+    so does a NaN, or an embedding holding one, which no `=` calls equal.
 
       nl.hash_join_collect %state, (%b, %name) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>
 

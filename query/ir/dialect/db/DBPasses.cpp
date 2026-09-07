@@ -2326,17 +2326,10 @@ struct FuseHashJoin : public impl::FuseHashJoinBase<FuseHashJoin> {
         Operation* const root = getOperation();
 
         // Collect the matches first: fusing erases ops, which would invalidate the walk.
-        // Fusing a product leaves nothing for a second filter over the same rows to match,
-        // so the first filter to reach a product is the one that takes it.
         llvm::SmallVector<EqualityCross, 2> matches;
-        llvm::SmallPtrSet<Operation*, 4> matchedProducts;
-        root->walk([&matches, &matchedProducts](FilterOp filter) {
+        root->walk([&matches](FilterOp filter) {
             EqualityCross match;
-            if (!matchEqualityCross(filter, match)) {
-                return;
-            }
-
-            if (matchedProducts.insert(match._product.getOperation()).second) {
+            if (matchEqualityCross(filter, match)) {
                 matches.push_back(match);
             }
         });

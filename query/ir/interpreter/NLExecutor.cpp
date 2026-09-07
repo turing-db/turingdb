@@ -1418,6 +1418,38 @@ bool plainDoubleColumnRowMatchable(const Column* column, size_t row) {
     return !std::isnan(raw[row]);
 }
 
+// Whether one row of a nullable embedding column carries a key a join can match. A null
+// does not, and neither does a vector holding a NaN: TuringEqual compares two embeddings
+// element by element, so such a row equals nothing - not even itself.
+bool optEmbeddingColumnRowMatchable(const Column* column, size_t row) {
+    const auto& raw = static_cast<const ColumnVector<std::optional<types::Embedding::Primitive>>*>(column)->getRaw();
+    const std::optional<types::Embedding::Primitive>& embedding = raw[row];
+    if (!embedding.has_value()) {
+        return false;
+    }
+
+    const auto isNaN = [](float value) { return std::isnan(value); };
+
+    return std::none_of(embedding->begin(), embedding->end(), isNaN);
+}
+
+// Serialize one row of a nullable embedding column into the row key, as the vector's
+// length then its floats. TuringEqual holds when two embeddings carry the same floats in
+// the same order, which is byte equality once the sign of a zero is canonicalized; a NaN
+// never reaches here, the match gate having kept those rows out of the join.
+void joinKeyAppendOptEmbeddingColumn(const Column* column, size_t row, std::string& key) {
+    const auto& raw = static_cast<const ColumnVector<std::optional<types::Embedding::Primitive>>*>(column)->getRaw();
+    const types::Embedding::Primitive& embedding = *raw[row];
+
+    const size_t length = embedding.size();
+    key.append(reinterpret_cast<const char*>(&length), sizeof(length));
+
+    for (const float value : embedding) {
+        const float normalized = (value == 0.0f) ? 0.0f : value;
+        key.append(reinterpret_cast<const char*>(&normalized), sizeof(normalized));
+    }
+}
+
 // Whether one row of a type-erased column of tagged scalars carries a matchable key - the
 // cell's own tag says whether it is null, where a nullable column has a present flag.
 bool listElementColumnRowMatchable(const Column* column, size_t row) {
@@ -6212,12 +6244,14 @@ NLKeyIsMatchableFunction NLExecutor::everyKeyMatchable() {
     return &everyRowMatchable;
 }
 
-// Selected per column from its value type. Every value type carries a present flag, so -
-// unlike selectOptKeyAppendFunction - an embedding dispatches fine here; a key column of
-// one is rejected by the serializer, not by this.
+// Selected per column from its value type. A double and an embedding answer their own way,
+// since neither a NaN nor a vector holding one equals itself; every other value type
+// matches on any present row.
 NLKeyIsMatchableFunction NLExecutor::selectOptKeyMatchableFunction(ValueType valueType) {
     if (valueType == ValueType::Double) {
         return &optDoubleColumnRowMatchable;
+    } else if (valueType == ValueType::Embedding) {
+        return &optEmbeddingColumnRowMatchable;
     }
 
     NLKeyIsMatchableFunction isMatchable = nullptr;
@@ -6241,6 +6275,10 @@ NLKeyIsMatchableFunction NLExecutor::selectPlainKeyMatchableFunction(ValueType v
 
 NLKeyIsMatchableFunction NLExecutor::selectListElementKeyMatchableFunction() {
     return &listElementColumnRowMatchable;
+}
+
+NLKeyAppendFunction NLExecutor::selectOptEmbeddingKeyAppendFunction() {
+    return &joinKeyAppendOptEmbeddingColumn;
 }
 
 // An ID chunk (node/edge/edge-type IDs) has no null rows, so every row counts,
