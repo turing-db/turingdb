@@ -31,8 +31,17 @@ public:
                  LocalMemory* mem,
                  NLOutputSink* sink);
 
+    // The overrides of the join cost model, which otherwise leaves a cross product cut by
+    // an equality as it stands whenever it estimates the product the cheaper of the two.
+    // The v3 siblings of PlanGenConfig's flags, and they mean what those mean: forcing
+    // fuses every cut the pass matches, and clearing use fuses none.
+    void setForceValueHashJoin(bool force) { _forcesValueHashJoin = force; }
+    void setUseValueHashJoin(bool use) { _usesValueHashJoin = use; }
+
 private:
     SystemManager* _sysMan {nullptr};
+    bool _forcesValueHashJoin {false};
+    bool _usesValueHashJoin {true};
 
     void executeImpl(QueryStatus& status,
                      std::string_view query,
