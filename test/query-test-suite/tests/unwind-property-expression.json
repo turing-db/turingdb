@@ -2,11 +2,11 @@
   "enabled": true,
   "remote-enabled": false,
   "graph": "simpledb",
-  "query": "MATCH (n) UNWIND n.age AS a RETURN n.name, a",
+  "query": "MATCH (n) UNWIND n.age AS a RETURN n.name, a\nORDER BY n.name, a",
   "expect": {
     "plan": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n) UNWIND n.age AS a RETURN n.name, a\n       |                  ^^^^^\n-------* UNWIND of an expression evaluated per row is only supported by the MLIR query engine.",
-    "result": "PLAN ERROR\n-------* Query error\n     1 | MATCH (n) UNWIND n.age AS a RETURN n.name, a\n       |                  ^^^^^\n-------* UNWIND of an expression evaluated per row is only supported by the MLIR query engine.",
-    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n) UNWIND n.age AS a RETURN n.name, a\\n       |                  ^^^^^\\n-------* UNWIND of an expression evaluated per row is only supported by the MLIR query engine.\"}"
+    "result": "n.name,a\nAdam,32\nRemy,32",
+    "resultJson": "{\"header\":{\"column_names\":[\"n.name\",\"a\"],\"column_types\":[\"String\",\"Int64\"]},\"data\":[[[\"Adam\",\"Remy\"],[32,32]]]}"
   },
   "tags": [
     "errors",
