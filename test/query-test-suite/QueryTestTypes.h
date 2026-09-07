@@ -13,6 +13,7 @@ struct QueryTestSpec {
     std::string _expectPlan;
     std::string _expectResult;
     std::string _expectResultJson;
+    std::string _expectMlir;
     std::vector<std::string> _tags;
     bool _enabled {true};
     bool _remoteEnabled {true};
@@ -31,6 +32,15 @@ struct QueryTestResult {
     bool _resultMatched {false};
     bool _resultJsonMatched {false};
     bool _resultJsonValid {false};
+    uint64_t _timeUs {0};
+};
+
+struct V3QueryTestResult {
+    std::string _name;
+    std::string _resultOutput;
+    std::string _mlirOutput;
+    bool _resultMatched {false};
+    bool _mlirMatched {false};
     uint64_t _timeUs {0};
 };
 
