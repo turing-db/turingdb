@@ -369,11 +369,11 @@ LogicalResult HashJoinCollect::verify() {
 // and emits the probe columns unchanged followed by the build ones, so it has at
 // least as many results as columns and the first of them keep the probe types.
 LogicalResult HashJoinProbe::verify() {
-    if (getColumns().empty()) {
+    const OperandRange columns = getColumns();
+    if (columns.empty()) {
         return emitOpError("requires at least one column to probe with");
     }
 
-    const OperandRange columns = getColumns();
     const ResultRange results = getResults();
     if (results.size() < columns.size()) {
         return emitOpError("expects a result per probe column and per build column, but has ")

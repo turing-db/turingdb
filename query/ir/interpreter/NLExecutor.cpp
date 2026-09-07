@@ -5014,9 +5014,8 @@ void NLExecutor::runHashJoinCollect(NLExecutionContext* context, NLFunctionData*
     const size_t rowCount = key->size();
     const size_t firstRow = state->getRowCount();
 
-    // Row r of this chunk becomes build row firstRow + r, which is what the buffers will
-    // hold it at once appended. A key no probe key can match - a null, a NaN - is indexed
-    // under nothing, so no probe row reaches it.
+    // A key no probe key can match - a null, a NaN - is indexed under nothing, so no probe
+    // row reaches it.
     const NLKeyAppendFunction keyAppend = collect->getKeyAppend();
     const NLKeyIsMatchableFunction keyIsMatchable = collect->getKeyIsMatchable();
     std::string* keyScratch = collect->getKeyScratch();
@@ -5032,8 +5031,6 @@ void NLExecutor::runHashJoinCollect(NLExecutionContext* context, NLFunctionData*
         state->indexRow(*keyScratch, firstRow + row);
     }
 
-    // The columns are appended together, so the buffers stay row-aligned with each other
-    // and with the rows just indexed.
     for (const NLSortCollectData::Append& append : collect->appends()) {
         append._append(append._input, append._buffer);
     }
@@ -5084,8 +5081,6 @@ void NLExecutor::runHashJoinProbe(NLExecutionContext* context, NLFunctionData* d
         }
     }
 
-    // The probe side reads its own chunk, the build side the buffers; both gather by the
-    // matched pairs, so every output column is row-aligned with the joined rows.
     for (const NLCarriedColumn& column : probe->probeColumns()) {
         const NLGatherFunction gather = column.getGatherFunc();
         gather(column.getInput(), probeIndices, column.getOutput());

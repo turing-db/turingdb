@@ -1668,17 +1668,12 @@ void DBLowering::lowerHashJoin(mlir::db::HashJoin join) {
 
     const mlir::Location loc = _builder.getUnknownLoc();
 
-    // The build side is emptied at the top of the block the two nests are rooted in, which
-    // is also where it dominates them both: a join nested in a factor therefore starts
-    // fresh on each enclosing step rather than carrying the previous one's rows.
     _builder.setInsertionPointToStart(rootBlock);
     nl::HashJoinBuffer buffer = _builder.create<nl::HashJoinBuffer>(loc,
                                                                     join.getRightKey(),
                                                                     join.getLeftKey());
     const mlir::Value state = buffer.getState();
 
-    // The collect sits in the built factor's innermost loop body, where all of its
-    // columns are bound together, so the buffers stay row-aligned with the key index.
     setInsertionInto(buildBody);
     _builder.create<nl::HashJoinCollect>(loc, state, buildColumns);
 
@@ -1686,8 +1681,6 @@ void DBLowering::lowerHashJoin(mlir::db::HashJoin join) {
     mlir::Block* const probeBody = lowerFactor(join.getLeftFactor(), rootBlock, probeColumns);
     rowAlignFactorChunks(probeColumns);
 
-    // The probe stands where an nl.cross_product stands in a nested loop: at the deepest
-    // point of the side that walks, just before whatever consumes the joined rows.
     setInsertionInto(probeBody);
 
     llvm::SmallVector<mlir::Type, 8> resultTypes;
