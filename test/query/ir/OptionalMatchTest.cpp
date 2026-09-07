@@ -292,3 +292,33 @@ TEST_F(OptionalMatchTest, DistinctCollapsesThePaddedRows) {
     expectRows("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) RETURN DISTINCT f.name",
                {{"Adam"}, {"Remy"}, {"null"}});
 }
+
+// A group whose rows the pattern all missed collects an empty list, and keeps its row
+// rather than dropping out of the result
+TEST_F(OptionalMatchTest, CollectsAnEmptyListForAnUnmatchedOptional) {
+    expectRows("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) "
+               "RETURN p.name, collect(f.name)",
+               {{"Remy", "[Adam]"},
+                {"Adam", "[Remy]"},
+                {"Maxime", "[]"},
+                {"Luc", "[]"},
+                {"Martina", "[]"},
+                {"Suhas", "[]"},
+                {"Cyrus", "[]"},
+                {"Doruk", "[]"}});
+}
+
+// A reduction beside the collected list charges the same groups: a group the pattern
+// missed counts none of its padded rows
+TEST_F(OptionalMatchTest, CountsBesideACollectedListOverPaddedRows) {
+    expectRows("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) "
+               "RETURN p.name, collect(f.name), count(f)",
+               {{"Remy", "[Adam]", "1"},
+                {"Adam", "[Remy]", "1"},
+                {"Maxime", "[]", "0"},
+                {"Luc", "[]", "0"},
+                {"Martina", "[]", "0"},
+                {"Suhas", "[]", "0"},
+                {"Cyrus", "[]", "0"},
+                {"Doruk", "[]", "0"}});
+}
