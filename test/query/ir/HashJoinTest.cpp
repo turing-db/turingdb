@@ -273,6 +273,20 @@ TEST_F(HashJoinTest, keepsTheProductWhenTheEqualityReadsOneFactor) {
     EXPECT_FALSE(contains(program, "db.hash_join")) << program;
 }
 
+// A column a procedure yielded carries no type until lowering resolves it, so two of them
+// could hold two kinds of value: nothing here proves the join would answer the equality
+// the way the filter does, and the product stays.
+TEST_F(HashJoinTest, keepsTheProductWhenNeitherKeyHasAResolvedType) {
+    std::string program;
+    explainStage("EXPLAIN (db) CALL db.labels() YIELD label CALL db.edgeTypes() YIELD edgeType "
+                 "WHERE label = edgeType RETURN label, edgeType",
+                 "db",
+                 program);
+
+    EXPECT_TRUE(contains(program, "db.cross_product")) << program;
+    EXPECT_FALSE(contains(program, "db.hash_join")) << program;
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
