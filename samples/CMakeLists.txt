@@ -47,6 +47,7 @@ add_subdirectory(graphsage)
 add_subdirectory(list-buffer)
 add_subdirectory(mlir)
 add_subdirectory(scan_bench)
+add_subdirectory(path_bench)
 add_subdirectory(match-brute-force)
 
 set (SCRIPT_LIST_CONTENT "")
