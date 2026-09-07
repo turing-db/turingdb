@@ -627,6 +627,15 @@ void ReadStmtAnalyzer::analyze(ShortestPathStmt* spSt) {
     const auto maybeEvalType = toEvaluatedType(weightPropType);
     bioassert(maybeEvalType.has_value(), "Invalid value type.");
     const EvaluatedType evalType = maybeEvalType.value();
+    const bool isNumeric = [evalType] -> bool {
+        const bool isInt = evalType == EvaluatedType::Integer;
+        const bool isDouble = evalType == EvaluatedType::Double;
+        return isInt or isDouble;
+    }();
+
+    if (!isNumeric) {
+        throwError("SHORTESTPATH may only use numeric edge properties as weights", spSt);
+    }
 
     const std::string_view distName = distVar->getName();
     const std::string_view pathName = pathVar->getName();
