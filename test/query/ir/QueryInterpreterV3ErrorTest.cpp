@@ -62,15 +62,19 @@ protected:
     std::unique_ptr<QueryInterpreterV3> _interpreter;
 };
 
-// A codegen rejection is a TuringException and reaches the user as it was written: an
-// expression kind the generator has no column for names itself, rather than being dressed
-// up as the internal failure the case below is.
-TEST_F(QueryInterpreterV3ErrorTest, reportsUnsupportedExpressionRejectionAsIs) {
+// A codegen rejection carries the span of the query it came from, so an expression kind
+// the generator has no column for is reported under the caret naming it, rather than being
+// dressed up as the internal failure the case below is.
+TEST_F(QueryInterpreterV3ErrorTest, reportsUnsupportedExpressionRejectionWithItsLocation) {
     QueryStatus status;
     runQuery("MATCH (n) RETURN n:Person", status);
 
     EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
-    EXPECT_EQ(status.getError(), "Unsupported expression: ENTITY_TYPES");
+    EXPECT_EQ(status.getError(),
+              "-------* Query error\n"
+              "     1 | MATCH (n) RETURN n:Person\n"
+              "       |                  ^^^^^^^^\n"
+              "-------* Unsupported expression: ENTITY_TYPES");
 }
 
 // An internal generator failure is a FatalException and must keep reading as
