@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <math.h>
 
 #include "PathDistanceIndex.h"
 #include "PathHopFilter.h"
@@ -23,6 +24,12 @@ constexpr size_t defaultWalkerCount = 16;
 
 // How many frontier nodes ahead the distinct mode's search fetches adjacency
 constexpr size_t frontierLookahead = 16;
+
+// An edge the distinct mode's search relaxes costs this many candidate checks of the walk,
+// measured with samples/path_bench where the seeds' balls do not overlap at all; the search
+// pays for itself where a batch's balls overlap enough to be expanded once instead of once
+// per seed
+constexpr double relaxedEdgeCostInChecks = 1.5;
 
 uint64_t signatureBit(EdgeID edge) {
     return 1ull << ((edge.getValue() * 0x9E3779B97F4A7C15ull) >> 58);
@@ -77,6 +84,31 @@ void PathExplorator::setDistinctEnds(bool distinct) {
     if (distinct) {
         _reach._words.assign(_parts.getAllocatedNodeCount(), ReachWords {});
     }
+}
+
+bool PathExplorator::searchPaysForDistinctEnds(const GraphView& view, PathExplorationDir direction, uint64_t maxHops) {
+    const PartDirectory parts(view);
+    const double nodeCount = static_cast<double>(parts.getAllocatedNodeCount());
+    const double edgeCount = static_cast<double>(parts.getAllocatedEdgeCount());
+    const double candidatesPerSeed = PathDistanceIndex::estimatedEnumerationChecks(parts, direction, 1, maxHops);
+    if (nodeCount == 0.0 || edgeCount == 0.0 || candidatesPerSeed == 0.0) {
+        return false;
+    }
+
+    // The search expands every node a batch's seeds reach short of the last hop, once: the
+    // seeds and what they fan out to within max - 1 hops, drawn over the graph, are expected
+    // to be this many distinct nodes, each expanded along its edges
+    const double seeds = static_cast<double>(PathTargetIndex::targetsPerBatch);
+    const double expandedPerSeed = 1.0 + PathDistanceIndex::estimatedEnumerationChecks(parts, direction, 1, maxHops - 1);
+    const double expanded = nodeCount * (1.0 - exp(-seeds * expandedPerSeed / nodeCount));
+
+    const double directions = direction == PathExplorationDir::BOTH ? 2.0 : 1.0;
+    const double fanOut = std::max(1.0, directions * edgeCount / nodeCount);
+
+    const double walked = seeds * candidatesPerSeed;
+    const double relaxed = expanded * fanOut;
+
+    return walked > relaxedEdgeCostInChecks * relaxed;
 }
 
 void PathExplorator::setWalkerCount(size_t walkerCount) {

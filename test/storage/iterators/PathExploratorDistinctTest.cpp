@@ -11,6 +11,7 @@
 #include "columns/ColumnIDs.h"
 #include "iterators/ChunkConfig.h"
 #include "iterators/PathExplorationDir.h"
+#include "iterators/PathExplorator.h"
 #include "iterators/PathTargetIndex.h"
 #include "metadata/LabelSet.h"
 #include "reader/GraphReader.h"
@@ -279,6 +280,18 @@ TEST_F(PathExploratorDistinctTest, reportsAClosedTrailBackToTheSeedOnce) {
         backToTheSeed += row._target == _hubGraph._hub ? 1 : 0;
     }
     EXPECT_EQ(backToTheSeed, 1u);
+}
+
+TEST_F(PathExploratorDistinctTest, searchPaysOnceTheBallsOverlap) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+
+    // Sixty-four seeds on twenty-three nodes overlap from the first hop; nothing to walk from
+    // a bound of zero
+    EXPECT_TRUE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::FORWARD, 1));
+    EXPECT_TRUE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::BOTH, unbounded));
+    EXPECT_FALSE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::FORWARD, 0));
 }
 
 TEST_F(PathExploratorDistinctTest, expandsEachReachedNodeOncePerBatch) {
