@@ -1,11 +1,11 @@
 {
   "enabled": true,
   "graph": "simpledb",
-  "query": "LOAD CSV 'test.csv' AS row MATCH (n) where n.name = row[0] RETURN n",
+  "query": "LOAD CSV 'test.csv' AS row MATCH (n) where n.name = row[0] RETURN n\nORDER BY n",
   "expect": {
     "plan": "PLAN ERROR\n-------* Query error\n     1 | LOAD CSV 'test.csv' AS row MATCH (n) where n.name = row[0] RETURN n\n       |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Non-standalone LOAD CSV in read statements not yet supported.",
-    "result": "PLAN ERROR\n-------* Query error\n     1 | LOAD CSV 'test.csv' AS row MATCH (n) where n.name = row[0] RETURN n\n       |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n-------* Non-standalone LOAD CSV in read statements not yet supported.",
-    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"-------* Query error\\n     1 | LOAD CSV 'test.csv' AS row MATCH (n) where n.name = row[0] RETURN n\\n       |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n-------* Non-standalone LOAD CSV in read statements not yet supported.\"}"
+    "result": "n\n0\n1\n8",
+    "resultJson": "{\"header\":{\"column_names\":[\"n\"],\"column_types\":[\"UInt64\"]},\"data\":[[[0,1,8]]]}"
   },
   "tags": [
     "csv",
