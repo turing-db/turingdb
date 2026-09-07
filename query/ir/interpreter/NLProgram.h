@@ -1336,12 +1336,13 @@ private:
 // collide by concatenation (e.g. "a"+"b" versus "ab"+"").
 using NLKeyAppendFunction = void (*)(const Column* column, size_t row, std::string& key);
 
-// Type of handle that answers whether one row of a column is null. One per column kind /
-// value type, selected during translation the same way the key-append family is; a column
-// that cannot hold a null answers false for every row. A null row serializes to a key like
-// any other, so this is what tells the two apart where nulls must not match - a join key,
-// where Cypher gives null rather than true for `=` against a null.
-using NLIsNullFunction = bool (*)(const Column* column, size_t row);
+// Type of handle that answers whether one row of a join key column can match at all. One
+// per column kind / value type, selected during translation the same way the key-append
+// family is. Two values the key bytes cannot tell apart from a matchable one are not: a
+// null, for which Cypher gives null rather than true for `=`, and a NaN, which is not
+// equal to itself - and the serializer maps every NaN payload to one canonical NaN, which
+// is what DISTINCT wants and the opposite of what a join does.
+using NLKeyIsMatchableFunction = bool (*)(const Column* column, size_t row);
 
 // Runtime state of one hash join's build side: the build rows, materialized column by
 // column, and the index from a row's serialized key to the rows carrying it.
@@ -1422,15 +1423,15 @@ public:
         _appends.push_back(append);
     }
 
-    void setKeyColumn(const Column* key, NLKeyAppendFunction keyAppend, NLIsNullFunction isNull) {
+    void setKeyColumn(const Column* key, NLKeyAppendFunction keyAppend, NLKeyIsMatchableFunction isMatchable) {
         _key = key;
         _keyAppend = keyAppend;
-        _keyIsNull = isNull;
+        _keyIsMatchable = isMatchable;
     }
 
     const Column* getKeyColumn() const { return _key; }
     NLKeyAppendFunction getKeyAppend() const { return _keyAppend; }
-    NLIsNullFunction getKeyIsNull() const { return _keyIsNull; }
+    NLKeyIsMatchableFunction getKeyIsMatchable() const { return _keyIsMatchable; }
 
     std::string* getKeyScratch() { return &_keyScratch; }
 
@@ -1440,7 +1441,7 @@ private:
 
     const Column* _key {nullptr};
     NLKeyAppendFunction _keyAppend {nullptr};
-    NLIsNullFunction _keyIsNull {nullptr};
+    NLKeyIsMatchableFunction _keyIsMatchable {nullptr};
 
     // Scratch reused to build each row's key, cleared once per row
     std::string _keyScratch;
@@ -1466,15 +1467,15 @@ public:
     void addProbeColumn(const NLCarriedColumn& column) { _probeColumns.push_back(column); }
     void addBuildColumn(const NLCarriedColumn& column) { _buildColumns.push_back(column); }
 
-    void setKeyColumn(const Column* key, NLKeyAppendFunction keyAppend, NLIsNullFunction isNull) {
+    void setKeyColumn(const Column* key, NLKeyAppendFunction keyAppend, NLKeyIsMatchableFunction isMatchable) {
         _key = key;
         _keyAppend = keyAppend;
-        _keyIsNull = isNull;
+        _keyIsMatchable = isMatchable;
     }
 
     const Column* getKeyColumn() const { return _key; }
     NLKeyAppendFunction getKeyAppend() const { return _keyAppend; }
-    NLIsNullFunction getKeyIsNull() const { return _keyIsNull; }
+    NLKeyIsMatchableFunction getKeyIsMatchable() const { return _keyIsMatchable; }
 
     std::string* getKeyScratch() { return &_keyScratch; }
 
@@ -1488,7 +1489,7 @@ private:
 
     const Column* _key {nullptr};
     NLKeyAppendFunction _keyAppend {nullptr};
-    NLIsNullFunction _keyIsNull {nullptr};
+    NLKeyIsMatchableFunction _keyIsMatchable {nullptr};
 
     std::string _keyScratch;
 

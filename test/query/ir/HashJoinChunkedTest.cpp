@@ -71,6 +71,44 @@ func.func @main() {
 }
 )mlir";
 
+// A join whose key is the same constant on both sides, so every probe row matches every
+// build row. A constant holds one value standing for every row rather than a row of its
+// own, so the join has to lay it out over the rows its factor walks before buffering them.
+const char* const joinOnAConstantKey = R"mlir(
+func.func @main() {
+  %0:4 = db.hash_join factor {
+    %1 = db.scan_nodes() : !db.column<!storage.node_id>
+    %2 = db.constant(1 : i64)
+    db.yield %1, %2 : !db.column<!storage.node_id>, !db.column<i64>
+  } factor {
+    %1 = db.scan_nodes() : !db.column<!storage.node_id>
+    %2 = db.constant(1 : i64)
+    db.yield %1, %2 : !db.column<!storage.node_id>, !db.column<i64>
+  } on 1, 1
+  db.output(%0#0, %0#2) names ["n", "m"] : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// The same join keyed on a NaN, which is equal to nothing - itself included - so it must
+// match nothing. The key serializer maps every NaN payload to one canonical NaN, which is
+// what DISTINCT wants and what the join must not read as a match.
+const char* const joinOnANaNKey = R"mlir(
+func.func @main() {
+  %0:4 = db.hash_join factor {
+    %1 = db.scan_nodes() : !db.column<!storage.node_id>
+    %2 = db.constant(0x7FF8000000000000 : f64)
+    db.yield %1, %2 : !db.column<!storage.node_id>, !db.column<f64>
+  } factor {
+    %1 = db.scan_nodes() : !db.column<!storage.node_id>
+    %2 = db.constant(0x7FF8000000000000 : f64)
+    db.yield %1, %2 : !db.column<!storage.node_id>, !db.column<f64>
+  } on 1, 1
+  db.output(%0#0, %0#2) names ["n", "m"] : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
 using Blocks = std::vector<std::vector<size_t>>;
 
 Row pair(size_t left, size_t right) {
@@ -166,6 +204,23 @@ TEST_F(HashJoinChunkedTest, joinsEveryNodeWithItselfOnAStringKey) {
     }
 
     expectRowsAtEveryChunkSize(joinOnName, expected);
+}
+
+// One key for all 18 nodes on either side, so the join is the whole cross product: each
+// probe node paired with every build node, in build order.
+TEST_F(HashJoinChunkedTest, joinsEveryPairOnAConstantKey) {
+    Rows expected;
+    for (size_t probeNode = 0; probeNode < 18; probeNode++) {
+        for (size_t buildNode = 0; buildNode < 18; buildNode++) {
+            expected.push_back(pair(probeNode, buildNode));
+        }
+    }
+
+    expectRowsAtEveryChunkSize(joinOnAConstantKey, expected);
+}
+
+TEST_F(HashJoinChunkedTest, leavesEveryRowOfANaNKeyUnmatched) {
+    expectRowsAtEveryChunkSize(joinOnANaNKey, Rows {});
 }
 
 int main(int argc, char** argv) {

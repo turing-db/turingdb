@@ -1820,6 +1820,11 @@ target_link_libraries(test_query_ir_hash_join_chunked PRIVATE
         turing_db_examples_s
         turing_ir_test_rows_s)
 
+# The probe result cases run hand-written nl IR - one program malformed - against the
+# shared SimpleGraph.
+add_ir_tests(test_query_ir_hash_join_probe_results HashJoinProbeResultsTest.cpp)
+target_link_libraries(test_query_ir_hash_join_probe_results PRIVATE turing_db_examples_s)
+
 # The hash join fusion is checked at both IR levels and run against the shared SimpleGraph,
 # so it needs the frontend engine beside the dialects.
 add_turing_test(test_query_ir_hash_join HashJoinTest.cpp)

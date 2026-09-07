@@ -1214,9 +1214,11 @@ def HashJoinProbe : NLOp<"hash_join_probe", [Pure]> {
 
     The results are the probe columns followed by the build columns, so they line
     up with the db.hash_join results this lowers from: the left (probed) factor's
-    yielded columns followed by the right (built) factor's. A probe row's matches
-    come out together and in build order, so the rows arrive in the order the
-    nested loop this replaces produced them in.
+    yielded columns followed by the right (built) factor's. The whole build side
+    is indexed before any probing, so a probe row's matches come out together and
+    in build order at any chunk size - where nl.cross_product, re-running the
+    inner nest per outer chunk, interleaves a multi-chunk inner side. Neither
+    order is one an ORDER BY constrains, so they may differ under a LIMIT.
 
     The build columns are not operands - they live in the handle - so their chunk
     types cannot be inferred and the whole result signature is spelled out, the

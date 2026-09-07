@@ -1664,6 +1664,7 @@ void DBLowering::lowerHashJoin(mlir::db::HashJoin join) {
 
     llvm::SmallVector<mlir::Value, 4> buildColumns;
     mlir::Block* const buildBody = lowerFactor(join.getRightFactor(), rootBlock, buildColumns);
+    rowAlignFactorChunks(buildColumns);
 
     const mlir::Location loc = _builder.getUnknownLoc();
 
@@ -1683,6 +1684,7 @@ void DBLowering::lowerHashJoin(mlir::db::HashJoin join) {
 
     llvm::SmallVector<mlir::Value, 4> probeColumns;
     mlir::Block* const probeBody = lowerFactor(join.getLeftFactor(), rootBlock, probeColumns);
+    rowAlignFactorChunks(probeColumns);
 
     // The probe stands where an nl.cross_product stands in a nested loop: at the deepest
     // point of the side that walks, just before whatever consumes the joined rows.
@@ -3781,6 +3783,20 @@ void DBLowering::followCardinalityThrough(mlir::ValueRange inputChunks, mlir::Va
 
         _innermostCardinality = resultChunks[chunkIndex];
         return;
+    }
+}
+
+void DBLowering::rowAlignFactorChunks(llvm::SmallVectorImpl<mlir::Value>& chunks) {
+    mlir::Value cardinality;
+    for (const mlir::Value chunk : chunks) {
+        if (!yieldsConstantColumn(chunk)) {
+            cardinality = chunk;
+            break;
+        }
+    }
+
+    for (mlir::Value& chunk : chunks) {
+        chunk = rowAlignedChunk(chunk, cardinality);
     }
 }
 

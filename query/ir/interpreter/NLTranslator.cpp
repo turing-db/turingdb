@@ -2779,24 +2779,30 @@ void NLTranslator::translateHashJoinCollect(nl::HashJoinCollect collect, NLStmtC
 
     // One growing buffer per build column, row-aligned. The buffer keeps the column's
     // element type; the append copies a chunk's rows onto its tail, exactly as a sort
-    // accumulates them.
+    // accumulates them. The types are recorded beside them for the probe, which declares
+    // these columns among its own results and is checked against what was allocated here.
+    llvm::SmallVector<mlir::Type, 4>& buildTypes = _hashJoinBuildTypes[collectState];
+
     for (const mlir::Value column : columns) {
-        Column* bufferColumn = allocColumnForChunkType(column.getType());
+        const mlir::Type chunkType = column.getType();
+        buildTypes.push_back(chunkType);
+
+        Column* bufferColumn = allocColumnForChunkType(chunkType);
         state->addColumnBuffer(bufferColumn);
 
         const NLSortCollectData::Append append {getColumn(column),
                                                 bufferColumn,
-                                                selectAppendForChunkType(column.getType())};
+                                                selectAppendForChunkType(chunkType)};
         data->addAppend(append);
     }
 
     // The key is one of those columns, read a second time to index each row: the
-    // serializer turns a row into the bytes the probe looks up, and the null test keeps a
-    // null row out of the index.
+    // serializer turns a row into the bytes the probe looks up, and the match gate keeps
+    // a row no probe key can match - a null, a NaN - out of the index.
     const mlir::Value keyColumn = columns[buildKey];
     data->setKeyColumn(getColumn(keyColumn),
                        selectKeyAppendForChunkType(keyColumn.getType()),
-                       selectIsNullForChunkType(keyColumn.getType()));
+                       selectKeyMatchableForChunkType(keyColumn.getType()));
 
     body->emplaceStmt(&NLExecutor::runHashJoinCollect, data);
 }
@@ -2842,21 +2848,30 @@ void NLTranslator::translateHashJoinProbe(nl::HashJoinProbe probe, NLStmtContain
                                              selectGatherForChunkType(column.getType())));
     }
 
+    // A build result is gathered out of the buffer the collect allocated, so the type it
+    // declares has to be the type that buffer holds: reading a column of one element type
+    // as another would take its rows apart at the wrong width.
+    const llvm::SmallVector<mlir::Type, 4>& buildTypes = _hashJoinBuildTypes[probeState];
     for (size_t columnIndex = 0; columnIndex < buildCount; columnIndex++) {
         const mlir::Value result = results[columns.size() + columnIndex];
+        const mlir::Type bufferType = buildTypes[columnIndex];
 
-        Column* output = allocColumnForChunkType(result.getType());
+        if (result.getType() != bufferType) {
+            throw IRException("nl.hash_join_probe must declare each build result as the chunk type the nl.hash_join_collect appended");
+        }
+
+        Column* output = allocColumnForChunkType(bufferType);
         _valueSlots[result] = output;
 
         data->addBuildColumn(NLCarriedColumn(state->buffer(columnIndex),
                                              output,
-                                             selectGatherForChunkType(result.getType())));
+                                             selectGatherForChunkType(bufferType)));
     }
 
     const mlir::Value keyColumn = columns[probeKey];
     data->setKeyColumn(getColumn(keyColumn),
                        selectKeyAppendForChunkType(keyColumn.getType()),
-                       selectIsNullForChunkType(keyColumn.getType()));
+                       selectKeyMatchableForChunkType(keyColumn.getType()));
 
     body->emplaceStmt(&NLExecutor::runHashJoinProbe, data);
 }
@@ -4200,20 +4215,22 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
     return NLExecutor::selectKeyAppendFunction(chunkKindFromElementType(elementType));
 }
 
-// The null-testing sibling of selectKeyAppendForChunkType: a nullable value chunk reads
-// its present flag and a type-erased cell its tag; every other chunk holds no null row, so
-// one handle answers false for all of them.
-NLIsNullFunction NLTranslator::selectIsNullForChunkType(mlir::Type chunkType) {
+// The gating sibling of selectKeyAppendForChunkType: a nullable value chunk reads its
+// present flag and a type-erased cell its tag, a double chunk of either shape also
+// rejects a NaN, and every other chunk holds a matchable key in every row.
+NLKeyIsMatchableFunction NLTranslator::selectKeyMatchableForChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        return NLExecutor::selectOptIsNullFunction(valueTypeFromElementType(nullableType.getValueType()));
+        return NLExecutor::selectOptKeyMatchableFunction(valueTypeFromElementType(nullableType.getValueType()));
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
-        return NLExecutor::selectListElementIsNullFunction();
+        return NLExecutor::selectListElementKeyMatchableFunction();
+    } else if (isPlainValueElementType(elementType)) {
+        return NLExecutor::selectPlainKeyMatchableFunction(valueTypeFromElementType(elementType));
     }
 
-    return NLExecutor::neverNull();
+    return NLExecutor::everyKeyMatchable();
 }
 
 // The value-reduction sibling of selectCountForChunkType: a type-erased column of tagged
