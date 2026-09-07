@@ -31,6 +31,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSESCANEDGES
 #define GEN_PASS_DEF_FUSEEDGESBYTYPE
 #define GEN_PASS_DEF_FUSESCANEDGESBYTYPE
+#define GEN_PASS_DEF_REUSEPROPERTYREADS
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
 #include "DBPasses.h.inc"
 
@@ -1597,6 +1598,155 @@ struct FuseScanByPropertyValue : public impl::FuseScanByPropertyValueBase<FuseSc
                                               matchPropertyValueScanChain,
                                               fuseScanByPropertyValue,
                                               builder);
+    }
+};
+
+// The ops whose results hold the rows of their operands selected, reordered or repeated as
+// a whole, values untouched, so a property read of an operand and carried through is the
+// column a read of the result would have produced. group_aggregate and collect are not
+// among them - a group's rows are not its input's - and neither is remove_duplicates,
+// whose dedup key is every column it carries, so a wider carry set drops different rows.
+bool mapsRowsThrough(Operation* op) {
+    return isEdgeHop(op) || isa<FilterOp, Unwind, Limit, Skip, Sort>(op);
+}
+
+// The operand whose rows a result's rows are drawn from, if any: each carried column comes
+// back at its own position, and a hop's input re-surfaces as srcids, or tgtids when it
+// walks backwards.
+bool matchRowSourceOperand(Operation* op, const CarrySetLayout& layout, size_t resultIndex, size_t& operandIndex) {
+    if (resultIndex >= layout._resultOffset) {
+        operandIndex = layout._operandOffset + (resultIndex - layout._resultOffset);
+        return true;
+    } else if (isEdgeHop(op)) {
+        constexpr size_t srcResultIndex = 0;
+        constexpr size_t tgtResultIndex = 3;
+        const size_t inputResultIndex = isReverseHop(op) ? tgtResultIndex : srcResultIndex;
+
+        if (resultIndex == inputResultIndex) {
+            operandIndex = 0;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool matchPropertyRead(Operation* op, StringAttr& property, bool& nodeProperty) {
+    if (GetNodeProperties read = dyn_cast<GetNodeProperties>(op)) {
+        property = read.getPropertyAttr();
+        nodeProperty = true;
+        return true;
+    } else if (GetEdgeProperties read = dyn_cast<GetEdgeProperties>(op)) {
+        property = read.getPropertyAttr();
+        nodeProperty = false;
+        return true;
+    }
+
+    return false;
+}
+
+// Widens an op's carry set by one column and hands back the result it comes out as. A carry
+// set is the trailing operands and the trailing results of the op holding it, so the column
+// appends to both; an op's arity is fixed once built, hence the rebuild.
+Value appendCarriedColumn(Operation* op, Value column, mlir::OpBuilder& builder) {
+    llvm::SmallVector<Value> operands;
+    llvm::append_range(operands, op->getOperands());
+    operands.push_back(column);
+
+    llvm::SmallVector<Type> types;
+    llvm::append_range(types, op->getResultTypes());
+    types.push_back(column.getType());
+
+    OperationState state(op->getLoc(), op->getName());
+    state.addOperands(operands);
+    state.addTypes(types);
+    state.addAttributes(op->getAttrs());
+
+    builder.setInsertionPoint(op);
+    Operation* const widened = builder.create(state);
+
+    op->replaceAllUsesWith(widened->getResults().drop_back());
+    op->erase();
+
+    return widened->getResults().back();
+}
+
+// The column holding `property` for the rows of `column`, taken from a read already
+// standing before `useSite` and carried down through the ops in between when that read was
+// taken further up the chain. Null when there is none: this adds no read of its own.
+Value propertyColumnOf(Value column, StringAttr property, bool nodeProperty, Operation* useSite, mlir::OpBuilder& builder) {
+    for (Operation* const user : column.getUsers()) {
+        StringAttr userProperty;
+        bool userReadsNodes = false;
+        if (user == useSite || !matchPropertyRead(user, userProperty, userReadsNodes)) {
+            continue;
+        }
+
+        const bool readsTheSameProperty = userReadsNodes == nodeProperty && userProperty == property;
+        const bool standsBeforeTheUse = user->getBlock() == useSite->getBlock() && user->isBeforeInBlock(useSite);
+
+        if (readsTheSameProperty && standsBeforeTheUse) {
+            return user->getResult(0);
+        }
+    }
+
+    Operation* const def = column.getDefiningOp();
+    if (!def || !mapsRowsThrough(def)) {
+        return {};
+    }
+
+    CarrySetLayout layout;
+    const bool carries = matchCarrySetLayout(def, layout);
+    bioassert(carries, "A row-mapping op has a carry set");
+
+    size_t sourceOperandIndex = 0;
+    const size_t resultIndex = cast<OpResult>(column).getResultNumber();
+    if (!matchRowSourceOperand(def, layout, resultIndex, sourceOperandIndex)) {
+        return {};
+    }
+
+    const Value source = def->getOperand(sourceOperandIndex);
+    const Value sourceProperty = propertyColumnOf(source, property, nodeProperty, def, builder);
+    if (!sourceProperty) {
+        return {};
+    }
+
+    const size_t carriedColumnCount = carriedCount(def, layout);
+    for (size_t carriedIndex = 0; carriedIndex < carriedColumnCount; carriedIndex++) {
+        if (def->getOperand(layout._operandOffset + carriedIndex) == sourceProperty) {
+            return def->getResult(layout._resultOffset + carriedIndex);
+        }
+    }
+
+    return appendCarriedColumn(def, sourceProperty, builder);
+}
+
+struct ReusePropertyReads : public impl::ReusePropertyReadsBase<ReusePropertyReads> {
+    void runOnOperation() override {
+        Operation* const root = getOperation();
+
+        llvm::SmallVector<Operation*> reads;
+        root->walk([&](Operation* op) {
+            if (isa<GetNodeProperties, GetEdgeProperties>(op)) {
+                reads.push_back(op);
+            }
+        });
+
+        mlir::OpBuilder builder(&getContext());
+        for (Operation* const read : reads) {
+            StringAttr property;
+            bool nodeProperty = false;
+            const bool isPropertyRead = matchPropertyRead(read, property, nodeProperty);
+            bioassert(isPropertyRead, "A collected op is a property read");
+
+            const Value reused = propertyColumnOf(read->getOperand(0), property, nodeProperty, read, builder);
+            if (!reused) {
+                continue;
+            }
+
+            read->getResult(0).replaceAllUsesWith(reused);
+            read->erase();
+        }
     }
 };
 
