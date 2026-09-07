@@ -28,11 +28,7 @@
 #include "CypherAST.h"
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
-#include "Projection.h"
-#include "QueryCommand.h"
-#include "SinglePartQuery.h"
 #include "TuringException.h"
-#include "stmt/ReturnStmt.h"
 
 #include "Graph.h"
 #include "ID.h"
@@ -107,41 +103,22 @@ private:
     std::vector<std::string> _values;
 };
 
-// The v3 result must line up with the shared expect.result, so its header uses the
-// same column names the v2 pipeline assigns - the analyzed RETURN projection, read in
-// the same order as PipelineGenerator::translateProduceResultsNode.
-void collectReturnColumnNames(const CypherAST& ast, std::vector<std::string>& columnNames) {
+// The names the emitted program gives its result columns. Reading them off the db.output
+// op rather than the RETURN projection is what lets a standalone CALL be named too: it
+// yields its columns with no RETURN clause for a projection to be read from.
+void collectOutputColumnNames(mlir::ModuleOp module, std::vector<std::string>& columnNames) {
     columnNames.clear();
 
-    const Projection* projection = nullptr;
-    for (const QueryCommand* command : ast.queries()) {
-        if (command->getKind() != QueryCommand::Kind::SINGLE_PART_QUERY) {
-            continue;
+    module.walk([&columnNames](mlir::db::Output output) {
+        const std::optional<mlir::ArrayAttr> names = output.getColumnNames();
+        if (!names) {
+            return;
         }
 
-        const SinglePartQuery* query = static_cast<const SinglePartQuery*>(command);
-        const ReturnStmt* returnStmt = query->getReturnStmt();
-        if (returnStmt) {
-            projection = returnStmt->getProjection();
+        for (const mlir::Attribute name : *names) {
+            columnNames.emplace_back(mlir::cast<mlir::StringAttr>(name).getValue());
         }
-    }
-
-    if (!projection) {
-        return;
-    }
-
-    for (const Projection::ReturnItem& item : projection->items()) {
-        std::optional<std::string_view> name;
-        if (Expr* const* exprPtr = std::get_if<Expr*>(&item)) {
-            name = projection->getName(*exprPtr);
-        } else if (VarDecl* const* declPtr = std::get_if<VarDecl*>(&item)) {
-            name = projection->getName(*declPtr);
-        }
-
-        if (name) {
-            columnNames.emplace_back(*name);
-        }
-    }
+    });
 }
 
 void generateMLIRProgram(std::string& out,
@@ -172,8 +149,6 @@ void generateMLIRProgram(std::string& out,
         return;
     }
 
-    collectReturnColumnNames(ast, columnNames);
-
     mlir::MLIRContext context;
     context.getOrLoadDialect<mlir::func::FuncDialect>();
     context.getOrLoadDialect<mlir::storage::Storage>();
@@ -194,6 +169,8 @@ void generateMLIRProgram(std::string& out,
         out = fmt::format("PLAN ERROR\n{}", e.what());
         return;
     }
+
+    collectOutputColumnNames(module, columnNames);
 
     llvm::raw_string_ostream stream(out);
     module.print(stream);
