@@ -578,6 +578,7 @@ private:
     static NLGatherFunction selectGatherForChunkType(mlir::Type chunkType);
     static NLCompareFunction selectCompareForChunkType(mlir::Type chunkType);
     static NLKeyAppendFunction selectKeyAppendForChunkType(mlir::Type chunkType);
+    static NLKeyAppendFunction selectJoinKeyAppendForChunkType(mlir::Type chunkType);
     static NLKeyIsMatchableFunction selectKeyMatchableForChunkType(mlir::Type chunkType);
 
     // The non-null row count handler for a chunk type - the all-rows count for an
