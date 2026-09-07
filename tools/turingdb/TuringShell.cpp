@@ -20,6 +20,7 @@
 #include "Graph.h"
 #include "SystemManager.h"
 #include "LineNoiseHandle.h"
+#include "ShellCompletion.h"
 #include "ShellTable.h"
 #include "LocalMemory.h"
 
@@ -359,6 +360,12 @@ TuringShell::TuringShell(TuringDB& turingDB,
     _localCommands.emplace("shell", Command {shCommand});
     _localCommands.emplace("connect", Command {connectCommand});
     _localCommands.emplace("disconnect", Command {disconnectCommand});
+
+    for (const auto& [name, command] : _localCommands) {
+        _completion.addCommand(name);
+    }
+
+    _completion.install();
 }
 
 TuringShell::~TuringShell() {
