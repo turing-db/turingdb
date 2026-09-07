@@ -2738,12 +2738,12 @@ TEST_F(QueriesTest, labelsFunction) {
         auto res = runQuery(matchLabels, [&actual](const Dataframe* df) {
             ASSERT_TRUE(df);
             auto* ns = findColumn(df, "n")->as<ColumnNodeIDs>();
-            auto* labels = findColumn(df, "labels")->as<ColumnVector<std::string>>();
+            auto* labels = findColumn(df, "labels")->as<ColumnVector<std::string_view>>();
             ASSERT_TRUE(ns && labels);
             ASSERT_EQ(ns->size(), labels->size());
 
             for (const auto& [n, lbl] : rv::zip(*ns, *labels)) {
-                actual.add({n, lbl});
+                actual.add({n, std::string {lbl}});
             }
         });
     }

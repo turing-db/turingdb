@@ -235,8 +235,10 @@ void unwindTaggedElementEmit(const Column* source,
 }
 
 template <typename Functor>
-Functor makeFunctor(NLExecutionContext* context) {
-    if constexpr (std::is_constructible_v<Functor, GraphView>) {
+Functor makeFunctor(NLExecutionContext* context, LocalMemory* mem) {
+    if constexpr (std::is_constructible_v<Functor, GraphView, StringBuffer*>) {
+        return Functor(*context->getView(), &mem->stringBuffer());
+    } else if constexpr (std::is_constructible_v<Functor, GraphView>) {
         return Functor(*context->getView());
     } else {
         return Functor {};
@@ -244,7 +246,7 @@ Functor makeFunctor(NLExecutionContext* context) {
 }
 
 template <typename Functor>
-void functionConstKernel(NLExecutionContext* context, Column* result, const Column* input) {
+void functionConstKernel(NLExecutionContext* context, Column* result, const Column* input, LocalMemory* mem) {
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
 
@@ -252,13 +254,13 @@ void functionConstKernel(NLExecutionContext* context, Column* result, const Colu
     bioassert(typedInput, "Function operand has an unexpected column type.");
     auto* output = static_cast<ColumnConst<Res>*>(result);
 
-    Functor functor = makeFunctor<Functor>(context);
+    Functor functor = makeFunctor<Functor>(context, mem);
     output->set(functor(typedInput->getRaw()));
 }
 
 // A null constant argument converts to a null result whatever the function; the
 // ColumnConst<PropertyNull> result already reads as null, so nothing is computed.
-void functionNullKernel(NLExecutionContext*, Column*, const Column*) {
+void functionNullKernel(NLExecutionContext*, Column*, const Column*, LocalMemory*) {
 }
 
 template <typename Functor, typename Element>
@@ -277,12 +279,12 @@ void applyFunctionOverVector(Functor& functor,
 }
 
 template <typename Functor>
-void functionVectorKernel(NLExecutionContext* context, Column* result, const Column* input) {
+void functionVectorKernel(NLExecutionContext* context, Column* result, const Column* input, LocalMemory* mem) {
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
 
     auto* output = static_cast<ColumnVector<Res>*>(result);
-    Functor functor = makeFunctor<Functor>(context);
+    Functor functor = makeFunctor<Functor>(context, mem);
 
     if (const auto* typedInput = dynamic_cast<const ColumnVector<Arg>*>(input)) {
         applyFunctionOverVector(functor, typedInput, output);
@@ -302,7 +304,7 @@ void functionVectorKernel(NLExecutionContext* context, Column* result, const Col
 }
 
 template <typename Functor>
-void functionOptKernel(NLExecutionContext* context, Column* result, const Column* input) {
+void functionOptKernel(NLExecutionContext* context, Column* result, const Column* input, LocalMemory* mem) {
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
     using JustRes = TypeUtils::unwrap_optional_t<Res>;
@@ -317,7 +319,7 @@ void functionOptKernel(NLExecutionContext* context, Column* result, const Column
     output->resize(size);
     auto& outputRaw = output->getRaw();
 
-    Functor functor = makeFunctor<Functor>(context);
+    Functor functor = makeFunctor<Functor>(context, mem);
     for (size_t row = 0; row < size; row++) {
         if (inputRaw[row].has_value()) {
             outputRaw[row] = functor(inputRaw[row].value());
@@ -3734,7 +3736,7 @@ NLBinaryFn NLExecutor::selectBinary(const Column* lhs,
 
 void NLExecutor::runUnaryFunction(NLExecutionContext* context, NLFunctionData* data) {
     const NLUnaryFunctionData* funcData = static_cast<NLUnaryFunctionData*>(data);
-    funcData->getKernel()(context, funcData->getResult(), funcData->getInput());
+    funcData->getKernel()(context, funcData->getResult(), funcData->getInput(), funcData->getMemory());
 }
 
 template <typename Functor>

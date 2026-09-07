@@ -39,15 +39,18 @@ void resolveHeadCommit(Data* data, const ProcedureContext* ctxt, const VersionCo
     bioassert(data->_headCommit, "headCommitHash not found");
 }
 
+template <size_t I>
+using ReturnCol = ColumnVector<HistoryProcedure::ReturnType<I>>;
+
 void writeChunk(Data* data,
                 ProcedureState* proc,
                 size_t chunkSize) {
     size_t count = 0;
 
-    auto* commitCol = static_cast<ColumnVector<std::string>*>(data->getReturnColumn(0));
-    auto* nodeCountCol = static_cast<UInt64Col*>(data->getReturnColumn(1));
-    auto* edgeCountCol = static_cast<UInt64Col*>(data->getReturnColumn(2));
-    auto* partCountCol = static_cast<UInt64Col*>(data->getReturnColumn(3));
+    auto* commitCol = static_cast<ReturnCol<0>*>(data->getReturnColumn(0));
+    auto* nodeCountCol = static_cast<ReturnCol<1>*>(data->getReturnColumn(1));
+    auto* edgeCountCol = static_cast<ReturnCol<2>*>(data->getReturnColumn(2));
+    auto* partCountCol = static_cast<ReturnCol<3>*>(data->getReturnColumn(3));
 
     if (commitCol) {
         commitCol->clear();
@@ -106,10 +109,11 @@ void HistoryProcedure::registerProcedure(ProcedureNamespace* ns) {
     proc->setExecuteCallback(&execute);
     proc->setAllocCallback(&allocData);
     proc->setDeallocCallback(&deallocData);
-    proc->addReturnValue("commit", ProcedureType::STRING);
-    proc->addReturnValue("nodeCount", ProcedureType::UINT_64);
-    proc->addReturnValue("edgeCount", ProcedureType::UINT_64);
-    proc->addReturnValue("partCount", ProcedureType::UINT_64);
+
+    for (const auto& [name, type] : items) {
+        proc->addReturnValue(name, type);
+    }
+
     ns->addProcedure(proc);
 }
 

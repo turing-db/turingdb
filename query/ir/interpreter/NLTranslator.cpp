@@ -1626,7 +1626,8 @@ void NLTranslator::translateUnaryFunction(mlir::Operation* op, NLStmtContainer* 
 
     _valueSlots[op->getResult(0)] = result;
 
-    NLUnaryFunctionData* data = _program->allocFunctionData<NLUnaryFunctionData>(input, result, kernel);
+    NLUnaryFunctionData* data =
+        _program->allocFunctionData<NLUnaryFunctionData>(input, result, kernel, _memory);
     body->emplaceStmt(&NLExecutor::runUnaryFunction, data);
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -25,6 +26,14 @@ public:
         std::string_view _asName;
         NamedColumn* _col {nullptr};
     };
+
+    struct ReturnItem {
+        std::string_view _name;
+        ProcedureType _type {ProcedureType::INVALID};
+    };
+
+    template <size_t N>
+    using ReturnItems = std::array<ReturnItem, N>;
 
     using ExecuteCallback = void (*)(ProcedureState*);
     using AllocCallback = ProcedureData* (*)();

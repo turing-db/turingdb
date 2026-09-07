@@ -844,7 +844,7 @@ PipelineOutputInterface* PipelineGenerator::translateDataframeFilterNode(Datafra
 
     const auto& predicates = node->getPredicates();
 
-    PredicateProgram* predProg = PredicateProgram::create(_pipeline);
+    PredicateProgram* predProg = PredicateProgram::create(_pipeline, &_mem->stringBuffer());
     PredicateProgramGenerator predGen(this, predProg, _builder.getPendingOutput());
 
     for (const Predicate* pred : predicates) {
@@ -872,7 +872,7 @@ PipelineOutputInterface* PipelineGenerator::translateNodeFilterNode(NodeFilterNo
     const auto& predicates = node->getPredicates();
     const auto& labelConstrs = node->getLabelConstraints();
 
-    PredicateProgram* predProg = PredicateProgram::create(_pipeline);
+    PredicateProgram* predProg = PredicateProgram::create(_pipeline, &_mem->stringBuffer());
     PredicateProgramGenerator predGen(this, predProg, _builder.getPendingOutput());
 
     // Compile predicate expressions into an expression program
@@ -920,7 +920,7 @@ PipelineOutputInterface* PipelineGenerator::translateEdgeFilterNode(EdgeFilterNo
     const auto& predicates = node->getPredicates();
     const auto& typeConstraint = node->getEdgeTypeConstraints();
 
-    PredicateProgram* predProg = PredicateProgram::create(_pipeline);
+    PredicateProgram* predProg = PredicateProgram::create(_pipeline, &_mem->stringBuffer());
     PredicateProgramGenerator predGen(this, predProg, _builder.getPendingOutput());
 
     if (!predicates.empty()) {
@@ -977,7 +977,7 @@ PipelineOutputInterface* PipelineGenerator::translateProduceResultsNode(ProduceR
         Dataframe* df = _builder.getPendingOutputInterface()->getDataframe();
         DataframeManager* dfMan = _pipeline->getDataframeManager();
 
-        ExprProgram* exprProg = ExprProgram::create(_pipeline);
+        ExprProgram* exprProg = ExprProgram::create(_pipeline, &_mem->stringBuffer());
         ExprProgramGenerator exprGen(this, exprProg, _builder.getPendingOutput());
 
         // Generate columns for projection expressions not yet registered
@@ -1305,7 +1305,7 @@ PipelineOutputInterface* PipelineGenerator::translateProcedureEvalNode(Procedure
                 throw PlannerException("Procedure arguments must be literals, lists or symbols");
             }
 
-            ExprProgram* exprProg = ExprProgram::create(_pipeline);
+            ExprProgram* exprProg = ExprProgram::create(_pipeline, &_mem->stringBuffer());
             ExprProgramGenerator exprGen(this, exprProg, _builder.getPendingOutput());
             col = exprGen.generateExpr(argExpr);
         } else {
@@ -1358,7 +1358,7 @@ PipelineOutputInterface* PipelineGenerator::translateExprEvalNode(ExprEvalNode* 
         return _builder.getPendingOutputInterface();
     }
 
-    ExprProgram* prog = ExprProgram::create(_pipeline);
+    ExprProgram* prog = ExprProgram::create(_pipeline, &_mem->stringBuffer());
     ExprProgramGenerator progGen(this, prog, _builder.getPendingOutput());
 
     // Add the evaluating processor to the pipeline. It takes a pointer to the above
@@ -1389,7 +1389,7 @@ PipelineOutputInterface* PipelineGenerator::translateWriteNode(WriteNode* node) 
         _builder.addMaterialize();
     }
 
-    ExprProgram* exprProg = ExprProgram::create(_pipeline);
+    ExprProgram* exprProg = ExprProgram::create(_pipeline, &_mem->stringBuffer());
     ExprProgramGenerator exprGen(this, exprProg, _builder.getPendingOutput());
 
     WriteProcessor::DeletedNodes delNodes;
@@ -2028,7 +2028,7 @@ PipelineOutputInterface* PipelineGenerator::translateUnwindNode(UnwindNode* node
         // Buffer to store values of items
         std::vector<ListBuffer<>::ListItemVariant> items;
         { // Fill the list of items
-            ExprProgram* exprProg = ExprProgram::create(_pipeline);
+            ExprProgram* exprProg = ExprProgram::create(_pipeline, &_mem->stringBuffer());
             /// @ref ExprProgramGenerator requires a pending view, but we don't use it.
             /// Provide a null view for only this expr prog.
             constexpr PendingOutputView unusedView {};

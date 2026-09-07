@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Procedure.h"
+#include "ProcedureTypeVector.h"
+
 namespace db {
 
 class ProcedureData;
@@ -11,6 +14,16 @@ struct HistoryProcedure {
     static void deallocData(ProcedureData* data);
     static void execute(ProcedureState* proc);
     static void registerProcedure(ProcedureNamespace* ns);
+
+    static constexpr Procedure::ReturnItems<4> items {
+        {{._name = "commit", ._type = ProcedureType::STRING},
+         {._name = "nodeCount", ._type = ProcedureType::UINT_64},
+         {._name = "edgeCount", ._type = ProcedureType::UINT_64},
+         {._name = "partCount", ._type = ProcedureType::UINT_64}}
+    };
+
+    template <std::size_t I>
+    using ReturnType = ProcedureTypeType_t<items[I]._type>;
 };
 
 }

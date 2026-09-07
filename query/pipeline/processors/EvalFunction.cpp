@@ -17,6 +17,7 @@ template <ColumnOperator Op>
 struct UnaryEval {
     Column* _res {nullptr};
     GraphView _view;
+    StringBuffer* _buffer {nullptr};
 
     template <typename T>
     void operator()(const T* arg) {
@@ -25,13 +26,14 @@ struct UnaryEval {
         if constexpr (Op == OP_FUNC_LABELS) {
             bioassert(_view.isValid(),
                       "Attempted to evaluate labels() with invalid GraphView.");
+            bioassert(_buffer, "Attempted to evaluate labels() without a string buffer.");
 
             using ResultType = FunctionColumnResult<LabelsFunction, T>::ResultColumnType;
 
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid cast to result column for labels().");
 
-            ColumnFunctions::exec<LabelsFunction>(result, arg, _view);
+            ColumnFunctions::exec<LabelsFunction>(result, arg, _view, _buffer);
         } else if constexpr (Op == OP_FUNC_EDGE_TYPES) {
             bioassert(_view.isValid(),
                       "Attempted to evaluate edgeTypes() with invalid GraphView.");
@@ -74,9 +76,9 @@ struct UnaryEval {
 }
 
 template <ColumnOperator Op>
-void EvalFunction::eval(Column* res, const Column* arg, GraphView view) {
+void EvalFunction::eval(Column* res, const Column* arg, GraphView view, StringBuffer* buffer) {
     using Types = TypeRestrictions<Op>;
-    UnaryEval<Op> fn {res, view};
+    UnaryEval<Op> fn {res, view, buffer};
     using Dispatcher = ColumnSingleDispatcher<typename Types::Allowed,
                                               UnaryEval<Op>,
                                               typename Types::Excluded>;
@@ -86,15 +88,15 @@ void EvalFunction::eval(Column* res, const Column* arg, GraphView view) {
 template <ColumnOperator Op>
 void EvalFunction::eval(Column* res, const Column* arg) {
     using Types = TypeRestrictions<Op>;
-    UnaryEval<Op> fn {res, {}};
+    UnaryEval<Op> fn {res, {}, nullptr};
     using Dispatcher = ColumnSingleDispatcher<typename Types::Allowed,
                                               UnaryEval<Op>,
                                               typename Types::Excluded>;
     Dispatcher::dispatch(arg, fn);
 }
 
-template void EvalFunction::eval<OP_FUNC_LABELS>(Column* res, const Column* arg, GraphView view);
-template void EvalFunction::eval<OP_FUNC_EDGE_TYPES>(Column* res, const Column* arg, GraphView view);
+template void EvalFunction::eval<OP_FUNC_LABELS>(Column* res, const Column* arg, GraphView view, StringBuffer* buffer);
+template void EvalFunction::eval<OP_FUNC_EDGE_TYPES>(Column* res, const Column* arg, GraphView view, StringBuffer* buffer);
 
 template void EvalFunction::eval<OP_TO_INTEGER>(Column* res, const Column* arg);
 template void EvalFunction::eval<OP_TO_FLOAT>(Column* res, const Column* arg);

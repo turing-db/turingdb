@@ -11,6 +11,7 @@ namespace db {
 class PipelineV2;
 class Column;
 class PredicateProgram;
+class StringBuffer;
 
 class ExprProgram {
 public:
@@ -26,7 +27,7 @@ public:
         Column* _rhs {nullptr};
     };
 
-    static ExprProgram* create(PipelineV2* pipeline);
+    static ExprProgram* create(PipelineV2* pipeline, StringBuffer* stringBuffer);
 
     const Instructions& instrs() const { return _instrs; }
 
@@ -43,6 +44,7 @@ private:
     // All instructions which need be evaluated
     Instructions _instrs;
     GraphView _view;
+    StringBuffer* _stringBuffer {nullptr};
 
     ExprProgram() = default;
     virtual ~ExprProgram() = default;
