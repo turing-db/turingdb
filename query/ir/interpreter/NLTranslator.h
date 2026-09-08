@@ -738,6 +738,7 @@ private:
 
     Column* allocOptOwnedStringColumn();
 
+    static bool isEntityIDElement(mlir::Type elementType);
     static bool isPlainValueElementType(mlir::Type elementType);
     Column* allocPlainColumn(ValueType valueType);
     ColumnVector<uint64_t>* allocCountColumn();

@@ -1892,7 +1892,8 @@ def OptionalMatch : TuringOp<"optional_match", [Pure]> {
     or edge is an invalid ID (`ID::isValid()`), which reads as null through a
     property fetch and renders as null, so no column type changes here.
 
-    Reading the graph is deterministic, so the op is Pure.
+    Reading the graph is deterministic and the op writes nothing, so it is Pure -
+    which says nothing about the row count, and this op changes it.
   }];
 
   let arguments = (ins Variadic<Column>:$input_columns);

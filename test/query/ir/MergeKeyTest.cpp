@@ -51,6 +51,24 @@ TEST_F(MergeKeyTest, bindsAPendingNodeAnIntegerAndADoubleBothConstrain) {
     expectRows("MATCH (s:Score) RETURN count(s)", {{"2"}});
 }
 
+// labels() owns the characters of the string it hands back, where a property column
+// borrows them from the graph. That owned string is a merge key like any other value: the
+// one Person matched writes one Tag under its label set.
+TEST_F(MergeKeyTest, keysANodeOnTheLabelsOfAMatchedNode) {
+    expectWriteRowCount("MATCH (p:Person {name: 'Remy'}) MERGE (t:Tag {name: labels(p)})", 0);
+
+    expectRows("MATCH (t:Tag) RETURN t.name", {{"Person, SoftwareEngineering, Founder"}});
+}
+
+// The edge sibling of the same key: edgeType() is owned the way labels() is
+TEST_F(MergeKeyTest, keysANodeOnTheTypeOfAMatchedEdge) {
+    expectWriteRowCount("MATCH (:Person {name: 'Remy'})-[e:KNOWS_WELL]->() "
+                        "MERGE (t:Tag {name: edgeType(e)})",
+                        0);
+
+    expectRows("MATCH (t:Tag) RETURN t.name", {{"KNOWS_WELL"}});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

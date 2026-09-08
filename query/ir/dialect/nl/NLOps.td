@@ -2346,9 +2346,9 @@ def OptionalDrain : NLOp<"optional_drain", [Pure]> {
       %rows = nl.optional_drain(%state) : !nl.iter<!nl.chunk<!storage.node_id>, ...>
       nl.for %p, %e, %f in %rows : !nl.iter<...> { ... }
 
-    Placing it after the pattern's loop nest, in the same block as the
-    nl.optional_buffer that opened the accumulator, is what guarantees the matched
-    rows are all in by the time it first steps.
+    Its first step must find every matched row already collected, so place it after
+    the pattern's loop nest, in the block holding the nl.optional_buffer that opened
+    the accumulator.
   }];
 
   let arguments = (ins NLOptionalStateHandle:$state);

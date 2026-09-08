@@ -2086,3 +2086,25 @@ target_link_libraries(test_query_ir_similarity_guided_traversal PRIVATE
         turing_db_storage_s
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_similarity_guided_traversal PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_owned_string_chunk OwnedStringChunkTest.cpp)
+target_link_libraries(test_query_ir_owned_string_chunk PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_owned_string_chunk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_create_then_delete CreateThenDeleteTest.cpp)
+target_link_libraries(test_query_ir_create_then_delete PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_create_then_delete PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

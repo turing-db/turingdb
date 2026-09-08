@@ -542,6 +542,33 @@ private:
     std::vector<bool> _values;
 };
 
+// Collects a nullable boolean column: what a comparison over an operand that can be null
+// emits, an entity column included - the invalid ID an OPTIONAL MATCH leaves is a null,
+// and a comparison against a null is one.
+class CollectingOptMaskSink : public NLOutputSink {
+public:
+    using OptBoolValues = std::vector<std::optional<bool>>;
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* values = dynamic_cast<const ColumnOptVector<CustomBool>*>(chunks[0]);
+        ASSERT_NE(values, nullptr);
+
+        const auto& raw = values->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            const std::optional<CustomBool>& value = raw[rowIndex];
+            _values.push_back(value ? std::optional<bool> {static_cast<bool>(*value)}
+                                    : std::optional<bool> {});
+        }
+    }
+
+    const OptBoolValues& getValues() const { return _values; }
+
+private:
+    OptBoolValues _values;
+};
+
 class CollectingNodeBoolSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
@@ -1970,6 +1997,18 @@ func.func @main() {
 }
 )mlir";
 
+// Counting a column of label-set IDs: a plain chunk whose element type is neither an
+// entity ID nor a nullable value. No row of it is null, so the tally is the node count.
+const char* const countLabelSetsProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %ls = db.get_node_label_set(%a) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
+  %n = db.count(%ls) : (!db.column<!storage.labelset_id>) -> !db.column<ui64>
+  db.output(%n) : !db.column<ui64>
+  return
+}
+)mlir";
+
 // MATCH (a) RETURN count(a.score): count the non-null scores. A node without the
 // property reads null, and count(a.score) does not charge those - so the tally is
 // fewer than the node count.
@@ -3073,12 +3112,13 @@ TEST_F(DBLoweringTest, eqNodeToItselfIsAllTrue) {
     const FrozenCommitTx transaction = graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
 
-    CollectingMaskSink sink;
+    CollectingOptMaskSink sink;
     runLoweredProgram(eqSelfProgram, reader.getView(), sink);
 
-    // The diamond has four nodes, and every node equals itself.
-    const std::vector<bool> expected {true, true, true, true};
-    EXPECT_EQ(sink.values(), expected);
+    // The diamond has four nodes, and every node equals itself. The column is nullable
+    // because an entity column can carry one; none of these four rows does.
+    const CollectingOptMaskSink::OptBoolValues expected {true, true, true, true};
+    EXPECT_EQ(sink.getValues(), expected);
 }
 
 TEST_F(DBLoweringTest, eqNodePropertyToConstantBroadcasting) {
@@ -5492,6 +5532,20 @@ TEST_F(DBLoweringTest, countsNonNullScores) {
     runLoweredProgram(countScoresProgram, reader.getView(), sink);
 
     const std::vector<uint64_t> expected {2};
+    EXPECT_EQ(sink.getValues(), expected);
+}
+
+TEST_F(DBLoweringTest, countsEveryRowOfALabelSetColumn) {
+    auto graph = buildLabeledGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // Five nodes, so five label sets. A tally over a plain chunk charges every row
+    // whether or not NLChunkKind names its element type.
+    CollectingCountSink sink;
+    runLoweredProgram(countLabelSetsProgram, reader.getView(), sink);
+
+    const std::vector<uint64_t> expected {5};
     EXPECT_EQ(sink.getValues(), expected);
 }
 

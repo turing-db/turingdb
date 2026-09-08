@@ -2037,7 +2037,20 @@ void collectValidIDFold(Column* values,
     auto& valuesRaw = static_cast<ColumnVector<IDType>*>(values)->getRaw();
     const auto& inputRaw = static_cast<const ColumnVector<IDType>*>(input)->getRaw();
 
-    valuesRaw.reserve(valuesRaw.size() + inputRaw.size());
+    const size_t base = valuesRaw.size();
+    const auto isValid = [](const IDType id) { return id.isValid(); };
+
+    if (std::ranges::all_of(inputRaw, isValid)) {
+        valuesRaw.insert(valuesRaw.end(), inputRaw.begin(), inputRaw.end());
+
+        for (size_t row = 0; row < inputRaw.size(); row++) {
+            groupPositions[groups[row]].push_back(base + row);
+        }
+
+        return;
+    }
+
+    valuesRaw.reserve(base + inputRaw.size());
 
     for (size_t row = 0; row < inputRaw.size(); row++) {
         if (!inputRaw[row].isValid()) {
@@ -3231,7 +3244,14 @@ void NLExecutor::runDeleteNode(NLExecutionContext* context, NLFunctionData* data
 
     const auto& raw = nodes->getRaw();
 
+    // A node an OPTIONAL MATCH did not match is an invalid ID, which Cypher deletes nothing
+    // for. Staging it would tombstone an ID the graph never held, and the node count reads
+    // the tombstones off what it allocated: it would report one node too few.
     for (size_t row = 0; row < raw.size(); row++) {
+        if (!raw[row].isValid()) {
+            continue;
+        }
+
         const bool isPending = isPendingRow(pending, allPending, row);
         const CommitWriteBuffer::ExistingOrPendingNode node =
             resolveNode(nodes, row, isPending, firstPendingNodeID);
@@ -3279,6 +3299,10 @@ void NLExecutor::runDeleteEdge(NLExecutionContext* context, NLFunctionData* data
 
     const auto& raw = edges->getRaw();
     for (size_t row = 0; row < raw.size(); row++) {
+        if (!raw[row].isValid()) {
+            continue;
+        }
+
         if (isPendingRow(pending, allPending, row)) {
             writeBuffer->addDeletedPendingEdge(raw[row].getValue() - firstPendingEdgeID);
         } else {
@@ -4128,23 +4152,18 @@ NLUnaryFn NLExecutor::selectNot(const Column* operand, LocalMemory* memory, Colu
 }
 
 NLUnaryFn NLExecutor::selectEntityToNullable(NLChunkKind kind, LocalMemory* memory, Column*& result) {
-    result = memory->alloc<ColumnOptVector<types::UInt64::Primitive>>();
-
-    switch (kind) {
-        case NLChunkKind::NodeID:
-            return &entityToNullableColumn<NodeID>;
-        break;
-
-        case NLChunkKind::EdgeID:
-            return &entityToNullableColumn<EdgeID>;
-        break;
-
-        default:
-            throw IRException("Only a node or an edge column can be read as a nullable ID column");
-        break;
+    const bool readsIDs = kind == NLChunkKind::NodeID || kind == NLChunkKind::EdgeID;
+    if (!readsIDs) {
+        throw IRException("Only a node or an edge column can be read as a nullable ID column");
     }
 
-    return nullptr;
+    result = memory->alloc<ColumnOptVector<types::UInt64::Primitive>>();
+
+    if (kind == NLChunkKind::NodeID) {
+        return &entityToNullableColumn<NodeID>;
+    }
+
+    return &entityToNullableColumn<EdgeID>;
 }
 
 NLUnaryFn NLExecutor::selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result) {
@@ -5324,6 +5343,14 @@ NLCountFunction NLExecutor::selectOptOwnedStringCount() {
     return &countPresentColumn<std::optional<types::String::OwningPrimitive>>;
 }
 
+NLBroadcastFunction NLExecutor::selectOptOwnedStringBlockRepeat() {
+    return &blockRepeatColumn<std::optional<types::String::OwningPrimitive>>;
+}
+
+NLBroadcastFunction NLExecutor::selectOptOwnedStringTile() {
+    return &tileColumn<std::optional<types::String::OwningPrimitive>>;
+}
+
 NLGatherFunction NLExecutor::selectOptGatherFunction(ValueType valueType) {
     NLGatherFunction gather = nullptr;
     const auto select = [&]<SupportedType T>() {
@@ -5480,8 +5507,8 @@ size_t NLExecutor::countAllRows(const Column* column) {
 }
 
 // Selected per column from its kind, so count(n) tallies only the rows in which the node
-// or edge n is not null. A kind whose rows are never null - a label ID, or a scalar a
-// procedure yielded - has no invalid value to skip and gets no handle here.
+// or edge n is not null. A kind whose rows are never null - a label or edge-type ID, or a
+// scalar a procedure yielded - has no invalid value to skip and gets no handle here.
 NLCountFunction NLExecutor::selectIDCountFunction(NLChunkKind kind) {
     switch (kind) {
         case NLChunkKind::NodeID:
@@ -5490,10 +5517,6 @@ NLCountFunction NLExecutor::selectIDCountFunction(NLChunkKind kind) {
 
         case NLChunkKind::EdgeID:
             return &countValidIDs<EdgeID>;
-        break;
-
-        case NLChunkKind::EdgeTypeID:
-            return &countValidIDs<EdgeTypeID>;
         break;
 
         default:
@@ -5513,10 +5536,6 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountValidIDFold(NLChunkKind
 
         case NLChunkKind::EdgeID:
             return &groupFoldCountValidID<EdgeID>;
-        break;
-
-        case NLChunkKind::EdgeTypeID:
-            return &groupFoldCountValidID<EdgeTypeID>;
         break;
 
         default:
@@ -6118,6 +6137,12 @@ NLKeyAppendFunction NLExecutor::selectOptMergeKeyAppendFunction(ValueType valueT
             return selectOptKeyAppendFunction(valueType);
         break;
     }
+}
+
+NLKeyAppendFunction NLExecutor::selectOptOwnedStringMergeKeyAppend(ValueType keyType) {
+    throwUnlessKeyedAsItsOwnType(ValueType::String, keyType);
+
+    return selectOptOwnedStringKeyAppend();
 }
 
 NLKeyAppendFunction NLExecutor::selectNullMergeKeyAppendFunction() {

@@ -364,6 +364,10 @@ ValueType valueTypeFromChunkType(mlir::Type chunkType) {
     const mlir::Type elementType = chunk.getElementType();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        if (mlir::isa<storage::OwnedStringType>(nullableType.getValueType())) {
+            return ValueType::String;
+        }
+
         return valueTypeFromElementType(nullableType.getValueType());
     }
 
@@ -2184,9 +2188,14 @@ void NLTranslator::addTruncateColumn(mlir::Value inputValue,
         output = _memory->allocSame(input);
         copyPrefix = NLExecutor::selectConstBlockRepeatFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
-        output = allocOptColumnForValueType(valueType);
-        copyPrefix = NLExecutor::selectOptBlockRepeatFunction(valueType);
+        if (isOwnedStringElement(nullableType.getValueType())) {
+            output = allocOptOwnedStringColumn();
+            copyPrefix = NLExecutor::selectOptOwnedStringBlockRepeat();
+        } else {
+            const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+            output = allocOptColumnForValueType(valueType);
+            copyPrefix = NLExecutor::selectOptBlockRepeatFunction(valueType);
+        }
     } else if (isPlainValueElementType(elementType)) {
         const ValueType valueType = valueTypeFromElementType(elementType);
         output = allocPlainColumn(valueType);
@@ -2284,9 +2293,14 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
         output = _memory->allocSame(input);
         copySuffix = NLExecutor::selectConstCopyFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
-        output = allocOptColumnForValueType(valueType);
-        copySuffix = NLExecutor::selectOptCopyFunction(valueType);
+        if (isOwnedStringElement(nullableType.getValueType())) {
+            output = allocOptOwnedStringColumn();
+            copySuffix = NLExecutor::selectOptOwnedStringCopy();
+        } else {
+            const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+            output = allocOptColumnForValueType(valueType);
+            copySuffix = NLExecutor::selectOptCopyFunction(valueType);
+        }
     } else if (isPlainValueElementType(elementType)) {
         const ValueType valueType = valueTypeFromElementType(elementType);
         output = allocPlainColumn(valueType);
@@ -2794,14 +2808,15 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
                 // No row of a list chunk is null, so a group's tally is its whole row
                 // count, as it is for count(*).
                 aggregate._fold = NLExecutor::selectGroupCountAllFold();
-            } else {
-                // An ID chunk charges its valid rows, an invalid ID being the null an
-                // OPTIONAL MATCH leaves; every other non-nullable chunk holds no null
-                // to skip - a column a CALL yielded - so every row is charged.
+            } else if (isEntityIDElement(countElementType)) {
+                // An invalid ID is the null an OPTIONAL MATCH leaves, so a group charges
+                // its valid rows alone.
                 const NLChunkKind countKind = chunkKindFromElementType(countElementType);
-                const NLGroupAggregateFoldFunction idFold = NLExecutor::selectGroupCountValidIDFold(countKind);
-
-                aggregate._fold = idFold ? idFold : NLExecutor::selectGroupCountAllFold();
+                aggregate._fold = NLExecutor::selectGroupCountValidIDFold(countKind);
+            } else {
+                // Every other non-nullable chunk holds no null to skip - a column a CALL
+                // yielded - so every row of the group is charged.
+                aggregate._fold = NLExecutor::selectGroupCountAllFold();
             }
         }
         break;
@@ -3798,6 +3813,10 @@ NLKeyAppendFunction NLTranslator::selectMergeKeyAppend(mlir::Type chunkType,
     const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        if (isOwnedStringElement(nullableType.getValueType())) {
+            return NLExecutor::selectOptOwnedStringMergeKeyAppend(keyType);
+        }
+
         const ValueType nullableValueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptMergeKeyAppendFunction(nullableValueType, keyType);
     }
@@ -3855,9 +3874,10 @@ NLCountFunction NLTranslator::selectCountForChunkType(mlir::Type chunkType) {
     }
 
     // An entity an OPTIONAL MATCH did not match is an invalid ID, so an ID chunk counts
-    // its valid rows; every other plain chunk holds no null and counts them all.
-    if (const NLCountFunction idCount = NLExecutor::selectIDCountFunction(chunkKindFromElementType(elementType))) {
-        return idCount;
+    // its valid rows; every other plain chunk holds no null and counts them all, whether
+    // or not it is one chunkKindFromElementType has a kind for.
+    if (isEntityIDElement(elementType)) {
+        return NLExecutor::selectIDCountFunction(chunkKindFromElementType(elementType));
     }
 
     return &NLExecutor::countAllRows;
@@ -3916,6 +3936,10 @@ Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
     const mlir::Type elementType = chunk.getElementType();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        if (isOwnedStringElement(nullableType.getValueType())) {
+            return allocOptOwnedStringColumn();
+        }
+
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         return allocOptColumnForValueType(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
@@ -3992,10 +4016,16 @@ void NLTranslator::addCrossColumn(mlir::Value inputValue,
         output = _memory->allocSame(input);
         broadcast = NLExecutor::selectConstBlockRepeatFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
-        output = allocOptColumnForValueType(valueType);
-        broadcast = isOuter ? NLExecutor::selectOptBlockRepeatFunction(valueType)
-                            : NLExecutor::selectOptTileFunction(valueType);
+        if (isOwnedStringElement(nullableType.getValueType())) {
+            output = allocOptOwnedStringColumn();
+            broadcast = isOuter ? NLExecutor::selectOptOwnedStringBlockRepeat()
+                                : NLExecutor::selectOptOwnedStringTile();
+        } else {
+            const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+            output = allocOptColumnForValueType(valueType);
+            broadcast = isOuter ? NLExecutor::selectOptBlockRepeatFunction(valueType)
+                                : NLExecutor::selectOptTileFunction(valueType);
+        }
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         output = allocListElementColumn();
         broadcast = isOuter ? NLExecutor::selectListElementBlockRepeatFunction()
@@ -4082,6 +4112,10 @@ Column* NLTranslator::allocOptOwnedStringColumn() {
     column->reserve(_program->getChunkSize());
 
     return column;
+}
+
+bool NLTranslator::isEntityIDElement(mlir::Type elementType) {
+    return mlir::isa<storage::NodeIDType>(elementType) || mlir::isa<storage::EdgeIDType>(elementType);
 }
 
 bool NLTranslator::isPlainValueElementType(mlir::Type elementType) {

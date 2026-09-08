@@ -89,6 +89,14 @@ TEST_F(ShellCompletionTest, BackspaceDeletesBothSides) {
     EXPECT_EQ(typeKey(_completion, backspaceKey, "MATCH (n)|"), "MATCH (n|");
 }
 
+// Two of the same character are not a pair: the one before the cursor goes, the one
+// after it stays. It is the doubled letters of ordinary Cypher that this protects.
+TEST_F(ShellCompletionTest, BackspaceLeavesADoubledCharacterAlone) {
+    EXPECT_EQ(typeKey(_completion, backspaceKey, "MATCH (n|n)"), "MATCH (|n)");
+    EXPECT_EQ(typeKey(_completion, backspaceKey, "MATCH (a)-[:FOL|LOWS]->()"), "MATCH (a)-[:FO|LOWS]->()");
+    EXPECT_EQ(typeKey(_completion, backspaceKey, "MATCH (a)-|-(b)"), "MATCH (a)|-(b)");
+}
+
 TEST_F(ShellCompletionTest, DashCompletesToArrows) {
     EXPECT_EQ(firstCompletion(_completion, "MATCH (a)-"), "MATCH (a)-->|");
     EXPECT_EQ(firstCompletion(_completion, "MATCH (a)<-"), "MATCH (a)<--|");

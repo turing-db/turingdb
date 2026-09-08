@@ -290,3 +290,20 @@ TEST_F(OptionalMatchCompositionTest, callAfterTheJoinCrossesItsRows) {
                "CALL db.labels() YIELD label RETURN count(label)",
                {{"72"}});
 }
+
+// An aggregate the barrier published is one row standing for every row the join reads: the
+// eight Persons each carry the count of eight, and the six rows the pattern missed carry it
+// as much as the two it matched
+TEST_F(OptionalMatchCompositionTest, aggregateAheadOfTheJoinIsCarriedByEveryRow) {
+    expectRows("MATCH (a:Person) WITH count(a) AS people "
+               "MATCH (x:Person) OPTIONAL MATCH (x)-[:KNOWS_WELL]->(f) "
+               "RETURN people, x.name, f.name",
+               {{"8", "Remy", "Adam"},
+                {"8", "Adam", "Remy"},
+                {"8", "Maxime", "null"},
+                {"8", "Luc", "null"},
+                {"8", "Martina", "null"},
+                {"8", "Suhas", "null"},
+                {"8", "Cyrus", "null"},
+                {"8", "Doruk", "null"}});
+}

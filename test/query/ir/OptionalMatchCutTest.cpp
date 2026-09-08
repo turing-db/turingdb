@@ -210,6 +210,10 @@ protected:
         return Rows(rows.begin(), rows.begin() + count);
     }
 
+    static Rows suffix(const Rows& rows, size_t count) {
+        return Rows(rows.begin() + count, rows.end());
+    }
+
     const std::string _graphName = "simpledb";
     std::unique_ptr<TuringTestEnv> _env;
     Graph* _graph {nullptr};
@@ -284,4 +288,40 @@ TEST_F(OptionalMatchCutTest, leavesTheScanUnboundedUnderASort) {
                nlModule);
 
     EXPECT_FALSE(loopOverIsBounded<mlir::nl::ScanNodesByLabel>(*nlModule));
+}
+
+// The cut a query writes on the OPTIONAL MATCH itself rather than on the projection behind
+// it. The sort reads the rows the join kept, matched and padded alike: the two rows f
+// matched carry a name to order on, and the six it missed carry a null, which sorts last.
+TEST_F(OptionalMatchCutTest, sortsTheRowsTheJoinKept) {
+    expectRows("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) ORDER BY f.name, p.name "
+               "RETURN p.name, f.name",
+               {{"Remy", "Adam"},
+                {"Adam", "Remy"},
+                {"Cyrus", "null"},
+                {"Doruk", "null"},
+                {"Luc", "null"},
+                {"Martina", "null"},
+                {"Maxime", "null"},
+                {"Suhas", "null"}});
+}
+
+TEST_F(OptionalMatchCutTest, limitsTheRowsTheJoinKeptOnTheMatch) {
+    expectRows("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) LIMIT 2 "
+               "RETURN p.name, f.name",
+               prefix(friendRows, 2));
+}
+
+TEST_F(OptionalMatchCutTest, skipsTheRowsTheJoinKeptOnTheMatch) {
+    expectRows("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) SKIP 2 "
+               "RETURN p.name, f.name",
+               suffix(friendRows, 2));
+}
+
+// The mirror of those three: a cut the mandatory MATCH ahead of the join carries bounds
+// what the join reads, so it is generated where that MATCH is and not behind the op
+TEST_F(OptionalMatchCutTest, limitsTheRowsTheJoinReads) {
+    expectRows("MATCH (p:Person) LIMIT 2 OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) "
+               "RETURN p.name, f.name",
+               prefix(friendRows, 2));
 }
