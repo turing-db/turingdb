@@ -290,8 +290,14 @@ TEST_F(PathExploratorDistinctTest, searchPaysOnceTheBallsOverlap) {
     // Sixty-four seeds on twenty-three nodes overlap from the first hop; nothing to walk from
     // a bound of zero
     EXPECT_TRUE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::FORWARD, std::nullopt, 1));
-    EXPECT_TRUE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::BOTH, std::nullopt, unbounded));
     EXPECT_FALSE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::FORWARD, std::nullopt, 0));
+
+    // An unbounded walk searches whatever the graph looks like: the trails it would otherwise
+    // enumerate grow exponentially with the depth reached and no estimate bounds them, where
+    // the search stops at its fixpoint
+    EXPECT_TRUE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::FORWARD, std::nullopt, PathExplorator::unboundedHops));
+    EXPECT_TRUE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::BOTH, std::nullopt, unbounded));
+    EXPECT_TRUE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::BACKWARD, _hubGraph._typeA, unbounded));
 }
 
 TEST_F(PathExploratorDistinctTest, expandsEachReachedNodeOncePerBatch) {

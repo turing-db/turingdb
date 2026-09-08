@@ -31,6 +31,9 @@ class Tombstones;
 // multi-source breadth-first search instead, emitting each (seed, end) pair once and no path.
 class PathExplorator {
 public:
+    // The maximum an unbounded quantifier carries: trail semantics, not the bound, ends it
+    static constexpr uint64_t unboundedHops = UINT64_MAX;
+
     PathExplorator(const GraphView& view,
                    const ColumnNodeIDs* inputNodeIDs,
                    PathExplorationDir direction,

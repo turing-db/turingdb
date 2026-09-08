@@ -118,20 +118,23 @@ bool PathDistanceIndex::canReachEndWithin(NodeID node, uint64_t hops) const {
     return distance != unreachable && distance <= hops;
 }
 
-double PathDistanceIndex::sampledFanOut(const PartDirectory& parts,
-                                       PathExplorationDir direction,
-                                       std::optional<EdgeTypeID> edgeType) {
+void PathDistanceIndex::sampleBranching(const PartDirectory& parts,
+                                        PathExplorationDir direction,
+                                        std::optional<EdgeTypeID> edgeType,
+                                        TypeBranching& branching) {
+    branching = TypeBranching {};
+
     const size_t nodeCount = parts.getAllocatedNodeCount();
     if (nodeCount == 0) {
-        return 0.0;
+        return;
     }
 
     const size_t stride = std::max<size_t>(1, nodeCount / fanOutSampleTarget);
-    const bool walksOuts = direction != PathExplorationDir::BACKWARD;
-    const bool walksIns = direction != PathExplorationDir::FORWARD;
 
     size_t sampled = 0;
-    size_t matching = 0;
+    size_t reachable = 0;
+    double arrivals = 0.0;
+    double continuations = 0.0;
 
     for (size_t node = 0; node < nodeCount; node += stride) {
         const NodeID sample(node);
@@ -143,24 +146,61 @@ double PathDistanceIndex::sampledFanOut(const PartDirectory& parts,
         const EdgeIndexer& ownerIndexer = *parts.get(owner)._indexer;
         sampled++;
 
-        if (walksOuts) {
-            matching += countMatching(ownerIndexer.getNodeOutEdges(sample), edgeType);
+        const size_t outs = countMatching(ownerIndexer.getNodeOutEdges(sample), edgeType);
+        const size_t ins = countMatching(ownerIndexer.getNodeInEdges(sample), edgeType);
+
+        // A hop arrives at a node against the direction the next one leaves it by, so a node
+        // joins the frontier as often as it has arriving edges and then branches by the ones
+        // that continue: weighting each node's branching by its arrivals is what the walk
+        // sees, where an average over the graph counts nodes no hop of it ever reaches
+        size_t arriving = 0;
+        size_t continuing = 0;
+        switch (direction) {
+            case PathExplorationDir::FORWARD:
+                arriving = ins;
+                continuing = outs;
+            break;
+            case PathExplorationDir::BACKWARD:
+                arriving = outs;
+                continuing = ins;
+            break;
+            case PathExplorationDir::BOTH:
+                arriving = outs + ins;
+                continuing = outs + ins;
+            break;
         }
-        if (walksIns) {
-            matching += countMatching(ownerIndexer.getNodeInEdges(sample), edgeType);
+
+        if (arriving == 0) {
+            continue;
         }
+
+        reachable++;
+        arrivals += static_cast<double>(arriving);
+        continuations += static_cast<double>(arriving) * static_cast<double>(continuing);
     }
 
-    if (sampled == 0) {
-        return 0.0;
+    if (sampled == 0 || arrivals == 0.0) {
+        return;
     }
 
-    return static_cast<double>(matching) / static_cast<double>(sampled);
+    branching._fanOut = continuations / arrivals;
+    branching._supportNodes = static_cast<double>(nodeCount) * static_cast<double>(reachable)
+                              / static_cast<double>(sampled);
 }
 
 double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
                                                      PathExplorationDir direction,
                                                      std::optional<EdgeTypeID> edgeType,
+                                                     size_t seedCount,
+                                                     uint64_t maxHops) {
+    TypeBranching branching;
+    sampleBranching(parts, direction, edgeType, branching);
+
+    return estimatedEnumerationChecks(parts, branching, seedCount, maxHops);
+}
+
+double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
+                                                     const TypeBranching& branching,
                                                      size_t seedCount,
                                                      uint64_t maxHops) {
     const size_t nodeCount = parts.getAllocatedNodeCount();
@@ -169,19 +209,24 @@ double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
         return 0.0;
     }
 
-    const double nodes = static_cast<double>(nodeCount);
-    const double fanOut = std::max(1.0, sampledFanOut(parts, direction, edgeType));
+    const double fanOut = std::max(1.0, branching._fanOut);
+    const double support = std::clamp(branching._supportNodes, 1.0, static_cast<double>(nodeCount));
 
     // The candidates of every hop summed, over the levels the index itself would build: a
-    // chain of fan-out one walks one per hop, and a frontier that already covers the graph
-    // cannot grow, which is what keeps an unbounded walk's estimate finite
+    // chain of fan-out one walks one per hop, and a frontier cannot grow past the nodes that
+    // carry the walked type. Growth is all this predicts, so it charges the first level that
+    // covers them and stops rather than extrapolating a saturated frontier to the bound.
     const uint64_t levelCount = std::min<uint64_t>(maxHops, farthest);
 
     double candidatesPerSeed = 0.0;
     double frontier = 1.0;
     for (uint64_t level = 0; level < levelCount; level++) {
         candidatesPerSeed += frontier * fanOut;
-        frontier = std::min(frontier * fanOut, nodes);
+        if (frontier >= support) {
+            break;
+        }
+
+        frontier = std::min(frontier * fanOut, support);
     }
 
     return static_cast<double>(seedCount) * candidatesPerSeed;
