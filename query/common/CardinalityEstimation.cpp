@@ -19,6 +19,12 @@ size_t CardinalityEstimation::estimateNodeCount(const LabelSet& labelset) const 
     return reader.getNodeCountMatchingLabelset(labelset.handle());
 }
 
+size_t CardinalityEstimation::estimateEdgeCount() const {
+    GraphReader reader(_graphView);
+
+    return reader.getEdgeCount();
+}
+
 bool CardinalityEstimation::shouldPreferCartesian(const LabelSet& left, const LabelSet& right, size_t queryLimit) const {
     const size_t leftCount = estimateNodeCount(left);
     const size_t rightCount = estimateNodeCount(right);

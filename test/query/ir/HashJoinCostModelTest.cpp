@@ -56,9 +56,10 @@ protected:
     }
 
     // @param nodeCount nodes labelled Point, the first @param rareCount of them labelled
-    // Rare as well, so a query naming Rare scans a small side of a large graph. Every node
-    // carries a name, which is what the cuts below key on.
-    void buildGraph(size_t nodeCount, size_t rareCount) {
+    // Rare as well, so a query naming Rare scans a small side of a large graph, and
+    // @param edgesPerNode LINKS edges out of each. Every node carries a name, which is
+    // what the cuts below key on.
+    void buildGraph(size_t nodeCount, size_t rareCount, size_t edgesPerNode = 0) {
         _graph = Graph::create();
 
         auto change = _graph->newChange();
@@ -68,6 +69,7 @@ protected:
 
         const LabelID pointLabel = metadata.getOrCreateLabel("Point");
         const LabelID rareLabel = metadata.getOrCreateLabel("Rare");
+        const EdgeTypeID linksType = metadata.getOrCreateEdgeType("LINKS");
         const PropertyTypeID nameID = metadata.getOrCreatePropertyType("name", ValueType::String)._id;
 
         const LabelSet pointLabelSet = LabelSet::fromList({pointLabel});
@@ -75,12 +77,21 @@ protected:
 
         _names.clear();
         _names.reserve(nodeCount);
+
+        std::vector<NodeID> nodes;
+        nodes.reserve(nodeCount);
         for (size_t node = 0; node < nodeCount; node++) {
             const bool isRare = node < rareCount;
-            const NodeID nodeID = builder.addNode(isRare ? rareLabelSet : pointLabelSet);
+            nodes.push_back(builder.addNode(isRare ? rareLabelSet : pointLabelSet));
 
             _names.push_back("point" + std::to_string(node));
-            builder.addNodeProperty<types::String>(nodeID, nameID, _names.back());
+            builder.addNodeProperty<types::String>(nodes.back(), nameID, _names.back());
+        }
+
+        for (size_t node = 0; node < nodeCount; node++) {
+            for (size_t edge = 0; edge < edgesPerNode; edge++) {
+                builder.addEdge(linksType, nodes[node], nodes[(node + edge + 1) % nodeCount]);
+            }
         }
 
         const auto submitResult = change->access().submit(*_jobSystem);
@@ -195,6 +206,25 @@ TEST_F(HashJoinCostModelTest, buildsTheSideTheLabelsNarrow) {
 
     generate("MATCH (n), (m:Rare) WHERE n.name = m.name RETURN n, m", forced, program);
     EXPECT_LT(program.find("} factor {"), program.find("db.scan_nodes_by_label")) << program;
+}
+
+// A factor a hop seeds carries a row per edge, not per node, and the graph counts those
+// too: a hundred nodes with three edges each is three hundred rows against the hundred the
+// bare scan beside it makes, so the bare scan is the side to hold.
+TEST_F(HashJoinCostModelTest, buildsTheScanRatherThanTheEdgesItIsCrossedWith) {
+    buildGraph(100, 0, 3);
+
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView view = reader.getView();
+    ASSERT_EQ(reader.getEdgeCount(), 300u);
+
+    const mlir::db::DBPassContext forced {&view, true, true};
+
+    std::string program;
+    generate("MATCH (a)-->(b), (m) WHERE b.name = m.name RETURN a, m", forced, program);
+
+    EXPECT_LT(program.find("db.scan_edges"), program.find("} factor {")) << program;
 }
 
 // The two overrides: forcing takes every cut the pass matches whatever the estimate says,
