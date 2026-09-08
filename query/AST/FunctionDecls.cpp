@@ -270,6 +270,50 @@ void FunctionDecls::initDefault() {
     sumListItems->setIsAggregate(true);
     sumListItems->setIsV3Only(true);
 
+    // List functions. Every one reads a whole list cell, which only the MLIR engine lays
+    // out over the driving relation, so each is v3-only as the whole-cell counts are.
+    FunctionSignature* size = createFunction("size");
+    size->setArguments({EvaluatedType::List});
+    size->setReturnTypes({{EvaluatedType::Integer}});
+    size->setIsV3Only(true);
+
+    // The first element of a list carries whichever type that element has, and a stored
+    // list may mix them, so head answers with the tagged scalar an UNWIND of the list
+    // binds: an empty list - and an absent one - head into the null such a cell holds.
+    FunctionSignature* head = createFunction("head");
+    head->setArguments({EvaluatedType::List});
+    head->setReturnTypes({{EvaluatedType::ListItem}});
+    head->setIsV3Only(true);
+
+    // Dropping the first element leaves a list over the same elements, so it nests as
+    // deeply as the one it came from; the tail of an empty list is empty, not null.
+    FunctionSignature* tail = createFunction("tail");
+    tail->setArguments({EvaluatedType::List});
+    tail->setReturnTypes({{EvaluatedType::List}});
+    tail->setReturnsItsArgumentShape(true);
+    tail->setIsV3Only(true);
+
+    // The same three over a type-erased cell, which is the only thing an UNWIND of a
+    // stored list of lists can bind: a stored list names no element type, so what its
+    // elements are is known per row rather than in the plan. A cell holding a null
+    // answers null; one holding no list at all is the type error the row raises.
+    FunctionSignature* sizeCell = createFunction("size");
+    sizeCell->setArguments({EvaluatedType::ListItem});
+    sizeCell->setReturnTypes({{EvaluatedType::Integer}});
+    sizeCell->setIsV3Only(true);
+
+    FunctionSignature* headCell = createFunction("head");
+    headCell->setArguments({EvaluatedType::ListItem});
+    headCell->setReturnTypes({{EvaluatedType::ListItem}});
+    headCell->setIsV3Only(true);
+
+    // The cell names no element type, so the list left of it names none either: an UNWIND
+    // of this tail binds tagged cells again rather than a type it could promise
+    FunctionSignature* tailCell = createFunction("tail");
+    tailCell->setArguments({EvaluatedType::ListItem});
+    tailCell->setReturnTypes({{EvaluatedType::List}});
+    tailCell->setIsV3Only(true);
+
     // Conversion functions
     FunctionSignature* toInteger = createFunction("toInteger");
     toInteger->setArguments({EvaluatedType::String});

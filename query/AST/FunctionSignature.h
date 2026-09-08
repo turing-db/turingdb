@@ -74,6 +74,10 @@ public:
     // reading an element back knows the type it has - collect, and nothing else today.
     bool collectsItsArgument() const { return _collectsItsArgument; }
 
+    // Whether the list this returns nests as deeply over the same elements as its own
+    // argument, so an UNWIND of it binds what an UNWIND of the argument would - tail.
+    bool returnsItsArgumentShape() const { return _returnsItsArgumentShape; }
+
     size_t getMinArgCount() const { return _requiredArgCount; }
 
     void setArguments(ArgumentTypes&& args) {
@@ -94,6 +98,8 @@ public:
 
     void setCollectsItsArgument(bool collects) { _collectsItsArgument = collects; }
 
+    void setReturnsItsArgumentShape(bool returnsShape) { _returnsItsArgumentShape = returnsShape; }
+
 private:
     std::string_view _fullName;
     ArgumentTypes _argumentTypes;
@@ -102,6 +108,7 @@ private:
     bool _isAggregate {false};
     bool _isProcedure {false};
     bool _collectsItsArgument {false};
+    bool _returnsItsArgumentShape {false};
 
     // An overload only the MLIR engine answers: the legacy planner either cannot lay its
     // argument out or reduces it over the wrong rows, so it never matches there

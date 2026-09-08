@@ -9,6 +9,7 @@
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "TypeUtils.h"
+#include "list/ListElementView.h"
 #include "metadata/PropertyType.h"
 #include "views/GraphView.h"
 
@@ -170,6 +171,86 @@ private:
 
     static void strToLower(std::string& lower, std::string_view src);
 };
+
+// The list family over a type-erased cell, which is what a list looks like wherever its
+// type is known only per row - an element an UNWIND of a list of lists hands on. A cell
+// holding a null answers null, as Cypher answers a list function over one; a cell holding
+// no list at all is a type error only the row it is in can find out about, so each throws.
+
+class TaggedListSizeFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<types::Int64::Primitive>;
+
+    ResultType operator()(ArgType cell) const;
+};
+
+class TaggedListHeadFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = ListElementView;
+
+    ResultType operator()(ArgType cell) const;
+};
+
+class TaggedListTailFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<types::List::Primitive>;
+
+    ResultType operator()(ArgType cell) const;
+};
+
+class ListSizeFunction {
+public:
+    using ArgType = types::List::Primitive;
+    using ResultType = types::Int64::Primitive;
+    using TaggedCounterpart = TaggedListSizeFunction;
+
+    ResultType operator()(const ArgType list) const {
+        return static_cast<ResultType>(list.size());
+    }
+};
+
+class ListHeadFunction {
+public:
+    using ArgType = types::List::Primitive;
+    using ResultType = ListElementView;
+    using TaggedCounterpart = TaggedListHeadFunction;
+
+    // An empty list has no first element and an absent one has no element at all, so both
+    // head into the null a tagged cell carries itself: the result needs no nullable column
+    static constexpr bool ReadsNullsItself = true;
+
+    ResultType operator()(const ArgType list) const {
+        return list.empty() ? ListElementView::nullElement() : list.front();
+    }
+
+    ResultType operator()(const std::optional<ArgType>& list) const {
+        return list.has_value() ? (*this)(*list) : ListElementView::nullElement();
+    }
+};
+
+class ListTailFunction {
+public:
+    using ArgType = types::List::Primitive;
+    using ResultType = types::List::Primitive;
+    using TaggedCounterpart = TaggedListTailFunction;
+
+    ResultType operator()(const ArgType list) const {
+        return list.tail();
+    }
+};
+
+// A function that reads its own nulls is handed the absent value itself and answers with a
+// value of its result type, so its result rides a plain column rather than a nullable one.
+template <typename Functor>
+concept ReadsItsNulls = requires { requires Functor::ReadsNullsItself; };
+
+// A function naming a counterpart reads the same argument out of a type-erased cell, so a
+// column of cells is served by that one rather than by the function itself.
+template <typename Functor>
+concept HasTaggedCounterpart = requires { typename Functor::TaggedCounterpart; };
 
 class CosineSimilarityFunction {
 public:

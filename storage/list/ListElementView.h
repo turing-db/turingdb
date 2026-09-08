@@ -7,6 +7,8 @@
 
 #include "ListBufferTypeTag.h"
 
+#include "metadata/PropertyNull.h"
+
 namespace db {
 
 /**
@@ -39,9 +41,18 @@ public:
     template <typename T>
     T getAs() const;
 
+    /// Returns a view of a null element, for a producer holding no @ref ListByteBuffer.
+    static ListElementView nullElement() { return ListElementView {_nullElementBytes}; }
+
 private:
     /// Pointer to the tag of this element in a ListByteBuffer
     const std::byte* _tag {nullptr};
+
+    // What a ListByteBuffer holds for a null element: the tag, then the bytes of the
+    // value, which getAs reads whatever the size of the type it reads them into.
+    static constexpr std::byte _nullElementBytes[1 + sizeof(PropertyNull)] {
+        static_cast<std::byte>(ListBufferTypeTag::Null),
+    };
 };
 
 template <typename T>

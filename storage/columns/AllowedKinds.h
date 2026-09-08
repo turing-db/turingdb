@@ -175,6 +175,10 @@ struct PairRestrictions<Op> {
             KindPair<std::optional<types::Embedding::Primitive>, PropertyNull>,
             KindPair<std::optional<ListView>, PropertyNull>,
 
+            // A tagged cell carries its null in the tag rather than in a nullable
+            // column, so it is tested against null as a cell rather than as an optional
+            KindPair<ListElementView, PropertyNull>,
+
             KindPair<NodeID, types::Int64::Primitive>,                // WHERE n = 1
             KindPair<NodeID, std::optional<types::Int64::Primitive>>, // WHERE e = e.age
             KindPair<EdgeID, types::Int64::Primitive>,                // WHERE n = 1

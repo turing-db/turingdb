@@ -41,7 +41,7 @@ using NLUnaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder,
                                                mlir::Location loc,
                                                nl::ChunkType resultType,
                                                mlir::Value input);
-using UnaryFunctionElement = mlir::Type (*)(mlir::OpBuilder& builder);
+using UnaryFunctionElement = mlir::Type (*)(mlir::OpBuilder& builder, mlir::Type inputElement);
 
 template <typename NLOp>
 mlir::Value emitNLUnaryFunction(mlir::OpBuilder& builder,
@@ -51,20 +51,56 @@ mlir::Value emitNLUnaryFunction(mlir::OpBuilder& builder,
     return builder.create<NLOp>(loc, resultType, input).getResult();
 }
 
-mlir::Type ownedStringFunctionElement(mlir::OpBuilder& builder) {
+mlir::Type ownedStringFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
     return storage::OwnedStringType::get(builder.getContext());
 }
 
-mlir::Type integerFunctionElement(mlir::OpBuilder& builder) {
+mlir::Type integerFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
     return builder.getI64Type();
 }
 
-mlir::Type floatFunctionElement(mlir::OpBuilder& builder) {
+mlir::Type floatFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
     return builder.getF64Type();
 }
 
-mlir::Type booleanFunctionElement(mlir::OpBuilder& builder) {
+mlir::Type booleanFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
     return builder.getI1Type();
+}
+
+// A list function reads a list cell, or the type-erased cell an unwind of a list of lists
+// hands its nested lists on as. Anything else is IR no query produces.
+void throwIfNotAListInput(mlir::Type inputElement) {
+    if (!llvm::isa<storage::ListType, storage::ListElementType>(inputElement)) {
+        throw IRException("a list function reads a list column");
+    }
+}
+
+mlir::Type listSizeFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
+    throwIfNotAListInput(inputElement);
+
+    return builder.getI64Type();
+}
+
+// A stored list may mix the types of its elements, so one read out of a cell is the
+// type-erased tagged scalar a heterogeneous list's elements ride, whatever element type
+// the cell's own column resolved to.
+mlir::Type listHeadFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
+    throwIfNotAListInput(inputElement);
+
+    return storage::ListElementType::get(builder.getContext());
+}
+
+// The list a tail leaves is over the elements the list it came from held, so it keeps that
+// list's own element type. A list read out of a tagged cell names no element type of its
+// own, so what is left of it is a list of tagged cells.
+mlir::Type listTailFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
+    throwIfNotAListInput(inputElement);
+
+    if (llvm::isa<storage::ListElementType>(inputElement)) {
+        return storage::ListType::get(builder.getContext(), inputElement);
+    }
+
+    return inputElement;
 }
 
 // The nl sibling of each db system command. They are copied across one for one -
@@ -98,6 +134,7 @@ const llvm::StringMap<llvm::StringRef> systemCommandSiblings = {
 enum class ResultNullability {
     FollowsInput,
     AlwaysNullable,
+    NeverNullable,
 };
 
 struct UnaryFunctionLowering {
@@ -112,6 +149,9 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     {"db.to_integer", {&emitNLUnaryFunction<nl::ToInteger>, &integerFunctionElement,     ResultNullability::AlwaysNullable}},
     {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,       ResultNullability::AlwaysNullable}},
     {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, &booleanFunctionElement,     ResultNullability::AlwaysNullable}},
+    {"db.size",       {&emitNLUnaryFunction<nl::Size>,      &listSizeFunctionElement,    ResultNullability::FollowsInput}},
+    {"db.head",       {&emitNLUnaryFunction<nl::Head>,      &listHeadFunctionElement,    ResultNullability::NeverNullable}},
+    {"db.tail",       {&emitNLUnaryFunction<nl::Tail>,      &listTailFunctionElement,    ResultNullability::FollowsInput}},
 };
 
 const UnaryFunctionLowering* lookupUnaryFunctionLowering(mlir::Operation& operation) {
@@ -361,6 +401,11 @@ bool isUntypedNullChunk(mlir::Type chunkType) {
 
     const auto nullableType = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
     return nullableType && mlir::isa<mlir::NoneType>(nullableType.getValueType());
+}
+
+bool isTaggedCellChunk(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    return chunk && mlir::isa<storage::ListElementType>(chunk.getElementType());
 }
 
 mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
@@ -2635,7 +2680,15 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
                                            mlir::Type lhsType,
                                            mlir::Type rhsType) {
     mlir::MLIRContext* const ctx = _builder.getContext();
-    const bool operandNullable = isNullableChunk(lhsType) || isNullableChunk(rhsType);
+
+    // A tagged cell holds its null in its own tag, so a null test on one always answers:
+    // the mask carries no null of its own, unlike the one a nullable value column gives.
+    const bool testsATaggedCellForNull =
+        (isTaggedCellChunk(lhsType) && isUntypedNullChunk(rhsType))
+        || (isTaggedCellChunk(rhsType) && isUntypedNullChunk(lhsType));
+
+    const bool operandNullable = !testsATaggedCellForNull
+                              && (isNullableChunk(lhsType) || isNullableChunk(rhsType));
 
     switch (kind) {
         case BinaryResultKind::Boolean: {
@@ -2676,10 +2729,18 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
     mlir::Value lhsChunk = mapValue(op.getOperand(0));
     mlir::Value rhsChunk = mapValue(op.getOperand(1));
 
-    // x IS NULL over a plain scalar column meets kernels reading a nullable value column
-    if (isUntypedNullChunk(rhsChunk.getType()) && !isNullableChunk(lhsChunk.getType())) {
+    // x IS NULL over a plain scalar column meets kernels reading a nullable value column.
+    // A tagged cell is not one of them: it holds its null in its own tag, and the
+    // comparison reads that tag, so such a column is compared as it stands.
+    const mlir::Type lhsChunkType = lhsChunk.getType();
+    const mlir::Type rhsChunkType = rhsChunk.getType();
+
+    const bool lhsReadsItsOwnNull = isNullableChunk(lhsChunkType) || isTaggedCellChunk(lhsChunkType);
+    const bool rhsReadsItsOwnNull = isNullableChunk(rhsChunkType) || isTaggedCellChunk(rhsChunkType);
+
+    if (isUntypedNullChunk(rhsChunkType) && !lhsReadsItsOwnNull) {
         lhsChunk = nullableValueChunk(lhsChunk);
-    } else if (isUntypedNullChunk(lhsChunk.getType()) && !isNullableChunk(rhsChunk.getType())) {
+    } else if (isUntypedNullChunk(lhsChunkType) && !rhsReadsItsOwnNull) {
         rhsChunk = nullableValueChunk(rhsChunk);
     }
 
@@ -2743,11 +2804,19 @@ void DBLowering::lowerUnaryFunction(mlir::Operation* op) {
 
     const mlir::Value inputChunk = mapValue(op->getOperand(0));
 
-    const mlir::Type baseElement = spec->element(_builder);
+    const mlir::Type inputElement = mlir::cast<nl::ChunkType>(inputChunk.getType()).getElementType();
+    const auto inputNullableElement = mlir::dyn_cast<storage::NullableType>(inputElement);
+    const mlir::Type inputValueElement = inputNullableElement ? inputNullableElement.getValueType() : inputElement;
 
-    const bool inputNullable = isNullableChunk(inputChunk.getType());
+    const mlir::Type baseElement = spec->element(_builder, inputValueElement);
+
+    // A tagged cell is always there, but the value it holds may be the null its tag says
+    // it is, so what a function reads out of one can be absent as a nullable column's is
+    const bool inputCanBeNull = inputNullableElement != nullptr
+                             || isTaggedCellChunk(inputChunk.getType());
+
     const bool alwaysNull = spec->nullability == ResultNullability::AlwaysNullable;
-    const bool specNull = spec->nullability == ResultNullability::FollowsInput && inputNullable;
+    const bool specNull = spec->nullability == ResultNullability::FollowsInput && inputCanBeNull;
     const bool resultNullable = alwaysNull || specNull;
 
     mlir::Type resultElement = baseElement;
@@ -2769,7 +2838,9 @@ void DBLowering::lowerBinaryFunction(mlir::Operation* op) {
     const mlir::Value lhsChunk = mapValue(op->getOperand(0));
     const mlir::Value rhsChunk = mapValue(op->getOperand(1));
 
-    const mlir::Type baseElement = spec->element(_builder);
+    const mlir::Type lhsElement = mlir::cast<nl::ChunkType>(lhsChunk.getType()).getElementType();
+    const mlir::Type baseElement = spec->element(_builder, lhsElement);
+
     mlir::Type resultElement = baseElement;
     if (isNullableChunk(lhsChunk.getType()) || isNullableChunk(rhsChunk.getType())) {
         resultElement = storage::NullableType::get(_builder.getContext(), baseElement);

@@ -101,6 +101,9 @@ const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctio
     {"nl.to_integer", &NLExecutor::selectFunction<toIntegerFunction>},
     {"nl.to_float",   &NLExecutor::selectFunction<toFloatFunction>},
     {"nl.to_boolean", &NLExecutor::selectFunction<toBoolFunction>},
+    {"nl.size",       &NLExecutor::selectFunction<ListSizeFunction>},
+    {"nl.head",       &NLExecutor::selectFunction<ListHeadFunction>},
+    {"nl.tail",       &NLExecutor::selectFunction<ListTailFunction>},
 };
 
 NLUnaryFunctionSelector lookupUnaryFunctionSelector(mlir::Operation& operation) {

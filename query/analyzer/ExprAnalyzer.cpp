@@ -201,15 +201,17 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             }
 
             // A type-erased cell is equal only to a cell holding the same value, so it
-            // compares against the types it can hold - a list among them. Only the MLIR
-            // engine runs such a comparison: the legacy planner hands it no cell column
+            // compares against the types it can hold - a list and a null among them, the
+            // null being what IS (NOT) NULL tests a cell for. Only the MLIR engine runs
+            // such a comparison: the legacy planner hands it no cell column
             const bool comparesListItem =
                 pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Integer)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Char)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Bool)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::List);
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::List)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Null);
 
             // A stored list compares against another list, and against null for
             // IS (NOT) NULL. The MLIR engine alone runs it: the legacy planner has no
@@ -876,6 +878,12 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
         if (signature->collectsItsArgument() && !providedArgs.empty()) {
             const Expr* collected = providedArgs.front();
             expr->setListShape(ListShape::collecting(collected->getType(), collected->getListShape()));
+        }
+
+        // A tail nests as deeply over the same elements as the list it drops one from, so
+        // it hands on that list's shape - what an UNWIND of it reads to know its elements.
+        if (signature->returnsItsArgumentShape() && !providedArgs.empty()) {
+            expr->setListShape(providedArgs.front()->getListShape());
         }
 
         if (signature->isAggregate()) {

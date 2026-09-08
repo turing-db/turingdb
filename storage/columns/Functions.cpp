@@ -4,6 +4,7 @@
 
 #include <range/v3/view/drop.hpp>
 
+#include "list/ListBufferTypeTag.h"
 #include "metadata/LabelMap.h"
 #include "reader/GraphReader.h"
 #include "views/GraphView.h"
@@ -14,6 +15,52 @@ using namespace db;
 
 namespace rg = ranges;
 namespace rv = rg::views;
+
+namespace {
+
+// The list a tagged cell holds, or nothing when it holds a null. Only these two answer a
+// list function: a cell of any other type is a list function applied to something that is
+// no list, which no plan can see coming because the cell carries its type per row.
+std::optional<ListView> taggedList(const ListElementView cell) {
+    const ListBufferTypeTag tag = cell.getTag();
+
+    if (tag == ListBufferTypeTag::ListView) {
+        return cell.getAs<ListView>();
+    } else if (tag == ListBufferTypeTag::Null) {
+        return std::nullopt;
+    }
+
+    throw TuringException("size(), head() and tail() read a list, and this row holds a value that is not one");
+}
+
+}
+
+TaggedListSizeFunction::ResultType TaggedListSizeFunction::operator()(const ArgType cell) const {
+    const std::optional<ListView> list = taggedList(cell);
+    if (!list) {
+        return std::nullopt;
+    }
+
+    return static_cast<types::Int64::Primitive>(list->size());
+}
+
+TaggedListHeadFunction::ResultType TaggedListHeadFunction::operator()(const ArgType cell) const {
+    const std::optional<ListView> list = taggedList(cell);
+    if (!list || list->empty()) {
+        return ListElementView::nullElement();
+    }
+
+    return list->front();
+}
+
+TaggedListTailFunction::ResultType TaggedListTailFunction::operator()(const ArgType cell) const {
+    const std::optional<ListView> list = taggedList(cell);
+    if (!list) {
+        return std::nullopt;
+    }
+
+    return list->tail();
+}
 
 void LabelsFunction::getLabelString(std::string& out, GraphView view, NodeID n) {
     out.clear();

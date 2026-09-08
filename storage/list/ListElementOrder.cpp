@@ -252,3 +252,7 @@ bool db::operator==(const ListElementView element, const ListView value) {
     return element.getTag() == ListBufferTypeTag::ListView
         && element.getAs<ListView>() == value;
 }
+
+bool db::operator==(const ListElementView element, PropertyNull) {
+    return element.getTag() == ListBufferTypeTag::Null;
+}

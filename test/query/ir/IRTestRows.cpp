@@ -119,6 +119,17 @@ bool renderValueCell(const Column* column, size_t row, std::string& out) {
         return true;
     }
 
+    if (const auto* optConstCol = dynamic_cast<const ColumnConst<std::optional<T>>*>(column)) {
+        const std::optional<T>& value = optConstCol->at(0);
+        if (!value) {
+            out = "null";
+            return true;
+        }
+
+        renderValue<T>(*value, out);
+        return true;
+    }
+
     if (const auto* plain = dynamic_cast<const ColumnVector<T>*>(column)) {
         renderValue<T>((*plain)[row], out);
         return true;
@@ -154,6 +165,17 @@ void turing::test::renderCell(const Column* column, size_t row, std::string& out
     } else if (const auto* constList = dynamic_cast<const ColumnConst<ListView>*>(column)) {
         out.clear();
         renderList(constList->at(0), out);
+    } else if (const auto* constOptList = dynamic_cast<const ColumnConst<std::optional<ListView>>*>(column)) {
+        const std::optional<ListView>& list = constOptList->at(0);
+        out.clear();
+        if (list) {
+            renderList(*list, out);
+        } else {
+            out = "null";
+        }
+    } else if (const auto* constElement = dynamic_cast<const ColumnConst<ListElementView>*>(column)) {
+        out.clear();
+        renderListElement(constElement->at(0), out);
     } else if (const auto* optLists = dynamic_cast<const ColumnOptVector<ListView>*>(column)) {
         const std::optional<ListView>& list = (*optLists)[row];
         out.clear();

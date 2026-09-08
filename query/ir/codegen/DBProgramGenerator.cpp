@@ -127,6 +127,9 @@ const std::unordered_map<std::string_view, UnaryFunctionEmitter> unaryFunctionEm
     {"toInteger", &emitUnaryFunction<mlir::db::ToInteger>},
     {"toFloat", &emitUnaryFunction<mlir::db::ToFloat>},
     {"toBoolean", &emitUnaryFunction<mlir::db::ToBoolean>},
+    {"size", &emitUnaryFunction<mlir::db::Size>},
+    {"head", &emitUnaryFunction<mlir::db::Head>},
+    {"tail", &emitUnaryFunction<mlir::db::Tail>},
 };
 
 using BinaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder,
@@ -3962,9 +3965,13 @@ mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propEx
 void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
                                                          const FunctionInvocationExpr* funcExpr) {
     const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
-    const std::string_view funcName = invocation->getSignature()->getFullName();
+    const FunctionSignature* signature = invocation->getSignature();
+    const std::string_view funcName = signature->getFullName();
 
-    if (!funcExpr->isAggregate()) {
+    // A call carries an aggregate as soon as one of its arguments does, so what it is
+    // itself is what its own signature says: size(collect(x)) is a scalar function over a
+    // reduced column, the way 2 * count(n) is a scalar expression over one.
+    if (!signature->isAggregate()) {
         translateFunctionExpr(expr, invocation);
         return;
     }

@@ -5,6 +5,7 @@
 #include "ListElementView.h"
 #include "ListView.h"
 
+#include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
 namespace db {
@@ -43,5 +44,14 @@ bool operator==(ListElementView element, types::Double::Primitive value);
 bool operator==(ListElementView element, types::String::Primitive value);
 bool operator==(ListElementView element, types::Bool::Primitive value);
 bool operator==(ListElementView element, ListView value);
+
+/**
+ * @brief Tests an element of a @ref ListByteBuffer for null, as IS (NOT) NULL does.
+ *
+ * A tagged cell carries its own null rather than riding a nullable column, so the tag is
+ * what the test reads. Declared here so the test resolves to it rather than to
+ * PropertyNull.h's fallback, which answers false for any type it knows nothing about.
+ */
+bool operator==(ListElementView element, PropertyNull);
 
 }
