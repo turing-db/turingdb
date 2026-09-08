@@ -79,6 +79,7 @@ set(storage_sources
         iterators/PathDistanceIndex.cpp
         iterators/PathExplorator.cpp
         iterators/PathHopFilter.cpp
+        iterators/PathReachTable.cpp
         iterators/PathTargetIndex.cpp
 
         iterators/TombstoneFilter.cpp

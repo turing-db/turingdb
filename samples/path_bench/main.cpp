@@ -603,12 +603,9 @@ int main(int argc, char** argv) {
             distinctRow.push_back("distinct (seed, end) pairs");
             appendRunCells(distinctRow, distinctRun);
 
-            const bool searches = PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::FORWARD, std::nullopt, maxHops);
-
             std::cout << "==== Distinct ends: enumeration against the multi-source search ====\n";
             printAsciiTable(headers, rows);
-            std::cout << "Gate verdict for a batch of " << PathTargetIndex::targetsPerBatch << " seeds: "
-                      << (searches ? "search" : "walk") << "\n\n";
+            std::cout << "\n";
         }
 
         // --- The same shapes as Cypher, through the passes and the interpreter ---

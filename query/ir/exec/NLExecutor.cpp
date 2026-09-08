@@ -5837,15 +5837,7 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
         explorator.setEdgeTypeFilter(loopData->getEdgeType());
     }
 
-    // A distinct exploration may still walk: the passes only mark one whose duplicates no
-    // consumer can tell apart, so the search runs where its overlap makes it the cheaper way
-    const PathExplorationDir direction = loopData->getDirection();
-    std::optional<EdgeTypeID> walkedType;
-    if (loopData->filtersByType()) {
-        walkedType = loopData->getEdgeType();
-    }
-
-    const bool distinctEnds = loopData->isDistinctEnds() && PathExplorator::searchPaysForDistinctEnds(view, direction, walkedType, maxHops);
+    const bool distinctEnds = loopData->isDistinctEnds();
     explorator.setDistinctEnds(distinctEnds);
 
     // The distinct mode is a breadth-first search already, so it prunes by no index

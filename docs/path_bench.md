@@ -126,7 +126,49 @@ record when there is no type to match, so its sample never faults the adjacency 
 
 What remains of v3's floor is ~0.55 ms for any query plus ~0.3 ms to start a walk. The
 `DISTINCT` cascade moved +1.40 ms, which is inside the noise of a query that first-touches
-95 MB — the dense `ReachWords` array is the next fixed cost of this kind.
+95 MB — the dense `ReachWords` array, the fixed cost the next section removes.
+
+## The gate that never searched
+
+The distinct search had a gate of its own in front of it, `searchPaysForDistinctEnds`,
+which compared the walk's estimated candidate checks against the search's estimated
+relaxations and let only an unbounded quantifier through unconditionally. The estimate
+caps its levels at 254 and floors the fan-out at 1, so on `precedingEvent` (fan-out 0.29)
+both sides saturate near 16,000 checks and the gate chose the walk at every finite bound:
+`<-[:precedingEvent]-{1,100}(d:Reaction) RETURN DISTINCT d.stId` from the hub ran past
+28 s where the same query written `+` took 32 ms, and so did `{1,50000}`. The search
+expands each (seed, node) pair at most once where the walk expands it at least once, so
+no estimate can save more than the search's constant while the walk can lose without
+bound.
+
+The gate is gone: a `distinct` exploration always searches. What made the search cost a
+flat 31 ms was `setDistinctEnds` writing one 32-byte record per node of the graph, 95 MB
+first-touched per input chunk whatever the ball. The records now live in `PathReachTable`,
+an open-addressing table keyed by the nodes a batch reaches, cleared at the cost of those
+nodes. Same protocol as above, `RETURN DISTINCT` throughout; the third column is the old
+binary with the gate patched to return true:
+
+| Query | rows | walk (gate) | dense search | sparse search |
+|---|---|---|---|---|
+| Hub reactions within 32 `precedingEvent` hops | 902 | 7.4 ms | 34.3 | 0.88 |
+| Within 44 | 1,308 | 34,525 | 32.5 | 0.92 |
+| Within 100 | 1,520 | killed at 28 s | 33.0 | 0.93 |
+| Unbounded | 1,520 | 32.2 (searched) | 33.2 | 0.91 |
+| Signal Transduction's events within 100 `hasEvent` hops | 2,997 | 2.0 | 32.7 | 0.95 |
+| Unbounded | 2,997 | 32.3 (searched) | 32.6 | 0.93 |
+| Events within 100 hops of a `Species` | 0 | 0.32 | 31.0 | 0.31 |
+| Reactions within 100 hops of the 415 top-level pathways | 81,798 | 39.9 | 59.7 | 30.2 |
+| Within 3 hops | 24,127 | 6.5 | 38.0 | 5.7 |
+| `count(DISTINCT b)` of every complex's components within 100 | 1 (110,048 seeds) | 84.2 | 120.8 | 61.2 |
+
+The dense column minus the sparse one is the 31 ms allocation, paid once per input chunk
+(twice for the 110,048 complexes). Against the walk the search is never slower here, and
+on the shapes whose seeds share sub-trees it is a quarter to a third faster.
+
+The search's worst case is seeds whose balls share nothing. On `path_bench`'s default shape
+(2M nodes, degree 8, 1,000 seeds, hops 1 to 3, 583,905 distinct pairs of 584,000 rows) the
+sparse search takes 21.8 ms against 16.1 for the walk, the 1.35× the dense array measured
+before it - the table costs nothing the dense words did not.
 
 ## A v2 correctness bug, found by the comparison
 

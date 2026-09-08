@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <bit>
-#include <math.h>
 
 #include "PathDistanceIndex.h"
 #include "PathHopFilter.h"
@@ -24,12 +23,6 @@ constexpr size_t defaultWalkerCount = 16;
 
 // How many frontier nodes ahead the distinct mode's search fetches adjacency
 constexpr size_t frontierLookahead = 16;
-
-// An edge the distinct mode's search relaxes costs this many candidate checks of the walk,
-// measured with samples/path_bench where the seeds' balls do not overlap at all; the search
-// pays for itself where a batch's balls overlap enough to be expanded once instead of once
-// per seed
-constexpr double relaxedEdgeCostInChecks = 1.5;
 
 uint64_t signatureBit(EdgeID edge) {
     return 1ull << ((edge.getValue() * 0x9E3779B97F4A7C15ull) >> 58);
@@ -80,51 +73,6 @@ void PathExplorator::setDistinctEnds(bool distinct) {
     bioassert(!distinct || _minHops == 0 || _direction != PathExplorationDir::BOTH,
               "An undirected distinct mode is exact for a minimum of zero hops alone");
     _distinctEnds = distinct;
-
-    if (distinct) {
-        _reach._words.assign(_parts.getAllocatedNodeCount(), ReachWords {});
-    }
-}
-
-bool PathExplorator::searchPaysForDistinctEnds(const GraphView& view,
-                                              PathExplorationDir direction,
-                                              std::optional<EdgeTypeID> edgeType,
-                                              uint64_t maxHops) {
-    const PartDirectory parts(view);
-    const double nodeCount = static_cast<double>(parts.getAllocatedNodeCount());
-    const double edgeCount = static_cast<double>(parts.getAllocatedEdgeCount());
-    if (nodeCount == 0.0 || edgeCount == 0.0) {
-        return false;
-    }
-
-    // Enumerating the trails of an unbounded walk has no cost bound at all - their number
-    // grows exponentially with the depth reached, from a single seed - where the search
-    // stops at its fixpoint, and under DISTINCT the two answer the same question
-    if (maxHops == unboundedHops) {
-        return true;
-    }
-
-    PathDistanceIndex::TypeBranching branching;
-    PathDistanceIndex::sampleBranching(parts, direction, edgeType, branching);
-
-    const double candidatesPerSeed = PathDistanceIndex::estimatedEnumerationChecks(parts, branching, 1, maxHops);
-    if (candidatesPerSeed == 0.0) {
-        return false;
-    }
-
-    // The search expands every node a batch's seeds reach short of the last hop, once: the
-    // seeds and what they fan out to within max - 1 hops, drawn over the graph, are expected
-    // to be this many distinct nodes, each expanded along its edges
-    const double seeds = static_cast<double>(PathTargetIndex::targetsPerBatch);
-    const double expandedPerSeed = 1.0 + PathDistanceIndex::estimatedEnumerationChecks(parts, branching, 1, maxHops - 1);
-    const double expanded = nodeCount * (1.0 - exp(-seeds * expandedPerSeed / nodeCount));
-
-    const double fanOut = std::max(1.0, branching._fanOut);
-
-    const double walked = seeds * candidatesPerSeed;
-    const double relaxed = expanded * fanOut;
-
-    return walked > relaxedEdgeCostInChecks * relaxed;
 }
 
 void PathExplorator::setWalkerCount(size_t walkerCount) {
@@ -192,7 +140,6 @@ void PathExplorator::reset() {
     if (_reach._batchActive) {
         finishBatch();
     }
-    _reach._batch = 0;
 
     _turn = 0;
     _activeWalkers = 0;
@@ -489,23 +436,12 @@ void PathExplorator::fillDistinct(size_t maxCount) {
     _valid = hasWork();
 }
 
-PathExplorator::ReachWords& PathExplorator::wordsOf(NodeID node) {
-    ReachWords& words = _reach._words[node.getValue()];
-    if (words._batch != _reach._batch) {
-        words = ReachWords {};
-        words._batch = _reach._batch;
-    }
-
-    return words;
-}
-
 void PathExplorator::startBatch() {
     Reachability& reach = _reach;
-    const size_t nodeCount = reach._words.size();
+    const size_t nodeCount = _parts.getAllocatedNodeCount();
     const size_t count = std::min(PathTargetIndex::targetsPerBatch, _input->size() - _seedCursor);
 
     reach._batchFirstRow = _seedCursor;
-    reach._batch++;
     reach._level = 0;
     reach._next.clear();
     reach._emitNode = 0;
@@ -519,24 +455,23 @@ void PathExplorator::startBatch() {
     // zero-length end and the bit stays set
     for (size_t bit = 0; bit < count; bit++) {
         const size_t row = reach._batchFirstRow + bit;
-        const size_t seed = (*_input)[row].getValue();
-        if (seed >= nodeCount) {
+        const NodeID seed = (*_input)[row];
+        if (seed.getValue() >= nodeCount) {
             continue;
         }
 
         const uint64_t mask = 1ull << bit;
-        ReachWords& words = wordsOf(NodeID(seed));
+        PathReachTable::Slot& slot = reach._reached.reach(seed);
 
         if (_minHops == 0) {
-            words._seen |= mask;
+            slot._seen |= mask;
         }
 
-        if (words._gained == 0) {
-            reach._next.push_back(NodeID(seed));
+        if (slot._frontier == 0) {
+            reach._next.push_back(seed);
         }
 
-        words._frontier |= mask;
-        words._gained |= mask;
+        slot._frontier |= mask;
     }
 }
 
@@ -547,7 +482,7 @@ void PathExplorator::emitGainedRows(size_t maxCount) {
         const NodeID node = reach._next[reach._emitNode];
 
         if (reach._emitBits == 0) {
-            reach._emitBits = reach._words[node.getValue()]._gained;
+            reach._emitBits = reach._reached.get(node)._frontier;
         }
 
         const unsigned bit = static_cast<unsigned>(std::countr_zero(reach._emitBits));
@@ -566,16 +501,13 @@ void PathExplorator::emitGainedRows(size_t maxCount) {
 
 void PathExplorator::expandLevel() {
     Reachability& reach = _reach;
+    PathReachTable& reached = reach._reached;
 
     std::swap(reach._frontier, reach._next);
     reach._next.clear();
     reach._emitNode = 0;
     reach._emitBits = 0;
     reach._level++;
-
-    for (const NodeID node : reach._frontier) {
-        reach._words[node.getValue()]._gained = 0;
-    }
 
     // The frontier is known ahead, so each node's adjacency is fetched a few nodes before
     // its turn: the search has no interleaved walkers to hide that miss behind
@@ -587,33 +519,34 @@ void PathExplorator::expandLevel() {
             prefetchNodeData(aheadNode, _parts.ownerIndex(aheadNode));
         }
 
+        // The word is taken before the candidates are reached: reaching one may grow the
+        // table under the expanded slot
         const NodeID node = reach._frontier[index];
-        const uint64_t word = reach._words[node.getValue()]._frontier;
+        PathReachTable::Slot& expanded = reached.get(node);
+        const uint64_t word = expanded._frontier;
+        expanded._frontier = 0;
+
         collectReachCandidates(node);
 
         for (const NodeID candidate : reach._candidateNodes) {
-            ReachWords& words = wordsOf(candidate);
-            const uint64_t gained = word & ~words._seen;
+            PathReachTable::Slot& slot = reached.reach(candidate);
+            const uint64_t gained = word & ~slot._seen;
             if (gained == 0) {
                 continue;
             }
 
-            words._seen |= gained;
-            if (words._gained == 0) {
+            slot._seen |= gained;
+            if (slot._gained == 0) {
                 reach._next.push_back(candidate);
             }
-            words._gained |= gained;
+            slot._gained |= gained;
         }
     }
 
-    // The frontier words move one level on: a node keeps only what it gained this level
-    for (const NodeID node : reach._frontier) {
-        reach._words[node.getValue()]._frontier = 0;
-    }
-
     for (const NodeID node : reach._next) {
-        ReachWords& words = reach._words[node.getValue()];
-        words._frontier = words._gained;
+        PathReachTable::Slot& slot = reached.get(node);
+        slot._frontier = slot._gained;
+        slot._gained = 0;
     }
 }
 
@@ -670,6 +603,7 @@ void PathExplorator::appendReachCandidates(std::span<const EdgeRecord> edges) {
 void PathExplorator::finishBatch() {
     Reachability& reach = _reach;
 
+    reach._reached.clear();
     reach._frontier.clear();
     reach._next.clear();
     reach._emitNode = 0;
