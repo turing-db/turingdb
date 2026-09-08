@@ -177,6 +177,26 @@ TEST_F(HashJoinCostModelTest, keepsTheProductWhenTheLabelsNarrowBothSides) {
     EXPECT_FALSE(fuses("MATCH (n:Rare), (m:Rare) WHERE n.name = m.name RETURN n, m"));
 }
 
+// Which side the join buffers, read off the db program: the built side is its right
+// factor, so a scan standing after the join's own `} factor {` is the side being built.
+TEST_F(HashJoinCostModelTest, buildsTheSideTheLabelsNarrow) {
+    buildGraph(400, 10);
+
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView view = reader.getView();
+    const mlir::db::DBPassContext forced {&view, true, true};
+
+    // Ten Rare nodes against four hundred: whichever side the query writes it on, the ten
+    // are what the join holds and the four hundred what it streams.
+    std::string program;
+    generate("MATCH (n:Rare), (m) WHERE n.name = m.name RETURN n, m", forced, program);
+    EXPECT_LT(program.find("} factor {"), program.find("db.scan_nodes_by_label")) << program;
+
+    generate("MATCH (n), (m:Rare) WHERE n.name = m.name RETURN n, m", forced, program);
+    EXPECT_LT(program.find("} factor {"), program.find("db.scan_nodes_by_label")) << program;
+}
+
 // The two overrides: forcing takes every cut the pass matches whatever the estimate says,
 // and clearing use takes none.
 TEST_F(HashJoinCostModelTest, forcingFusesTheSmallestProduct) {
