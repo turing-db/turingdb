@@ -227,6 +227,24 @@ TEST_F(HashJoinCostModelTest, buildsTheScanRatherThanTheEdgesItIsCrossedWith) {
     EXPECT_LT(program.find("db.scan_edges"), program.find("} factor {")) << program;
 }
 
+// A hop no edge scan swallowed - one out of a labelled scan - carries its fan-out: ten
+// Rare nodes of average degree three make thirty rows, so the bare scan of the same ten is
+// the smaller side and the one to hold.
+TEST_F(HashJoinCostModelTest, sizesAHopByItsFanOut) {
+    buildGraph(100, 10, 3);
+
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView view = reader.getView();
+    const mlir::db::DBPassContext forced {&view, true, true};
+
+    std::string program;
+    generate("MATCH (m:Rare), (n:Rare)-->(x) WHERE m.name = x.name RETURN m, x", forced, program);
+
+    // The hop is the side that streams, so it stands in the join's first factor.
+    EXPECT_LT(program.find("db.get_out_edges"), program.find("} factor {")) << program;
+}
+
 // The two overrides: forcing takes every cut the pass matches whatever the estimate says,
 // and clearing use takes none.
 TEST_F(HashJoinCostModelTest, forcingFusesTheSmallestProduct) {

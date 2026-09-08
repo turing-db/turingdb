@@ -2281,27 +2281,66 @@ std::optional<size_t> estimateSourceRows(Operation* op,
     return std::nullopt;
 }
 
+// The ratio an op multiplies the rows it reads by, and nothing when it hands them on as
+// they come. A hop makes the graph's average degree of rows per row it reads - all the db
+// level can say of a hop out of a node it cannot name - and an undirected one walks both
+// directions, so twice that. It is a ratio rather than a count because a graph with fewer
+// edges than nodes has a hop shrink its input rather than grow it.
+struct RowMultiplier {
+    size_t _numerator {1};
+    size_t _denominator {1};
+};
+
+std::optional<RowMultiplier> estimateRowMultiplier(Operation* op, const ::db::CardinalityEstimation& estimation) {
+    const bool walksOneDirection = isa<GetOutEdges, GetInEdges, GetOutEdgesByType, GetInEdgesByType>(op);
+    const bool walksBoth = isa<GetEdges>(op);
+    if (!walksOneDirection && !walksBoth) {
+        return std::nullopt;
+    }
+
+    const size_t nodeCount = estimation.estimateNodeCount(::db::LabelSet {});
+    if (nodeCount == 0) {
+        return std::nullopt;
+    }
+
+    const size_t edgeCount = estimation.estimateEdgeCount();
+
+    return RowMultiplier {walksBoth ? 2 * edgeCount : edgeCount, nodeCount};
+}
+
+size_t multiplySaturating(size_t rows, size_t factor) {
+    constexpr size_t rowCeiling = std::numeric_limits<size_t>::max();
+    if (factor != 0 && rows > rowCeiling / factor) {
+        return rowCeiling;
+    }
+
+    return rows * factor;
+}
+
 // The rows a factor makes: the product of what its sources seed it with, a factor crossing
-// two of them holding a row per pair. A factor seeded from somewhere the db level cannot
-// count - a procedure, a load - counts as the ten rows the v2 planner reads a yielded item
-// at.
+// two of them holding a row per pair, grown or shrunk by every hop walked from one. A
+// factor seeded from somewhere the db level cannot count - a procedure, a load - counts as
+// the ten rows the v2 planner reads a yielded item at.
 size_t estimateFactorRows(Region& factor,
                           const ::db::GraphMetadata& metadata,
                           const ::db::CardinalityEstimation& estimation) {
     constexpr size_t uncountedSourceRows = 10;
-    constexpr size_t rowCeiling = std::numeric_limits<size_t>::max();
 
     bool countedASource = false;
     size_t rows = 1;
 
     factor.walk([&](Operation* op) {
         const std::optional<size_t> seeded = estimateSourceRows(op, metadata, estimation);
-        if (!seeded) {
+        if (seeded) {
+            countedASource = true;
+            rows = multiplySaturating(rows, *seeded);
             return;
         }
 
-        countedASource = true;
-        rows = (*seeded != 0 && rows > rowCeiling / *seeded) ? rowCeiling : rows * *seeded;
+        const std::optional<RowMultiplier> multiplier = estimateRowMultiplier(op, estimation);
+        if (multiplier) {
+            rows = multiplySaturating(rows, multiplier->_numerator) / multiplier->_denominator;
+        }
     });
 
     return countedASource ? rows : uncountedSourceRows;
