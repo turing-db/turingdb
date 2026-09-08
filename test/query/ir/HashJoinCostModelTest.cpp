@@ -245,6 +245,29 @@ TEST_F(HashJoinCostModelTest, sizesAHopByItsFanOut) {
     EXPECT_LT(program.find("db.get_out_edges"), program.find("} factor {")) << program;
 }
 
+// An unwind of a literal list makes a row per element, and the elements are in the IR, so
+// the side it seeds is sized through it: twenty of them over the ten Rare nodes they are
+// crossed with are two hundred rows, against the hundred of the plain scan beside them -
+// so the scan is what the join holds and the product what it streams.
+TEST_F(HashJoinCostModelTest, sizesAFactorThroughTheListItUnwinds) {
+    buildGraph(100, 10, 0);
+
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView view = reader.getView();
+    const mlir::db::DBPassContext forced {&view, true, true};
+
+    std::string program;
+    generate("MATCH (n) UNWIND [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20] AS x "
+             "MATCH (m:Rare) WHERE n.name = m.name RETURN n, m, x",
+             forced,
+             program);
+
+    // The product stands in the join's first factor, the side that streams; the scan it
+    // was crossed with would stand there instead were the list left uncounted.
+    EXPECT_LT(program.find("db.cross_product"), program.find("} factor {")) << program;
+}
+
 // The two overrides: forcing takes every cut the pass matches whatever the estimate says,
 // and clearing use takes none.
 TEST_F(HashJoinCostModelTest, forcingFusesTheSmallestProduct) {

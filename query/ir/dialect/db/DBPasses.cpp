@@ -2258,15 +2258,22 @@ bool prefersTheProduct(const EqualityCross& match, const DBPassContext& context)
     return estimation.shouldPreferCartesian(leftLabels, rightLabels, limitOverTheCut(match._filter));
 }
 
+// What the db level puts on rows it cannot count - the figure the v2 planner reads a
+// yielded item at.
+constexpr size_t uncountableRows = 10;
+
 // The rows an op seeds a factor with, and nothing at all when it seeds none - a fetch, a
 // filter or a hop reads a column rather than making one. A listed set of IDs is its own
-// count, a by-label scan is what the graph holds under those labels, and a property scan
-// is read at the whole node count: selectivity is not something the db level knows.
+// count, a literal list one row per element, a by-label scan what the graph holds under
+// those labels, and a property scan the whole node count: selectivity is not something
+// the db level knows.
 std::optional<size_t> estimateSourceRows(Operation* op,
                                          const ::db::GraphMetadata& metadata,
                                          const ::db::CardinalityEstimation& estimation) {
     if (ConstScanNodes constScan = dyn_cast<ConstScanNodes>(op)) {
         return constScan.getNodeIDs().size();
+    } else if (UnwindConst unwind = dyn_cast<UnwindConst>(op)) {
+        return unwind.getElements().size();
     } else if (ScanNodesByLabel byLabel = dyn_cast<ScanNodesByLabel>(op)) {
         ::db::LabelSet labels;
         collectScanLabels(byLabel.getLabels(), metadata, labels);
@@ -2285,13 +2292,20 @@ std::optional<size_t> estimateSourceRows(Operation* op,
 // they come. A hop makes the graph's average degree of rows per row it reads - all the db
 // level can say of a hop out of a node it cannot name - and an undirected one walks both
 // directions, so twice that. It is a ratio rather than a count because a graph with fewer
-// edges than nodes has a hop shrink its input rather than grow it.
+// edges than nodes has a hop shrink its input rather than grow it. An unwind makes a row
+// per element of each row's list, whose length is a property of the rows themselves: no
+// statistic of the graph measures it, so it reads at the figure an uncountable source
+// does - where a literal list, whose elements are in the IR, is counted exactly instead.
 struct RowMultiplier {
     size_t _numerator {1};
     size_t _denominator {1};
 };
 
 std::optional<RowMultiplier> estimateRowMultiplier(Operation* op, const ::db::CardinalityEstimation& estimation) {
+    if (isa<Unwind>(op)) {
+        return RowMultiplier {uncountableRows, 1};
+    }
+
     const bool walksOneDirection = isa<GetOutEdges, GetInEdges, GetOutEdgesByType, GetInEdgesByType>(op);
     const bool walksBoth = isa<GetEdges>(op);
     if (!walksOneDirection && !walksBoth) {
@@ -2318,14 +2332,12 @@ size_t multiplySaturating(size_t rows, size_t factor) {
 }
 
 // The rows a factor makes: the product of what its sources seed it with, a factor crossing
-// two of them holding a row per pair, grown or shrunk by every hop walked from one. A
-// factor seeded from somewhere the db level cannot count - a procedure, a load - counts as
-// the ten rows the v2 planner reads a yielded item at.
+// two of them holding a row per pair, grown or shrunk by every hop and unwind reading from
+// one. A factor seeded from somewhere the db level cannot count - a procedure, a load -
+// counts as an uncountable source's rows.
 size_t estimateFactorRows(Region& factor,
                           const ::db::GraphMetadata& metadata,
                           const ::db::CardinalityEstimation& estimation) {
-    constexpr size_t uncountedSourceRows = 10;
-
     bool countedASource = false;
     size_t rows = 1;
 
@@ -2343,28 +2355,26 @@ size_t estimateFactorRows(Region& factor,
         }
     });
 
-    return countedASource ? rows : uncountedSourceRows;
+    return countedASource ? rows : uncountableRows;
 }
 
 // Which way round the two sides go into the join, whose right factor is the built one. The
 // built side is buffered whole and indexed while the probed side streams a chunk at a
-// time, so the side to build is the smaller - and the side never to build is one holding a
-// product, whose rows multiply where a scan's are linear, whatever either side counts.
+// time, so the side to build is the one making the fewer rows.
 bool buildsTheLeftFactor(const EqualityCross& match, const DBPassContext& context) {
     CrossProduct product = match._product;
     Region& leftFactor = product.getLeftFactor();
     Region& rightFactor = product.getRightFactor();
 
-    const bool leftHoldsAProduct = factorHoldsAProduct(leftFactor);
-    const bool rightHoldsAProduct = factorHoldsAProduct(rightFactor);
-    if (leftHoldsAProduct != rightHoldsAProduct) {
-        return rightHoldsAProduct;
-    }
-
-    // Alike that far and no graph to count them against, so the right factor is built, the
-    // way db.hash_join reads its two regions.
+    // With no graph to count either side against, a factor holding a product of its own is
+    // the one to probe - its rows multiply where a scan's are linear - and with neither or
+    // both holding one the right factor is built, the way db.hash_join reads its regions.
+    // The estimate needs no such proxy: it multiplies through the product itself.
     if (!context._view) {
-        return false;
+        const bool leftHoldsAProduct = factorHoldsAProduct(leftFactor);
+        const bool rightHoldsAProduct = factorHoldsAProduct(rightFactor);
+
+        return rightHoldsAProduct && !leftHoldsAProduct;
     }
 
     const ::db::GraphView& view = *context._view;
