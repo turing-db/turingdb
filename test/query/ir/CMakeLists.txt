@@ -1760,6 +1760,18 @@ target_link_libraries(test_query_ir_avg_empty PRIVATE
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_avg_empty PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# The null-predicate tests read a Double property that half the fixture's nodes carry, so
+# IS NULL and IS NOT NULL over a Double partition it.
+add_turing_test(test_query_ir_null_predicate_on_double NullPredicateOnDoubleTest.cpp)
+target_sources(test_query_ir_null_predicate_on_double PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_null_predicate_on_double PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_null_predicate_on_double PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_avg_literal AvgLiteralTest.cpp)
 target_sources(test_query_ir_avg_literal PRIVATE StringRowSink.cpp)
 target_link_libraries(test_query_ir_avg_literal PRIVATE

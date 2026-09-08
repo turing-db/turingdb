@@ -191,7 +191,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
 
             // For IS NULL or IS NOT NULL
             if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Null)
-                || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Null)
+                || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Null)
                 || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Null)
                 || pair == TypePairBitset(EvaluatedType::Char, EvaluatedType::Null)
                 || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Null)
