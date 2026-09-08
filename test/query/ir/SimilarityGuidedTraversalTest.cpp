@@ -162,16 +162,17 @@ TEST_F(SimilarityGuidedTraversalTest, ranksTheFirstHopFrontierBySimilarity) {
 TEST_F(SimilarityGuidedTraversalTest, keepsTheMostSimilarNodesAtEveryHop) {
     const Rows expected {{"d8"}, {"d10"}};
 
-    expectRowsInOrder("MATCH (seed:Doc {name: 'd0'})-[:LINKS_TO]->(h1:Doc) "
-                      "WITH h1, cosine_similarity(h1.vec, (1.0, 0.0, 0.0, 0.0)) AS sim1 "
+    expectRowsInOrder("WITH (1.0, 0.0, 0.0, 0.0) AS origin "
+                      "MATCH (seed:Doc {name: 'd0'})-[:LINKS_TO]->(h1:Doc) "
+                      "WITH origin, h1, cosine_similarity(h1.vec, origin) AS sim1 "
                       "ORDER BY sim1 DESC "
                       "LIMIT 2 "
                       "MATCH (h1)-[:LINKS_TO]->(h2:Doc) "
-                      "WITH DISTINCT h2, cosine_similarity(h2.vec, (1.0, 0.0, 0.0, 0.0)) AS sim2 "
+                      "WITH DISTINCT origin, h2, cosine_similarity(h2.vec, origin) AS sim2 "
                       "ORDER BY sim2 DESC "
                       "LIMIT 2 "
                       "MATCH (h2)-[:LINKS_TO]->(h3:Doc) "
-                      "WITH DISTINCT h3, cosine_similarity(h3.vec, (1.0, 0.0, 0.0, 0.0)) AS sim3 "
+                      "WITH DISTINCT origin, h3, cosine_similarity(h3.vec, origin) AS sim3 "
                       "ORDER BY sim3 DESC "
                       "LIMIT 3 "
                       "RETURN h3.name",
@@ -192,12 +193,13 @@ TEST_F(SimilarityGuidedTraversalTest, theUnprunedWalkReachesMoreThanTheBeam) {
 TEST_F(SimilarityGuidedTraversalTest, steersTheWalkWithTheQueryVector) {
     const Rows expected {{"d10"}, {"d5"}};
 
-    expectRows("MATCH (seed:Doc {name: 'd0'})-[:LINKS_TO]->(h1:Doc) "
-               "WITH h1, cosine_similarity(h1.vec, (0.0, 0.0, 1.0, 0.0)) AS sim1 "
+    expectRows("WITH (0.0, 0.0, 1.0, 0.0) AS origin "
+               "MATCH (seed:Doc {name: 'd0'})-[:LINKS_TO]->(h1:Doc) "
+               "WITH origin, h1, cosine_similarity(h1.vec, origin) AS sim1 "
                "ORDER BY sim1 DESC "
                "LIMIT 2 "
                "MATCH (h1)-[:LINKS_TO]->(h2:Doc) "
-               "WITH DISTINCT h2, cosine_similarity(h2.vec, (0.0, 0.0, 1.0, 0.0)) AS sim2 "
+               "WITH DISTINCT origin, h2, cosine_similarity(h2.vec, origin) AS sim2 "
                "ORDER BY sim2 DESC "
                "LIMIT 2 "
                "MATCH (h2)-[:LINKS_TO]->(h3:Doc) "
