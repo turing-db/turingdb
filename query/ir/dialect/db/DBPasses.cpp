@@ -1,6 +1,7 @@
 #include "DBPasses.h"
 
 #include <algorithm>
+#include <limits>
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
@@ -2161,6 +2162,19 @@ bool factorHoldsAProduct(Region& factor) {
     return walked.wasInterrupted();
 }
 
+// The label set a scan's label names stand for, resolved against the schema.
+void collectScanLabels(ArrayAttr labelNames, const ::db::GraphMetadata& metadata, ::db::LabelSet& labels) {
+    const ::db::LabelMap& labelMap = metadata.labels();
+    for (const Attribute labelAttr : labelNames) {
+        const llvm::StringRef name = cast<StringAttr>(labelAttr).getValue();
+        const std::optional<::db::LabelID> label = labelMap.get(std::string_view(name.data(), name.size()));
+
+        if (label) {
+            labels.set(*label);
+        }
+    }
+}
+
 // The label set the rows of one side are scanned under, when the db level knows one: the
 // labels of a by-label node scan, and none at all otherwise - every node of the graph,
 // which is what the v2 planner estimates a variable with no label constraint at.
@@ -2176,15 +2190,7 @@ void keySideLabels(const JoinKeySide& side,
         return;
     }
 
-    const ::db::LabelMap& labelMap = metadata.labels();
-    for (const Attribute labelAttr : scan.getLabels()) {
-        const llvm::StringRef name = cast<StringAttr>(labelAttr).getValue();
-        const std::optional<::db::LabelID> label = labelMap.get(std::string_view(name.data(), name.size()));
-
-        if (label) {
-            labels.set(*label);
-        }
-    }
+    collectScanLabels(scan.getLabels(), metadata, labels);
 }
 
 // The row budget a limit downstream of the cut puts on the rows the join would emit, and
@@ -2251,6 +2257,84 @@ bool prefersTheProduct(const EqualityCross& match, const DBPassContext& context)
     return estimation.shouldPreferCartesian(leftLabels, rightLabels, limitOverTheCut(match._filter));
 }
 
+// Whether an op seeds a factor with a row per node it selects.
+bool isNodeScan(Operation* op) {
+    return isa<ScanNodes, ScanNodesByLabel, ConstScanNodes, ScanNodesByPropertyValue>(op);
+}
+
+// The rows a node scan selects, as the graph says. A listed set of IDs is its own count; a
+// by-label scan is what the graph holds under those labels, which is also all a property
+// scan can be read at - selectivity is not something the db level knows.
+size_t estimateScanRows(Operation* scan,
+                        const ::db::GraphMetadata& metadata,
+                        const ::db::CardinalityEstimation& estimation) {
+    if (ConstScanNodes constScan = dyn_cast<ConstScanNodes>(scan)) {
+        return constScan.getNodeIDs().size();
+    }
+
+    ::db::LabelSet labels;
+    if (ScanNodesByLabel byLabel = dyn_cast<ScanNodesByLabel>(scan)) {
+        collectScanLabels(byLabel.getLabels(), metadata, labels);
+    }
+
+    return estimation.estimateNodeCount(labels);
+}
+
+// The rows a factor makes: the product of the node counts its scans select, a factor
+// crossing two of them holding a row per pair. A factor seeded from somewhere the db level
+// cannot count - a procedure, a load, an edge scan - counts as the ten rows the v2 planner
+// reads a yielded item at.
+size_t estimateFactorRows(Region& factor,
+                          const ::db::GraphMetadata& metadata,
+                          const ::db::CardinalityEstimation& estimation) {
+    constexpr size_t uncountedSourceRows = 10;
+    constexpr size_t rowCeiling = std::numeric_limits<size_t>::max();
+
+    bool countedAScan = false;
+    size_t rows = 1;
+
+    factor.walk([&](Operation* op) {
+        if (!isNodeScan(op)) {
+            return;
+        }
+
+        const size_t scanned = estimateScanRows(op, metadata, estimation);
+        countedAScan = true;
+        rows = (scanned != 0 && rows > rowCeiling / scanned) ? rowCeiling : rows * scanned;
+    });
+
+    return countedAScan ? rows : uncountedSourceRows;
+}
+
+// Which way round the two sides go into the join, whose right factor is the built one. The
+// built side is buffered whole and indexed while the probed side streams a chunk at a
+// time, so the side to build is the smaller - and the side never to build is one holding a
+// product, whose rows multiply where a scan's are linear, whatever either side counts.
+bool buildsTheLeftFactor(const EqualityCross& match, const DBPassContext& context) {
+    CrossProduct product = match._product;
+    Region& leftFactor = product.getLeftFactor();
+    Region& rightFactor = product.getRightFactor();
+
+    const bool leftHoldsAProduct = factorHoldsAProduct(leftFactor);
+    const bool rightHoldsAProduct = factorHoldsAProduct(rightFactor);
+    if (leftHoldsAProduct != rightHoldsAProduct) {
+        return rightHoldsAProduct;
+    }
+
+    // Alike that far and no graph to count them against, so the right factor is built, the
+    // way db.hash_join reads its two regions.
+    if (!context._view) {
+        return false;
+    }
+
+    const ::db::GraphView& view = *context._view;
+    const ::db::GraphMetadata& metadata = view.metadata();
+    const ::db::CardinalityEstimation estimation(view);
+
+    return estimateFactorRows(leftFactor, metadata, estimation)
+         < estimateFactorRows(rightFactor, metadata, estimation);
+}
+
 bool matchEqualityCross(FilterOp filter, EqualityCross& match) {
     EqOp equality = filter.getMask().getDefiningOp<EqOp>();
     if (!equality || !equality.getResult().hasOneUse()) {
@@ -2303,20 +2387,7 @@ bool matchEqualityCross(FilterOp filter, EqualityCross& match) {
         return false;
     }
 
-    const bool carriesProductColumns = carriesProductColumnsOnly(filter, product);
-    const bool rowsReachOnlyTheCut = productRowsReachOnly(product, match);
-    if (!carriesProductColumns || !rowsReachOnlyTheCut) {
-        return false;
-    }
-
-    // With neither side or both holding a product there is nothing to tell them apart -
-    // no cardinality is known here - so the right factor is built, the way db.hash_join
-    // reads its two regions.
-    const bool leftHoldsAProduct = factorHoldsAProduct(product.getLeftFactor());
-    const bool rightHoldsAProduct = factorHoldsAProduct(product.getRightFactor());
-    match._buildsTheLeftFactor = rightHoldsAProduct && !leftHoldsAProduct;
-
-    return true;
+    return carriesProductColumnsOnly(filter, product) && productRowsReachOnly(product, match);
 }
 
 // Sinks the ops rebuilding a side's key into its factor, so the key becomes a column the
@@ -2432,9 +2503,12 @@ struct FuseHashJoin : public impl::FuseHashJoinBase<FuseHashJoin> {
         llvm::SmallVector<EqualityCross, 2> matches;
         root->walk([&matches, &context](FilterOp filter) {
             EqualityCross match;
-            if (matchEqualityCross(filter, match) && !prefersTheProduct(match, context)) {
-                matches.push_back(match);
+            if (!matchEqualityCross(filter, match) || prefersTheProduct(match, context)) {
+                return;
             }
+
+            match._buildsTheLeftFactor = buildsTheLeftFactor(match, context);
+            matches.push_back(match);
         });
 
         mlir::OpBuilder builder(&getContext());
