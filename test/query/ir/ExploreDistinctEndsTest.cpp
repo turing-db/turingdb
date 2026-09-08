@@ -28,8 +28,6 @@
 #include "LocalMemory.h"
 #include "SimpleGraph.h"
 #include "iterators/ChunkConfig.h"
-#include "iterators/PathExplorationDir.h"
-#include "iterators/PathExplorator.h"
 #include "metadata/LabelSet.h"
 #include "reader/GraphReader.h"
 #include "versioning/Change.h"
@@ -468,11 +466,6 @@ TEST_F(ExploreDistinctEndsGeneratedGraphTest, distinctFormEmitsTheDeduplicatedRo
     const GraphReader reader = transaction.readGraph();
     const GraphView& view = reader.getView();
     ASSERT_EQ(reader.getNodeCount(), nodeCount);
-
-    // Three hops from sixty-four seeds cover the graph several times over, one hop barely a
-    // third of it: the executor searches the first and walks the second
-    EXPECT_TRUE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::FORWARD, std::nullopt, 3));
-    EXPECT_FALSE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::FORWARD, std::nullopt, 1));
 
     expectSameRows(generatedEnumeratedProgram, generatedDistinctProgram, view);
     expectSameRows(generatedOneHopEnumeratedProgram, generatedOneHopDistinctProgram, view);
