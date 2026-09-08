@@ -129,6 +129,12 @@ void PathDistanceIndex::sampleBranching(const PartDirectory& parts,
         return;
     }
 
+    const size_t edgeCount = parts.getAllocatedEdgeCount();
+    EdgeBranchingCache& cache = parts.getBranchingCache();
+    if (cache.lookup(direction, edgeType, nodeCount, edgeCount, branching)) {
+        return;
+    }
+
     const size_t stride = std::max<size_t>(1, nodeCount / fanOutSampleTarget);
 
     size_t sampled = 0;
@@ -179,13 +185,13 @@ void PathDistanceIndex::sampleBranching(const PartDirectory& parts,
         continuations += static_cast<double>(arriving) * static_cast<double>(continuing);
     }
 
-    if (sampled == 0 || arrivals == 0.0) {
-        return;
+    if (sampled > 0 && arrivals > 0.0) {
+        branching._fanOut = continuations / arrivals;
+        branching._supportNodes = static_cast<double>(nodeCount) * static_cast<double>(reachable)
+                                  / static_cast<double>(sampled);
     }
 
-    branching._fanOut = continuations / arrivals;
-    branching._supportNodes = static_cast<double>(nodeCount) * static_cast<double>(reachable)
-                              / static_cast<double>(sampled);
+    cache.store(direction, edgeType, nodeCount, edgeCount, branching);
 }
 
 double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,

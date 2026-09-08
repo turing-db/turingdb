@@ -7,7 +7,9 @@
 
 using namespace db;
 
-PartDirectory::PartDirectory(const GraphView& view) {
+PartDirectory::PartDirectory(const GraphView& view)
+    : _branchingCache(&view.branchingCache())
+{
     for (const WeakArc<DataPart>& arc : view.dataparts()) {
         const DataPart* part = arc.get();
         const EdgeIndexer& indexer = part->edgeIndexer();

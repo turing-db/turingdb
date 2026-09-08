@@ -43,6 +43,7 @@ public:
     [[nodiscard]] DataPartSpan commitDataparts() const { return _data->commitDataparts(); }
     [[nodiscard]] const Tombstones& tombstones() const { return _data->tombstones(); }
     [[nodiscard]] const GraphMetadata& metadata() const { return _data->metadata(); }
+    [[nodiscard]] EdgeBranchingCache& branchingCache() const { return _data->branchingCache(); }
     [[nodiscard]] const CommitHistory& history() const { return _data->history(); }
     std::span<const WeakArc<Index>> indexes() const { return _data->indexes(); }
 
