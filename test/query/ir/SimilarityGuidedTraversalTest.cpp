@@ -224,6 +224,48 @@ TEST_F(SimilarityGuidedTraversalTest, scoresTheFrontierAgainstTheAnchorsEmbeddin
                       expected);
 }
 
+// The reference vector moves with the frontier: every hop scores its neighbours against
+// the node it was reached from, not against the seed.
+TEST_F(SimilarityGuidedTraversalTest, ranksEachHopAgainstThePreviousNode) {
+    const Rows expected {{"d7"}, {"d10"}, {"d9"}};
+
+    expectRowsInOrder("MATCH (seed:Doc {name: 'd2'})-[:LINKS_TO]->(h1:Doc) "
+                      "WITH h1, cosine_similarity(h1.vec, seed.vec) AS sim1 "
+                      "ORDER BY sim1 DESC "
+                      "LIMIT 2 "
+                      "MATCH (h1)-[:LINKS_TO]->(h2:Doc) "
+                      "WITH h1, h2, cosine_similarity(h2.vec, h1.vec) AS sim2 "
+                      "ORDER BY sim2 DESC "
+                      "LIMIT 2 "
+                      "MATCH (h2)-[:LINKS_TO]->(h3:Doc) "
+                      "WITH h2, h3, cosine_similarity(h3.vec, h2.vec) AS sim3 "
+                      "ORDER BY sim3 DESC "
+                      "LIMIT 3 "
+                      "RETURN h3.name",
+                      expected);
+}
+
+// The same walk with the reference pinned to the seed keeps d10 over d9 at the second hop,
+// and ends somewhere else for it.
+TEST_F(SimilarityGuidedTraversalTest, ranksEveryHopAgainstTheSeedInstead) {
+    const Rows expected {{"d7"}, {"d9"}, {"d8"}};
+
+    expectRowsInOrder("MATCH (seed:Doc {name: 'd2'})-[:LINKS_TO]->(h1:Doc) "
+                      "WITH seed, h1, cosine_similarity(h1.vec, seed.vec) AS sim1 "
+                      "ORDER BY sim1 DESC "
+                      "LIMIT 2 "
+                      "MATCH (h1)-[:LINKS_TO]->(h2:Doc) "
+                      "WITH seed, h2, cosine_similarity(h2.vec, seed.vec) AS sim2 "
+                      "ORDER BY sim2 DESC "
+                      "LIMIT 2 "
+                      "MATCH (h2)-[:LINKS_TO]->(h3:Doc) "
+                      "WITH h3, cosine_similarity(h3.vec, seed.vec) AS sim3 "
+                      "ORDER BY sim3 DESC "
+                      "LIMIT 3 "
+                      "RETURN h3.name",
+                      expected);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
