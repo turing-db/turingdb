@@ -2122,3 +2122,19 @@ target_link_libraries(test_query_ir_null_comparison PRIVATE
         turing_db_interpreter_v3_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_null_comparison PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# The CASE tests run both forms of the selection end to end through QueryInterpreterV3
+# over the shared SimpleGraph fixture.
+add_turing_test(test_query_ir_case_expression CaseExpressionTest.cpp)
+target_link_libraries(test_query_ir_case_expression PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_case_expression PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# The db.case dialect tests parse hand-written selections, so they need only the dialect.
+add_ir_tests(test_query_ir_case_op CaseOpTest.cpp)

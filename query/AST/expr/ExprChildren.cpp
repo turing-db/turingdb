@@ -3,6 +3,7 @@
 #include "FunctionInvocation.h"
 
 #include "BinaryExpr.h"
+#include "CaseExpr.h"
 #include "Expr.h"
 #include "ExprChain.h"
 #include "FunctionInvocationExpr.h"
@@ -65,6 +66,26 @@ bool ExprChildren::collect(const Expr* expr, std::vector<const Expr*>& children)
 
             for (const Expr* element : list->getElements()) {
                 children.push_back(element);
+            }
+
+            return true;
+        }
+        break;
+
+        case Expr::Kind::CASE: {
+            const CaseExpr* caseExpr = static_cast<const CaseExpr*>(expr);
+
+            if (const Expr* subject = caseExpr->getSubject()) {
+                children.push_back(subject);
+            }
+
+            for (const CaseExpr::Branch& branch : caseExpr->getBranches()) {
+                children.push_back(branch._when);
+                children.push_back(branch._then);
+            }
+
+            if (const Expr* elseExpr = caseExpr->getElseExpr()) {
+                children.push_back(elseExpr);
             }
 
             return true;

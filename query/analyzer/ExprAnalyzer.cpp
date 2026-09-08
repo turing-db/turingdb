@@ -28,6 +28,32 @@ using namespace db;
 
 namespace {
 
+// The type a CASE takes when one branch gives @param carried and another gives
+// @param branch: a null branch constrains nothing, an integer beside a double widens,
+// and a one-character string literal reads as the string it is. Invalid when the two
+// share no column type, which is what the caller reports.
+EvaluatedType unifiedBranchType(EvaluatedType carried, EvaluatedType branch) {
+    if (carried == branch) {
+        return carried;
+    }
+
+    if (carried == EvaluatedType::Null) {
+        return branch;
+    } else if (branch == EvaluatedType::Null) {
+        return carried;
+    }
+
+    const TypePairBitset pair(carried, branch);
+
+    if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Double)) {
+        return EvaluatedType::Double;
+    } else if (pair == TypePairBitset(EvaluatedType::Char, EvaluatedType::String)) {
+        return EvaluatedType::String;
+    }
+
+    return EvaluatedType::Invalid;
+}
+
 // The shape of the list these elements make: depth 1 over the one type they share, or
 // one level deeper than the lists they are. Elements that share no type - an empty list,
 // a mix of types, lists of differing shape - leave the leaf Invalid, which is what makes
@@ -123,6 +149,9 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
         break;
         case Expr::Kind::LIST:
             analyzeListExpr(static_cast<ListExpr*>(expr));
+        break;
+        case Expr::Kind::CASE:
+            analyzeCaseExpr(static_cast<CaseExpr*>(expr));
         break;
 
         case Expr::Kind::_SIZE:
@@ -1039,6 +1068,87 @@ void ExprAnalyzer::registerEdgePatternDeclaration(const EdgePattern* edge) {
     }
 
     _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::EdgePattern, edgeName);
+}
+
+void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
+    if (not _isV3) {
+        throwError("CASE is only supported in V3", expr);
+    }
+
+    const auto contaminate = [expr](const Expr* part) {
+        if (part->isDynamic()) {
+            expr->setDynamic();
+        }
+
+        if (part->isAggregate()) {
+            expr->setAggregate();
+        }
+    };
+
+    // The subject of the simple form, compared for equality against every WHEN value.
+    // Null in the generic form, whose WHEN expressions are predicates of their own.
+    Expr* const subject = expr->getSubject();
+    if (subject) {
+        analyzeExpr(subject);
+        requireCaseComparable(subject, subject->getType());
+        contaminate(subject);
+    }
+
+    EvaluatedType resultType = EvaluatedType::Null;
+
+    for (const CaseExpr::Branch& branch : expr->getBranches()) {
+        analyzeExpr(branch._when);
+        analyzeExpr(branch._then);
+
+        const EvaluatedType whenType = branch._when->getType();
+        if (subject) {
+            requireCaseComparable(branch._when, whenType);
+        } else if (whenType != EvaluatedType::Bool && whenType != EvaluatedType::Null) {
+            throwError(fmt::format("The WHEN condition of a CASE must be a boolean, not '{}'",
+                                   EvaluatedTypeName::value(whenType)),
+                       branch._when);
+        }
+
+        resultType = unifyCaseBranch(resultType, branch._then);
+
+        contaminate(branch._when);
+        contaminate(branch._then);
+    }
+
+    Expr* const elseExpr = expr->getElseExpr();
+    if (elseExpr) {
+        analyzeExpr(elseExpr);
+        resultType = unifyCaseBranch(resultType, elseExpr);
+        contaminate(elseExpr);
+    }
+
+    expr->setType(resultType);
+}
+
+EvaluatedType ExprAnalyzer::unifyCaseBranch(EvaluatedType carried, const Expr* branch) {
+    const EvaluatedType branchType = branch->getType();
+    const EvaluatedType unified = unifiedBranchType(carried, branchType);
+
+    if (unified == EvaluatedType::Invalid) {
+        throwError(fmt::format("A CASE returns one column, so its branches must share a "
+                               "type: '{}' and '{}' cannot be mixed",
+                               EvaluatedTypeName::value(carried),
+                               EvaluatedTypeName::value(branchType)),
+                   branch);
+    }
+
+    return unified;
+}
+
+void ExprAnalyzer::requireCaseComparable(const Expr* expr, EvaluatedType type) const {
+    if (type == EvaluatedType::Null || convertibleToValueType(type)) {
+        return;
+    }
+
+    throwError(fmt::format("The subject of a CASE and the values it is compared against "
+                           "must be scalars, not '{}'",
+                           EvaluatedTypeName::value(type)),
+               expr);
 }
 
 void ExprAnalyzer::analyzeListExpr(ListExpr* expr) {

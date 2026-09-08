@@ -304,6 +304,21 @@ private:
     // Propagates nullity from operand to result
     void lowerNot(mlir::db::NotOp notOp);
 
+    // Lower a db.case into its nl sibling: resolve the one value column its branches
+    // share, convert the branches that need promoting into it, and place the selection
+    // where every condition and value it reads is bound.
+    void lowerCase(mlir::db::Case caseOp);
+
+    // The value element type a CASE's branches share: the one they all carry, the
+    // promotion of their numbers when they carry two, and an i64 when every branch is
+    // null. A branch no value column can hold is rejected here.
+    mlir::Type caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks);
+
+    // @param chunk as the selection reads it: itself when it already carries
+    // @param resultElement, and an nl.to_float / nl.to_integer of it when the branches
+    // promoted past its own type. A null branch is left untyped.
+    mlir::Value caseBranchChunk(mlir::Value chunk, mlir::Type resultElement);
+
     void lowerUnaryFunction(mlir::Operation* op);
 
     void lowerBinaryFunction(mlir::Operation* op);
@@ -417,6 +432,10 @@ private:
 
     // Point the builder at the right place for an op consuming lhs and rhs.
     void setInsertionForBinaryOp(mlir::Value lhs, mlir::Value rhs);
+
+    // The n-ary sibling of setInsertionForBinaryOp, for an op reading a whole set of
+    // columns - the branches of a db.case
+    void setInsertionForNaryOp(llvm::ArrayRef<mlir::Value> operands);
 
     // Lays the constants among the chunks a cut is charged to over the rows of the
     // driving relation. A cut walks rows and a constant carries none of its own - it

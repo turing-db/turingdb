@@ -2967,6 +2967,65 @@ private:
     NLUnaryFn _fn {nullptr};
 };
 
+// Whether row @param row of a CASE branch's condition column holds true. A null
+// condition never does, so its rows fall through to the next branch.
+using NLCaseTestFn = bool (*)(const Column* condition, size_t row);
+
+// Copies row @param row of a CASE branch's value column into the same row of the result.
+// Every column a selection reads carries rows, so a row of the result is written from the
+// row of the branch that produced it.
+using NLCaseWriteFn = void (*)(Column* result, const Column* value, size_t row);
+
+// Sizes a CASE result to @param rowCount rows, all absent: the value a row unmatched by
+// every branch of a defaultless CASE holds
+using NLCaseResetFn = void (*)(Column* result, size_t rowCount);
+
+// One CASE, as the rows are walked: per branch the condition to read, the value to take
+// when it holds, and the kernels that read each. The default is what a row matching no
+// branch takes; with none, the reset already left it absent.
+class NLCaseData : public NLFunctionData {
+public:
+    struct Branch {
+        const Column* _condition {nullptr};
+        const Column* _value {nullptr};
+        NLCaseTestFn _test {nullptr};
+        NLCaseWriteFn _write {nullptr};
+    };
+
+    NLCaseData(const Column* cardinality, Column* result, NLCaseResetFn reset)
+        : _cardinality(cardinality),
+        _result(result),
+        _reset(reset)
+    {
+    }
+
+    const Column* getCardinality() const { return _cardinality; }
+    Column* getResult() const { return _result; }
+    NLCaseResetFn getReset() const { return _reset; }
+
+    const Column* getDefaultValue() const { return _defaultValue; }
+    NLCaseWriteFn getWriteDefault() const { return _writeDefault; }
+
+    const std::vector<Branch>& branches() const { return _branches; }
+
+    void addBranch(const Branch& branch) {
+        _branches.push_back(branch);
+    }
+
+    void setDefault(const Column* defaultValue, NLCaseWriteFn writeDefault) {
+        _defaultValue = defaultValue;
+        _writeDefault = writeDefault;
+    }
+
+private:
+    const Column* _cardinality {nullptr};
+    Column* _result {nullptr};
+    NLCaseResetFn _reset {nullptr};
+    std::vector<Branch> _branches;
+    const Column* _defaultValue {nullptr};
+    NLCaseWriteFn _writeDefault {nullptr};
+};
+
 using NLUnaryFunctionKernel = void (*)(NLExecutionContext* context, Column* result, const Column* input);
 
 class NLUnaryFunctionData : public NLFunctionData {

@@ -304,6 +304,9 @@
 %type<db::Expr*> propertyExpr
 %type<db::Expr*> atomExpr
 %type<db::Expr*> collectExpr
+%type<db::CaseExpr*> caseExpr
+%type<db::CaseExpr*> whenThenChain
+%type<std::pair<db::Expr*, db::Expr*>> whenThen
 %type<db::Expr*> pathExpr
 %type<db::Expr*> parenthesizedExpr
 
@@ -1222,7 +1225,7 @@ atomExpr
     | symbol { $$ = SymbolExpr::create(ast, $1); LOC($$, @$); }
 
     | parameter { scanner.notImplemented(@$, "Parameters"); }
-    | caseExpr { scanner.notImplemented(@$, "CASE"); }
+    | caseExpr { $$ = $1; }
     | countFunc { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
     | listComprehension { scanner.notImplemented(@$, "List comprehensions"); }
     //| patternComprehension { scanner.notImplemented(@$, "Pattern comprehensions"); }
@@ -1546,19 +1549,25 @@ countFunc
     ;
 
 caseExpr
-    : CASE whenThenChain END { scanner.notImplemented(@$, "CASE"); }
-    | CASE expr whenThenChain END  { scanner.notImplemented(@$, "CASE"); }
-    | CASE whenThenChain ELSE expr END { scanner.notImplemented(@$, "CASE"); }
-    | CASE expr whenThenChain ELSE expr END { scanner.notImplemented(@$, "CASE"); }
+    : CASE whenThenChain END { $$ = $2; LOC($$, @$); }
+    | CASE expr whenThenChain END  { $3->setSubject($2); $$ = $3; LOC($$, @$); }
+    | CASE whenThenChain ELSE expr END { $2->setElseExpr($4); $$ = $2; LOC($$, @$); }
+    | CASE expr whenThenChain ELSE expr END { $3->setSubject($2); $3->setElseExpr($5); $$ = $3; LOC($$, @$); }
     ;
 
 whenThenChain
-    : whenThen
-    | whenThenChain whenThen
+    : whenThen {
+        $$ = CaseExpr::create(ast);
+        $$->addBranch($1.first, $1.second);
+      }
+    | whenThenChain whenThen {
+        $1->addBranch($2.first, $2.second);
+        $$ = $1;
+      }
     ;
 
 whenThen
-    : WHEN expr THEN expr
+    : WHEN expr THEN expr { $$ = std::make_pair($2, $4); }
     ;
 
 parameter

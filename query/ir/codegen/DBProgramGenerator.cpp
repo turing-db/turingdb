@@ -71,6 +71,7 @@
 #include "FunctionSignature.h"
 #include "Literal.h"
 #include "expr/BinaryExpr.h"
+#include "expr/CaseExpr.h"
 #include "expr/EntityTypeExpr.h"
 #include "expr/Expr.h"
 #include "expr/ExprChain.h"
@@ -4453,6 +4454,12 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         }
         break;
 
+        case Expr::Kind::CASE: {
+            const CaseExpr* caseExpr = static_cast<const CaseExpr*>(expr);
+            translateCaseExpr(expr, caseExpr);
+        }
+        break;
+
         case Expr::Kind::LIST:
         case Expr::Kind::PATH:
             throwError(fmt::format("Unsupported expression: {}",
@@ -4504,6 +4511,58 @@ void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* u
             throwError("Unknown unary operator.", expr);
         break;
     }
+}
+
+void DBProgramGenerator::translateCaseExpr(const Expr* expr, const CaseExpr* caseExpr) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    // The simple form compares its subject against every WHEN value, which is the generic
+    // form with that equality as the condition
+    const Expr* const subjectExpr = caseExpr->getSubject();
+    mlir::Value subject;
+    if (subjectExpr) {
+        translateExpr(subjectExpr);
+        bioassert(_part._exprMap.contains(subjectExpr), "CASE subject with no column.");
+        subject = _part._exprMap.at(subjectExpr);
+    }
+
+    llvm::SmallVector<mlir::Value, 4> conditions;
+    llvm::SmallVector<mlir::Value, 4> values;
+
+    for (const CaseExpr::Branch& branch : caseExpr->getBranches()) {
+        translateExpr(branch._when);
+        translateExpr(branch._then);
+
+        bioassert(_part._exprMap.contains(branch._when), "CASE branch with no condition column.");
+        bioassert(_part._exprMap.contains(branch._then), "CASE branch with no value column.");
+
+        const mlir::Value when = _part._exprMap.at(branch._when);
+
+        if (subject) {
+            conditions.push_back(_opBuilder.create<mlir::db::EqOp>(loc, boolType, subject, when).getResult());
+        } else {
+            conditions.push_back(when);
+        }
+
+        values.push_back(_part._exprMap.at(branch._then));
+    }
+
+    const Expr* const elseExpr = caseExpr->getElseExpr();
+    mlir::Value defaultValue;
+    if (elseExpr) {
+        translateExpr(elseExpr);
+        bioassert(_part._exprMap.contains(elseExpr), "CASE default with no column.");
+        defaultValue = _part._exprMap.at(elseExpr);
+    }
+
+    _part._exprMap[expr] = _opBuilder.create<mlir::db::Case>(loc,
+                                                             noneType,
+                                                             conditions,
+                                                             values,
+                                                             defaultValue)
+                               .getResult();
 }
 
 void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr* binExpr) {

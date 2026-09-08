@@ -39,6 +39,7 @@ class UnaryExpr;
 class FunctionInvocationExpr;
 class IndexExpr;
 class ListExpr;
+class CaseExpr;
 class Pattern;
 class PatternElement;
 class EntityPattern;
@@ -136,6 +137,7 @@ public:
     friend FunctionInvocationExpr;
     friend IndexExpr;
     friend ListExpr;
+    friend CaseExpr;
     friend Pattern;
     friend PatternElement;
     friend NodePattern;

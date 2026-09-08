@@ -13,4 +13,5 @@
 #include "expr/FunctionInvocationExpr.h"
 #include "expr/IndexExpr.h"
 #include "expr/ListExpr.h"
+#include "expr/CaseExpr.h"
 

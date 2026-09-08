@@ -1421,6 +1421,40 @@ def ContainsOp : PredicateOp<"contains", [Pure]> {
   let summary = "Row-wise test of whether each string column value contains the given substring";
 }
 
+def Case : TuringOp<"case", [Pure, AttrSizedOperandSegments]> {
+  let summary = "Row-wise selection of the first branch whose condition holds";
+
+  let description = [{
+    A Cypher CASE. `conditions` and `values` are parallel: a row takes the value of the
+    first branch whose condition is true, the default when none is, and null when there
+    is no default.
+
+      %r = db.case({%c0, %c1}, {%v0, %v1}, %d)
+             : (!db.column<!storage.bool>, !db.column<!storage.bool>,
+                !db.column<i64>, !db.column<i64>, !db.column<i64>) -> !db.column<none>
+
+    The simple form `CASE s WHEN v THEN ...` is emitted as the generic one, with a db.eq
+    of the subject against each WHEN value as the condition.
+
+    The result element type is resolved during lowering, as for the arithmetic ops: the
+    branches promote against each other into one nullable value column. A selection walks
+    rows, so - unlike the arithmetic ops - it is not constant through its operands: the
+    constants among them are laid out over the driving relation during lowering.
+  }];
+
+  let arguments = (ins Variadic<Column>:$conditions,
+                       Variadic<Column>:$values,
+                       Optional<Column>:$defaultValue);
+  let results = (outs Column:$result);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` `{` $conditions `}` `,` `{` $values `}` (`,` $defaultValue^)? `)`
+    attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 def FilterOp : TuringOp<"filter", [Pure]> {
   let summary = "Keep only the rows where the mask is true, filtering carried columns alongside";
 
