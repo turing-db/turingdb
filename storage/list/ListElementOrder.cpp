@@ -291,6 +291,11 @@ bool db::operator==(const ListElementView element, const types::Bool::Primitive 
         && static_cast<bool>(element.getAs<types::Bool::Primitive>()) == static_cast<bool>(value);
 }
 
+bool db::operator==(const ListElementView element, const ListView value) {
+    return element.getTag() == ListBufferTypeTag::ListView
+        && element.getAs<ListView>() == value;
+}
+
 std::strong_ordering db::operator<=>(const ListElementView element, const types::Int64::Primitive value) {
     return compareElementWithNumber(element, value);
 }
