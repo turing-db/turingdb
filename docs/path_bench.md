@@ -1,4 +1,4 @@
-# Variable-length paths on Reactome: v2 against v3
+# Variable-length paths on Reactome: v2, v3 and ladybug
 
 Measured with `scripts/bench_paths.py`, which runs 71 Cypher queries in five groups
 through both engines in the turingdb shell — v2 directly, v3 behind the `#v3` prefix —
@@ -8,7 +8,7 @@ walk (`count()`) and as a distinct-end search (`count(DISTINCT)`) across hop bou
 
 Provenance: `9e9704046` (the sparse reach table, no distinct gate), default `-O3` build,
 20-core Linux box, quiet machine.
-Graph `reactome` loaded from its binary dump: 2,978,202 nodes and 11,537,331 edges (415
+Graph `reactome` loaded from its binary dump: 2,978,202 nodes and 11,537,843 edges (415
 `TopLevelPathway`, 117,945 `Event`, 83,459 `Reaction`, 110,048 `Complex`).
 
 ```
@@ -17,7 +17,8 @@ scripts/bench_paths.py -reps 5 -verify
 
 Both engines agreed on every result they both produced — row multisets, and aggregate
 values up to the 125,690,888-path one — with a single exception, which turned out to be a
-v2 bug (below).
+v2 bug (below). The same 71 queries were later run against ladybug on the same graph and
+the same box; that is its own section, after the v2 bug.
 
 ## A. Property-seeded typed queries — what a curator actually writes
 
@@ -263,6 +264,151 @@ v2's three-hop chain counts walks that traverse the same relationship twice — 
 semantics excludes them. At depth two both return 64,698, since a directed walk cannot
 reuse an edge in two steps. So on this shape v2 is both slower and wrong.
 
+A third engine settles it from outside: ladybug returns 89,068 for this query under its
+default recursive semantics and 86,520 for the same query written `TRAIL`, which is the
+two numbers and the name of the difference between them.
+
+## Ladybug on the same 71 queries
+
+[Ladybug](https://github.com/LadybugDB/ladybug) 0.20.3, the fork that continues Kùzu, run
+through its Python API on the same box and the same graph — 2,978,202 nodes and 11,537,843
+edges converted out of turingdb's parquet dump of `reactome`, which copies in in 12 s. Same
+protocol as above: five runs per query, the first discarded, median of the rest, with a
+180 s timeout. Ladybug is embedded, so the process is the driver that holds the database; it
+took all 20 cores and a 16 GB buffer pool.
+
+Two things had to be decided before any of it could run. Reactome nodes carry six labels
+each and ladybug is one label per node table, so every node goes into one `Node` table and
+the labels the queries name become boolean columns: `(a:Event)` is written `(a:Node)` with
+`a.isEvent`. And its recursive rels default to **walk** semantics, which counts the
+repeated-edge paths v2 counts; `TRAIL` matches v3, so every quantifier below is written
+`TRAIL`. Its upper bound is capped at 30 until `var_length_extend_max_depth` is raised,
+here to 200, which is also what stands in for `+`.
+
+**Every count ladybug produced matches v3's**, all 65 that finished — row multisets and
+aggregates alike, up to the 125,690,888-path one. Six queries hit the 180 s timeout.
+
+Ladybug indexes only the primary key, so `stId` seeds cost a scan of all 2.98M nodes. The
+seeded queries are therefore timed twice, as written and re-seeded on the primary key, the
+same split this page already makes when it subtracts v2's 45.81 ms seed lookup. The
+`lb (pk)` column is the walk without the missing index.
+
+| A. Property-seeded | v3 | lb | lb (pk) | |
+|---|---|---|---|---|
+| Find Signal Transduction by accession | 0.55 ms | 13.07 | 0.24 | **0.4×** |
+| Its direct sub-events | 0.85 | 6.62 | 1.57 | 1.8× |
+| Its sub-events exactly 3 levels down | 1.02 | 12.74 | 6.54 | 6.4× |
+| Its sub-events exactly 4 levels down | 1.29 | 16.84 | 11.92 | 9.2× |
+| Reactions exactly 4 steps downstream of the hub | 1.20 | 4.87 | 1.00 | **0.8×** |
+| Sub-units of the complex, 2 levels in | 1.22 | 5.25 | 0.80 | **0.7×** |
+
+Ladybug's floor is the lower of the two: a primary-key lookup answers the seed in 0.24 ms
+against v3's 0.55, and the two shallowest walks finish under v3's time. Everything after
+this table is the walk.
+
+| B. Label-seeded typed traversal | v3 | lb | | count |
+|---|---|---|---|---|
+| Events 2 `hasEvent` levels under all 415 top-level pathways | 1.46 ms | 16.22 | 11.1× | 11,630 |
+| …3 levels | 3.37 | 30.57 | 9.1× | 28,799 |
+| …4 levels | 7.06 | 62.46 | 8.8× | 40,012 |
+| …5 levels | 11.40 | 101.18 | 8.9× | 28,679 |
+| …6 levels | 13.98 | 126.26 | 9.0× | 10,260 |
+| Every sub-unit two levels inside every complex | 30.12 | 1,915.89 | **63.6×** | 213,396 |
+| Reaction triples three `precedingEvent` steps apart | 17.53 | 1,358.53 | **77.5×** | 86,520 |
+| Reactions two `hasEvent` levels under every top-level pathway | 1.17 | 10.02 | 8.6× | 6,371 |
+| Every reaction's input entities | 7.75 | 17.91 | 2.3× | 186,017 |
+
+| C. Untyped variable-length | v3 | lb | | paths |
+|---|---|---|---|---|
+| Within 2 hops of the 415 top-level pathways | 1.42 ms | 503.35 | 355× | 34,669 |
+| Within 3 hops of them | 4.90 | 1,202.90 | 246× | 228,878 |
+| Events within 3 hops of them | 7.86 | 1,186.66 | 151× | 90,086 |
+| Within 2 hops of all 83,459 reactions | 85.88 | 91,956.57 | **1,071×** | 4,788,031 |
+| Within 2 hops in either direction | 836.27 | 25,939.23 | 31× | 125,690,888 |
+
+**Untyped is where ladybug is furthest behind, and its cost there follows the seeds, not
+the paths.** 83,459 reactions two hops out is 4,788,031 paths and takes 92 s; 415 pathways
+two hops out in both directions is 125,690,888 paths — twenty-six times as many — and
+takes 26 s. An untyped quantifier has to walk all 88 rel tables, and ladybug appears to pay
+that per seed. The undirected row is its best untyped showing only because it is v3's worst.
+
+| D. Queries v2 cannot express | v3 | lb | lb (pk) | | rows |
+|---|---|---|---|---|---|
+| Signal Transduction's entire sub-event tree, any depth | 2.23 ms | 21.80 | 16.63 | 7.5× | 3,154 |
+| Every reaction it eventually decomposes into | 2.15 | 20.01 | 15.47 | 7.2× | 2,344 |
+| Every reaction under every top-level pathway | 26.04 | 214.47 | — | 8.2× | 92,952 |
+| Which top-level pathway contains the hub reaction | 1.20 | 5.93 | 1.01 | **0.8×** | 1 |
+| Reactions up to 4 steps downstream of that hub | 1.22 | 6.25 | 2.33 | 1.9× | 96 |
+| All reactions downstream of that hub, any distance, `DISTINCT` | 2.01 | `TIMEOUT` | `TIMEOUT` | — | 1,520 |
+| That complex's whole sub-unit tree | 1.22 | 5.37 | 1.52 | 1.2× | 23 |
+| Reaction pairs of one pathway sharing an input entity | 60.62 | 17,757.71 | — | 293× | 390,348 |
+
+The `DISTINCT` cascade is the first timeout, and it is the same query v2 was killed on at
+420 s. Group E says why.
+
+### Ladybug has no distinct-end search
+
+`count(DISTINCT z)` costs ladybug what `count(z)` costs it, at every bound — it enumerates
+the trails and deduplicates the ends. So its search column inherits the walk's explosion,
+where v3's is flat in the bound. Primary-key seeds throughout, against the v3 columns from
+the table above:
+
+| bound | v3 walk | lb walk | v3 search | lb search | trails | ends |
+|---|---|---|---|---|---|---|
+| `{1,4}` | 1.23 ms | 1.84 | 1.23 ms | 2.76 | 96 | 96 |
+| `{1,8}` | 1.23 | 1.93 | 1.24 | 3.24 | 101 | 101 |
+| `{1,16}` | 1.25 | 3.08 | 1.27 | 3.63 | 179 | 177 |
+| `{1,24}` | 1.53 | 6.72 | 1.40 | 8.21 | 1,412 | 511 |
+| `{1,32}` | 5.15 | 54.19 | 1.53 | 58.26 | 43,489 | 902 |
+| `{1,40}` | 1,329 | 8,015.57 | 1.62 | **8,422.73** | 16,956,465 | 1,175 |
+| `{1,44}` | 24,275 | `TIMEOUT` | 1.68 | `TIMEOUT` | 302,221,591 | 1,308 |
+| `{1,100}` | — | — | 1.77 | `TIMEOUT` | — | 1,520 |
+| `+` | — | — | 1.77 | `TIMEOUT` | — | 1,520 |
+
+58.26 ms against 54.19 at 32 hops, 8,422 against 8,015 at 40: the two modes are one
+enumeration. At `{1,40}` that is 5,199× v3's 1.62 ms for the same 1,175 ends, and past it
+ladybug stops answering the question at all while v3 stays at 1.77 ms. Five of the six
+timeouts are in this column.
+
+The other four sweeps have no such divergence, because on those shapes the walk is cheap
+enough that v3 searches for no gain either:
+
+| sweep, bound | v3 walk | lb walk | v3 search | lb search |
+|---|---|---|---|---|
+| Signal Transduction's sub-events, `{1,2}` | 0.92 ms | 2.81 | 0.93 ms | 3.73 |
+| …`{1,13}` | 1.94 | 14.00 | 1.85 | 14.74 |
+| …`+` | 1.91 | 14.57 | 1.85 | 15.43 |
+| Reactions under the 415 top-level pathways, `{1,3}` | 3.79 | 29.24 | 5.64 | 31.04 |
+| …`{1,6}` | 16.33 | 128.48 | 20.91 | 136.12 |
+| …`+` | 21.33 | 166.52 | 22.42 | 173.48 |
+| Sub-units of every complex, `{1,2}` | 30.26 | 1,919.23 | 44.19 | 1,921.89 |
+| …`{1,100}` | 52.62 | 2,546.39 | 59.07 | 2,558.75 |
+| Reactions downstream of every reaction, `{1,3}` | 17.94 | 1,346.44 | 16.92 | 1,354.07 |
+| …`+` | — | — | 138.34 | `TIMEOUT` |
+
+The last row is the sixth timeout and the same story as the cascade: 45,331 distinct ends
+that v3 reaches in 138 ms and ladybug cannot enumerate its way to.
+
+### What the comparison says
+
+On a typed walk ladybug runs a steady 6× to 11× v3 — 8.6× to 11.1× across the `hasEvent`
+depth ladder, 5.5× to 9× across the group E sweeps, 7.2× to 8.2× on the unbounded typed
+walks of group D. That multiple is flat in depth and in result size, which makes it a
+per-edge constant rather than anything about the shape. It widens to 43×–78× where the
+seeds are many and their balls overlap (110,048 complexes, 83,459 reactions) and to
+151×–1,071× on untyped quantifiers.
+
+The one qualitative gap is the distinct search. Everywhere else ladybug is slower by a
+factor; on `count(DISTINCT)` over a re-converging relation it is on the wrong side of the
+walk's exponential, which is the whole case for `PathReachTable` and for searching
+unconditionally. Its own fixed costs are lower than v3's — 0.24 ms to look up a node
+against 0.55 — so none of this is a floor it is paying.
+
+Two caveats. The boolean-column encoding of labels is forced by ladybug's data model and
+may cost it something a native multi-label match would not, and the as-written seed column
+measures a missing secondary index rather than a traversal, which is why the `lb (pk)`
+column is there.
+
 ## Reproducing
 
 A single lock guards a turing dir and other sessions routinely hold `~/.turing`, so copy
@@ -287,3 +433,15 @@ both engines return one row either way.
 The storage-level harness for the same work is `samples/path_bench`, which times the
 explorator directly (walker count, lookahead, the two index gates, the distinct search)
 on generated out-of-cache graphs rather than through Cypher on Reactome.
+
+For the ladybug column, `pip install ladybug`, then load the graph out of a parquet dump
+of it and run the same 71 queries against it:
+
+```
+scripts/ladybug_load_reactome.py -dump ~/reactome-parquet-dump -db ~/.ladybug-bench/reactome
+scripts/bench_ladybug.py -reps 5
+```
+
+`-report` re-renders a finished results file without measuring anything, `-resume` skips
+the query ids already in it, and `-timeout` bounds a query that will not finish — leaving
+it at 180 s is what produced the six above.
