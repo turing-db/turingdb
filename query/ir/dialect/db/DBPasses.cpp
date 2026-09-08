@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <optional>
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
@@ -2257,53 +2258,53 @@ bool prefersTheProduct(const EqualityCross& match, const DBPassContext& context)
     return estimation.shouldPreferCartesian(leftLabels, rightLabels, limitOverTheCut(match._filter));
 }
 
-// Whether an op seeds a factor with a row per node it selects.
-bool isNodeScan(Operation* op) {
-    return isa<ScanNodes, ScanNodesByLabel, ConstScanNodes, ScanNodesByPropertyValue>(op);
-}
-
-// The rows a node scan selects, as the graph says. A listed set of IDs is its own count; a
-// by-label scan is what the graph holds under those labels, which is also all a property
-// scan can be read at - selectivity is not something the db level knows.
-size_t estimateScanRows(Operation* scan,
-                        const ::db::GraphMetadata& metadata,
-                        const ::db::CardinalityEstimation& estimation) {
-    if (ConstScanNodes constScan = dyn_cast<ConstScanNodes>(scan)) {
+// The rows an op seeds a factor with, and nothing at all when it seeds none - a fetch, a
+// filter or a hop reads a column rather than making one. A listed set of IDs is its own
+// count, a by-label scan is what the graph holds under those labels, and a property scan
+// is read at the whole node count: selectivity is not something the db level knows.
+std::optional<size_t> estimateSourceRows(Operation* op,
+                                         const ::db::GraphMetadata& metadata,
+                                         const ::db::CardinalityEstimation& estimation) {
+    if (ConstScanNodes constScan = dyn_cast<ConstScanNodes>(op)) {
         return constScan.getNodeIDs().size();
-    }
-
-    ::db::LabelSet labels;
-    if (ScanNodesByLabel byLabel = dyn_cast<ScanNodesByLabel>(scan)) {
+    } else if (ScanNodesByLabel byLabel = dyn_cast<ScanNodesByLabel>(op)) {
+        ::db::LabelSet labels;
         collectScanLabels(byLabel.getLabels(), metadata, labels);
+
+        return estimation.estimateNodeCount(labels);
+    } else if (isa<ScanNodes, ScanNodesByPropertyValue>(op)) {
+        return estimation.estimateNodeCount(::db::LabelSet {});
+    } else if (isa<ScanEdges, ScanEdgesByType>(op)) {
+        return estimation.estimateEdgeCount();
     }
 
-    return estimation.estimateNodeCount(labels);
+    return std::nullopt;
 }
 
-// The rows a factor makes: the product of the node counts its scans select, a factor
-// crossing two of them holding a row per pair. A factor seeded from somewhere the db level
-// cannot count - a procedure, a load, an edge scan - counts as the ten rows the v2 planner
-// reads a yielded item at.
+// The rows a factor makes: the product of what its sources seed it with, a factor crossing
+// two of them holding a row per pair. A factor seeded from somewhere the db level cannot
+// count - a procedure, a load - counts as the ten rows the v2 planner reads a yielded item
+// at.
 size_t estimateFactorRows(Region& factor,
                           const ::db::GraphMetadata& metadata,
                           const ::db::CardinalityEstimation& estimation) {
     constexpr size_t uncountedSourceRows = 10;
     constexpr size_t rowCeiling = std::numeric_limits<size_t>::max();
 
-    bool countedAScan = false;
+    bool countedASource = false;
     size_t rows = 1;
 
     factor.walk([&](Operation* op) {
-        if (!isNodeScan(op)) {
+        const std::optional<size_t> seeded = estimateSourceRows(op, metadata, estimation);
+        if (!seeded) {
             return;
         }
 
-        const size_t scanned = estimateScanRows(op, metadata, estimation);
-        countedAScan = true;
-        rows = (scanned != 0 && rows > rowCeiling / scanned) ? rowCeiling : rows * scanned;
+        countedASource = true;
+        rows = (*seeded != 0 && rows > rowCeiling / *seeded) ? rowCeiling : rows * *seeded;
     });
 
-    return countedAScan ? rows : uncountedSourceRows;
+    return countedASource ? rows : uncountedSourceRows;
 }
 
 // Which way round the two sides go into the join, whose right factor is the built one. The
