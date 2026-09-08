@@ -1,6 +1,5 @@
 #pragma once
 
-#include <string>
 #include <type_traits>
 
 #include "EntityList.h"
@@ -44,7 +43,7 @@ concept SupportedColumnVectorTypes = std::is_same_v<T, db::types::UInt64::Primit
 || std::is_same_v<T, db::EntityList>
 || std::is_same_v<T, db::ListElementView>
 || std::is_same_v<T, db::ListView>
-|| std::is_same_v<T, std::string>;
+|| std::is_same_v<T, db::types::String::Primitive>;
 
 template <typename T>
 concept SupportedColumnOptVectorTypes = std::is_same_v<T, db::types::UInt64::Primitive>
@@ -52,7 +51,7 @@ concept SupportedColumnOptVectorTypes = std::is_same_v<T, db::types::UInt64::Pri
 || std::is_same_v<T, db::types::Double::Primitive>
 || std::is_same_v<T, db::types::Bool::Primitive>
 || std::is_same_v<T, db::types::Embedding::Primitive>
-|| std::is_same_v<T, std::string>;
+|| std::is_same_v<T, db::types::String::Primitive>;
 
 template <typename T>
 concept SupportedColumnConstTypes = std::is_same_v<T, db::types::UInt64::Primitive>
@@ -62,7 +61,7 @@ concept SupportedColumnConstTypes = std::is_same_v<T, db::types::UInt64::Primiti
 || std::is_same_v<T, db::types::Embedding::Primitive>
 || std::is_same_v<T, db::PropertyNull>
 || std::is_same_v<T, db::ListView>
-|| std::is_same_v<T, std::string>;
+|| std::is_same_v<T, db::types::String::Primitive>;
 //|| std::is_same_v<T, db::ListElementView> - disabled: no ColumnConst<ListElementView> memory pool
 
 template <typename T>
@@ -71,6 +70,6 @@ concept SupportedColumnOptConstTypes = std::is_same_v<T, db::types::UInt64::Prim
 || std::is_same_v<T, db::types::Double::Primitive>
 || std::is_same_v<T, db::types::Bool::Primitive>
 || std::is_same_v<T, db::types::Embedding::Primitive>
-|| std::is_same_v<T, std::string>;
+|| std::is_same_v<T, db::types::String::Primitive>;
 
 }

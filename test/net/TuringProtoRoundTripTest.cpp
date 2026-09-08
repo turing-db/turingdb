@@ -243,8 +243,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsNumericColumnsAcrossChunkSizes) {
 // CHUNK boundary mid-string. Verifies the decoder reassembles it correctly
 // and preserves nulls in the right positions.
 TEST(TuringProtoRoundTripTest, RoundTripsOptionalStringColumnsAcrossChunkSizes) {
-    using OptionalDecodedString = std::optional<std::string>;
-    using OptionalSourceString = std::optional<StringView>;
+    using OptionalString = std::optional<StringView>;
     using namespace std::string_view_literals;
 
     for (const size_t chunkSize : std::array<size_t, 4> {48, 63, 95, 192}) {
@@ -262,10 +261,10 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalStringColumnsAcrossChunkSizes) 
         addColumn(&dfMan, &source, "id", ids);
 
         auto* labels = localMem.alloc<db::ColumnOptVector<StringView>>();
-        labels->push_back(OptionalSourceString {"alpha"sv});
+        labels->push_back(OptionalString {"alpha"sv});
         labels->push_back(std::nullopt);
-        labels->push_back(OptionalSourceString {"this string is deliberately long enough to cross chunk boundaries"sv});
-        labels->push_back(OptionalSourceString {"omega"sv});
+        labels->push_back(OptionalString {"this string is deliberately long enough to cross chunk boundaries"sv});
+        labels->push_back(OptionalString {"omega"sv});
         addColumn(&dfMan, &source, "label", labels);
 
         const auto packets = encodeDataframeWithChunkSize(source, chunkSize);
@@ -282,18 +281,18 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalStringColumnsAcrossChunkSizes) 
         EXPECT_EQ(decoded.getLogicalRowCount(), 4u);
 
         const auto* decodedIds = decoded.cols().at(0)->as<db::ColumnVector<UInt64>>();
-        const auto* decodedLabels = decoded.cols().at(1)->as<db::ColumnVector<OptionalDecodedString>>();
+        const auto* decodedLabels = decoded.cols().at(1)->as<db::ColumnOptVector<StringView>>();
         ASSERT_NE(decodedIds, nullptr);
         ASSERT_NE(decodedLabels, nullptr);
 
         EXPECT_EQ(decodedIds->getRaw(),
                   (std::vector<UInt64> {101, 102, 103, 104}));
         EXPECT_EQ(decodedLabels->getRaw(),
-                  (std::vector<OptionalDecodedString> {
-                      std::string("alpha"),
+                  (std::vector<OptionalString> {
+                      "alpha"sv,
                       std::nullopt,
-                      std::string("this string is deliberately long enough to cross chunk boundaries"),
-                      std::string("omega")}));
+                      "this string is deliberately long enough to cross chunk boundaries"sv,
+                      "omega"sv}));
     }
 }
 
@@ -332,7 +331,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsHugeStringsAcrossMultipleBuffers) {
 
         ASSERT_EQ(decoded.cols().size(), 2u);
         const auto* decodedIds = decoded.cols().at(0)->as<db::ColumnVector<UInt64>>();
-        const auto* decodedLabels = decoded.cols().at(1)->as<db::ColumnVector<std::string>>();
+        const auto* decodedLabels = decoded.cols().at(1)->as<db::ColumnVector<StringView>>();
         ASSERT_NE(decodedIds, nullptr);
         ASSERT_NE(decodedLabels, nullptr);
 
@@ -393,8 +392,7 @@ TEST(TuringProtoRoundTripTest, RoundTripsHugeEmbeddingsAcrossMultipleBuffers) {
 // encoder to chunk it, and a nullopt. Verifies all three reach the decoder
 // as ColumnConst with the correct contained value.
 TEST(TuringProtoRoundTripTest, RoundTripsOptionalConstantColumns) {
-    using OptionalDecodedString = std::optional<std::string>;
-    using OptionalSourceString = std::optional<StringView>;
+    using OptionalString = std::optional<StringView>;
 
     db::LocalMemory localMem;
     db::DataframeManager dfMan;
@@ -405,11 +403,11 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalConstantColumns) {
     addColumn(&dfMan, &source, "maybe_id", maybeId);
 
     const std::string hugeLabel(512, 'q');
-    auto* maybeLabel = localMem.alloc<db::ColumnConst<OptionalSourceString>>();
-    maybeLabel->set(OptionalSourceString {std::string_view(hugeLabel)});
+    auto* maybeLabel = localMem.alloc<db::ColumnConst<OptionalString>>();
+    maybeLabel->set(OptionalString {std::string_view(hugeLabel)});
     addColumn(&dfMan, &source, "maybe_label", maybeLabel);
 
-    auto* emptyLabel = localMem.alloc<db::ColumnConst<OptionalSourceString>>();
+    auto* emptyLabel = localMem.alloc<db::ColumnConst<OptionalString>>();
     emptyLabel->set(std::nullopt);
     addColumn(&dfMan, &source, "empty_label", emptyLabel);
 
@@ -426,14 +424,14 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalConstantColumns) {
 
     ASSERT_EQ(decoded.cols().size(), 3u);
     const auto* decodedIds = decoded.cols().at(0)->as<db::ColumnConst<std::optional<UInt64>>>();
-    const auto* decodedLabel = decoded.cols().at(1)->as<db::ColumnConst<OptionalDecodedString>>();
-    const auto* decodedEmptyLabel = decoded.cols().at(2)->as<db::ColumnConst<OptionalDecodedString>>();
+    const auto* decodedLabel = decoded.cols().at(1)->as<db::ColumnConst<OptionalString>>();
+    const auto* decodedEmptyLabel = decoded.cols().at(2)->as<db::ColumnConst<OptionalString>>();
     ASSERT_NE(decodedIds, nullptr);
     ASSERT_NE(decodedLabel, nullptr);
     ASSERT_NE(decodedEmptyLabel, nullptr);
 
     EXPECT_EQ(decodedIds->at(0), std::optional<UInt64> {42});
-    EXPECT_EQ(decodedLabel->at(0), OptionalDecodedString {hugeLabel});
+    EXPECT_EQ(decodedLabel->at(0), OptionalString {hugeLabel});
     EXPECT_EQ(decodedEmptyLabel->at(0), std::nullopt);
 }
 

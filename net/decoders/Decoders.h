@@ -1,21 +1,17 @@
 #pragma once
 
-#include <stack>
 #include <stddef.h>
 #include <cstddef>
 #include <cstring>
 #include <optional>
 #include <span>
-#include <string>
 
-#include "ChunkedBuffer.h"
 #include "DecodedColumnSchema.h"
 #include "GraphPath.h"
 #include "DecodeContext.h"
 #include "TuringProtoDecoderConcepts.h"
 #include "TuringProtoHeaders.h"
 #include "TuringProtoInBuf.h"
-#include "list/ListBuffer.h"
 #include "list/ListUtils.h"
 
 namespace net::proto {
@@ -189,7 +185,7 @@ inline bool decodeVector(DecodeContext* ctx,
                          Sink* sink,
                          typename Sink::template ColumnVector<T>* typedCol,
                          ProtoColumnState* columnState) {
-    if constexpr (std::is_same_v<T, std::string>) {
+    if constexpr (std::is_same_v<T, db::types::String::Primitive>) {
         if (ctx->_rowIndex == 0) {
             typedCol->reserve(columnState->getNumRows());
         }
@@ -203,16 +199,18 @@ inline bool decodeVector(DecodeContext* ctx,
             WireSize stringSize = 0;
             ctx->_inBuf->readData(&stringSize, sizeof(stringSize));
 
-            if (stringSize <= ctx->_inBuf->readable()) {
-                typedCol->emplace_back(ctx->_inBuf->readPtr(), stringSize);
-                ctx->_inBuf->increaseReadOffset(stringSize);
-            } else {
-                auto& val = typedCol->emplace_back(stringSize, '\0');
-                const size_t numBytesToRead = ctx->_inBuf->readable();
-                ctx->_inBuf->readData(val.data(), numBytesToRead);
+            char* data = sink->allocString(stringSize);
+            const T view = sink->getStringView(data, stringSize);
 
-                ctx->_bufferState._start = val.data();
-                ctx->_bufferState._len = val.size();
+            typedCol->emplace_back(view);
+            if (stringSize <= ctx->_inBuf->readable()) {
+                ctx->_inBuf->readData(data, stringSize);
+            } else {
+                const size_t numBytesToRead = ctx->_inBuf->readable();
+                ctx->_inBuf->readData(data, numBytesToRead);
+
+                ctx->_bufferState._start = data;
+                ctx->_bufferState._len = stringSize;
                 ctx->_bufferState._offset = numBytesToRead;
 
                 ctx->_rowIndex += i + 1;
@@ -294,11 +292,10 @@ inline bool decodeVector(DecodeContext* ctx,
             ctx->_inBuf->readData(&pathByteSize, sizeof(pathByteSize));
             const size_t numEntities = pathByteSize / sizeof(db::EntityID);
 
+            auto& path = typedCol->emplace_back(numEntities);
             if (pathByteSize <= ctx->_inBuf->readable()) {
-                auto& path = typedCol->emplace_back(numEntities);
                 ctx->_inBuf->readData(path.data(), pathByteSize);
             } else {
-                auto& path = typedCol->emplace_back(numEntities);
                 const size_t numBytesToRead = ctx->_inBuf->readable();
                 ctx->_inBuf->readData(path.data(), numBytesToRead);
 
@@ -329,12 +326,10 @@ inline bool decodeVector(DecodeContext* ctx,
             auto* data = sink->allocEmbedding(numFloats);
             const std::span<const float> span = sink->getEmbeddingView(data, numFloats);
 
+            typedCol->emplace_back(span);
             if (embeddingSize <= ctx->_inBuf->readable()) {
                 ctx->_inBuf->readData(data, embeddingSize);
-                typedCol->emplace_back(span);
             } else {
-                typedCol->emplace_back(span);
-
                 const size_t numBytesToRead = ctx->_inBuf->readable();
                 ctx->_inBuf->readData(data, numBytesToRead);
 
@@ -411,7 +406,7 @@ inline bool decodeOptVector(DecodeContext* ctx,
                             Sink* sink,
                             typename Sink::template ColumnVector<std::optional<T>>* typedCol,
                             ProtoColumnState* columnState) {
-    if constexpr (std::is_same_v<T, std::string>) {
+    if constexpr (std::is_same_v<T, db::types::String::Primitive>) {
         for (size_t i = 0; ctx->_rowIndex + i < columnState->getNumRows(); ++i) {
             if (ctx->_inBuf->readable() < sizeof(WireSize)) {
                 ctx->_rowIndex += i;
@@ -429,16 +424,18 @@ inline bool decodeOptVector(DecodeContext* ctx,
             WireSize stringSize = 0;
             ctx->_inBuf->readData(&stringSize, sizeof(stringSize));
 
-            if (stringSize <= ctx->_inBuf->readable()) {
-                entry.emplace(ctx->_inBuf->readPtr(), stringSize);
-                ctx->_inBuf->increaseReadOffset(stringSize);
-            } else {
-                auto& val = entry.emplace(stringSize, '\0');
-                const size_t numBytesToRead = ctx->_inBuf->readable();
-                ctx->_inBuf->readData(val.data(), numBytesToRead);
+            char* data = sink->allocString(stringSize);
+            const T view = sink->getStringView(data, stringSize);
 
-                ctx->_bufferState._start = val.data();
-                ctx->_bufferState._len = val.size();
+            entry.emplace(view);
+            if (stringSize <= ctx->_inBuf->readable()) {
+                ctx->_inBuf->readData(data, stringSize);
+            } else {
+                const size_t numBytesToRead = ctx->_inBuf->readable();
+                ctx->_inBuf->readData(data, numBytesToRead);
+
+                ctx->_bufferState._start = data;
+                ctx->_bufferState._len = stringSize;
                 ctx->_bufferState._offset = numBytesToRead;
 
                 ctx->_rowIndex += i + 1;
@@ -468,12 +465,10 @@ inline bool decodeOptVector(DecodeContext* ctx,
             auto* data = sink->allocEmbedding(numFloats);
             const std::span<const float> span = sink->getEmbeddingView(data, numFloats);
 
+            entry.emplace(span);
             if (embeddingSize <= ctx->_inBuf->readable()) {
                 ctx->_inBuf->readData(data, embeddingSize);
-                entry.emplace(span);
             } else {
-                entry.emplace(span);
-
                 const size_t numBytesToRead = ctx->_inBuf->readable();
                 ctx->_inBuf->readData(data, numBytesToRead);
 
@@ -515,7 +510,7 @@ template <typename T, typename Sink>
 inline bool decodeConst(DecodeContext* ctx,
                         Sink* sink,
                         typename Sink::template ColumnConst<T>* typedCol) {
-    if constexpr (std::is_same_v<T, std::string>) {
+    if constexpr (std::is_same_v<T, db::types::String::Primitive>) {
         if (ctx->_inBuf->readable() < sizeof(WireSize)) {
             return false;
         }
@@ -523,20 +518,20 @@ inline bool decodeConst(DecodeContext* ctx,
         WireSize stringSize = 0;
         ctx->_inBuf->readData(&stringSize, sizeof(stringSize));
 
-        if (stringSize <= ctx->_inBuf->readable()) {
-            std::string val(ctx->_inBuf->readPtr(), stringSize);
-            typedCol->set(std::move(val));
-            ctx->_inBuf->increaseReadOffset(stringSize);
-        } else {
-            std::string val(stringSize, '\0');
-            const size_t numBytesToRead = ctx->_inBuf->readable();
-            ctx->_inBuf->readData(val.data(), numBytesToRead);
+        char* data = sink->allocString(stringSize);
+        const T view = sink->getStringView(data, stringSize);
 
-            ctx->_bufferState._start = val.data();
-            ctx->_bufferState._len = val.size();
+        typedCol->set(view);
+        if (stringSize <= ctx->_inBuf->readable()) {
+            ctx->_inBuf->readData(data, stringSize);
+        } else {
+            const size_t numBytesToRead = ctx->_inBuf->readable();
+            ctx->_inBuf->readData(data, numBytesToRead);
+
+            ctx->_bufferState._start = data;
+            ctx->_bufferState._len = stringSize;
             ctx->_bufferState._offset = numBytesToRead;
 
-            typedCol->set(std::move(val));
             // Const columns have no row dimension, so queueing a body-resume via
             // _bufferState means the whole column is decoded once that resume
             // finishes. Mark this column complete now (advance _colIndex; reset
@@ -560,21 +555,22 @@ inline bool decodeConst(DecodeContext* ctx,
         ctx->_inBuf->readData(&pathByteSize, sizeof(pathByteSize));
         const size_t numEntities = pathByteSize / sizeof(db::EntityID);
 
-        if (pathByteSize <= ctx->_inBuf->readable()) {
-            db::Path path(numEntities);
-            ctx->_inBuf->readData(path.data(), pathByteSize);
-            typedCol->set(std::move(path));
-        } else {
-            db::Path path(numEntities);
-            const size_t numBytesToRead = ctx->_inBuf->readable();
-            ctx->_inBuf->readData(path.data(), numBytesToRead);
+        db::Path path(numEntities);
+        char* pathBytes = reinterpret_cast<char*>(path.data());
 
-            ctx->_bufferState._start = reinterpret_cast<char*>(path.data());
+        // db::Path is a std::vector, so moving it into the column keeps pathBytes valid.
+        typedCol->set(std::move(path));
+        if (pathByteSize <= ctx->_inBuf->readable()) {
+            ctx->_inBuf->readData(pathBytes, pathByteSize);
+        } else {
+            const size_t numBytesToRead = ctx->_inBuf->readable();
+            ctx->_inBuf->readData(pathBytes, numBytesToRead);
+
+            ctx->_bufferState._start = pathBytes;
             ctx->_bufferState._len = pathByteSize;
             ctx->_bufferState._offset = numBytesToRead;
 
-            typedCol->set(std::move(path));
-            // See the std::string branch: const columns have no row dimension,
+            // See the string branch: const columns have no row dimension,
             // so completing this body via _bufferState completes the column.
             // Advance _colIndex to keep decodeIncomingData from re-entering and
             // misreading the next column's bytes as path framing.
@@ -595,12 +591,10 @@ inline bool decodeConst(DecodeContext* ctx,
         auto* data = sink->allocEmbedding(numFloats);
         const std::span<const float> span = sink->getEmbeddingView(data, numFloats);
 
+        typedCol->set(span);
         if (embeddingSize <= ctx->_inBuf->readable()) {
             ctx->_inBuf->readData(data, embeddingSize);
-            typedCol->set(span);
         } else {
-            typedCol->set(span);
-
             const size_t numBytesToRead = ctx->_inBuf->readable();
             ctx->_inBuf->readData(data, numBytesToRead);
 
@@ -608,7 +602,7 @@ inline bool decodeConst(DecodeContext* ctx,
             ctx->_bufferState._len = embeddingSize;
             ctx->_bufferState._offset = numBytesToRead;
 
-            // See the std::string branch: const columns have no row dimension,
+            // See the string branch: const columns have no row dimension,
             // so completing this body via _bufferState completes the column.
             // Advance _colIndex to keep decodeIncomingData from re-entering and
             // misreading the next column's bytes as embedding framing.
@@ -678,7 +672,7 @@ template <typename T, typename Sink>
 inline bool decodeOptConst(DecodeContext* ctx,
                            Sink* sink,
                            typename Sink::template ColumnConst<std::optional<T>>* typedCol) {
-    if constexpr (std::is_same_v<T, std::string>) {
+    if constexpr (std::is_same_v<T, db::types::String::Primitive>) {
         if (ctx->_inBuf->readable() < sizeof(uint8_t)) {
             return false;
         }
@@ -698,20 +692,21 @@ inline bool decodeOptConst(DecodeContext* ctx,
         WireSize stringSize = 0;
         ctx->_inBuf->readData(&stringSize, sizeof(stringSize));
 
-        if (stringSize <= ctx->_inBuf->readable()) {
-            typedCol->set(std::string(ctx->_inBuf->readPtr(), stringSize));
-            ctx->_inBuf->increaseReadOffset(stringSize);
-        } else {
-            std::string val(stringSize, '\0');
-            const size_t numBytesToRead = ctx->_inBuf->readable();
-            ctx->_inBuf->readData(val.data(), numBytesToRead);
+        char* data = sink->allocString(stringSize);
+        const T view = sink->getStringView(data, stringSize);
 
-            ctx->_bufferState._start = val.data();
-            ctx->_bufferState._len = val.size();
+        typedCol->set(view);
+        if (stringSize <= ctx->_inBuf->readable()) {
+            ctx->_inBuf->readData(data, stringSize);
+        } else {
+            const size_t numBytesToRead = ctx->_inBuf->readable();
+            ctx->_inBuf->readData(data, numBytesToRead);
+
+            ctx->_bufferState._start = data;
+            ctx->_bufferState._len = stringSize;
             ctx->_bufferState._offset = numBytesToRead;
 
-            typedCol->set(std::move(val));
-            // See decodeConst's std::string branch: const columns have no row
+            // See decodeConst's string branch: const columns have no row
             // dimension, so completing this body via _bufferState completes the
             // column. Advance _colIndex to keep decodeIncomingData from
             // re-entering and misreading the next column's hasValue/length bytes
@@ -745,12 +740,10 @@ inline bool decodeOptConst(DecodeContext* ctx,
         auto* data = sink->allocEmbedding(numFloats);
         const std::span<const float> span = sink->getEmbeddingView(data, numFloats);
 
+        typedCol->set(span);
         if (embeddingSize <= ctx->_inBuf->readable()) {
             ctx->_inBuf->readData(data, embeddingSize);
-            typedCol->set(span);
         } else {
-            typedCol->set(span);
-
             const size_t numBytesToRead = ctx->_inBuf->readable();
             ctx->_inBuf->readData(data, numBytesToRead);
 
@@ -758,7 +751,7 @@ inline bool decodeOptConst(DecodeContext* ctx,
             ctx->_bufferState._len = embeddingSize;
             ctx->_bufferState._offset = numBytesToRead;
 
-            // See decodeConst's std::string branch: const columns have no row
+            // See decodeConst's string branch: const columns have no row
             // dimension, so completing this body via _bufferState completes the
             // column. Advance _colIndex to keep decodeIncomingData from
             // re-entering and misreading the next column's bytes as embedding

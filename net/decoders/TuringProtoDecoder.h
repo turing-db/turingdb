@@ -78,7 +78,7 @@ decltype(auto) TuringProtoDecoder<Sink>::dispatchColumnType(ColumnInternalKind t
         case ColumnInternalKind::DOUBLE:
             return fn.template operator()<db::types::Double::Primitive>(encoding);
         case ColumnInternalKind::STRING:
-            return fn.template operator()<std::string>(encoding);
+            return fn.template operator()<db::types::String::Primitive>(encoding);
         case ColumnInternalKind::BOOL:
             return fn.template operator()<db::types::Bool::Primitive>(encoding);
         case ColumnInternalKind::PATH:
