@@ -2811,6 +2811,7 @@ void DBProgramGenerator::generateCrossedCall(std::string_view procedureName,
 void DBProgramGenerator::publishCreatedEntity(const VarDecl* decl,
                                               mlir::Value column,
                                               llvm::ArrayRef<llvm::StringRef> labelNames,
+                                              llvm::StringRef edgeType,
                                               llvm::ArrayRef<llvm::StringRef> propNames,
                                               llvm::ArrayRef<mlir::Value> propValues) {
     bioassert(propNames.size() == propValues.size(), "One value per created property expected");
@@ -2823,6 +2824,8 @@ void DBProgramGenerator::publishCreatedEntity(const VarDecl* decl,
     for (const llvm::StringRef labelName : labelNames) {
         created._labels.emplace_back(labelName.data(), labelName.size());
     }
+
+    created._edgeType.assign(edgeType.begin(), edgeType.end());
 
     for (size_t index = 0; index < propNames.size(); index++) {
         const llvm::StringRef propName = propNames[index];
@@ -2908,7 +2911,7 @@ void DBProgramGenerator::generateCreate(const SinglePartQuery* query) {
 
         if (decl) {
             knownVars[decl] = nodeValue;
-            publishCreatedEntity(decl, nodeValue, labelNames, propNames, propValues);
+            publishCreatedEntity(decl, nodeValue, labelNames, {}, propNames, propValues);
         }
 
         return nodeValue;
@@ -2966,7 +2969,12 @@ void DBProgramGenerator::generateCreate(const SinglePartQuery* query) {
 
                 const VarDecl* edgeDecl = edge->getDecl();
                 if (edgeDecl && !edgeDecl->isUnnamed()) {
-                    publishCreatedEntity(edgeDecl, createEdge.getResult(), {}, propNames, propValues);
+                    publishCreatedEntity(edgeDecl,
+                                         createEdge.getResult(),
+                                         {},
+                                         llvm::StringRef {edgeType.data(), edgeType.size()},
+                                         propNames,
+                                         propValues);
                 }
 
                 lhsValue = rhsValue;
@@ -4219,6 +4227,14 @@ mlir::Value DBProgramGenerator::nullConstantColumn() {
     return _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(), resultType, valueAttr).getResult();
 }
 
+mlir::Value DBProgramGenerator::constantString(llvm::StringRef value) {
+    const mlir::Type stringType = mlir::storage::StringType::get(_mlirCtxt);
+    const mlir::TypedAttr valueAttr = mlir::StringAttr::get(value, stringType);
+    const mlir::db::ColumnType resultType = allocColumnType(stringType);
+
+    return _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(), resultType, valueAttr).getResult();
+}
+
 mlir::Value DBProgramGenerator::constantLabelString(llvm::ArrayRef<std::string> labels) {
     static constexpr std::string_view labelSeparator = ", ";
 
@@ -4231,11 +4247,7 @@ mlir::Value DBProgramGenerator::constantLabelString(llvm::ArrayRef<std::string> 
         joined += labels[index];
     }
 
-    const mlir::Type stringType = mlir::storage::StringType::get(_mlirCtxt);
-    const mlir::TypedAttr valueAttr = mlir::StringAttr::get(joined, stringType);
-    const mlir::db::ColumnType resultType = allocColumnType(stringType);
-
-    return _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(), resultType, valueAttr).getResult();
+    return constantString(joined);
 }
 
 mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propExpr) {
@@ -4374,7 +4386,7 @@ mlir::Value DBProgramGenerator::translateArg(const Expr* argExpr) {
     return _part._exprMap.at(argExpr);
 }
 
-mlir::Value DBProgramGenerator::translateCreatedLabels(const Expr* argExpr) {
+mlir::Value DBProgramGenerator::translateCreatedMetadata(std::string_view funcName, const Expr* argExpr) {
     if (argExpr->getKind() != Expr::Kind::SYMBOL) {
         return {};
     }
@@ -4387,7 +4399,15 @@ mlir::Value DBProgramGenerator::translateCreatedLabels(const Expr* argExpr) {
         return {};
     }
 
-    return constantLabelString(createdIt->second._labels);
+    const PartScope::CreatedEntity& created = createdIt->second;
+
+    if (funcName == "labels") {
+        return constantLabelString(created._labels);
+    } else if (funcName == "edgeType") {
+        return constantString(created._edgeType);
+    } else {
+        return {};
+    }
 }
 
 void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
@@ -4398,10 +4418,11 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
-    if (funcName == "labels" && args && args->size() == 1) {
-        const mlir::Value createdLabels = translateCreatedLabels(args->front());
-        if (createdLabels) {
-            _part._exprMap[expr] = createdLabels;
+    const bool isEntityMetadata = funcName == "labels" || funcName == "edgeType";
+    if (isEntityMetadata && args && args->size() == 1) {
+        const mlir::Value createdMetadata = translateCreatedMetadata(funcName, args->front());
+        if (createdMetadata) {
+            _part._exprMap[expr] = createdMetadata;
             return;
         }
     }
