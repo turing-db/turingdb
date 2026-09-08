@@ -1954,3 +1954,16 @@ target_link_libraries(test_query_ir_label_predicate_codegen PRIVATE
         turing_db_ir_common_s
         turing_db_storage_s)
 target_include_directories(test_query_ir_label_predicate_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# The neighbourhood ranking tests score a node's neighbours against its own embedding end
+# to end through QueryInterpreterV3, over a purpose-built graph of 3-dimensional vectors,
+# and read the nl dump of a top-K ranking back as text.
+add_turing_test(test_query_ir_embedding_neighbour_ranking EmbeddingNeighbourRankingTest.cpp)
+target_sources(test_query_ir_embedding_neighbour_ranking PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_embedding_neighbour_ranking PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_embedding_neighbour_ranking PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
