@@ -61,6 +61,29 @@ def multipage_string_nodes():
         write_batch_size=16,
     )
 
+def nested_list_property_nodes():
+    # A LIST<LIST<INT64>> property column: two repetition levels, so the importer has to
+    # reassemble the inner lists from the rep/def levels rather than flatten them. Covers
+    # an empty inner list, a null inner list, a null element and an empty outer list.
+    ids = [0, 1, 2, 3]
+    labels = [[b"Person"] for _ in ids]
+    groups = [
+        [[1, 2], [3]],
+        [[], [4, None]],
+        [None, [5]],
+        [],
+    ]
+    table = pa.table(
+        {
+            "__id": pa.array(ids, pa.int64()),
+            "__labels": pa.array(labels, LABELS_TYPE),
+            "groups": pa.array(groups, pa.list_(pa.list_(pa.int64()))),
+        }
+    )
+    write(table, "nested_list_property_nodes.parquet")
+
+
 if __name__ == "__main__":
     minimal_edges()
     multipage_string_nodes()
+    nested_list_property_nodes()
