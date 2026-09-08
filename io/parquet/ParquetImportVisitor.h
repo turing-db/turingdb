@@ -19,6 +19,7 @@
 #include "metadata/PropertyType.h"
 
 namespace parquet {
+class ColumnDescriptor;
 class FileMetaData;
 }
 
@@ -54,6 +55,10 @@ protected:
         parquet::Type::type physicalType {parquet::Type::UNDEFINED};
         int16_t maxDefLevel {0};
         int16_t maxRepLevel {0};
+
+        // Indexed by repetition depth: the definition level a value must reach for the
+        // list at that depth to hold an element. Index 0 is unused.
+        std::vector<int16_t> listDefLevels;
     };
 
     CommitBuilder* _builder {nullptr};
@@ -106,9 +111,7 @@ protected:
     // Infers a property column value type and registers property type
     void discoverPropertyColumn(size_t columnIndex,
                                 const std::string& path,
-                                parquet::Type::type physicalType,
-                                int16_t maxDefLevel,
-                                int16_t maxRepLevel);
+                                const parquet::ColumnDescriptor& descriptor);
 
     // Capture helpers for property columns, called by the derived value callbacks
     // once they have handled their entity-specific columns.

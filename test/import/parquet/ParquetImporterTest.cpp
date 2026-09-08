@@ -318,6 +318,71 @@ TEST_F(ParquetImporterTest, ImportsListProperty) {
     ASSERT_EQ(tags, expected);
 }
 
+// A LIST<LIST<INT64>> property column: two repetition levels, so the rows have to be
+// reassembled into nested lists rather than flattened into one. The fixture also carries
+// an empty inner list, a null inner list, a null element and an empty outer list, each of
+// which the definition levels distinguish from the others.
+TEST_F(ParquetImporterTest, ImportsNestedListProperty) {
+    constexpr std::string_view graphName = "nestedlistprop";
+
+    SystemAccessor system = _env->getSystemManager().accessUnique();
+    Graph* imported = importSplit(system,
+                                  graphName,
+                                  "nested_list_property_nodes.parquet",
+                                  "minimal_edges.parquet");
+    ASSERT_NE(imported, nullptr);
+
+    const GraphReader reader = imported->openTransaction().readGraph();
+    const GraphMetadata& metadata = reader.getMetadata();
+
+    const auto groupsType = metadata.propTypes().get("groups");
+    ASSERT_TRUE(groupsType.has_value());
+    ASSERT_EQ(groupsType->_valueType, ValueType::List);
+
+    const auto renderElement = [](const ListElementView element) -> std::string {
+        if (element.getTag() == ListBufferTypeTag::Null) {
+            return "null";
+        }
+
+        return std::to_string(element.getAs<int64_t>());
+    };
+
+    std::vector<std::string> groups;
+    for (const ListView list : reader.scanNodeProperties<types::List>(groupsType->_id)) {
+        std::string rendered = "[";
+        for (const ListElementView outer : list) {
+            if (rendered.size() > 1) {
+                rendered += ", ";
+            }
+
+            if (outer.getTag() == ListBufferTypeTag::Null) {
+                rendered += "null";
+                continue;
+            }
+
+            ASSERT_EQ(outer.getTag(), ListBufferTypeTag::ListView);
+
+            rendered += "[";
+            bool first = true;
+            for (const ListElementView inner : outer.getAs<ListView>()) {
+                if (!first) {
+                    rendered += ", ";
+                }
+                first = false;
+                rendered += renderElement(inner);
+            }
+            rendered += "]";
+        }
+
+        groups.push_back(rendered + "]");
+    }
+    std::ranges::sort(groups);
+
+    const std::vector<std::string> expected = {
+        "[[1, 2], [3]]", "[[], [4, null]]", "[]", "[null, [5]]"};
+    ASSERT_EQ(groups, expected);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv, [] {
         testing::GTEST_FLAG(repeat) = 5;

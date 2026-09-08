@@ -1,8 +1,11 @@
 #include "ParquetImportVisitor.h"
 
+#include <ranges>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include <parquet/schema.h>
 #include <parquet/types.h>
 
 #include "list/ListBuffer.h"
@@ -18,17 +21,54 @@ using namespace db;
 namespace {
 
 // Parquet nests a LIST's values under synthetic group names, so the leaf path carries a
-// suffix the property must not be named after.
+// suffix the property must not be named after - one per level of nesting, so a list of
+// lists carries the suffix twice.
 std::string_view listPropertyName(const std::string& path) {
     static constexpr std::string_view suffixes[] = {".list.element", ".list.item", ".array"};
 
-    for (const std::string_view suffix : suffixes) {
-        if (path.ends_with(suffix)) {
-            return std::string_view {path}.substr(0, path.size() - suffix.size());
+    std::string_view name {path};
+
+    bool stripped = true;
+    while (stripped) {
+        stripped = false;
+
+        for (const std::string_view suffix : suffixes) {
+            if (name.ends_with(suffix)) {
+                name = name.substr(0, name.size() - suffix.size());
+                stripped = true;
+                break;
+            }
         }
     }
 
-    return path;
+    return name;
+}
+
+// The definition level at which the list at each repetition depth holds an element.
+// Walking the schema path root to leaf, a repeated node opens the next depth and both it
+// and an optional node deepen the level a value has to reach to be present at all.
+void collectListDefLevels(const parquet::ColumnDescriptor& descriptor,
+                          std::vector<int16_t>& listDefLevels) {
+    std::vector<const parquet::schema::Node*> ancestors;
+    for (const parquet::schema::Node* node = descriptor.schema_node().get();
+         node != nullptr && node->parent() != nullptr;
+         node = node->parent()) {
+        ancestors.push_back(node);
+    }
+
+    listDefLevels.assign(descriptor.max_repetition_level() + 1, 0);
+
+    int16_t definition = 0;
+    int16_t repetition = 0;
+    for (const parquet::schema::Node* node : ancestors | std::views::reverse) {
+        if (node->is_repeated()) {
+            repetition++;
+            definition++;
+            listDefLevels[repetition] = definition;
+        } else if (node->is_optional()) {
+            definition++;
+        }
+    }
 }
 
 }
@@ -75,10 +115,12 @@ bool ParquetImportVisitor::onBoolValues(size_t columnIndex, std::span<const bool
 
 void ParquetImportVisitor::discoverPropertyColumn(size_t columnIndex,
                                                   const std::string& path,
-                                                  parquet::Type::type physicalType,
-                                                  int16_t maxDefLevel,
-                                                  int16_t maxRepLevel) {
+                                                  const parquet::ColumnDescriptor& descriptor) {
     MetadataBuilder& metadataBuilder = _builder->metadata();
+
+    const parquet::Type::type physicalType = descriptor.physical_type();
+    const int16_t maxDefLevel = descriptor.max_definition_level();
+    const int16_t maxRepLevel = descriptor.max_repetition_level();
 
     ValueType valueType = ValueType::Invalid;
     // FIXME: Byte arrays always strings. Check for lists, etc.
@@ -122,6 +164,10 @@ void ParquetImportVisitor::discoverPropertyColumn(size_t columnIndex,
                         .physicalType = physicalType,
                         .maxDefLevel = maxDefLevel,
                         .maxRepLevel = maxRepLevel};
+
+    if (isList) {
+        collectListDefLevels(descriptor, col.listDefLevels);
+    }
 
     _propertyColumns[columnIndex] = std::move(col);
 }
@@ -188,27 +234,48 @@ void ParquetImportVisitor::buildListProperties(size_t columnIndex,
     const std::vector<int16_t>& defLevels = _propDefLevels[columnIndex];
     bioassert(repLevels.size() == defLevels.size(), "List property: rep and def level counts differ");
 
-    // A leaf under a LIST is one level deeper than the list itself, so an entry one below
-    // the maximum is a null element while anything shallower carries no element at all -
-    // an empty list, or, at level zero, a row with no value for the column.
-    const int16_t elementDefLevel = prop.maxDefLevel;
-    const int16_t nullElementDefLevel = static_cast<int16_t>(prop.maxDefLevel - 1);
+    const size_t maxDepth = static_cast<size_t>(prop.maxRepLevel);
+    const int16_t rowPresentDefLevel = static_cast<int16_t>(prop.listDefLevels[1] - 1);
 
-    std::vector<ListContainer::ListItemVariant> elements;
+    // One accumulator per repetition depth; a deeper one is closed into its parent
+    // before that parent moves on, so a list is built before the list holding it.
+    std::vector<std::vector<ListContainer::ListItemVariant>> openLists(maxDepth + 1);
+    size_t openDepth = 0;
     size_t valueIndex = 0;
     size_t row = 0;
     bool rowHasValue = false;
+    ListView rowList;
+
+    const auto closeDepth = [&](size_t depth) {
+        const ListView list = _listScratch.insert(openLists[depth]);
+        openLists[depth].clear();
+
+        if (depth == 1) {
+            rowList = list;
+        } else {
+            openLists[depth - 1].push_back(list);
+        }
+    };
 
     const auto storeRow = [&]() {
-        if (row > 0 && rowHasValue) {
-            _chunkLists[row - 1] = _listScratch.insert(elements);
+        if (row == 0 || !rowHasValue) {
+            return;
         }
-        elements.clear();
+
+        while (openDepth > 1) {
+            closeDepth(openDepth);
+            openDepth--;
+        }
+
+        closeDepth(1);
+        _chunkLists[row - 1] = rowList;
     };
 
     for (size_t i = 0; i < repLevels.size(); i++) {
-        const bool nextRow = repLevels[i] == 0;
-        if (nextRow) {
+        const int16_t repetition = repLevels[i];
+        const int16_t definition = defLevels[i];
+
+        if (repetition == 0) {
             storeRow();
 
             if (row == numRows) {
@@ -217,14 +284,49 @@ void ParquetImportVisitor::buildListProperties(size_t columnIndex,
             }
 
             row++;
-            rowHasValue = defLevels[i] != 0;
+            rowHasValue = definition >= rowPresentDefLevel;
+            openDepth = rowHasValue ? 1 : 0;
+            openLists[1].clear();
+        } else {
+            while (openDepth > static_cast<size_t>(repetition)) {
+                closeDepth(openDepth);
+                openDepth--;
+            }
         }
 
-        if (defLevels[i] == elementDefLevel) {
-            elements.push_back(listElement(prop, columnIndex, valueIndex));
-            valueIndex++;
-        } else if (defLevels[i] == nullElementDefLevel) {
-            elements.push_back(PropertyNull {});
+        if (!rowHasValue) {
+            continue;
+        }
+
+        size_t presentDepth = 0;
+        while (presentDepth < maxDepth && prop.listDefLevels[presentDepth + 1] <= definition) {
+            presentDepth++;
+        }
+
+        while (openDepth < presentDepth) {
+            openDepth++;
+            openLists[openDepth].clear();
+        }
+
+        if (presentDepth == maxDepth) {
+            if (definition == prop.maxDefLevel) {
+                openLists[maxDepth].push_back(listElement(prop, columnIndex, valueIndex));
+                valueIndex++;
+            } else {
+                openLists[maxDepth].push_back(PropertyNull {});
+            }
+        } else if (presentDepth > 0) {
+            // The entry stops short of a leaf, so what sits at the next depth is the
+            // whole element: an empty list where the level reaches that list, a null
+            // where it does not.
+            const bool emptyList =
+                definition == static_cast<int16_t>(prop.listDefLevels[presentDepth + 1] - 1);
+
+            if (emptyList) {
+                openLists[presentDepth].push_back(_listScratch.insert({}));
+            } else {
+                openLists[presentDepth].push_back(PropertyNull {});
+            }
         }
     }
 

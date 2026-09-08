@@ -35,7 +35,6 @@ bool ParquetEdgeVisitor::onFileStart(const parquet::FileMetaData& metadata) {
         const parquet::ColumnDescriptor* desc = schema->Column(columnIndex);
         const std::string path = desc->path()->ToDotString();
         const parquet::Type::type type = desc->physical_type();
-        const int16_t maxDefLevel = desc->max_definition_level();
         const int16_t maxRepLevel = desc->max_repetition_level();
 
         if (path == SOURCE_COL_PATH) {
@@ -60,7 +59,7 @@ bool ParquetEdgeVisitor::onFileStart(const parquet::FileMetaData& metadata) {
 
             _edgetypeColIdx = columnIndex;
         } else {
-            discoverPropertyColumn(columnIndex, path, type, maxDefLevel, maxRepLevel);
+            discoverPropertyColumn(columnIndex, path, *desc);
         }
     }
 

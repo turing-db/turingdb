@@ -53,7 +53,7 @@ bool ParquetNodeVisitor::onFileStart(const parquet::FileMetaData& metadata) {
             _lblColIdx = columnIndex;
             _lblMaxDefLevel = maxDefLevel;
         } else {
-            discoverPropertyColumn(columnIndex, path, type, maxDefLevel, maxRepLevel);
+            discoverPropertyColumn(columnIndex, path, *desc);
         }
     }
 
