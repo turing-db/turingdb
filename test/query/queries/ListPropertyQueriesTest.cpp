@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -137,6 +138,28 @@ protected:
         ASSERT_TRUE(status) << text << ": " << status.getError();
     }
 
+    void readNames(std::string_view text, std::vector<std::string>& names) {
+        names.clear();
+
+        const QueryStatus status = query(text, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(df->size(), 1);
+
+            const auto* column = df->cols().front()->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(column) << "expected a nullable string column";
+
+            const size_t rowCount = df->getLogicalRowCount();
+            for (size_t row = 0; row < rowCount; row++) {
+                const std::optional<types::String::Primitive>& name = column->at(row);
+                names.emplace_back(name ? std::string {*name} : "null");
+            }
+        });
+
+        ASSERT_TRUE(status) << text << ": " << status.getError();
+
+        std::sort(names.begin(), names.end());
+    }
+
     std::string _graphName = "simpledb";
     std::unique_ptr<TuringTestEnv> _env;
     TuringDB* _db {nullptr};
@@ -213,4 +236,46 @@ TEST_F(ListPropertyQueriesTest, readsAListAcrossACartesianProduct) {
 
     ASSERT_FALSE(lists.empty());
     EXPECT_EQ(lists, std::vector<std::string>(lists.size(), "[1, 2]"));
+}
+
+// A list property is read back by the v2 pipeline but not compared by it: comparing one
+// needs a list column the legacy planner never hands the operator, so the analyzer turns
+// the comparison away and the MLIR engine is the one that runs it.
+TEST_F(ListPropertyQueriesTest, readsAListThroughAFilterOnAnotherProperty) {
+    write("CREATE (a:Tagged {name: 'a', tags: [1, 2]})");
+    write("CREATE (b:Tagged {name: 'b', tags: [3]})");
+
+    std::vector<std::string> lists;
+    readLists("MATCH (n:Tagged) WHERE n.name = 'a' RETURN n.tags", lists);
+
+    EXPECT_EQ(lists, (std::vector<std::string> {"[1, 2]"}));
+}
+
+TEST_F(ListPropertyQueriesTest, rejectsListEqualityInWhere) {
+    write("CREATE (a:Tagged {name: 'a', tags: [1, 2]})");
+
+    const QueryStatus status =
+        query("MATCH (n:Tagged) WHERE n.tags = [1, 2] RETURN n.name", [](const Dataframe*) {});
+
+    ASSERT_FALSE(status);
+    EXPECT_NE(status.getError().find("'List' and 'List'"), std::string::npos)
+        << status.getError();
+}
+
+TEST_F(ListPropertyQueriesTest, rejectsListEqualityInAPattern) {
+    write("CREATE (a:Tagged {name: 'a', tags: [1, 2]})");
+
+    const QueryStatus status =
+        query("MATCH (n:Tagged {tags: [1, 2]}) RETURN n.name", [](const Dataframe*) {});
+
+    ASSERT_FALSE(status);
+}
+
+TEST_F(ListPropertyQueriesTest, rejectsAListIsNotNullTest) {
+    write("CREATE (a:Tagged {name: 'a', tags: [1, 2]})");
+
+    const QueryStatus status =
+        query("MATCH (n:Tagged) WHERE n.tags IS NOT NULL RETURN n.name", [](const Dataframe*) {});
+
+    ASSERT_FALSE(status);
 }

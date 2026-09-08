@@ -34,13 +34,14 @@ bool operator==(ListView lhs, ListView rhs);
  * @brief Compares an element of a @ref ListByteBuffer against a value of a known type.
  *
  * Equal only when the element holds that value: a number compares numerically whatever
- * it is tagged as, while an element of another type - a null or a nested list included -
- * equals no scalar.
+ * it is tagged as, a nested list element-wise against a list, and an element of any other
+ * type - a null included - equals neither.
  */
 bool operator==(ListElementView element, types::Int64::Primitive value);
 bool operator==(ListElementView element, types::UInt64::Primitive value);
 bool operator==(ListElementView element, types::Double::Primitive value);
 bool operator==(ListElementView element, types::String::Primitive value);
 bool operator==(ListElementView element, types::Bool::Primitive value);
+bool operator==(ListElementView element, ListView value);
 
 }

@@ -247,3 +247,8 @@ bool db::operator==(const ListElementView element, const types::Bool::Primitive 
     return element.getTag() == ListBufferTypeTag::Bool
         && static_cast<bool>(element.getAs<types::Bool::Primitive>()) == static_cast<bool>(value);
 }
+
+bool db::operator==(const ListElementView element, const ListView value) {
+    return element.getTag() == ListBufferTypeTag::ListView
+        && element.getAs<ListView>() == value;
+}

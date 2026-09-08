@@ -201,16 +201,24 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             }
 
             // A type-erased cell is equal only to a cell holding the same value, so it
-            // compares against the scalar types it can hold. Only the MLIR engine runs
-            // such a comparison: the legacy planner hands the operator no cell column
+            // compares against the types it can hold - a list among them. Only the MLIR
+            // engine runs such a comparison: the legacy planner hands it no cell column
             const bool comparesListItem =
                 pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Integer)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Char)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Bool);
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Bool)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::List);
 
-            if (_isV3 && comparesListItem) {
+            // A stored list compares against another list, and against null for
+            // IS (NOT) NULL. The MLIR engine alone runs it: the legacy planner has no
+            // list column to hand the operator.
+            const bool comparesList =
+                pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)
+                || pair == TypePairBitset(EvaluatedType::List, EvaluatedType::Null);
+
+            if (_isV3 && (comparesListItem || comparesList)) {
                 break;
             }
 

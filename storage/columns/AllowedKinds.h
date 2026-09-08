@@ -140,6 +140,7 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
         OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
         OptionalKindPairs<types::Embedding::Primitive, types::Embedding::Primitive>::Pairs,
+        OptionalKindPairs<ListView, ListView>::Pairs,
 
         // Equality against a type-erased cell, which holds its own type
         ListElementKindPairs<types::Int64::Primitive>::Pairs,
@@ -147,6 +148,7 @@ struct PairRestrictions<Op> {
         ListElementKindPairs<types::Double::Primitive>::Pairs,
         ListElementKindPairs<types::String::Primitive>::Pairs,
         ListElementKindPairs<types::Bool::Primitive>::Pairs,
+        ListElementKindPairs<ListView>::Pairs,
 
         // A loaded CSV field owns its characters, so a comparison against a string
         // property meets a borrowed view on one side and an owned string on the other -
@@ -171,6 +173,7 @@ struct PairRestrictions<Op> {
             KindPair<std::optional<types::String::Primitive>, PropertyNull>,
             KindPair<std::optional<types::Bool::Primitive>, PropertyNull>,
             KindPair<std::optional<types::Embedding::Primitive>, PropertyNull>,
+            KindPair<std::optional<ListView>, PropertyNull>,
 
             KindPair<NodeID, types::Int64::Primitive>,                // WHERE n = 1
             KindPair<NodeID, std::optional<types::Int64::Primitive>>, // WHERE e = e.age
