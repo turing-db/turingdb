@@ -4,7 +4,7 @@ Measured with `scripts/bench_paths.py`, which runs 28 biologically meaningful Cy
 queries through both engines in the turingdb shell — v2 directly, v3 behind the `#v3`
 prefix — and reports the median of five runs per query, the first discarded as a warmup.
 
-Provenance: commit `f56ef43ff`, default `-O3` build, 20-core Linux box, quiet machine.
+Provenance: this commit, default `-O3` build, 20-core Linux box, quiet machine.
 Graph `reactome` loaded from its binary dump: 2,978,202 nodes and 11,537,331 edges (415
 `TopLevelPathway`, 117,945 `Event`, 83,459 `Reaction`, 110,048 `Complex`).
 
@@ -20,18 +20,22 @@ v2 bug (below).
 
 | Question | v2 | v3 | |
 |---|---|---|---|
-| Find Signal Transduction by accession | 46.80 ms | 0.55 ms | **84×** |
-| Its direct sub-events (17 rows) | 46.21 | 1.33 | **35×** |
-| Its sub-events exactly 3 levels down (480) | 46.87 | 1.48 | **32×** |
-| Its sub-events exactly 4 levels down (1,169) | 47.42 | 1.74 | **27×** |
-| Reactions exactly 4 steps downstream of hub `R-HSA-2993780` | 47.09 | 1.66 | **28×** |
-| Sub-units of complex `R-HSA-6814275`, 2 levels in | 46.30 | 1.26 | **37×** |
+| Find Signal Transduction by accession | 45.77 ms | 0.56 ms | **82×** |
+| Its direct sub-events (17 rows) | 45.80 | 0.85 | **54×** |
+| Its sub-events exactly 3 levels down (480) | 46.10 | 1.01 | **46×** |
+| Its sub-events exactly 4 levels down (1,169) | 47.28 | 1.28 | **37×** |
+| Reactions exactly 4 steps downstream of hub `R-HSA-2993780` | 46.15 | 1.20 | **38×** |
+| Sub-units of complex `R-HSA-6814275`, 2 levels in | 46.04 | 1.21 | **38×** |
 
-**This is not a path-engine result.** Subtract the seed lookup on the first row and
-almost nothing of v2's time is left: its traversal accounts for at most ~0.6 ms on any
-of these, against v3's 0.7–1.2 ms. The multiple is `FuseScanByPropertyValue` turning a
-2.98M-node scan into a ranged property lookup. On walks this small v3 is level with v2
-or behind it, paying a fixed per-query cost of about half a millisecond.
+**Most of this is not a path-engine result.** Subtract the seed lookup on the first row
+and what is left of v2 is its traversal: 0.03 ms at depth 1, 0.33 at depth 3, 1.51 at
+depth 4 — though those are differences of two ~46 ms measurements, so their resolution is
+poor. v3's own increment is 0.29 / 0.45 / 0.72 ms at the same depths. The bulk of the
+multiple is `FuseScanByPropertyValue` turning a 2.98M-node scan into a ranged property
+lookup; v3 only pulls ahead on the walk itself by depth 4.
+
+These queries start from **one** node, so there is little for either engine to do. That is
+what makes them a good probe of fixed costs and a bad probe of traversal throughput.
 
 ## B. Label-seeded typed traversal — the engine, with no scan in the way
 
@@ -40,15 +44,15 @@ is the same set at a fixed depth. Both sides return identical counts.
 
 | Question | v2 | v3 | | count |
 |---|---|---|---|---|
-| Events 2 `hasEvent` levels under all 415 top-level pathways | 2.27 ms | 1.92 ms | 1.2× | 11,630 |
-| …3 levels | 9.92 | 3.87 | 2.6× | 28,799 |
-| …4 levels | 23.94 | 7.88 | 3.0× | 40,012 |
-| …5 levels | 51.06 | 12.32 | **4.1×** | 28,679 |
-| …6 levels | 67.26 | 14.87 | **4.5×** | 10,260 |
-| Every sub-unit two levels inside every complex | 57.45 | 30.35 | 1.9× | 213,396 |
-| Reaction triples three `precedingEvent` steps apart | 46.09 | 18.45 | 2.5× | see below |
-| Reactions two `hasEvent` levels under every top-level pathway | 2.43 | 1.16 | 2.1× | 6,371 |
-| Every reaction's input entities | 21.28 | 7.79 | 2.7× | 186,017 |
+| Events 2 `hasEvent` levels under all 415 top-level pathways | 2.40 ms | 1.46 ms | 1.7× | 11,630 |
+| …3 levels | 10.19 | 3.37 | 3.0× | 28,799 |
+| …4 levels | 24.57 | 7.04 | 3.5× | 40,012 |
+| …5 levels | 50.89 | 11.26 | **4.5×** | 28,679 |
+| …6 levels | 62.06 | 13.78 | **4.5×** | 10,260 |
+| Every sub-unit two levels inside every complex | 57.48 | 30.29 | 1.9× | 213,396 |
+| Reaction triples three `precedingEvent` steps apart | 46.36 | 17.60 | 2.6× | see below |
+| Reactions two `hasEvent` levels under every top-level pathway | 2.53 | 1.17 | 2.2× | 6,371 |
+| Every reaction's input entities | 21.26 | 7.78 | 2.7× | 186,017 |
 
 The margin grows with depth: the walk amortises v3's fixed per-query cost.
 
@@ -56,13 +60,13 @@ The margin grows with depth: the walk amortises v3's fixed per-query cost.
 
 | Question | v2 | v3 | | paths |
 |---|---|---|---|---|
-| Within 2 hops of the 415 top-level pathways | 2.99 ms | 1.42 ms | 2.1× | 34,669 |
-| Within 3 hops of them | 16.98 | 4.88 | 3.5× | 228,878 |
-| Events within 3 hops of them | 25.97 | 7.96 | 3.3× | 90,086 |
-| Within 2 hops of all 83,459 reactions | 255.93 | 85.98 | 3.0× | 4,788,031 |
-| Within 2 hops in either direction | 7143.46 | 832.97 | **8.6×** | 125,690,888 |
+| Within 2 hops of the 415 top-level pathways | 3.17 ms | 1.43 ms | 2.2× | 34,669 |
+| Within 3 hops of them | 17.02 | 4.87 | 3.5× | 228,878 |
+| Events within 3 hops of them | 25.84 | 7.83 | 3.3× | 90,086 |
+| Within 2 hops of all 83,459 reactions | 258.80 | 85.62 | 3.0× | 4,788,031 |
+| Within 2 hops in either direction | 7290.65 | 830.18 | **8.8×** | 125,690,888 |
 
-The last row is the cleanest read on the explorator alone: 151M paths/s against 17.6M.
+The last row is the cleanest read on the explorator alone: 151M paths/s against 17.2M.
 
 ## D. Queries v2 cannot express at all
 
@@ -72,17 +76,57 @@ Every Reactome hierarchy is typed, so this covers most of what a biologist would
 
 | Question | v2 | v3 | rows |
 |---|---|---|---|
-| Signal Transduction's entire sub-event tree, any depth | `ANALYZE_ERROR` | 2.65 ms | 3,154 |
-| Every reaction it eventually decomposes into | `ANALYZE_ERROR` | 2.64 | 2,344 |
-| Every reaction under every top-level pathway | `ANALYZE_ERROR` | 26.81 | 92,952 |
-| Which top-level pathway contains reaction `R-HSA-2993780` | `ANALYZE_ERROR` | 1.64 | 1 |
-| Reactions up to 4 steps downstream of that hub | `ANALYZE_ERROR` | 1.67 | 96 |
-| All reactions downstream of that hub, any distance, `DISTINCT` | `ANALYZE_ERROR` | 31.31 | 1,520 |
-| That complex's whole sub-unit tree | `ANALYZE_ERROR` | 1.23 | 23 |
-| Reaction pairs of one pathway sharing an input entity | `PLAN_ERROR: Common Successor Joins With Common Ancestor Unsupported` | 61.24 | 1 |
+| Signal Transduction's entire sub-event tree, any depth | `ANALYZE_ERROR` | 2.19 ms | 3,154 |
+| Every reaction it eventually decomposes into | `ANALYZE_ERROR` | 2.13 | 2,344 |
+| Every reaction under every top-level pathway | `ANALYZE_ERROR` | 26.22 | 92,952 |
+| Which top-level pathway contains reaction `R-HSA-2993780` | `ANALYZE_ERROR` | 1.22 | 1 |
+| Reactions up to 4 steps downstream of that hub | `ANALYZE_ERROR` | 1.26 | 96 |
+| All reactions downstream of that hub, any distance, `DISTINCT` | `ANALYZE_ERROR` | 32.71 | 1,520 |
+| That complex's whole sub-unit tree | `ANALYZE_ERROR` | 1.25 | 23 |
+| Reaction pairs of one pathway sharing an input entity | `PLAN_ERROR: Common Successor Joins With Common Ancestor Unsupported` | 61.10 | 1 |
 
 The `DISTINCT` cascade is the query the unconditional-search rule fixed: as an all-trails
 walk it was killed at 420 s.
+
+## The gate that cost more than the walk
+
+The first run of this benchmark showed v3 losing the traversal on group A, and the cause
+was not the walk. An end-constrained exploration asks `PathDistanceIndex::isWorthBuilding`
+whether a pruning index would pay, and that estimate needs the walked type's branching,
+which `sampleBranching` measured by striding over 4,096 nodes and reading both edge lists
+of each — 8,192 cold probes across a 2.4 GB graph, before a single edge of the walk. It
+ran per chunk until the index was built, so a query that visits 17 nodes paid a pass over
+the whole adjacency, and a multi-chunk query paid several.
+
+The branching depends only on the parts, the direction and the edge type — nothing about
+the query's seeds or hop bound — so it is now memoised on the commit's data
+(`EdgeBranchingCache`), keyed by direction and type and invalidated by the part counts it
+was measured on. Same protocol, before and after:
+
+| Query | before | after | |
+|---|---|---|---|
+| Its direct sub-events | 1.33 ms | 0.85 | −0.48 |
+| Its sub-events exactly 3 levels down | 1.48 | 1.01 | −0.47 |
+| Reactions exactly 4 steps downstream of the hub | 1.66 | 1.20 | −0.46 |
+| Events 4 `hasEvent` levels under all top-level pathways | 7.88 | 7.04 | −0.84 |
+| Events 6 levels under all of them | 14.87 | 13.78 | −1.09 |
+| Signal Transduction's entire sub-event tree | 2.65 | 2.19 | −0.46 |
+| Which top-level pathway contains the reaction | 1.64 | 1.22 | −0.42 |
+| **Sub-units of a complex, 2 levels in** (no end label) | 1.26 | 1.21 | −0.05 |
+| **That complex's whole sub-unit tree** (no end label) | 1.25 | 1.25 | 0.00 |
+| **Within 2 hops of the top-level pathways** (no end label) | 1.42 | 1.43 | +0.01 |
+| **Within 3 hops of them** (no end label) | 4.88 | 4.87 | −0.01 |
+
+Every end-constrained query drops by one sampling pass, 0.42–0.51 ms; the deeper ones drop
+0.84–1.09 ms, being the multi-chunk queries that were re-sampling per chunk. The four
+queries with no end constraint never reach the gate and do not move, which is what makes
+the attribution a measurement rather than a story. The one untyped end-labelled query
+saves only 0.13 ms, because `countMatching` returns `edges.size()` without reading an edge
+record when there is no type to match, so its sample never faults the adjacency in.
+
+What remains of v3's floor is ~0.55 ms for any query plus ~0.3 ms to start a walk. The
+`DISTINCT` cascade moved +1.40 ms, which is inside the noise of a query that first-touches
+95 MB — the dense `ReachWords` array is the next fixed cost of this kind.
 
 ## A v2 correctness bug, found by the comparison
 

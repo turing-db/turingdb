@@ -9,6 +9,7 @@
 
 namespace db {
 
+class EdgeBranchingCache;
 class EdgeIndexer;
 class NodeContainer;
 
@@ -36,11 +37,13 @@ public:
 
     size_t getAllocatedNodeCount() const { return _allocatedNodeCount; }
     size_t getAllocatedEdgeCount() const { return _allocatedEdgeCount; }
+    EdgeBranchingCache& getBranchingCache() const { return *_branchingCache; }
 
 private:
     std::vector<Entry> _entries;
     std::vector<NodeID> _firstNodeIDs;
     std::vector<size_t> _patchPartIndices;
+    EdgeBranchingCache* _branchingCache {nullptr};
     size_t _allocatedNodeCount {0};
     size_t _allocatedEdgeCount {0};
 };

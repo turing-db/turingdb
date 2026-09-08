@@ -8,6 +8,7 @@
 
 #include "PathExplorationDir.h"
 #include "datapart/EdgeRecord.h"
+#include "metadata/EdgeBranchingCache.h"
 #include "metadata/LabelSet.h"
 #include "views/GraphView.h"
 #include "ID.h"
@@ -42,14 +43,9 @@ public:
     bool canReachEndWithin(NodeID node, uint64_t hops) const;
     size_t getReachedCount() const { return _reached; }
 
-    // What a walk of one edge type branches by at the nodes it reaches, and how many nodes
-    // its frontier can occupy. A relation held by a fraction of the nodes is walked only
-    // through those, so averaging its degree over every node describes no walk at all.
-    // Sampled with a stride: no per-type edge count is kept.
-    struct TypeBranching {
-        double _fanOut {0.0};
-        double _supportNodes {0.0};
-    };
+    // Sampled with a stride, since no per-type edge count is kept, and memoised on the
+    // parts it was measured on
+    using TypeBranching = EdgeBranching;
 
     static void sampleBranching(const PartDirectory& parts,
                                 PathExplorationDir direction,
