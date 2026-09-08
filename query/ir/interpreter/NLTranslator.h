@@ -678,6 +678,7 @@ private:
     void translateNot(mlir::nl::Not notOp, NLStmtContainer* body);
     void translateToNullable(mlir::nl::ToNullable toNullable, NLStmtContainer* body);
 
+    void translateCase(mlir::nl::Case caseOp, NLStmtContainer* body);
     void translateUnaryFunction(mlir::Operation* op, NLStmtContainer* body);
 
     void translateBinaryFunction(mlir::Operation* op, NLStmtContainer* body);

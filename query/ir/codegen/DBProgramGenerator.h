@@ -31,6 +31,7 @@ class Region;
 namespace db {
 
 class BinaryExpr;
+class CaseExpr;
 class ExplainReport;
 class FunctionInvocationExpr;
 class FunctionInvocation;
@@ -667,6 +668,7 @@ private:
     void translateUnaryExpr(const Expr* expr, const UnaryExpr* unaryExpr);
     void translateBinaryExpr(const Expr* expr, const BinaryExpr* binExpr);
     void translateStringExpr(const Expr* expr);
+    void translateCaseExpr(const Expr* expr, const CaseExpr* caseExpr);
     void translateFunctionInvocationExpr(const Expr* expr, const FunctionInvocationExpr* funcExpr);
 
     void translateFunctionExpr(const Expr* expr, const FunctionInvocation* invocation);

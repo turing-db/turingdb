@@ -254,6 +254,25 @@ public:
 
     static NLUnaryFn selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result);
 
+    // Write each row of a CASE (nl.case): the value of the first branch whose condition
+    // holds, the default when none does, and an absent value when there is no default.
+    static void runCase(NLExecutionContext* context, NLFunctionData* data);
+
+    // Size the CASE result to the step's rows, all absent
+    static NLCaseResetFn selectCaseReset(ValueType valueType);
+
+    // Read one branch's condition column: a mask, a nullable mask - where a null row is
+    // not a match - or the null literal, which matches no row at all
+    static NLCaseTestFn selectCaseTest(const Column* condition, bool nullable, bool untypedNull);
+
+    // Copy one branch's value column into the result, which lowering resolved to the one
+    // nullable value column every branch promotes into. A branch of null writes nothing:
+    // the reset already left the row absent.
+    static NLCaseWriteFn selectCaseWrite(ValueType valueType,
+                                         const Column* value,
+                                         bool nullable,
+                                         bool untypedNull);
+
     // Lay a constant chunk's single value out over the driving relation's rows
     // (nl.broadcast_constant), so a fold that walks rows is handed the step's rows
     // rather than the one row a constant column is.

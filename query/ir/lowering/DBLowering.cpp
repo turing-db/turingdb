@@ -1,6 +1,7 @@
 #include "DBLowering.h"
 
 #include <algorithm>
+#include <array>
 #include <mlir/IR/Location.h>
 #include <optional>
 #include <string_view>
@@ -29,6 +30,7 @@
 #include "metadata/PropertyType.h"
 
 #include "IRException.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Casting.h"
 
 using namespace db;
@@ -342,6 +344,32 @@ NumericOperand numericOperand(mlir::Type chunkType) {
     }
 
     return {.numeric = element, .nullable = nullable};
+}
+
+// The value element a chunk carries, with its nullability stripped and a mask read as the
+// i1 it holds: what two chunks are compared on to see whether they carry the same values.
+mlir::Type chunkValueElement(mlir::OpBuilder& builder, mlir::Type chunkType) {
+    mlir::Type element = mlir::cast<nl::ChunkType>(chunkType).getElementType();
+    if (const auto nullable = mlir::dyn_cast<storage::NullableType>(element)) {
+        element = nullable.getValueType();
+    }
+
+    if (mlir::isa<storage::BoolType>(element)) {
+        return builder.getI1Type();
+    }
+
+    return element;
+}
+
+// Whether an element type is one arithmetic promotes: the two Cypher number columns.
+bool isNumericElement(mlir::Type element) {
+    if (mlir::isa<mlir::Float64Type>(element)) {
+        return true;
+    }
+
+    const auto integerType = mlir::dyn_cast<mlir::IntegerType>(element);
+
+    return integerType && integerType.getWidth() == 64;
 }
 
 bool isNullableChunk(mlir::Type chunkType) {
@@ -852,6 +880,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerBinaryOp<nl::Xor>(operation, BinaryResultKind::Boolean);
     } else if (mlir::db::NotOp notOp = mlir::dyn_cast<mlir::db::NotOp>(operation)) {
         lowerNot(notOp);
+    } else if (mlir::db::Case caseOp = mlir::dyn_cast<mlir::db::Case>(operation)) {
+        lowerCase(caseOp);
     } else if (mlir::db::FilterOp filter = mlir::dyn_cast<mlir::db::FilterOp>(operation)) {
         lowerFilter(filter);
     } else if (mlir::db::GroupAggregate groupAggregate = mlir::dyn_cast<mlir::db::GroupAggregate>(operation)) {
@@ -3037,6 +3067,153 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
     _valueMap[op.getResult(0)] = nlOp.getResult();
 }
 
+mlir::Type DBLowering::caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks) {
+    mlir::Type unified;
+
+    for (const mlir::Value chunk : valueChunks) {
+        const mlir::Type chunkType = chunk.getType();
+
+        // A null branch names no type of its own; what the others share is the column
+        if (isUntypedNullChunk(chunkType)) {
+            continue;
+        }
+
+        const mlir::Type element = chunkValueElement(_builder, chunkType);
+
+        if (!unified || unified == element) {
+            unified = element;
+            continue;
+        }
+
+        const bool bothNumeric = isNumericElement(unified) && isNumericElement(element);
+        if (!bothNumeric) {
+            throw IRException("db.case requires branches of one type, or of numeric types "
+                              "that promote against each other");
+        }
+
+        unified = promoteNumeric(_builder, unified, element);
+    }
+
+    // Every branch is the null literal, so no branch says what the column holds. The rows
+    // are all absent whichever type carries them, so they ride the integer column an
+    // untyped null is laid out over anywhere else.
+    if (!unified) {
+        return _builder.getIntegerType(64);
+    }
+
+    const auto integerType = mlir::dyn_cast<mlir::IntegerType>(unified);
+    const bool isBool = integerType && integerType.getWidth() == 1;
+    const bool isString = mlir::isa<storage::StringType>(unified);
+
+    if (!isNumericElement(unified) && !isBool && !isString) {
+        throw IRException("db.case requires scalar branches: an entity, a list or an "
+                          "embedding is not a value a branch can select");
+    }
+
+    return unified;
+}
+
+mlir::Value DBLowering::caseBranchChunk(mlir::Value chunk, mlir::Type resultElement) {
+    const mlir::Type chunkType = chunk.getType();
+
+    // A null branch is left as the untyped null it is: the selection writes an absent
+    // value for the rows that take it, whatever the column holds elsewhere
+    if (isUntypedNullChunk(chunkType)) {
+        return chunk;
+    } else if (chunkValueElement(_builder, chunkType) == resultElement) {
+        return chunk;
+    }
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const nl::ChunkType convertedType
+        = nl::ChunkType::get(context, storage::NullableType::get(context, resultElement));
+
+    mlir::OpBuilder::InsertionGuard guard(_builder);
+    setInsertionForUnaryOp(chunk);
+
+    if (mlir::isa<mlir::Float64Type>(resultElement)) {
+        return _builder.create<nl::ToFloat>(_builder.getUnknownLoc(), convertedType, chunk).getResult();
+    }
+
+    return _builder.create<nl::ToInteger>(_builder.getUnknownLoc(), convertedType, chunk).getResult();
+}
+
+void DBLowering::lowerCase(mlir::db::Case caseOp) {
+    llvm::SmallVector<mlir::Value, 4> conditions;
+    for (const mlir::Value condition : caseOp.getConditions()) {
+        conditions.push_back(mapValue(condition));
+    }
+
+    llvm::SmallVector<mlir::Value, 4> values;
+    for (const mlir::Value value : caseOp.getValues()) {
+        values.push_back(mapValue(value));
+    }
+
+    const mlir::Value dbDefault = caseOp.getDefaultValue();
+    mlir::Value defaultValue = dbDefault ? mapValue(dbDefault) : mlir::Value();
+
+    const auto gatherOperands = [&](llvm::SmallVectorImpl<mlir::Value>& gathered) {
+        gathered.assign(conditions.begin(), conditions.end());
+        gathered.append(values.begin(), values.end());
+
+        if (defaultValue) {
+            gathered.push_back(defaultValue);
+        }
+    };
+
+    llvm::SmallVector<mlir::Value, 8> operands;
+    gatherOperands(operands);
+
+    // A selection walks rows and a constant carries none of its own, so every branch is
+    // first laid out over the relation driving the CASE - the kernel then reads one cell
+    // of each condition and each value per row it writes
+    const mlir::Value cardinality = cardinalityDriver(operands);
+
+    for (mlir::Value& condition : conditions) {
+        condition = rowAlignedChunk(condition, cardinality);
+    }
+
+    for (mlir::Value& value : values) {
+        value = rowAlignedChunk(value, cardinality);
+    }
+
+    if (defaultValue) {
+        defaultValue = rowAlignedChunk(defaultValue, cardinality);
+    }
+
+    llvm::SmallVector<mlir::Value, 5> valueChunks(values.begin(), values.end());
+    if (defaultValue) {
+        valueChunks.push_back(defaultValue);
+    }
+
+    const mlir::Type resultElement = caseResultElement(valueChunks);
+
+    for (mlir::Value& value : values) {
+        value = caseBranchChunk(value, resultElement);
+    }
+
+    if (defaultValue) {
+        defaultValue = caseBranchChunk(defaultValue, resultElement);
+    }
+
+    gatherOperands(operands);
+
+    // A row matching no branch of a defaultless CASE is absent, and so is one taking a
+    // null branch, so the selection always lands in a nullable value column
+    mlir::MLIRContext* const context = _builder.getContext();
+    const nl::ChunkType resultType
+        = nl::ChunkType::get(context, storage::NullableType::get(context, resultElement));
+
+    setInsertionForNaryOp(operands);
+
+    nl::Case nlCase = _builder.create<nl::Case>(_builder.getUnknownLoc(),
+                                                resultType,
+                                                conditions,
+                                                values,
+                                                defaultValue);
+    _valueMap[caseOp.getResult()] = nlCase.getResult();
+}
+
 void DBLowering::lowerNot(mlir::db::NotOp notOp) {
     const mlir::Value operandChunk = mapValue(notOp.getOperand());
 
@@ -3320,31 +3497,46 @@ void DBLowering::setInsertionAfterProducingLoop(mlir::Block* updateBlock) {
 }
 
 void DBLowering::setInsertionForBinaryOp(mlir::Value lhs, mlir::Value rhs) {
-    // If both operands are top-level constants (in `_entryBlock`), then place the op
-    // after the latter defined constant. Otherwise place the op in the more deeply nested
+    const std::array<mlir::Value, 2> operands {lhs, rhs};
+    setInsertionForNaryOp(operands);
+}
+
+void DBLowering::setInsertionForNaryOp(llvm::ArrayRef<mlir::Value> operands) {
+    // If every operand is a top-level constant (in `_entryBlock`), then place the op
+    // after the last defined constant. Otherwise place the op in the more deeply nested
     // block.
-    mlir::Block* const insertBlock = deeperBlock(lhs, rhs);
+    mlir::Value deepest = operands.front();
+    for (const mlir::Value operand : operands.drop_front()) {
+        if (deeperBlock(deepest, operand) != ownerBlock(deepest)) {
+            deepest = operand;
+        }
+    }
+
+    mlir::Block* const insertBlock = ownerBlock(deepest);
 
     if (insertBlock != _entryBlock) {
         setInsertionInto(insertBlock);
         return;
     }
 
-    const mlir::Operation* lhsDef = lhs.getDefiningOp();
-    const mlir::Operation* rhsDef = rhs.getDefiningOp();
-    const size_t defsToFind = (lhsDef == rhsDef) ? 1 : 2;
+    llvm::SmallPtrSet<const mlir::Operation*, 4> defs;
+    for (const mlir::Value operand : operands) {
+        if (const mlir::Operation* const definingOp = operand.getDefiningOp()) {
+            defs.insert(definingOp);
+        }
+    }
 
-    // Walk the entry block to find which of the two defining ops appears later —
-    // the new op must go after that one to stay before any nl.for that follows.
-    // Each op appears once in the block, so stop as soon as both defs are seen.
+    // Walk the entry block to find which of the defining ops appears last — the new op
+    // must go after that one to stay before any nl.for that follows. Each op appears once
+    // in the block, so stop as soon as every def is seen.
     mlir::Operation* lastDef = nullptr;
     size_t defsFound = 0;
     for (mlir::Operation& op : *_entryBlock) {
-        if (&op == lhsDef || &op == rhsDef) {
+        if (defs.contains(&op)) {
             lastDef = &op;
             defsFound++;
 
-            if (defsFound == defsToFind) {
+            if (defsFound == defs.size()) {
                 break;
             }
         }

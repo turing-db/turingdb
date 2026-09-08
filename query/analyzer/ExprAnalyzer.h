@@ -34,6 +34,7 @@ class Symbol;
 class NodePattern;
 class EdgePattern;
 class ListExpr;
+class CaseExpr;
 class MapLiteral;
 
 class ExprAnalyzer {
@@ -61,6 +62,7 @@ public:
     void analyzeSymbolExpr(SymbolExpr* expr);
     void analyzeLiteralExpr(LiteralExpr* expr);
     void analyzeListExpr(ListExpr* expr);
+    void analyzeCaseExpr(CaseExpr* expr);
     void analyzeStringExpr(StringExpr* expr);
     void analyzeEntityTypeExpr(EntityTypeExpr* expr);
     void analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionResolver* resolver);
@@ -95,6 +97,13 @@ private:
 
     void analyzeListElements(Expr* expr, std::span<Expr* const> elements);
     void analyzeMapEntries(Expr* expr, const MapLiteral* map);
+
+    // The type a CASE has once @param branch is folded into the type its earlier branches
+    // already share, reporting a pair no column type can hold
+    EvaluatedType unifyCaseBranch(EvaluatedType carried, const Expr* branch);
+
+    // Rejects a CASE subject, or a value it is compared against, that no column holds
+    void requireCaseComparable(const Expr* expr, EvaluatedType type) const;
 
     LoadCSVStmt* findCSVSource(const VarDecl* alias) const;
 

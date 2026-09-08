@@ -1683,6 +1683,30 @@ class NLBinaryFunctionOp<string mnemonic> : NLOp<mnemonic, [Pure, ConstantThroug
 def CosineSimilarity : NLBinaryFunctionOp<"cosine_similarity">;
 def EuclideanDistance : NLBinaryFunctionOp<"euclidean_distance">;
 
+def Case : NLOp<"case", [Pure, RowAlignedThroughOperands, AttrSizedOperandSegments]> {
+  let summary = "Row-wise selection of the first branch whose condition holds";
+  let description = [{
+      The lowered db.case: parallel condition and value chunks, an optional default, and
+      a nullable value chunk holding the branch each row took. Every operand carries
+      rows - a constant among them was laid out over the driving relation during
+      lowering - so the selection reads one cell of each per row it writes.
+
+      %r = nl.case({%c0}, {%v0}, %d) : (!nl.chunk<i1>, !nl.chunk<!storage.nullable<i64>>,
+                                        !nl.chunk<!storage.nullable<i64>>)
+                                        -> !nl.chunk<!storage.nullable<i64>>
+  }];
+
+  let arguments = (ins Variadic<NLChunk>:$conditions,
+                       Variadic<NLChunk>:$values,
+                       Optional<NLChunk>:$defaultValue);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = [{
+    `(` `{` $conditions `}` `,` `{` $values `}` (`,` $defaultValue^)? `)`
+    attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 def Filter : NLOp<"filter", [Pure]> {
   let summary = "Keep only the rows where the mask chunk is true, as freshly cut chunks";
   let description = [{

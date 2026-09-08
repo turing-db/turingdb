@@ -342,6 +342,14 @@ ValueType nullableChunkValueType(mlir::Type chunkType) {
     return valueTypeFromElementType(nullableType.getValueType());
 }
 
+// Whether a chunk holds a value that may be absent (!nl.chunk<!storage.nullable<T>>), as
+// opposed to a plain value column or a mask
+bool isNullableChunk(mlir::Type chunkType) {
+    const auto chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+
+    return chunk && mlir::isa<storage::NullableType>(chunk.getElementType());
+}
+
 // Whether a chunk carries the null literal, which has no value type of its own: a
 // !nl.chunk<!storage.nullable<none>>
 bool isUntypedNullChunk(mlir::Type chunkType) {
@@ -658,6 +666,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateNot(notOp, body);
         } else if (nl::ToNullable toNullable = mlir::dyn_cast<nl::ToNullable>(operation)) {
             translateToNullable(toNullable, body);
+        } else if (nl::Case caseOp = mlir::dyn_cast<nl::Case>(operation)) {
+            translateCase(caseOp, body);
         } else if (lookupUnaryFunctionSelector(operation)) {
             translateUnaryFunction(&operation, body);
         } else if (lookupBinaryFunctionSelector(operation)) {
@@ -1962,6 +1972,55 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
 
     NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
     body->emplaceStmt(&NLExecutor::runUnary, data);
+}
+
+void NLTranslator::translateCase(nl::Case caseOp, NLStmtContainer* body) {
+    const mlir::Value resultValue = caseOp.getResult();
+    const ValueType valueType = nullableChunkValueType(resultValue.getType());
+
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    const mlir::OperandRange conditions = caseOp.getConditions();
+    const mlir::OperandRange values = caseOp.getValues();
+
+    // Every branch was laid out over the driving relation during lowering, so any of them
+    // gives the rows this step writes
+    NLCaseData* data = _program->allocFunctionData<NLCaseData>(getColumn(conditions.front()),
+                                                               result,
+                                                               NLExecutor::selectCaseReset(valueType));
+
+    for (size_t branchIndex = 0; branchIndex < conditions.size(); branchIndex++) {
+        const mlir::Type conditionType = conditions[branchIndex].getType();
+        const mlir::Type valueChunkType = values[branchIndex].getType();
+
+        NLCaseData::Branch branch;
+        branch._condition = getColumn(conditions[branchIndex]);
+        branch._value = getColumn(values[branchIndex]);
+        branch._test = NLExecutor::selectCaseTest(branch._condition,
+                                                  isNullableChunk(conditionType),
+                                                  isUntypedNullChunk(conditionType));
+        branch._write = NLExecutor::selectCaseWrite(valueType,
+                                                    branch._value,
+                                                    isNullableChunk(valueChunkType),
+                                                    isUntypedNullChunk(valueChunkType));
+
+        data->addBranch(branch);
+    }
+
+    const mlir::Value defaultValue = caseOp.getDefaultValue();
+    if (defaultValue) {
+        const mlir::Type defaultType = defaultValue.getType();
+        const Column* const defaultColumn = getColumn(defaultValue);
+
+        data->setDefault(defaultColumn,
+                         NLExecutor::selectCaseWrite(valueType,
+                                                     defaultColumn,
+                                                     isNullableChunk(defaultType),
+                                                     isUntypedNullChunk(defaultType)));
+    }
+
+    body->emplaceStmt(&NLExecutor::runCase, data);
 }
 
 void NLTranslator::translateUnaryFunction(mlir::Operation* op, NLStmtContainer* body) {

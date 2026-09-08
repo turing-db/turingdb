@@ -307,6 +307,7 @@ void ReturnStmtGenerator::expandExpr(Expr* expr) {
             // TODO: Add a GetEntityType node (currently unused)
         case Expr::Kind::PATH:
         case Expr::Kind::LIST:
+        case Expr::Kind::CASE:
             throwError(
                 fmt::format("{} expressions not yet supported in RETURN statements.",
                             ExprKindDescription::value(expr->getKind())),
@@ -331,6 +332,7 @@ void ReturnStmtGenerator::handleEvaluationBlocker(const Expr* expr) {
         case Expr::Kind::LITERAL:
         case Expr::Kind::INDEX:
         case Expr::Kind::LIST:
+        case Expr::Kind::CASE:
             throwError("Tried to handle non-blocking expression as blocker.", expr);
         break;
 

@@ -9,6 +9,7 @@
 #include "SymbolChain.h"
 
 #include "BinaryExpr.h"
+#include "CaseExpr.h"
 #include "EntityTypeExpr.h"
 #include "Expr.h"
 #include "ExprChain.h"
@@ -114,6 +115,31 @@ bool StructuralExpressionComparator::equal(const Expr* lhs, const Expr* rhs) {
             const ListExpr* rhsList = static_cast<const ListExpr*>(rhs);
 
             return equalExprLists(lhsList->getElements(), rhsList->getElements());
+        }
+        break;
+
+        case Expr::Kind::CASE: {
+            const CaseExpr* lhsCase = static_cast<const CaseExpr*>(lhs);
+            const CaseExpr* rhsCase = static_cast<const CaseExpr*>(rhs);
+
+            const CaseExpr::Branches& lhsBranches = lhsCase->getBranches();
+            const CaseExpr::Branches& rhsBranches = rhsCase->getBranches();
+
+            if (lhsBranches.size() != rhsBranches.size()) {
+                return false;
+            }
+
+            for (size_t branchIndex = 0; branchIndex < lhsBranches.size(); branchIndex++) {
+                const bool sameWhen = equal(lhsBranches[branchIndex]._when, rhsBranches[branchIndex]._when);
+                const bool sameThen = equal(lhsBranches[branchIndex]._then, rhsBranches[branchIndex]._then);
+
+                if (!sameWhen || !sameThen) {
+                    return false;
+                }
+            }
+
+            return equal(lhsCase->getSubject(), rhsCase->getSubject())
+                   && equal(lhsCase->getElseExpr(), rhsCase->getElseExpr());
         }
         break;
 

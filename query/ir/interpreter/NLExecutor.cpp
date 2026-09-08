@@ -1006,6 +1006,52 @@ NLUnaryFn selectToNullableOf(const Column* operand, LocalMemory* memory, Column*
     return &toNullableColumn<Primitive>;
 }
 
+bool caseTestMask(const Column* condition, size_t row) {
+    return static_cast<const ColumnMask*>(condition)->getRaw()[row];
+}
+
+bool caseTestOptMask(const Column* condition, size_t row) {
+    return static_cast<const ColumnOptMask*>(condition)->getRaw()[row].value_or(false);
+}
+
+bool caseTestBoolColumn(const Column* condition, size_t row) {
+    return static_cast<const ColumnVector<types::Bool::Primitive>*>(condition)->getRaw()[row];
+}
+
+// A null is not true, so a branch whose condition is the null literal never fires and its
+// rows fall through to the next one
+bool caseTestNever(const Column* condition, size_t row) {
+    return false;
+}
+
+template <typename Primitive>
+void caseWriteOptCell(Column* result, const Column* value, size_t row) {
+    std::vector<std::optional<Primitive>>& results = static_cast<ColumnOptVector<Primitive>*>(result)->getRaw();
+    results[row] = static_cast<const ColumnOptVector<Primitive>*>(value)->getRaw()[row];
+}
+
+template <typename Primitive>
+void caseWritePlainCell(Column* result, const Column* value, size_t row) {
+    std::vector<std::optional<Primitive>>& results = static_cast<ColumnOptVector<Primitive>*>(result)->getRaw();
+    results[row] = static_cast<const ColumnVector<Primitive>*>(value)->getRaw()[row];
+}
+
+void caseWriteMaskCell(Column* result, const Column* value, size_t row) {
+    std::vector<std::optional<CustomBool>>& results = static_cast<ColumnOptMask*>(result)->getRaw();
+    results[row] = CustomBool {static_cast<const ColumnMask*>(value)->getRaw()[row]};
+}
+
+// The reset already left the row absent, which is what a branch of null gives it; the
+// write is only what claims the row against the branches behind it
+void caseWriteNullCell(Column* result, const Column* value, size_t row) {
+}
+
+template <typename Primitive>
+void caseResetColumn(Column* result, size_t rowCount) {
+    std::vector<std::optional<Primitive>>& results = static_cast<ColumnOptVector<Primitive>*>(result)->getRaw();
+    results.assign(rowCount, std::optional<Primitive> {});
+}
+
 // 3-way compare two rows of a type-erased column of tagged scalars. Cells need not share
 // a type, so a pair of different types compares by the order those types sort in; nulls
 // tie and sort after every value, as they do in a nullable value column.
@@ -4136,6 +4182,79 @@ void NLExecutor::runBinary(NLExecutionContext*, NLFunctionData* data) {
 void NLExecutor::runUnary(NLExecutionContext*, NLFunctionData* data) {
     const NLUnaryData* unary = static_cast<NLUnaryData*>(data);
     unary->getFn()(unary->getResult(), unary->getOperand());
+}
+
+void NLExecutor::runCase(NLExecutionContext*, NLFunctionData* data) {
+    const NLCaseData* caseData = static_cast<NLCaseData*>(data);
+
+    Column* const result = caseData->getResult();
+    const size_t rowCount = caseData->getCardinality()->size();
+
+    caseData->getReset()(result, rowCount);
+
+    const std::vector<NLCaseData::Branch>& branches = caseData->branches();
+    const Column* const defaultValue = caseData->getDefaultValue();
+    const NLCaseWriteFn writeDefault = caseData->getWriteDefault();
+
+    // A row takes the first branch whose condition holds, so the branches are walked per
+    // row rather than the rows per branch: the first match ends the row
+    for (size_t row = 0; row < rowCount; row++) {
+        bool matched = false;
+
+        for (const NLCaseData::Branch& branch : branches) {
+            if (!branch._test(branch._condition, row)) {
+                continue;
+            }
+
+            branch._write(result, branch._value, row);
+            matched = true;
+            break;
+        }
+
+        if (!matched && writeDefault) {
+            writeDefault(result, defaultValue, row);
+        }
+    }
+}
+
+NLCaseResetFn NLExecutor::selectCaseReset(ValueType valueType) {
+    NLCaseResetFn reset = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        reset = &caseResetColumn<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return reset;
+}
+
+NLCaseTestFn NLExecutor::selectCaseTest(const Column* condition, bool nullable, bool untypedNull) {
+    if (untypedNull) {
+        return &caseTestNever;
+    } else if (condition->getContainerKind() == ContainerKind::code<ColumnMask>()) {
+        return &caseTestMask;
+    }
+
+    return nullable ? &caseTestOptMask : &caseTestBoolColumn;
+}
+
+NLCaseWriteFn NLExecutor::selectCaseWrite(ValueType valueType,
+                                          const Column* value,
+                                          bool nullable,
+                                          bool untypedNull) {
+    if (untypedNull) {
+        return &caseWriteNullCell;
+    } else if (value->getContainerKind() == ContainerKind::code<ColumnMask>()) {
+        return &caseWriteMaskCell;
+    }
+
+    NLCaseWriteFn write = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        write = nullable ? &caseWriteOptCell<typename T::Primitive>
+                         : &caseWritePlainCell<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return write;
 }
 
 NLUnaryFn NLExecutor::selectNot(const Column* operand, LocalMemory* memory, Column*& result) {

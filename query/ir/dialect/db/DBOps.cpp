@@ -400,6 +400,22 @@ LogicalResult Output::verify() {
     return success();
 }
 
+// db.case pairs each condition with the value the row takes when it holds, so the two
+// operand groups must be parallel; a CASE with no branch is not a selection at all.
+LogicalResult Case::verify() {
+    const OperandRange conditions = getConditions();
+    const OperandRange values = getValues();
+
+    if (conditions.empty()) {
+        return emitOpError("requires at least one branch");
+    } else if (conditions.size() != values.size()) {
+        return emitOpError("expects one value per condition, but has ")
+               << values.size() << " values for " << conditions.size() << " conditions";
+    }
+
+    return success();
+}
+
 // db.limit passes its columns straight through, so the results must be exactly
 // the input columns - same count, same types and in the same order.
 LogicalResult Limit::verify() {
