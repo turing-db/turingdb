@@ -17,7 +17,15 @@ namespace rv = rg::views;
 
 void LabelsFunction::getLabelString(std::string& out, GraphView view, NodeID n) {
     out.clear();
-    const LabelSetHandle lblset = view.read().getNodeLabelSet(n);
+    const GraphReader reader = view.read();
+
+    const bool exists = reader.graphHasNode(n);
+    if (!exists) {
+        out = "null";
+        return;
+    }
+
+    const LabelSetHandle lblset = reader.getNodeLabelSet(n);
 
     std::vector<LabelID> labels;
     lblset.decompose(labels);

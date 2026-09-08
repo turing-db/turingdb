@@ -2810,12 +2810,19 @@ void DBProgramGenerator::generateCrossedCall(std::string_view procedureName,
 
 void DBProgramGenerator::publishCreatedEntity(const VarDecl* decl,
                                               mlir::Value column,
+                                              llvm::ArrayRef<llvm::StringRef> labelNames,
                                               llvm::ArrayRef<llvm::StringRef> propNames,
                                               llvm::ArrayRef<mlir::Value> propValues) {
     bioassert(propNames.size() == propValues.size(), "One value per created property expected");
 
     PartScope::CreatedEntity& created = _part._createdEntities[decl];
     created._column = column;
+
+    created._labels.clear();
+    created._labels.reserve(labelNames.size());
+    for (const llvm::StringRef labelName : labelNames) {
+        created._labels.emplace_back(labelName.data(), labelName.size());
+    }
 
     for (size_t index = 0; index < propNames.size(); index++) {
         const llvm::StringRef propName = propNames[index];
@@ -2901,7 +2908,7 @@ void DBProgramGenerator::generateCreate(const SinglePartQuery* query) {
 
         if (decl) {
             knownVars[decl] = nodeValue;
-            publishCreatedEntity(decl, nodeValue, propNames, propValues);
+            publishCreatedEntity(decl, nodeValue, labelNames, propNames, propValues);
         }
 
         return nodeValue;
@@ -2959,7 +2966,7 @@ void DBProgramGenerator::generateCreate(const SinglePartQuery* query) {
 
                 const VarDecl* edgeDecl = edge->getDecl();
                 if (edgeDecl && !edgeDecl->isUnnamed()) {
-                    publishCreatedEntity(edgeDecl, createEdge.getResult(), propNames, propValues);
+                    publishCreatedEntity(edgeDecl, createEdge.getResult(), {}, propNames, propValues);
                 }
 
                 lhsValue = rhsValue;
@@ -4212,6 +4219,25 @@ mlir::Value DBProgramGenerator::nullConstantColumn() {
     return _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(), resultType, valueAttr).getResult();
 }
 
+mlir::Value DBProgramGenerator::constantLabelString(llvm::ArrayRef<std::string> labels) {
+    static constexpr std::string_view labelSeparator = ", ";
+
+    std::string joined;
+    for (size_t index = 0; index < labels.size(); index++) {
+        if (index > 0) {
+            joined += labelSeparator;
+        }
+
+        joined += labels[index];
+    }
+
+    const mlir::Type stringType = mlir::storage::StringType::get(_mlirCtxt);
+    const mlir::TypedAttr valueAttr = mlir::StringAttr::get(joined, stringType);
+    const mlir::db::ColumnType resultType = allocColumnType(stringType);
+
+    return _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(), resultType, valueAttr).getResult();
+}
+
 mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propExpr) {
     const VarDecl* entityDecl = propExpr->getEntityVarDecl();
     const std::string_view varName = entityDecl->getName();
@@ -4348,6 +4374,22 @@ mlir::Value DBProgramGenerator::translateArg(const Expr* argExpr) {
     return _part._exprMap.at(argExpr);
 }
 
+mlir::Value DBProgramGenerator::translateCreatedLabels(const Expr* argExpr) {
+    if (argExpr->getKind() != Expr::Kind::SYMBOL) {
+        return {};
+    }
+
+    const SymbolExpr* symbolExpr = static_cast<const SymbolExpr*>(argExpr);
+    const VarDecl* decl = symbolExpr->getDecl();
+
+    const auto createdIt = _part._createdEntities.find(decl);
+    if (createdIt == end(_part._createdEntities)) {
+        return {};
+    }
+
+    return constantLabelString(createdIt->second._labels);
+}
+
 void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
                                                const FunctionInvocation* invocation) {
     const std::string_view funcName = invocation->getSignature()->getFullName();
@@ -4355,6 +4397,14 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    if (funcName == "labels" && args && args->size() == 1) {
+        const mlir::Value createdLabels = translateCreatedLabels(args->front());
+        if (createdLabels) {
+            _part._exprMap[expr] = createdLabels;
+            return;
+        }
+    }
 
     const auto unaryIt = unaryFunctionEmitters.find(funcName);
     if (unaryIt != end(unaryFunctionEmitters)) {

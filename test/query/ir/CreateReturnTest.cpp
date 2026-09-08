@@ -158,6 +158,22 @@ TEST_F(CreateReturnTest, returnsNullForAPropertyTheCreateDidNotWrite) {
     expectWriteRows("CREATE (n:Tag {name: 'x'}) RETURN n.age", {{"null"}});
 }
 
+// labels() reads the labels the CREATE wrote, not a db.labels of the provisional ID: that
+// node is in no committed graph the read would consult
+TEST_F(CreateReturnTest, returnsLabelsOfTheNodeItCreated) {
+    expectWriteRows("CREATE (n:Tag) RETURN labels(n)", {{"Tag"}});
+}
+
+TEST_F(CreateReturnTest, returnsEveryLabelOfTheNodeItCreated) {
+    expectWriteRows("CREATE (n:Person:Officer) RETURN labels(n)", {{"Person, Officer"}});
+}
+
+TEST_F(CreateReturnTest, returnsLabelsOncePerMatchedRow) {
+    expectWriteRows("MATCH (p:Person) CREATE (m:Clone) RETURN labels(m)",
+                    {{"Clone"}, {"Clone"}, {"Clone"}, {"Clone"},
+                     {"Clone"}, {"Clone"}, {"Clone"}, {"Clone"}});
+}
+
 // One Tag per Person, each carrying that Person's name
 TEST_F(CreateReturnTest, returnsANodePerMatchedRow) {
     expectWriteRows("MATCH (p:Person) CREATE (t:Tag {name: p.name}) RETURN t.name",
