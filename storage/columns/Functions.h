@@ -12,6 +12,7 @@
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "TypeUtils.h"
+#include "metadata/LabelSetHandle.h"
 #include "metadata/PropertyType.h"
 #include "views/GraphView.h"
 
@@ -21,6 +22,8 @@
 #include "TuringException.h"
 
 namespace db {
+
+class CommitWriteBuffer;
 
 /**
  * @brief Generic function to apply a generic invokable to two possibly-optional
@@ -55,21 +58,26 @@ public:
     using ArgType = NodeID;
     using ResultType = std::string;
 
-    explicit LabelsFunction(GraphView view)
-        : _view(view)
-    {
-    }
+    explicit LabelsFunction(GraphView view);
 
-    ResultType operator()(const NodeID n) {
-        getLabelString(_tmp, _view, n);
+    // The graph holds none of a change's writes until they commit, so the labels of a
+    // node this one wrote are read out of @param writeBuffer
+    LabelsFunction(GraphView view, const CommitWriteBuffer* writeBuffer);
+
+    ResultType operator()(const NodeID node) {
+        getLabelString(_tmp, node);
         return _tmp;
     }
 
 private:
     GraphView _view;
+    const CommitWriteBuffer* _writeBuffer {nullptr};
+    size_t _firstPendingNodeID {0};
     std::string _tmp;
 
-    static void getLabelString(std::string& out, GraphView view, NodeID n);
+    void getLabelString(std::string& out, NodeID node);
+    bool isPendingNode(NodeID node) const;
+    LabelSetHandle readLabelSet(NodeID node) const;
 };
 
 class EdgeTypesFunction {
@@ -77,21 +85,22 @@ public:
     using ArgType = EdgeID;
     using ResultType = std::string;
 
-    explicit EdgeTypesFunction(GraphView view)
-        : _view(view)
-    {
-    }
+    explicit EdgeTypesFunction(GraphView view);
+    EdgeTypesFunction(GraphView view, const CommitWriteBuffer* writeBuffer);
 
-    ResultType operator()(const EdgeID e) {
-        getEdgeTypeString(_tmp, _view, e);
+    ResultType operator()(const EdgeID edge) {
+        getEdgeTypeString(_tmp, edge);
         return _tmp;
     }
 
 private:
     GraphView _view;
+    const CommitWriteBuffer* _writeBuffer {nullptr};
+    size_t _firstPendingEdgeID {0};
     std::string _tmp;
 
-    static void getEdgeTypeString(std::string& out, GraphView view, EdgeID e);
+    void getEdgeTypeString(std::string& out, EdgeID edge);
+    EdgeTypeID readEdgeType(EdgeID edge) const;
 };
 
 class toIntegerFunction {

@@ -4737,6 +4737,12 @@ mlir::Value DBProgramGenerator::translateCreatedMetadata(std::string_view funcNa
 
     const PartScope::CreatedEntity& created = createdIt->second;
 
+    // A MERGE's rows mix the entities it wrote with the ones it bound, so no one label
+    // set or type stands for the column: those rows read theirs where each entity lives
+    if (created._pending) {
+        return {};
+    }
+
     if (funcName == "labels") {
         return constantLabelString(created._labels);
     } else if (funcName == "edgeType") {

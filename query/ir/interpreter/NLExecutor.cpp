@@ -246,7 +246,9 @@ void unwindTaggedElementEmit(const Column* source,
 
 template <typename Functor>
 Functor makeFunctor(NLExecutionContext* context) {
-    if constexpr (std::is_constructible_v<Functor, GraphView>) {
+    if constexpr (std::is_constructible_v<Functor, GraphView, const CommitWriteBuffer*>) {
+        return Functor(*context->getView(), context->getWriteBuffer());
+    } else if constexpr (std::is_constructible_v<Functor, GraphView>) {
         return Functor(*context->getView());
     } else {
         return Functor {};
