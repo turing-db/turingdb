@@ -174,6 +174,13 @@ TEST_F(CreateReturnTest, returnsLabelsOncePerMatchedRow) {
                      {"Clone"}, {"Clone"}, {"Clone"}, {"Clone"}});
 }
 
+// edgeType() reads the type the CREATE wrote, not a db.edge_type of the provisional ID:
+// that edge is in no committed graph the read would consult
+TEST_F(CreateReturnTest, returnsEdgeTypeAndLabelsOfThePatternItCreated) {
+    expectWriteRows("CREATE (n:S)-[e:E]->(m:T) RETURN labels(n), edgeType(e), labels(m)",
+                    {{"S", "E", "T"}});
+}
+
 // One Tag per Person, each carrying that Person's name
 TEST_F(CreateReturnTest, returnsANodePerMatchedRow) {
     expectWriteRows("MATCH (p:Person) CREATE (t:Tag {name: p.name}) RETURN t.name",

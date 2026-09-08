@@ -143,14 +143,15 @@ private:
         std::vector<YieldedColumn> _yieldedColumns;
 
         // What a CREATE wrote for one of its named pattern entities: the column of
-        // provisional IDs, the value column of every property it set, and the labels it
-        // wrote. A created entity is in no pattern the traversal walked, so it is no VDG
-        // variable, and its rows are not in the graph a fetch would read - all come from
-        // here instead
+        // provisional IDs, the value column of every property it set, and the labels or
+        // edge type it wrote. A created entity is in no pattern the traversal walked, so it
+        // is no VDG variable, and its rows are not in the graph a fetch would read - all
+        // come from here instead
         struct CreatedEntity {
             mlir::Value _column;
             std::unordered_map<std::string_view, mlir::Value> _properties;
             std::vector<std::string> _labels;
+            std::string _edgeType;
         };
 
         std::unordered_map<const VarDecl*, CreatedEntity> _createdEntities;
@@ -307,6 +308,7 @@ private:
     void publishCreatedEntity(const VarDecl* decl,
                               mlir::Value column,
                               llvm::ArrayRef<llvm::StringRef> labelNames,
+                              llvm::StringRef edgeType,
                               llvm::ArrayRef<llvm::StringRef> propNames,
                               llvm::ArrayRef<mlir::Value> propValues);
 
@@ -503,6 +505,7 @@ private:
 
     mlir::Value nullConstantColumn();
 
+    mlir::Value constantString(llvm::StringRef value);
     mlir::Value constantLabelString(llvm::ArrayRef<std::string> labels);
 
     // Taken in the order the query declares its variables, so the choice is the query's
@@ -560,10 +563,11 @@ private:
     mlir::Value translatePropertyExpr(const PropertyExpr* propExpr);
     mlir::Value translateEntityTypeExpr(const EntityTypeExpr* typeExpr);
 
-    // The labels of a node the CREATE wrote, as the constant string labels() reads: its
-    // provisional ID is in no committed graph a db.labels read would consult. Null when
-    // the argument is not a created entity, so a matched node falls through to db.labels.
-    mlir::Value translateCreatedLabels(const Expr* argExpr);
+    // labels() / edgeType() of an entity the CREATE wrote, as the constant string it reads:
+    // its provisional ID is in no committed graph the runtime read would consult. Null when
+    // the argument is not a created entity, so a matched entity falls through to db.labels /
+    // db.edge_type.
+    mlir::Value translateCreatedMetadata(std::string_view funcName, const Expr* argExpr);
 
     // The attribute carrying a scalar literal's value and type, or a null attribute for
     // any other literal kind
