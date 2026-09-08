@@ -344,7 +344,18 @@ bool ShellCompletion::deletePair(std::string_view line, size_t cursor, Edit& edi
         return false;
     }
 
-    const size_t runLength = closingRunLength(line[cursor - 1], line, cursor);
+    // closerFor hands back any other character unchanged, so without this only an opener
+    // or a quote is read as one half of a pair - a doubled letter is two characters that
+    // happen to be equal
+    const char opener = line[cursor - 1];
+    const bool opensAPair = openerChars.find(opener) != std::string_view::npos
+                            || quoteChars.find(opener) != std::string_view::npos;
+
+    if (!opensAPair) {
+        return false;
+    }
+
+    const size_t runLength = closingRunLength(opener, line, cursor);
     if (runLength == 0) {
         return false;
     }

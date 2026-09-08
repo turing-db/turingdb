@@ -353,6 +353,17 @@ bool isNullableChunk(mlir::Type chunkType) {
     return mlir::isa<storage::NullableType>(chunk.getElementType());
 }
 
+// A node or edge ID chunk: the one plain chunk whose rows can be null, an OPTIONAL MATCH
+// leaving an invalid ID where the pattern missed.
+bool isEntityChunk(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        return false;
+    }
+
+    return mlir::isa<storage::NodeIDType, storage::EdgeIDType>(chunk.getElementType());
+}
+
 bool isListChunk(mlir::Type chunkType) {
     const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
     if (!chunk) {
@@ -1441,8 +1452,6 @@ void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
         }
     }
 
-    // The collect belongs where the pattern bound its columns together - the same block an
-    // nl.output over them would sit in.
     setInsertionInto(deepestOwnerBlock(matchedChunks, stepBlock));
     _builder.create<nl::OptionalCollect>(loc, state, matchedTag, matchedChunks);
 
@@ -1455,8 +1464,6 @@ void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
         chunkTypes.push_back(chunk.getType());
     }
 
-    // Placed after the pattern's nest in the block that opened the accumulator, so the
-    // matched rows are all in by the time it first steps.
     const nl::IteratorType iteratorType = nl::IteratorType::get(_builder.getContext(), chunkTypes);
     setInsertionInto(stepBlock);
     nl::OptionalDrain drain = _builder.create<nl::OptionalDrain>(loc, iteratorType, state);
@@ -3006,10 +3013,18 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
     mlir::Value lhsChunk = mapValue(op.getOperand(0));
     mlir::Value rhsChunk = mapValue(op.getOperand(1));
 
+    const bool comparesTwoEntities = isEntityChunk(lhsChunk.getType()) && isEntityChunk(rhsChunk.getType());
+
     // x IS NULL over a plain scalar column meets kernels reading a nullable value column
     if (isUntypedNullChunk(rhsChunk.getType()) && !isNullableChunk(lhsChunk.getType())) {
         lhsChunk = nullableValueChunk(lhsChunk);
     } else if (isUntypedNullChunk(lhsChunk.getType()) && !isNullableChunk(rhsChunk.getType())) {
+        rhsChunk = nullableValueChunk(rhsChunk);
+    } else if (comparesTwoEntities) {
+        // Two entities are compared as the IDs they are, and an ID column carries its null
+        // in the ID: read raw, the invalid ID two missed matches hold compares equal to
+        // itself. Read as nullable ui64, a null compares as a null - which a WHERE drops.
+        lhsChunk = nullableValueChunk(lhsChunk);
         rhsChunk = nullableValueChunk(rhsChunk);
     }
 

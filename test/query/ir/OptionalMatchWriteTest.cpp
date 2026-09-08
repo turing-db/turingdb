@@ -16,9 +16,11 @@
 #include "SystemManager.h"
 #include "TuringDB.h"
 #include "dataframe/Dataframe.h"
+#include "reader/GraphReader.h"
 #include "versioning/Change.h"
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
+#include "versioning/Transaction.h"
 
 #include "IRTestRows.h"
 #include "TuringTest.h"
@@ -149,6 +151,22 @@ protected:
         EXPECT_EQ(actual, expected) << "query: " << query;
     }
 
+    // What the graph itself holds, rather than what a scan of one label finds: the counts
+    // read the tombstones a delete left, so an ID that was never in the graph shows up here
+    size_t graphNodeCount() {
+        SystemAccessor system = _env->getSystemManager().accessUnique();
+        Graph* graph = system.getGraph(_graphName);
+
+        return graph->openTransaction().readGraph().getNodeCount();
+    }
+
+    size_t graphEdgeCount() {
+        SystemAccessor system = _env->getSystemManager().accessUnique();
+        Graph* graph = system.getGraph(_graphName);
+
+        return graph->openTransaction().readGraph().getEdgeCount();
+    }
+
     const std::string _graphName = "simpledb";
     std::unique_ptr<TuringTestEnv> _env;
     std::unique_ptr<QueryInterpreterV3> _interpreter;
@@ -242,6 +260,33 @@ TEST_F(OptionalMatchWriteTest, setsAPropertyOnTheEdgesThePatternMatched) {
                {{"Remy -> Adam", "99"},
                 {"Adam -> Remy", "99"},
                 {"Ghosts -> Remy", "200"}});
+}
+
+// simpledb holds 18 nodes and 18 edges. Remy and Adam are the two f matched, and the six
+// padded rows name no node, so the graph is left with 16 nodes - and the 8 edges the two
+// of them walked are the only ones the detach takes.
+TEST_F(OptionalMatchWriteTest, detachDeleteTombstonesTheNodesThePatternMatched) {
+    applyWrite("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) DETACH DELETE f");
+
+    EXPECT_EQ(graphNodeCount(), 16u);
+}
+
+// Doruk walks no KNOWS_WELL edge, so f is null on every row the join kept: there is no
+// node to tombstone, and the invalid ID the null carries is not one
+TEST_F(OptionalMatchWriteTest, detachDeleteOverANullNodeTombstonesNothing) {
+    applyWrite("MATCH (p:Person {name: 'Doruk'}) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) "
+               "DETACH DELETE f");
+
+    EXPECT_EQ(graphNodeCount(), 18u);
+    EXPECT_EQ(graphEdgeCount(), 18u);
+}
+
+// The edge variable of a row the pattern missed is null the way a node one is
+TEST_F(OptionalMatchWriteTest, deleteOverANullEdgeTombstonesNothing) {
+    applyWrite("MATCH (p:Person {name: 'Doruk'}) OPTIONAL MATCH (p)-[e:KNOWS_WELL]->(f) "
+               "DELETE e");
+
+    EXPECT_EQ(graphEdgeCount(), 18u);
 }
 
 // An edge cannot hang off a node that is null, so the six padded rows name no edge to

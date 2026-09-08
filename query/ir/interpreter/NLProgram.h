@@ -2994,14 +2994,9 @@ private:
 using NLFillNullFunction = void (*)(Column* output, size_t rowCount);
 
 // Runtime state of one OPTIONAL MATCH over one step of the rows its pattern joins onto:
-// that step's own chunks, a matched flag per row of them, and the row buffers the matched
-// rows are collected into. nl.optional_buffer resets it once per step,
-// nl.optional_collect appends one chunk of every column the pattern contributes and marks
-// the input rows the row tag names, and the nl.for over nl.optional_drain reads the
-// collected rows back and then rebuilds the rows nothing matched out of the input chunks.
-// The pattern sibling of NLSortState: it accumulates rows to re-emit them, but keeps the
-// input chunks beside them, and covers one step rather than the whole relation - so the
-// memory it holds is one step's matches, not every row.
+// that step's own chunks, a matched flag per row of them, and the buffers the matched rows
+// are collected into. The sibling of NLSortState, except that it covers one step rather
+// than the whole relation, so the memory it holds is one step's matches.
 class NLOptionalState {
 public:
     // One chunk of the step the pattern joins onto, in the order the pattern yields them
@@ -3025,7 +3020,10 @@ public:
     // alone. Runs each time nl.optional_buffer's block runs.
     void reset();
 
-    void markMatched(size_t row) { _matched[row] = true; }
+    void markMatched(size_t row) {
+        bioassert(row < _matched.size(), "Row tag {} is outside the {} rows of the step", row, _matched.size());
+        _matched[row] = true;
+    }
 
     // The input rows nothing matched, in order. Computed on the first call of a step, so
     // the drain pays for the sweep once however many chunks it emits.

@@ -163,10 +163,10 @@ void fillPipelinePassNames(std::vector<std::string_view>& passNames) {
     }
 }
 
-// Under a name no Cypher identifier can be, the way the dependency graph names an
-// anonymised variable, so an OPTIONAL MATCH's row tag is carried alongside the columns its
-// pattern walks without a query variable ever resolving to it
-constexpr std::string_view optionalTagName {"'optional_tag"};
+// The row tag an OPTIONAL MATCH carries beside the columns its pattern walks. A backtick
+// can appear in no Cypher identifier, quoted or not, so no variable of the query's own is
+// ever taken for the tag - the columns are keyed by name.
+constexpr std::string_view optionalTagName {"`optional_tag"};
 
 using UnaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder,
                                              mlir::Location loc,
@@ -2202,8 +2202,11 @@ void DBProgramGenerator::generateStatementOperations(std::span<Stmt* const> stmt
             const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt);
             generateMatchConstraints(matchStmt);
             generateMatchFilter(matchStmt);
-            generateMatchOrderBy(matchStmt);
-            generateMatchWindow(matchStmt);
+
+            if (!matchStmt->isOptional()) {
+                generateMatchOrderBy(matchStmt);
+                generateMatchWindow(matchStmt);
+            }
         } else if (kind == Stmt::Kind::CALL && !drivesTheTraversal) {
             generateCall(static_cast<const CallStmt*>(stmt));
         } else if (kind == Stmt::Kind::VECTOR_SEARCH && !drivesTheTraversal) {
@@ -3714,6 +3717,11 @@ void DBProgramGenerator::generateWith(const WithStmt* with) {
 }
 
 void DBProgramGenerator::generateOptionalMatch(std::span<Stmt* const> stmt) {
+    // rebindScope carries a column and its name, which is all a read needs. A created
+    // entity is more than that - a pending mask and the properties written on it - and
+    // Cypher puts every reading clause ahead of every updating one, so none is in scope.
+    bioassert(_part._createdEntities.empty(), "An OPTIONAL MATCH cannot follow a CREATE");
+
     llvm::SmallVector<PublishedColumn> scopeColumns;
     collectPublishedColumns(scopeColumns);
 
@@ -3823,6 +3831,11 @@ void DBProgramGenerator::generateOptionalMatch(std::span<Stmt* const> stmt) {
     published.append(constants.begin(), constants.end());
 
     rebindScope(published);
+
+    // An OPTIONAL MATCH's cut reads the rows the join produced, the padded ones included
+    const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt.front());
+    generateMatchOrderBy(matchStmt);
+    generateMatchWindow(matchStmt);
 }
 
 void DBProgramGenerator::broadcastConstantProjection(llvm::SmallVectorImpl<mlir::Value>& projected) {

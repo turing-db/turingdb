@@ -273,6 +273,35 @@ TEST_F(OptionalMatchTest, IsNullOverAPropertyOfANullEntity) {
                {{"Maxime"}, {"Luc"}, {"Martina"}, {"Suhas"}, {"Cyrus"}, {"Doruk"}});
 }
 
+// Two nulls are not equal: a null compared to anything is a null, and a WHERE keeps only
+// what is true. Doruk and Maxime both walk no KNOWS_WELL edge, so f and g are both null
+// and the one row the two crosses make goes.
+TEST_F(OptionalMatchTest, TwoNullEntitiesDoNotCompareEqual) {
+    expectRowCount("MATCH (p:Person {name: 'Doruk'}) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) "
+                   "MATCH (q:Person {name: 'Maxime'}) OPTIONAL MATCH (q)-[:KNOWS_WELL]->(g) "
+                   "WITH p, q, f, g WHERE f = g RETURN p.name, q.name",
+                   0);
+}
+
+// Of the 64 pairs the two crosses make, the ones equality keeps are the two whose patterns
+// both matched the same friend: Remy walks to Adam on both sides, Adam to Remy
+TEST_F(OptionalMatchTest, EqualityKeepsThePairsBothPatternsMatched) {
+    expectRows("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) "
+               "MATCH (q:Person) OPTIONAL MATCH (q)-[:KNOWS_WELL]->(g) "
+               "WITH p, q, f, g WHERE f = g RETURN p.name, q.name",
+               {{"Remy", "Remy"}, {"Adam", "Adam"}});
+}
+
+// A null is not unequal either, so the same two pairs are all <> has to work with: Remy's
+// Adam against Adam's Remy, either way round. A row holding a null names no second entity
+// for the friend it did match to differ from.
+TEST_F(OptionalMatchTest, InequalityKeepsThePairsBothPatternsMatched) {
+    expectRows("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) "
+               "MATCH (q:Person) OPTIONAL MATCH (q)-[:KNOWS_WELL]->(g) "
+               "WITH p, q, f, g WHERE f <> g RETURN p.name, q.name",
+               {{"Remy", "Adam"}, {"Adam", "Remy"}});
+}
+
 // A function reading a null entity reads a null rather than the graph at an ID it holds no
 // row for
 TEST_F(OptionalMatchTest, LabelsOfANullNodeIsNull) {
@@ -366,4 +395,30 @@ TEST_F(OptionalMatchTest, CollectsDistinctEntitiesWithoutTheUnmatchedNull) {
     expectRows("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) "
                "RETURN collect(DISTINCT f)",
                {{"[1, 0]"}});
+}
+
+// The row tag the join carries is named under a spelling of the engine's own. A
+// backtick-quoted identifier can hold anything but a backtick, so a variable written that
+// way is the query's own and resolves to the node the pattern bound.
+TEST_F(OptionalMatchTest, EscapedVariableSpelledLikeTheRowTag) {
+    expectRows("MATCH (p:Person {name: 'Remy'}) "
+               "OPTIONAL MATCH (p)-[:KNOWS_WELL]->(`'optional_tag`) "
+               "RETURN p.name, `'optional_tag`.name",
+               {{"Remy", "Adam"}});
+}
+
+// A pattern the query names - `q = (a)-->(b)` - is unimplemented across both engines, so
+// it is turned away where it is written. The op verifier's rule that every pattern
+// variable is a node or an edge ID column is a backstop behind that, never a user's error.
+TEST_F(OptionalMatchTest, RejectsANamedPathWithoutAnInternalError) {
+    RowSink sink;
+    const QueryStatus status = runQuery("MATCH (a:Person) "
+                                        "OPTIONAL MATCH q = (a)-[:KNOWS_WELL]->(b) RETURN q",
+                                        &sink);
+
+    ASSERT_FALSE(status.isOk());
+
+    const std::string& error = status.getError();
+    EXPECT_EQ(error.find("Internal Error"), std::string::npos) << error;
+    EXPECT_EQ(error.find("must be a node or an edge ID column"), std::string::npos) << error;
 }

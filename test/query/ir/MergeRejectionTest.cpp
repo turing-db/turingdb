@@ -110,6 +110,32 @@ TEST_F(MergeRejectionTest, rejectsAVariableLengthHop) {
         << status.getError();
 }
 
+// A node an OPTIONAL MATCH did not match is null, and a merge cannot hang an edge off a
+// node the graph does not hold: the six rows the pattern missed turn the query away where
+// it is written, the way a CREATE of the same edge is
+TEST_F(MergeRejectionTest, rejectsAnEdgeFromANodeAnOptionalMatchMissed) {
+    QueryStatus status;
+    runQuery("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) "
+             "MERGE (f)-[:PROBE]->(t:Tag {name: 'x'})",
+             status);
+
+    EXPECT_FALSE(status.isOk()) << status.getError();
+    EXPECT_NE(status.getError().find("Cannot merge a pattern on a null node"), std::string::npos)
+        << status.getError();
+}
+
+// The same null node standing on its own: a merge of a bound node alone has nothing to
+// match and nothing it may write, so it is turned away rather than merged as a node with
+// an invalid ID
+TEST_F(MergeRejectionTest, rejectsAPatternOnANodeAnOptionalMatchMissed) {
+    QueryStatus status;
+    runQuery("MATCH (p:Person) OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) MERGE (f)", status);
+
+    EXPECT_FALSE(status.isOk()) << status.getError();
+    EXPECT_NE(status.getError().find("Cannot merge a pattern on a null node"), std::string::npos)
+        << status.getError();
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

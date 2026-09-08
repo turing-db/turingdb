@@ -283,6 +283,8 @@ public:
     static NLCompareFunction selectOptOwnedStringCompare();
     static NLKeyAppendFunction selectOptOwnedStringKeyAppend();
     static NLCountFunction selectOptOwnedStringCount();
+    static NLBroadcastFunction selectOptOwnedStringBlockRepeat();
+    static NLBroadcastFunction selectOptOwnedStringTile();
 
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
 
@@ -339,6 +341,7 @@ public:
     static NLKeyAppendFunction selectPlainMergeKeyAppendFunction(NLChunkKind kind, ValueType keyType);
     static NLKeyAppendFunction selectConstMergeKeyAppendFunction(ValueType valueType, ValueType keyType);
     static NLKeyAppendFunction selectOptMergeKeyAppendFunction(ValueType valueType, ValueType keyType);
+    static NLKeyAppendFunction selectOptOwnedStringMergeKeyAppend(ValueType keyType);
     static NLKeyAppendFunction selectNullMergeKeyAppendFunction();
     static NLGroupKeyGatherFunction selectPlainGroupKeyGather(ValueType valueType);
 

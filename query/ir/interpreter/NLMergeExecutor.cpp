@@ -21,6 +21,7 @@
 #include "NLExecutionContext.h"
 #include "NLWriteProperties.h"
 
+#include "IRException.h"
 #include "BioAssert.h"
 
 using namespace db;
@@ -66,6 +67,22 @@ void fetchMergeEdgeProperty(const GraphView& view,
     ValueTypeDispatcher(property._propertyType._valueType).execute(fetch);
 }
 
+// A row an OPTIONAL MATCH did not match holds an invalid ID, which names no node of the
+// graph and none of the write buffer either: there is nothing to match the pattern against
+// and nothing to hang what it would write off
+void throwIfBoundNodeIsNull(const NLMergeData::Node& node, size_t rowCount) {
+    const ColumnNodeIDs* bound = node._boundColumn;
+    const ColumnMask* pending = node._boundPending;
+
+    for (size_t row = 0; row < rowCount; row++) {
+        const bool isPending = pending && (*pending)[row];
+
+        if (!isPending && !(*bound)[row].isValid()) {
+            throw IRException("Cannot merge a pattern on a null node");
+        }
+    }
+}
+
 }
 
 NLMergeExecutor::NLMergeExecutor(NLExecutionContext* context, NLMergeData* data)
@@ -93,6 +110,12 @@ void NLMergeExecutor::run() {
 
     clearResults();
     extractProperties(rowCount);
+
+    for (const NLMergeData::Node& node : _data->nodes()) {
+        if (node._boundColumn) {
+            throwIfBoundNodeIsNull(node, rowCount);
+        }
+    }
 
     _work->_candidates.resize(_data->nodes().size());
     _work->_candidateKeys.resize(_data->nodes().size());
