@@ -39,12 +39,32 @@ GROUPS = {
     "B": "Label-seeded typed traversal - the engine, with no scan in the way",
     "C": "Untyped variable-length - the only path shapes v2 will run",
     "D": "Queries v2 cannot express at all",
+    "E": "Search against walk, by hop bound - count(DISTINCT) searches, count() walks",
 }
 
 
 def hasEventChain(depth):
     hops = "".join(f"-[:hasEvent]->(x{level})" for level in range(1, depth))
     return f"MATCH (p:TopLevelPathway){hops}-[:hasEvent]->(z:Event) RETURN count(z)"
+
+
+def quantifier(bound):
+    return "+" if bound is None else f"{{1,{bound}}}"
+
+
+# The same pattern counted as trails (the walk) and as distinct ends (the search), one query
+# per bound; the walk's bounds stop where its trails stop being enumerable in seconds
+def sweep(prefix, question, pattern, walkBounds, searchBounds):
+    queries = []
+    for mode, bounds in (("walk", walkBounds), ("search", searchBounds)):
+        for bound in bounds:
+            aggregate = "count(DISTINCT z)" if mode == "search" else "count(z)"
+            label = "unbounded" if bound is None else f"{{1,{bound}}}"
+            queries.append(("E", f"{prefix}_{mode}_{bound or 'inf'}",
+                            f"{question}, {label}, {mode}",
+                            None,
+                            f"MATCH {pattern.format(hops=quantifier(bound))} RETURN {aggregate}"))
+    return queries
 
 
 # group, id, question, v2 query (None to ask v2 the v3 query and record how it
@@ -191,6 +211,31 @@ QUERIES = [
      "MATCH (a:Pathway)-[:hasEvent]->(r1:ReactionLikeEvent), (a)-[:hasEvent]->(r2:ReactionLikeEvent), (r1)-[:input]->(e:PhysicalEntity), (r2)-[:input]->(e) RETURN count(e)"),
 ]
 
+QUERIES += sweep("cascade", f"Reactions downstream of hub {HUB_REACTION}",
+                 f"(r:Reaction {{{{stId:'{HUB_REACTION}'}}}})<-[:precedingEvent]-{{hops}}(z:Reaction)",
+                 [4, 8, 16, 24, 32, 40, 44],
+                 [4, 8, 16, 24, 32, 40, 44, 100, None])
+
+QUERIES += sweep("st", "Signal Transduction's sub-events",
+                 f"(p:TopLevelPathway {{{{stId:'{SIGNAL_TRANSDUCTION}'}}}})-[:hasEvent]->{{hops}}(z:Event)",
+                 [2, 4, 8, 13, 100, None],
+                 [2, 4, 8, 13, 100, None])
+
+QUERIES += sweep("tlp", "Reactions under the 415 top-level pathways",
+                 "(p:TopLevelPathway)-[:hasEvent]->{hops}(z:Reaction)",
+                 [3, 6, 100, None],
+                 [3, 6, 100, None])
+
+QUERIES += sweep("complex", "Sub-units of every complex",
+                 "(c:Complex)-[:hasComponent]->{hops}(z)",
+                 [2, 100],
+                 [2, 100])
+
+QUERIES += sweep("reactions", "Reactions downstream of every reaction",
+                 "(r:Reaction)<-[:precedingEvent]-{hops}(z:Reaction)",
+                 [3],
+                 [3, None])
+
 
 def selectQueries(groups, only):
     selected = []
@@ -272,6 +317,14 @@ def median(results, queryID):
     return statistics.median(result["times"][1:])
 
 
+# An aggregate's value when -verify captured it, else the rows the query returned
+def countOrRows(result):
+    if not result:
+        return None
+
+    return result["value"] if result["value"] is not None else result["rows"]
+
+
 def report(queries, v2Results, v3Results):
     for group, title in GROUPS.items():
         inGroup = [q for q in queries if q[0] == group]
@@ -280,12 +333,12 @@ def report(queries, v2Results, v3Results):
 
         print(f"\n{group}. {title}")
         print("-" * 112)
-        print(f"  {'question':58} {'v2':>14} {'v3 ms':>9} {'speedup':>8} {'rows':>9}")
+        print(f"  {'question':58} {'v2':>14} {'v3 ms':>9} {'speedup':>8} {'rows':>11}")
 
         for _, queryID, question, _, _ in inGroup:
             v2Time = median(v2Results, queryID)
             v3Time = median(v3Results, queryID)
-            rows = (v3Results.get(queryID) or {}).get("rows")
+            rows = countOrRows(v3Results.get(queryID))
 
             if v3Time is None:
                 print(f"  {question:58} {'':>14} {'FAILED':>9}")
@@ -293,9 +346,9 @@ def report(queries, v2Results, v3Results):
 
             if v2Time is None:
                 error = (v2Results.get(queryID) or {}).get("error") or "no result"
-                print(f"  {question:58} {error.split(':')[0]:>14} {v3Time:9.2f} {'--':>8} {rows!s:>9}")
+                print(f"  {question:58} {error.split(':')[0]:>14} {v3Time:9.2f} {'--':>8} {rows!s:>11}")
             else:
-                print(f"  {question:58} {v2Time:14.2f} {v3Time:9.2f} {v2Time / v3Time:7.1f}x {rows!s:>9}")
+                print(f"  {question:58} {v2Time:14.2f} {v3Time:9.2f} {v2Time / v3Time:7.1f}x {rows!s:>11}")
 
     print()
     reportDisagreements(queries, v2Results, v3Results)
@@ -333,7 +386,7 @@ def main():
     parser.add_argument("-port", type=int, default=6811)
     parser.add_argument("-reps", type=int, default=5, help="runs per query; the first is a warmup")
     parser.add_argument("-timeout", type=float, default=1800, help="seconds per engine")
-    parser.add_argument("-groups", default="ABCD", help="query groups to run")
+    parser.add_argument("-groups", default="ABCDE", help="query groups to run")
     parser.add_argument("-only", default="", help="comma-separated query ids")
     parser.add_argument("-verify", action="store_true", help="re-run the counting queries unquiet and compare their values")
     args = parser.parse_args()
