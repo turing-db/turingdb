@@ -247,14 +247,14 @@ TEST_F(PathTargetIndexTest, costGateChargesEveryBatch) {
     const GraphReader reader = transaction.readGraph();
     const GraphView& view = reader.getView();
 
-    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, 1, 1, 4));
-    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, 100000, 0, 4));
-    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, 100000, 1, 4));
-    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, 100000, 64, 4));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, 1, 1, 4));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, 100000, 0, 4));
+    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, 100000, 1, 4));
+    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, 100000, 64, 4));
 
     // Fifty thousand batches of words cost more than a hundred thousand seeds fanning out
-    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, 100000, 3000000, 4));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, 100000, 3000000, 4));
 
     // And ten million batches would not fit in memory, whatever the walk costs
-    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, 100000, 640000000, unbounded));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, 100000, 640000000, unbounded));
 }

@@ -5752,15 +5752,15 @@ const PathDistanceIndex* pruningIndexFor(const GraphView& view,
 
     loopData->addSeedsSeen(seedCount);
 
-    const PathExplorationDir direction = loopData->getDirection();
-    const bool worthBuilding = PathDistanceIndex::isWorthBuilding(view, direction, loopData->getSeedsSeen(), maxHops);
-    if (!worthBuilding) {
-        return nullptr;
-    }
-
     std::optional<EdgeTypeID> edgeType;
     if (loopData->filtersByType()) {
         edgeType = loopData->getEdgeType();
+    }
+
+    const PathExplorationDir direction = loopData->getDirection();
+    const bool worthBuilding = PathDistanceIndex::isWorthBuilding(view, direction, edgeType, loopData->getSeedsSeen(), maxHops);
+    if (!worthBuilding) {
+        return nullptr;
     }
 
     index->build(view, loopData->getEndLabels(), direction, edgeType, maxHops);
@@ -5777,15 +5777,15 @@ const PathTargetIndex* targetIndexFor(const GraphView& view, NLExplorePathsLoopD
     std::sort(targets.begin(), targets.end());
     targets.erase(std::unique(targets.begin(), targets.end()), targets.end());
 
-    const PathExplorationDir direction = loopData->getDirection();
-    const bool worthBuilding = PathTargetIndex::isWorthBuilding(view, direction, endNodes.size(), targets.size(), maxHops);
-    if (!worthBuilding) {
-        return nullptr;
-    }
-
     std::optional<EdgeTypeID> edgeType;
     if (loopData->filtersByType()) {
         edgeType = loopData->getEdgeType();
+    }
+
+    const PathExplorationDir direction = loopData->getDirection();
+    const bool worthBuilding = PathTargetIndex::isWorthBuilding(view, direction, edgeType, endNodes.size(), targets.size(), maxHops);
+    if (!worthBuilding) {
+        return nullptr;
     }
 
     PathTargetIndex* index = loopData->getTargetIndex();
@@ -5834,7 +5834,12 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
     // A distinct exploration may still walk: the passes only mark one whose duplicates no
     // consumer can tell apart, so the search runs where its overlap makes it the cheaper way
     const PathExplorationDir direction = loopData->getDirection();
-    const bool distinctEnds = loopData->isDistinctEnds() && PathExplorator::searchPaysForDistinctEnds(view, direction, maxHops);
+    std::optional<EdgeTypeID> walkedType;
+    if (loopData->filtersByType()) {
+        walkedType = loopData->getEdgeType();
+    }
+
+    const bool distinctEnds = loopData->isDistinctEnds() && PathExplorator::searchPaysForDistinctEnds(view, direction, walkedType, maxHops);
     explorator.setDistinctEnds(distinctEnds);
 
     // The distinct mode is a breadth-first search already, so it prunes by no index

@@ -146,6 +146,7 @@ public:
     // Whether the enumeration the seeds imply is expected to cost more than the batches
     static bool isWorthBuilding(const GraphView& view,
                                 PathExplorationDir direction,
+                                std::optional<EdgeTypeID> edgeType,
                                 size_t seedCount,
                                 size_t targetCount,
                                 uint64_t maxHops);
@@ -162,7 +163,11 @@ private:
     std::unordered_map<uint64_t, PathTargetHandle> _handles;
     bool _built {false};
 
-    static void planBatch(const PartDirectory& parts, PathExplorationDir direction, uint64_t maxHops, BatchPlan& plan);
+    static void planBatch(const PartDirectory& parts,
+                          PathExplorationDir direction,
+                          std::optional<EdgeTypeID> edgeType,
+                          uint64_t maxHops,
+                          BatchPlan& plan);
 
     void buildBatch(const PartDirectory& parts,
                     std::span<const NodeID> targets,

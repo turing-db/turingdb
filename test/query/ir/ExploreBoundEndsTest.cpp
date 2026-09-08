@@ -523,7 +523,7 @@ TEST_F(ExploreBoundEndsGeneratedGraphTest, targetIndexKeepsTheFilteredRows) {
 
     // Every node's out-neighbours are the targets: at most one batch per sixty-four of
     // them, and the seeds are the edges
-    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, nodeCount * outDegree, nodeCount, 3));
+    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, nodeCount * outDegree, nodeCount, 3));
 
     RowSink filtered;
     runProgram(generatedFilterProgram, view, filtered);

@@ -289,9 +289,9 @@ TEST_F(PathExploratorDistinctTest, searchPaysOnceTheBallsOverlap) {
 
     // Sixty-four seeds on twenty-three nodes overlap from the first hop; nothing to walk from
     // a bound of zero
-    EXPECT_TRUE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::FORWARD, 1));
-    EXPECT_TRUE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::BOTH, unbounded));
-    EXPECT_FALSE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::FORWARD, 0));
+    EXPECT_TRUE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::FORWARD, std::nullopt, 1));
+    EXPECT_TRUE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::BOTH, std::nullopt, unbounded));
+    EXPECT_FALSE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::FORWARD, std::nullopt, 0));
 }
 
 TEST_F(PathExploratorDistinctTest, expandsEachReachedNodeOncePerBatch) {
