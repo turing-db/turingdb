@@ -104,7 +104,7 @@ void renderList(const ListView& list, std::string& out) {
 
 template <typename T>
 void renderValue(const T& value, std::string& out) {
-    if constexpr (std::is_same_v<T, std::string_view>) {
+    if constexpr (std::is_same_v<T, std::string_view> || std::is_same_v<T, std::string>) {
         out = std::string(value);
     } else if constexpr (std::is_same_v<T, types::Bool::Primitive>) {
         out = value ? "true" : "false";
@@ -164,7 +164,8 @@ void turing::test::renderCell(const Column* column, size_t row, std::string& out
                || renderValueCell<uint64_t>(column, row, out)
                || renderValueCell<double>(column, row, out)
                || renderValueCell<types::Bool::Primitive>(column, row, out)
-               || renderValueCell<std::string_view>(column, row, out)) {
+               || renderValueCell<std::string_view>(column, row, out)
+               || renderValueCell<std::string>(column, row, out)) {
         // Rendered by the helper for whichever value type matched
     } else {
         throw std::runtime_error("IRTestRows: unsupported output column type");

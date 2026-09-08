@@ -209,6 +209,9 @@ public:
     PendingNode& getPendingNode(size_t idx) { return _pendingNodes.at(idx); }
     PendingEdge& getPendingEdge(size_t idx) { return _pendingEdges.at(idx); }
 
+    const PendingNode& getPendingNode(size_t idx) const { return _pendingNodes.at(idx); }
+    const PendingEdge& getPendingEdge(size_t idx) const { return _pendingEdges.at(idx); }
+
     const PendingIndexes& pendingIndexes() const { return _pendingIndexes; }
     const DroppedIndexes& droppedIndexes() const { return _droppedIndexes; }
 

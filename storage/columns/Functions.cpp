@@ -6,6 +6,7 @@
 
 #include "metadata/LabelMap.h"
 #include "reader/GraphReader.h"
+#include "versioning/CommitWriteBuffer.h"
 #include "views/GraphView.h"
 
 #include "BioAssert.h"
@@ -15,24 +16,52 @@ using namespace db;
 namespace rg = ranges;
 namespace rv = rg::views;
 
-void LabelsFunction::getLabelString(std::string& out, GraphView view, NodeID n) {
-    out.clear();
-    const GraphReader reader = view.read();
+LabelsFunction::LabelsFunction(GraphView view)
+    : _view(view)
+{
+}
 
-    const bool exists = reader.graphHasNode(n);
+LabelsFunction::LabelsFunction(GraphView view, const CommitWriteBuffer* writeBuffer)
+    : _view(view),
+    _writeBuffer(writeBuffer)
+{
+    if (_writeBuffer) {
+        _firstPendingNodeID = _view.read().getTotalNodesAllocated();
+    }
+}
+
+// A node this change wrote is named by the ID it will commit as - one past the last the
+// graph holds, plus its offset in the write buffer - so the ID alone says which of the
+// two holds its labels.
+bool LabelsFunction::isPendingNode(NodeID node) const {
+    return _writeBuffer && node.getValue() >= _firstPendingNodeID;
+}
+
+LabelSetHandle LabelsFunction::readLabelSet(NodeID node) const {
+    if (isPendingNode(node)) {
+        return _writeBuffer->getPendingNode(node.getValue() - _firstPendingNodeID).labelsetHandle;
+    }
+
+    return _view.read().getNodeLabelSet(node);
+}
+
+void LabelsFunction::getLabelString(std::string& out, NodeID node) {
+    out.clear();
+
+    const bool exists = isPendingNode(node) || _view.read().graphHasNode(node);
     if (!exists) {
         out = "null";
         return;
     }
 
-    const LabelSetHandle lblset = reader.getNodeLabelSet(n);
+    const LabelSetHandle lblset = readLabelSet(node);
 
     std::vector<LabelID> labels;
     lblset.decompose(labels);
 
-    bioassert(!labels.empty(), "Could not retrieve labels for node {}.", n.getValue());
+    bioassert(!labels.empty(), "Could not retrieve labels for node {}.", node.getValue());
 
-    const LabelMap& lblMap = view.metadata().labels();
+    const LabelMap& lblMap = _view.metadata().labels();
 
     {
         const LabelID fstLbl = labels.front();
@@ -53,11 +82,34 @@ void LabelsFunction::getLabelString(std::string& out, GraphView view, NodeID n) 
     }
 }
 
-void EdgeTypesFunction::getEdgeTypeString(std::string& out, GraphView view, EdgeID e) {
-    out.clear();
-    const EdgeTypeID et = view.read().getEdgeTypeID(e);
+EdgeTypesFunction::EdgeTypesFunction(GraphView view)
+    : _view(view)
+{
+}
 
-    const EdgeTypeMap& etMap = view.metadata().edgeTypes();
+EdgeTypesFunction::EdgeTypesFunction(GraphView view, const CommitWriteBuffer* writeBuffer)
+    : _view(view),
+    _writeBuffer(writeBuffer)
+{
+    if (_writeBuffer) {
+        _firstPendingEdgeID = _view.read().getTotalEdgesAllocated();
+    }
+}
+
+EdgeTypeID EdgeTypesFunction::readEdgeType(EdgeID edge) const {
+    const bool isPending = _writeBuffer && edge.getValue() >= _firstPendingEdgeID;
+    if (isPending) {
+        return _writeBuffer->getPendingEdge(edge.getValue() - _firstPendingEdgeID).edgeType;
+    }
+
+    return _view.read().getEdgeTypeID(edge);
+}
+
+void EdgeTypesFunction::getEdgeTypeString(std::string& out, EdgeID edge) {
+    out.clear();
+    const EdgeTypeID et = readEdgeType(edge);
+
+    const EdgeTypeMap& etMap = _view.metadata().edgeTypes();
     const std::optional<std::string_view> name = etMap.getName(et);
     bioassert(name, "Could not get name of EdgeTypeID {}.", et.getValue());
 
