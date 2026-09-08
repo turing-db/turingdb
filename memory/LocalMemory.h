@@ -103,8 +103,10 @@ public:
         MakeMemoryPool<ColumnConst<ListView>>::type,
         MakeMemoryPool<ColumnVector<ListElementView>>::type,
         MakeMemoryPool<ColumnOptVector<ListElementView>>::type,
+        MakeMemoryPool<ColumnConst<ListElementView>>::type,
         MakeMemoryPool<ColumnConst<std::optional<ListElementView>>>::type,
-        MakeMemoryPool<ColumnOptVector<ListView>>::type
+        MakeMemoryPool<ColumnOptVector<ListView>>::type,
+        MakeMemoryPool<ColumnConst<std::optional<ListView>>>::type
     >;
 
     template <typename KeyT, typename ValueT>

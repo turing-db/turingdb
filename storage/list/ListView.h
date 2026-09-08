@@ -28,6 +28,9 @@ public:
     ListElementView front() const { return _elements.front(); }
     ListElementView back() const { return _elements.back(); }
 
+    /// Returns this list without its first element; an empty list has none to drop.
+    ListView tail() const { return empty() ? *this : ListView {_elements.data() + 1, _elements.size() - 1}; }
+
     explicit operator bool() { return _elements.data() != nullptr; }
 
 private:
