@@ -2718,6 +2718,10 @@ Column* NLTranslator::allocValueColumnForValueType(ValueType valueType) {
             return _memory->alloc<ColumnVector<types::String::Primitive>>();
         break;
 
+        case ValueType::List:
+            return allocListColumn();
+        break;
+
         default:
             throw IRException("collect does not support this value type");
         break;

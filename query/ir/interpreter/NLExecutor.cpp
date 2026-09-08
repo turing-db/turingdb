@@ -941,6 +941,34 @@ int compareListColumn(const Column* column, size_t a, size_t b) {
     return 0;
 }
 
+// The nullable sibling, for a list read out of a property: a row holding no list sorts
+// after every list, as compareOptColumn places a null after every value.
+int compareOptListColumn(const Column* column, size_t a, size_t b) {
+    const auto& raw = static_cast<const ColumnOptVector<ListView>*>(column)->getRaw();
+    const std::optional<ListView>& valueA = raw[a];
+    const std::optional<ListView>& valueB = raw[b];
+
+    const bool aNull = !valueA.has_value();
+    const bool bNull = !valueB.has_value();
+    if (aNull || bNull) {
+        if (aNull && bNull) {
+            return 0;
+        }
+
+        return aNull ? 1 : -1;
+    }
+
+    const std::strong_ordering order = *valueA <=> *valueB;
+
+    if (order == std::strong_ordering::less) {
+        return -1;
+    } else if (order == std::strong_ordering::greater) {
+        return 1;
+    }
+
+    return 0;
+}
+
 // Append the raw bytes of a present property value to a distinct row key. The key
 // is a std::string used purely as a growable byte buffer - not text - so the value
 // is appended verbatim: a trivially-copyable primitive copies its object bytes; a
@@ -1030,6 +1058,13 @@ void distinctAppendListBytes(std::string& key, const ListView list) {
     for (const ListElementView element : list) {
         distinctAppendElementBytes(key, element);
     }
+}
+
+// A list would otherwise pick the trivially-copyable template and key on the view's own
+// bytes - a pointer into its buffer - so two equal lists held in different buffers, as a
+// property's and a literal's are, would count as two.
+void distinctAppendValueBytes(std::string& key, const ListView value) {
+    distinctAppendListBytes(key, value);
 }
 
 // Serialize a number by its value rather than by the type it is tagged with: an integer
@@ -4212,6 +4247,10 @@ NLCollectFoldFunction NLExecutor::selectCollectFold(ValueType valueType) {
             return &collectFold<types::String::Primitive>;
         break;
 
+        case ValueType::List:
+            return &collectFold<ListView>;
+        break;
+
         default:
             throw IRException("collect does not support this value type");
         break;
@@ -4243,6 +4282,10 @@ NLCollectFoldFunction NLExecutor::selectCollectDistinctFold(ValueType valueType)
 
         case ValueType::String:
             return &collectFoldDistinct<types::String::Primitive>;
+        break;
+
+        case ValueType::List:
+            return &collectFoldDistinct<ListView>;
         break;
 
         default:
@@ -4335,6 +4378,10 @@ NLUnwindCollectValueEmitFunction NLExecutor::selectUnwindCollectValueEmit(ValueT
             return &unwindCollectValueEmit<types::String::Primitive>;
         break;
 
+        case ValueType::List:
+            return &unwindCollectValueEmit<ListView>;
+        break;
+
         default:
             throw IRException("unwind does not support this value type");
         break;
@@ -4363,6 +4410,10 @@ NLCollectListEmitFunction NLExecutor::selectCollectListEmit(ValueType valueType)
 
         case ValueType::String:
             return &collectListEmit<types::String::Primitive>;
+        break;
+
+        case ValueType::List:
+            return &collectListEmit<ListView>;
         break;
 
         default:
@@ -5445,7 +5496,7 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
         break;
 
         case NLChunkKind::List:
-            throw IRException("A list column cannot be a sort key: a list has no order here");
+            return &compareListColumn;
         break;
     }
 
@@ -5484,7 +5535,7 @@ NLCompareFunction NLExecutor::selectOptCompareFunction(ValueType valueType) {
         break;
 
         case ValueType::List:
-            throw IRException("cannot sort by a list column");
+            return &compareOptListColumn;
         break;
 
         case ValueType::Invalid:
