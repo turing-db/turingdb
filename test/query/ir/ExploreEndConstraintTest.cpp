@@ -623,7 +623,7 @@ TEST_F(ExploreEndConstraintGeneratedGraphTest, pruningIndexKeepsTheFilteredRows)
     ASSERT_EQ(reader.getNodeCount(), nodeCount);
 
     // The scan hands the executor every node as a seed in one chunk, past the cost gate
-    EXPECT_TRUE(PathDistanceIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, nodeCount, 4));
+    EXPECT_TRUE(PathDistanceIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, nodeCount, 4));
 
     RowSink filtered;
     runProgram(generatedFilterProgram, view, filtered);

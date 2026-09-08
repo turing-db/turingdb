@@ -60,7 +60,10 @@ public:
 
     // Whether the distinct mode's search is expected to beat the walk on this graph: only
     // once the balls of a batch of seeds overlap enough to be walked together
-    static bool searchPaysForDistinctEnds(const GraphView& view, PathExplorationDir direction, uint64_t maxHops);
+    static bool searchPaysForDistinctEnds(const GraphView& view,
+                                          PathExplorationDir direction,
+                                          std::optional<EdgeTypeID> edgeType,
+                                          uint64_t maxHops);
 
 private:
     enum class Stage : uint8_t {

@@ -170,11 +170,15 @@ PathTargetIndex::PathTargetIndex() {
 PathTargetIndex::~PathTargetIndex() {
 }
 
-void PathTargetIndex::planBatch(const PartDirectory& parts, PathExplorationDir direction, uint64_t maxHops, BatchPlan& plan) {
+void PathTargetIndex::planBatch(const PartDirectory& parts,
+                                PathExplorationDir direction,
+                                std::optional<EdgeTypeID> edgeType,
+                                uint64_t maxHops,
+                                BatchPlan& plan) {
     const double nodeCount = static_cast<double>(parts.getAllocatedNodeCount());
 
     // A batch's search reaches at most what its targets fan out to, and at most the graph
-    const double candidatesPerTarget = PathDistanceIndex::estimatedEnumerationChecks(parts, direction, 1, maxHops);
+    const double candidatesPerTarget = PathDistanceIndex::estimatedEnumerationChecks(parts, direction, edgeType, 1, maxHops);
     const double reachedPerBatch = std::min(nodeCount, static_cast<double>(targetsPerBatch) * candidatesPerTarget);
     const double levelCount = static_cast<double>(std::min<uint64_t>(maxHops, PathDistanceIndex::farthest) + 1);
     const double words = levelCount * nodeCount;
@@ -198,7 +202,7 @@ void PathTargetIndex::build(const GraphView& view,
     const uint64_t levelCap = std::min<uint64_t>(maxHops, PathDistanceIndex::farthest);
 
     BatchPlan plan;
-    planBatch(parts, direction, maxHops, plan);
+    planBatch(parts, direction, edgeType, maxHops, plan);
 
     _handles.clear();
     _batches.clear();
@@ -244,6 +248,7 @@ PathTargetHandle PathTargetIndex::find(NodeID target) const {
 
 bool PathTargetIndex::isWorthBuilding(const GraphView& view,
                                       PathExplorationDir direction,
+                                      std::optional<EdgeTypeID> edgeType,
                                       size_t seedCount,
                                       size_t targetCount,
                                       uint64_t maxHops) {
@@ -257,14 +262,14 @@ bool PathTargetIndex::isWorthBuilding(const GraphView& view,
     }
 
     BatchPlan plan;
-    planBatch(parts, direction, maxHops, plan);
+    planBatch(parts, direction, edgeType, maxHops, plan);
 
     const double batchCount = static_cast<double>((targetCount + targetsPerBatch - 1) / targetsPerBatch);
     if (batchCount * plan._bytes > bytesLimit) {
         return false;
     }
 
-    return PathDistanceIndex::estimatedEnumerationChecks(parts, direction, seedCount, maxHops) > batchCount * plan._checks;
+    return PathDistanceIndex::estimatedEnumerationChecks(parts, direction, edgeType, seedCount, maxHops) > batchCount * plan._checks;
 }
 
 void PathTargetIndex::buildBatch(const PartDirectory& parts,

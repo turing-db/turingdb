@@ -471,8 +471,8 @@ TEST_F(ExploreDistinctEndsGeneratedGraphTest, distinctFormEmitsTheDeduplicatedRo
 
     // Three hops from sixty-four seeds cover the graph several times over, one hop barely a
     // third of it: the executor searches the first and walks the second
-    EXPECT_TRUE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::FORWARD, 3));
-    EXPECT_FALSE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::FORWARD, 1));
+    EXPECT_TRUE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::FORWARD, std::nullopt, 3));
+    EXPECT_FALSE(PathExplorator::searchPaysForDistinctEnds(view, PathExplorationDir::FORWARD, std::nullopt, 1));
 
     expectSameRows(generatedEnumeratedProgram, generatedDistinctProgram, view);
     expectSameRows(generatedOneHopEnumeratedProgram, generatedOneHopDistinctProgram, view);

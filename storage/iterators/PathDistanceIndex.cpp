@@ -16,9 +16,26 @@ using namespace db;
 namespace {
 
 // One node or edge the search touches costs this many candidate checks of the walk it
-// spares: measured with samples/path_bench between 0.26 and 0.40 across graph shapes, so a
-// half builds the index only where the walk is expected to cost about one and a half times it
-constexpr double indexUnitCostInChecks = 0.5;
+// spares: measured with samples/path_bench between 0.22 and 0.35 across graph shapes, and the
+// highest of those keeps the gate within 1.4 of each shape's measured break-even either way
+constexpr double indexUnitCostInChecks = 0.35;
+
+constexpr size_t fanOutSampleTarget = 4096;
+
+size_t countMatching(std::span<const EdgeRecord> edges, std::optional<EdgeTypeID> edgeType) {
+    if (!edgeType) {
+        return edges.size();
+    }
+
+    size_t matching = 0;
+    for (const EdgeRecord& record : edges) {
+        if (record._edgeTypeID == *edgeType) {
+            matching++;
+        }
+    }
+
+    return matching;
+}
 
 }
 
@@ -101,8 +118,49 @@ bool PathDistanceIndex::canReachEndWithin(NodeID node, uint64_t hops) const {
     return distance != unreachable && distance <= hops;
 }
 
+double PathDistanceIndex::sampledFanOut(const PartDirectory& parts,
+                                       PathExplorationDir direction,
+                                       std::optional<EdgeTypeID> edgeType) {
+    const size_t nodeCount = parts.getAllocatedNodeCount();
+    if (nodeCount == 0) {
+        return 0.0;
+    }
+
+    const size_t stride = std::max<size_t>(1, nodeCount / fanOutSampleTarget);
+    const bool walksOuts = direction != PathExplorationDir::BACKWARD;
+    const bool walksIns = direction != PathExplorationDir::FORWARD;
+
+    size_t sampled = 0;
+    size_t matching = 0;
+
+    for (size_t node = 0; node < nodeCount; node += stride) {
+        const NodeID sample(node);
+        const size_t owner = parts.ownerIndex(sample);
+        if (owner == parts.size()) {
+            continue;
+        }
+
+        const EdgeIndexer& ownerIndexer = *parts.get(owner)._indexer;
+        sampled++;
+
+        if (walksOuts) {
+            matching += countMatching(ownerIndexer.getNodeOutEdges(sample), edgeType);
+        }
+        if (walksIns) {
+            matching += countMatching(ownerIndexer.getNodeInEdges(sample), edgeType);
+        }
+    }
+
+    if (sampled == 0) {
+        return 0.0;
+    }
+
+    return static_cast<double>(matching) / static_cast<double>(sampled);
+}
+
 double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
                                                      PathExplorationDir direction,
+                                                     std::optional<EdgeTypeID> edgeType,
                                                      size_t seedCount,
                                                      uint64_t maxHops) {
     const size_t nodeCount = parts.getAllocatedNodeCount();
@@ -111,24 +169,33 @@ double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
         return 0.0;
     }
 
-    const double directions = direction == PathExplorationDir::BOTH ? 2.0 : 1.0;
-    const double fanOut = std::max(1.0, directions * static_cast<double>(edgeCount) / static_cast<double>(nodeCount));
-    const double hops = static_cast<double>(maxHops);
+    const double nodes = static_cast<double>(nodeCount);
+    const double fanOut = std::max(1.0, sampledFanOut(parts, direction, edgeType));
 
-    // The candidates of every hop summed: a chain of fan-out one walks one per hop
-    const double candidatesPerSeed = fanOut == 1.0 ? hops : fanOut * (pow(fanOut, hops) - 1.0) / (fanOut - 1.0);
+    // The candidates of every hop summed, over the levels the index itself would build: a
+    // chain of fan-out one walks one per hop, and a frontier that already covers the graph
+    // cannot grow, which is what keeps an unbounded walk's estimate finite
+    const uint64_t levelCount = std::min<uint64_t>(maxHops, farthest);
+
+    double candidatesPerSeed = 0.0;
+    double frontier = 1.0;
+    for (uint64_t level = 0; level < levelCount; level++) {
+        candidatesPerSeed += frontier * fanOut;
+        frontier = std::min(frontier * fanOut, nodes);
+    }
 
     return static_cast<double>(seedCount) * candidatesPerSeed;
 }
 
 bool PathDistanceIndex::isWorthBuilding(const GraphView& view,
                                         PathExplorationDir direction,
+                                        std::optional<EdgeTypeID> edgeType,
                                         size_t seedCount,
                                         uint64_t maxHops) {
     const PartDirectory parts(view);
     const double indexCost = indexUnitCostInChecks * static_cast<double>(parts.getAllocatedNodeCount() + parts.getAllocatedEdgeCount());
 
-    return estimatedEnumerationChecks(parts, direction, seedCount, maxHops) > indexCost;
+    return estimatedEnumerationChecks(parts, direction, edgeType, seedCount, maxHops) > indexCost;
 }
 
 void PathDistanceIndex::collectEnds(const PartDirectory& parts, const LabelSet& endLabels, std::vector<NodeID>& ends) {

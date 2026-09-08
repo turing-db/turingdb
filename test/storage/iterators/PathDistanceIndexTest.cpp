@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <math.h>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -7,6 +8,7 @@
 #include "TuringTest.h"
 
 #include "Graph.h"
+#include "iterators/PartDirectory.h"
 #include "iterators/PathDistanceIndex.h"
 #include "iterators/PathExplorationDir.h"
 #include "metadata/LabelSet.h"
@@ -329,9 +331,49 @@ TEST_F(PathDistanceIndexTest, costGateNeedsEnoughSeeds) {
     const GraphReader reader = transaction.readGraph();
     const GraphView& view = reader.getView();
 
-    EXPECT_FALSE(PathDistanceIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, 1, 4));
-    EXPECT_TRUE(PathDistanceIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, 100000, 4));
-    EXPECT_TRUE(PathDistanceIndex::isWorthBuilding(view, PathExplorationDir::BOTH, 100000, unbounded));
-    EXPECT_FALSE(PathDistanceIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, 100000, 0));
-    EXPECT_FALSE(PathDistanceIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, 0, 4));
+    EXPECT_FALSE(PathDistanceIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, 1, 4));
+    EXPECT_TRUE(PathDistanceIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, 100000, 4));
+    EXPECT_TRUE(PathDistanceIndex::isWorthBuilding(view, PathExplorationDir::BOTH, std::nullopt, 100000, unbounded));
+    EXPECT_FALSE(PathDistanceIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, 100000, 0));
+    EXPECT_FALSE(PathDistanceIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, 0, 4));
+}
+
+TEST_F(PathDistanceIndexTest, estimatesAnUnboundedWalkFinitely) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const PartDirectory parts(reader.getView());
+
+    const double bounded = PathDistanceIndex::estimatedEnumerationChecks(parts, PathExplorationDir::FORWARD, std::nullopt, 1, 4);
+    const double unboundedChecks = PathDistanceIndex::estimatedEnumerationChecks(parts, PathExplorationDir::FORWARD, std::nullopt, 1, unbounded);
+
+    EXPECT_TRUE(std::isfinite(unboundedChecks));
+    EXPECT_GT(unboundedChecks, bounded);
+
+    // The estimate charges the levels the index itself would build and no more
+    const double capped = PathDistanceIndex::estimatedEnumerationChecks(parts,
+                                                                        PathExplorationDir::FORWARD,
+                                                                        std::nullopt,
+                                                                        1,
+                                                                        PathDistanceIndex::farthest);
+    EXPECT_DOUBLE_EQ(unboundedChecks, capped);
+}
+
+TEST_F(PathDistanceIndexTest, estimatesTheWalkOfTheTypeItFollows) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const PartDirectory parts(reader.getView());
+
+    // Eight of the ten edges are of type A and two of type B, so a walk restricted to B is
+    // expected to fan out less than one over every edge
+    EXPECT_GT(PathDistanceIndex::sampledFanOut(parts, PathExplorationDir::FORWARD, std::nullopt),
+              PathDistanceIndex::sampledFanOut(parts, PathExplorationDir::FORWARD, _typeA));
+    EXPECT_GT(PathDistanceIndex::sampledFanOut(parts, PathExplorationDir::FORWARD, _typeA),
+              PathDistanceIndex::sampledFanOut(parts, PathExplorationDir::FORWARD, _typeB));
+
+    // Over both directions the untyped fan-out clears one, where the two B edges leave a
+    // walk restricted to them expecting no branching at all
+    const double untyped = PathDistanceIndex::estimatedEnumerationChecks(parts, PathExplorationDir::BOTH, std::nullopt, 100, 6);
+    const double typedB = PathDistanceIndex::estimatedEnumerationChecks(parts, PathExplorationDir::BOTH, _typeB, 100, 6);
+
+    EXPECT_GT(untyped, typedB);
 }

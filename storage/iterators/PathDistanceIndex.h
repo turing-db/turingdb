@@ -42,16 +42,24 @@ public:
     bool canReachEndWithin(NodeID node, uint64_t hops) const;
     size_t getReachedCount() const { return _reached; }
 
+    // The edges of the walked type one node carries, over a strided sample of the nodes: no
+    // per-type edge count is kept, and counting them all costs about what the index does
+    static double sampledFanOut(const PartDirectory& parts,
+                                PathExplorationDir direction,
+                                std::optional<EdgeTypeID> edgeType);
+
     // The candidate checks the unpruned walk is expected to make: the seeds fanning out over
-    // every hop of the bound, infinite past what a double holds
+    // every hop of the bound, the frontier holding once it covers the graph
     static double estimatedEnumerationChecks(const PartDirectory& parts,
                                              PathExplorationDir direction,
+                                             std::optional<EdgeTypeID> edgeType,
                                              size_t seedCount,
                                              uint64_t maxHops);
 
     // Whether the enumeration the seeds imply is expected to cost more than the index
     static bool isWorthBuilding(const GraphView& view,
                                 PathExplorationDir direction,
+                                std::optional<EdgeTypeID> edgeType,
                                 size_t seedCount,
                                 uint64_t maxHops);
 
