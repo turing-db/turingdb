@@ -1,0 +1,125 @@
+#include <memory>
+#include <optional>
+#include <vector>
+
+#include "TuringTest.h"
+
+#include "Graph.h"
+#include "iterators/PartDirectory.h"
+#include "iterators/PathDistanceIndex.h"
+#include "iterators/PathExplorationDir.h"
+#include "metadata/LabelSet.h"
+#include "reader/GraphReader.h"
+#include "versioning/Change.h"
+#include "versioning/CommitBuilder.h"
+#include "versioning/Transaction.h"
+#include "views/GraphView.h"
+#include "writers/DataPartBuilder.h"
+#include "writers/MetadataBuilder.h"
+#include "JobSystem.h"
+
+using namespace db;
+using namespace turing::test;
+
+// Two edge types over one graph, each held by a small share of its nodes, as every relation
+// of a real schema is: a cascade whose nodes each continue along three edges, and a path
+// whose nodes continue along one. What a walk of either branches by is a property of the
+// nodes it reaches, not of the graph it is embedded in.
+class PathBranchingSampleTest : public TuringTest {
+protected:
+    static constexpr size_t cascadeNodeCount = 40;
+    static constexpr size_t chainNodeCount = 60;
+    static constexpr size_t nodeCount = 2000;
+
+    void initialize() override {
+        _jobSystem = std::make_unique<JobSystem>();
+        _jobSystem->init();
+        _graph = Graph::create();
+
+        auto change = _graph->newChange();
+        auto* commitBuilder = change->access().getTip();
+        auto& builder = commitBuilder->newBuilder();
+        auto& metadata = builder.getMetadata();
+
+        const LabelSet plain = LabelSet::fromList({metadata.getOrCreateLabel("N")});
+        _cascade = metadata.getOrCreateEdgeType("CASCADE");
+        _chain = metadata.getOrCreateEdgeType("CHAIN");
+
+        for (size_t node = 0; node < nodeCount; node++) {
+            builder.addNode(plain);
+        }
+
+        for (size_t node = 0; node + 3 < cascadeNodeCount; node++) {
+            builder.addEdge(_cascade, node, node + 1);
+            builder.addEdge(_cascade, node, node + 2);
+            builder.addEdge(_cascade, node, node + 3);
+        }
+
+        const size_t chainFirst = cascadeNodeCount;
+        for (size_t node = chainFirst; node + 1 < chainFirst + chainNodeCount; node++) {
+            builder.addEdge(_chain, node, node + 1);
+        }
+
+        const auto submitted = change->access().submit(*_jobSystem);
+        ASSERT_TRUE(submitted);
+    }
+
+    std::unique_ptr<JobSystem> _jobSystem;
+    std::unique_ptr<Graph> _graph;
+    EdgeTypeID _cascade {0};
+    EdgeTypeID _chain {0};
+};
+
+TEST_F(PathBranchingSampleTest, branchesByTheNodesTheWalkReaches) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const PartDirectory parts(reader.getView());
+
+    PathDistanceIndex::TypeBranching cascade;
+    PathDistanceIndex::TypeBranching chain;
+    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::FORWARD, _cascade, cascade);
+    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::FORWARD, _chain, chain);
+
+    // A node the cascade reaches continues along three edges of its own, and one the chain
+    // reaches along a single one. Spread over the two thousand nodes of the graph instead,
+    // the same edges would report 0.05 and 0.03 - every walk a chain, or less.
+    EXPECT_GT(cascade._fanOut, 2.0);
+    EXPECT_NEAR(chain._fanOut, 1.0, 0.05);
+
+    // And only their own nodes can hold a frontier
+    EXPECT_LT(cascade._supportNodes, 2.0 * cascadeNodeCount);
+    EXPECT_LT(chain._supportNodes, 2.0 * chainNodeCount);
+}
+
+TEST_F(PathBranchingSampleTest, chargesACascadeMoreThanAChainPerHop) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const PartDirectory parts(reader.getView());
+
+    const auto checks = [&parts](std::optional<EdgeTypeID> edgeType, uint64_t maxHops) {
+        return PathDistanceIndex::estimatedEnumerationChecks(parts, PathExplorationDir::FORWARD, edgeType, 1, maxHops);
+    };
+
+    // A frontier that trebles every hop outgrows one that holds, which is the whole of what
+    // the two gates reading this estimate have to tell apart
+    EXPECT_GT(checks(_cascade, 4), 3.0 * checks(_chain, 4));
+}
+
+TEST_F(PathBranchingSampleTest, theFrontierStopsAtTheNodesCarryingTheType) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const PartDirectory parts(reader.getView());
+
+    const auto checks = [&parts](std::optional<EdgeTypeID> edgeType, uint64_t maxHops) {
+        return PathDistanceIndex::estimatedEnumerationChecks(parts, PathExplorationDir::FORWARD, edgeType, 1, maxHops);
+    };
+
+    // The cascade spans forty nodes, so its frontier covers them within a few hops
+    EXPECT_GT(checks(_cascade, 3), checks(_cascade, 2));
+    EXPECT_DOUBLE_EQ(checks(_cascade, 100), checks(_cascade, PathDistanceIndex::farthest));
+
+    // Past that the estimate has nothing left to predict and charges no deeper bound for it,
+    // where multiplying the covered frontier by the levels of an unbounded walk would price
+    // a walk of forty nodes above an index over the whole graph
+    EXPECT_LT(checks(_cascade, PathDistanceIndex::farthest), static_cast<double>(nodeCount));
+}

@@ -42,17 +42,32 @@ public:
     bool canReachEndWithin(NodeID node, uint64_t hops) const;
     size_t getReachedCount() const { return _reached; }
 
-    // The edges of the walked type one node carries, over a strided sample of the nodes: no
-    // per-type edge count is kept, and counting them all costs about what the index does
-    static double sampledFanOut(const PartDirectory& parts,
+    // What a walk of one edge type branches by at the nodes it reaches, and how many nodes
+    // its frontier can occupy. A relation held by a fraction of the nodes is walked only
+    // through those, so averaging its degree over every node describes no walk at all.
+    // Sampled with a stride: no per-type edge count is kept.
+    struct TypeBranching {
+        double _fanOut {0.0};
+        double _supportNodes {0.0};
+    };
+
+    static void sampleBranching(const PartDirectory& parts,
                                 PathExplorationDir direction,
-                                std::optional<EdgeTypeID> edgeType);
+                                std::optional<EdgeTypeID> edgeType,
+                                TypeBranching& branching);
 
     // The candidate checks the unpruned walk is expected to make: the seeds fanning out over
-    // every hop of the bound, the frontier holding once it covers the graph
+    // every hop of the bound, the frontier holding once it covers the nodes the type reaches.
+    // Sampling the branching costs a strided pass over the adjacency, so a caller that needs
+    // more than one of these takes the sample once and passes it to the overload.
     static double estimatedEnumerationChecks(const PartDirectory& parts,
                                              PathExplorationDir direction,
                                              std::optional<EdgeTypeID> edgeType,
+                                             size_t seedCount,
+                                             uint64_t maxHops);
+
+    static double estimatedEnumerationChecks(const PartDirectory& parts,
+                                             const TypeBranching& branching,
                                              size_t seedCount,
                                              uint64_t maxHops);
 

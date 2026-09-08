@@ -363,17 +363,28 @@ TEST_F(PathDistanceIndexTest, estimatesTheWalkOfTheTypeItFollows) {
     const GraphReader reader = transaction.readGraph();
     const PartDirectory parts(reader.getView());
 
-    // Eight of the ten edges are of type A and two of type B, so a walk restricted to B is
-    // expected to fan out less than one over every edge
-    EXPECT_GT(PathDistanceIndex::sampledFanOut(parts, PathExplorationDir::FORWARD, std::nullopt),
-              PathDistanceIndex::sampledFanOut(parts, PathExplorationDir::FORWARD, _typeA));
-    EXPECT_GT(PathDistanceIndex::sampledFanOut(parts, PathExplorationDir::FORWARD, _typeA),
-              PathDistanceIndex::sampledFanOut(parts, PathExplorationDir::FORWARD, _typeB));
-
-    // Over both directions the untyped fan-out clears one, where the two B edges leave a
-    // walk restricted to them expecting no branching at all
+    // Over both directions a walk on every edge reaches more per hop than one restricted to
+    // the two B edges, whose frontier never leaves the nodes carrying them
     const double untyped = PathDistanceIndex::estimatedEnumerationChecks(parts, PathExplorationDir::BOTH, std::nullopt, 100, 6);
     const double typedB = PathDistanceIndex::estimatedEnumerationChecks(parts, PathExplorationDir::BOTH, _typeB, 100, 6);
 
     EXPECT_GT(untyped, typedB);
+}
+
+TEST_F(PathDistanceIndexTest, chargesTheFrontierWhileItGrowsAndNotAfter) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const PartDirectory parts(reader.getView());
+
+    const auto checks = [&parts](uint64_t maxHops) {
+        return PathDistanceIndex::estimatedEnumerationChecks(parts, PathExplorationDir::BOTH, std::nullopt, 1, maxHops);
+    };
+
+    // A deeper bound costs more only while the frontier can still grow
+    EXPECT_GT(checks(3), checks(2));
+
+    // Once it covers every node carrying the type there is nothing left to predict, so the
+    // estimate must not multiply that frontier by levels the walk may never reach
+    EXPECT_DOUBLE_EQ(checks(unbounded), checks(PathDistanceIndex::farthest));
+    EXPECT_DOUBLE_EQ(checks(unbounded), checks(PathDistanceIndex::farthest / 2));
 }

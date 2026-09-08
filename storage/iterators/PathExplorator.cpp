@@ -93,8 +93,22 @@ bool PathExplorator::searchPaysForDistinctEnds(const GraphView& view,
     const PartDirectory parts(view);
     const double nodeCount = static_cast<double>(parts.getAllocatedNodeCount());
     const double edgeCount = static_cast<double>(parts.getAllocatedEdgeCount());
-    const double candidatesPerSeed = PathDistanceIndex::estimatedEnumerationChecks(parts, direction, edgeType, 1, maxHops);
-    if (nodeCount == 0.0 || edgeCount == 0.0 || candidatesPerSeed == 0.0) {
+    if (nodeCount == 0.0 || edgeCount == 0.0) {
+        return false;
+    }
+
+    // Enumerating the trails of an unbounded walk has no cost bound at all - their number
+    // grows exponentially with the depth reached, from a single seed - where the search
+    // stops at its fixpoint, and under DISTINCT the two answer the same question
+    if (maxHops == unboundedHops) {
+        return true;
+    }
+
+    PathDistanceIndex::TypeBranching branching;
+    PathDistanceIndex::sampleBranching(parts, direction, edgeType, branching);
+
+    const double candidatesPerSeed = PathDistanceIndex::estimatedEnumerationChecks(parts, branching, 1, maxHops);
+    if (candidatesPerSeed == 0.0) {
         return false;
     }
 
@@ -102,10 +116,10 @@ bool PathExplorator::searchPaysForDistinctEnds(const GraphView& view,
     // seeds and what they fan out to within max - 1 hops, drawn over the graph, are expected
     // to be this many distinct nodes, each expanded along its edges
     const double seeds = static_cast<double>(PathTargetIndex::targetsPerBatch);
-    const double expandedPerSeed = 1.0 + PathDistanceIndex::estimatedEnumerationChecks(parts, direction, edgeType, 1, maxHops - 1);
+    const double expandedPerSeed = 1.0 + PathDistanceIndex::estimatedEnumerationChecks(parts, branching, 1, maxHops - 1);
     const double expanded = nodeCount * (1.0 - exp(-seeds * expandedPerSeed / nodeCount));
 
-    const double fanOut = std::max(1.0, PathDistanceIndex::sampledFanOut(parts, direction, edgeType));
+    const double fanOut = std::max(1.0, branching._fanOut);
 
     const double walked = seeds * candidatesPerSeed;
     const double relaxed = expanded * fanOut;
