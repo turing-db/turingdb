@@ -393,6 +393,15 @@ void applyFunctionOverVector(Functor& functor,
     }
 }
 
+// Whether a column holds one type-erased cell per row, which a list function reads
+// through its tagged counterpart rather than as the list column it was written against.
+bool readsTaggedCells(const Column* input) {
+    const ColumnKind::Code kind = input->getKind();
+
+    return kind == ColumnVector<ListElementView>::staticKind()
+        || kind == ColumnConst<ListElementView>::staticKind();
+}
+
 template <typename Functor>
 void functionVectorKernel(NLExecutionContext* context, Column* result, const Column* input) {
     using Arg = typename Functor::ArgType;
@@ -416,6 +425,45 @@ void functionVectorKernel(NLExecutionContext* context, Column* result, const Col
     }
 
     bioassert(false, "Function operand has an unexpected column type.");
+}
+
+// The nullable-input kernel of a function that reads its own nulls: the absent value goes
+// to the functor as it is, so the result rides the plain column its answers always fill.
+template <typename Functor>
+void functionNullReadingKernel(NLExecutionContext* context, Column* result, const Column* input) {
+    using Arg = typename Functor::ArgType;
+    using Res = typename Functor::ResultType;
+
+    const auto* typedInput = dynamic_cast<const ColumnOptVector<Arg>*>(input);
+    bioassert(typedInput, "Function operand has an unexpected column type.");
+    auto* output = static_cast<ColumnVector<Res>*>(result);
+
+    const auto& inputRaw = typedInput->getRaw();
+    const size_t size = inputRaw.size();
+
+    output->resize(size);
+    auto& outputRaw = output->getRaw();
+
+    Functor functor = makeFunctor<Functor>(context);
+    for (size_t row = 0; row < size; row++) {
+        outputRaw[row] = functor(inputRaw[row]);
+    }
+}
+
+// The kernel serving a column of type-erased cells: such a column holds a cell per row,
+// or the single cell a constant is, and never rides a nullable column - a cell holds its
+// null in its own tag - so these two shapes are all there are.
+template <typename Functor>
+NLUnaryFunctionKernel selectTaggedCellFunction(const Column* input, LocalMemory* memory, Column*& result) {
+    using Res = typename Functor::ResultType;
+
+    if (input->getContainerKind() == ContainerKind::code<ColumnConst>()) {
+        result = memory->alloc<ColumnConst<Res>>();
+        return &functionConstKernel<Functor>;
+    }
+
+    result = memory->alloc<ColumnVector<Res>>();
+    return &functionVectorKernel<Functor>;
 }
 
 // A node or edge an OPTIONAL MATCH did not match is an invalid ID, so a function reading
@@ -5229,14 +5277,27 @@ NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool input
         return &functionNullKernel;
     }
 
+    // A column of type-erased cells is served by the counterpart reading one, which
+    // answers over the same rows but reads its argument - and its nulls - out of the tag
+    if constexpr (HasTaggedCounterpart<Functor>) {
+        if (readsTaggedCells(input)) {
+            return selectTaggedCellFunction<typename Functor::TaggedCounterpart>(input, memory, result);
+        }
+    }
+
     if (input->getContainerKind() == ContainerKind::code<ColumnConst>()) {
         result = memory->alloc<ColumnConst<Res>>();
         return &functionConstKernel<Functor>;
     }
 
     if (inputNullable) {
-        result = memory->alloc<ColumnOptVector<JustRes>>();
-        return &functionOptKernel<Functor>;
+        if constexpr (ReadsItsNulls<Functor>) {
+            result = memory->alloc<ColumnVector<Res>>();
+            return &functionNullReadingKernel<Functor>;
+        } else {
+            result = memory->alloc<ColumnOptVector<JustRes>>();
+            return &functionOptKernel<Functor>;
+        }
     }
 
     // An entity column carries its null in the ID rather than in an optional, so it is
@@ -5272,6 +5333,9 @@ NLUnaryFunctionKernel NLExecutor::selectConversion(const Column* input, bool inp
 template NLUnaryFunctionKernel NLExecutor::selectFunction<LabelsFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<EdgeTypesFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<toBoolFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<ListSizeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<ListHeadFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<ListTailFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
 template NLUnaryFunctionKernel NLExecutor::selectConversion<toIntegerFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectConversion<toFloatFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);

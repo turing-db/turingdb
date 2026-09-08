@@ -240,6 +240,9 @@ const std::unordered_map<std::string_view, UnaryFunctionEmitter> unaryFunctionEm
     {"toInteger", &emitUnaryFunction<mlir::db::ToInteger>},
     {"toFloat", &emitUnaryFunction<mlir::db::ToFloat>},
     {"toBoolean", &emitUnaryFunction<mlir::db::ToBoolean>},
+    {"size", &emitUnaryFunction<mlir::db::Size>},
+    {"head", &emitUnaryFunction<mlir::db::Head>},
+    {"tail", &emitUnaryFunction<mlir::db::Tail>},
 };
 
 using BinaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder,
