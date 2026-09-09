@@ -113,6 +113,9 @@ template <typename T>
     return result;
 }
 
+[[maybe_unused]] std::string valueToString(const db::ListElementView element);
+[[maybe_unused]] std::string valueToString(db::ListView view);
+
 template <typename T>
 [[maybe_unused]] std::string valueToString(const std::optional<T>& value) {
     if (!value.has_value()) {
@@ -141,8 +144,6 @@ template <typename T>
     result += "]";
     return result;
 }
-
-[[maybe_unused]] std::string valueToString(db::ListView view);
 
 [[maybe_unused]] std::string valueToString(const db::ListElementView element) {
     const auto writeTyped = []<typename T>(const db::ListElementView element) -> std::string {

@@ -164,8 +164,8 @@ protected:
         DBLowering lowering(&context, &view);
         lowering.lower(dbFunction, *nlModule);
 
-        mlir::nl::Index index;
-        nlModule->walk([&](mlir::nl::Index op) { index = op; });
+        mlir::nl::ListIndex index;
+        nlModule->walk([&](mlir::nl::ListIndex op) { index = op; });
         EXPECT_TRUE(index);
 
         std::string printed;
