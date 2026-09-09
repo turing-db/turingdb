@@ -60,15 +60,9 @@ struct OptionalKindPairs {
         KindPair<std::optional<L>, std::optional<R>>>;
 };
 
-// A tagged scalar against a value of a known type, either way round, so a comparison
-// finds the pair whichever side the type-erased column is on.
 template <typename T>
 struct ListElementKindPairs {
-    using Pairs = std::tuple<
-        KindPair<ListElementView, T>,
-        KindPair<T, ListElementView>,
-        KindPair<ListElementView, std::optional<T>>,
-        KindPair<std::optional<T>, ListElementView>>;
+    using Pairs = typename OptionalKindPairs<ListElementView, T>::Pairs;
 };
 
 template <typename T>
@@ -149,6 +143,7 @@ struct PairRestrictions<Op> {
         ListElementKindPairs<types::Double::Primitive>::Pairs,
         ListElementKindPairs<types::String::Primitive>::Pairs,
         ListElementKindPairs<types::Bool::Primitive>::Pairs,
+        OptionalKindPairs<ListElementView, ListElementView>::Pairs,
 
         // A loaded CSV field owns its characters, so a comparison against a string
         // property meets a borrowed view on one side and an owned string on the other -
@@ -158,8 +153,6 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs,
 
         std::tuple<
-            KindPair<ListElementView, ListElementView>,
-
             // Filtering by ID or labels/edge type
             KindPair<NodeID, NodeID>,
             KindPair<EdgeID, EdgeID>,
@@ -173,6 +166,7 @@ struct PairRestrictions<Op> {
             KindPair<std::optional<types::String::Primitive>, PropertyNull>,
             KindPair<std::optional<types::Bool::Primitive>, PropertyNull>,
             KindPair<std::optional<types::Embedding::Primitive>, PropertyNull>,
+            KindPair<std::optional<ListElementView>, PropertyNull>,
 
             KindPair<NodeID, types::Int64::Primitive>,                // WHERE n = 1
             KindPair<NodeID, std::optional<types::Int64::Primitive>>, // WHERE e = e.age
