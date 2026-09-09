@@ -196,12 +196,7 @@ short area-prefixed line, no body:
 
 ```
 QA: pin the grouping of a null OPTIONAL MATCH key
-
-Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 ```
-
-The co-author line is deliberate here and overrides CLAUDE.md's no-co-author rule: /qatest
-output is machine-found and is marked as such.
 
 PR title carries the detail — `QA: 4 failing Cypher tests on v3`. The body is one
 imperative sentence, then a fenced code block of bare facts: each query, its expected rows,
