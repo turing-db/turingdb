@@ -3238,11 +3238,14 @@ NLExecutor::~NLExecutor() {
 
 void NLExecutor::run() {
     NLOutputSink* const sink = _ctxt.getSink();
-    const std::span<const std::string_view> columnNames = _prog->columnNames();
+    if (sink) {
+        NLOutputData* const outputData = _prog->getOutputData();
+        std::span<const Column* const> outputs;
+        if (outputData) {
+            outputs = outputData->outputs();
+        }
 
-    const bool hasNamesToPublish = sink && !columnNames.empty();
-    if (hasNamesToPublish) {
-        sink->setColumnNames(columnNames);
+        sink->declareOutput(_prog->columnNames(), outputs);
     }
 
     runBody(&_ctxt, _prog->getStmts());

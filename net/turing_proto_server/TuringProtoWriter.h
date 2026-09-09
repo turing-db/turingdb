@@ -51,8 +51,11 @@ public:
     [[nodiscard]] bool wroteNonEmptyChunk() const override { return _wroteNonEmptyChunk; }
     [[nodiscard]] bool errorOccured() const override { return _errorOccured; }
 
-    void writeDataframeHeader(const db::Dataframe*);
-    void writeDataframe(const db::Dataframe*);
+    void writeDataframeHeader(const db::Dataframe* frame);
+    void writeDataframe(const db::Dataframe* frame);
+    void writeColumnHeaders(std::span<const std::string_view> names,
+                            std::span<const db::Column* const> cols);
+    void writeColumns(std::span<const db::Column* const> cols, size_t offset, size_t rowCount);
     void writeError(const db::QueryStatus* status);
     void writeProtocolError(std::string_view message);
     void writeEndPacket(db::QueryCallbacks::ExecTimeMilliseconds milliseconds);

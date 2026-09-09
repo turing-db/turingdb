@@ -23,7 +23,8 @@ public:
     StringRowSink();
     ~StringRowSink() override;
 
-    void setColumnNames(std::span<const std::string_view> names) override;
+    void declareOutput(std::span<const std::string_view> names,
+                       std::span<const db::Column* const> chunks) override;
     void appendChunks(std::span<const db::Column* const> chunks, size_t offset, size_t rowCount) override;
 
     const std::vector<Row>& getRows() const { return _rows; }

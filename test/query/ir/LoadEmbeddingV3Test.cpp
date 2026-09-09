@@ -49,7 +49,8 @@ using CountColumn = ColumnVector<types::UInt64::Primitive>;
 
 class CountSink : public NLOutputSink {
 public:
-    void setColumnNames(std::span<const std::string_view> names) override {
+    void declareOutput(std::span<const std::string_view> names,
+                       std::span<const Column* const> chunks) override {
         _columnNames.assign(names.begin(), names.end());
     }
 

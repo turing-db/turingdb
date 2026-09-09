@@ -41,6 +41,7 @@ struct EndToEndResult {
 // copies that payload into _inBuf, so client buffer must be at least as big as
 // server's — equal is the simplest way to guarantee that).
 EndToEndResult runEndToEnd(const std::string& outDir,
+                           bool useV3,
                            size_t queryChunkRows,
                            size_t bufferCapacity,
                            const std::function<void(db::Graph*, db::JobSystem*)>& seeder,
@@ -68,6 +69,7 @@ EndToEndResult runEndToEnd(const std::string& outDir,
     serverConfig.setProtoBufferCapacity(bufferCapacity);
 
     ProtoEnvScope protoScope;
+    V3EnvScope v3Scope(useV3);
     db::TuringServer server(serverConfig, env->getDB());
     server.start();
 
@@ -121,7 +123,7 @@ EndToEndResult runEndToEnd(const std::string& outDir,
 
 } // namespace
 
-class TuringProtoEndToEndTest : public TuringTest {};
+class TuringProtoEndToEndTest : public TuringTest, public ::testing::WithParamInterface<bool> {};
 
 // chunkRows=1 forces the query pipeline to emit one Dataframe per row. Each
 // server-side writeDataframe() produces its own CHUNK_HEADER + CHUNK +
@@ -129,7 +131,7 @@ class TuringProtoEndToEndTest : public TuringTest {};
 // END_CHUNK. With 12 seeded rows we therefore expect exactly 12 client
 // callbacks. Verifies the streaming path delivers many small dataframes in
 // order without losing or merging rows.
-TEST_F(TuringProtoEndToEndTest, ManySmallQueryChunks) {
+TEST_P(TuringProtoEndToEndTest, ManySmallQueryChunks) {
     constexpr size_t ROW_COUNT = 12;
 
     auto seeder = [&](db::Graph* graph, db::JobSystem* jobSystem) {
@@ -144,6 +146,7 @@ TEST_F(TuringProtoEndToEndTest, ManySmallQueryChunks) {
     };
 
     const auto result = runEndToEnd(_outDir,
+                                    GetParam(),
                                     /*queryChunkRows=*/1,
                                     /*bufferCapacity=*/net::proto::DEFAULT_BUFFER_CAPACITY,
                                     seeder,
@@ -176,7 +179,7 @@ TEST_F(TuringProtoEndToEndTest, ManySmallQueryChunks) {
 // evaluates to ColumnConst<std::optional<Int64>>, re-encoded per group by chunkRows=1.
 // Guards the END_CHUNK per-column state reset; the constant sits last in the projection
 // so a decode desync fails as a wrong value rather than a garbage string allocation.
-TEST_F(TuringProtoEndToEndTest, OptionalConstantAcrossManyChunkGroups) {
+TEST_P(TuringProtoEndToEndTest, OptionalConstantAcrossManyChunkGroups) {
     constexpr size_t ROW_COUNT = 12;
 
     auto seeder = [&](db::Graph* graph, db::JobSystem* jobSystem) {
@@ -191,6 +194,7 @@ TEST_F(TuringProtoEndToEndTest, OptionalConstantAcrossManyChunkGroups) {
     };
 
     const auto result = runEndToEnd(_outDir,
+                                    GetParam(),
                                     /*queryChunkRows=*/1,
                                     /*bufferCapacity=*/net::proto::DEFAULT_BUFFER_CAPACITY,
                                     seeder,
@@ -213,7 +217,7 @@ TEST_F(TuringProtoEndToEndTest, OptionalConstantAcrossManyChunkGroups) {
 // buffer-full callback emits a CHUNK packet and resets. So this single value
 // must round-trip across many CHUNK packets that collectively encode one
 // row. The decoded string must equal the source byte-for-byte.
-TEST_F(TuringProtoEndToEndTest, HugeValueExceedsProtoBuffer) {
+TEST_P(TuringProtoEndToEndTest, HugeValueExceedsProtoBuffer) {
     constexpr size_t BUFFER_CAPACITY = 512;
     const std::string hugeValue(8192, 'x');
 
@@ -226,6 +230,7 @@ TEST_F(TuringProtoEndToEndTest, HugeValueExceedsProtoBuffer) {
     };
 
     const auto result = runEndToEnd(_outDir,
+                                    GetParam(),
                                     /*queryChunkRows=*/net::proto::DEFAULT_BUFFER_CAPACITY,
                                     BUFFER_CAPACITY,
                                     seeder,
@@ -242,7 +247,7 @@ TEST_F(TuringProtoEndToEndTest, HugeValueExceedsProtoBuffer) {
 // buffer forces each of those CHUNKs to split mid-value because the seeded
 // strings exceed the buffer. Stresses dataframe-boundary AND value-mid-flush
 // reassembly together.
-TEST_F(TuringProtoEndToEndTest, MixedSmallChunksTinyBuffer) {
+TEST_P(TuringProtoEndToEndTest, MixedSmallChunksTinyBuffer) {
     constexpr size_t ROW_COUNT = 6;
     constexpr size_t BUFFER_CAPACITY = 512;
     constexpr size_t VALUE_SIZE = 1024;
@@ -264,6 +269,7 @@ TEST_F(TuringProtoEndToEndTest, MixedSmallChunksTinyBuffer) {
     };
 
     const auto result = runEndToEnd(_outDir,
+                                    GetParam(),
                                     /*queryChunkRows=*/1,
                                     BUFFER_CAPACITY,
                                     seeder,
@@ -294,7 +300,7 @@ TEST_F(TuringProtoEndToEndTest, MixedSmallChunksTinyBuffer) {
 // emitting that run, exercising boundary handling for the fixed-width path
 // (no length prefix to anchor on) — analog of HugeValueExceedsProtoBuffer
 // but for the fixed-width code path.
-TEST_F(TuringProtoEndToEndTest, FixedWidthValuesAcrossPackets) {
+TEST_P(TuringProtoEndToEndTest, FixedWidthValuesAcrossPackets) {
     constexpr size_t ROW_COUNT = 500;
     constexpr size_t BUFFER_CAPACITY = 256;
 
@@ -311,6 +317,7 @@ TEST_F(TuringProtoEndToEndTest, FixedWidthValuesAcrossPackets) {
     };
 
     const auto result = runEndToEnd(_outDir,
+                                    GetParam(),
                                     /*queryChunkRows=*/net::proto::DEFAULT_BUFFER_CAPACITY,
                                     BUFFER_CAPACITY,
                                     seeder,
@@ -340,7 +347,7 @@ TEST_F(TuringProtoEndToEndTest, FixedWidthValuesAcrossPackets) {
 // minor fraction of the wire output. The encoder must therefore split the
 // mask itself across multiple CHUNK packets — this exercises the mask
 // serialization path independent of the value path.
-TEST_F(TuringProtoEndToEndTest, BigMaskSplitAcrossPackets) {
+TEST_P(TuringProtoEndToEndTest, BigMaskSplitAcrossPackets) {
     constexpr size_t ROW_COUNT = 8000;
     constexpr size_t NON_NULL_COUNT = 50;
     constexpr size_t BUFFER_CAPACITY = 128;
@@ -360,6 +367,7 @@ TEST_F(TuringProtoEndToEndTest, BigMaskSplitAcrossPackets) {
     };
 
     const auto result = runEndToEnd(_outDir,
+                                    GetParam(),
                                     /*queryChunkRows=*/net::proto::DEFAULT_BUFFER_CAPACITY,
                                     BUFFER_CAPACITY,
                                     seeder,
@@ -389,3 +397,53 @@ TEST_F(TuringProtoEndToEndTest, BigMaskSplitAcrossPackets) {
     }
     EXPECT_EQ(nonNullValues, expected);
 }
+
+// A folded SKIP or LIMIT emits a window of each chunk, not the whole chunk, so only the
+// rows the query kept may reach the wire. Chunks of 4 over 12 rows: the skip drops the
+// first 2 rows of the first chunk and the limit cuts the second chunk short.
+TEST_P(TuringProtoEndToEndTest, SkipLimitWindow) {
+    constexpr size_t ROW_COUNT = 12;
+    constexpr size_t LIMIT_COUNT = 5;
+
+    auto seeder = [&](db::Graph* graph, db::JobSystem* jobSystem) {
+        db::GraphWriter writer(graph, jobSystem);
+        for (size_t i = 0; i < ROW_COUNT; ++i) {
+            const auto node = writer.addNode({"TestLabel"});
+            const std::string name = "node_" + std::to_string(i);
+            writer.addNodeProperty<db::types::String>(node, "name", std::string_view(name));
+        }
+        ASSERT_TRUE(writer.commit());
+        ASSERT_TRUE(writer.submit());
+    };
+
+    const auto result = runEndToEnd(_outDir,
+                                    GetParam(),
+                                    /*queryChunkRows=*/4,
+                                    /*bufferCapacity=*/net::proto::DEFAULT_BUFFER_CAPACITY,
+                                    seeder,
+                                    "MATCH (n:TestLabel) RETURN n.name AS name SKIP 2 LIMIT 5");
+
+    ASSERT_EQ(result.rows.size(), LIMIT_COUNT);
+    ASSERT_EQ(result.columnNames.size(), 1u);
+    EXPECT_EQ(result.columnNames[0], "name");
+
+    std::vector<std::string> received;
+    received.reserve(result.rows.size());
+    for (const auto& row : result.rows) {
+        ASSERT_EQ(row.size(), 1u);
+        received.push_back(row[0]);
+    }
+    std::sort(received.begin(), received.end());
+    EXPECT_EQ(std::unique(received.begin(), received.end()), received.end());
+
+    for (const std::string& name : received) {
+        EXPECT_TRUE(name.starts_with("node_")) << name;
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(Engines,
+                         TuringProtoEndToEndTest,
+                         ::testing::Values(false, true),
+                         [](const ::testing::TestParamInfo<bool>& info) {
+                             return std::string(info.param ? "v3" : "v2");
+                         });

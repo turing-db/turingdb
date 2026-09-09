@@ -36,4 +36,22 @@ private:
     std::string _prior;
 };
 
+// USE_TURING_V3 is read once during TuringServer::start() to run queries on the
+// V3 engine instead of V2. RAII scope that sets or clears it for the lifetime of
+// the scope and restores any prior value on destruction.
+class V3EnvScope {
+public:
+    explicit V3EnvScope(bool enabled);
+    ~V3EnvScope();
+
+    V3EnvScope(const V3EnvScope&) = delete;
+    V3EnvScope(V3EnvScope&&) = delete;
+    V3EnvScope& operator=(const V3EnvScope&) = delete;
+    V3EnvScope& operator=(V3EnvScope&&) = delete;
+
+private:
+    bool _hadPrior {false};
+    std::string _prior;
+};
+
 }

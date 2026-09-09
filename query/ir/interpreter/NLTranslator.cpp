@@ -2127,6 +2127,8 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
     const bool singleRowStep = stepKeepsASingleRow(outputBlock);
 
     NLOutputData* outputData = _program->allocFunctionData<NLOutputData>();
+    _program->setOutputData(outputData);
+
     outputData->setLimit(limitStateFor(output.getLimit()));
     outputData->setSkip(skipStateFor(output.getSkip()));
 

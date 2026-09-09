@@ -210,14 +210,14 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
     procedureContext.setGraphView(&view);
     procedureContext.setTransaction(&txRes.value());
     procedureContext.setProcedures(system.getProcedures());
-    procedureContext.setChunkSize(ChunkConfig::CHUNK_SIZE);
+    procedureContext.setChunkSize(_chunkSize);
     procedureContext.setListBuffer(&mem->listBuffer());
 
     DBDialectInterpreter interpreter(module,
                                      &view,
                                      sink,
                                      mem,
-                                     ChunkConfig::CHUNK_SIZE,
+                                     _chunkSize,
                                      writeBuffer,
                                      metadataBuilder,
                                      &procedureContext,

@@ -34,7 +34,8 @@ namespace {
 // A sink for the statements that report no row.
 class NullSink : public NLOutputSink {
 public:
-    void setColumnNames(std::span<const std::string_view> names) override {}
+    void declareOutput(std::span<const std::string_view> names,
+                       std::span<const Column* const> chunks) override {}
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {}
 };
 
