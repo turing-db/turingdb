@@ -133,8 +133,10 @@ func.func @main() {
   nl.for %interest in %interests : !nl.iter<!nl.chunk<!storage.node_id>> {
     %groups = nl.collect(%buffer) : !nl.iter<!nl.chunk<!storage.list<!storage.node_id>>>
     nl.for %list in %groups : !nl.iter<!nl.chunk<!storage.list<!storage.node_id>>> {
-      %crossedInterest, %crossedList = nl.cross_product {%interest} {%list} : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.list<!storage.node_id>>}
-      nl.output(%crossedInterest, %crossedList, %count) names ["interest", "people", "total"] : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.list<!storage.node_id>>, !nl.chunk<ui64>
+      %pairs = nl.cross_product {%interest} {%list} : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.list<!storage.node_id>>}
+      nl.for %crossedInterest, %crossedList in %pairs : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.list<!storage.node_id>>> {
+        nl.output(%crossedInterest, %crossedList, %count) names ["interest", "people", "total"] : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.list<!storage.node_id>>, !nl.chunk<ui64>
+      }
     }
   }
   func.return

@@ -3743,7 +3743,8 @@ TEST_F(DBLoweringTest, lowersCrossProductToNestedLoops) {
     lowering.lower(dbFunction, *nlModule);
 
     // The product becomes a loop nest, not two sibling loops: exactly one
-    // nl.cross_product and exactly two nl.for loops (one scan per factor).
+    // nl.cross_product and exactly three nl.for loops - one scan per factor, plus
+    // the product's own, which walks the pairs a chunk at a time.
     size_t crossProductCount = 0;
     size_t forCount = 0;
     mlir::nl::CrossProduct cross;
@@ -3757,13 +3758,17 @@ TEST_F(DBLoweringTest, lowersCrossProductToNestedLoops) {
     });
 
     EXPECT_EQ(crossProductCount, 1u);
-    EXPECT_EQ(forCount, 2u);
+    EXPECT_EQ(forCount, 3u);
     ASSERT_TRUE(cross);
 
-    // One column contributed by each factor, two results (outer ++ inner).
+    // One column contributed by each factor, so the iterator produces two chunks
+    // per step (outer ++ inner).
     EXPECT_EQ(cross.getOuterColumns().size(), 1u);
     EXPECT_EQ(cross.getInnerColumns().size(), 1u);
-    EXPECT_EQ(cross.getResults().size(), 2u);
+
+    const auto iteratorType = mlir::dyn_cast<mlir::nl::IteratorType>(cross.getResult().getType());
+    ASSERT_TRUE(iteratorType);
+    EXPECT_EQ(iteratorType.getChunkTypes().size(), 2u);
 
     // The cross sits in the inner loop body, itself nested in the outer loop
     // body - so the inner factor re-runs once per outer chunk.
@@ -3776,6 +3781,14 @@ TEST_F(DBLoweringTest, lowersCrossProductToNestedLoops) {
     // outer column is the outer loop's chunk, the inner column the inner's.
     EXPECT_EQ(cross.getOuterColumns()[0], outerFor.getBody()->getArgument(0));
     EXPECT_EQ(cross.getInnerColumns()[0], innerFor.getBody()->getArgument(0));
+
+    // The product drives a third loop, nested inside the inner factor's, which
+    // binds one variable per crossed column and holds the consumer.
+    ASSERT_TRUE(cross.getResult().hasOneUse());
+    auto productFor = mlir::dyn_cast<mlir::nl::For>(*cross.getResult().getUsers().begin());
+    ASSERT_TRUE(productFor);
+    EXPECT_EQ(productFor->getParentOp(), innerFor.getOperation());
+    EXPECT_EQ(productFor.getBody()->getNumArguments(), 2u);
 }
 
 TEST_F(DBLoweringTest, limitsScanToFewerThanNodeCount) {

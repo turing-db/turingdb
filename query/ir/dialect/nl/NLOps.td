@@ -707,54 +707,55 @@ def Yield : NLOp<"yield", [Pure, Terminator, HasParent<"For">]> {
 * CrossProduct
 */
 def CrossProduct : NLOp<"cross_product", [Pure, InferTypeOpAdaptor, AttrSizedOperandSegments]> {
-  let summary = "Cross every row of one loop's chunks with every row of another";
+  let summary = "Create an iterator over every pair of one loop's chunk rows with another's";
 
   let description = [{
-    Given an outer chunk of N rows and an inner chunk of M rows it produces N*M
-    rows: each outer column is block-repeated x M (outer row i becomes M
-    consecutive rows) and each inner column is tiled x N (the whole inner chunk
-    repeated N times), so result row k pairs outer row k/M with inner row k%M -
-    every outer row against every inner row.
+    Given an outer chunk of N rows and an inner chunk of M rows the product has
+    N*M rows: pair k is outer row k/M with inner row k%M, so every outer row meets
+    every inner row. Each step of an enclosing nl.for fills one chunk of that
+    sequence - each outer column block-repeated and each inner column tiled over
+    the pairs the step covers:
 
-      %a, %b = nl.cross_product {%a} {%b}
+      %pairs = nl.cross_product {%a} {%b}
                  : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.node_id>}
+      nl.for %ra, %rb in %pairs : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>> {
+        ...
+      }
+
+    The product is the one operator whose result outgrows its inputs, so it is an
+    iterator rather than a straight-line op: laying all N*M rows out at once would
+    mean a chunk of 64Ki rows crossed with another holding 4.29e9 rows - 64 GiB for
+    two id columns. Chunked, a step holds the chunk size whatever the sides measure,
+    which is what the v2 CartesianProductProcessor does with its own cursor.
 
     The two brace groups are the columns each factor contributes, in db.yield
-    order; the op's results are the outer columns followed by the inner, each
-    result chunk keeping its input's element type - only the row count changes.
+    order; the iterator's chunk types are the outer columns' followed by the
+    inner's, each keeping its input's element type - only the row count changes.
     N and M are read from the first column of each group, so each group must be
-    non-empty.
+    non-empty, and every column of a group must be row-aligned with that first one.
 
-    An optional `limit` operand carries an !nl.limit_state handle. When present,
-    the product is built only up to limit.getRemaining() rows: rows are laid out in
-    (outer, inner) order, so the product's prefix is exactly the prefix the
-    following nl.limit_update/nl.output can emit this step, and building the rest
-    would be wasted work. Absent, the whole N*M product is built.
-
-      %a, %b = nl.cross_product {%a} {%b} limit %h
-                 : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.node_id>}
+    A `limit` on the enclosing nl.for bounds the product the way it bounds a scan:
+    the loop stops once the budget is spent, and - since the pairs come out in
+    (outer, inner) order - a step lays out only the prefix the following
+    nl.limit_update/nl.output can still emit.
   }];
 
-  // The outer and inner column groups to cross, plus the optional limit handle.
-  // Three operand groups of independent size need AttrSizedOperandSegments to
-  // record each group's size.
+  // The outer and inner column groups to cross. Two operand groups of independent
+  // size need AttrSizedOperandSegments to record each group's size.
   let arguments = (ins Variadic<NLChunk>:$outer_columns,
-                       Variadic<NLChunk>:$inner_columns,
-                       Optional<NLLimitStateHandle>:$limit);
+                       Variadic<NLChunk>:$inner_columns);
 
-  // One result per crossed column, outer group then inner group; inferred from
-  // the operands since the broadcast keeps each chunk's element type.
-  let results = (outs Variadic<NLChunk>:$results);
+  // An iterator over the crossed columns, outer group then inner group; inferred
+  // from the operands since the broadcast keeps each chunk's element type.
+  let results = (outs NLIterator:$result);
 
-  // The two SSA brace groups mirror the two factors. The result types are
-  // inferred, so only the operand chunk types are spelled - the same two
-  // groups, each in braces, after the colon (as nl.output spells its chunk
-  // types). The optional limit handle, when present, prints after a `limit`
-  // keyword (its type is buildable and so omitted, as on nl.output). The
+  // The two SSA brace groups mirror the two factors. The result type is inferred,
+  // so only the operand chunk types are spelled - the same two groups, each in
+  // braces, after the colon (as nl.output spells its chunk types). The
   // operandSegmentSizes attribute is populated and elided automatically by the
   // generated parser/printer.
   let assemblyFormat = [{
-    `{` $outer_columns `}` `{` $inner_columns `}` (`limit` $limit^)? attr-dict `:`
+    `{` $outer_columns `}` `{` $inner_columns `}` attr-dict `:`
     `{` qualified(type($outer_columns)) `}` `{` qualified(type($inner_columns)) `}`
   }];
 }

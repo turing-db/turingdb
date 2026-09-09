@@ -832,60 +832,68 @@ void applyNotOnConst(Column* result, const Column* operand) {
 void applyNotOnNullConst(Column*, const Column*) {
 }
 
-// Block-repeat: each input row is emitted `factor` times in a row, so input row
-// i lands at output indices [i*factor, (i+1)*factor). This lays out an outer
-// column of a cross product, where each outer row pairs with the whole inner
-// chunk. The fill stops at `outputRowCount` rows (min(N*factor, remaining) under
-// a limit), so the last block may be partial and later input rows are skipped.
+// Block-repeat: the outer column of a cross product, where each outer row pairs
+// with the whole inner chunk, so pair p takes input row p/factor. Fills the
+// `rowCount` pairs from `position` on, which may start partway into one input
+// row's block and end partway into another's.
 template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
-void blockRepeatColumn(const Column* input, size_t factor, size_t outputRowCount, Column* output) {
+void blockRepeatColumn(const Column* input, size_t factor, size_t position, size_t rowCount, Column* output) {
     const ColumnType* typedInput = static_cast<const ColumnType*>(input);
     ColumnType* typedOutput = static_cast<ColumnType*>(output);
 
     const auto& inputRaw = typedInput->getRaw();
     auto& outputRaw = typedOutput->getRaw();
-    outputRaw.resize(outputRowCount);
+    outputRaw.resize(rowCount);
 
     auto outputIt = outputRaw.begin();
-    size_t rowsLeft = outputRowCount;
-    for (const ElementType& value : inputRaw) {
-        if (rowsLeft == 0) {
-            break;
-        }
+    size_t rowsLeft = rowCount;
+    size_t inputIndex = position / factor;
+    size_t doneInBlock = position % factor;
 
-        const size_t count = std::min(factor, rowsLeft);
-        std::fill_n(outputIt, count, value);
+    while (rowsLeft > 0 && inputIndex < inputRaw.size()) {
+        const size_t count = std::min(factor - doneInBlock, rowsLeft);
+        std::fill_n(outputIt, count, inputRaw[inputIndex]);
+
         outputIt += count;
         rowsLeft -= count;
+        inputIndex++;
+        doneInBlock = 0;
     }
 }
 
-void blockRepeatConstColumn(const Column* input, size_t factor, size_t outputRowCount, Column* output) {
-    output->assignFromLine(input, 0, outputRowCount);
+void blockRepeatConstColumn(const Column* input, size_t factor, size_t position, size_t rowCount, Column* output) {
+    output->assignFromLine(input, 0, rowCount);
 }
 
-// Tile: the whole input chunk is emitted back to back, so input row j lands at
-// output indices j, j+M, j+2M, ... This lays out an inner column of a cross
-// product, where the inner chunk repeats once per outer row. The fill stops at
-// `outputRowCount` rows (min(M*N, remaining) under a limit), which alone bounds
-// the repeats, so the row count drives it rather than the `factor` (N) the outer
-// side uses. The last tile may be partial.
+// Tile: the inner column of a cross product, where the inner chunk repeats once
+// per outer row, so pair p takes input row p % M. Fills the `rowCount` pairs from
+// `position` on, which may start partway into one tile and end partway into
+// another. M is the tile's own length, which is what the enclosing product passes
+// as the factor.
 template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
-void tileColumn(const Column* input, size_t factor, size_t outputRowCount, Column* output) {
+void tileColumn(const Column* input, size_t factor, size_t position, size_t rowCount, Column* output) {
     const ColumnType* typedInput = static_cast<const ColumnType*>(input);
     ColumnType* typedOutput = static_cast<ColumnType*>(output);
 
     const auto& inputRaw = typedInput->getRaw();
     auto& outputRaw = typedOutput->getRaw();
-    outputRaw.resize(outputRowCount);
+    outputRaw.resize(rowCount);
 
     const size_t tileLength = inputRaw.size();
+    if (tileLength == 0) {
+        return;
+    }
+
     auto outputIt = outputRaw.begin();
-    size_t rowsLeft = outputRowCount;
+    size_t rowsLeft = rowCount;
+    size_t inputIndex = position % tileLength;
+
     while (rowsLeft > 0) {
-        const size_t count = std::min(tileLength, rowsLeft);
-        outputIt = std::copy(inputRaw.begin(), inputRaw.begin() + count, outputIt);
+        const size_t count = std::min(tileLength - inputIndex, rowsLeft);
+        outputIt = std::copy(inputRaw.begin() + inputIndex, inputRaw.begin() + inputIndex + count, outputIt);
+
         rowsLeft -= count;
+        inputIndex = 0;
     }
 }
 
@@ -4388,34 +4396,52 @@ void NLExecutor::runGetInEdgesByTypeLoop(NLExecutionContext* context, NLFunction
     runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getTargets());
 }
 
-void NLExecutor::runCrossProduct(NLExecutionContext* context, NLFunctionData* data) {
-    NLCrossProductData* cross = static_cast<NLCrossProductData*>(data);
+void NLExecutor::runCrossProductLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLCrossProductLoopData* loopData = static_cast<NLCrossProductLoopData*>(data);
 
-    const NLCrossProductData::Columns& outerColumns = cross->outerColumns();
-    const NLCrossProductData::Columns& innerColumns = cross->innerColumns();
+    const NLCrossProductLoopData::Columns& outerColumns = loopData->outerColumns();
+    const NLCrossProductLoopData::Columns& innerColumns = loopData->innerColumns();
     bioassert(!outerColumns.empty() && !innerColumns.empty(),
               "nl.cross_product needs a column on each side to size the product");
 
-    // N outer rows crossed with M inner rows: each outer column is
-    // block-repeated x M and each inner column tiled x N, so every outer row
-    // pairs with every inner row. The counts come from the first column of each
-    // side; all columns of a side are row-aligned, so any one measures it.
+    // N outer rows crossed with M inner rows make N*M pairs. The counts come from
+    // the first column of each side; every column of a side is row-aligned with
+    // that first one, which is what lets one position slice them all.
     const size_t outerRowCount = outerColumns.front().getInput()->size();
     const size_t innerRowCount = innerColumns.front().getInput()->size();
 
-    const NLLimitState* limit = cross->getLimit();
     const size_t productRowCount = outerRowCount * innerRowCount;
-    const size_t remaining = limit ? limit->getRemaining() : productRowCount;
-    const size_t outputRowCount = std::min(productRowCount, remaining);
+    const size_t chunkSize = context->getChunkSize();
+    const NLLimitState* limit = loopData->getLimit();
+    const NLStmtContainer* loopBody = loopData->getStmts();
 
-    for (const NLCrossColumn& column : outerColumns) {
-        const NLBroadcastFunction broadcast = column.getBroadcast();
-        broadcast(column.getInput(), innerRowCount, outputRowCount, column.getOutput());
-    }
+    // Walk the pairs a chunk at a time. Under a limit the step is cut to what the
+    // budget can still emit - the pairs come out in (outer, inner) order, so the
+    // step's prefix is exactly what the nl.limit_update/nl.output below can take,
+    // and the loop stops once the budget is spent, as a scan's loop does.
+    size_t position = 0;
+    while (position < productRowCount) {
+        const size_t remaining = limit ? limit->getRemaining() : productRowCount;
+        if (remaining == 0) {
+            return;
+        }
 
-    for (const NLCrossColumn& column : innerColumns) {
-        const NLBroadcastFunction broadcast = column.getBroadcast();
-        broadcast(column.getInput(), outerRowCount, outputRowCount, column.getOutput());
+        const size_t chunkRowCount = std::min(chunkSize, productRowCount - position);
+        const size_t rowCount = std::min(chunkRowCount, remaining);
+
+        for (const NLCrossColumn& column : outerColumns) {
+            const NLBroadcastFunction broadcast = column.getBroadcast();
+            broadcast(column.getInput(), innerRowCount, position, rowCount, column.getOutput());
+        }
+
+        for (const NLCrossColumn& column : innerColumns) {
+            const NLBroadcastFunction broadcast = column.getBroadcast();
+            broadcast(column.getInput(), innerRowCount, position, rowCount, column.getOutput());
+        }
+
+        runBody(context, loopBody);
+
+        position += rowCount;
     }
 }
 
@@ -4439,7 +4465,7 @@ void NLExecutor::runLimitTruncate(NLExecutionContext* context, NLFunctionData* d
     // nl.limit_update); never mutates the counter.
     for (const NLCrossColumn& column : truncate->columns()) {
         const NLBroadcastFunction copyPrefix = column.getBroadcast();
-        copyPrefix(column.getInput(), 1, emitThisStep, column.getOutput());
+        copyPrefix(column.getInput(), 1, 0, emitThisStep, column.getOutput());
     }
 }
 

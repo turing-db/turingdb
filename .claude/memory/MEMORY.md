@@ -99,4 +99,5 @@
 - @reference_bioassert_throws.md — bioassert throws a catchable FatalException (TuringException); the abort() is dead code
 - @reference_gcc_maybe_uninit_sort.md — sort an index permutation to dodge GCC's -Wmaybe-uninitialized; a call-site pragma can't suppress it
 - @reference_no_string_predicates.md — no CONTAINS / STARTS WITH / ENDS WITH; StringOperator existing in the AST does NOT imply support
+- @reference_v3_cross_product_chunked.md — v3 nl.cross_product is an iterator driving its own nl.for; one chunk of pairs per step, like v2's cursor
 - @reference_change_visibility.md — within a change MATCH sees the COMMITted tip (read-your-own-writes works after COMMIT); after SUBMIT the change is gone, checkout head to see committed data

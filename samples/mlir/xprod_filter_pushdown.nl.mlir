@@ -10,8 +10,10 @@ func.func @main() {
     %5 = nl.filter %4, (%arg0) : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.node_id>
     %6 = nl.scan_nodes()
     nl.for %arg1 in %6 : !nl.iter<!nl.chunk<!storage.node_id>> {
-      %7:2 = nl.cross_product{%5} {%arg1} : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.node_id>}
-      nl.output(%7#0, %7#1) names ["n", "m"] : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
+      %7 = nl.cross_product{%5} {%arg1} : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.node_id>}
+      nl.for %arg2, %arg3 in %7 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>> {
+        nl.output(%arg2, %arg3) names ["n", "m"] : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
+      }
     }
   }
   return

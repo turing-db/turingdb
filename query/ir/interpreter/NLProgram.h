@@ -869,21 +869,24 @@ private:
     std::unordered_set<uint64_t> _matchingIDs;
 };
 
-// A cross product emits N*M rows (every outer row paired with every inner row),
-// but an input column holds only its N or M values, so its values must be
-// repeated to fill an N*M-row output column. That repetition is the broadcast.
-// With outer [a0,a1] (N=2) and inner [b0,b1,b2] (M=3) the result is:
+// A cross product pairs every outer row with every inner row, so the pair at
+// position p is outer row p/M with inner row p%M (M being the inner row count).
+// An input column holds only its N or M values, so filling a column of pairs
+// repeats them: that repetition is the broadcast. With outer [a0,a1] (N=2) and
+// inner [b0,b1,b2] (M=3) the whole product reads:
 //   outer -> [a0,a0,a0, a1,a1,a1]   each outer row repeated M times (block-repeat)
-//   inner -> [b0,b1,b2, b0,b1,b2]   whole inner chunk repeated N times (tile)
-// so row k across all columns is one (outer, inner) pair. `factor` is M for an
-// outer column, N for an inner one; both directions share this signature.
-// `outputRowCount` caps the fill: it is min(N*M, remaining) under a limit, so the
-// broadcast lays out only the product's first outputRowCount rows (its last block
-// or tile may be partial) and skips the rest the limit could never emit. Without
-// a limit it is the full N*M.
+//   inner -> [b0,b1,b2, b0,b1,b2]   the inner chunk repeated N times (tile)
+// so row k across all columns is one pair.
+//
+// A step fills the `rowCount` pairs starting at `position`, which is how the
+// product is cut into chunks: a slice may start and end mid-block or mid-tile, and
+// every column of the step slices at the same position, so they stay row-aligned.
+// `factor` is M for both directions - block-repeat divides the position by it,
+// tile takes the position modulo it.
 using NLBroadcastFunction = void (*)(const Column* input,
                                      size_t factor,
-                                     size_t outputRowCount,
+                                     size_t position,
+                                     size_t rowCount,
                                      Column* output);
 
 // One column used as operand of nl.cross_product: its input chunk, the output
@@ -909,11 +912,12 @@ private:
     NLBroadcastFunction _broadcast {nullptr};
 };
 
-// nl.cross_product data: the outer and inner columns of a cartesian product.
-// N (outer rows) and M (inner rows) are read at run time from the first column
-// of each group. Each outer column is block-repeated x M and each inner column
-// is tiled x N, so the product has N*M rows.
-class NLCrossProductData : public NLFunctionData {
+// nl.cross_product loop data: the outer and inner columns of a cartesian product,
+// and the body run once per chunk of the pairs they make. N (outer rows) and M
+// (inner rows) are read at run time from the first column of each group, so the
+// product has N*M pairs; the loop walks them chunk by chunk rather than laying all
+// of them out at once.
+class NLCrossProductLoopData : public NLFunctionData {
 public:
     using Columns = std::vector<NLCrossColumn>;
 
@@ -928,16 +932,20 @@ public:
         _innerColumns.push_back(column);
     }
 
-    // The governing limit counter, or null for an unbounded product. When set,
-    // the product is built only up to getRemaining() rows; it never mutates the
-    // counter (the following nl.limit_update does).
+    // The governing limit counter, or null for an unbounded loop. The loop stops
+    // once it reaches zero and a step lays out at most that many pairs; it never
+    // mutates the counter (the nl.limit_update in the body does).
     NLLimitState* getLimit() const { return _limit; }
     void setLimit(NLLimitState* limit) { _limit = limit; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
 
 private:
     Columns _outerColumns;
     Columns _innerColumns;
     NLLimitState* _limit {nullptr};
+    NLStmtContainer _stmts;
 };
 
 // Lay a constant column's single value out over rowCount rows of a fresh output

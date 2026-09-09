@@ -711,7 +711,16 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
         } else if (nl::CheckEdgeTypeConstraint checkEdgeTypeConstraint = mlir::dyn_cast<nl::CheckEdgeTypeConstraint>(operation)) {
             translateCheckEdgeTypeConstraint(checkEdgeTypeConstraint, body);
         } else if (nl::CrossProduct crossProduct = mlir::dyn_cast<nl::CrossProduct>(operation)) {
-            translateCrossProduct(crossProduct, body);
+            IteratorConfig config;
+            config._kind = IteratorKind::CrossProduct;
+
+            const mlir::OperandRange outerColumns = crossProduct.getOuterColumns();
+            config._crossOuterColumns.assign(outerColumns.begin(), outerColumns.end());
+
+            const mlir::OperandRange innerColumns = crossProduct.getInnerColumns();
+            config._crossInnerColumns.assign(innerColumns.begin(), innerColumns.end());
+
+            _iteratorConfigs[crossProduct.getResult()] = config;
         } else if (nl::Limit limit = mlir::dyn_cast<nl::Limit>(operation)) {
             translateLimit(limit, body);
         } else if (nl::LimitUpdate update = mlir::dyn_cast<nl::LimitUpdate>(operation)) {
@@ -854,6 +863,11 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         translateOptionalDrainLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::ProcedureInit) {
         translateProcedureInitLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::CrossProduct) {
+        // A product expands the rows it is given rather than accumulating them, so -
+        // like a hop - a downstream LIMIT can bound its loop through the ordinary
+        // early-exit, and a step lays out only the prefix the budget can emit.
+        translateCrossProductLoop(config, loopBody, limit, body);
     } else {
         translateEdgeLoop(config, loopBody, limit, body);
     }
@@ -4389,45 +4403,47 @@ Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
     return allocColumnForKind(chunkKindFromElementType(elementType));
 }
 
-void NLTranslator::translateCrossProduct(nl::CrossProduct cross, NLStmtContainer* body) {
-    const mlir::OperandRange outerColumns = cross.getOuterColumns();
-    const mlir::OperandRange innerColumns = cross.getInnerColumns();
+void NLTranslator::translateCrossProductLoop(const IteratorConfig& config,
+                                             mlir::Block& loopBody,
+                                             NLLimitState* limit,
+                                             NLStmtContainer* body) {
+    const std::span<const mlir::Value> outerColumns = config._crossOuterColumns;
+    const std::span<const mlir::Value> innerColumns = config._crossInnerColumns;
 
-    // At run time runCrossProduct takes N from the first outer column and M from
-    // the first inner column, so a side with no column cannot be sized. Reject
-    // that here: DBLowering never emits it, but the nl IR may come from elsewhere.
+    // At run time the loop takes N from the first outer column and M from the first
+    // inner column, so a side with no column cannot be sized. Reject that here:
+    // DBLowering never emits it, but the nl IR may come from elsewhere.
     if (outerColumns.empty() || innerColumns.empty()) {
         throw IRException("nl.cross_product needs at least one column on each side");
     }
 
-    NLCrossProductData* data = _program->allocFunctionData<NLCrossProductData>();
+    NLCrossProductLoopData* loopData = _program->allocFunctionData<NLCrossProductLoopData>();
+    loopData->setLimit(limit);
 
-    // The optional limit handle is a separate operand group, so it never appears
-    // among the columns; null leaves the product unbounded.
-    data->setLimit(limitStateFor(cross.getLimit()));
-
-    // The results are the outer columns followed by the inner, the order
-    // inferReturnTypes lays them out, so walk the result list in step.
-    const mlir::ResultRange results = cross.getResults();
-    size_t resultIndex = 0;
+    // The loop binds one variable per crossed column - the outer columns followed by
+    // the inner, the order inferReturnTypes lays the iterator's chunks out - so walk
+    // the block arguments in step.
+    unsigned argumentIndex = 0;
 
     for (const mlir::Value column : outerColumns) {
-        addCrossColumn(column, results[resultIndex], /*isOuter=*/true, data);
-        resultIndex++;
+        addCrossColumn(column, loopBody.getArgument(argumentIndex), /*isOuter=*/true, loopData);
+        argumentIndex++;
     }
 
     for (const mlir::Value column : innerColumns) {
-        addCrossColumn(column, results[resultIndex], /*isOuter=*/false, data);
-        resultIndex++;
+        addCrossColumn(column, loopBody.getArgument(argumentIndex), /*isOuter=*/false, loopData);
+        argumentIndex++;
     }
 
-    body->emplaceStmt(&NLExecutor::runCrossProduct, data);
+    body->emplaceStmt(&NLExecutor::runCrossProductLoop, loopData);
+
+    translateBlock(loopBody, loopData->getStmts());
 }
 
 void NLTranslator::addCrossColumn(mlir::Value inputValue,
                                   mlir::Value resultValue,
                                   bool isOuter,
-                                  NLCrossProductData* data) {
+                                  NLCrossProductLoopData* data) {
     const Column* input = getColumn(inputValue);
 
     const auto chunkType = mlir::cast<nl::ChunkType>(inputValue.getType());
