@@ -750,6 +750,7 @@ private:
     Column* allocListColumn();
 
     Column* allocListElementColumn();
+    Column* allocOptListElementColumn();
 
     Column* getColumn(mlir::Value chunkValue) const;
 

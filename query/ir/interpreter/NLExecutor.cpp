@@ -418,6 +418,16 @@ struct BinaryOpTraits<OP_CONCAT> {
 };
 
 template <>
+struct BinaryOpTraits<OP_INDEX> {
+    using Functor = Index;
+
+    template <typename ResCol, typename LhsCol, typename RhsCol>
+    static void exec(ResCol* result, const LhsCol* lhs, const RhsCol* rhs) {
+        BinaryOperators::exec<Functor>(result, lhs, rhs);
+    }
+};
+
+template <>
 struct BinaryOpTraits<OP_SUB> {
     using Functor = Sub;
 
@@ -5387,6 +5397,14 @@ NLGatherFunction NLExecutor::selectListElementGatherFunction() {
     return &gatherColumn<ListElementView>;
 }
 
+NLAppendFunction NLExecutor::selectOptListElementAppendFunction() {
+    return &appendColumn<std::optional<ListElementView>>;
+}
+
+NLGatherFunction NLExecutor::selectOptListElementGatherFunction() {
+    return &gatherColumn<std::optional<ListElementView>>;
+}
+
 NLCompareFunction NLExecutor::selectListElementCompareFunction() {
     return &compareListElementColumn;
 }
@@ -6584,6 +6602,7 @@ void NLExecutor::runCheckEdgeTypeConstraint(NLExecutionContext* context, NLFunct
 
 template NLBinaryFn NLExecutor::selectBinary<OP_ADD>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_CONCAT>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
+template NLBinaryFn NLExecutor::selectBinary<OP_INDEX>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_SUB>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_MUL>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_DIV>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);

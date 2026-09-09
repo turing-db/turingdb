@@ -404,6 +404,9 @@ public:
     // chunk, so a heterogeneous unwind can be sorted and its rows re-emitted.
     static NLAppendFunction selectListElementAppendFunction();
     static NLGatherFunction selectListElementGatherFunction();
+
+    static NLAppendFunction selectOptListElementAppendFunction();
+    static NLGatherFunction selectOptListElementGatherFunction();
     static NLCompareFunction selectListElementCompareFunction();
 
     // Distinct row key and non-null tally for a list_element chunk, so a heterogeneous
