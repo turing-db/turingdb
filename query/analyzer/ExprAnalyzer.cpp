@@ -665,14 +665,35 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     analyzeExpr(base);
     analyzeExpr(indexExpr);
 
-    if (base->getType() != EvaluatedType::StringTable) {
-        throwError(fmt::format("Index operator [] can only be applied to StringTable, not '{}'",
-                               EvaluatedTypeName::value(base->getType())), expr);
+    const EvaluatedType baseType = base->getType();
+
+    const bool indexesAList = baseType == EvaluatedType::List;
+    const bool indexesACSVRow = baseType == EvaluatedType::StringTable;
+
+    if (!indexesAList && !indexesACSVRow) {
+        throwError(fmt::format("Index operator [] can only be applied to a list or a CSV row, not '{}'",
+                               EvaluatedTypeName::value(baseType)), expr);
     }
 
     if (indexExpr->getType() != EvaluatedType::Integer) {
         throwError(fmt::format("Index expression must be an integer, not '{}'",
                                EvaluatedTypeName::value(indexExpr->getType())), expr);
+    }
+
+    if (indexesAList) {
+        expr->setType(EvaluatedType::ListItem);
+
+        if (base->isDynamic() || indexExpr->isDynamic()) {
+            expr->setDynamic();
+        }
+
+        if (base->isAggregate() || indexExpr->isAggregate()) {
+            expr->setAggregate();
+        }
+
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::ListItem));
+
+        return;
     }
 
     // Detect literal index for compile-time optimization
