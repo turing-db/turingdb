@@ -844,6 +844,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerBinaryOp<nl::Add>(operation, BinaryResultKind::Numeric);
     } else if (mlir::isa<mlir::db::ConcatOp>(operation)) {
         lowerBinaryOp<nl::Concat>(operation, BinaryResultKind::Concat);
+    } else if (mlir::isa<mlir::db::IndexOp>(operation)) {
+        lowerBinaryOp<nl::Index>(operation, BinaryResultKind::Index);
     } else if (mlir::isa<mlir::db::SubOp>(operation)) {
         lowerBinaryOp<nl::Sub>(operation, BinaryResultKind::Numeric);
     } else if (mlir::isa<mlir::db::MulOp>(operation)) {
@@ -3031,6 +3033,15 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
                 sharedType ? lhsInnerType : storage::ListElementType::get(ctx);
             return storage::ListType::get(ctx, resultInnerType);
 
+        }
+        break;
+
+        case BinaryResultKind::Index: {
+            if (!isListChunk(lhsType)) {
+                throw IRException("db.index requires a list as its indexed operand");
+            }
+
+            return storage::NullableType::get(ctx, storage::ListElementType::get(ctx));
         }
         break;
     }
