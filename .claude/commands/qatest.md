@@ -202,10 +202,30 @@ PR title carries the detail — `QA: 4 failing Cypher tests on v3`. The body is 
 imperative sentence, then a fenced code block of bare facts: each query, its expected rows,
 and what v3 returned. No headers, no bullets, no prose paragraphs.
 
+Split the queries by likely cause, one group per cause, in the order the commits land, so
+a group pairs with the test file that pins it. Open each group with a lowercase line naming
+the cause and separate the groups with a blank line — that keeps the grouping inside the
+code block, where the no-headers rule leaves room for it. A flat list of every query reads
+as one long bug and hides where each one starts.
+
 ```
 Pin four Cypher queries v3 answers wrong.
 
+two edge variables of one MATCH bind the same edge:
 <query>
+expected: ...
+v3:       ...
+
+<query>
+expected: ...
+v3:       ...
+
+an absent label is an error instead of an empty match:
+<query>
+expected: ...
+v3:       ...
+
+<query>          <- already correct, the contrast that places the bug
 expected: ...
 v3:       ...
 
@@ -215,8 +235,10 @@ expected: ...
 <the client>: ...
 ```
 
-An output-layer finding goes at the end of that same block, under the line naming the
-client, so the body stays one sentence and one code block. The title still counts tests.
+Mark a query that already answers correctly, or a reader takes the group's every line for
+a failure. An output-layer finding is a group of its own at the end, under the line naming
+the client, so the body stays one sentence and one code block. The title still counts
+tests.
 
 End the body with the Claude Code footer. `gh pr create` works; `gh pr edit` does not on
 this repo — edit a body afterwards with
