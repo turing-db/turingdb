@@ -4456,18 +4456,7 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
 
         case Expr::Kind::INDEX: {
             const IndexExpr* indexExpr = static_cast<const IndexExpr*>(expr);
-            const mlir::Value fieldColumn = findYieldedColumn(indexExpr->getCSVFieldDecl());
-
-            // A load publishes one column per field its accesses named, and only a
-            // constant index names one: which field a computed index reads is known no
-            // earlier than the row it reads it from
-            if (!fieldColumn) {
-                throwError("Only a constant index selects a CSV field: "
-                           "row[i] with a computed index is not supported yet.",
-                           expr);
-            }
-
-            _part._exprMap[expr] = fieldColumn;
+            translateIndexExpr(expr, indexExpr);
         }
         break;
 
@@ -4750,6 +4739,39 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
         case BinaryOperator::_SIZE:
         break;
     }
+}
+
+void DBProgramGenerator::translateIndexExpr(const Expr* expr, const IndexExpr* indexExpr) {
+    const Expr* base = indexExpr->getBase();
+
+    if (base->getType() == EvaluatedType::List) {
+        const Expr* index = indexExpr->getIndexExpr();
+
+        translateExpr(base);
+        translateExpr(index);
+
+        bioassert(_part._exprMap.contains(base), "List index with unknown base.");
+        bioassert(_part._exprMap.contains(index), "List index with unknown index.");
+
+        const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+        const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+        _part._exprMap[expr] = _opBuilder.create<mlir::db::IndexOp>(loc,
+                                                                    noneType,
+                                                                    _part._exprMap.at(base),
+                                                                    _part._exprMap.at(index)).getResult();
+        return;
+    }
+
+    const mlir::Value fieldColumn = findYieldedColumn(indexExpr->getCSVFieldDecl());
+
+    if (!fieldColumn) {
+        throwError("Only a constant index selects a CSV field: "
+                   "row[i] with a computed index is not supported yet.",
+                   expr);
+    }
+
+    _part._exprMap[expr] = fieldColumn;
 }
 
 void DBProgramGenerator::translateStringExpr(const Expr* expr) {

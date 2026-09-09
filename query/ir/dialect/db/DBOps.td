@@ -1348,6 +1348,21 @@ def ConcatOp : BinaryOp<"concat", [Pure]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
+def IndexOp : BinaryOp<"index", [Pure]> {
+  let summary = "Row-wise read of one element of a list column, by position";
+
+  let description = [{
+    `[1, 3, 4][2]`
+
+      %e = db.index %xs, %i : (!db.column<none>, !db.column<i64>) -> !db.column<none>
+  }];
+
+  let arguments = (ins Column:$lhs, Column:$rhs);
+  let results   = (outs Column:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
 def SubOp : BinaryOp<"sub", [Pure]> {
   let summary = "Row-wise subtraction of two value columns";
 

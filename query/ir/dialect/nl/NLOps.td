@@ -1406,6 +1406,18 @@ def Concat : NLOp<"concat", [Pure, ConstantThroughOperands, RowAlignedThroughOpe
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
+def Index : NLOp<"index", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
+  let summary = "Row-wise read of one element of a list chunk, by position";
+  let description = [{
+      %e = nl.index %xs, %i : (!nl.chunk<!storage.list<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<!storage.list_element>>
+  }];
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
 def Sub : NLOp<"sub", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise subtraction of two value chunks";
   let description = [{

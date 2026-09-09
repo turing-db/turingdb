@@ -292,6 +292,7 @@ private:
         Boolean,   // eq/neq/gt/lt/gte/lte and and/or/xor: i1, nullable if either is
         Double,    // pow: always f64 per openCypher, nullable if either operand is
         Concat,    // concat: string or list (determined at lowering)
+        Index,     // index: a nullable tagged scalar, whatever the list holds
     };
 
     template <typename NLOp>

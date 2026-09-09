@@ -673,6 +673,9 @@ private:
     // The condition one WHEN value puts on a row: the value itself in the generic form,
     // and the comparison of @param subject against it in the simple one
     mlir::Value translateCaseTest(mlir::Value subject, const CaseExpr::Test& test);
+
+    void translateIndexExpr(const Expr* expr, const IndexExpr* indexExpr);
+
     void translateFunctionInvocationExpr(const Expr* expr, const FunctionInvocationExpr* funcExpr);
 
     void translateFunctionExpr(const Expr* expr, const FunctionInvocation* invocation);
