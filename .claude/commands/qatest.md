@@ -251,5 +251,24 @@ this repo — edit a body afterwards with
 `gh api -X PATCH repos/turing-db/turingdb/pulls/<n> -f body=...` and verify with
 `gh pr view <n> --json body -q .body`.
 
+A PATCH replaces the whole body, so never send one without reading what is there first.
+Once the PR is open the body is shared, and the reviewer writes in it — a `Triage:` line
+naming the cause above a group is theirs, and it is the most valuable text on the page.
+Read the body with `gh pr view <n> --json body -q .body`, edit that text, and send it
+back. Preserve every line you did not write, verbatim, including a triage line whose group
+you are removing — move the triage, do not drop it. Regenerating the body from your own
+notes erases their work silently, because a PATCH reports no conflict.
+
+Their triage is already gone if you notice too late. GitHub keeps the history, so recover
+it rather than asking them to retype it:
+
+```bash
+gh api graphql -f query='query { repository(owner:"turing-db", name:"turingdb") {
+  pullRequest(number:<n>) { userContentEdits(first:30) { nodes { editedAt diff } } } } }'
+```
+
+`diff` holds each past body in full, newest first. Take the newest revision carrying their
+text, apply your change to it, and send that.
+
 Say plainly in the final message that CI will be red and why, and name any output-layer
 finding the PR carries without a test.
