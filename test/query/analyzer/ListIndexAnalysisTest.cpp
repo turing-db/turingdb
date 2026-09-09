@@ -91,6 +91,17 @@ TEST_F(ListIndexAnalysisTest, acceptsAnIndexIntoAListOfLists) {
     expectAccepted("MATCH (n:Person) RETURN [[1, 2], [3, 4]][0]");
 }
 
+TEST_F(ListIndexAnalysisTest, acceptsAComparisonOfAnIndexedElement) {
+    expectAccepted("MATCH (n:Person) WHERE [1, 2, 3][0] = 1 RETURN n.name");
+    expectAccepted("MATCH (n:Person) WHERE [1, 2, 3][0] = [1, 2, 3][1] RETURN n.name");
+    expectAccepted("MATCH (n:Person) WHERE ['a', 'b'][0] = 'a' RETURN n.name");
+}
+
+TEST_F(ListIndexAnalysisTest, acceptsANullTestOnAnIndexedElement) {
+    expectAccepted("MATCH (n:Person) WHERE [1, 2, 3][9] IS NULL RETURN n.name");
+    expectAccepted("MATCH (n:Person) WHERE [1, 2, 3][9] IS NOT NULL RETURN n.name");
+}
+
 TEST_F(ListIndexAnalysisTest, rejectsANonIntegerIndex) {
     expectRejected("MATCH (n:Person) RETURN [1, 2, 3]['a']",
                    "Index expression must be an integer");

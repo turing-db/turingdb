@@ -239,7 +239,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Integer)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Char)
-                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Bool);
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Bool)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Null);
 
             if (_isV3 && comparesListItem) {
                 break;

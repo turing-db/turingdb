@@ -254,6 +254,57 @@ TEST_F(ListIndexTest, readsNullWhereThePositionIsNull) {
     EXPECT_EQ(present, 2u);
 }
 
+// Two nodes are 32, so two rows read position 0 and every other row reads null: the
+// comparison keeps the two whose element is 1 and drops the nulls with them.
+TEST_F(ListIndexTest, filtersOnTheElementAtAPosition) {
+    const std::vector<std::optional<types::Int64::Primitive>> matched =
+        evalElements("MATCH (n) WHERE [1, 2, 3][n.age - 32] = 1 RETURN [1, 2, 3][n.age - 32]");
+
+    EXPECT_EQ(matched.size(), 2u);
+    for (const std::optional<types::Int64::Primitive>& row : matched) {
+        EXPECT_EQ(row, 1);
+    }
+
+    const std::vector<std::optional<types::Int64::Primitive>> unmatched =
+        evalElements("MATCH (n) WHERE [1, 2, 3][n.age - 32] = 9 RETURN [1, 2, 3][n.age - 32]");
+
+    EXPECT_TRUE(unmatched.empty());
+}
+
+TEST_F(ListIndexTest, testsWhetherThePositionHeldAnElement) {
+    const std::vector<std::optional<types::Int64::Primitive>> absent =
+        evalElements("MATCH (n) WHERE [1, 2, 3][n.age - 32] IS NULL RETURN [1, 2, 3][n.age - 32]");
+
+    EXPECT_EQ(absent.size(), 16u);
+    for (const std::optional<types::Int64::Primitive>& row : absent) {
+        EXPECT_EQ(row, std::nullopt);
+    }
+
+    const std::vector<std::optional<types::Int64::Primitive>> present =
+        evalElements("MATCH (n) WHERE [1, 2, 3][n.age - 32] IS NOT NULL RETURN [1, 2, 3][n.age - 32]");
+
+    EXPECT_EQ(present.size(), 2u);
+}
+
+TEST_F(ListIndexTest, comparesTwoElementReads) {
+    const std::vector<std::optional<types::Int64::Primitive>> rows =
+        evalElements("MATCH (n) WHERE [1, 2, 3][n.age - 32] = [1, 2, 3][0] RETURN [1, 2, 3][n.age - 32]");
+
+    EXPECT_EQ(rows.size(), 2u);
+}
+
+TEST_F(ListIndexTest, comparesAnElementAgainstAString) {
+    const std::vector<std::optional<types::Int64::Primitive>> matched =
+        evalElements("MATCH (n) WHERE ['a', 'b'][n.age - 32] = 'a' RETURN [1, 2, 3][n.age - 32]");
+
+    EXPECT_EQ(matched.size(), 2u);
+
+    const std::vector<std::optional<types::Int64::Primitive>> unmatched =
+        evalElements("MATCH (n) WHERE ['a', 'b'][n.age - 32] = 'z' RETURN [1, 2, 3][n.age - 32]");
+
+    EXPECT_TRUE(unmatched.empty());
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
