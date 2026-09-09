@@ -31,7 +31,7 @@ class InternalCombination {
     using InternalResImpl = std::conditional_t<
                                TypeUtils::is_optional_v<InternalT>
                                    || TypeUtils::is_optional_v<InternalU>,
-                               std::optional<AbsInternalRes>,
+                               TypeUtils::wrap_optional_t<AbsInternalRes>,
                                AbsInternalRes>;
 public:
     using type = InternalResImpl;

@@ -47,12 +47,15 @@ struct TypeUtils {
     template <typename ColT>
     using unwrap_inner_t = unwrap_optional_t<typename InnerTypeHelper<ColT>::type>;
 
+    template <typename T>
+    using wrap_optional_t = std::conditional_t<is_optional_v<T>, T, std::optional<T>>;
+
     template <typename T, typename U>
     static constexpr bool neither_optional = !is_optional_v<T> && !is_optional_v<U>;
 
     template <typename Func, typename... Args>
     using optional_invoke_result =
-        std::optional<std::invoke_result_t<Func, unwrap_optional_t<Args>...>>;
+        wrap_optional_t<std::invoke_result_t<Func, unwrap_optional_t<Args>...>>;
 
     template <typename T>
     using decay_col_t = std::remove_cvref_t<std::remove_pointer_t<T>>;
