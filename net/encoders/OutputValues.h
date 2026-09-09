@@ -67,7 +67,7 @@ template <typename T>
 concept IsListView = std::is_same_v<T, ListView>;
 
 template <typename T>
-concept IsListElement = std::is_same_v<T, ListElementView>;
+concept IsListElement = std::is_same_v<TypeUtils::unwrap_optional_t<T>, ListElementView>;
 
 template <typename T>
 concept IsNull = std::is_same_v<T, PropertyNull>;

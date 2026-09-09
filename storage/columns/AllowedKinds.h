@@ -510,7 +510,8 @@ struct OutputtedTypes {
         EntityList,
 
         ListView,
-        ListElementView
+        ListElementView,
+        std::optional<ListElementView>
     >>;
 
     using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>()>;
