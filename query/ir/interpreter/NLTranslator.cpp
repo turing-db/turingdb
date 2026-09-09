@@ -2006,8 +2006,9 @@ void NLTranslator::translateFilter(nl::Filter filter, NLStmtContainer* body) {
 
     const auto maskChunk = mlir::cast<nl::ChunkType>(filter.getMask().getType());
     const bool maskNullable = mlir::isa<storage::NullableType>(maskChunk.getElementType());
+    const bool maskIsUntypedNull = isUntypedNullChunk(filter.getMask().getType());
     const NLMaskSurvivorFunction filterFunction =
-        NLExecutor::selectMaskSurvivorFunction(maskNullable);
+        NLExecutor::selectMaskSurvivorFunction(maskNullable, maskIsUntypedNull);
 
     NLFilterData* data = _program->allocFunctionData<NLFilterData>(mask, filterFunction);
 

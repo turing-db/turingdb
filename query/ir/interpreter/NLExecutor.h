@@ -298,9 +298,10 @@ public:
     // Gather for the count result chunk: one non-nullable uint64 tally per row.
     static NLGatherFunction selectCountGatherFunction();
 
-    // The mask survivor collector for an nl.filter, chosen by the mask chunk's
-    // nullability: a nullable mask drops null rows as well as false ones.
-    static NLMaskSurvivorFunction selectMaskSurvivorFunction(bool nullable);
+    // The mask survivor collector for an nl.filter, chosen by the mask chunk's shape: a
+    // nullable mask drops null rows as well as false ones, and a mask that is null itself
+    // keeps nothing.
+    static NLMaskSurvivorFunction selectMaskSurvivorFunction(bool nullable, bool untypedNull);
 
     // Append (onto a buffer tail) for an ID chunk of this kind / a nullable value
     // chunk of this value type. Used by nl.sort_collect.
