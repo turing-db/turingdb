@@ -333,6 +333,10 @@ public:
             // fires if this branch is ever instantiated; a bare static_assert(false)
             // is diagnosed eagerly by pre-P2593 compilers even when discarded.
             static_assert(sizeof(T) == 0, "Sending ColumnOptVector<EntityList> not supported");
+        } else if constexpr (db::IsListElement<T>) {
+            // The element decoders read a contiguous run of scalars, wire format has no
+            // framing for null
+            throw FatalException("ColumnOptVector<ListElementView> is not supported");
         } else if constexpr (db::IsNull<T>) {
             // Don't send anything for property null
         } else {
@@ -420,6 +424,9 @@ public:
             // EntityList is only used as ColumnVector<EntityList>, never optional.
             // Dependent condition (see the ColumnOptVector<EntityList> branch above).
             static_assert(sizeof(T) == 0, "ColumnOptConst<EntityList> is not supported");
+        } else if constexpr (db::IsListElement<T>) {
+            // See the ColumnOptVector<ListElementView> branch above.
+            throw FatalException("ColumnOptConst<ListElementView> is not supported");
         } else if constexpr (db::IsNull<T>) {
             // Don't send anything for property null
         } else {
