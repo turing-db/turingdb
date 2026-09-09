@@ -285,6 +285,8 @@ public:
                 _decoder.decodeIncomingChunk(&_container);
             break;
             case MessageTypes::END_CHUNK:
+                _decoder.decodeChunkFooter(&_container);
+            break;
             case MessageTypes::END:
             break;
             case MessageTypes::ERROR:
@@ -298,6 +300,12 @@ public:
 
     uint32_t getColumnCount() const {
         return static_cast<uint32_t>(_container.size());
+    }
+
+    // The row count the chunk's footer declared. A column of constants holds one value
+    // however many rows it stands for, so this is what sizes the result, not any column.
+    uint32_t getRowCount() const {
+        return static_cast<uint32_t>(_container.getRowCount());
     }
 
     std::string getColumnName(uint32_t index) const {
@@ -378,6 +386,7 @@ EMSCRIPTEN_BINDINGS(turingdb_decoder) {
         .constructor<uint32_t>()
         .function("decodePacket", &TuringDecoder::decodePacket)
         .function("getColumnCount", &TuringDecoder::getColumnCount)
+        .function("getRowCount", &TuringDecoder::getRowCount)
         .function("getColumnName", &TuringDecoder::getColumnName)
         .function("getColumnBuffers", &TuringDecoder::getColumnBuffers)
         .function("getListBytes", &TuringDecoder::getListBytes)

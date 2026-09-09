@@ -22,6 +22,8 @@ void Dataframe::clear() {
     for (const NamedColumn* ncols : _cols) {
         ncols->getColumn()->clear();
     }
+
+    _declaredRowCount.reset();
 }
 
 void Dataframe::addColumn(NamedColumn* column) {
@@ -30,6 +32,10 @@ void Dataframe::addColumn(NamedColumn* column) {
 }
 
 size_t Dataframe::getLogicalRowCount() const {
+    if (_declaredRowCount.has_value()) {
+        return *_declaredRowCount;
+    }
+
     size_t maxSize = 0;
     for (const NamedColumn* ncol : _cols) {
         const Column* col = ncol->getColumn();
@@ -136,6 +142,10 @@ void Dataframe::append(const Dataframe* other) {
     const size_t oldRows = this->getLogicalRowCount();
     const size_t addRows = other->getLogicalRowCount();
     const size_t newRows = oldRows + addRows;
+
+    if (_declaredRowCount.has_value()) {
+        _declaredRowCount = newRows;
+    }
 
     const NamedColumns& otherCols = other->cols();
 

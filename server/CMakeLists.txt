@@ -1,7 +1,9 @@
 
 set(server_sources
     AuthGate.cpp
+    DBServerNlSink.cpp
     DBServerProcessor.cpp
+    TuringProtoServerNlSink.cpp
     TuringProtoServerProcessor.cpp
     TuringServer.cpp
     VisualizerProxy.cpp)
@@ -16,5 +18,6 @@ target_link_libraries(turing_db_server_s PRIVATE
     turing_db_tcp_server_s
     turing_db_turing_proto_server_s
     turing_db_memory_s
+    turing_db_interpreter_v3_s
     nlohmann_json
     CURL::libcurl)

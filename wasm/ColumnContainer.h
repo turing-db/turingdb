@@ -16,6 +16,8 @@ public:
     ~ColumnContainer();
 
     void addColumn(Column* column, std::string_view name);
+    void setRowCount(size_t rowCount) { _rowCount = rowCount; }
+    size_t getRowCount() const { return _rowCount; }
     Column* operator[](size_t index);
 
     const std::string& getName(size_t index) const;
@@ -30,6 +32,7 @@ public:
 private:
     std::vector<Column*> _columns;
     std::vector<std::string> _names;
+    size_t _rowCount {0};
 };
 
 }

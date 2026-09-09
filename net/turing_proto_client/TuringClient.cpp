@@ -498,6 +498,7 @@ db::QueryStatus TuringClient::sendQuery(const std::string& query,
             break;
 
             case MessageTypes::END_CHUNK:
+                decoder.decodeChunkFooter(&dataframeContainer);
                 callbackFired = true;
                 callback(&df);
                 df.clear();

@@ -40,6 +40,11 @@ public:
     // Decode new data from the incoming chunk
     void decodeIncomingData(SinkColumnContainer<Sink>* container);
 
+    // Reads the row count the chunk closed with, so a chunk of constants alone which
+    // does not have the columns that set the row count on the server side still keeps record
+    // of the number of it rows it has
+    void decodeChunkFooter(SinkColumnContainer<Sink>* container);
+
     void reset();
 
     template <typename T>
@@ -332,6 +337,17 @@ void TuringProtoDecoder<Sink>::decodeIncomingData(SinkColumnContainer<Sink>* con
         _context._rowIndex = 0;
         _context._constListStarted = false;
     }
+}
+
+template <ProtoDecodeSink Sink>
+void TuringProtoDecoder<Sink>::decodeChunkFooter(SinkColumnContainer<Sink>* container) {
+    bioassert(container, "decodeChunkFooter called with null column container");
+    bioassert(_context._inBuf->readable() >= sizeof(WireSize), "Chunk footer is missing its row count");
+
+    WireSize rowCount = 0;
+    _context._inBuf->readData(&rowCount, sizeof(rowCount));
+
+    container->setRowCount(rowCount);
 }
 
 template <ProtoDecodeSink Sink>

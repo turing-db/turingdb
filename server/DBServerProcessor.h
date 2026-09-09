@@ -24,7 +24,8 @@ class Graph;
 class DBServerProcessor {
 public:
     DBServerProcessor(TuringDB& db,
-                      net::TCPConnection& connection);
+                      net::TCPConnection& connection,
+                      bool useV3);
     ~DBServerProcessor();
 
     DBServerProcessor(const DBServerProcessor&) = delete;
@@ -43,6 +44,7 @@ private:
     TuringDB& _db;
     net::TCPConnection& _connection;
     DBThreadContext* _threadContext {nullptr};
+    bool _useV3 {false};
 
     const Graph* getRequestedGraph() const;
     const net::HTTP::Info& getHttpInfo() const;

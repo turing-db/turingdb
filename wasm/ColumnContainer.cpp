@@ -35,6 +35,8 @@ void ColumnContainer::clear() {
 }
 
 void ColumnContainer::clearColumnData() {
+    _rowCount = 0;
+
     for (Column* column : _columns) {
         column->clear();
     }

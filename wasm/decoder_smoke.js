@@ -109,7 +109,13 @@ createTuringDecoderModule().then((Module) => {
 
     decoder.decodePacket(frame(MESSAGE_CHUNK_HEADER, header));
     decoder.decodePacket(frame(MESSAGE_CHUNK, chunk));
-    decoder.decodePacket(frame(MESSAGE_END_CHUNK, new Writer()));
+    // The chunk closes with its row count: a constant column holds one value however
+    // many rows it stands for, so nothing else on the wire states how many there are.
+    const footer = new Writer();
+    footer.u32(3);
+    decoder.decodePacket(frame(MESSAGE_END_CHUNK, footer));
+
+    assert.strictEqual(decoder.getRowCount(), 3);
 
     assert.strictEqual(decoder.getColumnCount(), 4);
     assert.strictEqual(decoder.getColumnName(0), "ids");

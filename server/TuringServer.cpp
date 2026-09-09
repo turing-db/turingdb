@@ -27,6 +27,11 @@ bool isProtoEnabled() {
     return val && strcmp(val, "1") == 0;
 }
 
+bool isV3Enabled() {
+    const char* val = getenv("USE_TURING_V3");
+    return val && strcmp(val, "1") == 0;
+}
+
 }
 
 TuringServer::TuringServer(const DBServerConfig& config, TuringDB& db)
@@ -43,6 +48,7 @@ TuringServer::~TuringServer() {
 
 void TuringServer::start() {
     const bool useProto = isProtoEnabled();
+    const bool useV3 = isV3Enabled();
 
     net::TCPServer::Functions functions;
     functions._createThreadContext =
@@ -52,8 +58,8 @@ void TuringServer::start() {
 
     if (useProto) {
         functions._processor =
-            [&](net::AbstractThreadContext* threadContext, net::TCPConnection& connection) {
-                TuringProtoServerProcessor processor(_db, connection);
+            [this, useV3](net::AbstractThreadContext* threadContext, net::TCPConnection& connection) {
+                TuringProtoServerProcessor processor(_db, connection, useV3);
                 processor.process(threadContext);
             };
         functions._createParser = [](net::NetBuffer* inputBuffer) {
@@ -63,9 +69,9 @@ void TuringServer::start() {
             return std::make_unique<net::proto::TuringProtoWriter>(bufferCapacity);
         };
     } else {
-        functions._processor = [&](net::AbstractThreadContext* threadContext,
-                                   net::TCPConnection& connection) {
-            DBServerProcessor processor(_db, connection);
+        functions._processor = [this, useV3](net::AbstractThreadContext* threadContext,
+                                             net::TCPConnection& connection) {
+            DBServerProcessor processor(_db, connection, useV3);
             processor.process(threadContext);
         };
         functions._createParser = [](net::NetBuffer* inputBuffer) {
@@ -100,10 +106,11 @@ void TuringServer::start() {
 
     _serverThread = std::thread(serverFunc);
 
-    spdlog::info("  - Server listening on address: {}:{} ({})",
+    spdlog::info("  - Server listening on address: {}:{} ({}, {})",
                  _server->getAddress(),
                  _server->getPort(),
-                 useProto ? "proto" : "http");
+                 useProto ? "proto" : "http",
+                 useV3 ? "v3" : "v2");
 }
 
 void TuringServer::wait() {

@@ -8,6 +8,7 @@
 #include "NetException.h"
 #include "ProtocolException.h"
 #include "QueryCallbacks.h"
+#include "QueryInterpreterV3.h"
 #include "QueryStatus.h"
 #include "TCPConnection.h"
 #include "TuringDB.h"
@@ -18,9 +19,12 @@
 using namespace db;
 
 TuringProtoServerProcessor::TuringProtoServerProcessor(TuringDB& db,
-                                                       net::TCPConnection& connection)
+                                                       net::TCPConnection& connection,
+                                                       bool useV3)
     : _db(db),
-    _connection(connection)
+    _connection(connection),
+    _protoNLSink(&connection.getWriter<net::proto::TuringProtoWriter>()),
+    _useV3(useV3)
 {
 }
 
@@ -76,6 +80,27 @@ void TuringProtoServerProcessor::handleQuery() {
     auto& writer = _connection.getWriter<net::proto::TuringProtoWriter>();
     auto& mem = _threadContext->getLocalMemory();
     const TransactionInfo info = getTransactionInfo();
+    const QueryConfig& queryConfig = _db.getDefaultQueryConfig();
+
+    if (_useV3) {
+        QueryInterpreterV3 interpreter(&_db.getSystemManager());
+        interpreter.setChunkSize(queryConfig.getChunkSize());
+
+        QueryStatus status;
+        interpreter.execute(status, info.query, info.graphName, info.commit, info.change, &mem, &_protoNLSink);
+
+        if (!status.isOk()) {
+            writer.reset();
+            writer.writeError(&status);
+        }
+
+        if (writer.errorOccured()) {
+            return;
+        }
+
+        writer.writeEndPacket(status.getTotalTime().count());
+        return;
+    }
 
     QueryCallbacks callbacks;
 
@@ -104,7 +129,7 @@ void TuringProtoServerProcessor::handleQuery() {
         writer.writeError(&status);
     });
 
-    const QueryState state(info.graphName, &mem, &_db.getDefaultQueryConfig(), &callbacks, info.commit, info.change);
+    const QueryState state(info.graphName, &mem, &queryConfig, &callbacks, info.commit, info.change);
     _db.query(info.query, state);
 }
 

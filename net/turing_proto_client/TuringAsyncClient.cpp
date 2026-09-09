@@ -387,6 +387,7 @@ void TuringAsyncClient::processProtoPacket() {
         break;
 
         case MessageTypes::END_CHUNK:
+            _decoder.decodeChunkFooter(_dataframeContainer.get());
             _callbackFired = true;
             _callback(_df.get());
             _df->clear();
