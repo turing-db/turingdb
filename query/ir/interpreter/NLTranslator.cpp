@@ -634,7 +634,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateBinaryOp<OP_ADD>(add, body);
         } else if (nl::Concat concat = mlir::dyn_cast<nl::Concat>(operation)) {
             translateBinaryOp<OP_CONCAT>(concat, body);
-        } else if (nl::Index index = mlir::dyn_cast<nl::Index>(operation)) {
+        } else if (nl::ListIndex index = mlir::dyn_cast<nl::ListIndex>(operation)) {
             translateBinaryOp<OP_INDEX>(index, body);
         } else if (nl::Sub sub = mlir::dyn_cast<nl::Sub>(operation)) {
             translateBinaryOp<OP_SUB>(sub, body);

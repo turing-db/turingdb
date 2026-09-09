@@ -845,7 +845,7 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
     } else if (mlir::isa<mlir::db::ConcatOp>(operation)) {
         lowerBinaryOp<nl::Concat>(operation, BinaryResultKind::Concat);
     } else if (mlir::isa<mlir::db::IndexOp>(operation)) {
-        lowerBinaryOp<nl::Index>(operation, BinaryResultKind::Index);
+        lowerBinaryOp<nl::ListIndex>(operation, BinaryResultKind::Index);
     } else if (mlir::isa<mlir::db::SubOp>(operation)) {
         lowerBinaryOp<nl::Sub>(operation, BinaryResultKind::Numeric);
     } else if (mlir::isa<mlir::db::MulOp>(operation)) {

@@ -419,7 +419,7 @@ struct BinaryOpTraits<OP_CONCAT> {
 
 template <>
 struct BinaryOpTraits<OP_INDEX> {
-    using Functor = Index;
+    using Functor = ListIndex;
 
     template <typename ResCol, typename LhsCol, typename RhsCol>
     static void exec(ResCol* result, const LhsCol* lhs, const RhsCol* rhs) {
