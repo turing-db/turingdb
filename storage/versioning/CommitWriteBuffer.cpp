@@ -192,7 +192,7 @@ void CommitWriteBuffer::addHangingEdges(const GraphView& view) {
 }
 
 NodeID CommitWriteBuffer::buildPendingNode(DataPartBuilder& builder,
-                                          const PendingNode& node,
+                                          PendingNode& node,
                                           bool deleted) {
     const NodeID nodeID = builder.addNode(node.labelsetHandle);
 
@@ -239,7 +239,7 @@ void CommitWriteBuffer::buildPendingNodes(DataPartBuilder& builder, Tombstones& 
 }
 
 EdgeID CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
-                                          const PendingEdge& edge,
+                                          PendingEdge& edge,
                                           bool deleted) {
     // If this edge has source or target which is a node in a previous datapart, check
     // if it has been deleted.
@@ -281,7 +281,7 @@ EdgeID CommitWriteBuffer::buildPendingEdge(DataPartBuilder& builder,
         return newEdgeID;
     }
 
-    for (const auto& [propID, value] : edge.properties) {
+    for (auto& [propID, value] : edge.properties) {
         std::visit(
             [&](auto&& val) {
                 using T = std::decay_t<decltype(val)>;
@@ -368,8 +368,8 @@ bool CommitWriteBuffer::touchesDeletedNode(const PendingEdge& edge) const {
 void CommitWriteBuffer::applyNodeUpdates(DataPartBuilder& builder) {
     // Iterate through updates in reverse: most recent update take precedence
     while(!_updatedNodes.empty()) {
-        const auto& [nodeID, property] = _updatedNodes.back();
-        const auto& [propID, value] = property;
+        auto& [nodeID, property] = _updatedNodes.back();
+        auto& [propID, value] = property;
         std::visit(
             [&](auto&& val) {
                 using T = std::decay_t<decltype(val)>;
