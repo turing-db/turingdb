@@ -10,6 +10,7 @@
 #include "views/GraphView.h"
 
 #include "IRException.h"
+#include <optional>
 
 using namespace db;
 
@@ -31,7 +32,7 @@ public:
         _buf.clear();
         _buf.reserve(_rowCount);
         for (size_t i = 0; i < _rowCount; i++) {
-            _buf.emplace_back(_propID, typed->getRaw());
+            _buf.emplace_back(_propID, std::make_optional(typed->getRaw()));
         }
     }
 
@@ -39,7 +40,7 @@ public:
         _buf.clear();
         _buf.reserve(_rowCount);
         for (size_t i = 0; i < _rowCount; i++) {
-            _buf.emplace_back(_propID, std::string(typed->getRaw()));
+            _buf.emplace_back(_propID, std::make_optional(std::string(typed->getRaw())));
         }
     }
 
@@ -48,7 +49,7 @@ public:
         _buf.reserve(_rowCount);
         const types::Embedding::Primitive span = typed->getRaw();
         for (size_t i = 0; i < _rowCount; i++) {
-            _buf.emplace_back(_propID, types::Embedding::OwningPrimitive(span.begin(), span.end()));
+            _buf.emplace_back(_propID, std::make_optional(types::Embedding::OwningPrimitive(span.begin(), span.end())));
         }
     }
 
@@ -72,7 +73,7 @@ public:
         _buf.clear();
         _buf.reserve(typed->size());
         for (const T& val : *typed) {
-            _buf.emplace_back(_propID, val);
+            _buf.emplace_back(_propID, std::make_optional(val));
         }
     }
 
@@ -80,7 +81,7 @@ public:
         _buf.clear();
         _buf.reserve(typed->size());
         for (const types::String::Primitive val : *typed) {
-            _buf.emplace_back(_propID, std::string(val));
+            _buf.emplace_back(_propID, std::make_optional(std::string(val)));
         }
     }
 
@@ -88,7 +89,7 @@ public:
         _buf.clear();
         _buf.reserve(typed->size());
         for (const types::Embedding::Primitive val : *typed) {
-            _buf.emplace_back(_propID, types::Embedding::OwningPrimitive(val.begin(), val.end()));
+            _buf.emplace_back(_propID, std::make_optional(types::Embedding::OwningPrimitive(val.begin(), val.end())));
         }
     }
 
@@ -100,7 +101,7 @@ public:
             if (!val) {
                 throw IRException("Cannot set a property to NULL in CREATE.");
             }
-            _buf.emplace_back(_propID, *val);
+            _buf.emplace_back(_propID, std::make_optional(*val));
         }
     }
 
@@ -111,7 +112,7 @@ public:
             if (!val) {
                 throw IRException("Cannot set a property to NULL in CREATE.");
             }
-            _buf.emplace_back(_propID, std::string(*val));
+            _buf.emplace_back(_propID, std::make_optional(std::string(*val)));
         }
     }
 
@@ -122,7 +123,7 @@ public:
             if (!val) {
                 throw IRException("Cannot set a property to NULL in CREATE.");
             }
-            _buf.emplace_back(_propID, types::Embedding::OwningPrimitive(val->begin(), val->end()));
+            _buf.emplace_back(_propID, std::make_optional(types::Embedding::OwningPrimitive(val->begin(), val->end())));
         }
     }
 

@@ -256,10 +256,10 @@ private:
     void buildPendingNodes(DataPartBuilder& builder, Tombstones& tombstones);
     void buildPendingEdges(DataPartBuilder& builder, Tombstones& tombstones);
 
-    NodeID buildPendingNode(DataPartBuilder& builder, const PendingNode& node, bool deleted);
-    void addPendingNodeProperties(DataPartBuilder& builder, const PendingNode& node);
+    NodeID buildPendingNode(DataPartBuilder& builder, PendingNode& node, bool deleted);
+    void addPendingNodeProperties(DataPartBuilder& builder, PendingNode& node);
 
-    EdgeID buildPendingEdge(DataPartBuilder& builder, const PendingEdge& edge, bool deleted);
+    EdgeID buildPendingEdge(DataPartBuilder& builder, PendingEdge& edge, bool deleted);
 
     bool touchesDeletedNode(const PendingEdge& edge) const;
 
