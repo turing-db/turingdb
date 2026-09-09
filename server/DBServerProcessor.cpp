@@ -2,6 +2,8 @@
 
 #include "TuringDB.h"
 #include "JsonEncoder.h"
+#include "DBServerNlSink.h"
+#include "QueryInterpreterV3.h"
 
 #include "DBThreadContext.h"
 #include "HTTPParser.h"
@@ -15,10 +17,12 @@
 using namespace db;
 
 DBServerProcessor::DBServerProcessor(TuringDB& db,
-                                     net::TCPConnection& connection)
+                                     net::TCPConnection& connection,
+                                     bool useV3)
     : _writer(&connection.getWriter<net::HTTPWriter>()),
     _db(db),
-    _connection(connection)
+    _connection(connection),
+    _useV3(useV3)
 {
 }
 
@@ -127,8 +131,29 @@ void DBServerProcessor::queryImpl(std::string_view query,
     net::NetWriter* writer = _writer.getWriter();
     bioassert(writer, "Invalid writer");
 
-    QueryCallbacks queryCallbacks;
     JsonEncoder<net::NetWriter> encoder(*writer);
+
+    if (_useV3) {
+        encoder.start();
+
+        DBServerNlSink sink(&encoder);
+        QueryInterpreterV3 interpreter(&_db.getSystemManager());
+        const QueryConfig& queryConfig = _db.getDefaultQueryConfig();
+        interpreter.setChunkSize(queryConfig.getChunkSize());
+
+        QueryStatus status;
+        interpreter.execute(status, query, graphName, commit, change, &mem, &sink);
+
+        if (!status.isOk()) {
+            encoder.encodeError(status.getStatus(), status.getError());
+        }
+
+        encoder.encodeTime(status.getTotalTime().count());
+        encoder.finish();
+        return;
+    }
+
+    QueryCallbacks queryCallbacks;
 
     queryCallbacks.setOnBegin([&] {
         encoder.start();

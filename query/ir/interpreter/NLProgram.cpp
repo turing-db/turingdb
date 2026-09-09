@@ -8,6 +8,7 @@
 #include "Procedure.h"
 #include "ProcedureData.h"
 
+#include "BioAssert.h"
 #include "IRException.h"
 
 using namespace db;
@@ -20,6 +21,12 @@ NLProgram::~NLProgram() {
 
 void NLProgram::setColumnNames(std::span<const std::string_view> names) {
     _columnNames.assign(names.begin(), names.end());
+}
+
+void NLProgram::setOutputData(NLOutputData* outputData) {
+    bioassert(!_outputData, "A program carries at most one output statement");
+
+    _outputData = outputData;
 }
 
 NLMergeNodeIndex* NLProgram::findMergeNodeIndex(const std::string& signature) const {

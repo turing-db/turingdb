@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <array>
+#include <span>
 #include <type_traits>
 #include <concepts>
 #include <vector>
@@ -56,10 +57,10 @@ public:
     }
 
     template <typename T>
-    static void create(DynamicLargeBitMask& out, const std::vector<std::optional<T>>& optionalVec) {
-        out.resize(optionalVec.size());
-        for (size_t i = 0; i < optionalVec.size(); ++i) {
-            out.set(i, optionalVec[i].has_value());
+    static void create(DynamicLargeBitMask& out, std::span<const std::optional<T>> optionalValues) {
+        out.resize(optionalValues.size());
+        for (size_t i = 0; i < optionalValues.size(); ++i) {
+            out.set(i, optionalValues[i].has_value());
         }
     }
 

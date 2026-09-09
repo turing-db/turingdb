@@ -231,12 +231,20 @@ function makeEnd(execTimeMs) {
     return frame(MESSAGE_END, end);
 }
 
+// A chunk closes with its row count: a constant column holds one value however many rows
+// it stands for, so nothing else on the wire says how many there are.
+function makeEndChunk(rowCount) {
+    const footer = new Writer();
+    footer.u32(rowCount);
+    return frame(MESSAGE_END_CHUNK, footer);
+}
+
 async function testQuery(module) {
     const bytes = concatPackets([
         ...makeFirstDataframe(),
-        frame(MESSAGE_END_CHUNK, new Writer()),
+        makeEndChunk(3),
         ...makeSecondDataframe(),
-        frame(MESSAGE_END_CHUNK, new Writer()),
+        makeEndChunk(2),
         makeEnd(12.5),
     ]);
 
@@ -285,7 +293,7 @@ async function testQuery(module) {
 async function testQueryData(module) {
     const bytes = concatPackets([
         ...makeFirstDataframe(),
-        frame(MESSAGE_END_CHUNK, new Writer()),
+        makeEndChunk(3),
         makeEnd(1.0),
     ]);
 

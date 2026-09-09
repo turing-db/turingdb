@@ -24,6 +24,7 @@ public:
     db::Column* operator[](size_t index);
 
     void addColumn(db::Column* column, std::string_view name);
+    void setRowCount(size_t rowCount);
 
 private:
     db::Dataframe* _dataframe {nullptr};

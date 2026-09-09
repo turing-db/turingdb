@@ -453,29 +453,17 @@ export class Column {
     }
 }
 
-// Reads the decoder's current dataframe: one Column per decoded column, all sized to
-// the dataframe's row count (constants report the row count of their vector siblings).
+// Reads the decoder's current dataframe: one Column per decoded column, all sized to the
+// row count the chunk's footer declared.
 function readDataframe(decoder) {
     const columnCount = decoder.getColumnCount();
+    const rowCount = decoder.getRowCount();
     const names = [];
     const buffers = [];
-    let rowCount = 0;
-    let hasVector = false;
 
     for (let index = 0; index < columnCount; index++) {
         names.push(decoder.getColumnName(index));
-
-        const columnBuffers = decoder.getColumnBuffers(index);
-        buffers.push(columnBuffers);
-
-        const isVector = columnBuffers.encoding === ColumnEncoding.VECTOR || columnBuffers.encoding === ColumnEncoding.OPTIONAL_VECTOR;
-        if (isVector) {
-            hasVector = true;
-            rowCount = Math.max(rowCount, columnBuffers.count);
-        }
-    }
-    if (!hasVector && columnCount > 0) {
-        rowCount = 1;
+        buffers.push(decoder.getColumnBuffers(index));
     }
 
     const hasLists = buffers.some((column) => column.typeCode === ColumnType.LIST_VIEW || column.typeCode === ColumnType.LIST_ELEMENT_VIEW);
@@ -621,9 +609,11 @@ export class TuringClient {
             if (type === MESSAGE_CHUNK_HEADER || type === MESSAGE_CHUNK) {
                 this._decodePacket(decoder, packet);
             } else if (type === MESSAGE_END_CHUNK) {
-                // One dataframe is complete: read it out, then drop its rows while
-                // keeping the columns — the server sends one CHUNK_HEADER per response
-                // and streams every dataframe through the same columns.
+                // One dataframe is complete: its footer states the row count, so the
+                // packet goes to the decoder before the frame is read out. Then drop the
+                // rows while keeping the columns — the server sends one CHUNK_HEADER per
+                // response and streams every dataframe through the same columns.
+                this._decodePacket(decoder, packet);
                 chunks.push(this._readDataframe(decoder));
                 decoder.endChunk();
                 sawEndChunk = true;

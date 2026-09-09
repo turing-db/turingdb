@@ -13,11 +13,13 @@ class NLOutputSink {
 public:
     virtual ~NLOutputSink();
 
-    // The name of each column appendChunks is about to receive, in that order. Called
-    // once before the first chunk, and not at all by a program naming no column - so an
-    // implementor labelling its output needs a fallback. The views last only for the
-    // call: an implementor keeping a name copies it.
-    virtual void setColumnNames(std::span<const std::string_view> names);
+    // The columns appendChunks is about to receive, typed but not yet filled, and the
+    // name of each. Called exactly once per program, before it runs; both spans are
+    // empty for a program producing no result. names is either empty(a program built
+    // by hand can leave its output unnamed) or holds one name per chunk. The views
+    // last only for the call: an implementor keeping a name copies it.
+    virtual void declareOutput(std::span<const std::string_view> names,
+                               std::span<const Column* const> chunks);
 
     // One call per chunk emission of the program. Only rows
     // [offset, offset + rowCount) of each chunk are part of the result - the rows

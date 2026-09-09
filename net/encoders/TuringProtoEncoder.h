@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <optional>
 #include <span>
 #include <stack>
@@ -231,9 +232,14 @@ struct ListElementWriteVisitor {
 
 class DataWriter {
 public:
-    explicit DataWriter(net::proto::TuringProtoOutBuf* outBuf, std::stack<NestedListStackElement>& stack)
+    DataWriter(net::proto::TuringProtoOutBuf* outBuf,
+               std::stack<NestedListStackElement>& stack,
+               size_t offset,
+               size_t rowCount)
         : _outBuf(outBuf),
-        _stack(stack)
+        _stack(stack),
+        _offset(offset),
+        _rowCount(rowCount)
     {
     }
 
@@ -247,24 +253,26 @@ public:
 
     template <typename T>
     void operator()(const db::ColumnVector<T>* col) {
-        writeRowCount(col->size());
+        const std::span<const T> values = columnWindow(col->data(), col->size());
+
+        writeRowCount(values.size());
 
         if constexpr (db::StringLike<T>) {
-            for (const auto& val : *col) {
+            for (const auto& val : values) {
                 bioassert(val.size() * sizeof(char) <= MAX_WIRE_SIZE, "String length exceeds maximum wire size");
                 const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(char));
                 _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
                 _outBuf->copyVarLenData(val.data(), columnByteSize);
             }
         } else if constexpr (db::IsPath<T>) {
-            for (const auto& val : *col) {
+            for (const auto& val : values) {
                 bioassert(val.size() * sizeof(db::EntityID) <= MAX_WIRE_SIZE, "Path length exceeds maximum wire size");
                 const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(db::EntityID));
                 _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
                 _outBuf->copyVarLenData(val.data(), columnByteSize);
             }
         } else if constexpr (db::IsEmbedding<T>) {
-            for (const auto& val : *col) {
+            for (const auto& val : values) {
                 bioassert(val.size() * sizeof(float) <= MAX_WIRE_SIZE, "Embedding length exceeds maximum wire size");
                 const WireSize columnByteSize = static_cast<WireSize>(val.size() * sizeof(float));
                 _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
@@ -273,7 +281,7 @@ public:
         } else if constexpr (db::IsEntityList<T>) {
             constexpr size_t sizeOfEntry = sizeof(db::EntityList::Entry::_id) + sizeof(db::EntityList::Entry::_type);
 
-            for (const auto& entityList : *col) {
+            for (const auto& entityList : values) {
                 bioassert(entityList.size() <= MAX_WIRE_SIZE, "Entity list length exceeds maximum wire size");
                 const WireSize columnByteSize = static_cast<WireSize>(entityList.size());
                 _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
@@ -286,31 +294,33 @@ public:
                 }
             }
         } else if constexpr (db::IsListView<T>) {
-            for (const auto& listView : *col) {
+            for (const auto& listView : values) {
                 writeListView(listView);
             }
         } else if constexpr (db::IsListElement<T>) {
             // One element per row: the row count (already written above) is the element
             // count, so only [listByteSize] + the elements follow.
-            writeListElements(col->getRaw());
+            writeListElements(values);
         } else {
             static_assert(std::is_trivially_copyable_v<T>,
                           "TuringProtoEncoder can't encode a non trivial element in a trivial manner");
-            const size_t columnByteSize = sizeof(T) * col->size();
-            _outBuf->copyVector<T>(col->data(), columnByteSize);
+            const size_t columnByteSize = sizeof(T) * values.size();
+            _outBuf->copyVector<T>(values.data(), columnByteSize);
         }
     }
 
     template <typename T>
     void operator()(const db::ColumnVector<std::optional<T>>* col) {
-        writeRowCount(col->size());
+        const std::span<const std::optional<T>> values = columnWindow(col->data(), col->size());
+
+        writeRowCount(values.size());
 
         DynamicLargeBitMask<uint64_t> mask(0);
-        DynamicLargeBitMask<uint64_t>::create(mask, col->getRaw());
+        DynamicLargeBitMask<uint64_t>::create(mask, values);
         _outBuf->copyVarLenData(mask.data(), mask.byteSize());
 
         if constexpr (db::StringLike<T>) {
-            for (const auto& val : *col) {
+            for (const auto& val : values) {
                 if (!val.has_value()) {
                     const WireSize columnByteSize = 0;
                     _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
@@ -323,7 +333,7 @@ public:
                 _outBuf->copyVarLenData(val->data(), columnByteSize);
             }
         } else if constexpr (db::IsPath<T>) {
-            for (const auto& val : *col) {
+            for (const auto& val : values) {
                 if (!val.has_value()) {
                     const WireSize columnByteSize = 0;
                     _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
@@ -336,7 +346,7 @@ public:
                 _outBuf->copyVarLenData(val->data(), columnByteSize);
             }
         } else if constexpr (db::IsEmbedding<T>) {
-            for (const auto& val : *col) {
+            for (const auto& val : values) {
                 if (!val.has_value()) {
                     const WireSize columnByteSize = 0;
                     _outBuf->copyFixedLenData(&columnByteSize, sizeof(columnByteSize));
@@ -355,13 +365,13 @@ public:
             // is diagnosed eagerly by pre-P2593 compilers even when discarded.
             static_assert(sizeof(T) == 0, "Sending ColumnOptVector<EntityList> not supported");
         } else if constexpr (db::IsListElement<T>) {
-            writeOptionalListElements(col->getRaw());
+            writeOptionalListElements(values);
         } else if constexpr (db::IsNull<T>) {
             // Don't send anything for property null
         } else {
             static_assert(std::is_trivially_copyable_v<T>,
                           "TuringProtoEncoder only supports trivially copyable types and string");
-            for (const auto& val : *col) {
+            for (const auto& val : values) {
                 if (!val.has_value()) {
                     const T zero {};
                     _outBuf->copyFixedLenData(&zero, sizeof(T));
@@ -459,13 +469,24 @@ public:
         static_assert(sizeof(db::ColumnMask::ValueType) == sizeof(db::types::Bool::Primitive),
                       "A mask is decoded as a BOOL vector, so its values must be bool-sized");
 
-        writeRowCount(col->size());
+        const std::span<const db::ColumnMask::ValueType> values = columnWindow(col->data(), col->size());
 
-        const size_t columnByteSize = sizeof(db::ColumnMask::ValueType) * col->size();
-        _outBuf->copyVector<db::ColumnMask::ValueType>(col->data(), columnByteSize);
+        writeRowCount(values.size());
+
+        const size_t columnByteSize = sizeof(db::ColumnMask::ValueType) * values.size();
+        _outBuf->copyVector<db::ColumnMask::ValueType>(values.data(), columnByteSize);
     }
 
 private:
+    // We don't assume dataframes to be rectangular in the encoder. For each column we
+    // calculate the appropriate span.
+    template <typename T>
+    std::span<const T> columnWindow(const T* data, size_t columnSize) const {
+        const size_t available = columnSize > _offset ? columnSize - _offset : 0;
+
+        return std::span<const T>(data + _offset, std::min(_rowCount, available));
+    }
+
     // Writes each element's [tag][value] / [tag][numBytes][data].
     void writeListElementValues(std::span<const db::ListElementView> elements) {
         const ListElementWriteVisitor writeVisitor {_outBuf, &_stack};
@@ -544,6 +565,8 @@ private:
 
     net::proto::TuringProtoOutBuf* _outBuf {nullptr};
     std::stack<NestedListStackElement>& _stack;
+    size_t _offset {0};
+    size_t _rowCount {0};
 };
 
 class TuringProtoEncoder {
@@ -552,6 +575,12 @@ public:
 
     void writeDataframeHeader(const db::Dataframe* df);
     void writeDataframe(const db::Dataframe* df);
+    void writeColumnHeaders(std::span<const std::string_view> names,
+                            std::span<const db::Column* const> columns);
+    void writeColumns(std::span<const db::Column* const> columns, size_t offset, size_t rowCount);
+    //A chunk footer contains metadata about the columns which are not needed for the decoding
+    //of the columns - for now this only includes the rowCount.
+    void writeChunkFooter(size_t rowCount);
     void writeError(const db::QueryStatus* status);
     void writeProtocolError(std::string_view message);
     void writeEnd(db::QueryCallbacks::ExecTimeMilliseconds milliseconds);
@@ -559,6 +588,9 @@ public:
 private:
     net::proto::TuringProtoOutBuf* _outBuf {nullptr};
     std::stack<NestedListStackElement> _stack;
+
+    void writeColumnCount(size_t count);
+    void writeColumnHeader(std::string_view name, const db::Column* column);
 };
 
 }

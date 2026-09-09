@@ -1,5 +1,7 @@
 #include "TuringProtoEncoder.h"
 
+#include <range/v3/view/zip.hpp>
+
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/AllowedKinds.h"
 #include "QueryStatus.h"
@@ -7,6 +9,7 @@
 #include "BioAssert.h"
 
 using namespace net::proto;
+namespace rv = ranges::views;
 
 TuringProtoEncoder::TuringProtoEncoder(net::proto::TuringProtoOutBuf* outBuf)
     : _outBuf(outBuf)
@@ -14,48 +17,92 @@ TuringProtoEncoder::TuringProtoEncoder(net::proto::TuringProtoOutBuf* outBuf)
 }
 
 void TuringProtoEncoder::writeDataframeHeader(const db::Dataframe* df) {
-    using Encoder = db::ColumnSingleDispatcher<db::OutputtedTypes::Allowed, ColumnHeaderWriter, db::OutputtedTypes::Excluded>;
+    const db::Dataframe::NamedColumns& columns = df->cols();
 
     size_t chunkHeaderLen = sizeof(WireSize);
-    for (const db::NamedColumn* namedCol : df->cols()) {
+    for (const db::NamedColumn* namedColumn : columns) {
         chunkHeaderLen += net::proto::ColumnWireHeader::wireSize();
-        chunkHeaderLen += namedCol->getName().size();
+        chunkHeaderLen += namedColumn->getName().size();
     }
     bioassert(chunkHeaderLen <= _outBuf->capacity(), "Dataframe schema exceeds maximum chunk size");
 
-    bioassert(df->cols().size() <= MAX_WIRE_SIZE, "Number of columns exceed maximum number of columns");
-    const WireSize columnCount = static_cast<WireSize>(df->cols().size());
-    _outBuf->copyFixedLenData(&columnCount, sizeof(columnCount));
+    writeColumnCount(columns.size());
 
-    for (const db::NamedColumn* namedCol : df->cols()) {
-        const std::string_view colName = namedCol->getName();
-        bioassert(colName.size() <= MAX_WIRE_SIZE, "Column name length exceeds maximum wire size");
-        net::proto::ColumnWireHeader columnHeader {
-            ._nameLen = static_cast<WireSize>(colName.size()),
-            ._typeCode = 0,
-            ._encoding = std::to_underlying(net::proto::ColumnKind::VECTOR)};
+    for (const db::NamedColumn* namedColumn : columns) {
+        writeColumnHeader(namedColumn->getName(), namedColumn->getColumn());
+    }
+}
 
-        ColumnHeaderWriter writer(columnHeader);
-        const db::Column* col = namedCol->getColumn();
-        Encoder::dispatch(col, writer);
-        _outBuf->copyHeader(&columnHeader);
-        _outBuf->copyVarLenData(colName.data(), colName.size());
+void TuringProtoEncoder::writeColumnHeaders(std::span<const std::string_view> names,
+                                            std::span<const db::Column* const> columns) {
+    bioassert(names.size() == columns.size(), "The wire schema needs one name per column");
+
+    size_t chunkHeaderLen = sizeof(WireSize);
+    for (const std::string_view name : names) {
+        chunkHeaderLen += net::proto::ColumnWireHeader::wireSize();
+        chunkHeaderLen += name.size();
+    }
+    bioassert(chunkHeaderLen <= _outBuf->capacity(), "Column schema exceeds maximum chunk size");
+
+    writeColumnCount(columns.size());
+
+    for (const auto [name, column] : rv::zip(names, columns)) {
+        writeColumnHeader(name, column);
     }
 }
 
 void TuringProtoEncoder::writeDataframe(const db::Dataframe* df) {
-    if (df->getLogicalRowCount() == 0) {
+    const size_t rowCount = df->getLogicalRowCount();
+    if (rowCount == 0) {
         return;
     }
 
     using Encoder = db::ColumnSingleDispatcher<db::OutputtedTypes::Allowed, DataWriter, db::OutputtedTypes::Excluded>;
 
-    DataWriter writer(_outBuf, _stack);
-
-    for (const db::NamedColumn* namedCol : df->cols()) {
-        const db::Column* col = namedCol->getColumn();
-        Encoder::dispatch(col, writer);
+    DataWriter writer(_outBuf, _stack, 0, rowCount);
+    for (const db::NamedColumn* namedColumn : df->cols()) {
+        Encoder::dispatch(namedColumn->getColumn(), writer);
     }
+}
+
+void TuringProtoEncoder::writeColumns(std::span<const db::Column* const> columns, size_t offset, size_t rowCount) {
+    if (rowCount == 0) {
+        return;
+    }
+
+    using Encoder = db::ColumnSingleDispatcher<db::OutputtedTypes::Allowed, DataWriter, db::OutputtedTypes::Excluded>;
+
+    DataWriter writer(_outBuf, _stack, offset, rowCount);
+    for (const db::Column* column : columns) {
+        Encoder::dispatch(column, writer);
+    }
+}
+
+void TuringProtoEncoder::writeChunkFooter(size_t rowCount) {
+    bioassert(rowCount <= MAX_WIRE_SIZE, "Chunk row count exceeds maximum wire size");
+    const WireSize wireRowCount = static_cast<WireSize>(rowCount);
+    _outBuf->copyFixedLenData(&wireRowCount, sizeof(wireRowCount));
+}
+
+void TuringProtoEncoder::writeColumnCount(size_t count) {
+    bioassert(count <= MAX_WIRE_SIZE, "Number of columns exceed maximum number of columns");
+    const WireSize columnCount = static_cast<WireSize>(count);
+    _outBuf->copyFixedLenData(&columnCount, sizeof(columnCount));
+}
+
+void TuringProtoEncoder::writeColumnHeader(std::string_view name, const db::Column* column) {
+    using Encoder = db::ColumnSingleDispatcher<db::OutputtedTypes::Allowed, ColumnHeaderWriter, db::OutputtedTypes::Excluded>;
+
+    bioassert(name.size() <= MAX_WIRE_SIZE, "Column name length exceeds maximum wire size");
+    net::proto::ColumnWireHeader columnHeader {
+        ._nameLen = static_cast<WireSize>(name.size()),
+        ._typeCode = 0,
+        ._encoding = std::to_underlying(net::proto::ColumnKind::VECTOR)};
+
+    ColumnHeaderWriter writer(columnHeader);
+    Encoder::dispatch(column, writer);
+    _outBuf->copyHeader(&columnHeader);
+    _outBuf->copyVarLenData(name.data(), name.size());
 }
 
 void TuringProtoEncoder::writeError(const db::QueryStatus* status) {

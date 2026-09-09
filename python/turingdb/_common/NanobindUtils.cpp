@@ -80,6 +80,10 @@ void appendDfs(const db::Dataframe* src, db::Dataframe* dst) {
     const auto& srcCols = src->cols();
     const auto& dstCols = dst->cols();
 
+    // A chunk of constants alone grows no column, so the running total has to be carried
+    // rather than read back off the buffered columns.
+    dst->setDeclaredRowCount(dst->getDeclaredRowCount() + src->getLogicalRowCount());
+
     for (size_t i = 0; i < srcCols.size(); ++i) {
         db::Column* dstCol = dstCols[i]->getColumn();
 

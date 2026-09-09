@@ -81,4 +81,26 @@ ProtoEnvScope::~ProtoEnvScope() {
     }
 }
 
+V3EnvScope::V3EnvScope(bool enabled) {
+    const char* existing = ::getenv("USE_TURING_V3");
+    _hadPrior = existing != nullptr;
+    if (_hadPrior) {
+        _prior = existing;
+    }
+
+    if (enabled) {
+        ::setenv("USE_TURING_V3", "1", 1);
+    } else {
+        ::unsetenv("USE_TURING_V3");
+    }
+}
+
+V3EnvScope::~V3EnvScope() {
+    if (_hadPrior) {
+        ::setenv("USE_TURING_V3", _prior.c_str(), 1);
+    } else {
+        ::unsetenv("USE_TURING_V3");
+    }
+}
+
 }

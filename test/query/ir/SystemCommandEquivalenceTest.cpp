@@ -107,7 +107,8 @@ void renderCell(const Column* column, size_t row, std::string& text) {
 // The result table of a command run through the MLIR engine.
 class SystemTableSink : public NLOutputSink {
 public:
-    void setColumnNames(std::span<const std::string_view> names) override {
+    void declareOutput(std::span<const std::string_view> names,
+                       std::span<const Column* const> chunks) override {
         _columnNames.assign(names.begin(), names.end());
     }
 

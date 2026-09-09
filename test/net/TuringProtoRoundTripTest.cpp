@@ -90,9 +90,11 @@ std::vector<FramedPacket> encodeDataframeWithChunkSize(const db::Dataframe& df, 
     if (dataBuf.size() > 0) {
         emitPacket(net::proto::MessageTypes::CHUNK, &dataBuf);
     }
+    encoder.writeChunkFooter(df.getLogicalRowCount());
     packets.push_back(FramedPacket {
         ._type = net::proto::MessageTypes::END_CHUNK,
-        ._bytes = framePacket(net::proto::MessageTypes::END_CHUNK, {})});
+        ._bytes = framePacket(net::proto::MessageTypes::END_CHUNK,
+                              std::string_view(dataBuf.data(), dataBuf.size()))});
 
     return packets;
 }
@@ -155,7 +157,7 @@ void decodeChunkPackets(const std::vector<FramedPacket>& packets,
                 decoder.decodeIncomingChunk(&decodedContainer);
                 break;
             case net::proto::MessageTypes::END_CHUNK:
-                EXPECT_EQ(protoHeader._dataLen, 0u);
+                decoder.decodeChunkFooter(&decodedContainer);
                 break;
             default:
                 FAIL() << "Unexpected packet type in round-trip decode";
@@ -876,3 +878,60 @@ TEST(TuringProtoRoundTripTest, RoundTripsOptionalConstantListElementViewColumns)
 
     EXPECT_FALSE(decodedMissing->at(0).has_value());
 }
+
+// A projection of constants alone - MATCH (n) RETURN 5 - has no column whose length
+// carries the row count, so the chunk states it outright. Encode one constant over three
+// rows and check the decoded frame reports three, not the one value that crossed the wire.
+TEST(TuringProtoRoundTripTest, RoundTripsConstantOnlyChunkRowCount) {
+    constexpr size_t ROW_COUNT = 3;
+
+    db::LocalMemory localMem;
+    db::DataframeManager dfMan;
+
+    auto* answer = localMem.alloc<db::ColumnConst<Int64>>();
+    answer->set(5);
+
+    const std::vector<std::string_view> names {"answer"};
+    const std::vector<const db::Column*> columns {answer};
+
+    net::proto::TuringProtoOutBuf schemaBuf(256);
+    net::proto::TuringProtoOutBuf dataBuf(256);
+    std::vector<FramedPacket> packets;
+
+    {
+        net::proto::TuringProtoEncoder encoder(&schemaBuf);
+        encoder.writeColumnHeaders(names, columns);
+        packets.push_back(FramedPacket {
+            ._type = net::proto::MessageTypes::CHUNK_HEADER,
+            ._bytes = framePacket(net::proto::MessageTypes::CHUNK_HEADER,
+                                  std::string_view(schemaBuf.data(), schemaBuf.size()))});
+    }
+
+    net::proto::TuringProtoEncoder encoder(&dataBuf);
+    encoder.writeColumns(columns, 0, ROW_COUNT);
+    packets.push_back(FramedPacket {
+        ._type = net::proto::MessageTypes::CHUNK,
+        ._bytes = framePacket(net::proto::MessageTypes::CHUNK,
+                              std::string_view(dataBuf.data(), dataBuf.size()))});
+    dataBuf.reset();
+    encoder.writeChunkFooter(ROW_COUNT);
+    packets.push_back(FramedPacket {
+        ._type = net::proto::MessageTypes::END_CHUNK,
+        ._bytes = framePacket(net::proto::MessageTypes::END_CHUNK,
+                              std::string_view(dataBuf.data(), dataBuf.size()))});
+
+    net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<char> stringBuffer;
+    db::ListBuffer<> listBuffer;
+    db::Dataframe decoded;
+    std::vector<net::proto::DecodedColumnSchema> schemas;
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
+
+    ASSERT_EQ(decoded.cols().size(), 1u);
+    EXPECT_EQ(decoded.getLogicalRowCount(), ROW_COUNT);
+
+    const auto* decodedAnswer = decoded.cols().at(0)->as<db::ColumnConst<Int64>>();
+    ASSERT_NE(decodedAnswer, nullptr);
+    EXPECT_EQ(decodedAnswer->at(0), 5);
+}
+
