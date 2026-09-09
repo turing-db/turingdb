@@ -12,8 +12,8 @@ CaseExpr::CaseExpr()
 CaseExpr::~CaseExpr() {
 }
 
-void CaseExpr::addBranch(Expr* when, Expr* then) {
-    _branches.push_back({._when = when, ._then = then});
+void CaseExpr::addBranch(const Tests& tests, Expr* then) {
+    _branches.push_back({._tests = tests, ._then = then});
 }
 
 CaseExpr* CaseExpr::create(CypherAST* ast) {

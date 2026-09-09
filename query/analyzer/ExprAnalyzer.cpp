@@ -1097,21 +1097,18 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
     EvaluatedType resultType = EvaluatedType::Null;
 
     for (const CaseExpr::Branch& branch : expr->getBranches()) {
-        analyzeExpr(branch._when);
-        analyzeExpr(branch._then);
+        for (const CaseExpr::Test& test : branch._tests) {
+            analyzeCaseTest(branch, subject, test);
 
-        const EvaluatedType whenType = branch._when->getType();
-        if (subject) {
-            requireCaseComparable(branch._when, whenType);
-        } else if (whenType != EvaluatedType::Bool && whenType != EvaluatedType::Null) {
-            throwError(fmt::format("The WHEN condition of a CASE must be a boolean, not '{}'",
-                                   EvaluatedTypeName::value(whenType)),
-                       branch._when);
+            if (test._value) {
+                contaminate(test._value);
+            }
         }
+
+        analyzeExpr(branch._then);
 
         resultType = unifyCaseBranch(resultType, branch._then);
 
-        contaminate(branch._when);
         contaminate(branch._then);
     }
 
@@ -1123,6 +1120,43 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
     }
 
     expr->setType(resultType);
+}
+
+void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
+                                   const Expr* subject,
+                                   const CaseExpr::Test& test) {
+    const bool testsNull = test._kind == CaseExpr::TestKind::IsNull
+                           || test._kind == CaseExpr::TestKind::IsNotNull;
+
+    if (!subject) {
+        if (test._kind != CaseExpr::TestKind::Value) {
+            throwError("A WHEN that compares needs a CASE subject to compare against",
+                       testsNull ? branch._then : test._value);
+        }
+
+        if (branch._tests.size() > 1) {
+            throwError("A CASE with no subject takes one predicate per WHEN, not a list of values",
+                       test._value);
+        }
+
+        analyzeExpr(test._value);
+
+        const EvaluatedType whenType = test._value->getType();
+        if (whenType != EvaluatedType::Bool && whenType != EvaluatedType::Null) {
+            throwError(fmt::format("The WHEN condition of a CASE must be a boolean, not '{}'",
+                                   EvaluatedTypeName::value(whenType)),
+                       test._value);
+        }
+
+        return;
+    }
+
+    if (testsNull) {
+        return;
+    }
+
+    analyzeExpr(test._value);
+    requireCaseComparable(test._value, test._value->getType());
 }
 
 EvaluatedType ExprAnalyzer::unifyCaseBranch(EvaluatedType carried, const Expr* branch) {

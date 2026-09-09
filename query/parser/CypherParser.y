@@ -306,7 +306,10 @@
 %type<db::Expr*> collectExpr
 %type<db::CaseExpr*> caseExpr
 %type<db::CaseExpr*> whenThenChain
-%type<std::pair<db::Expr*, db::Expr*>> whenThen
+%type<std::pair<db::CaseExpr::Tests, db::Expr*>> whenThen
+%type<db::CaseExpr::Tests> caseTests
+%type<db::CaseExpr::Test> caseTest
+%type<db::BinaryOperator> caseComparisonSign
 %type<db::Expr*> pathExpr
 %type<db::Expr*> parenthesizedExpr
 
@@ -1567,7 +1570,40 @@ whenThenChain
     ;
 
 whenThen
-    : WHEN expr THEN expr { $$ = std::make_pair($2, $4); }
+    : WHEN caseTests THEN expr { $$ = std::make_pair($2, $4); }
+    ;
+
+caseTests
+    : caseTest { $$ = CaseExpr::Tests {$1}; }
+    | caseTests COMMA caseTest { $$ = $1; $$.push_back($3); }
+    ;
+
+caseTest
+    : expr {
+        $$ = CaseExpr::Test {._value = $1};
+      }
+    | caseComparisonSign expr {
+        $$ = CaseExpr::Test {._value = $2,
+                             ._operator = $1,
+                             ._kind = CaseExpr::TestKind::Comparison};
+      }
+    | IS NULL_ {
+        $$ = CaseExpr::Test {._kind = CaseExpr::TestKind::IsNull};
+      }
+    | IS_NOT NULL_ {
+        $$ = CaseExpr::Test {._kind = CaseExpr::TestKind::IsNotNull};
+      }
+    ;
+
+// The subject is on the left of a comparator branch, so IS is not one of them: it only
+// opens the null tests above
+caseComparisonSign
+    : ASSIGN { $$ = BinaryOperator::Equal; }
+    | LE { $$ = BinaryOperator::LessThanOrEqual; }
+    | GE { $$ = BinaryOperator::GreaterThanOrEqual; }
+    | GT { $$ = BinaryOperator::GreaterThan; }
+    | LT { $$ = BinaryOperator::LessThan; }
+    | NOT_EQUAL { $$ = BinaryOperator::NotEqual; }
     ;
 
 parameter

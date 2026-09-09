@@ -80,7 +80,12 @@ bool ExprChildren::collect(const Expr* expr, std::vector<const Expr*>& children)
             }
 
             for (const CaseExpr::Branch& branch : caseExpr->getBranches()) {
-                children.push_back(branch._when);
+                for (const CaseExpr::Test& test : branch._tests) {
+                    if (test._value) {
+                        children.push_back(test._value);
+                    }
+                }
+
                 children.push_back(branch._then);
             }
 
