@@ -1123,6 +1123,7 @@ void DBProgramGenerator::runPasses() {
     }
 
     mlir::PassManager passManager(_mlirCtxt);
+    passManager.enableVerifier(false);
     for (const DBPassFactory factory : dbPassPipeline) {
         passManager.addPass(factory());
     }
