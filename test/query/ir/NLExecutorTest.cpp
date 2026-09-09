@@ -925,8 +925,10 @@ constexpr const char* crossListChunkProgram = R"mlir(
 func.func @main() {
   %xs = nl.constant([1, 2])
   %ys = nl.constant([3, 4])
-  %p:2 = nl.cross_product{%xs} {%ys} : {!nl.chunk<!storage.list<i64>>} {!nl.chunk<!storage.list<i64>>}
-  nl.output(%p#0, %p#1) : !nl.chunk<!storage.list<i64>>, !nl.chunk<!storage.list<i64>>
+  %pairs = nl.cross_product{%xs} {%ys} : {!nl.chunk<!storage.list<i64>>} {!nl.chunk<!storage.list<i64>>}
+  nl.for %px, %py in %pairs : !nl.iter<!nl.chunk<!storage.list<i64>>, !nl.chunk<!storage.list<i64>>> {
+    nl.output(%px, %py) : !nl.chunk<!storage.list<i64>>, !nl.chunk<!storage.list<i64>>
+  }
   func.return
 }
 )mlir";
@@ -948,8 +950,10 @@ func.func @main() {
   nl.for %scores in %groups : !nl.iter<!nl.chunk<!storage.list<i64>>> {
     %others = nl.scan_nodes()
     nl.for %b in %others : !nl.iter<!nl.chunk<!storage.node_id>> {
-      %p:2 = nl.cross_product{%scores} {%b} : {!nl.chunk<!storage.list<i64>>} {!nl.chunk<!storage.node_id>}
-      nl.output(%p#0, %p#1) : !nl.chunk<!storage.list<i64>>, !nl.chunk<!storage.node_id>
+      %pairs = nl.cross_product{%scores} {%b} : {!nl.chunk<!storage.list<i64>>} {!nl.chunk<!storage.node_id>}
+      nl.for %pscores, %pb in %pairs : !nl.iter<!nl.chunk<!storage.list<i64>>, !nl.chunk<!storage.node_id>> {
+        nl.output(%pscores, %pb) : !nl.chunk<!storage.list<i64>>, !nl.chunk<!storage.node_id>
+      }
     }
   }
   func.return
@@ -971,8 +975,10 @@ func.func @main() {
   nl.for %scores in %groups : !nl.iter<!nl.chunk<!storage.list<i64>>> {
     %others = nl.scan_nodes()
     nl.for %b in %others : !nl.iter<!nl.chunk<!storage.node_id>> {
-      %p:2 = nl.cross_product{%b} {%scores} : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.list<i64>>}
-      nl.output(%p#0, %p#1) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.list<i64>>
+      %pairs = nl.cross_product{%b} {%scores} : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.list<i64>>}
+      nl.for %pb, %pscores in %pairs : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.list<i64>>> {
+        nl.output(%pb, %pscores) : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.list<i64>>
+      }
     }
   }
   func.return

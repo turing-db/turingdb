@@ -1622,38 +1622,21 @@ void DBLowering::lowerCrossProduct(mlir::db::CrossProduct product) {
     mlir::Block* const innerBody = lowerFactor(product.getRightFactor(), outerBody, innerColumns);
 
     // The cross sits at the deepest point - the inner factor's innermost loop
-    // body, where both factors have a chunk bound - just before whatever
-    // consumes the product (the lowered db.output).
+    // body, where both factors have a chunk bound.
     setInsertionInto(innerBody);
 
-    // Null when no limit governs this product (built in full); otherwise the
-    // handle whose budget caps the build, so the cross lays out only the prefix
-    // the limit can emit this step.
-    const mlir::Value limitHandle = _loopLimitHandle.lookup(product.getOperation());
     nl::CrossProduct cross = _builder.create<nl::CrossProduct>(_builder.getUnknownLoc(),
                                                                outerColumns,
-                                                               innerColumns,
-                                                               limitHandle);
+                                                               innerColumns);
 
-    // The product's results are the outer factor's yielded columns followed by
-    // the inner's, the same order nl.cross_product lays out its results.
-    const mlir::ResultRange dbResults = product.getResults();
-    const mlir::ResultRange crossResults = cross.getResults();
-    for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
-        _valueMap[dbResults[resultIndex]] = crossResults[resultIndex];
-    }
-
-    // The crossed columns live in innerBody, so when this product is itself
-    // nested in a factor - e.g. the three-way MATCH (a), (b), (c), where a
-    // cross_product's factor is another cross_product - it stands in for that
-    // factor's innermost loop: the enclosing factor roots its next op (or a
-    // deeper product) there. Record it the way buildLoopForSource records a real
-    // loop, so lowerFactor sees a factor whose innermost "loop" is this product.
-    // At top level nothing reads _innermostLoopBody, so this is a no-op there.
-    _innermostLoopBody = innerBody;
-
-    // Cross prod result defines cardinality
-    _innermostCardinality = crossResults.front();
+    // The pairs come out chunk by chunk, so the product drives a loop of its own
+    // nested in the inner factor's - the third level of the nest, below the two the
+    // factors opened. That binds the db results to the loop variables, carries the
+    // limit handle when one governs the product, and leaves the loop body as the
+    // innermost one, which is where the consumer (the lowered db.output) goes and
+    // where an enclosing factor roots when this product is itself a factor - the
+    // three-way MATCH (a), (b), (c).
+    buildLoopForSource(cross.getResult(), product.getOperation());
 }
 
 void DBLowering::lowerHashJoin(mlir::db::HashJoin join) {

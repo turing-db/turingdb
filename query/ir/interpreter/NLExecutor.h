@@ -83,7 +83,8 @@ public:
     static void runCheckLabelConstraint(NLExecutionContext* context, NLFunctionData* data);
     static void runCheckEdgeTypeConstraint(NLExecutionContext* context, NLFunctionData* data);
 
-    static void runCrossProduct(NLExecutionContext* context, NLFunctionData* data);
+    // Drive the pairs of a cross product, running the body once per chunk of them.
+    static void runCrossProductLoop(NLExecutionContext* context, NLFunctionData* data);
 
     // Reset a limit counter to its budget; runs each time its block runs.
     static void runLimitInit(NLExecutionContext* context, NLFunctionData* data);

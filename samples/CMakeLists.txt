@@ -54,6 +54,7 @@ add_subdirectory(query_bench)
 add_subdirectory(scan_bench)
 add_subdirectory(vardeps)
 add_subdirectory(match-brute-force)
+add_subdirectory(cartesian_bench)
 
 set (SCRIPT_LIST_CONTENT "")
 list (LENGTH SAMPLE_LIST SAMPLE_COUNT)

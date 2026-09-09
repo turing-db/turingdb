@@ -8,9 +8,11 @@ module {
     nl.for %arg0 in %1 limit %0 : !nl.iter<!nl.chunk<!storage.node_id>> {
       %2 = nl.scan_nodes()
       nl.for %arg1 in %2 limit %0 : !nl.iter<!nl.chunk<!storage.node_id>> {
-        %3:2 = nl.cross_product{%arg0} {%arg1} limit %0 : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.node_id>}
-        nl.limit_update %0, %3#0 : !nl.chunk<!storage.node_id>
-        nl.output(%3#0, %3#1) limit %0 : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
+        %3 = nl.cross_product{%arg0} {%arg1} : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.node_id>}
+        nl.for %arg2, %arg3 in %3 limit %0 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>> {
+          nl.limit_update %0, %arg2 : !nl.chunk<!storage.node_id>
+          nl.output(%arg2, %arg3) limit %0 : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
+        }
       }
     }
     return

@@ -19,8 +19,10 @@ func.func @main() {
       %13 = nl.get_node_properties(%arg1, %4) : !nl.chunk<!storage.nullable<i64>>
       %14 = nl.eq %13, %0 : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<none>>) -> !nl.chunk<!storage.nullable<i1>>
       %15 = nl.filter %14, (%arg1) : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.node_id>
-      %16:2 = nl.cross_product{%11} {%15} : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.node_id>}
-      nl.output(%16#0, %16#1) names ["n", "m"] : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
+      %16 = nl.cross_product{%11} {%15} : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.node_id>}
+      nl.for %arg2, %arg3 in %16 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>> {
+        nl.output(%arg2, %arg3) names ["n", "m"] : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
+      }
     }
   }
   return

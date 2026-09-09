@@ -62,6 +62,7 @@ private:
         Unwind,
         ProcedureInit,
         OptionalDrain,
+        CrossProduct,
     };
 
     // Settings of the iterators passed to each for loop
@@ -90,6 +91,11 @@ private:
         // The argument chunks a ProcedureInit iterator hands the procedure, in its
         // declaration order; empty for the other kinds (and for a source call).
         llvm::SmallVector<mlir::Value, 4> _procedureInputs;
+
+        // The two sides a CrossProduct iterator crosses, each in db.yield order;
+        // empty for the other kinds.
+        llvm::SmallVector<mlir::Value, 4> _crossOuterColumns;
+        llvm::SmallVector<mlir::Value, 4> _crossInnerColumns;
 
         // The label names a ScanNodesByLabel or ScanNodesByPropertyValue iterator filters
         // by; empty for the other kinds. These are views into the op's interned StringAttr
@@ -746,18 +752,22 @@ private:
     // accumulator, which carries the single group its reset created.
     bool stepKeepsASingleRow(mlir::Block* block) const;
 
-    // Translate an nl.cross_product: allocate an output column per crossed
-    // column, map each to the matching op result, and record the broadcast
-    // statement (outer columns block-repeated, inner columns tiled)
-    void translateCrossProduct(mlir::nl::CrossProduct cross, NLStmtContainer* body);
+    // Translate the loop over an nl.cross_product: allocate an output column per
+    // crossed column, map each to the matching loop variable, and record the loop
+    // that walks the pairs a chunk at a time (outer columns block-repeated, inner
+    // columns tiled)
+    void translateCrossProductLoop(const IteratorConfig& config,
+                                   mlir::Block& loopBody,
+                                   NLLimitState* limit,
+                                   NLStmtContainer* body);
 
-    // Allocate the output column for one crossed column, map the op result to
+    // Allocate the output column for one crossed column, map the loop variable to
     // it, and append it (with its block-repeat/tile broadcast) to the outer or
     // inner list of data
     void addCrossColumn(mlir::Value inputValue,
                         mlir::Value resultValue,
                         bool isOuter,
-                        NLCrossProductData* data);
+                        NLCrossProductLoopData* data);
 
     // Allocate the fresh output column for one truncated column, map the op
     // result to it, and append it (with its block-repeat prefix-copy) to data

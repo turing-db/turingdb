@@ -66,6 +66,9 @@ add_ir_tests(test_query_ir_collect CollectTest.cpp)
 # The chunked collect tests force the collect fold to span chunk boundaries.
 add_ir_tests(test_query_ir_collect_chunked CollectChunkedTest.cpp)
 
+# The chunked cross product tests force the product to span chunk boundaries.
+add_ir_tests(test_query_ir_cross_product_chunked CrossProductChunkedTest.cpp)
+
 # The collect row-alignment and drain tests run against the shared SimpleGraph fixture.
 add_ir_tests(test_query_ir_collect_row_alignment CollectRowAlignmentTest.cpp)
 target_link_libraries(test_query_ir_collect_row_alignment PRIVATE turing_db_examples_s)
