@@ -138,12 +138,18 @@ protected:
         interpreter.run();
     }
 
-    std::optional<types::Int64::Primitive> evalElement(std::string_view query) {
+    std::vector<std::optional<types::Int64::Primitive>> evalElements(std::string_view query) {
         ElementSink sink;
         runQuery(query, &sink);
 
-        EXPECT_EQ(sink.rows().size(), 1u) << "query: " << query;
-        return sink.rows().empty() ? std::nullopt : sink.rows().front();
+        return sink.rows();
+    }
+
+    std::optional<types::Int64::Primitive> evalElement(std::string_view query) {
+        const std::vector<std::optional<types::Int64::Primitive>> rows = evalElements(query);
+
+        EXPECT_EQ(rows.size(), 1u) << "query: " << query;
+        return rows.empty() ? std::nullopt : rows.front();
     }
 
     std::string indexResultType(std::string_view query) {
@@ -227,6 +233,25 @@ TEST_F(ListIndexTest, readsAnElementOfAMixedList) {
 // Remy is 32, so every position is past the end: the row's own value drives the read.
 TEST_F(ListIndexTest, readsThePositionFromTheRow) {
     EXPECT_EQ(evalElement("MATCH (n) WHERE n.name = 'Remy' RETURN [1, 3, 4][n.age]"), std::nullopt);
+}
+
+TEST_F(ListIndexTest, readsNullWhereThePositionIsNull) {
+    const std::vector<std::optional<types::Int64::Primitive>> rows =
+        evalElements("MATCH (n) RETURN [1, 2, 3][n.age - 32]");
+
+    EXPECT_EQ(rows.size(), 18u);
+
+    size_t present = 0;
+    for (const std::optional<types::Int64::Primitive>& row : rows) {
+        if (!row.has_value()) {
+            continue;
+        }
+
+        EXPECT_EQ(*row, 1);
+        present++;
+    }
+
+    EXPECT_EQ(present, 2u);
 }
 
 int main(int argc, char** argv) {
