@@ -138,6 +138,7 @@ void ExprProgram::evalBinaryInstr(const Instruction& instr) {
         case OP_CONTAINS:
         case OP_PROJECT:
         case OP_IN:
+        case OP_INDEX:
             throw FatalException(
                 fmt::format("Unsupported binary operator: {}.",
                             ColumnOperatorDescription::value(op)));
@@ -196,6 +197,7 @@ void ExprProgram::evalUnaryInstr(const Instruction& instr) {
         case OP_CONTAINS:
         case OP_PROJECT:
         case OP_IN:
+        case OP_INDEX:
         case OP_XOR:
             throw FatalException(fmt::format(
                 "Attempted to evalute {} as unary operator.",
@@ -264,6 +266,7 @@ void ExprProgram::evalFunction(const Instruction& instr) {
         case OP_CONTAINS:
         case OP_PROJECT:
         case OP_IN:
+        case OP_INDEX:
         case OP_MINUS:
         case OP_PLUS:
         case OP_NOT:

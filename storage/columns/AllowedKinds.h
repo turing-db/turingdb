@@ -322,6 +322,26 @@ struct PairRestrictions<Op> {
     >;
 };
 
+template <ColumnOperator Op>
+    requires (Op == OP_INDEX)
+struct PairRestrictions<Op> {
+    using Allowed = GenerateKindPairList<
+        std::tuple<
+            KindPair<ListView, types::Int64::Primitive>,
+            KindPair<ListView, types::UInt64::Primitive>,
+            KindPair<ListView, std::optional<types::Int64::Primitive>>,
+            KindPair<ListView, std::optional<types::UInt64::Primitive>>
+        >
+    >;
+
+    using AllowedMixed = AllowedMixedList<>;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
+};
+
 struct MaskedPairs {
     using Allowed = GenerateKindPairList<>;
 
