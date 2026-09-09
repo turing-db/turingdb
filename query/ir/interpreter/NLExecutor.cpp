@@ -752,6 +752,10 @@ void collectOptMaskSurvivors(const Column* mask, ColumnVector<size_t>* indices) 
     }
 }
 
+// A null mask holds for no row, so a filter on one keeps nothing
+void collectNoSurvivors(const Column*, ColumnVector<size_t>*) {
+}
+
 bool isMaskConstant(const Column* mask) {
     return mask->getContainerKind() == ContainerKind::code<ColumnConst<CustomBool>>();
 }
@@ -5173,8 +5177,10 @@ NLGatherFunction NLExecutor::selectCountGatherFunction() {
     return &gatherColumn<uint64_t>;
 }
 
-NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(bool nullable) {
-    if (nullable) {
+NLMaskSurvivorFunction NLExecutor::selectMaskSurvivorFunction(bool nullable, bool untypedNull) {
+    if (untypedNull) {
+        return &collectNoSurvivors;
+    } else if (nullable) {
         return &collectOptMaskSurvivors;
     }
 

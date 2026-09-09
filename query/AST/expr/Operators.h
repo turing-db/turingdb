@@ -23,6 +23,8 @@ enum class BinaryOperator : uint8_t {
     Mod,
     Pow,
     In,
+    IsNull,
+    IsNotNull,
 
     _SIZE
 };
@@ -43,7 +45,9 @@ using BinaryOperatorDescription = EnumToString<BinaryOperator>::Create<
     EnumStringPair<BinaryOperator::Div, "DIV">,
     EnumStringPair<BinaryOperator::Mod, "MOD">,
     EnumStringPair<BinaryOperator::Pow, "POW">,
-    EnumStringPair<BinaryOperator::In, "IN">
+    EnumStringPair<BinaryOperator::In, "IN">,
+    EnumStringPair<BinaryOperator::IsNull, "ISNULL">,
+    EnumStringPair<BinaryOperator::IsNotNull, "ISNOTNULL">
 >;
 
 enum class UnaryOperator : uint8_t {

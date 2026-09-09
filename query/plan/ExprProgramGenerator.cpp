@@ -103,6 +103,16 @@ ColumnOperator ExprProgramGenerator::binaryOperatorToColumnOperator(BinaryOperat
             return ColumnOperator::OP_NOT_EQUAL;
         break;
 
+        // The null test is an equality against the null constant at the column level, which
+        // is what ColumnConst<PropertyNull> compares as
+        case BinaryOperator::IsNull:
+            return ColumnOperator::OP_EQUAL;
+        break;
+
+        case BinaryOperator::IsNotNull:
+            return ColumnOperator::OP_NOT_EQUAL;
+        break;
+
         case BinaryOperator::GreaterThan:
             return ColumnOperator::OP_GREATER_THAN;
         break;

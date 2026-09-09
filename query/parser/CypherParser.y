@@ -1131,8 +1131,8 @@ comparisonSign
     | GT { $$ = BinaryOperator::GreaterThan; }
     | LT { $$ = BinaryOperator::LessThan; }
     | NOT_EQUAL { $$ = BinaryOperator::NotEqual; }
-    | IS { $$ = BinaryOperator::Equal; }
-    | IS_NOT { $$ = BinaryOperator::NotEqual; }
+    | IS { $$ = BinaryOperator::IsNull; }
+    | IS_NOT { $$ = BinaryOperator::IsNotNull; }
     | IN { $$ = BinaryOperator::In; }
     ;
 

@@ -4524,9 +4524,32 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
 
     const BinaryOperator op = binExpr->getOperator();
 
+    // Null is equal to nothing, itself included, so a comparison against it is null on
+    // every row whichever side carries it. IS NULL is the operator that tests for one
+    const bool comparesAgainstNull = lhsExpr->getType() == EvaluatedType::Null
+                                     || rhsExpr->getType() == EvaluatedType::Null;
+
     switch (op) {
         case BinaryOperator::Equal:
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::EqOp>(loc, boolType, lhs, rhs).getResult();
+            if (comparesAgainstNull) {
+                _part._exprMap[expr] = nullConstantColumn();
+            } else {
+                _part._exprMap[expr] = _opBuilder.create<mlir::db::EqOp>(loc, boolType, lhs, rhs).getResult();
+            }
+        break;
+        case BinaryOperator::IsNull:
+            if (lhsExpr->getType() == EvaluatedType::Null) {
+                _part._exprMap[expr] = constantBool(true);
+            } else {
+                _part._exprMap[expr] = _opBuilder.create<mlir::db::EqOp>(loc, boolType, lhs, rhs).getResult();
+            }
+        break;
+        case BinaryOperator::IsNotNull:
+            if (lhsExpr->getType() == EvaluatedType::Null) {
+                _part._exprMap[expr] = constantBool(false);
+            } else {
+                _part._exprMap[expr] = _opBuilder.create<mlir::db::NeqOp>(loc, boolType, lhs, rhs).getResult();
+            }
         break;
         case BinaryOperator::And:
             _part._exprMap[expr] = _opBuilder.create<mlir::db::AndOp>(loc, boolType, lhs, rhs).getResult();
@@ -4567,7 +4590,11 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
             _part._exprMap[expr] = _opBuilder.create<mlir::db::LteOp>(loc, boolType, lhs, rhs).getResult();
         break;
         case BinaryOperator::NotEqual:
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::NeqOp>(loc, boolType, lhs, rhs).getResult();
+            if (comparesAgainstNull) {
+                _part._exprMap[expr] = nullConstantColumn();
+            } else {
+                _part._exprMap[expr] = _opBuilder.create<mlir::db::NeqOp>(loc, boolType, lhs, rhs).getResult();
+            }
         break;
         case BinaryOperator::Xor:
             _part._exprMap[expr] = _opBuilder.create<mlir::db::XorOp>(loc, boolType, lhs, rhs).getResult();
@@ -4708,6 +4735,13 @@ mlir::Value DBProgramGenerator::nullConstantColumn() {
     const mlir::Type nullableType = mlir::storage::NullableType::get(_mlirCtxt,
                                                                     mlir::NoneType::get(_mlirCtxt));
     const mlir::TypedAttr valueAttr = mlir::StringAttr::get("", nullableType);
+    const mlir::db::ColumnType resultType = allocColumnType(valueAttr.getType());
+
+    return _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(), resultType, valueAttr).getResult();
+}
+
+mlir::Value DBProgramGenerator::constantBool(bool value) {
+    const mlir::TypedAttr valueAttr = _opBuilder.getBoolAttr(value);
     const mlir::db::ColumnType resultType = allocColumnType(valueAttr.getType());
 
     return _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(), resultType, valueAttr).getResult();

@@ -617,6 +617,7 @@ private:
 
     mlir::Value nullConstantColumn();
 
+    mlir::Value constantBool(bool value);
     mlir::Value constantString(llvm::StringRef value);
     mlir::Value constantLabelString(llvm::ArrayRef<std::string> labels);
 

@@ -189,8 +189,10 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            // For IS NULL or IS NOT NULL
-            if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Null)
+            // Comparing against a null is null, so the pairs a null takes part in are as
+            // valid as any other; the two nulls of 'null = null' included
+            if (pair == TypePairBitset(EvaluatedType::Null, EvaluatedType::Null)
+                || pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Null)
                 || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Null)
                 || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Null)
                 || pair == TypePairBitset(EvaluatedType::Char, EvaluatedType::Null)
@@ -247,6 +249,21 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
 
             throwError(error, expr);
         } break;
+
+        case BinaryOperator::IsNull:
+        case BinaryOperator::IsNotNull: {
+            type = EvaluatedType::Bool;
+
+            if (b == EvaluatedType::Null) {
+                break;
+            }
+
+            throwError(fmt::format("IS tests whether its operand is null, so its right side "
+                                   "must be NULL, not '{}'",
+                                   EvaluatedTypeName::value(b)),
+                       expr);
+        } break;
+
         case BinaryOperator::LessThan:
         case BinaryOperator::GreaterThan:
         case BinaryOperator::LessThanOrEqual:
