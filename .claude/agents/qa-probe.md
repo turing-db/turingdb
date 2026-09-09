@@ -81,7 +81,9 @@ engine has them and a client is what failed.
   client that fails and the one that works. Say so explicitly: a `QueryInterpreterV3` unit
   test supplies its own sink, so it will pass and cannot pin this.
 - `KNOWN-LIMIT` — the shape is one of the documented gaps: `CONTAINS` / `STARTS WITH` /
-  `ENDS WITH`, variable-length paths, a read of an uncommitted write, list-valued
+  `ENDS WITH`, variable-length paths, relationship uniqueness within one MATCH (two
+  relationship variables of one clause may bind the same edge, so a fork like
+  `MATCH (a)<-[e1]-(b)-[e2]->(c)` over-counts), a read of an uncommitted write, list-valued
   properties, or anything the data model cannot represent (every node has a label, every
   edge one type, properties are scalars).
 - `CORRECT` — v3 answers it right.
