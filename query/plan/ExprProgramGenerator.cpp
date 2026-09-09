@@ -400,11 +400,18 @@ Column* ExprProgramGenerator::generateSymbolExpr(const SymbolExpr* symbolExpr) {
 }
 
 Column* ExprProgramGenerator::generateIndexExpr(const IndexExpr* indexExpr) {
+    const Expr* base = indexExpr->getBase();
+    const EvaluatedType baseType = base->getType();
+
+    if (baseType != EvaluatedType::StringTable) {
+        throw PlannerException(fmt::format("Indexing a '{}' is not supported",
+                                           EvaluatedTypeName::value(baseType)));
+    }
+
     if (!indexExpr->hasLiteralIndex()) {
         throw PlannerException("Dynamic CSV row indexing not yet supported");
     }
 
-    const Expr* base = indexExpr->getBase();
     const VarDecl* baseDecl = base->getExprVarDecl();
     if (!baseDecl) {
         throw PlannerException("CSV index base does not have a variable");
