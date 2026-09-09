@@ -16,6 +16,7 @@
 
 #include "DBOps.h"
 #include "DBTypes.h"
+#include "expr/CaseExpr.h"
 
 #include "ExplainRequest.h"
 
@@ -31,7 +32,6 @@ class Region;
 namespace db {
 
 class BinaryExpr;
-class CaseExpr;
 class ExplainReport;
 class FunctionInvocationExpr;
 class FunctionInvocation;
@@ -669,6 +669,10 @@ private:
     void translateBinaryExpr(const Expr* expr, const BinaryExpr* binExpr);
     void translateStringExpr(const Expr* expr);
     void translateCaseExpr(const Expr* expr, const CaseExpr* caseExpr);
+
+    // The condition one WHEN value puts on a row: the value itself in the generic form,
+    // and the comparison of @param subject against it in the simple one
+    mlir::Value translateCaseTest(mlir::Value subject, const CaseExpr::Test& test);
     void translateFunctionInvocationExpr(const Expr* expr, const FunctionInvocationExpr* funcExpr);
 
     void translateFunctionExpr(const Expr* expr, const FunctionInvocation* invocation);

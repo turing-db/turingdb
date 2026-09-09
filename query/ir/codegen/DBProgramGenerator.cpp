@@ -4532,20 +4532,22 @@ void DBProgramGenerator::translateCaseExpr(const Expr* expr, const CaseExpr* cas
     llvm::SmallVector<mlir::Value, 4> values;
 
     for (const CaseExpr::Branch& branch : caseExpr->getBranches()) {
-        translateExpr(branch._when);
-        translateExpr(branch._then);
+        mlir::Value condition;
 
-        bioassert(_part._exprMap.contains(branch._when), "CASE branch with no condition column.");
-        bioassert(_part._exprMap.contains(branch._then), "CASE branch with no value column.");
+        for (const CaseExpr::Test& test : branch._tests) {
+            const mlir::Value tested = translateCaseTest(subject, test);
 
-        const mlir::Value when = _part._exprMap.at(branch._when);
-
-        if (subject) {
-            conditions.push_back(_opBuilder.create<mlir::db::EqOp>(loc, boolType, subject, when).getResult());
-        } else {
-            conditions.push_back(when);
+            if (condition) {
+                condition = _opBuilder.create<mlir::db::OrOp>(loc, boolType, condition, tested).getResult();
+            } else {
+                condition = tested;
+            }
         }
 
+        translateExpr(branch._then);
+        bioassert(_part._exprMap.contains(branch._then), "CASE branch with no value column.");
+
+        conditions.push_back(condition);
         values.push_back(_part._exprMap.at(branch._then));
     }
 
@@ -4563,6 +4565,58 @@ void DBProgramGenerator::translateCaseExpr(const Expr* expr, const CaseExpr* cas
                                                              values,
                                                              defaultValue)
                                .getResult();
+}
+
+mlir::Value DBProgramGenerator::translateCaseTest(mlir::Value subject, const CaseExpr::Test& test) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+
+    if (test._kind == CaseExpr::TestKind::IsNull) {
+        return _opBuilder.create<mlir::db::EqOp>(loc, boolType, subject, nullConstantColumn()).getResult();
+    } else if (test._kind == CaseExpr::TestKind::IsNotNull) {
+        return _opBuilder.create<mlir::db::NeqOp>(loc, boolType, subject, nullConstantColumn()).getResult();
+    }
+
+    translateExpr(test._value);
+    bioassert(_part._exprMap.contains(test._value), "CASE branch with no condition column.");
+
+    const mlir::Value value = _part._exprMap.at(test._value);
+
+    if (!subject) {
+        return value;
+    }
+
+    // Null is equal to nothing, itself included, so a branch comparing the subject against
+    // it is never taken. IS NULL above is how a Cypher CASE tests for one
+    if (test._value->getType() == EvaluatedType::Null) {
+        return constantBool(false);
+    }
+
+    switch (test._operator) {
+        case BinaryOperator::Equal:
+            return _opBuilder.create<mlir::db::EqOp>(loc, boolType, subject, value).getResult();
+        break;
+        case BinaryOperator::NotEqual:
+            return _opBuilder.create<mlir::db::NeqOp>(loc, boolType, subject, value).getResult();
+        break;
+        case BinaryOperator::LessThan:
+            return _opBuilder.create<mlir::db::LtOp>(loc, boolType, subject, value).getResult();
+        break;
+        case BinaryOperator::GreaterThan:
+            return _opBuilder.create<mlir::db::GtOp>(loc, boolType, subject, value).getResult();
+        break;
+        case BinaryOperator::LessThanOrEqual:
+            return _opBuilder.create<mlir::db::LteOp>(loc, boolType, subject, value).getResult();
+        break;
+        case BinaryOperator::GreaterThanOrEqual:
+            return _opBuilder.create<mlir::db::GteOp>(loc, boolType, subject, value).getResult();
+        break;
+        default:
+            throwError(fmt::format("Unsupported comparison in a CASE branch: {}",
+                                   BinaryOperatorDescription::value(test._operator)),
+                       test._value);
+        break;
+    }
 }
 
 void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr* binExpr) {

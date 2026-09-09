@@ -130,10 +130,24 @@ bool StructuralExpressionComparator::equal(const Expr* lhs, const Expr* rhs) {
             }
 
             for (size_t branchIndex = 0; branchIndex < lhsBranches.size(); branchIndex++) {
-                const bool sameWhen = equal(lhsBranches[branchIndex]._when, rhsBranches[branchIndex]._when);
-                const bool sameThen = equal(lhsBranches[branchIndex]._then, rhsBranches[branchIndex]._then);
+                const CaseExpr::Tests& lhsTests = lhsBranches[branchIndex]._tests;
+                const CaseExpr::Tests& rhsTests = rhsBranches[branchIndex]._tests;
 
-                if (!sameWhen || !sameThen) {
+                if (lhsTests.size() != rhsTests.size()) {
+                    return false;
+                }
+
+                for (size_t testIndex = 0; testIndex < lhsTests.size(); testIndex++) {
+                    const bool sameKind = lhsTests[testIndex]._kind == rhsTests[testIndex]._kind;
+                    const bool sameOperator = lhsTests[testIndex]._operator == rhsTests[testIndex]._operator;
+                    const bool sameValue = equal(lhsTests[testIndex]._value, rhsTests[testIndex]._value);
+
+                    if (!sameKind || !sameOperator || !sameValue) {
+                        return false;
+                    }
+                }
+
+                if (!equal(lhsBranches[branchIndex]._then, rhsBranches[branchIndex]._then)) {
                     return false;
                 }
             }

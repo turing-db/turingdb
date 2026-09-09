@@ -5,6 +5,7 @@
 #include <unordered_map>
 
 #include "decl/EvaluatedType.h"
+#include "expr/CaseExpr.h"
 #include "metadata/PropertyType.h"
 #include "views/GraphView.h"
 
@@ -34,7 +35,6 @@ class Symbol;
 class NodePattern;
 class EdgePattern;
 class ListExpr;
-class CaseExpr;
 class MapLiteral;
 
 class ExprAnalyzer {
@@ -104,6 +104,10 @@ private:
 
     // Rejects a CASE subject, or a value it is compared against, that no column holds
     void requireCaseComparable(const Expr* expr, EvaluatedType type) const;
+
+    // One WHEN value of @param branch, read as a predicate when the CASE has no subject
+    // and as something to compare that subject against when it has one
+    void analyzeCaseTest(const CaseExpr::Branch& branch, const Expr* subject, const CaseExpr::Test& test);
 
     LoadCSVStmt* findCSVSource(const VarDecl* alias) const;
 
