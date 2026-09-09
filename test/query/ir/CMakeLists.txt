@@ -2138,3 +2138,6 @@ target_include_directories(test_query_ir_case_expression PRIVATE ${CMAKE_CURRENT
 
 # The db.case dialect tests parse hand-written selections, so they need only the dialect.
 add_ir_tests(test_query_ir_case_op CaseOpTest.cpp)
+
+# The Cypher manual's CASE examples, run end to end against simpledb.
+add_call_v3_test(test_query_ir_neo4j_case_example Neo4jCaseExampleTest.cpp)
