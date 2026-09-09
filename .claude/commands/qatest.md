@@ -105,6 +105,13 @@ A candidate is a **hit** only when all four hold:
 Prefer four distinct root causes over four shapes of one bug. When a probe finds several
 shapes of the same cause, keep the clearest one and keep hunting.
 
+A probe's `OUTPUT-BUG` — the engine holds the right rows and a client cannot render them —
+is a finding but not a hit. Verify it the way you verify a hit, then record it in
+`<scratch>/qa/hits.md` under a heading of its own and carry it into the PR body in phase 7.
+It does not fill one of the four test slots, because the harness hands
+`QueryInterpreterV3` its own sink and a test of it would pass. Keep hunting for four hits
+beside it.
+
 Keep `<scratch>/qa/hits.md` current: query, expected, v3 actual, v2 actual, the rule.
 
 Stop the loop at 4 hits, or at the deadline.
@@ -119,6 +126,12 @@ Stop the loop at 4 hits, or at the deadline.
   `FatalException` whose message opens `Internal Error: The assertion '<expr>' failed at`.
   That string in a query error is an internal logic error, not a user-facing rejection,
   and always a hit.
+- **A result the client cannot print.** The rows are right and the user still never sees
+  them. `MATCH (n) RETURN n:Person` returns 18 rows and the shell answers
+  `EXEC_ERROR: Unsupported unary operation on column of type db::ColumnMask` with no rows,
+  because `writeColumnCell` in `tools/turingdb/TuringShell.cpp` excludes ColumnMask; the
+  mlir driver prints `?` for every Bool column. Worth hunting and worth reporting, but a
+  finding rather than a hit — see above.
 
 ### Known limitations — not bugs
 
@@ -162,6 +175,10 @@ exactly: `TuringTest` + `TuringTestEnv` + `QueryInterpreterV3` + `SimpleGraph` +
   the name cannot carry it. Nothing else. No annotation of which test fails.
 - The rest of the C++ style rules in CLAUDE.md apply in full.
 
+Write no test for an output-layer finding. The test passes the sink of its choice to
+`QueryInterpreterV3`, so the query the shell cannot print hands back its rows here and the
+assertion holds. The PR body reports it instead.
+
 ## 6. Build and run
 
 ```bash
@@ -196,11 +213,20 @@ Pin four Cypher queries v3 answers wrong.
 <query>
 expected: ...
 v3:       ...
+
+not pinned, <the client> cannot print the result:
+<query>
+expected: ...
+<the client>: ...
 ```
+
+An output-layer finding goes at the end of that same block, under the line naming the
+client, so the body stays one sentence and one code block. The title still counts tests.
 
 End the body with the Claude Code footer. `gh pr create` works; `gh pr edit` does not on
 this repo — edit a body afterwards with
 `gh api -X PATCH repos/turing-db/turingdb/pulls/<n> -f body=...` and verify with
 `gh pr view <n> --json body -q .body`.
 
-Say plainly in the final message that CI will be red and why.
+Say plainly in the final message that CI will be red and why, and name any output-layer
+finding the PR carries without a test.
