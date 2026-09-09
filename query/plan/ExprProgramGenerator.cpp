@@ -723,6 +723,7 @@ Column* ExprProgramGenerator::allocUnaryResultCol(ColumnOperator op, const Colum
         case OP_CONTAINS:
         case OP_PROJECT:
         case OP_IN:
+        case OP_INDEX:
         case OP_XOR:
             throw PlannerException(
                 fmt::format("Attempted to allocate unary result for binary operator {}.",

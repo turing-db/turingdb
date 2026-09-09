@@ -227,6 +227,24 @@ struct Concatenate {
     }
 };
 
+struct ListIndex {
+    inline std::optional<ListElementView> operator()(ListView list, int64_t index) const {
+        const int64_t size = list.size();
+        const int64_t offset = index < 0 ? size + index : index;
+
+        if (offset < 0 || offset >= size) {
+            return std::nullopt;
+        }
+
+        return list.elements()[static_cast<size_t>(offset)];
+    }
+
+    // Unused but defined to satisfy dispatcher
+    inline std::optional<ListElementView> operator()(int64_t index, ListView list) const {
+        return operator()(list, index);
+    }
+};
+
 }
 
 using Add = BinaryOp<std::plus<>>;
@@ -236,6 +254,7 @@ using Div = BinaryOp<SafeDivides>;
 using Mod = BinaryOp<SafeModulo>;
 using Pow = BinaryOp<Power>;
 using Concat = Concatenate;
+using Index = BinaryOp<ListIndex>;
 
 }
 

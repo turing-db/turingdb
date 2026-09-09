@@ -95,7 +95,8 @@ public:
         const Change*,
         Column*,
         ListView,
-        ListElementView
+        ListElementView,
+        std::optional<ListElementView>
     >;
 
     using Code = uint8_t;
