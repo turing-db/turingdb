@@ -111,6 +111,11 @@ public:
         _count = typed->size();
     }
 
+    // A mask carries no null, so every one of its rows counts
+    void operator()(const ColumnMask* typed) {
+        _count = typed->size();
+    }
+
     // e.g. COUNT(l) over an unwound heterogeneous list: a cell tagged null holds a null
     // value, so it counts like the empty cell of a nullable column - not at all
     void operator()(const ColumnVector<ListElementView>* typed) {

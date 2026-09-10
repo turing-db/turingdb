@@ -10,6 +10,7 @@
 #include "list/ListUtils.h"
 
 #include "columns/AllowedKinds.h"
+#include "columns/ColumnMask.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "dataframe/Dataframe.h"
 
@@ -67,6 +68,20 @@ public:
             const T& value = col->operator[](row);
 
             encodeValue(value);
+        }
+    }
+
+    void operator()(const ColumnMask* col) {
+        if (_logicalRowCount == 0) {
+            return;
+        }
+
+        encodeValue(col->operator[](0));
+
+        for (size_t row = 1; row < _logicalRowCount; row++) {
+            _writer.write(",");
+
+            encodeValue(col->operator[](row));
         }
     }
 

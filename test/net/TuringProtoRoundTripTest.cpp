@@ -22,6 +22,7 @@
 #include "TuringProtoOutBuf.h"
 #include "LocalMemory.h"
 #include "columns/ColumnConst.h"
+#include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "dataframe/Dataframe.h"
@@ -34,6 +35,7 @@ namespace {
 using UInt64 = db::types::UInt64::Primitive;
 using Int64 = db::types::Int64::Primitive;
 using StringView = db::types::String::Primitive;
+using Bool = db::types::Bool::Primitive;
 using Embedding = db::types::Embedding::Primitive;
 
 struct FramedPacket {
@@ -234,6 +236,40 @@ TEST(TuringProtoRoundTripTest, RoundTripsNumericColumnsAcrossChunkSizes) {
         EXPECT_EQ(decodedScores->getRaw(),
                   (std::vector<Int64> {-10, 25, 99, -42, 0, 7}));
     }
+}
+
+// A label predicate answers with a mask, a boolean column that carries no nulls of its
+// own, so it goes on the wire as a plain BOOL vector.
+TEST(TuringProtoRoundTripTest, RoundTripsMaskColumns) {
+    db::LocalMemory localMem;
+    db::DataframeManager dfMan;
+    db::Dataframe source;
+
+    auto* isPerson = localMem.alloc<db::ColumnMask>();
+    isPerson->push_back(true);
+    isPerson->push_back(false);
+    isPerson->push_back(false);
+    isPerson->push_back(true);
+    addColumn(&dfMan, &source, "n:Person", isPerson);
+
+    const auto packets = encodeDataframeWithChunkSize(source, 64);
+    expectPacketSequence(packets, true);
+
+    net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<char> stringBuffer;
+    db::ListBuffer<> listBuffer;
+    db::Dataframe decoded;
+    std::vector<net::proto::DecodedColumnSchema> schemas;
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
+
+    ASSERT_EQ(decoded.cols().size(), 1u);
+    EXPECT_EQ(decoded.getLogicalRowCount(), 4u);
+    EXPECT_EQ(decoded.cols().at(0)->getName(), "n:Person");
+
+    const auto* decodedFlags = decoded.cols().at(0)->as<db::ColumnVector<Bool>>();
+    ASSERT_NE(decodedFlags, nullptr);
+
+    EXPECT_EQ(decodedFlags->getRaw(), (std::vector<Bool> {true, false, false, true}));
 }
 
 // Optional string columns combine two harder cases: variable-length data

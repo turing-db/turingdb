@@ -16,6 +16,7 @@
 
 namespace db {
 
+class ColumnMask;
 class EntityList;
 
 template <typename T>
@@ -106,6 +107,10 @@ struct ColumnTypeGenerator {
         } else {
             COMPILE_ERROR("Unknown column type");
         }
+    }
+
+    void operator()(const ColumnMask*) {
+        _name = "Bool";
     }
 };
 
