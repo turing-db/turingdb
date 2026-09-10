@@ -3069,10 +3069,20 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
 
     const bool comparesTwoEntities = isEntityChunk(lhsChunk.getType()) && isEntityChunk(rhsChunk.getType());
 
+    const bool readsScalarOperands = kind != BinaryResultKind::Index;
+
+    const bool nullAgainstRhs = readsScalarOperands
+                             && isUntypedNullChunk(rhsChunk.getType())
+                             && !isNullableChunk(lhsChunk.getType());
+
+    const bool nullAgainstLhs = readsScalarOperands
+                             && isUntypedNullChunk(lhsChunk.getType())
+                             && !isNullableChunk(rhsChunk.getType());
+
     // x IS NULL over a plain scalar column meets kernels reading a nullable value column
-    if (isUntypedNullChunk(rhsChunk.getType()) && !isNullableChunk(lhsChunk.getType())) {
+    if (nullAgainstRhs) {
         lhsChunk = nullableValueChunk(lhsChunk);
-    } else if (isUntypedNullChunk(lhsChunk.getType()) && !isNullableChunk(rhsChunk.getType())) {
+    } else if (nullAgainstLhs) {
         rhsChunk = nullableValueChunk(rhsChunk);
     } else if (comparesTwoEntities) {
         // Two entities are compared as the IDs they are, and an ID column carries its null
