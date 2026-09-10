@@ -1470,9 +1470,9 @@ private:
 // output chunk and the gather that reads the matched rows back - both in the
 // NLCarriedColumn (input, output, gather) shape the edge and sort loops use. The two
 // index scratches hold this step's matched pairs, one row of each side per output row.
-class NLHashJoinProbeData : public NLFunctionData {
+class NLHashJoinProbeLoopData : public NLFunctionData {
 public:
-    NLHashJoinProbeData(NLHashJoinState* state)
+    NLHashJoinProbeLoopData(NLHashJoinState* state)
         : _state(state)
     {
     }
@@ -1514,6 +1514,9 @@ public:
     ColumnVector<size_t>* getProbeIndices() { return &_probeIndices; }
     ColumnVector<size_t>* getBuildIndices() { return &_buildIndices; }
 
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
 private:
     NLHashJoinState* _state {nullptr};
     std::vector<NLCarriedColumn> _probeColumns;
@@ -1532,6 +1535,8 @@ private:
     // and _buildIndices[i] of the buffers.
     ColumnVector<size_t> _probeIndices;
     ColumnVector<size_t> _buildIndices;
+
+    NLStmtContainer _stmts;
 };
 
 // Runtime state of one DISTINCT: the set of serialized row keys already emitted.

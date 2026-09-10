@@ -148,7 +148,7 @@ public:
     // Emit each probe row paired with the build rows its key matches: look each probe
     // row's key up in the index, then gather the probe columns and the build buffers by
     // the matched pairs into fresh output chunks. A null probe key matches nothing.
-    static void runHashJoinProbe(NLExecutionContext* context, NLFunctionData* data);
+    static void runHashJoinProbeLoop(NLExecutionContext* context, NLFunctionData* data);
 
     // Empty the seen-set of a DISTINCT; runs each time its block runs.
     static void runDistinctReset(NLExecutionContext* context, NLFunctionData* data);

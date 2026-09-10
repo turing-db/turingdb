@@ -69,6 +69,10 @@ add_ir_tests(test_query_ir_collect_chunked CollectChunkedTest.cpp)
 # The chunked cross product tests force the product to span chunk boundaries.
 add_ir_tests(test_query_ir_cross_product_chunked CrossProductChunkedTest.cpp)
 
+# The chunked probe cases join a side whose rows all carry one key, so the matches of a
+# probe chunk outgrow it.
+add_ir_tests(test_query_ir_hash_join_chunked_probe HashJoinChunkedProbeTest.cpp)
+
 # The collect row-alignment and drain tests run against the shared SimpleGraph fixture.
 add_ir_tests(test_query_ir_collect_row_alignment CollectRowAlignmentTest.cpp)
 target_link_libraries(test_query_ir_collect_row_alignment PRIVATE turing_db_examples_s)

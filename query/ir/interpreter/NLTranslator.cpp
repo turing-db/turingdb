@@ -742,7 +742,14 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
         } else if (nl::HashJoinCollect hashJoinCollect = mlir::dyn_cast<nl::HashJoinCollect>(operation)) {
             translateHashJoinCollect(hashJoinCollect, body);
         } else if (nl::HashJoinProbe hashJoinProbe = mlir::dyn_cast<nl::HashJoinProbe>(operation)) {
-            translateHashJoinProbe(hashJoinProbe, body);
+            IteratorConfig config;
+            config._kind = IteratorKind::HashJoinProbe;
+            config._hashJoinState = hashJoinProbe.getState();
+
+            const mlir::OperandRange probeColumns = hashJoinProbe.getColumns();
+            config._probeColumns.assign(probeColumns.begin(), probeColumns.end());
+
+            _iteratorConfigs[hashJoinProbe.getResult()] = config;
         } else if (nl::Distinct distinct = mlir::dyn_cast<nl::Distinct>(operation)) {
             translateDistinctState(distinct, body);
         } else if (nl::DistinctFilter distinctFilter = mlir::dyn_cast<nl::DistinctFilter>(operation)) {
@@ -868,6 +875,10 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         // like a hop - a downstream LIMIT can bound its loop through the ordinary
         // early-exit, and a step lays out only the prefix the budget can emit.
         translateCrossProductLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::HashJoinProbe) {
+        // A probe expands the rows it is given the way a product does, so a downstream
+        // LIMIT bounds its loop through the same early-exit.
+        translateHashJoinProbeLoop(config, loopBody, limit, body);
     } else {
         translateEdgeLoop(config, loopBody, limit, body);
     }
@@ -2823,18 +2834,21 @@ void NLTranslator::translateHashJoinCollect(nl::HashJoinCollect collect, NLStmtC
     body->emplaceStmt(&NLExecutor::runHashJoinCollect, data);
 }
 
-void NLTranslator::translateHashJoinProbe(nl::HashJoinProbe probe, NLStmtContainer* body) {
-    const mlir::Value probeState = probe.getState();
+void NLTranslator::translateHashJoinProbeLoop(const IteratorConfig& config,
+                                              mlir::Block& loopBody,
+                                              NLLimitState* limit,
+                                              NLStmtContainer* body) {
+    const mlir::Value probeState = config._hashJoinState;
     NLHashJoinState* state = hashJoinStateFor(probeState);
 
-    const mlir::OperandRange columns = probe.getColumns();
-    const mlir::ResultRange results = probe.getResults();
+    const std::span<const mlir::Value> columns = config._probeColumns;
 
     // The build buffers are allocated by the collect, which the lowering places in the
     // build loop ahead of this probe, so by here they say how many columns the build side
-    // contributes - and the results are the probe columns followed by those.
+    // contributes - and the loop binds one variable per probe column, then one per build
+    // column, the order the iterator lays its chunks out in.
     const size_t buildCount = state->buffers().size();
-    if (results.size() != columns.size() + buildCount) {
+    if (loopBody.getNumArguments() != columns.size() + buildCount) {
         throw IRException("nl.hash_join_probe emits one column per probe column and per build column");
     }
 
@@ -2845,16 +2859,14 @@ void NLTranslator::translateHashJoinProbe(nl::HashJoinProbe probe, NLStmtContain
         throw IRException("hash join probe key column index is out of range");
     }
 
-    NLHashJoinProbeData* data = _program->allocFunctionData<NLHashJoinProbeData>(state);
+    NLHashJoinProbeLoopData* data = _program->allocFunctionData<NLHashJoinProbeLoopData>(state);
+    data->setLimit(limit);
 
-    // The optional limit handle is a separate operand group, so it never appears among
-    // the columns; null leaves the probe unbounded.
-    data->setLimit(limitStateFor(probe.getLimit()));
-
-    // Reserve the matched-pair scratches so a step that matches no more than a chunk's
-    // worth of rows stays allocation-free, the same as the edge and sort loops' indices.
+    // Reserve the matched-pair scratches so a step that pairs no more than a chunk's worth
+    // of rows stays allocation-free, the same as the edge and sort loops' indices.
     data->getProbeIndices()->reserve(_program->getChunkSize());
     data->getBuildIndices()->reserve(_program->getChunkSize());
+    data->getHashScratch()->reserve(_program->getChunkSize());
 
     // A probe column is read from this step's chunk and repeated once per match; a build
     // column is read back from its buffer at the matched row. Both are the gather the
@@ -2863,27 +2875,27 @@ void NLTranslator::translateHashJoinProbe(nl::HashJoinProbe probe, NLStmtContain
         const mlir::Value column = columns[columnIndex];
 
         Column* output = allocColumnForChunkType(column.getType());
-        _valueSlots[results[columnIndex]] = output;
+        _valueSlots[loopBody.getArgument(static_cast<unsigned>(columnIndex))] = output;
 
         data->addProbeColumn(NLCarriedColumn(getColumn(column),
                                              output,
                                              selectGatherForChunkType(column.getType())));
     }
 
-    // A build result is gathered out of the buffer the collect allocated, so the type it
-    // declares has to be the type that buffer holds: reading a column of one element type
-    // as another would take its rows apart at the wrong width.
+    // A build chunk is gathered out of the buffer the collect allocated, so the type the
+    // iterator declares has to be the type that buffer holds: reading a column of one
+    // element type as another would take its rows apart at the wrong width.
     const llvm::SmallVector<mlir::Type, 4>& buildTypes = _hashJoinBuildTypes[probeState];
     for (size_t columnIndex = 0; columnIndex < buildCount; columnIndex++) {
-        const mlir::Value result = results[columns.size() + columnIndex];
+        const mlir::Value bound = loopBody.getArgument(static_cast<unsigned>(columns.size() + columnIndex));
         const mlir::Type bufferType = buildTypes[columnIndex];
 
-        if (result.getType() != bufferType) {
-            throw IRException("nl.hash_join_probe must declare each build result as the chunk type the nl.hash_join_collect appended");
+        if (bound.getType() != bufferType) {
+            throw IRException("nl.hash_join_probe must declare each build chunk as the chunk type the nl.hash_join_collect appended");
         }
 
         Column* output = allocColumnForChunkType(bufferType);
-        _valueSlots[result] = output;
+        _valueSlots[bound] = output;
 
         data->addBuildColumn(NLCarriedColumn(state->buffer(columnIndex),
                                              output,
@@ -2905,9 +2917,10 @@ void NLTranslator::translateHashJoinProbe(nl::HashJoinProbe probe, NLStmtContain
                         state->buffer(buildKey),
                         selectJoinKeyFunctionsForChunkType(keyColumn.getType()),
                         selectKeyMatchableForChunkType(keyColumn.getType()));
-    data->getHashScratch()->reserve(_program->getChunkSize());
 
-    body->emplaceStmt(&NLExecutor::runHashJoinProbe, data);
+    body->emplaceStmt(&NLExecutor::runHashJoinProbeLoop, data);
+
+    translateBlock(loopBody, data->getStmts());
 }
 
 NLHashJoinState* NLTranslator::hashJoinStateFor(mlir::Value handle) const {

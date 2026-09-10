@@ -63,6 +63,7 @@ private:
         ProcedureInit,
         OptionalDrain,
         CrossProduct,
+        HashJoinProbe,
     };
 
     // Settings of the iterators passed to each for loop
@@ -96,6 +97,11 @@ private:
         // empty for the other kinds.
         llvm::SmallVector<mlir::Value, 4> _crossOuterColumns;
         llvm::SmallVector<mlir::Value, 4> _crossInnerColumns;
+
+        // The build side a HashJoinProbe iterator matches against and the probe columns it
+        // walks, in db.yield order; null and empty for the other kinds.
+        mlir::Value _hashJoinState;
+        llvm::SmallVector<mlir::Value, 4> _probeColumns;
 
         // The label names a ScanNodesByLabel or ScanNodesByPropertyValue iterator filters
         // by; empty for the other kinds. These are views into the op's interned StringAttr
@@ -397,7 +403,10 @@ private:
     // Translate an nl.hash_join_probe: allocate one fresh output column per probe
     // and per build column, map each result to its output, bake the probe key's
     // serializer and match gate, and record the per-step probe statement
-    void translateHashJoinProbe(mlir::nl::HashJoinProbe probe, NLStmtContainer* body);
+    void translateHashJoinProbeLoop(const IteratorConfig& config,
+                                    mlir::Block& loopBody,
+                                    NLLimitState* limit,
+                                    NLStmtContainer* body);
 
     // The runtime build side a hash join handle names. The handle is a required
     // operand of nl.hash_join_collect and nl.hash_join_probe, so this throws if it

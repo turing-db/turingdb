@@ -1202,52 +1202,56 @@ def HashJoinCollect : NLOp<"hash_join_collect", []> {
 // rows from the same probe chunk, and it writes only its own result chunks.
 // AttrSizedOperandSegments: the probe columns and the optional limit handle are two
 // operand groups of independent size, as on nl.cross_product.
-def HashJoinProbe : NLOp<"hash_join_probe", [Pure, AttrSizedOperandSegments]> {
-  let summary = "Emit each probe row paired with the build rows its key matches";
+def HashJoinProbe : NLOp<"hash_join_probe", [Pure]> {
+  let summary = "Create an iterator over each probe row paired with the build rows its key matches";
   let description = [{
-    Runs in the probe loop body, once per step, and stands where nl.cross_product
-    stands in a nested loop: it is what makes the join's rows. For each row of the
-    probe chunk it looks the row's key up in the handle's index and emits one row
-    per build row that matches - the probe row's columns repeated once per match,
+    Runs in the probe loop body and stands where nl.cross_product stands in a
+    nested loop: it is what makes the join's rows. For each row of the probe chunk
+    it looks the row's key up in the handle's index and pairs the row with every
+    build row that matches - the probe row's columns repeated once per match,
     beside the matched build row's columns read back from the buffers. A probe row
-    whose key is null, or whose key matches nothing, emits no row.
+    whose key is null, or whose key matches nothing, pairs with nothing.
 
-      %n, %name, %m = nl.hash_join_probe %state, (%arg0, %key)
+      %pairs = nl.hash_join_probe %state, (%arg0, %key)
           : (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>)
-         -> (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.node_id>)
+         -> !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.node_id>>
+      nl.for %n, %name, %m in %pairs
+          : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.node_id>> {
+        ...
+      }
 
-    The results are the probe columns followed by the build columns, so they line
-    up with the db.hash_join results this lowers from: the left (probed) factor's
-    yielded columns followed by the right (built) factor's. The whole build side
-    is indexed before any probing, so a probe row's matches come out together and
-    in build order at any chunk size - where nl.cross_product, re-running the
-    inner nest per outer chunk, interleaves a multi-chunk inner side. Neither
-    order is one an ORDER BY constrains, so they may differ under a LIMIT.
+    A key that many build rows carry makes more pairs than either side holds, so -
+    like the cross product - this is an iterator rather than a straight-line op:
+    pairing a whole probe chunk at once means a side of 6345 rows sharing one key
+    lays out 40e6 rows in a single step. Chunked, a step holds the chunk size
+    whatever the fan-out measures, so a step may start and end partway through one
+    probe row's matches.
 
-    The build columns are not operands - they live in the handle - so their chunk
-    types cannot be inferred and the whole result signature is spelled out, the
-    way nl.sort spells its iterator's.
+    The iterator's chunks are the probe columns followed by the build columns, so
+    they line up with the db.hash_join results this lowers from: the left (probed)
+    factor's yielded columns followed by the right (built) factor's. The build
+    columns are not operands - they live in the handle - so their chunk types
+    cannot be inferred and the iterator type is spelled out, the way nl.sort
+    spells its own.
 
-    An optional `limit` operand carries an !nl.limit_state handle. When present,
-    only the first limit.getRemaining() matched pairs of this step are laid out:
-    the rows come out probe-row-major, so that prefix is exactly the prefix the
-    following nl.limit_update/nl.output can emit, and pairing the rest would be
-    wasted work. Absent, every match of the chunk is laid out. The bounded sibling
-    of nl.cross_product's own limit operand.
+    The whole build side is indexed before any probing, so a probe row's matches
+    come out together and in build order at any chunk size - where
+    nl.cross_product, re-running the inner nest per outer chunk, interleaves a
+    multi-chunk inner side. Neither order is one an ORDER BY constrains, so they
+    may differ under a LIMIT.
 
-      %n, %name, %m = nl.hash_join_probe %state, (%arg0, %key) limit %h
-          : (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>)
-         -> (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.node_id>)
+    A `limit` on the enclosing nl.for bounds the pairing the way it bounds a
+    product: the loop stops once the budget is spent, and a step lays out only the
+    prefix the following nl.limit_update/nl.output can still emit.
   }];
 
   let arguments = (ins NLHashJoinStateHandle:$state,
-                       Variadic<NLChunk>:$columns,
-                       Optional<NLLimitStateHandle>:$limit);
-  let results   = (outs Variadic<NLChunk>:$results);
+                       Variadic<NLChunk>:$columns);
+  let results   = (outs NLIterator:$result);
 
   let assemblyFormat = [{
-    $state `,` `(` $columns `)` (`limit` $limit^)? attr-dict `:`
-    `(` qualified(type($columns)) `)` `->` `(` qualified(type($results)) `)`
+    $state `,` `(` $columns `)` attr-dict `:`
+    `(` qualified(type($columns)) `)` `->` qualified(type($result))
   }];
   let hasVerifier = 1;
 }

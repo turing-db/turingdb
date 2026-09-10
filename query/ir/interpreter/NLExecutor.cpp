@@ -5245,8 +5245,8 @@ void NLExecutor::runHashJoinCollect(NLExecutionContext* context, NLFunctionData*
     }
 }
 
-void NLExecutor::runHashJoinProbe(NLExecutionContext* context, NLFunctionData* data) {
-    NLHashJoinProbeData* probe = static_cast<NLHashJoinProbeData*>(data);
+void NLExecutor::runHashJoinProbeLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLHashJoinProbeLoopData* probe = static_cast<NLHashJoinProbeLoopData*>(data);
     const NLHashJoinState* state = probe->getState();
     const NLHashJoinIndex& index = state->getIndex();
 
@@ -5265,41 +5265,70 @@ void NLExecutor::runHashJoinProbe(NLExecutionContext* context, NLFunctionData* d
     ColumnVector<size_t>* buildIndices = probe->getBuildIndices();
     std::vector<size_t>& probeRaw = probeIndices->getRaw();
     std::vector<size_t>& buildRaw = buildIndices->getRaw();
-    probeRaw.clear();
-    buildRaw.clear();
 
-    // One output row per matched pair, the probe rows walked in order and each row's
-    // matches taken in build order. A key nothing can match - a null, a NaN - emits no
-    // row, as the equality this replaces kept none. A limit caps the pairs at the prefix
-    // it can emit this step, since the rows come out in the order they are paired in.
+    const size_t chunkSize = context->getChunkSize();
     const NLLimitState* limit = probe->getLimit();
-    const size_t pairBudget = limit ? limit->getRemaining() : std::numeric_limits<size_t>::max();
+    const NLStmtContainer* loopBody = probe->getStmts();
 
-    for (size_t row = 0; row < rowCount && probeRaw.size() < pairBudget; row++) {
-        if (!keyIsMatchable(key, row)) {
-            continue;
+    // Walk the pairs a chunk at a time, holding the probe row reached and the next row of
+    // its group to pair, so a step can start and end partway through one row's matches.
+    // noRow with nothing left to pair is what advances the probe row.
+    size_t probeRow = 0;
+    size_t match = NLHashJoinIndex::noRow;
+    bool inGroup = false;
+
+    while (probeRow < rowCount) {
+        const size_t remaining = limit ? limit->getRemaining() : chunkSize;
+        if (remaining == 0) {
+            return;
         }
 
-        const size_t group = findKeyGroup(index, hashes[row], key, row, buildKey, keyEqual);
+        const size_t stepBudget = std::min(chunkSize, remaining);
 
-        // Every row of the group carries the key the probe row matched, so the group is
-        // walked without comparing again.
-        for (size_t match = group;
-             match != NLHashJoinIndex::noRow && probeRaw.size() < pairBudget;
-             match = index.getNextInGroup(match)) {
-            probeRaw.push_back(row);
-            buildRaw.push_back(match);
+        probeRaw.clear();
+        buildRaw.clear();
+
+        while (probeRow < rowCount && probeRaw.size() < stepBudget) {
+            if (!inGroup) {
+                if (!keyIsMatchable(key, probeRow)) {
+                    probeRow++;
+                    continue;
+                }
+
+                match = findKeyGroup(index, hashes[probeRow], key, probeRow, buildKey, keyEqual);
+                inGroup = true;
+            }
+
+            // Every row of the group carries the key this probe row matched, so the group
+            // is walked without comparing again.
+            while (match != NLHashJoinIndex::noRow && probeRaw.size() < stepBudget) {
+                probeRaw.push_back(probeRow);
+                buildRaw.push_back(match);
+
+                match = index.getNextInGroup(match);
+            }
+
+            if (match == NLHashJoinIndex::noRow) {
+                probeRow++;
+                inGroup = false;
+            }
         }
-    }
 
-    for (const NLCarriedColumn& column : probe->probeColumns()) {
-        const NLGatherFunction gather = column.getGatherFunc();
-        gather(column.getInput(), probeIndices, column.getOutput());
-    }
+        if (probeRaw.empty()) {
+            return;
+        }
 
-    for (const NLCarriedColumn& column : probe->buildColumns()) {
-        const NLGatherFunction gather = column.getGatherFunc();
-        gather(column.getInput(), buildIndices, column.getOutput());
+        for (const NLCarriedColumn& column : probe->probeColumns()) {
+            const NLGatherFunction gather = column.getGatherFunc();
+            gather(column.getInput(), probeIndices, column.getOutput());
+        }
+
+        for (const NLCarriedColumn& column : probe->buildColumns()) {
+            const NLGatherFunction gather = column.getGatherFunc();
+            gather(column.getInput(), buildIndices, column.getOutput());
+        }
+
+        runBody(context, loopBody);
     }
 }
 

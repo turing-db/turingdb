@@ -1674,27 +1674,21 @@ void DBLowering::lowerHashJoin(mlir::db::HashJoin join) {
         resultTypes.push_back(column.getType());
     }
 
-    // Null when no limit governs this join; otherwise the handle whose budget caps the
-    // probe, so it pairs only the prefix the limit can emit this step.
-    const mlir::Value limitHandle = _loopLimitHandle.lookup(join.getOperation());
-    nl::HashJoinProbe probe = _builder.create<nl::HashJoinProbe>(loc,
-                                                                 resultTypes,
-                                                                 state,
-                                                                 probeColumns,
-                                                                 limitHandle);
-
-    // The join's results are the left factor's yielded columns followed by the right
+    // The join's chunks are the left factor's yielded columns followed by the right
     // factor's, which is how the probe lays its own out: probed side then built side.
-    const mlir::ResultRange dbResults = join.getResults();
-    const mlir::ResultRange probeResults = probe.getResults();
-    for (size_t resultIndex = 0; resultIndex < dbResults.size(); resultIndex++) {
-        _valueMap[dbResults[resultIndex]] = probeResults[resultIndex];
-    }
+    const nl::IteratorType iteratorType = nl::IteratorType::get(_builder.getContext(), resultTypes);
+    nl::HashJoinProbe probe = _builder.create<nl::HashJoinProbe>(loc,
+                                                                 iteratorType,
+                                                                 state,
+                                                                 probeColumns);
 
-    // The joined columns live in probeBody, so a join nested in a factor stands in for
-    // that factor's innermost loop the way a cross product does.
-    _innermostLoopBody = probeBody;
-    _innermostCardinality = probeResults.front();
+    // A key many build rows carry makes more pairs than the probe chunk holds, so the
+    // pairs come out chunk by chunk and the probe drives a loop of its own nested in the
+    // probe factor's - as a cross product's pairs do. That binds the db results to the
+    // loop variables, carries the limit handle when one governs the join, and leaves the
+    // loop body as the innermost one, where the consumer goes and where an enclosing
+    // factor roots when this join is itself a factor.
+    buildLoopForSource(probe.getResult(), join.getOperation());
 }
 
 mlir::Block* DBLowering::lowerFactor(mlir::Region& factor,
