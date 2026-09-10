@@ -2,7 +2,9 @@
 
 #include <stdint.h>
 #include <algorithm>
+#include <bit>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <numeric>
 #include <queue>
@@ -1441,23 +1443,6 @@ bool optEmbeddingColumnRowMatchable(const Column* column, size_t row) {
     return std::none_of(embedding->begin(), embedding->end(), isNaN);
 }
 
-// Serialize one row of a nullable embedding column into the row key, as the vector's
-// length then its floats. TuringEqual holds when two embeddings carry the same floats in
-// the same order, which is byte equality once the sign of a zero is canonicalized; a NaN
-// never reaches here, the match gate having kept those rows out of the join.
-void joinKeyAppendOptEmbeddingColumn(const Column* column, size_t row, std::string& key) {
-    const auto& raw = static_cast<const ColumnVector<std::optional<types::Embedding::Primitive>>*>(column)->getRaw();
-    const types::Embedding::Primitive& embedding = *raw[row];
-
-    const size_t length = embedding.size();
-    key.append(reinterpret_cast<const char*>(&length), sizeof(length));
-
-    for (const float value : embedding) {
-        const float normalized = (value == 0.0f) ? 0.0f : value;
-        key.append(reinterpret_cast<const char*>(&normalized), sizeof(normalized));
-    }
-}
-
 // Whether one row of a type-erased column of tagged scalars carries a matchable key - the
 // cell's own tag says whether it is null, where a nullable column has a present flag.
 bool listElementColumnRowMatchable(const Column* column, size_t row) {
@@ -1490,6 +1475,158 @@ void distinctKeyAppendOptListElementColumn(const Column* column, size_t row, std
 void distinctKeyAppendListColumn(const Column* column, size_t row, std::string& key) {
     const auto& raw = static_cast<const ColumnVector<ListView>*>(column)->getRaw();
     distinctAppendListBytes(key, raw[row]);
+}
+
+// The 64-bit finalizer of MurmurHash3, so a key's bits spread over every bucket
+uint64_t mixKeyBits(uint64_t bits) {
+    bits ^= bits >> 33;
+    bits *= 0xff51afd7ed558ccdULL;
+    bits ^= bits >> 33;
+    bits *= 0xc4ceb9fe1a85ec53ULL;
+    bits ^= bits >> 33;
+
+    return bits;
+}
+
+template <typename Integral>
+    requires std::is_integral_v<Integral> || std::is_enum_v<Integral>
+uint64_t hashKeyValue(Integral value) {
+    return mixKeyBits(static_cast<uint64_t>(value));
+}
+
+template <IntegralType T, int I>
+uint64_t hashKeyValue(ID<T, I> id) {
+    return hashKeyValue(id.getValue());
+}
+
+uint64_t hashKeyValue(CustomBool value) {
+    return mixKeyBits(value._boolean);
+}
+
+// -0.0 hashes as +0.0, the one value it equals; a NaN never reaches a lookup
+uint64_t hashKeyValue(double value) {
+    const double normalized = (value == 0.0) ? 0.0 : value;
+    return mixKeyBits(std::bit_cast<uint64_t>(normalized));
+}
+
+uint64_t hashKeyValue(std::string_view value) {
+    return std::hash<std::string_view> {}(value);
+}
+
+uint64_t hashKeyValue(const std::string& value) {
+    return hashKeyValue(std::string_view(value));
+}
+
+uint64_t hashKeyValue(types::Embedding::Primitive embedding) {
+    uint64_t hash = mixKeyBits(embedding.size());
+
+    for (const float value : embedding) {
+        const float normalized = (value == 0.0f) ? 0.0f : value;
+        hash = mixKeyBits(hash ^ std::bit_cast<uint32_t>(normalized));
+    }
+
+    return hash;
+}
+
+template <typename ElementType>
+void hashKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
+    const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
+    hashes.resize(raw.size());
+
+    std::transform(raw.begin(), raw.end(), hashes.begin(), [](const ElementType& value) {
+        return hashKeyValue(value);
+    });
+}
+
+template <typename Primitive>
+void hashOptKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
+    const auto& raw = static_cast<const ColumnVector<std::optional<Primitive>>*>(column)->getRaw();
+    hashes.resize(raw.size());
+
+    std::transform(raw.begin(), raw.end(), hashes.begin(), [](const std::optional<Primitive>& value) {
+        return value.has_value() ? hashKeyValue(*value) : uint64_t {0};
+    });
+}
+
+// A tagged scalar hashes through the bytes DISTINCT keys it by, so an integer and a float
+// holding one value hash alike, as they compare equal
+void hashListElementKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
+    const auto& raw = static_cast<const ColumnVector<ListElementView>*>(column)->getRaw();
+    hashes.resize(raw.size());
+
+    std::string bytes;
+    std::transform(raw.begin(), raw.end(), hashes.begin(), [&bytes](const ListElementView element) {
+        bytes.clear();
+        distinctAppendElementBytes(bytes, element);
+        return hashKeyValue(std::string_view(bytes));
+    });
+}
+
+void hashListKeyColumn(const Column* column, std::vector<uint64_t>& hashes) {
+    const auto& raw = static_cast<const ColumnVector<ListView>*>(column)->getRaw();
+    hashes.resize(raw.size());
+
+    std::string bytes;
+    std::transform(raw.begin(), raw.end(), hashes.begin(), [&bytes](const ListView list) {
+        bytes.clear();
+        distinctAppendListBytes(bytes, list);
+        return hashKeyValue(std::string_view(bytes));
+    });
+}
+
+template <typename ElementType>
+bool keyValuesEqual(const ElementType& probe, const ElementType& build) {
+    return probe == build;
+}
+
+bool keyValuesEqual(types::Embedding::Primitive probe, types::Embedding::Primitive build) {
+    return EmbeddingEqual {}(probe, build);
+}
+
+template <typename ElementType>
+bool keyEqualColumn(const Column* probe, size_t probeRow, const Column* build, size_t buildRow) {
+    const auto& probeRaw = static_cast<const ColumnVector<ElementType>*>(probe)->getRaw();
+    const auto& buildRaw = static_cast<const ColumnVector<ElementType>*>(build)->getRaw();
+
+    return keyValuesEqual(probeRaw[probeRow], buildRaw[buildRow]);
+}
+
+template <typename Primitive>
+bool keyEqualOptColumn(const Column* probe, size_t probeRow, const Column* build, size_t buildRow) {
+    const auto& probeRaw = static_cast<const ColumnVector<std::optional<Primitive>>*>(probe)->getRaw();
+    const auto& buildRaw = static_cast<const ColumnVector<std::optional<Primitive>>*>(build)->getRaw();
+
+    return keyValuesEqual(*probeRaw[probeRow], *buildRaw[buildRow]);
+}
+
+template <typename ElementType>
+NLJoinKeyFunctions joinKeyFunctions() {
+    return {&hashKeyColumn<ElementType>, &keyEqualColumn<ElementType>};
+}
+
+template <typename Primitive>
+NLJoinKeyFunctions optJoinKeyFunctions() {
+    return {&hashOptKeyColumn<Primitive>, &keyEqualOptColumn<Primitive>};
+}
+
+// The group of build rows carrying a key, or noRow when no indexed row carries it. One
+// bucket chains the groups of every key that falls in it, so a group's key is confirmed
+// by hash and then by value.
+size_t findKeyGroup(const NLHashJoinIndex& index,
+                    uint64_t hash,
+                    const Column* probeKey,
+                    size_t probeRow,
+                    const Column* buildKey,
+                    NLKeyEqualFunction keyEqual) {
+    for (size_t group = index.getFirstGroup(hash); group != NLHashJoinIndex::noRow; group = index.getNextGroup(group)) {
+        const bool sameHash = index.getHash(group) == hash;
+
+        if (sameHash && keyEqual(probeKey, probeRow, buildKey, group)) {
+            return group;
+        }
+    }
+
+    return NLHashJoinIndex::noRow;
 }
 
 // Count the non-null cells of a type-erased column of tagged scalars, so count(x) over a
@@ -5067,45 +5204,62 @@ void NLExecutor::runHashJoinReset(NLExecutionContext* context, NLFunctionData* d
 void NLExecutor::runHashJoinCollect(NLExecutionContext* context, NLFunctionData* data) {
     NLHashJoinCollectData* collect = static_cast<NLHashJoinCollectData*>(data);
     NLHashJoinState* state = collect->getState();
+    NLHashJoinIndex& index = state->getIndex();
 
     const Column* key = collect->getKeyColumn();
     const size_t rowCount = key->size();
-    const size_t firstRow = state->getRowCount();
+    const size_t firstRow = index.getRowCount();
+
+    const NLKeyHashFunction hashKeys = collect->getKeyHash();
+    std::vector<uint64_t>& hashes = *collect->getHashScratch();
+    hashKeys(key, hashes);
+
+    // Appending before indexing puts every row a key could join with in the buffer, so a
+    // new row's key is compared against one already indexed through that buffer alone.
+    for (const NLSortCollectData::Append& append : collect->appends()) {
+        append._append(append._input, append._buffer);
+    }
+
+    index.addRows(rowCount);
+
+    const Column* buildKey = collect->getBuildKeyColumn();
+    const NLKeyEqualFunction keyEqual = collect->getKeyEqual();
+    const NLKeyIsMatchableFunction keyIsMatchable = collect->getKeyIsMatchable();
 
     // A key no probe key can match - a null, a NaN - is indexed under nothing, so no probe
     // row reaches it.
-    const NLKeyAppendFunction keyAppend = collect->getKeyAppend();
-    const NLKeyIsMatchableFunction keyIsMatchable = collect->getKeyIsMatchable();
-    std::string* keyScratch = collect->getKeyScratch();
-
     for (size_t row = 0; row < rowCount; row++) {
         if (!keyIsMatchable(key, row)) {
             continue;
         }
 
-        keyScratch->clear();
-        keyAppend(key, row, *keyScratch);
+        const uint64_t hash = hashes[row];
+        const size_t bufferRow = firstRow + row;
+        const size_t group = findKeyGroup(index, hash, buildKey, bufferRow, buildKey, keyEqual);
 
-        state->indexRow(*keyScratch, firstRow + row);
+        if (group == NLHashJoinIndex::noRow) {
+            index.openGroup(bufferRow, hash);
+        } else {
+            index.addToGroup(group, bufferRow);
+        }
     }
-
-    for (const NLSortCollectData::Append& append : collect->appends()) {
-        append._append(append._input, append._buffer);
-    }
-
-    state->addRows(rowCount);
 }
 
 void NLExecutor::runHashJoinProbe(NLExecutionContext* context, NLFunctionData* data) {
     NLHashJoinProbeData* probe = static_cast<NLHashJoinProbeData*>(data);
     const NLHashJoinState* state = probe->getState();
+    const NLHashJoinIndex& index = state->getIndex();
 
     const Column* key = probe->getKeyColumn();
+    const Column* buildKey = probe->getBuildKeyColumn();
     const size_t rowCount = key->size();
 
-    const NLKeyAppendFunction keyAppend = probe->getKeyAppend();
+    const NLKeyHashFunction hashKeys = probe->getKeyHash();
+    const NLKeyEqualFunction keyEqual = probe->getKeyEqual();
     const NLKeyIsMatchableFunction keyIsMatchable = probe->getKeyIsMatchable();
-    std::string* keyScratch = probe->getKeyScratch();
+
+    std::vector<uint64_t>& hashes = *probe->getHashScratch();
+    hashKeys(key, hashes);
 
     ColumnVector<size_t>* probeIndices = probe->getProbeIndices();
     ColumnVector<size_t>* buildIndices = probe->getBuildIndices();
@@ -5126,16 +5280,15 @@ void NLExecutor::runHashJoinProbe(NLExecutionContext* context, NLFunctionData* d
             continue;
         }
 
-        keyScratch->clear();
-        keyAppend(key, row, *keyScratch);
+        const size_t group = findKeyGroup(index, hashes[row], key, row, buildKey, keyEqual);
 
-        for (const size_t buildRow : state->rowsFor(*keyScratch)) {
+        // Every row of the group carries the key the probe row matched, so the group is
+        // walked without comparing again.
+        for (size_t match = group;
+             match != NLHashJoinIndex::noRow && probeRaw.size() < pairBudget;
+             match = index.getNextInGroup(match)) {
             probeRaw.push_back(row);
-            buildRaw.push_back(buildRow);
-
-            if (probeRaw.size() == pairBudget) {
-                break;
-            }
+            buildRaw.push_back(match);
         }
     }
 
@@ -6303,8 +6456,101 @@ NLKeyIsMatchableFunction NLExecutor::selectListElementKeyMatchableFunction() {
     return &listElementColumnRowMatchable;
 }
 
-NLKeyAppendFunction NLExecutor::selectOptEmbeddingKeyAppendFunction() {
-    return &joinKeyAppendOptEmbeddingColumn;
+NLJoinKeyFunctions NLExecutor::selectJoinKeyFunctions(NLChunkKind kind) {
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return joinKeyFunctions<NodeID>();
+        break;
+
+        case NLChunkKind::EdgeID:
+            return joinKeyFunctions<EdgeID>();
+        break;
+
+        case NLChunkKind::EdgeTypeID:
+            return joinKeyFunctions<EdgeTypeID>();
+        break;
+
+        case NLChunkKind::LabelID:
+            return joinKeyFunctions<LabelID>();
+        break;
+
+        case NLChunkKind::PropertyTypeID:
+            return joinKeyFunctions<PropertyTypeID>();
+        break;
+
+        case NLChunkKind::ValueTypeCode:
+            return joinKeyFunctions<ValueType>();
+        break;
+
+        case NLChunkKind::UInt64:
+            return joinKeyFunctions<types::UInt64::Primitive>();
+        break;
+
+        case NLChunkKind::Int64:
+            return joinKeyFunctions<types::Int64::Primitive>();
+        break;
+
+        case NLChunkKind::Double:
+            return joinKeyFunctions<types::Double::Primitive>();
+        break;
+
+        case NLChunkKind::Bool:
+            return joinKeyFunctions<types::Bool::Primitive>();
+        break;
+
+        case NLChunkKind::String:
+            return joinKeyFunctions<types::String::Primitive>();
+        break;
+
+        case NLChunkKind::OwnedString:
+            return joinKeyFunctions<std::string>();
+        break;
+
+        case NLChunkKind::List:
+            return {&hashListKeyColumn, &keyEqualColumn<ListView>};
+        break;
+
+        case NLChunkKind::Path:
+            throw IRException("A path column cannot be a join key: a path has no scalar value to key on");
+        break;
+    }
+
+    bioassert(false, "Unknown NLChunkKind");
+    return {};
+}
+
+NLJoinKeyFunctions NLExecutor::selectOptJoinKeyFunctions(ValueType valueType) {
+    NLJoinKeyFunctions functions;
+    const auto select = [&]<SupportedType T>() {
+        functions = optJoinKeyFunctions<typename T::Primitive>();
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return functions;
+}
+
+NLJoinKeyFunctions NLExecutor::selectPlainJoinKeyFunctions(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return joinKeyFunctions<types::Int64::Primitive>();
+        break;
+
+        case ValueType::UInt64:
+            return joinKeyFunctions<types::UInt64::Primitive>();
+        break;
+
+        case ValueType::Double:
+            return joinKeyFunctions<types::Double::Primitive>();
+        break;
+
+        default:
+            throw IRException("a plain value column must be numeric");
+        break;
+    }
+}
+
+NLJoinKeyFunctions NLExecutor::selectListElementJoinKeyFunctions() {
+    return {&hashListElementKeyColumn, &keyEqualColumn<ListElementView>};
 }
 
 // An ID chunk (node/edge/edge-type IDs) has no null rows, so every row counts,

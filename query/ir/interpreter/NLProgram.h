@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 #include <algorithm>
 #include <memory>
 #include <optional>
@@ -16,6 +17,7 @@
 #include "GraphPath.h"
 #include "ID.h"
 #include "LocalMemory.h"
+#include "NLHashJoinIndex.h"
 #include "ProcedureState.h"
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
@@ -1352,15 +1354,31 @@ using NLKeyAppendFunction = void (*)(const Column* column, size_t row, std::stri
 // is what DISTINCT wants and the opposite of what a join does.
 using NLKeyIsMatchableFunction = bool (*)(const Column* column, size_t row);
 
+// Type of handle that hashes every row of a join key column, one hash per row, for the
+// build index to chain rows under and the probe to look them up by. The key is read where
+// it lives and never copied; a row the matchable gate rejects hashes to anything, since
+// no lookup ever reaches it.
+using NLKeyHashFunction = void (*)(const Column* column, std::vector<uint64_t>& hashes);
+
+// Type of handle that answers whether a probe row's key equals a build row's, both read in
+// place from columns of one chunk type.
+using NLKeyEqualFunction = bool (*)(const Column* probe, size_t probeRow, const Column* build, size_t buildRow);
+
+// The two handlers a join reads a key column through, selected together from its chunk type.
+struct NLJoinKeyFunctions {
+    NLKeyHashFunction _hash {nullptr};
+    NLKeyEqualFunction _equal {nullptr};
+};
+
 // Runtime state of one hash join's build side: the build rows, materialized column by
-// column, and the index from a row's serialized key to the rows carrying it.
-// nl.hash_join_buffer empties it, nl.hash_join_collect grows it once per build-loop step,
-// and nl.hash_join_probe reads it once per probe-loop step. The joining sibling of
+// column, and the index chaining each row under its key's hash. nl.hash_join_buffer
+// empties it, nl.hash_join_collect grows it once per build-loop step, and
+// nl.hash_join_probe reads it once per probe-loop step. The joining sibling of
 // NLSortState: it indexes the rows it accumulates rather than ordering them, and they
 // come back out through the probe rather than through a loop of its own.
 class NLHashJoinState {
 public:
-    // Empty the buffers and the key index, so the build side starts fresh. Runs each time
+    // Empty the buffers and the index, so the build side starts fresh. Runs each time
     // nl.hash_join_buffer's block runs - once at function scope for a top-level join.
     void reset();
 
@@ -1371,31 +1389,14 @@ public:
     const std::vector<Column*>& buffers() const { return _buffers; }
     Column* buffer(size_t index) const { return _buffers[index]; }
 
-    // Index a build row under its serialized key. The rows of one key keep collect order,
-    // so a probe row's matches come out in the order the build side produced them.
-    void indexRow(const std::string& key, size_t row) { _rowsByKey[key].push_back(row); }
-
-    // The build rows carrying a key, empty when none does.
-    const std::vector<size_t>& rowsFor(const std::string& key) const;
-
-    // How many rows the buffers hold, which is what the next collected chunk's rows are
-    // numbered from.
-    size_t getRowCount() const { return _rowCount; }
-    void addRows(size_t rows) { _rowCount += rows; }
+    NLHashJoinIndex& getIndex() { return _index; }
+    const NLHashJoinIndex& getIndex() const { return _index; }
 
 private:
     // One buffer per collected build column, row-aligned, grown by nl.hash_join_collect.
     std::vector<Column*> _buffers;
 
-    // Serialized key -> the build rows holding it, in collect order.
-    std::unordered_map<std::string, std::vector<size_t>> _rowsByKey;
-
-    // Rows collected so far, so each chunk's rows are numbered from where the last ended.
-    size_t _rowCount {0};
-
-    // Answered for a key no build row carries, so the probe reads an empty range rather
-    // than testing for a miss.
-    std::vector<size_t> _noRows;
+    NLHashJoinIndex _index;
 };
 
 // nl.hash_join_buffer data: empties a build side each time the block it lives in runs -
@@ -1431,28 +1432,37 @@ public:
         _appends.push_back(append);
     }
 
-    void setKeyColumn(const Column* key, NLKeyAppendFunction keyAppend, NLKeyIsMatchableFunction isMatchable) {
+    // The collected key chunk and the buffer it is appended to, whose rows a new row's key
+    // is compared against to find the group already holding it.
+    void setKeyColumns(const Column* key,
+                       const Column* buildKey,
+                       const NLJoinKeyFunctions& keyFunctions,
+                       NLKeyIsMatchableFunction isMatchable) {
         _key = key;
-        _keyAppend = keyAppend;
+        _buildKey = buildKey;
+        _keyFunctions = keyFunctions;
         _keyIsMatchable = isMatchable;
     }
 
     const Column* getKeyColumn() const { return _key; }
-    NLKeyAppendFunction getKeyAppend() const { return _keyAppend; }
+    const Column* getBuildKeyColumn() const { return _buildKey; }
+    NLKeyHashFunction getKeyHash() const { return _keyFunctions._hash; }
+    NLKeyEqualFunction getKeyEqual() const { return _keyFunctions._equal; }
     NLKeyIsMatchableFunction getKeyIsMatchable() const { return _keyIsMatchable; }
 
-    std::string* getKeyScratch() { return &_keyScratch; }
+    std::vector<uint64_t>* getHashScratch() { return &_hashScratch; }
 
 private:
     NLHashJoinState* _state {nullptr};
     std::vector<NLSortCollectData::Append> _appends;
 
     const Column* _key {nullptr};
-    NLKeyAppendFunction _keyAppend {nullptr};
+    const Column* _buildKey {nullptr};
+    NLJoinKeyFunctions _keyFunctions;
     NLKeyIsMatchableFunction _keyIsMatchable {nullptr};
 
-    // Scratch reused to build each row's key, cleared once per row
-    std::string _keyScratch;
+    // This step's key hashes, one per row of the collected chunk
+    std::vector<uint64_t> _hashScratch;
 };
 
 // nl.hash_join_probe data: per probe column its input chunk, the fresh output chunk and
@@ -1481,17 +1491,25 @@ public:
     NLLimitState* getLimit() const { return _limit; }
     void setLimit(NLLimitState* limit) { _limit = limit; }
 
-    void setKeyColumn(const Column* key, NLKeyAppendFunction keyAppend, NLKeyIsMatchableFunction isMatchable) {
+    // The probe key chunk and the build key buffer it is matched against, read through
+    // the handlers of their shared chunk type.
+    void setKeyColumns(const Column* key,
+                       const Column* buildKey,
+                       const NLJoinKeyFunctions& keyFunctions,
+                       NLKeyIsMatchableFunction isMatchable) {
         _key = key;
-        _keyAppend = keyAppend;
+        _buildKey = buildKey;
+        _keyFunctions = keyFunctions;
         _keyIsMatchable = isMatchable;
     }
 
     const Column* getKeyColumn() const { return _key; }
-    NLKeyAppendFunction getKeyAppend() const { return _keyAppend; }
+    const Column* getBuildKeyColumn() const { return _buildKey; }
+    NLKeyHashFunction getKeyHash() const { return _keyFunctions._hash; }
+    NLKeyEqualFunction getKeyEqual() const { return _keyFunctions._equal; }
     NLKeyIsMatchableFunction getKeyIsMatchable() const { return _keyIsMatchable; }
 
-    std::string* getKeyScratch() { return &_keyScratch; }
+    std::vector<uint64_t>* getHashScratch() { return &_hashScratch; }
 
     ColumnVector<size_t>* getProbeIndices() { return &_probeIndices; }
     ColumnVector<size_t>* getBuildIndices() { return &_buildIndices; }
@@ -1502,11 +1520,13 @@ private:
     std::vector<NLCarriedColumn> _buildColumns;
 
     const Column* _key {nullptr};
-    NLKeyAppendFunction _keyAppend {nullptr};
+    const Column* _buildKey {nullptr};
+    NLJoinKeyFunctions _keyFunctions;
     NLKeyIsMatchableFunction _keyIsMatchable {nullptr};
     NLLimitState* _limit {nullptr};
 
-    std::string _keyScratch;
+    // This step's key hashes, one per row of the probe chunk
+    std::vector<uint64_t> _hashScratch;
 
     // This step's matched pairs: output row i reads _probeIndices[i] of the probe chunk
     // and _buildIndices[i] of the buffers.

@@ -1841,6 +1841,9 @@ target_link_libraries(test_query_ir_hash_join_cost_model PRIVATE
 add_ir_tests(test_query_ir_hash_join_embedding_key HashJoinEmbeddingKeyTest.cpp)
 target_link_libraries(test_query_ir_hash_join_embedding_key PRIVATE turing_ir_test_rows_s)
 
+# The build index cases group rows by key and walk the buckets directly, with no graph or IR.
+add_ir_tests(test_query_ir_hash_join_index NLHashJoinIndexTest.cpp)
+
 # The hash join fusion is checked at both IR levels and run against the shared SimpleGraph,
 # so it needs the frontend engine beside the dialects.
 add_turing_test(test_query_ir_hash_join HashJoinTest.cpp)

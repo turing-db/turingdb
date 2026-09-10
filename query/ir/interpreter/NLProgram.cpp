@@ -201,14 +201,7 @@ void NLHashJoinState::reset() {
         buffer->clear();
     }
 
-    _rowsByKey.clear();
-    _rowCount = 0;
-}
-
-const std::vector<size_t>& NLHashJoinState::rowsFor(const std::string& key) const {
-    const auto rows = _rowsByKey.find(key);
-
-    return rows == _rowsByKey.end() ? _noRows : rows->second;
+    _index.clear();
 }
 
 NLGroupTable::Assignment NLGroupTable::assign(const std::string& key) {
