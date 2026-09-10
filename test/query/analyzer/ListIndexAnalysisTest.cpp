@@ -102,6 +102,10 @@ TEST_F(ListIndexAnalysisTest, acceptsANullTestOnAnIndexedElement) {
     expectAccepted("MATCH (n:Person) WHERE [1, 2, 3][9] IS NOT NULL RETURN n.name");
 }
 
+TEST_F(ListIndexAnalysisTest, acceptsANullIndex) {
+    expectAccepted("MATCH (n:Person) RETURN [1, 2, 3][null]");
+}
+
 TEST_F(ListIndexAnalysisTest, rejectsANonIntegerIndex) {
     expectRejected("MATCH (n:Person) RETURN [1, 2, 3]['a']",
                    "Index expression must be an integer");

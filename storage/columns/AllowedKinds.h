@@ -327,7 +327,11 @@ struct PairRestrictions<Op> {
             KindPair<ListView, types::Int64::Primitive>,
             KindPair<ListView, types::UInt64::Primitive>,
             KindPair<ListView, std::optional<types::Int64::Primitive>>,
-            KindPair<ListView, std::optional<types::UInt64::Primitive>>
+            KindPair<ListView, std::optional<types::UInt64::Primitive>>,
+
+            KindPair<ListView, PropertyNull>,
+            KindPair<ListElementView, PropertyNull>,
+            KindPair<std::optional<ListElementView>, PropertyNull>
         >
     >;
 

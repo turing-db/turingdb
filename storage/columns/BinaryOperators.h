@@ -247,11 +247,25 @@ struct ListIndexImpl {
         return operator()(cell.getAs<ListView>(), index);
     }
 
+    inline std::optional<ListElementView> operator()(ListView /*unused*/, PropertyNull /*unused*/) const {
+        return std::nullopt;
+    }
+
+    inline std::optional<ListElementView> operator()(ListElementView /*unused*/, PropertyNull /*unused*/) const {
+        return std::nullopt;
+    }
+
     // Unused but defined to satisfy dispatcher
     std::optional<ListElementView> operator()(int64_t /*unused*/, ListView /*unused*/) const {
         throw TuringException("Index operands the wrong way round.");
     }
     std::optional<ListElementView> operator()(int64_t /*unused*/, ListElementView /*unused*/) const {
+        throw TuringException("Index operands the wrong way round.");
+    }
+    std::optional<ListElementView> operator()(PropertyNull /*unused*/, ListView /*unused*/) const {
+        throw TuringException("Index operands the wrong way round.");
+    }
+    std::optional<ListElementView> operator()(PropertyNull /*unused*/, ListElementView /*unused*/) const {
         throw TuringException("Index operands the wrong way round.");
     }
 };
