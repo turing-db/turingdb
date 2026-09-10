@@ -3358,6 +3358,52 @@ TEST_F(WriteQueriesTest, dynamicStringPropertySetNull) {
     }
 }
 
+TEST_F(WriteQueriesTest, createdNodeNullPropertyKeepsItsOwner) {
+    newChange();
+    {
+        // Node 2 has a name and no dob. The commit sorts new nodes by labelset, so
+        // NULLHOLDER and Interest swap places: a null still carrying its pre-sort ID
+        // lands on the other node.
+        constexpr std::string_view createQuery =
+            R"(MATCH (n) WHERE n = 2 CREATE (a:NULLHOLDER {dob: n.dob}), (b:Interest {dob: n.name}))";
+
+        auto res = query(createQuery, _emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    using Values = std::vector<std::optional<std::string_view>>;
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (m:NULLHOLDER) RETURN m.dob)";
+
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            const auto* dobs = findColumn(df, "m.dob")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(dobs);
+
+            EXPECT_EQ((Values {std::nullopt}), dobs->getRaw()) << dump(df);
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+
+    {
+        constexpr std::string_view matchQuery =
+            R"(MATCH (m:Interest) WHERE m.dob IS NOT NULL RETURN m.dob)";
+
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            const auto* dobs = findColumn(df, "m.dob")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(dobs);
+
+            EXPECT_EQ((Values {"Computers"}), dobs->getRaw()) << dump(df);
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+}
+
 TEST_F(WriteQueriesTest, dynamicIntSelfAddProperty) {
     newChange();
     {
