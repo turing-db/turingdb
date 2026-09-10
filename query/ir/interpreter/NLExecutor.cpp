@@ -5477,6 +5477,14 @@ NLCopyFunction NLExecutor::selectListElementCopyFunction() {
     return &copyRangeColumn<ListElementView>;
 }
 
+NLBroadcastFunction NLExecutor::selectOptListElementBlockRepeatFunction() {
+    return &blockRepeatColumn<std::optional<ListElementView>>;
+}
+
+NLBroadcastFunction NLExecutor::selectOptListElementTileFunction() {
+    return &tileColumn<std::optional<ListElementView>>;
+}
+
 NLCompareFunction NLExecutor::selectOptListElementCompareFunction() {
     return &compareOptListElementColumn;
 }

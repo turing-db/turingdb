@@ -419,6 +419,8 @@ public:
     static NLGroupKeyGatherFunction selectListElementGroupKeyGatherFunction();
     static NLCopyFunction selectListElementCopyFunction();
 
+    static NLBroadcastFunction selectOptListElementBlockRepeatFunction();
+    static NLBroadcastFunction selectOptListElementTileFunction();
     static NLCompareFunction selectOptListElementCompareFunction();
     static NLKeyAppendFunction selectOptListElementKeyAppendFunction();
     static NLCountFunction selectOptListElementCountFunction();

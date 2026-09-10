@@ -2255,6 +2255,9 @@ void NLTranslator::addTruncateColumn(mlir::Value inputValue,
     if (isConstantColumn(input)) {
         output = _memory->allocSame(input);
         copyPrefix = NLExecutor::selectConstBlockRepeatFunction();
+    } else if (isNullableListElement(elementType)) {
+        output = allocOptListElementColumn();
+        copyPrefix = NLExecutor::selectOptListElementBlockRepeatFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         if (isOwnedStringElement(nullableType.getValueType())) {
             output = allocOptOwnedStringColumn();
@@ -2360,6 +2363,9 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
     if (isConstantColumn(input)) {
         output = _memory->allocSame(input);
         copySuffix = NLExecutor::selectConstCopyFunction();
+    } else if (isNullableListElement(elementType)) {
+        output = allocOptListElementColumn();
+        copySuffix = NLExecutor::selectOptListElementCopyFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         if (isOwnedStringElement(nullableType.getValueType())) {
             output = allocOptOwnedStringColumn();
@@ -4119,6 +4125,10 @@ void NLTranslator::addCrossColumn(mlir::Value inputValue,
     if (isConstantColumn(input)) {
         output = _memory->allocSame(input);
         broadcast = NLExecutor::selectConstBlockRepeatFunction();
+    } else if (isNullableListElement(elementType)) {
+        output = allocOptListElementColumn();
+        broadcast = isOuter ? NLExecutor::selectOptListElementBlockRepeatFunction()
+                            : NLExecutor::selectOptListElementTileFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         if (isOwnedStringElement(nullableType.getValueType())) {
             output = allocOptOwnedStringColumn();
