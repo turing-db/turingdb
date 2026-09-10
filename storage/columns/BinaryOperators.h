@@ -144,17 +144,25 @@ inline auto asSignedInteger(T&& value) {
  * @brief Thin wrapper over a provided functor @param F to dispatch optional logic
  * accordingly
  */
-template <typename F>
+template <typename F, bool NarrowsUnsigned = true>
 struct BinaryOp {
+    template <typename T>
+    static inline decltype(auto) operand(T&& value) {
+        if constexpr (NarrowsUnsigned) {
+            return asSignedInteger(std::forward<T>(value));
+        }
+        return std::forward<T>(value);
+    }
+
     template <typename T, typename U>
         requires TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>
     inline decltype(auto) operator()(T&& a, U&& b) const {
-        return optionalGeneric<F>(asSignedInteger(std::forward<T>(a)), asSignedInteger(std::forward<U>(b)));
+        return optionalGeneric<F>(operand(std::forward<T>(a)), operand(std::forward<U>(b)));
     }
 
     template <typename T, typename U>
     inline decltype(auto) operator()(T&& a, U&& b) const {
-        return F {}(asSignedInteger(std::forward<T>(a)), asSignedInteger(std::forward<U>(b)));
+        return F {}(operand(std::forward<T>(a)), operand(std::forward<U>(b)));
     }
 };
 
@@ -247,6 +255,22 @@ struct ListIndexImpl {
         return operator()(cell.getAs<ListView>(), index);
     }
 
+    inline std::optional<ListElementView> operator()(ListView list, uint64_t index) const {
+        if (index >= list.size()) {
+            return std::nullopt;
+        }
+
+        return list.elements()[static_cast<size_t>(index)];
+    }
+
+    inline std::optional<ListElementView> operator()(ListElementView cell, uint64_t index) const {
+        if (cell.getTag() != ListBufferTypeTag::ListView) {
+            return std::nullopt;
+        }
+
+        return operator()(cell.getAs<ListView>(), index);
+    }
+
     inline std::optional<ListElementView> operator()(ListView /*unused*/, PropertyNull /*unused*/) const {
         return std::nullopt;
     }
@@ -268,6 +292,12 @@ struct ListIndexImpl {
     std::optional<ListElementView> operator()(PropertyNull /*unused*/, ListElementView /*unused*/) const {
         throw TuringException("Index operands the wrong way round.");
     }
+    std::optional<ListElementView> operator()(uint64_t /*unused*/, ListView /*unused*/) const {
+        throw TuringException("Index operands the wrong way round.");
+    }
+    std::optional<ListElementView> operator()(uint64_t /*unused*/, ListElementView /*unused*/) const {
+        throw TuringException("Index operands the wrong way round.");
+    }
 };
 
 }
@@ -279,7 +309,7 @@ using Div = BinaryOp<SafeDivides>;
 using Mod = BinaryOp<SafeModulo>;
 using Pow = BinaryOp<Power>;
 using Concat = Concatenate;
-using ListIndex = BinaryOp<ListIndexImpl>;
+using ListIndex = BinaryOp<ListIndexImpl, /*NarrowsUnsigned=*/false>;
 
 }
 
