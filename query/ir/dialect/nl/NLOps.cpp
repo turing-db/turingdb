@@ -378,17 +378,18 @@ LogicalResult HashJoinProbe::verify() {
         return emitOpError("requires at least one column to probe with");
     }
 
-    const ResultRange results = getResults();
-    if (results.size() < columns.size()) {
-        return emitOpError("expects a result per probe column and per build column, but has ")
-               << results.size() << " results for " << columns.size() << " probe columns";
+    const auto iteratorType = cast<IteratorType>(getResult().getType());
+    const ArrayRef<Type> chunkTypes = iteratorType.getChunkTypes();
+    if (chunkTypes.size() < columns.size()) {
+        return emitOpError("expects a chunk per probe column and per build column, but has ")
+               << chunkTypes.size() << " chunks for " << columns.size() << " probe columns";
     }
 
     for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
-        if (columns[columnIndex].getType() != results[columnIndex].getType()) {
-            return emitOpError("result ") << columnIndex
-                                          << " must have the same type as probe column "
-                                          << columnIndex;
+        if (columns[columnIndex].getType() != chunkTypes[columnIndex]) {
+            return emitOpError("chunk ") << columnIndex
+                                         << " must have the same type as probe column "
+                                         << columnIndex;
         }
     }
 

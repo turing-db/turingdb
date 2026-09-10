@@ -313,8 +313,8 @@ TEST_F(HashJoinTest, joinsThreePatternsOnAPropertyOfTwoOfThem) {
     expectCount("MATCH (a), (b), (c) WHERE a.name = c.name RETURN count(*)", 324);
 }
 
-// A LIMIT over a join bounds the probe, so a step pairs only the rows the cut can emit
-// rather than every match of its chunk.
+// A LIMIT over a join bounds the loop the probe drives, so a step pairs only the rows the
+// cut can emit and the loop stops once the budget is spent.
 TEST_F(HashJoinTest, boundsTheProbeWithALimit) {
     std::string program;
     explainStage("EXPLAIN (nl) MATCH (n), (m) WHERE n.name = m.name RETURN n, m LIMIT 3", "nl", program);
@@ -322,8 +322,11 @@ TEST_F(HashJoinTest, boundsTheProbeWithALimit) {
     const size_t probe = program.find("nl.hash_join_probe");
     ASSERT_NE(probe, std::string::npos) << program;
 
-    const std::string_view probeLine(program.data() + probe, program.find('\n', probe) - probe);
-    EXPECT_TRUE(contains(probeLine, "limit")) << program;
+    const size_t probeLoop = program.find("nl.for", probe);
+    ASSERT_NE(probeLoop, std::string::npos) << program;
+
+    const std::string_view loopLine(program.data() + probeLoop, program.find('\n', probeLoop) - probeLoop);
+    EXPECT_TRUE(contains(loopLine, "limit")) << program;
 }
 
 // The budget runs out inside a probe row's matches, not on a row boundary: the four French

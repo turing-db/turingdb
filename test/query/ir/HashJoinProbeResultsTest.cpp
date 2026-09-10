@@ -45,8 +45,8 @@ private:
 };
 
 // The build columns are not operands of nl.hash_join_probe - they live in the handle - so
-// their chunk types are spelled among its results, and nothing in NLOps.td ties those to
-// the columns the collect appended. Here the last result claims a node ID column where the
+// their chunk types are spelled in its iterator, and nothing in NLOps.td ties those to the
+// columns the collect appended. Here the last chunk claims a node ID column where the
 // collect appended a nullable string, so the buffer holding string views would be gathered
 // as a column of IDs.
 constexpr const char* const mistypedBuildResultProgram = R"mlir(
@@ -61,8 +61,10 @@ func.func @main() {
   %probe = nl.scan_nodes()
   nl.for %p in %probe : !nl.iter<!nl.chunk<!storage.node_id>> {
     %pname = nl.get_node_properties(%p, %nameType) : !nl.chunk<!storage.nullable<!storage.string>>
-    %joined:4 = nl.hash_join_probe %state, (%p, %pname) : (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>) -> (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>)
-    nl.output(%joined#0, %joined#2) names ["n", "m"] : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
+    %joined = nl.hash_join_probe %state, (%p, %pname) : (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>) -> !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>>
+    nl.for %n, %name, %m, %mname in %joined : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>> {
+      nl.output(%n, %m) names ["n", "m"] : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
+    }
   }
   return
 }
@@ -82,8 +84,10 @@ func.func @main() {
   %probe = nl.scan_nodes()
   nl.for %p in %probe : !nl.iter<!nl.chunk<!storage.node_id>> {
     %pname = nl.get_node_properties(%p, %nameType) : !nl.chunk<!storage.nullable<!storage.string>>
-    %joined:4 = nl.hash_join_probe %state, (%p, %pname) : (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>) -> (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>)
-    nl.output(%joined#0, %joined#2) names ["n", "m"] : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
+    %joined = nl.hash_join_probe %state, (%p, %pname) : (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>) -> !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>>
+    nl.for %n, %name, %m, %mname in %joined : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.nullable<!storage.string>>> {
+      nl.output(%n, %m) names ["n", "m"] : !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>
+    }
   }
   return
 }
@@ -91,7 +95,7 @@ func.func @main() {
 
 }
 
-// What an nl.hash_join_probe declares its build results as, which is what the buffers the
+// What an nl.hash_join_probe declares its build chunks as, which is what the buffers the
 // collect allocated are read back through.
 class HashJoinProbeResultsTest : public TuringTest {
 protected:
