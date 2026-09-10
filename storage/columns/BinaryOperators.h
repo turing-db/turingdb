@@ -150,8 +150,9 @@ struct BinaryOp {
     static inline decltype(auto) operand(T&& value) {
         if constexpr (NarrowsUnsigned) {
             return asSignedInteger(std::forward<T>(value));
+        } else {
+            return std::forward<T>(value);
         }
-        return std::forward<T>(value);
     }
 
     template <typename T, typename U>

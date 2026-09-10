@@ -4,7 +4,6 @@
 
 #include <limits>
 #include <optional>
-#include <string_view>
 #include <vector>
 
 #include "columns/BinaryOperators.h"
@@ -20,13 +19,12 @@ namespace {
 
 class ListIndexOperatorTest : public testing::Test {
 protected:
-    ListView list(std::vector<ListBuffer<>::ListItemVariant> elements) {
+    ListView list(std::vector<QueryListBuffer::ListItemVariant> elements) {
         return _buffer.insert(elements);
     }
 
-    ListElementView cell(ListBuffer<>::ListItemVariant element) {
-        const ListView holder = _buffer.insert({element});
-        return *holder.begin();
+    ListElementView cell(QueryListBuffer::ListItemVariant element) {
+        return list({element}).elements()[0];
     }
 
     std::optional<types::Int64::Primitive> integerAt(const std::optional<ListElementView>& element) {
@@ -37,7 +35,7 @@ protected:
         return element->getAs<types::Int64::Primitive>();
     }
 
-    ListBuffer<> _buffer;
+    QueryListBuffer _buffer;
 };
 
 }

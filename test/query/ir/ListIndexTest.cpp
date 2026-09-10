@@ -244,7 +244,10 @@ protected:
         generateProgram(query, view, procedures, context, module);
 
         const mlir::func::FuncOp dbFunction = module.get().lookupSymbol<mlir::func::FuncOp>("main");
-        EXPECT_TRUE(dbFunction);
+        EXPECT_TRUE(dbFunction) << "query: " << query;
+        if (!dbFunction) {
+            return {};
+        }
 
         mlir::OwningOpRef<mlir::ModuleOp> nlModule = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
         DBLowering lowering(&context, &view);
@@ -252,7 +255,10 @@ protected:
 
         mlir::nl::ListIndex index;
         nlModule->walk([&](mlir::nl::ListIndex op) { index = op; });
-        EXPECT_TRUE(index);
+        EXPECT_TRUE(index) << "query: " << query;
+        if (!index) {
+            return {};
+        }
 
         std::string printed;
         llvm::raw_string_ostream stream(printed);
