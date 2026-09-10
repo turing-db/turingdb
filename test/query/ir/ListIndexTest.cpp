@@ -35,12 +35,14 @@
 #include "CypherParser.h"
 
 #include "Graph.h"
+#include "ProcedureContext.h"
 #include "SimpleGraph.h"
 #include "SystemAccessor.h"
 #include "SystemManager.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
+#include "iterators/ChunkConfig.h"
 #include "list/ListBufferTypeTag.h"
 #include "list/ListElementView.h"
 #include "metadata/PropertyType.h"
@@ -198,7 +200,21 @@ protected:
         generateProgram(query, view, procedures, context, module);
 
         LocalMemory memory;
-        DBDialectInterpreter interpreter(module.get(), &view, sink, &memory);
+
+        ProcedureContext procedureContext;
+        procedureContext.setGraphView(&view);
+        procedureContext.setProcedures(procedures);
+        procedureContext.setChunkSize(ChunkConfig::CHUNK_SIZE);
+        procedureContext.setListBuffer(&memory.listBuffer());
+
+        DBDialectInterpreter interpreter(module.get(),
+                                         &view,
+                                         sink,
+                                         &memory,
+                                         ChunkConfig::CHUNK_SIZE,
+                                         /*writeBuffer=*/nullptr,
+                                         /*metadataBuilder=*/nullptr,
+                                         &procedureContext);
         interpreter.run();
     }
 
