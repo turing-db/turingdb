@@ -107,12 +107,8 @@ public:
     }
 
     template <SupportedType T>
-    const T::Primitive* tryGet(PropertyTypeID ptID, EntityID entityID) const {
-        const TypedPropertyContainer<T>* container = tryGetContainer<T>(ptID);
-        if (!container) {
-            return nullptr;
-        }
-        return container->tryGet(entityID);
+    std::optional<const typename T::Primitive*> tryGet(PropertyTypeID ptID, EntityID entityID) const {
+        return tryGetWithNull<T>(ptID, entityID);
     }
 
     /**
