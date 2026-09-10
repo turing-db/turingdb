@@ -923,7 +923,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodeConstProp) {
     {
         for (const NodeID n : read().scanNodes()) {
             const types::String::Primitive* name =
-                read().tryGetNodeProperty<types::String>(NAME_PROP_ID, n);
+                read().tryGetNodeProperty<types::String>(NAME_PROP_ID, n).value_or(nullptr);
             ASSERT_TRUE(name);
             expected.add({n, *name});
             expected.add({n + numNodesPrior, "NEWNAME"});
@@ -984,7 +984,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodeDynamicProp) {
     {
         for (const NodeID n : read().scanNodes()) {
             const types::String::Primitive* name =
-                read().tryGetNodeProperty<types::String>(NAME_PROP_ID, n);
+                read().tryGetNodeProperty<types::String>(NAME_PROP_ID, n).value_or(nullptr);
             ASSERT_TRUE(name);
             // Original node keeps its name
             expected.add({*name});
@@ -1210,7 +1210,7 @@ TEST_F(WriteQueriesTest, dynamicNamePreservedAcrossCommit) {
     {
         for (const NodeID n : read().scanNodes()) {
             const types::String::Primitive* name =
-                read().tryGetNodeProperty<types::String>(NAME_PROP_ID, n);
+                read().tryGetNodeProperty<types::String>(NAME_PROP_ID, n).value_or(nullptr);
             ASSERT_TRUE(name);
             expected.add({*name});
         }

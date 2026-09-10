@@ -180,11 +180,11 @@ TEST_F(ComplexNullPredicatesTest, complexMatchWithIsNotNull) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* type = read().tryGetNodeProperty<types::String>(typeID, n);
-            const auto* country = read().tryGetNodeProperty<types::String>(countryID, n);
-            const auto* institution = read().tryGetNodeProperty<types::String>(institutionID, n);
-            const auto* publishedYear = read().tryGetNodeProperty<types::Int64>(publishedYearID, n);
-            const auto* citedByCount = read().tryGetNodeProperty<types::Int64>(citedByCountID, n);
+            const auto* type = read().tryGetNodeProperty<types::String>(typeID, n).value_or(nullptr);
+            const auto* country = read().tryGetNodeProperty<types::String>(countryID, n).value_or(nullptr);
+            const auto* institution = read().tryGetNodeProperty<types::String>(institutionID, n).value_or(nullptr);
+            const auto* publishedYear = read().tryGetNodeProperty<types::Int64>(publishedYearID, n).value_or(nullptr);
+            const auto* citedByCount = read().tryGetNodeProperty<types::Int64>(citedByCountID, n).value_or(nullptr);
 
             if (type && *type == "publication" &&
                 country && *country == "United States" &&
@@ -233,10 +233,10 @@ TEST_F(ComplexNullPredicatesTest, complexMatchWithIsNull) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* type = read().tryGetNodeProperty<types::String>(typeID, n);
-            const auto* country = read().tryGetNodeProperty<types::String>(countryID, n);
-            const auto* institution = read().tryGetNodeProperty<types::String>(institutionID, n);
-            const auto* publishedYear = read().tryGetNodeProperty<types::Int64>(publishedYearID, n);
+            const auto* type = read().tryGetNodeProperty<types::String>(typeID, n).value_or(nullptr);
+            const auto* country = read().tryGetNodeProperty<types::String>(countryID, n).value_or(nullptr);
+            const auto* institution = read().tryGetNodeProperty<types::String>(institutionID, n).value_or(nullptr);
+            const auto* publishedYear = read().tryGetNodeProperty<types::Int64>(publishedYearID, n).value_or(nullptr);
 
             if (type && *type == "publication" &&
                 country && *country == "United States" &&
@@ -285,10 +285,10 @@ TEST_F(ComplexNullPredicatesTest, mixedNullPredicates) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* type = read().tryGetNodeProperty<types::String>(typeID, n);
-            const auto* country = read().tryGetNodeProperty<types::String>(countryID, n);
-            const auto* institution = read().tryGetNodeProperty<types::String>(institutionID, n);
-            const auto* publishedYear = read().tryGetNodeProperty<types::Int64>(publishedYearID, n);
+            const auto* type = read().tryGetNodeProperty<types::String>(typeID, n).value_or(nullptr);
+            const auto* country = read().tryGetNodeProperty<types::String>(countryID, n).value_or(nullptr);
+            const auto* institution = read().tryGetNodeProperty<types::String>(institutionID, n).value_or(nullptr);
+            const auto* publishedYear = read().tryGetNodeProperty<types::Int64>(publishedYearID, n).value_or(nullptr);
 
             if (type && *type == "publication" &&
                 country && *country == "United States" &&
@@ -334,9 +334,9 @@ TEST_F(ComplexNullPredicatesTest, isNotNullWithOrLogic) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* type = read().tryGetNodeProperty<types::String>(typeID, n);
-            const auto* country = read().tryGetNodeProperty<types::String>(countryID, n);
-            const auto* institution = read().tryGetNodeProperty<types::String>(institutionID, n);
+            const auto* type = read().tryGetNodeProperty<types::String>(typeID, n).value_or(nullptr);
+            const auto* country = read().tryGetNodeProperty<types::String>(countryID, n).value_or(nullptr);
+            const auto* institution = read().tryGetNodeProperty<types::String>(institutionID, n).value_or(nullptr);
 
             if (type && (*type == "publication" || *type == "article") &&
                 country && *country == "United States" &&
@@ -381,8 +381,8 @@ TEST_F(ComplexNullPredicatesTest, noResultWhenAllHaveNull) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n);
-            const auto* institution = read().tryGetNodeProperty<types::String>(institutionID, n);
+            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n).value_or(nullptr);
+            const auto* institution = read().tryGetNodeProperty<types::String>(institutionID, n).value_or(nullptr);
 
             if (name && *name == "John Doe" && institution) {
                 expected.add({n});

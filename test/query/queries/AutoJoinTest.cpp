@@ -410,9 +410,9 @@ TEST_F(JoinFeatureTest, megaHubJoin) {
         // Check if edge goes from Person to Interest named "MegaHub"
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (interestName && *interestName == "MegaHub") {
-                const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
+                const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
                 if (personName) {
                     personsWithMegaHub.push_back(*personName);
                 }
@@ -478,9 +478,9 @@ TEST_F(JoinFeatureTest, sharedInterestJoin) {
         // Check if edge goes from Person to Interest named "Shared"
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (interestName && *interestName == "Shared") {
-                const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
+                const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
                 if (personName) {
                     personsWithSharedInterest.push_back(*personName);
                 }
@@ -544,7 +544,7 @@ TEST_F(JoinFeatureTest, fullCartesianProduct) {
     for (const auto& nodeID : reader.scanNodes()) {
         NodeView nodeView = reader.getNodeView(nodeID);
         if (nodeView.labelset().hasLabel(personLabelID)) {
-            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID);
+            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID).value_or(nullptr);
             if (name) {
                 personNames.push_back(*name);
             } else {
@@ -558,7 +558,7 @@ TEST_F(JoinFeatureTest, fullCartesianProduct) {
     for (const auto& nodeID : reader.scanNodes()) {
         NodeView nodeView = reader.getNodeView(nodeID);
         if (nodeView.labelset().hasLabel(interestLabelID)) {
-            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID);
+            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID).value_or(nullptr);
             if (name) {
                 interestNames.push_back(*name);
             } else {
@@ -620,7 +620,7 @@ TEST_F(JoinFeatureTest, tripleHopJoin) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
+            const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
             personInterestEdges.push_back({
                 personName ? std::optional<String>(*personName) : std::nullopt,
                 e._otherID
@@ -635,7 +635,7 @@ TEST_F(JoinFeatureTest, tripleHopJoin) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(interestLabelID) &&
             dstView.labelset().hasLabel(categoryLabelID)) {
-            const auto* categoryName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* categoryName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             interestCategoryEdges.push_back({
                 e._nodeID,
                 categoryName ? std::optional<String>(*categoryName) : std::nullopt
@@ -646,7 +646,7 @@ TEST_F(JoinFeatureTest, tripleHopJoin) {
     // Build expected results by joining on Interest NodeID
     Rows expected;
     for (const auto& [personName, interestID] : personInterestEdges) {
-        const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, interestID);
+        const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, interestID).value_or(nullptr);
         OptString intName = interestName ? std::optional<String>(*interestName) : std::nullopt;
         for (const auto& [icInterestID, categoryName] : interestCategoryEdges) {
             if (interestID == icInterestID) {
@@ -740,8 +740,8 @@ TEST_F(JoinFeatureTest, undirectedEdgeJoin) {
         // Only Person-Person edges (KNOWS edges in this graph)
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(personLabelID)) {
-            const auto* srcName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* dstName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* srcName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* dstName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (srcName && dstName) {
                 // Undirected matches both directions
                 expected.add({*srcName, *dstName});
@@ -905,11 +905,11 @@ TEST_F(JoinFeatureTest, nullPropertyFilter) {
         // Person -> Interest edge
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* isFrench = reader.tryGetNodeProperty<types::Bool>(isFrenchID, e._nodeID);
+            const auto* isFrench = reader.tryGetNodeProperty<types::Bool>(isFrenchID, e._nodeID).value_or(nullptr);
             // Only include if isFrench is true
             if (isFrench && *isFrench) {
-                const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-                const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+                const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+                const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
                 expected.add({
                     personName ? std::optional<String>(*personName) : std::nullopt,
                     interestName ? std::optional<String>(*interestName) : std::nullopt
@@ -985,9 +985,9 @@ TEST_F(JoinFeatureTest, complexBooleanFilter) {
         // Person -> Interest edge
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* isFrench = reader.tryGetNodeProperty<types::Bool>(isFrenchID, e._nodeID);
-            const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* isFrench = reader.tryGetNodeProperty<types::Bool>(isFrenchID, e._nodeID).value_or(nullptr);
+            const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
 
             if (interestName) {
                 interestNames[e._otherID] = *interestName;
@@ -1062,7 +1062,7 @@ TEST_F(JoinFeatureTest, filterOnNullProperty) {
     for (const auto& nodeID : reader.scanNodes()) {
         NodeView nodeView = reader.getNodeView(nodeID);
         if (nodeView.labelset().hasLabel(interestLabelID)) {
-            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID);
+            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID).value_or(nullptr);
             if (!name) {
                 // Interest with no name property (NULL)
                 expectedCount++;
@@ -1110,9 +1110,9 @@ TEST_F(JoinFeatureTest, largeResultMultiChunk) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (interestName && *interestName == "MegaHub") {
-                const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
+                const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
                 if (personName) {
                     personsWithMegaHub.push_back(*personName);
                 }
@@ -1211,7 +1211,7 @@ TEST_F(JoinFeatureTest, multipleDisconnectedPatterns) {
     for (const auto& nodeID : reader.scanNodes()) {
         NodeView nodeView = reader.getNodeView(nodeID);
         if (nodeView.labelset().hasLabel(personLabelID)) {
-            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID);
+            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID).value_or(nullptr);
             if (name) {
                 if (*name == "A") foundA = true;
                 if (*name == "B") foundB = true;
@@ -1272,8 +1272,8 @@ TEST_F(JoinFeatureTest, joinWithPropertyProjection) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (personName && interestName) {
                 expected.add({*personName, *interestName});
             }
@@ -1367,8 +1367,8 @@ TEST_F(JoinFeatureTest, multiJoin_doubleInterestConnection) {
         // Person -> Interest edge
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (personName && interestName) {
                 personNames[e._nodeID] = *personName;
                 interestNames[e._otherID] = *interestName;
@@ -1470,8 +1470,8 @@ TEST_F(JoinFeatureTest, multiJoin_tripleJoinChain) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (pName && iName) {
                 personNames[e._nodeID] = *pName;
                 interestNames[e._otherID] = *iName;
@@ -1602,8 +1602,8 @@ TEST_F(JoinFeatureTest, multiJoin_categoryBridge) {
         // Person -> Interest
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (pName) personNames[e._nodeID] = *pName;
             if (iName) interestNames[e._otherID] = *iName;
             personToInterests[e._nodeID].push_back(e._otherID);
@@ -1612,8 +1612,8 @@ TEST_F(JoinFeatureTest, multiJoin_categoryBridge) {
         // Interest -> Category
         if (srcView.labelset().hasLabel(interestLabelID) &&
             dstView.labelset().hasLabel(categoryLabelID)) {
-            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* cName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* cName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (iName) interestNames[e._nodeID] = *iName;
             if (cName) categoryNames[e._otherID] = *cName;
             interestToCategories[e._nodeID].push_back(e._otherID);
@@ -1723,8 +1723,8 @@ TEST_F(JoinFeatureTest, multiJoin_threeWayInterestShare) {
         // Person -> Interest
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (pName) personNames[e._nodeID] = *pName;
             if (iName) interestNames[e._otherID] = *iName;
             interestToPersons[e._otherID].push_back(e._nodeID);
@@ -1732,8 +1732,8 @@ TEST_F(JoinFeatureTest, multiJoin_threeWayInterestShare) {
         // Person -> Person (KNOWS)
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(personLabelID)) {
-            const auto* srcName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* dstName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* srcName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* dstName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (srcName) personNames[e._nodeID] = *srcName;
             if (dstName) personNames[e._otherID] = *dstName;
             personToKnowers[e._otherID].push_back(e._nodeID);  // src knows dst, so dst is known by src
@@ -1868,8 +1868,8 @@ TEST_F(JoinFeatureTest, multiJoin_fourPersonChain) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (pName && iName) {
                 personNames[e._nodeID] = *pName;
                 interestNames[e._otherID] = *iName;
@@ -2027,8 +2027,8 @@ TEST_F(JoinFeatureTest, multiJoin_categoryDoubleHop) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (pName && iName) {
                 personInterests[*pName].push_back({e._otherID, *iName});
             }
@@ -2042,7 +2042,7 @@ TEST_F(JoinFeatureTest, multiJoin_categoryDoubleHop) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(interestLabelID) &&
             dstView.labelset().hasLabel(categoryLabelID)) {
-            const auto* catName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* catName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (catName) {
                 interestCategories[e._nodeID].push_back({e._otherID, *catName});
             }
@@ -2052,7 +2052,7 @@ TEST_F(JoinFeatureTest, multiJoin_categoryDoubleHop) {
     // Build category->interests map (interests that belong to each category)
     std::map<NodeID, std::vector<std::pair<NodeID, String>>> categoryInterests;
     for (const auto& [iID, cats] : interestCategories) {
-        const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, iID);
+        const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, iID).value_or(nullptr);
         if (iName) {
             for (const auto& [catID, catName] : cats) {
                 categoryInterests[catID].push_back({iID, *iName});
@@ -2146,8 +2146,8 @@ TEST_F(JoinFeatureTest, multiJoin_personChainToCategory) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (personName && interestName) {
                 personInterests[*personName].push_back({e._otherID, *interestName});
             }
@@ -2161,7 +2161,7 @@ TEST_F(JoinFeatureTest, multiJoin_personChainToCategory) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(interestLabelID) &&
             dstView.labelset().hasLabel(categoryLabelID)) {
-            const auto* catName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* catName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (catName) {
                 interestCategories[e._nodeID].push_back(*catName);
             }
@@ -2254,16 +2254,16 @@ TEST_F(JoinFeatureTest, multiJoin_fiveHopChain) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (pName && iName) {
                 personInterests[*pName].push_back({e._otherID, *iName});
             }
         }
         if (srcView.labelset().hasLabel(interestLabelID) &&
             dstView.labelset().hasLabel(categoryLabelID)) {
-            const auto* catName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
-            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
+            const auto* catName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
+            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
             if (catName && iName) {
                 interestCategories[e._nodeID].push_back({e._otherID, *catName});
                 categoryInterests[e._otherID].push_back({e._nodeID, *iName});
@@ -2489,16 +2489,16 @@ TEST_F(JoinFeatureTest, multiJoin_extendedChainWithCategory) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (pName && iName) {
                 personInterests[*pName].push_back({e._otherID, *iName});
             }
         }
         if (srcView.labelset().hasLabel(interestLabelID) &&
             dstView.labelset().hasLabel(categoryLabelID)) {
-            const auto* catName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
-            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
+            const auto* catName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
+            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
             if (catName && iName) {
                 interestCategories[e._nodeID].push_back({e._otherID, *catName});
                 categoryInterests[e._otherID].push_back({e._nodeID, *iName});
@@ -2653,9 +2653,9 @@ TEST_F(JoinFeatureTest, multiJoin_chainWithPropertyFilter) {
     for (const auto& node : reader.scanNodes()) {
         NodeView nodeView = reader.getNodeView(node);
         if (nodeView.labelset().hasLabel(personLabelID)) {
-            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, node);
+            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, node).value_or(nullptr);
             if (name) {
-                const auto* isFrench = reader.tryGetNodeProperty<types::Bool>(isFrenchID, node);
+                const auto* isFrench = reader.tryGetNodeProperty<types::Bool>(isFrenchID, node).value_or(nullptr);
                 persons[*name].isFrench = isFrench ? std::optional<bool>(*isFrench) : std::nullopt;
             }
         }
@@ -2667,8 +2667,8 @@ TEST_F(JoinFeatureTest, multiJoin_chainWithPropertyFilter) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (personName && interestName) {
                 persons[*personName].interests.push_back({e._otherID, *interestName});
             }
@@ -2783,8 +2783,8 @@ TEST_F(JoinFeatureTest, multiJoin_sevenNodeChain) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* personName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* interestName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (personName && interestName) {
                 personInterests[*personName].push_back({e._otherID, *interestName});
             }
@@ -2917,8 +2917,8 @@ TEST_F(JoinFeatureTest, multiJoin_eightJoinChain) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (pName && iName) {
                 personInterests[*pName].push_back({e._otherID, *iName});
             }
@@ -3086,14 +3086,14 @@ TEST_F(JoinFeatureTest, commaMatch_twoWayCartesian) {
     for (const auto& nodeID : reader.scanNodes()) {
         NodeView nodeView = reader.getNodeView(nodeID);
         if (nodeView.labelset().hasLabel(personLabelID)) {
-            const auto* isFrench = reader.tryGetNodeProperty<types::Bool>(isFrenchID, nodeID);
-            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID);
+            const auto* isFrench = reader.tryGetNodeProperty<types::Bool>(isFrenchID, nodeID).value_or(nullptr);
+            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID).value_or(nullptr);
             if (isFrench && *isFrench && name) {
                 frenchPersons.push_back(*name);
             }
         }
         if (nodeView.labelset().hasLabel(interestLabelID)) {
-            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID);
+            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID).value_or(nullptr);
             if (name && *name == "MegaHub") {
                 megaHubName = *name;
                 foundMegaHub = true;
@@ -3154,7 +3154,7 @@ TEST_F(JoinFeatureTest, commaMatch_threeWayCartesian) {
 
     for (const auto& nodeID : reader.scanNodes()) {
         NodeView nodeView = reader.getNodeView(nodeID);
-        const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID);
+        const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID).value_or(nullptr);
         if (!name) continue;
 
         if (nodeView.labelset().hasLabel(personLabelID) && *name == "A") {
@@ -3222,8 +3222,8 @@ TEST_F(JoinFeatureTest, commaMatch_pathWithSingleNode) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (pName && iName) {
                 personInterestPairs.push_back({*pName, *iName});
             }
@@ -3236,7 +3236,7 @@ TEST_F(JoinFeatureTest, commaMatch_pathWithSingleNode) {
     for (const auto& nodeID : reader.scanNodes()) {
         NodeView nodeView = reader.getNodeView(nodeID);
         if (nodeView.labelset().hasLabel(categoryLabelID)) {
-            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID);
+            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID).value_or(nullptr);
             if (name && *name == "Cat1") {
                 cat1Name = *name;
                 foundCat1 = true;
@@ -3299,8 +3299,8 @@ TEST_F(JoinFeatureTest, commaMatch_twoIndependentPaths) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (pName && iName) {
                 if (*pName == "A") aInterests.push_back(*iName);
                 if (*pName == "B") bInterests.push_back(*iName);
@@ -3370,7 +3370,7 @@ TEST_F(JoinFeatureTest, commaMatch_fourWayCartesian) {
 
     for (const auto& nodeID : reader.scanNodes()) {
         NodeView nodeView = reader.getNodeView(nodeID);
-        const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID);
+        const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID).value_or(nullptr);
         if (!name) continue;
 
         if (nodeView.labelset().hasLabel(personLabelID) && *name == "A") {
@@ -3441,8 +3441,8 @@ TEST_F(JoinFeatureTest, commaMatch_cartesianWithInequalities) {
     for (const auto& nodeID : reader.scanNodes()) {
         NodeView nodeView = reader.getNodeView(nodeID);
         if (nodeView.labelset().hasLabel(personLabelID)) {
-            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID);
-            const auto* isFrench = reader.tryGetNodeProperty<types::Bool>(isFrenchID, nodeID);
+            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID).value_or(nullptr);
+            const auto* isFrench = reader.tryGetNodeProperty<types::Bool>(isFrenchID, nodeID).value_or(nullptr);
             if (name) {
                 allPersons.push_back(*name);
                 if (isFrench && *isFrench) {
@@ -3509,7 +3509,7 @@ TEST_F(JoinFeatureTest, commaMatch_pathAndCartesianMixed) {
     for (const auto& nodeID : reader.scanNodes()) {
         NodeView nodeView = reader.getNodeView(nodeID);
         if (nodeView.labelset().hasLabel(personLabelID)) {
-            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID);
+            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID).value_or(nullptr);
             if (name) allPersons.push_back(*name);
         }
     }
@@ -3521,15 +3521,15 @@ TEST_F(JoinFeatureTest, commaMatch_pathAndCartesianMixed) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (pName && iName) {
                 // Check if interest belongs to Cat1
                 for (const auto& e2 : reader.scanOutEdges()) {
                     if (e2._nodeID == e._otherID) {
                         NodeView dstView2 = reader.getNodeView(e2._otherID);
                         if (dstView2.labelset().hasLabel(categoryLabelID)) {
-                            const auto* catName = reader.tryGetNodeProperty<types::String>(nameID, e2._otherID);
+                            const auto* catName = reader.tryGetNodeProperty<types::String>(nameID, e2._otherID).value_or(nullptr);
                             if (catName && *catName == "Cat1") {
                                 personInterestToCat1.push_back({*pName, *iName});
                             }
@@ -3598,8 +3598,8 @@ TEST_F(JoinFeatureTest, commaMatch_twoPathsPropertyJoin) {
     for (const auto& nodeID : reader.scanNodes()) {
         NodeView nodeView = reader.getNodeView(nodeID);
         if (nodeView.labelset().hasLabel(personLabelID)) {
-            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID);
-            const auto* isFrench = reader.tryGetNodeProperty<types::Bool>(isFrenchID, nodeID);
+            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID).value_or(nullptr);
+            const auto* isFrench = reader.tryGetNodeProperty<types::Bool>(isFrenchID, nodeID).value_or(nullptr);
             if (name) {
                 personInfo[*name].first = isFrench ? std::optional<bool>(*isFrench) : std::nullopt;
             }
@@ -3611,8 +3611,8 @@ TEST_F(JoinFeatureTest, commaMatch_twoPathsPropertyJoin) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (pName && iName) {
                 personInfo[*pName].second.push_back(*iName);
             }
@@ -3683,8 +3683,8 @@ TEST_F(JoinFeatureTest, commaMatch_threePathsCombined) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(personLabelID) &&
             dstView.labelset().hasLabel(interestLabelID)) {
-            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* pName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (pName && iName) {
                 if (*pName == "A") aInterests.push_back(*iName);
                 if (*pName == "B") bInterests.push_back(*iName);
@@ -3759,8 +3759,8 @@ TEST_F(JoinFeatureTest, commaMatch_categoryChainWithPerson) {
     for (const auto& nodeID : reader.scanNodes()) {
         NodeView nodeView = reader.getNodeView(nodeID);
         if (nodeView.labelset().hasLabel(personLabelID)) {
-            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID);
-            const auto* isFrench = reader.tryGetNodeProperty<types::Bool>(isFrenchID, nodeID);
+            const auto* name = reader.tryGetNodeProperty<types::String>(nameID, nodeID).value_or(nullptr);
+            const auto* isFrench = reader.tryGetNodeProperty<types::Bool>(isFrenchID, nodeID).value_or(nullptr);
             if (name && isFrench && *isFrench) {
                 frenchPersons.push_back(*name);
             }
@@ -3774,8 +3774,8 @@ TEST_F(JoinFeatureTest, commaMatch_categoryChainWithPerson) {
         NodeView dstView = reader.getNodeView(e._otherID);
         if (srcView.labelset().hasLabel(interestLabelID) &&
             dstView.labelset().hasLabel(categoryLabelID)) {
-            const auto* catName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID);
-            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID);
+            const auto* catName = reader.tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
+            const auto* iName = reader.tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
             if (catName && *catName == "Cat2" && iName) {
                 cat2Interests.push_back(*iName);
             }

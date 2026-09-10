@@ -1236,9 +1236,9 @@ TEST_F(MatchCreateTest, matchCreateWithStaticProperties) {
     ASSERT_TRUE(countPropID.has_value()) << "count property should exist";
     ASSERT_TRUE(activePropID.has_value()) << "active property should exist";
 
-    const auto* source = read().tryGetNodeProperty<types::String>(sourcePropID->_id, createdNode);
-    const auto* count = read().tryGetNodeProperty<types::Int64>(countPropID->_id, createdNode);
-    const auto* active = read().tryGetNodeProperty<types::Bool>(activePropID->_id, createdNode);
+    const auto* source = read().tryGetNodeProperty<types::String>(sourcePropID->_id, createdNode).value_or(nullptr);
+    const auto* count = read().tryGetNodeProperty<types::Int64>(countPropID->_id, createdNode).value_or(nullptr);
+    const auto* active = read().tryGetNodeProperty<types::Bool>(activePropID->_id, createdNode).value_or(nullptr);
 
     ASSERT_TRUE(source != nullptr) << "source property should be set";
     ASSERT_TRUE(count != nullptr) << "count property should be set";

@@ -105,7 +105,7 @@ TEST_F(MultiHopPatternTest, divergentPattern_sharedInterestFrenchNonFrench) {
             bool hasNonFrench = false;
 
             for (const NodeID personNode : persons) {
-                const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, personNode);
+                const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, personNode).value_or(nullptr);
                 if (isFrench && *isFrench) {
                     hasFrench = true;
                 } else if (isFrench && !*isFrench) {
@@ -114,7 +114,7 @@ TEST_F(MultiHopPatternTest, divergentPattern_sharedInterestFrenchNonFrench) {
             }
 
             if (hasFrench && hasNonFrench) {
-                const auto* name = read().tryGetNodeProperty<types::String>(nameID, interestNode);
+                const auto* name = read().tryGetNodeProperty<types::String>(nameID, interestNode).value_or(nullptr);
                 if (name) {
                     expectedInterests.insert(*name);
                 }
@@ -175,7 +175,7 @@ TEST_F(MultiHopPatternTest, DISABLED_divergentPattern_returnMiddleNode) {
 
         for (const auto& [interestNode, count] : interestPersonCount) {
             if (count >= 2) {
-                const auto* name = read().tryGetNodeProperty<types::String>(nameID, interestNode);
+                const auto* name = read().tryGetNodeProperty<types::String>(nameID, interestNode).value_or(nullptr);
                 if (name) {
                     expectedInterests.insert(*name);
                 }
@@ -237,14 +237,14 @@ TEST_F(MultiHopPatternTest, divergentPattern_returnAllThreeNodes) {
 
         // Generate all pairs (a, c) where a != c for each Interest
         for (const auto& [interestNode, persons] : interestToPersons) {
-            const auto* interestName = read().tryGetNodeProperty<types::String>(nameID, interestNode);
+            const auto* interestName = read().tryGetNodeProperty<types::String>(nameID, interestNode).value_or(nullptr);
             if (!interestName) continue;
 
             for (size_t i = 0; i < persons.size(); i++) {
                 for (size_t j = 0; j < persons.size(); j++) {
                     if (persons[i] != persons[j]) {
-                        const auto* nameA = read().tryGetNodeProperty<types::String>(nameID, persons[i]);
-                        const auto* nameC = read().tryGetNodeProperty<types::String>(nameID, persons[j]);
+                        const auto* nameA = read().tryGetNodeProperty<types::String>(nameID, persons[i]).value_or(nullptr);
+                        const auto* nameC = read().tryGetNodeProperty<types::String>(nameID, persons[j]).value_or(nullptr);
                         if (nameA && nameC) {
                             expected.add({*nameA, *interestName, *nameC});
                         }
@@ -300,14 +300,14 @@ TEST_F(MultiHopPatternTest, divergentPattern_withEdgeTypes) {
         }
 
         for (const auto& [interestNode, persons] : interestToPersons) {
-            const auto* interestName = read().tryGetNodeProperty<types::String>(nameID, interestNode);
+            const auto* interestName = read().tryGetNodeProperty<types::String>(nameID, interestNode).value_or(nullptr);
             if (!interestName) continue;
 
             for (size_t i = 0; i < persons.size(); i++) {
                 for (size_t j = 0; j < persons.size(); j++) {
                     if (persons[i] != persons[j]) {
-                        const auto* nameA = read().tryGetNodeProperty<types::String>(nameID, persons[i]);
-                        const auto* nameC = read().tryGetNodeProperty<types::String>(nameID, persons[j]);
+                        const auto* nameA = read().tryGetNodeProperty<types::String>(nameID, persons[i]).value_or(nullptr);
+                        const auto* nameC = read().tryGetNodeProperty<types::String>(nameID, persons[j]).value_or(nullptr);
                         if (nameA && nameC) {
                             expected.add({*nameA, *interestName, *nameC});
                         }
@@ -367,10 +367,10 @@ TEST_F(MultiHopPatternTest, DISABLED_divergentPattern_filterOnMiddleNode) {
         for (const auto& [interestNode, count] : interestPersonCount) {
             if (count < 2) continue;
 
-            const auto* isReal = read().tryGetNodeProperty<types::Bool>(isRealID, interestNode);
+            const auto* isReal = read().tryGetNodeProperty<types::Bool>(isRealID, interestNode).value_or(nullptr);
             if (!isReal || !*isReal) continue;
 
-            const auto* name = read().tryGetNodeProperty<types::String>(nameID, interestNode);
+            const auto* name = read().tryGetNodeProperty<types::String>(nameID, interestNode).value_or(nullptr);
             if (name) {
                 expectedInterests.insert(*name);
             }
@@ -436,14 +436,14 @@ TEST_F(MultiHopPatternTest, convergentPattern_personWithMultipleInterests) {
 
         // All pairs of different interests for each person
         for (const auto& [personNode, interests] : personToInterests) {
-            const auto* personName = read().tryGetNodeProperty<types::String>(nameID, personNode);
+            const auto* personName = read().tryGetNodeProperty<types::String>(nameID, personNode).value_or(nullptr);
             if (!personName) continue;
 
             for (size_t i = 0; i < interests.size(); i++) {
                 for (size_t j = 0; j < interests.size(); j++) {
                     if (interests[i] != interests[j]) {
-                        const auto* name1 = read().tryGetNodeProperty<types::String>(nameID, interests[i]);
-                        const auto* name2 = read().tryGetNodeProperty<types::String>(nameID, interests[j]);
+                        const auto* name1 = read().tryGetNodeProperty<types::String>(nameID, interests[i]).value_or(nullptr);
+                        const auto* name2 = read().tryGetNodeProperty<types::String>(nameID, interests[j]).value_or(nullptr);
                         if (name1 && name2) {
                             expected.add({*personName, *name1, *name2});
                         }
@@ -504,10 +504,10 @@ TEST_F(MultiHopPatternTest, DISABLED_convergentPattern_withFilter) {
         for (const auto& [personNode, count] : personInterestCount) {
             if (count < 2) continue;
 
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, personNode);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, personNode).value_or(nullptr);
             if (!isFrench || !*isFrench) continue;
 
-            const auto* name = read().tryGetNodeProperty<types::String>(nameID, personNode);
+            const auto* name = read().tryGetNodeProperty<types::String>(nameID, personNode).value_or(nullptr);
             if (name) {
                 expectedPersons.insert(*name);
             }
@@ -579,13 +579,13 @@ TEST_F(MultiHopPatternTest, convergentPattern_mixedEdgeTypes) {
             auto knownIt = personToKnown.find(personNode);
             if (knownIt == personToKnown.end()) continue;
 
-            const auto* personName = read().tryGetNodeProperty<types::String>(nameID, personNode);
+            const auto* personName = read().tryGetNodeProperty<types::String>(nameID, personNode).value_or(nullptr);
             if (!personName) continue;
 
             for (const NodeID interest : interests) {
                 for (const NodeID known : knownIt->second) {
-                    const auto* interestName = read().tryGetNodeProperty<types::String>(nameID, interest);
-                    const auto* knownName = read().tryGetNodeProperty<types::String>(nameID, known);
+                    const auto* interestName = read().tryGetNodeProperty<types::String>(nameID, interest).value_or(nullptr);
+                    const auto* knownName = read().tryGetNodeProperty<types::String>(nameID, known).value_or(nullptr);
                     if (interestName && knownName) {
                         expected.add({*personName, *interestName, *knownName});
                     }
@@ -655,9 +655,9 @@ TEST_F(MultiHopPatternTest, forwardChain_personKnowsPersonInterest) {
 
                 const NodeID interestC = e2._otherID;
 
-                const auto* nameA = read().tryGetNodeProperty<types::String>(nameID, personA);
-                const auto* nameB = read().tryGetNodeProperty<types::String>(nameID, personB);
-                const auto* nameC = read().tryGetNodeProperty<types::String>(nameID, interestC);
+                const auto* nameA = read().tryGetNodeProperty<types::String>(nameID, personA).value_or(nullptr);
+                const auto* nameB = read().tryGetNodeProperty<types::String>(nameID, personB).value_or(nullptr);
+                const auto* nameC = read().tryGetNodeProperty<types::String>(nameID, interestC).value_or(nullptr);
                 if (nameA && nameB && nameC) {
                     expected.add({*nameA, *nameB, *nameC});
                 }
@@ -712,7 +712,7 @@ TEST_F(MultiHopPatternTest, forwardChain_withFilters) {
             NodeView dstView1 = read().getNodeView(e1._otherID);
             if (!srcView1.labelset().hasLabel(personLabelID) || !dstView1.labelset().hasLabel(personLabelID)) continue;
 
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, e1._nodeID);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, e1._nodeID).value_or(nullptr);
             if (!isFrench || !*isFrench) continue;
 
             const NodeID personA = e1._nodeID;
@@ -725,9 +725,9 @@ TEST_F(MultiHopPatternTest, forwardChain_withFilters) {
                 if (read().getEdgeTypeID(e2._edgeID) != INTERESTED_IN_TYPEID) continue;
                 if (!read().getNodeView(e2._otherID).labelset().hasLabel(interestLabelID)) continue;
 
-                const auto* nameA = read().tryGetNodeProperty<types::String>(nameID, personA);
-                const auto* nameB = read().tryGetNodeProperty<types::String>(nameID, personB);
-                const auto* nameC = read().tryGetNodeProperty<types::String>(nameID, e2._otherID);
+                const auto* nameA = read().tryGetNodeProperty<types::String>(nameID, personA).value_or(nullptr);
+                const auto* nameB = read().tryGetNodeProperty<types::String>(nameID, personB).value_or(nullptr);
+                const auto* nameC = read().tryGetNodeProperty<types::String>(nameID, e2._otherID).value_or(nullptr);
                 if (nameA && nameB && nameC) {
                     expected.add({*nameA, *nameB, *nameC});
                 }
@@ -789,11 +789,11 @@ TEST_F(MultiHopPatternTest, forwardChain_deadEnd) {
                 const NodeID nodeX = e2._otherID;
 
                 const auto* nameP =
-                    read().tryGetNodeProperty<types::String>(nameID, personP);
+                    read().tryGetNodeProperty<types::String>(nameID, personP).value_or(nullptr);
                 const auto* nameI =
-                    read().tryGetNodeProperty<types::String>(nameID, interestI);
+                    read().tryGetNodeProperty<types::String>(nameID, interestI).value_or(nullptr);
                 const auto* nameX =
-                    read().tryGetNodeProperty<types::String>(nameID, nodeX);
+                    read().tryGetNodeProperty<types::String>(nameID, nodeX).value_or(nullptr);
                 if (nameP && nameI && nameX) {
                     expected.add({*nameP, *nameI, *nameX});
                 }
@@ -868,13 +868,13 @@ TEST_F(MultiHopPatternTest, backwardChain_interestFromPerson) {
             auto knownByIt = personKnownBy.find(personP);
             if (knownByIt == personKnownBy.end()) continue;
 
-            const auto* nameP = read().tryGetNodeProperty<types::String>(nameID, personP);
+            const auto* nameP = read().tryGetNodeProperty<types::String>(nameID, personP).value_or(nullptr);
             if (!nameP) continue;
 
             for (const NodeID interestI : interests) {
                 for (const NodeID nodeQ : knownByIt->second) {
-                    const auto* nameI = read().tryGetNodeProperty<types::String>(nameID, interestI);
-                    const auto* nameQ = read().tryGetNodeProperty<types::String>(nameID, nodeQ);
+                    const auto* nameI = read().tryGetNodeProperty<types::String>(nameID, interestI).value_or(nullptr);
+                    const auto* nameQ = read().tryGetNodeProperty<types::String>(nameID, nodeQ).value_or(nullptr);
                     if (nameI && nameQ) {
                         expected.add({*nameI, *nameP, *nameQ});
                     }
@@ -940,17 +940,17 @@ TEST_F(MultiHopPatternTest, backwardChain_withFilter) {
         }
 
         for (const auto& [personP, interests] : personToInterests) {
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, personP);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, personP).value_or(nullptr);
             if (isFrench && *isFrench) continue; // Skip French
 
             auto knownByIt = personKnownBy.find(personP);
             if (knownByIt == personKnownBy.end()) continue;
 
-            const auto* nameP = read().tryGetNodeProperty<types::String>(nameID, personP);
+            const auto* nameP = read().tryGetNodeProperty<types::String>(nameID, personP).value_or(nullptr);
             if (!nameP) continue;
 
             for (const NodeID interestI : interests) {
-                const auto* nameI = read().tryGetNodeProperty<types::String>(nameID, interestI);
+                const auto* nameI = read().tryGetNodeProperty<types::String>(nameID, interestI).value_or(nullptr);
                 if (nameI) {
                     expected.add({*nameI, *nameP});
                 }
@@ -1008,14 +1008,14 @@ TEST_F(MultiHopPatternTest, labelConstraint_allNodesLabeled) {
         }
 
         for (const auto& [interestNode, persons] : interestToPersons) {
-            const auto* interestName = read().tryGetNodeProperty<types::String>(nameID, interestNode);
+            const auto* interestName = read().tryGetNodeProperty<types::String>(nameID, interestNode).value_or(nullptr);
             if (!interestName) continue;
 
             for (size_t i = 0; i < persons.size(); i++) {
                 for (size_t j = 0; j < persons.size(); j++) {
                     if (persons[i] != persons[j]) {
-                        const auto* name1 = read().tryGetNodeProperty<types::String>(nameID, persons[i]);
-                        const auto* name2 = read().tryGetNodeProperty<types::String>(nameID, persons[j]);
+                        const auto* name1 = read().tryGetNodeProperty<types::String>(nameID, persons[i]).value_or(nullptr);
+                        const auto* name2 = read().tryGetNodeProperty<types::String>(nameID, persons[j]).value_or(nullptr);
                         if (name1 && name2) {
                             expected.add({*name1, *interestName, *name2});
                         }
@@ -1071,7 +1071,7 @@ TEST_F(MultiHopPatternTest, DISABLED_labelConstraint_middleNodeOnly) {
 
         for (const auto& [interestNode, sources] : interestSources) {
             if (sources.size() >= 2) {
-                const auto* name = read().tryGetNodeProperty<types::String>(nameID, interestNode);
+                const auto* name = read().tryGetNodeProperty<types::String>(nameID, interestNode).value_or(nullptr);
                 if (name) {
                     expectedInterests.insert(*name);
                 }
@@ -1141,14 +1141,14 @@ TEST_F(MultiHopPatternTest, labelConstraint_multipleLabels) {
             auto personsIt = interestToPersons.find(interestNode);
             if (personsIt == interestToPersons.end()) continue;
 
-            const auto* interestName = read().tryGetNodeProperty<types::String>(nameID, interestNode);
+            const auto* interestName = read().tryGetNodeProperty<types::String>(nameID, interestNode).value_or(nullptr);
             if (!interestName) continue;
 
             for (const NodeID founder : founders) {
                 for (const NodeID person : personsIt->second) {
                     if (founder != person) {
-                        const auto* founderName = read().tryGetNodeProperty<types::String>(nameID, founder);
-                        const auto* personName = read().tryGetNodeProperty<types::String>(nameID, person);
+                        const auto* founderName = read().tryGetNodeProperty<types::String>(nameID, founder).value_or(nullptr);
+                        const auto* personName = read().tryGetNodeProperty<types::String>(nameID, person).value_or(nullptr);
                         if (founderName && personName) {
                             expected.add({*founderName, *interestName, *personName});
                         }
@@ -1202,8 +1202,8 @@ TEST_F(MultiHopPatternTest, labelConstraint_edgeAndNodeLabels) {
             NodeView dstView = read().getNodeView(e._otherID);
             if (!srcView.labelset().hasLabel(personLabelID) || !dstView.labelset().hasLabel(interestLabelID)) continue;
 
-            const auto* personName = read().tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* interestName = read().tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* personName = read().tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* interestName = read().tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (personName && interestName) {
                 expected.add({*personName, *interestName});
             }
@@ -1259,7 +1259,7 @@ TEST_F(MultiHopPatternTest, whereFilter_booleanOnBothEnds) {
             NodeView dstView = read().getNodeView(e._otherID);
             if (!srcView.labelset().hasLabel(personLabelID) || !dstView.labelset().hasLabel(interestLabelID)) continue;
 
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, e._nodeID);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, e._nodeID).value_or(nullptr);
             if (isFrench && *isFrench) {
                 interestToFrench[e._otherID].push_back(e._nodeID);
             } else if (isFrench && !*isFrench) {
@@ -1271,13 +1271,13 @@ TEST_F(MultiHopPatternTest, whereFilter_booleanOnBothEnds) {
             auto nonFrenchIt = interestToNonFrench.find(interestNode);
             if (nonFrenchIt == interestToNonFrench.end()) continue;
 
-            const auto* interestName = read().tryGetNodeProperty<types::String>(nameID, interestNode);
+            const auto* interestName = read().tryGetNodeProperty<types::String>(nameID, interestNode).value_or(nullptr);
             if (!interestName) continue;
 
             for (const NodeID french : frenchPersons) {
                 for (const NodeID nonFrench : nonFrenchIt->second) {
-                    const auto* frenchName = read().tryGetNodeProperty<types::String>(nameID, french);
-                    const auto* nonFrenchName = read().tryGetNodeProperty<types::String>(nameID, nonFrench);
+                    const auto* frenchName = read().tryGetNodeProperty<types::String>(nameID, french).value_or(nullptr);
+                    const auto* nonFrenchName = read().tryGetNodeProperty<types::String>(nameID, nonFrench).value_or(nullptr);
                     if (frenchName && nonFrenchName) {
                         expected.add({*frenchName, *interestName, *nonFrenchName});
                     }
@@ -1328,7 +1328,7 @@ TEST_F(MultiHopPatternTest, whereFilter_stringEquality) {
         for (const NodeID interestNode : read().scanNodes()) {
             if (!read().getNodeView(interestNode).labelset().hasLabel(interestLabelID)) continue;
 
-            const auto* interestName = read().tryGetNodeProperty<types::String>(nameID, interestNode);
+            const auto* interestName = read().tryGetNodeProperty<types::String>(nameID, interestNode).value_or(nullptr);
             if (!interestName || *interestName != "Cooking") continue;
 
             std::vector<NodeID> interestedPersons;
@@ -1342,8 +1342,8 @@ TEST_F(MultiHopPatternTest, whereFilter_stringEquality) {
             for (size_t i = 0; i < interestedPersons.size(); i++) {
                 for (size_t j = 0; j < interestedPersons.size(); j++) {
                     if (interestedPersons[i] != interestedPersons[j]) {
-                        const auto* nameA = read().tryGetNodeProperty<types::String>(nameID, interestedPersons[i]);
-                        const auto* nameC = read().tryGetNodeProperty<types::String>(nameID, interestedPersons[j]);
+                        const auto* nameA = read().tryGetNodeProperty<types::String>(nameID, interestedPersons[i]).value_or(nullptr);
+                        const auto* nameC = read().tryGetNodeProperty<types::String>(nameID, interestedPersons[j]).value_or(nullptr);
                         if (nameA && nameC) {
                             expected.add({*nameA, *nameC});
                         }
@@ -1457,7 +1457,7 @@ TEST_F(MultiHopPatternTest, DISABLED_returnVariation_distinctMiddle) {
 
         for (const auto& [interestNode, count] : interestPersonCount) {
             if (count >= 2) {
-                const auto* name = read().tryGetNodeProperty<types::String>(nameID, interestNode);
+                const auto* name = read().tryGetNodeProperty<types::String>(nameID, interestNode).value_or(nullptr);
                 if (name) {
                     expectedInterests.insert(*name);
                 }

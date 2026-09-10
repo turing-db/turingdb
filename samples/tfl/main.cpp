@@ -368,7 +368,7 @@ int main(int argc, const char** argv) {
             NodeID nodeID(pathResult[i].getValue());
             const auto* name =
                 reader.tryGetNodeProperty<types::String>(
-                    namePropID, nodeID);
+                    namePropID, nodeID).value_or(nullptr);
             if (name) {
                 stops.emplace_back(*name);
             }
@@ -376,7 +376,7 @@ int main(int argc, const char** argv) {
             EdgeID edgeID(pathResult[i].getValue());
             const auto* line =
                 reader.tryGetEdgeProperty<types::String>(
-                    linePropID, edgeID);
+                    linePropID, edgeID).value_or(nullptr);
             if (line) {
                 edgeLines.emplace_back(*line);
             }
