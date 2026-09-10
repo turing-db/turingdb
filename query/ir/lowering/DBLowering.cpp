@@ -401,6 +401,19 @@ bool isListChunk(mlir::Type chunkType) {
     return mlir::isa<storage::ListType>(chunk.getElementType());
 }
 
+bool isIndexableChunk(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        return false;
+    }
+
+    const mlir::Type element = chunk.getElementType();
+    const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
+    const mlir::Type indexed = nullable ? nullable.getValueType() : element;
+
+    return mlir::isa<storage::ListType, storage::ListElementType>(indexed);
+}
+
 // Internal type of listChunk
 mlir::Type listInternalType(mlir::Type chunkType) {
     const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
@@ -3037,7 +3050,7 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
         break;
 
         case BinaryResultKind::Index: {
-            if (!isListChunk(lhsType)) {
+            if (!isIndexableChunk(lhsType)) {
                 throw IRException("db.index requires a list as its indexed operand");
             }
 

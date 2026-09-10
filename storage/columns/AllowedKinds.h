@@ -320,6 +320,9 @@ template <ColumnOperator Op>
     requires (Op == OP_INDEX)
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
+        OptionalKindPairs<ListElementView, types::Int64::Primitive>::Pairs,
+        OptionalKindPairs<ListElementView, types::UInt64::Primitive>::Pairs,
+
         std::tuple<
             KindPair<ListView, types::Int64::Primitive>,
             KindPair<ListView, types::UInt64::Primitive>,

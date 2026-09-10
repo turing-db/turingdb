@@ -239,9 +239,20 @@ struct ListIndexImpl {
         return list.elements()[static_cast<size_t>(offset)];
     }
 
+    inline std::optional<ListElementView> operator()(ListElementView cell, int64_t index) const {
+        if (cell.getTag() != ListBufferTypeTag::ListView) {
+            return std::nullopt;
+        }
+
+        return operator()(cell.getAs<ListView>(), index);
+    }
+
     // Unused but defined to satisfy dispatcher
-    inline std::optional<ListElementView> operator()(int64_t index, ListView list) const {
-        return operator()(list, index);
+    std::optional<ListElementView> operator()(int64_t /*unused*/, ListView /*unused*/) const {
+        throw TuringException("Index operands the wrong way round.");
+    }
+    std::optional<ListElementView> operator()(int64_t /*unused*/, ListElementView /*unused*/) const {
+        throw TuringException("Index operands the wrong way round.");
     }
 };
 

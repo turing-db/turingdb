@@ -4743,8 +4743,9 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
 
 void DBProgramGenerator::translateIndexExpr(const Expr* expr, const IndexExpr* indexExpr) {
     const Expr* base = indexExpr->getBase();
+    const EvaluatedType baseType = base->getType();
 
-    if (base->getType() == EvaluatedType::List) {
+    if (baseType == EvaluatedType::List || baseType == EvaluatedType::ListItem) {
         const Expr* index = indexExpr->getIndexExpr();
 
         translateExpr(base);

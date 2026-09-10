@@ -668,7 +668,8 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
 
     const EvaluatedType baseType = base->getType();
 
-    const bool indexesAList = baseType == EvaluatedType::List;
+    const bool indexesAList = baseType == EvaluatedType::List
+                           || baseType == EvaluatedType::ListItem;
     const bool indexesACSVRow = baseType == EvaluatedType::StringTable;
 
     if (!indexesAList && !indexesACSVRow) {

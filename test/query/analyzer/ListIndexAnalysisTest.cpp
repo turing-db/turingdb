@@ -116,11 +116,13 @@ TEST_F(ListIndexAnalysisTest, rejectsAnIndexIntoAScalar) {
                    "Index operator [] can only be applied to a list or a CSV row");
 }
 
-// An element carries its own type rather than the list's, so it is not itself a list the
-// next access could read - chaining is turned away until the access is typed by shape.
-TEST_F(ListIndexAnalysisTest, rejectsAChainedIndex) {
-    expectRejected("MATCH (n:Person) RETURN [[1, 2], [3, 4]][0][1]",
-                   "Index operator [] can only be applied to a list or a CSV row");
+TEST_F(ListIndexAnalysisTest, acceptsAChainedIndex) {
+    expectAccepted("MATCH (n:Person) RETURN [[1, 2], [3, 4]][0][1]");
+}
+
+TEST_F(ListIndexAnalysisTest, acceptsAnIndexIntoAnUnwoundItem) {
+    expectAccepted("UNWIND [[1, 2], [3, 4]] AS xs RETURN xs[0]");
+    expectAccepted("UNWIND [1, [2, 3]] AS xs RETURN xs[0]");
 }
 
 // The rejection for the pipeline engine, which runs no list operator, belongs to its
