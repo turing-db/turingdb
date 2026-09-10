@@ -682,7 +682,7 @@ private:
     mlir::Value translatePropertyExpr(const PropertyExpr* propExpr);
     mlir::Value translateEntityTypeExpr(const EntityTypeExpr* typeExpr);
 
-    // labels() / edgeType() of an entity the CREATE wrote, as the constant string it reads:
+    // labels() / type() of an entity the CREATE wrote, as the constant string it reads:
     // its provisional ID is in no committed graph the runtime read would consult. Null when
     // the argument is not a created entity, so a matched entity falls through to db.labels /
     // db.edge_type.

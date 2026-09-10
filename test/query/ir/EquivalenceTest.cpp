@@ -786,9 +786,9 @@ TEST_F(EquivalenceTest, labelsAndTypeFunctions) {
     expectEquivalent("MATCH (a:Interest) RETURN labels(a)");
     expectEquivalent("MATCH (n) RETURN n, labels(n)");
 
-    expectEquivalent("MATCH (a)-[e]->(b) RETURN edgeType(e)");
-    expectEquivalent("MATCH (a)-[e:INTERESTED_IN]->(b) RETURN edgeType(e)");
-    expectEquivalent("MATCH (a)-[e]->(b) RETURN a, edgeType(e), b");
+    expectEquivalent("MATCH (a)-[e]->(b) RETURN type(e)");
+    expectEquivalent("MATCH (a)-[e:INTERESTED_IN]->(b) RETURN type(e)");
+    expectEquivalent("MATCH (a)-[e]->(b) RETURN a, type(e), b");
 
     expectEquivalent("MATCH (n) WHERE labels(n) = 'Interest' RETURN *");
     expectEquivalent("MATCH (n) WHERE labels(n) = 'Person' RETURN *");
@@ -822,5 +822,5 @@ TEST_F(EquivalenceTest, functionsWithLimit) {
     expectEquivalent("MATCH (n) RETURN labels(n) LIMIT 5");
     expectEquivalent("MATCH (n) RETURN labels(n) LIMIT 1");
     expectEquivalent("MATCH (n) RETURN n, labels(n) LIMIT 4");
-    expectEquivalent("MATCH (a)-[e]->(b) RETURN edgeType(e) LIMIT 3");
+    expectEquivalent("MATCH (a)-[e]->(b) RETURN type(e) LIMIT 3");
 }

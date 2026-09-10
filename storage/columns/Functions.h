@@ -313,7 +313,7 @@ struct FunctionExecutor<LabelsFunction, Res, Arg> {
     }
 };
 
-/// Specialisation for edgeType()
+/// Specialisation for type()
 template <typename Res, typename Arg>
 struct FunctionExecutor<EdgeTypesFunction, Res, Arg> {
     static void apply(ColumnVector<std::string>* res,

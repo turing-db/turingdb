@@ -23,7 +23,7 @@
 using namespace db;
 using namespace turing::test;
 
-// labels() and edgeType() are the two functions whose rows own the characters they hold,
+// labels() and type() are the two functions whose rows own the characters they hold,
 // where a string property column borrows them from the graph. That makes their chunk a
 // nullable of owned strings, an element type every step carrying a chunk on has to know:
 // a limit, a skip, a grouping key, a cross product.
@@ -91,7 +91,7 @@ TEST_F(OwnedStringChunkTest, skipsAColumnOfLabels) {
 }
 
 TEST_F(OwnedStringChunkTest, skipsAColumnOfEdgeTypes) {
-    expectRowCount("MATCH ()-[e]->() RETURN edgeType(e) SKIP 2", 16);
+    expectRowCount("MATCH ()-[e]->() RETURN type(e) SKIP 2", 16);
 }
 
 TEST_F(OwnedStringChunkTest, dedupsAColumnOfLabels) {
@@ -136,7 +136,7 @@ TEST_F(OwnedStringChunkTest, carriesAColumnOfLabelsAcrossACrossProduct) {
 // edges Remy and Adam walk form the named group, the six padded rows the null one
 TEST_F(OwnedStringChunkTest, groupsOnTheEdgeTypeOfAnOptionalMatch) {
     expectRows("MATCH (p:Person) OPTIONAL MATCH (p)-[e:KNOWS_WELL]->(f) "
-               "RETURN edgeType(e), count(*)",
+               "RETURN type(e), count(*)",
                {{"KNOWS_WELL", "2"}, {"null", "6"}});
 }
 

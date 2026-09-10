@@ -60,10 +60,10 @@ TEST_F(MergeKeyTest, keysANodeOnTheLabelsOfAMatchedNode) {
     expectRows("MATCH (t:Tag) RETURN t.name", {{"Person, SoftwareEngineering, Founder"}});
 }
 
-// The edge sibling of the same key: edgeType() is owned the way labels() is
+// The edge sibling of the same key: type() is owned the way labels() is
 TEST_F(MergeKeyTest, keysANodeOnTheTypeOfAMatchedEdge) {
     expectWriteRowCount("MATCH (:Person {name: 'Remy'})-[e:KNOWS_WELL]->() "
-                        "MERGE (t:Tag {name: edgeType(e)})",
+                        "MERGE (t:Tag {name: type(e)})",
                         0);
 
     expectRows("MATCH (t:Tag) RETURN t.name", {{"KNOWS_WELL"}});

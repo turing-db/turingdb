@@ -2141,3 +2141,6 @@ add_ir_tests(test_query_ir_case_op CaseOpTest.cpp)
 
 # The Cypher manual's CASE examples, run end to end against simpledb.
 add_call_v3_test(test_query_ir_neo4j_case_example Neo4jCaseExampleTest.cpp)
+
+# type() over an edge, run end to end against simpledb.
+add_call_v3_test(test_query_ir_edge_type_function EdgeTypeFunctionTest.cpp)
