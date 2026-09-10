@@ -49,7 +49,7 @@ def ReusePropertyReads : Pass<"reuse_property_reads"> {
 }
 
 def TrimUnreadColumns : Pass<"trim_unread_columns"> {
-    let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products and grouping ops";
+    let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops and calls";
     let dependentDialects = ["mlir::db::DB"];
 }
 

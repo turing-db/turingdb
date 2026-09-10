@@ -230,25 +230,56 @@ struct MaskCone {
     llvm::SmallSetVector<Value, 4> _inputs;
 };
 
+// One suspended operand loop of the cone walk: the op whose operands are being
+// visited, and how many of them are done.
+struct ConeFrame {
+    Operation* _op {nullptr};
+    unsigned _nextOperand {0};
+};
+
 // Gathers the mask's compute cone and the external columns feeding it. Valid
 // even when the cone spans blocks.
-void collectConePostOrder(Value value, llvm::SmallPtrSet<Operation*, 8>& visited, MaskCone& cone) {
-    Operation* const def = value.getDefiningOp();
+void collectConePostOrder(Value mask, llvm::SmallPtrSet<Operation*, 8>& visited, MaskCone& cone) {
+    Operation* const maskDef = mask.getDefiningOp();
 
-    if (!def || !isMaskComputeOp(def)) {
-        cone._inputs.insert(value);
+    if (!maskDef || !isMaskComputeOp(maskDef)) {
+        cone._inputs.insert(mask);
         return;
     }
 
-    if (!visited.insert(def).second) {
+    // A caller walking several conjuncts into one cone shares the set across the
+    // calls, so a root already collected by an earlier conjunct is dropped here.
+    if (!visited.insert(maskDef).second) {
         return;
     }
 
-    for (const Value operand : def->getOperands()) {
-        collectConePostOrder(operand, visited, cone);
-    }
+    llvm::SmallVector<ConeFrame> stack {ConeFrame {maskDef, 0}};
+    while (!stack.empty()) {
+        ConeFrame& frame = stack.back();
 
-    cone._ops.push_back(def);
+        if (frame._nextOperand == frame._op->getNumOperands()) {
+            cone._ops.push_back(frame._op);
+            stack.pop_back();
+            continue;
+        }
+
+        const Value operand = frame._op->getOperand(frame._nextOperand);
+        frame._nextOperand++;
+
+        Operation* const operandDef = operand.getDefiningOp();
+        if (!operandDef || !isMaskComputeOp(operandDef)) {
+            cone._inputs.insert(operand);
+            continue;
+        }
+
+        // A second path can only reach an op through a value that something else
+        // also reads, so a singly-used result needs no membership check. An OR
+        // chain is singly-used throughout and never touches the set at all.
+        const bool reachableOnce = operandDef->getNumResults() == 1 && operand.hasOneUse();
+        if (reachableOnce || visited.insert(operandDef).second) {
+            stack.push_back(ConeFrame {operandDef, 0});
+        }
+    }
 }
 
 MaskCone collectMaskCone(Value mask) {
@@ -1118,6 +1149,11 @@ bool matchCarrySetLayout(Operation* op, CarrySetLayout& layout) {
     } else if (isa<Limit, Skip, Sort, GroupAggregate, Collect>(op)) {
         layout = CarrySetLayout {._operandOffset = 0, ._resultOffset = 0};
         return true;
+    } else if (CallProcedure call = dyn_cast<CallProcedure>(op)) {
+        const size_t inputCount = call.getInputs().size();
+        const size_t yieldCount = call.getYields().size();
+        layout = CarrySetLayout {._operandOffset = inputCount, ._resultOffset = yieldCount};
+        return true;
     }
 
     return false;
@@ -1288,6 +1324,10 @@ void trimAttributes(Operation* op, llvm::ArrayRef<size_t> kept, OperationState& 
         trimGroupAggregateKinds(groupAggregate, kept, state, builder);
     } else if (Collect collect = dyn_cast<Collect>(op)) {
         trimCollectAttributes(collect, kept, state, builder);
+    } else if (CallProcedure call = dyn_cast<CallProcedure>(op)) {
+        const int32_t inputCount = static_cast<int32_t>(call.getInputs().size());
+        const int32_t keptCount = static_cast<int32_t>(kept.size());
+        state.attributes.set(call.getOperandSegmentSizesAttrName(), builder.getDenseI32ArrayAttr({inputCount, keptCount}));
     }
 }
 
