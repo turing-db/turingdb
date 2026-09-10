@@ -3849,6 +3849,10 @@ NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) 
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
+    if (isNullableListElement(elementType)) {
+        return NLExecutor::selectOptListElementCompareFunction();
+    }
+
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         if (isOwnedStringElement(nullableType.getValueType())) {
             return NLExecutor::selectOptOwnedStringCompare();
@@ -3908,6 +3912,10 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
+    if (isNullableListElement(elementType)) {
+        return NLExecutor::selectOptListElementKeyAppendFunction();
+    }
+
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         if (isOwnedStringElement(nullableType.getValueType())) {
             return NLExecutor::selectOptOwnedStringKeyAppend();
@@ -3942,6 +3950,10 @@ NLCountFunction NLTranslator::selectCountForChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
+    if (isNullableListElement(elementType)) {
+        return NLExecutor::selectOptListElementCountFunction();
+    }
+
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         if (isOwnedStringElement(nullableType.getValueType())) {
             return NLExecutor::selectOptOwnedStringCount();
@@ -3967,6 +3979,10 @@ NLGroupKeyGatherFunction NLTranslator::selectGroupKeyGatherForChunkType(mlir::Ty
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
+    if (isNullableListElement(elementType)) {
+        return NLExecutor::selectOptListElementGroupKeyGatherFunction();
+    }
+
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         if (isOwnedStringElement(nullableType.getValueType())) {
             return NLExecutor::selectOptOwnedStringGroupKeyGather();
@@ -3988,6 +4004,10 @@ NLGroupKeyGatherFunction NLTranslator::selectGroupKeyGatherForChunkType(mlir::Ty
 NLCopyFunction NLTranslator::selectCopyForChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
+
+    if (isNullableListElement(elementType)) {
+        return NLExecutor::selectOptListElementCopyFunction();
+    }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         if (isOwnedStringElement(nullableType.getValueType())) {
@@ -4014,6 +4034,10 @@ NLCopyFunction NLTranslator::selectCopyForChunkType(mlir::Type chunkType) {
 Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
+
+    if (isNullableListElement(elementType)) {
+        return allocOptListElementColumn();
+    }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
         if (isOwnedStringElement(nullableType.getValueType())) {

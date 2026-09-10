@@ -419,6 +419,12 @@ public:
     static NLGroupKeyGatherFunction selectListElementGroupKeyGatherFunction();
     static NLCopyFunction selectListElementCopyFunction();
 
+    static NLCompareFunction selectOptListElementCompareFunction();
+    static NLKeyAppendFunction selectOptListElementKeyAppendFunction();
+    static NLCountFunction selectOptListElementCountFunction();
+    static NLGroupKeyGatherFunction selectOptListElementGroupKeyGatherFunction();
+    static NLCopyFunction selectOptListElementCopyFunction();
+
     // The cut families for a list chunk: a list cell copies as a view, so a prefix or a
     // suffix of them is the plain range copy every other cell column uses
     static NLBroadcastFunction selectListBlockRepeatFunction();

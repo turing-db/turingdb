@@ -1078,6 +1078,36 @@ int compareListElementColumn(const Column* column, size_t a, size_t b) {
     return 0;
 }
 
+int compareOptListElementColumn(const Column* column, size_t a, size_t b) {
+    const std::vector<std::optional<ListElementView>>& raw =
+        static_cast<const ColumnOptVector<ListElementView>*>(column)->getRaw();
+
+    const auto isNull = [](const std::optional<ListElementView>& element) {
+        return !element.has_value() || element->getTag() == ListBufferTypeTag::Null;
+    };
+
+    const bool aNull = isNull(raw[a]);
+    const bool bNull = isNull(raw[b]);
+
+    if (aNull || bNull) {
+        if (aNull && bNull) {
+            return 0;
+        }
+
+        return aNull ? 1 : -1;
+    }
+
+    const std::strong_ordering order = *raw[a] <=> *raw[b];
+
+    if (order == std::strong_ordering::less) {
+        return -1;
+    } else if (order == std::strong_ordering::greater) {
+        return 1;
+    }
+
+    return 0;
+}
+
 // 3-way compare two rows of a collected list column. Two lists order lexicographically
 // on the element order above, so a list can be the key the rows are sorted on.
 int compareListColumn(const Column* column, size_t a, size_t b) {
@@ -1301,6 +1331,19 @@ void distinctKeyAppendListElementColumn(const Column* column, size_t row, std::s
     distinctAppendElementBytes(key, raw[row]);
 }
 
+void distinctKeyAppendOptListElementColumn(const Column* column, size_t row, std::string& key) {
+    const std::vector<std::optional<ListElementView>>& raw =
+        static_cast<const ColumnOptVector<ListElementView>*>(column)->getRaw();
+    const std::optional<ListElementView>& element = raw[row];
+
+    if (!element.has_value()) {
+        key.push_back(static_cast<char>(ListBufferTypeTag::Null));
+        return;
+    }
+
+    distinctAppendElementBytes(key, *element);
+}
+
 // Serialize one row of a list column into the row key, so two rows key alike when their
 // lists hold equal elements - the equality Cypher gives two lists.
 void distinctKeyAppendListColumn(const Column* column, size_t row, std::string& key) {
@@ -1314,6 +1357,15 @@ size_t countNonNullElementsColumn(const Column* column) {
     const auto& raw = static_cast<const ColumnVector<ListElementView>*>(column)->getRaw();
     return std::count_if(raw.begin(), raw.end(), [](const ListElementView element) {
         return element.getTag() != ListBufferTypeTag::Null;
+    });
+}
+
+size_t countPresentElementsColumn(const Column* column) {
+    const std::vector<std::optional<ListElementView>>& raw =
+        static_cast<const ColumnOptVector<ListElementView>*>(column)->getRaw();
+
+    return std::count_if(raw.begin(), raw.end(), [](const std::optional<ListElementView>& element) {
+        return element.has_value() && element->getTag() != ListBufferTypeTag::Null;
     });
 }
 
@@ -5423,6 +5475,26 @@ NLGroupKeyGatherFunction NLExecutor::selectListElementGroupKeyGatherFunction() {
 
 NLCopyFunction NLExecutor::selectListElementCopyFunction() {
     return &copyRangeColumn<ListElementView>;
+}
+
+NLCompareFunction NLExecutor::selectOptListElementCompareFunction() {
+    return &compareOptListElementColumn;
+}
+
+NLKeyAppendFunction NLExecutor::selectOptListElementKeyAppendFunction() {
+    return &distinctKeyAppendOptListElementColumn;
+}
+
+NLCountFunction NLExecutor::selectOptListElementCountFunction() {
+    return &countPresentElementsColumn;
+}
+
+NLGroupKeyGatherFunction NLExecutor::selectOptListElementGroupKeyGatherFunction() {
+    return &groupGatherAppendColumn<std::optional<ListElementView>>;
+}
+
+NLCopyFunction NLExecutor::selectOptListElementCopyFunction() {
+    return &copyRangeColumn<std::optional<ListElementView>>;
 }
 
 NLBroadcastFunction NLExecutor::selectListBlockRepeatFunction() {
