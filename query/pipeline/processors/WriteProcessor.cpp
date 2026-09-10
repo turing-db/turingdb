@@ -122,6 +122,7 @@ public:
             if (!val.has_value()) {
                 using Disengaged = std::optional<types::String::OwningPrimitive>;
                 _buf.emplace_back(_propID, Disengaged {});
+                continue;
             }
 
             const types::String::Primitive v = *val;
@@ -152,6 +153,7 @@ public:
             if (!val.has_value()) {
                 using Disengaged = std::optional<types::Embedding::OwningPrimitive>;
                 _buf.emplace_back(_propID, Disengaged {});
+                continue;
             }
             const types::Embedding::Primitive v = *val;
 

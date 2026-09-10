@@ -3327,6 +3327,37 @@ TEST_F(WriteQueriesTest, dynamicIntPropertySetNull) {
     }
 }
 
+TEST_F(WriteQueriesTest, dynamicStringPropertySetNull) {
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH (n) SET n.dob = n.dob)";
+
+        auto res = query(setQuery, _emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery =
+            R"(MATCH (n) WHERE n.dob IS NOT NULL RETURN n.name, n.dob)";
+
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(2, df->size());
+
+            const auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* dobs = findColumn(df, "n.dob")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(names && dobs);
+
+            using Values = std::vector<std::optional<std::string_view>>;
+
+            EXPECT_EQ((Values {"Remy", "Adam", "Maxime", "Luc"}), names->getRaw()) << dump(df);
+            EXPECT_EQ((Values {"18/01", "18/08", "24/07", "28/05"}), dobs->getRaw()) << dump(df);
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+}
+
 TEST_F(WriteQueriesTest, dynamicIntSelfAddProperty) {
     newChange();
     {
