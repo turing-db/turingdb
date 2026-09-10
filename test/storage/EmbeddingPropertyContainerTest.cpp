@@ -281,7 +281,7 @@ TEST_F(EmbeddingGraphTest, GetPropertiesWithNullIteratorAcrossBuckets) {
         ASSERT_EQ(view.size(), dimension);
 
         // Look up the original loop index via the idx property
-        const auto* origIdx = reader.tryGetNodeProperty<types::Int64>(idxType->_id, nodeID);
+        const auto* origIdx = reader.tryGetNodeProperty<types::Int64>(idxType->_id, nodeID).value_or(nullptr);
         ASSERT_NE(origIdx, nullptr);
         const size_t i = static_cast<size_t>(*origIdx);
 
@@ -339,7 +339,7 @@ TEST_F(EmbeddingGraphTest, GetPropertiesWithNullIterator) {
         const NodeID nodeID = it.getCurrentID();
         const auto value = it.get();
 
-        const auto* origIdx = reader.tryGetNodeProperty<types::Int64>(idxType->_id, nodeID);
+        const auto* origIdx = reader.tryGetNodeProperty<types::Int64>(idxType->_id, nodeID).value_or(nullptr);
         ASSERT_NE(origIdx, nullptr);
         const size_t i = static_cast<size_t>(*origIdx);
 
