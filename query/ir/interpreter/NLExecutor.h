@@ -475,6 +475,7 @@ public:
     // The sibling reading a type-erased input column: sum and avg reduce its numeric
     // cells into the f64 accumulator, whatever tags they carry.
     static NLAggregateUpdateFunction selectTaggedAggregateUpdate(AggregateKind kind);
+    static NLAggregateUpdateFunction selectOptTaggedAggregateUpdate(AggregateKind kind);
     static NLAggregateResultFunction selectAggregateResult(AggregateKind kind, ValueType resultType);
 
     // The grouped counterparts, selected for one aggregate of a grouped
@@ -493,6 +494,7 @@ public:
     // The sibling reading a type-erased input column: sum and avg reduce its numeric
     // cells into the f64 accumulator, whatever tags they carry.
     static NLGroupAggregateFoldFunction selectTaggedGroupAggregateFold(GroupAggregateKind kind);
+    static NLGroupAggregateFoldFunction selectOptTaggedGroupAggregateFold(GroupAggregateKind kind);
     static NLGroupAggregateFoldFunction selectGroupCountAllFold();
     static NLGroupAggregateFoldFunction selectGroupCountDistinctFold(ValueType inputType);
     static NLGroupAggregateFoldFunction selectGroupCountDistinctChunkFold(NLChunkKind kind);
@@ -500,7 +502,9 @@ public:
     // The grouped count / count(DISTINCT) folds of a type-erased column of tagged
     // scalars, the column a heterogeneous UNWIND produces
     static NLGroupAggregateFoldFunction selectGroupCountListElementFold();
+    static NLGroupAggregateFoldFunction selectGroupCountOptListElementFold();
     static NLGroupAggregateFoldFunction selectGroupCountDistinctListElementFold();
+    static NLGroupAggregateFoldFunction selectGroupCountDistinctOptListElementFold();
     static NLGroupAggregateEmitFunction selectGroupAggregateEmit(GroupAggregateKind kind, ValueType resultType);
 
     // The append (onto a key buffer's tail) for an ID chunk of this kind / a
@@ -557,6 +561,10 @@ public:
     static void selectCollectTaggedHandlers(bool distinctValues,
                                             NLCollectFoldFunction& fold,
                                             NLCollectListEmitFunction& listEmit);
+
+    static void selectCollectOptTaggedHandlers(bool distinctValues,
+                                               NLCollectFoldFunction& fold,
+                                               NLCollectListEmitFunction& listEmit);
 
     // The with-null property fetch handler for an ID type (NodeID/EdgeID) and a
     // value type (types::Double, ...). The translator picks the specialization

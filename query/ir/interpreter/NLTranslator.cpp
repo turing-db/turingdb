@@ -2873,7 +2873,9 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
             const mlir::Type countElementType = chunk.getElementType();
             const auto nullable = mlir::dyn_cast<storage::NullableType>(countElementType);
-            if (nullable) {
+            if (isNullableListElement(countElementType)) {
+                aggregate._fold = NLExecutor::selectGroupCountOptListElementFold();
+            } else if (nullable) {
                 const ValueType valueType = valueTypeFromElementType(nullable.getValueType());
                 aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, valueType);
             } else if (mlir::isa<storage::ListElementType>(countElementType)) {
@@ -2916,11 +2918,14 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             aggregate._emit = NLExecutor::selectGroupAggregateEmit(kind, ValueType::Int64);
 
             const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
-            const auto nullable = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
-            if (nullable) {
+            const mlir::Type distinctElementType = chunk.getElementType();
+            const auto nullable = mlir::dyn_cast<storage::NullableType>(distinctElementType);
+            if (isNullableListElement(distinctElementType)) {
+                aggregate._fold = NLExecutor::selectGroupCountDistinctOptListElementFold();
+            } else if (nullable) {
                 const ValueType valueType = valueTypeFromElementType(nullable.getValueType());
                 aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, valueType);
-            } else if (mlir::isa<storage::ListElementType>(chunk.getElementType())) {
+            } else if (mlir::isa<storage::ListElementType>(distinctElementType)) {
                 aggregate._fold = NLExecutor::selectGroupCountDistinctListElementFold();
             } else {
                 aggregate._fold = NLExecutor::selectGroupCountDistinctChunkFold(getChunkKind(chunkType));
@@ -2943,7 +2948,9 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             // A type-erased input carries a type per cell, so it reduces by tag into the
             // f64 its mixed numeric tags land on rather than into the input's own type.
             const mlir::Type reducedElement = mlir::cast<nl::ChunkType>(chunkType).getElementType();
-            const bool reducesTaggedCells = mlir::isa<storage::ListElementType>(reducedElement);
+            const bool reducesNullableTaggedCells = isNullableListElement(reducedElement);
+            const bool reducesTaggedCells = mlir::isa<storage::ListElementType>(reducedElement)
+                                         || reducesNullableTaggedCells;
 
             const bool accumulatesAsDouble = reducesTaggedCells
                                           || (kind == GroupAggregateKind::Avg)
@@ -2955,10 +2962,15 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
 
             aggregate._accumulator = allocOptColumnForValueType(accumulatorType);
             aggregate._grow = NLExecutor::selectGroupAggregateGrow(kind, accumulatorType);
-            aggregate._fold = reducesTaggedCells
-                                  ? NLExecutor::selectTaggedGroupAggregateFold(kind)
-                                  : NLExecutor::selectGroupAggregateFold(kind, inputType);
             aggregate._emit = NLExecutor::selectGroupAggregateEmit(kind, accumulatorType);
+
+            if (reducesNullableTaggedCells) {
+                aggregate._fold = NLExecutor::selectOptTaggedGroupAggregateFold(kind);
+            } else if (reducesTaggedCells) {
+                aggregate._fold = NLExecutor::selectTaggedGroupAggregateFold(kind);
+            } else {
+                aggregate._fold = NLExecutor::selectGroupAggregateFold(kind, inputType);
+            }
         }
         break;
     }
@@ -3161,7 +3173,15 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
         NLCollectState::ValueColumn value;
         value._input = getColumn(column);
 
-        if (mlir::isa<storage::NullableType>(element)) {
+        if (isNullableListElement(element)) {
+            NLCollectFoldFunction fold = nullptr;
+            NLCollectListEmitFunction listEmit = nullptr;
+            NLExecutor::selectCollectOptTaggedHandlers(isDistinct, fold, listEmit);
+
+            value._buffer = allocListElementColumn();
+            value._fold = fold;
+            value._listEmit = listEmit;
+        } else if (mlir::isa<storage::NullableType>(element)) {
             const ValueType valueType = nullableChunkValueType(column.getType());
 
             value._buffer = allocValueColumnForValueType(valueType);
@@ -3945,7 +3965,11 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
 NLAggregateUpdateFunction NLTranslator::selectAggregateUpdateForChunkType(AggregateKind kind,
                                                                          mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
-    if (mlir::isa<storage::ListElementType>(chunk.getElementType())) {
+    const mlir::Type elementType = chunk.getElementType();
+
+    if (isNullableListElement(elementType)) {
+        return NLExecutor::selectOptTaggedAggregateUpdate(kind);
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectTaggedAggregateUpdate(kind);
     }
 
