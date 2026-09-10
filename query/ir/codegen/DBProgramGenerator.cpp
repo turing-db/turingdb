@@ -4757,10 +4757,10 @@ void DBProgramGenerator::translateIndexExpr(const Expr* expr, const IndexExpr* i
         const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
         const mlir::Location loc = _opBuilder.getUnknownLoc();
 
-        _part._exprMap[expr] = _opBuilder.create<mlir::db::IndexOp>(loc,
-                                                                    noneType,
-                                                                    _part._exprMap.at(base),
-                                                                    _part._exprMap.at(index)).getResult();
+        _part._exprMap[expr] = _opBuilder.create<mlir::db::ListIndex>(loc,
+                                                                      noneType,
+                                                                      _part._exprMap.at(base),
+                                                                      _part._exprMap.at(index)).getResult();
         return;
     }
 
