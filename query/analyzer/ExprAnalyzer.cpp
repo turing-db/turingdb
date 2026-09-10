@@ -678,9 +678,14 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
                                EvaluatedTypeName::value(baseType)), expr);
     }
 
-    if (indexExpr->getType() != EvaluatedType::Integer) {
+    const EvaluatedType indexType = indexExpr->getType();
+
+    const bool indexesByPosition = indexType == EvaluatedType::Integer;
+    const bool indexesByNull = indexesAList && indexType == EvaluatedType::Null;
+
+    if (!indexesByPosition && !indexesByNull) {
         throwError(fmt::format("Index expression must be an integer, not '{}'",
-                               EvaluatedTypeName::value(indexExpr->getType())), expr);
+                               EvaluatedTypeName::value(indexType)), expr);
     }
 
     if (indexesAList) {

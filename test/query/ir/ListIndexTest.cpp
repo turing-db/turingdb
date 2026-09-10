@@ -496,6 +496,11 @@ TEST_F(ListIndexTest, readsNullPastTheEndOfAnIndexedList) {
     EXPECT_EQ(evalElement("MATCH (n) WHERE n.name = 'Remy' RETURN [[1, 2], [3, 4]][9][0]"), std::nullopt);
 }
 
+TEST_F(ListIndexTest, readsNullWhereThePositionIsANullLiteral) {
+    EXPECT_EQ(evalElement("MATCH (n) WHERE n.name = 'Remy' RETURN [1, 3, 4][null]"), std::nullopt);
+    EXPECT_EQ(evalElement("MATCH (n) WHERE n.name = 'Remy' RETURN [[1, 2], [3, 4]][0][null]"), std::nullopt);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
