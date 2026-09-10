@@ -1857,6 +1857,19 @@ target_link_libraries(test_query_ir_hash_join PRIVATE
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_hash_join PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# The projected-key cases check that a cut still fuses when the query returns the property
+# it joins on, so they need the frontend engine beside the dialects.
+add_turing_test(test_query_ir_hash_join_projected_key HashJoinProjectedKeyTest.cpp)
+target_sources(test_query_ir_hash_join_projected_key PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_hash_join_projected_key PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_hash_join_projected_key PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 # The comma-pattern join key tests read the rows of a four-pattern MATCH as text, so they
 # need StringRowSink beside the v3 engine.
 add_turing_test(test_query_ir_comma_pattern_join_keys CommaPatternJoinKeysTest.cpp)
