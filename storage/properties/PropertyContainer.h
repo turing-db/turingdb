@@ -278,6 +278,10 @@ public:
 
         const size_t offset = it->second;
 
+        if (offset == NULL_INDEX) {
+            return _values.end();
+        }
+
         return _values.begin() + offset;
     }
 
