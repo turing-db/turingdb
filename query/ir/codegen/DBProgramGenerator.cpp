@@ -137,9 +137,10 @@ using DBPassFactory = std::unique_ptr<mlir::Pass> (*)();
 // The optimisation pipeline every query runs through, in order. An EXPLAIN prefix
 // reporting on a pass walks the same table one pass at a time, which is what keeps the
 // pipeline it reports on and the pipeline that runs the same one.
-const std::array<DBPassFactory, 10> dbPassPipeline = {
+const std::array<DBPassFactory, 11> dbPassPipeline = {
     &mlir::db::createFuseScanByLabel,
     &mlir::db::createPushDownFilters,
+    &mlir::db::createTrimUnreadColumns,
     &mlir::db::createFuseUnwindEquality,
     &mlir::db::createFuseScanByNodeIDs,
     &mlir::db::createFuseScanByPropertyValue,
@@ -150,10 +151,16 @@ const std::array<DBPassFactory, 10> dbPassPipeline = {
     &mlir::db::createTrimUnreadColumns,
 };
 
-// The stage a dump of one pass is reported under: "after fuse_scan_edges"
-void makePassLabel(std::string_view selector, std::string_view passName, std::string& label) {
+// The stage a dump of one pass is reported under: "after fuse_scan_edges", or "after
+// trim_unread_columns 2" for a run of a pass the pipeline runs more than once
+void makePassLabel(std::string_view selector, std::string_view passName, size_t run, std::string& label) {
     label = selector;
     label += passName;
+
+    if (run > 0) {
+        label += ' ';
+        label += std::to_string(run);
+    }
 }
 
 void fillPipelinePassNames(std::vector<std::string_view>& passNames) {
@@ -161,6 +168,17 @@ void fillPipelinePassNames(std::vector<std::string_view>& passNames) {
         const std::unique_ptr<mlir::Pass> pass = factory();
         passNames.push_back(toStringView(pass->getArgument()));
     }
+}
+
+// Which run of its pass the pipeline position is, counted from 1, or 0 for a pass the
+// pipeline runs once
+size_t passRunNumber(std::span<const std::string_view> pipelinePasses, size_t passIndex) {
+    const std::string_view passName = pipelinePasses[passIndex];
+    if (std::ranges::count(pipelinePasses, passName) == 1) {
+        return 0;
+    }
+
+    return static_cast<size_t>(std::ranges::count(pipelinePasses.first(passIndex + 1), passName));
 }
 
 // The row tag an OPTIONAL MATCH carries beside the columns its pattern walks. A backtick
@@ -1146,16 +1164,20 @@ void DBProgramGenerator::runExplainedPasses() {
 
     const bool printsEveryPass = _explain->isRequested(ExplainStage::PASSES);
 
+    std::vector<std::string_view> pipelinePasses;
+    fillPipelinePassNames(pipelinePasses);
+
     std::string module;
     ExplainReport::renderModule(*_module, module);
 
-    for (const DBPassFactory factory : dbPassPipeline) {
-        std::unique_ptr<mlir::Pass> pass = factory();
-        const std::string_view passName = toStringView(pass->getArgument());
+    for (size_t passIndex = 0; passIndex < dbPassPipeline.size(); passIndex++) {
+        std::unique_ptr<mlir::Pass> pass = dbPassPipeline[passIndex]();
+        const std::string_view passName = pipelinePasses[passIndex];
+        const size_t run = passRunNumber(pipelinePasses, passIndex);
 
         if (_explain->isPassPrintedBefore(passName)) {
             std::string label;
-            makePassLabel("before ", passName, label);
+            makePassLabel("before ", passName, run, label);
 
             _explain->addText(label, module);
         }
@@ -1173,7 +1195,7 @@ void DBProgramGenerator::runExplainedPasses() {
         const bool changedTheModule = rewritten != module;
         if (_explain->isPassPrintedAfter(passName) || (printsEveryPass && changedTheModule)) {
             std::string label;
-            makePassLabel("after ", passName, label);
+            makePassLabel("after ", passName, run, label);
 
             _explain->addText(label, rewritten);
         }

@@ -1149,6 +1149,11 @@ bool matchCarrySetLayout(Operation* op, CarrySetLayout& layout) {
     } else if (isa<Limit, Skip, Sort, GroupAggregate, Collect>(op)) {
         layout = CarrySetLayout {._operandOffset = 0, ._resultOffset = 0};
         return true;
+    } else if (CallProcedure call = dyn_cast<CallProcedure>(op)) {
+        const size_t inputCount = call.getInputs().size();
+        const size_t yieldCount = call.getYields().size();
+        layout = CarrySetLayout {._operandOffset = inputCount, ._resultOffset = yieldCount};
+        return true;
     }
 
     return false;
@@ -1319,6 +1324,10 @@ void trimAttributes(Operation* op, llvm::ArrayRef<size_t> kept, OperationState& 
         trimGroupAggregateKinds(groupAggregate, kept, state, builder);
     } else if (Collect collect = dyn_cast<Collect>(op)) {
         trimCollectAttributes(collect, kept, state, builder);
+    } else if (CallProcedure call = dyn_cast<CallProcedure>(op)) {
+        const int32_t inputCount = static_cast<int32_t>(call.getInputs().size());
+        const int32_t keptCount = static_cast<int32_t>(kept.size());
+        state.attributes.set(call.getOperandSegmentSizesAttrName(), builder.getDenseI32ArrayAttr({inputCount, keptCount}));
     }
 }
 

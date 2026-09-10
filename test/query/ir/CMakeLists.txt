@@ -195,6 +195,7 @@ add_call_v3_test(test_query_ir_standalone_call StandaloneCallTest.cpp)
 add_call_v3_test(test_query_ir_empty_result_column_names EmptyResultColumnNamesTest.cpp)
 add_call_v3_test(test_query_ir_scan_by_node_ids_v3 ScanByNodeIDsV3Test.cpp)
 add_call_v3_test(test_query_ir_unwind_node_seed_v3 UnwindNodeSeedV3Test.cpp)
+add_call_v3_test(test_query_ir_unwind_node_seed_call_v3 UnwindNodeSeedCallV3Test.cpp)
 add_call_v3_test(test_query_ir_scan_by_property_value_v3 ScanByPropertyValueV3Test.cpp)
 
 # The crossing-call tests hop twice from the column a CALL yielded and then call again,
@@ -264,6 +265,7 @@ add_ir_tests(test_query_ir_push_down_filter PushDownFilterTest.cpp)
 add_ir_tests(test_query_ir_fuse_scan_by_node_ids FuseScanByNodeIDsTest.cpp)
 add_ir_tests(test_query_ir_fuse_scan_by_property_value FuseScanByPropertyValueTest.cpp)
 add_ir_tests(test_query_ir_trim_unread_columns TrimUnreadColumnsTest.cpp)
+add_ir_tests(test_query_ir_trim_call_carry_set TrimCallCarrySetTest.cpp)
 add_ir_tests(test_query_ir_reuse_property_reads ReusePropertyReadsTest.cpp)
 
 # The edge-scan fusion tests check the rewritten db program, then lower and run it

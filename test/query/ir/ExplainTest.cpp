@@ -130,7 +130,22 @@ TEST_F(ExplainTest, reportsEveryPassOfABracketedList) {
 
     std::vector<std::string> stages;
     collectStages(sink, stages);
-    EXPECT_EQ(stages, (std::vector<std::string> {"after fuse_scan_by_label", "after trim_unread_columns"}));
+    EXPECT_EQ(stages, (std::vector<std::string> {"after fuse_scan_by_label",
+                                                 "after trim_unread_columns 1",
+                                                 "after trim_unread_columns 2"}));
+}
+
+// The pipeline trims twice, so each run of the pass reports under its own number.
+TEST_F(ExplainTest, numbersTheRunsOfAPassThePipelineRepeats) {
+    StringRowSink sink;
+    explain("EXPLAIN (around trim_unread_columns) MATCH (n:Person) RETURN n.name", sink);
+
+    std::vector<std::string> stages;
+    collectStages(sink, stages);
+    EXPECT_EQ(stages, (std::vector<std::string> {"before trim_unread_columns 1",
+                                                 "after trim_unread_columns 1",
+                                                 "before trim_unread_columns 2",
+                                                 "after trim_unread_columns 2"}));
 }
 
 TEST_F(ExplainTest, reportsTheModuleEnteringAndLeavingThePipeline) {

@@ -216,6 +216,31 @@ TEST_F(UnwindNodeSeedCodegenTest, aProjectedValueUnwindStaysAnUnwindConst) {
     EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
 }
 
+// The call carries every column in flight, the unwound values among them, and nothing
+// reads them past it: trimmed away before the fusion looks, they fold as with no call.
+TEST_F(UnwindNodeSeedCodegenTest, aValueUnwindComparedToTheNodeFusesPastACall) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = generate("UNWIND [5, 2] AS x MATCH (n) WHERE n = x "
+                                                              "CALL gnn.neighbourhoodSample(n, 3, 11) YIELD tgt RETURN n, tgt");
+
+    EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ConstScanNodes>(*module), 1u);
+
+    llvm::SmallVector<mlir::db::CallProcedure> calls = collect<mlir::db::CallProcedure>(*module);
+    ASSERT_EQ(calls.size(), 1u);
+    EXPECT_EQ(calls.front().getCarriedColumns().size(), 1u);
+}
+
+TEST_F(UnwindNodeSeedCodegenTest, aValueUnwindReadPastACallStaysAnUnwindConst) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = generate("UNWIND [5, 2] AS x MATCH (n) WHERE n = x "
+                                                              "CALL gnn.neighbourhoodSample(n, 3, 11) YIELD tgt RETURN x, tgt");
+
+    EXPECT_EQ(countOps<mlir::db::UnwindConst>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ConstScanNodes>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ScanNodes>(*module), 1u);
+}
+
 TEST_F(UnwindNodeSeedCodegenTest, unwindWithoutAMatchStaysAnUnwindConst) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = generate("UNWIND [5, 2] AS x RETURN x");
 
