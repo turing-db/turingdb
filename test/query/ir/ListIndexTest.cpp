@@ -464,6 +464,38 @@ TEST_F(ListIndexTest, carriesAnElementThroughACrossProduct) {
     EXPECT_EQ(sorted, expected);
 }
 
+TEST_F(ListIndexTest, readsAnElementOfAnUnwoundList) {
+    const std::vector<std::optional<types::Int64::Primitive>> first =
+        evalElements("UNWIND [[1, 2], [3, 4]] AS xs RETURN xs[0]");
+
+    const std::vector<std::optional<types::Int64::Primitive>> expectedFirst = {1, 3};
+    EXPECT_EQ(first, expectedFirst);
+
+    const std::vector<std::optional<types::Int64::Primitive>> second =
+        evalElements("UNWIND [[1, 2], [3, 4]] AS xs RETURN xs[1]");
+
+    const std::vector<std::optional<types::Int64::Primitive>> expectedSecond = {2, 4};
+    EXPECT_EQ(second, expectedSecond);
+}
+
+TEST_F(ListIndexTest, readsAnElementOfAnIndexedList) {
+    EXPECT_EQ(evalElement("MATCH (n) WHERE n.name = 'Remy' RETURN [[1, 2], [3, 4]][0][1]"), 2);
+    EXPECT_EQ(evalElement("MATCH (n) WHERE n.name = 'Remy' RETURN [[1, 2], [3, 4]][1][0]"), 3);
+}
+
+TEST_F(ListIndexTest, readsNullWhereTheCellIsNotAList) {
+    const std::vector<std::optional<types::Int64::Primitive>> rows =
+        evalElements("UNWIND [1, [2, 3]] AS xs RETURN xs[0]");
+
+    const std::vector<std::optional<types::Int64::Primitive>> expected = {std::nullopt, 2};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(ListIndexTest, readsNullPastTheEndOfAnIndexedList) {
+    EXPECT_EQ(evalElement("MATCH (n) WHERE n.name = 'Remy' RETURN [[1, 2], [3, 4]][0][9]"), std::nullopt);
+    EXPECT_EQ(evalElement("MATCH (n) WHERE n.name = 'Remy' RETURN [[1, 2], [3, 4]][9][0]"), std::nullopt);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
