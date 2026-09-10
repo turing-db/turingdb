@@ -733,7 +733,7 @@ private:
     // it is neither an ID chunk nor a !storage.nullable<...> one and takes a plain
     // ColumnVector<uint64_t>.
     // Whether a nullable chunk's value type is one whose rows own their characters, which
-    // the value type alone does not say: labels() and edgeType() format their own text
+    // the value type alone does not say: labels() and type() format their own text
     // where a string property column borrows the graph's
     static bool isOwnedStringElement(mlir::Type elementType);
 

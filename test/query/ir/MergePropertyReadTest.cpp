@@ -73,7 +73,7 @@ TEST_F(MergePropertyReadTest, readsTheLabelsOfTheBoundAndWrittenRowsOfOneMerge) 
 TEST_F(MergePropertyReadTest, readsTheTypeOfAHopItWrote) {
     expectWriteRows("MATCH (a:Person {name: 'Remy'}), (b:Person {name: 'Luc'}) "
                     "MERGE (a)-[e:KNOWS_WELL {duration: 5}]->(b) "
-                    "RETURN edgeType(e)",
+                    "RETURN type(e)",
                     {{"KNOWS_WELL"}});
 }
 

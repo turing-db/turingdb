@@ -85,7 +85,7 @@ TEST_F(CallPatternShapesTest, undirectedEdgeAroundACall) {
 
 TEST_F(CallPatternShapesTest, edgeTypeOfACarriedEdge) {
     StringRowSink sink;
-    runQuery("MATCH (n {name: 'Remy'})-[e]->(m {name: 'Adam'}) CALL db.getNodes([0]) YIELD id RETURN edgeType(e)", sink);
+    runQuery("MATCH (n {name: 'Remy'})-[e]->(m {name: 'Adam'}) CALL db.getNodes([0]) YIELD id RETURN type(e)", sink);
 
     const std::vector<StringRowSink::Row> expected {{"KNOWS_WELL"}};
     EXPECT_EQ(sink.getRows(), expected);
@@ -101,7 +101,7 @@ TEST_F(CallPatternShapesTest, labelsOfAYieldedNode) {
 
 TEST_F(CallPatternShapesTest, edgeTypeOfAYieldedEdge) {
     StringRowSink sink;
-    runQuery("CALL db.getEdges([0]) YIELD id AS e RETURN edgeType(e)", sink);
+    runQuery("CALL db.getEdges([0]) YIELD id AS e RETURN type(e)", sink);
 
     const std::vector<StringRowSink::Row> expected {{"KNOWS_WELL"}};
     EXPECT_EQ(sink.getRows(), expected);

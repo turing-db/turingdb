@@ -51,10 +51,10 @@ TEST_F(CreateReturnTest, returnsLabelsOncePerMatchedRow) {
                      {"Clone"}, {"Clone"}, {"Clone"}, {"Clone"}});
 }
 
-// edgeType() reads the type the CREATE wrote, not a db.edge_type of the provisional ID:
+// type() reads the type the CREATE wrote, not a db.edge_type of the provisional ID:
 // that edge is in no committed graph the read would consult
 TEST_F(CreateReturnTest, returnsEdgeTypeAndLabelsOfThePatternItCreated) {
-    expectWriteRows("CREATE (n:S)-[e:E]->(m:T) RETURN labels(n), edgeType(e), labels(m)",
+    expectWriteRows("CREATE (n:S)-[e:E]->(m:T) RETURN labels(n), type(e), labels(m)",
                     {{"S", "E", "T"}});
 }
 

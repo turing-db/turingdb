@@ -11,10 +11,6 @@ FunctionDecls::~FunctionDecls() {
 
 void FunctionDecls::initDefault() {
     // Entity patterns
-    FunctionSignature* edgeType = createFunction("edgeType");
-    edgeType->setArguments({EvaluatedType::EdgePattern});
-    edgeType->setReturnTypes({{EvaluatedType::String}});
-
     FunctionSignature* type = createFunction("type");
     type->setArguments({EvaluatedType::EdgePattern});
     type->setReturnTypes({{EvaluatedType::String}});

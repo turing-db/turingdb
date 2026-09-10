@@ -485,7 +485,7 @@ Column* ExprProgramGenerator::generateFuncInvocationExpr(const FunctionInvocatio
         return resCol;
     }
 
-    if (funcName == "edgeType" || funcName == "type") {
+    if (funcName == "type") {
         if (args->size() != 1) {
             throw PlannerException(
                 fmt::format("{}() expects 1 argument, got {}", funcName, args->size()));

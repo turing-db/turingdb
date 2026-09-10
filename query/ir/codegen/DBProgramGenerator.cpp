@@ -184,7 +184,7 @@ mlir::Value emitUnaryFunction(mlir::OpBuilder& builder,
 
 const std::unordered_map<std::string_view, UnaryFunctionEmitter> unaryFunctionEmitters = {
     {"labels", &emitUnaryFunction<mlir::db::Labels>},
-    {"edgeType", &emitUnaryFunction<mlir::db::EdgeType>},
+    {"type", &emitUnaryFunction<mlir::db::EdgeType>},
     {"toInteger", &emitUnaryFunction<mlir::db::ToInteger>},
     {"toFloat", &emitUnaryFunction<mlir::db::ToFloat>},
     {"toBoolean", &emitUnaryFunction<mlir::db::ToBoolean>},
@@ -5046,7 +5046,7 @@ mlir::Value DBProgramGenerator::translateCreatedMetadata(std::string_view funcNa
 
     if (funcName == "labels") {
         return constantLabelString(created._labels);
-    } else if (funcName == "edgeType") {
+    } else if (funcName == "type") {
         return constantString(created._edgeType);
     } else {
         return {};
@@ -5061,7 +5061,7 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
 
-    const bool isEntityMetadata = funcName == "labels" || funcName == "edgeType";
+    const bool isEntityMetadata = funcName == "labels" || funcName == "type";
     if (isEntityMetadata && args && args->size() == 1) {
         const mlir::Value createdMetadata = translateCreatedMetadata(funcName, args->front());
         if (createdMetadata) {

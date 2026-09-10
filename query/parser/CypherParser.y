@@ -1691,6 +1691,7 @@ symbol
     | FILTER { $$ = Symbol::create(ast, $1); }
     | EXTRACT { $$ = Symbol::create(ast, $1); }
     | EMBEDDING { $$ = Symbol::create(ast, $1); }
+    | TYPE { $$ = Symbol::create(ast, $1); }
     //| ANY { $$ = Symbol::create(ast, $1); } // Causes conflicts
     //| NONE { $$ = Symbol::create(ast, $1); } // Causes conflicts
     //| SINGLE { $$ = Symbol::create(ast, $1); } // Causes conflicts

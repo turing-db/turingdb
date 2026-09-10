@@ -4160,7 +4160,7 @@ Column* NLTranslator::allocSingleRowOptColumnForValueType(ValueType valueType) {
 // tally is one (a ui64 that is never null) and so is an expression over it (a signed
 // i64, or an f64 once a double takes part). A width-1 integer is a mask, not one of
 // these, and an ID or list element is its own family.
-// A nullable chunk whose rows own their characters - what labels() and edgeType() produce
+// A nullable chunk whose rows own their characters - what labels() and type() produce
 // - rather than borrowing them from the graph, as a string property column does. Its value
 // type is String either way, so the handler families need this beside it.
 bool NLTranslator::isOwnedStringElement(mlir::Type elementType) {

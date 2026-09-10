@@ -545,7 +545,7 @@ struct WriteProcessorPropertyTypes {
         std::optional<types::Embedding::Primitive>,
 
         std::string, // For LOAD CSV inputs
-        std::optional<std::string> // For labels() and edgeType(), which own their strings
+        std::optional<std::string> // For labels() and type(), which own their strings
     >>;
 
     // Used for specialised dispatching logic for only consts (shouldn't hold optional)
