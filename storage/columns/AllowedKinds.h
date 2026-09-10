@@ -489,8 +489,7 @@ struct OutputtedTypes {
         ListElementView
     >>;
 
-  using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>(),
-                                      ContainerKind::code<ColumnMask>()>;
+    using Excluded = ExcludedContainers<ContainerKind::code<ColumnSet>()>;
 };
 
 /// Totally ordered types, e.g. sorted in ORDER BY

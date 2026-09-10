@@ -31,6 +31,7 @@
 #include "columns/Column.h"
 #include "columns/ColumnVector.h"
 #include "columns/ColumnConst.h"
+#include "columns/ColumnMask.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnOperatorDispatcher.h"
@@ -627,6 +628,10 @@ struct CellWriter {
 
     template <typename T>
     void operator()(const ColumnConst<T>* column) {
+        writeValue(_table, column->at(_row));
+    }
+
+    void operator()(const ColumnMask* column) {
         writeValue(_table, column->at(_row));
     }
 };
