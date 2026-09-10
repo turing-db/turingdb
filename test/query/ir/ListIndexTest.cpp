@@ -436,6 +436,34 @@ TEST_F(ListIndexTest, groupsOnTheElementAtAPosition) {
     EXPECT_EQ(rows, expected);
 }
 
+TEST_F(ListIndexTest, truncatesRowsCarryingAnElement) {
+    const std::vector<std::optional<types::Int64::Primitive>> rows =
+        evalElements("UNWIND [0, 1, 2, 5] AS i RETURN [10, null, 30][i] LIMIT 2");
+
+    const std::vector<std::optional<types::Int64::Primitive>> expected = {10, std::nullopt};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(ListIndexTest, skipsRowsCarryingAnElement) {
+    const std::vector<std::optional<types::Int64::Primitive>> rows =
+        evalElements("UNWIND [0, 1, 2, 5] AS i RETURN [10, null, 30][i] SKIP 2");
+
+    const std::vector<std::optional<types::Int64::Primitive>> expected = {30, std::nullopt};
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(ListIndexTest, carriesAnElementThroughACrossProduct) {
+    const std::vector<std::optional<types::Int64::Primitive>> rows =
+        evalElements("UNWIND [0, 2] AS i WITH [10, null, 30][i] AS e "
+                     "CALL db.getNodes([0, 1]) YIELD id RETURN e");
+
+    std::vector<std::optional<types::Int64::Primitive>> sorted = rows;
+    std::sort(sorted.begin(), sorted.end());
+
+    const std::vector<std::optional<types::Int64::Primitive>> expected = {10, 10, 30, 30};
+    EXPECT_EQ(sorted, expected);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
