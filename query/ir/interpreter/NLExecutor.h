@@ -492,10 +492,15 @@ public:
     static NLKeyAppendFunction selectKeyAppendFunction(NLChunkKind kind);
     static NLKeyAppendFunction selectOptKeyAppendFunction(ValueType valueType);
 
-    // The embedding key of a join, which selectOptKeyAppendFunction turns away: an
-    // embedding is no DISTINCT key, but two embedding columns do compare with `=`, so the
-    // vector serializes to the bytes a join matches on.
-    static NLKeyAppendFunction selectOptEmbeddingKeyAppendFunction();
+    // Hash and equality for a join key: an ID chunk of this kind, a nullable value chunk
+    // of this value type, a plain numeric chunk, a type-erased cell. Used by
+    // nl.hash_join_collect to chain a build row under its hash and by nl.hash_join_probe
+    // to find and confirm the build rows a probe row matches. An embedding is a key here,
+    // as `=` compares two vectors, though it is no DISTINCT key.
+    static NLJoinKeyFunctions selectJoinKeyFunctions(NLChunkKind kind);
+    static NLJoinKeyFunctions selectOptJoinKeyFunctions(ValueType valueType);
+    static NLJoinKeyFunctions selectPlainJoinKeyFunctions(ValueType valueType);
+    static NLJoinKeyFunctions selectListElementJoinKeyFunctions();
 
     // Per-row test of whether a join key can match. An ID chunk holds neither a null nor
     // a NaN, so every row of it matches; a nullable value chunk reads its present flag, a

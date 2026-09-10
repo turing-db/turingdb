@@ -2810,13 +2810,15 @@ void NLTranslator::translateHashJoinCollect(nl::HashJoinCollect collect, NLStmtC
         data->addAppend(append);
     }
 
-    // The key is one of those columns, read a second time to index each row: the
-    // serializer turns a row into the bytes the probe looks up, and the match gate keeps
-    // a row no probe key can match - a null, a NaN - out of the index.
+    // The key is one of those columns, read a second time to chain each row under its
+    // hash; the match gate keeps a row no probe key can match - a null, a NaN - out of
+    // the index.
     const mlir::Value keyColumn = columns[buildKey];
-    data->setKeyColumn(getColumn(keyColumn),
-                       selectJoinKeyAppendForChunkType(keyColumn.getType()),
-                       selectKeyMatchableForChunkType(keyColumn.getType()));
+    data->setKeyColumns(getColumn(keyColumn),
+                        state->buffer(buildKey),
+                        selectJoinKeyFunctionsForChunkType(keyColumn.getType()),
+                        selectKeyMatchableForChunkType(keyColumn.getType()));
+    data->getHashScratch()->reserve(_program->getChunkSize());
 
     body->emplaceStmt(&NLExecutor::runHashJoinCollect, data);
 }
@@ -2836,7 +2838,9 @@ void NLTranslator::translateHashJoinProbe(nl::HashJoinProbe probe, NLStmtContain
         throw IRException("nl.hash_join_probe emits one column per probe column and per build column");
     }
 
-    const uint64_t probeKey = hashJoinBufferOf(probeState).getProbeKey();
+    nl::HashJoinBuffer buffer = hashJoinBufferOf(probeState);
+    const uint64_t probeKey = buffer.getProbeKey();
+    const uint64_t buildKey = buffer.getBuildKey();
     if (probeKey >= columns.size()) {
         throw IRException("hash join probe key column index is out of range");
     }
@@ -2886,10 +2890,22 @@ void NLTranslator::translateHashJoinProbe(nl::HashJoinProbe probe, NLStmtContain
                                              selectGatherForChunkType(bufferType)));
     }
 
+    // The probe key is read against the build key buffer through the handlers of one
+    // chunk type, so the two sides must have collected and probed chunks of that type.
+    if (buildKey >= buildTypes.size()) {
+        throw IRException("hash join build key column index is out of range");
+    }
+
     const mlir::Value keyColumn = columns[probeKey];
-    data->setKeyColumn(getColumn(keyColumn),
-                       selectJoinKeyAppendForChunkType(keyColumn.getType()),
-                       selectKeyMatchableForChunkType(keyColumn.getType()));
+    if (keyColumn.getType() != buildTypes[buildKey]) {
+        throw IRException("nl.hash_join_probe must read its key from a chunk of the type the build key was collected as");
+    }
+
+    data->setKeyColumns(getColumn(keyColumn),
+                        state->buffer(buildKey),
+                        selectJoinKeyFunctionsForChunkType(keyColumn.getType()),
+                        selectKeyMatchableForChunkType(keyColumn.getType()));
+    data->getHashScratch()->reserve(_program->getChunkSize());
 
     body->emplaceStmt(&NLExecutor::runHashJoinProbe, data);
 }
@@ -4233,19 +4249,22 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
     return NLExecutor::selectKeyAppendFunction(chunkKindFromElementType(elementType));
 }
 
-// The join's sibling of selectKeyAppendForChunkType. An embedding has no byte identity a
-// DISTINCT can group by, which is what that one answers for, but `=` between two embedding
-// columns compares the vectors - so a join on one serializes them rather than turning the
-// query away with a diagnostic about duplicates.
-NLKeyAppendFunction NLTranslator::selectJoinKeyAppendForChunkType(mlir::Type chunkType) {
+// The join's sibling of selectKeyAppendForChunkType: a key is hashed and compared where it
+// lives rather than serialized. An embedding is a key here, since `=` between two embedding
+// columns compares the vectors, though it has no byte identity a DISTINCT can group by.
+NLJoinKeyFunctions NLTranslator::selectJoinKeyFunctionsForChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
-    const auto nullableType = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
+    const mlir::Type elementType = chunk.getElementType();
 
-    if (nullableType && valueTypeFromElementType(nullableType.getValueType()) == ValueType::Embedding) {
-        return NLExecutor::selectOptEmbeddingKeyAppendFunction();
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        return NLExecutor::selectOptJoinKeyFunctions(valueTypeFromElementType(nullableType.getValueType()));
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        return NLExecutor::selectListElementJoinKeyFunctions();
+    } else if (isPlainValueElementType(elementType)) {
+        return NLExecutor::selectPlainJoinKeyFunctions(valueTypeFromElementType(elementType));
     }
 
-    return selectKeyAppendForChunkType(chunkType);
+    return NLExecutor::selectJoinKeyFunctions(chunkKindFromElementType(elementType));
 }
 
 // The gating sibling of selectKeyAppendForChunkType: a nullable value chunk reads its

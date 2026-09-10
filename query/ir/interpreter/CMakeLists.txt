@@ -1,5 +1,6 @@
 set(ir_interpreter_sources
     NLProgram.cpp
+    NLHashJoinIndex.cpp
     NLOutputSink.cpp
     NLExecutionContext.cpp
     NLWriteProperties.cpp
