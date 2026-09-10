@@ -1,12 +1,15 @@
 #include <gtest/gtest.h>
 
 #include <stddef.h>
+#include <stdint.h>
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -37,6 +40,8 @@
 #include "SystemManager.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
+#include "columns/ColumnVector.h"
+#include "list/ListBufferTypeTag.h"
 #include "list/ListElementView.h"
 #include "metadata/PropertyType.h"
 #include "versioning/Transaction.h"
@@ -49,6 +54,19 @@ using namespace db;
 using namespace turing::test;
 
 namespace {
+
+using GroupRows = std::vector<std::pair<std::optional<types::Int64::Primitive>, uint64_t>>;
+
+// The integer an index read produced, or nothing where the position held no value - past
+// the end of the list, or a null inside it. getAs reads the cell without checking its
+// tag, so a null has to be told from a value before the read, not after.
+std::optional<types::Int64::Primitive> elementAsInteger(const std::optional<ListElementView>& element) {
+    if (!element.has_value() || element->getTag() == ListBufferTypeTag::Null) {
+        return std::nullopt;
+    }
+
+    return element->getAs<types::Int64::Primitive>();
+}
 
 // Reads the first projected column as one optional integer per row, accepting both shapes
 // an index result takes: a constant, when list and position are both literals, and a
@@ -68,12 +86,7 @@ public:
             const std::optional<ListElementView> element =
                 constElement ? (*constElement)[rowIndex] : vectorElement->getRaw()[rowIndex];
 
-            if (!element.has_value()) {
-                _rows.push_back(std::nullopt);
-                continue;
-            }
-
-            _rows.push_back(element->getAs<types::Int64::Primitive>());
+            _rows.push_back(elementAsInteger(element));
         }
     }
 
@@ -81,6 +94,57 @@ public:
 
 private:
     std::vector<std::optional<types::Int64::Primitive>> _rows;
+};
+
+// Reads the tally an aggregate with no grouping key emits.
+class CountSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[0]);
+        ASSERT_NE(counts, nullptr);
+
+        const std::vector<uint64_t>& raw = counts->getRaw();
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _values.push_back(raw[rowIndex]);
+        }
+    }
+
+    const std::vector<uint64_t>& values() const { return _values; }
+
+private:
+    std::vector<uint64_t> _values;
+};
+
+// Reads the (element, tally) rows a count grouped by an index read emits. A grouped
+// aggregate emits its groups in first-seen order, which the language does not promise, so
+// the rows are compared sorted.
+class GroupedElementCountSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 2u);
+
+        const auto* keys = dynamic_cast<const ColumnOptVector<ListElementView>*>(chunks[0]);
+        const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
+        ASSERT_NE(keys, nullptr);
+        ASSERT_NE(counts, nullptr);
+
+        const std::vector<std::optional<ListElementView>>& keyRaw = keys->getRaw();
+        const std::vector<uint64_t>& countRaw = counts->getRaw();
+
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.emplace_back(elementAsInteger(keyRaw[rowIndex]), countRaw[rowIndex]);
+        }
+    }
+
+    void sortedRows(GroupRows& rows) const {
+        rows = _rows;
+        std::sort(rows.begin(), rows.end());
+    }
+
+private:
+    GroupRows _rows;
 };
 
 }
@@ -150,6 +214,22 @@ protected:
 
         EXPECT_EQ(rows.size(), 1u) << "query: " << query;
         return rows.empty() ? std::nullopt : rows.front();
+    }
+
+    uint64_t evalCount(std::string_view query) {
+        CountSink sink;
+        runQuery(query, &sink);
+
+        const std::vector<uint64_t>& values = sink.values();
+
+        EXPECT_EQ(values.size(), 1u) << "query: " << query;
+        return values.empty() ? 0 : values.front();
+    }
+
+    void evalGroups(std::string_view query, GroupRows& rows) {
+        GroupedElementCountSink sink;
+        runQuery(query, &sink);
+        sink.sortedRows(rows);
     }
 
     std::string indexResultType(std::string_view query) {
@@ -303,6 +383,57 @@ TEST_F(ListIndexTest, comparesAnElementAgainstAString) {
         evalElements("MATCH (n) WHERE ['a', 'b'][n.age - 32] = 'z' RETURN [1, 2, 3][n.age - 32]");
 
     EXPECT_TRUE(unmatched.empty());
+}
+
+// Position 1 holds a null inside the list and position 5 is past its end, so two of the
+// four rows are null by different routes: ascending puts both after the values, and DESC
+// puts both before them.
+TEST_F(ListIndexTest, sortsOnTheElementAtAPosition) {
+    const std::vector<std::optional<types::Int64::Primitive>> ascending =
+        evalElements("UNWIND [0, 1, 2, 5] AS i RETURN [10, null, 30][i] ORDER BY [10, null, 30][i]");
+
+    ASSERT_EQ(ascending.size(), 4u);
+    EXPECT_EQ(ascending[0], 10);
+    EXPECT_EQ(ascending[1], 30);
+    EXPECT_EQ(ascending[2], std::nullopt);
+    EXPECT_EQ(ascending[3], std::nullopt);
+
+    const std::vector<std::optional<types::Int64::Primitive>> descending =
+        evalElements("UNWIND [0, 1, 2, 5] AS i RETURN [10, null, 30][i] ORDER BY [10, null, 30][i] DESC");
+
+    ASSERT_EQ(descending.size(), 4u);
+    EXPECT_EQ(descending[0], std::nullopt);
+    EXPECT_EQ(descending[1], std::nullopt);
+    EXPECT_EQ(descending[2], 30);
+    EXPECT_EQ(descending[3], 10);
+}
+
+// The null inside the list and the read past its end are one value to DISTINCT, so the
+// four rows dedup to 10, 30 and a single null.
+TEST_F(ListIndexTest, dedupsTheElementAtAPosition) {
+    const std::vector<std::optional<types::Int64::Primitive>> rows =
+        evalElements("UNWIND [0, 1, 2, 5] AS i RETURN DISTINCT [10, null, 30][i]");
+
+    std::vector<std::optional<types::Int64::Primitive>> sorted = rows;
+    std::sort(sorted.begin(), sorted.end());
+
+    const std::vector<std::optional<types::Int64::Primitive>> expected = {std::nullopt, 10, 30};
+    EXPECT_EQ(sorted, expected);
+}
+
+// count(x) charges neither null, so two of the four rows are counted.
+TEST_F(ListIndexTest, countsThePresentElements) {
+    EXPECT_EQ(evalCount("UNWIND [0, 1, 2, 5] AS i RETURN count([10, null, 30][i])"), 2u);
+}
+
+// Position 0 is read twice and the two nulls group together, so the five rows group as
+// 10 twice, 30 once and null twice.
+TEST_F(ListIndexTest, groupsOnTheElementAtAPosition) {
+    GroupRows rows;
+    evalGroups("UNWIND [0, 1, 2, 5, 0] AS i RETURN [10, null, 30][i], count(i)", rows);
+
+    const GroupRows expected = {{std::nullopt, 2u}, {10, 2u}, {30, 1u}};
+    EXPECT_EQ(rows, expected);
 }
 
 int main(int argc, char** argv) {
