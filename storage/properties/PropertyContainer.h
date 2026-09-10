@@ -382,7 +382,13 @@ public:
     }
 
     bool has(EntityID entityID) const override {
-        return _entityIndexMap.contains(entityID);
+        const auto it = _entityIndexMap.find(entityID);
+
+        if (it == _entityIndexMap.end()) {
+            return false;
+        }
+
+        return it->second != NULL_INDEX;
     }
 
     types::Embedding::Primitive get(EntityID entityID) const {
@@ -399,8 +405,16 @@ public:
         if (it == _entityIndexMap.end()) {
             return nullptr;
         }
+
+        const size_t offset = it->second;
+
+        if (offset == NULL_INDEX) {
+            return nullptr;
+        }
+
         const auto& views = _values.get();
-        return &views[it->second];
+
+        return &views[offset];
     }
 
     std::optional<const types::Embedding::Primitive*> tryGetWithNull(EntityID entityID) const {
