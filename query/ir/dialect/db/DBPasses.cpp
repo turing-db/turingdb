@@ -2086,17 +2086,28 @@ bool matchKeySide(Value key, JoinKeySide& side, CrossProduct& product) {
 }
 
 // Whether nothing but the equality reads the ops rebuilding a key. The cone is sunk into
-// the factor and dropped from here, so a reader left behind would lose its operand.
-bool keyConeIsPrivateTo(const MaskCone& cone, EqOp equality) {
+// the factor and dropped from here, so a reader left behind would lose its operand - the
+// exception being the filter carrying the key itself, which the join yields among its own
+// columns and hands to that reader instead.
+bool keyConeIsPrivateTo(const JoinKeySide& side, EqOp equality, FilterOp filter) {
     llvm::SmallPtrSet<Operation*, 8> coneOps;
-    for (Operation* const coneOp : cone._ops) {
+    for (Operation* const coneOp : side._cone._ops) {
         coneOps.insert(coneOp);
     }
 
     Operation* const equalityOp = equality.getOperation();
-    for (Operation* const coneOp : cone._ops) {
+    Operation* const filterOp = filter.getOperation();
+    Operation* const keyOp = side._key.getDefiningOp();
+
+    for (Operation* const coneOp : side._cone._ops) {
+        const bool holdsTheKey = coneOp == keyOp;
+
         for (Operation* const user : coneOp->getUsers()) {
-            if (user != equalityOp && !coneOps.contains(user)) {
+            const bool isTheEquality = user == equalityOp;
+            const bool isAnotherConeOp = coneOps.contains(user);
+            const bool carriesTheKey = holdsTheKey && user == filterOp;
+
+            if (!isTheEquality && !isAnotherConeOp && !carriesTheKey) {
                 return false;
             }
         }
@@ -2134,12 +2145,16 @@ bool productRowsReachOnly(CrossProduct product, const EqualityCross& match) {
     return true;
 }
 
-// Whether every column the filter carries is a column of the product. The join hands each
-// of them back as a result of its own, which it can only do for a column the product made:
-// one computed from them outside was computed over the rows the join no longer produces.
-bool carriesProductColumnsOnly(FilterOp filter, CrossProduct product) {
+// Whether every column the filter carries is one the join hands back as a result of its
+// own: a column the product made, or a key, which the join yields beside the columns its
+// factor already had. One computed from them outside was computed over the rows the join
+// no longer produces.
+bool carriesJoinColumnsOnly(FilterOp filter, const EqualityCross& match) {
     for (const Value carried : filter.getColumnsToFilter()) {
-        if (carried.getDefiningOp<CrossProduct>() != product) {
+        const bool isAProductColumn = carried.getDefiningOp<CrossProduct>() == match._product;
+        const bool isAKey = carried == match._left._key || carried == match._right._key;
+
+        if (!isAProductColumn && !isAKey) {
             return false;
         }
     }
@@ -2431,13 +2446,13 @@ bool matchEqualityCross(FilterOp filter, EqualityCross& match) {
         return false;
     }
 
-    const bool conesArePrivate = keyConeIsPrivateTo(match._left._cone, equality)
-                                 && keyConeIsPrivateTo(match._right._cone, equality);
+    const bool conesArePrivate = keyConeIsPrivateTo(match._left, equality, filter)
+                                 && keyConeIsPrivateTo(match._right, equality, filter);
     if (!conesArePrivate) {
         return false;
     }
 
-    return carriesProductColumnsOnly(filter, product) && productRowsReachOnly(product, match);
+    return carriesJoinColumnsOnly(filter, match) && productRowsReachOnly(product, match);
 }
 
 // Sinks the ops rebuilding a side's key into its factor, so the key becomes a column the
@@ -2511,13 +2526,26 @@ void fuseHashJoin(EqualityCross& match, mlir::OpBuilder& builder) {
         joinColumns.push_back(join.getResult(rightFirstResult + columnIndex));
     }
 
+    // A sunk key sits past the columns its factor already yielded, so it is none of those.
+    const Value leftKeyColumn = join.getResult(leftFirstResult + leftKey);
+    const Value rightKeyColumn = join.getResult(rightFirstResult + rightKey);
+
     // The join keeps only the rows the equality held on, so what the filter handed
-    // downstream now comes from the join directly.
+    // downstream now comes from the join directly - a carried key from the column the
+    // join yields for it, which is that key over the joined rows.
     const Operation::operand_range carried = match._filter.getColumnsToFilter();
     const ResultRange filtered = match._filter.getFilteredColumns();
     for (size_t columnIndex = 0; columnIndex < carried.size(); columnIndex++) {
-        const unsigned productIndex = cast<OpResult>(carried[columnIndex]).getResultNumber();
-        filtered[columnIndex].replaceAllUsesWith(joinColumns[productIndex]);
+        const Value carriedColumn = carried[columnIndex];
+
+        if (carriedColumn == match._left._key) {
+            filtered[columnIndex].replaceAllUsesWith(leftKeyColumn);
+        } else if (carriedColumn == match._right._key) {
+            filtered[columnIndex].replaceAllUsesWith(rightKeyColumn);
+        } else {
+            const unsigned productIndex = cast<OpResult>(carriedColumn).getResultNumber();
+            filtered[columnIndex].replaceAllUsesWith(joinColumns[productIndex]);
+        }
     }
 
     for (size_t columnIndex = 0; columnIndex < joinColumns.size(); columnIndex++) {
