@@ -117,6 +117,10 @@ ListShape concatenatedListShape(const ListShape& left, const ListShape& right) {
     return left;
 }
 
+bool isEntity(EvaluatedType type) {
+    return type == EvaluatedType::NodePattern || type == EvaluatedType::EdgePattern;
+}
+
 }
 
 ExprAnalyzer::ExprAnalyzer(CypherAST* ast, const GraphView& graphView)
@@ -1208,7 +1212,7 @@ void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
     Expr* const subject = expr->getSubject();
     if (subject) {
         analyzeExpr(subject);
-        requireCaseComparable(subject, subject->getType());
+        requireCaseSubject(subject);
         contaminate(subject);
     }
 
@@ -1274,7 +1278,12 @@ void ExprAnalyzer::analyzeCaseTest(const CaseExpr::Branch& branch,
     }
 
     analyzeExpr(test._value);
-    requireCaseComparable(test._value, test._value->getType());
+
+    if (isEntity(subject->getType())) {
+        requireComparableToEntity(subject, test);
+    } else {
+        requireCaseValue(test._value);
+    }
 }
 
 EvaluatedType ExprAnalyzer::unifyCaseBranch(EvaluatedType carried, const Expr* branch) {
@@ -1292,15 +1301,56 @@ EvaluatedType ExprAnalyzer::unifyCaseBranch(EvaluatedType carried, const Expr* b
     return unified;
 }
 
-void ExprAnalyzer::requireCaseComparable(const Expr* expr, EvaluatedType type) const {
+void ExprAnalyzer::requireCaseSubject(const Expr* subject) const {
+    const EvaluatedType type = subject->getType();
+
+    const bool isScalar = type == EvaluatedType::Null || convertibleToValueType(type);
+
+    if (isScalar || isEntity(type)) {
+        return;
+    }
+
+    throwError(fmt::format("The subject of a CASE must be a scalar, a node or an edge, not '{}'",
+                           EvaluatedTypeName::value(type)),
+               subject);
+}
+
+void ExprAnalyzer::requireCaseValue(const Expr* value) const {
+    const EvaluatedType type = value->getType();
+
     if (type == EvaluatedType::Null || convertibleToValueType(type)) {
         return;
     }
 
-    throwError(fmt::format("The subject of a CASE and the values it is compared against "
-                           "must be scalars, not '{}'",
+    throwError(fmt::format("The values a CASE compares its subject against must be scalars, "
+                           "not '{}'",
                            EvaluatedTypeName::value(type)),
-               expr);
+               value);
+}
+
+void ExprAnalyzer::requireComparableToEntity(const Expr* subject, const CaseExpr::Test& test) const {
+    const EvaluatedType subjectType = subject->getType();
+    const EvaluatedType valueType = test._value->getType();
+
+    const bool comparesForEquality = test._kind == CaseExpr::TestKind::Value
+                                     || test._operator == BinaryOperator::Equal;
+
+    if (!comparesForEquality) {
+        throwError("A CASE compares a node or an edge for equality, so its branches cannot "
+                   "order one",
+                   test._value);
+    }
+
+    const bool comparable = valueType == EvaluatedType::Null
+                            || valueType == EvaluatedType::Integer
+                            || valueType == subjectType;
+
+    if (!comparable) {
+        throwError(fmt::format("A node or an edge is equal to one of its kind or to an id, "
+                               "not to '{}'",
+                               EvaluatedTypeName::value(valueType)),
+                   test._value);
+    }
 }
 
 void ExprAnalyzer::analyzeListExpr(ListExpr* expr) {
