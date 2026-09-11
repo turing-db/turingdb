@@ -1951,6 +1951,70 @@ void DBProgramGenerator::collectComponentRoots(llvm::SmallVectorImpl<const Varia
     }
 }
 
+// Breaking a cycle leaves the variable it closed on standing behind one merge edge per
+// end, and that variable carries no rows until every end it merges holds some. A root
+// inside the broken cycle reaches those ends without crossing it; one outside reaches the
+// variable first and stalls there, having nothing to open the ends with.
+bool DBProgramGenerator::reachesTheMergesItCrosses(const VariableDependency& root) const {
+    const auto isMerged = [](const VariableDependency* var) {
+        return std::ranges::any_of(var->incoming(),
+                                   [](const DependencyEdge* edge) { return edge->isMetaEdge(); });
+    };
+
+    llvm::SmallVector<const VariableDependency*> worklist {&root};
+    std::unordered_set<const VariableDependency*> reached {&root};
+    llvm::SmallVector<const VariableDependency*> crossed;
+
+    while (!worklist.empty()) {
+        const VariableDependency* const current = worklist.pop_back_val();
+
+        if (isMerged(current)) {
+            crossed.push_back(current);
+            continue;
+        }
+
+        for (const DependencyEdge* edge : current->edges()) {
+            const VariableDependency* const other = edge->src() == current ? edge->tgt() : edge->src();
+            if (reached.insert(other).second) {
+                worklist.push_back(other);
+            }
+        }
+    }
+
+    return std::ranges::all_of(crossed, [&reached](const VariableDependency* var) {
+        return std::ranges::all_of(var->incoming(), [&reached](const DependencyEdge* edge) {
+            return !edge->isMetaEdge() || reached.contains(edge->src());
+        });
+    });
+}
+
+void DBProgramGenerator::collectOrderedRoots(llvm::SmallVectorImpl<const VariableDependency*>& roots) const {
+    for (const VariableDependency& var : _vdg.vars()) {
+        if (isValidRoot(var)) {
+            roots.push_back(&var);
+        }
+    }
+
+    // Both ends a broken cycle leaves behind can open it, but only the one the pattern
+    // traverses out of walks it the way the pattern was written; opening it at the other
+    // emits the reverse traversal, whose path lists its hops back to front.
+    const auto walksOutOfABrokenCycle = [](const VariableDependency* root) {
+        const VariableDependency::Edges& outgoing = root->outgoing();
+
+        const auto isMeta = [](const DependencyEdge* edge) { return edge->isMetaEdge(); };
+
+        return std::ranges::any_of(outgoing, isMeta)
+            && !std::ranges::all_of(outgoing, isMeta);
+    };
+
+    const auto opensItsOwnMerges = [this](const VariableDependency* root) {
+        return reachesTheMergesItCrosses(*root);
+    };
+
+    std::stable_partition(roots.begin(), roots.end(), walksOutOfABrokenCycle);
+    std::stable_partition(roots.begin(), roots.end(), opensItsOwnMerges);
+}
+
 void DBProgramGenerator::generateTraversal(std::span<Stmt* const> stmts) {
     if (_vdg.empty()) {
         return;
@@ -1987,13 +2051,12 @@ void DBProgramGenerator::generateTraversal(std::span<Stmt* const> stmts) {
     // Connected components
     std::vector<TranslatedComponent> components;
 
-    // TODO: Use nodes at ends of diameter
-    for (const VariableDependency& root : _vdg.vars()) {
-        if (defined.contains(&root)) {
-            continue;
-        }
+    llvm::SmallVector<const VariableDependency*> roots;
+    collectOrderedRoots(roots);
 
-        if (!isValidRoot(root)) {
+    // TODO: Use nodes at ends of diameter
+    for (const VariableDependency* root : roots) {
+        if (defined.contains(root)) {
             continue;
         }
 
@@ -2004,7 +2067,7 @@ void DBProgramGenerator::generateTraversal(std::span<Stmt* const> stmts) {
         component._region->push_back(scratch); // Region destructor frees scratch
         _opBuilder.setInsertionPointToStart(scratch);
 
-        translateComponent(&root, defined, component._vars);
+        translateComponent(root, defined, component._vars);
 
         for (const VariableDependency* var : component._vars) {
             bioassert(_part._varMap.contains(var), "Component var {} not registered", var->getName());
