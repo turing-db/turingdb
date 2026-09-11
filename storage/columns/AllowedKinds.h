@@ -201,7 +201,9 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::Int64::Primitive, types::Double::Primitive>::Pairs,
         OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs,
-        OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs
+        OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs,
+        // Lexicographic ordering of strings
+        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<
@@ -225,7 +227,9 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::Int64::Primitive, types::Double::Primitive>::Pairs,
         OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs,
-        OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs
+        OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs,
+        // Lexicographic ordering of strings
+        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<

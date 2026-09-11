@@ -301,7 +301,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
 
             if (pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Integer)
                 || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Double)
-                || pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Double)) {
+                || pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Double)
+                || pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)) {
                 // Valid pair
                 break;
             }
