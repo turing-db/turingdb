@@ -23,11 +23,13 @@ template <IteratedID ID, SupportedType T>
 void GetPropertiesIteratorWithNull<ID, T>::init() {
     bioassert(_inputIDs, "Null input column.");
 
+    _prop = nullptr;
+    _entityIt = _inputIDs->cbegin();
+
     if (_inputIDs->empty()) {
         return;
     }
 
-    _entityIt = _inputIDs->cbegin();
     EntityID id {_entityIt->getValue()};
 
     _partIt.skipToEnd();
