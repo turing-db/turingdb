@@ -23,6 +23,8 @@ add_query_suite_target(test_query_test_suite
     QueryResultFormatter.cpp)
 
 add_test(NAME test_query_test_suite COMMAND test_query_test_suite)
+set_tests_properties(test_query_test_suite PROPERTIES
+    ENVIRONMENT "OPENBLAS_NUM_THREADS=1")
 
 add_query_suite_target(test_remote_query_test_suite
     RemoteQueryTestSuite.cpp
@@ -35,6 +37,8 @@ target_link_libraries(test_remote_query_test_suite
             turing_db_proto_client_s)
 
 add_test(NAME test_remote_query_test_suite COMMAND test_remote_query_test_suite)
+set_tests_properties(test_remote_query_test_suite PROPERTIES
+    ENVIRONMENT "OPENBLAS_NUM_THREADS=1")
 
 add_query_suite_target(query_test_suite_cli
     QueryTestSuiteCLI.cpp

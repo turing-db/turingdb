@@ -21,5 +21,5 @@ function(add_turing_test exe_name cpp_file)
 
     add_test(NAME ${exe_name} COMMAND ${exe_name})
     set_tests_properties(${exe_name} PROPERTIES
-        ENVIRONMENT "TURING_EXTENSIONS_DIR=${CMAKE_BINARY_DIR}/lib/turingdb/extensions")
+        ENVIRONMENT "TURING_EXTENSIONS_DIR=${CMAKE_BINARY_DIR}/lib/turingdb/extensions;OPENBLAS_NUM_THREADS=1")
 endfunction()
