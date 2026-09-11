@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <span>
 #include <stack>
 #include <type_traits>
@@ -49,6 +50,26 @@ inline WireSize computeListByteSize(std::span<const db::ListElementView> element
     for (const auto& elem : elements) {
         db::ListTagDispatcher dispatcher {elem.getTag()};
         totalSize += dispatcher.execute(sizeVisitor, elem);
+    }
+
+    bioassert(totalSize <= MAX_WIRE_SIZE, "List length exceeds maximum wire size");
+    return static_cast<WireSize>(totalSize);
+}
+
+// The same for an optional column's elements, counting a row that holds no element as the
+// null it is written as.
+inline WireSize computeOptionalListByteSize(std::span<const std::optional<db::ListElementView>> elements) {
+    const ListElementByteSizeVisitor sizeVisitor;
+
+    size_t totalSize = 0;
+    for (const std::optional<db::ListElementView>& element : elements) {
+        if (!element.has_value()) {
+            totalSize += sizeof(db::PropertyNull);
+            continue;
+        }
+
+        db::ListTagDispatcher dispatcher {element->getTag()};
+        totalSize += dispatcher.execute(sizeVisitor, *element);
     }
 
     bioassert(totalSize <= MAX_WIRE_SIZE, "List length exceeds maximum wire size");
@@ -334,9 +355,7 @@ public:
             // is diagnosed eagerly by pre-P2593 compilers even when discarded.
             static_assert(sizeof(T) == 0, "Sending ColumnOptVector<EntityList> not supported");
         } else if constexpr (db::IsListElement<T>) {
-            // The element decoders read a contiguous run of scalars, wire format has no
-            // framing for null
-            throw FatalException("ColumnOptVector<ListElementView> is not supported");
+            writeOptionalListElements(col->getRaw());
         } else if constexpr (db::IsNull<T>) {
             // Don't send anything for property null
         } else {
@@ -425,8 +444,8 @@ public:
             // Dependent condition (see the ColumnOptVector<EntityList> branch above).
             static_assert(sizeof(T) == 0, "ColumnOptConst<EntityList> is not supported");
         } else if constexpr (db::IsListElement<T>) {
-            // See the ColumnOptVector<ListElementView> branch above.
-            throw FatalException("ColumnOptConst<ListElementView> is not supported");
+            const db::ListElementView element = *opt;
+            writeListElements(std::span<const db::ListElementView>(&element, 1));
         } else if constexpr (db::IsNull<T>) {
             // Don't send anything for property null
         } else {
@@ -492,6 +511,35 @@ private:
         _outBuf->copyFixedLenData(&listByteSize, sizeof(listByteSize));
 
         writeListElementValues(elements);
+    }
+
+    // The same for an optional column. A row holding no element is written as a null one so
+    // the elements stay one per row; the column's null mask, already on the wire, is what
+    // tells such a row from one holding a null read out of a list.
+    void writeOptionalListElements(std::span<const std::optional<db::ListElementView>> elements) {
+        const WireSize listByteSize = computeOptionalListByteSize(elements);
+
+        _outBuf->checkRemainingAndFlush(sizeof(listByteSize));
+        _outBuf->copyFixedLenData(&listByteSize, sizeof(listByteSize));
+
+        for (const std::optional<db::ListElementView>& element : elements) {
+            if (!element.has_value()) {
+                writeNullListElement();
+                continue;
+            }
+
+            writeListElementValues(std::span<const db::ListElementView>(&element.value(), 1));
+        }
+    }
+
+    void writeNullListElement() {
+        constexpr size_t tagSize = sizeof(db::ListBufferTypeTag);
+        constexpr db::ListBufferTypeTag tag = db::TypeToListBufferTag<db::PropertyNull>::Tag;
+        const db::PropertyNull value {};
+
+        _outBuf->checkRemainingAndFlush(tagSize + sizeof(value));
+        _outBuf->copyFixedLenData(&tag, tagSize);
+        _outBuf->copyFixedLenData(&value, sizeof(value));
     }
 
     net::proto::TuringProtoOutBuf* _outBuf {nullptr};

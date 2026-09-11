@@ -477,6 +477,40 @@ struct OptionalVectorColumnDecoder {
 };
 
 template <ProtoDecodeSink Sink>
+struct OptionalVectorColumnDecoder<SinkListElementView<Sink>, Sink> {
+    using T = SinkListElementView<Sink>;
+
+    static bool decode(DecodeContext* context,
+                       Sink* sink,
+                       SinkColumnOptVector<T, Sink>* typedColumn,
+                       ProtoColumnState* columnState) {
+        // One element per column row, as in the non-optional case, wire-encoded as
+        // [listByteSize] followed by the elements. Which rows hold one is read off the mask,
+        // not off the tag: a row holding a null out of a list carries the very same tag.
+        if (context->_rowIndex == 0) {
+            if (context->_inBuf->readable() < sizeof(WireSize)) {
+                return false;
+            }
+
+            WireSize listByteSize = 0;
+            context->_inBuf->readData(&listByteSize, sizeof(listByteSize));
+
+            sink->beginList(columnState->getNumRows(), listByteSize);
+            context->_rowIndex = 1;
+        }
+
+        const ProtoColumnState::BitMask& mask = columnState->getBitMask();
+        auto onTopLevelElement = [typedColumn, &mask](size_t index, const SinkListElementView<Sink>& view) {
+            if (mask.test(index)) {
+                typedColumn->data()[index] = view;
+            }
+        };
+
+        return drainListStack(context, sink, onTopLevelElement);
+    }
+};
+
+template <ProtoDecodeSink Sink>
 struct OptionalVectorColumnDecoder<db::types::String::Primitive, Sink> {
     using T = db::types::String::Primitive;
 
@@ -664,10 +698,11 @@ struct ConstColumnDecoder<SinkListView<Sink>, Sink> {
 
     template <ConstColumnOf<T, Sink> Column>
     static bool decode(DecodeContext* context, Sink* sink, Column* typedColumn) {
-        // Const columns have no row dimension, so reuse _rowIndex as a 0/1 "list started"
-        // marker (the driver resets it to 0 before this column). 1 means we have read the
-        // header, reserved the space, and set the (initially unfilled) ListView on the column.
-        if (context->_rowIndex == 0) {
+        // Const columns have no row dimension, so _constListStarted carries the "list
+        // started" state (the driver clears it before this column). Set means we have read
+        // the header, reserved the space, and set the (initially unfilled) ListView on the
+        // column.
+        if (!context->_constListStarted) {
             if (context->_inBuf->readable() < 2 * sizeof(WireSize)) {
                 return false;
             }
@@ -678,7 +713,7 @@ struct ConstColumnDecoder<SinkListView<Sink>, Sink> {
             context->_inBuf->readData(&listByteSize, sizeof(listByteSize));
 
             typedColumn->set(sink->beginList(elementCount, listByteSize));
-            context->_rowIndex = 1;
+            context->_constListStarted = true;
         }
         auto onTopLevelElement = [](size_t, const SinkListElementView<Sink>&) {};
         return drainListStack(context, sink, onTopLevelElement);
@@ -694,7 +729,7 @@ struct ConstColumnDecoder<SinkListElementView<Sink>, Sink> {
         // A constant ListElementView is a single element, wire-encoded as [listByteSize] + one
         // element. Stream it onto the list buffer and set the column to its view.
 
-        if (context->_rowIndex == 0) {
+        if (!context->_constListStarted) {
             if (context->_inBuf->readable() < sizeof(WireSize)) {
                 return false;
             }
@@ -703,7 +738,7 @@ struct ConstColumnDecoder<SinkListElementView<Sink>, Sink> {
             context->_inBuf->readData(&listByteSize, sizeof(listByteSize));
 
             sink->beginList(1, listByteSize);
-            context->_rowIndex = 1;
+            context->_constListStarted = true;
         }
 
         // The constant is the single top-level element; store its view on the column.

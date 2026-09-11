@@ -148,3 +148,13 @@ TEST_F(AbsentPropertyNameTest, ReadingItLeavesTheSchemaAlone) {
     expectRows("MATCH (n:Person) WHERE n.name = 'Remy' RETURN n.nosuchprop", {{"null"}});
     expectRows("MATCH (n:Person) WHERE n.name = 'Remy' RETURN n.nosuchprop", {{"null"}});
 }
+
+// An absent name reads as null, so ordering it against a value is null on every row and
+// selects none of them, whatever the type of that value
+TEST_F(AbsentPropertyNameTest, OrderingItAgainstAStringMatchesNothing) {
+    expectNoRows("MATCH (n:Person) WHERE n.nosuchprop < 'x' RETURN n.name");
+}
+
+TEST_F(AbsentPropertyNameTest, OrderingItAgainstANumberMatchesNothing) {
+    expectNoRows("MATCH (n:Person) WHERE n.nosuchprop < 1 RETURN n.name");
+}

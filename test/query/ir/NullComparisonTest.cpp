@@ -108,6 +108,24 @@ TEST_F(NullComparisonTest, rejectsAnIsTestAgainstAValue) {
     runQueryExpectingError("MATCH (n:Person) RETURN n.age IS 5", "must be NULL");
 }
 
+// Ordering a value against null is null, the same as testing it for equality. The type of
+// the other operand does not change that
+TEST_F(NullComparisonTest, orderingAStringAgainstNullIsNull) {
+    expectRows("MATCH (n:Person) RETURN n.name, n.name < null", allNull);
+}
+
+TEST_F(NullComparisonTest, orderingANumberAgainstNullIsNull) {
+    expectRows("MATCH (n:Person) RETURN n.name, n.age >= null", allNull);
+}
+
+TEST_F(NullComparisonTest, orderingAgainstNullReadsTheSameOnEitherSide) {
+    expectRows("MATCH (n:Person) RETURN n.name, null > n.name", allNull);
+}
+
+TEST_F(NullComparisonTest, orderingAgainstNullMatchesNoRow) {
+    expectRows("MATCH (n:Person) WHERE n.name < null RETURN n.name", {});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
