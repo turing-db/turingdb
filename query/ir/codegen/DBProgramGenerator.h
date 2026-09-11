@@ -388,6 +388,12 @@ private:
     // translateComponent is called with, one per component
     void collectComponentRoots(llvm::SmallVectorImpl<const VariableDependency*>& roots) const;
 
+    // Whether a root reaches the ends of every merge it crosses without crossing it first
+    bool reachesTheMergesItCrosses(const VariableDependency& root) const;
+
+    // Every valid root, the ones a merge would stall translated last
+    void collectOrderedRoots(llvm::SmallVectorImpl<const VariableDependency*>& roots) const;
+
     // Adds filters for edges which should be equivalent (joined on)
     void resolveEdgeIdentities();
 

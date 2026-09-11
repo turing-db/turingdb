@@ -257,6 +257,7 @@ add_call_v3_test(test_query_ir_concatenated_list_seed ConcatenatedListSeedTest.c
 add_call_v3_test(test_query_ir_explore_paths_cypher ExplorePathsCypherTest.cpp)
 add_call_v3_test(test_query_ir_explore_end_constraint_cypher ExploreEndConstraintCypherTest.cpp)
 add_call_v3_test(test_query_ir_explore_bound_and_distinct_cypher ExploreBoundAndDistinctCypherTest.cpp)
+add_call_v3_test(test_query_ir_self_referencing_pattern SelfReferencingPatternTest.cpp)
 
 # The crossing-call tests hop twice from the column a CALL yielded and then call again,
 # once with a constant argument alone and once reading the chain's tail, from the query
