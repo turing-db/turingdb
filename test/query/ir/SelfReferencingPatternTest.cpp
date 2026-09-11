@@ -100,6 +100,16 @@ TEST_F(SelfReferencingPatternTest, opensTheCycleOnALabelScan) {
     EXPECT_FALSE(contains(program, "db.scan_nodes(")) << program;
 }
 
+// A walk ending where it began holds the seed at both ends, so a predicate on the end is one
+// on the seed and sinks to the scan that opened it
+TEST_F(SelfReferencingPatternTest, sinksAPredicateOnTheCycleToItsScan) {
+    StringRowSink sink;
+    runQuery("EXPLAIN (db) MATCH (a:Person {name: 'Remy'})-[e]->{1,7}(a) RETURN count(a)", sink);
+
+    const std::string_view program = dumpOf(sink, "db");
+    EXPECT_TRUE(contains(program, "db.scan_nodes_by_property_value")) << program;
+}
+
 TEST_F(SelfReferencingPatternTest, walksTheCycleTheWayThePatternIsWritten) {
     StringRowSink sink;
     runQuery("MATCH (a:Person)-[e]->+(a) RETURN a.name, e", sink);

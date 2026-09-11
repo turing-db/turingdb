@@ -262,12 +262,17 @@ Value climbToLineageAnchor(Value column, bool& crossedProducer, llvm::SmallVecto
             } else {
                 return column;
             }
-        } else if (isa<ExplorePaths>(def)) {
+        } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(def)) {
             const size_t resultIndex = cast<OpResult>(column).getResultNumber();
+            constexpr size_t tgtResultIndex = 1;
 
             // The seed re-surfaces as srcids and each carried column passes through; the end
-            // node and the path are born here, whichever direction the exploration walks.
-            if (resultIndex == 0) {
+            // node and the path are born here, whichever direction the exploration walks -
+            // except where the walk is one that comes back to its seed, which leaves the end
+            // holding that seed row for row, so a predicate on it is one on the seed.
+            const bool endHoldsTheSeed = resultIndex == tgtResultIndex && exploration.getEndsOnSeed();
+
+            if (resultIndex == 0 || endHoldsTheSeed) {
                 column = def->getOperand(0);
                 crossedProducer = true;
             } else if (resultIndex >= pathFixedResultCount) {
