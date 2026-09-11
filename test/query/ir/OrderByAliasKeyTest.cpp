@@ -23,7 +23,6 @@
 #include "NLOutputSink.h"
 #include "StorageDialect.h"
 
-#include "AnalyzeException.h"
 #include "CypherAST.h"
 #include "CypherAnalyzer.h"
 #include "CypherParser.h"
@@ -183,13 +182,13 @@ TEST_F(OrderByAliasKeyTest, aliasInsideACompoundKeyOrdersDescending) {
                     edgeDurationsDescending);
 }
 
-// A DISTINCT drops rows before the sort sees them, so a key computed from an item would
-// be one value per row the dedup was given rather than per row it kept. The analyzer
-// turns those keys away, which is what leaves the column of an item safe to key on.
-TEST_F(OrderByAliasKeyTest, aliasInsideACompoundKeyIsRejectedUnderDistinct) {
-    const std::string_view query =
-        "MATCH (a)-[e]->(b) RETURN DISTINCT e.duration AS edgeDuration ORDER BY edgeDuration + 1";
+// A DISTINCT drops rows before the sort sees them, so the key is computed over the
+// deduped column: one value per row the dedup kept. The eighteen edges carry five
+// distinct durations, and the null closes the order.
+TEST_F(OrderByAliasKeyTest, aliasInsideACompoundKeyOrdersUnderDistinct) {
+    const OptInt64Values expected = {10, 15, 20, 200, std::nullopt};
 
-    OrderedOptInt64Sink sink;
-    EXPECT_THROW(runQuery(query, &sink), AnalyzeException);
+    expectDurations("MATCH (a)-[e]->(b) RETURN DISTINCT e.duration AS edgeDuration "
+                    "ORDER BY edgeDuration + 1",
+                    expected);
 }

@@ -572,6 +572,14 @@ private:
     void translateDistinctOverConstants(const Projection* projection,
                                         llvm::SmallVectorImpl<mlir::Value>& projected);
 
+    // Binds every variable a dedup projected to the column the dedup handed back, so that
+    // a key read off one - the c.name of WITH DISTINCT c, p ORDER BY c.name - is computed
+    // over the rows that survived rather than over the ones the match produced
+    void rebindDistinctColumns(const Projection* projection, llvm::ArrayRef<mlir::Value> projected);
+
+    // Replaces the column @param decl is read through, wherever the part publishes it
+    void rebindVariableColumn(const VarDecl* decl, mlir::Value column);
+
     void runPasses();
 
     // Whether the EXPLAIN prefix asked about a pass at all, which is what decides
