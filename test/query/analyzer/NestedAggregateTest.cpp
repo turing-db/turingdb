@@ -81,6 +81,13 @@ TEST_F(NestedAggregateTest, rejectsCountOverAnAggregateAlias) {
                    nestedAggregateReason);
 }
 
+// A list around the alias is no screen: the argument still names an aggregate of the same
+// projection, so what collect would fold is one value per group rather than the rows of it
+TEST_F(NestedAggregateTest, rejectsAnAggregateAliasInsideAListArgument) {
+    expectRejected("MATCH (a)-[e]->(b) RETURN a, sum(e.duration) AS s, collect([s])",
+                   nestedAggregateReason);
+}
+
 // The nesting spelled out in the call rather than reached through an alias
 TEST_F(NestedAggregateTest, rejectsAnAggregateSpelledInsideAnAggregate) {
     expectRejected("MATCH (a)-[e]->(b) RETURN a, count(DISTINCT sum(e.duration))",

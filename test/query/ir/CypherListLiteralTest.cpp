@@ -838,6 +838,22 @@ TEST_F(CypherListLiteralTest, buildsAListOfAnUnwoundVariablePerRow) {
     expectRows("UNWIND [1, 2] AS x RETURN [x]", expected);
 }
 
+// An element read off a list by index carries the tag its value was stored under, and the
+// column holding it is nullable: the list takes the value under that tag.
+TEST_F(CypherListLiteralTest, buildsAListOfAnIndexedElementPerRow) {
+    const Rows expected = {{"[1]"}};
+
+    expectRows("UNWIND [[1, 'a']] AS xs WITH xs[0] AS first RETURN [first]", expected);
+}
+
+// The same read past the end of the list, which has no element: the row has no cell, and
+// the list holds the null that is.
+TEST_F(CypherListLiteralTest, buildsAListOfAnAbsentIndexedElement) {
+    const Rows expected = {{"[null]"}};
+
+    expectRows("UNWIND [[1, 'a']] AS xs WITH xs[7] AS missing RETURN [missing]", expected);
+}
+
 TEST_F(CypherListLiteralTest, rejectsAnArithmeticListElement) {
     // The grammar admits no expression inside a list, so an arithmetic element is turned
     // away by the parser rather than built per row. Pinned so that teaching the grammar

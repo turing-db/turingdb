@@ -378,6 +378,22 @@ LogicalResult DistinctFilter::verify() {
     return success();
 }
 
+// An nl.make_list must read at least one element chunk: there would be no cell to build a
+// list out of, and nothing to size the step from. A list known without reading a row is an
+// nl.constant instead.
+LogicalResult MakeList::verify() {
+    if (getElements().empty()) {
+        return emitOpError("requires at least one element chunk");
+    }
+
+    const Type elementType = llvm::cast<ChunkType>(getResult().getType()).getElementType();
+    if (!llvm::isa<storage::ListType>(elementType)) {
+        return emitOpError("result must be a chunk of lists");
+    }
+
+    return success();
+}
+
 void For::build(OpBuilder& builder, OperationState& state, Value iterator) {
     For::build(builder, state, iterator, Value());
 }

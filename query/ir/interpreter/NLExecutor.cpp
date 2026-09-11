@@ -193,8 +193,8 @@ void unwindListValueEmit(const Column* source,
     }
 }
 
-// The present-in-every-row sibling of unwindListValueEmit: an entity ID and a nested list
-// are always there, so the elements drain into a plain column rather than a nullable one.
+// The present-in-every-row sibling of unwindListValueEmit: a nested list is always there,
+// so the elements drain into a plain column rather than a nullable one.
 template <typename Element>
 void unwindListPlainEmit(const Column* source,
                          const ColumnVector<size_t>* rows,
@@ -214,6 +214,38 @@ void unwindListPlainEmit(const Column* source,
         bioassert(element.getTag() == expectedTag, "Unwound element does not have the unwound list's element type.");
 
         outputRaw[index] = element.getAs<Element>();
+    }
+}
+
+// The entity sibling of unwindListPlainEmit: an ID column spells a null entity as an
+// invalid ID, so the tagged null a list holds drains back into one rather than tripping
+// the tag check.
+template <typename IDType>
+void unwindListValidIDEmit(const Column* source,
+                           const ColumnVector<size_t>* rows,
+                           const ColumnVector<size_t>* positions,
+                           Column* output) {
+    const std::vector<ListView>& lists = static_cast<const ColumnVector<ListView>*>(source)->getRaw();
+    const std::vector<size_t>& rowsRaw = rows->getRaw();
+    const std::vector<size_t>& positionsRaw = positions->getRaw();
+
+    std::vector<IDType>& outputRaw = static_cast<ColumnVector<IDType>*>(output)->getRaw();
+    outputRaw.resize(rowsRaw.size());
+
+    constexpr ListBufferTypeTag expectedTag = TypeToListBufferTag<IDType>::Tag;
+
+    for (size_t index = 0; index < rowsRaw.size(); index++) {
+        const ListElementView element = lists[rowsRaw[index]].elements()[positionsRaw[index]];
+        const ListBufferTypeTag tag = element.getTag();
+
+        if (tag == ListBufferTypeTag::Null) {
+            outputRaw[index] = IDType {};
+            continue;
+        }
+
+        bioassert(tag == expectedTag, "Unwound element does not have the unwound list's entity type.");
+
+        outputRaw[index] = element.getAs<IDType>();
     }
 }
 
@@ -2520,17 +2552,42 @@ ListBuffer<>::ListItemVariant valueListItem(const Column* input, size_t row, Loc
     return ListBuffer<>::ListItemVariant {*cell};
 }
 
-// The sibling of valueListItem for a column whose cells are present in every row: an
-// entity ID, and a nested list held as the one element it is.
+// The sibling of valueListItem for a column whose cells are present in every row: a
+// nested list, held as the one element it is.
 template <typename Element>
 ListBuffer<>::ListItemVariant plainListItem(const Column* input, size_t row, LocalMemory*) {
     return ListBuffer<>::ListItemVariant {(*static_cast<const ColumnVector<Element>*>(input))[row]};
+}
+
+// The entity sibling of valueListItem: an entity an OPTIONAL MATCH did not match is an
+// invalid ID, which is how a null entity is spelled, so it joins the list as the tagged
+// null rather than as the value 2^64-1 - the null collectValidIDFold drops instead.
+template <typename IDType>
+ListBuffer<>::ListItemVariant validIDListItem(const Column* input, size_t row, LocalMemory*) {
+    const IDType id = (*static_cast<const ColumnVector<IDType>*>(input))[row];
+    if (!id.isValid()) {
+        return ListBuffer<>::ListItemVariant {PropertyNull {}};
+    }
+
+    return ListBuffer<>::ListItemVariant {id};
 }
 
 // The sibling of valueListItem for a type-erased column: the cell already carries the tag
 // its value is stored under, so it goes into the list as the type that tag names.
 ListBuffer<>::ListItemVariant taggedColumnListItem(const Column* input, size_t row, LocalMemory*) {
     return taggedListItem((*static_cast<const ColumnVector<ListElementView>*>(input))[row]);
+}
+
+// The nullable sibling of taggedColumnListItem: a column an OPTIONAL MATCH padded, or one
+// an index read off a list, has no cell in every row.
+ListBuffer<>::ListItemVariant optTaggedColumnListItem(const Column* input, size_t row, LocalMemory*) {
+    const std::optional<ListElementView>& element =
+        (*static_cast<const ColumnOptVector<ListElementView>*>(input))[row];
+    if (!element.has_value()) {
+        return ListBuffer<>::ListItemVariant {PropertyNull {}};
+    }
+
+    return taggedListItem(*element);
 }
 
 // The sibling of valueListItem for a column that owns its characters - a CSV field's. The
@@ -4428,6 +4485,12 @@ void NLExecutor::runMakeList(NLExecutionContext*, NLFunctionData* data) {
     // Every element column is row-aligned with the others, so the first gives the rows
     const size_t rowCount = elements.front()._column->size();
 
+    const auto isRowAligned = [rowCount](const NLMakeListData::Element& element) {
+        return element._column->size() == rowCount;
+    };
+    bioassert(std::ranges::all_of(elements, isRowAligned),
+              "Element columns of a list build are not row-aligned.");
+
     std::vector<ListView>& outputRaw = static_cast<ColumnVector<ListView>*>(makeList->getResult())->getRaw();
     outputRaw.resize(rowCount);
 
@@ -4456,19 +4519,19 @@ NLListItemReadFunction NLExecutor::selectValueListItemRead(ValueType valueType) 
 }
 
 NLListItemReadFunction NLExecutor::selectNodeListItemRead() {
-    return &plainListItem<NodeID>;
+    return &validIDListItem<NodeID>;
 }
 
 NLListItemReadFunction NLExecutor::selectEdgeListItemRead() {
-    return &plainListItem<EdgeID>;
+    return &validIDListItem<EdgeID>;
 }
 
 NLListItemReadFunction NLExecutor::selectNestedListItemRead() {
     return &plainListItem<ListView>;
 }
 
-NLListItemReadFunction NLExecutor::selectTaggedListItemRead() {
-    return &taggedColumnListItem;
+NLListItemReadFunction NLExecutor::selectTaggedListItemRead(bool nullable) {
+    return nullable ? &optTaggedColumnListItem : &taggedColumnListItem;
 }
 
 NLListItemReadFunction NLExecutor::selectOwnedStringListItemRead(bool nullable) {
@@ -5274,11 +5337,11 @@ NLUnwindElementEmitFunction NLExecutor::selectListUnwindValueEmit(ValueType valu
 }
 
 NLUnwindElementEmitFunction NLExecutor::selectListUnwindNodeEmit() {
-    return &unwindListPlainEmit<NodeID>;
+    return &unwindListValidIDEmit<NodeID>;
 }
 
 NLUnwindElementEmitFunction NLExecutor::selectListUnwindEdgeEmit() {
-    return &unwindListPlainEmit<EdgeID>;
+    return &unwindListValidIDEmit<EdgeID>;
 }
 
 NLUnwindElementEmitFunction NLExecutor::selectListUnwindListEmit() {

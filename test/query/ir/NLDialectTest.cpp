@@ -701,6 +701,31 @@ TEST_F(NLDialectTest, makeListBuildsAListChunkOfTheSharedElementType) {
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
 }
 
+// An nl.make_list reading no chunk has no cell to build a list out of, and nothing to size
+// its step from either: the verifier turns it away rather than leaving the interpreter to
+// read the first of no element chunks.
+TEST_F(NLDialectTest, verifierRejectsMakeListWithoutElementChunks) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    const mlir::Type int64Type = mlir::IntegerType::get(&_context, 64);
+    const mlir::Type listChunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::ListType::get(&_context, int64Type));
+
+    builder.create<mlir::nl::MakeList>(loc, listChunkType, mlir::ValueRange {});
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    // Swallow the verifier's diagnostic so the deliberate failure does not print.
+    const mlir::ScopedDiagnosticHandler handler(&_context, [](mlir::Diagnostic&) {
+        return mlir::success();
+    });
+    EXPECT_TRUE(mlir::failed(mlir::verify(function)));
+}
+
 // A list literal is an nl.constant value: it holds the whole list rather than spreading it
 // over rows, so it produces a chunk of that list type - inferred from the elements, since an
 // array attribute carries none of its own. A nested list rides one element as an array.

@@ -128,6 +128,25 @@ TEST_F(UnwindVariablesTest, keepsTheNullOfAnAbsentProperty) {
     expectRows("MATCH (n) WHERE n.name = 'Remy' UNWIND [n.age, n.height] AS x RETURN x", expected);
 }
 
+// An OPTIONAL MATCH that matched nothing leaves an invalid ID, which is how a null entity
+// is spelled, so the list holds a null where the element is - not the 2^64-1 the invalid
+// ID reads as. Computers (2) has no out-edge of any type.
+TEST_F(UnwindVariablesTest, holdsTheNullOfAnUnmatchedOptionalNode) {
+    const Rows expected = {{"2, null"}};
+    expectRows("MATCH (n) WHERE n.name = 'Computers' OPTIONAL MATCH (n)-[:KNOWS_WELL]->(m) "
+               "RETURN [n, m]",
+               expected);
+}
+
+// The null drains back out as the invalid ID an entity column spells it with, so the
+// unwound variable is null and a property read off it is null too
+TEST_F(UnwindVariablesTest, spreadsTheNullOfAnUnmatchedOptionalNode) {
+    const Rows expected = {{"2", "Computers"}, {"null", "null"}};
+    expectRows("MATCH (n) WHERE n.name = 'Computers' OPTIONAL MATCH (n)-[:KNOWS_WELL]->(m) "
+               "UNWIND [n, m] AS x RETURN x, x.name",
+               expected);
+}
+
 // One level deeper: the elements are lists of their own, so each cell unwinds into the
 // list it is rather than into the nodes inside it
 TEST_F(UnwindVariablesTest, spreadsAListOfLists) {

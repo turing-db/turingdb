@@ -348,6 +348,24 @@ TEST_F(OrderByAggregateUnprojectedKeyTest, ordersGroupsByADeeperKeyOverAGrouping
                        durationGroupsAscending);
 }
 
+// A list of the grouping key: an element holding one value per group makes the list hold
+// one too, so the key is built over the grouped column. Built over the ungrouped one it
+// would be as long as the edges rather than as the groups.
+TEST_F(OrderByAggregateUnprojectedKeyTest, ordersGroupsByAListOverAGroupingKey) {
+    expectDurationRows("MATCH (a)-[e]->(b) RETURN e.duration, count(b.name) ORDER BY [e.duration]",
+                       durationGroupsAscending);
+}
+
+// The elements are what the key holds, so a list is group-wise only where all of them are:
+// b.name is one name per edge inside a list as much as outside one.
+TEST_F(OrderByAggregateUnprojectedKeyTest, rejectsAListOverADroppedVariable) {
+    expectRejected("MATCH (a:Person)-[e]->(b) RETURN a, a.age, count(b.name) ORDER BY [b.name]");
+}
+
+TEST_F(OrderByAggregateUnprojectedKeyTest, rejectsAListMixingAGroupingKeyWithADroppedVariable) {
+    expectRejected("MATCH (a:Person)-[e]->(b) RETURN a, a.age, count(b.name) ORDER BY [a.age, b.name]");
+}
+
 // An alias is another spelling of the item it names, so a key computing over one computes
 // over that item's grouped column just as spelling the item out does.
 TEST_F(OrderByAggregateUnprojectedKeyTest, ordersGroupsByAKeyComputedOverTheAliasOfAGroupingKey) {

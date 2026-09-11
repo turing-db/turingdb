@@ -137,6 +137,10 @@ TEST_F(NestedAggregateProjectionTest, generatesAnAggregateInsideAnExpression) {
     EXPECT_NO_THROW(generateProgram("MATCH (n:Person) RETURN n.name, 2 * count(n) + 20"));
 }
 
-TEST_F(NestedAggregateProjectionTest, rejectsAListHoldingAnAggregateBesideAGroupingKey) {
-    expectRejected("MATCH (n) RETURN DISTINCT n, [count(n.age)]", nestedAggregateReason);
+// Unlike a map, a list is a value this codegen builds a column of, so the aggregate it
+// holds is registered with the grouped aggregate and the list is built over the result -
+// the same route an aggregate inside arithmetic takes.
+TEST_F(NestedAggregateProjectionTest, generatesAListHoldingAnAggregateBesideAGroupingKey) {
+    EXPECT_NO_THROW(generateProgram("MATCH (n) RETURN DISTINCT n, [count(n.age)]"));
+    EXPECT_NO_THROW(generateProgram("MATCH (n) RETURN n.age, [count(n.name)]"));
 }
