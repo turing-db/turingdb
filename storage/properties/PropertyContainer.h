@@ -107,6 +107,7 @@ public:
     ~TypedPropertyContainer() override = default;
 
     void add(EntityID entityID, const PropertyNull&) {
+        _nullIds.emplace_back(entityID);
         _entityIndexMap[entityID] = NULL_INDEX;
     }
 
