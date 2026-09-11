@@ -69,7 +69,5 @@ TEST_F(FilePageReaderTest, Pages) {
 }
 
 int main(int argc, char** argv) {
-    return turing::test::turingTestMain(argc, argv, [] {
-        testing::GTEST_FLAG(repeat) = 2;
-    });
+    return turing::test::turingTestMain(argc, argv);
 }

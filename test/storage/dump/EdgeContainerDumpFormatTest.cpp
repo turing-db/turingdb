@@ -71,7 +71,5 @@ TEST_F(EdgeContainerDumpFormatTest, edgeContainerDumpBytes) {
 }
 
 int main(int argc, char** argv) {
-    return turing::test::turingTestMain(argc, argv, [] {
-        testing::GTEST_FLAG(repeat) = 1;
-    });
+    return turing::test::turingTestMain(argc, argv);
 }

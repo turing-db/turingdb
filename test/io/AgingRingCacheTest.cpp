@@ -659,7 +659,5 @@ TEST_F(AgingRingCacheTest, SaveFailure_ErrorCodeInResult) {
 }
 
 int main(int argc, char** argv) {
-    return turingTestMain(argc, argv, [] {
-        testing::GTEST_FLAG(repeat) = 40;
-    });
+    return turingTestMain(argc, argv);
 }

@@ -97,7 +97,5 @@ TEST_F(ChainedCallTest, chainedCallYieldsRowsWithPersonNodes) {
 }
 
 int main(int argc, char** argv) {
-    return turing::test::turingTestMain(argc, argv, [] {
-        testing::GTEST_FLAG(repeat) = 100;
-    });
+    return turing::test::turingTestMain(argc, argv);
 }

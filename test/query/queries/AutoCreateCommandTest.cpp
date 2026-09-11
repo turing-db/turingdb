@@ -1525,6 +1525,5 @@ TEST_F(CreateCommandTest, createSegfaultProbe) {
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
-    testing::GTEST_FLAG(repeat) = 1;
     return RUN_ALL_TESTS();
 }

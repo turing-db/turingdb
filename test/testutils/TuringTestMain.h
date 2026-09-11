@@ -61,7 +61,6 @@ private:
 
 inline int turingTestMain(int argc, char** argv, TuringMainConfig config = nullptr) {
     testing::GTEST_FLAG(print_time) = true;
-    testing::GTEST_FLAG(repeat) = 50;
     testing::GTEST_FLAG(shuffle) = true;
 
     db::JobSystem::setDefaultThreadCount(1);

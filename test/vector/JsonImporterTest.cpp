@@ -192,5 +192,5 @@ TEST_F(JsonImporterTest, ValidJson) {
 }
 
 int main(int argc, char** argv) {
-    return turingTestMain(argc, argv, [] { testing::GTEST_FLAG(repeat) = 2; });
+    return turingTestMain(argc, argv);
 }

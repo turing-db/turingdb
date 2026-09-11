@@ -72,7 +72,5 @@ TEST_F(GetLabelSetIDProcessorTest, test) {
 }
 
 int main(int argc, char** argv) {
-    return turing::test::turingTestMain(argc, argv, [] {
-        testing::GTEST_FLAG(repeat) = 1;
-    });
+    return turing::test::turingTestMain(argc, argv);
 }

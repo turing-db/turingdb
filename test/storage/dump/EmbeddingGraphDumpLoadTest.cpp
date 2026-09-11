@@ -203,5 +203,5 @@ TEST_F(EmbeddingGraphDumpLoadTest, MultiCommitEmbeddings) {
 }
 
 int main(int argc, char** argv) {
-    return turingTestMain(argc, argv, [] { testing::GTEST_FLAG(repeat) = 1; });
+    return turingTestMain(argc, argv);
 }
