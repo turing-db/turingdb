@@ -89,6 +89,17 @@ TEST_F(SelfReferencingPatternTest, foldsTheSeedItWalksBackToIntoTheExploration) 
     EXPECT_FALSE(contains(after, "db.eq")) << after;
 }
 
+// Breaking the cycle leaves the walk opening on an end of its own, which carries the labels
+// of the variable it merges into or opens by reading every node in the graph
+TEST_F(SelfReferencingPatternTest, opensTheCycleOnALabelScan) {
+    StringRowSink sink;
+    runQuery("EXPLAIN (db) MATCH (a:Person)-[e]->{1,7}(a) RETURN count(a)", sink);
+
+    const std::string_view program = dumpOf(sink, "db");
+    EXPECT_TRUE(contains(program, "db.scan_nodes_by_label")) << program;
+    EXPECT_FALSE(contains(program, "db.scan_nodes(")) << program;
+}
+
 TEST_F(SelfReferencingPatternTest, walksTheCycleTheWayThePatternIsWritten) {
     StringRowSink sink;
     runQuery("MATCH (a:Person)-[e]->+(a) RETURN a.name, e", sink);

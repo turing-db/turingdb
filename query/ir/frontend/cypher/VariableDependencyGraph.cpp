@@ -457,6 +457,9 @@ void VariableDependencyGraph::subdivideWithMergeIncImpl(VariableDependency* s,
     addDirected(mid, t, EdgeMetadata(EdgeMetadata::EdgeType::MERGE));
 }
 
+// Both ends the subdivision leaves behind are merged into @param t and so hold exactly the
+// nodes it does: whatever constrains it constrains them, and constraining the end the walk
+// opens on is what lets that end be scanned by label rather than read off the whole graph
 VariableDependency* VariableDependencyGraph::subdivideWithMerge(VariableDependency* s,
                                                                 VariableDependency* t) {
     std::string buf;
@@ -466,6 +469,7 @@ VariableDependency* VariableDependencyGraph::subdivideWithMerge(VariableDependen
         if (findOut != end(s->_outgoing)) {
             getNextAnonymisation(t, buf);
             VariableDependency* mid = newVariable(buf);
+            mid->_constraints = t->_constraints;
             subdivideWithMergeOutImpl(s, mid, t, *findOut);
             return mid;
         }
@@ -477,6 +481,7 @@ VariableDependency* VariableDependencyGraph::subdivideWithMerge(VariableDependen
         if (findIn != end(s->_incoming)) {
             getNextAnonymisation(t, buf);
             VariableDependency* mid = newVariable(buf);
+            mid->_constraints = t->_constraints;
             subdivideWithMergeIncImpl(s, mid, t, *findIn);
             return mid;
         }
