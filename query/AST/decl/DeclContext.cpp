@@ -72,12 +72,9 @@ VarDecl* DeclContext::getOrCreateNodePatternVariable(CypherAST* ast, std::string
     return getOrCreateNamedVariable(ast, EvaluatedType::NodePattern, name);
 }
 
+// The item computes a column of its own, so an alias spelling a name already in scope
+// declares a second variable that shadows the first rather than naming it again
 VarDecl* DeclContext::declareProjectedVariable(CypherAST* ast, EvaluatedType type, std::string_view name) {
-    VarDecl* declared = getDecl(name);
-    if (declared && declared->getType() == type) {
-        return declared;
-    }
-
     VarDecl* decl = VarDecl::create(ast, this, name, type);
     decl->setIsUnnamed(false);
     _declMap[decl->getName()] = decl;

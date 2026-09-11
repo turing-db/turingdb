@@ -2257,3 +2257,15 @@ add_call_v3_test(test_query_ir_neo4j_case_example Neo4jCaseExampleTest.cpp)
 
 # type() over an edge, run end to end against simpledb.
 add_call_v3_test(test_query_ir_edge_type_function EdgeTypeFunctionTest.cpp)
+
+# An aggregate aliased to the name it reads, run end to end against simpledb.
+add_turing_test(test_query_ir_shadowed_alias ShadowedAliasTest.cpp)
+target_link_libraries(test_query_ir_shadowed_alias PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_shadowed_alias PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
