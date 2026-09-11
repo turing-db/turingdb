@@ -125,6 +125,7 @@ concept OptionalPredicate = TuringPredicate<Pred, TypeUtils::unwrap_optional_t<A
 
 template <typename Pred, typename... Args>
 concept NullableResultPredicate =
-    std::same_as<std::optional<CustomBool>, std::invoke_result_t<Pred, Args...>>;
+    std::same_as<std::optional<CustomBool>,
+                 std::invoke_result_t<Pred, TypeUtils::unwrap_optional_t<Args>...>>;
 
 }

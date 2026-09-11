@@ -66,6 +66,13 @@ struct ListElementKindPairs {
 };
 
 template <typename T>
+struct ListMembershipKindPairs {
+    using Pairs = std::tuple<
+        KindPair<T, ListView>,
+        KindPair<std::optional<T>, ListView>>;
+};
+
+template <typename T>
 struct OptionalKinds {
     using Types = std::tuple<
         T,
@@ -316,6 +323,30 @@ struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
         OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
         std::tuple<KindPair<ListView, ListView>>
+    >;
+
+    using AllowedMixed = AllowedMixedList<>;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
+};
+
+template <ColumnOperator Op>
+    requires (Op == OP_IN)
+struct PairRestrictions<Op> {
+    using Allowed = GenerateKindPairList<
+        ListMembershipKindPairs<types::Int64::Primitive>::Pairs,
+        ListMembershipKindPairs<types::UInt64::Primitive>::Pairs,
+        ListMembershipKindPairs<types::Double::Primitive>::Pairs,
+        ListMembershipKindPairs<types::String::Primitive>::Pairs,
+        ListMembershipKindPairs<types::String::OwningPrimitive>::Pairs,
+        ListMembershipKindPairs<types::Bool::Primitive>::Pairs,
+
+        ListMembershipKindPairs<ListElementView>::Pairs,
+
+        std::tuple<KindPair<PropertyNull, ListView>>
     >;
 
     using AllowedMixed = AllowedMixedList<>;
