@@ -2282,6 +2282,9 @@ target_include_directories(test_query_ir_null_aggregate PRIVATE ${CMAKE_CURRENT_
 # The Cypher manual's CASE examples, run end to end against simpledb.
 add_call_v3_test(test_query_ir_neo4j_case_example Neo4jCaseExampleTest.cpp)
 
+# A CASE over a node or an edge, including the ones an OPTIONAL MATCH left null.
+add_call_v3_test(test_query_ir_case_entity_subject CaseEntitySubjectTest.cpp)
+
 # type() over an edge, run end to end against simpledb.
 add_call_v3_test(test_query_ir_edge_type_function EdgeTypeFunctionTest.cpp)
 
