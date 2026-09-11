@@ -15,6 +15,7 @@
 namespace db {
 
 class PartDirectory;
+class PathHopFilter;
 class Tombstones;
 
 // The nodes one batch of up to 64 targets reaches, in one of two layouts. Sparse: an
@@ -149,7 +150,8 @@ public:
                                 std::optional<EdgeTypeID> edgeType,
                                 size_t seedCount,
                                 size_t targetCount,
-                                uint64_t maxHops);
+                                uint64_t maxHops,
+                                double hopPassRate = 1.0);
 
 private:
     // What one batch of the build is expected to cost in the cheaper of the two layouts

@@ -785,6 +785,7 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor]> {
                        OptionalAttr<StrAttr>:$edge_type,
                        OptionalAttr<StrArrayAttr>:$end_labels,
                        OptionalAttr<UI64Attr>:$end_column,
+                       UnitAttr:$ends_on_seed,
                        UnitAttr:$distinct);
   let results   = (outs NLIterator:$result);
 
@@ -793,7 +794,8 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor]> {
   let assemblyFormat = [{
     `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
     (`to` $max_hops^)? (`edge_type` $edge_type^)? (`end_labels` $end_labels^)?
-    (`end_column` $end_column^)? (`distinct` $distinct^)? ($hop^)?
+    (`end_column` $end_column^)? (`ends_on_seed` $ends_on_seed^)?
+    (`distinct` $distinct^)? ($hop^)?
     attr-dict ( `:` qualified(type($columns_to_filter))^ )?
   }];
 

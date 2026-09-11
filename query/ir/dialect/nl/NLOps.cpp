@@ -339,6 +339,10 @@ LogicalResult ExplorePaths::verify() {
         return emitOpError("end_column ") << *endColumn << " is not a carried column";
     }
 
+    if (getEndsOnSeed() && endColumn) {
+        return emitOpError("ends_on_seed names the end already named by end_column");
+    }
+
     if (getDistinct() && getMinHops() > 1) {
         return emitOpError("distinct is exact for a min_hops of at most one");
     }

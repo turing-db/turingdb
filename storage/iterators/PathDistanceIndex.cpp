@@ -4,6 +4,7 @@
 #include <math.h>
 
 #include "PartDirectory.h"
+#include "PathHopFilter.h"
 #include "datapart/NodeContainer.h"
 #include "datapart/NodeRange.h"
 #include "indexers/EdgeIndexer.h"
@@ -21,6 +22,24 @@ namespace {
 constexpr double indexUnitCostInChecks = 0.35;
 
 constexpr size_t fanOutSampleTarget = 4096;
+
+// Fewer than the fan-out sample takes: every node of this one costs an evaluation of the
+// query's hop predicate rather than a count of its adjacency
+constexpr size_t hopSampleTarget = 1024;
+
+void appendMatching(std::span<const EdgeRecord> edges,
+                    std::optional<EdgeTypeID> edgeType,
+                    std::vector<NodeID>& candidateNodes,
+                    std::vector<EdgeID>& candidateEdges) {
+    for (const EdgeRecord& record : edges) {
+        if (edgeType && record._edgeTypeID != *edgeType) {
+            continue;
+        }
+
+        candidateNodes.push_back(record._otherID);
+        candidateEdges.push_back(record._edgeID);
+    }
+}
 
 size_t countMatching(std::span<const EdgeRecord> edges, std::optional<EdgeTypeID> edgeType) {
     if (!edgeType) {
@@ -208,7 +227,8 @@ double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
 double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
                                                      const TypeBranching& branching,
                                                      size_t seedCount,
-                                                     uint64_t maxHops) {
+                                                     uint64_t maxHops,
+                                                     double hopPassRate) {
     const size_t nodeCount = parts.getAllocatedNodeCount();
     const size_t edgeCount = parts.getAllocatedEdgeCount();
     if (seedCount == 0 || maxHops == 0 || nodeCount == 0 || edgeCount == 0) {
@@ -232,21 +252,76 @@ double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
             break;
         }
 
-        frontier = std::min(frontier * fanOut, support);
+        frontier = std::min(frontier * fanOut * hopPassRate, support);
     }
 
     return static_cast<double>(seedCount) * candidatesPerSeed;
+}
+
+double PathDistanceIndex::sampleHopPassRate(const PartDirectory& parts,
+                                            PathExplorationDir direction,
+                                            std::optional<EdgeTypeID> edgeType,
+                                            PathHopFilter& hopFilter) {
+    const size_t nodeCount = parts.getAllocatedNodeCount();
+    if (nodeCount == 0) {
+        return 1.0;
+    }
+
+    const size_t stride = std::max<size_t>(1, nodeCount / hopSampleTarget);
+
+    std::vector<NodeID> candidateNodes;
+    std::vector<EdgeID> candidateEdges;
+
+    size_t offered = 0;
+    size_t kept = 0;
+
+    for (size_t node = 0; node < nodeCount; node += stride) {
+        const NodeID sample(node);
+        const size_t owner = parts.ownerIndex(sample);
+        if (owner == parts.size()) {
+            continue;
+        }
+
+        const EdgeIndexer& ownerIndexer = *parts.get(owner)._indexer;
+
+        candidateNodes.clear();
+        candidateEdges.clear();
+
+        if (direction != PathExplorationDir::BACKWARD) {
+            appendMatching(ownerIndexer.getNodeOutEdges(sample), edgeType, candidateNodes, candidateEdges);
+        }
+        if (direction != PathExplorationDir::FORWARD) {
+            appendMatching(ownerIndexer.getNodeInEdges(sample), edgeType, candidateNodes, candidateEdges);
+        }
+
+        if (candidateNodes.empty()) {
+            continue;
+        }
+
+        offered += candidateNodes.size();
+        kept += hopFilter.filter(sample, candidateNodes, candidateEdges);
+    }
+
+    if (offered == 0) {
+        return 1.0;
+    }
+
+    return static_cast<double>(kept) / static_cast<double>(offered);
 }
 
 bool PathDistanceIndex::isWorthBuilding(const GraphView& view,
                                         PathExplorationDir direction,
                                         std::optional<EdgeTypeID> edgeType,
                                         size_t seedCount,
-                                        uint64_t maxHops) {
+                                        uint64_t maxHops,
+                                        double hopPassRate) {
     const PartDirectory parts(view);
     const double indexCost = indexUnitCostInChecks * static_cast<double>(parts.getAllocatedNodeCount() + parts.getAllocatedEdgeCount());
 
-    return estimatedEnumerationChecks(parts, direction, edgeType, seedCount, maxHops) > indexCost;
+    TypeBranching branching;
+    sampleBranching(parts, direction, edgeType, branching);
+
+    return estimatedEnumerationChecks(parts, branching, seedCount, maxHops, hopPassRate) > indexCost;
 }
 
 void PathDistanceIndex::collectEnds(const PartDirectory& parts, const LabelSet& endLabels, std::vector<NodeID>& ends) {

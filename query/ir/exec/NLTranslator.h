@@ -143,6 +143,7 @@ private:
         // The carried column holding each seed's own end, when the exploration is bound,
         // and whether it reports each (seed, end) pair once instead of every path
         std::optional<uint64_t> _endColumn;
+        bool _endsOnSeed {false};
         bool _distinctEnds {false};
 
         // The node IDs a ConstScanNodes iterator emits; empty for the other kinds.

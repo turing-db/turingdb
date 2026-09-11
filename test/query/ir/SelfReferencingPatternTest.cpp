@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include "CallV3Test.h"
@@ -15,6 +17,10 @@ using Rows = std::vector<StringRowSink::Row>;
 Rows sorted(Rows rows) {
     std::sort(rows.begin(), rows.end());
     return rows;
+}
+
+bool contains(std::string_view text, std::string_view needle) {
+    return text.find(needle) != std::string_view::npos;
 }
 
 // Remy -0-> Adam -4-> Remy and Remy -1-> Ghosts -7-> Remy are simpledb's only cycles, and
@@ -57,7 +63,31 @@ const Rows shortCyclesUnderABoundStart {
 // that bound the variable earlier has to cross the merge, which it can only do once both
 // ends carry rows.
 class SelfReferencingPatternTest : public CallV3Test {
+protected:
+    std::string_view dumpOf(const StringRowSink& sink, std::string_view stage) {
+        for (const StringRowSink::Row& row : sink.getRows()) {
+            if (row.front() == stage) {
+                return row.back();
+            }
+        }
+
+        return {};
+    }
 };
+
+// The end a self-referencing pattern walks back to is the seed of its own row, which is the
+// per-row target fuse_explore_end_nodes exists to fold into the exploration
+TEST_F(SelfReferencingPatternTest, foldsTheSeedItWalksBackToIntoTheExploration) {
+    StringRowSink sink;
+    runQuery("EXPLAIN (around fuse_explore_end_nodes) MATCH (a:Person)-[e]->{1,7}(a) RETURN count(a)", sink);
+
+    const std::string_view before = dumpOf(sink, "before fuse_explore_end_nodes");
+    EXPECT_TRUE(contains(before, "db.eq")) << before;
+
+    const std::string_view after = dumpOf(sink, "after fuse_explore_end_nodes");
+    EXPECT_TRUE(contains(after, "ends_on_seed")) << after;
+    EXPECT_FALSE(contains(after, "db.eq")) << after;
+}
 
 TEST_F(SelfReferencingPatternTest, walksTheCycleTheWayThePatternIsWritten) {
     StringRowSink sink;

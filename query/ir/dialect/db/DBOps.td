@@ -1180,6 +1180,14 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, DeclareOpInterfaceMethods<Op
 
       %s, %t, %p, %b2 = db.explore_paths(%a, {%b}) forward hops 1 end_column 0
 
+    `ends_on_seed` is that same constraint when the end the pattern names is the seed it
+    started from - `MATCH (a)-[e]->+(a)`, the cycle through `a` - so each row's target is
+    its own `srcids` and no carried column holds it. The same pass sets it, from the
+    equality codegen leaves between `tgtids` and `srcids`, and the paths that do not come
+    back are pruned exactly as a bound end's are.
+
+      %s, %t, %p = db.explore_paths(%a, {}) forward hops 1 to 7 ends_on_seed
+
     `distinct` asks for each (seed, end) pair once and no path at all, which is what a
     downstream DISTINCT or distinct aggregate reads out of an exploration whose path is
     unread; the fuse_explore_distinct_ends pass sets it. It is exact when `min_hops` is
@@ -1197,6 +1205,7 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, DeclareOpInterfaceMethods<Op
                        OptionalAttr<StrAttr>:$edge_type,
                        OptionalAttr<StrArrayAttr>:$end_labels,
                        OptionalAttr<UI64Attr>:$end_column,
+                       UnitAttr:$ends_on_seed,
                        UnitAttr:$distinct);
 
   let results   = (outs ColumnNodeIDs:$srcids,
@@ -1209,7 +1218,8 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, DeclareOpInterfaceMethods<Op
   let assemblyFormat = [{
     `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
     (`to` $max_hops^)? (`edge_type` $edge_type^)? (`end_labels` $end_labels^)?
-    (`end_column` $end_column^)? (`distinct` $distinct^)? ($hop^)?
+    (`end_column` $end_column^)? (`ends_on_seed` $ends_on_seed^)?
+    (`distinct` $distinct^)? ($hop^)?
     attr-dict `:` functional-type(operands, results)
   }];
 

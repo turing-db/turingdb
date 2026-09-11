@@ -678,6 +678,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
                 }
             }
             config._endColumn = explorePaths.getEndColumn();
+            config._endsOnSeed = explorePaths.getEndsOnSeed();
             config._distinctEnds = explorePaths.getDistinct();
             _iteratorConfigs[explorePaths.getResult()] = config;
         } else if (nl::Sort sort = mlir::dyn_cast<nl::Sort>(operation)) {
@@ -1846,10 +1847,13 @@ void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
 
     bindCarriedColumns(config, loopBody, 3, loopData);
 
-    // The bound end is the carried column's input, row-aligned with the seeds
+    // The bound end is the carried column's input, row-aligned with the seeds; a walk
+    // ending where it began targets the seeds themselves
     if (config._endColumn) {
         const mlir::Value endValue = config._carriedColumns[*config._endColumn];
         loopData->setEndNodes(static_cast<const ColumnNodeIDs*>(getColumn(endValue)));
+    } else if (config._endsOnSeed) {
+        loopData->setEndNodes(static_cast<const ColumnNodeIDs*>(getColumn(config._inputNodes)));
     }
 
     if (config._distinctEnds) {
