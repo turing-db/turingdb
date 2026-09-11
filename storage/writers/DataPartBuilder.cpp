@@ -7,7 +7,15 @@
 #include "properties/PropertyManager.h"
 #include "writers/MetadataBuilder.h"
 
+#include "FatalException.h"
+
 using namespace db;
+
+namespace {
+
+constexpr std::string_view embErr =
+    "Could not set new embedding property to NULL, as its dimension is unknown.";
+}
 
 DataPartBuilder::~DataPartBuilder() = default;
 
@@ -125,7 +133,10 @@ void DataPartBuilder::addNodeProperty<types::Embedding>(NodeID nodeID,
                                                         PropertyTypeID ptID,
                                                         std::optional<types::Embedding::Primitive>&& value) {
     if (!_nodeProperties->hasPropertyType(ptID)) {
-        bioassert(value.has_value(), "Null embedding on register.");
+        if (!value.has_value()) {
+            throw FatalException(std::string {embErr});
+        }
+
         _nodeProperties->registerEmbeddingPropertyType(ptID, value->size());
     }
 
@@ -141,7 +152,10 @@ void DataPartBuilder::addEdgeProperty<types::Embedding>(const EdgeRecord& edge,
                                                         std::optional<types::Embedding::Primitive>&& value,
                                                         LabelSetHandle srcLblSet/*={}*/) {
     if (!_edgeProperties->hasPropertyType(ptID)) {
-        bioassert(value.has_value(), "Null embedding on register.");
+        if (!value.has_value()) {
+            throw FatalException(std::string {embErr});
+        }
+
         _edgeProperties->registerEmbeddingPropertyType(ptID, value->size());
     }
     if (edge._edgeID < _firstEdgeID) {

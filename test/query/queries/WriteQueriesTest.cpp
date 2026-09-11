@@ -3470,6 +3470,28 @@ TEST_F(WriteQueriesTest, propertyValueScanSkipsNulledNodes) {
     EXPECT_EQ(0, countMatches(matchQuery));
 }
 
+TEST_F(WriteQueriesTest, nullEmbeddingWithoutADimensionIsRefused) {
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH (n) WHERE n = 0 SET n.emb = (0.0, 0.1))";
+
+        auto res = query(setQuery, _emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    newChange();
+    {
+        // Node 1 has no emb, so this writes a null into a datapart that holds no
+        // embedding for the property and cannot know its dimension
+        constexpr std::string_view setQuery = R"(MATCH (n), (m) WHERE n = 1 SET m.emb = n.emb)";
+
+        auto res = query(setQuery, _emptyCallback);
+        ASSERT_FALSE(res) << "expected a null embedding with no dimension to be refused";
+        EXPECT_NE(std::string::npos, res.getError().find("dimension")) << res.getError();
+    }
+}
+
 TEST_F(WriteQueriesTest, createdNodeNullPropertyKeepsItsOwner) {
     newChange();
     {
