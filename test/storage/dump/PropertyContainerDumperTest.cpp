@@ -1,3 +1,5 @@
+#include <optional>
+
 #include "TuringTest.h"
 
 #include "dump/DumpConfig.h"
@@ -199,6 +201,140 @@ TEST_F(PropertyContainerDumperTest, sortedEmbeddingsAreLoadedAsSorted) {
     const auto& loaded = result.value()->cast<types::Embedding>();
     EXPECT_TRUE(loaded.isSorted());
     EXPECT_TRUE(PropertyContainerComparator::same(&original, &loaded));
+}
+
+TEST_F(PropertyContainerDumperTest, intNullsRoundTrip) {
+    fs::Path outDir(_outDir.c_str());
+    const fs::Path path = outDir / "int_nulls";
+
+    TypedPropertyContainer<types::Int64> original;
+    for (EntityID id = 0; id < 1000; id++) {
+        if (id.getValue() % 3 == 0) {
+            original.add(id, std::nullopt);
+        } else {
+            original.add(id, static_cast<types::Int64::Primitive>(id.getValue()));
+        }
+    }
+    original.sort();
+
+    {
+        auto writer = fs::FilePageWriter::open(path);
+        ASSERT_TRUE(writer);
+        TrivialPropertyContainerDumper<types::Int64> dumper(writer.value());
+        ASSERT_TRUE(dumper.dump(original));
+    }
+
+    auto reader = fs::FilePageReader::open(path, DumpConfig::PAGE_SIZE);
+    ASSERT_TRUE(reader);
+    TrivialPropertyContainerLoader<types::Int64> loader(reader.value());
+    auto result = loader.load();
+    ASSERT_TRUE(result);
+
+    const auto& loaded = result.value()->cast<types::Int64>();
+    EXPECT_TRUE(PropertyContainerComparator::same(&original, &loaded));
+
+    for (EntityID id = 0; id < 1000; id++) {
+        const std::optional<const types::Int64::Primitive*> value = loaded.tryGetWithNull(id);
+
+        if (id.getValue() % 3 == 0) {
+            EXPECT_FALSE(value.has_value()) << "id " << id.getValue() << " should be null";
+        } else {
+            ASSERT_TRUE(value.has_value()) << "id " << id.getValue();
+            ASSERT_NE(value.value(), nullptr) << "id " << id.getValue();
+            EXPECT_EQ(*value.value(), static_cast<types::Int64::Primitive>(id.getValue()));
+        }
+    }
+}
+
+TEST_F(PropertyContainerDumperTest, stringNullsRoundTrip) {
+    fs::Path outDir(_outDir.c_str());
+    const fs::Path path = outDir / "string_nulls";
+
+    static constexpr std::string_view str = "Hello, world!";
+
+    TypedPropertyContainer<types::String> original;
+    for (EntityID id = 0; id < 1000; id++) {
+        if (id.getValue() % 3 == 0) {
+            original.add(id, std::nullopt);
+        } else {
+            original.add(id, str);
+        }
+    }
+    original.sort();
+
+    {
+        auto writer = fs::FilePageWriter::open(path);
+        ASSERT_TRUE(writer);
+        StringPropertyContainerDumper dumper(writer.value());
+        ASSERT_TRUE(dumper.dump(original));
+    }
+
+    auto reader = fs::FilePageReader::open(path, DumpConfig::PAGE_SIZE);
+    ASSERT_TRUE(reader);
+    StringPropertyContainerLoader loader(reader.value());
+    auto result = loader.load();
+    ASSERT_TRUE(result);
+
+    const auto& loaded = result.value()->cast<types::String>();
+    EXPECT_TRUE(PropertyContainerComparator::same(&original, &loaded));
+
+    for (EntityID id = 0; id < 1000; id++) {
+        const std::optional<const types::String::Primitive*> value = loaded.tryGetWithNull(id);
+
+        if (id.getValue() % 3 == 0) {
+            EXPECT_FALSE(value.has_value()) << "id " << id.getValue() << " should be null";
+        } else {
+            ASSERT_TRUE(value.has_value()) << "id " << id.getValue();
+            ASSERT_NE(value.value(), nullptr) << "id " << id.getValue();
+            EXPECT_EQ(*value.value(), str);
+        }
+    }
+}
+
+TEST_F(PropertyContainerDumperTest, embeddingNullsRoundTrip) {
+    fs::Path outDir(_outDir.c_str());
+    const fs::Path path = outDir / "embedding_nulls";
+    const size_t dimension = 4;
+
+    const std::vector<float> embedding(dimension, 1.5f);
+
+    TypedPropertyContainer<types::Embedding> original(dimension);
+    for (EntityID id = 0; id < 1000; id++) {
+        if (id.getValue() % 3 == 0) {
+            original.add(id, std::nullopt);
+        } else {
+            original.add(id, embedding);
+        }
+    }
+    original.sort();
+
+    {
+        auto writer = fs::FilePageWriter::open(path);
+        ASSERT_TRUE(writer);
+        EmbeddingPropertyContainerDumper dumper(writer.value());
+        ASSERT_TRUE(dumper.dump(original));
+    }
+
+    auto reader = fs::FilePageReader::open(path, DumpConfig::PAGE_SIZE);
+    ASSERT_TRUE(reader);
+    EmbeddingPropertyContainerLoader loader(reader.value());
+    auto result = loader.load();
+    ASSERT_TRUE(result);
+
+    const auto& loaded = result.value()->cast<types::Embedding>();
+    EXPECT_TRUE(PropertyContainerComparator::same(&original, &loaded));
+
+    for (EntityID id = 0; id < 1000; id++) {
+        const std::optional<const types::Embedding::Primitive*> value = loaded.tryGetWithNull(id);
+
+        if (id.getValue() % 3 == 0) {
+            EXPECT_FALSE(value.has_value()) << "id " << id.getValue() << " should be null";
+        } else {
+            ASSERT_TRUE(value.has_value()) << "id " << id.getValue();
+            ASSERT_NE(value.value(), nullptr) << "id " << id.getValue();
+            EXPECT_EQ((*value.value())[0], 1.5f);
+        }
+    }
 }
 
 TEST_F(PropertyContainerDumperTest, emptyEmbeddingRoundTrip) {

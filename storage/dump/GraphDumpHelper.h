@@ -1,7 +1,9 @@
 #pragma once
 
 #include <charconv>
+#include <span>
 
+#include "ID.h"
 #include "DumpResult.h"
 #include "FilePageWriter.h"
 #include "DumpConfig.h"
@@ -15,6 +17,33 @@ class GraphDumpHelper {
 public:
     [[nodiscard]] static constexpr size_t getPageCountForItems(size_t itemCount, size_t itemsPerPage) {
         return itemCount / itemsPerPage + ((itemCount % itemsPerPage) != 0);
+    }
+
+    // Pages an array of entity IDs, header-count then raw ID bytes per page. EntityID is
+    // a standard-layout uint64_t wrapper, layout pinned in PropertyContainerDumpConstants.h
+    static void writeEntityIDPages(fs::FilePageWriter& writer,
+                                   std::span<const EntityID> ids,
+                                   size_t idCountPerPage) {
+        const size_t stride = sizeof(EntityID::Type);
+        const size_t pageCount = getPageCountForItems(ids.size(), idCountPerPage);
+        const size_t remainder = ids.size() % idCountPerPage;
+
+        const uint8_t* idBytes = reinterpret_cast<const uint8_t*>(ids.data());
+
+        size_t offset = 0;
+        for (size_t i = 0; i < pageCount; i++) {
+            writer.nextPage();
+
+            const bool isLastPage = (i == pageCount - 1);
+            const size_t countInPage = isLastPage
+                                         ? (remainder == 0 ? idCountPerPage : remainder)
+                                         : idCountPerPage;
+
+            writer.writeToCurrentPage(countInPage);
+            writer.writeToCurrentPage(std::span {idBytes + offset * stride, countInPage * stride});
+
+            offset += countInPage;
+        }
     }
 
     static void writeFileHeader(fs::FilePageWriter& writer) {

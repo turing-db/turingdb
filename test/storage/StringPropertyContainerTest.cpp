@@ -2,6 +2,7 @@
 
 #include <optional>
 
+#include "comparators/PropertyContainerComparator.h"
 #include "properties/PropertyContainer.h"
 
 using namespace db;
@@ -76,4 +77,28 @@ TEST(StringPropertyContainerTest, SortKeepsNullsWithNoValues) {
     const std::optional<const types::String::Primitive*> absent = container.tryGetWithNull(EntityID(3));
     ASSERT_TRUE(absent.has_value());
     ASSERT_EQ(absent.value(), nullptr);
+}
+
+TEST(StringPropertyContainerTest, ComparatorSeparatesNullFromAbsent) {
+    TypedPropertyContainer<types::String> withNull;
+    withNull.add(EntityID(1), std::optional<types::String::Primitive> {"Remy"});
+    withNull.add(EntityID(2), std::nullopt);
+
+    TypedPropertyContainer<types::String> withoutNull;
+    withoutNull.add(EntityID(1), std::optional<types::String::Primitive> {"Remy"});
+
+    EXPECT_FALSE(PropertyContainerComparator::same(&withNull, &withoutNull));
+    EXPECT_FALSE(PropertyContainerComparator::same(&withoutNull, &withNull));
+
+    TypedPropertyContainer<types::String> differentNull;
+    differentNull.add(EntityID(1), std::optional<types::String::Primitive> {"Remy"});
+    differentNull.add(EntityID(3), std::nullopt);
+
+    EXPECT_FALSE(PropertyContainerComparator::same(&withNull, &differentNull));
+
+    TypedPropertyContainer<types::String> sameNull;
+    sameNull.add(EntityID(1), std::optional<types::String::Primitive> {"Remy"});
+    sameNull.add(EntityID(2), std::nullopt);
+
+    EXPECT_TRUE(PropertyContainerComparator::same(&withNull, &sameNull));
 }
