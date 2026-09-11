@@ -3358,6 +3358,35 @@ TEST_F(WriteQueriesTest, dynamicStringPropertySetNull) {
     }
 }
 
+TEST_F(WriteQueriesTest, dynamicStringPropertySetNullOnAllNodes) {
+    newChange();
+    {
+        // Node 2 has no dob, so every node's dob becomes null and the commit's dob
+        // container holds nulls and no values at all
+        constexpr std::string_view setQuery = R"(MATCH (n), (m) WHERE n = 2 SET m.dob = n.dob)";
+
+        auto res = query(setQuery, _emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n) RETURN n.dob)";
+
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            const auto* dobs = findColumn(df, "n.dob")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(dobs);
+
+            const bool allNull = std::ranges::all_of(*dobs, [](auto&& dob) { return !dob; });
+
+            ASSERT_TRUE(allNull) << dump(df);
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+}
+
 TEST_F(WriteQueriesTest, createdNodeNullPropertyKeepsItsOwner) {
     newChange();
     {

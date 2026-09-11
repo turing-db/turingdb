@@ -59,3 +59,21 @@ TEST(StringPropertyContainerTest, SortKeepsExplicitNull) {
     ASSERT_EQ(*container.tryGet(EntityID(1)), "Remy");
     ASSERT_EQ(*container.tryGet(EntityID(5)), "Adam");
 }
+
+TEST(StringPropertyContainerTest, SortKeepsNullsWithNoValues) {
+    TypedPropertyContainer<types::String> container;
+
+    container.add(EntityID(1), std::nullopt);
+    container.add(EntityID(2), std::nullopt);
+
+    container.sort();
+
+    ASSERT_EQ(container.size(), 0);
+
+    ASSERT_FALSE(container.tryGetWithNull(EntityID(1)).has_value());
+    ASSERT_FALSE(container.tryGetWithNull(EntityID(2)).has_value());
+
+    const std::optional<const types::String::Primitive*> absent = container.tryGetWithNull(EntityID(3));
+    ASSERT_TRUE(absent.has_value());
+    ASSERT_EQ(absent.value(), nullptr);
+}
