@@ -1,4 +1,4 @@
-# Variable-length paths on Reactome: v2, v3 and ladybug
+# Variable-length paths on Reactome: v2, v3, ladybug and memgraph
 
 Measured with `scripts/bench_paths.py`, which runs 71 Cypher queries in five groups
 through both engines in the turingdb shell — v2 directly, v3 behind the `#v3` prefix —
@@ -17,8 +17,8 @@ scripts/bench_paths.py -reps 5 -verify
 
 Both engines agreed on every result they both produced — row multisets, and aggregate
 values up to the 125,690,888-path one — with a single exception, which turned out to be a
-v2 bug (below). The same 71 queries were later run against ladybug on the same graph and
-the same box; that is its own section, after the v2 bug.
+v2 bug (below). The same 71 queries were later run against ladybug and against memgraph on
+the same graph and the same box; those are their own sections, after the v2 bug.
 
 ## A. Property-seeded typed queries — what a curator actually writes
 
@@ -409,6 +409,172 @@ may cost it something a native multi-label match would not, and the as-written s
 measures a missing secondary index rather than a traversal, which is why the `lb (pk)`
 column is there.
 
+## Memgraph on the same 71 queries
+
+[Memgraph](https://memgraph.com) 3.12.0 community, in its official container on the same
+box and the same graph — 2,978,202 nodes and 11,537,843 edges converted out of turingdb's
+parquet dump of `reactome` into one CSV per labelset and one per edge type, which `LOAD
+CSV` reads in 31 s into 2.25 GiB resident. Same protocol as above: five runs per query,
+the first discarded, median of the rest, with a 180 s timeout.
+
+Memgraph is schemaless and multi-label, so nothing about the queries had to be re-encoded:
+every one below is the v3 query with the quantifier rewritten and nothing else —
+`-[:hasEvent]->{3,3}` becomes `-[:hasEvent*3..3]->`, `+` becomes `*1..`. Its variable-length
+expansion enforces relationship uniqueness, so `preceding_d3` returns 86,520, which is v3's
+trail count and the third engine to say v2's 89,068 counts paths that reuse an edge.
+
+Both engines run one core per query — measured, 100 % of one core each on the undirected
+untyped walk — which ladybug's column above does not do, having taken all 20.
+
+One cost is the protocol's and not the engine's, and it is held out in its own column. A
+query that returns rows pays bolt: 1,169 stIds cost 6.8 ms of serializing and hydrating on
+top of a 0.4 ms walk. The `mg count` column is the same query with its projection wrapped
+in `count()`, so the rows never leave the server; it is the column to compare against v3,
+which counts rows in the shell without formatting them. The round trip itself is 0.115 ms.
+
+Four queries hit the 180 s timeout, all four `count(DISTINCT)` over `precedingEvent`. **Of
+the 67 that finished, 66 return exactly v3's count**; the one that differs, and the one
+count the `*BFS` column differs on, are semantics rather than error — both below.
+
+| A. Property-seeded | v3 | mg | mg (count) | | rows |
+|---|---|---|---|---|---|
+| Find Signal Transduction by accession | 0.55 ms | 0.49 | 0.37 | **0.7×** | 1 |
+| Its direct sub-events | 0.85 | 0.63 | 0.45 | **0.5×** | 17 |
+| Its sub-events exactly 3 levels down | 1.02 | 3.17 | 0.24 | **0.2×** | 480 |
+| Its sub-events exactly 4 levels down | 1.29 | 7.16 | 0.41 | **0.3×** | 1,169 |
+| Reactions exactly 4 steps downstream of the hub | 1.20 | 0.14 | 0.15 | **0.1×** | 1 |
+| Sub-units of the complex, 2 levels in | 1.22 | 0.12 | 0.13 | **0.1×** | 2 |
+
+Memgraph is faster on every query in this group, by 1.5× to 9×. Its floor is 0.12 ms
+against v3's 0.55, and a label-property index on `stId` answers the seed the way
+`FuseScanByPropertyValue` does, so these queries measure two fixed costs and memgraph's is
+the smaller one. The two counts this table never recorded are 1 and 2; the depth ladder
+sums to the 96 of `cascade_1_4`, which both engines agree on.
+
+| B. Label-seeded typed traversal | v3 | mg | | count |
+|---|---|---|---|---|
+| Events 2 `hasEvent` levels under all 415 top-level pathways | 1.46 ms | 1.93 | 1.3× | 11,630 |
+| …3 levels | 3.37 | 5.23 | 1.6× | 28,799 |
+| …4 levels | 7.06 | 16.65 | 2.4× | 40,012 |
+| …5 levels | 11.40 | 25.64 | 2.3× | 28,679 |
+| …6 levels | 13.98 | 29.38 | 2.1× | 10,260 |
+| Every sub-unit two levels inside every complex | 30.12 | 68.30 | 2.3× | 213,396 |
+| Reaction triples three `precedingEvent` steps apart | 17.53 | 34.91 | 2.0× | 86,520 |
+| Reactions two `hasEvent` levels under every top-level pathway | 1.17 | 1.40 | 1.2× | 6,371 |
+| Every reaction's input entities | 7.75 | 34.12 | **4.4×** | 186,017 |
+
+| C. Untyped variable-length | v3 | mg | | paths |
+|---|---|---|---|---|
+| Within 2 hops of the 415 top-level pathways | 1.42 ms | 1.68 | 1.2× | 34,669 |
+| Within 3 hops of them | 4.90 | 9.84 | 2.0× | 228,878 |
+| Events within 3 hops of them | 7.86 | 18.86 | 2.4× | 90,086 |
+| Within 2 hops of all 83,459 reactions | 85.88 | 254.44 | 3.0× | 4,788,031 |
+| Within 2 hops in either direction | 836.27 | 4,427.69 | **5.3×** | 125,690,888 |
+
+Untyped is where ladybug lost two to three orders of magnitude; memgraph pays 1.2× to 5.3×,
+and its cost follows the paths rather than the seeds. It beats v2 on four of the five,
+including the undirected 125,690,888-path row where v2 takes 7,118 ms, and ties on the
+fifth at 254.44 ms against 253.96.
+
+| D. Queries v2 cannot express | v3 | mg | mg (count) | | rows |
+|---|---|---|---|---|---|
+| Signal Transduction's entire sub-event tree, any depth | 2.23 ms | 20.51 | 1.18 | **0.5×** | 3,154 |
+| Every reaction it eventually decomposes into | 2.15 | 14.93 | 0.89 | **0.4×** | 2,344 |
+| Every reaction under every top-level pathway | 26.04 | 699.47 | 37.46 | 1.4× | 92,952 |
+| Which top-level pathway contains the hub reaction | 1.20 | 0.33 | 0.15 | **0.1×** | 1 |
+| Reactions up to 4 steps downstream of that hub | 1.22 | 0.66 | 0.17 | **0.1×** | 96 |
+| All reactions downstream of that hub, any distance, `DISTINCT` | 2.01 | `TIMEOUT` | `TIMEOUT` | — | 1,520 |
+| That complex's whole sub-unit tree | 1.22 | 0.28 | 0.15 | **0.1×** | 23 |
+| Reaction pairs of one pathway sharing an input entity | 60.62 | 327.96 | — | 5.4× | 198,362 |
+
+The typed unbounded walks off one seed are memgraph's, by 1.9× to 8×. The `DISTINCT` cascade
+is the first timeout, the same query v2 was killed on at 420 s and ladybug timed out on.
+
+### Memgraph has a distinct-end search, but `count(DISTINCT)` does not use it
+
+`-[:precedingEvent *BFS 1..44]-` visits every reachable node once and is memgraph's own
+answer to the question the distinct search answers; written as a quantifier and a
+`count(DISTINCT)`, the same question enumerates the trails. So the search column below is
+the walk's explosion, and the BFS column beside it is flat in the bound, like v3's:
+
+| bound | v3 walk | mg walk | v3 search | mg search | mg `*BFS` | trails | ends |
+|---|---|---|---|---|---|---|---|
+| `{1,4}` | 1.23 ms | 0.33 | 1.23 ms | 0.22 | 0.23 | 96 | 96 |
+| `{1,8}` | 1.23 | 0.16 | 1.24 | 0.20 | 0.22 | 101 | 101 |
+| `{1,16}` | 1.25 | 0.14 | 1.27 | 0.15 | 0.19 | 179 | 177 |
+| `{1,24}` | 1.53 | 0.35 | 1.40 | 0.45 | 0.51 | 1,412 | 511 |
+| `{1,32}` | 5.15 | 5.96 | 1.53 | 6.32 | 1.10 | 43,489 | 902 |
+| `{1,40}` | 1,329 | 2,060.11 | 1.62 | 2,299.87 | 1.61 | 16,956,465 | 1,175 |
+| `{1,44}` | 24,275 | 37,842.01 | 1.68 | 42,285.42 | 1.82 | 302,221,591 | 1,308 |
+| `{1,100}` | — | — | 1.77 | `TIMEOUT` | 2.26 | — | 1,520 |
+| `+` | — | — | 1.77 | `TIMEOUT` | 2.26 | — | 1,520 |
+
+42,285 ms against 37,842 at 44 hops: `count(DISTINCT)` costs the walk plus the
+deduplication, exactly as it does on ladybug. Written `*BFS` the same 1,308 ends cost
+1.82 ms, 1.08× v3's 1.68 — so the engine has the search, and the gap is that its planner
+will not reach for it. That is the difference v3 removed by dropping
+`searchPaysForDistinctEnds` and marking the exploration `distinct` from the aggregate.
+
+The other four sweeps have no such divergence, the walk being cheap enough on those shapes
+that v3 searches for no gain either. On those, `*BFS` is *slower* than memgraph's own walk
+— 114.83 ms against 101.44 for the complexes' components, 51.67 against 44.34 for the
+pathways' reactions — because a BFS over 110,048 seeds pays a frontier per seed where the
+walk streams:
+
+| sweep, bound | v3 walk | mg walk | v3 search | mg search | mg `*BFS` |
+|---|---|---|---|---|---|
+| Signal Transduction's sub-events, `{1,2}` | 0.92 ms | 0.18 | 0.93 ms | 0.17 | 0.18 |
+| …`{1,13}` | 1.94 | 0.76 | 1.85 | 0.72 | 1.13 |
+| …`+` | 1.91 | 0.79 | 1.85 | 0.76 | 1.30 |
+| Reactions under the 415 top-level pathways, `{1,3}` | 3.79 | 6.48 | 5.64 | 6.93 | 10.03 |
+| …`{1,6}` | 16.33 | 34.40 | 20.91 | 40.80 | 49.02 |
+| …`+` | 21.33 | 37.31 | 22.42 | 43.65 | 51.63 |
+| Sub-units of every complex, `{1,2}` | 30.26 | 72.22 | 44.19 | 101.44 | 114.83 |
+| …`{1,100}` | 52.62 | 106.12 | 59.07 | 140.27 | 174.57 |
+| Reactions downstream of every reaction, `{1,3}` | 17.94 | 39.62 | 16.92 | 45.88 | 54.77 |
+| …`+` | — | — | 138.34 | `TIMEOUT` | 1,544.97 |
+
+The last row is the fourth timeout and the same story as the cascade: 45,331 distinct ends
+that v3 reaches in 138 ms, memgraph cannot enumerate its way to, and its BFS reaches in
+1.5 s.
+
+### The two counts that differ, and what each one is
+
+`reactions_search_inf` is 45,331 in v3 and 45,296 under `*BFS`. The 35 missing nodes are
+reachable from themselves and from nothing else within the bound: BFS measures a node's
+shortest distance to itself as 0, below the quantifier's lower bound of 1, where the trail
+walk finds it again around a cycle. At bound 3 the same difference is 36 of 45,252, and
+3,039 reactions are self-reachable in three `precedingEvent` hops.
+
+`shared_input` is 390,348 in v3 and 198,362 in memgraph, and the difference is exactly the
+191,986 `(pathway, reaction, entity)` triples where `r1` and `r2` are the same reaction.
+openCypher's relationship uniqueness spans the whole `MATCH` clause, so binding `r1` and
+`r2` to one reaction would bind both `hasEvent` relationships to one relationship, which
+memgraph — and Neo4j — exclude. v3 and ladybug both match homomorphically across the
+comma-separated patterns and count the self-pairs, so the query as written asks for pairs
+and gets each reaction paired with itself.
+
+### What the comparison says
+
+Core for core, memgraph runs a typed walk at 1.2× to 2.4× v3, flat in depth and result
+size — the same shape as ladybug's multiple but a quarter of its size, and without the 20
+cores. Untyped costs it 1.2× to 5.3× rather than ladybug's 151×–1,071×, and many seeds
+whose balls overlap cost it 2.0×–2.7× rather than 43×–78×. It is ahead of v3 wherever the
+query is small: every seeded query in group A, every unbounded walk off one seed in group
+D, and every bound of the two single-seed sweeps in group E — a 0.12 ms floor against 0.55
+buys a lot when the walk is 96 nodes.
+
+The one qualitative gap is the one ladybug has too, and memgraph has the answer in the box:
+`count(DISTINCT)` over a re-converging relation enumerates trails until it times out, while
+`*BFS` on the same pattern returns the same ends in 1.8 ms. The difference is not the
+algorithm but who chooses it — v3 marks the exploration `distinct` from the aggregate and
+searches, memgraph makes it the query author's job.
+
+Two caveats, both v3's. Its numbers were measured through the turingdb shell in-process,
+where memgraph's cross a bolt socket even in the `mg count` column, worth 0.115 ms a query.
+And this comparison uses memgraph community; the enterprise build's storage modes and
+parallel execution are not in it.
+
 ## Reproducing
 
 A single lock guards a turing dir and other sessions routinely hold `~/.turing`, so copy
@@ -445,3 +611,23 @@ scripts/bench_ladybug.py -reps 5
 `-report` re-renders a finished results file without measuring anything, `-resume` skips
 the query ids already in it, and `-timeout` bounds a query that will not finish — leaving
 it at 180 s is what produced the six above.
+
+For the memgraph column, run the server in its container with the import directory mounted,
+convert the same parquet dump into the CSVs `LOAD CSV` reads, and run the 71 queries over
+bolt:
+
+```
+docker run -d --name memgraph-bench -p 7687:7687 \
+    -v ~/.memgraph-bench/import:/import:ro -v memgraph-bench-data:/var/lib/memgraph \
+    memgraph/memgraph:latest \
+    --storage-wal-enabled=false --storage-snapshot-interval-sec=0 --memory-limit=45000
+
+pip install neo4j
+scripts/memgraph_load_reactome_vlp.py -dump ~/reactome-parquet-dump -import ~/.memgraph-bench/import
+scripts/bench_memgraph_vlp.py -reps 5
+```
+
+`bench_memgraph_vlp.py` takes the same `-groups` / `-only` / `-reps` / `-timeout` / `-resume` /
+`-report` as the ladybug harness. It times every row-returning query a second time with its
+projection wrapped in `count()`, which is the `mg count` column, and every distinct query a
+second time as a `*BFS` expansion, which is the `mg BFS` one; `-no-bfs` drops the latter.
