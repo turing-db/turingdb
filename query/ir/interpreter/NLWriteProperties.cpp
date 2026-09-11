@@ -143,7 +143,8 @@ void extractMaskProperties(const ColumnMask* mask,
     buf.clear();
     buf.reserve(mask->size());
     for (const ColumnMask::Bool_t flag : mask->getRaw()) {
-        buf.emplace_back(propID, types::Bool::Primitive(static_cast<bool>(flag)));
+        const std::optional<types::Bool::Primitive> val {flag._value};
+        buf.emplace_back(propID, val);
     }
 }
 
