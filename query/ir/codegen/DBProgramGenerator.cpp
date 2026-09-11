@@ -586,20 +586,6 @@ void collectDistinctValueIndices(llvm::ArrayRef<const FunctionInvocationExpr*> c
     }
 }
 
-void collectProjectedCollects(const Projection* projection,
-                              llvm::SmallVectorImpl<const FunctionInvocationExpr*>& found) {
-    for (const Projection::ReturnItem& returnItem : projection->items()) {
-        Expr* const* itemPtr = std::get_if<Expr*>(&returnItem);
-        if (!itemPtr) {
-            continue;
-        }
-
-        if (isCollectInvocation(*itemPtr)) {
-            found.push_back(static_cast<const FunctionInvocationExpr*>(*itemPtr));
-        }
-    }
-}
-
 }
 
 DBProgramGenerator::DBProgramGenerator(mlir::ModuleOp* mainModule, ExplainReport* explain)
@@ -5310,8 +5296,22 @@ mlir::db::Collect DBProgramGenerator::createCollect(llvm::ArrayRef<mlir::Value> 
 }
 
 void DBProgramGenerator::generateKeylessCollect(const Projection* projection) {
+    llvm::SmallVector<const FunctionInvocationExpr*> aggregateExprs;
+    for (const Projection::ReturnItem& returnItem : projection->items()) {
+        Expr* const* itemPtr = std::get_if<Expr*>(&returnItem);
+        if (!itemPtr) {
+            continue;
+        }
+
+        collectAggregateInvocations(*itemPtr, aggregateExprs);
+    }
+
     llvm::SmallVector<const FunctionInvocationExpr*> collectExprs;
-    collectProjectedCollects(projection, collectExprs);
+    for (const FunctionInvocationExpr* aggregateExpr : aggregateExprs) {
+        if (isCollectInvocation(aggregateExpr)) {
+            collectExprs.push_back(aggregateExpr);
+        }
+    }
 
     // A lone collect is built by its own translation, keyless, as any other aggregate is
     if (collectExprs.size() < 2) {

@@ -37,8 +37,6 @@ TEST_F(CollectConcatenationTest, concatenatesTwoCollectsAcrossAWithBarrier) {
     EXPECT_EQ(sink.getRows(), concatenatedNodes);
 }
 
-// The same two collects concatenated in the RETURN itself, which the engine rejects today
-// with "db operands to deeperBlock must be bound in the same loop".
 TEST_F(CollectConcatenationTest, concatenatesTwoCollectsInTheSameReturn) {
     StringRowSink sink;
     runQuery(returnQuery, sink);
