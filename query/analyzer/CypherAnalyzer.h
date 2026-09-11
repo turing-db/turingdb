@@ -98,7 +98,7 @@ private:
     void analyzeWithOrderBy(const Projection* projection) const;
     void throwOnUnpublishedKeyVariable(const Expr* keyExpr, const Projection* projection) const;
     void declareItemAlias(Expr* item, std::string_view alias);
-    void analyzeDistinct(const Projection* projection, const Stmt* clause) const;
+    void analyzeDistinct(const Projection* projection, const Stmt* clause, bool isAggregate) const;
     void analyzeNestedAggregates(const Projection* projection) const;
     void analyzeAggregateArguments(const Expr* expr, const Projection* projection) const;
     bool readsAnAggregateItem(const Expr* expr, const Projection* projection) const;

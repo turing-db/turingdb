@@ -490,7 +490,7 @@ void CypherAnalyzer::analyzeProjection(Projection* projection, const Stmt* claus
     }
 
     if (projection->isDistinct()) {
-        analyzeDistinct(projection, clause);
+        analyzeDistinct(projection, clause, isAggregate);
     }
 
     if (isAggregate) {
@@ -536,12 +536,16 @@ void CypherAnalyzer::setV3() {
     _writeAnalyzer->setV3();
 }
 
-void CypherAnalyzer::analyzeDistinct(const Projection* projection, const Stmt* clause) const {
+void CypherAnalyzer::analyzeDistinct(const Projection* projection,
+                                     const Stmt* clause,
+                                     bool isAggregate) const {
     if (!_isV3) { // only supported by MLIR v3
         throwError("DISTINCT not yet supported.", clause);
     }
 
-    if (!projection->hasOrderBy()) {
+    // An aggregating projection emits one row per group, so no two of its rows are equal
+    // and the dedup drops nothing: its keys answer to analyzeAggregateOrderBy instead
+    if (isAggregate || !projection->hasOrderBy()) {
         return;
     }
 
@@ -550,14 +554,12 @@ void CypherAnalyzer::analyzeDistinct(const Projection* projection, const Stmt* c
     for (const OrderByItem* item : orderBy->getItems()) {
         const Expr* keyExpr = item->getExpr();
 
-        // A constant key holds the same value in every row, so it orders nothing and
-        // names no column the dedup could have dropped
-        if (!keyExpr->isDynamic()) {
-            continue;
-        }
-
-        if (!projection->hasItem(keyExpr)) {
-            throwError("ORDER BY with DISTINCT may only order by returned columns.", keyExpr);
+        // The dedup keys its rows on the columns the projection carries, so a key over
+        // those holds one value per row it kept - the test a grouping key answers too
+        if (!isGroupWise(keyExpr, projection)) {
+            throwError("ORDER BY with DISTINCT may only order by expressions over the "
+                       "returned columns.",
+                       keyExpr);
         }
     }
 }

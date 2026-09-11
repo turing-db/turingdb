@@ -857,13 +857,35 @@ TEST_F(DistinctTest, limitsDistinctRows) {
     EXPECT_EQ(std::unique(rows.begin(), rows.end()), rows.end());
 }
 
-// A key the projection does not carry cannot be honoured after the dedup: it was read
-// once per pre-dedup row, so it no longer lines up with the rows that survived. Cypher
-// rejects the query for the same reason, and so does the analyzer.
-TEST_F(DistinctTest, rejectsOrderByOnUnreturnedKey) {
-    DistinctNodeSink sink;
-    EXPECT_THROW(runQuery("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY b.name", &sink),
+// A property of a variable the dedup kept holds one value per row it kept, so the key is
+// read off the deduped column: the twelve distinct targets in name order.
+TEST_F(DistinctTest, ordersDistinctTargetsByAnUnreturnedProperty) {
+    expectNames("MATCH (a)-->(b) WITH DISTINCT b ORDER BY b.name RETURN b.name",
+                distinctTargetNames);
+}
+
+// The projection returns a value computed from b rather than b, so b itself is gone after
+// the dedup and b.age has no value per surviving row to order on.
+TEST_F(DistinctTest, rejectsOrderByOnAVariableTheProjectionDropped) {
+    DistinctNameSink sink;
+    EXPECT_THROW(runQuery("MATCH (a)-->(b) RETURN DISTINCT b.name ORDER BY b.age", &sink),
                  TuringException);
+}
+
+// a is in no column the projection carries, so the dedup drops it whole: it was read once
+// per pre-dedup row and no longer lines up with the rows that survived.
+TEST_F(DistinctTest, rejectsOrderByOnAnUnprojectedVariable) {
+    DistinctNodeSink sink;
+    EXPECT_THROW(runQuery("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY a.name", &sink),
+                 TuringException);
+}
+
+// An aggregate key groups the projection as an aggregate item would, so the rows are one
+// per name before the dedup ever sees them and DISTINCT drops nothing. Gym is pointed at
+// three times and no other node more than twice, so it is the group the order opens on.
+TEST_F(DistinctTest, ordersDistinctGroupsByAnAggregateKey) {
+    const Names expected = {"Gym"};
+    expectNames("MATCH (a)-->(b) RETURN DISTINCT b.name ORDER BY count(b) DESC LIMIT 1", expected);
 }
 
 // A DISTINCT projection ordered by the very expression it returns. The key and the
@@ -877,6 +899,18 @@ TEST_F(DistinctTest, dedupsAndOrdersAnExpression) {
              &sink);
 
     const OptInt64Values expected = {0, std::nullopt};
+    EXPECT_EQ(sink.values(), expected);
+}
+
+// The key spells the returned item out again and computes over it. The two are separate
+// trees, so the key is only read off the deduped column once it is matched to the item:
+// computed afresh it would read the eighteen edges the dedup was given. A null sorts
+// after every value, so descending it comes first.
+TEST_F(DistinctTest, dedupsAndOrdersByAnExpressionOverAProjectedItem) {
+    DistinctOptInt64Sink sink;
+    runQuery("MATCH (a)-[e]->(b) RETURN DISTINCT e.duration ORDER BY e.duration + 1 DESC", &sink);
+
+    const OptInt64Values expected = {std::nullopt, 200, 20, 15, 10};
     EXPECT_EQ(sink.values(), expected);
 }
 

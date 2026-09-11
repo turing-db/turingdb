@@ -4129,23 +4129,100 @@ void DBProgramGenerator::translateDistinct(const Projection* projection,
     // keeps is the first of them - the projection capped at a single row
     if (dedupedColumns.empty()) {
         translateDistinctOverConstants(projection, projected);
+    } else {
+        llvm::SmallVector<mlir::Type> dedupedTypes;
+        for (const mlir::Value column : dedupedColumns) {
+            dedupedTypes.push_back(column.getType());
+        }
+
+        const mlir::Location loc = _opBuilder.getUnknownLoc();
+        auto distinctOp = _opBuilder.create<mlir::db::RemoveDuplicates>(loc, dedupedTypes, mlir::ValueRange{dedupedColumns});
+
+        // The dedup hands back one column per column it read, so its results take the place
+        // of the ones it was given and the constant columns stay as they were
+        const mlir::ResultRange results = distinctOp.getResults();
+        for (size_t resultIndex = 0; resultIndex < dedupedItems.size(); resultIndex++) {
+            projected[dedupedItems[resultIndex]] = results[resultIndex];
+        }
+    }
+
+    rebindDistinctColumns(projection, projected);
+}
+
+void DBProgramGenerator::rebindDistinctColumns(const Projection* projection,
+                                               llvm::ArrayRef<mlir::Value> projected) {
+    bioassert(projected.size() == projection->items().size(),
+              "One projected column per return item expected");
+
+    GroupedColumns itemColumns;
+
+    size_t itemIndex = 0;
+    for (const Projection::ReturnItem& item : projection->items()) {
+        const mlir::Value column = projected[itemIndex];
+        itemIndex++;
+
+        if (const VarDecl* const* itemDecl = std::get_if<VarDecl*>(&item)) {
+            rebindVariableColumn(*itemDecl, column);
+            continue;
+        }
+
+        const Expr* itemExpr = *std::get_if<Expr*>(&item);
+        itemColumns.emplace_back(itemExpr, column);
+
+        const VarDecl* exprDecl = itemExpr->getExprVarDecl();
+        if (!exprDecl) {
+            continue;
+        }
+
+        _part._projectedColumns[exprDecl] = column;
+
+        // Only a bare variable is still that variable once the projection has run; every
+        // other item is a value computed from one, and reading the variable is no read of
+        // the column the item produced
+        if (itemExpr->getKind() == Expr::Kind::SYMBOL) {
+            rebindVariableColumn(exprDecl, column);
+        }
+    }
+
+    // A key spelling an item out again - the e.duration of
+    // RETURN DISTINCT e.duration ORDER BY e.duration + 1 - is a tree of its own, so
+    // binding it to the item's column is what stops it being computed a second time over
+    // the rows the dedup dropped
+    bindOrderByKeyColumns(projection, itemColumns);
+}
+
+void DBProgramGenerator::rebindVariableColumn(const VarDecl* decl, mlir::Value column) {
+    rebindYieldedColumn(decl, column);
+
+    // An edge identity has no variable of its own: its column is published under the
+    // traversal variable that produced it, which is where the replacement has to land
+    const VariableDependencyGraph::EdgeIdentityMap& edgeIdentities = _vdg.edgeIdentities();
+    const auto identityIt = edgeIdentities.find(decl);
+    const bool hasIdentity = identityIt != edgeIdentities.end() && !identityIt->second.empty();
+
+    const VariableDependency* boundVar = nullptr;
+
+    if (hasIdentity) {
+        boundVar = identityIt->second.front();
+    } else {
+        for (const auto& [var, values] : _part._varMap) {
+            if (var->getDecl() == decl) {
+                boundVar = var;
+                break;
+            }
+        }
+    }
+
+    if (!boundVar) {
         return;
     }
 
-    llvm::SmallVector<mlir::Type> dedupedTypes;
-    for (const mlir::Value column : dedupedColumns) {
-        dedupedTypes.push_back(column.getType());
-    }
+    registerValue(boundVar, column);
 
-    const mlir::Location loc = _opBuilder.getUnknownLoc();
-    auto distinctOp = _opBuilder.create<mlir::db::RemoveDuplicates>(loc, dedupedTypes, mlir::ValueRange{dedupedColumns});
-
-    // The dedup hands back one column per column it read, so its results take the place
-    // of the ones it was given and the constant columns stay as they were
-    const mlir::ResultRange results = distinctOp.getResults();
-    for (size_t resultIndex = 0; resultIndex < dedupedItems.size(); resultIndex++) {
-        projected[dedupedItems[resultIndex]] = results[resultIndex];
-    }
+    // The edge types published for the variable were read over the rows this column
+    // replaces, so they no longer line up with it: dropping them has the next read fetch
+    // them over this column instead
+    _part._edgeTypeMap.erase(boundVar);
 }
 
 void DBProgramGenerator::translateDistinctOverConstants(const Projection* projection,

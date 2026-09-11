@@ -14,13 +14,15 @@ using namespace db;
 namespace {
 
 const std::string_view unprojectedKeyReason =
-    "ORDER BY with DISTINCT may only order by returned columns";
+    "ORDER BY with DISTINCT may only order by expressions over the returned columns";
 
 }
 
-// After a DISTINCT only the returned columns are left, so an ORDER BY key the projection
-// does not carry names a column the dedup dropped. The rule is a property of the query
-// alone, so the analyzer is what turns those queries away, before any plan is generated.
+// After a DISTINCT only the returned columns are left, so an ORDER BY key has to be
+// computable from them: a key over a variable the projection carries holds one value per
+// row the dedup kept, and one over a variable it dropped holds none. The rule is a
+// property of the query alone, so the analyzer is what turns those queries away, before
+// any plan is generated.
 class DistinctOrderByTest : public turing::test::TuringTest {
 public:
     void initialize() override {
@@ -63,16 +65,32 @@ protected:
     std::unique_ptr<ProcedureManager> _procedures;
 };
 
-// The key is a property of a returned node, which the projection does not carry: it was
-// read once per pre-dedup row, so it no longer lines up with the rows that survived
-TEST_F(DistinctOrderByTest, rejectsUnprojectedKey) {
-    expectRejected("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY b.name", unprojectedKeyReason);
+// The key reads a property of a node the projection returns. b survives the dedup, so
+// b.name holds one value per row it kept and the key is read off the deduped column
+TEST_F(DistinctOrderByTest, acceptsAPropertyOfAProjectedVariable) {
+    EXPECT_NO_THROW(analyzeQuery("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY b.name"));
+}
+
+TEST_F(DistinctOrderByTest, acceptsAPropertyKeyBesideAProjectedOne) {
+    EXPECT_NO_THROW(analyzeQuery("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY b, b.name"));
+}
+
+// a is in no column the projection carries, so the dedup drops it whole: a.name was read
+// once per pre-dedup row and no longer lines up with the rows that survived
+TEST_F(DistinctOrderByTest, rejectsAKeyOverAnUnprojectedVariable) {
+    expectRejected("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY a.name", unprojectedKeyReason);
 }
 
 // One projected key does not excuse the other: the query is rejected on the key the
 // dedup dropped, wherever it sits among the keys
-TEST_F(DistinctOrderByTest, rejectsUnprojectedKeyAmongProjectedOnes) {
-    expectRejected("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY b, b.name", unprojectedKeyReason);
+TEST_F(DistinctOrderByTest, rejectsAnUnprojectedKeyAmongProjectedOnes) {
+    expectRejected("MATCH (a)-->(b) RETURN DISTINCT b ORDER BY b, a.name", unprojectedKeyReason);
+}
+
+// The projection returns a value computed from b rather than b, so b itself does not
+// survive it and b.age has no value per deduped row to order on
+TEST_F(DistinctOrderByTest, rejectsAKeyOverAVariableTheProjectionDropped) {
+    expectRejected("MATCH (a)-->(b) RETURN DISTINCT b.name ORDER BY b.age", unprojectedKeyReason);
 }
 
 TEST_F(DistinctOrderByTest, acceptsDistinctWithoutOrderBy) {
