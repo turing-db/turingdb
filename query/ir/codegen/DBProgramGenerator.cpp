@@ -124,6 +124,18 @@ std::string_view toStringView(llvm::StringRef text) {
     return std::string_view(text.data(), text.size());
 }
 
+// The untyped null column the null literal compiles to: nullable with no value type of
+// its own, so nothing about it says which column would carry a value
+bool isUntypedNullColumn(mlir::Value column) {
+    const auto columnType = mlir::dyn_cast<mlir::db::ColumnType>(column.getType());
+    if (!columnType) {
+        return false;
+    }
+
+    const auto nullableType = mlir::dyn_cast<mlir::storage::NullableType>(columnType.getType());
+    return nullableType && mlir::isa<mlir::NoneType>(nullableType.getValueType());
+}
+
 mlir::ArrayAttr strArrayAttr(mlir::OpBuilder& builder, std::span<const std::string_view> names) {
     llvm::SmallVector<llvm::StringRef> refs;
     for (const std::string_view name : names) {
@@ -4654,6 +4666,17 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
     const bool comparesAgainstNull = lhsExpr->getType() == EvaluatedType::Null
                                      || rhsExpr->getType() == EvaluatedType::Null;
 
+    // AND, OR and XOR read a null side as an unknown boolean, which the runtime truth
+    // tables answer against the other side's value per row. With both sides null there is
+    // no value to answer against and the result is null, whichever of the three it is
+    const bool isThreeValuedLogic = op == BinaryOperator::And
+                                    || op == BinaryOperator::Or
+                                    || op == BinaryOperator::Xor;
+    if (isThreeValuedLogic && isUntypedNullColumn(lhs) && isUntypedNullColumn(rhs)) {
+        _part._exprMap[expr] = nullConstantColumn();
+        return;
+    }
+
     switch (op) {
         case BinaryOperator::Equal:
             if (comparesAgainstNull) {
@@ -4703,16 +4726,32 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
             _part._exprMap[expr] = _opBuilder.create<mlir::db::DivOp>(loc, noneType, lhs, rhs).getResult();
         break;
         case BinaryOperator::GreaterThan:
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::GtOp>(loc, boolType, lhs, rhs).getResult();
+            if (comparesAgainstNull) {
+                _part._exprMap[expr] = nullConstantColumn();
+            } else {
+                _part._exprMap[expr] = _opBuilder.create<mlir::db::GtOp>(loc, boolType, lhs, rhs).getResult();
+            }
         break;
         case BinaryOperator::LessThan:
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::LtOp>(loc, boolType, lhs, rhs).getResult();
+            if (comparesAgainstNull) {
+                _part._exprMap[expr] = nullConstantColumn();
+            } else {
+                _part._exprMap[expr] = _opBuilder.create<mlir::db::LtOp>(loc, boolType, lhs, rhs).getResult();
+            }
         break;
         case BinaryOperator::GreaterThanOrEqual:
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::GteOp>(loc, boolType, lhs, rhs).getResult();
+            if (comparesAgainstNull) {
+                _part._exprMap[expr] = nullConstantColumn();
+            } else {
+                _part._exprMap[expr] = _opBuilder.create<mlir::db::GteOp>(loc, boolType, lhs, rhs).getResult();
+            }
         break;
         case BinaryOperator::LessThanOrEqual:
-            _part._exprMap[expr] = _opBuilder.create<mlir::db::LteOp>(loc, boolType, lhs, rhs).getResult();
+            if (comparesAgainstNull) {
+                _part._exprMap[expr] = nullConstantColumn();
+            } else {
+                _part._exprMap[expr] = _opBuilder.create<mlir::db::LteOp>(loc, boolType, lhs, rhs).getResult();
+            }
         break;
         case BinaryOperator::NotEqual:
             if (comparesAgainstNull) {
@@ -4941,6 +4980,12 @@ mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propEx
         bioassert(fieldColumn, "CSV header access on a row no load published: {}.{}", varName, propName);
 
         return fieldColumn;
+    }
+
+    // No property in the graph carries the name - the analyzer typed the read null for
+    // it - so there is nothing to fetch and every row reads null
+    if (propExpr->getType() == EvaluatedType::Null) {
+        return nullConstantColumn();
     }
 
     // Every row a CREATE wrote holds a provisional ID, which the graph a fetch reads knows

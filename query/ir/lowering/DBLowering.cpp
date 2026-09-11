@@ -3267,6 +3267,12 @@ void DBLowering::lowerNot(mlir::db::NotOp notOp) {
         resultElement = storage::NullableType::get(bldCtxt, boolElement);
     }
 
+    // NOT of an unknown truth value is unknown, and an untyped null names no boolean
+    // column to carry it: the negation is the same untyped null its operand is
+    if (isUntypedNullChunk(operandType)) {
+        resultElement = mlir::cast<nl::ChunkType>(operandType).getElementType();
+    }
+
     const nl::ChunkType resultType = nl::ChunkType::get(bldCtxt, resultElement);
 
     mlir::Block* const insertBlock = ownerBlock(operandChunk);

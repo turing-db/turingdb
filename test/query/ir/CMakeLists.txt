@@ -1393,6 +1393,39 @@ target_link_libraries(test_query_ir_optional_match PRIVATE
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_optional_match PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_turing_test(test_query_ir_null_predicate NullPredicateTest.cpp)
+target_link_libraries(test_query_ir_null_predicate PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_null_predicate PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_absent_property_name AbsentPropertyNameTest.cpp)
+target_link_libraries(test_query_ir_absent_property_name PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_absent_property_name PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_absent_schema_name AbsentSchemaNameTest.cpp)
+target_link_libraries(test_query_ir_absent_schema_name PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_absent_schema_name PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_optional_match_write OptionalMatchWriteTest.cpp)
 target_link_libraries(test_query_ir_optional_match_write PRIVATE
         turing_db_s
