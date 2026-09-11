@@ -3439,6 +3439,37 @@ TEST_F(WriteQueriesTest, nodePropertyLookupTakesTheNewestDatapart) {
     }
 }
 
+TEST_F(WriteQueriesTest, propertyValueScanSkipsNulledNodes) {
+    const auto countMatches = [this](std::string_view matchQuery) {
+        size_t rowCount = 0;
+
+        auto res = query(matchQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            rowCount += df->getLogicalRowCount();
+        });
+        EXPECT_TRUE(res) << res.getError();
+
+        return rowCount;
+    };
+
+    constexpr std::string_view matchQuery = R"(MATCH (n {dob: "18/01"}) RETURN n)";
+
+    EXPECT_EQ(1, countMatches(matchQuery));
+
+    // Node 2 has no dob, so the newer datapart records Remy's dob as null and holds no
+    // dob value at all
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH (n), (m) WHERE n = 2 SET m.dob = n.dob)";
+
+        auto res = query(setQuery, _emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    EXPECT_EQ(0, countMatches(matchQuery));
+}
+
 TEST_F(WriteQueriesTest, createdNodeNullPropertyKeepsItsOwner) {
     newChange();
     {

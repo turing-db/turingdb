@@ -45,6 +45,7 @@ private:
         EntityID _first;
         EntityID _last;
         bool _sorted {false};
+        bool _hasNulls {false};
     };
 
     PropertyTypeID _propTypeID;

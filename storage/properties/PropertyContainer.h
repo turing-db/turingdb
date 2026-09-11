@@ -54,6 +54,12 @@ public:
     virtual size_t size() const = 0;
 
     virtual bool has(EntityID entityID) const = 0;
+
+    /// @returns true if stores a value or explicit NULL for @param entityID 
+    bool hasEntry(EntityID entityID) const { return _entityIndexMap.contains(entityID); }
+
+    bool empty() const { return size() == 0 && _nullIds.empty(); }
+
     ValueType getValueType() const { return _valueType; }
 
     const IDs& ids() const { return _ids; }
