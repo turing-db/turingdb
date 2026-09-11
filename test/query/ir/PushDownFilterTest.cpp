@@ -133,6 +133,72 @@ TEST_F(PushDownFilterTest, sinksAPredicateToTheColumnAnEqualityHoldsItTo) {
     EXPECT_TRUE(mlir::isa<mlir::db::FilterOp>(hops.front().getInputNodes().getDefiningOp()));
 }
 
+// The end of the second hop is held to that hop's seed, and that seed to the column carried
+// off the scan: a chain of two equalities, neither of which reaches the scan on its own
+const char* const chainedEqualityPredicate = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %s, %e, %et, %t = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %s2, %e2, %et2, %t2, %sc = db.get_out_edges(%t, {%s}) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %sameEnd = db.eq %t2, %s2 : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> !db.column<!storage.bool>
+  %j1, %j2, %j3 = db.filter(%sameEnd, {%t2, %s2, %sc}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %sameSeed = db.eq %j2, %j3 : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> !db.column<!storage.bool>
+  %k1, %k2, %k3 = db.filter(%sameSeed, {%j1, %j2, %j3}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %age = db.get_node_properties(%k1, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %lim = db.constant(30 : i64)
+  %mask = db.gt %age, %lim : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %f1, %f2, %f3 = db.filter(%mask, {%k1, %k2, %k3}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%f1, %f2, %f3) : !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// Neither equality holds the predicate's column to the scan by itself; together they do
+TEST_F(PushDownFilterTest, followsAChainOfEqualitiesToTheScan) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(chainedEqualityPredicate);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runPushDown(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::GetNodeProperties> reads = collect<mlir::db::GetNodeProperties>(*module);
+    ASSERT_EQ(reads.size(), 1u);
+    EXPECT_TRUE(mlir::isa<mlir::db::ScanNodes>(reads.front().getInputNodes().getDefiningOp()));
+}
+
+// The equality shares its filter with another predicate, so the mask is a conjunction
+const char* const conjoinedEqualityPredicate = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %s, %e, %et, %t = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %same = db.eq %t, %s : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> !db.column<!storage.bool>
+  %rank = db.get_node_properties(%s, "rank") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %zero = db.constant(0 : i64)
+  %positive = db.gt %rank, %zero : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %both = db.and %same, %positive : (!db.column<!storage.bool>, !db.column<!storage.bool>) -> !db.column<!storage.bool>
+  %tj, %sj = db.filter(%both, {%t, %s}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %age = db.get_node_properties(%tj, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %lim = db.constant(30 : i64)
+  %mask = db.gt %age, %lim : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %tf, %sf = db.filter(%mask, {%tj, %sj}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%tf, %sf) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+TEST_F(PushDownFilterTest, readsAnEqualityOutOfAConjunction) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(conjoinedEqualityPredicate);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runPushDown(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::GetNodeProperties> reads = collect<mlir::db::GetNodeProperties>(*module);
+    for (mlir::db::GetNodeProperties read : reads) {
+        if (read.getProperty() == "age") {
+            EXPECT_TRUE(mlir::isa<mlir::db::ScanNodes>(read.getInputNodes().getDefiningOp()));
+        }
+    }
+}
+
 // MATCH (a) WHERE a.age > 30 RETURN a
 const char* const rootOnlyPredicate = R"mlir(
 func.func @main() {
