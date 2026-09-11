@@ -262,6 +262,7 @@ TEST_F(CoalesceFunctionTest, rejectsANodeBesideAnEdge) {
 TEST_F(CoalesceFunctionTest, coalescesAReduction) {
     expectRows("MATCH (n:Person) RETURN coalesce(max(n.age), 0)", {{"32"}});
     expectRows("MATCH (n:Person) WHERE NOT n.hasPhD RETURN coalesce(max(n.age), 0)", {{"0"}});
+    expectRows("MATCH (n:Person) RETURN coalesce(max(n.shoeSize), 0)", {{"0"}});
 }
 
 // coalesce answers one column, so arguments no column type can hold together are reported

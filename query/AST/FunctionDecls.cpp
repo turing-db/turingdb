@@ -225,6 +225,23 @@ void FunctionDecls::initDefault() {
     maxBool->setReturnTypes({{EvaluatedType::Bool}});
     maxBool->setIsAggregate(true);
 
+    // An extremum of nothing is null, a sum of nothing is 0 and an average of nothing is
+    // null, so a column that is null on every row - a name no property in the graph carries,
+    // or the null literal - reduces to an answer rather than to an argument error, exactly
+    // as count(null) and collect(null) do. Only the MLIR engine reads a name the graph does
+    // not carry, so the overloads are v3-only.
+    FunctionSignature* minNulls = createFunction("min");
+    minNulls->setArguments({EvaluatedType::Null});
+    minNulls->setReturnTypes({{EvaluatedType::Null}});
+    minNulls->setIsAggregate(true);
+    minNulls->setIsV3Only(true);
+
+    FunctionSignature* maxNulls = createFunction("max");
+    maxNulls->setArguments({EvaluatedType::Null});
+    maxNulls->setReturnTypes({{EvaluatedType::Null}});
+    maxNulls->setIsAggregate(true);
+    maxNulls->setIsV3Only(true);
+
     FunctionSignature* avgInt = createFunction("avg");
     avgInt->setArguments({EvaluatedType::Integer});
     avgInt->setReturnTypes({{EvaluatedType::Double}});
@@ -245,6 +262,12 @@ void FunctionDecls::initDefault() {
     avgListItems->setIsAggregate(true);
     avgListItems->setIsV3Only(true);
 
+    FunctionSignature* avgNulls = createFunction("avg");
+    avgNulls->setArguments({EvaluatedType::Null});
+    avgNulls->setReturnTypes({{EvaluatedType::Null}});
+    avgNulls->setIsAggregate(true);
+    avgNulls->setIsV3Only(true);
+
     // sum() enabled for v3 analyzer 
     FunctionSignature* sumInt = createFunction("sum");
     sumInt->setArguments({EvaluatedType::Integer});
@@ -255,6 +278,14 @@ void FunctionDecls::initDefault() {
     sumDouble->setArguments({EvaluatedType::Double});
     sumDouble->setReturnTypes({{EvaluatedType::Double}});
     sumDouble->setIsAggregate(true);
+
+    // A sum of no value is 0 rather than null, so this one answers an integer where the
+    // extremums above answer null
+    FunctionSignature* sumNulls = createFunction("sum");
+    sumNulls->setArguments({EvaluatedType::Null});
+    sumNulls->setReturnTypes({{EvaluatedType::Integer}});
+    sumNulls->setIsAggregate(true);
+    sumNulls->setIsV3Only(true);
 
     // A type-erased cell carries its number's type per row. Mixed numeric tags are what
     // leaves a list type-erased, and Cypher sums those to a float, so this reduces to one

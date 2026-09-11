@@ -286,6 +286,19 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
     const bool isString = mlir::isa<storage::StringType>(inputElement);
     const bool isTaggedCell = mlir::isa<storage::ListElementType>(inputElement);
 
+    // An untyped null holds no value to reduce - a name no property in the graph carries,
+    // or the null literal - so every reduction over it sees nothing: min, max and avg
+    // answer null and sum answers 0. It names no value type either, so the answer rides
+    // the integer column an untyped null is laid out over anywhere else, except avg's,
+    // which is a float whatever it reduced.
+    if (mlir::isa<mlir::NoneType>(inputElement)) {
+        if (kind == storage::AggregateKind::Avg) {
+            return builder.getF64Type();
+        }
+
+        return builder.getIntegerType(64);
+    }
+
     switch (kind) {
         case storage::AggregateKind::Sum: {
             if (!isNumeric && !isTaggedCell) {
