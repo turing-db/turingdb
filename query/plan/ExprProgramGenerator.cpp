@@ -318,6 +318,13 @@ Column* ExprProgramGenerator::generateLiteralExpr(const LiteralExpr* literalExpr
             const Literal* lit = literalExpr->getLiteral();
             const ListLiteral* list = static_cast<const ListLiteral*>(lit);
 
+            // The list is built once, here, and held as the one value every row reads, so
+            // an element that is read per row has nothing to put in it yet. The MLIR
+            // engine builds those lists a row at a time instead (db.make_list).
+            if (!list->isLiteralTree()) {
+                throw PlannerException("Non-literal list elements are not yet supported");
+            }
+
             std::vector<ListBuffer<>::ListItemVariant> items;
             items.reserve(list->size());
 

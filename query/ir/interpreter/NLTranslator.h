@@ -679,6 +679,15 @@ private:
     void translateToNullable(mlir::nl::ToNullable toNullable, NLStmtContainer* body);
 
     void translateCase(mlir::nl::Case caseOp, NLStmtContainer* body);
+
+    // Allocates the list column an nl.make_list writes, and binds the read each element
+    // column's cells go into the list buffer through
+    void translateMakeList(mlir::nl::MakeList makeList, NLStmtContainer* body);
+
+    // The read one element column of an nl.make_list contributes its cell through, chosen
+    // by what the chunk holds
+    static NLListItemReadFunction selectListItemRead(mlir::Type chunkType);
+
     void translateUnaryFunction(mlir::Operation* op, NLStmtContainer* body);
 
     void translateBinaryFunction(mlir::Operation* op, NLStmtContainer* body);

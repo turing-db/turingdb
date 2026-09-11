@@ -3,9 +3,9 @@
   "graph": "simpledb",
   "query": "return [(10 + 3), (true AND false)]",
   "expect": {
-    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | return [(10 + 3), (true AND false)]\n       |         ^^^^^^^^\n-------* Non-literal list elements are not yet supported",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | return [(10 + 3), (true AND false)]\n       |         ^^^^^^^^\n-------* Non-literal list elements are not yet supported",
-    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | return [(10 + 3), (true AND false)]\\n       |         ^^^^^^^^\\n-------* Non-literal list elements are not yet supported\"}"
+    "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): v6\n__expr__ (LITERAL): v0\n__expr__ (LITERAL): v1\n__expr__ (LITERAL): v3\n__expr__ (LITERAL): v4\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
+    "result": "PLAN ERROR\nNon-literal list elements are not yet supported",
+    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"Non-literal list elements are not yet supported\"}"
   },
   "tags": [],
   "write-required": false

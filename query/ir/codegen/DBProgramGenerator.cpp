@@ -444,6 +444,26 @@ mlir::Type sharedAttrType(llvm::ArrayRef<mlir::Attribute> elements) {
     return std::ranges::all_of(elements, hasFirstType) ? firstType : nullptr;
 }
 
+// The element type of the lists a db.make_list builds: the one type its element columns
+// name, or the type-erased tagged scalar where they name no single one. A column whose own
+// type is resolved during lowering names `none`, which is the type such columns share - so
+// the verdict is taken again over the resolved chunks when the op is lowered.
+mlir::Type sharedColumnElement(mlir::MLIRContext* context, llvm::ArrayRef<mlir::Value> columns) {
+    mlir::Type shared;
+
+    for (const mlir::Value column : columns) {
+        const mlir::Type element = mlir::cast<mlir::db::ColumnType>(column.getType()).getType();
+
+        if (!shared) {
+            shared = element;
+        } else if (shared != element) {
+            return mlir::storage::ListElementType::get(context);
+        }
+    }
+
+    return shared;
+}
+
 mlir::Value findVarOrThrow(const DBProgramGenerator::VariableIdentityMap& map,
                         const VariableDependency* var) {
     const auto findIt = map.find(var);
@@ -754,6 +774,10 @@ mlir::Attribute DBProgramGenerator::listElementAttr(const Literal* literal) {
 }
 
 mlir::Value DBProgramGenerator::translateListLiteral(const ListLiteral* list) {
+    if (!list->isLiteralTree()) {
+        return translateListOfColumns(list);
+    }
+
     llvm::SmallVector<mlir::Attribute> elements;
     translateListElements(list, elements);
 
@@ -764,6 +788,22 @@ mlir::Value DBProgramGenerator::translateListLiteral(const ListLiteral* list) {
                                                                            _opBuilder.getArrayAttr(elements));
 
     return constant.getResult();
+}
+
+mlir::Value DBProgramGenerator::translateListOfColumns(const ListLiteral* list) {
+    llvm::SmallVector<mlir::Value> elementColumns;
+    for (const Expr* item : list->items()) {
+        elementColumns.push_back(getOrTranslateExprColumn(item));
+    }
+
+    const mlir::Type elementType = sharedColumnElement(_mlirCtxt, elementColumns);
+    const mlir::Type listType = mlir::storage::ListType::get(_mlirCtxt, elementType);
+
+    mlir::db::MakeList makeList = _opBuilder.create<mlir::db::MakeList>(_opBuilder.getUnknownLoc(),
+                                                                        allocColumnType(listType),
+                                                                        mlir::ValueRange {elementColumns});
+
+    return makeList.getResult();
 }
 
 template<typename EdgeOp>

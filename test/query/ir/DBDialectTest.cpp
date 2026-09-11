@@ -1276,6 +1276,38 @@ func.func @main() {
 }
 )mlir";
 
+// MATCH (n)-->(m) RETURN [n, m]: a list built out of the column each element rides, one
+// cell per row. The two columns share a type, so the cells are lists of node IDs.
+const char* const makeListProgram = R"mlir(
+func.func @main() {
+  %srcs, %eids, %etypes, %tgts = db.scan_edges() : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  %xs = db.make_list(%srcs, %tgts) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> !db.column<!storage.list<!storage.node_id>>
+  db.output(%xs) : !db.column<!storage.list<!storage.node_id>>
+  return
+}
+)mlir";
+
+// A make_list producing something other than a column of lists: the op builds lists, so
+// the verifier rejects it.
+const char* const scalarMakeListProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %xs = db.make_list(%n) : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  db.output(%xs) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// A make_list reading no column: there is no cell to build a list out of, so the verifier
+// rejects it. A list known without reading a row is a db.constant instead.
+const char* const emptyMakeListProgram = R"mlir(
+func.func @main() {
+  %xs = db.make_list() : () -> !db.column<!storage.list<i64>>
+  db.output(%xs) : !db.column<!storage.list<i64>>
+  return
+}
+)mlir";
+
 // RETURN [1, 2, 3]: the same literals as a value rather than a source, so the whole list
 // is one cell. A list literal is a db.constant value like any other, carried as the array
 // of its elements; the column type is inferred from them, so it is never spelled.
@@ -1695,6 +1727,47 @@ TEST_F(DBDialectTest, unwindRoundTripsThroughTextualForm) {
 
 TEST_F(DBDialectTest, verifierRejectsUnwindRetypingACarriedColumn) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(retypedCarryUnwindProgram);
+    EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, parsesMakeList) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(makeListProgram);
+    ASSERT_TRUE(module);
+
+    mlir::db::MakeList makeList;
+    module.get().walk([&](mlir::db::MakeList op) {
+        makeList = op;
+    });
+    ASSERT_TRUE(makeList);
+
+    // One operand per element, and the result the list of the type they share.
+    ASSERT_EQ(makeList.getElements().size(), 2u);
+
+    const mlir::Type nodeIDType = mlir::storage::NodeIDType::get(&_context);
+    const mlir::Type listColumnType = mlir::db::ColumnType::get(&_context, mlir::storage::ListType::get(&_context, nodeIDType));
+    EXPECT_EQ(makeList.getResult().getType(), listColumnType);
+}
+
+TEST_F(DBDialectTest, makeListRoundTripsThroughTextualForm) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(makeListProgram);
+    ASSERT_TRUE(module);
+
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module.get().print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed = parse(printed.c_str());
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
+TEST_F(DBDialectTest, verifierRejectsMakeListProducingAScalarColumn) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(scalarMakeListProgram);
+    EXPECT_FALSE(module);
+}
+
+TEST_F(DBDialectTest, verifierRejectsMakeListWithoutElementColumns) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(emptyMakeListProgram);
     EXPECT_FALSE(module);
 }
 

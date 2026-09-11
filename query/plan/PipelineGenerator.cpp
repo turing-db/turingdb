@@ -162,6 +162,13 @@ struct AddLiteralToList {
 void fillList(const ListLiteral* list,
               ExprProgramGenerator* exprGen,
               std::vector<ListBuffer<>::ListItemVariant>& items) {
+    // The list is built once, here, and spread over the rows it makes, so an element that
+    // is read per row has nothing to put in it yet. The MLIR engine builds those lists a
+    // row at a time instead (db.make_list).
+    if (!list->isLiteralTree()) {
+        throw PlannerException("Non-literal list elements are not yet supported");
+    }
+
     using Types = ListableTypes;
     using AddItem = ColumnSingleDispatcher<Types::Allowed,
                                            AddLiteralToList,

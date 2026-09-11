@@ -663,6 +663,44 @@ TEST_F(NLDialectTest, unwindBuildsElementAndCarriedChunkIterator) {
     EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
 }
 
+// nl.make_list spells its chunk type as well: the cells it writes are lists of the type
+// its element chunks share, so the type is read off the operands rather than inferred.
+TEST_F(NLDialectTest, makeListBuildsAListChunkOfTheSharedElementType) {
+    mlir::OpBuilder builder(&_context);
+    const mlir::Location loc = builder.getUnknownLoc();
+
+    mlir::OwningOpRef<mlir::ModuleOp> module = mlir::ModuleOp::create(loc);
+    builder.setInsertionPointToEnd(module->getBody());
+    auto function = builder.create<mlir::func::FuncOp>(loc, "main", mlir::FunctionType::get(&_context, {}, {}));
+    builder.setInsertionPointToStart(function.addEntryBlock());
+
+    mlir::nl::Constant first = builder.create<mlir::nl::Constant>(loc, builder.getI64IntegerAttr(1));
+    mlir::nl::Constant second = builder.create<mlir::nl::Constant>(loc, builder.getI64IntegerAttr(2));
+
+    const mlir::Type int64Type = mlir::IntegerType::get(&_context, 64);
+    const mlir::Type listChunkType = mlir::nl::ChunkType::get(&_context, mlir::storage::ListType::get(&_context, int64Type));
+
+    mlir::nl::MakeList makeList = builder.create<mlir::nl::MakeList>(loc,
+                                                                     listChunkType,
+                                                                     mlir::ValueRange {first.getResult(), second.getResult()});
+    builder.create<mlir::func::ReturnOp>(loc);
+
+    EXPECT_EQ(makeList.getResult().getType(), listChunkType);
+    EXPECT_EQ(makeList.getElements().size(), 2u);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
+
+    // Printing then re-parsing yields a module that still verifies, so the nl.make_list
+    // printer and parser are inverses.
+    std::string printed;
+    llvm::raw_string_ostream stream(printed);
+    module->print(stream);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> reparsed =
+        mlir::parseSourceString<mlir::ModuleOp>(printed, mlir::ParserConfig(&_context));
+    ASSERT_TRUE(reparsed);
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*reparsed)));
+}
+
 // A list literal is an nl.constant value: it holds the whole list rather than spreading it
 // over rows, so it produces a chunk of that list type - inferred from the elements, since an
 // array attribute carries none of its own. A nested list rides one element as an array.

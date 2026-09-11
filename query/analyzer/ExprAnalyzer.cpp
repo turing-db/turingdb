@@ -54,6 +54,16 @@ EvaluatedType unifiedBranchType(EvaluatedType carried, EvaluatedType branch) {
     return EvaluatedType::Invalid;
 }
 
+// The types a list is homogeneous in: the scalars a value column holds, the entities a
+// pattern binds - [n, m] is a list of nodes, as collect(n) gathers one - and the lists a
+// nesting is made of.
+bool namesAListElementType(EvaluatedType type) {
+    return convertibleToValueType(type)
+        || type == EvaluatedType::NodePattern
+        || type == EvaluatedType::EdgePattern
+        || type == EvaluatedType::List;
+}
+
 // The shape of the list these elements make: depth 1 over the one type they share, or
 // one level deeper than the lists they are. Elements that share no type - an empty list,
 // a mix of types, lists of differing shape - leave the leaf Invalid, which is what makes
@@ -87,7 +97,7 @@ ListShape sharedListShape(std::span<Expr* const> elements) {
         }
     }
 
-    if (!convertibleToValueType(shared) && shared != EvaluatedType::List) {
+    if (!namesAListElementType(shared)) {
         return ListShape(EvaluatedType::Invalid, 1);
     }
 
@@ -1245,17 +1255,10 @@ void ExprAnalyzer::analyzeListExpr(ListExpr* expr) {
 
 void ExprAnalyzer::analyzeListElements(Expr* expr, std::span<Expr* const> elements) {
     for (Expr* element : elements) {
-        // Analyzed before the literal check, so an element that is ill-formed - a name no
-        // pattern declares - is reported as that rather than as the gap it also falls in
         analyzeExpr(element);
 
-        if (element->getKind() != Expr::Kind::LITERAL) {
-            throwError("Non-literal list elements are not yet supported", element);
-        }
-
-        // An element is an expression of its own, so its flags are the list's. Elements
-        // are literals today, and a map literal is one: the {age: n.age} of
-        // ORDER BY [{age: n.age}] reads a row through its value
+        // An element is an expression of its own, so its flags are the list's: the n of
+        // [n, m] reads a row, and so does the {age: n.age} of ORDER BY [{age: n.age}]
         if (element->isDynamic()) {
             expr->setDynamic();
         }

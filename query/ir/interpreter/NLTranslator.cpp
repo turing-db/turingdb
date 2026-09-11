@@ -680,6 +680,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateToNullable(toNullable, body);
         } else if (nl::Case caseOp = mlir::dyn_cast<nl::Case>(operation)) {
             translateCase(caseOp, body);
+        } else if (nl::MakeList makeList = mlir::dyn_cast<nl::MakeList>(operation)) {
+            translateMakeList(makeList, body);
         } else if (lookupUnaryFunctionSelector(operation)) {
             translateUnaryFunction(&operation, body);
         } else if (lookupBinaryFunctionSelector(operation)) {
@@ -1990,6 +1992,52 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
 
     NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
     body->emplaceStmt(&NLExecutor::runUnary, data);
+}
+
+NLListItemReadFunction NLTranslator::selectListItemRead(mlir::Type chunkType) {
+    const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
+
+    if (mlir::isa<storage::NodeIDType>(elementType)) {
+        return NLExecutor::selectNodeListItemRead();
+    } else if (mlir::isa<storage::EdgeIDType>(elementType)) {
+        return NLExecutor::selectEdgeListItemRead();
+    } else if (mlir::isa<storage::ListType>(elementType)) {
+        return NLExecutor::selectNestedListItemRead();
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        return NLExecutor::selectTaggedListItemRead();
+    } else if (isOwnedStringElement(elementType)) {
+        return NLExecutor::selectOwnedStringListItemRead(/*nullable=*/false);
+    }
+
+    const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
+    if (!nullableType) {
+        throw IRException("nl.make_list requires a nullable value chunk for a scalar element column");
+    }
+
+    const mlir::Type valueElement = nullableType.getValueType();
+    if (isOwnedStringElement(valueElement)) {
+        return NLExecutor::selectOwnedStringListItemRead(/*nullable=*/true);
+    }
+
+    return NLExecutor::selectValueListItemRead(valueTypeFromElementType(valueElement));
+}
+
+void NLTranslator::translateMakeList(nl::MakeList makeList, NLStmtContainer* body) {
+    const mlir::Value resultValue = makeList.getResult();
+
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    NLMakeListData* data = _program->allocFunctionData<NLMakeListData>(result, _memory);
+
+    for (const mlir::Value elementChunk : makeList.getElements()) {
+        data->addElement(NLMakeListData::Element {
+            ._column = getColumn(elementChunk),
+            ._read = selectListItemRead(elementChunk.getType()),
+        });
+    }
+
+    body->emplaceStmt(&NLExecutor::runMakeList, data);
 }
 
 void NLTranslator::translateCase(nl::Case caseOp, NLStmtContainer* body) {

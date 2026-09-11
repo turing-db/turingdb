@@ -492,16 +492,25 @@ TEST_F(OrderByTest, mapKeyReadingARowIsNotDropped) {
                  TuringException);
 }
 
-// The list mirror of the case above, rejected one step earlier: the analyzer does not
-// accept a non-literal list element yet, so a list key cannot read a row today. The
-// element flags are propagated all the same, so the day it does, the key varies with
-// them instead of being taken for a constant
-TEST_F(OrderByTest, listKeyReadingARowIsRejected) {
+// The list mirror of the case above: a list holding a property reads a row through it, so
+// it is a column of one list per row and the key is kept rather than taken for a constant
+// and dropped. The projection returns n.name alone, so the list is the appended column
+TEST_F(OrderByTest, listKeyReadingARowIsAppended) {
     mlir::MLIRContext context;
     mlir::OwningOpRef<mlir::ModuleOp> module;
+    generateProgram("MATCH (n) RETURN n.name ORDER BY [1, n.age]", context, module);
 
-    EXPECT_THROW(generateProgram("MATCH (n) RETURN n.name ORDER BY [1, n.age]", context, module),
-                 TuringException);
+    size_t sortCount = 0;
+
+    module->walk([&](mlir::db::Sort sortOp) {
+        sortCount++;
+
+        EXPECT_EQ(sortOp.getColumns().size(), 2u);
+        ASSERT_EQ(sortOp.getKeyColumns().size(), 1u);
+        EXPECT_EQ(sortOp.getKeyColumns()[0], 1);
+    });
+
+    EXPECT_EQ(sortCount, 1u);
 }
 
 // A map is a literal, so a list may hold one and reach the propagation the case above

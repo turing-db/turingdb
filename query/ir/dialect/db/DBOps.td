@@ -354,6 +354,51 @@ def Unwind : TuringOp<"unwind", [Pure]> {
 }
 
 /**
+* MakeList
+*/
+def MakeList : TuringOp<"make_list", [Pure]> {
+  let summary = "Build one list per row out of the row's cell in each element column";
+
+  let description = [{
+    The list `[n, m]` whose elements are read per row rather than known at plan time -
+    the row-varying form db.constant's array of literals is the constant case of. It
+    reads one column per element and produces one list cell per row:
+
+      %xs = db.make_list(%n, %m) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+                                -> !db.column<!storage.list<!storage.node_id>>
+
+    Row r of the result is the list of row r of each operand, in operand order. A cell
+    is a view over the query's list buffer, as an nl.collect drain's is, so a row copies
+    in O(1) however long the list. An operand holding one value for every row rather
+    than one per row is laid out over the rows during lowering, so `[n, 1]` gives every
+    row a two-element list.
+
+    The result element type is the homogeneity verdict, as db.unwind_const's is: columns
+    that agree give a list of that type, columns that disagree a list of type-erased
+    tagged scalars, matching Cypher's LIST OF ANY. A column whose own type is resolved
+    during lowering - a property fetch's - names none here, so the verdict is taken
+    again over the resolved chunks when the op is lowered:
+
+      %xs = db.make_list(%age, %name) : (!db.column<none>, !db.column<none>)
+                                     -> !db.column<!storage.list<none>>
+
+    `UNWIND [n, m] AS x` is this op feeding db.unwind, which spreads each cell back into
+    one row per element.
+  }];
+
+  let arguments = (ins Variadic<Column>:$elements);
+  let results   = (outs Column:$result);
+  let hasVerifier = 1;
+
+  // The element columns print inside the parens, as db.collect's columns do; the operand
+  // and result types follow as a function type, so the list is spelled beside the columns
+  // it was built from.
+  let assemblyFormat = [{
+    `(` $elements `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
 * ScanEdges
 */
 def ScanEdges : TuringOp<"scan_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
