@@ -4886,9 +4886,7 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
             _part._exprMap[expr] = _opBuilder.create<mlir::db::PowOp>(loc, noneType, lhs, rhs).getResult();
         break;
         case BinaryOperator::In:
-            throwError(fmt::format("Unsupported operation: {}",
-                                   BinaryOperatorDescription::value(op)),
-                       expr);
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::InOp>(loc, boolType, lhs, rhs).getResult();
         break;
 
         case BinaryOperator::_SIZE:

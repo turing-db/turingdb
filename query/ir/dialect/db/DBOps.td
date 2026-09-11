@@ -1550,6 +1550,10 @@ def ContainsOp : PredicateOp<"contains", [Pure]> {
   let summary = "Row-wise test of whether each string column value contains the given substring";
 }
 
+def InOp : PredicateOp<"in", [Pure]> {
+  let summary = "Row-wise test of whether each value is an element of the given list";
+}
+
 def Case : TuringOp<"case", [Pure, AttrSizedOperandSegments]> {
   let summary = "Row-wise selection of the first branch whose condition holds";
 
