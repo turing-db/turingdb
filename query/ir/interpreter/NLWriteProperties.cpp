@@ -3,6 +3,7 @@
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnKind.h"
+#include "columns/ColumnMask.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnVector.h"
 #include "reader/GraphReader.h"
@@ -130,6 +131,16 @@ private:
     PropertyTypeID _propID;
 };
 
+void extractMaskProperties(const ColumnMask* mask,
+                           PropertyTypeID propID,
+                           CommitWriteBuffer::UntypedProperties& buf) {
+    buf.clear();
+    buf.reserve(mask->size());
+    for (const ColumnMask::Bool_t flag : mask->getRaw()) {
+        buf.emplace_back(propID, types::Bool::Primitive(static_cast<bool>(flag)));
+    }
+}
+
 }
 
 size_t db::committedNodeCount(const GraphView* view) {
@@ -163,6 +174,8 @@ void db::extractColumnProperties(const Column* column,
         ColumnSingleDispatcher<Types::AllowedConst,
                                ConstPropertyExtractor,
                                Types::ExcludedConst>::dispatch(column, extractor);
+    } else if (containerKind == ContainerKind::code<ColumnMask>()) {
+        extractMaskProperties(static_cast<const ColumnMask*>(column), propID, buf);
     } else {
         VectorPropertyExtractor extractor(buf, propID);
         ColumnSingleDispatcher<Types::AllowedVector,

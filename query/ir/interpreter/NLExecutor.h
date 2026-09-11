@@ -305,6 +305,20 @@ public:
     static NLBroadcastFunction selectOptOwnedStringBlockRepeat();
     static NLBroadcastFunction selectOptOwnedStringTile();
 
+    // The mask members of the handler families, for a !storage.bool chunk: a ColumnMask -
+    // what a label test, an edge type test and a merge produce - where an i1 value chunk
+    // is a ColumnVector<CustomBool>.
+    static NLGatherFunction selectMaskGather();
+    static NLAppendFunction selectMaskAppend();
+    static NLCopyFunction selectMaskCopy();
+    static NLGroupKeyGatherFunction selectMaskGroupKeyGather();
+    static NLCompareFunction selectMaskCompare();
+    static NLKeyAppendFunction selectMaskKeyAppend();
+    static NLBroadcastFunction selectMaskBlockRepeat();
+    static NLBroadcastFunction selectMaskTile();
+    static NLKeyAppendFunction selectMaskMergeKeyAppend(ValueType keyType);
+    static NLUnaryFn selectMaskToNullable(LocalMemory* memory, Column*& result);
+
     static NLGatherFunction selectGatherFunction(NLChunkKind kind);
 
     // The null fill for a chunk of this kind: an invalid ID for an ID chunk, which is how

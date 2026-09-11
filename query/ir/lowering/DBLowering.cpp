@@ -242,7 +242,7 @@ nl::ChunkType procedureChunkType(mlir::OpBuilder& builder, ProcedureType procedu
         break;
 
         case ProcedureType::BOOL:
-            return nl::ChunkType::get(context, storage::BoolType::get(context));
+            return nl::ChunkType::get(context, builder.getI1Type());
         break;
 
         case ProcedureType::STRING_VIEW:

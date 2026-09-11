@@ -383,6 +383,10 @@ ValueType valueTypeFromChunkType(mlir::Type chunkType) {
         return ValueType::String;
     }
 
+    if (mlir::isa<storage::BoolType>(elementType)) {
+        return ValueType::Bool;
+    }
+
     return valueTypeFromElementType(elementType);
 }
 
@@ -1961,11 +1965,17 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
     const auto operandChunk = mlir::cast<nl::ChunkType>(operandValue.getType());
     const mlir::Type operandElement = operandChunk.getElementType();
     const bool readsAnEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(operandElement);
+    const bool readsAMask = isMaskElementType(operandElement);
 
     Column* result = nullptr;
-    const NLUnaryFn fn = readsAnEntity
-        ? NLExecutor::selectEntityToNullable(chunkKindFromElementType(operandElement), _memory, result)
-        : NLExecutor::selectToNullable(valueType, operand, _memory, result);
+    NLUnaryFn fn = nullptr;
+    if (readsAnEntity) {
+        fn = NLExecutor::selectEntityToNullable(chunkKindFromElementType(operandElement), _memory, result);
+    } else if (readsAMask) {
+        fn = NLExecutor::selectMaskToNullable(_memory, result);
+    } else {
+        fn = NLExecutor::selectToNullable(valueType, operand, _memory, result);
+    }
     bioassert(result, "Failed to allocate the nullable column of nl.to_nullable.");
 
     _valueSlots[toNullable.getResult()] = result;
@@ -2256,6 +2266,9 @@ void NLTranslator::addTruncateColumn(mlir::Value inputValue,
             output = allocOptColumnForValueType(valueType);
             copyPrefix = NLExecutor::selectOptBlockRepeatFunction(valueType);
         }
+    } else if (isMaskElementType(elementType)) {
+        output = allocMaskColumn();
+        copyPrefix = NLExecutor::selectMaskBlockRepeat();
     } else if (isPlainValueElementType(elementType)) {
         const ValueType valueType = valueTypeFromElementType(elementType);
         output = allocPlainColumn(valueType);
@@ -2361,6 +2374,9 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
             output = allocOptColumnForValueType(valueType);
             copySuffix = NLExecutor::selectOptCopyFunction(valueType);
         }
+    } else if (isMaskElementType(elementType)) {
+        output = allocMaskColumn();
+        copySuffix = NLExecutor::selectMaskCopy();
     } else if (isPlainValueElementType(elementType)) {
         const ValueType valueType = valueTypeFromElementType(elementType);
         output = allocPlainColumn(valueType);
@@ -3768,6 +3784,8 @@ Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
         return allocOptColumnForValueType(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return allocListElementColumn();
+    } else if (isMaskElementType(elementType)) {
+        return allocMaskColumn();
     }
 
     if (isPlainValueElementType(elementType)) {
@@ -3794,6 +3812,8 @@ NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
         return NLExecutor::selectOptAppendFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementAppendFunction();
+    } else if (isMaskElementType(elementType)) {
+        return NLExecutor::selectMaskAppend();
     }
 
     if (isPlainValueElementType(elementType)) {
@@ -3816,6 +3836,8 @@ NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
         return NLExecutor::selectOptGatherFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementGatherFunction();
+    } else if (isMaskElementType(elementType)) {
+        return NLExecutor::selectMaskGather();
     }
 
     if (isPlainValueElementType(elementType)) {
@@ -3838,6 +3860,8 @@ NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) 
         return NLExecutor::selectOptCompareFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementCompareFunction();
+    } else if (isMaskElementType(elementType)) {
+        return NLExecutor::selectMaskCompare();
     }
 
     if (isPlainValueElementType(elementType)) {
@@ -3879,6 +3903,8 @@ NLKeyAppendFunction NLTranslator::selectMergeKeyAppend(mlir::Type chunkType,
 
         const ValueType nullableValueType = valueTypeFromElementType(nullableType.getValueType());
         return NLExecutor::selectOptMergeKeyAppendFunction(nullableValueType, keyType);
+    } else if (isMaskElementType(elementType)) {
+        return NLExecutor::selectMaskMergeKeyAppend(keyType);
     }
 
     return NLExecutor::selectPlainMergeKeyAppendFunction(chunkKindFromElementType(elementType), keyType);
@@ -3897,6 +3923,8 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
         return NLExecutor::selectOptKeyAppendFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementKeyAppendFunction();
+    } else if (isMaskElementType(elementType)) {
+        return NLExecutor::selectMaskKeyAppend();
     }
 
     if (isPlainValueElementType(elementType)) {
@@ -3956,6 +3984,8 @@ NLGroupKeyGatherFunction NLTranslator::selectGroupKeyGatherForChunkType(mlir::Ty
         return NLExecutor::selectOptGroupKeyGather(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementGroupKeyGatherFunction();
+    } else if (isMaskElementType(elementType)) {
+        return NLExecutor::selectMaskGroupKeyGather();
     }
 
     if (isPlainValueElementType(elementType)) {
@@ -3978,6 +4008,8 @@ NLCopyFunction NLTranslator::selectCopyForChunkType(mlir::Type chunkType) {
         return NLExecutor::selectOptCopyFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementCopyFunction();
+    } else if (isMaskElementType(elementType)) {
+        return NLExecutor::selectMaskCopy();
     }
 
     if (isPlainValueElementType(elementType)) {
@@ -4086,6 +4118,9 @@ void NLTranslator::addCrossColumn(mlir::Value inputValue,
             broadcast = isOuter ? NLExecutor::selectOptBlockRepeatFunction(valueType)
                                 : NLExecutor::selectOptTileFunction(valueType);
         }
+    } else if (isMaskElementType(elementType)) {
+        output = allocMaskColumn();
+        broadcast = isOuter ? NLExecutor::selectMaskBlockRepeat() : NLExecutor::selectMaskTile();
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         output = allocListElementColumn();
         broadcast = isOuter ? NLExecutor::selectListElementBlockRepeatFunction()
@@ -4169,6 +4204,17 @@ bool NLTranslator::isOwnedStringElement(mlir::Type elementType) {
 
 Column* NLTranslator::allocOptOwnedStringColumn() {
     auto* column = _memory->alloc<ColumnOptVector<types::String::OwningPrimitive>>();
+    column->reserve(_program->getChunkSize());
+
+    return column;
+}
+
+bool NLTranslator::isMaskElementType(mlir::Type elementType) {
+    return mlir::isa<storage::BoolType>(elementType);
+}
+
+Column* NLTranslator::allocMaskColumn() {
+    ColumnMask* column = _memory->alloc<ColumnMask>();
     column->reserve(_program->getChunkSize());
 
     return column;
