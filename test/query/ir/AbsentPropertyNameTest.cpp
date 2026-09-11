@@ -119,6 +119,12 @@ TEST_F(AbsentPropertyNameTest, IsNullHoldsOnEveryRow) {
     expectCounts("MATCH (n:Person) WHERE n.nosuchprop IS NULL RETURN count(n)", {8});
 }
 
+// Unlabelled, over every node of the graph: no node carries the name, so every one of
+// them answers the test
+TEST_F(AbsentPropertyNameTest, IsNullHoldsOnEveryNodeOfTheGraph) {
+    expectCounts("MATCH (n) WHERE n.no_such_prop IS NULL RETURN count(n)", {18});
+}
+
 TEST_F(AbsentPropertyNameTest, IsNotNullHoldsOnNoRow) {
     expectCounts("MATCH (n:Person) WHERE n.nosuchprop IS NOT NULL RETURN count(n)", {0});
 }
