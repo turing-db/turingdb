@@ -358,6 +358,30 @@ TEST_F(PathDistanceIndexTest, estimatesAnUnboundedWalkFinitely) {
     EXPECT_DOUBLE_EQ(unboundedChecks, capped);
 }
 
+// The branching is sampled off the edge type alone, which is the walk of a pattern putting no
+// predicate on its hops. One that keeps a hundredth of the candidates is checked on every one
+// of them, so the first level costs what it always did and the frontier past it collapses.
+TEST_F(PathDistanceIndexTest, estimatesTheWalkAPredicateLeaves) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const PartDirectory parts(reader.getView());
+
+    PathDistanceIndex::TypeBranching branching;
+    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::BOTH, std::nullopt, branching);
+    ASSERT_GT(branching._fanOut, 1.0);
+
+    const double unfiltered = PathDistanceIndex::estimatedEnumerationChecks(parts, branching, 100, 6);
+    const double filtered = PathDistanceIndex::estimatedEnumerationChecks(parts, branching, 100, 6, 0.01);
+    const double firstLevel = 100.0 * branching._fanOut;
+
+    EXPECT_GT(unfiltered, filtered);
+    EXPECT_GT(filtered, firstLevel);
+    EXPECT_LT(filtered, 1.1 * firstLevel);
+
+    // A predicate letting everything through is the walk the type alone predicts
+    EXPECT_DOUBLE_EQ(PathDistanceIndex::estimatedEnumerationChecks(parts, branching, 100, 6, 1.0), unfiltered);
+}
+
 TEST_F(PathDistanceIndexTest, estimatesTheWalkOfTheTypeItFollows) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();

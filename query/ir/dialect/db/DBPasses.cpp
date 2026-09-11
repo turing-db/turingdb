@@ -1897,12 +1897,13 @@ struct FuseExploreEndConstraint : public impl::FuseExploreEndConstraintBase<Fuse
 };
 
 // A path exploration whose rows are then cut down to those ending on the node a carried
-// column already holds: the bound end spelled the long way, since the walk itself can head
-// for that node and never build the rows the filter goes on to drop.
+// column already holds, or on the seed the walk left: the bound end spelled the long way,
+// since the walk itself can head for that node and never build the rows the filter goes on
+// to drop. An absent _endColumn is the seed, which no carried column names.
 struct EndBoundExploration {
     ExplorePaths _exploration;
     EqOp _equality;
-    uint64_t _endColumn {0};
+    std::optional<uint64_t> _endColumn;
 };
 
 bool matchEndBoundExploration(FilterOp filter, EndBoundExploration& bound) {
@@ -1920,7 +1921,8 @@ bool matchEndBoundExploration(FilterOp filter, EndBoundExploration& bound) {
         exploration = ends.getDefiningOp<ExplorePaths>();
     }
 
-    if (!exploration || ends != exploration.getTgtids() || exploration.getEndColumn()) {
+    const bool alreadyBound = exploration && (exploration.getEndColumn() || exploration.getEndsOnSeed());
+    if (!exploration || ends != exploration.getTgtids() || alreadyBound) {
         return false;
     }
 
@@ -1929,8 +1931,11 @@ bool matchEndBoundExploration(FilterOp filter, EndBoundExploration& bound) {
         return false;
     }
 
+    // A walk the pattern brings back to where it started compares its end against its own
+    // seed, which is a result of the exploration like a carried column but not one of them
     const size_t resultIndex = carriedResult.getResultNumber();
-    if (resultIndex < pathFixedResultCount) {
+    const bool endsOnSeed = carried == exploration.getSrcids();
+    if (!endsOnSeed && resultIndex < pathFixedResultCount) {
         return false;
     }
 
@@ -1951,7 +1956,9 @@ bool matchEndBoundExploration(FilterOp filter, EndBoundExploration& bound) {
 
     bound = EndBoundExploration {._exploration = exploration,
                                  ._equality = equality,
-                                 ._endColumn = resultIndex - pathFixedResultCount};
+                                 ._endColumn = endsOnSeed
+                                                 ? std::nullopt
+                                                 : std::optional<uint64_t> {resultIndex - pathFixedResultCount}};
 
     return true;
 }
@@ -1966,7 +1973,11 @@ void fuseExploreEndNodes(FilterOp filter, const EndBoundExploration& bound, mlir
     ExplorePaths exploration = bound._exploration;
     EqOp equality = bound._equality;
 
-    exploration.setEndColumnAttr(unsignedAttribute(bound._endColumn, builder));
+    if (bound._endColumn) {
+        exploration.setEndColumnAttr(unsignedAttribute(*bound._endColumn, builder));
+    } else {
+        exploration.setEndsOnSeed(true);
+    }
 
     const Operation::operand_range columns = filter.getColumnsToFilter();
     const mlir::ResultRange filtered = filter.getFilteredColumns();

@@ -251,7 +251,8 @@ bool PathTargetIndex::isWorthBuilding(const GraphView& view,
                                       std::optional<EdgeTypeID> edgeType,
                                       size_t seedCount,
                                       size_t targetCount,
-                                      uint64_t maxHops) {
+                                      uint64_t maxHops,
+                                      double hopPassRate) {
     if (targetCount == 0) {
         return false;
     }
@@ -269,7 +270,12 @@ bool PathTargetIndex::isWorthBuilding(const GraphView& view,
         return false;
     }
 
-    return PathDistanceIndex::estimatedEnumerationChecks(parts, direction, edgeType, seedCount, maxHops) > batchCount * plan._checks;
+    const double budget = batchCount * plan._checks;
+
+    PathDistanceIndex::TypeBranching branching;
+    PathDistanceIndex::sampleBranching(parts, direction, edgeType, branching);
+
+    return PathDistanceIndex::estimatedEnumerationChecks(parts, branching, seedCount, maxHops, hopPassRate) > budget;
 }
 
 void PathTargetIndex::buildBatch(const PartDirectory& parts,

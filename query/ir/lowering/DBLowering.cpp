@@ -5207,6 +5207,7 @@ void DBLowering::lowerExplorePaths(mlir::db::ExplorePaths explorePaths) {
                                                                      explorePaths.getEdgeTypeAttr(),
                                                                      explorePaths.getEndLabelsAttr(),
                                                                      explorePaths.getEndColumnAttr(),
+                                                                     explorePaths.getEndsOnSeed(),
                                                                      explorePaths.getDistinct());
 
     mlir::Region& dbHop = explorePaths.getHop();

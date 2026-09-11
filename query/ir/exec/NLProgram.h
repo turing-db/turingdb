@@ -890,6 +890,11 @@ public:
     void addSeedsSeen(size_t count) { _seedsSeen += count; }
     size_t getSeedsSeen() const { return _seedsSeen; }
 
+    // Measured once for the loop: the gates run per chunk of seeds, and sampling the
+    // predicate costs an evaluation of it per sampled node
+    const std::optional<double>& getHopPassRate() const { return _hopPassRate; }
+    void setHopPassRate(double rate) { _hopPassRate = rate; }
+
     void setEndNodes(const ColumnNodeIDs* endNodes) { _endNodes = endNodes; }
     const ColumnNodeIDs* getEndNodes() const { return _endNodes; }
     PathTargetIndex* getTargetIndex() { return &_targetIndex; }
@@ -912,6 +917,7 @@ private:
     bool _endMatchable {true};
     PathDistanceIndex _distanceIndex;
     size_t _seedsSeen {0};
+    std::optional<double> _hopPassRate;
 
     const ColumnNodeIDs* _endNodes {nullptr};
     PathTargetIndex _targetIndex;

@@ -17,6 +17,7 @@ namespace db {
 
 class EdgeIndexer;
 class PartDirectory;
+class PathHopFilter;
 class Tombstones;
 
 // For every node, the fewest hops to a node carrying the end labels along the exploration
@@ -52,6 +53,17 @@ public:
                                 std::optional<EdgeTypeID> edgeType,
                                 TypeBranching& branching);
 
+    // The share of a strided sample's candidates the hop predicate keeps. The branching
+    // sampled off the edge type is what the walk would do with no predicate on its hops;
+    // scaling it by this is what the walk actually does, and a selective predicate is the
+    // difference between an enumeration that dwarfs an index and one that costs nothing.
+    // Costs a pass over the sample's adjacency and an evaluation of the predicate on it,
+    // so the gates take it only once the cheap estimate has said the index is worth it.
+    static double sampleHopPassRate(const PartDirectory& parts,
+                                    PathExplorationDir direction,
+                                    std::optional<EdgeTypeID> edgeType,
+                                    PathHopFilter& hopFilter);
+
     // The candidate checks the unpruned walk is expected to make: the seeds fanning out over
     // every hop of the bound, the frontier holding once it covers the nodes the type reaches.
     // Sampling the branching costs a strided pass over the adjacency, so a caller that needs
@@ -62,17 +74,22 @@ public:
                                              size_t seedCount,
                                              uint64_t maxHops);
 
+    // hopPassRate is the share of each level's candidates the query's hop predicate lets
+    // through: they all cost a check, and the ones that pass are all that reach the next
+    // level, so it shrinks the frontier rather than the candidates
     static double estimatedEnumerationChecks(const PartDirectory& parts,
                                              const TypeBranching& branching,
                                              size_t seedCount,
-                                             uint64_t maxHops);
+                                             uint64_t maxHops,
+                                             double hopPassRate = 1.0);
 
     // Whether the enumeration the seeds imply is expected to cost more than the index
     static bool isWorthBuilding(const GraphView& view,
                                 PathExplorationDir direction,
                                 std::optional<EdgeTypeID> edgeType,
                                 size_t seedCount,
-                                uint64_t maxHops);
+                                uint64_t maxHops,
+                                double hopPassRate = 1.0);
 
 private:
     std::vector<uint8_t> _distances;

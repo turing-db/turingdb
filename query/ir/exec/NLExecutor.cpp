@@ -5747,10 +5747,35 @@ private:
 // The distance index of an end-constrained exploration is built at most once per loop, the
 // first time the seeds seen over all its chunks make the enumeration costlier than the
 // index; null until then
+// Sampled off the graph once for the whole loop: the gates below run per chunk of seeds,
+// and the sample costs an evaluation of the query's hop predicate per node it visits
+double hopPassRateFor(const GraphView& view, NLExplorePathsLoopData* loopData, PathHopFilter* hopFilter) {
+    if (!hopFilter) {
+        return 1.0;
+    }
+
+    const std::optional<double>& measured = loopData->getHopPassRate();
+    if (measured) {
+        return *measured;
+    }
+
+    std::optional<EdgeTypeID> edgeType;
+    if (loopData->filtersByType()) {
+        edgeType = loopData->getEdgeType();
+    }
+
+    const PartDirectory parts(view);
+    const double rate = PathDistanceIndex::sampleHopPassRate(parts, loopData->getDirection(), edgeType, *hopFilter);
+    loopData->setHopPassRate(rate);
+
+    return rate;
+}
+
 const PathDistanceIndex* pruningIndexFor(const GraphView& view,
                                          NLExplorePathsLoopData* loopData,
                                          uint64_t maxHops,
-                                         size_t seedCount) {
+                                         size_t seedCount,
+                                         double hopPassRate) {
     PathDistanceIndex* index = loopData->getDistanceIndex();
     if (index->isBuilt()) {
         return index;
@@ -5764,7 +5789,7 @@ const PathDistanceIndex* pruningIndexFor(const GraphView& view,
     }
 
     const PathExplorationDir direction = loopData->getDirection();
-    const bool worthBuilding = PathDistanceIndex::isWorthBuilding(view, direction, edgeType, loopData->getSeedsSeen(), maxHops);
+    const bool worthBuilding = PathDistanceIndex::isWorthBuilding(view, direction, edgeType, loopData->getSeedsSeen(), maxHops, hopPassRate);
     if (!worthBuilding) {
         return nullptr;
     }
@@ -5776,7 +5801,10 @@ const PathDistanceIndex* pruningIndexFor(const GraphView& view,
 
 // The target index of a bound end is a chunk's own: its distinct targets, batched 64 per
 // word, when the enumeration they imply is costlier than the batches; null otherwise
-const PathTargetIndex* targetIndexFor(const GraphView& view, NLExplorePathsLoopData* loopData, uint64_t maxHops) {
+const PathTargetIndex* targetIndexFor(const GraphView& view,
+                                      NLExplorePathsLoopData* loopData,
+                                      uint64_t maxHops,
+                                      double hopPassRate) {
     const std::vector<NodeID>& endNodes = loopData->getEndNodes()->getRaw();
 
     std::vector<NodeID> targets(endNodes.begin(), endNodes.end());
@@ -5789,7 +5817,7 @@ const PathTargetIndex* targetIndexFor(const GraphView& view, NLExplorePathsLoopD
     }
 
     const PathExplorationDir direction = loopData->getDirection();
-    const bool worthBuilding = PathTargetIndex::isWorthBuilding(view, direction, edgeType, endNodes.size(), targets.size(), maxHops);
+    const bool worthBuilding = PathTargetIndex::isWorthBuilding(view, direction, edgeType, endNodes.size(), targets.size(), maxHops, hopPassRate);
     if (!worthBuilding) {
         return nullptr;
     }
@@ -5840,25 +5868,27 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
     const bool distinctEnds = loopData->isDistinctEnds();
     explorator.setDistinctEnds(distinctEnds);
 
+    std::optional<NLHopFilter> hopFilter;
+    if (loopData->hasHopFilter()) {
+        hopFilter.emplace(context, loopData);
+        explorator.setHopFilter(&*hopFilter);
+    }
+
+    const double hopPassRate = hopPassRateFor(view, loopData, hopFilter ? &*hopFilter : nullptr);
+
     // The distinct mode is a breadth-first search already, so it prunes by no index
     if (filtersByEndLabels) {
         explorator.setEndLabels(&loopData->getEndLabels());
         if (!distinctEnds) {
-            explorator.setDistanceIndex(pruningIndexFor(view, loopData, maxHops, inputNodeIDs->size()));
+            explorator.setDistanceIndex(pruningIndexFor(view, loopData, maxHops, inputNodeIDs->size(), hopPassRate));
         }
     }
 
     if (loopData->getEndNodes()) {
         explorator.setEndNodes(loopData->getEndNodes());
         if (!distinctEnds) {
-            explorator.setTargetIndex(targetIndexFor(view, loopData, maxHops));
+            explorator.setTargetIndex(targetIndexFor(view, loopData, maxHops, hopPassRate));
         }
-    }
-
-    std::optional<NLHopFilter> hopFilter;
-    if (loopData->hasHopFilter()) {
-        hopFilter.emplace(context, loopData);
-        explorator.setHopFilter(&*hopFilter);
     }
 
     runEdgeLoopSteps(context, loopData, &explorator, loopData->getSources());

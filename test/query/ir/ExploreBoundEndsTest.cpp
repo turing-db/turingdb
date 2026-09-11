@@ -110,8 +110,8 @@ func.func @main() {
 }
 )mlir";
 
-// The equality compares the end with the seed, a fixed result the exploration cannot be
-// bound to
+// The equality compares the end with the seed, which no carried column holds: the walk the
+// pattern brings back to where it started
 const char* const seedEqualityProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
@@ -426,17 +426,31 @@ TEST_F(ExploreBoundEndsTest, fusesTheEqualityFilterIntoTheExploration) {
     }
 }
 
+TEST_F(ExploreBoundEndsTest, fusesTheEqualityAgainstTheSeedIntoTheExploration) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(seedEqualityProgram);
+    ASSERT_TRUE(module);
+
+    runPass(*module, mlir::db::createFuseExploreEndNodes());
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    mlir::db::ExplorePaths fused = findExplorePaths(*module);
+    ASSERT_TRUE(fused);
+    EXPECT_TRUE(fused.getEndsOnSeed());
+    EXPECT_FALSE(fused.getEndColumn().has_value());
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::EqOp>(*module), 0u);
+}
+
 TEST_F(ExploreBoundEndsTest, leavesEqualitiesItCannotTake) {
-    for (const char* program : {seedEqualityProgram, outsideEqualityProgram}) {
-        const mlir::OwningOpRef<mlir::ModuleOp> module = parse(program);
-        ASSERT_TRUE(module) << program;
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(outsideEqualityProgram);
+    ASSERT_TRUE(module);
 
-        runPass(*module, mlir::db::createFuseExploreEndNodes());
-        EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
+    runPass(*module, mlir::db::createFuseExploreEndNodes());
+    EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
 
-        EXPECT_FALSE(findExplorePaths(*module).getEndColumn().has_value()) << program;
-        EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u) << program;
-    }
+    EXPECT_FALSE(findExplorePaths(*module).getEndColumn().has_value());
+    EXPECT_FALSE(findExplorePaths(*module).getEndsOnSeed());
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 1u);
 }
 
 TEST_F(ExploreBoundEndsTest, trimKeepsAndRenumbersTheEndColumn) {
