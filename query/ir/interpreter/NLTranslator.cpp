@@ -1994,9 +1994,9 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
 
 void NLTranslator::translateCase(nl::Case caseOp, NLStmtContainer* body) {
     const mlir::Value resultValue = caseOp.getResult();
-    const ValueType valueType = nullableChunkValueType(resultValue.getType());
+    const mlir::Type resultChunkType = resultValue.getType();
 
-    Column* const result = allocColumnForChunkType(resultValue.getType());
+    Column* const result = allocColumnForChunkType(resultChunkType);
     _valueSlots[resultValue] = result;
 
     const mlir::OperandRange conditions = caseOp.getConditions();
@@ -2006,7 +2006,7 @@ void NLTranslator::translateCase(nl::Case caseOp, NLStmtContainer* body) {
     // gives the rows this step writes
     NLCaseData* data = _program->allocFunctionData<NLCaseData>(getColumn(conditions.front()),
                                                                result,
-                                                               NLExecutor::selectCaseReset(valueType));
+                                                               selectCaseResetForChunkType(resultChunkType));
 
     for (size_t branchIndex = 0; branchIndex < conditions.size(); branchIndex++) {
         const mlir::Type conditionType = conditions[branchIndex].getType();
@@ -2018,10 +2018,7 @@ void NLTranslator::translateCase(nl::Case caseOp, NLStmtContainer* body) {
         branch._test = NLExecutor::selectCaseTest(branch._condition,
                                                   isNullableChunk(conditionType),
                                                   isUntypedNullChunk(conditionType));
-        branch._write = NLExecutor::selectCaseWrite(valueType,
-                                                    branch._value,
-                                                    isNullableChunk(valueChunkType),
-                                                    isUntypedNullChunk(valueChunkType));
+        branch._write = selectCaseWriteForChunkType(resultChunkType, branch._value, valueChunkType);
 
         data->addBranch(branch);
     }
@@ -2032,13 +2029,38 @@ void NLTranslator::translateCase(nl::Case caseOp, NLStmtContainer* body) {
         const Column* const defaultColumn = getColumn(defaultValue);
 
         data->setDefault(defaultColumn,
-                         NLExecutor::selectCaseWrite(valueType,
-                                                     defaultColumn,
-                                                     isNullableChunk(defaultType),
-                                                     isUntypedNullChunk(defaultType)));
+                         selectCaseWriteForChunkType(resultChunkType, defaultColumn, defaultType));
     }
 
     body->emplaceStmt(&NLExecutor::runCase, data);
+}
+
+NLCaseResetFn NLTranslator::selectCaseResetForChunkType(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+    const mlir::Type elementType = chunk.getElementType();
+
+    if (isEntityIDElement(elementType)) {
+        return NLExecutor::selectEntityCaseReset(chunkKindFromElementType(elementType));
+    }
+
+    return NLExecutor::selectCaseReset(nullableChunkValueType(chunkType));
+}
+
+NLCaseWriteFn NLTranslator::selectCaseWriteForChunkType(mlir::Type resultChunkType,
+                                                        const Column* value,
+                                                        mlir::Type valueChunkType) {
+    const auto resultChunk = mlir::cast<nl::ChunkType>(resultChunkType);
+    const mlir::Type resultElement = resultChunk.getElementType();
+
+    if (isEntityIDElement(resultElement)) {
+        return NLExecutor::selectEntityCaseWrite(chunkKindFromElementType(resultElement),
+                                                 isUntypedNullChunk(valueChunkType));
+    }
+
+    return NLExecutor::selectCaseWrite(nullableChunkValueType(resultChunkType),
+                                       value,
+                                       isNullableChunk(valueChunkType),
+                                       isUntypedNullChunk(valueChunkType));
 }
 
 void NLTranslator::translateUnaryFunction(mlir::Operation* op, NLStmtContainer* body) {

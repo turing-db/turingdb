@@ -273,6 +273,13 @@ public:
                                          bool nullable,
                                          bool untypedNull);
 
+    // The entity siblings of the two above, for a selection whose branches are nodes or
+    // edges: an entity column carries its null in the ID rather than in an optional, so
+    // the reset writes the invalid ID and the write copies the branch's ID across
+    static NLCaseResetFn selectEntityCaseReset(NLChunkKind kind);
+
+    static NLCaseWriteFn selectEntityCaseWrite(NLChunkKind kind, bool untypedNull);
+
     // Lay a constant chunk's single value out over the driving relation's rows
     // (nl.broadcast_constant), so a fold that walks rows is handed the step's rows
     // rather than the one row a constant column is.

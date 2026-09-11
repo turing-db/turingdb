@@ -3139,8 +3139,14 @@ mlir::Type DBLowering::caseResultElement(llvm::ArrayRef<mlir::Value> valueChunks
     const bool isBool = integerType && integerType.getWidth() == 1;
     const bool isString = mlir::isa<storage::StringType>(unified);
 
-    if (!isNumericElement(unified) && !isBool && !isString) {
-        throw IRException("db.case requires scalar branches: an entity, a list or an "
+    // A node or an edge is selected as the entity it is rather than as its ID's integer,
+    // so the selection answers a column the rest of the query still reads as an entity.
+    // Mixing one with a scalar, or a node with an edge, was already turned away above:
+    // neither pair promotes.
+    const bool isEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(unified);
+
+    if (!isNumericElement(unified) && !isBool && !isString && !isEntity) {
+        throw IRException("db.case requires scalar or entity branches: a list or an "
                           "embedding is not a value a branch can select");
     }
 
@@ -3233,10 +3239,15 @@ void DBLowering::lowerCase(mlir::db::Case caseOp) {
     gatherOperands(operands);
 
     // A row matching no branch of a defaultless CASE is absent, and so is one taking a
-    // null branch, so the selection always lands in a nullable value column
+    // null branch, so the selection always lands in a column that can hold an absent row.
+    // An entity column already can - it carries its null in the ID an OPTIONAL MATCH left
+    // invalid - so entities land in a plain ID chunk and every scalar in a nullable one.
     mlir::MLIRContext* const context = _builder.getContext();
-    const nl::ChunkType resultType
-        = nl::ChunkType::get(context, storage::NullableType::get(context, resultElement));
+    const bool selectsEntities = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(resultElement);
+    const mlir::Type resultChunkElement = selectsEntities
+        ? resultElement
+        : storage::NullableType::get(context, resultElement);
+    const nl::ChunkType resultType = nl::ChunkType::get(context, resultChunkElement);
 
     setInsertionForNaryOp(operands);
 

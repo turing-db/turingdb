@@ -276,6 +276,26 @@ TEST_F(CaseExpressionTest, selectsOnAnEdgeProperty) {
                {{"Animals", "long"}, {"Computers", "short"}});
 }
 
+// A branch may select an entity. The column that comes out is still one of nodes, so the
+// query reads their properties on. simpledb's two Person-to-Person KNOWS_WELL hops are
+// Remy's and Adam's, and both select Remy
+TEST_F(CaseExpressionTest, selectsANodeBranch) {
+    expectRows("MATCH (a:Person)-[:KNOWS_WELL]->(b:Person) "
+               "WITH CASE WHEN a.name = 'Remy' THEN a ELSE b END AS chosen "
+               "RETURN chosen.name",
+               {{"Remy"}, {"Remy"}});
+}
+
+// A row matching no branch is null, which an entity column spells as an invalid ID rather
+// than as an absent optional
+TEST_F(CaseExpressionTest, leavesAnUnmatchedEntityRowNull) {
+    expectRows("MATCH (a:Person)-[:INTERESTED_IN]->(b) "
+               "WHERE a.name = 'Martina' OR a.name = 'Doruk' "
+               "WITH a, CASE WHEN a.name = 'Martina' THEN b END AS chosen "
+               "RETURN a.name, chosen.name",
+               {{"Martina", "Cooking"}, {"Doruk", "null"}});
+}
+
 // A CASE returns one column, so branches no column type can hold together are reported
 // rather than silently taking one of the two
 TEST_F(CaseExpressionTest, rejectsBranchesOfUnrelatedTypes) {
