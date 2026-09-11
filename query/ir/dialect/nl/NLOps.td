@@ -1727,9 +1727,11 @@ def Case : NLOp<"case", [Pure, RowAlignedThroughOperands, AttrSizedOperandSegmen
   let summary = "Row-wise selection of the first branch whose condition holds";
   let description = [{
       The lowered db.case: parallel condition and value chunks, an optional default, and
-      a nullable value chunk holding the branch each row took. Every operand carries
-      rows - a constant among them was laid out over the driving relation during
-      lowering - so the selection reads one cell of each per row it writes.
+      a nullable value chunk holding the branch each row took - an entity chunk when the
+      branches are nodes or edges, whose null is the invalid ID rather than an absent
+      optional. Every operand carries rows - a constant among them was laid out over the
+      driving relation during lowering - so the selection reads one cell of each per row
+      it writes.
 
       %r = nl.case({%c0}, {%v0}, %d) : (!nl.chunk<i1>, !nl.chunk<!storage.nullable<i64>>,
                                         !nl.chunk<!storage.nullable<i64>>)

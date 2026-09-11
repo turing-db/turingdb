@@ -614,6 +614,14 @@ private:
     static NLAggregateUpdateFunction selectAggregateUpdateForChunkType(AggregateKind kind,
                                                                       mlir::Type chunkType);
 
+    // The reset a selection's result column needs, and the write one of its branches
+    // needs. Both turn on what the result chunk holds: an entity column carries its null
+    // in the ID, every other column in an optional. Used by nl.case.
+    static NLCaseResetFn selectCaseResetForChunkType(mlir::Type chunkType);
+    static NLCaseWriteFn selectCaseWriteForChunkType(mlir::Type resultChunkType,
+                                                     const Column* value,
+                                                     mlir::Type valueChunkType);
+
     // Translate an nl.get_node_properties / nl.get_edge_properties: resolve the
     // property name (carried by the nl.get_property_type that produced the
     // handle) to a PropertyTypeID and value type, allocate the nullable value

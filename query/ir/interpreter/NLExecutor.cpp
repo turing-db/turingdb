@@ -1101,10 +1101,24 @@ void caseWriteMaskCell(Column* result, const Column* value, size_t row) {
 void caseWriteNullCell(Column* result, const Column* value, size_t row) {
 }
 
+template <typename ID>
+void caseWriteEntityCell(Column* result, const Column* value, size_t row) {
+    std::vector<ID>& results = static_cast<ColumnVector<ID>*>(result)->getRaw();
+    results[row] = static_cast<const ColumnVector<ID>*>(value)->getRaw()[row];
+}
+
 template <typename Primitive>
 void caseResetColumn(Column* result, size_t rowCount) {
     std::vector<std::optional<Primitive>>& results = static_cast<ColumnOptVector<Primitive>*>(result)->getRaw();
     results.assign(rowCount, std::optional<Primitive> {});
+}
+
+// A default-constructed ID is the invalid one, which is how an entity column spells an
+// absent row: the reset leaves every row null, as the optional one above does
+template <typename ID>
+void caseResetEntityColumn(Column* result, size_t rowCount) {
+    std::vector<ID>& results = static_cast<ColumnVector<ID>*>(result)->getRaw();
+    results.assign(rowCount, ID {});
 }
 
 // 3-way compare two rows of a type-erased column of tagged scalars. Cells need not share
@@ -4556,6 +4570,28 @@ NLCaseTestFn NLExecutor::selectCaseTest(const Column* condition, bool nullable, 
     }
 
     return nullable ? &caseTestOptMask : &caseTestBoolColumn;
+}
+
+NLCaseResetFn NLExecutor::selectEntityCaseReset(NLChunkKind kind) {
+    if (kind == NLChunkKind::NodeID) {
+        return &caseResetEntityColumn<NodeID>;
+    } else if (kind == NLChunkKind::EdgeID) {
+        return &caseResetEntityColumn<EdgeID>;
+    }
+
+    throw IRException("Only a node or an edge column can hold a selection over entities");
+}
+
+NLCaseWriteFn NLExecutor::selectEntityCaseWrite(NLChunkKind kind, bool untypedNull) {
+    if (untypedNull) {
+        return &caseWriteNullCell;
+    } else if (kind == NLChunkKind::NodeID) {
+        return &caseWriteEntityCell<NodeID>;
+    } else if (kind == NLChunkKind::EdgeID) {
+        return &caseWriteEntityCell<EdgeID>;
+    }
+
+    throw IRException("Only a node or an edge column can hold a selection over entities");
 }
 
 NLCaseWriteFn NLExecutor::selectCaseWrite(ValueType valueType,

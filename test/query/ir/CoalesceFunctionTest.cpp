@@ -214,6 +214,49 @@ TEST_F(CoalesceFunctionTest, carriesTheAnswerThroughAWith) {
                {{"32"}, {"0"}});
 }
 
+// An OPTIONAL MATCH that missed leaves a null node, which is fallen through like any other
+// null. What the selection answers is still a node, so the query reads its properties on.
+// Only Remy and Adam know someone well in simpledb; the other six fall back to themselves
+TEST_F(CoalesceFunctionTest, coalescesNodes) {
+    expectRows("MATCH (n:Person) OPTIONAL MATCH (n)-[:KNOWS_WELL]->(f) "
+               "WITH n, coalesce(f, n) AS someone RETURN n.name, someone.name",
+               {
+                   {"Remy", "Adam"}, {"Adam", "Remy"}, {"Maxime", "Maxime"}, {"Luc", "Luc"},
+                   {"Martina", "Martina"}, {"Suhas", "Suhas"}, {"Cyrus", "Cyrus"},
+                   {"Doruk", "Doruk"},
+               });
+}
+
+// Edges coalesce as nodes do, and what comes out is still an edge the query reads a
+// property from. Remy's KNOWS_WELL hop wins on each of his three interests; Martina has
+// no such hop, so her row falls back to the interest one
+TEST_F(CoalesceFunctionTest, coalescesEdges) {
+    expectRows("MATCH (n:Person) WHERE n.name = 'Remy' OR n.name = 'Martina' "
+               "OPTIONAL MATCH (n)-[k:KNOWS_WELL]->() "
+               "OPTIONAL MATCH (n)-[i:INTERESTED_IN]->() "
+               "WITH coalesce(k, i) AS link RETURN link.name",
+               {
+                   {"Remy -> Adam"}, {"Remy -> Adam"}, {"Remy -> Adam"},
+                   {"Martina -> Cooking"},
+               });
+}
+
+// With nothing but hops that missed to choose from, the answer is the null an entity
+// column spells as an invalid ID
+TEST_F(CoalesceFunctionTest, answersANullEntityWhenNoArgumentHasOne) {
+    expectRows("MATCH (n:Person) WHERE n.name = 'Martina' "
+               "OPTIONAL MATCH (n)-[k:KNOWS_WELL]->() "
+               "WITH coalesce(k, null) AS link RETURN link.name",
+               {{"null"}});
+}
+
+// A node and an edge are no more one column than a node and a number, so neither pair is
+// held together
+TEST_F(CoalesceFunctionTest, rejectsANodeBesideAnEdge) {
+    expectError("MATCH (n:Person)-[e]->() RETURN coalesce(n, e)", "must share a type");
+    expectError("MATCH (n:Person) RETURN coalesce(n, 1)", "must share a type");
+}
+
 // A reduction answers one row, and the fallback stands in when that row is null. None of
 // the four people without a PhD carries an age, so their extremum reduces nothing
 TEST_F(CoalesceFunctionTest, coalescesAReduction) {

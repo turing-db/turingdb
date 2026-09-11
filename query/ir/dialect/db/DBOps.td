@@ -1498,9 +1498,11 @@ def Case : TuringOp<"case", [Pure, AttrSizedOperandSegments]> {
     of the subject against each WHEN value as the condition.
 
     The result element type is resolved during lowering, as for the arithmetic ops: the
-    branches promote against each other into one nullable value column. A selection walks
-    rows, so - unlike the arithmetic ops - it is not constant through its operands: the
-    constants among them are laid out over the driving relation during lowering.
+    branches promote against each other into one nullable value column, or - when they are
+    all nodes, or all edges - into the entity column they already are, which carries the
+    null of an unmatched row in its ID. A selection walks rows, so - unlike the arithmetic
+    ops - it is not constant through its operands: the constants among them are laid out
+    over the driving relation during lowering.
   }];
 
   let arguments = (ins Variadic<Column>:$conditions,
