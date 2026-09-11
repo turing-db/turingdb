@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+#include <unordered_set>
+
 #include <range/v3/view/zip.hpp>
 
 #include "list/ListElementOrder.h"
@@ -46,6 +48,10 @@ public:
         const auto valueType = a->getValueType();
 
         if (valueType != b->getValueType()) {
+            return false;
+        }
+
+        if (!sameNulls(a, b)) {
             return false;
         }
 
@@ -143,6 +149,24 @@ public:
         }
 
         return true;
+    }
+
+private:
+    // sort() never orders _nullIds, so two containers holding the same nulls can list
+    // them in different orders
+    [[nodiscard]] static bool sameNulls(const PropertyContainer* a,
+                                        const PropertyContainer* b) {
+        const auto& nullsA = a->nullIds();
+        const auto& nullsB = b->nullIds();
+
+        if (nullsA.size() != nullsB.size()) {
+            return false;
+        }
+
+        const std::unordered_set<EntityID> setA(nullsA.begin(), nullsA.end());
+        const std::unordered_set<EntityID> setB(nullsB.begin(), nullsB.end());
+
+        return setA == setB;
     }
 };
 
