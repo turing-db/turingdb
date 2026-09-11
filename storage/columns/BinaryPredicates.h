@@ -391,9 +391,17 @@ struct BinaryPredicateExecutor {
  */
 template <typename F>
 struct BinaryPredicate {
+    // Handle predicates that resolve their own nulls
+    template <typename T, typename U>
+        requires NullableResultPredicate<F, T, U>
+    inline std::optional<CustomBool> operator()(T&& a, U&& b) {
+        return F {}(std::forward<T>(a), std::forward<U>(b));
+    }
+
     // Handle optional cases
     template<typename T, typename U>
         requires (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>)
+              && (!NullableResultPredicate<F, T, U>)
     inline std::optional<CustomBool> operator()(T&& a, U&& b) {
         // Short-circuiting implementations for AND and OR
         if constexpr (std::is_same_v<F, std::logical_or<>>) {
@@ -532,6 +540,65 @@ struct StringContains {
     }
 };
 
+/**
+ * @brief Tests whether a value is an element of a list, as Cypher's IN does.
+ *
+ * An OR-fold of equality over the elements, so an empty list is false whatever the left
+ * operand is, and an element that is null - or a left operand that is - leaves an
+ * otherwise unmatched answer unknown rather than false.
+ */
+struct TuringIn {
+    std::optional<CustomBool> operator()(const PropertyNull& /*unused*/,
+                                         const ListView list) const {
+        if (list.empty()) {
+            return CustomBool {false};
+        }
+
+        return std::nullopt;
+    }
+
+    template <typename T>
+    std::optional<CustomBool> operator()(const T& value, const ListView list) const {
+        if (list.empty()) {
+            return CustomBool {false};
+        }
+
+        if constexpr (TypeUtils::is_optional_v<T>) {
+            if (!value.has_value()) {
+                return std::nullopt;
+            }
+        }
+
+        using Scalar = TypeUtils::unwrap_optional_t<T>;
+        const Scalar& scalar = TypeUtils::unwrap(value);
+
+        if constexpr (std::is_same_v<Scalar, ListElementView>) {
+            if (scalar.getTag() == ListBufferTypeTag::Null) {
+                return std::nullopt;
+            }
+        }
+
+        bool unknown = false;
+
+        for (const ListElementView element : list) {
+            if (element.getTag() == ListBufferTypeTag::Null) {
+                unknown = true;
+                continue;
+            }
+
+            if (element == scalar) {
+                return CustomBool {true};
+            }
+        }
+
+        if (unknown) {
+            return std::nullopt;
+        }
+
+        return CustomBool {false};
+    }
+};
+
 }
 
 using Eq = BinaryPredicate<TuringEqual>;
@@ -550,5 +617,7 @@ using Xor = BinaryPredicate<TuringXor>;
 using StartsWith = BinaryPredicate<StringPredicate<StringStartsWith>>;
 using EndsWith = BinaryPredicate<StringPredicate<StringEndsWith>>;
 using Contains = BinaryPredicate<StringPredicate<StringContains>>;
+
+using In = BinaryPredicate<TuringIn>;
 
 }
