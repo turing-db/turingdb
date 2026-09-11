@@ -73,6 +73,9 @@ public:
 
     bool isSorted() const { return _sorted; }
 
+    // One map entry per ID, valued or null: a container an entity was added to twice holds fewer
+    bool hasDistinctIDs() const { return _entityIndexMap.size() == _ids.size() + _nullIds.size(); }
+
     IDs& nullIds() { return _nullIds; }
     const IDs& nullIds() const { return _nullIds; }
 
@@ -203,9 +206,6 @@ public:
     size_t size() const override {
         return _values.size();
     }
-
-    // One index per ID: a container an entity was added to twice holds fewer.
-    bool hasDistinctIDs() const { return _entityIndexMap.size() == _ids.size(); }
 
     void sort() override {
         ranges::sort(
@@ -346,8 +346,6 @@ public:
     size_t size() const override {
         return _values.size();
     }
-
-    bool hasDistinctIDs() const { return _entityIndexMap.size() == _ids.size(); }
 
     void sort() override;
 

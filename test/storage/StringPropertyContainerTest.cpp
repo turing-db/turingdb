@@ -102,3 +102,26 @@ TEST(StringPropertyContainerTest, ComparatorSeparatesNullFromAbsent) {
 
     EXPECT_TRUE(PropertyContainerComparator::same(&withNull, &sameNull));
 }
+
+TEST(StringPropertyContainerTest, NullsDoNotCountAsDuplicateIDs) {
+    TypedPropertyContainer<types::String> container;
+
+    container.add(EntityID(1), std::optional<types::String::Primitive> {"Remy"});
+    container.add(EntityID(2), std::nullopt);
+    container.add(EntityID(3), std::optional<types::String::Primitive> {"Adam"});
+
+    container.sort();
+
+    EXPECT_TRUE(container.hasDistinctIDs());
+}
+
+TEST(StringPropertyContainerTest, RepeatedIDIsNotDistinct) {
+    TypedPropertyContainer<types::String> container;
+
+    container.add(EntityID(1), std::optional<types::String::Primitive> {"Remy"});
+    container.add(EntityID(1), std::optional<types::String::Primitive> {"Adam"});
+
+    container.sort();
+
+    EXPECT_FALSE(container.hasDistinctIDs());
+}
