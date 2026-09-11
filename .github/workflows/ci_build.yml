@@ -22,58 +22,17 @@ on:
   workflow_dispatch:
 
 
-# Only PR runs share a group, so a new push supersedes the build still holding a
-# runner. The run_id fallback gives every other run (main pushes, release tags,
+# PR runs and main pushes each share a group, so a new commit supersedes the run
+# still holding a runner. The run_id fallback gives every other run (release tags,
 # the nightlies calling this via workflow_call) a unique group, so they neither
 # cancel each other nor queue behind one another.
 concurrency:
-  group: ci-build-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: ci-build-${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && github.ref) || github.run_id }}
   cancel-in-progress: true
 
 
-# Main pushes cluster: merges land back-to-back when someone ships two or three
-# PRs in a sitting, and each one used to take a runner from the fixed self-hosted
-# pool to build a commit that was superseded seconds later.
-env:
-  MAIN_DEBOUNCE_SECONDS: 300
-
-
 jobs:
-  # Hold main pushes for the debounce window, then build only if this commit is
-  # still the tip. Superseded runs report skipped rather than cancelled, so main
-  # keeps a clean history. It waits on a GitHub-hosted runner (free on this public
-  # repo) to avoid parking a self-hosted one for the whole window, and fails open:
-  # a failed tip check leaves the output empty and the build runs.
-  debounce:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      superseded: ${{ steps.tip.outputs.superseded }}
-
-    steps:
-    - name: Wait out the debounce window
-      run: sleep "$MAIN_DEBOUNCE_SECONDS"
-
-    - name: Check whether a newer commit has landed
-      id: tip
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        TIP=$(gh api "repos/${{ github.repository }}/commits/main" --jq '.sha')
-        echo "tip of main: $TIP"
-        echo "this run:    ${{ github.sha }}"
-        if [ "$TIP" != "${{ github.sha }}" ]; then
-            echo "Superseded by $TIP, skipping the build"
-            echo "superseded=true" >> "$GITHUB_OUTPUT"
-        fi
-
   build:
-    # debounce is skipped for every trigger but a main push, and a skipped need
-    # would otherwise skip this job too.
-    needs: debounce
-    if: ${{ !cancelled() && needs.debounce.outputs.superseded != 'true' }}
     strategy:
       # Don't cancel the whole matrix when one job fails: on the shared
       # self-hosted runners a single transient flake would otherwise cancel the
