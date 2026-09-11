@@ -24,6 +24,7 @@ DumpResult<void> EmbeddingPropertyContainerDumper::dump(const TypedPropertyConta
 
     const auto& container = props.getRawContainer();
     const uint64_t propCount = props.size();
+    const uint64_t nullCount = props.nullIds().size();
     const uint64_t dimension = container.getDimension();
     const uint64_t totalFloats = propCount * dimension;
 
@@ -38,6 +39,7 @@ DumpResult<void> EmbeddingPropertyContainerDumper::dump(const TypedPropertyConta
 
     const uint64_t idPageCount = GraphDumpHelper::getPageCountForItems(propCount, idCountPerPage);
     const uint64_t floatPageCount = GraphDumpHelper::getPageCountForItems(totalFloats, floatsPerPage);
+    const uint64_t nullPageCount = GraphDumpHelper::getPageCountForItems(nullCount, idCountPerPage);
 
     // Metadata page
     GraphDumpHelper::writeFileHeader(_writer);
@@ -46,6 +48,8 @@ DumpResult<void> EmbeddingPropertyContainerDumper::dump(const TypedPropertyConta
     _writer.writeToCurrentPage(dimension);
     _writer.writeToCurrentPage(idPageCount);
     _writer.writeToCurrentPage(floatPageCount);
+    _writer.writeToCurrentPage(nullCount);
+    _writer.writeToCurrentPage(nullPageCount);
 
     {
         // IDs
@@ -126,6 +130,8 @@ DumpResult<void> EmbeddingPropertyContainerDumper::dump(const TypedPropertyConta
             }
         }
     }
+
+    GraphDumpHelper::writeEntityIDPages(_writer, props.nullIds(), idCountPerPage);
 
     _writer.finish();
 
