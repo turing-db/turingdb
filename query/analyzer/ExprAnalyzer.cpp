@@ -104,6 +104,19 @@ ListShape sharedListShape(std::span<Expr* const> elements) {
     return ListShape::collecting(shared, first->getListShape());
 }
 
+// The shape of the list a concatenation makes: the one both sides carry, or a list of
+// tagged scalars when they carry different ones, as a mixed list literal is.
+ListShape concatenatedListShape(const ListShape& left, const ListShape& right) {
+    const bool sameDepth = left.getDepth() == right.getDepth();
+    const bool sameLeafType = left.getLeafType() == right.getLeafType();
+
+    if (!sameDepth || !sameLeafType) {
+        return ListShape(EvaluatedType::Invalid, 1);
+    }
+
+    return left;
+}
+
 }
 
 ExprAnalyzer::ExprAnalyzer(CypherAST* ast, const GraphView& graphView)
@@ -363,6 +376,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                     throwError("List concatenation is only supported in V3", expr);
                 }
                 type = EvaluatedType::List;
+                expr->setListShape(concatenatedListShape(lhs->getListShape(), rhs->getListShape()));
                 break;
             }
 

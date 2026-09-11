@@ -52,9 +52,6 @@ TEST_F(ConcatenatedListSeedTest, seedsACallFromACollectedList) {
     EXPECT_EQ(rows, frontierEdges);
 }
 
-// Concatenating the two collects drops the node element type, so the analyzer rejects the
-// call the unwound item drives with "Invalid arguments for function
-// 'gnn.neighbourhoodSample'".
 TEST_F(ConcatenatedListSeedTest, seedsACallFromTwoCollectedListsConcatenated) {
     StringRowSink sink;
     runQuery(concatenatedListQuery, sink);
