@@ -268,7 +268,13 @@ template <ColumnOperator Op>
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
         // Boolean properties; optional (3-valued logic) and non-optional
-        OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs
+        OptionalKindPairs<types::Bool::Primitive, types::Bool::Primitive>::Pairs,
+
+        std::tuple<
+            // A null of unknown type, which the truth tables read as an unknown truth
+            // value: the lowering reads the other side as nullable to meet it
+            KindPair<std::optional<types::Bool::Primitive>, PropertyNull>
+        >
     >;
 
     using AllowedMixed = AllowedMixedList<

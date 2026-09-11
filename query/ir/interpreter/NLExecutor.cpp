@@ -777,6 +777,11 @@ void applyNotOnConst(Column* result, const Column* operand) {
     UnaryPredicateExecutor<Not, CustomBool>::apply(typedResult, typedOperand);
 }
 
+// NOT of an unknown truth value is unknown; the ColumnConst<PropertyNull> result already
+// reads as null, so nothing is computed.
+void applyNotOnNullConst(Column*, const Column*) {
+}
+
 // Block-repeat: each input row is emitted `factor` times in a row, so input row
 // i lands at output indices [i*factor, (i+1)*factor). This lays out an outer
 // column of a cross product, where each outer row pairs with the whole inner
@@ -4259,6 +4264,13 @@ NLCaseWriteFn NLExecutor::selectCaseWrite(ValueType valueType,
 
 NLUnaryFn NLExecutor::selectNot(const Column* operand, LocalMemory* memory, Column*& result) {
     const ContainerKind::Code kind = operand->getContainerKind();
+
+    // The untyped null constant negates to a null rather than to the boolean the constant
+    // branch below would read out of it
+    if (dynamic_cast<const ColumnConst<PropertyNull>*>(operand)) {
+        result = memory->alloc<ColumnConst<PropertyNull>>();
+        return &applyNotOnNullConst;
+    }
 
     if (kind == ContainerKind::code<ColumnConst<CustomBool>>()) {
         result = memory->alloc<ColumnConst<CustomBool>>();

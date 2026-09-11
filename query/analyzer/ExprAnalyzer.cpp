@@ -306,6 +306,18 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
+            // Ordering a value against a null is null, the same as comparing it against
+            // one. Only the MLIR engine answers such a comparison: the legacy planner
+            // hands the operator a null column no ordering kernel reads
+            const bool ordersAgainstNull =
+                pair == TypePairBitset(EvaluatedType::Null, EvaluatedType::Null)
+                || pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Null)
+                || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Null);
+
+            if (_isV3 && ordersAgainstNull) {
+                break;
+            }
+
             const std::string error = fmt::format(
                 "Operands are not valid or compatible numeric types: '{}' and '{}'",
                 EvaluatedTypeName::value(a),
@@ -613,6 +625,10 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
 
     ValueType vt = ValueType::Invalid;
 
+    // A name no property in the graph carries has no value on any row and no type: the
+    // read is null. v2 cannot plan a null property read, so it still rejects the name.
+    bool readsAsNull = false;
+
     if (!propTypeFound) {
         // Property does not exist yet
 
@@ -620,19 +636,24 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         auto it = _toBeCreatedTypes.find(name);
 
         if (it == _toBeCreatedTypes.end()) {
-            if (!allowCreate) {
-                // Property does not exist and is not meant to be created in this query
-                const std::string error = fmt::format("Property type '{}' not found", propName->getName());
-                throwError(error, expr);
-            } else {
+            if (allowCreate) {
                 // Property does not exist but is created
                 addToBeCreatedType(propName->getName(), defaultType, expr);
                 it = _toBeCreatedTypes.find(name);
+            } else if (_isV3) {
+                readsAsNull = true;
+            } else {
+                // Property does not exist and is not meant to be created in this query
+                const std::string error = fmt::format("Property type '{}' not found", propName->getName());
+                throwError(error, expr);
             }
         }
 
-        // Property is meant to be created in this query
-        vt = it->second;
+        if (!readsAsNull) {
+            // Property is meant to be created in this query
+            vt = it->second;
+        }
+
         expr->setPropertyName(name);
     } else {
         // Property already exists
@@ -640,14 +661,18 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         expr->setPropertyName(propName->getName());
     }
 
-    const auto maybeEvalType = toEvaluatedType(vt);
-    if (!maybeEvalType.has_value()) {
-        const std::string_view name = propName->getName();
-        const std::string error = fmt::format("Property type '{}' is invalid", name);
-        throwError(error, expr);
-    }
+    EvaluatedType type = EvaluatedType::Null;
 
-    EvaluatedType type = *maybeEvalType;
+    if (!readsAsNull) {
+        const auto maybeEvalType = toEvaluatedType(vt);
+        if (!maybeEvalType.has_value()) {
+            const std::string_view name = propName->getName();
+            const std::string error = fmt::format("Property type '{}' is invalid", name);
+            throwError(error, expr);
+        }
+
+        type = *maybeEvalType;
+    }
 
     expr->setEntityVarDecl(varDecl);
     expr->setType(type);

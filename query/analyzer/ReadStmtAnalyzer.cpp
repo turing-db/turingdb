@@ -380,12 +380,14 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
         const LabelMap& labelMap = _graphMetadata.labels();
 
         for (const Symbol* label : *labels) {
-            const std::optional<LabelID> labelID = labelMap.get(label->getName());
-            if (!labelID) {
-                throwError(fmt::format("Unknown label: {}", label->getName()), nodePattern);
+            const std::string_view labelName = label->getName();
+            const bool graphHasLabel = labelMap.get(labelName).has_value();
+
+            if (!graphHasLabel && !_isV3) { // v3 matches no node instead of failing
+                throwError(fmt::format("Unknown label: {}", labelName), nodePattern);
             }
 
-            data->addLabelConstraint(label->getName());
+            data->addLabelConstraint(labelName);
         }
     }
 
@@ -401,11 +403,14 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
             }
 
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
-            if (!propType) {
+
+            if (!propType && !_isV3) { // v3 reads it as null, so the constraint matches nothing
                 throwError(fmt::format("Unknown property: {}", propName->getName()), nodePattern);
             }
 
-            if (!constraintTypeCompatible(propType->_valueType, expr->getType())) {
+            const bool incompatibleValue = propType
+                                           && !constraintTypeCompatible(propType->_valueType, expr->getType());
+            if (incompatibleValue) {
                 throwError(fmt::format("Cannot evaluate node property: types '{}' and '{}' are incompatible",
                                        ValueTypeName::value(propType->_valueType),
                                        EvaluatedTypeName::value(expr->getType())),
@@ -424,7 +429,9 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
             BinaryExpr* predExpr = BinaryExpr::create(_ast, BinaryOperator::Equal, propExpr, expr);
             _exprAnalyzer->analyzeRootExpr(predExpr);
 
-            data->addExprConstraint(propName->getName(), propType->_valueType, predExpr);
+            const ValueType constraintType = propType ? propType->_valueType : ValueType::Invalid;
+
+            data->addExprConstraint(propName->getName(), constraintType, predExpr);
         }
     }
 }
@@ -450,14 +457,14 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
         const EdgeTypeMap& edgeTypeMap = _graphMetadata.edgeTypes();
 
         for (const Symbol* edgeTypeSymbol : *types) {
-            const std::optional<EdgeTypeID> etID = edgeTypeMap.get(edgeTypeSymbol->getName());
-            if (!etID) {
-                throwError(fmt::format("Unknown edge type: {}",
-                                       edgeTypeSymbol->getName()),
-                           edgePattern);
+            const std::string_view edgeTypeName = edgeTypeSymbol->getName();
+            const bool graphHasEdgeType = edgeTypeMap.get(edgeTypeName).has_value();
+
+            if (!graphHasEdgeType && !_isV3) { // v3 matches no edge instead of failing
+                throwError(fmt::format("Unknown edge type: {}", edgeTypeName), edgePattern);
             }
 
-            data->addEdgeTypeConstraint(edgeTypeSymbol->getName());
+            data->addEdgeTypeConstraint(edgeTypeName);
         }
     }
 
@@ -473,11 +480,14 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
             }
 
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
-            if (!propType) {
+
+            if (!propType && !_isV3) { // v3 reads it as null, so the constraint matches nothing
                 throwError(fmt::format("Unknown property: {}", propName->getName()), edgePattern);
             }
 
-            if (!constraintTypeCompatible(propType->_valueType, expr->getType())) {
+            const bool incompatibleValue = propType
+                                           && !constraintTypeCompatible(propType->_valueType, expr->getType());
+            if (incompatibleValue) {
                 throwError(fmt::format("Cannot evaluate edge property: types '{}' and '{}' are incompatible",
                                        ValueTypeName::value(propType->_valueType),
                                        EvaluatedTypeName::value(expr->getType())),
@@ -496,7 +506,9 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
             BinaryExpr* predExpr = BinaryExpr::create(_ast, BinaryOperator::Equal, propExpr, expr);
             _exprAnalyzer->analyzeRootExpr(predExpr);
 
-            data->addExprConstraint(propName->getName(), propType->_valueType, predExpr);
+            const ValueType constraintType = propType ? propType->_valueType : ValueType::Invalid;
+
+            data->addExprConstraint(propName->getName(), constraintType, predExpr);
         }
     }
 

@@ -27,9 +27,15 @@ struct TuringNotEqual;
 static constexpr CustomBool sentinelFalse(false);
 static constexpr CustomBool sentinelTrue(true);
 
+// A null of unknown type is an unknown truth value in a Boolean operation, so the
+// three-valued operators take it as an operand beside the booleans
 template <typename T>
 concept BooleanOpt = std::same_as<TypeUtils::unwrap_optional_t<T>, types::Bool::Primitive>
-                  || std::same_as<ColumnMask::Bool_t, T>;
+                  || std::same_as<ColumnMask::Bool_t, T>
+                  || std::same_as<std::decay_t<T>, PropertyNull>;
+
+template <typename... Ts>
+concept HoldsPropertyNull = (std::same_as<std::decay_t<Ts>, PropertyNull> || ...);
 
 template <typename F>
 concept TestsEquality =
@@ -394,6 +400,9 @@ struct BinaryPredicate {
             return optionalOr(std::forward<T>(a), std::forward<U>(b));
         } else if constexpr (std::is_same_v<F, std::logical_and<>>) {
             return optionalAnd(std::forward<T>(a), std::forward<U>(b));
+        } else if constexpr (HoldsPropertyNull<T, U>) {
+            // An operand of unknown value leaves the predicate's answer unknown
+            return std::nullopt;
         } else { // General implementation for >, <, <=, etc
             return optionalPredicate<F>(std::forward<T>(a), std::forward<U>(b));
         }

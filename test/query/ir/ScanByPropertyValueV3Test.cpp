@@ -105,8 +105,8 @@ TEST_F(ScanByPropertyValueV3Test, labelConjunctionNarrowsTheScan) {
     expectSortedRows("MATCH (n:Person:Bioinformatics) WHERE n.isFrench = false RETURN n.name", {{"Martina"}});
 }
 
-TEST_F(ScanByPropertyValueV3Test, labelAbsentFromTheSchemaIsRejectedBeforeTheScan) {
-    runQueryExpectingError("MATCH (n:Nobody) WHERE n.age = 32 RETURN n.name", "Unknown label: Nobody");
+TEST_F(ScanByPropertyValueV3Test, labelAbsentFromTheSchemaMatchesNothing) {
+    expectSortedRows("MATCH (n:Nobody) WHERE n.age = 32 RETURN n.name", {});
 }
 
 TEST_F(ScanByPropertyValueV3Test, labelledScanYieldsInScanOrder) {
