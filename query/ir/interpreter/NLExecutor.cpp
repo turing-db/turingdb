@@ -711,12 +711,12 @@ void resolveCSVFieldIndices(const NLLoadCSVLoopData& loopData,
 }
 
 // Gather rows of a carried column by applying indices
-template <typename ElementType>
+template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
 void gatherColumn(const Column* input,
                   const ColumnVector<size_t>* indices,
                   Column* output) {
-    const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
-    ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
+    const ColumnType* typedInput = static_cast<const ColumnType*>(input);
+    ColumnType* typedOutput = static_cast<ColumnType*>(output);
 
     typedOutput->resize(indices->size());
     const auto& indicesRaw = indices->getRaw();
@@ -792,10 +792,10 @@ void applyNotOnConst(Column* result, const Column* operand) {
 // column of a cross product, where each outer row pairs with the whole inner
 // chunk. The fill stops at `outputRowCount` rows (min(N*factor, remaining) under
 // a limit), so the last block may be partial and later input rows are skipped.
-template <typename ElementType>
+template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
 void blockRepeatColumn(const Column* input, size_t factor, size_t outputRowCount, Column* output) {
-    const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
-    ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
+    const ColumnType* typedInput = static_cast<const ColumnType*>(input);
+    ColumnType* typedOutput = static_cast<ColumnType*>(output);
 
     const auto& inputRaw = typedInput->getRaw();
     auto& outputRaw = typedOutput->getRaw();
@@ -825,10 +825,10 @@ void blockRepeatConstColumn(const Column* input, size_t factor, size_t outputRow
 // `outputRowCount` rows (min(M*N, remaining) under a limit), which alone bounds
 // the repeats, so the row count drives it rather than the `factor` (N) the outer
 // side uses. The last tile may be partial.
-template <typename ElementType>
+template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
 void tileColumn(const Column* input, size_t factor, size_t outputRowCount, Column* output) {
-    const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
-    ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
+    const ColumnType* typedInput = static_cast<const ColumnType*>(input);
+    ColumnType* typedOutput = static_cast<ColumnType*>(output);
 
     const auto& inputRaw = typedInput->getRaw();
     auto& outputRaw = typedOutput->getRaw();
@@ -885,10 +885,10 @@ void broadcastConstantListColumn(const Column* value, size_t rowCount, Column* o
 // output indices [0, rowCount). This lifts a skip's surviving suffix to the front
 // of a fresh chunk - nl.skip_truncate passes inputOffset = skipThisStep and
 // rowCount = emitThisStep. std::copy of a contiguous range is lowered to memcpy.
-template <typename ElementType>
+template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
 void copyRangeColumn(const Column* input, size_t inputOffset, size_t rowCount, Column* output) {
-    const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
-    ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
+    const ColumnType* typedInput = static_cast<const ColumnType*>(input);
+    ColumnType* typedOutput = static_cast<ColumnType*>(output);
 
     const auto& inputRaw = typedInput->getRaw();
     auto& outputRaw = typedOutput->getRaw();
@@ -906,10 +906,10 @@ void copyRangeConstColumn(const Column* input, size_t inputOffset, size_t rowCou
 // same element type. nl.sort_collect calls this once per producing-loop step, so
 // the buffer accumulates every row across all chunks, row-aligned with the other
 // buffers of the same accumulator.
-template <typename ElementType>
+template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
 void appendColumn(const Column* input, Column* buffer) {
-    const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
-    ColumnVector<ElementType>* typedBuffer = static_cast<ColumnVector<ElementType>*>(buffer);
+    const ColumnType* typedInput = static_cast<const ColumnType*>(input);
+    ColumnType* typedBuffer = static_cast<ColumnType*>(buffer);
 
     const auto& inputRaw = typedInput->getRaw();
     auto& bufferRaw = typedBuffer->getRaw();
@@ -920,9 +920,9 @@ void appendColumn(const Column* input, Column* buffer) {
 // 3-way compare two rows of a non-null orderable column (an ID column, or a plain scalar
 // a procedure yielded): negative if row a sorts before row b, positive if after, zero if
 // they are equal.
-template <typename ElementType>
+template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
 int compareColumn(const Column* column, size_t a, size_t b) {
-    const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
+    const auto& raw = static_cast<const ColumnType*>(column)->getRaw();
     const ElementType& valueA = raw[a];
     const ElementType& valueB = raw[b];
 
@@ -965,9 +965,9 @@ int compareOptColumn(const Column* column, size_t a, size_t b) {
 
 // Copy a plain value column into a nullable one with every row present (nl.to_nullable),
 // so a kernel reading a nullable value column takes a column a procedure yielded.
-template <typename Primitive>
+template <typename Primitive, typename ColumnType = ColumnVector<Primitive>>
 void toNullableColumn(Column* result, const Column* operand) {
-    const auto& values = static_cast<const ColumnVector<Primitive>*>(operand)->getRaw();
+    const auto& values = static_cast<const ColumnType*>(operand)->getRaw();
     auto& nullables = static_cast<ColumnOptVector<Primitive>*>(result)->getRaw();
 
     nullables.resize(values.size());
@@ -1177,9 +1177,9 @@ void distinctKeyAppendColumn(const Column* column, size_t row, std::string& key)
 // yielded, a tally, an expression over one - into the row key. The ID sibling reads
 // through the ID's integer; here the element is the value, and no row of such a chunk is
 // null, so the key carries no tag byte to tell a null from a value.
-template <typename ElementType>
+template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
 void distinctKeyAppendPlainColumn(const Column* column, size_t row, std::string& key) {
-    const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
+    const auto& raw = static_cast<const ColumnType*>(column)->getRaw();
     distinctAppendValueBytes(key, raw[row]);
 }
 
@@ -1698,12 +1698,12 @@ NLAggregateUpdateFunction selectMinMaxUpdate(ValueType inputType) {
 // buffer of the same element type. nl.group_aggregate_update passes the rows that
 // created a new group this step, so the buffer grows one key value per group in
 // creation order.
-template <typename ElementType>
+template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
 void groupGatherAppendColumn(const Column* input,
                              const std::vector<size_t>& rows,
                              Column* buffer) {
-    const auto& inputRaw = static_cast<const ColumnVector<ElementType>*>(input)->getRaw();
-    auto& bufferRaw = static_cast<ColumnVector<ElementType>*>(buffer)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnType*>(input)->getRaw();
+    auto& bufferRaw = static_cast<ColumnType*>(buffer)->getRaw();
 
     for (const size_t row : rows) {
         bufferRaw.push_back(inputRaw[row]);
@@ -2881,9 +2881,9 @@ void throwIfNodesHaveEdges(const GraphView& view, const ColumnNodeIDs* nodes) {
 // A merge keys the value a row asks for against the value the graph holds, and those
 // arrive in a plain and a nullable column respectively: the two have to serialize alike,
 // which is why a plain row writes the tag byte the nullable one writes for a value.
-template <typename ElementType>
+template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
 void mergeKeyAppendPlainColumn(const Column* column, size_t row, std::string& key) {
-    const auto& raw = static_cast<const ColumnVector<ElementType>*>(column)->getRaw();
+    const auto& raw = static_cast<const ColumnType*>(column)->getRaw();
 
     key.push_back('\1');
     distinctAppendValueBytes(key, raw[row]);
@@ -5660,6 +5660,48 @@ NLBroadcastFunction NLExecutor::selectOptOwnedStringBlockRepeat() {
 
 NLBroadcastFunction NLExecutor::selectOptOwnedStringTile() {
     return &tileColumn<std::optional<types::String::OwningPrimitive>>;
+}
+
+NLGatherFunction NLExecutor::selectMaskGather() {
+    return &gatherColumn<ColumnMask::Bool_t, ColumnMask>;
+}
+
+NLAppendFunction NLExecutor::selectMaskAppend() {
+    return &appendColumn<ColumnMask::Bool_t, ColumnMask>;
+}
+
+NLCopyFunction NLExecutor::selectMaskCopy() {
+    return &copyRangeColumn<ColumnMask::Bool_t, ColumnMask>;
+}
+
+NLGroupKeyGatherFunction NLExecutor::selectMaskGroupKeyGather() {
+    return &groupGatherAppendColumn<ColumnMask::Bool_t, ColumnMask>;
+}
+
+NLCompareFunction NLExecutor::selectMaskCompare() {
+    return &compareColumn<ColumnMask::Bool_t, ColumnMask>;
+}
+
+NLKeyAppendFunction NLExecutor::selectMaskKeyAppend() {
+    return &distinctKeyAppendPlainColumn<ColumnMask::Bool_t, ColumnMask>;
+}
+
+NLBroadcastFunction NLExecutor::selectMaskBlockRepeat() {
+    return &blockRepeatColumn<ColumnMask::Bool_t, ColumnMask>;
+}
+
+NLBroadcastFunction NLExecutor::selectMaskTile() {
+    return &tileColumn<ColumnMask::Bool_t, ColumnMask>;
+}
+
+NLKeyAppendFunction NLExecutor::selectMaskMergeKeyAppend(ValueType keyType) {
+    throwUnlessKeyedAsItsOwnType(ValueType::Bool, keyType);
+    return &mergeKeyAppendPlainColumn<ColumnMask::Bool_t, ColumnMask>;
+}
+
+NLUnaryFn NLExecutor::selectMaskToNullable(LocalMemory* memory, Column*& result) {
+    result = memory->alloc<ColumnOptMask>();
+    return &toNullableColumn<types::Bool::Primitive, ColumnMask>;
 }
 
 NLGatherFunction NLExecutor::selectOptGatherFunction(ValueType valueType) {

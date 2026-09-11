@@ -739,6 +739,10 @@ private:
 
     Column* allocOptOwnedStringColumn();
 
+    static bool isMaskElementType(mlir::Type elementType);
+
+    Column* allocMaskColumn();
+
     static bool isEntityIDElement(mlir::Type elementType);
     static bool isPlainValueElementType(mlir::Type elementType);
     Column* allocPlainColumn(ValueType valueType);
