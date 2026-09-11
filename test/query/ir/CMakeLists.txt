@@ -197,6 +197,7 @@ add_call_v3_test(test_query_ir_scan_by_node_ids_v3 ScanByNodeIDsV3Test.cpp)
 add_call_v3_test(test_query_ir_unwind_node_seed_v3 UnwindNodeSeedV3Test.cpp)
 add_call_v3_test(test_query_ir_unwind_node_seed_call_v3 UnwindNodeSeedCallV3Test.cpp)
 add_call_v3_test(test_query_ir_scan_by_property_value_v3 ScanByPropertyValueV3Test.cpp)
+add_call_v3_test(test_query_ir_gnn_frontier_union GnnFrontierUnionTest.cpp)
 
 # The crossing-call tests hop twice from the column a CALL yielded and then call again,
 # once with a constant argument alone and once reading the chain's tail, from the query
