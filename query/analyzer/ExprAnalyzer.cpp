@@ -938,23 +938,33 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
     for (FunctionSignature* signature : signatures) {
         const auto& expectedArgs = signature->argumentTypes();
 
+        // A signature unifying its arguments declares none of them, so its arity is a
+        // minimum alone and there is no expected type to match each against: they are
+        // checked against each other once the overload is settled on.
+        const bool unifiesArguments = signature->unifiesItsArguments();
+
         const size_t minArgs = signature->getMinArgCount();
         const size_t maxArgs = expectedArgs.size();
 
-        if (providedArgs.size() < minArgs || providedArgs.size() > maxArgs) {
+        const bool tooFewArgs = providedArgs.size() < minArgs;
+        const bool tooManyArgs = !unifiesArguments && providedArgs.size() > maxArgs;
+
+        if (tooFewArgs || tooManyArgs) {
             // Number of arguments does not match
             continue;
         }
 
-        const bool matchingArgs = std::equal(
-            expectedArgs.begin(), expectedArgs.begin() + providedArgs.size(),
-            providedArgs.begin(), [](const FunctionArgumentType& expected, const Expr* arg) {
-                return arg->getType() == expected.getType();
-            });
+        if (!unifiesArguments) {
+            const bool matchingArgs = std::equal(
+                expectedArgs.begin(), expectedArgs.begin() + providedArgs.size(),
+                providedArgs.begin(), [](const FunctionArgumentType& expected, const Expr* arg) {
+                    return arg->getType() == expected.getType();
+                });
 
-        if (!matchingArgs) {
-            // Argument types do not match
-            continue;
+            if (!matchingArgs) {
+                // Argument types do not match
+                continue;
+            }
         }
 
         // An overload the legacy planner cannot answer correctly is declared v3-only
@@ -968,8 +978,13 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
         // would have to be read again for every one. Turned away here rather than by the
         // procedure at runtime, once a row has already reached it - but only once every
         // overload has been tried, since another may take that argument per row.
+
+        // A signature can declare fewer arguments than were provided - one unifying them
+        // declares none - and more, when the ones behind the required count are optional
+        const size_t declaredArgs = std::min(providedArgs.size(), expectedArgs.size());
+
         bool readsARowIntoAConstant = false;
-        for (size_t argIndex = 0; argIndex < providedArgs.size(); argIndex++) {
+        for (size_t argIndex = 0; argIndex < declaredArgs; argIndex++) {
             const FunctionArgumentType& expected = expectedArgs[argIndex];
             const Expr* arg = providedArgs[argIndex];
 
@@ -1005,7 +1020,9 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
         }
 
         // Found a valid signature
-        if (signature->returnTypes().size() == 1) {
+        if (unifiesArguments) {
+            expr->setType(unifiedArgumentType(name, providedArgs));
+        } else if (signature->returnTypes().size() == 1) {
             expr->setType(signature->returnTypes().front().getType());
         } else {
             expr->setType(EvaluatedType::Tuple);
@@ -1048,6 +1065,29 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
 
     // Checked all overloaded signatures, none match: error
     throwError(fmt::format("Invalid arguments for function '{}'", name), expr);
+}
+
+EvaluatedType ExprAnalyzer::unifiedArgumentType(std::string_view name,
+                                                std::span<Expr* const> args) const {
+    EvaluatedType unified = EvaluatedType::Null;
+
+    for (const Expr* arg : args) {
+        const EvaluatedType argType = arg->getType();
+        const EvaluatedType folded = unifiedBranchType(unified, argType);
+
+        if (folded == EvaluatedType::Invalid) {
+            throwError(fmt::format("'{}' answers one column, so its arguments must share a "
+                                   "type: '{}' and '{}' cannot be mixed",
+                                   name,
+                                   EvaluatedTypeName::value(unified),
+                                   EvaluatedTypeName::value(argType)),
+                       arg);
+        }
+
+        unified = folded;
+    }
+
+    return unified;
 }
 
 void ExprAnalyzer::addToBeCreatedType(std::string_view name, ValueType type, const void* obj) {

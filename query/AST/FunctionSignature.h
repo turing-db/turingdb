@@ -74,6 +74,12 @@ public:
     // reading an element back knows the type it has - collect, and nothing else today.
     bool collectsItsArgument() const { return _collectsItsArgument; }
 
+    // Whether this takes any number of values of one type and answers the type they
+    // share - coalesce, and nothing else today. Such a signature declares no argument of
+    // its own: the analyzer unifies the arguments against each other, as it does the
+    // branches of a CASE, and the type they share is what the call returns.
+    bool unifiesItsArguments() const { return _unifiesItsArguments; }
+
     size_t getMinArgCount() const { return _requiredArgCount; }
 
     void setArguments(ArgumentTypes&& args) {
@@ -94,6 +100,8 @@ public:
 
     void setCollectsItsArgument(bool collects) { _collectsItsArgument = collects; }
 
+    void setUnifiesItsArguments(bool unifies) { _unifiesItsArguments = unifies; }
+
 private:
     std::string_view _fullName;
     ArgumentTypes _argumentTypes;
@@ -102,6 +110,7 @@ private:
     bool _isAggregate {false};
     bool _isProcedure {false};
     bool _collectsItsArgument {false};
+    bool _unifiesItsArguments {false};
 
     // An overload only the MLIR engine answers: the legacy planner either cannot lay its
     // argument out or reduces it over the wrong rows, so it never matches there

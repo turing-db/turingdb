@@ -2255,6 +2255,18 @@ target_include_directories(test_query_ir_case_expression PRIVATE ${CMAKE_CURRENT
 # The db.case dialect tests parse hand-written selections, so they need only the dialect.
 add_ir_tests(test_query_ir_case_op CaseOpTest.cpp)
 
+# coalesce, run end to end through QueryInterpreterV3 over the shared SimpleGraph fixture.
+add_turing_test(test_query_ir_coalesce_function CoalesceFunctionTest.cpp)
+target_link_libraries(test_query_ir_coalesce_function PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_coalesce_function PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 # The Cypher manual's CASE examples, run end to end against simpledb.
 add_call_v3_test(test_query_ir_neo4j_case_example Neo4jCaseExampleTest.cpp)
 

@@ -5168,9 +5168,13 @@ mlir::Value DBProgramGenerator::translateEntityTypeExpr(const EntityTypeExpr* ty
 void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
                                                          const FunctionInvocationExpr* funcExpr) {
     const FunctionInvocation* invocation = funcExpr->getFunctionInvocation();
-    const std::string_view funcName = invocation->getSignature()->getFullName();
+    const FunctionSignature* signature = invocation->getSignature();
+    const std::string_view funcName = signature->getFullName();
 
-    if (!funcExpr->isAggregate()) {
+    // The expression's own aggregate flag is contaminated by its arguments, so a scalar
+    // function over a reduction - coalesce(max(n.age), 0) - carries it too. What says a
+    // call reduces its input is the signature it resolved to.
+    if (!signature->isAggregate()) {
         translateFunctionExpr(expr, invocation);
         return;
     }
@@ -5269,6 +5273,11 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
         }
     }
 
+    if (funcName == "coalesce") {
+        translateCoalesce(expr, args);
+        return;
+    }
+
     const auto unaryIt = unaryFunctionEmitters.find(funcName);
     if (unaryIt != end(unaryFunctionEmitters)) {
         if (!args || args->size() != 1) {
@@ -5293,6 +5302,53 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     }
 
     throwError(fmt::format("Unsupported function: {}", funcName), expr);
+}
+
+void DBProgramGenerator::translateCoalesce(const Expr* expr, const ExprChain* args) {
+    bioassert(args && !args->empty(), "coalesce() with no arguments.");
+
+    const ExprChain::ExprVector& argExprs = args->getExprs();
+
+    llvm::SmallVector<mlir::Value, 4> arguments;
+    for (const Expr* argExpr : argExprs) {
+        arguments.push_back(translateArg(argExpr));
+    }
+
+    if (arguments.size() == 1) {
+        _part._exprMap[expr] = arguments.front();
+        return;
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    const size_t branchCount = arguments.size() - 1;
+
+    llvm::SmallVector<mlir::Value, 4> conditions;
+    for (size_t argIndex = 0; argIndex < branchCount; argIndex++) {
+        // The null literal is absent on every row, so the branch it guards is never taken
+        if (argExprs[argIndex]->getType() == EvaluatedType::Null) {
+            conditions.push_back(constantBool(false));
+            continue;
+        }
+
+        const mlir::Value present = _opBuilder.create<mlir::db::NeqOp>(loc,
+                                                                       boolType,
+                                                                       arguments[argIndex],
+                                                                       nullConstantColumn())
+                                        .getResult();
+        conditions.push_back(present);
+    }
+
+    const llvm::ArrayRef<mlir::Value> branches = llvm::ArrayRef<mlir::Value>(arguments).drop_back();
+
+    _part._exprMap[expr] = _opBuilder.create<mlir::db::Case>(loc,
+                                                             noneType,
+                                                             conditions,
+                                                             branches,
+                                                             arguments.back())
+                               .getResult();
 }
 
 mlir::db::Collect DBProgramGenerator::createCollect(llvm::ArrayRef<mlir::Value> keyColumns,

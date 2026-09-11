@@ -44,6 +44,7 @@ class EdgePattern;
 class EmbeddingLiteral;
 class EntityTypeExpr;
 class Expr;
+class ExprChain;
 class IndexExpr;
 class Literal;
 class ListLiteral;
@@ -687,6 +688,10 @@ private:
     void translateFunctionInvocationExpr(const Expr* expr, const FunctionInvocationExpr* funcExpr);
 
     void translateFunctionExpr(const Expr* expr, const FunctionInvocation* invocation);
+
+    // coalesce over @param args, emitted as the selection it is: every argument but the
+    // last guarded by its own presence, the last standing as the default
+    void translateCoalesce(const Expr* expr, const ExprChain* args);
 
     mlir::Value translateArg(const Expr* argExpr);
     mlir::Value translateLiteralExpr(const Literal* literal);
