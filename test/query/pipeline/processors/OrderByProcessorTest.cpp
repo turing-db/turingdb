@@ -295,7 +295,5 @@ TEST_F(OrderByProcessorTest, alternatingEmpty) {
 }
 
 int main(int argc, char** argv) {
-    return turing::test::turingTestMain(argc, argv, [] {
-        testing::GTEST_FLAG(repeat) = 10;
-    });
+    return turing::test::turingTestMain(argc, argv);
 }

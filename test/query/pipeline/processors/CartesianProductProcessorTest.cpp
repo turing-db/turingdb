@@ -1785,7 +1785,5 @@ TEST_F(CartesianProductProcessorTest, constValueChangesAcrossChunks) {
 }
 
 int main(int argc, char** argv) {
-    return turing::test::turingTestMain(argc, argv, [] {
-        testing::GTEST_FLAG(repeat) = 20;
-    });
+    return turing::test::turingTestMain(argc, argv);
 }

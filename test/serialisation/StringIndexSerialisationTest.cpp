@@ -90,7 +90,5 @@ TEST_F(StringIndexSerialisationTest, indexInitialisation) {
 }
 
 int main(int argc, char** argv) {
-    return turingTestMain(argc, argv, [] {
-        testing::GTEST_FLAG(repeat) = 1;
-    });
+    return turingTestMain(argc, argv);
 }

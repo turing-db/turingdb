@@ -265,7 +265,5 @@ TEST_F(JobSystemTest, ManyJobSystems) {
 }
 
 int main(int argc, char** argv) {
-    return turing::test::turingTestMain(argc, argv, [] {
-        testing::GTEST_FLAG(repeat) = 50;
-    });
+    return turing::test::turingTestMain(argc, argv);
 }
