@@ -134,6 +134,11 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
                     id = tmpToFinalNodeIDs.at(id.getValue()).getValue();
                 }
             }
+            for (auto& id : props->nullIds()) {
+                if (id >= firstTmpNodeID.getValue()) {
+                    id = tmpToFinalNodeIDs.at(id.getValue()).getValue();
+                }
+            }
 
             props->sort();
 
@@ -192,6 +197,11 @@ CommitResult<void> DataPart::load(const GraphView& view, JobSystem& jobSystem, D
     for (const auto& [ptID, props] : *_edgeProperties) {
         jobs.submit<void>([&, ptID, props = props.get()](Promise*) {
             for (auto& id : props->getMutableIDs()) {
+                if (id >= firstTmpEdgeID.getValue()) {
+                    id = tmpToFinalEdgeIDs.at(id.getValue()).getValue();
+                }
+            }
+            for (auto& id : props->nullIds()) {
                 if (id >= firstTmpEdgeID.getValue()) {
                     id = tmpToFinalEdgeIDs.at(id.getValue()).getValue();
                 }

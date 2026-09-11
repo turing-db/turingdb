@@ -923,7 +923,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodeConstProp) {
     {
         for (const NodeID n : read().scanNodes()) {
             const types::String::Primitive* name =
-                read().tryGetNodeProperty<types::String>(NAME_PROP_ID, n);
+                read().tryGetNodeProperty<types::String>(NAME_PROP_ID, n).value_or(nullptr);
             ASSERT_TRUE(name);
             expected.add({n, *name});
             expected.add({n + numNodesPrior, "NEWNAME"});
@@ -984,7 +984,7 @@ TEST_F(WriteQueriesTest, scanNodesCreateNodeDynamicProp) {
     {
         for (const NodeID n : read().scanNodes()) {
             const types::String::Primitive* name =
-                read().tryGetNodeProperty<types::String>(NAME_PROP_ID, n);
+                read().tryGetNodeProperty<types::String>(NAME_PROP_ID, n).value_or(nullptr);
             ASSERT_TRUE(name);
             // Original node keeps its name
             expected.add({*name});
@@ -1210,7 +1210,7 @@ TEST_F(WriteQueriesTest, dynamicNamePreservedAcrossCommit) {
     {
         for (const NodeID n : read().scanNodes()) {
             const types::String::Primitive* name =
-                read().tryGetNodeProperty<types::String>(NAME_PROP_ID, n);
+                read().tryGetNodeProperty<types::String>(NAME_PROP_ID, n).value_or(nullptr);
             ASSERT_TRUE(name);
             expected.add({*name});
         }
@@ -3302,13 +3302,239 @@ TEST_F(WriteQueriesTest, dynamicIntPropertyExpression) {
 TEST_F(WriteQueriesTest, dynamicIntPropertySetNull) {
     newChange();
     {
-        constexpr std::string_view setQuery =
+        std::string_view setQuery =
             R"(MATCH (n), (m) WHERE n = 10 SET m.age = n.age)"; // n.age is null for n = 10
 
         auto res = query(setQuery, [](const Dataframe*) {});
-        ASSERT_FALSE(res);
-        ASSERT_TRUE(res.hasErrorMessage());
-        ASSERT_EQ("Setting properties to NULL is not yet supported.", res.getError());
+        ASSERT_TRUE(res);
+    }
+    submitCurrentChange();
+
+    {
+        std::string_view matchQuery = "MATCH (n) RETURN n.age";
+
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            const auto* ages = findColumn(df, "n.age")->as<ColumnOptVector<types::Int64::Primitive>>();
+            ASSERT_TRUE(ages);
+
+            const bool allNull = std::ranges::all_of(*ages, [](auto&& x) { return !x; });
+
+            ASSERT_TRUE(allNull) << dump(df);
+        });
+        ASSERT_TRUE(res);
+    }
+}
+
+TEST_F(WriteQueriesTest, dynamicStringPropertySetNull) {
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH (n) SET n.dob = n.dob)";
+
+        auto res = query(setQuery, _emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery =
+            R"(MATCH (n) WHERE n.dob IS NOT NULL RETURN n.name, n.dob)";
+
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            ASSERT_EQ(2, df->size());
+
+            const auto* names = findColumn(df, "n.name")->as<ColumnOptVector<types::String::Primitive>>();
+            const auto* dobs = findColumn(df, "n.dob")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(names && dobs);
+
+            using Values = std::vector<std::optional<std::string_view>>;
+
+            EXPECT_EQ((Values {"Remy", "Adam", "Maxime", "Luc"}), names->getRaw()) << dump(df);
+            EXPECT_EQ((Values {"18/01", "18/08", "24/07", "28/05"}), dobs->getRaw()) << dump(df);
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+}
+
+TEST_F(WriteQueriesTest, dynamicStringPropertySetNullOnAllNodes) {
+    newChange();
+    {
+        // Node 2 has no dob, so every node's dob becomes null and the commit's dob
+        // container holds nulls and no values at all
+        constexpr std::string_view setQuery = R"(MATCH (n), (m) WHERE n = 2 SET m.dob = n.dob)";
+
+        auto res = query(setQuery, _emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (n) RETURN n.dob)";
+
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            const auto* dobs = findColumn(df, "n.dob")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(dobs);
+
+            const bool allNull = std::ranges::all_of(*dobs, [](auto&& dob) { return !dob; });
+
+            ASSERT_TRUE(allNull) << dump(df);
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+}
+
+TEST_F(WriteQueriesTest, nodePropertyLookupTakesTheNewestDatapart) {
+    const auto namePropID = read().getMetadata().propTypes().get("name");
+    const auto dobPropID = read().getMetadata().propTypes().get("dob");
+    ASSERT_TRUE(namePropID.has_value());
+    ASSERT_TRUE(dobPropID.has_value());
+
+    const PropertyTypeID nameID = namePropID->_id;
+    const PropertyTypeID dobID = dobPropID->_id;
+    const NodeID remy {0};
+
+    {
+        const auto name = read().tryGetNodeProperty<types::String>(nameID, remy);
+        ASSERT_TRUE(name.has_value());
+        ASSERT_NE(name.value(), nullptr);
+        ASSERT_EQ(*name.value(), "Remy");
+
+        const auto dob = read().tryGetNodeProperty<types::String>(dobID, remy);
+        ASSERT_TRUE(dob.has_value());
+        ASSERT_NE(dob.value(), nullptr);
+        ASSERT_EQ(*dob.value(), "18/01");
+    }
+
+    // Node 2 has no dob, so this nulls every node's dob in a datapart newer than the one
+    // holding Remy's 18/01
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH (n), (m) WHERE n = 2 SET m.dob = n.dob)";
+
+        auto res = query(setQuery, _emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    EXPECT_FALSE(read().tryGetNodeProperty<types::String>(dobID, remy).has_value());
+
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH (n) WHERE n.name = "Remy" SET n.dob = "01/01")";
+
+        auto res = query(setQuery, _emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    {
+        const auto dob = read().tryGetNodeProperty<types::String>(dobID, remy);
+        ASSERT_TRUE(dob.has_value());
+        ASSERT_NE(dob.value(), nullptr);
+        EXPECT_EQ(*dob.value(), "01/01");
+    }
+}
+
+TEST_F(WriteQueriesTest, propertyValueScanSkipsNulledNodes) {
+    const auto countMatches = [this](std::string_view matchQuery) {
+        size_t rowCount = 0;
+
+        auto res = query(matchQuery, [&](const Dataframe* df) {
+            ASSERT_TRUE(df);
+            rowCount += df->getLogicalRowCount();
+        });
+        EXPECT_TRUE(res) << res.getError();
+
+        return rowCount;
+    };
+
+    constexpr std::string_view matchQuery = R"(MATCH (n {dob: "18/01"}) RETURN n)";
+
+    EXPECT_EQ(1, countMatches(matchQuery));
+
+    // Node 2 has no dob, so the newer datapart records Remy's dob as null and holds no
+    // dob value at all
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH (n), (m) WHERE n = 2 SET m.dob = n.dob)";
+
+        auto res = query(setQuery, _emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    EXPECT_EQ(0, countMatches(matchQuery));
+}
+
+TEST_F(WriteQueriesTest, nullEmbeddingWithoutADimensionIsRefused) {
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH (n) WHERE n = 0 SET n.emb = (0.0, 0.1))";
+
+        auto res = query(setQuery, _emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    newChange();
+    {
+        // Node 1 has no emb, so this writes a null into a datapart that holds no
+        // embedding for the property and cannot know its dimension
+        constexpr std::string_view setQuery = R"(MATCH (n), (m) WHERE n = 1 SET m.emb = n.emb)";
+
+        auto res = query(setQuery, _emptyCallback);
+        ASSERT_FALSE(res) << "expected a null embedding with no dimension to be refused";
+        EXPECT_NE(std::string::npos, res.getError().find("dimension")) << res.getError();
+    }
+}
+
+TEST_F(WriteQueriesTest, createdNodeNullPropertyKeepsItsOwner) {
+    newChange();
+    {
+        // Node 2 has a name and no dob. The commit sorts new nodes by labelset, so
+        // NULLHOLDER and Interest swap places: a null still carrying its pre-sort ID
+        // lands on the other node.
+        constexpr std::string_view createQuery =
+            R"(MATCH (n) WHERE n = 2 CREATE (a:NULLHOLDER {dob: n.dob}), (b:Interest {dob: n.name}))";
+
+        auto res = query(createQuery, _emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    using Values = std::vector<std::optional<std::string_view>>;
+
+    {
+        constexpr std::string_view matchQuery = R"(MATCH (m:NULLHOLDER) RETURN m.dob)";
+
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            const auto* dobs = findColumn(df, "m.dob")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(dobs);
+
+            EXPECT_EQ((Values {std::nullopt}), dobs->getRaw()) << dump(df);
+        });
+        ASSERT_TRUE(res) << res.getError();
+    }
+
+    {
+        constexpr std::string_view matchQuery =
+            R"(MATCH (m:Interest) WHERE m.dob IS NOT NULL RETURN m.dob)";
+
+        auto res = query(matchQuery, [](const Dataframe* df) {
+            ASSERT_TRUE(df);
+
+            const auto* dobs = findColumn(df, "m.dob")->as<ColumnOptVector<types::String::Primitive>>();
+            ASSERT_TRUE(dobs);
+
+            EXPECT_EQ((Values {"Computers"}), dobs->getRaw()) << dump(df);
+        });
+        ASSERT_TRUE(res) << res.getError();
     }
 }
 

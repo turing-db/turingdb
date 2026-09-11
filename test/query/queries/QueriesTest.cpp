@@ -1913,8 +1913,8 @@ TEST_F(QueriesTest, predicateOR) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const Boolean* french = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, n);
-            const Boolean* phd = read().tryGetNodeProperty<types::Bool>(HASPHD_PROPID, n);
+            const Boolean* french = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, n).value_or(nullptr);
+            const Boolean* phd = read().tryGetNodeProperty<types::Bool>(HASPHD_PROPID, n).value_or(nullptr);
             if ((french && *french) || (phd && *phd)) {
                 expected.add({n});
             }
@@ -1949,8 +1949,8 @@ TEST_F(QueriesTest, predicateAND) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const Boolean* french = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, n);
-            const Boolean* phd = read().tryGetNodeProperty<types::Bool>(HASPHD_PROPID, n);
+            const Boolean* french = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, n).value_or(nullptr);
+            const Boolean* phd = read().tryGetNodeProperty<types::Bool>(HASPHD_PROPID, n).value_or(nullptr);
             if (!french || !phd) {
                 continue;
             }
@@ -1989,9 +1989,9 @@ TEST_F(QueriesTest, predicateNOT) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const Boolean* french = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, n);
+            const Boolean* french = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, n).value_or(nullptr);
             if (french != nullptr && !*french) {
-                const String* name = read().tryGetNodeProperty<types::String>(NAME_PROPID, n);
+                const String* name = read().tryGetNodeProperty<types::String>(NAME_PROPID, n).value_or(nullptr);
                 expected.add({n, *name});
             }
         }
@@ -2030,17 +2030,17 @@ TEST_F(QueriesTest, cartProdThenFilter) {
     Rows expected;
     {
         for (NodeID n : read().scanNodes()) {
-            const Boolean* nfrench = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, n);
+            const Boolean* nfrench = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, n).value_or(nullptr);
             if (!nfrench || !*nfrench) {
                 continue;
             }
-            const String* nname = read().tryGetNodeProperty<types::String>(NAME_PROPID, n);
+            const String* nname = read().tryGetNodeProperty<types::String>(NAME_PROPID, n).value_or(nullptr);
             for (NodeID m : read().scanNodes()) {
-                const Boolean* mfrench = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, m);
+                const Boolean* mfrench = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, m).value_or(nullptr);
                 if (!mfrench || *mfrench) {
                     continue;
                 }
-                const String* mname = read().tryGetNodeProperty<types::String>(NAME_PROPID, m);
+                const String* mname = read().tryGetNodeProperty<types::String>(NAME_PROPID, m).value_or(nullptr);
                 expected.add({*nname, *mname});
             }
         }
@@ -2081,14 +2081,14 @@ TEST_F(QueriesTest, complexPredicate) {
     Rows expected;
     {
         for (NodeID n : read().scanNodes()) {
-            const Boolean* french = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, n);
-            const Boolean* phd = read().tryGetNodeProperty<types::Bool>(HASPHD_PROPID, n);
+            const Boolean* french = read().tryGetNodeProperty<types::Bool>(ISFRENCH_PROPID, n).value_or(nullptr);
+            const Boolean* phd = read().tryGetNodeProperty<types::Bool>(HASPHD_PROPID, n).value_or(nullptr);
             if (!phd || !french) { // Don't have these props: skip
                 continue;
             }
             if (!*french || *phd) { // not french or has phd
                 const String* name =
-                    read().tryGetNodeProperty<types::String>(NAME_PROPID, n);
+                    read().tryGetNodeProperty<types::String>(NAME_PROPID, n).value_or(nullptr);
                 expected.add({n, *name});
             }
         }
@@ -2240,7 +2240,7 @@ TEST_F(QueriesTest, int64FilterOperands) {
             for (const EdgeRecord& e : read().scanOutEdges()) {
 
                 const auto* duration =
-                    read().tryGetEdgeProperty<types::Int64>(durationProp, e._edgeID);
+                    read().tryGetEdgeProperty<types::Int64>(durationProp, e._edgeID).value_or(nullptr);
                 if (duration && comp(*duration, threshold)) {
                     expected.add({e._edgeID, *duration});
                 }
@@ -2323,7 +2323,7 @@ TEST_F(QueriesTest, int64FilterOperandsConjunction) {
             for (const EdgeRecord& e : read().scanOutEdges()) {
 
                 const auto* duration =
-                    read().tryGetEdgeProperty<types::Int64>(durationProp, e._edgeID);
+                    read().tryGetEdgeProperty<types::Int64>(durationProp, e._edgeID).value_or(nullptr);
                 if (duration && comp1(*duration, th1) && comp2(*duration, th2)) {
                     expected.add({e._edgeID, *duration});
                 }
@@ -2387,7 +2387,7 @@ TEST_F(QueriesTest, int64FilterOperandsDisjunction) {
             for (const EdgeRecord& e : read().scanOutEdges()) {
 
                 const auto* duration =
-                    read().tryGetEdgeProperty<types::Int64>(durationProp, e._edgeID);
+                    read().tryGetEdgeProperty<types::Int64>(durationProp, e._edgeID).value_or(nullptr);
                 if (duration && (comp1(*duration, th1) || comp2(*duration, th2))) {
                     expected.add({e._edgeID, *duration});
                 }
@@ -2448,7 +2448,7 @@ TEST_F(QueriesTest, notEqualFilter) {
         Rows expected;
         {
             for (const NodeID n : read().scanNodes()) {
-                const auto* prop = read().tryGetNodeProperty<T>(propID, n);
+                const auto* prop = read().tryGetNodeProperty<T>(propID, n).value_or(nullptr);
                 if (prop && comp1(*prop, th1)) {
                     expected.add({n, *prop});
                 }
@@ -2508,7 +2508,7 @@ TEST_F(QueriesTest, isNotNullFilter) {
         Rows expected;
         {
             for (const NodeID n : read().scanNodes()) {
-                const auto* prop = read().tryGetNodeProperty<T>(propID, n);
+                const auto* prop = read().tryGetNodeProperty<T>(propID, n).value_or(nullptr);
                 if (prop) {
                     expected.add({n, *prop});
                 }
@@ -2566,7 +2566,7 @@ TEST_F(QueriesTest, isNullFilter) {
         Rows expected;
         {
             for (const NodeID n : read().scanNodes()) {
-                const auto* prop = read().tryGetNodeProperty<T>(propID, n);
+                const auto* prop = read().tryGetNodeProperty<T>(propID, n).value_or(nullptr);
                 if (!prop) {
                     expected.add({n});
                 }
@@ -2649,7 +2649,7 @@ TEST_F(QueriesTest, indirectLabelFilter) {
 
             // Check if pf is French
             const auto* isFrenchPF =
-                read().tryGetNodeProperty<types::Bool>(isFrenchID, personPF);
+                read().tryGetNodeProperty<types::Bool>(isFrenchID, personPF).value_or(nullptr);
             if (!isFrenchPF || !*isFrenchPF) {
                 continue;
             }
@@ -2669,14 +2669,14 @@ TEST_F(QueriesTest, indirectLabelFilter) {
 
                 // Check if npf is NOT French
                 const auto* isFrenchNPF =
-                    read().tryGetNodeProperty<types::Bool>(isFrenchID, personNPF);
+                    read().tryGetNodeProperty<types::Bool>(isFrenchID, personNPF).value_or(nullptr);
                 if (isFrenchNPF && *isFrenchNPF) {
                     continue; // Skip if French
                 }
 
                 // Get the interest name
                 const auto* nameI =
-                    read().tryGetNodeProperty<types::String>(nameID, interestI);
+                    read().tryGetNodeProperty<types::String>(nameID, interestI).value_or(nullptr);
                 if (nameI) {
                     expected.add({*nameI});
                 }
@@ -2860,20 +2860,20 @@ TEST_F(QueriesTest, successorJoinWithCrossFilter) {
         }
 
         for (const auto& [x, sources] : incomingMap) {
-            const String* xname = read().tryGetNodeProperty<types::String>(NAME_PROPID, x);
+            const String* xname = read().tryGetNodeProperty<types::String>(NAME_PROPID, x).value_or(nullptr);
             if (!xname) continue;
 
             for (NodeID a : sources) {
-                const Int64* aAge = read().tryGetNodeProperty<types::Int64>(AGE_PROPID, a);
+                const Int64* aAge = read().tryGetNodeProperty<types::Int64>(AGE_PROPID, a).value_or(nullptr);
                 if (!aAge) continue;
-                const String* aName = read().tryGetNodeProperty<types::String>(NAME_PROPID, a);
+                const String* aName = read().tryGetNodeProperty<types::String>(NAME_PROPID, a).value_or(nullptr);
                 if (!aName) continue;
 
                 for (NodeID b : sources) {
-                    const Int64* bAge = read().tryGetNodeProperty<types::Int64>(AGE_PROPID, b);
+                    const Int64* bAge = read().tryGetNodeProperty<types::Int64>(AGE_PROPID, b).value_or(nullptr);
                     if (!bAge) continue;
                     if (*aAge != *bAge) continue;
-                    const String* bName = read().tryGetNodeProperty<types::String>(NAME_PROPID, b);
+                    const String* bName = read().tryGetNodeProperty<types::String>(NAME_PROPID, b).value_or(nullptr);
                     if (!bName) continue;
 
                     expected.add({*xname, *aName, *aAge, *bName, *bAge});
@@ -3020,20 +3020,20 @@ TEST_F(QueriesTest, ancestorJoinWithCrossFilter) {
                 targets.push_back(edge._otherID);
             }
 
-            const String* xname = read().tryGetNodeProperty<types::String>(NAME_PROPID, x);
+            const String* xname = read().tryGetNodeProperty<types::String>(NAME_PROPID, x).value_or(nullptr);
             if (!xname) continue;
 
             for (NodeID a : targets) {
-                const Int64* aAge = read().tryGetNodeProperty<types::Int64>(AGE_PROPID, a);
+                const Int64* aAge = read().tryGetNodeProperty<types::Int64>(AGE_PROPID, a).value_or(nullptr);
                 if (!aAge) continue;
-                const String* aName = read().tryGetNodeProperty<types::String>(NAME_PROPID, a);
+                const String* aName = read().tryGetNodeProperty<types::String>(NAME_PROPID, a).value_or(nullptr);
                 if (!aName) continue;
 
                 for (NodeID b : targets) {
-                    const Int64* bAge = read().tryGetNodeProperty<types::Int64>(AGE_PROPID, b);
+                    const Int64* bAge = read().tryGetNodeProperty<types::Int64>(AGE_PROPID, b).value_or(nullptr);
                     if (!bAge) continue;
                     if (*aAge != *bAge) continue;
-                    const String* bName = read().tryGetNodeProperty<types::String>(NAME_PROPID, b);
+                    const String* bName = read().tryGetNodeProperty<types::String>(NAME_PROPID, b).value_or(nullptr);
                     if (!bName) continue;
 
                     expected.add({*xname, *aName, *aAge, *bName, *bAge});
@@ -3083,7 +3083,7 @@ TEST_F(QueriesTest, tripleAncestorJoinWithChainAndCrossFilter) {
     Rows expected;
     {
         for (NodeID x : read().scanNodes()) {
-            const String* xname = read().tryGetNodeProperty<types::String>(NAME_PROPID, x);
+            const String* xname = read().tryGetNodeProperty<types::String>(NAME_PROPID, x).value_or(nullptr);
             if (!xname) continue;
 
             std::vector<NodeID> xTargets;
@@ -3094,11 +3094,11 @@ TEST_F(QueriesTest, tripleAncestorJoinWithChainAndCrossFilter) {
             }
 
             for (NodeID a : xTargets) {
-                const String* aName = read().tryGetNodeProperty<types::String>(NAME_PROPID, a);
+                const String* aName = read().tryGetNodeProperty<types::String>(NAME_PROPID, a).value_or(nullptr);
                 if (!aName) continue;
 
                 for (NodeID b : xTargets) {
-                    const String* bName = read().tryGetNodeProperty<types::String>(NAME_PROPID, b);
+                    const String* bName = read().tryGetNodeProperty<types::String>(NAME_PROPID, b).value_or(nullptr);
                     if (!bName) continue;
                     if (*aName != *bName) continue;
 
@@ -3111,12 +3111,12 @@ TEST_F(QueriesTest, tripleAncestorJoinWithChainAndCrossFilter) {
                     }
 
                     for (NodeID c : xTargets) {
-                        const String* cName = read().tryGetNodeProperty<types::String>(NAME_PROPID, c);
+                        const String* cName = read().tryGetNodeProperty<types::String>(NAME_PROPID, c).value_or(nullptr);
                         if (!cName) continue;
                         if (*bName != *cName) continue;
 
                         for (NodeID d : bTargets) {
-                            const String* dName = read().tryGetNodeProperty<types::String>(NAME_PROPID, d);
+                            const String* dName = read().tryGetNodeProperty<types::String>(NAME_PROPID, d).value_or(nullptr);
                             if (!dName) continue;
 
                             expected.add({*xname, *aName, *bName, *cName, *dName});
@@ -3236,9 +3236,9 @@ TEST_F(QueriesTest, predicateJoinSharedInterest) {
             continue;
         }
         const auto* pName = read().tryGetNodeProperty<types::String>(
-            nameProp, e._nodeID);
+            nameProp, e._nodeID).value_or(nullptr);
         const auto* iName = read().tryGetNodeProperty<types::String>(
-            nameProp, e._otherID);
+            nameProp, e._otherID).value_or(nullptr);
         if (pName && iName) {
             pairs.push_back({*pName, *iName});
         }
@@ -3316,11 +3316,11 @@ TEST_F(QueriesTest, predicateJoinSameGroupTraversal) {
             continue;
         }
         const auto* pName = read().tryGetNodeProperty<types::String>(
-            nameProp, e._nodeID);
+            nameProp, e._nodeID).value_or(nullptr);
         const auto* french = read().tryGetNodeProperty<types::Bool>(
-            isFrenchProp, e._nodeID);
+            isFrenchProp, e._nodeID).value_or(nullptr);
         const auto* tName = read().tryGetNodeProperty<types::String>(
-            nameProp, e._otherID);
+            nameProp, e._otherID).value_or(nullptr);
         if (pName && french && tName) {
             tuples.push_back({*pName, *french, *tName});
         }
@@ -3403,14 +3403,14 @@ TEST_F(QueriesTest, predicateJoinEdgeProficiency) {
             continue;
         }
         const auto* prof = read().tryGetEdgeProperty<types::String>(
-            profProp, e._edgeID);
+            profProp, e._edgeID).value_or(nullptr);
         if (!prof) {
             continue;
         }
         const auto* srcName = read().tryGetNodeProperty<types::String>(
-            nameProp, e._nodeID);
+            nameProp, e._nodeID).value_or(nullptr);
         const auto* dstName = read().tryGetNodeProperty<types::String>(
-            nameProp, e._otherID);
+            nameProp, e._otherID).value_or(nullptr);
         if (srcName && dstName) {
             tuples.push_back({*srcName, *dstName, *prof});
         }
@@ -3489,11 +3489,11 @@ TEST_F(QueriesTest, predicateJoinWithInequalityFilter) {
         if (!v.labelset().hasLabel(personLabel)) {
             continue;
         }
-        const auto* nm = read().tryGetNodeProperty<types::String>(nameProp, n);
+        const auto* nm = read().tryGetNodeProperty<types::String>(nameProp, n).value_or(nullptr);
         const auto* fr = read().tryGetNodeProperty<types::Bool>(
-            isFrenchProp, n);
+            isFrenchProp, n).value_or(nullptr);
         const auto* phd = read().tryGetNodeProperty<types::Bool>(
-            hasPhDProp, n);
+            hasPhDProp, n).value_or(nullptr);
         if (nm && fr && phd) {
             people.push_back({*nm, *fr, *phd});
         }
@@ -3573,8 +3573,8 @@ TEST_F(QueriesTest, predicateJoinDivergentAge) {
             if (edges[i].src != edges[j].src) {
                 continue;
             }
-            const auto* ageA = read().tryGetNodeProperty<types::Int64>(ageProp, edges[i].tgt);
-            const auto* ageB = read().tryGetNodeProperty<types::Int64>(ageProp, edges[j].tgt);
+            const auto* ageA = read().tryGetNodeProperty<types::Int64>(ageProp, edges[i].tgt).value_or(nullptr);
+            const auto* ageB = read().tryGetNodeProperty<types::Int64>(ageProp, edges[j].tgt).value_or(nullptr);
             if (!ageA || !ageB || *ageA != *ageB) {
                 continue;
             }
@@ -3628,8 +3628,8 @@ TEST_F(QueriesTest, predicateJoinDivergentNameNeq) {
             if (edges[i].src != edges[j].src) {
                 continue;
             }
-            const auto* nameA = read().tryGetNodeProperty<types::String>(nameProp, edges[i].tgt);
-            const auto* nameB = read().tryGetNodeProperty<types::String>(nameProp, edges[j].tgt);
+            const auto* nameA = read().tryGetNodeProperty<types::String>(nameProp, edges[i].tgt).value_or(nullptr);
+            const auto* nameB = read().tryGetNodeProperty<types::String>(nameProp, edges[j].tgt).value_or(nullptr);
             if (!nameA || !nameB || *nameA == *nameB) {
                 continue;
             }

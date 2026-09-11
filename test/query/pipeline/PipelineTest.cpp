@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <numeric>
 #include <math.h>
 
 #include "SystemManager.h"

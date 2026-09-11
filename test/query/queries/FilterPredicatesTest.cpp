@@ -55,7 +55,7 @@ TEST_F(FilterPredicatesTest, stringEquality_exactMatch) {
     {
         const PropertyTypeID nameID = getPropID("name");
         for (const NodeID n : read().scanNodes()) {
-            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n);
+            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n).value_or(nullptr);
             if (name && *name == "Remy") {
                 expected.add({n});
             }
@@ -117,7 +117,7 @@ TEST_F(FilterPredicatesTest, stringNotEqual) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n);
+            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n).value_or(nullptr);
             if (name && *name != "Remy") {
                 expected.add({n, *name});
             }
@@ -156,7 +156,7 @@ TEST_F(FilterPredicatesTest, intEqual) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* age = read().tryGetNodeProperty<types::Int64>(ageID, n);
+            const auto* age = read().tryGetNodeProperty<types::Int64>(ageID, n).value_or(nullptr);
             if (age && *age == 32) {
                 expected.add({n, *age});
             }
@@ -191,7 +191,7 @@ TEST_F(FilterPredicatesTest, intLessThan) {
     Rows expected;
     {
         for (const EdgeRecord& e : read().scanOutEdges()) {
-            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID);
+            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID).value_or(nullptr);
             if (duration && *duration < 20) {
                 expected.add({e._edgeID, *duration});
             }
@@ -225,7 +225,7 @@ TEST_F(FilterPredicatesTest, intGreaterThan) {
     Rows expected;
     {
         for (const EdgeRecord& e : read().scanOutEdges()) {
-            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID);
+            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID).value_or(nullptr);
             if (duration && *duration > 20) {
                 expected.add({e._edgeID, *duration});
             }
@@ -259,7 +259,7 @@ TEST_F(FilterPredicatesTest, intLessThanOrEqual) {
     Rows expected;
     {
         for (const EdgeRecord& e : read().scanOutEdges()) {
-            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID);
+            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID).value_or(nullptr);
             if (duration && *duration <= 15) {
                 expected.add({e._edgeID, *duration});
             }
@@ -293,7 +293,7 @@ TEST_F(FilterPredicatesTest, intGreaterThanOrEqual) {
     Rows expected;
     {
         for (const EdgeRecord& e : read().scanOutEdges()) {
-            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID);
+            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID).value_or(nullptr);
             if (duration && *duration >= 20) {
                 expected.add({e._edgeID, *duration});
             }
@@ -327,7 +327,7 @@ TEST_F(FilterPredicatesTest, intNotEqual) {
     Rows expected;
     {
         for (const EdgeRecord& e : read().scanOutEdges()) {
-            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID);
+            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID).value_or(nullptr);
             if (duration && *duration != 20) {
                 expected.add({e._edgeID, *duration});
             }
@@ -364,7 +364,7 @@ TEST_F(FilterPredicatesTest, booleanTrue) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
             if (isFrench && *isFrench) {
                 expected.add({n});
             }
@@ -397,7 +397,7 @@ TEST_F(FilterPredicatesTest, booleanFalse) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
             if (isFrench && !*isFrench) {
                 expected.add({n});
             }
@@ -435,8 +435,8 @@ TEST_F(FilterPredicatesTest, andTwoBooleans) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n);
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
+            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n).value_or(nullptr);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
             if (hasPhD && isFrench && *hasPhD && *isFrench) {
                 expected.add({n});
             }
@@ -471,9 +471,9 @@ TEST_F(FilterPredicatesTest, andThreeConditions) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n);
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
-            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n);
+            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n).value_or(nullptr);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
+            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n).value_or(nullptr);
             if (hasPhD && isFrench && name && *hasPhD && *isFrench && *name == "Remy") {
                 expected.add({n});
             }
@@ -507,7 +507,7 @@ TEST_F(FilterPredicatesTest, andIntRangeFilter) {
     Rows expected;
     {
         for (const EdgeRecord& e : read().scanOutEdges()) {
-            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID);
+            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID).value_or(nullptr);
             if (duration && *duration >= 15 && *duration <= 20) {
                 expected.add({e._edgeID, *duration});
             }
@@ -545,8 +545,8 @@ TEST_F(FilterPredicatesTest, orTwoBooleans) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n);
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
+            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n).value_or(nullptr);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
             if ((hasPhD && *hasPhD) || (isFrench && *isFrench)) {
                 expected.add({n});
             }
@@ -580,7 +580,7 @@ TEST_F(FilterPredicatesTest, orThreeConditions) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n);
+            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n).value_or(nullptr);
             if (name && (*name == "Remy" || *name == "Adam" || *name == "Luc")) {
                 expected.add({n, *name});
             }
@@ -615,7 +615,7 @@ TEST_F(FilterPredicatesTest, orIntBoundaryConditions) {
     Rows expected;
     {
         for (const EdgeRecord& e : read().scanOutEdges()) {
-            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID);
+            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID).value_or(nullptr);
             if (duration && (*duration < 15 || *duration > 100)) {
                 expected.add({e._edgeID, *duration});
             }
@@ -653,7 +653,7 @@ TEST_F(FilterPredicatesTest, notBoolean) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
             if (isFrench && !*isFrench) {
                 expected.add({n});
             }
@@ -689,8 +689,8 @@ TEST_F(FilterPredicatesTest, notHasPhD) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n);
-            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n);
+            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n).value_or(nullptr);
+            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n).value_or(nullptr);
             if (hasPhD && !*hasPhD && name) {
                 expected.add({n, *name});
             }
@@ -725,7 +725,7 @@ TEST_F(FilterPredicatesTest, doubleNotBoolean) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
             if (isFrench && *isFrench) {
                 expected.add({n});
             }
@@ -763,8 +763,8 @@ TEST_F(FilterPredicatesTest, andOrCombined) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n);
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
+            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n).value_or(nullptr);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
             // Cypher semantics: (A AND B) OR NOT B
             // If B is NULL, result is NULL (not included)
             // If B is false, NOT B is true, so result is true (included, regardless of A)
@@ -811,8 +811,8 @@ TEST_F(FilterPredicatesTest, notAndCombination) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n);
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
+            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n).value_or(nullptr);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
             // Cypher semantics: NOT (A AND B)
             // If A is false (even if B is NULL): A AND B = false, NOT false = true (included)
             // If B is false (even if A is NULL): A AND B = false, NOT false = true (included)
@@ -856,8 +856,8 @@ TEST_F(FilterPredicatesTest, notOrCombination) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n);
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
+            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n).value_or(nullptr);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
             // Cypher semantics: NOT (A OR B)
             // For this to be true, A OR B must be false
             // A OR B is false only when both A and B are non-NULL and false
@@ -969,8 +969,8 @@ TEST_F(FilterPredicatesTest, nestedParentheses) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n);
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
+            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n).value_or(nullptr);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
             if (!hasPhD || !isFrench) {
                 continue;
             }
@@ -1007,8 +1007,8 @@ TEST_F(FilterPredicatesTest, tripleNestedParentheses) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
-            const auto* isReal = read().tryGetNodeProperty<types::Bool>(isRealID, n);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
+            const auto* isReal = read().tryGetNodeProperty<types::Bool>(isRealID, n).value_or(nullptr);
             // Cypher semantics: (((A AND B) OR C) AND NOT B)
             // NOT B must be true for AND to possibly be true, so B must be non-NULL and false
             // If B is false: A AND false = false, so we need C to be true
@@ -1052,9 +1052,9 @@ TEST_F(FilterPredicatesTest, deeplyNestedWithNot) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n);
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
-            const auto* isReal = read().tryGetNodeProperty<types::Bool>(isRealID, n);
+            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n).value_or(nullptr);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
+            const auto* isReal = read().tryGetNodeProperty<types::Bool>(isRealID, n).value_or(nullptr);
             // Cypher semantics: NOT (A OR (B AND (NOT C)))
             // For result to be true, (A OR X) must be false, so A must be false
             // A must be non-NULL and false
@@ -1101,10 +1101,10 @@ TEST_F(FilterPredicatesTest, nestedParenthesesWithComparisons) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* age = read().tryGetNodeProperty<types::Int64>(ageID, n);
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
-            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n);
-            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n);
+            const auto* age = read().tryGetNodeProperty<types::Int64>(ageID, n).value_or(nullptr);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
+            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n).value_or(nullptr);
+            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n).value_or(nullptr);
             // Cypher semantics: ((age > 30 AND isFrench) OR (age <= 30 AND hasPhD))
             // age must be non-NULL for comparisons, name must be non-NULL for output
             if (!age || !name) {
@@ -1148,8 +1148,8 @@ TEST_F(FilterPredicatesTest, complexNestedWithMultipleNots) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n);
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
+            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n).value_or(nullptr);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
             if (!hasPhD || !isFrench) {
                 continue;
             }
@@ -1192,11 +1192,11 @@ TEST_F(FilterPredicatesTest, nestedParenthesesFourLevels) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n);
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
-            const auto* isReal = read().tryGetNodeProperty<types::Bool>(isRealID, n);
-            const auto* age = read().tryGetNodeProperty<types::Int64>(ageID, n);
-            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n);
+            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n).value_or(nullptr);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
+            const auto* isReal = read().tryGetNodeProperty<types::Bool>(isRealID, n).value_or(nullptr);
+            const auto* age = read().tryGetNodeProperty<types::Int64>(ageID, n).value_or(nullptr);
+            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n).value_or(nullptr);
             // Cypher semantics: ((((A OR B) AND C) OR NOT B) AND age > 25)
             // age must be non-NULL and > 25, name must be non-NULL for output
             if (!age || *age <= 25 || !name) {
@@ -1243,9 +1243,9 @@ TEST_F(FilterPredicatesTest, nestedParenthesesWithStringAndInt) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n);
-            const auto* age = read().tryGetNodeProperty<types::Int64>(ageID, n);
-            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n);
+            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n).value_or(nullptr);
+            const auto* age = read().tryGetNodeProperty<types::Int64>(ageID, n).value_or(nullptr);
+            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n).value_or(nullptr);
             // Cypher semantics: name must be non-NULL and match, age must be non-NULL
             // hasPhD can be NULL if age >= 30
             if (!name || !age) {
@@ -1293,8 +1293,8 @@ TEST_F(FilterPredicatesTest, nestedParenthesesOnEdges) {
     Rows expected;
     {
         for (const EdgeRecord& e : read().scanOutEdges()) {
-            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID);
-            const auto* proficiency = read().tryGetEdgeProperty<types::String>(proficiencyID, e._edgeID);
+            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID).value_or(nullptr);
+            const auto* proficiency = read().tryGetEdgeProperty<types::String>(proficiencyID, e._edgeID).value_or(nullptr);
             if (!duration) {
                 continue;
             }
@@ -1337,7 +1337,7 @@ TEST_F(FilterPredicatesTest, isNullOnInt) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* age = read().tryGetNodeProperty<types::Int64>(ageID, n);
+            const auto* age = read().tryGetNodeProperty<types::Int64>(ageID, n).value_or(nullptr);
             if (!age) {
                 expected.add({n});
             }
@@ -1370,7 +1370,7 @@ TEST_F(FilterPredicatesTest, isNotNullOnInt) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* age = read().tryGetNodeProperty<types::Int64>(ageID, n);
+            const auto* age = read().tryGetNodeProperty<types::Int64>(ageID, n).value_or(nullptr);
             if (age) {
                 expected.add({n, *age});
             }
@@ -1404,7 +1404,7 @@ TEST_F(FilterPredicatesTest, isNullOnString) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* dob = read().tryGetNodeProperty<types::String>(dobID, n);
+            const auto* dob = read().tryGetNodeProperty<types::String>(dobID, n).value_or(nullptr);
             if (!dob) {
                 expected.add({n});
             }
@@ -1436,7 +1436,7 @@ TEST_F(FilterPredicatesTest, isNotNullOnBool) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* isReal = read().tryGetNodeProperty<types::Bool>(isRealID, n);
+            const auto* isReal = read().tryGetNodeProperty<types::Bool>(isRealID, n).value_or(nullptr);
             if (isReal) {
                 expected.add({n});
             }
@@ -1471,8 +1471,8 @@ TEST_F(FilterPredicatesTest, isNullAndOtherCondition) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* age = read().tryGetNodeProperty<types::Int64>(ageID, n);
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
+            const auto* age = read().tryGetNodeProperty<types::Int64>(ageID, n).value_or(nullptr);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
             if (!age && isFrench && *isFrench) {
                 expected.add({n});
             }
@@ -1504,7 +1504,7 @@ TEST_F(FilterPredicatesTest, isNullOnEdgeProperty) {
     Rows expected;
     {
         for (const EdgeRecord& e : read().scanOutEdges()) {
-            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID);
+            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID).value_or(nullptr);
             if (!duration) {
                 expected.add({e._edgeID});
             }
@@ -1545,7 +1545,7 @@ TEST_F(FilterPredicatesTest, edgeTypeWithWhere) {
             if (read().getEdgeTypeID(e._edgeID) != INTERESTED_IN_TYPEID) {
                 continue;
             }
-            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID);
+            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID).value_or(nullptr);
             if (duration && *duration > 15) {
                 expected.add({e._edgeID, *duration});
             }
@@ -1617,15 +1617,15 @@ TEST_F(FilterPredicatesTest, cartesianProductTwoNodesFilter) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* nFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
+            const auto* nFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
             if (!nFrench || !*nFrench) continue;
-            const auto* nName = read().tryGetNodeProperty<types::String>(nameID, n);
+            const auto* nName = read().tryGetNodeProperty<types::String>(nameID, n).value_or(nullptr);
             if (!nName) continue;
 
             for (const NodeID m : read().scanNodes()) {
-                const auto* mFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, m);
+                const auto* mFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, m).value_or(nullptr);
                 if (!mFrench || *mFrench) continue;
-                const auto* mName = read().tryGetNodeProperty<types::String>(nameID, m);
+                const auto* mName = read().tryGetNodeProperty<types::String>(nameID, m).value_or(nullptr);
                 if (!mName) continue;
 
                 expected.add({*nName, *mName});
@@ -1663,16 +1663,16 @@ TEST_F(FilterPredicatesTest, cartesianProductSameNodeDifferentProps) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* nPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n);
+            const auto* nPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n).value_or(nullptr);
             if (!nPhD || !*nPhD) continue;
-            const auto* nName = read().tryGetNodeProperty<types::String>(nameID, n);
+            const auto* nName = read().tryGetNodeProperty<types::String>(nameID, n).value_or(nullptr);
             if (!nName) continue;
 
             for (const NodeID m : read().scanNodes()) {
                 if (n == m) continue;
-                const auto* mPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, m);
+                const auto* mPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, m).value_or(nullptr);
                 if (!mPhD || !*mPhD) continue;
-                const auto* mName = read().tryGetNodeProperty<types::String>(nameID, m);
+                const auto* mName = read().tryGetNodeProperty<types::String>(nameID, m).value_or(nullptr);
                 if (!mName) continue;
 
                 expected.add({*nName, *mName});
@@ -1709,7 +1709,7 @@ TEST_F(FilterPredicatesTest, filterWithLimit) {
     size_t expectedCount = 0;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
             if (isFrench && *isFrench) {
                 expectedCount++;
             }
@@ -1738,7 +1738,7 @@ TEST_F(FilterPredicatesTest, filterWithSkip) {
     size_t totalFrench = 0;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n);
+            const auto* isFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, n).value_or(nullptr);
             if (isFrench && *isFrench) {
                 totalFrench++;
             }
@@ -1833,16 +1833,16 @@ TEST_F(FilterPredicatesTest, nodePropertyEquality) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* nAge = read().tryGetNodeProperty<types::Int64>(ageID, n);
+            const auto* nAge = read().tryGetNodeProperty<types::Int64>(ageID, n).value_or(nullptr);
             if (!nAge) continue;
-            const auto* nName = read().tryGetNodeProperty<types::String>(nameID, n);
+            const auto* nName = read().tryGetNodeProperty<types::String>(nameID, n).value_or(nullptr);
             if (!nName) continue;
 
             for (const NodeID m : read().scanNodes()) {
                 if (n == m) continue;
-                const auto* mAge = read().tryGetNodeProperty<types::Int64>(ageID, m);
+                const auto* mAge = read().tryGetNodeProperty<types::Int64>(ageID, m).value_or(nullptr);
                 if (!mAge || *nAge != *mAge) continue;
-                const auto* mName = read().tryGetNodeProperty<types::String>(nameID, m);
+                const auto* mName = read().tryGetNodeProperty<types::String>(nameID, m).value_or(nullptr);
                 if (!mName) continue;
 
                 expected.add({*nName, *mName});
@@ -1883,9 +1883,9 @@ TEST_F(FilterPredicatesTest, stringPropertyOnEdge) {
     Rows expected;
     {
         for (const EdgeRecord& e : read().scanOutEdges()) {
-            const auto* prof = read().tryGetEdgeProperty<types::String>(proficiencyID, e._edgeID);
+            const auto* prof = read().tryGetEdgeProperty<types::String>(proficiencyID, e._edgeID).value_or(nullptr);
             if (prof && *prof == "expert") {
-                const auto* name = read().tryGetEdgeProperty<types::String>(nameID, e._edgeID);
+                const auto* name = read().tryGetEdgeProperty<types::String>(nameID, e._edgeID).value_or(nullptr);
                 if (name) {
                     expected.add({e._edgeID, *name});
                 }
@@ -1921,7 +1921,7 @@ TEST_F(FilterPredicatesTest, stringNotEqualOnEdge) {
     Rows expected;
     {
         for (const EdgeRecord& e : read().scanOutEdges()) {
-            const auto* prof = read().tryGetEdgeProperty<types::String>(proficiencyID, e._edgeID);
+            const auto* prof = read().tryGetEdgeProperty<types::String>(proficiencyID, e._edgeID).value_or(nullptr);
             if (prof && *prof != "expert") {
                 expected.add({e._edgeID, *prof});
             }
@@ -1959,9 +1959,9 @@ TEST_F(FilterPredicatesTest, mixedIntAndString) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* age = read().tryGetNodeProperty<types::Int64>(ageID, n);
-            const auto* dob = read().tryGetNodeProperty<types::String>(dobID, n);
-            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n);
+            const auto* age = read().tryGetNodeProperty<types::Int64>(ageID, n).value_or(nullptr);
+            const auto* dob = read().tryGetNodeProperty<types::String>(dobID, n).value_or(nullptr);
+            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n).value_or(nullptr);
             if (age && dob && name && *age == 32 && *dob == "18/01") {
                 expected.add({n, *name});
             }
@@ -2030,9 +2030,9 @@ TEST_F(FilterPredicatesTest, mixedBoolAndInt) {
     Rows expected;
     {
         for (const NodeID n : read().scanNodes()) {
-            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n);
-            const auto* age = read().tryGetNodeProperty<types::Int64>(ageID, n);
-            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n);
+            const auto* hasPhD = read().tryGetNodeProperty<types::Bool>(hasPhdID, n).value_or(nullptr);
+            const auto* age = read().tryGetNodeProperty<types::Int64>(ageID, n).value_or(nullptr);
+            const auto* name = read().tryGetNodeProperty<types::String>(nameID, n).value_or(nullptr);
             if (hasPhD && age && name && *hasPhD && *age == 32) {
                 expected.add({n, *name});
             }
@@ -2084,7 +2084,7 @@ TEST_F(FilterPredicatesTest, edgeFilterWithNodeLabel) {
         for (const EdgeRecord& e : read().scanOutEdges()) {
             if (read().getEdgeTypeID(e._edgeID) != INTERESTED_IN_TYPEID) continue;
 
-            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID);
+            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID).value_or(nullptr);
             if (!duration || *duration < 20) continue;
 
             NodeView srcView = read().getNodeView(e._nodeID);
@@ -2093,8 +2093,8 @@ TEST_F(FilterPredicatesTest, edgeFilterWithNodeLabel) {
             NodeView dstView = read().getNodeView(e._otherID);
             if (!dstView.labelset().hasLabel(interestLabel)) continue;
 
-            const auto* srcName = read().tryGetNodeProperty<types::String>(nameID, e._nodeID);
-            const auto* dstName = read().tryGetNodeProperty<types::String>(nameID, e._otherID);
+            const auto* srcName = read().tryGetNodeProperty<types::String>(nameID, e._nodeID).value_or(nullptr);
+            const auto* dstName = read().tryGetNodeProperty<types::String>(nameID, e._otherID).value_or(nullptr);
             if (srcName && dstName) {
                 expected.add({*srcName, *dstName, *duration});
             }
@@ -2131,10 +2131,10 @@ TEST_F(FilterPredicatesTest, multiHopWithFilter) {
     Rows expected;
     {
         for (const EdgeRecord& e1 : read().scanOutEdges()) {
-            const auto* aFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, e1._nodeID);
+            const auto* aFrench = read().tryGetNodeProperty<types::Bool>(isFrenchID, e1._nodeID).value_or(nullptr);
             if (!aFrench || !*aFrench) continue;
 
-            const auto* aName = read().tryGetNodeProperty<types::String>(nameID, e1._nodeID);
+            const auto* aName = read().tryGetNodeProperty<types::String>(nameID, e1._nodeID).value_or(nullptr);
             if (!aName) continue;
 
             ColumnNodeIDs bNodes;
@@ -2142,7 +2142,7 @@ TEST_F(FilterPredicatesTest, multiHopWithFilter) {
 
             auto outEdges = read().getOutEdges(&bNodes);
             for (const EdgeRecord& e2 : outEdges) {
-                const auto* cName = read().tryGetNodeProperty<types::String>(nameID, e2._otherID);
+                const auto* cName = read().tryGetNodeProperty<types::String>(nameID, e2._otherID).value_or(nullptr);
                 if (cName) {
                     expected.add({*aName, *cName});
                 }
@@ -2181,7 +2181,7 @@ TEST_F(FilterPredicatesTest, zeroValueComparison) {
     Rows expected;
     {
         for (const EdgeRecord& e : read().scanOutEdges()) {
-            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID);
+            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID).value_or(nullptr);
             if (duration && *duration > 0) {
                 expected.add({e._edgeID, *duration});
             }
@@ -2213,7 +2213,7 @@ TEST_F(FilterPredicatesTest, largeValueFilter) {
     Rows expected;
     {
         for (const EdgeRecord& e : read().scanOutEdges()) {
-            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID);
+            const auto* duration = read().tryGetEdgeProperty<types::Int64>(durationID, e._edgeID).value_or(nullptr);
             if (duration && *duration >= 100) {
                 expected.add({e._edgeID, *duration});
             }

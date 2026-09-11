@@ -37,12 +37,12 @@ public:
     struct EdgeUpdate;
 
     using SupportedTypeVariant = std::variant<
-                     types::Int64::Primitive,
-                     types::UInt64::Primitive,
-                     types::Double::Primitive,
-                     std::string, /// Needs to be owning to outlive the query
-                     types::Bool::Primitive,
-                     types::Embedding::OwningPrimitive
+        std::optional<types::Int64::Primitive>,
+        std::optional<types::UInt64::Primitive>,
+        std::optional<types::Double::Primitive>,
+        std::optional<types::String::OwningPrimitive>, /// Needs to be owning to outlive the query
+        std::optional<types::Bool::Primitive>,
+        std::optional<types::Embedding::OwningPrimitive>
      >;
      using UntypedProperties = std::vector<UntypedProperty>;
      using PendingNodeOffset = size_t;
@@ -256,10 +256,10 @@ private:
     void buildPendingNodes(DataPartBuilder& builder, Tombstones& tombstones);
     void buildPendingEdges(DataPartBuilder& builder, Tombstones& tombstones);
 
-    NodeID buildPendingNode(DataPartBuilder& builder, const PendingNode& node, bool deleted);
-    void addPendingNodeProperties(DataPartBuilder& builder, const PendingNode& node);
+    NodeID buildPendingNode(DataPartBuilder& builder, PendingNode& node, bool deleted);
+    void addPendingNodeProperties(DataPartBuilder& builder, PendingNode& node);
 
-    EdgeID buildPendingEdge(DataPartBuilder& builder, const PendingEdge& edge, bool deleted);
+    EdgeID buildPendingEdge(DataPartBuilder& builder, PendingEdge& edge, bool deleted);
 
     bool touchesDeletedNode(const PendingEdge& edge) const;
 
@@ -269,12 +269,12 @@ private:
     /// Updates a property of an edge which is already committed
     void applyExistingEdgeUpdate(DataPartBuilder& builder,
                                  const EdgeRecord& record,
-                                 const CommitWriteBuffer::UntypedProperty& prop);
+                                 CommitWriteBuffer::UntypedProperty& prop);
 
     /// Updates a property of an edge which is not yet committed
     void applyPendingEdgeUpdate(DataPartBuilder& builder,
                                 EdgeID edgeID,
-                                const CommitWriteBuffer::UntypedProperty& prop);
+                                CommitWriteBuffer::UntypedProperty& prop);
 };
 
 class CommitWriteBufferRebaser {

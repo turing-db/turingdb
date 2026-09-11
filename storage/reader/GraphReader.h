@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "ID.h"
 #include "views/EdgeView.h"
 #include "views/GraphView.h"
@@ -104,12 +106,12 @@ public:
     bool isEdgeProperty(PropertyTypeID ptID) const;
 
     template <SupportedType T>
-    [[nodiscard]] const T::Primitive* tryGetNodeProperty(PropertyTypeID ptID,
-                                                         NodeID nodeID) const;
+    [[nodiscard]] std::optional<const typename T::Primitive*> tryGetNodeProperty(PropertyTypeID ptID,
+                                                                                 NodeID nodeID) const;
 
     template <SupportedType T>
-    [[nodiscard]] const T::Primitive* tryGetEdgeProperty(PropertyTypeID ptID,
-                                                         EdgeID edgeID) const;
+    [[nodiscard]] std::optional<const typename T::Primitive*> tryGetEdgeProperty(PropertyTypeID ptID,
+                                                                                 EdgeID edgeID) const;
 
     template <SupportedType T>
     [[nodiscard]] ScanNodePropertiesRange<T> scanNodeProperties(PropertyTypeID ptID) const {

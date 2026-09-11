@@ -35,7 +35,8 @@ void GetPropertiesIterator<ID, T>::init() {
             _entityIt = _inputIDs->cbegin();
 
             for (; _entityIt != _inputIDs->cend(); _entityIt++) {
-                _prop = properties.tryGet<T>(_propTypeID, _entityIt->getValue());
+                _prop = properties.tryGet<T>(_propTypeID, _entityIt->getValue())
+                            .value_or(nullptr);
 
                 if (_prop) {
                     return;
@@ -94,7 +95,8 @@ void GetPropertiesIterator<ID, T>::next() {
                                               ? part->nodeProperties()
                                               : part->edgeProperties();
 
-        _prop = properties.tryGet<T>(_propTypeID, _entityIt->getValue());
+        _prop =
+            properties.tryGet<T>(_propTypeID, _entityIt->getValue()).value_or(nullptr);
 
         // If _prop is nullptr, the current nodeID does not have this prop,
         // -> start over the algorithm

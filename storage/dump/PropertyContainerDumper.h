@@ -23,18 +23,23 @@ public:
         GraphDumpHelper::writeFileHeader(_writer);
 
         const uint64_t propCount = props.size();
+        const uint64_t nullCount = props.nullIds().size();
 
         // Page counts
         const uint64_t idPageCount = GraphDumpHelper::getPageCountForItems(
             propCount, Constants::ID_COUNT_PER_PAGE);
         const uint64_t valuePageCount = GraphDumpHelper::getPageCountForItems(
             propCount, Constants::VALUE_COUNT_PER_PAGE);
+        const uint64_t nullPageCount = GraphDumpHelper::getPageCountForItems(
+            nullCount, Constants::ID_COUNT_PER_PAGE);
 
         // Metadata
         _writer.writeToCurrentPage(props.getValueType());
         _writer.writeToCurrentPage(propCount);
         _writer.writeToCurrentPage(idPageCount);
         _writer.writeToCurrentPage(valuePageCount);
+        _writer.writeToCurrentPage(nullCount);
+        _writer.writeToCurrentPage(nullPageCount);
 
         {
             // IDs
@@ -92,6 +97,8 @@ public:
             }
         }
 
+        GraphDumpHelper::writeEntityIDPages(_writer, props.nullIds(), Constants::ID_COUNT_PER_PAGE);
+
         _writer.finish();
 
         if (_writer.errorOccured()) {
@@ -118,6 +125,7 @@ public:
         Profile profile("StringPropertyContainerDumper::dump");
         const auto& buckets = props.getRawContainer();
         const uint64_t propCount = props.size();
+        const uint64_t nullCount = props.nullIds().size();
         const uint64_t bucketCount = buckets.bucketCount();
 
         // Page counts
@@ -126,6 +134,9 @@ public:
 
         const uint64_t bucketPageCount = GraphDumpHelper::getPageCountForItems(
             bucketCount, Constants::BUCKET_COUNT_PER_PAGE);
+
+        const uint64_t nullPageCount = GraphDumpHelper::getPageCountForItems(
+            nullCount, Constants::ID_COUNT_PER_PAGE);
 
         uint64_t limitsPageCount = 1;
 
@@ -242,6 +253,8 @@ public:
             buffer->patch(reinterpret_cast<const uint8_t*>(&blockCountInPage), sizeof(uint64_t), 0);
         }
 
+        GraphDumpHelper::writeEntityIDPages(_writer, props.nullIds(), Constants::ID_COUNT_PER_PAGE);
+
         // Back to beginning to write metadata
         _writer.seek(0);
 
@@ -251,6 +264,8 @@ public:
         _writer.writeToCurrentPage(idPageCount);
         _writer.writeToCurrentPage(bucketPageCount);
         _writer.writeToCurrentPage(limitsPageCount);
+        _writer.writeToCurrentPage(nullCount);
+        _writer.writeToCurrentPage(nullPageCount);
 
         _writer.finish();
 

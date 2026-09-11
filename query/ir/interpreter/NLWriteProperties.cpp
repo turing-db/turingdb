@@ -6,10 +6,11 @@
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnVector.h"
+#include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
 #include "views/GraphView.h"
 
-#include "IRException.h"
+#include <optional>
 
 using namespace db;
 
@@ -31,7 +32,7 @@ public:
         _buf.clear();
         _buf.reserve(_rowCount);
         for (size_t i = 0; i < _rowCount; i++) {
-            _buf.emplace_back(_propID, typed->getRaw());
+            _buf.emplace_back(_propID, std::make_optional(typed->getRaw()));
         }
     }
 
@@ -39,7 +40,7 @@ public:
         _buf.clear();
         _buf.reserve(_rowCount);
         for (size_t i = 0; i < _rowCount; i++) {
-            _buf.emplace_back(_propID, std::string(typed->getRaw()));
+            _buf.emplace_back(_propID, std::make_optional(std::string(typed->getRaw())));
         }
     }
 
@@ -48,7 +49,7 @@ public:
         _buf.reserve(_rowCount);
         const types::Embedding::Primitive span = typed->getRaw();
         for (size_t i = 0; i < _rowCount; i++) {
-            _buf.emplace_back(_propID, types::Embedding::OwningPrimitive(span.begin(), span.end()));
+            _buf.emplace_back(_propID, std::make_optional(types::Embedding::OwningPrimitive(span.begin(), span.end())));
         }
     }
 
@@ -72,7 +73,7 @@ public:
         _buf.clear();
         _buf.reserve(typed->size());
         for (const T& val : *typed) {
-            _buf.emplace_back(_propID, val);
+            _buf.emplace_back(_propID, std::make_optional(val));
         }
     }
 
@@ -80,7 +81,7 @@ public:
         _buf.clear();
         _buf.reserve(typed->size());
         for (const types::String::Primitive val : *typed) {
-            _buf.emplace_back(_propID, std::string(val));
+            _buf.emplace_back(_propID, std::make_optional(std::string(val)));
         }
     }
 
@@ -88,7 +89,7 @@ public:
         _buf.clear();
         _buf.reserve(typed->size());
         for (const types::Embedding::Primitive val : *typed) {
-            _buf.emplace_back(_propID, types::Embedding::OwningPrimitive(val.begin(), val.end()));
+            _buf.emplace_back(_propID, std::make_optional(types::Embedding::OwningPrimitive(val.begin(), val.end())));
         }
     }
 
@@ -97,32 +98,37 @@ public:
         _buf.clear();
         _buf.reserve(typed->size());
         for (const std::optional<T>& val : *typed) {
-            if (!val) {
-                throw IRException("Cannot set a property to NULL in CREATE.");
-            }
-            _buf.emplace_back(_propID, *val);
+            _buf.emplace_back(_propID, val);
         }
     }
 
+    /// Owning string as outlives query
     void operator()(const ColumnVector<std::optional<types::String::Primitive>>* typed) {
         _buf.clear();
         _buf.reserve(typed->size());
         for (const std::optional<types::String::Primitive>& val : *typed) {
-            if (!val) {
-                throw IRException("Cannot set a property to NULL in CREATE.");
+            if (!val.has_value()) {
+                using Disengaged = std::optional<types::String::OwningPrimitive>;
+                _buf.emplace_back(_propID, Disengaged {});
+                continue;
             }
-            _buf.emplace_back(_propID, std::string(*val));
+
+            _buf.emplace_back(_propID, std::make_optional(std::string(*val)));
         }
     }
 
+    /// Owning vec as outlives query
     void operator()(const ColumnVector<std::optional<types::Embedding::Primitive>>* typed) {
         _buf.clear();
         _buf.reserve(typed->size());
         for (const std::optional<types::Embedding::Primitive>& val : *typed) {
-            if (!val) {
-                throw IRException("Cannot set a property to NULL in CREATE.");
+            if (!val.has_value()) {
+                using Disengaged = std::optional<types::Embedding::OwningPrimitive>;
+                _buf.emplace_back(_propID, Disengaged {});
+                continue;
             }
-            _buf.emplace_back(_propID, types::Embedding::OwningPrimitive(val->begin(), val->end()));
+            types::Embedding::OwningPrimitive emb(val->begin(), val->end());
+            _buf.emplace_back(_propID, std::make_optional(std::move(emb)));
         }
     }
 
@@ -137,7 +143,8 @@ void extractMaskProperties(const ColumnMask* mask,
     buf.clear();
     buf.reserve(mask->size());
     for (const ColumnMask::Bool_t flag : mask->getRaw()) {
-        buf.emplace_back(propID, types::Bool::Primitive(static_cast<bool>(flag)));
+        const std::optional<types::Bool::Primitive> val {flag._value};
+        buf.emplace_back(propID, val);
     }
 }
 

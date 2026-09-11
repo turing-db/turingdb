@@ -39,6 +39,8 @@ DumpResult<std::unique_ptr<PropertyContainer>> EmbeddingPropertyContainerLoader:
     const uint64_t dimension = it.get<uint64_t>();
     const uint64_t idPageCount = it.get<uint64_t>();
     const uint64_t floatPageCount = it.get<uint64_t>();
+    const uint64_t nullCount = it.get<uint64_t>();
+    const uint64_t nullPageCount = it.get<uint64_t>();
 
     auto* container = new TypedPropertyContainer<types::Embedding>(dimension);
     container->_ids.resize(propCount);
@@ -94,12 +96,42 @@ DumpResult<std::unique_ptr<PropertyContainer>> EmbeddingPropertyContainerLoader:
         }
     }
 
-    // Reconstruct the entity ID -> index map
+    // Loading null ids
+    container->_nullIds.resize(nullCount);
+    offset = 0;
+
+    for (size_t i = 0; i < nullPageCount; i++) {
+        _reader.nextPage();
+
+        if (_reader.errorOccured()) {
+            return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS, _reader.error().value());
+        }
+
+        it = _reader.begin();
+
+        if (it.remainingBytes() != DumpConfig::PAGE_SIZE) {
+            return DumpError::result(DumpErrorType::COULD_NOT_READ_PROPS);
+        }
+
+        const size_t countInPage = it.get<uint64_t>();
+        for (size_t j = 0; j < countInPage; j++) {
+            container->_nullIds[j + offset] = it.get<EntityID::Type>();
+        }
+        offset += countInPage;
+    }
+
+    // Reconstruct the entity ID -> index map. Nulls go in after the values, as sort()
+    // does, so a null wins for an ID carrying both
     auto& entityIndexMap = container->_entityIndexMap;
     const auto& ids = container->_ids;
-    entityIndexMap.reserve(ids.size());
+    const auto& nullIds = container->_nullIds;
+    entityIndexMap.reserve(ids.size() + nullIds.size());
     for (size_t i = 0; i < ids.size(); i++) {
         entityIndexMap[ids[i]] = i;
+    }
+
+    for (const EntityID id : nullIds) {
+        entityIndexMap[id] = container->NULL_INDEX;
     }
 
     container->_sorted = std::is_sorted(ids.begin(), ids.end());

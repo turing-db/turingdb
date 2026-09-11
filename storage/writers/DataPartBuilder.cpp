@@ -7,7 +7,15 @@
 #include "properties/PropertyManager.h"
 #include "writers/MetadataBuilder.h"
 
+#include "FatalException.h"
+
 using namespace db;
+
+namespace {
+
+constexpr std::string_view embErr =
+    "Could not set new embedding property to NULL, as its dimension is unknown.";
+}
 
 DataPartBuilder::~DataPartBuilder() = default;
 
@@ -51,7 +59,7 @@ NodeID DataPartBuilder::addNode(const LabelSet& labelset) {
 template <SupportedType T>
 void DataPartBuilder::addNodeProperty(NodeID nodeID,
                                       PropertyTypeID ptID,
-                                      T::Primitive value) {
+                                      std::optional<typename T::Primitive>&& value) {
     if (!_nodeProperties->hasPropertyType(ptID)) {
         _nodeProperties->registerPropertyType<T>(ptID);
     }
@@ -65,7 +73,7 @@ void DataPartBuilder::addNodeProperty(NodeID nodeID,
 template <SupportedType T>
 void DataPartBuilder::addEdgeProperty(const EdgeRecord& edge,
                                       PropertyTypeID ptID,
-                                      T::Primitive value,
+                                      std::optional<typename T::Primitive>&& value,
                                       LabelSetHandle srcLblSet/*={}*/) {
     // If the property does not exist in this DP, create it
     if (!_edgeProperties->hasPropertyType(ptID)) {
@@ -86,15 +94,15 @@ void DataPartBuilder::addEdgeProperty(const EdgeRecord& edge,
 
 template <SupportedType T, TypedInternalID I>
 bool DataPartBuilder::hasProperty(I id, PropertyTypeID pid) {
-    PropertyManager const* propertyManager {nullptr};
+    constexpr bool isNode = std::is_same_v<I, NodeID>;
+    const PropertyManager* propertyManager =
+        isNode ? _nodeProperties.get() : _edgeProperties.get();
 
-    if constexpr (std::is_same_v<I, NodeID>) {
-        propertyManager = _nodeProperties.get();
-    } else {
-        propertyManager = _edgeProperties.get();
-    }
+    const auto maybeProp = propertyManager->tryGet<T>(pid, id.getValue());
+    const bool explicitNull = !maybeProp.has_value();
 
-    return propertyManager->tryGet<T>(pid, id.getValue());
+    // Explicit null still means that this property has been registered: return true
+    return explicitNull or maybeProp.value() != nullptr;
 }
 
 const EdgeRecord& DataPartBuilder::addEdge(EdgeTypeID typeID, NodeID srcID, NodeID tgtID) {
@@ -123,9 +131,13 @@ const EdgeRecord& DataPartBuilder::addEdge(EdgeTypeID typeID, NodeID srcID, Node
 template <>
 void DataPartBuilder::addNodeProperty<types::Embedding>(NodeID nodeID,
                                                         PropertyTypeID ptID,
-                                                        types::Embedding::Primitive value) {
+                                                        std::optional<types::Embedding::Primitive>&& value) {
     if (!_nodeProperties->hasPropertyType(ptID)) {
-        _nodeProperties->registerEmbeddingPropertyType(ptID, value.size());
+        if (!value.has_value()) {
+            throw FatalException(std::string {embErr});
+        }
+
+        _nodeProperties->registerEmbeddingPropertyType(ptID, value->size());
     }
 
     if (nodeID < _firstNodeID) {
@@ -137,10 +149,14 @@ void DataPartBuilder::addNodeProperty<types::Embedding>(NodeID nodeID,
 template <>
 void DataPartBuilder::addEdgeProperty<types::Embedding>(const EdgeRecord& edge,
                                                         PropertyTypeID ptID,
-                                                        types::Embedding::Primitive value,
+                                                        std::optional<types::Embedding::Primitive>&& value,
                                                         LabelSetHandle srcLblSet/*={}*/) {
     if (!_edgeProperties->hasPropertyType(ptID)) {
-        _edgeProperties->registerEmbeddingPropertyType(ptID, value.size());
+        if (!value.has_value()) {
+            throw FatalException(std::string {embErr});
+        }
+
+        _edgeProperties->registerEmbeddingPropertyType(ptID, value->size());
     }
     if (edge._edgeID < _firstEdgeID) {
         _patchedEdges.emplace(edge._edgeID, edge);
@@ -155,10 +171,10 @@ template bool DataPartBuilder::hasProperty<types::Embedding>(EdgeID id, Property
 #define INSTANTIATE(PType)                                                   \
     template void DataPartBuilder::addNodeProperty<PType>(NodeID,            \
                                                           PropertyTypeID,    \
-                                                          PType::Primitive); \
+                                                          std::optional<PType::Primitive>&&); \
     template void DataPartBuilder::addEdgeProperty<PType>(const EdgeRecord&, \
                                                           PropertyTypeID,    \
-                                                          PType::Primitive,  \
+                                                          std::optional<PType::Primitive>&&,  \
                                                           LabelSetHandle);   \
     template bool DataPartBuilder::hasProperty<PType>(NodeID id, PropertyTypeID pid);             \
     template bool DataPartBuilder::hasProperty<PType>(EdgeID id, PropertyTypeID pid);             \

@@ -175,6 +175,6 @@ TEST_F(CreateNodeEdgeTest, createNodeWithStringProperty) {
 
     ASSERT_EQ(pendingNodes()[0].properties.size(), 1u);
     const CommitWriteBuffer::UntypedProperty& prop = pendingNodes()[0].properties[0];
-    ASSERT_TRUE(std::holds_alternative<std::string>(prop.value));
-    EXPECT_EQ(std::get<std::string>(prop.value), "Alice");
+    ASSERT_TRUE(std::holds_alternative<std::optional<types::String::OwningPrimitive>>(prop.value));
+    EXPECT_EQ(std::get<std::optional<types::String::OwningPrimitive>>(prop.value), "Alice");
 }

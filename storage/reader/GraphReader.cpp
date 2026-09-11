@@ -1,6 +1,9 @@
 #include "GraphReader.h"
 
 #include <algorithm>
+#include <optional>
+
+#include <range/v3/view/reverse.hpp>
 
 #include "datapart/DataPart.h"
 #include "ID.h"
@@ -14,6 +17,7 @@
 #include "BioAssert.h"
 
 using namespace db;
+namespace rv = ranges::views;
 
 size_t GraphReader::getTotalNodesAllocated() const {
     if (_view.dataparts().empty()) {
@@ -310,11 +314,18 @@ bool GraphReader::edgeIsDeleted(EdgeID edgeID) const {
 }
 
 template <SupportedType T>
-const T::Primitive* GraphReader::tryGetNodeProperty(PropertyTypeID ptID, NodeID nodeID) const {
-    for (const auto& part : _view.dataparts()) {
-        const auto* p = part->nodeProperties().tryGet<T>(ptID, nodeID.getValue());
-        if (p) {
-            return p;
+std::optional<const typename T::Primitive*> GraphReader::tryGetNodeProperty(PropertyTypeID ptID, NodeID nodeID) const {
+    const DataPartSpan& parts = _view.dataparts();
+
+    // newest to oldest => most recent value wins
+    for (const auto& part : rv::reverse(parts)) {
+        const auto& p = part->nodeProperties().tryGetWithNull<T>(ptID, nodeID.getValue());
+        if (!p.has_value()) {
+            return std::nullopt;
+        }
+        const typename T::Primitive* value = *p;
+        if (value) {
+            return value;
         }
     }
 
@@ -322,11 +333,18 @@ const T::Primitive* GraphReader::tryGetNodeProperty(PropertyTypeID ptID, NodeID 
 }
 
 template <SupportedType T>
-const T::Primitive* GraphReader::tryGetEdgeProperty(PropertyTypeID ptID, EdgeID edgeID) const {
-    for (const auto& part : _view.dataparts()) {
-        const auto* p = part->edgeProperties().tryGet<T>(ptID, edgeID.getValue());
-        if (p) {
-            return p;
+std::optional<const typename T::Primitive*> GraphReader::tryGetEdgeProperty(PropertyTypeID ptID, EdgeID edgeID) const {
+    const DataPartSpan& parts = _view.dataparts();
+
+    // newest to oldest => most recent value wins
+    for (const auto& part : rv::reverse(parts)) {
+        const auto& p = part->edgeProperties().tryGetWithNull<T>(ptID, edgeID.getValue());
+        if (!p.has_value()) {
+            return std::nullopt;
+        }
+        const typename T::Primitive* value = *p;
+        if (value) {
+            return value;
         }
     }
 
@@ -359,16 +377,16 @@ bool GraphReader::isEdgeProperty(PropertyTypeID ptID) const {
     return isEdgeProperty;
 }
 
-template const types::UInt64::Primitive* GraphReader::tryGetNodeProperty<types::UInt64>(PropertyTypeID ptID, NodeID nodeID) const;
-template const types::Int64::Primitive* GraphReader::tryGetNodeProperty<types::Int64>(PropertyTypeID ptID, NodeID nodeID) const;
-template const types::Double::Primitive* GraphReader::tryGetNodeProperty<types::Double>(PropertyTypeID ptID, NodeID nodeID) const;
-template const types::String::Primitive* GraphReader::tryGetNodeProperty<types::String>(PropertyTypeID ptID, NodeID nodeID) const;
-template const types::Bool::Primitive* GraphReader::tryGetNodeProperty<types::Bool>(PropertyTypeID ptID, NodeID nodeID) const;
-template const types::Embedding::Primitive* GraphReader::tryGetNodeProperty<types::Embedding>(PropertyTypeID ptID, NodeID nodeID) const;
+template std::optional<const types::UInt64::Primitive*> GraphReader::tryGetNodeProperty<types::UInt64>(PropertyTypeID ptID, NodeID nodeID) const;
+template std::optional<const types::Int64::Primitive*> GraphReader::tryGetNodeProperty<types::Int64>(PropertyTypeID ptID, NodeID nodeID) const;
+template std::optional<const types::Double::Primitive*> GraphReader::tryGetNodeProperty<types::Double>(PropertyTypeID ptID, NodeID nodeID) const;
+template std::optional<const types::String::Primitive*> GraphReader::tryGetNodeProperty<types::String>(PropertyTypeID ptID, NodeID nodeID) const;
+template std::optional<const types::Bool::Primitive*> GraphReader::tryGetNodeProperty<types::Bool>(PropertyTypeID ptID, NodeID nodeID) const;
+template std::optional<const types::Embedding::Primitive*> GraphReader::tryGetNodeProperty<types::Embedding>(PropertyTypeID ptID, NodeID nodeID) const;
 
-template const types::UInt64::Primitive* GraphReader::tryGetEdgeProperty<types::UInt64>(PropertyTypeID ptID, EdgeID edgeID) const;
-template const types::Int64::Primitive* GraphReader::tryGetEdgeProperty<types::Int64>(PropertyTypeID ptID, EdgeID edgeID) const;
-template const types::Double::Primitive* GraphReader::tryGetEdgeProperty<types::Double>(PropertyTypeID ptID, EdgeID edgeID) const;
-template const types::String::Primitive* GraphReader::tryGetEdgeProperty<types::String>(PropertyTypeID ptID, EdgeID edgeID) const;
-template const types::Bool::Primitive* GraphReader::tryGetEdgeProperty<types::Bool>(PropertyTypeID ptID, EdgeID edgeID) const;
-template const types::Embedding::Primitive* GraphReader::tryGetEdgeProperty<types::Embedding>(PropertyTypeID ptID, EdgeID edgeID) const;
+template std::optional<const types::UInt64::Primitive*> GraphReader::tryGetEdgeProperty<types::UInt64>(PropertyTypeID ptID, EdgeID edgeID) const;
+template std::optional<const types::Int64::Primitive*> GraphReader::tryGetEdgeProperty<types::Int64>(PropertyTypeID ptID, EdgeID edgeID) const;
+template std::optional<const types::Double::Primitive*> GraphReader::tryGetEdgeProperty<types::Double>(PropertyTypeID ptID, EdgeID edgeID) const;
+template std::optional<const types::String::Primitive*> GraphReader::tryGetEdgeProperty<types::String>(PropertyTypeID ptID, EdgeID edgeID) const;
+template std::optional<const types::Bool::Primitive*> GraphReader::tryGetEdgeProperty<types::Bool>(PropertyTypeID ptID, EdgeID edgeID) const;
+template std::optional<const types::Embedding::Primitive*> GraphReader::tryGetEdgeProperty<types::Embedding>(PropertyTypeID ptID, EdgeID edgeID) const;
