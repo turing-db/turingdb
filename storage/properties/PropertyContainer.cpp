@@ -8,29 +8,26 @@
 using namespace db;
 
 void TypedPropertyContainer<types::String>::sort() {
-    if (_ids.empty()) {
-        _sorted = true;
-        return;
+    if (!_ids.empty()) {
+        StringContainer newValues;
+
+        std::vector<size_t> offsets(_ids.size());
+        std::iota(offsets.begin(), offsets.end(), 0);
+
+        ranges::sort(
+            ranges::views::zip(_ids, offsets),
+            [&](const auto& pair1, const auto& pair2) {
+                const EntityID id1 = std::get<0>(pair1);
+                const EntityID id2 = std::get<0>(pair2);
+                return id1 < id2;
+            });
+
+        for (size_t i : offsets) {
+            newValues.alloc(_values.getView(i));
+        }
+
+        _values = std::move(newValues);
     }
-
-    StringContainer newValues;
-
-    std::vector<size_t> offsets(_ids.size());
-    std::iota(offsets.begin(), offsets.end(), 0);
-
-    ranges::sort(
-        ranges::views::zip(_ids, offsets),
-        [&](const auto& pair1, const auto& pair2) {
-            const EntityID id1 = std::get<0>(pair1);
-            const EntityID id2 = std::get<0>(pair2);
-            return id1 < id2;
-        });
-
-    for (size_t i : offsets) {
-        newValues.alloc(_values.getView(i));
-    }
-
-    _values = std::move(newValues);
 
     _entityIndexMap.clear();
     _entityIndexMap.reserve(_ids.size() + _nullIds.size());
@@ -46,30 +43,27 @@ void TypedPropertyContainer<types::String>::sort() {
 }
 
 void TypedPropertyContainer<types::Embedding>::sort() {
-    if (_ids.empty()) {
-        _sorted = true;
-        return;
+    if (!_ids.empty()) {
+        const size_t dimension = _values.getDimension();
+        EmbeddingContainer newValues(dimension);
+
+        std::vector<size_t> offsets(_ids.size());
+        std::iota(offsets.begin(), offsets.end(), 0);
+
+        ranges::sort(
+            ranges::views::zip(_ids, offsets),
+            [&](const auto& pair1, const auto& pair2) {
+                const EntityID id1 = std::get<0>(pair1);
+                const EntityID id2 = std::get<0>(pair2);
+                return id1 < id2;
+            });
+
+        for (size_t i : offsets) {
+            newValues.alloc(_values.getView(i));
+        }
+
+        _values = std::move(newValues);
     }
-
-    const size_t dimension = _values.getDimension();
-    EmbeddingContainer newValues(dimension);
-
-    std::vector<size_t> offsets(_ids.size());
-    std::iota(offsets.begin(), offsets.end(), 0);
-
-    ranges::sort(
-        ranges::views::zip(_ids, offsets),
-        [&](const auto& pair1, const auto& pair2) {
-            const EntityID id1 = std::get<0>(pair1);
-            const EntityID id2 = std::get<0>(pair2);
-            return id1 < id2;
-        });
-
-    for (size_t i : offsets) {
-        newValues.alloc(_values.getView(i));
-    }
-
-    _values = std::move(newValues);
 
     _entityIndexMap.clear();
     _entityIndexMap.reserve(_ids.size() + _nullIds.size());
