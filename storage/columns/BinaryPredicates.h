@@ -597,6 +597,13 @@ struct TuringIn {
 
         return CustomBool {false};
     }
+
+    // Unused but needed to satisfy symmetry of dispatcher
+    template <typename T>
+    std::optional<CustomBool> operator()(const ListView /*unused*/, const T& /*unused*/) {
+        throw FatalException("IN operands in incorrect order");
+    }
+
 };
 
 }
