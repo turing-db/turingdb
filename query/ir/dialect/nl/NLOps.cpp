@@ -603,10 +603,15 @@ LogicalResult AggregateUpdate::verify() {
     // Every other input is a property value chunk; its value type is what the fold
     // reads, and sum/min/max fold into an accumulator of that type.
     if (!taggedCells) {
-        const Type inputValueType = aggregateValueType(getRows().getType());
-        if (!inputValueType) {
+        const Type declaredValueType = aggregateValueType(getRows().getType());
+        if (!declaredValueType) {
             return emitOpError("input must be a nullable value chunk (a property column)");
         }
+
+        // The null literal names no value type of its own and is carried as a null
+        // integer, which is the column the fold reads and folds nothing out of
+        const bool untypedNull = isa<NoneType>(declaredValueType);
+        const Type inputValueType = untypedNull ? IntegerType::get(getContext(), 64) : declaredValueType;
 
         if (!isAvg && inputValueType != accumulatorType) {
             return emitOpError("sum/min/max must fold into an accumulator of the input's value type");
