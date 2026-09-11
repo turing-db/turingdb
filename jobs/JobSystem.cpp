@@ -13,24 +13,32 @@ namespace {
 
 constexpr const char* THREAD_NAME = "turingdb.worker";
 
-size_t getThreadCount(size_t requestedThreads) {
-    if (requestedThreads == 0) {
-        return std::thread::hardware_concurrency();
-    } else {
+}
+
+size_t JobSystem::_defaultThreadCount {0};
+
+void JobSystem::setDefaultThreadCount(size_t threadCount) {
+    _defaultThreadCount = threadCount;
+}
+
+size_t JobSystem::resolveThreadCount(size_t requestedThreads) {
+    if (requestedThreads > 0) {
         return requestedThreads;
+    } else if (_defaultThreadCount > 0) {
+        return _defaultThreadCount;
+    } else {
+        return std::thread::hardware_concurrency();
     }
 }
 
-}
-
 JobSystem::JobSystem()
-    : _nThreads(getThreadCount(0)),
+    : _nThreads(resolveThreadCount(0)),
     _jobs(_nThreads)
 {
 }
 
 JobSystem::JobSystem(size_t nthreads)
-    : _nThreads(getThreadCount(nthreads)),
+    : _nThreads(resolveThreadCount(nthreads)),
     _jobs(_nThreads)
 {
 }

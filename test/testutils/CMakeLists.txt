@@ -6,6 +6,7 @@ target_link_libraries(turing_testutils_s
     PUBLIC  GTest::gtest
             GTest::gmock
             turing_common_s
+            turing_db_jobs_s
             spdlog)
 
 target_include_directories(turing_testutils_s
