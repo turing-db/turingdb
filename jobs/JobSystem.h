@@ -75,12 +75,25 @@ public:
     void wait();
     void terminate();
 
+    /* @brief Thread count used by every JobSystem built without an explicit one
+     *
+     * Set by the test harness so a test never stands up a pool sized to the
+     * host's core count. Zero restores hardware_concurrency().
+     * */
+    static void setDefaultThreadCount(size_t threadCount);
+
+    size_t getThreadCount() const { return _nThreads; }
+
 private:
+    static size_t _defaultThreadCount;
+
     size_t _nThreads {0};
     JobQueue _jobs;
     std::vector<std::jthread> _workers;
     std::atomic<bool> _stopRequested {false};
     bool _terminated {false};
+
+    static size_t resolveThreadCount(size_t requestedThreads);
 };
 
 }

@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 #include <spdlog/fmt/bundled/core.h>
 
+#include "JobSystem.h"
 #include "TuringTime.h"
 
 namespace turing::test {
@@ -62,6 +63,8 @@ inline int turingTestMain(int argc, char** argv, TuringMainConfig config = nullp
     testing::GTEST_FLAG(print_time) = true;
     testing::GTEST_FLAG(repeat) = 50;
     testing::GTEST_FLAG(shuffle) = true;
+
+    db::JobSystem::setDefaultThreadCount(1);
 
     if (config) {
         config();
