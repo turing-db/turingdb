@@ -150,7 +150,31 @@ Operation::operand_range factorYieldColumns(mlir::Region& factor) {
 // The column its variable was bound at, following every op that passes the column through.
 // Sets crossedProducer when one of those builds the rows - a hop or a cross product - as
 // opposed to a filter, which only drops them.
-Value climbToLineageAnchor(Value column, bool& crossedProducer) {
+using ColumnEquality = std::pair<Value, Value>;
+
+// A filter keeping only the rows where two node columns agree holds them to the same node
+// below it, so anything reading one of them reads the other just as well
+bool matchColumnEquality(FilterOp filter, ColumnEquality& equality) {
+    EqOp mask = filter.getMask().getDefiningOp<EqOp>();
+    if (!mask) {
+        return false;
+    }
+
+    const auto isNodeColumn = [](Value column) {
+        const auto type = dyn_cast<ColumnType>(column.getType());
+        return type && isa<storage::NodeIDType>(type.getType());
+    };
+
+    if (!isNodeColumn(mask.getLhs()) || !isNodeColumn(mask.getRhs())) {
+        return false;
+    }
+
+    equality = ColumnEquality {mask.getLhs(), mask.getRhs()};
+
+    return true;
+}
+
+Value climbToLineageAnchor(Value column, bool& crossedProducer, llvm::SmallVectorImpl<ColumnEquality>* equalities = nullptr) {
     for (;;) {
         Operation* const def = column.getDefiningOp();
         if (!def) {
@@ -163,6 +187,12 @@ Value climbToLineageAnchor(Value column, bool& crossedProducer) {
 
         if (FilterOp filter = dyn_cast<FilterOp>(def)) {
             const size_t resultIndex = cast<OpResult>(column).getResultNumber();
+
+            ColumnEquality equality;
+            if (equalities && matchColumnEquality(filter, equality)) {
+                equalities->push_back(equality);
+            }
+
             column = filter.getColumnsToFilter()[resultIndex];
 
             continue;
@@ -298,6 +328,35 @@ struct PushablePredicate {
     MaskCone _cone;
 };
 
+// The anchor a predicate can be rebuilt on instead of @param anchor: where an equality the
+// climb crossed holds that anchor to a column the graph was scanned for, the predicate reads
+// the same node off the scan, and applying it there is what spares the walk between them.
+Value scannedAnchorEqualTo(Value anchor, llvm::ArrayRef<ColumnEquality> equalities) {
+    if (!anchor || isNodeSource(anchor.getDefiningOp())) {
+        return {};
+    }
+
+    for (const ColumnEquality& equality : equalities) {
+        bool crossed = false;
+        const Value lhs = climbToLineageAnchor(equality.first, crossed);
+        crossed = false;
+        const Value rhs = climbToLineageAnchor(equality.second, crossed);
+        if (!lhs || !rhs) {
+            continue;
+        }
+
+        if (lhs == anchor && isNodeSource(rhs.getDefiningOp())) {
+            return rhs;
+        }
+
+        if (rhs == anchor && isNodeSource(lhs.getDefiningOp())) {
+            return lhs;
+        }
+    }
+
+    return {};
+}
+
 bool matchPushablePredicate(FilterOp filter, PushablePredicate& pushable) {
     Operation* const maskDef = filter.getMask().getDefiningOp();
     if (!maskDef || !isMaskComputeOp(maskDef)) {
@@ -310,8 +369,9 @@ bool matchPushablePredicate(FilterOp filter, PushablePredicate& pushable) {
     }
 
     bool crossedProducer = false;
+    llvm::SmallVector<ColumnEquality, 4> equalities;
     for (const Value input : pushable._cone._inputs) {
-        const Value inputAnchor = climbToLineageAnchor(input, crossedProducer);
+        const Value inputAnchor = climbToLineageAnchor(input, crossedProducer, &equalities);
         if (!inputAnchor) {
             return false;
         }
@@ -322,6 +382,12 @@ bool matchPushablePredicate(FilterOp filter, PushablePredicate& pushable) {
             // More than one lineage feeds the mask: not a single-variable predicate.
             return false;
         }
+    }
+
+    const Value equatedAnchor = scannedAnchorEqualTo(pushable._anchor, equalities);
+    if (equatedAnchor) {
+        pushable._anchor = equatedAnchor;
+        crossedProducer = true;
     }
 
     // Crossing only filters leaves the predicate over the rows the anchor produced already:

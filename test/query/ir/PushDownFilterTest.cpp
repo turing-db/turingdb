@@ -96,6 +96,43 @@ TEST_F(PushDownFilterTest, sinksRootPredicatePastHops) {
     EXPECT_TRUE(mlir::isa<mlir::db::ScanNodes>(read.getInputNodes().getDefiningOp()));
 }
 
+// A walk whose end an equality filter holds to its seed - what breaking a cycle in the
+// pattern leaves behind - with the predicate written over the end
+const char* const equatedEndPredicate = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %s, %e, %et, %t = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %same = db.eq %t, %s : (!db.column<!storage.node_id>, !db.column<!storage.node_id>) -> !db.column<!storage.bool>
+  %tj, %sj = db.filter(%same, {%t, %s}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  %age = db.get_node_properties(%tj, "age") : (!db.column<!storage.node_id>) -> !db.column<i64>
+  %lim = db.constant(30 : i64)
+  %mask = db.gt %age, %lim : (!db.column<i64>, !db.column<i64>) -> !db.column<!storage.bool>
+  %tf, %sf = db.filter(%mask, {%tj, %sj}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+  db.output(%tf, %sf) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// The end of the walk is born at the hop, so a predicate on it sinks no further than the hop
+// on its own. The equality holds it to the seed on every row that survives, and the seed is
+// the scan, so the predicate is the scan's to apply.
+TEST_F(PushDownFilterTest, sinksAPredicateToTheColumnAnEqualityHoldsItTo) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module = parse(equatedEndPredicate);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runPushDown(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
+
+    llvm::SmallVector<mlir::db::GetOutEdges> hops = collect<mlir::db::GetOutEdges>(*module);
+    ASSERT_EQ(hops.size(), 1u);
+
+    llvm::SmallVector<mlir::db::GetNodeProperties> reads = collect<mlir::db::GetNodeProperties>(*module);
+    ASSERT_EQ(reads.size(), 1u);
+    EXPECT_TRUE(mlir::isa<mlir::db::ScanNodes>(reads.front().getInputNodes().getDefiningOp()));
+
+    // The hop walks the nodes the predicate kept rather than every node of the graph
+    EXPECT_TRUE(mlir::isa<mlir::db::FilterOp>(hops.front().getInputNodes().getDefiningOp()));
+}
+
 // MATCH (a) WHERE a.age > 30 RETURN a
 const char* const rootOnlyPredicate = R"mlir(
 func.func @main() {
