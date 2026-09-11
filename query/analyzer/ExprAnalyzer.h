@@ -109,6 +109,10 @@ private:
     // and as something to compare that subject against when it has one
     void analyzeCaseTest(const CaseExpr::Branch& branch, const Expr* subject, const CaseExpr::Test& test);
 
+    // The type the arguments of a call to @param name share, folded the way a CASE folds
+    // its branches, reporting a pair no column type can hold
+    EvaluatedType unifiedArgumentType(std::string_view name, std::span<Expr* const> args) const;
+
     LoadCSVStmt* findCSVSource(const VarDecl* alias) const;
 
     // The declaration the load publishes field @param slot under, created by the first

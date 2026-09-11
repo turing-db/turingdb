@@ -295,6 +295,15 @@ void FunctionDecls::initDefault() {
     toBoolean->setArguments({EvaluatedType::String});
     toBoolean->setReturnTypes({{EvaluatedType::Bool}});
 
+    // coalesce answers the first of its arguments that is not null, so it takes any number
+    // of them and declares none: the analyzer unifies what it is given, and the type they
+    // share is what the call returns. Only the MLIR engine evaluates it.
+    FunctionSignature* coalesce = createFunction("coalesce");
+    coalesce->setReturnTypes({{EvaluatedType::Null}});
+    coalesce->setRequiredArgCount(1);
+    coalesce->setUnifiesItsArguments(true);
+    coalesce->setIsV3Only(true);
+
     // Embedding distance functions
     FunctionSignature* cosineSim = createFunction("cosine_similarity");
     cosineSim->setArguments({EvaluatedType::Embedding, EvaluatedType::Embedding});
