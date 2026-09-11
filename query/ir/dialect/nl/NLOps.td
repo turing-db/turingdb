@@ -259,6 +259,7 @@ def MakeList : NLOp<"make_list", [Pure, RowAlignedThroughOperands]> {
 
   let arguments = (ins Variadic<NLChunk>:$elements);
   let results   = (outs NLChunk:$result);
+  let hasVerifier = 1;
 
   let assemblyFormat = "`(` $elements `)` attr-dict `:` functional-type(operands, results)";
 }

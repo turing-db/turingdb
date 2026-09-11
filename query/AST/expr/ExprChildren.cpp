@@ -1,6 +1,7 @@
 #include "ExprChildren.h"
 
 #include "FunctionInvocation.h"
+#include "Literal.h"
 
 #include "BinaryExpr.h"
 #include "CaseExpr.h"
@@ -9,6 +10,7 @@
 #include "FunctionInvocationExpr.h"
 #include "IndexExpr.h"
 #include "ListExpr.h"
+#include "LiteralExpr.h"
 #include "StringExpr.h"
 #include "UnaryExpr.h"
 
@@ -112,6 +114,22 @@ bool ExprChildren::collect(const Expr* expr, std::vector<const Expr*>& children)
         }
         break;
 
+        case Expr::Kind::LITERAL: {
+            const Literal* literal = static_cast<const LiteralExpr*>(expr)->getLiteral();
+
+            // A map holds its values under keys rather than in a list this can hand back
+            if (literal->getKind() != Literal::Kind::LIST) {
+                return false;
+            }
+
+            for (const Expr* item : static_cast<const ListLiteral*>(literal)->items()) {
+                children.push_back(item);
+            }
+
+            return true;
+        }
+        break;
+
         case Expr::Kind::SYMBOL:
         case Expr::Kind::PROPERTY:
         case Expr::Kind::ENTITY_TYPES:
@@ -121,8 +139,8 @@ bool ExprChildren::collect(const Expr* expr, std::vector<const Expr*>& children)
         break;
 
         default:
-            // A path holds a pattern and a literal may hold a map, neither of which is a
-            // list of sub-expressions this can hand back
+            // A path holds a pattern, which is not a list of sub-expressions this can
+            // hand back
             return false;
         break;
     }

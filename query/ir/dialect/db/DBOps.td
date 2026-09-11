@@ -376,8 +376,9 @@ def MakeList : TuringOp<"make_list", [Pure]> {
     The result element type is the homogeneity verdict, as db.unwind_const's is: columns
     that agree give a list of that type, columns that disagree a list of type-erased
     tagged scalars, matching Cypher's LIST OF ANY. A column whose own type is resolved
-    during lowering - a property fetch's - names none here, so the verdict is taken
-    again over the resolved chunks when the op is lowered:
+    during lowering - a property fetch's - names none here, and no verdict is taken
+    against a type that is not known yet: one such column makes the whole list none, and
+    lowering takes the verdict over the resolved chunks:
 
       %xs = db.make_list(%age, %name) : (!db.column<none>, !db.column<none>)
                                      -> !db.column<!storage.list<none>>

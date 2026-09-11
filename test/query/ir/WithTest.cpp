@@ -608,6 +608,13 @@ TEST_F(WithTest, rejectsAVariableTheBarrierDropped) {
                    QueryStatus::Status::ANALYZE_ERROR);
 }
 
+// A list key is read in the scope the projection opens like any other: what it holds has
+// to be a published column, and n is not one.
+TEST_F(WithTest, rejectsAListKeyOverAVariableTheBarrierDropped) {
+    expectRejected("MATCH (n:Person) WITH n.name AS name ORDER BY [n.age] RETURN name",
+                   QueryStatus::Status::ANALYZE_ERROR);
+}
+
 // A name the barrier dropped is free again below it, so a pattern spelling it declares a
 // variable of its own rather than joining onto what the name used to hold - which makes
 // this the cross product above, not a traversal of the published rows: Remy's name

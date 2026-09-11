@@ -563,14 +563,15 @@ public:
     static NLCollectListEmitFunction selectCollectListEmit(ValueType valueType);
 
     // The reads an nl.make_list takes one element out of a column with: a nullable value
-    // column gives the value it holds or a tagged null, an entity and a nested list the
-    // cell they hold in every row, a type-erased column the cell under the tag it already
-    // carries, and a column owning its characters a copy of them.
+    // column gives the value it holds or a tagged null, an entity the ID it holds or that
+    // same null where an OPTIONAL MATCH left the ID invalid, a nested list the cell it
+    // holds in every row, a type-erased column the cell under the tag it already carries,
+    // and a column owning its characters a copy of them.
     static NLListItemReadFunction selectValueListItemRead(ValueType valueType);
     static NLListItemReadFunction selectNodeListItemRead();
     static NLListItemReadFunction selectEdgeListItemRead();
     static NLListItemReadFunction selectNestedListItemRead();
-    static NLListItemReadFunction selectTaggedListItemRead();
+    static NLListItemReadFunction selectTaggedListItemRead(bool nullable);
     static NLListItemReadFunction selectOwnedStringListItemRead(bool nullable);
 
     // The fold and list-emit for an entity chunk of this kind, whose elements carry a

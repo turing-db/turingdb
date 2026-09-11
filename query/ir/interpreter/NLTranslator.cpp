@@ -2004,7 +2004,9 @@ NLListItemReadFunction NLTranslator::selectListItemRead(mlir::Type chunkType) {
     } else if (mlir::isa<storage::ListType>(elementType)) {
         return NLExecutor::selectNestedListItemRead();
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
-        return NLExecutor::selectTaggedListItemRead();
+        return NLExecutor::selectTaggedListItemRead(/*nullable=*/false);
+    } else if (isNullableListElement(elementType)) {
+        return NLExecutor::selectTaggedListItemRead(/*nullable=*/true);
     } else if (isOwnedStringElement(elementType)) {
         return NLExecutor::selectOwnedStringListItemRead(/*nullable=*/false);
     }

@@ -446,13 +446,18 @@ mlir::Type sharedAttrType(llvm::ArrayRef<mlir::Attribute> elements) {
 
 // The element type of the lists a db.make_list builds: the one type its element columns
 // name, or the type-erased tagged scalar where they name no single one. A column whose own
-// type is resolved during lowering names `none`, which is the type such columns share - so
-// the verdict is taken again over the resolved chunks when the op is lowered.
+// type is resolved during lowering names `none`, and no verdict can be taken against a
+// type that is not known yet: the whole list stays `none` and lowering takes the verdict
+// over the resolved chunks.
 mlir::Type sharedColumnElement(mlir::MLIRContext* context, llvm::ArrayRef<mlir::Value> columns) {
     mlir::Type shared;
 
     for (const mlir::Value column : columns) {
         const mlir::Type element = mlir::cast<mlir::db::ColumnType>(column.getType()).getType();
+
+        if (mlir::isa<mlir::NoneType>(element)) {
+            return element;
+        }
 
         if (!shared) {
             shared = element;
