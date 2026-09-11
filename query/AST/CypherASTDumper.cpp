@@ -934,6 +934,12 @@ void CypherASTDumper::dump(std::ostream& out, const BinaryExpr* expr) {
         case BinaryOperator::In:
             out << "        Operator IN\n";
             break;
+        case BinaryOperator::IsNull:
+            out << "        Operator IS_NULL\n";
+            break;
+        case BinaryOperator::IsNotNull:
+            out << "        Operator IS_NOT_NULL\n";
+            break;
         default:
             throw CompilerException("Unknown binary operator");
             break;

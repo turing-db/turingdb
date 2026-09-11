@@ -234,3 +234,25 @@ TEST_F(ExplainTest, rejectsAPassThePipelineDoesNotRun) {
     expectRejected("EXPLAIN (after bogus_pass) MATCH (n) RETURN n", "Unknown EXPLAIN pass 'bogus_pass'");
     expectRejected("EXPLAIN (after bogus_pass) MATCH (n) RETURN n", "fuse_scan_by_label");
 }
+
+TEST_F(ExplainTest, dumpsTheAstOfANullTest) {
+    StringRowSink sink;
+    explain("EXPLAIN (ast) MATCH (n:Person) WHERE n.age IS NULL RETURN n.name", sink);
+
+    std::vector<std::string> stages;
+    collectStages(sink, stages);
+    EXPECT_EQ(stages, (std::vector<std::string> {"ast"}));
+
+    EXPECT_TRUE(contains(dumpOf(sink, "ast"), "Operator IS_NULL"));
+}
+
+TEST_F(ExplainTest, dumpsTheAstOfANotNullTest) {
+    StringRowSink sink;
+    explain("EXPLAIN (ast) MATCH (n:Person) WHERE n.age IS NOT NULL RETURN n.name", sink);
+
+    std::vector<std::string> stages;
+    collectStages(sink, stages);
+    EXPECT_EQ(stages, (std::vector<std::string> {"ast"}));
+
+    EXPECT_TRUE(contains(dumpOf(sink, "ast"), "Operator IS_NOT_NULL"));
+}

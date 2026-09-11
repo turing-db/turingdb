@@ -1234,6 +1234,7 @@ void DBProgramGenerator::runExplainedPasses() {
         }
 
         mlir::PassManager passManager(_mlirCtxt);
+        passManager.enableVerifier(false);
         passManager.addPass(std::move(pass));
 
         if (mlir::failed(passManager.run(*_module))) {

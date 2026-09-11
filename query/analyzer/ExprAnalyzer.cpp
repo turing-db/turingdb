@@ -338,10 +338,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             // Ordering a value against a null is null, the same as comparing it against
             // one. Only the MLIR engine answers such a comparison: the legacy planner
             // hands the operator a null column no ordering kernel reads
-            const bool ordersAgainstNull =
-                pair == TypePairBitset(EvaluatedType::Null, EvaluatedType::Null)
-                || pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Null)
-                || pair == TypePairBitset(EvaluatedType::Double, EvaluatedType::Null);
+            const bool ordersAgainstNull = a == EvaluatedType::Null || b == EvaluatedType::Null;
 
             if (_isV3 && ordersAgainstNull) {
                 break;

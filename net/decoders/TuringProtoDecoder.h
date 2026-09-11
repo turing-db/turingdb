@@ -330,6 +330,7 @@ void TuringProtoDecoder<Sink>::decodeIncomingData(SinkColumnContainer<Sink>* con
 
         ++_context._columnIndex;
         _context._rowIndex = 0;
+        _context._constListStarted = false;
     }
 }
 

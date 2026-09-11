@@ -753,3 +753,126 @@ TEST(TuringProtoRoundTripTest, RejectsSchemaLargerThanChunkSize) {
 
     EXPECT_THROW(encodeDataframeWithChunkSize(source, 24), TuringException);
 }
+
+// Encode a ColumnOptVector<ListElementView> — the shape an out-of-range list index reads
+// as — and decode it back. A row that holds no element and a row that holds a null taken
+// out of a list both travel as a null-tagged element, so what tells them apart on the
+// far side is the column's null mask; the two must not collapse into one.
+TEST(TuringProtoRoundTripTest, RoundTripsOptionalListElementViewColumns) {
+    using OptionalElement = std::optional<db::ListElementView>;
+
+    db::LocalMemory localMem;
+    db::DataframeManager dfMan;
+    db::Dataframe source;
+
+    const std::string text(64, 'q');
+
+    std::vector<db::ListBuffer<>::ListItemVariant> items;
+    items.emplace_back(Int64 {-3});
+    items.emplace_back(StringView {text});
+    items.emplace_back(db::PropertyNull {});
+
+    const db::ListView list = localMem.listBuffer().insert(items);
+
+    std::vector<db::ListElementView> elements;
+    for (const auto& element : list) {
+        elements.push_back(element);
+    }
+    ASSERT_EQ(elements.size(), 3u);
+
+    auto* col = localMem.alloc<db::ColumnOptVector<db::ListElementView>>();
+    col->push_back(OptionalElement {elements[0]});
+    col->push_back(std::nullopt);
+    col->push_back(OptionalElement {elements[1]});
+    col->push_back(OptionalElement {elements[2]});
+    col->push_back(std::nullopt);
+    addColumn(&dfMan, &source, "element", col);
+
+    // Small enough to split the header, the mask and the string element's payload
+    for (const size_t chunkSize : std::array<size_t, 4> {48, 64, 97, 256}) {
+        SCOPED_TRACE(::testing::Message() << "chunkSize=" << chunkSize);
+
+        const auto packets = encodeDataframeWithChunkSize(source, chunkSize);
+        expectPacketSequence(packets, true);
+
+        net::proto::ChunkedBuffer<float> embeddingBuffer;
+        net::proto::ChunkedBuffer<char> stringBuffer;
+        db::ListBuffer<> listBuffer;
+        db::Dataframe decoded;
+        std::vector<net::proto::DecodedColumnSchema> schemas;
+        decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
+
+        ASSERT_EQ(decoded.cols().size(), 1u);
+        const auto* decodedCol = decoded.cols().at(0)->as<db::ColumnOptVector<db::ListElementView>>();
+        ASSERT_NE(decodedCol, nullptr);
+
+        const std::vector<OptionalElement>& raw = decodedCol->getRaw();
+        ASSERT_EQ(raw.size(), 5u);
+
+        ASSERT_TRUE(raw[0].has_value());
+        EXPECT_EQ(raw[0]->getTag(), db::ListBufferTypeTag::Int);
+        EXPECT_EQ(raw[0]->getAs<Int64>(), -3);
+
+        EXPECT_FALSE(raw[1].has_value());
+
+        ASSERT_TRUE(raw[2].has_value());
+        EXPECT_EQ(raw[2]->getTag(), db::ListBufferTypeTag::String);
+        EXPECT_EQ(raw[2]->getAs<StringView>(), std::string_view(text));
+
+        ASSERT_TRUE(raw[3].has_value());
+        EXPECT_EQ(raw[3]->getTag(), db::ListBufferTypeTag::Null);
+
+        EXPECT_FALSE(raw[4].has_value());
+    }
+}
+
+// Encode a ColumnConst<std::optional<ListElementView>> — the shape an index read of a
+// literal list at a literal position takes — both carrying an element and carrying none.
+TEST(TuringProtoRoundTripTest, RoundTripsOptionalConstantListElementViewColumns) {
+    using OptionalElement = std::optional<db::ListElementView>;
+
+    db::LocalMemory localMem;
+    db::DataframeManager dfMan;
+    db::Dataframe source;
+
+    const std::string text(64, 'z');
+
+    std::vector<db::ListBuffer<>::ListItemVariant> items;
+    items.emplace_back(StringView {text});
+
+    const db::ListView list = localMem.listBuffer().insert(items);
+
+    auto* element = localMem.alloc<db::ColumnConst<OptionalElement>>();
+    element->set(OptionalElement {*list.begin()});
+    addColumn(&dfMan, &source, "element", element);
+
+    auto* missing = localMem.alloc<db::ColumnConst<OptionalElement>>();
+    missing->set(std::nullopt);
+    addColumn(&dfMan, &source, "missing", missing);
+
+    // The element's payload outruns the buffer, so the decode of the constant resumes on a
+    // later packet with its header already read
+    const auto packets = encodeDataframeWithChunkSize(source, 48);
+    expectPacketSequence(packets, true);
+    EXPECT_GE(countPacketsOfType(packets, net::proto::MessageTypes::CHUNK), 2u);
+
+    net::proto::ChunkedBuffer<float> embeddingBuffer;
+    net::proto::ChunkedBuffer<char> stringBuffer;
+    db::ListBuffer<> listBuffer;
+    db::Dataframe decoded;
+    std::vector<net::proto::DecodedColumnSchema> schemas;
+    decodeChunkPackets(packets, &localMem, &embeddingBuffer, &stringBuffer, &listBuffer, &dfMan, &decoded, &schemas);
+
+    ASSERT_EQ(decoded.cols().size(), 2u);
+    const auto* decodedElement = decoded.cols().at(0)->as<db::ColumnConst<OptionalElement>>();
+    const auto* decodedMissing = decoded.cols().at(1)->as<db::ColumnConst<OptionalElement>>();
+    ASSERT_NE(decodedElement, nullptr);
+    ASSERT_NE(decodedMissing, nullptr);
+
+    const OptionalElement decodedValue = decodedElement->at(0);
+    ASSERT_TRUE(decodedValue.has_value());
+    EXPECT_EQ(decodedValue->getTag(), db::ListBufferTypeTag::String);
+    EXPECT_EQ(decodedValue->getAs<StringView>(), std::string_view(text));
+
+    EXPECT_FALSE(decodedMissing->at(0).has_value());
+}

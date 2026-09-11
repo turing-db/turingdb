@@ -1200,8 +1200,6 @@ def HashJoinCollect : NLOp<"hash_join_collect", []> {
 */
 // Pure: given a filled build side it deterministically produces the same matched
 // rows from the same probe chunk, and it writes only its own result chunks.
-// AttrSizedOperandSegments: the probe columns and the optional limit handle are two
-// operand groups of independent size, as on nl.cross_product.
 def HashJoinProbe : NLOp<"hash_join_probe", [Pure]> {
   let summary = "Create an iterator over each probe row paired with the build rows its key matches";
   let description = [{

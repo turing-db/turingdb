@@ -35,12 +35,17 @@ struct DecodeContext {
     // Entry count of the EntityList row being decoded. The count and actual data can be
     // split across chunks so we need to store state here.
     std::optional<size_t> _entityListEntryCount;
+    // Set once a constant list column's header has been read and its space reserved, so a
+    // resumed pass drains elements rather than reading the header again. An optional
+    // constant spends _rowIndex on its has-value flag, so the two cannot share it.
+    bool _constListStarted {false};
 
     void reset() {
         _columnIndex = 0;
         _rowIndex = 0;
         _bufferState.reset();
         _entityListEntryCount.reset();
+        _constListStarted = false;
     }
 };
 
