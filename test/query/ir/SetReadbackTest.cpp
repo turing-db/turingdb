@@ -47,6 +47,16 @@ TEST_F(SetReadbackTest, readsTheValueTheSetComputedFromTheOldOne) {
     expectWriteRows("MATCH (p:Person {name: 'Remy'}) SET p.age = p.age + 1 RETURN p.age", {{"33"}});
 }
 
+// A null value is written as an explicit null over the value the node held, not refused
+TEST_F(SetReadbackTest, readsTheNullAPlainSetWrote) {
+    expectWriteRows("MATCH (p:Person {name: 'Remy'}), (i:Interest {name: 'Computers'}) "
+                    "SET p.dob = i.dob "
+                    "RETURN p.dob",
+                    {{"null"}});
+
+    expectRows("MATCH (p:Person {name: 'Remy'}) RETURN p.dob", {{"null"}});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

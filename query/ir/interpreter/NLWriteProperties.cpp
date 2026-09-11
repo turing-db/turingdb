@@ -6,10 +6,10 @@
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnVector.h"
+#include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
 #include "views/GraphView.h"
 
-#include "IRException.h"
 #include <optional>
 
 using namespace db;
@@ -98,32 +98,37 @@ public:
         _buf.clear();
         _buf.reserve(typed->size());
         for (const std::optional<T>& val : *typed) {
-            if (!val) {
-                throw IRException("Cannot set a property to NULL in CREATE.");
-            }
-            _buf.emplace_back(_propID, std::make_optional(*val));
+            _buf.emplace_back(_propID, val);
         }
     }
 
+    /// Owning string as outlives query
     void operator()(const ColumnVector<std::optional<types::String::Primitive>>* typed) {
         _buf.clear();
         _buf.reserve(typed->size());
         for (const std::optional<types::String::Primitive>& val : *typed) {
-            if (!val) {
-                throw IRException("Cannot set a property to NULL in CREATE.");
+            if (!val.has_value()) {
+                using Disengaged = std::optional<types::String::OwningPrimitive>;
+                _buf.emplace_back(_propID, Disengaged {});
+                continue;
             }
+
             _buf.emplace_back(_propID, std::make_optional(std::string(*val)));
         }
     }
 
+    /// Owning vec as outlives query
     void operator()(const ColumnVector<std::optional<types::Embedding::Primitive>>* typed) {
         _buf.clear();
         _buf.reserve(typed->size());
         for (const std::optional<types::Embedding::Primitive>& val : *typed) {
-            if (!val) {
-                throw IRException("Cannot set a property to NULL in CREATE.");
+            if (!val.has_value()) {
+                using Disengaged = std::optional<types::Embedding::OwningPrimitive>;
+                _buf.emplace_back(_propID, Disengaged {});
+                continue;
             }
-            _buf.emplace_back(_propID, std::make_optional(types::Embedding::OwningPrimitive(val->begin(), val->end())));
+            types::Embedding::OwningPrimitive emb(val->begin(), val->end());
+            _buf.emplace_back(_propID, std::make_optional(std::move(emb)));
         }
     }
 
