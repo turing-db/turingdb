@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <optional>
 
+#include <range/v3/view/reverse.hpp>
+
 #include "datapart/DataPart.h"
 #include "ID.h"
 #include "datapart/NodeContainer.h"
@@ -15,6 +17,7 @@
 #include "BioAssert.h"
 
 using namespace db;
+namespace rv = ranges::views;
 
 size_t GraphReader::getTotalNodesAllocated() const {
     if (_view.dataparts().empty()) {
@@ -312,7 +315,10 @@ bool GraphReader::edgeIsDeleted(EdgeID edgeID) const {
 
 template <SupportedType T>
 std::optional<const typename T::Primitive*> GraphReader::tryGetNodeProperty(PropertyTypeID ptID, NodeID nodeID) const {
-    for (const auto& part : _view.dataparts()) {
+    const DataPartSpan& parts = _view.dataparts();
+
+    // newest to oldest => most recent value wins
+    for (const auto& part : rv::reverse(parts)) {
         const auto& p = part->nodeProperties().tryGetWithNull<T>(ptID, nodeID.getValue());
         if (!p.has_value()) {
             return std::nullopt;
@@ -328,7 +334,10 @@ std::optional<const typename T::Primitive*> GraphReader::tryGetNodeProperty(Prop
 
 template <SupportedType T>
 std::optional<const typename T::Primitive*> GraphReader::tryGetEdgeProperty(PropertyTypeID ptID, EdgeID edgeID) const {
-    for (const auto& part : _view.dataparts()) {
+    const DataPartSpan& parts = _view.dataparts();
+
+    // newest to oldest => most recent value wins
+    for (const auto& part : rv::reverse(parts)) {
         const auto& p = part->edgeProperties().tryGetWithNull<T>(ptID, edgeID.getValue());
         if (!p.has_value()) {
             return std::nullopt;

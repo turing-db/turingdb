@@ -3387,6 +3387,58 @@ TEST_F(WriteQueriesTest, dynamicStringPropertySetNullOnAllNodes) {
     }
 }
 
+TEST_F(WriteQueriesTest, nodePropertyLookupTakesTheNewestDatapart) {
+    const auto namePropID = read().getMetadata().propTypes().get("name");
+    const auto dobPropID = read().getMetadata().propTypes().get("dob");
+    ASSERT_TRUE(namePropID.has_value());
+    ASSERT_TRUE(dobPropID.has_value());
+
+    const PropertyTypeID nameID = namePropID->_id;
+    const PropertyTypeID dobID = dobPropID->_id;
+    const NodeID remy {0};
+
+    {
+        const auto name = read().tryGetNodeProperty<types::String>(nameID, remy);
+        ASSERT_TRUE(name.has_value());
+        ASSERT_NE(name.value(), nullptr);
+        ASSERT_EQ(*name.value(), "Remy");
+
+        const auto dob = read().tryGetNodeProperty<types::String>(dobID, remy);
+        ASSERT_TRUE(dob.has_value());
+        ASSERT_NE(dob.value(), nullptr);
+        ASSERT_EQ(*dob.value(), "18/01");
+    }
+
+    // Node 2 has no dob, so this nulls every node's dob in a datapart newer than the one
+    // holding Remy's 18/01
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH (n), (m) WHERE n = 2 SET m.dob = n.dob)";
+
+        auto res = query(setQuery, _emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    EXPECT_FALSE(read().tryGetNodeProperty<types::String>(dobID, remy).has_value());
+
+    newChange();
+    {
+        constexpr std::string_view setQuery = R"(MATCH (n) WHERE n.name = "Remy" SET n.dob = "01/01")";
+
+        auto res = query(setQuery, _emptyCallback);
+        ASSERT_TRUE(res) << res.getError();
+    }
+    submitCurrentChange();
+
+    {
+        const auto dob = read().tryGetNodeProperty<types::String>(dobID, remy);
+        ASSERT_TRUE(dob.has_value());
+        ASSERT_NE(dob.value(), nullptr);
+        EXPECT_EQ(*dob.value(), "01/01");
+    }
+}
+
 TEST_F(WriteQueriesTest, createdNodeNullPropertyKeepsItsOwner) {
     newChange();
     {
