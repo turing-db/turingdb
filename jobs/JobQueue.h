@@ -4,7 +4,6 @@
 #include <mutex>
 #include <optional>
 #include <queue>
-#include <thread>
 
 #include "Job.h"
 
@@ -34,6 +33,10 @@ public:
 
             _finished++;
             _runningCount--;
+
+            if (_finished == _submitted) {
+                _doneCondition.notify_all();
+            }
 
         } else {
             _jobs.emplace(std::move(job));
@@ -84,17 +87,18 @@ public:
         std::scoped_lock lock(_mutex);
         _finished++;
         _runningCount--;
+
+        if (_finished == _submitted) {
+            _doneCondition.notify_all();
+        }
     }
 
     void wait() {
         std::unique_lock lock(_mutex);
 
-        while (_finished != _submitted) {
-            lock.unlock();
-            _wakeCondition.notify_one();
-            std::this_thread::yield();
-            lock.lock();
-        }
+        _doneCondition.wait(lock, [&] {
+            return _finished == _submitted;
+        });
 
         _wakeCondition.notify_all();
     }
@@ -104,6 +108,7 @@ private:
 
     size_t _threadCount {1};
     std::condition_variable _wakeCondition;
+    std::condition_variable _doneCondition;
     mutable std::mutex _mutex;
     std::queue<Job> _jobs;
     size_t _finished {0};
