@@ -72,7 +72,8 @@ size_t dropHitsInContainer(const TypedPropertyContainer<T>& container, NodeID* h
     for (size_t read = 0; read < count; read++) {
         const NodeID hit = hits[read];
         hits[write] = hit;
-        write += static_cast<size_t>(!container.has(EntityID {hit.getValue()}));
+        const bool present = container.hasEntry(EntityID {hit.getValue()});
+        write += !present;
     }
 
     return write;
@@ -125,13 +126,16 @@ void ScanNodesByPropertyValueChunkWriter<T>::collectPartContainers() {
         const TypedPropertyContainer<T>* container = properties.tryGetContainer<T>(_propTypeID);
 
         PartContainer entry;
-        if (container && container->size() > 0) {
-            const PropertyContainer::IDs& ids = container->ids();
-
+        if (container && !container->empty()) {
             entry._container = container;
-            entry._first = ids.front();
-            entry._last = ids.back();
             entry._sorted = container->isSorted();
+            entry._hasNulls = !container->nullIds().empty();
+
+            if (container->size() > 0) {
+                const PropertyContainer::IDs& ids = container->ids();
+                entry._first = ids.front();
+                entry._last = ids.back();
+            }
         }
 
         _partContainers.push_back(entry);
@@ -143,7 +147,7 @@ bool ScanNodesByPropertyValueChunkWriter<T>::startPart() {
     const size_t partIndex = static_cast<size_t>(_partIt.getIterator() - _view.dataparts().begin());
 
     _container = _partContainers[partIndex]._container;
-    if (!_container) {
+    if (!_container || _container->size() == 0) {
         return false;
     }
 
@@ -185,7 +189,7 @@ void ScanNodesByPropertyValueChunkWriter<T>::collectNewerContainers(size_t partI
             continue;
         }
 
-        const bool bounded = current._sorted && candidate._sorted;
+        const bool bounded = current._sorted && candidate._sorted && !candidate._hasNulls;
         const bool disjoint = bounded && (candidate._last < current._first || candidate._first > current._last);
 
         if (!disjoint) {
@@ -257,7 +261,7 @@ size_t ScanNodesByPropertyValueChunkWriter<T>::dropOverriddenHits(NodeID* hits, 
             return 0;
         }
 
-        if (candidatesAscend && newer._sorted) {
+        if (candidatesAscend && newer._sorted && !newer._hasNulls) {
             kept = dropHitsInSortedIDs(newer._container->ids(), hits, kept);
         } else {
             kept = dropHitsInContainer(*newer._container, hits, kept);
