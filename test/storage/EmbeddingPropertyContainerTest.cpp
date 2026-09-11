@@ -129,6 +129,24 @@ TEST(EmbeddingPropertyContainerTest, SortKeepsExplicitNull) {
     ASSERT_EQ((*container.tryGet(EntityID(50)))[0], 3.0f);
 }
 
+TEST(EmbeddingPropertyContainerTest, SortKeepsNullsWithNoValues) {
+    TypedPropertyContainer<types::Embedding> container(2);
+
+    container.add(EntityID(1), std::nullopt);
+    container.add(EntityID(2), std::nullopt);
+
+    container.sort();
+
+    ASSERT_EQ(container.size(), 0);
+
+    ASSERT_FALSE(container.tryGetWithNull(EntityID(1)).has_value());
+    ASSERT_FALSE(container.tryGetWithNull(EntityID(2)).has_value());
+
+    const std::optional<const types::Embedding::Primitive*> absent = container.tryGetWithNull(EntityID(3));
+    ASSERT_TRUE(absent.has_value());
+    ASSERT_EQ(absent.value(), nullptr);
+}
+
 TEST(EmbeddingPropertyContainerTest, AllAndGetSpan) {
     TypedPropertyContainer<types::Embedding> container(2);
 
