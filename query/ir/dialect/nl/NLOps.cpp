@@ -586,7 +586,10 @@ LogicalResult AggregateUpdate::verify() {
     // numeric tags lands on, where min/max hold the reduced value in the input's own type
     // and so have to know it.
     const auto rowsChunk = cast<ChunkType>(getRows().getType());
-    const bool taggedCells = isa<storage::ListElementType>(rowsChunk.getElementType());
+    const Type rowsElement = rowsChunk.getElementType();
+    const auto rowsNullable = dyn_cast<storage::NullableType>(rowsElement);
+    const Type reducedElement = rowsNullable ? rowsNullable.getValueType() : rowsElement;
+    const bool taggedCells = isa<storage::ListElementType>(reducedElement);
     if (taggedCells) {
         if (!isAvg && kind != storage::AggregateKind::Sum) {
             return emitOpError("only sum and avg fold a column of tagged cells");

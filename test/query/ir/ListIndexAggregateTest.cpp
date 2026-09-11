@@ -252,9 +252,9 @@ TEST_F(ListIndexAggregateTest, sumsTheElements) {
 
 TEST_F(ListIndexAggregateTest, sumsTheElementsOfEachGroup) {
     const Rows expected = {{"0", std::to_string(20.0)},
-                           {"1", "null"},
+                           {"1", std::to_string(0.0)},
                            {"2", std::to_string(30.0)},
-                           {"5", "null"}};
+                           {"5", std::to_string(0.0)}};
     expectRows("UNWIND [0, 1, 2, 5, 0] AS i RETURN i, sum([10, null, 30][i])", expected);
 }
 
