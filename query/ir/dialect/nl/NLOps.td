@@ -237,6 +237,33 @@ def Unwind : NLOp<"unwind", [Pure]> {
 }
 
 /**
+* MakeList
+*/
+def MakeList : NLOp<"make_list", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise build of one list per row out of every element chunk";
+  let description = [{
+    Imperative counterpart of db.make_list. Row r of the result is the list of row r of
+    each operand, in operand order, written into the query's list buffer as one
+    contiguous run:
+
+      %xs = nl.make_list(%n, %m)
+              : (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>)
+              -> !nl.chunk<!storage.list<!storage.node_id>>
+
+    Every operand carries rows - lowering lays a constant one out over them first - so
+    the cells are read at the same row index and the chunk is as long as they are. The
+    element type is the list of the type the operands share, or of type-erased tagged
+    scalars where they disagree, and is spelled out rather than inferred, as nl.unwind's
+    is.
+  }];
+
+  let arguments = (ins Variadic<NLChunk>:$elements);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "`(` $elements `)` attr-dict `:` functional-type(operands, results)";
+}
+
+/**
 * ScanEdges
 */
 def ScanEdges : NLOp<"scan_edges", [Pure, InferTypeOpAdaptor]> {

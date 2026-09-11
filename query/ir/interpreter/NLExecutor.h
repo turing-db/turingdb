@@ -258,6 +258,10 @@ public:
     // holds, the default when none does, and an absent value when there is no default.
     static void runCase(NLExecutionContext* context, NLFunctionData* data);
 
+    // Build one list per row (nl.make_list): row r takes the cell each element column
+    // holds at r, in operand order, as one contiguous run of the query's list buffer.
+    static void runMakeList(NLExecutionContext* context, NLFunctionData* data);
+
     // Size the CASE result to the step's rows, all absent
     static NLCaseResetFn selectCaseReset(ValueType valueType);
 
@@ -557,6 +561,17 @@ public:
     static NLUnwindElementEmitFunction selectListUnwindListEmit();
     static NLUnwindElementEmitFunction selectTaggedUnwindElementEmit();
     static NLCollectListEmitFunction selectCollectListEmit(ValueType valueType);
+
+    // The reads an nl.make_list takes one element out of a column with: a nullable value
+    // column gives the value it holds or a tagged null, an entity and a nested list the
+    // cell they hold in every row, a type-erased column the cell under the tag it already
+    // carries, and a column owning its characters a copy of them.
+    static NLListItemReadFunction selectValueListItemRead(ValueType valueType);
+    static NLListItemReadFunction selectNodeListItemRead();
+    static NLListItemReadFunction selectEdgeListItemRead();
+    static NLListItemReadFunction selectNestedListItemRead();
+    static NLListItemReadFunction selectTaggedListItemRead();
+    static NLListItemReadFunction selectOwnedStringListItemRead(bool nullable);
 
     // The fold and list-emit for an entity chunk of this kind, whose elements carry a
     // node or edge ID. An edge-type ID is no entity, so the kind is rejected.

@@ -36,7 +36,6 @@ using namespace turing::test;
 namespace {
 
 const std::string_view nestedAggregateReason = "Nested aggregates are not supported";
-const std::string_view nonLiteralListElementReason = "Non-literal list elements are not yet supported";
 
 }
 
@@ -139,5 +138,5 @@ TEST_F(NestedAggregateProjectionTest, generatesAnAggregateInsideAnExpression) {
 }
 
 TEST_F(NestedAggregateProjectionTest, rejectsAListHoldingAnAggregateBesideAGroupingKey) {
-    expectRejected("MATCH (n) RETURN DISTINCT n, [count(n.age)]", nonLiteralListElementReason);
+    expectRejected("MATCH (n) RETURN DISTINCT n, [count(n.age)]", nestedAggregateReason);
 }

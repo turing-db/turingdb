@@ -782,6 +782,24 @@ LogicalResult Unwind::verify() {
     return success();
 }
 
+// There is a column for the list to be built out of, and what the op produces is a list.
+LogicalResult MakeList::verify() {
+    if (getElements().empty()) {
+        return emitOpError("requires at least one element column");
+    }
+
+    const ColumnType resultColumn = llvm::dyn_cast<ColumnType>(getResult().getType());
+    if (!resultColumn) {
+        return emitOpError("result must be a column");
+    }
+
+    if (!llvm::isa<storage::ListType>(resultColumn.getType())) {
+        return emitOpError("result must be a column of lists");
+    }
+
+    return success();
+}
+
 // The unwound column's element type is the homogeneity verdict: a type-erased
 // list_element column accepts any elements, a typed one requires them to share that one
 // type - the shared check the const_list verifier runs too.

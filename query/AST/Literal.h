@@ -171,6 +171,11 @@ public:
 
     void addItem(Expr* item);
 
+    /// Whether every item is a literal, at any depth - what makes the whole list a value
+    /// known without reading a row, rather than one built per row out of what its items
+    /// read.
+    bool isLiteralTree() const;
+
     bool empty() const { return _items.empty(); }
     size_t size() const { return _items.size(); }
 

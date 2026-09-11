@@ -54,8 +54,6 @@ namespace {
 using Row = std::vector<std::string>;
 using Rows = std::vector<Row>;
 
-const std::string_view nonLiteralListElementReason = "Non-literal list elements are not yet supported";
-
 std::string renderList(ListView list);
 
 // Render one element of a list as its value, recursing into a nested list.
@@ -826,19 +824,23 @@ TEST_F(CypherListLiteralTest, rejectsMapListElements) {
     expectRejected("RETURN [{age: 32}]", "Only booleans, integers, floats, strings, nulls");
 }
 
-TEST_F(CypherListLiteralTest, rejectsAPropertyListElement) {
-    // Elements are literals today: a property reads a row, which the list cannot carry.
-    expectRejected("MATCH (n) WHERE n.name = 'Remy' RETURN [n.age]", nonLiteralListElementReason);
+TEST_F(CypherListLiteralTest, buildsAListOfAPropertyPerRow) {
+    // A property reads a row, so the list is one cell per row rather than the one value
+    // every row shares - the db.make_list form of a list literal.
+    const Rows expected = {{"[32]"}};
+
+    expectRows("MATCH (n) WHERE n.name = 'Remy' RETURN [n.age]", expected);
 }
 
-TEST_F(CypherListLiteralTest, rejectsAnUnwoundVariableListElement) {
-    expectRejected("UNWIND [1, 2] AS x RETURN [x]", nonLiteralListElementReason);
+TEST_F(CypherListLiteralTest, buildsAListOfAnUnwoundVariablePerRow) {
+    const Rows expected = {{"[1]"}, {"[2]"}};
+
+    expectRows("UNWIND [1, 2] AS x RETURN [x]", expected);
 }
 
 TEST_F(CypherListLiteralTest, rejectsAnArithmeticListElement) {
-    // The grammar admits no expression inside a list, so an arithmetic element never
-    // reaches the analyzer's message above - the same limitation surfaces as a parse
-    // failure. Pinned so that teaching the grammar the expression moves the rejection to
-    // the analyzer visibly, rather than silently.
+    // The grammar admits no expression inside a list, so an arithmetic element is turned
+    // away by the parser rather than built per row. Pinned so that teaching the grammar
+    // the expression shows up as the element becoming supported, rather than silently.
     expectRejected("RETURN [1 + 1]", "syntax error");
 }

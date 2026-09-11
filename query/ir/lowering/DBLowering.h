@@ -184,6 +184,7 @@ private:
     void lowerLoadCSV(mlir::db::LoadCSV loadCSV);
     void lowerVectorSearch(mlir::db::VectorSearch vectorSearch);
     void lowerUnwind(mlir::db::Unwind unwind);
+    void lowerMakeList(mlir::db::MakeList makeList);
     void lowerScanEdges(mlir::db::ScanEdges scanEdges);
     void lowerScanEdgesByType(mlir::db::ScanEdgesByType scanEdgesByType);
     void lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges);
@@ -471,6 +472,11 @@ private:
     // list_element when they share none, and any other source keeps its own element,
     // its cells being the elements themselves
     static mlir::Type unwoundElementType(mlir::MLIRContext* context, mlir::Type sourceElement);
+
+    // The element type of the lists @param chunks build: the one type every chunk carries,
+    // falling back to the type-erased list_element when they carry no single one - the
+    // homogeneity verdict taken over the resolved chunks rather than over the db columns
+    static mlir::Type listedElementType(mlir::MLIRContext* context, llvm::ArrayRef<mlir::Value> chunks);
 
     // The nl chunk a db value lowered to, and the block that holds a chunk
     mlir::Value mapValue(mlir::Value dbValue) const;

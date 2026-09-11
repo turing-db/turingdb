@@ -1,6 +1,9 @@
 #include "Literal.h"
 
+#include <algorithm>
+
 #include "CypherAST.h"
+#include "expr/LiteralExpr.h"
 
 using namespace db;
 
@@ -173,6 +176,23 @@ ListLiteral* ListLiteral::create(CypherAST* ast) {
 
 void ListLiteral::addItem(Expr* item) {
     _items.push_back(item);
+}
+
+bool ListLiteral::isLiteralTree() const {
+    const auto isLiteralItem = [](const Expr* item) {
+        if (item->getKind() != Expr::Kind::LITERAL) {
+            return false;
+        }
+
+        const Literal* literal = static_cast<const LiteralExpr*>(item)->getLiteral();
+        if (literal->getKind() != Kind::LIST) {
+            return true;
+        }
+
+        return static_cast<const ListLiteral*>(literal)->isLiteralTree();
+    };
+
+    return std::ranges::all_of(_items, isLiteralItem);
 }
 
 MapLiteral::MapLiteral()

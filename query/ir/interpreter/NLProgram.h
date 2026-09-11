@@ -3026,6 +3026,46 @@ private:
     NLCaseWriteFn _writeDefault {nullptr};
 };
 
+// Read the cell one element column holds at @param row as the value the list buffer
+// stores for it, tagged with the type it is. One per column kind, selected during
+// translation the way the case write families are. The memory is what a column owning its
+// characters copies them into, as the concatenation kernel copies its result.
+using NLListItemReadFunction = ListBuffer<>::ListItemVariant (*)(const Column* input,
+                                                                 size_t row,
+                                                                 LocalMemory* memory);
+
+// Row-wise list build (nl.make_list): row r of the result is the list of row r of every
+// element column, written into the query's list buffer as one contiguous run. Every
+// element column carries rows and they are row-aligned, so the first of them gives the
+// rows this step writes.
+class NLMakeListData : public NLFunctionData {
+public:
+    struct Element {
+        const Column* _column {nullptr};
+        NLListItemReadFunction _read {nullptr};
+    };
+
+    NLMakeListData(Column* result, LocalMemory* memory)
+        : _result(result),
+        _memory(memory)
+    {
+    }
+
+    Column* getResult() const { return _result; }
+    LocalMemory* getMemory() const { return _memory; }
+
+    const std::vector<Element>& elements() const { return _elements; }
+
+    void addElement(const Element& element) {
+        _elements.push_back(element);
+    }
+
+private:
+    Column* _result {nullptr};
+    LocalMemory* _memory {nullptr};
+    std::vector<Element> _elements;
+};
+
 using NLUnaryFunctionKernel = void (*)(NLExecutionContext* context, Column* result, const Column* input);
 
 class NLUnaryFunctionData : public NLFunctionData {

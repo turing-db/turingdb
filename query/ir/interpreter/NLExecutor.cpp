@@ -161,8 +161,9 @@ void unwindListElementEmit(const Column* source,
 
 // Copy the elements one step covers out of a list column into a typed value column: each
 // output row is the element at its position in the list its source row holds. The list's
-// element type is the column's, so every element is present and shares that type - the
-// tag check is what holds a list whose elements disagree with it to that promise.
+// element type is the column's, so every element either carries that type or is the null
+// a list built out of a column with an absent cell holds - the tag check is what holds a
+// list whose elements disagree with both to that promise.
 template <typename Primitive>
 void unwindListValueEmit(const Column* source,
                          const ColumnVector<size_t>* rows,
@@ -179,7 +180,14 @@ void unwindListValueEmit(const Column* source,
 
     for (size_t index = 0; index < rowsRaw.size(); index++) {
         const ListElementView element = lists[rowsRaw[index]].elements()[positionsRaw[index]];
-        bioassert(element.getTag() == expectedTag, "Unwound element does not have the unwound list's value type.");
+        const ListBufferTypeTag tag = element.getTag();
+
+        if (tag == ListBufferTypeTag::Null) {
+            outputRaw[index] = std::nullopt;
+            continue;
+        }
+
+        bioassert(tag == expectedTag, "Unwound element does not have the unwound list's value type.");
 
         outputRaw[index] = element.getAs<Primitive>();
     }
@@ -2500,6 +2508,54 @@ void collectListEmit(const Column* values,
     }
 }
 
+// Read one cell of a nullable value column as the element it contributes to a list: the
+// value it holds, or the tagged null Cypher leaves in the list where the row has none.
+template <typename Primitive>
+ListBuffer<>::ListItemVariant valueListItem(const Column* input, size_t row, LocalMemory*) {
+    const std::optional<Primitive>& cell = (*static_cast<const ColumnOptVector<Primitive>*>(input))[row];
+    if (!cell.has_value()) {
+        return ListBuffer<>::ListItemVariant {PropertyNull {}};
+    }
+
+    return ListBuffer<>::ListItemVariant {*cell};
+}
+
+// The sibling of valueListItem for a column whose cells are present in every row: an
+// entity ID, and a nested list held as the one element it is.
+template <typename Element>
+ListBuffer<>::ListItemVariant plainListItem(const Column* input, size_t row, LocalMemory*) {
+    return ListBuffer<>::ListItemVariant {(*static_cast<const ColumnVector<Element>*>(input))[row]};
+}
+
+// The sibling of valueListItem for a type-erased column: the cell already carries the tag
+// its value is stored under, so it goes into the list as the type that tag names.
+ListBuffer<>::ListItemVariant taggedColumnListItem(const Column* input, size_t row, LocalMemory*) {
+    return taggedListItem((*static_cast<const ColumnVector<ListElementView>*>(input))[row]);
+}
+
+// The sibling of valueListItem for a column that owns its characters - a CSV field's. The
+// list stores a view rather than the characters, and the column refills on the next step,
+// so they are copied into the query's string buffer for the view to span.
+ListBuffer<>::ListItemVariant ownedStringListItem(const Column* input, size_t row, LocalMemory* memory) {
+    const std::string& owned = (*static_cast<const ColumnVector<std::string>*>(input))[row];
+    const std::span<const char> characters {owned.data(), owned.size()};
+
+    return ListBuffer<>::ListItemVariant {memory->stringBuffer().insert(characters)};
+}
+
+// The nullable sibling of ownedStringListItem: the label set labels(n) joins is owned and
+// absent on a node carrying none.
+ListBuffer<>::ListItemVariant optOwnedStringListItem(const Column* input, size_t row, LocalMemory* memory) {
+    const std::optional<std::string>& owned = (*static_cast<const ColumnOptVector<std::string>*>(input))[row];
+    if (!owned.has_value()) {
+        return ListBuffer<>::ListItemVariant {PropertyNull {}};
+    }
+
+    const std::span<const char> characters {owned->data(), owned->size()};
+
+    return ListBuffer<>::ListItemVariant {memory->stringBuffer().insert(characters)};
+}
+
 // The fold and the list emit an entity collect of this ID reads. The list emits through
 // the value path's template - its elements are the IDs the fold appended - so there is
 // no entity emit of its own.
@@ -4361,6 +4417,62 @@ void NLExecutor::runCase(NLExecutionContext*, NLFunctionData* data) {
             writeDefault(result, defaultValue, row);
         }
     }
+}
+
+void NLExecutor::runMakeList(NLExecutionContext*, NLFunctionData* data) {
+    const NLMakeListData* makeList = static_cast<NLMakeListData*>(data);
+
+    const std::vector<NLMakeListData::Element>& elements = makeList->elements();
+    ListBuffer<>& listBuffer = makeList->getMemory()->listBuffer();
+
+    // Every element column is row-aligned with the others, so the first gives the rows
+    const size_t rowCount = elements.front()._column->size();
+
+    std::vector<ListView>& outputRaw = static_cast<ColumnVector<ListView>*>(makeList->getResult())->getRaw();
+    outputRaw.resize(rowCount);
+
+    std::vector<ListBuffer<>::ListItemVariant> row;
+    row.reserve(elements.size());
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        row.clear();
+        for (const NLMakeListData::Element& element : elements) {
+            row.push_back(element._read(element._column, rowIndex, makeList->getMemory()));
+        }
+
+        outputRaw[rowIndex] = listBuffer.insert(row);
+    }
+}
+
+NLListItemReadFunction NLExecutor::selectValueListItemRead(ValueType valueType) {
+    NLListItemReadFunction selected = nullptr;
+
+    const auto select = [&]<SupportedType T>() {
+        selected = &valueListItem<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return selected;
+}
+
+NLListItemReadFunction NLExecutor::selectNodeListItemRead() {
+    return &plainListItem<NodeID>;
+}
+
+NLListItemReadFunction NLExecutor::selectEdgeListItemRead() {
+    return &plainListItem<EdgeID>;
+}
+
+NLListItemReadFunction NLExecutor::selectNestedListItemRead() {
+    return &plainListItem<ListView>;
+}
+
+NLListItemReadFunction NLExecutor::selectTaggedListItemRead() {
+    return &taggedColumnListItem;
+}
+
+NLListItemReadFunction NLExecutor::selectOwnedStringListItemRead(bool nullable) {
+    return nullable ? &optOwnedStringListItem : &ownedStringListItem;
 }
 
 NLCaseResetFn NLExecutor::selectCaseReset(ValueType valueType) {

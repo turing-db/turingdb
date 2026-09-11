@@ -3,9 +3,9 @@
   "graph": "simpledb",
   "query": "MATCH (n) RETURN [n.name]",
   "expect": {
-    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN [n.name]\n       |                   ^^^^^^\n-------* Non-literal list elements are not yet supported",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN [n.name]\n       |                   ^^^^^^\n-------* Non-literal list elements are not yet supported",
-    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n) RETURN [n.name]\\n       |                   ^^^^^^\\n-------* Non-literal list elements are not yet supported\"}"
+    "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): v1\n    `\"]\n    4[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    5[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->4\n    2-->1\n    3-->5\n    4-->3",
+    "result": "PLAN ERROR\nNon-literal list elements are not yet supported",
+    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"Non-literal list elements are not yet supported\"}"
   },
   "tags": [
     "lists",
