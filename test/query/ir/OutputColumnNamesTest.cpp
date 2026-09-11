@@ -48,7 +48,8 @@ using ColumnNames = std::vector<std::string>;
 // so a test can hold the names against the columns they label.
 class ColumnNameSink : public NLOutputSink {
 public:
-    void setColumnNames(std::span<const std::string_view> names) override {
+    void declareOutput(std::span<const std::string_view> names,
+                       std::span<const Column* const> chunks) override {
         _names.assign(names.begin(), names.end());
     }
 

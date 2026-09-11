@@ -4,6 +4,7 @@
 
 #include "NLOutputSink.h"
 #include "QueryStatus.h"
+#include "iterators/ChunkConfig.h"
 #include "versioning/CommitHash.h"
 #include "versioning/ChangeID.h"
 
@@ -23,6 +24,8 @@ public:
     explicit QueryInterpreterV3(SystemManager* sysMan);
     ~QueryInterpreterV3();
 
+    void setChunkSize(size_t chunkSize) { _chunkSize = chunkSize; }
+
     void execute(QueryStatus& status,
                  std::string_view query,
                  std::string_view graphName,
@@ -33,6 +36,7 @@ public:
 
 private:
     SystemManager* _sysMan {nullptr};
+    size_t _chunkSize {ChunkConfig::CHUNK_SIZE};
 
     void executeImpl(QueryStatus& status,
                      std::string_view query,

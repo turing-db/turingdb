@@ -1,5 +1,6 @@
 #pragma once
 
+#include "TuringProtoServerNlSink.h"
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
@@ -18,7 +19,8 @@ class TuringDB;
 class TuringProtoServerProcessor {
 public:
     TuringProtoServerProcessor(TuringDB& db,
-                               net::TCPConnection& connection);
+                               net::TCPConnection& connection,
+                               bool useV3);
     ~TuringProtoServerProcessor();
 
     TuringProtoServerProcessor(const TuringProtoServerProcessor&) = delete;
@@ -39,6 +41,8 @@ private:
     TuringDB& _db;
     net::TCPConnection& _connection;
     DBThreadContext* _threadContext {nullptr};
+    TuringProtoServerNlSink _protoNLSink;
+    bool _useV3 {false};
 
     void handleQuery();
     void writeQueryError(std::string_view message);

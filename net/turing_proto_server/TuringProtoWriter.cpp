@@ -76,6 +76,17 @@ void TuringProtoWriter::writeDataframeHeader(const db::Dataframe* frame) {
     writePacket(MessageTypes::CHUNK_HEADER);
 }
 
+void TuringProtoWriter::writeColumnHeaders(std::span<const std::string_view> names,
+                                           std::span<const db::Column* const> cols) {
+    _buffer.setOnBufferFullCallBack([]() {
+        bioassert(false, "Column schema exceeded buffer capacity");
+    });
+
+    _encoder.writeColumnHeaders(names, cols);
+
+    writePacket(MessageTypes::CHUNK_HEADER);
+}
+
 void TuringProtoWriter::writeDataframe(const db::Dataframe* frame) {
     auto onBufferFull = [&]() {
         writePacket(MessageTypes::CHUNK);
@@ -84,6 +95,21 @@ void TuringProtoWriter::writeDataframe(const db::Dataframe* frame) {
     _buffer.setOnBufferFullCallBack(onBufferFull);
 
     _encoder.writeDataframe(frame);
+
+    if (_buffer.size() > 0) {
+        writePacket(MessageTypes::CHUNK);
+    }
+    writePacket(MessageTypes::END_CHUNK);
+}
+
+void TuringProtoWriter::writeColumns(std::span<const db::Column* const> cols, size_t offset, size_t rowCount) {
+    auto onBufferFull = [&]() {
+        writePacket(MessageTypes::CHUNK);
+    };
+
+    _buffer.setOnBufferFullCallBack(onBufferFull);
+
+    _encoder.writeColumns(cols, offset, rowCount);
 
     if (_buffer.size() > 0) {
         writePacket(MessageTypes::CHUNK);

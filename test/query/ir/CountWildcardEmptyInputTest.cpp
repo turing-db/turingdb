@@ -39,7 +39,8 @@ using ColumnNames = std::vector<std::string>;
 // the i64 the language's one integer type is.
 class ScalarIntegerSink : public NLOutputSink {
 public:
-    void setColumnNames(std::span<const std::string_view> names) override {
+    void declareOutput(std::span<const std::string_view> names,
+                       std::span<const Column* const> chunks) override {
         _names.assign(names.begin(), names.end());
     }
 

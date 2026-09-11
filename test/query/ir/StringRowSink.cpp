@@ -168,7 +168,8 @@ StringRowSink::StringRowSink() {
 StringRowSink::~StringRowSink() {
 }
 
-void StringRowSink::setColumnNames(std::span<const std::string_view> names) {
+void StringRowSink::declareOutput(std::span<const std::string_view> names,
+                                  std::span<const Column* const> chunks) {
     _names.assign(names.begin(), names.end());
 }
 
