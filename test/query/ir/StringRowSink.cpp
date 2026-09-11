@@ -148,6 +148,23 @@ bool textOfPath(const Column* chunk, size_t rowIndex, std::string& text) {
     return true;
 }
 
+// A nullable boolean, which a three-valued predicate such as IN produces
+bool textOfOptionalBool(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnOptVector<CustomBool>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    const std::optional<CustomBool>& value = column->getRaw()[rowIndex];
+    if (!value) {
+        text = "null";
+        return true;
+    }
+
+    text = *value ? "true" : "false";
+    return true;
+}
+
 template <typename Primitive>
 bool textOfOptional(const Column* chunk, size_t rowIndex, std::string& text) {
     const auto* column = dynamic_cast<const ColumnOptVector<Primitive>*>(chunk);
@@ -220,6 +237,8 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfOptional<std::string_view>(chunk, rowIndex, text)) {
         return text;
     } else if (textOfOptional<std::string>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfOptionalBool(chunk, rowIndex, text)) {
         return text;
     } else if (textOfListElement(chunk, rowIndex, text)) {
         return text;
