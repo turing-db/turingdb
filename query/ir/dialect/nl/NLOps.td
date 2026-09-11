@@ -1749,6 +1749,18 @@ def Contains : NLOp<"contains", [Pure, ConstantThroughOperands, RowAlignedThroug
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
+def In : NLOp<"in", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
+  let summary = "Row-wise test of whether each chunk value is an element of the given list";
+  let description = [{
+      %r = nl.in %x, %y : (!nl.chunk<i64>, !nl.chunk<!storage.list<i64>>) -> !nl.chunk<!storage.nullable<i1>>
+  }];
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
 def And : NLOp<"and", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise logical AND of two boolean chunks";
   let description = [{

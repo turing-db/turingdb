@@ -257,7 +257,7 @@ Value climbToLineageAnchor(Value column, bool& crossedProducer, llvm::SmallVecto
 
 bool isMaskComputeOp(Operation* op) {
     return isa<EqOp, NeqOp, GtOp, LtOp, GteOp, LteOp,
-               StartsWithOp, EndsWithOp, ContainsOp,
+               StartsWithOp, EndsWithOp, ContainsOp, InOp,
                AndOp, OrOp, XorOp, NotOp,
                AddOp, SubOp, MulOp, DivOp, ModOp, PowOp, ConcatOp,
                ConstantOp,
