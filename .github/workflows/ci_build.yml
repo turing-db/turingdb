@@ -164,7 +164,7 @@ jobs:
         # per-OS key, which later cache-hit jobs then restored and failed on at
         # find_package. Bump the salt to discard them and re-save a clean tree
         # (with fail-fast disabled, jobs now run to completion so caches stay clean).
-        key: ${{ matrix.os }}-dependencies-v3-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh') }}
+        key: ${{ matrix.os }}-dependencies-v3-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules') }}
 
     # The macOS minis share one cache base across several runner instances, and
     # corca-ai/local-cache symlinks external/dependencies straight into that
@@ -179,7 +179,7 @@ jobs:
         python3 scripts/with_host_lock.py /tmp/turingdb-depcache.lock \
           bash scripts/dep_cache.sh restore \
           /Users/m1/actions-local-cache \
-          "${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh', 'scripts/dep_cache.sh') }}"
+          "${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'scripts/dep_cache.sh') }}"
 
     - name: Install build tools
       run: ./install_build_tools.sh
@@ -195,7 +195,7 @@ jobs:
         python3 scripts/with_host_lock.py /tmp/turingdb-depcache.lock \
           bash scripts/dep_cache.sh publish \
           /Users/m1/actions-local-cache \
-          "${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'build.sh', 'scripts/dep_cache.sh') }}"
+          "${{ matrix.os }}-dependencies-${{ hashFiles('install_build_tools.sh', 'dependencies.sh', '.gitmodules', 'scripts/dep_cache.sh') }}"
 
     - name: Setup Python
       run: uv python install ${{ matrix.python_version }}
