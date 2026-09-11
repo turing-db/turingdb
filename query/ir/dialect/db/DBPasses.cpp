@@ -152,26 +152,28 @@ Operation::operand_range factorYieldColumns(mlir::Region& factor) {
 // opposed to a filter, which only drops them.
 using ColumnEquality = std::pair<Value, Value>;
 
-// A filter keeping only the rows where two node columns agree holds them to the same node
-// below it, so anything reading one of them reads the other just as well
-bool matchColumnEquality(FilterOp filter, ColumnEquality& equality) {
-    EqOp mask = filter.getMask().getDefiningOp<EqOp>();
-    if (!mask) {
-        return false;
-    }
+void collectConjuncts(Value mask, llvm::SmallVectorImpl<Value>& conjuncts);
 
+// Every equality of two node columns the filter requires: it keeps only the rows where they
+// agree, so below it anything reading one of them reads the other just as well. A filter
+// whose mask is a conjunction requires each of its conjuncts, equalities among them.
+void collectColumnEqualities(FilterOp filter, llvm::SmallVectorImpl<ColumnEquality>& equalities) {
     const auto isNodeColumn = [](Value column) {
         const auto type = dyn_cast<ColumnType>(column.getType());
         return type && isa<storage::NodeIDType>(type.getType());
     };
 
-    if (!isNodeColumn(mask.getLhs()) || !isNodeColumn(mask.getRhs())) {
-        return false;
+    llvm::SmallVector<Value, 4> conjuncts;
+    collectConjuncts(filter.getMask(), conjuncts);
+
+    for (const Value conjunct : conjuncts) {
+        EqOp equality = conjunct.getDefiningOp<EqOp>();
+        if (!equality || !isNodeColumn(equality.getLhs()) || !isNodeColumn(equality.getRhs())) {
+            continue;
+        }
+
+        equalities.push_back(ColumnEquality {equality.getLhs(), equality.getRhs()});
     }
-
-    equality = ColumnEquality {mask.getLhs(), mask.getRhs()};
-
-    return true;
 }
 
 Value climbToLineageAnchor(Value column, bool& crossedProducer, llvm::SmallVectorImpl<ColumnEquality>* equalities = nullptr) {
@@ -188,9 +190,8 @@ Value climbToLineageAnchor(Value column, bool& crossedProducer, llvm::SmallVecto
         if (FilterOp filter = dyn_cast<FilterOp>(def)) {
             const size_t resultIndex = cast<OpResult>(column).getResultNumber();
 
-            ColumnEquality equality;
-            if (equalities && matchColumnEquality(filter, equality)) {
-                equalities->push_back(equality);
+            if (equalities) {
+                collectColumnEqualities(filter, *equalities);
             }
 
             column = filter.getColumnsToFilter()[resultIndex];
@@ -328,29 +329,42 @@ struct PushablePredicate {
     MaskCone _cone;
 };
 
-// The anchor a predicate can be rebuilt on instead of @param anchor: where an equality the
-// climb crossed holds that anchor to a column the graph was scanned for, the predicate reads
-// the same node off the scan, and applying it there is what spares the walk between them.
+// The anchor a predicate can be rebuilt on instead of @param anchor: the equalities the climb
+// crossed hold whole classes of columns to the same node, and where one of the class was
+// scanned for, the predicate reads that node off the scan. Applying it there is what spares
+// the walk between the two. The class is closed over the equalities rather than read a pair
+// at a time, so a column held to the scan through an intermediate is still found.
 Value scannedAnchorEqualTo(Value anchor, llvm::ArrayRef<ColumnEquality> equalities) {
     if (!anchor || isNodeSource(anchor.getDefiningOp())) {
         return {};
     }
 
-    for (const ColumnEquality& equality : equalities) {
+    llvm::SmallVector<Value, 4> anchorClass {anchor};
+    llvm::SmallPtrSet<void*, 4> seen {anchor.getAsOpaquePointer()};
+
+    const auto anchorOf = [](Value column) {
         bool crossed = false;
-        const Value lhs = climbToLineageAnchor(equality.first, crossed);
-        crossed = false;
-        const Value rhs = climbToLineageAnchor(equality.second, crossed);
-        if (!lhs || !rhs) {
-            continue;
-        }
+        return climbToLineageAnchor(column, crossed);
+    };
 
-        if (lhs == anchor && isNodeSource(rhs.getDefiningOp())) {
-            return rhs;
-        }
+    for (size_t index = 0; index < anchorClass.size(); index++) {
+        for (const ColumnEquality& equality : equalities) {
+            const Value lhs = anchorOf(equality.first);
+            const Value rhs = anchorOf(equality.second);
+            if (!lhs || !rhs) {
+                continue;
+            }
 
-        if (rhs == anchor && isNodeSource(lhs.getDefiningOp())) {
-            return lhs;
+            const Value held = lhs == anchorClass[index] ? rhs : (rhs == anchorClass[index] ? lhs : Value {});
+            if (!held || !seen.insert(held.getAsOpaquePointer()).second) {
+                continue;
+            }
+
+            if (isNodeSource(held.getDefiningOp())) {
+                return held;
+            }
+
+            anchorClass.push_back(held);
         }
     }
 
