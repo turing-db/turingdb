@@ -21,6 +21,6 @@ SinglePartQuery* SinglePartQuery::create(CypherAST* ast) {
     return query;
 }
 
-void SinglePartQuery::addReadStmt(Stmt* stmt) {
-    _readStmts->add(stmt);
+void SinglePartQuery::addStmt(Stmt* stmt) {
+    _stmts->add(stmt);
 }

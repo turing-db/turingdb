@@ -252,15 +252,28 @@ void PlanGraphGenerator::generateCommitQuery(const CommitQuery* query) {
 }
 
 void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
-    const StmtContainer* readStmts = query->getReadStmts();
-    const StmtContainer* updateStmts = query->getUpdateStmts();
+    const StmtContainer* stmts = query->getStmts();
     const ReturnStmt* returnStmt = query->getReturnStmt();
     const DeclContext* declCtxt = query->getDeclContext();
+
+    // The analyzer keeps a part's reading clauses ahead of its updating ones and rejects a
+    // WITH here, so the stream splits into the two halves these generators expect
+    std::vector<const Stmt*> readStmts;
+    std::vector<const Stmt*> updateStmts;
+    if (stmts) {
+        for (const Stmt* stmt : stmts->stmts()) {
+            if (Stmt::isUpdating(stmt->getKind())) {
+                updateStmts.push_back(stmt);
+            } else {
+                readStmts.push_back(stmt);
+            }
+        }
+    }
 
     PlanGraphNode* currentNode = nullptr;
 
     // Generate read statements (optional)
-    if (readStmts) {
+    if (!readStmts.empty()) {
         ReadStmtGenerator readGenerator(_ast, _view, _config, &_tree, _variables.get(), declCtxt);
 
         // Pass literal LIMIT to the read generator for join planning
@@ -272,7 +285,7 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
             }
         }
 
-        for (const Stmt* stmt : readStmts->stmts()) {
+        for (const Stmt* stmt : readStmts) {
             readGenerator.generateStmt(stmt);
         }
 
@@ -290,10 +303,10 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
     }
 
     // Generate update statements (optional)
-    if (updateStmts) {
+    if (!updateStmts.empty()) {
         WriteStmtGenerator writeGenerator(_ast, &_tree, _variables.get(), currentNode);
 
-        for (const Stmt* stmt : updateStmts->stmts()) {
+        for (const Stmt* stmt : updateStmts) {
             currentNode = writeGenerator.generateStmt(stmt);
             // Keep the write stmt generator _prevNode up to date
             writeGenerator.setPrevNode(currentNode);
@@ -308,7 +321,7 @@ void PlanGraphGenerator::generateSinglePartQuery(const SinglePartQuery* query) {
         // and we have updateStmts.
         // CALL standalone already handles its own ProduceResults
         // and readStmts alone must be followed by a RETURN as per grammar
-        if (updateStmts) {
+        if (!updateStmts.empty()) {
             currentNode = generateReturnNone(currentNode);
         }
     }

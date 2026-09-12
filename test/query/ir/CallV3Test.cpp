@@ -64,10 +64,14 @@ void CallV3Test::runQueryExpectingError(std::string_view query, std::string_view
 }
 
 void CallV3Test::runWrite(std::string_view query) {
+    NullSink sink;
+    runWrite(query, sink);
+}
+
+void CallV3Test::runWrite(std::string_view query, NLOutputSink& sink) {
     ChangeID changeID;
     newChange(changeID);
 
-    NullSink sink;
     QueryStatus status;
     _interpreter->execute(status, query, _graphName, CommitHash::head(), changeID, &_env->getMem(), &sink);
     ASSERT_TRUE(status.isOk()) << query << ": " << status.getError();
