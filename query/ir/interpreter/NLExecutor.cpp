@@ -5432,16 +5432,19 @@ void NLExecutor::runCountScanRows(NLExecutionContext* context, NLFunctionData* d
 
     // Each scan contributes the nodes carrying its labels, and crossed together they make
     // the product of those counts. An empty conjunction filters nothing, so its scan is
-    // every node of the graph; a named property narrows the one scan carrying it to the
-    // nodes that hold it, which is what count(a.name) tallies.
+    // every node of the graph; a named property narrows the one scan it is read from to the
+    // nodes that hold it, which is what count(b.name) tallies over a product.
     const GraphReader reader(*context->getView());
+    const std::span<const LabelSet> labelSets = scanRows->getLabelSets();
     const PropertyTypeID propertyTypeID = scanRows->getPropertyTypeID();
+    const size_t propertyScan = scanRows->getPropertyScan();
 
     size_t rows = 1;
-    for (const LabelSet& labelset : scanRows->getLabelSets()) {
+    for (size_t scanIndex = 0; scanIndex < labelSets.size(); scanIndex++) {
+        const LabelSet& labelset = labelSets[scanIndex];
         const LabelSetHandle labelsetHandle {labelset};
 
-        if (propertyTypeID.isValid()) {
+        if (propertyTypeID.isValid() && scanIndex == propertyScan) {
             rows *= reader.getNodeCountWithProperty(labelsetHandle, propertyTypeID);
         } else if (labelset.empty()) {
             rows *= reader.getNodeCount();

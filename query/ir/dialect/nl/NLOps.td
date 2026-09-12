@@ -1402,11 +1402,13 @@ def CountScanRows : NLOp<"count_scan_rows", [Pure, InferTypeOpAdaptor]> {
     to accumulate. It produces the chunk in place at function scope, where nl.output
     consumes it.
 
-    `property`, when given, narrows the tally of the one listed scan to the nodes
-    holding that property - the count(a.name) form, answered off the index the graph
-    keeps of each property by the label set of its holders:
+    `property`, when given, narrows the scan `propertyScan` names to the nodes holding
+    that property - the count(a.name) form, answered off the index the graph keeps of
+    each property by the label set of its holders. The scan is counted from 0 and
+    defaults to the first:
 
       %m = nl.count_scan_rows([["Person"]]) property "name"
+      %p = nl.count_scan_rows([["Reaction"], ["Pathway"]]) property "stId" of scan 1
 
     `labels` is the list db.count_scan_rows carried; translation resolves each name
     to a storage LabelID, the same way an nl.scan_nodes_by_label name is resolved, and
@@ -1418,11 +1420,13 @@ def CountScanRows : NLOp<"count_scan_rows", [Pure, InferTypeOpAdaptor]> {
     so the result type is inferred, not spelled out.
   }];
 
-  let arguments = (ins StrArrayArrayAttr:$labels, OptionalAttr<StrAttr>:$property);
+  let arguments = (ins StrArrayArrayAttr:$labels,
+                       OptionalAttr<StrAttr>:$property,
+                       OptionalAttr<UI64Attr>:$propertyScan);
   let results   = (outs NLChunk:$result);
   let hasVerifier = 1;
 
-  let assemblyFormat = "`(` $labels `)` (`property` $property^)? attr-dict";
+  let assemblyFormat = "`(` $labels `)` (`property` $property^)? (`of` `scan` $propertyScan^)? attr-dict";
 }
 
 /**

@@ -3082,7 +3082,7 @@ void NLTranslator::translateCountScanRows(nl::CountScanRows countScanRows, NLStm
     if (const std::optional<llvm::StringRef> property = countScanRows.getProperty()) {
         const std::optional<PropertyType> propertyType = _view->metadata().propTypes().get(std::string_view(property->data(), property->size()));
         if (propertyType) {
-            data->setPropertyTypeID(propertyType->_id);
+            data->setProperty(propertyType->_id, countScanRows.getPropertyScan().value_or(0));
         } else {
             data->markUnmatchable();
         }

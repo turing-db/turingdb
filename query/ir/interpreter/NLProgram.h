@@ -1749,9 +1749,10 @@ private:
 // executor builds each run points at storage that outlives it (this data lives for the
 // whole program); the translator resolves them in place through addLabelSet after
 // allocating the data. An invalid property type ID is a tally over the scanned nodes
-// themselves rather than over the ones holding a property. _matchable is false when a
-// requested label or the property was absent from the schema, leaving the conjunction
-// unsatisfiable, so the product counts 0.
+// themselves rather than over the ones holding a property; a valid one narrows the scan
+// _propertyScan indexes and leaves the others whole. _matchable is false when a requested
+// label or the property was absent from the schema, leaving the conjunction unsatisfiable,
+// so the product counts 0.
 class NLCountScanRowsData : public NLFunctionData {
 public:
     NLCountScanRowsData(Column* output)
@@ -1762,17 +1763,22 @@ public:
     Column* getOutput() const { return _output; }
     std::span<const LabelSet> getLabelSets() const { return _labelSets; }
     PropertyTypeID getPropertyTypeID() const { return _propertyTypeID; }
+    size_t getPropertyScan() const { return _propertyScan; }
     bool isMatchable() const { return _matchable; }
 
     void reserveLabelSets(size_t count) { _labelSets.reserve(count); }
     void addLabelSet(const LabelSet& labelset) { _labelSets.push_back(labelset); }
-    void setPropertyTypeID(PropertyTypeID propertyTypeID) { _propertyTypeID = propertyTypeID; }
+    void setProperty(PropertyTypeID propertyTypeID, size_t propertyScan) {
+        _propertyTypeID = propertyTypeID;
+        _propertyScan = propertyScan;
+    }
     void markUnmatchable() { _matchable = false; }
 
 private:
     Column* _output {nullptr};
     std::vector<LabelSet> _labelSets;
     PropertyTypeID _propertyTypeID;
+    size_t _propertyScan {0};
     bool _matchable {true};
 };
 
