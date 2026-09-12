@@ -420,6 +420,26 @@ LogicalResult DistinctFilter::verify() {
     return success();
 }
 
+// A count read off the graph's node counts is the same single unsigned tally
+// nl.count_result materializes, whatever it counted, so the chunk type never varies
+LogicalResult CountScanRows::inferReturnTypes(MLIRContext* context,
+                                              std::optional<Location> location,
+                                              CountScanRows::Adaptor adaptor,
+                                              SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(ChunkType::get(context, IntegerType::get(context, 64, IntegerType::Unsigned)));
+    return success();
+}
+
+// A count with no scan listed has nothing to count; the empty product it would stand for
+// is an nl.constant instead.
+LogicalResult CountScanRows::verify() {
+    if (getLabels().empty()) {
+        return emitOpError("requires at least one scan to count");
+    }
+
+    return success();
+}
+
 // An nl.make_list must read at least one element chunk: there would be no cell to build a
 // list out of, and nothing to size the step from. A list known without reading a row is an
 // nl.constant instead.

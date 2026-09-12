@@ -64,7 +64,7 @@ bool yieldsReducedRowChunk(mlir::Value column, llvm::DenseMap<mlir::Value, bool>
 
     bool isReducedRow = false;
     if (definingOp) {
-        if (mlir::isa<nl::CountResult, nl::AggregateResult>(definingOp)) {
+        if (mlir::isa<nl::CountResult, nl::CountScanRows, nl::AggregateResult>(definingOp)) {
             isReducedRow = true;
         } else if (definingOp->hasTrait<mlir::OpTrait::ConstantThroughOperands>()) {
             bool readsAReducedRow = false;
@@ -762,6 +762,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateCountUpdate(countUpdate, body);
         } else if (nl::CountResult countResult = mlir::dyn_cast<nl::CountResult>(operation)) {
             translateCountResult(countResult, body);
+        } else if (nl::CountScanRows countScanRows = mlir::dyn_cast<nl::CountScanRows>(operation)) {
+            translateCountScanRows(countScanRows, body);
         } else if (nl::Aggregate aggregate = mlir::dyn_cast<nl::Aggregate>(operation)) {
             translateAggregateState(aggregate, body);
         } else if (nl::AggregateUpdate aggregateUpdate = mlir::dyn_cast<nl::AggregateUpdate>(operation)) {
@@ -3046,6 +3048,34 @@ void NLTranslator::translateCountResult(nl::CountResult result, NLStmtContainer*
 
     NLCountResultData* data = _program->allocFunctionData<NLCountResultData>(state, output);
     body->emplaceStmt(&NLExecutor::runCountResult, data);
+}
+
+void NLTranslator::translateCountScanRows(nl::CountScanRows countScanRows, NLStmtContainer* body) {
+    // The result is the unsigned i64 count chunk (!nl.chunk<ui64>) runCountScanRows fills
+    // with the single product row - the chunk an nl.count_result emits after its loop.
+    ColumnVector<uint64_t>* output = allocCountColumn();
+    _valueSlots[countScanRows.getResult()] = output;
+
+    const mlir::ArrayAttr scans = countScanRows.getLabels();
+
+    NLCountScanRowsData* data = _program->allocFunctionData<NLCountScanRowsData>(output);
+    data->reserveLabelSets(scans.size());
+
+    for (const mlir::Attribute scan : scans) {
+        llvm::SmallVector<llvm::StringRef, 4> labels;
+        for (const mlir::Attribute label : mlir::cast<mlir::ArrayAttr>(scan)) {
+            labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
+        }
+
+        LabelSet labelset;
+        if (!resolveLabelSet(labels, labelset)) {
+            data->markUnmatchable();
+        }
+
+        data->addLabelSet(labelset);
+    }
+
+    body->emplaceStmt(&NLExecutor::runCountScanRows, data);
 }
 
 NLCountState* NLTranslator::countStateFor(mlir::Value handle) const {

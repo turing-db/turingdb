@@ -101,9 +101,11 @@ protected:
 // The two patterns are two components, so a product pairs them and its results are the
 // column of a followed by the column of b. The count takes the first of them - the column
 // of the query's first variable - and takes it where the product bound it, which is the
-// block the count is emitted into.
+// block the count is emitted into. b is matched on a property value so that the product's
+// size is not something the graph's node counts answer, leaving the count for this test to
+// read rather than a db.count_scan_rows.
 TEST_F(CountWildcardInputTest, countsTheColumnOfTheFirstMatchedVariable) {
-    generateProgram("MATCH (a), (b) RETURN count(*)");
+    generateProgram("MATCH (a), (b) WHERE b.age = 32 RETURN count(*)");
 
     mlir::db::Count count;
     _module.get().walk([&](mlir::db::Count found) { count = found; });

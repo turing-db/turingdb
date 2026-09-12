@@ -41,6 +41,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_REUSEPROPERTYREADS
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
+#define GEN_PASS_DEF_COUNTFROMMETADATA
 #include "DBPasses.h.inc"
 
 namespace {
@@ -2597,6 +2598,99 @@ struct FuseHashJoin : public impl::FuseHashJoinBase<FuseHashJoin> {
 
 private:
     DBPassContext _context;
+};
+
+// The label conjunction db.count_scan_rows spells for one scanned variable: the scan's own
+// label list, or an empty one for an unlabelled scan. Anything else a column can come off -
+// a filter, a hop, a property read - has a row count only the engine can reach, so there is
+// nothing to collect and the match fails.
+bool collectScanLabels(Value column, llvm::SmallVectorImpl<Attribute>& labels, mlir::OpBuilder& builder) {
+    Operation* const def = column.getDefiningOp();
+    if (!def) {
+        return false;
+    }
+
+    if (isa<ScanNodes>(def)) {
+        labels.push_back(builder.getStrArrayAttr({}));
+
+        return true;
+    } else if (ScanNodesByLabel scanByLabel = dyn_cast<ScanNodesByLabel>(def)) {
+        labels.push_back(scanByLabel.getLabelsAttr());
+
+        return true;
+    } else if (CrossProduct product = dyn_cast<CrossProduct>(def)) {
+        // A factor's rows are the rows of its first yielded column, so the product's rows
+        // are the two factors' together - and a factor is free to be a product of its own.
+        const Operation::operand_range leftColumns = factorYieldColumns(product.getLeftFactor());
+        const Operation::operand_range rightColumns = factorYieldColumns(product.getRightFactor());
+        if (leftColumns.empty() || rightColumns.empty()) {
+            return false;
+        }
+
+        if (!collectScanLabels(leftColumns.front(), labels, builder)) {
+            return false;
+        }
+
+        return collectScanLabels(rightColumns.front(), labels, builder);
+    }
+
+    return false;
+}
+
+// Whether this count tallies nothing but whole node scans, and the conjunctions of the
+// scans it tallies. count(DISTINCT x) is a different tally over the same rows, so it is
+// left alone.
+bool countsWholeScans(Count count, llvm::SmallVectorImpl<Attribute>& labels, mlir::OpBuilder& builder) {
+    if (count.getDistinct()) {
+        return false;
+    }
+
+    const Value rows = count.getInput();
+    const ColumnType rowsType = dyn_cast<ColumnType>(rows.getType());
+
+    // count(*) charges every row, so whichever column of the scans it is anchored on
+    // answers for them. A plain count charges the non-null rows, which is the same tally
+    // only on a column that holds no null - the node IDs a scan emits.
+    const bool countsEveryRow = count.getRows() || (rowsType && isa<storage::NodeIDType>(rowsType.getType()));
+    if (!countsEveryRow) {
+        return false;
+    }
+
+    return collectScanLabels(rows, labels, builder);
+}
+
+void countFromMetadata(Count count, ArrayAttr labels, mlir::OpBuilder& builder) {
+    builder.setInsertionPoint(count);
+    CountScanRows scanRows = builder.create<CountScanRows>(count.getLoc(), count.getResult().getType(), labels);
+
+    Operation* const countOp = count.getOperation();
+    const Value countedRows = count.getInput();
+
+    countOp->getResult(0).replaceAllUsesWith(scanRows.getResult());
+    countOp->erase();
+
+    // A cross product takes the scans in its factor regions down with it.
+    eraseIfUnused(countedRows.getDefiningOp());
+}
+
+struct CountFromMetadata : public impl::CountFromMetadataBase<CountFromMetadata> {
+    void runOnOperation() override {
+        // Collect the counts first, since rewriting erases ops and would invalidate the walk.
+        llvm::SmallVector<Count> counts;
+        getOperation()->walk([&](Count count) {
+            counts.push_back(count);
+        });
+
+        mlir::OpBuilder builder(&getContext());
+        for (const Count count : counts) {
+            llvm::SmallVector<Attribute> labels;
+            if (!countsWholeScans(count, labels, builder)) {
+                continue;
+            }
+
+            countFromMetadata(count, builder.getArrayAttr(labels), builder);
+        }
+    }
 };
 
 }

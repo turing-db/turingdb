@@ -1386,6 +1386,40 @@ def CountResult : NLOp<"count_result", []> {
 }
 
 /**
+* CountScanRows
+*/
+def CountScanRows : NLOp<"count_scan_rows", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Materialize the node counts of whole scans as their single-row product";
+  let description = [{
+    Imperative counterpart of db.count_scan_rows. Reads one node count per label
+    conjunction listed in `labels` and materializes their product as a single-row
+    chunk - one unsigned i64, the chunk nl.count_result emits:
+
+      %n = nl.count_scan_rows([["Reaction"], ["Pathway"]])
+
+    Unlike a count it opens no loop and reads no chunk: the counts come from the
+    graph's own per-label node counts, so there is no relation to walk and nothing
+    to accumulate. It produces the chunk in place at function scope, where nl.output
+    consumes it.
+
+    `labels` is the list db.count_scan_rows carried; translation resolves each name
+    to a storage LabelID, the same way an nl.scan_nodes_by_label name is resolved. A
+    name absent from the schema leaves its conjunction unsatisfiable, so that factor
+    counts 0 and the product is 0. An empty conjunction filters nothing and counts
+    every node.
+
+    The chunk is always a !nl.chunk<ui64> - a non-negative tally that is never null -
+    so the result type is inferred, not spelled out.
+  }];
+
+  let arguments = (ins StrArrayArrayAttr:$labels);
+  let results   = (outs NLChunk:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = "`(` $labels `)` attr-dict";
+}
+
+/**
 * Aggregate
 */
 // NOT Pure: the value-reducing sibling of nl.count. Each nl.aggregate is a

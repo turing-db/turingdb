@@ -458,6 +458,14 @@ LogicalResult ScanNodesByLabel::verify() {
     return success();
 }
 
+LogicalResult CountScanRows::verify() {
+    if (getLabels().empty()) {
+        return emitOpError("requires at least one scan to count");
+    }
+
+    return success();
+}
+
 LogicalResult ScanNodesByPropertyValue::verify() {
     if (getProperty().empty()) {
         return emitOpError("requires a non-empty property name");
