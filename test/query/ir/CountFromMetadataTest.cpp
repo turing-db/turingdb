@@ -80,9 +80,13 @@ protected:
         return mlir::succeeded(passManager.run(module));
     }
 
-    // The module holds exactly one db.count_scan_rows over the given conjunctions, and no
-    // count, scan or property read is left for the engine to walk.
-    void expectRewritten(mlir::ModuleOp module, const Conjunctions& expected, const std::string& property = "") {
+    // The module holds exactly one db.count_scan_rows over the given conjunctions, reading
+    // the property off the scan at @param propertyScan, and no count, scan or property read
+    // is left for the engine to walk.
+    void expectRewritten(mlir::ModuleOp module,
+                         const Conjunctions& expected,
+                         const std::string& property = "",
+                         uint64_t propertyScan = 0) {
         llvm::SmallVector<mlir::db::CountScanRows> rewritten = collect<mlir::db::CountScanRows>(module);
         ASSERT_EQ(rewritten.size(), 1u);
 
@@ -90,6 +94,7 @@ protected:
         conjunctionsOf(rewritten.front(), conjunctions);
         EXPECT_EQ(conjunctions, expected);
         EXPECT_EQ(propertyOf(rewritten.front()), property);
+        EXPECT_EQ(rewritten.front().getPropertyScan().value_or(0), propertyScan);
 
         EXPECT_EQ(countOps<mlir::db::Count>(module), 0u);
         EXPECT_EQ(countOps<mlir::db::CrossProduct>(module), 0u);
@@ -309,8 +314,8 @@ func.func @main() {
 }
 )mlir";
 
-// MATCH (a:Person), (b:Interest) RETURN count(b.name) - the op carries one property and no
-// say in which of the two scans it is read from, so the product is left alone.
+// MATCH (a:Person), (b:Interest) RETURN count(b.name) - the property is read of the right
+// factor's column, so the tally is the Persons crossed with the Interests holding it.
 const char* const crossProductPropertyCount = R"mlir(
 func.func @main() {
   %p:2 = db.cross_product factor {
@@ -319,6 +324,50 @@ func.func @main() {
   } factor {
     %b = db.scan_nodes_by_label(["Interest"]) : !db.column<!storage.node_id>
     db.yield %b : !db.column<!storage.node_id>
+  }
+  %name = db.get_node_properties(%p#1, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %n = db.count(%name) : (!db.column<none>) -> !db.column<none>
+  db.output(%n) : !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a:Person), (b:Interest) RETURN count(a.name) - the same off the left factor, which
+// is the first listed scan and so carries no index.
+const char* const crossProductLeftPropertyCount = R"mlir(
+func.func @main() {
+  %p:2 = db.cross_product factor {
+    %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+    db.yield %a : !db.column<!storage.node_id>
+  } factor {
+    %b = db.scan_nodes_by_label(["Interest"]) : !db.column<!storage.node_id>
+    db.yield %b : !db.column<!storage.node_id>
+  }
+  %name = db.get_node_properties(%p#0, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %n = db.count(%name) : (!db.column<none>) -> !db.column<none>
+  db.output(%n) : !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a:Person), (b:Interest), (c) RETURN count(c.name) - the three factors nest as two
+// products and the property is read of the innermost one's second column, so it is the last
+// scan of the three that the tally narrows. The inner product yields that column alone, the
+// way trim_unread_columns leaves it.
+const char* const nestedCrossProductPropertyCount = R"mlir(
+func.func @main() {
+  %p:2 = db.cross_product factor {
+    %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+    db.yield %a : !db.column<!storage.node_id>
+  } factor {
+    %q:2 = db.cross_product factor {
+      %b = db.scan_nodes_by_label(["Interest"]) : !db.column<!storage.node_id>
+      db.yield %b : !db.column<!storage.node_id>
+    } factor {
+      %c = db.scan_nodes() : !db.column<!storage.node_id>
+      db.yield %c : !db.column<!storage.node_id>
+    }
+    db.yield %q#1 : !db.column<!storage.node_id>
   }
   %name = db.get_node_properties(%p#1, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
   %n = db.count(%name) : (!db.column<none>) -> !db.column<none>
@@ -476,13 +525,28 @@ TEST_F(CountFromMetadataTest, DistinctPropertyCountIsLeftAlone) {
     EXPECT_EQ(countOps<mlir::db::GetNodeProperties>(*module), 1u);
 }
 
-TEST_F(CountFromMetadataTest, PropertyCountOverAProductIsLeftAlone) {
+TEST_F(CountFromMetadataTest, PropertyCountOverAProductNamesTheFactorItIsReadFrom) {
     mlir::OwningOpRef<mlir::ModuleOp> module = parse(crossProductPropertyCount);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runCountFromMetadata(*module));
 
-    expectUntouched(*module);
-    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 1u);
+    expectRewritten(*module, Conjunctions {{"Person"}, {"Interest"}}, "name", 1);
+}
+
+TEST_F(CountFromMetadataTest, PropertyCountOverTheLeftFactorNamesTheFirstScan) {
+    mlir::OwningOpRef<mlir::ModuleOp> module = parse(crossProductLeftPropertyCount);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runCountFromMetadata(*module));
+
+    expectRewritten(*module, Conjunctions {{"Person"}, {"Interest"}}, "name");
+}
+
+TEST_F(CountFromMetadataTest, PropertyCountOverANestedProductNamesTheLastScan) {
+    mlir::OwningOpRef<mlir::ModuleOp> module = parse(nestedCrossProductPropertyCount);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runCountFromMetadata(*module));
+
+    expectRewritten(*module, Conjunctions {{"Person"}, {"Interest"}, {}}, "name", 2);
 }
 
 TEST_F(CountFromMetadataTest, PropertyCountOverAHopIsLeftAlone) {

@@ -468,8 +468,12 @@ LogicalResult CountScanRows::verify() {
         return emitOpError("requires a non-empty property name");
     }
 
-    if (property && getLabels().size() != 1) {
-        return emitOpError("reads a property from a single scan");
+    if (!property && getPropertyScan()) {
+        return emitOpError("names the scan of a property it does not read");
+    }
+
+    if (getPropertyScan().value_or(0) >= getLabels().size()) {
+        return emitOpError("reads a property from a scan it does not list");
     }
 
     return success();

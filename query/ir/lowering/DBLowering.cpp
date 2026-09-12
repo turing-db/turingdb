@@ -2119,7 +2119,8 @@ void DBLowering::lowerCountScanRows(mlir::db::CountScanRows countScanRows) {
 
     nl::CountScanRows rows = _builder.create<nl::CountScanRows>(_builder.getUnknownLoc(),
                                                                 countScanRows.getLabelsAttr(),
-                                                                countScanRows.getPropertyAttr());
+                                                                countScanRows.getPropertyAttr(),
+                                                                countScanRows.getPropertyScanAttr());
 
     _valueMap[countScanRows.getResult()] = rows.getResult();
 }

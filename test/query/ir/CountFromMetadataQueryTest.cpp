@@ -21,6 +21,15 @@ protected:
     void expectCount(std::string_view query, uint64_t expected) {
         expectCounts(query, Counts {expected});
     }
+
+    // A count the rewrite answers off the graph's counts, beside the same count with a
+    // LIMIT past the product's size in front of it: that budget never binds, but it stands
+    // between the count and the scans, so the engine walks every row for that one and the
+    // two must agree.
+    void expectCountMatchesTheWalk(std::string_view query, std::string_view walkedQuery, uint64_t expected) {
+        expectCount(query, expected);
+        expectCount(walkedQuery, expected);
+    }
 };
 
 TEST_F(CountFromMetadataQueryTest, countsTheNodesCarryingALabel) {
@@ -80,6 +89,38 @@ TEST_F(CountFromMetadataQueryTest, countsNothingForAPropertyTheScannedNodesLack)
     expectCount("MATCH (a:Interest) RETURN count(a.isReal)", 7);
     expectCount("MATCH (a) RETURN count(a.isReal)", 7);
     expectCount("MATCH (a:Ghost) RETURN count(a.name)", 0);
+}
+
+// A property read off a product is a property of one of its factors: the tally is that
+// factor's holders crossed with the others' whole node counts. Which factor decides the
+// answer - the Interests hold isReal and the Persons hold none of it - so a tally charged
+// to the wrong one comes out 0 here rather than 56.
+TEST_F(CountFromMetadataQueryTest, countsTheHoldersOfAPropertyOfOneFactor) {
+    expectCountMatchesTheWalk("MATCH (a:Person), (b:Interest) RETURN count(b.isReal)",
+                              "MATCH (a:Person), (b:Interest) WITH a, b LIMIT 1000 RETURN count(b.isReal)",
+                              56);
+    expectCountMatchesTheWalk("MATCH (a:Person), (b:Interest) RETURN count(a.isReal)",
+                              "MATCH (a:Person), (b:Interest) WITH a, b LIMIT 1000 RETURN count(a.isReal)",
+                              0);
+    expectCountMatchesTheWalk("MATCH (a:Interest), (b:Person) RETURN count(b.age)",
+                              "MATCH (a:Interest), (b:Person) WITH a, b LIMIT 1000 RETURN count(b.age)",
+                              20);
+    expectCountMatchesTheWalk("MATCH (a:Person), (b:Person) RETURN count(b.age)",
+                              "MATCH (a:Person), (b:Person) WITH a, b LIMIT 1000 RETURN count(b.age)",
+                              16);
+}
+
+// Three factors, so the property is read from the first, the second or the last of them.
+TEST_F(CountFromMetadataQueryTest, countsTheHoldersOfAPropertyOfAnyFactor) {
+    expectCountMatchesTheWalk("MATCH (a:Person), (b:Interest), (c:Person) RETURN count(a.dob)",
+                              "MATCH (a:Person), (b:Interest), (c:Person) WITH a, b, c LIMIT 10000 RETURN count(a.dob)",
+                              320);
+    expectCountMatchesTheWalk("MATCH (a:Person), (b:Interest), (c:Person) RETURN count(b.isReal)",
+                              "MATCH (a:Person), (b:Interest), (c:Person) WITH a, b, c LIMIT 10000 RETURN count(b.isReal)",
+                              448);
+    expectCountMatchesTheWalk("MATCH (a:Person), (b:Interest), (c:Person) RETURN count(c.age)",
+                              "MATCH (a:Person), (b:Interest), (c:Person) WITH a, b, c LIMIT 10000 RETURN count(c.age)",
+                              160);
 }
 
 // Each write lands in a data part of its own, so a node written twice holds its property in
