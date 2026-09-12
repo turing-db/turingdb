@@ -1389,8 +1389,15 @@ void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
     const llvm::StringRef name = handleOp.getName();
 
     // Resolve the name against the schema once, here, so execution works from a
-    // PropertyTypeID and value type and never sees the name again
-    const std::optional<PropertyType> propertyType = _view->metadata().propTypes().get(std::string_view(name.data(), name.size()));
+    // PropertyTypeID and value type and never sees the name again. A CREATE earlier in the
+    // program may have introduced the name, which puts it in the change's own schema and
+    // nowhere else until the commit
+    const std::string_view propertyName(name.data(), name.size());
+    std::optional<PropertyType> propertyType = _view->metadata().propTypes().get(propertyName);
+    if (!propertyType && _metadataBuilder) {
+        propertyType = _metadataBuilder->findPropertyType(propertyName);
+    }
+
     if (!propertyType) {
         throw IRException("Unknown property '" + name.str() + "'");
     }

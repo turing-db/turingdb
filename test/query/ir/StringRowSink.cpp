@@ -14,6 +14,7 @@
 #include "list/ListBufferTypeTag.h"
 #include "list/ListElementView.h"
 #include "list/ListView.h"
+#include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
 using namespace db;
@@ -45,6 +46,17 @@ bool textOfConstant(const Column* chunk, size_t rowIndex, std::string& text) {
     }
 
     text = fmt::format("{}", column->at(rowIndex));
+    return true;
+}
+
+// The untyped null constant, which the null literal and a read of a name no property
+// carries both compile to: every row is an absent value of no type at all
+bool textOfNullConstant(const Column* chunk, std::string& text) {
+    if (!dynamic_cast<const ColumnConst<PropertyNull>*>(chunk)) {
+        return false;
+    }
+
+    text = "null";
     return true;
 }
 
@@ -234,6 +246,8 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfConstant<std::string_view>(chunk, rowIndex, text)) {
         return text;
     } else if (textOfConstant<std::string>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfNullConstant(chunk, text)) {
         return text;
     } else if (textOfOptional<int64_t>(chunk, rowIndex, text)) {
         return text;

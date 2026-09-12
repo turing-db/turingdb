@@ -265,7 +265,7 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
             if (propType) {
                 // Property type already exists
                 if (!ExprAnalyzer::propTypeCompatible(propType->_valueType, expr->getType())) {
-                    throwError(fmt::format("Cannot evaluate node property: types '{}' and '{}' are incompatible",
+                    throwError(fmt::format("Cannot evaluate edge property: types '{}' and '{}' are incompatible",
                                            ValueTypeName::value(propType->_valueType),
                                            EvaluatedTypeName::value(expr->getType())),
                                edgePattern);
@@ -279,6 +279,7 @@ void WriteStmtAnalyzer::analyze(EdgePattern* edgePattern) {
                                expr);
                 }
                 data->addExprConstraint(propName->getName(), valueType, expr);
+                _exprAnalyzer->addToBeCreatedType(propName->getName(), valueType, expr);
             }
         }
     }

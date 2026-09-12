@@ -411,9 +411,11 @@ private:
     // sibling of getOrCreatePropertyTypeHandle
     mlir::Value getOrCreateEdgeTypeHandle(llvm::StringRef edgeTypeName);
 
-    // The !nl.chunk<!storage.nullable<T>> a fetch of this property produces, with T
-    // the value type the name resolves to in the schema
-    mlir::Type propertyValueChunkType(llvm::StringRef propertyName);
+    static mlir::Type columnType(mlir::Value column);
+
+    // The !nl.chunk<!storage.nullable<T>> a fetch of this property produces, with T the
+    // value type the name resolves to in the schema, or the one the read declares
+    mlir::Type propertyValueChunkType(llvm::StringRef propertyName, mlir::Type declared);
 
     // Point the builder just before the terminator of block, where the next
     // lowered op belongs

@@ -29,6 +29,8 @@
 #include "metadata/LabelMap.h"
 #include "metadata/PropertyType.h"
 
+#include "IRValueTypes.h"
+
 #include "IRException.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Casting.h"
@@ -156,44 +158,6 @@ const BinaryFunctionLowering* lookupBinaryFunctionLowering(mlir::Operation& oper
     const llvm::StringRef name = operation.getName().getStringRef();
     const auto it = binaryFunctionLowerings.find(std::string_view(name.data(), name.size()));
     return it == binaryFunctionLowerings.end() ? nullptr : &it->second;
-}
-
-// Map a stored property value type to the MLIR element type baked into the
-// nullable value chunk. The element only has to round-trip back to this value
-// type during translation, so each kind takes a distinct builtin.
-mlir::Type valueTypeToElementType(mlir::OpBuilder& builder, ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return builder.getIntegerType(64);
-        break;
-
-        case ValueType::UInt64:
-            return builder.getIntegerType(64, /*isSigned=*/false);
-        break;
-
-        case ValueType::Double:
-            return builder.getF64Type();
-        break;
-
-        case ValueType::Bool:
-            return builder.getI1Type();
-        break;
-
-        case ValueType::String:
-            return storage::StringType::get(builder.getContext());
-        break;
-
-        case ValueType::Embedding:
-            return storage::EmbeddingType::get(builder.getContext());
-        break;
-
-        case ValueType::Invalid:
-        case ValueType::_SIZE:
-            throw IRException("Invalid property value type");
-        break;
-    }
-
-    throw IRException("Unhandled property value type");
 }
 
 // The chunk a procedure's return value of this type is read as. The element type
@@ -1346,7 +1310,7 @@ void DBLowering::lowerGetNodeProperties(mlir::db::GetNodeProperties getNodePrope
 
     // Resolve the name once, hoisted above the loops, and bake the value type.
     const mlir::Value handle = getOrCreatePropertyTypeHandle(property);
-    const mlir::Type valueChunkType = propertyValueChunkType(property);
+    const mlir::Type valueChunkType = propertyValueChunkType(property, columnType(getNodeProperties.getResult()));
 
     // A property read maps the input chunk in place, one value per node, so the
     // fetch nests in the loop that binds that chunk - it opens no loop of its own.
@@ -1366,7 +1330,7 @@ void DBLowering::lowerGetEdgeProperties(mlir::db::GetEdgeProperties getEdgePrope
     const llvm::StringRef property = getEdgeProperties.getProperty();
 
     const mlir::Value handle = getOrCreatePropertyTypeHandle(property);
-    const mlir::Type valueChunkType = propertyValueChunkType(property);
+    const mlir::Type valueChunkType = propertyValueChunkType(property, columnType(getEdgeProperties.getResult()));
 
     setInsertionInto(ownerBlock(inputChunk));
 
@@ -1736,7 +1700,18 @@ mlir::Value DBLowering::getOrCreateEdgeTypeHandle(llvm::StringRef edgeTypeName) 
     return handle;
 }
 
-mlir::Type DBLowering::propertyValueChunkType(llvm::StringRef propertyName) {
+mlir::Type DBLowering::columnType(mlir::Value column) {
+    return mlir::cast<mlir::db::ColumnType>(column.getType()).getType();
+}
+
+// `declared` is the db read's own result type: none for a name the graph carries, whose
+// type the schema answers for, and the nullable value type the analyzer resolved for a name
+// only this query's CREATE introduces, which no schema holds until the commit
+mlir::Type DBLowering::propertyValueChunkType(llvm::StringRef propertyName, mlir::Type declared) {
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(declared)) {
+        return nl::ChunkType::get(_builder.getContext(), nullableType);
+    }
+
     if (!_view) {
         throw IRException("Lowering a property fetch needs a graph to resolve the type of '" + propertyName.str() + "'");
     }

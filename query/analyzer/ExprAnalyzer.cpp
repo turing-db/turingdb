@@ -682,6 +682,7 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
         if (!readsAsNull) {
             // Property is meant to be created in this query
             vt = it->second;
+            expr->setCreatedValueType(vt);
         }
 
         expr->setPropertyName(name);

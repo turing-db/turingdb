@@ -2,6 +2,8 @@
 
 #include "Expr.h"
 
+#include "metadata/PropertyType.h"
+
 namespace db {
 
 class QualifiedName;
@@ -22,6 +24,12 @@ public:
 
     void setPropertyName(std::string_view propName) { _propName = propName; }
 
+    // The value type the query will create the property with, for a name the graph does
+    // not carry yet - a CREATE in this same query spells it out. Invalid for every name
+    // the graph already knows, whose type the schema answers for
+    ValueType getCreatedValueType() const { return _createdValueType; }
+    void setCreatedValueType(ValueType valueType) { _createdValueType = valueType; }
+
     bool isStringTableHeaderAccess() const { return _stringTableHeaderAccess; }
     void setStringTableHeaderAccess(bool csvHeaderAccess) {
         _stringTableHeaderAccess = csvHeaderAccess;
@@ -39,6 +47,7 @@ private:
     VarDecl* _entityDecl {nullptr};
     VarDecl* _csvFieldDecl {nullptr};
     std::string_view _propName;
+    ValueType _createdValueType {ValueType::Invalid};
     bool _stringTableHeaderAccess {false};
 
     PropertyExpr(QualifiedName* name)

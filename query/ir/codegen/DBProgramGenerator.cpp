@@ -41,6 +41,7 @@
 #include "StorageEnums.h"
 #include "StorageTypes.h"
 #include "IRConstantColumn.h"
+#include "IRValueTypes.h"
 #include "ExplainReport.h"
 
 #include "DependencyEdge.h"
@@ -5194,6 +5195,18 @@ mlir::Value DBProgramGenerator::constantLabelString(llvm::ArrayRef<std::string> 
     return constantString(joined);
 }
 
+// The graph answers for the type of a property it already carries, so the read is left
+// typed none for the lowering to resolve. A name only this query's CREATE introduces is in
+// no schema the lowering can consult, so the type the analyzer gave it rides on the op
+mlir::Type DBProgramGenerator::propertyValueType(const PropertyExpr* propExpr) {
+    const ValueType created = propExpr->getCreatedValueType();
+    if (created == ValueType::Invalid) {
+        return mlir::NoneType::get(_mlirCtxt);
+    }
+
+    return mlir::storage::NullableType::get(_mlirCtxt, valueTypeToElementType(_opBuilder, created));
+}
+
 mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propExpr) {
     const VarDecl* entityDecl = propExpr->getEntityVarDecl();
     const std::string_view varName = entityDecl->getName();
@@ -5234,8 +5247,7 @@ mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propEx
     bioassert(entityColumn, "WHERE clause property access on unknown variable: {}", varName);
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
-    // Use None for property type and infer during lowering
-    const mlir::db::ColumnType resultType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+    const mlir::db::ColumnType resultType = allocColumnType(propertyValueType(propExpr));
     const mlir::StringAttr propAttr = _opBuilder.getStringAttr(propName);
     const EvaluatedType entityType = entityDecl->getType();
 
