@@ -8,6 +8,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/OwningOpRef.h"
+#include "mlir/IR/Verifier.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
 
@@ -101,6 +102,10 @@ protected:
         EXPECT_EQ(countOps<mlir::db::ScanNodes>(module), 0u);
         EXPECT_EQ(countOps<mlir::db::ScanNodesByLabel>(module), 0u);
         EXPECT_EQ(countOps<mlir::db::GetNodeProperties>(module), 0u);
+
+        // The tally is typed as the count it replaced, so a db.skip or db.limit reading it
+        // still has the result type its verifier wants.
+        EXPECT_TRUE(mlir::succeeded(mlir::verify(module)));
     }
 
     // The count and the dataflow under it are left exactly as they were.
@@ -245,6 +250,46 @@ func.func @main() {
   %la = db.limit(%a) count 3 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
   %n = db.count(%la) rows : (!db.column<!storage.node_id>) -> !db.column<none>
   db.output(%n) : !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a:Person) WITH a SKIP 2 LIMIT 3 RETURN count(*) - the skip sibling: the tally is
+// over the rows left standing, not over the scan.
+const char* const skippedScanCount = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+  %sa = db.skip(%a) count 2 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  %la = db.limit(%sa) count 3 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  %n = db.count(%la) rows : (!db.column<!storage.node_id>) -> !db.column<none>
+  db.output(%n) : !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a:Person) WITH a SKIP 2 RETURN count(a.name) - and the property tally is over the
+// rows left standing too.
+const char* const skippedScanPropertyCount = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+  %sa = db.skip(%a) count 2 : (!db.column<!storage.node_id>) -> !db.column<!storage.node_id>
+  %name = db.get_node_properties(%sa, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %n = db.count(%name) : (!db.column<none>) -> !db.column<none>
+  db.output(%n) : !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a:Person) RETURN count(*) SKIP 1 LIMIT 1 - a SKIP and a LIMIT behind the count cut
+// the one row it collapses to rather than the rows it counted, so they read the tally and
+// the scan is still the whole of it.
+const char* const countThenSkipAndLimit = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+  %n = db.count(%a) rows : (!db.column<!storage.node_id>) -> !db.column<none>
+  %sn = db.skip(%n) count 1 : (!db.column<none>) -> !db.column<none>
+  %ln = db.limit(%sn) count 1 : (!db.column<none>) -> !db.column<none>
+  db.output(%ln) : !db.column<none>
   return
 }
 )mlir";
@@ -490,6 +535,35 @@ TEST_F(CountFromMetadataTest, OneUnreachableFactorLeavesTheProductAlone) {
 
     expectUntouched(*module);
     EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 1u);
+}
+
+TEST_F(CountFromMetadataTest, SkippedScanCountIsLeftAlone) {
+    mlir::OwningOpRef<mlir::ModuleOp> module = parse(skippedScanCount);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runCountFromMetadata(*module));
+
+    expectUntouched(*module);
+    EXPECT_EQ(countOps<mlir::db::Skip>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::Limit>(*module), 1u);
+}
+
+TEST_F(CountFromMetadataTest, SkippedScanPropertyCountIsLeftAlone) {
+    mlir::OwningOpRef<mlir::ModuleOp> module = parse(skippedScanPropertyCount);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runCountFromMetadata(*module));
+
+    expectUntouched(*module);
+    EXPECT_EQ(countOps<mlir::db::Skip>(*module), 1u);
+}
+
+TEST_F(CountFromMetadataTest, ASkipAndALimitBehindTheCountReadTheTally) {
+    mlir::OwningOpRef<mlir::ModuleOp> module = parse(countThenSkipAndLimit);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runCountFromMetadata(*module));
+
+    expectRewritten(*module, Conjunctions {{"Person"}});
+    EXPECT_EQ(countOps<mlir::db::Skip>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::Limit>(*module), 1u);
 }
 
 TEST_F(CountFromMetadataTest, PropertyCountReadsTheHoldersOfTheProperty) {

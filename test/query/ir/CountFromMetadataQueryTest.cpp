@@ -144,11 +144,32 @@ TEST_F(CountFromMetadataQueryTest, countsEachNodeOnceAcrossWrites) {
     expectCount("MATCH (a:Person) RETURN count(a.age)", 3);
 }
 
-// The shapes the rewrite leaves alone still answer as they did: a filtered scan, a budgeted
-// prefix, a hop, a property read off a hop, and a tally that charges each node once.
+// A SKIP or a LIMIT ahead of the count bounds the rows it tallies, so the scan is no longer
+// the whole of it and the rewrite leaves it alone.
+TEST_F(CountFromMetadataQueryTest, countsTheRowsASkipOrALimitLeavesStanding) {
+    expectCount("MATCH (a:Person) WITH a LIMIT 3 RETURN count(*)", 3);
+    expectCount("MATCH (a:Person) WITH a SKIP 2 RETURN count(*)", 6);
+    expectCount("MATCH (a:Person) WITH a SKIP 2 LIMIT 3 RETURN count(*)", 3);
+    expectCount("MATCH (a:Person) WITH a SKIP 6 RETURN count(a.name)", 2);
+    expectCount("MATCH (a:Person), (b:Interest) WITH a, b SKIP 75 RETURN count(*)", 5);
+}
+
+// Behind the count they cut the one row it collapses to instead, so the tally is still the
+// whole scan and the cut lands on it. A SKIP past that single row leaves nothing to emit.
+TEST_F(CountFromMetadataQueryTest, cutsTheOneRowTheCountCollapsesTo) {
+    expectCount("MATCH (a:Person) RETURN count(*) LIMIT 1", 8);
+    expectCount("MATCH (a:Person) RETURN count(*) SKIP 0 LIMIT 1", 8);
+    expectCount("MATCH (a:Person) RETURN count(a.age) SKIP 0 LIMIT 1", 2);
+    expectCount("MATCH (a:Person), (b:Interest) RETURN count(b.isReal) SKIP 0 LIMIT 1", 56);
+
+    expectCounts("MATCH (a:Person) RETURN count(*) SKIP 1", Counts {});
+    expectCounts("MATCH (a:Person), (b:Interest) RETURN count(b.isReal) SKIP 1", Counts {});
+}
+
+// The shapes the rewrite leaves alone still answer as they did: a filtered scan, a hop, a
+// property read off a hop, and a tally that charges each node once.
 TEST_F(CountFromMetadataQueryTest, countsTheShapesTheRewriteLeavesAlone) {
     expectCount("MATCH (a:Person) WHERE a.name = 'Remy' RETURN count(*)", 1);
-    expectCount("MATCH (a:Person) WITH a LIMIT 3 RETURN count(*)", 3);
     expectCount("MATCH (a:Person)-[:INTERESTED_IN]->(b) RETURN count(*)", 15);
     expectCount("MATCH (a:Person)-[:INTERESTED_IN]->(b) RETURN count(b.name)", 15);
     expectCount("MATCH (a:Person), (b:Interest) RETURN count(DISTINCT a)", 8);
