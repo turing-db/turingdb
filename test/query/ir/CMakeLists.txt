@@ -2374,3 +2374,63 @@ target_link_libraries(test_query_ir_unwind_variables PRIVATE
         turing_db_storage_s
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_unwind_variables PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Ordering a string type() owns against another string, run end to end against simpledb.
+add_turing_test(test_query_ir_owned_string_ordering OwnedStringOrderingTest.cpp)
+target_sources(test_query_ir_owned_string_ordering PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_owned_string_ordering PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_owned_string_ordering PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# min() and max() over a string type() owns, run end to end against simpledb.
+add_turing_test(test_query_ir_owned_string_reduction OwnedStringReductionTest.cpp)
+target_sources(test_query_ir_owned_string_reduction PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_owned_string_reduction PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_owned_string_reduction PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# coalesce over an argument list holding a literal, run end to end against simpledb.
+add_turing_test(test_query_ir_coalesce_literal_argument CoalesceLiteralArgumentTest.cpp)
+target_sources(test_query_ir_coalesce_literal_argument PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_coalesce_literal_argument PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_coalesce_literal_argument PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# An indexed list element as the operand of an operator, run end to end against simpledb.
+add_turing_test(test_query_ir_list_element_operand ListElementOperandTest.cpp)
+target_sources(test_query_ir_list_element_operand PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_list_element_operand PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_list_element_operand PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# A comparison against null disjoined with a constant, run end to end against simpledb.
+add_turing_test(test_query_ir_null_comparison_disjunction NullComparisonDisjunctionTest.cpp)
+target_sources(test_query_ir_null_comparison_disjunction PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_null_comparison_disjunction PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_null_comparison_disjunction PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
