@@ -40,7 +40,7 @@
 
 ## Build
 - Always build from `build/` directory: `make -j8`
-- Regression tests: `make run_regress`
+- Regression tests: `make run_regress` (classic pipeline only -- proves nothing about v3/MLIR work)
 - Unit tests: `ctest` or `ctest --output-on-failure`
 
 ## Code Style Feedback
@@ -101,3 +101,4 @@
 - @reference_no_string_predicates.md — no CONTAINS / STARTS WITH / ENDS WITH; StringOperator existing in the AST does NOT imply support
 - @reference_v3_cross_product_chunked.md — v3 nl.cross_product is an iterator driving its own nl.for; one chunk of pairs per step, like v2's cursor
 - @reference_change_visibility.md — within a change MATCH sees the COMMITted tip (read-your-own-writes works after COMMIT); after SUBMIT the change is gone, checkout head to see committed data
+- @reference_regress_not_v3.md — regress does not exercise the v3 MLIR engine; verify v3 work with ctest, not run_regress
