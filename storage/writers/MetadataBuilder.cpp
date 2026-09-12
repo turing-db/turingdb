@@ -1,6 +1,7 @@
 #include "MetadataBuilder.h"
 
 #include <mutex>
+#include <shared_mutex>
 
 #include "Profiler.h"
 #include "metadata/LabelMap.h"
@@ -33,6 +34,12 @@ PropertyType MetadataBuilder::getOrCreatePropertyType(std::string_view propTypeN
     std::unique_lock lock(_spinLock);
 
     return  _metadata->_propTypeMap.getOrCreate(propTypeName, valueType);
+}
+
+std::optional<PropertyType> MetadataBuilder::findPropertyType(std::string_view propTypeName) const {
+    std::shared_lock lock(_spinLock);
+
+    return _metadata->_propTypeMap.get(propTypeName);
 }
 
 std::unique_ptr<MetadataBuilder> MetadataBuilder::create(const GraphMetadata& prevMetadata, GraphMetadata* metadata) {
