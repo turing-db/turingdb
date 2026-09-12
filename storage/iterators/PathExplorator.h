@@ -79,6 +79,9 @@ private:
         bool _active {false};
         Stage _stage {Stage::Idle};
         size_t _seedRow {0};
+        size_t _arena {0};
+        // The arena's entries below this size are held by rows of the chunk being filled
+        size_t _pinned {0};
         NodeID _targetNode;
         PathTargetHandle _target;
 
@@ -158,6 +161,11 @@ private:
     void pushFrame(Walker& walker);
     void generateCandidates(Walker& walker, std::span<const EdgeRecord> edges);
     void emit(size_t seedRow, NodeID target, PathRef path);
+
+    void acquireArenas();
+    void releaseArenas();
+    void retainWalkedPaths();
+    void releasePathEntry(Walker& walker);
 
     void fillDistinct(size_t maxCount);
     void startBatch();
