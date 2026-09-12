@@ -15,6 +15,38 @@
 
 using namespace db;
 
+namespace {
+
+// Whether a data part after @param partIndex holds this property type at all. Only those
+// parts can hold a newer entry overriding one of this part's.
+bool holdsPropertyLater(DataPartSpan parts, size_t partIndex, PropertyTypeID propertyTypeID) {
+    for (size_t newer = partIndex + 1; newer < parts.size(); newer++) {
+        if (parts[newer]->nodeProperties().hasPropertyType(propertyTypeID)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// Whether a data part after @param partIndex holds this property for the entity too. A read
+// returns the newest entry, so the older one stands for the same node and must not be
+// counted a second time.
+bool isPropertyOverriddenLater(DataPartSpan parts,
+                               size_t partIndex,
+                               PropertyTypeID propertyTypeID,
+                               EntityID entityID) {
+    for (size_t newer = partIndex + 1; newer < parts.size(); newer++) {
+        if (parts[newer]->nodeProperties().has(propertyTypeID, entityID)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+}
+
 size_t GraphReader::getTotalNodesAllocated() const {
     if (_view.dataparts().empty()) {
         return 0;
@@ -94,6 +126,49 @@ size_t GraphReader::getNodeCountMatchingLabelset(const LabelSetHandle& labelset)
         const LabelSetIndexer<NodeRange>& indexer = nodes.getLabelSetIndexer();
         for (auto it = indexer.matchIterate(labelset); it.isValid(); it.next()) {
             count += filteredNodeCount(it.getValue(), tombstones);
+        }
+    }
+
+    return count;
+}
+
+size_t GraphReader::getNodeCountWithProperty(const LabelSetHandle& labelset,
+                                             PropertyTypeID propertyTypeID) const {
+    const DataPartSpan parts = _view.dataparts();
+    const Tombstones& tombstones = _view.tombstones();
+
+    size_t count = 0;
+    for (size_t partIndex = 0; partIndex < parts.size(); partIndex++) {
+        const PropertyManager& properties = parts[partIndex]->nodeProperties();
+        if (!properties.hasPropertyType(propertyTypeID)) {
+            continue;
+        }
+
+        const LabelSetPropertyIndexer* indexer = properties.tryGetIndexer(propertyTypeID);
+        bioassert(indexer, "A part holding a property container has no label set indexer for it");
+
+        // An entry is only read to exclude it: its node is deleted, or a later part holds a
+        // newer entry standing for the same node. With neither possible the indexed ranges
+        // answer on their own, one addition per range.
+        const bool excludesEntries = tombstones.hasNodes() || holdsPropertyLater(parts, partIndex, propertyTypeID);
+        const std::span<const EntityID> entityIDs = properties.ids(propertyTypeID);
+
+        for (auto labelsetIt = indexer->matchIterate(labelset); labelsetIt.isValid(); labelsetIt.next()) {
+            for (const PropertyRange& range : labelsetIt.getValue()) {
+                if (!excludesEntries) {
+                    count += range._count;
+                    continue;
+                }
+
+                for (const EntityID entityID : entityIDs.subspan(range._offset, range._count)) {
+                    const bool deleted = tombstones.containsNode(NodeID {entityID.getValue()});
+                    const bool overridden = isPropertyOverriddenLater(parts, partIndex, propertyTypeID, entityID);
+
+                    if (!deleted && !overridden) {
+                        count++;
+                    }
+                }
+            }
         }
     }
 

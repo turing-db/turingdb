@@ -3075,6 +3075,17 @@ void NLTranslator::translateCountScanRows(nl::CountScanRows countScanRows, NLStm
         data->addLabelSet(labelset);
     }
 
+    // A property the schema never had is held by no node, so the tally over its holders
+    // is 0 - the same unsatisfiable conjunction an absent label leaves.
+    if (const std::optional<llvm::StringRef> property = countScanRows.getProperty()) {
+        const std::optional<PropertyType> propertyType = _view->metadata().propTypes().get(std::string_view(property->data(), property->size()));
+        if (propertyType) {
+            data->setPropertyTypeID(propertyType->_id);
+        } else {
+            data->markUnmatchable();
+        }
+    }
+
     body->emplaceStmt(&NLExecutor::runCountScanRows, data);
 }
 

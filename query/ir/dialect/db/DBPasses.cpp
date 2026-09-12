@@ -2637,31 +2637,53 @@ bool collectScanLabels(Value column, llvm::SmallVectorImpl<Attribute>& labels, m
     return false;
 }
 
-// Whether this count tallies nothing but whole node scans, and the conjunctions of the
-// scans it tallies. count(DISTINCT x) is a different tally over the same rows, so it is
-// left alone.
-bool countsWholeScans(Count count, llvm::SmallVectorImpl<Attribute>& labels, mlir::OpBuilder& builder) {
+// What a count reads: the conjunctions of the scans it tallies, and the property whose
+// holders it is narrowed to, if any.
+struct ScanTally {
+    llvm::SmallVector<Attribute> labels;
+    StringAttr property;
+};
+
+// Whether this count tallies nothing but whole node scans, and what it reads off them.
+// count(DISTINCT x) is a different tally over the same rows, so it is left alone.
+bool countsWholeScans(Count count, ScanTally& tally, mlir::OpBuilder& builder) {
     if (count.getDistinct()) {
         return false;
     }
 
-    const Value rows = count.getInput();
-    const ColumnType rowsType = dyn_cast<ColumnType>(rows.getType());
+    Value rows = count.getInput();
 
-    // count(*) charges every row, so whichever column of the scans it is anchored on
-    // answers for them. A plain count charges the non-null rows, which is the same tally
-    // only on a column that holds no null - the node IDs a scan emits.
-    const bool countsEveryRow = count.getRows() || (rowsType && isa<storage::NodeIDType>(rowsType.getType()));
-    if (!countsEveryRow) {
+    // A property read keeps every row and nulls the ones without the value, so count(*)
+    // reads through it to the nodes underneath while a plain count tallies the holders.
+    if (GetNodeProperties fetch = rows.getDefiningOp<GetNodeProperties>()) {
+        rows = fetch.getInputNodes();
+        if (!count.getRows()) {
+            tally.property = fetch.getPropertyAttr();
+        }
+    } else {
+        // A plain count over anything else charges the non-null rows, which is the row
+        // count only on a column that holds no null - the node IDs a scan emits.
+        const ColumnType rowsType = dyn_cast<ColumnType>(rows.getType());
+        if (!count.getRows() && !(rowsType && isa<storage::NodeIDType>(rowsType.getType()))) {
+            return false;
+        }
+    }
+
+    if (!collectScanLabels(rows, tally.labels, builder)) {
         return false;
     }
 
-    return collectScanLabels(rows, labels, builder);
+    // Which scan a property is read from has to be named, and the op names it by carrying
+    // one. Counting the holders across a product is left to the pass that teaches it to.
+    return !tally.property || tally.labels.size() == 1;
 }
 
-void countFromMetadata(Count count, ArrayAttr labels, mlir::OpBuilder& builder) {
+void countFromMetadata(Count count, const ScanTally& tally, mlir::OpBuilder& builder) {
     builder.setInsertionPoint(count);
-    CountScanRows scanRows = builder.create<CountScanRows>(count.getLoc(), count.getResult().getType(), labels);
+    CountScanRows scanRows = builder.create<CountScanRows>(count.getLoc(),
+                                                           count.getResult().getType(),
+                                                           builder.getArrayAttr(tally.labels),
+                                                           tally.property);
 
     Operation* const countOp = count.getOperation();
     const Value countedRows = count.getInput();
@@ -2669,8 +2691,16 @@ void countFromMetadata(Count count, ArrayAttr labels, mlir::OpBuilder& builder) 
     countOp->getResult(0).replaceAllUsesWith(scanRows.getResult());
     countOp->erase();
 
-    // A cross product takes the scans in its factor regions down with it.
-    eraseIfUnused(countedRows.getDefiningOp());
+    // Drop the now-dead chain, consumer to producer, each only if unused; a cross product
+    // takes the scans in its factor regions down with it.
+    Operation* const countedOp = countedRows.getDefiningOp();
+    GetNodeProperties fetch = dyn_cast<GetNodeProperties>(countedOp);
+    const Value scanned = fetch ? fetch.getInputNodes() : Value();
+
+    eraseIfUnused(countedOp);
+    if (scanned) {
+        eraseIfUnused(scanned.getDefiningOp());
+    }
 }
 
 struct CountFromMetadata : public impl::CountFromMetadataBase<CountFromMetadata> {
@@ -2683,12 +2713,12 @@ struct CountFromMetadata : public impl::CountFromMetadataBase<CountFromMetadata>
 
         mlir::OpBuilder builder(&getContext());
         for (const Count count : counts) {
-            llvm::SmallVector<Attribute> labels;
-            if (!countsWholeScans(count, labels, builder)) {
+            ScanTally tally;
+            if (!countsWholeScans(count, tally, builder)) {
                 continue;
             }
 
-            countFromMetadata(count, builder.getArrayAttr(labels), builder);
+            countFromMetadata(count, tally, builder);
         }
     }
 };

@@ -19,6 +19,11 @@ module {
     // it reads no column, so it is loop-invariant the way a constant is - which
     // materializes the single tally row as an unsigned i64 (!nl.chunk<ui64>) for a
     // function-scope nl.output to emit. No loop, no accumulator, no emit step.
+    //
+    // The property form narrows the tally of one scan to the nodes holding a property,
+    // which the graph indexes by the label set of its holders - MATCH (a:Person) RETURN
+    // count(a.name), the rows where a.name is not null:
+    //   %count = db.count_scan_rows([["Person"]]) property "name" : !db.column<ui64>
     %count = db.count_scan_rows([["Person"], ["Interest"]]) : !db.column<ui64>
 
     db.output(%count) : !db.column<ui64>

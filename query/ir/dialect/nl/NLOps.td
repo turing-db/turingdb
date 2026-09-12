@@ -1402,21 +1402,27 @@ def CountScanRows : NLOp<"count_scan_rows", [Pure, InferTypeOpAdaptor]> {
     to accumulate. It produces the chunk in place at function scope, where nl.output
     consumes it.
 
+    `property`, when given, narrows the tally of the one listed scan to the nodes
+    holding that property - the count(a.name) form, answered off the index the graph
+    keeps of each property by the label set of its holders:
+
+      %m = nl.count_scan_rows([["Person"]]) property "name"
+
     `labels` is the list db.count_scan_rows carried; translation resolves each name
-    to a storage LabelID, the same way an nl.scan_nodes_by_label name is resolved. A
-    name absent from the schema leaves its conjunction unsatisfiable, so that factor
-    counts 0 and the product is 0. An empty conjunction filters nothing and counts
-    every node.
+    to a storage LabelID, the same way an nl.scan_nodes_by_label name is resolved, and
+    the property name to a storage PropertyTypeID. A name absent from the schema leaves
+    the conjunction unsatisfiable, so that factor counts 0 and the product is 0. An
+    empty conjunction filters nothing and counts every node.
 
     The chunk is always a !nl.chunk<ui64> - a non-negative tally that is never null -
     so the result type is inferred, not spelled out.
   }];
 
-  let arguments = (ins StrArrayArrayAttr:$labels);
+  let arguments = (ins StrArrayArrayAttr:$labels, OptionalAttr<StrAttr>:$property);
   let results   = (outs NLChunk:$result);
   let hasVerifier = 1;
 
-  let assemblyFormat = "`(` $labels `)` attr-dict";
+  let assemblyFormat = "`(` $labels `)` (`property` $property^)? attr-dict";
 }
 
 /**

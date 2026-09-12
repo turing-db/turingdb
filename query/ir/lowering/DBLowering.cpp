@@ -2117,7 +2117,9 @@ void DBLowering::lowerCountScanRows(mlir::db::CountScanRows countScanRows) {
     // constant, where it dominates every loop a later op may emit from.
     _builder.setInsertionPointToStart(_entryBlock);
 
-    nl::CountScanRows rows = _builder.create<nl::CountScanRows>(_builder.getUnknownLoc(), countScanRows.getLabelsAttr());
+    nl::CountScanRows rows = _builder.create<nl::CountScanRows>(_builder.getUnknownLoc(),
+                                                                countScanRows.getLabelsAttr(),
+                                                                countScanRows.getPropertyAttr());
 
     _valueMap[countScanRows.getResult()] = rows.getResult();
 }

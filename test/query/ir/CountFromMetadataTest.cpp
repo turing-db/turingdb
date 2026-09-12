@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -32,6 +33,17 @@ llvm::SmallVector<OpType> collect(mlir::ModuleOp module) {
 template <typename OpType>
 size_t countOps(mlir::ModuleOp module) {
     return collect<OpType>(module).size();
+}
+
+// The property the tally is narrowed to, or an empty string when it is over the scans
+// themselves.
+std::string propertyOf(mlir::db::CountScanRows scanRows) {
+    const std::optional<llvm::StringRef> property = scanRows.getProperty();
+    if (!property) {
+        return {};
+    }
+
+    return std::string(property->data(), property->size());
 }
 
 void conjunctionsOf(mlir::db::CountScanRows scanRows, Conjunctions& conjunctions) {
@@ -69,19 +81,21 @@ protected:
     }
 
     // The module holds exactly one db.count_scan_rows over the given conjunctions, and no
-    // count or scan is left for the engine to walk.
-    void expectRewritten(mlir::ModuleOp module, const Conjunctions& expected) {
-        const llvm::SmallVector<mlir::db::CountScanRows> rewritten = collect<mlir::db::CountScanRows>(module);
+    // count, scan or property read is left for the engine to walk.
+    void expectRewritten(mlir::ModuleOp module, const Conjunctions& expected, const std::string& property = "") {
+        llvm::SmallVector<mlir::db::CountScanRows> rewritten = collect<mlir::db::CountScanRows>(module);
         ASSERT_EQ(rewritten.size(), 1u);
 
         Conjunctions conjunctions;
         conjunctionsOf(rewritten.front(), conjunctions);
         EXPECT_EQ(conjunctions, expected);
+        EXPECT_EQ(propertyOf(rewritten.front()), property);
 
         EXPECT_EQ(countOps<mlir::db::Count>(module), 0u);
         EXPECT_EQ(countOps<mlir::db::CrossProduct>(module), 0u);
         EXPECT_EQ(countOps<mlir::db::ScanNodes>(module), 0u);
         EXPECT_EQ(countOps<mlir::db::ScanNodesByLabel>(module), 0u);
+        EXPECT_EQ(countOps<mlir::db::GetNodeProperties>(module), 0u);
     }
 
     // The count and the dataflow under it are left exactly as they were.
@@ -230,18 +244,6 @@ func.func @main() {
 }
 )mlir";
 
-// MATCH (a:Person) RETURN count(a.name) - a plain count skips the rows where the property
-// is null, which the row count over-states.
-const char* const propertyValueCount = R"mlir(
-func.func @main() {
-  %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
-  %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
-  %n = db.count(%name) : (!db.column<none>) -> !db.column<none>
-  db.output(%n) : !db.column<none>
-  return
-}
-)mlir";
-
 // MATCH (a:Person), (b:Interest) WHERE b.age = 32 RETURN count(*) - one factor is a
 // property scan, so the product has no size the counts can reach.
 const char* const crossProductWithPropertyScan = R"mlir(
@@ -254,6 +256,85 @@ func.func @main() {
     db.yield %b : !db.column<!storage.node_id>
   }
   %n = db.count(%p#0) rows : (!db.column<!storage.node_id>) -> !db.column<none>
+  db.output(%n) : !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a:Person) RETURN count(a.name) - the tally is over the rows where the property is
+// there, so it counts the scanned nodes that hold it.
+const char* const propertyCount = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+  %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %n = db.count(%name) : (!db.column<none>) -> !db.column<none>
+  db.output(%n) : !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a) RETURN count(a.name) - the same over an unlabelled scan.
+const char* const wholeGraphPropertyCount = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %n = db.count(%name) : (!db.column<none>) -> !db.column<none>
+  db.output(%n) : !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a:Person) WITH a.name AS name RETURN count(*) - a count(*) anchored on a property
+// column charges every row, nulls included, so the property read is not the tally and the
+// scan's row count is the answer.
+const char* const propertyAnchoredWildcardCount = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+  %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %n = db.count(%name) rows : (!db.column<none>) -> !db.column<none>
+  db.output(%n) : !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a:Person) RETURN count(DISTINCT a.name) - the distinct tally charges each value
+// once, which is not how many nodes hold the property.
+const char* const distinctPropertyCount = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+  %name = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %n = db.count(%name) distinct : (!db.column<none>) -> !db.column<none>
+  db.output(%n) : !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a:Person), (b:Interest) RETURN count(b.name) - the op carries one property and no
+// say in which of the two scans it is read from, so the product is left alone.
+const char* const crossProductPropertyCount = R"mlir(
+func.func @main() {
+  %p:2 = db.cross_product factor {
+    %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+    db.yield %a : !db.column<!storage.node_id>
+  } factor {
+    %b = db.scan_nodes_by_label(["Interest"]) : !db.column<!storage.node_id>
+    db.yield %b : !db.column<!storage.node_id>
+  }
+  %name = db.get_node_properties(%p#1, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %n = db.count(%name) : (!db.column<none>) -> !db.column<none>
+  db.output(%n) : !db.column<none>
+  return
+}
+)mlir";
+
+// MATCH (a:Person)-->(b) RETURN count(b.name) - the property is read off a hop's rows, which
+// the scan counts say nothing about.
+const char* const hopPropertyCount = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+  %s, %e, %t, %b = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %name = db.get_node_properties(%b, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+  %n = db.count(%name) : (!db.column<none>) -> !db.column<none>
   db.output(%n) : !db.column<none>
   return
 }
@@ -353,15 +434,6 @@ TEST_F(CountFromMetadataTest, LimitedScanCountIsLeftAlone) {
     EXPECT_EQ(countOps<mlir::db::Limit>(*module), 1u);
 }
 
-TEST_F(CountFromMetadataTest, CountOfAPropertyColumnIsLeftAlone) {
-    mlir::OwningOpRef<mlir::ModuleOp> module = parse(propertyValueCount);
-    ASSERT_TRUE(module);
-    ASSERT_TRUE(runCountFromMetadata(*module));
-
-    expectUntouched(*module);
-    EXPECT_EQ(countOps<mlir::db::ScanNodesByLabel>(*module), 1u);
-}
-
 TEST_F(CountFromMetadataTest, OneUnreachableFactorLeavesTheProductAlone) {
     mlir::OwningOpRef<mlir::ModuleOp> module = parse(crossProductWithPropertyScan);
     ASSERT_TRUE(module);
@@ -369,6 +441,57 @@ TEST_F(CountFromMetadataTest, OneUnreachableFactorLeavesTheProductAlone) {
 
     expectUntouched(*module);
     EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 1u);
+}
+
+TEST_F(CountFromMetadataTest, PropertyCountReadsTheHoldersOfTheProperty) {
+    mlir::OwningOpRef<mlir::ModuleOp> module = parse(propertyCount);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runCountFromMetadata(*module));
+
+    expectRewritten(*module, Conjunctions {{"Person"}}, "name");
+}
+
+TEST_F(CountFromMetadataTest, PropertyCountOverAnUnlabelledScanReadsAnEmptyConjunction) {
+    mlir::OwningOpRef<mlir::ModuleOp> module = parse(wholeGraphPropertyCount);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runCountFromMetadata(*module));
+
+    expectRewritten(*module, Conjunctions {{}}, "name");
+}
+
+TEST_F(CountFromMetadataTest, WildcardCountReadsThroughAPropertyToTheScan) {
+    mlir::OwningOpRef<mlir::ModuleOp> module = parse(propertyAnchoredWildcardCount);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runCountFromMetadata(*module));
+
+    expectRewritten(*module, Conjunctions {{"Person"}});
+}
+
+TEST_F(CountFromMetadataTest, DistinctPropertyCountIsLeftAlone) {
+    mlir::OwningOpRef<mlir::ModuleOp> module = parse(distinctPropertyCount);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runCountFromMetadata(*module));
+
+    expectUntouched(*module);
+    EXPECT_EQ(countOps<mlir::db::GetNodeProperties>(*module), 1u);
+}
+
+TEST_F(CountFromMetadataTest, PropertyCountOverAProductIsLeftAlone) {
+    mlir::OwningOpRef<mlir::ModuleOp> module = parse(crossProductPropertyCount);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runCountFromMetadata(*module));
+
+    expectUntouched(*module);
+    EXPECT_EQ(countOps<mlir::db::CrossProduct>(*module), 1u);
+}
+
+TEST_F(CountFromMetadataTest, PropertyCountOverAHopIsLeftAlone) {
+    mlir::OwningOpRef<mlir::ModuleOp> module = parse(hopPropertyCount);
+    ASSERT_TRUE(module);
+    ASSERT_TRUE(runCountFromMetadata(*module));
+
+    expectUntouched(*module);
+    EXPECT_EQ(countOps<mlir::db::GetOutEdges>(*module), 1u);
 }
 
 TEST_F(CountFromMetadataTest, HopCountIsLeftAlone) {
