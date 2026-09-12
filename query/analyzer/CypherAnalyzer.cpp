@@ -191,33 +191,36 @@ void CypherAnalyzer::analyze() {
 }
 
 void CypherAnalyzer::analyze(const SinglePartQuery* query) {
-    const StmtContainer* readStmts = query->getReadStmts();
-    const StmtContainer* updateStmts = query->getUpdateStmts();
+    const StmtContainer* stmts = query->getStmts();
     const ReturnStmt* returnStmt = query->getReturnStmt();
 
-    bool returnMandatory = updateStmts == nullptr;
+    bool returnMandatory = true;
 
-    // Generate read statements (optional)
-    if (readStmts) {
-        for (Stmt* stmt : readStmts->stmts()) {
-            if (stmt->getKind() == Stmt::Kind::WITH) {
-                analyze(static_cast<const WithStmt*>(stmt));
+    if (stmts) {
+        throwOnReadAfterUpdate(stmts);
+
+        for (Stmt* stmt : stmts->stmts()) {
+            const Stmt::Kind kind = stmt->getKind();
+
+            if (Stmt::isUpdating(kind)) {
+                returnMandatory = false;
+                _writeAnalyzer->analyze(stmt);
                 continue;
             }
 
-            if (stmt->getKind() == Stmt::Kind::CALL) {
+            if (kind == Stmt::Kind::WITH) {
+                analyze(static_cast<const WithStmt*>(stmt));
+                _writeAnalyzer->startPart();
+                continue;
+            }
+
+            if (kind == Stmt::Kind::CALL) {
                 if (static_cast<const CallStmt*>(stmt)->isStandaloneCall()) {
                     returnMandatory = false;
                 }
             }
-            _readAnalyzer->analyze(stmt);
-        }
-    }
 
-    // Generate update statements (optional)
-    if (updateStmts) {
-        for (const Stmt* stmt : updateStmts->stmts()) {
-            _writeAnalyzer->analyze(stmt);
+            _readAnalyzer->analyze(stmt);
         }
     }
 
@@ -232,6 +235,26 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
     }
 
     analyzeShortestPathReturn(query);
+}
+
+// A query part reads then writes: once a part has written, the only clause that may read
+// again is the WITH that ends it. `CREATE (n) MATCH (m)` is not a part with its clauses
+// out of order, it is two parts with the cut between them left out
+void CypherAnalyzer::throwOnReadAfterUpdate(const StmtContainer* stmts) const {
+    bool hasWritten = false;
+
+    for (const Stmt* stmt : stmts->stmts()) {
+        const Stmt::Kind kind = stmt->getKind();
+
+        if (kind == Stmt::Kind::WITH) {
+            hasWritten = false;
+        } else if (Stmt::isUpdating(kind)) {
+            hasWritten = true;
+        } else if (hasWritten) {
+            throwError("A reading clause cannot follow an updating clause: separate them with a WITH",
+                       stmt);
+        }
+    }
 }
 
 void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
@@ -702,13 +725,13 @@ bool CypherAnalyzer::isGroupWise(std::span<const Expr* const> exprs, const Proje
 }
 
 void CypherAnalyzer::analyzeShortestPathReturn(const SinglePartQuery* query) const {
-    const StmtContainer* readStmts = query->getReadStmts();
-    if (!readStmts) {
+    const StmtContainer* stmts = query->getStmts();
+    if (!stmts) {
         return;
     }
 
     const ShortestPathStmt* shortestPath = nullptr;
-    for (const Stmt* stmt : readStmts->stmts()) {
+    for (const Stmt* stmt : stmts->stmts()) {
         if (stmt->getKind() == Stmt::Kind::SHORTESTPATH) {
             shortestPath = static_cast<const ShortestPathStmt*>(stmt);
             break;

@@ -8,11 +8,13 @@
 
 #include "GraphPath.h"
 #include "ID.h"
+#include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "list/ListBufferTypeTag.h"
 #include "list/ListElementView.h"
 #include "list/ListView.h"
+#include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
 using namespace db;
@@ -31,6 +33,30 @@ bool textOfID(const Column* chunk, size_t rowIndex, std::string& text) {
     const IDType id = column->getRaw()[rowIndex];
     text = id.isValid() ? fmt::format("{}", id.getValue()) : "null";
 
+    return true;
+}
+
+// A constant column holds the one value every row of the relation reads, so the row index
+// says nothing about which value to read
+template <typename ElementType>
+bool textOfConstant(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnConst<ElementType>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    text = fmt::format("{}", column->at(rowIndex));
+    return true;
+}
+
+// The untyped null constant, which the null literal and a read of a name no property
+// carries both compile to: every row is an absent value of no type at all
+bool textOfNullConstant(const Column* chunk, std::string& text) {
+    if (!dynamic_cast<const ColumnConst<PropertyNull>*>(chunk)) {
+        return false;
+    }
+
+    text = "null";
     return true;
 }
 
@@ -210,6 +236,18 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfPlain<std::string_view>(chunk, rowIndex, text)) {
         return text;
     } else if (textOfPlain<std::string>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfConstant<int64_t>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfConstant<uint64_t>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfConstant<double>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfConstant<std::string_view>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfConstant<std::string>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfNullConstant(chunk, text)) {
         return text;
     } else if (textOfOptional<int64_t>(chunk, rowIndex, text)) {
         return text;

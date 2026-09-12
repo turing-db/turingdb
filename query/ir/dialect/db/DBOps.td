@@ -683,20 +683,30 @@ def GetNodeProperties : TuringOp<"get_node_properties", [Pure]> {
 
       %v = db.get_node_properties(%n, "age") pending %mask
              : (!db.column<!storage.node_id>, !db.column<!storage.bool>) -> !db.column<none>
+
+    `all_pending` says the same of every row without a mask to say it row by row,
+    which is what a db.create_node's column is: the read comes wholly out of the
+    write buffer.
+
+      %v = db.get_node_properties(%n, "age") all_pending
+             : (!db.column<!storage.node_id>) -> !db.column<none>
   }];
 
   // `property` is the symbolic property name, the same `name`/`age` spelled in
   // the query. Being an attribute and not an SSA value, it is absent from
   // `operands` below; lowering resolves it to a storage PropertyTypeID.
-  let arguments = (ins Column:$input_nodes, StrAttr:$property, Optional<Column>:$pending);
+  let arguments = (ins Column:$input_nodes,
+                       StrAttr:$property,
+                       Optional<Column>:$pending,
+                       UnitAttr:$all_pending);
   let results   = (outs Column:$result);
 
   // The string attribute prints inside the parens, ahead of the colon, and MLIR
   // elides it from attr-dict because the format already names it. The optional
   // mask prints after a `pending` keyword, which anchors its group.
   let assemblyFormat = [{
-    `(` $input_nodes `,` $property `)` (`pending` $pending^)? attr-dict `:`
-    functional-type(operands, results)
+    `(` $input_nodes `,` $property `)` (`pending` $pending^)? (`all_pending` $all_pending^)?
+    attr-dict `:` functional-type(operands, results)
   }];
 }
 
@@ -721,14 +731,18 @@ def GetEdgeProperties : TuringOp<"get_edge_properties", [Pure]> {
 
     `pending` is get_node_properties' mask, over edges: a row a db.merge wrote
     holds a write-buffer offset, and its value is read out of the write buffer.
+    `all_pending` is its maskless form, which a db.create_edge's column is.
   }];
 
-  let arguments = (ins Column:$input_edges, StrAttr:$property, Optional<Column>:$pending);
+  let arguments = (ins Column:$input_edges,
+                       StrAttr:$property,
+                       Optional<Column>:$pending,
+                       UnitAttr:$all_pending);
   let results   = (outs Column:$result);
 
   let assemblyFormat = [{
-    `(` $input_edges `,` $property `)` (`pending` $pending^)? attr-dict `:`
-    functional-type(operands, results)
+    `(` $input_edges `,` $property `)` (`pending` $pending^)? (`all_pending` $all_pending^)?
+    attr-dict `:` functional-type(operands, results)
   }];
 }
 
@@ -1659,17 +1673,21 @@ def CreateEdge : TuringOp<"create_edge", [AttrSizedOperandSegments]> {
                        StrArrayAttr:$prop_names,
                        Variadic<Column>:$prop_values,
                        Optional<Column>:$src_pending,
-                       Optional<Column>:$tgt_pending);
+                       Optional<Column>:$tgt_pending,
+                       UnitAttr:$src_all_pending,
+                       UnitAttr:$tgt_all_pending);
   let results   = (outs ColumnEdgeIDs:$result);
   let hasVerifier = 1;
 
   // The two optional masks say, row by row, which endpoints are entities this change
   // wrote and has not committed - what a db.merge's node column mixes. A column a
-  // db.create_node produced is pending in every row and carries no mask; one a scan or a
-  // traversal bound is pending in none and carries none either.
+  // db.create_node produced is pending in every row and says so with the matching
+  // all_pending flag; one a scan or a traversal bound is pending in none and carries
+  // neither a mask nor a flag.
   let assemblyFormat = [{
     `(` $src_ids `,` $tgt_ids `,` $edge_type `,` $prop_names `,` `{` $prop_values `}` `)`
-    (`src_pending` $src_pending^)? (`tgt_pending` $tgt_pending^)? attr-dict `:`
+    (`src_pending` $src_pending^)? (`tgt_pending` $tgt_pending^)?
+    (`src_all_pending` $src_all_pending^)? (`tgt_all_pending` $tgt_all_pending^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
@@ -1771,15 +1789,17 @@ def SetNodeProperty : TuringOp<"set_node_property", [AttrSizedOperandSegments]> 
                        StrAttr:$property,
                        Column:$value,
                        Optional<Column>:$pending,
-                       Optional<Column>:$rows);
+                       Optional<Column>:$rows,
+                       UnitAttr:$all_pending);
 
   // `pending` says, row by row, which entities this change wrote and has not committed -
   // those are written in the write buffer rather than recorded as an update to a
-  // committed entity. `rows` narrows which rows are written at all: Cypher's ON CREATE
-  // passes the merge's created mask, ON MATCH its negation, and a plain SET passes none.
+  // committed entity, and `all_pending` says it of every row without a mask. `rows`
+  // narrows which rows are written at all: Cypher's ON CREATE passes the merge's created
+  // mask, ON MATCH its negation, and a plain SET passes none.
   let assemblyFormat = [{
     `(` $input_nodes `,` $property `,` $value `)` (`pending` $pending^)? (`rows` $rows^)?
-    attr-dict `:` functional-type(operands, results)
+    (`all_pending` $all_pending^)? attr-dict `:` functional-type(operands, results)
   }];
 
   let hasVerifier = 1;
@@ -1799,11 +1819,12 @@ def SetEdgeProperty : TuringOp<"set_edge_property", [AttrSizedOperandSegments]> 
                        StrAttr:$property,
                        Column:$value,
                        Optional<Column>:$pending,
-                       Optional<Column>:$rows);
+                       Optional<Column>:$rows,
+                       UnitAttr:$all_pending);
 
   let assemblyFormat = [{
     `(` $input_edges `,` $property `,` $value `)` (`pending` $pending^)? (`rows` $rows^)?
-    attr-dict `:` functional-type(operands, results)
+    (`all_pending` $all_pending^)? attr-dict `:` functional-type(operands, results)
   }];
 
   let hasVerifier = 1;
@@ -1820,13 +1841,17 @@ def DeleteNode : TuringOp<"delete_node"> {
     `pending` is the mask a db.merge produced beside its node column: those rows
     hold an offset into the change's write buffer rather than an ID the graph
     knows, so the change drops the write instead of tombstoning an ID.
+    `all_pending` says that of every row, which a db.create_node's column is.
   }];
 
-  let arguments = (ins Column:$input_nodes, UnitAttr:$detach, Optional<Column>:$pending);
+  let arguments = (ins Column:$input_nodes,
+                       UnitAttr:$detach,
+                       Optional<Column>:$pending,
+                       UnitAttr:$all_pending);
 
   let assemblyFormat = [{
-    `(` $input_nodes `)` (`detach` $detach^)? (`pending` $pending^)? attr-dict `:`
-    functional-type(operands, results)
+    `(` $input_nodes `)` (`detach` $detach^)? (`pending` $pending^)?
+    (`all_pending` $all_pending^)? attr-dict `:` functional-type(operands, results)
   }];
 }
 
@@ -1836,13 +1861,14 @@ def DeleteEdge : TuringOp<"delete_edge"> {
   let description = [{
       db.delete_edge(%e) : (!db.column<!storage.edge_id>) -> ()
 
-    `pending` is delete_node's mask, over edges.
+    `pending` is delete_node's mask, over edges, and `all_pending` its maskless form.
   }];
 
-  let arguments = (ins Column:$input_edges, Optional<Column>:$pending);
+  let arguments = (ins Column:$input_edges, Optional<Column>:$pending, UnitAttr:$all_pending);
 
   let assemblyFormat = [{
-    `(` $input_edges `)` (`pending` $pending^)? attr-dict `:` functional-type(operands, results)
+    `(` $input_edges `)` (`pending` $pending^)? (`all_pending` $all_pending^)? attr-dict `:`
+    functional-type(operands, results)
   }];
 }
 

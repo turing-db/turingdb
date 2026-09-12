@@ -4,6 +4,7 @@ set(ir_common_sources
     ExplainReport.cpp
     IRConstantColumn.cpp
     IRRowAlignment.cpp
+    IRValueTypes.cpp
     IRException.cpp)
 
 add_library(turing_db_ir_common_s STATIC ${ir_common_sources})
@@ -12,6 +13,7 @@ target_link_libraries(turing_db_ir_common_s
     PRIVATE
         MLIRIR
         MLIRFuncDialect
+        turing_db_ir_storagedialect_s
 
     PUBLIC
         turing_db_query_common_s)

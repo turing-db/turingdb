@@ -43,6 +43,10 @@ public:
 
     void setV3() { _isV3 = true; }
 
+    // A WITH ends the part the CREATE was written in, so what follows it writes to
+    // entities the query has already bound rather than to ones it is still spelling out
+    void startPart() { _hasCreate = false; }
+
     // Statements
     void analyze(const Stmt* stmt);
 
