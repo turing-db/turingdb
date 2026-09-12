@@ -1,0 +1,3 @@
+personId|startDate|durationDays|countryXName|countryYName
+6597069766734|1275350400000|28|Sweden|Kazakhstan
+6597069766763|1275350400000|28|Hungary|Yemen
