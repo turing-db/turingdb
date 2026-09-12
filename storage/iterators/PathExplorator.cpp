@@ -49,13 +49,25 @@ PathExplorator::PathExplorator(const GraphView& view,
 }
 
 PathExplorator::~PathExplorator() {
+    if (_trie) {
+        releaseArenas();
+    }
 }
 
 void PathExplorator::setPaths(ColumnVector<PathRef>* paths, PathTrie* trie) {
     bioassert((paths == nullptr) == (trie == nullptr), "A path column needs the trie it indexes");
     bioassert(!paths || !_distinctEnds, "The distinct mode emits no path");
+
+    if (_trie) {
+        releaseArenas();
+    }
+
     _paths = paths;
     _trie = trie;
+
+    if (_trie) {
+        acquireArenas();
+    }
 }
 
 void PathExplorator::setEdgeTypeFilter(EdgeTypeID edgeType) {
@@ -77,8 +89,17 @@ void PathExplorator::setDistinctEnds(bool distinct) {
 
 void PathExplorator::setWalkerCount(size_t walkerCount) {
     bioassert(_activeWalkers == 0, "The walker count cannot change while seeds are being walked");
+
+    if (_trie) {
+        releaseArenas();
+    }
+
     _walkers.resize(std::max<size_t>(walkerCount, 1));
     _turn = 0;
+
+    if (_trie) {
+        acquireArenas();
+    }
 }
 
 void PathExplorator::prefetchNodeData(NodeID node, size_t partIndex) const {
@@ -134,7 +155,13 @@ void PathExplorator::resizeOutputs(size_t count) {
 
 void PathExplorator::reset() {
     for (Walker& walker : _walkers) {
+        const size_t arena = walker._arena;
         walker = Walker {};
+        walker._arena = arena;
+
+        if (_trie) {
+            _trie->truncateArena(arena, 0);
+        }
     }
 
     if (_reach._batchActive) {
@@ -153,6 +180,10 @@ void PathExplorator::fill(size_t maxCount) {
     if (_distinctEnds) {
         fillDistinct(maxCount);
         return;
+    }
+
+    if (_paths) {
+        retainWalkedPaths();
     }
 
     resizeOutputs(maxCount);
@@ -251,11 +282,14 @@ void PathExplorator::consume(Walker& walker) {
 
     PathRef entry = PathTrie::ROOT;
     if (_paths) {
-        entry = _trie->append(walker._pathEntries.back(), edge, node, depth);
+        entry = _trie->append(walker._arena, walker._pathEntries.back(), edge, node, depth);
     }
 
     if (emits) {
         emit(walker._seedRow, node, entry);
+        if (_paths) {
+            walker._pinned = _trie->getArenaSize(walker._arena);
+        }
     }
 
     if (!expands) {
@@ -292,7 +326,7 @@ void PathExplorator::popFrame(Walker& walker) {
     walker._pathEdges.pop_back();
     walker._pathSignatures.pop_back();
     if (_paths) {
-        walker._pathEntries.pop_back();
+        releasePathEntry(walker);
     }
 }
 
@@ -404,6 +438,39 @@ void PathExplorator::emit(size_t seedRow, NodeID target, PathRef path) {
     }
 
     _written++;
+}
+
+void PathExplorator::acquireArenas() {
+    for (Walker& walker : _walkers) {
+        walker._arena = _trie->acquireArena();
+    }
+}
+
+void PathExplorator::releaseArenas() {
+    for (Walker& walker : _walkers) {
+        _trie->releaseArena(walker._arena);
+        walker._arena = 0;
+    }
+}
+
+// The rows of the last chunk have been read once the next fill starts, so an arena keeps
+// its walker's current path alone
+void PathExplorator::retainWalkedPaths() {
+    for (Walker& walker : _walkers) {
+        _trie->retainChain(walker._arena, walker._pathEntries);
+        walker._pinned = 0;
+    }
+}
+
+// A backtracked entry no emitted row holds is the top of its arena: the entries above it
+// were its descendants, each released on its own backtrack or pinned, which pins it too
+void PathExplorator::releasePathEntry(Walker& walker) {
+    const size_t index = PathTrie::indexOf(walker._pathEntries.back());
+    walker._pathEntries.pop_back();
+
+    if (index >= walker._pinned) {
+        _trie->truncateArena(walker._arena, index);
+    }
 }
 
 void PathExplorator::fillDistinct(size_t maxCount) {

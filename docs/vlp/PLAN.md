@@ -24,7 +24,7 @@ engine is designed to beat the incumbents (Neo4j `VarLengthExpand`, Memgraph
 | 3 | Per-row bound targets with an MS-BFS distance index; join-based bidirectional enumeration cut at hubs where both searches suspend (GraphS); DISTINCT mode via bit-parallel MS-BFS | s-t path queries and DISTINCT reachability stop being enumeration problems; hubs, which carry 93–99 % of long paths, are never expanded blindly |
 | 4 | Storage: type-sorted adjacency runs, SoA edge arrays, patched-node bitmap; optional per-commit oracles (2-hop distance labels, landmark reachability with doomed sets, interval labels, hub segment cache) | Typed traversals touch only matching edges; half the bytes per candidate; no per-row list copies; pruning without a per-query BFS on large append-mostly graphs |
 
-## Status (2026-09-08)
+## Status (2026-09-13)
 
 Rebased onto `535a145e8`, a commit per tier, one recalibrating the gates and one removing the
 distinct gate:
@@ -36,6 +36,7 @@ distinct gate:
 | `f36461521` | 3 | `end_column` and `fuse_explore_end_nodes`, `PathTargetIndex` (multi-source BFS, 64 targets per word, per-chunk, gate charged per batch), `distinct` and `fuse_explore_distinct_ends` with the bit-parallel reachability mode of the explorator |
 | `f475c48bf` | 2-3 | The estimate the three gates share samples the fan-out of the edge type the walk follows and sums the candidates over `min(max, farthest)` levels with the frontier clamped at the graph, so an unbounded walk no longer estimates as infinite; `indexUnitCostInChecks` re-fitted from 0.5 to 0.35; `PathExploratorCyclicTest` |
 | `9e9704046` | 3 | Drops `searchPaysForDistinctEnds`, so a `distinct` exploration always searches; `PathReachTable`, an open-addressing table keyed by the nodes a batch reaches, replaces the dense `ReachWords` array, so a batch of the search costs its ball; `PathReachTableTest` |
+| uncommitted | 1 | `PathTrie` holds one entry arena per walker, named in the handle's top bits; the explorator truncates an arena on backtrack above the chunk's last emitted row and cuts it back to the walker's current path at the next fill, so the trie holds one chunk and the live prefixes instead of the whole search tree; `PathExploratorReclaimTest` |
 
 The eight `variable-length-paths-*.json` oracles run through the MLIR engine, and the two v2
 oracles that expected the old "not yet supported" plan error now expect the analyzer's
@@ -235,6 +236,30 @@ one table. First measurements on the default shape (2M nodes, degree 8, 1000 see
   past a 90 s cap at 64, and the unbounded form killed at 420 s. Trail counts double every
   two levels past 14, so `+` on that relation is an exponential query and not an engine
   defect - v2 cannot express it at all - which is what makes the gate above the lever.
+- **The trie's memory, measured and bounded**: with `e` bound, the trie appended an entry on
+  every step of the walk that emitted or expanded and freed none until the query ended, so it
+  held the search tree, not the rows. From one seed, `-[e:precedingEvent]->{1,N}(r) RETURN
+  count(e)` against `count(r)` cost 146 MB more at N = 24, 983 MB at 28, 3.7 GB at 32 and
+  7.7 GB after 60 s at 60, and 8 to 19 % of the time; the unbounded form grows at about
+  130 MB/s, so it would have filled the box before its 240 s kill. **Applied**: the trie
+  holds one entry arena per walker - a `PathRef` names its arena in its top 16 bits and its
+  index in the low 48, arena 0 is the root - and an arena is the walker's stack: emitting a
+  row pins the arena at its size, `popFrame` truncates the arena to the entry it backs out of
+  when that lies above the pin, and each `fill` first rewrites the walker's current path to
+  the bottom of its arena and drops the rest (`retainChain`), the previous chunk having been
+  consumed. Exact because no consumer keeps a handle past its chunk: sort, dedup, `WITH` and
+  `RETURN` expand the path first, `count` reads the handle column row by row, and the cross
+  product is a nested-loop join with both factors' chunks in flight; nested explorations
+  share the query's trie and hold their own arenas. Medians of interleaved rounds against
+  the previous binary: the unbounded `count(e)` flat at 4,701 MB after 60 s (12,371 before),
+  `(r:Reaction)-[e]->{1,2}(m) RETURN size(e)` 156 → 108 ms for 4,788,031 rows, the 415
+  pathways' `[e]-{1,2}` in both directions 1,860 → 1,491 ms and 8.6 → 4.8 GB for
+  125,690,888 rows, the seed's `{1,28}` 6,291 → 5,164 ms, `RETURN e` over 228,878 paths
+  9.79 → 9.68 ms. Trie-free queries move nowhere: the 26 queries of `scripts/bench_paths.py`
+  run as a simultaneous pair on separate turing dirs give a median ratio of 1.01 with a 0.99
+  to 1.02 spread, `samples/path_bench`'s 16-walker enumeration with paths 15.3 → 14.8 ms, a
+  19-query corpus of every shape a path flows through (cross product, `ORDER BY size(e)`,
+  `DISTINCT e`, `WITH e`, nested `e`, `f`, `UNWIND e`, `SKIP`/`LIMIT`) byte-identical.
 
 Remaining, in the suggested order:
 
@@ -268,16 +293,18 @@ Remaining, in the suggested order:
    - No sample under `samples/mlir` carries `end_labels`, `end_column` or `distinct`; the
      `mlir` sample tool still crashes on `-dump-lowered` for a sample with a label
      constraint and no graph, which keeps `explore_paths.mlir` schema-free.
-   - Every trie entry lives until the query ends; unmeasured on large outputs.
+   - An arena keeps the chains of the chunk's emitted rows until the next fill: at most
+     rows × depth entries of 32 bytes, 126 MB for a 65,536-row chunk of 60-hop paths sharing
+     nothing, and in practice far less through shared prefixes. Not measured to matter.
 
 ### Semantics (fixed by Cypher and the v2 oracle)
 - Trail semantics: an edge may not appear twice in one path; nodes may repeat.
 - One output row per path of length L with min ≤ L ≤ max. `min = 0` emits a zero-length
   path per seed (end node = seed, empty list). Unbounded max is finite by trail semantics.
 - Row = (seed input row, end node, path). `e` binds to the path: a `PathRef` handle into the
-  query-scoped `PathTrie`, which expands to the ordered list of edge IDs wherever a list is
-  consumed (output, `UNWIND`, list functions, comparisons). `m` binds to the end node column,
-  `n` is gathered back through `indices`.
+  query's `PathTrie`, valid for the chunk that emitted it, which expands to the ordered list
+  of edge IDs wherever a list is consumed (output, `UNWIND`, list functions, comparisons).
+  `m` binds to the end node column, `n` is gathered back through `indices`.
 - Hop predicates: a predicate written on the quantified relationship
   (`-[e:KNOWS {since: 2020}]->{1,3}`, `-[e WHERE e.since > 2020]->{1,3}`) or in a
   parenthesized quantified path pattern (`(n)((a)-[e]->(b) WHERE b.age > 30){1,3}(m)`) is
@@ -316,8 +343,8 @@ Remaining, in the suggested order:
 
 ### Cost model that orders the work
 Total work for all-trails enumeration = Σ over partial paths of (adjacency fetch +
-candidate checks + hop predicate) + Σ over emitted rows of one trie append + O(depth) per
-row where the path is expanded. For an unconstrained
+candidate checks + hop predicate, plus one trie append and one truncation on backtrack when
+`e` is read) + O(depth) per row where the path is expanded. For an unconstrained
 `(n)-[e]->{1,k}(m) RETURN e` the output itself is exponential and inherent, so only
 constants matter: candidate-check cost, adjacency latency, materialization bandwidth
 (Tier 1). For a constrained end (`(m:Rare)`, a bound `m`, `WHERE m.x = 1`, DISTINCT,
@@ -397,6 +424,8 @@ across seeds and input chunks, bounded by depth × degree), one `Walker` per int
   frame's end. Popping a frame truncates the candidate stacks to its `_candidateBegin`.
 - Descent stage for interleaving: `_pendingNode`, `_pendingDepth`, `_stage`
   (`Idle`, `RangeRequested`, `SpanRequested`).
+- `_arena`, the walker's entry stack in the trie, and `_pinned`, the arena size the chunk's
+  last emitted row holds.
 
 **Walk (per walker, depth-first):**
 1. `startSeed(row)`: `_pathEdges`/`_frames` cleared, `_pathSignatures = {0}`,
@@ -419,20 +448,25 @@ across seeds and input chunks, bounded by depth × degree), one `Walker` per int
    and the frame shrinks to the survivors. Seeds need no special case: signature 0 and an
    empty path never match.
 3. Consume: top frame exhausted (`_next == _candidateEnd`) → pop it (truncate candidate
-   stacks, `_pathEdges.pop_back()`, `_pathSignatures.pop_back()` unless it is the seed's
-   frame); no frames left → seed done, the walker takes the next seed. Otherwise take
-   candidate `(node, edge)` at `_next++`, child depth `d = _frames.size()`: when
+   stacks, `_pathEdges.pop_back()`, `_pathSignatures.pop_back()`, `_pathEntries.pop_back()`
+   with the arena truncated to that entry's index when it lies above `_pinned`, unless it is
+   the seed's frame); no frames left → seed done, the walker takes the next seed. Otherwise
+   take candidate `(node, edge)` at `_next++`, child depth `d = _frames.size()`: when
    `d >= minHops` emit a row (indices ← `_seedRow`, targets ← `node`, paths ← the trie entry
    of step 4); when `d < maxHops` push `edge` onto the path (`_pathSignatures.push_back(top |
    bit(edge))`, `_pathEntries.push_back(entry)`), issue the frame's candidate prefetch (below)
    and request a descent into `node`. A leaf candidate (`d == maxHops`) never touches
    the path arrays. Unbounded max is `UINT64_MAX`; trail semantics bound the depth by the
    number of live edges.
-4. Path emission is one trie append: `entry = trie.append(_pathEntries.back(), edge, node,
-   d)` returns the `PathRef` written to `paths`, and a descent into that candidate pushes the
-   same entry, so a prefix shared by many paths is stored once and a row costs one entry
-   whatever its depth. A candidate below `min` that is descended still gets an entry, as the
-   parent of the rows under it; a leaf gets one only when it is emitted. When `paths` is null
+4. Path emission is one trie append: `entry = trie.append(_arena, _pathEntries.back(), edge,
+   node, d)` returns the `PathRef` written to `paths`, and a descent into that candidate
+   pushes the same entry, so a prefix shared by many paths is stored once and a row costs one
+   entry whatever its depth. Emitting sets `_pinned` to the arena's size: the entries under an
+   emitted row stay through the backtracks over them, everything above the pin is truncated
+   as the walk backs out of it, and the next `fill` rewrites the walker's current path to the
+   bottom of the arena and drops the rest, the previous chunk's rows having been consumed. A
+   candidate below `min` that is descended still gets an entry, as the parent of the rows
+   under it; a leaf gets one only when it is emitted. When `paths` is null
    (neither `e` nor a group variable is read) nothing is appended and `_pathEntries` stays
    `{ROOT}`.
 
@@ -468,11 +502,19 @@ new `ID` instantiation in `storage/ID.h`; `ColumnVector<PathRef>` is registered 
 column (`ContainerKind::Types`, `LocalMemory` pool, `staticKind`) and joins every row-movement
 kind switch that lists `ListView` today (filter compaction, gather through indices, block
 repeat, copy range, sort permutation), so the path column is carried like a node ID column.
-`PathTrie` is a flat `std::vector<PathTrieEntry>` of `{PathRef _parent; EdgeID _edge; NodeID
-_node; uint64_t _depth;}` with `ROOT` as the zero-length path, owned by `LocalMemory` next to
-`listBuffer()` (`pathTrie()`, cleared with the query). Entries live until the query ends, as
-list cells do, but each prefix is stored once and the list buffer only grows where a path is
-expanded. Expansion is `db.expand_path(%paths, %srcids) kind edges|sources|ends`
+`PathTrie` holds `PathTrieEntry` `{PathRef _parent; EdgeID _edge; NodeID _node; uint64_t
+_depth;}` in arenas, one per walker, acquired by the explorator and released with it (nested
+explorations share the query's trie and hold their own); a `PathRef` names its arena in its
+top 16 bits and its index in the low 48, and `ROOT`, the zero-length path, is arena 0. An
+arena is the walker's stack: the entries above the chunk's last emitted row are truncated as
+the walk backs out of them, and each `fill` first rewrites the walker's current path to the
+arena's bottom (`retainChain`) and drops the rest, so the trie holds the chunk being filled
+and the live prefixes, never the search tree. That is exact because no consumer keeps a
+handle past its chunk: sort, dedup, `WITH` and `RETURN` expand the path first, `count` reads
+the handle column row by row, and the cross product is a nested-loop join with both factors'
+chunks in flight. The trie is owned by `LocalMemory` next to `listBuffer()` (`pathTrie()`,
+cleared with the query); each prefix is stored once and the list buffer only grows where a
+path is expanded. Expansion is `db.expand_path(%paths, %srcids) kind edges|sources|ends`
 (`column<path>` → `column<list<edge_id>>` or `column<list<node_id>>`): per row,
 `reserveList(depth, ...)` then fill from the tail while walking parents, so the last-first
 chain needs no reversal buffer; `sources` is the seed followed by the ends of all entries but
@@ -782,7 +824,12 @@ New:
   `storage/CMakeLists.txt` entries (iterators and list blocks).
 - `test/storage/list/PathTrieTest.cpp` (`add_storage_tests`): append, expansion from the
   tail for `edges`/`sources`/`ends`, `ROOT`, entry count equals rows plus descended prefixes
-  on a small fixture.
+  on a small fixture; arenas acquired, released and reused, truncation, `retainChain`
+  rewriting a chain to the bottom of its arena.
+- `test/storage/iterators/PathExploratorReclaimTest.cpp` (`add_storage_tests`): a complete
+  digraph on six nodes walked 1, 64 and 1,000 rows a fill with 1 and 16 walkers - after every
+  fill the trie holds at most the chunk's paths and the walkers' prefixes and the rows match
+  the reference; two explorators sharing one trie leave each other's chunk intact.
 - `test/storage/iterators/PathExploratorTest.cpp` (`add_storage_tests`), modeled on
   `GetEdgesByTypeIteratorTest.cpp`'s fixture and collector, with a graph submitted in two
   commits so second-commit edges between first-commit nodes are patch edges.
@@ -882,9 +929,10 @@ edges) timed through `QueryInterpreterV3`, in the shape of `samples/query_bench`
 - `type(e)`/`id(e)` on a quantified `e`: measured void, neither function exists in the
   engine - `type` does not parse and `id` is rejected as unknown - so nothing reaches codegen
   with a path column. The risk returns the day either is implemented.
-- Every trie entry lives until the query ends: 32 bytes per emitted row plus the descended
-  prefixes, O(rows) for an output that is exponential by nature; the list buffer only grows
-  where a path is expanded and, at output, per chunk.
+- The trie held every descended prefix until the query ended - 3.7 GB for one seed's
+  2,481,686 closed trails at bound 32, 7.7 GB after 60 s unbounded - fixed by the per-walker
+  arenas (Status). What remains is one chunk's chains until the next fill; the list buffer
+  only grows where a path is expanded and, at output, per chunk.
 - The `hop` region is the first region on a db op outside `db.cross_product`; `db.yield`'s
   parent constraint, the verifier, `lowerFactor` and the translator's block binding must
   generalize, and `TrimUnreadColumns`/`PushDownFilters` must treat the region as opaque.
