@@ -2422,3 +2422,15 @@ target_link_libraries(test_query_ir_list_element_operand PRIVATE
         turing_db_storage_s
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_list_element_operand PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# A comparison against null disjoined with a constant, run end to end against simpledb.
+add_turing_test(test_query_ir_null_comparison_disjunction NullComparisonDisjunctionTest.cpp)
+target_sources(test_query_ir_null_comparison_disjunction PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_null_comparison_disjunction PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_null_comparison_disjunction PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
