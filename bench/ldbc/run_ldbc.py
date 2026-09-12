@@ -150,12 +150,15 @@ def buildInput(queries, graphName, repeat):
 
     A write needs an open change or it fails at execution, and a fresh process always
     numbers its first change 0, so the update queries run after one is checked out.
+    Opening it is marked off as its own segment, or the shell prints its row count and
+    timing into the preceding query's chunk and they are read as that query's result.
     """
     lines = [f"cd {graphName}"]
     changeOpened = False
 
     for index, query in enumerate(queries):
         if query["writes"] and not changeOpened:
+            lines.append(f"sh echo {MARKER}setup:0")
             lines.append("CHANGE NEW")
             lines.append("checkout change-0")
             changeOpened = True
