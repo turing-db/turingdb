@@ -183,6 +183,10 @@ OPENBLAS_CMAKE_ARGS=(
     -DBUILD_SHARED_LIBS=OFF
     -DBUILD_TESTING=OFF
     -DNOFORTRAN=1
+    # NUM_THREADS defaults to the build machine's core count; 1 makes the build
+    # single-threaded, which needs USE_LOCKING to stay safe under concurrent calls.
+    -DNUM_THREADS=1
+    -DUSE_LOCKING=ON
 )
 
 if [[ $USE_CLANG -eq 1 ]]; then
