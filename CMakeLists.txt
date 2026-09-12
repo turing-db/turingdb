@@ -311,6 +311,13 @@ execute_process(COMMAND git show --no-patch --format=%at
                 OUTPUT_VARIABLE HEAD_COMMIT_TIMESTAMP
                 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
+# Project version from VERSION file. Tag updates from CI
+if(DEFINED ENV{SETUPTOOLS_SCM_PRETEND_VERSION})
+    set(PROJECT_VERSION $ENV{SETUPTOOLS_SCM_PRETEND_VERSION})
+else()
+    file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/VERSION PROJECT_VERSION LIMIT_COUNT 1)
+endif()
+
 add_subdirectory(cmake)
 add_subdirectory(external)
 
