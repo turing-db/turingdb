@@ -271,6 +271,13 @@ private:
     // update - so the tally charges each distinct value once.
     void lowerCount(mlir::db::Count count);
 
+    // Lower a db.count_scan_rows: the tally is already known from the graph's node counts,
+    // so there is no relation to walk and no accumulator to thread. Emit one
+    // nl.count_scan_rows carrying the same label conjunctions, hoisted to the top of the
+    // entry block the way a constant is, which materializes the single tally row (an
+    // unsigned i64, !nl.chunk<ui64>) the db result maps to.
+    void lowerCountScanRows(mlir::db::CountScanRows countScanRows);
+
     // Lower a db.sum / db.min / db.max / db.avg: the value-reducing siblings of
     // lowerCount. The db op names the reduction (`kind`); the input and result SSA
     // values are the column being reduced and the single-row result. Hoist an

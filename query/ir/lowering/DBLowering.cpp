@@ -861,6 +861,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerRemoveDuplicates(distinct);
     } else if (mlir::db::Count count = mlir::dyn_cast<mlir::db::Count>(operation)) {
         lowerCount(count);
+    } else if (mlir::db::CountScanRows countScanRows = mlir::dyn_cast<mlir::db::CountScanRows>(operation)) {
+        lowerCountScanRows(countScanRows);
     } else if (mlir::db::Sum sum = mlir::dyn_cast<mlir::db::Sum>(operation)) {
         lowerAggregate(sum.getInput(), sum.getResult(), storage::AggregateKind::Sum, sum.getDistinct());
     } else if (mlir::db::Min min = mlir::dyn_cast<mlir::db::Min>(operation)) {
@@ -2107,6 +2109,17 @@ void DBLowering::lowerCount(mlir::db::Count count) {
     // into a function-scope nl.output reading it - the block that holds the chunk is
     // the entry block, so lowerOutput places nl.output there.
     _valueMap[count.getResult()] = result.getResult();
+}
+
+void DBLowering::lowerCountScanRows(mlir::db::CountScanRows countScanRows) {
+    // The tally comes from the graph's node counts rather than from a relation, so the op
+    // reads no column and is loop-invariant: hoist it the way lowerConstant hoists a
+    // constant, where it dominates every loop a later op may emit from.
+    _builder.setInsertionPointToStart(_entryBlock);
+
+    nl::CountScanRows rows = _builder.create<nl::CountScanRows>(_builder.getUnknownLoc(), countScanRows.getLabelsAttr());
+
+    _valueMap[countScanRows.getResult()] = rows.getResult();
 }
 
 void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::AggregateKind kind, bool distinct) {

@@ -1742,6 +1742,35 @@ private:
     Column* _output {nullptr};
 };
 
+// nl.count_scan_rows data: the whole of a COUNT that reads the graph's node counts
+// instead of walking rows. Holds one label set per counted scan and the output column
+// to fill with the single product row - the same unsigned i64 count column
+// NLCountResultData fills. The label sets are owned here so the LabelSetHandle the
+// executor builds each run points at storage that outlives it (this data lives for the
+// whole program); the translator resolves them in place through addLabelSet after
+// allocating the data. _matchable is false when a requested label was absent from the
+// schema, leaving that conjunction unsatisfiable, so the product counts 0.
+class NLCountScanRowsData : public NLFunctionData {
+public:
+    NLCountScanRowsData(Column* output)
+        : _output(output)
+    {
+    }
+
+    Column* getOutput() const { return _output; }
+    std::span<const LabelSet> getLabelSets() const { return _labelSets; }
+    bool isMatchable() const { return _matchable; }
+
+    void reserveLabelSets(size_t count) { _labelSets.reserve(count); }
+    void addLabelSet(const LabelSet& labelset) { _labelSets.push_back(labelset); }
+    void markUnmatchable() { _matchable = false; }
+
+private:
+    Column* _output {nullptr};
+    std::vector<LabelSet> _labelSets;
+    bool _matchable {true};
+};
+
 // The reduction one nl.aggregate applies. The runtime counterpart of the MLIR
 // storage::AggregateKind: the translator maps the op's kind onto this, and it -
 // with the column value type - selects the reset/update/result handlers below.

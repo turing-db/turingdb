@@ -1272,6 +1272,48 @@ def Count : TuringOp<"count", [Pure]> {
 }
 
 /**
+* CountScanRows
+*/
+def CountScanRows : TuringOp<"count_scan_rows", [Pure]> {
+  let summary = "Count the rows of whole node scans from the graph's node counts";
+
+  let description = [{
+    What a db.count collapses to when the rows it tallies are whole node scans and
+    nothing else. `MATCH (a:Reaction) RETURN count(*)` asks how many Reaction nodes
+    there are, not which ones, and the graph already holds that number per label -
+    so the answer is a metadata read rather than a walk.
+
+    `labels` lists one label conjunction per scan, in factor order, and the result
+    is the product of their node counts - the row count of the cartesian product
+    those scans form:
+
+      %n = db.count_scan_rows([["Reaction"]]) : !db.column<none>
+      %m = db.count_scan_rows([["Reaction"], ["Pathway"]]) : !db.column<none>
+
+    An empty conjunction is an unlabelled scan and counts every node, so
+    `MATCH (a) RETURN count(*)` is db.count_scan_rows([[]]). The list itself must
+    not be empty: with no scan listed there is nothing to count. A label absent from
+    the schema matches no node, so its factor counts 0 and the whole product is 0 -
+    the same unsatisfiable conjunction db.scan_nodes_by_label yields no row for.
+
+    The result is the single-row unsigned tally db.count produces, typed as loosely
+    as db.count types its own so that replacing one leaves its consumers untouched.
+    Reading the counts is a deterministic read, so the op is Pure.
+  }];
+
+  // `labels` is one label conjunction per scan. Being an attribute and not an SSA
+  // value, it is absent from `operands`; lowering forwards it as-is.
+  let arguments = (ins StrArrayArrayAttr:$labels);
+  let results   = (outs Column:$result);
+  let hasVerifier = 1;
+
+  // The conjunctions print inside the parens as `[["Reaction"], ["Pathway"]]`, ahead
+  // of the colon, the same place db.scan_nodes_by_label prints its labels; the result
+  // type follows, qualified, as db.count prints its own.
+  let assemblyFormat = "`(` $labels `)` attr-dict `:` qualified(type($result))";
+}
+
+/**
 * Aggregates: Sum / Min / Max / Avg
 */
 // The value-reducing counterparts of db.count. Each consumes the whole dataflow of

@@ -5417,6 +5417,32 @@ void NLExecutor::runCountResult(NLExecutionContext* context, NLFunctionData* dat
     raw.assign(1, static_cast<uint64_t>(count));
 }
 
+void NLExecutor::runCountScanRows(NLExecutionContext* context, NLFunctionData* data) {
+    const NLCountScanRowsData* scanRows = static_cast<NLCountScanRowsData*>(data);
+
+    ColumnVector<uint64_t>* output = static_cast<ColumnVector<uint64_t>*>(scanRows->getOutput());
+    std::vector<uint64_t>& raw = output->getRaw();
+
+    // A conjunction naming a label the schema never had matches no node, so the scan it
+    // stands for contributes no row and the product is empty.
+    if (!scanRows->isMatchable()) {
+        raw.assign(1, 0);
+        return;
+    }
+
+    // Each scan contributes the nodes carrying its labels, and crossed together they make
+    // the product of those counts. An empty conjunction filters nothing, so its scan is
+    // every node of the graph.
+    const GraphReader reader(*context->getView());
+    size_t rows = 1;
+    for (const LabelSet& labelset : scanRows->getLabelSets()) {
+        rows *= labelset.empty() ? reader.getNodeCount()
+                                 : reader.getNodeCountMatchingLabelset(LabelSetHandle {labelset});
+    }
+
+    raw.assign(1, static_cast<uint64_t>(rows));
+}
+
 void NLExecutor::runAggregateReset(NLExecutionContext* context, NLFunctionData* data) {
     const NLAggregateResetData* reset = static_cast<NLAggregateResetData*>(data);
     reset->getReset()(reset->getState());

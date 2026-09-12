@@ -277,6 +277,7 @@ add_ir_tests(test_query_ir_fuse_scan_by_property_value FuseScanByPropertyValueTe
 add_ir_tests(test_query_ir_trim_unread_columns TrimUnreadColumnsTest.cpp)
 add_ir_tests(test_query_ir_trim_call_carry_set TrimCallCarrySetTest.cpp)
 add_ir_tests(test_query_ir_reuse_property_reads ReusePropertyReadsTest.cpp)
+add_ir_tests(test_query_ir_count_from_metadata CountFromMetadataTest.cpp)
 
 # The edge-scan fusion tests check the rewritten db program, then lower and run it
 # against the shared SimpleGraph fixture to compare its rows with the unfused hop's.
@@ -1807,6 +1808,16 @@ target_link_libraries(test_query_ir_count_wildcard_empty_input PRIVATE
         turing_db_storage_s
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_count_wildcard_empty_input PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_count_from_metadata_query CountFromMetadataQueryTest.cpp)
+target_link_libraries(test_query_ir_count_from_metadata_query PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_count_from_metadata_query PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_repeated_edge_variable RepeatedEdgeVariableTest.cpp)
 target_link_libraries(test_query_ir_repeated_edge_variable PRIVATE

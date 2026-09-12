@@ -53,6 +53,11 @@ def FuseHashJoin : Pass<"fuse_hash_join"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def CountFromMetadata : Pass<"count_from_metadata"> {
+    let summary = "Answer a count over whole node scans from the graph's node counts";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def TrimUnreadColumns : Pass<"trim_unread_columns"> {
     let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops and calls";
     let dependentDialects = ["mlir::db::DB"];

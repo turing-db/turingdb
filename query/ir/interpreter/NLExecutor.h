@@ -173,6 +173,11 @@ public:
     // the chunk at function scope.
     static void runCountResult(NLExecutionContext* context, NLFunctionData* data);
 
+    // The whole of a COUNT the graph already knows the answer to: read one node count
+    // per listed label conjunction and write their product into the output chunk's single
+    // unsigned i64 row. Walks no row, so it runs once at function scope.
+    static void runCountScanRows(NLExecutionContext* context, NLFunctionData* data);
+
     // Re-initialize an aggregate accumulator; runs each time its block runs.
     static void runAggregateReset(NLExecutionContext* context, NLFunctionData* data);
 

@@ -453,6 +453,12 @@ private:
     // emit statement (materialize the final tally as the chunk's single row)
     void translateCountResult(mlir::nl::CountResult result, NLStmtContainer* body);
 
+    // Translate an nl.count_scan_rows: resolve each listed conjunction to a label set,
+    // allocate the unsigned i64 count chunk the op produces, map the op result to it, and
+    // record the single statement that reads the graph's node counts into that chunk's
+    // one row - the whole of a count that walks nothing
+    void translateCountScanRows(mlir::nl::CountScanRows countScanRows, NLStmtContainer* body);
+
     // The runtime tally a count handle names. The handle is a required operand of
     // nl.count_update and nl.count_result, so this throws if it was not produced by
     // an nl.count.
