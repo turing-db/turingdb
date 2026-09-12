@@ -692,6 +692,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translatePropertyFetch(getNodeProperties.getInputNodes(),
                                    getNodeProperties.getPropertyType(),
                                    getNodeProperties.getPending(),
+                                   getNodeProperties.getAllPending(),
                                    getNodeProperties.getValues(),
                                    /*isNode=*/true,
                                    body);
@@ -699,6 +700,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translatePropertyFetch(getEdgeProperties.getInputEdges(),
                                    getEdgeProperties.getPropertyType(),
                                    getEdgeProperties.getPending(),
+                                   getEdgeProperties.getAllPending(),
                                    getEdgeProperties.getValues(),
                                    /*isNode=*/false,
                                    body);
@@ -1365,9 +1367,16 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
     translateBlock(loopBody, loopData->getStmts());
 }
 
+bool NLTranslator::isPendingValue(mlir::Value value, bool isNode) const {
+    const llvm::DenseSet<mlir::Value>& pendingValues = isNode ? _pendingNodeValues : _pendingEdgeValues;
+
+    return pendingValues.contains(value);
+}
+
 void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
                                           mlir::Value propertyTypeValue,
                                           mlir::Value pendingValue,
+                                          bool allPending,
                                           mlir::Value resultValue,
                                           bool isNode,
                                           NLStmtContainer* body) {
@@ -1396,6 +1405,7 @@ void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
                                                                                       output,
                                                                                       propertyType->_id);
     fetchData->setPending(getMaskColumn(pendingValue));
+    fetchData->setAllPending(allPending || isPendingValue(inputValue, isNode));
 
     const NLHandlerFunction handler = selectPropertyFetchHandler(isNode, valueType);
     body->emplaceStmt(handler, fetchData);
@@ -1513,8 +1523,8 @@ void NLTranslator::translateCreateEdge(nl::CreateEdge createEdge, NLStmtContaine
 
     const mlir::Value srcValue = createEdge.getSrcIds();
     const mlir::Value tgtValue = createEdge.getTgtIds();
-    const bool srcIsPending = _pendingNodeValues.contains(srcValue);
-    const bool tgtIsPending = _pendingNodeValues.contains(tgtValue);
+    const bool srcIsPending = createEdge.getSrcAllPending() || isPendingValue(srcValue, /*isNode=*/true);
+    const bool tgtIsPending = createEdge.getTgtAllPending() || isPendingValue(tgtValue, /*isNode=*/true);
 
     const ColumnNodeIDs* srcColumn = static_cast<const ColumnNodeIDs*>(getColumn(srcValue));
     const ColumnNodeIDs* tgtColumn = static_cast<const ColumnNodeIDs*>(getColumn(tgtValue));
@@ -1790,6 +1800,7 @@ void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty,
         valueColumn);
 
     data->setPending(getMaskColumn(setNodeProperty.getPending()));
+    data->setAllPending(setNodeProperty.getAllPending() || isPendingValue(inputValue, /*isNode=*/true));
     data->setRows(getMaskColumn(setNodeProperty.getRows()));
 
     body->emplaceStmt(&NLExecutor::runSetNodeProperty, data);
@@ -1816,6 +1827,7 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
         valueColumn);
 
     data->setPending(getMaskColumn(setEdgeProperty.getPending()));
+    data->setAllPending(setEdgeProperty.getAllPending() || isPendingValue(inputValue, /*isNode=*/false));
     data->setRows(getMaskColumn(setEdgeProperty.getRows()));
 
     body->emplaceStmt(&NLExecutor::runSetEdgeProperty, data);
@@ -1835,7 +1847,7 @@ void NLTranslator::translateDeleteNode(nl::DeleteNode deleteNode, NLStmtContaine
         _memory->alloc<ColumnNodeIDs>());
 
     data->setPending(getMaskColumn(deleteNode.getPending()));
-    data->setAllPending(_pendingNodeValues.contains(inputValue));
+    data->setAllPending(deleteNode.getAllPending() || isPendingValue(inputValue, /*isNode=*/true));
 
     body->emplaceStmt(&NLExecutor::runDeleteNode, data);
 }
@@ -1853,7 +1865,7 @@ void NLTranslator::translateDeleteEdge(nl::DeleteEdge deleteEdge, NLStmtContaine
         _memory->alloc<ColumnEdgeIDs>());
 
     data->setPending(getMaskColumn(deleteEdge.getPending()));
-    data->setAllPending(_pendingEdgeValues.contains(inputValue));
+    data->setAllPending(deleteEdge.getAllPending() || isPendingValue(inputValue, /*isNode=*/false));
 
     body->emplaceStmt(&NLExecutor::runDeleteEdge, data);
 }

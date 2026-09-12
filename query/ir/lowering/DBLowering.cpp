@@ -1356,7 +1356,8 @@ void DBLowering::lowerGetNodeProperties(mlir::db::GetNodeProperties getNodePrope
                                                                          valueChunkType,
                                                                          inputChunk,
                                                                          handle,
-                                                                         mapOptionalMask(getNodeProperties.getPending()));
+                                                                         mapOptionalMask(getNodeProperties.getPending()),
+                                                                         getNodeProperties.getAllPending());
     _valueMap[getNodeProperties.getResult()] = fetch.getValues();
 }
 
@@ -1373,7 +1374,8 @@ void DBLowering::lowerGetEdgeProperties(mlir::db::GetEdgeProperties getEdgePrope
                                                                          valueChunkType,
                                                                          inputChunk,
                                                                          handle,
-                                                                         mapOptionalMask(getEdgeProperties.getPending()));
+                                                                         mapOptionalMask(getEdgeProperties.getPending()),
+                                                                         getEdgeProperties.getAllPending());
     _valueMap[getEdgeProperties.getResult()] = fetch.getValues();
 }
 
@@ -2909,7 +2911,9 @@ void DBLowering::lowerCreateEdge(mlir::db::CreateEdge createEdge) {
         createEdge.getPropNamesAttr(),
         propChunks,
         mapOptionalMask(createEdge.getSrcPending()),
-        mapOptionalMask(createEdge.getTgtPending()));
+        mapOptionalMask(createEdge.getTgtPending()),
+        createEdge.getSrcAllPending(),
+        createEdge.getTgtAllPending());
     _valueMap[createEdge.getResult()] = create.getResult();
 }
 
@@ -3025,7 +3029,8 @@ void DBLowering::lowerSetNodeProperty(mlir::db::SetNodeProperty setNodeProperty)
         setNodeProperty.getPropertyAttr(),
         valueChunk,
         mapOptionalMask(setNodeProperty.getPending()),
-        mapOptionalMask(setNodeProperty.getRows()));
+        mapOptionalMask(setNodeProperty.getRows()),
+        setNodeProperty.getAllPending());
 }
 
 void DBLowering::lowerSetEdgeProperty(mlir::db::SetEdgeProperty setEdgeProperty) {
@@ -3046,7 +3051,8 @@ void DBLowering::lowerSetEdgeProperty(mlir::db::SetEdgeProperty setEdgeProperty)
         setEdgeProperty.getPropertyAttr(),
         valueChunk,
         mapOptionalMask(setEdgeProperty.getPending()),
-        mapOptionalMask(setEdgeProperty.getRows()));
+        mapOptionalMask(setEdgeProperty.getRows()),
+        setEdgeProperty.getAllPending());
 }
 
 void DBLowering::lowerDeleteNode(mlir::db::DeleteNode deleteNode) {
@@ -3059,7 +3065,8 @@ void DBLowering::lowerDeleteNode(mlir::db::DeleteNode deleteNode) {
     _builder.create<nl::DeleteNode>(loc,
                                     inputChunk,
                                     deleteNode.getDetach(),
-                                    mapOptionalMask(deleteNode.getPending()));
+                                    mapOptionalMask(deleteNode.getPending()),
+                                    deleteNode.getAllPending());
 }
 
 void DBLowering::lowerDeleteEdge(mlir::db::DeleteEdge deleteEdge) {
@@ -3068,7 +3075,10 @@ void DBLowering::lowerDeleteEdge(mlir::db::DeleteEdge deleteEdge) {
 
     setInsertionInto(ownerBlock(inputChunk));
 
-    _builder.create<nl::DeleteEdge>(loc, inputChunk, mapOptionalMask(deleteEdge.getPending()));
+    _builder.create<nl::DeleteEdge>(loc,
+                                    inputChunk,
+                                    mapOptionalMask(deleteEdge.getPending()),
+                                    deleteEdge.getAllPending());
 }
 
 void DBLowering::lowerConstant(mlir::db::ConstantOp constant) {

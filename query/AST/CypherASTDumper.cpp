@@ -301,12 +301,8 @@ void CypherASTDumper::dump(std::ostream& out, const SinglePartQuery* query) {
         }
     };
 
-    if (const StmtContainer* readStmts = query->getReadStmts()) {
-        dumpContainer(readStmts);
-    }
-
-    if (const StmtContainer* updateStmts = query->getUpdateStmts()) {
-        dumpContainer(updateStmts);
+    if (const StmtContainer* stmts = query->getStmts()) {
+        dumpContainer(stmts);
     }
 
     if (const ReturnStmt* retSt = query->getReturnStmt()) {

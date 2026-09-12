@@ -3492,6 +3492,7 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
     extractColumnProperties(nodeCol, rowCount, propID, propsBuffer);
 
     const ColumnMask* pending = setData->getPending();
+    const bool allPending = setData->isAllPending();
     const ColumnMask* rows = setData->getRows();
 
     const size_t firstPendingNodeID = committedNodeCount(context->getView());
@@ -3505,7 +3506,7 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
             continue;
         }
 
-        if (pending && (*pending)[row]) {
+        if (isPendingRow(pending, allPending, row)) {
             CommitWriteBuffer::PendingNode& node =
                 writeBuffer->getPendingNode(raw[row].getValue() - firstPendingNodeID);
             setPendingProperty(node.properties, propsBuffer[row]);
@@ -3529,6 +3530,7 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
     extractColumnProperties(edgeCol, rowCount, propID, propsBuffer);
 
     const ColumnMask* pending = setData->getPending();
+    const bool allPending = setData->isAllPending();
     const ColumnMask* rows = setData->getRows();
 
     const size_t firstPendingEdgeID = committedEdgeCount(context->getView());
@@ -3539,7 +3541,7 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
             continue;
         }
 
-        if (pending && (*pending)[row]) {
+        if (isPendingRow(pending, allPending, row)) {
             CommitWriteBuffer::PendingEdge& edge =
                 writeBuffer->getPendingEdge(raw[row].getValue() - firstPendingEdgeID);
             setPendingProperty(edge.properties, propsBuffer[row]);
@@ -6899,24 +6901,26 @@ void NLExecutor::runPropertyFetch(NLExecutionContext* context, NLFunctionData* d
     // whose entity the change wrote holds a write-buffer offset rather than an ID the
     // graph knows, and a row it merely updated still reads the value from before.
     const ColumnMask* pending = fetchData->getPending();
+    const bool allPending = fetchData->isAllPending();
     CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
 
     if (!writeBuffer) {
-        bioassert(!pending, "a property fetch over written entities requires an active write transaction");
+        bioassert(!pending && !allPending,
+                  "a property fetch over written entities requires an active write transaction");
         return;
     }
 
     NLWrittenValues& written = context->getWrittenValues();
     written.indexUpdates(writeBuffer);
 
-    if (!pending && !written.hasUpdates()) {
+    if (!pending && !allPending && !written.hasUpdates()) {
         return;
     }
 
     auto& raw = output->getRaw();
     const auto& inputRaw = inputIDs->getRaw();
     for (size_t row = 0; row < raw.size(); row++) {
-        if (pending && (*pending)[row]) {
+        if (isPendingRow(pending, allPending, row)) {
             raw[row] = readPendingEntityProperty<ID, T>(writeBuffer,
                                                         written,
                                                         &view,

@@ -23,6 +23,10 @@ public:
         WITH,
     };
 
+    // A clause that writes to the graph. Cypher orders a query part's clauses reading
+    // first and updating last, so this is what tells the two halves of a part apart
+    static bool isUpdating(Kind kind);
+
     virtual Kind getKind() const = 0;
 
 protected:

@@ -629,9 +629,15 @@ private:
     void translatePropertyFetch(mlir::Value inputValue,
                                 mlir::Value propertyTypeValue,
                                 mlir::Value pendingValue,
+                                bool allPending,
                                 mlir::Value resultValue,
                                 bool isNode,
                                 NLStmtContainer* body);
+
+    // Whether a chunk holds nothing but entities this change wrote and has not committed.
+    // The op says so when a query part cut stands between the create and the read; within
+    // one part the chunk is the create's own result, which is what the sets hold
+    bool isPendingValue(mlir::Value value, bool isNode) const;
 
     void translateGetNodeLabelSet(mlir::nl::GetNodeLabelSet op, NLStmtContainer* body);
     void translateGetEdgeTypes(mlir::nl::GetEdgeTypes op, NLStmtContainer* body);

@@ -787,14 +787,19 @@ public:
 
     // The rows holding a write-buffer offset rather than an ID the graph knows, or null
     // for an input no merge produced. Such a row reads its value out of the write buffer.
+    // A column a create produced is such a row throughout, which is what _allPending says.
     const ColumnMask* getPending() const { return _pending; }
     void setPending(const ColumnMask* pending) { _pending = pending; }
+
+    bool isAllPending() const { return _allPending; }
+    void setAllPending(bool allPending) { _allPending = allPending; }
 
 private:
     const Column* _input {nullptr};
     Column* _output {nullptr};
     const ColumnMask* _pending {nullptr};
     PropertyTypeID _propertyTypeID;
+    bool _allPending {false};
 };
 
 class NLGetNodeLabelSetData : public NLFunctionData {
@@ -2769,6 +2774,9 @@ public:
     const ColumnMask* getPending() const { return _pending; }
     void setPending(const ColumnMask* pending) { _pending = pending; }
 
+    bool isAllPending() const { return _allPending; }
+    void setAllPending(bool allPending) { _allPending = allPending; }
+
     // The rows the write touches, or null for a write that touches every one: Cypher's
     // ON CREATE hands over the merge's created mask and ON MATCH its negation.
     const ColumnMask* getRows() const { return _rows; }
@@ -2780,6 +2788,7 @@ private:
     const ColumnMask* _pending {nullptr};
     const ColumnMask* _rows {nullptr};
     PropertyTypeID _propertyTypeID;
+    bool _allPending {false};
 };
 
 class NLSetEdgePropertyData : public NLFunctionData {
@@ -2800,6 +2809,9 @@ public:
     const ColumnMask* getPending() const { return _pending; }
     void setPending(const ColumnMask* pending) { _pending = pending; }
 
+    bool isAllPending() const { return _allPending; }
+    void setAllPending(bool allPending) { _allPending = allPending; }
+
     const ColumnMask* getRows() const { return _rows; }
     void setRows(const ColumnMask* rows) { _rows = rows; }
 
@@ -2809,6 +2821,7 @@ private:
     const ColumnMask* _pending {nullptr};
     const ColumnMask* _rows {nullptr};
     PropertyTypeID _propertyTypeID;
+    bool _allPending {false};
 };
 
 class NLDeleteNodeData : public NLFunctionData {

@@ -17,19 +17,16 @@ public:
 
     Kind getKind() const override { return Kind::SINGLE_PART_QUERY; }
 
-    const StmtContainer* getReadStmts() const { return _readStmts; }
-    const StmtContainer* getUpdateStmts() const { return _updateStmts; }
+    const StmtContainer* getStmts() const { return _stmts; }
     const ReturnStmt* getReturnStmt() const { return _returnStmt; }
 
-    void setReadStmts(StmtContainer* stmts) { _readStmts = stmts; }
-    void addReadStmt(Stmt* stmt);
+    void setStmts(StmtContainer* stmts) { _stmts = stmts; }
+    void addStmt(Stmt* stmt);
 
-    void setUpdateStmts(StmtContainer* stmts) { _updateStmts = stmts; }
     void setReturnStmt(ReturnStmt* stmt) { _returnStmt = stmt; }
 
 private:
-    StmtContainer* _readStmts {nullptr};
-    StmtContainer* _updateStmts {nullptr};
+    StmtContainer* _stmts {nullptr};
     ReturnStmt* _returnStmt {nullptr};
 
     SinglePartQuery(DeclContext* declContext);

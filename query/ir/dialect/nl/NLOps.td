@@ -541,14 +541,17 @@ def GetNodeProperties : NLOp<"get_node_properties", [Pure, RowAlignedThroughOper
   // node chunk: such a row holds a write-buffer offset rather than an ID the graph
   // knows, so its value is read out of the write buffer rather than off the node the
   // offset collides with - null there when the write set the property on none.
+  // `all_pending` says that of every row without a mask, which an nl.create_node's
+  // chunk is.
   let arguments = (ins NLNodeIDChunk:$input_nodes,
                        NLPropertyTypeHandle:$property_type,
-                       Optional<NLBoolChunk>:$pending);
+                       Optional<NLBoolChunk>:$pending,
+                       UnitAttr:$all_pending);
   let results   = (outs NLChunk:$values);
 
   let assemblyFormat = [{
-    `(` $input_nodes `,` $property_type `)` (`pending` $pending^)? attr-dict `:`
-    qualified(type($values))
+    `(` $input_nodes `,` $property_type `)` (`pending` $pending^)? (`all_pending` $all_pending^)?
+    attr-dict `:` qualified(type($values))
   }];
 }
 
@@ -565,12 +568,13 @@ def GetEdgeProperties : NLOp<"get_edge_properties", [Pure, RowAlignedThroughOper
 
   let arguments = (ins NLEdgeIDChunk:$input_edges,
                        NLPropertyTypeHandle:$property_type,
-                       Optional<NLBoolChunk>:$pending);
+                       Optional<NLBoolChunk>:$pending,
+                       UnitAttr:$all_pending);
   let results   = (outs NLChunk:$values);
 
   let assemblyFormat = [{
-    `(` $input_edges `,` $property_type `)` (`pending` $pending^)? attr-dict `:`
-    qualified(type($values))
+    `(` $input_edges `,` $property_type `)` (`pending` $pending^)? (`all_pending` $all_pending^)?
+    attr-dict `:` qualified(type($values))
   }];
 }
 
@@ -2097,16 +2101,20 @@ def CreateEdge : NLOp<"create_edge", [AttrSizedOperandSegments]> {
                        StrArrayAttr:$prop_names,
                        Variadic<NLChunk>:$prop_values,
                        Optional<NLBoolChunk>:$src_pending,
-                       Optional<NLBoolChunk>:$tgt_pending);
+                       Optional<NLBoolChunk>:$tgt_pending,
+                       UnitAttr:$src_all_pending,
+                       UnitAttr:$tgt_all_pending);
   let results   = (outs NLEdgeIDChunk:$result);
   let hasVerifier = 1;
 
   // The two optional masks say, row by row, which endpoints are nodes this change wrote
   // and has not committed - what an nl.merge's node chunk mixes. A chunk an
-  // nl.create_node produced is pending in every row and carries no mask.
+  // nl.create_node produced is pending in every row and says so with the matching
+  // all_pending flag instead of a mask.
   let assemblyFormat = [{
     $src_ids `,` $tgt_ids `,` $edge_type `,` $prop_names `,` `{` $prop_values `}`
-    (`src_pending` $src_pending^)? (`tgt_pending` $tgt_pending^)? attr-dict
+    (`src_pending` $src_pending^)? (`tgt_pending` $tgt_pending^)?
+    (`src_all_pending` $src_all_pending^)? (`tgt_all_pending` $tgt_all_pending^)? attr-dict
     ( `:` qualified(type($prop_values))^ )?
   }];
 }
@@ -2183,11 +2191,12 @@ def SetNodeProperty : NLOp<"set_node_property", [AttrSizedOperandSegments]> {
                        StrAttr:$property,
                        NLChunk:$value,
                        Optional<NLBoolChunk>:$pending,
-                       Optional<NLBoolChunk>:$rows);
+                       Optional<NLBoolChunk>:$rows,
+                       UnitAttr:$all_pending);
 
   let assemblyFormat = [{
     $input_nodes `,` $property `,` $value (`pending` $pending^)? (`rows` $rows^)?
-    attr-dict `:` qualified(type($value))
+    (`all_pending` $all_pending^)? attr-dict `:` qualified(type($value))
   }];
 
   let hasVerifier = 1;
@@ -2205,11 +2214,12 @@ def SetEdgeProperty : NLOp<"set_edge_property", [AttrSizedOperandSegments]> {
                        StrAttr:$property,
                        NLChunk:$value,
                        Optional<NLBoolChunk>:$pending,
-                       Optional<NLBoolChunk>:$rows);
+                       Optional<NLBoolChunk>:$rows,
+                       UnitAttr:$all_pending);
 
   let assemblyFormat = [{
     $input_edges `,` $property `,` $value (`pending` $pending^)? (`rows` $rows^)?
-    attr-dict `:` qualified(type($value))
+    (`all_pending` $all_pending^)? attr-dict `:` qualified(type($value))
   }];
 
   let hasVerifier = 1;
@@ -2225,11 +2235,15 @@ def DeleteNode : NLOp<"delete_node"> {
 
   // `pending` is the mask an nl.merge produced beside its node chunk: such a row names
   // a node this change wrote and has not committed, which is dropped from the write
-  // buffer rather than tombstoned by an ID the graph does not hold.
-  let arguments = (ins NLNodeIDChunk:$input_nodes, UnitAttr:$detach, Optional<NLBoolChunk>:$pending);
+  // buffer rather than tombstoned by an ID the graph does not hold. `all_pending` says
+  // that of every row without a mask, which an nl.create_node's chunk is.
+  let arguments = (ins NLNodeIDChunk:$input_nodes,
+                       UnitAttr:$detach,
+                       Optional<NLBoolChunk>:$pending,
+                       UnitAttr:$all_pending);
 
   let assemblyFormat = [{
-    $input_nodes (`detach` $detach^)? (`pending` $pending^)? attr-dict
+    $input_nodes (`detach` $detach^)? (`pending` $pending^)? (`all_pending` $all_pending^)? attr-dict
   }];
 }
 
@@ -2241,10 +2255,12 @@ def DeleteEdge : NLOp<"delete_edge"> {
       }
   }];
 
-  let arguments = (ins NLEdgeIDChunk:$input_edges, Optional<NLBoolChunk>:$pending);
+  let arguments = (ins NLEdgeIDChunk:$input_edges,
+                       Optional<NLBoolChunk>:$pending,
+                       UnitAttr:$all_pending);
 
   let assemblyFormat = [{
-    $input_edges (`pending` $pending^)? attr-dict
+    $input_edges (`pending` $pending^)? (`all_pending` $all_pending^)? attr-dict
   }];
 }
 

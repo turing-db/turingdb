@@ -124,6 +124,22 @@ std::string_view toStringView(llvm::StringRef text) {
     return std::string_view(text.data(), text.size());
 }
 
+// The variable a projection item publishes as it stands, or null for an item that computes
+// a value from one: only the first keeps an entity, the second leaves it behind. A wildcard
+// expands to the declarations themselves, anything written out to a bare symbol expression
+const VarDecl* projectedVariable(const Projection::ReturnItem& item) {
+    if (VarDecl* const* itemDecl = std::get_if<VarDecl*>(&item)) {
+        return *itemDecl;
+    }
+
+    const Expr* itemExpr = *std::get_if<Expr*>(&item);
+    if (itemExpr->getKind() != Expr::Kind::SYMBOL) {
+        return nullptr;
+    }
+
+    return itemExpr->getExprVarDecl();
+}
+
 // The untyped null column the null literal compiles to: nullable with no value type of
 // its own, so nothing about it says which column would carry a value
 bool isUntypedNullColumn(mlir::Value column) {
@@ -1001,8 +1017,6 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
     const ReturnStmt* returnStmt = query->getReturnStmt();
     const Projection* projection = returnStmt ? returnStmt->getProjection() : nullptr;
 
-    generateUpdates(query);
-
     if (projection) {
         generateGroupAggregate(projection);
         generateOutput(projection);
@@ -1067,12 +1081,12 @@ void DBProgramGenerator::explainDependencyGraph() {
 }
 
 void DBProgramGenerator::generateQueryParts(const SinglePartQuery* query) {
-    const StmtContainer* readStmts = query->getReadStmts();
-    if (!readStmts) {
+    const StmtContainer* queryStmts = query->getStmts();
+    if (!queryStmts) {
         return;
     }
 
-    const std::span<Stmt* const> stmts {readStmts->stmts()};
+    const std::span<Stmt* const> stmts {queryStmts->stmts()};
 
     // A WITH closes a query part: the statements before it feed its projection, and the
     // columns that projection publishes are all the statements after it can read
@@ -1081,19 +1095,35 @@ void DBProgramGenerator::generateQueryParts(const SinglePartQuery* query) {
         const Stmt* stmt = stmts[index];
 
         if (stmt->getKind() == Stmt::Kind::WITH) {
-            generateOptionalParts(stmts.subspan(partBegin, index - partBegin));
+            generatePartStatements(stmts.subspan(partBegin, index - partBegin));
             generateWith(static_cast<const WithStmt*>(stmt));
             partBegin = index + 1;
         } else if (closesPartOnItsCut(stmt, stmts.subspan(index + 1))) {
-            generateOptionalParts(stmts.subspan(partBegin, index + 1 - partBegin));
+            generatePartStatements(stmts.subspan(partBegin, index + 1 - partBegin));
             publishInFlightColumns();
             partBegin = index + 1;
         }
     }
 
-    if (partBegin < stmts.size()) {
-        generateOptionalParts(stmts.subspan(partBegin));
+    generatePartStatements(stmts.subspan(partBegin));
+}
+
+// The reading clauses of a part build the rows its updating clauses write one entity per,
+// so the whole traversal is generated before the first write. The analyzer has already
+// rejected a part that reads again after writing, so the split is a single cut
+void DBProgramGenerator::generatePartStatements(std::span<Stmt* const> stmts) {
+    const auto isUpdating = [](const Stmt* stmt) {
+        return Stmt::isUpdating(stmt->getKind());
+    };
+
+    const auto firstUpdate = std::ranges::find_if(stmts, isUpdating);
+    const size_t readingCount = static_cast<size_t>(firstUpdate - stmts.begin());
+
+    if (readingCount > 0) {
+        generateOptionalParts(stmts.subspan(0, readingCount));
     }
+
+    generateUpdates(stmts.subspan(readingCount));
 }
 
 void DBProgramGenerator::generateOptionalParts(std::span<Stmt* const> stmts) {
@@ -2912,13 +2942,15 @@ void DBProgramGenerator::publishCreatedEntity(const VarDecl* decl,
     PartScope::CreatedEntity& created = _part._createdEntities[decl];
     created._column = column;
 
-    created._labels.clear();
-    created._labels.reserve(labelNames.size());
+    PartScope::WrittenEntity& written = _part._writtenEntities[decl];
+
+    written._labels.clear();
+    written._labels.reserve(labelNames.size());
     for (const llvm::StringRef labelName : labelNames) {
-        created._labels.emplace_back(labelName.data(), labelName.size());
+        written._labels.emplace_back(labelName.data(), labelName.size());
     }
 
-    created._edgeType.assign(edgeType.begin(), edgeType.end());
+    written._edgeType.assign(edgeType.begin(), edgeType.end());
 
     for (size_t index = 0; index < propNames.size(); index++) {
         const llvm::StringRef propName = propNames[index];
@@ -2935,6 +2967,23 @@ void DBProgramGenerator::publishMergedEntity(const VarDecl* decl,
     merged._pending = pending;
 }
 
+const DBProgramGenerator::PartScope::WrittenEntity* DBProgramGenerator::findWrittenEntity(const VarDecl* decl) const {
+    if (!decl) {
+        return nullptr;
+    }
+
+    const auto findIt = _part._writtenEntities.find(decl);
+    if (findIt == end(_part._writtenEntities)) {
+        return nullptr;
+    }
+
+    return &findIt->second;
+}
+
+bool DBProgramGenerator::isPendingThroughout(const VarDecl* decl) const {
+    return findWrittenEntity(decl) != nullptr;
+}
+
 mlir::Value DBProgramGenerator::findPendingMask(const VarDecl* decl) const {
     const auto findIt = _part._createdEntities.find(decl);
     if (findIt == end(_part._createdEntities)) {
@@ -2944,13 +2993,8 @@ mlir::Value DBProgramGenerator::findPendingMask(const VarDecl* decl) const {
     return findIt->second._pending;
 }
 
-void DBProgramGenerator::generateUpdates(const SinglePartQuery* query) {
-    const StmtContainer* updateStmts = query->getUpdateStmts();
-    if (!updateStmts) {
-        return;
-    }
-
-    for (const Stmt* stmt : updateStmts->stmts()) {
+void DBProgramGenerator::generateUpdates(std::span<Stmt* const> stmts) {
+    for (const Stmt* stmt : stmts) {
         switch (stmt->getKind()) {
             case Stmt::Kind::MERGE:
                 generateMergeStmt(static_cast<const MergeStmt*>(stmt));
@@ -3096,7 +3140,7 @@ void DBProgramGenerator::collectMergeNode(const NodePattern* nodePattern, MergeP
         // A CREATE's entities are provisional and in no graph a merge reads, so binding
         // one would leave the merge matching against whichever committed node the
         // provisional ID collides with
-        const bool writtenByACreate = !pending && _part._createdEntities.contains(node._decl);
+        const bool writtenByACreate = !pending && isPendingThroughout(node._decl);
         if (writtenByACreate) {
             throw TuringException(fmt::format("MERGE cannot bind '{}': a CREATE in the same query "
                                               "writes it, and what a CREATE writes is not visible "
@@ -3410,7 +3454,9 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
                 _opBuilder.getStrArrayAttr(propNames),
                 mlir::ValueRange{propValues},
                 findPendingMask(srcNode->getDecl()),
-                findPendingMask(tgtNode->getDecl()));
+                findPendingMask(tgtNode->getDecl()),
+                isPendingThroughout(srcNode->getDecl()),
+                isPendingThroughout(tgtNode->getDecl()));
 
             const VarDecl* edgeDecl = edge->getDecl();
             if (edgeDecl && !edgeDecl->isUnnamed()) {
@@ -3608,6 +3654,7 @@ void DBProgramGenerator::generateSetItems(const SetStmt* setStmt, mlir::Value ro
         // A merge's rows mix entities it wrote with entities it bound, and the two are
         // written to differently: the mask says which is which
         const mlir::Value pending = findPendingMask(entityDecl);
+        const bool allPending = isPendingThroughout(entityDecl);
 
         const mlir::StringAttr propAttr = _opBuilder.getStringAttr(propName);
         const EvaluatedType entityType = entityDecl->getType();
@@ -3616,9 +3663,21 @@ void DBProgramGenerator::generateSetItems(const SetStmt* setStmt, mlir::Value ro
         bioassert(isNode || isEdge, "SET on non-entity variable: {}", varName);
 
         if (isNode) {
-            _opBuilder.create<mlir::db::SetNodeProperty>(loc, entityColumn, propAttr, valueColumn, pending, rows);
+            _opBuilder.create<mlir::db::SetNodeProperty>(loc,
+                                                         entityColumn,
+                                                         propAttr,
+                                                         valueColumn,
+                                                         pending,
+                                                         rows,
+                                                         allPending);
         } else /* (isEdge) */ {
-            _opBuilder.create<mlir::db::SetEdgeProperty>(loc, entityColumn, propAttr, valueColumn, pending, rows);
+            _opBuilder.create<mlir::db::SetEdgeProperty>(loc,
+                                                         entityColumn,
+                                                         propAttr,
+                                                         valueColumn,
+                                                         pending,
+                                                         rows,
+                                                         allPending);
         }
     }
 }
@@ -3652,10 +3711,12 @@ void DBProgramGenerator::generateDeleteStmt(const DeleteStmt* deleteStmt) {
         const bool isNode = entityType == EvaluatedType::NodePattern;
         const bool isEdge = entityType == EvaluatedType::EdgePattern;
 
+        const bool allPending = isPendingThroughout(decl);
+
         if (isNode) {
-            _opBuilder.create<mlir::db::DeleteNode>(loc, entityColumn, detach, pending);
+            _opBuilder.create<mlir::db::DeleteNode>(loc, entityColumn, detach, pending, allPending);
         } else if (isEdge) {
-            _opBuilder.create<mlir::db::DeleteEdge>(loc, entityColumn, pending);
+            _opBuilder.create<mlir::db::DeleteEdge>(loc, entityColumn, pending, allPending);
         } else {
             throwError("Can only delete nodes or edges", expr);
         }
@@ -3722,13 +3783,23 @@ void DBProgramGenerator::generateOutput(const Projection* projection) {
                                        _opBuilder.getStrArrayAttr(outputNames));
 }
 
+bool DBProgramGenerator::writesToTheGraph(const SinglePartQuery* query) {
+    const StmtContainer* stmts = query->getStmts();
+    if (!stmts) {
+        return false;
+    }
+
+    return std::ranges::any_of(stmts->stmts(), [](const Stmt* stmt) {
+        return Stmt::isUpdating(stmt->getKind());
+    });
+}
+
 // A standalone CALL ends no projection, so what it yielded is the result: the columns go
 // out in yield order, under the names the YIELD gave them. A query that writes is not
 // standalone whatever it yielded - its result is its RETURN, and it has none - so a CALL
 // or a LOAD CSV feeding a CREATE reports no row rather than every row it wrote one for.
 void DBProgramGenerator::generateYieldedOutput(const SinglePartQuery* query) {
-    const StmtContainer* updateStmts = query->getUpdateStmts();
-    if (updateStmts && !updateStmts->stmts().empty()) {
+    if (writesToTheGraph(query)) {
         return;
     }
 
@@ -3784,10 +3855,12 @@ void DBProgramGenerator::generateWith(const WithStmt* with) {
 }
 
 void DBProgramGenerator::generateOptionalMatch(std::span<Stmt* const> stmt) {
-    // rebindScope carries a column and its name, which is all a read needs. A created
-    // entity is more than that - a pending mask and the properties written on it - and
-    // Cypher puts every reading clause ahead of every updating one, so none is in scope.
-    bioassert(_part._createdEntities.empty(), "An OPTIONAL MATCH cannot follow a CREATE");
+    // An optional pattern pads the rows it misses with an invalid ID, which is no offset
+    // into the write buffer the entity's rows live in: what the query wrote cannot be
+    // carried through one
+    if (!_part._writtenEntities.empty()) {
+        throwError("An OPTIONAL MATCH cannot read what a CREATE in the same query wrote", stmt.front());
+    }
 
     llvm::SmallVector<PublishedColumn> scopeColumns;
     collectPublishedColumns(scopeColumns);
@@ -3944,7 +4017,52 @@ void DBProgramGenerator::publishBoundColumns(const Projection* projection,
         published.push_back({publishedDecls[index], std::string(name.data(), name.size()), columns[index]});
     }
 
+    CarriedEntities carried;
+    carryWrittenEntities(projection, published, carried);
+
     rebindScope(published);
+
+    for (auto& [decl, written] : carried) {
+        _part._writtenEntities[decl] = std::move(written);
+    }
+}
+
+void DBProgramGenerator::carryWrittenEntities(const Projection* projection,
+                                              llvm::ArrayRef<PublishedColumn> published,
+                                              CarriedEntities& carried) const {
+    size_t index = 0;
+    for (const Projection::ReturnItem& item : projection->items()) {
+        const VarDecl* decl = projectedVariable(item);
+
+        throwOnPublishedMerge(projection, decl);
+
+        const PartScope::WrittenEntity* written = findWrittenEntity(decl);
+        if (written) {
+            carried.emplace_back(published[index]._decl, *written);
+        }
+
+        index++;
+    }
+}
+
+// A MERGE's rows mix the entities it wrote with the ones it bound, and only the mask beside
+// them says which is which. That mask is no item of the projection, so the cut leaves it
+// behind, and the part below would read every row off the graph - right for the rows the
+// merge matched, wrong for the ones it wrote
+void DBProgramGenerator::throwOnPublishedMerge(const Projection* projection, const VarDecl* decl) const {
+    if (!decl) {
+        return;
+    }
+
+    const auto findIt = _part._createdEntities.find(decl);
+    if (findIt == end(_part._createdEntities) || !findIt->second._pending) {
+        return;
+    }
+
+    throwError(fmt::format("A WITH cannot publish '{}': a MERGE in the same query writes it, and "
+                           "what a MERGE writes is not carried past a WITH",
+                           decl->getName()),
+               projection);
 }
 
 void DBProgramGenerator::rebindScope(llvm::ArrayRef<PublishedColumn> published) {
@@ -5096,10 +5214,10 @@ mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propEx
         return nullConstantColumn();
     }
 
-    // Every row a CREATE wrote holds a provisional ID, which the graph a fetch reads knows
-    // nothing about: the value of one of its properties is the one the CREATE wrote there,
-    // and a property it did not write is null. A MERGE's rows are a mixture, so they go
-    // through the fetch below, which reads each row where its own entity lives.
+    // The value of a property a CREATE wrote is the column it wrote it from, which saves
+    // the read the detour through the write buffer the fetch below takes. A MERGE's rows
+    // are a mixture, so they go through that fetch, which reads each row where its own
+    // entity lives.
     const auto createdIt = _part._createdEntities.find(entityDecl);
     const bool writtenByACreate = createdIt != end(_part._createdEntities) && !createdIt->second._pending;
     if (writtenByACreate) {
@@ -5109,8 +5227,6 @@ mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propEx
         if (propertyIt != end(properties)) {
             return propertyIt->second;
         }
-
-        return nullConstantColumn();
     }
 
     const mlir::Value entityColumn = resolveEntityColumn(entityDecl);
@@ -5128,14 +5244,38 @@ mlir::Value DBProgramGenerator::translatePropertyExpr(const PropertyExpr* propEx
     bioassert(isNode || isEdge, "Property access on non-entity variable: {}", varName);
 
     const mlir::Value pending = findPendingMask(entityDecl);
+    const bool allPending = isPendingThroughout(entityDecl);
 
     if (isNode) {
-        auto op = _opBuilder.create<mlir::db::GetNodeProperties>(loc, resultType, entityColumn, propAttr, pending);
+        auto op = _opBuilder.create<mlir::db::GetNodeProperties>(loc,
+                                                                 resultType,
+                                                                 entityColumn,
+                                                                 propAttr,
+                                                                 pending,
+                                                                 allPending);
         return op.getResult();
     } else {
-        auto op = _opBuilder.create<mlir::db::GetEdgeProperties>(loc, resultType, entityColumn, propAttr, pending);
+        auto op = _opBuilder.create<mlir::db::GetEdgeProperties>(loc,
+                                                                 resultType,
+                                                                 entityColumn,
+                                                                 propAttr,
+                                                                 pending,
+                                                                 allPending);
         return op.getResult();
     }
+}
+
+// A node carries every label its test names, an edge the single type it was written with
+bool DBProgramGenerator::writtenEntityHasTypes(const PartScope::WrittenEntity& written,
+                                               std::span<const std::string_view> typeNames,
+                                               bool isNode) {
+    if (!isNode) {
+        return typeNames.size() == 1 && typeNames.front() == written._edgeType;
+    }
+
+    return std::ranges::all_of(typeNames, [&written](std::string_view typeName) {
+        return std::ranges::find(written._labels, typeName) != end(written._labels);
+    });
 }
 
 mlir::Value DBProgramGenerator::translateEntityTypeExpr(const EntityTypeExpr* typeExpr) {
@@ -5154,6 +5294,19 @@ mlir::Value DBProgramGenerator::translateEntityTypeExpr(const EntityTypeExpr* ty
     const bool isNode = entityType == EvaluatedType::NodePattern;
     const bool isEdge = entityType == EvaluatedType::EdgePattern;
     bioassert(isNode || isEdge, "Type test on non-entity variable: {}", varName);
+
+    // What the query wrote is in no graph the test would read, so the labels and the type
+    // the CREATE spelled decide it here, laid out over the rows the entity carries
+    const PartScope::WrittenEntity* written = findWrittenEntity(entityDecl);
+    if (written) {
+        const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+        const mlir::Value answer = constantBool(writtenEntityHasTypes(*written, typeNames, isNode));
+
+        return _opBuilder.create<mlir::db::BroadcastConstant>(_opBuilder.getUnknownLoc(),
+                                                              noneType,
+                                                              answer,
+                                                              resolveEntityColumn(entityDecl)).getResult();
+    }
 
     if (isEdge) {
         return checkEdgeType(resolveOrFetchEdgeTypeColumn(entityDecl, varName), typeNames);
@@ -5226,31 +5379,24 @@ mlir::Value DBProgramGenerator::translateArg(const Expr* argExpr) {
     return _part._exprMap.at(argExpr);
 }
 
+// A MERGE's rows mix the entities it wrote with the ones it bound, so no one label set or
+// type stands for its column and it records neither: the caller falls back on the fetch,
+// which reads each row where its own entity lives
 mlir::Value DBProgramGenerator::translateCreatedMetadata(std::string_view funcName, const Expr* argExpr) {
     if (argExpr->getKind() != Expr::Kind::SYMBOL) {
         return {};
     }
 
     const SymbolExpr* symbolExpr = static_cast<const SymbolExpr*>(argExpr);
-    const VarDecl* decl = symbolExpr->getDecl();
-
-    const auto createdIt = _part._createdEntities.find(decl);
-    if (createdIt == end(_part._createdEntities)) {
+    const PartScope::WrittenEntity* written = findWrittenEntity(symbolExpr->getDecl());
+    if (!written) {
         return {};
     }
 
-    const PartScope::CreatedEntity& created = createdIt->second;
-
-    // A MERGE's rows mix the entities it wrote with the ones it bound, so no one label
-    // set or type stands for the column: those rows read theirs where each entity lives
-    if (created._pending) {
-        return {};
-    }
-
-    if (funcName == "labels") {
-        return constantLabelString(created._labels);
-    } else if (funcName == "type") {
-        return constantString(created._edgeType);
+    if (funcName == "labels" && !written->_labels.empty()) {
+        return constantLabelString(written->_labels);
+    } else if (funcName == "type" && !written->_edgeType.empty()) {
+        return constantString(written->_edgeType);
     } else {
         return {};
     }

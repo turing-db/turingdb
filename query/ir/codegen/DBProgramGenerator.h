@@ -152,10 +152,9 @@ private:
         std::vector<YieldedColumn> _yieldedColumns;
 
         // What a CREATE wrote for one of its named pattern entities: the column of
-        // provisional IDs, the value column of every property it set, and the labels or
-        // edge type it wrote. A created entity is in no pattern the traversal walked, so it
-        // is no VDG variable, and its rows are not in the graph a fetch would read - all
-        // come from here instead
+        // provisional IDs and the value column of every property it set. A created entity
+        // is in no pattern the traversal walked, so it is no VDG variable, and its rows are
+        // not in the graph a fetch would read - both come from here instead
         struct CreatedEntity {
             mlir::Value _column;
 
@@ -166,11 +165,20 @@ private:
             mlir::Value _pending;
 
             std::unordered_map<std::string_view, mlir::Value> _properties;
+        };
+
+        std::unordered_map<const VarDecl*, CreatedEntity> _createdEntities;
+
+        // What a part cut leaves of an entity the query wrote: every row of it still
+        // names one this change has not committed, so a read goes to the write buffer, and
+        // the labels or edge type the CREATE spelled are all there is to say what it is. No
+        // column is kept - the WITH publishes one, which a traversal below is free to cut
+        struct WrittenEntity {
             std::vector<std::string> _labels;
             std::string _edgeType;
         };
 
-        std::unordered_map<const VarDecl*, CreatedEntity> _createdEntities;
+        std::unordered_map<const VarDecl*, WrittenEntity> _writtenEntities;
 
         // The traversal root a CALL ahead of the MATCH bound, when the query lets the
         // traversal expand that column instead of scanning the graph and joining. Null
@@ -205,6 +213,10 @@ private:
     void createMain();
 
     void generateQueryParts(const SinglePartQuery* query);
+
+    // One query part: its reading clauses, then the updating ones that write over the rows
+    // they matched
+    void generatePartStatements(std::span<Stmt* const> stmts);
 
     // The statements between two WITH barriers, split again at each OPTIONAL MATCH: an
     // optional pattern keeps the rows it does not match, so it cannot be walked with the
@@ -330,6 +342,26 @@ private:
     // Moves a translated connected component into a CrossProduct factor
     void moveComponentToFactor(TranslatedComponent& component, mlir::Block* factorBlock);
 
+    // Every row of the variable's column names an entity this change wrote and has not
+    // committed, so a read of one is answered by the write buffer and not by the graph
+    bool isPendingThroughout(const VarDecl* decl) const;
+
+    const PartScope::WrittenEntity* findWrittenEntity(const VarDecl* decl) const;
+
+    static bool writtenEntityHasTypes(const PartScope::WrittenEntity& written,
+                                      std::span<const std::string_view> typeNames,
+                                      bool isNode);
+
+    using CarriedEntities = llvm::SmallVector<std::pair<const VarDecl*, PartScope::WrittenEntity>>;
+
+    // Re-keys what the query has written to the declarations a WITH publishes it under,
+    // so the part below the cut still reads it as this change's own
+    void carryWrittenEntities(const Projection* projection,
+                              llvm::ArrayRef<PublishedColumn> published,
+                              CarriedEntities& carried) const;
+
+    void throwOnPublishedMerge(const Projection* projection, const VarDecl* decl) const;
+
     // Records what a CREATE wrote for one named entity of its pattern, so the projection
     // reads that back rather than fetching an ID the graph does not hold yet
     void publishCreatedEntity(const VarDecl* decl,
@@ -387,7 +419,7 @@ private:
 
     // Emits each update statement of a part in the order the query writes them, so a
     // statement reading what an earlier one wrote is generated behind it
-    void generateUpdates(const SinglePartQuery* query);
+    void generateUpdates(std::span<Stmt* const> stmts);
     void generateCreateStmt(const CreateStmt* createStmt);
     void generateMergeStmt(const MergeStmt* mergeStmt);
 
@@ -421,6 +453,8 @@ private:
     void generateSetItems(const SetStmt* setStmt, mlir::Value rows);
     void generateDeleteStmt(const DeleteStmt* deleteStmt);
     void generateOutput(const Projection* projection);
+
+    static bool writesToTheGraph(const SinglePartQuery* query);
 
     // A standalone CALL ends no projection: what it yielded is the result
     void generateYieldedOutput(const SinglePartQuery* query);
