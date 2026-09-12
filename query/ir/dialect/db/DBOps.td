@@ -1296,21 +1296,34 @@ def CountScanRows : TuringOp<"count_scan_rows", [Pure]> {
     the schema matches no node, so its factor counts 0 and the whole product is 0 -
     the same unsatisfiable conjunction db.scan_nodes_by_label yields no row for.
 
+    `property`, when given, narrows the tally to the rows where that property is
+    present - Cypher's count(a.name), which counts the rows in which a.name is not
+    null, so the answer is how many of the scanned nodes hold it rather than how many
+    there are. That too the graph knows without reading a value: it indexes each
+    property by the label set of the nodes holding it.
+
+      %n = db.count_scan_rows([["Person"]]) property "name" : !db.column<none>
+
+    Only a single scan may carry it: with more than one the op would have to say which
+    of them the property is read from, and nothing generates that shape.
+
     The result is the single-row unsigned tally db.count produces, typed as loosely
     as db.count types its own so that replacing one leaves its consumers untouched.
     Reading the counts is a deterministic read, so the op is Pure.
   }];
 
-  // `labels` is one label conjunction per scan. Being an attribute and not an SSA
-  // value, it is absent from `operands`; lowering forwards it as-is.
-  let arguments = (ins StrArrayArrayAttr:$labels);
+  // `labels` is one label conjunction per scan, `property` the name whose holders
+  // the tally is narrowed to. Being attributes and not SSA values, they are absent
+  // from `operands`; lowering forwards them as-is.
+  let arguments = (ins StrArrayArrayAttr:$labels, OptionalAttr<StrAttr>:$property);
   let results   = (outs Column:$result);
   let hasVerifier = 1;
 
   // The conjunctions print inside the parens as `[["Reaction"], ["Pathway"]]`, ahead
-  // of the colon, the same place db.scan_nodes_by_label prints its labels; the result
-  // type follows, qualified, as db.count prints its own.
-  let assemblyFormat = "`(` $labels `)` attr-dict `:` qualified(type($result))";
+  // of the colon, the same place db.scan_nodes_by_label prints its labels; the
+  // property follows its keyword when set, the way db.count prints its flags; the
+  // result type follows, qualified, as db.count prints its own.
+  let assemblyFormat = "`(` $labels `)` (`property` $property^)? attr-dict `:` qualified(type($result))";
 }
 
 /**

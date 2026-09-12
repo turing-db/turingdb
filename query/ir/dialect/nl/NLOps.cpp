@@ -431,10 +431,19 @@ LogicalResult CountScanRows::inferReturnTypes(MLIRContext* context,
 }
 
 // A count with no scan listed has nothing to count; the empty product it would stand for
-// is an nl.constant instead.
+// is an nl.constant instead. A property is read from one named scan, as in db.count_scan_rows.
 LogicalResult CountScanRows::verify() {
     if (getLabels().empty()) {
         return emitOpError("requires at least one scan to count");
+    }
+
+    const std::optional<llvm::StringRef> property = getProperty();
+    if (property && property->empty()) {
+        return emitOpError("requires a non-empty property name");
+    }
+
+    if (property && getLabels().size() != 1) {
+        return emitOpError("reads a property from a single scan");
     }
 
     return success();

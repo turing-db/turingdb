@@ -463,6 +463,15 @@ LogicalResult CountScanRows::verify() {
         return emitOpError("requires at least one scan to count");
     }
 
+    const std::optional<llvm::StringRef> property = getProperty();
+    if (property && property->empty()) {
+        return emitOpError("requires a non-empty property name");
+    }
+
+    if (property && getLabels().size() != 1) {
+        return emitOpError("reads a property from a single scan");
+    }
+
     return success();
 }
 

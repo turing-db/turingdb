@@ -5423,8 +5423,8 @@ void NLExecutor::runCountScanRows(NLExecutionContext* context, NLFunctionData* d
     ColumnVector<uint64_t>* output = static_cast<ColumnVector<uint64_t>*>(scanRows->getOutput());
     std::vector<uint64_t>& raw = output->getRaw();
 
-    // A conjunction naming a label the schema never had matches no node, so the scan it
-    // stands for contributes no row and the product is empty.
+    // A conjunction naming a label, or a property, the schema never had matches no node, so
+    // the scan it stands for contributes no row and the product is empty.
     if (!scanRows->isMatchable()) {
         raw.assign(1, 0);
         return;
@@ -5432,12 +5432,22 @@ void NLExecutor::runCountScanRows(NLExecutionContext* context, NLFunctionData* d
 
     // Each scan contributes the nodes carrying its labels, and crossed together they make
     // the product of those counts. An empty conjunction filters nothing, so its scan is
-    // every node of the graph.
+    // every node of the graph; a named property narrows the one scan carrying it to the
+    // nodes that hold it, which is what count(a.name) tallies.
     const GraphReader reader(*context->getView());
+    const PropertyTypeID propertyTypeID = scanRows->getPropertyTypeID();
+
     size_t rows = 1;
     for (const LabelSet& labelset : scanRows->getLabelSets()) {
-        rows *= labelset.empty() ? reader.getNodeCount()
-                                 : reader.getNodeCountMatchingLabelset(LabelSetHandle {labelset});
+        const LabelSetHandle labelsetHandle {labelset};
+
+        if (propertyTypeID.isValid()) {
+            rows *= reader.getNodeCountWithProperty(labelsetHandle, propertyTypeID);
+        } else if (labelset.empty()) {
+            rows *= reader.getNodeCount();
+        } else {
+            rows *= reader.getNodeCountMatchingLabelset(labelsetHandle);
+        }
     }
 
     raw.assign(1, static_cast<uint64_t>(rows));

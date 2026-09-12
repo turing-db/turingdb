@@ -74,6 +74,15 @@ public:
     [[nodiscard]] const EdgeRecord* getEdge(EdgeID edgeID) const;
     [[nodiscard]] LabelSetHandle getNodeLabelSet(NodeID nodeID) const;
     [[nodiscard]] size_t getNodeCountMatchingLabelset(const LabelSetHandle& labelset) const;
+
+    /**
+     * @brief Returns the number of nodes matching @p labelset which hold property @p
+     * propertyTypeID, counting each node once and none that a tombstone deleted.
+     * @detail A node written twice holds the property in two data parts; only the newest
+     * entry stands for it.
+     */
+    [[nodiscard]] size_t getNodeCountWithProperty(const LabelSetHandle& labelset,
+                                                  PropertyTypeID propertyTypeID) const;
     [[nodiscard]] size_t getDatapartCount() const;
     [[nodiscard]] size_t getNodePropertyCount(PropertyTypeID ptID) const;
     [[nodiscard]] size_t getNodePropertyCount(size_t datapartIndex, PropertyTypeID ptID) const;
