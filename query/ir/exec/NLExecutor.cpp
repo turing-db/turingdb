@@ -5773,10 +5773,24 @@ double hopPassRateFor(const GraphView& view, NLExplorePathsLoopData* loopData, P
     return rate;
 }
 
+// The branching of the region this chunk's seeds open onto: both gates price the walk by it,
+// and it is what the walk does rather than what the average node carrying the type does
+double seedFanOutFor(const GraphView& view, NLExplorePathsLoopData* loopData) {
+    std::optional<EdgeTypeID> edgeType;
+    if (loopData->filtersByType()) {
+        edgeType = loopData->getEdgeType();
+    }
+
+    const PartDirectory parts(view);
+
+    return PathDistanceIndex::sampleSeedFanOut(parts, loopData->getDirection(), edgeType, loopData->getInput()->getRaw());
+}
+
 const PathDistanceIndex* pruningIndexFor(const GraphView& view,
                                          NLExplorePathsLoopData* loopData,
                                          uint64_t maxHops,
                                          size_t seedCount,
+                                         double fanOut,
                                          double hopPassRate) {
     PathDistanceIndex* index = loopData->getDistanceIndex();
     if (index->isBuilt()) {
@@ -5791,7 +5805,7 @@ const PathDistanceIndex* pruningIndexFor(const GraphView& view,
     }
 
     const PathExplorationDir direction = loopData->getDirection();
-    const bool worthBuilding = PathDistanceIndex::isWorthBuilding(view, direction, edgeType, loopData->getSeedsSeen(), maxHops, hopPassRate);
+    const bool worthBuilding = PathDistanceIndex::isWorthBuilding(view, fanOut, loopData->getSeedsSeen(), maxHops, hopPassRate);
     if (!worthBuilding) {
         return nullptr;
     }
@@ -5806,6 +5820,7 @@ const PathDistanceIndex* pruningIndexFor(const GraphView& view,
 const PathTargetIndex* targetIndexFor(const GraphView& view,
                                       NLExplorePathsLoopData* loopData,
                                       uint64_t maxHops,
+                                      double fanOut,
                                       double hopPassRate) {
     const std::vector<NodeID>& endNodes = loopData->getEndNodes()->getRaw();
 
@@ -5819,7 +5834,7 @@ const PathTargetIndex* targetIndexFor(const GraphView& view,
     }
 
     const PathExplorationDir direction = loopData->getDirection();
-    const bool worthBuilding = PathTargetIndex::isWorthBuilding(view, direction, edgeType, endNodes.size(), targets.size(), maxHops, hopPassRate);
+    const bool worthBuilding = PathTargetIndex::isWorthBuilding(view, direction, edgeType, fanOut, endNodes.size(), targets.size(), maxHops, hopPassRate);
     if (!worthBuilding) {
         return nullptr;
     }
@@ -5876,20 +5891,23 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
         explorator.setHopFilter(&*hopFilter);
     }
 
-    const double hopPassRate = hopPassRateFor(view, loopData, hopFilter ? &*hopFilter : nullptr);
-
     // The distinct mode is a breadth-first search already, so it prunes by no index
+    const bool prunes = !distinctEnds && (filtersByEndLabels || loopData->getEndNodes());
+
+    const double hopPassRate = prunes ? hopPassRateFor(view, loopData, hopFilter ? &*hopFilter : nullptr) : 1.0;
+    const double fanOut = prunes ? seedFanOutFor(view, loopData) : 0.0;
+
     if (filtersByEndLabels) {
         explorator.setEndLabels(&loopData->getEndLabels());
         if (!distinctEnds) {
-            explorator.setDistanceIndex(pruningIndexFor(view, loopData, maxHops, inputNodeIDs->size(), hopPassRate));
+            explorator.setDistanceIndex(pruningIndexFor(view, loopData, maxHops, inputNodeIDs->size(), fanOut, hopPassRate));
         }
     }
 
     if (loopData->getEndNodes()) {
         explorator.setEndNodes(loopData->getEndNodes());
         if (!distinctEnds) {
-            explorator.setTargetIndex(targetIndexFor(view, loopData, maxHops, hopPassRate));
+            explorator.setTargetIndex(targetIndexFor(view, loopData, maxHops, fanOut, hopPassRate));
         }
     }
 

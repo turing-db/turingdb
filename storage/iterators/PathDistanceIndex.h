@@ -64,6 +64,14 @@ public:
                                     std::optional<EdgeTypeID> edgeType,
                                     PathHopFilter& hopFilter);
 
+    // The branching of the region the walk enters, measured by expanding a sample of its own
+    // seeds a few levels: what a walk costs turns on the fan-out of where it starts, and an
+    // average over every node carrying the type misses that by the exponent of the bound.
+    static double sampleSeedFanOut(const PartDirectory& parts,
+                                   PathExplorationDir direction,
+                                   std::optional<EdgeTypeID> edgeType,
+                                   std::span<const NodeID> seeds);
+
     // The candidate checks one search from each source is expected to make: its frontier is
     // distinct nodes, so it cannot grow past the nodes the type reaches and holds at the
     // first level that covers them.
@@ -80,18 +88,15 @@ public:
     // hopPassRate is the share of each level's candidates the query's hop predicate lets
     // through: they all cost a check, and the ones that pass are all that reach the next
     // level, so it shrinks the frontier rather than the candidates.
-    // Sampling the branching costs a strided pass over the adjacency, so a caller that needs
-    // more than one of these takes the sample once and passes it in.
     static double estimatedEnumerationChecks(const PartDirectory& parts,
-                                             const TypeBranching& branching,
+                                             double fanOut,
                                              size_t seedCount,
                                              uint64_t maxHops,
                                              double hopPassRate = 1.0);
 
     // Whether the enumeration the seeds imply is expected to cost more than the index
     static bool isWorthBuilding(const GraphView& view,
-                                PathExplorationDir direction,
-                                std::optional<EdgeTypeID> edgeType,
+                                double fanOut,
                                 size_t seedCount,
                                 uint64_t maxHops,
                                 double hopPassRate = 1.0);

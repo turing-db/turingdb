@@ -149,6 +149,7 @@ public:
     static bool isWorthBuilding(const GraphView& view,
                                 PathExplorationDir direction,
                                 std::optional<EdgeTypeID> edgeType,
+                                double fanOut,
                                 size_t seedCount,
                                 size_t targetCount,
                                 uint64_t maxHops,

@@ -28,6 +28,7 @@
 #include "LocalMemory.h"
 #include "SimpleGraph.h"
 #include "iterators/ChunkConfig.h"
+#include "iterators/PartDirectory.h"
 #include "iterators/PathDistanceIndex.h"
 #include "iterators/PathExplorationDir.h"
 #include "metadata/LabelSet.h"
@@ -623,7 +624,13 @@ TEST_F(ExploreEndConstraintGeneratedGraphTest, pruningIndexKeepsTheFilteredRows)
     ASSERT_EQ(reader.getNodeCount(), nodeCount);
 
     // The scan hands the executor every node as a seed in one chunk, past the cost gate
-    EXPECT_TRUE(PathDistanceIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, nodeCount, 4));
+    std::vector<NodeID> seeds;
+    for (size_t node = 0; node < nodeCount; node++) {
+        seeds.push_back(NodeID(node));
+    }
+
+    const double fanOut = PathDistanceIndex::sampleSeedFanOut(PartDirectory(view), PathExplorationDir::FORWARD, std::nullopt, seeds);
+    EXPECT_TRUE(PathDistanceIndex::isWorthBuilding(view, fanOut, nodeCount, 4));
 
     RowSink filtered;
     runProgram(generatedFilterProgram, view, filtered);

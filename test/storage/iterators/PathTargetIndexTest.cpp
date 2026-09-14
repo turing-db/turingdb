@@ -9,6 +9,8 @@
 
 #include "Graph.h"
 #include "iterators/PathExplorationDir.h"
+#include "iterators/PartDirectory.h"
+#include "iterators/PathDistanceIndex.h"
 #include "iterators/PathTargetIndex.h"
 #include "metadata/LabelSet.h"
 #include "reader/GraphReader.h"
@@ -247,14 +249,21 @@ TEST_F(PathTargetIndexTest, costGateChargesEveryBatch) {
     const GraphReader reader = transaction.readGraph();
     const GraphView& view = reader.getView();
 
-    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, 1, 1, 4));
-    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, 100000, 0, 4));
-    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, 100000, 1, 4));
-    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, 100000, 64, 4));
+    std::vector<NodeID> seeds;
+    for (size_t node = 0; node < nodeCount; node++) {
+        seeds.push_back(NodeID(node));
+    }
+
+    const double fanOut = PathDistanceIndex::sampleSeedFanOut(PartDirectory(view), PathExplorationDir::FORWARD, std::nullopt, seeds);
+
+    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, fanOut, 1, 1, 4));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, fanOut, 100000, 0, 4));
+    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, fanOut, 100000, 1, 4));
+    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, fanOut, 100000, 64, 4));
 
     // Fifty thousand batches of words cost more than a hundred thousand seeds fanning out
-    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, 100000, 3000000, 4));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, fanOut, 100000, 3000000, 4));
 
     // And ten million batches would not fit in memory, whatever the walk costs
-    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, 100000, 640000000, unbounded));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, fanOut, 100000, 640000000, unbounded));
 }

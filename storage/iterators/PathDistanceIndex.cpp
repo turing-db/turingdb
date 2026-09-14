@@ -23,6 +23,12 @@ constexpr double indexUnitCostInChecks = 0.35;
 
 constexpr size_t fanOutSampleTarget = 4096;
 
+// The seeds expanded to measure the branching where a walk starts, the levels they are
+// expanded over and the nodes that expansion may reach
+constexpr size_t seedSampleTarget = 64;
+constexpr size_t seedSampleLevels = 3;
+constexpr size_t seedSampleBudget = 4096;
+
 // Fewer than the fan-out sample takes: every node of this one costs an evaluation of the
 // query's hop predicate rather than a count of its adjacency
 constexpr size_t hopSampleTarget = 1024;
@@ -39,6 +45,22 @@ void appendMatching(std::span<const EdgeRecord> edges,
         candidateNodes.push_back(record._otherID);
         candidateEdges.push_back(record._edgeID);
     }
+}
+
+size_t appendMatchingNodes(std::span<const EdgeRecord> edges,
+                           std::optional<EdgeTypeID> edgeType,
+                           std::vector<NodeID>& nodes) {
+    size_t appended = 0;
+    for (const EdgeRecord& record : edges) {
+        if (edgeType && record._edgeTypeID != *edgeType) {
+            continue;
+        }
+
+        nodes.push_back(record._otherID);
+        appended++;
+    }
+
+    return appended;
 }
 
 size_t countMatching(std::span<const EdgeRecord> edges, std::optional<EdgeTypeID> edgeType) {
@@ -216,6 +238,75 @@ void PathDistanceIndex::sampleBranching(const PartDirectory& parts,
     cache.store(direction, edgeType, nodeCount, edgeCount, branching);
 }
 
+double PathDistanceIndex::sampleSeedFanOut(const PartDirectory& parts,
+                                           PathExplorationDir direction,
+                                           std::optional<EdgeTypeID> edgeType,
+                                           std::span<const NodeID> seeds) {
+    if (seeds.empty() || parts.getAllocatedNodeCount() == 0) {
+        return 0.0;
+    }
+
+    const bool walksOuts = direction != PathExplorationDir::BACKWARD;
+    const bool walksIns = direction != PathExplorationDir::FORWARD;
+
+    const size_t stride = std::max<size_t>(1, seeds.size() / seedSampleTarget);
+
+    std::vector<NodeID> frontier;
+    for (size_t seed = 0; seed < seeds.size(); seed += stride) {
+        frontier.push_back(seeds[seed]);
+    }
+
+    double arrivals = 0.0;
+    double continuations = 0.0;
+
+    std::vector<NodeID> next;
+    for (size_t level = 0; level < seedSampleLevels && !frontier.empty(); level++) {
+        next.clear();
+
+        for (const NodeID node : frontier) {
+            if (next.size() >= seedSampleBudget) {
+                break;
+            }
+
+            const size_t owner = parts.ownerIndex(node);
+            if (owner == parts.size()) {
+                continue;
+            }
+
+            const EdgeIndexer& ownerIndexer = *parts.get(owner)._indexer;
+
+            size_t continuing = 0;
+            if (walksOuts) {
+                continuing += appendMatchingNodes(ownerIndexer.getNodeOutEdges(node), edgeType, next);
+            }
+            if (walksIns) {
+                continuing += appendMatchingNodes(ownerIndexer.getNodeInEdges(node), edgeType, next);
+            }
+
+            for (const size_t patchIndex : parts.patchPartsAfter(owner)) {
+                const EdgeIndexer& patchIndexer = *parts.get(patchIndex)._indexer;
+                if (walksOuts) {
+                    continuing += appendMatchingNodes(patchIndexer.getNodeOutEdges(node), edgeType, next);
+                }
+                if (walksIns) {
+                    continuing += appendMatchingNodes(patchIndexer.getNodeInEdges(node), edgeType, next);
+                }
+            }
+
+            arrivals += 1.0;
+            continuations += static_cast<double>(continuing);
+        }
+
+        std::swap(frontier, next);
+    }
+
+    if (arrivals == 0.0) {
+        return 0.0;
+    }
+
+    return continuations / arrivals;
+}
+
 double PathDistanceIndex::estimatedSearchChecks(const PartDirectory& parts,
                                                 PathExplorationDir direction,
                                                 std::optional<EdgeTypeID> edgeType,
@@ -251,7 +342,7 @@ double PathDistanceIndex::estimatedSearchChecks(const PartDirectory& parts,
 }
 
 double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
-                                                     const TypeBranching& branching,
+                                                     double fanOut,
                                                      size_t seedCount,
                                                      uint64_t maxHops,
                                                      double hopPassRate) {
@@ -261,16 +352,16 @@ double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
         return 0.0;
     }
 
-    const double fanOut = std::max(1.0, branching._fanOut);
+    const double perHop = std::max(1.0, fanOut);
     const uint64_t levelCount = std::min<uint64_t>(maxHops, farthest);
 
     double candidatesPerSeed = 0.0;
     double frontier = 1.0;
 
     for (uint64_t level = 0; level < levelCount; level++) {
-        candidatesPerSeed += frontier * fanOut;
+        candidatesPerSeed += frontier * perHop;
 
-        frontier = frontier * fanOut * hopPassRate;
+        frontier = frontier * perHop * hopPassRate;
     }
 
     return static_cast<double>(seedCount) * candidatesPerSeed;
@@ -328,18 +419,14 @@ double PathDistanceIndex::sampleHopPassRate(const PartDirectory& parts,
 }
 
 bool PathDistanceIndex::isWorthBuilding(const GraphView& view,
-                                        PathExplorationDir direction,
-                                        std::optional<EdgeTypeID> edgeType,
+                                        double fanOut,
                                         size_t seedCount,
                                         uint64_t maxHops,
                                         double hopPassRate) {
     const PartDirectory parts(view);
     const double indexCost = indexUnitCostInChecks * static_cast<double>(parts.getAllocatedNodeCount() + parts.getAllocatedEdgeCount());
 
-    TypeBranching branching;
-    sampleBranching(parts, direction, edgeType, branching);
-
-    return estimatedEnumerationChecks(parts, branching, seedCount, maxHops, hopPassRate) > indexCost;
+    return estimatedEnumerationChecks(parts, fanOut, seedCount, maxHops, hopPassRate) > indexCost;
 }
 
 void PathDistanceIndex::collectEnds(const PartDirectory& parts, const LabelSet& endLabels, std::vector<NodeID>& ends) {

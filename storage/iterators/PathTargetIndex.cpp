@@ -248,6 +248,7 @@ PathTargetHandle PathTargetIndex::find(NodeID target) const {
 bool PathTargetIndex::isWorthBuilding(const GraphView& view,
                                       PathExplorationDir direction,
                                       std::optional<EdgeTypeID> edgeType,
+                                      double fanOut,
                                       size_t seedCount,
                                       size_t targetCount,
                                       uint64_t maxHops,
@@ -271,10 +272,7 @@ bool PathTargetIndex::isWorthBuilding(const GraphView& view,
 
     const double budget = batchCount * plan._checks;
 
-    PathDistanceIndex::TypeBranching branching;
-    PathDistanceIndex::sampleBranching(parts, direction, edgeType, branching);
-
-    return PathDistanceIndex::estimatedEnumerationChecks(parts, branching, seedCount, maxHops, hopPassRate) > budget;
+    return PathDistanceIndex::estimatedEnumerationChecks(parts, fanOut, seedCount, maxHops, hopPassRate) > budget;
 }
 
 void PathTargetIndex::buildBatch(const PartDirectory& parts,
