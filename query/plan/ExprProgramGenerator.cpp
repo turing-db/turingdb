@@ -495,6 +495,7 @@ Column* ExprProgramGenerator::generateFuncInvocationExpr(const FunctionInvocatio
         const ColumnOperator op = OP_FUNC_LABELS;
         Column* resCol = allocUnaryResultCol(op, argCol);
 
+        _exprProg->setListBuffer(&_gen->memory().listBuffer());
         _exprProg->addInstr(op, resCol, argCol, nullptr);
         return resCol;
     }

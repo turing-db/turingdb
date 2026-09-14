@@ -1,6 +1,7 @@
 #pragma once
 
 #include "columns/ColumnOperator.h"
+#include "list/ListBuffer.h"
 #include "views/GraphView.h"
 
 namespace db {
@@ -17,9 +18,13 @@ public:
     template <ColumnOperator Op>
     static void eval(Column* res, const Column* arg);
 
-    /// Specialisation for functions requiring a GraphView (e.g. labels())
+    /// Specialisation for functions requiring a GraphView (e.g. type())
     template <ColumnOperator Op>
     static void eval(Column* res, const Column* arg, GraphView view);
+
+    /// Specialisation for functions building their rows in the list buffer (labels())
+    template <ColumnOperator Op>
+    static void eval(Column* res, const Column* arg, GraphView view, QueryListBuffer* listBuffer);
 
     /// Binary function evaluation (e.g. cosine_similarity, euclidean_distance)
     template <ColumnOperator Op>

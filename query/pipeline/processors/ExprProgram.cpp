@@ -231,7 +231,7 @@ void ExprProgram::evalFunction(const Instruction& instr) {
         break;
 
         case OP_FUNC_LABELS:
-            EvalFunction::eval<OP_FUNC_LABELS>(res, arg, _view);
+            EvalFunction::eval<OP_FUNC_LABELS>(res, arg, _view, _listBuffer);
         break;
 
         case OP_FUNC_EDGE_TYPES:
