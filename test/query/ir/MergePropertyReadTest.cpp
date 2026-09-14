@@ -52,21 +52,21 @@ TEST_F(MergePropertyReadTest, readsNullForAPropertyTheWriteDidNotSet) {
 // The labels of a row the merge wrote are the ones its pattern named, read out of the
 // change: the graph holds nothing at the provisional ID that row carries
 TEST_F(MergePropertyReadTest, readsTheLabelsOfARowItWrote) {
-    expectWriteRows("MERGE (n:Tag {name: 'x'}) RETURN labels(n)", {{"Tag"}});
+    expectWriteRows("MERGE (n:Tag {name: 'x'}) RETURN labels(n)", {{"[Tag]"}});
 }
 
 // A row it bound reads the labels the graph holds for that node, which are the node's own
 // and not the one label the pattern named
 TEST_F(MergePropertyReadTest, readsTheGraphLabelsOfARowItBound) {
     expectWriteRows("MERGE (p:Person {name: 'Remy'}) RETURN labels(p)",
-                    {{"Person, SoftwareEngineering, Founder"}});
+                    {{"[Person, SoftwareEngineering, Founder]"}});
 }
 
 // One merge, both kinds of row: Computers is an Interest the graph holds and Nope is one
 // the merge writes, so each row answers from where its own entity lives
 TEST_F(MergePropertyReadTest, readsTheLabelsOfTheBoundAndWrittenRowsOfOneMerge) {
     expectWriteRows("UNWIND ['Computers', 'Nope'] AS name MERGE (i:Interest {name: name}) RETURN labels(i)",
-                    {{"Interest"}, {"SoftwareEngineering, Interest"}});
+                    {{"[Interest]"}, {"[SoftwareEngineering, Interest]"}});
 }
 
 // The type of a hop the merge wrote is the one its pattern named

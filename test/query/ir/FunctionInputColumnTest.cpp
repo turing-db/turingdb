@@ -90,11 +90,11 @@ protected:
     std::unique_ptr<QueryInterpreterV3> _interpreter;
 };
 
-TEST_F(FunctionInputColumnTest, toIntegerOverLabelsReachesFunctor) {
+TEST_F(FunctionInputColumnTest, toIntegerOverEdgeTypesReachesFunctor) {
     NullSink sink;
     QueryStatus status;
 
-    runQuery("MATCH (n) RETURN toInteger(labels(n))", status, &sink);
+    runQuery("MATCH ()-[e]->() RETURN toInteger(type(e))", status, &sink);
 
     EXPECT_TRUE(status.isOk()) << status.getError();
     EXPECT_EQ(sink.getTotalRows(), 18u);

@@ -3,8 +3,8 @@
   "graph": "simpledb",
   "query": "MATCH (n) WHERE n.age = toInteger(\"32\") RETURN n.age + toFloat(\"10.2\"), labels(n)",
   "expect": {
-    "result": "\"n.age + toFloat(\"\"10.2\"\")\",labels(n)\n42.2,\"Person, SoftwareEngineering, Founder\"\n42.2,\"Person, Founder, Bioinformatics\"",
-    "resultJson": "{\"header\":{\"column_names\":[\"n.age + toFloat(\\\"10.2\\\")\",\"labels(n)\"],\"column_types\":[\"Double\",\"String\"]},\"data\":[[[42.200000,42.200000],[\"Person, SoftwareEngineering, Founder\",\"Person, Founder, Bioinformatics\"]]]}"
+    "result": "\"n.age + toFloat(\"\"10.2\"\")\",labels(n)\n42.2,\"[Person, SoftwareEngineering, Founder]\"\n42.2,\"[Person, Founder, Bioinformatics]\"",
+    "resultJson": "{\"header\":{\"column_names\":[\"n.age + toFloat(\\\"10.2\\\")\",\"labels(n)\"],\"column_types\":[\"Double\",\"List\"]},\"data\":[[[42.200000,42.200000],[[\"Person\", \"SoftwareEngineering\", \"Founder\"],[\"Person\", \"Founder\", \"Bioinformatics\"]]]]}"
   },
   "tags": [
     "filter",
