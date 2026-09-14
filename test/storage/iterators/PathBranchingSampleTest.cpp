@@ -92,8 +92,8 @@ TEST_F(PathBranchingSampleTest, branchesByTheNodesTheWalkReaches) {
     EXPECT_LT(chain._supportNodes, 2.0 * chainNodeCount);
 }
 
-// The fan-out a walk meets is the fan-out where it starts. Seeded in the cascade it branches
-// by three and seeded in the chain by one, and a sample spread over the graph reports neither.
+// The fan-out a walk meets is the fan-out where it starts: seeded in the cascade it branches
+// by three, seeded in the chain by one.
 TEST_F(PathBranchingSampleTest, measuresTheBranchingWhereTheSeedsAre) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
@@ -132,7 +132,11 @@ TEST_F(PathBranchingSampleTest, measuresTheBranchingWhereTheSeedsAre) {
 
     EXPECT_GT(fanOut(cascadeSeeds), 2.0);
     EXPECT_NEAR(fanOut(chainSeeds), 1.0, 0.1);
-    EXPECT_LT(fanOut(everyNode), fanOut(chainSeeds));
+
+    // Seeded over the whole graph almost every seed dies at once, and the levels past them
+    // reach the cascade the survivors run into. That is what such a walk would meet, not the
+    // graph's twentieth of an edge per node.
+    EXPECT_GT(fanOut(everyNode), 2.0);
 }
 
 TEST_F(PathBranchingSampleTest, chargesACascadeMoreThanAChainPerHop) {
