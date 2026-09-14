@@ -350,8 +350,10 @@ void unwindOptTaggedElementEmit(const Column* source,
 }
 
 template <typename Functor>
-Functor makeFunctor(NLExecutionContext* context) {
-    if constexpr (std::is_constructible_v<Functor, GraphView, const CommitWriteBuffer*>) {
+Functor makeFunctor(NLExecutionContext* context, LocalMemory* memory) {
+    if constexpr (std::is_constructible_v<Functor, GraphView, QueryListBuffer*, const CommitWriteBuffer*>) {
+        return Functor(*context->getView(), &memory->listBuffer(), context->getWriteBuffer());
+    } else if constexpr (std::is_constructible_v<Functor, GraphView, const CommitWriteBuffer*>) {
         return Functor(*context->getView(), context->getWriteBuffer());
     } else if constexpr (std::is_constructible_v<Functor, GraphView>) {
         return Functor(*context->getView());
@@ -361,7 +363,7 @@ Functor makeFunctor(NLExecutionContext* context) {
 }
 
 template <typename Functor>
-void functionConstKernel(NLExecutionContext* context, Column* result, const Column* input) {
+void functionConstKernel(NLExecutionContext* context, Column* result, const Column* input, LocalMemory* memory) {
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
 
@@ -369,13 +371,13 @@ void functionConstKernel(NLExecutionContext* context, Column* result, const Colu
     bioassert(typedInput, "Function operand has an unexpected column type.");
     auto* output = static_cast<ColumnConst<Res>*>(result);
 
-    Functor functor = makeFunctor<Functor>(context);
+    Functor functor = makeFunctor<Functor>(context, memory);
     output->set(functor(typedInput->getRaw()));
 }
 
 // A null constant argument converts to a null result whatever the function; the
 // ColumnConst<PropertyNull> result already reads as null, so nothing is computed.
-void functionNullKernel(NLExecutionContext*, Column*, const Column*) {
+void functionNullKernel(NLExecutionContext*, Column*, const Column*, LocalMemory*) {
 }
 
 template <typename Functor, typename Element>
@@ -404,12 +406,12 @@ bool readsTaggedCells(const Column* input) {
 }
 
 template <typename Functor>
-void functionVectorKernel(NLExecutionContext* context, Column* result, const Column* input) {
+void functionVectorKernel(NLExecutionContext* context, Column* result, const Column* input, LocalMemory* memory) {
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
 
     auto* output = static_cast<ColumnVector<Res>*>(result);
-    Functor functor = makeFunctor<Functor>(context);
+    Functor functor = makeFunctor<Functor>(context, memory);
 
     if (const auto* typedInput = dynamic_cast<const ColumnVector<Arg>*>(input)) {
         applyFunctionOverVector(functor, typedInput, output);
@@ -478,7 +480,7 @@ NLUnaryFunctionKernel selectTaggedCellFunction(const Column* input, bool inputNu
 // entity sibling of functionOptKernel: the input is a plain ID column, which carries its
 // null in the ID itself instead of in an optional.
 template <typename Functor>
-void functionEntityKernel(NLExecutionContext* context, Column* result, const Column* input) {
+void functionEntityKernel(NLExecutionContext* context, Column* result, const Column* input, LocalMemory* memory) {
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
     using JustRes = TypeUtils::unwrap_optional_t<Res>;
@@ -493,7 +495,7 @@ void functionEntityKernel(NLExecutionContext* context, Column* result, const Col
     output->resize(size);
     auto& outputRaw = output->getRaw();
 
-    Functor functor = makeFunctor<Functor>(context);
+    Functor functor = makeFunctor<Functor>(context, memory);
     for (size_t row = 0; row < size; row++) {
         if (inputRaw[row].isValid()) {
             outputRaw[row] = functor(inputRaw[row]);
@@ -551,13 +553,13 @@ void applyFunctionOverOptVector(Functor& functor,
 }
 
 template <typename Functor>
-void functionOptKernel(NLExecutionContext* context, Column* result, const Column* input) {
+void functionOptKernel(NLExecutionContext* context, Column* result, const Column* input, LocalMemory* memory) {
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
     using JustRes = TypeUtils::unwrap_optional_t<Res>;
 
     auto* output = static_cast<ColumnOptVector<JustRes>*>(result);
-    Functor functor = makeFunctor<Functor>(context);
+    Functor functor = makeFunctor<Functor>(context, memory);
 
     if (const auto* typedInput = dynamic_cast<const ColumnOptVector<Arg>*>(input)) {
         applyFunctionOverOptVector(functor, typedInput, output);
@@ -1767,18 +1769,17 @@ void distinctKeyAppendListColumn(const Column* column, size_t row, std::string& 
     distinctAppendListBytes(key, raw[row]);
 }
 
-// The nullable counterpart, for a list read out of a property.
 void distinctKeyAppendOptListColumn(const Column* column, size_t row, std::string& key) {
-    const auto& raw = static_cast<const ColumnOptVector<ListView>*>(column)->getRaw();
-    const std::optional<ListView>& value = raw[row];
+    const std::vector<std::optional<ListView>>& raw =
+        static_cast<const ColumnOptVector<ListView>*>(column)->getRaw();
+    const std::optional<ListView>& list = raw[row];
 
-    if (!value.has_value()) {
-        key.push_back('\0');
+    if (!list.has_value()) {
+        key.push_back(static_cast<char>(ListBufferTypeTag::Null));
         return;
     }
 
-    key.push_back('\1');
-    distinctAppendListBytes(key, *value);
+    distinctAppendListBytes(key, *list);
 }
 
 // The 64-bit finalizer of MurmurHash3, so a key's bits spread over every bucket
@@ -1971,6 +1972,15 @@ size_t countPresentElementsColumn(const Column* column) {
 
     return std::count_if(raw.begin(), raw.end(), [](const std::optional<ListElementView>& element) {
         return element.has_value() && element->getTag() != ListBufferTypeTag::Null;
+    });
+}
+
+size_t countPresentListsColumn(const Column* column) {
+    const std::vector<std::optional<ListView>>& raw =
+        static_cast<const ColumnOptVector<ListView>*>(column)->getRaw();
+
+    return std::count_if(raw.begin(), raw.end(), [](const std::optional<ListView>& list) {
+        return list.has_value();
     });
 }
 
@@ -2714,6 +2724,31 @@ void groupFoldCountPresentListElement(Column* accumulator,
     }
 }
 
+void groupFoldCountDistinctPresentList(Column* accumulator,
+                                       std::vector<uint64_t>& counts,
+                                       const Column* input,
+                                       const std::vector<size_t>& groups,
+                                       NLGroupDistinctTally& distinct) {
+    const std::vector<std::optional<ListView>>& inputRaw =
+        static_cast<const ColumnOptVector<ListView>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const std::optional<ListView>& list = inputRaw[row];
+        if (!list.has_value()) {
+            continue;
+        }
+
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendListBytes(distinct.getKey(), *list);
+
+        if (distinct.insertIfNew()) {
+            counts[group]++;
+        }
+    }
+}
+
 // Tally each group's distinct present cells of a type-erased column of tagged scalars.
 // The key carries the tag as well as the value, so cells of different types are told
 // apart the way a whole-row DISTINCT tells them apart.
@@ -3077,6 +3112,60 @@ void collectListFoldDistinct(Column* values,
     }
 }
 
+// The nullable siblings of collectCellFold and collectListFoldDistinct for a list chunk: a
+// row an OPTIONAL MATCH left with no list is dropped, as collectFold drops an absent
+// optional, so the buffer they fill is a plain list column either way.
+void collectOptListFold(Column* values,
+                        const Column* input,
+                        const std::vector<size_t>& groups,
+                        std::vector<std::vector<size_t>>& groupPositions,
+                        NLGroupDistinctTally& distinct) {
+    auto& valuesRaw = static_cast<ColumnVector<ListView>*>(values)->getRaw();
+    const std::vector<std::optional<ListView>>& inputRaw =
+        static_cast<const ColumnOptVector<ListView>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const std::optional<ListView>& list = inputRaw[row];
+        if (!list.has_value()) {
+            continue;
+        }
+
+        const size_t position = valuesRaw.size();
+        valuesRaw.push_back(*list);
+        groupPositions[groups[row]].push_back(position);
+    }
+}
+
+void collectOptListFoldDistinct(Column* values,
+                                const Column* input,
+                                const std::vector<size_t>& groups,
+                                std::vector<std::vector<size_t>>& groupPositions,
+                                NLGroupDistinctTally& distinct) {
+    auto& valuesRaw = static_cast<ColumnVector<ListView>*>(values)->getRaw();
+    const std::vector<std::optional<ListView>>& inputRaw =
+        static_cast<const ColumnOptVector<ListView>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const std::optional<ListView>& list = inputRaw[row];
+        if (!list.has_value()) {
+            continue;
+        }
+
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendListBytes(distinct.getKey(), *list);
+
+        if (!distinct.insertIfNew()) {
+            continue;
+        }
+
+        const size_t position = valuesRaw.size();
+        valuesRaw.push_back(*list);
+        groupPositions[group].push_back(position);
+    }
+}
+
 // Emit a chunk of unwound values (nl.unwind_collect): for each flat-buffer position this chunk
 // covers, write the present value into the nullable value output. collect dropped
 // nulls, so every emitted element is present.
@@ -3145,6 +3234,16 @@ ListBuffer<>::ListItemVariant plainListItem(const Column* input, size_t row, Loc
     return ListBuffer<>::ListItemVariant {(*static_cast<const ColumnVector<Element>*>(input))[row]};
 }
 
+template <typename Element>
+ListBuffer<>::ListItemVariant optListItem(const Column* input, size_t row, LocalMemory*) {
+    const std::optional<Element>& cell = (*static_cast<const ColumnOptVector<Element>*>(input))[row];
+    if (!cell.has_value()) {
+        return ListBuffer<>::ListItemVariant {PropertyNull {}};
+    }
+
+    return ListBuffer<>::ListItemVariant {*cell};
+}
+
 // The entity sibling of valueListItem: an entity an OPTIONAL MATCH did not match is an
 // invalid ID, which is how a null entity is spelled, so it joins the list as the tagged
 // null rather than as the value 2^64-1 - the null collectValidIDFold drops instead.
@@ -3186,8 +3285,6 @@ ListBuffer<>::ListItemVariant ownedStringListItem(const Column* input, size_t ro
     return ListBuffer<>::ListItemVariant {memory->stringBuffer().insert(characters)};
 }
 
-// The nullable sibling of ownedStringListItem: the label set labels(n) joins is owned and
-// absent on a node carrying none.
 ListBuffer<>::ListItemVariant optOwnedStringListItem(const Column* input, size_t row, LocalMemory* memory) {
     const std::optional<std::string>& owned = (*static_cast<const ColumnOptVector<std::string>*>(input))[row];
     if (!owned.has_value()) {
@@ -5371,7 +5468,7 @@ NLBinaryFn NLExecutor::selectValueListIndex(ValueType valueType,
 
 void NLExecutor::runUnaryFunction(NLExecutionContext* context, NLFunctionData* data) {
     const NLUnaryFunctionData* funcData = static_cast<NLUnaryFunctionData*>(data);
-    funcData->getKernel()(context, funcData->getResult(), funcData->getInput());
+    funcData->getKernel()(context, funcData->getResult(), funcData->getInput(), funcData->getMemory());
 }
 
 template <typename Functor>
@@ -6382,6 +6479,13 @@ void NLExecutor::selectCollectListHandlers(bool distinctValues,
     listEmit = &collectListEmit<ListView>;
 }
 
+void NLExecutor::selectCollectOptListHandlers(bool distinctValues,
+                                             NLCollectFoldFunction& fold,
+                                             NLCollectListEmitFunction& listEmit) {
+    fold = distinctValues ? &collectOptListFoldDistinct : &collectOptListFold;
+    listEmit = &collectListEmit<ListView>;
+}
+
 // A type-erased cell carries its own type, so the fold drops the ones tagged null and the
 // emit writes each survivor back under the type its tag names.
 void NLExecutor::selectCollectTaggedHandlers(bool distinctValues,
@@ -6753,6 +6857,56 @@ NLCompareFunction NLExecutor::selectListCompareFunction() {
 
 NLCopyFunction NLExecutor::selectListCopyFunction() {
     return &copyRangeColumn<ListView>;
+}
+
+// The nullable list family, which labels() produces: a node an OPTIONAL MATCH did not
+// match holds no list, where a collected list column holds one in every row.
+NLBroadcastFunction NLExecutor::selectOptListBlockRepeatFunction() {
+    return &blockRepeatColumn<std::optional<ListView>>;
+}
+
+NLBroadcastFunction NLExecutor::selectOptListTileFunction() {
+    return &tileColumn<std::optional<ListView>>;
+}
+
+NLAppendFunction NLExecutor::selectOptListAppendFunction() {
+    return &appendColumn<std::optional<ListView>>;
+}
+
+NLGatherFunction NLExecutor::selectOptListGatherFunction() {
+    return &gatherColumn<std::optional<ListView>>;
+}
+
+NLCompareFunction NLExecutor::selectOptListCompareFunction() {
+    return &compareOptListColumn;
+}
+
+NLKeyAppendFunction NLExecutor::selectOptListKeyAppendFunction() {
+    return &distinctKeyAppendOptListColumn;
+}
+
+NLCountFunction NLExecutor::selectOptListCountFunction() {
+    return &countPresentListsColumn;
+}
+
+NLGroupKeyGatherFunction NLExecutor::selectOptListGroupKeyGatherFunction() {
+    return &groupGatherAppendColumn<std::optional<ListView>>;
+}
+
+NLCopyFunction NLExecutor::selectOptListCopyFunction() {
+    return &copyRangeColumn<std::optional<ListView>>;
+}
+
+NLListItemReadFunction NLExecutor::selectOptNestedListItemRead() {
+    return &optListItem<ListView>;
+}
+
+NLGroupAggregateFoldFunction NLExecutor::selectGroupCountOptListFold() {
+    return &groupFoldCountPresent<ListView>;
+}
+
+NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctOptListFold() {
+    return &groupFoldCountDistinctPresentList;
 }
 
 NLCopyFunction NLExecutor::selectCopyFunction(NLChunkKind kind) {

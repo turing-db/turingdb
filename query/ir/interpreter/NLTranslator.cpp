@@ -379,6 +379,12 @@ bool isNullableListElement(mlir::Type elementType) {
     return nullableType && mlir::isa<storage::ListElementType>(nullableType.getValueType());
 }
 
+bool isNullableList(mlir::Type elementType) {
+    const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
+
+    return nullableType && mlir::isa<storage::ListType>(nullableType.getValueType());
+}
+
 // The property value type a chunk writes, which is not quite the shape it holds: a
 // column that owns its strings - a loaded CSV field - writes a String property like a
 // borrowed one, so it is recognised here and not in valueTypeFromElementType, which
@@ -2175,6 +2181,8 @@ NLListItemReadFunction NLTranslator::selectListItemRead(mlir::Type chunkType) {
         return NLExecutor::selectNestedListItemRead();
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectTaggedListItemRead(/*nullable=*/false);
+    } else if (isNullableList(elementType)) {
+        return NLExecutor::selectOptNestedListItemRead();
     } else if (isNullableListElement(elementType)) {
         return NLExecutor::selectTaggedListItemRead(/*nullable=*/true);
     } else if (isOwnedStringElement(elementType)) {
@@ -2299,7 +2307,7 @@ void NLTranslator::translateUnaryFunction(mlir::Operation* op, NLStmtContainer* 
 
     _valueSlots[op->getResult(0)] = result;
 
-    NLUnaryFunctionData* data = _program->allocFunctionData<NLUnaryFunctionData>(input, result, kernel);
+    NLUnaryFunctionData* data = _program->allocFunctionData<NLUnaryFunctionData>(input, result, kernel, _memory);
     body->emplaceStmt(&NLExecutor::runUnaryFunction, data);
 }
 
@@ -2509,6 +2517,9 @@ void NLTranslator::addTruncateColumn(mlir::Value inputValue,
     if (isConstantColumn(input)) {
         output = _memory->allocSame(input);
         copyPrefix = NLExecutor::selectConstBlockRepeatFunction();
+    } else if (isNullableList(elementType)) {
+        output = allocOptListColumn();
+        copyPrefix = NLExecutor::selectOptListBlockRepeatFunction();
     } else if (isNullableListElement(elementType)) {
         output = allocOptListElementColumn();
         copyPrefix = NLExecutor::selectOptListElementBlockRepeatFunction();
@@ -2620,6 +2631,9 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
     if (isConstantColumn(input)) {
         output = _memory->allocSame(input);
         copySuffix = NLExecutor::selectConstCopyFunction();
+    } else if (isNullableList(elementType)) {
+        output = allocOptListColumn();
+        copySuffix = NLExecutor::selectOptListCopyFunction();
     } else if (isNullableListElement(elementType)) {
         output = allocOptListElementColumn();
         copySuffix = NLExecutor::selectOptListElementCopyFunction();
@@ -3360,7 +3374,9 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
             const mlir::Type countElementType = chunk.getElementType();
             const auto nullable = mlir::dyn_cast<storage::NullableType>(countElementType);
-            if (isNullableListElement(countElementType)) {
+            if (isNullableList(countElementType)) {
+                aggregate._fold = NLExecutor::selectGroupCountOptListFold();
+            } else if (isNullableListElement(countElementType)) {
                 aggregate._fold = NLExecutor::selectGroupCountOptListElementFold();
             } else if (nullable) {
                 const ValueType valueType = valueTypeFromElementType(nullable.getValueType());
@@ -3407,7 +3423,9 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
             const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
             const mlir::Type distinctElementType = chunk.getElementType();
             const auto nullable = mlir::dyn_cast<storage::NullableType>(distinctElementType);
-            if (isNullableListElement(distinctElementType)) {
+            if (isNullableList(distinctElementType)) {
+                aggregate._fold = NLExecutor::selectGroupCountDistinctOptListFold();
+            } else if (isNullableListElement(distinctElementType)) {
                 aggregate._fold = NLExecutor::selectGroupCountDistinctOptListElementFold();
             } else if (nullable) {
                 const ValueType valueType = valueTypeFromElementType(nullable.getValueType());
@@ -3672,7 +3690,15 @@ void NLTranslator::translateCollectUpdate(nl::CollectUpdate update, NLStmtContai
         NLCollectState::ValueColumn value;
         value._input = getColumn(column);
 
-        if (isNullableListElement(element)) {
+        if (isNullableList(element)) {
+            NLCollectFoldFunction fold = nullptr;
+            NLCollectListEmitFunction listEmit = nullptr;
+            NLExecutor::selectCollectOptListHandlers(isDistinct, fold, listEmit);
+
+            value._buffer = allocListColumn();
+            value._fold = fold;
+            value._listEmit = listEmit;
+        } else if (isNullableListElement(element)) {
             NLCollectFoldFunction fold = nullptr;
             NLCollectListEmitFunction listEmit = nullptr;
             NLExecutor::selectCollectOptTaggedHandlers(isDistinct, fold, listEmit);
@@ -4296,7 +4322,9 @@ Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
-    if (isNullableListElement(elementType)) {
+    if (isNullableList(elementType)) {
+        return allocOptListColumn();
+    } else if (isNullableListElement(elementType)) {
         return allocOptListElementColumn();
     }
 
@@ -4328,7 +4356,9 @@ NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
-    if (isNullableListElement(elementType)) {
+    if (isNullableList(elementType)) {
+        return NLExecutor::selectOptListAppendFunction();
+    } else if (isNullableListElement(elementType)) {
         return NLExecutor::selectOptListElementAppendFunction();
     }
 
@@ -4356,7 +4386,9 @@ NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
-    if (isNullableListElement(elementType)) {
+    if (isNullableList(elementType)) {
+        return NLExecutor::selectOptListGatherFunction();
+    } else if (isNullableListElement(elementType)) {
         return NLExecutor::selectOptListElementGatherFunction();
     }
 
@@ -4384,7 +4416,9 @@ NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) 
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
-    if (isNullableListElement(elementType)) {
+    if (isNullableList(elementType)) {
+        return NLExecutor::selectOptListCompareFunction();
+    } else if (isNullableListElement(elementType)) {
         return NLExecutor::selectOptListElementCompareFunction();
     }
 
@@ -4451,7 +4485,9 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
-    if (isNullableListElement(elementType)) {
+    if (isNullableList(elementType)) {
+        return NLExecutor::selectOptListKeyAppendFunction();
+    } else if (isNullableListElement(elementType)) {
         return NLExecutor::selectOptListElementKeyAppendFunction();
     }
 
@@ -4533,7 +4569,9 @@ NLCountFunction NLTranslator::selectCountForChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
-    if (isNullableListElement(elementType)) {
+    if (isNullableList(elementType)) {
+        return NLExecutor::selectOptListCountFunction();
+    } else if (isNullableListElement(elementType)) {
         return NLExecutor::selectOptListElementCountFunction();
     }
 
@@ -4562,7 +4600,9 @@ NLGroupKeyGatherFunction NLTranslator::selectGroupKeyGatherForChunkType(mlir::Ty
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
-    if (isNullableListElement(elementType)) {
+    if (isNullableList(elementType)) {
+        return NLExecutor::selectOptListGroupKeyGatherFunction();
+    } else if (isNullableListElement(elementType)) {
         return NLExecutor::selectOptListElementGroupKeyGatherFunction();
     }
 
@@ -4590,7 +4630,9 @@ NLCopyFunction NLTranslator::selectCopyForChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
-    if (isNullableListElement(elementType)) {
+    if (isNullableList(elementType)) {
+        return NLExecutor::selectOptListCopyFunction();
+    } else if (isNullableListElement(elementType)) {
         return NLExecutor::selectOptListElementCopyFunction();
     }
 
@@ -4622,7 +4664,9 @@ Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
 
-    if (isNullableListElement(elementType)) {
+    if (isNullableList(elementType)) {
+        return allocOptListColumn();
+    } else if (isNullableListElement(elementType)) {
         return allocOptListElementColumn();
     }
 
@@ -4708,6 +4752,10 @@ void NLTranslator::addCrossColumn(mlir::Value inputValue,
     if (isConstantColumn(input)) {
         output = _memory->allocSame(input);
         broadcast = NLExecutor::selectConstBlockRepeatFunction();
+    } else if (isNullableList(elementType)) {
+        output = allocOptListColumn();
+        broadcast = isOuter ? NLExecutor::selectOptListBlockRepeatFunction()
+                            : NLExecutor::selectOptListTileFunction();
     } else if (isNullableListElement(elementType)) {
         output = allocOptListElementColumn();
         broadcast = isOuter ? NLExecutor::selectOptListElementBlockRepeatFunction()
@@ -4887,6 +4935,13 @@ ColumnVector<uint64_t>* NLTranslator::allocCountColumn() {
 
 Column* NLTranslator::allocListColumn() {
     ColumnVector<ListView>* column = _memory->alloc<ColumnVector<ListView>>();
+    column->reserve(_program->getChunkSize());
+
+    return column;
+}
+
+Column* NLTranslator::allocOptListColumn() {
+    ColumnOptVector<ListView>* column = _memory->alloc<ColumnOptVector<ListView>>();
     column->reserve(_program->getChunkSize());
 
     return column;
