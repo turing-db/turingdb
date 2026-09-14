@@ -27,6 +27,7 @@ class PathTargetBatch {
 public:
     static constexpr size_t targetsPerBatch = 64;
     static constexpr uint8_t unreached = 255;
+    static constexpr uint8_t farthestLevel = unreached - 1;
 
     PathTargetBatch();
     ~PathTargetBatch();
@@ -176,7 +177,7 @@ private:
                     PathExplorationDir direction,
                     std::optional<EdgeTypeID> edgeType,
                     const Tombstones* tombstones,
-                    uint64_t levelCap,
+                    uint64_t maxHops,
                     PathTargetBatch& batch);
     void relax(std::span<const EdgeRecord> edges,
                uint64_t word,

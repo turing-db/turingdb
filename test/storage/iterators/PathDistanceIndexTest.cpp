@@ -343,18 +343,17 @@ TEST_F(PathDistanceIndexTest, estimatesAnUnboundedWalkFinitely) {
     const GraphReader reader = transaction.readGraph();
     const PartDirectory parts(reader.getView());
 
-    const double bounded = PathDistanceIndex::estimatedEnumerationChecks(parts, PathExplorationDir::FORWARD, std::nullopt, 1, 4);
-    const double unboundedChecks = PathDistanceIndex::estimatedEnumerationChecks(parts, PathExplorationDir::FORWARD, std::nullopt, 1, unbounded);
+    PathDistanceIndex::TypeBranching branching;
+    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::FORWARD, std::nullopt, branching);
+
+    const double bounded = PathDistanceIndex::estimatedEnumerationChecks(parts, branching, 1, 4);
+    const double unboundedChecks = PathDistanceIndex::estimatedEnumerationChecks(parts, branching, 1, unbounded);
 
     EXPECT_TRUE(std::isfinite(unboundedChecks));
     EXPECT_GT(unboundedChecks, bounded);
 
     // The estimate charges the levels the index itself would build and no more
-    const double capped = PathDistanceIndex::estimatedEnumerationChecks(parts,
-                                                                        PathExplorationDir::FORWARD,
-                                                                        std::nullopt,
-                                                                        1,
-                                                                        PathDistanceIndex::farthest);
+    const double capped = PathDistanceIndex::estimatedEnumerationChecks(parts, branching, 1, PathDistanceIndex::farthest);
     EXPECT_DOUBLE_EQ(unboundedChecks, capped);
 }
 
@@ -389,8 +388,13 @@ TEST_F(PathDistanceIndexTest, estimatesTheWalkOfTheTypeItFollows) {
 
     // Over both directions a walk on every edge reaches more per hop than one restricted to
     // the two B edges, whose frontier never leaves the nodes carrying them
-    const double untyped = PathDistanceIndex::estimatedEnumerationChecks(parts, PathExplorationDir::BOTH, std::nullopt, 100, 6);
-    const double typedB = PathDistanceIndex::estimatedEnumerationChecks(parts, PathExplorationDir::BOTH, _typeB, 100, 6);
+    PathDistanceIndex::TypeBranching untypedBranching;
+    PathDistanceIndex::TypeBranching typedBranching;
+    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::BOTH, std::nullopt, untypedBranching);
+    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::BOTH, _typeB, typedBranching);
+
+    const double untyped = PathDistanceIndex::estimatedEnumerationChecks(parts, untypedBranching, 100, 6);
+    const double typedB = PathDistanceIndex::estimatedEnumerationChecks(parts, typedBranching, 100, 6);
 
     EXPECT_GT(untyped, typedB);
 }
@@ -401,14 +405,14 @@ TEST_F(PathDistanceIndexTest, chargesTheFrontierWhileItGrowsAndNotAfter) {
     const PartDirectory parts(reader.getView());
 
     const auto checks = [&parts](uint64_t maxHops) {
-        return PathDistanceIndex::estimatedEnumerationChecks(parts, PathExplorationDir::BOTH, std::nullopt, 1, maxHops);
+        return PathDistanceIndex::estimatedSearchChecks(parts, PathExplorationDir::BOTH, std::nullopt, 1, maxHops);
     };
 
     // A deeper bound costs more only while the frontier can still grow
     EXPECT_GT(checks(3), checks(2));
 
-    // Once it covers every node carrying the type there is nothing left to predict, so the
-    // estimate must not multiply that frontier by levels the walk may never reach
+    // Once it covers every node carrying the type there is nothing left for the search to
+    // reach, so the estimate must not multiply that frontier by levels it never visits
     EXPECT_DOUBLE_EQ(checks(unbounded), checks(PathDistanceIndex::farthest));
     EXPECT_DOUBLE_EQ(checks(unbounded), checks(PathDistanceIndex::farthest / 2));
 }

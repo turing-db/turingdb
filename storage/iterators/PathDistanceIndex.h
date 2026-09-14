@@ -64,19 +64,24 @@ public:
                                     std::optional<EdgeTypeID> edgeType,
                                     PathHopFilter& hopFilter);
 
-    // The candidate checks the unpruned walk is expected to make: the seeds fanning out over
-    // every hop of the bound, the frontier holding once it covers the nodes the type reaches.
-    // Sampling the branching costs a strided pass over the adjacency, so a caller that needs
-    // more than one of these takes the sample once and passes it to the overload.
-    static double estimatedEnumerationChecks(const PartDirectory& parts,
-                                             PathExplorationDir direction,
-                                             std::optional<EdgeTypeID> edgeType,
-                                             size_t seedCount,
-                                             uint64_t maxHops);
+    // The candidate checks one search from each source is expected to make: its frontier is
+    // distinct nodes, so it cannot grow past the nodes the type reaches and holds at the
+    // first level that covers them.
+    static double estimatedSearchChecks(const PartDirectory& parts,
+                                        PathExplorationDir direction,
+                                        std::optional<EdgeTypeID> edgeType,
+                                        size_t sourceCount,
+                                        uint64_t maxHops);
 
+    // The candidate checks the unpruned walk is expected to make: the seeds fanning out over
+    // every hop of the bound. Its frontier is partial paths, not nodes - a trail reaches the
+    // same node as often as a path arrives at it - so nothing caps it at the nodes the type
+    // carries, and it grows with the bound the way the enumeration itself does.
     // hopPassRate is the share of each level's candidates the query's hop predicate lets
     // through: they all cost a check, and the ones that pass are all that reach the next
-    // level, so it shrinks the frontier rather than the candidates
+    // level, so it shrinks the frontier rather than the candidates.
+    // Sampling the branching costs a strided pass over the adjacency, so a caller that needs
+    // more than one of these takes the sample once and passes it in.
     static double estimatedEnumerationChecks(const PartDirectory& parts,
                                              const TypeBranching& branching,
                                              size_t seedCount,

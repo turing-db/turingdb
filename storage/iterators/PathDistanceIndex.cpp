@@ -84,11 +84,14 @@ void PathDistanceIndex::build(const GraphView& view,
 
     const Tombstones& tombstones = view.tombstones();
     const Tombstones* edgeTombstones = tombstones.hasEdges() ? &tombstones : nullptr;
-    const uint64_t levelCap = std::min<uint64_t>(maxHops, farthest);
 
     std::vector<NodeID> next;
-    for (uint64_t level = 1; level <= levelCap && !frontier.empty(); level++) {
-        const uint8_t distance = static_cast<uint8_t>(level);
+
+    // A distance saturates at the farthest a byte can hold, so past that one reads "at least
+    // that many hops". canReachEndWithin then keeps a node a deeper bound may not be able to
+    // use, which costs a walk that never completes; capping the search instead would drop it.
+    for (uint64_t level = 1; level <= maxHops && !frontier.empty(); level++) {
+        const uint8_t distance = static_cast<uint8_t>(std::min<uint64_t>(level, farthest));
         next.clear();
 
         for (const NodeID node : frontier) {
@@ -213,15 +216,38 @@ void PathDistanceIndex::sampleBranching(const PartDirectory& parts,
     cache.store(direction, edgeType, nodeCount, edgeCount, branching);
 }
 
-double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
-                                                     PathExplorationDir direction,
-                                                     std::optional<EdgeTypeID> edgeType,
-                                                     size_t seedCount,
-                                                     uint64_t maxHops) {
+double PathDistanceIndex::estimatedSearchChecks(const PartDirectory& parts,
+                                                PathExplorationDir direction,
+                                                std::optional<EdgeTypeID> edgeType,
+                                                size_t sourceCount,
+                                                uint64_t maxHops) {
+    const size_t nodeCount = parts.getAllocatedNodeCount();
+    const size_t edgeCount = parts.getAllocatedEdgeCount();
+    if (sourceCount == 0 || maxHops == 0 || nodeCount == 0 || edgeCount == 0) {
+        return 0.0;
+    }
+
     TypeBranching branching;
     sampleBranching(parts, direction, edgeType, branching);
 
-    return estimatedEnumerationChecks(parts, branching, seedCount, maxHops);
+    const double fanOut = std::max(1.0, branching._fanOut);
+    const double support = std::clamp(branching._supportNodes, 1.0, static_cast<double>(nodeCount));
+    const uint64_t levelCount = std::min<uint64_t>(maxHops, farthest);
+
+    double candidatesPerSource = 0.0;
+    double frontier = 1.0;
+
+    for (uint64_t level = 0; level < levelCount; level++) {
+        candidatesPerSource += frontier * fanOut;
+
+        if (frontier >= support) {
+            break;
+        }
+
+        frontier = std::min(frontier * fanOut, support);
+    }
+
+    return static_cast<double>(sourceCount) * candidatesPerSource;
 }
 
 double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
@@ -236,23 +262,15 @@ double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
     }
 
     const double fanOut = std::max(1.0, branching._fanOut);
-    const double support = std::clamp(branching._supportNodes, 1.0, static_cast<double>(nodeCount));
-
-    // The candidates of every hop summed, over the levels the index itself would build: a
-    // chain of fan-out one walks one per hop, and a frontier cannot grow past the nodes that
-    // carry the walked type. Growth is all this predicts, so it charges the first level that
-    // covers them and stops rather than extrapolating a saturated frontier to the bound.
     const uint64_t levelCount = std::min<uint64_t>(maxHops, farthest);
 
     double candidatesPerSeed = 0.0;
     double frontier = 1.0;
+
     for (uint64_t level = 0; level < levelCount; level++) {
         candidatesPerSeed += frontier * fanOut;
-        if (frontier >= support) {
-            break;
-        }
 
-        frontier = std::min(frontier * fanOut * hopPassRate, support);
+        frontier = frontier * fanOut * hopPassRate;
     }
 
     return static_cast<double>(seedCount) * candidatesPerSeed;
