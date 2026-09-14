@@ -95,6 +95,17 @@ TEST_F(MultiPatternJoinTest, joinsTwoWaysIntoANodeWithTwoWaysOutOfIt) {
     expectRows("MATCH (a)-->(x), (b)-->(x), (x)-->(c)-->(e), (x)-->(d)-->(e) RETURN a", expected);
 }
 
+// The four patterns alone produce 9792 rows, with n one of Remy (0), Adam (1) and Ghosts (6).
+// Only Remy and Adam carry age, both 32, so p.age/10 is 3 and n never equals it. m.age < 0 is
+// false on every row too, so the result is empty either way.
+TEST_F(MultiPatternJoinTest, filtersAwayEveryRowOfFourJoinedPatterns) {
+    expectRows("MATCH (nl)-->(dp)-->(q), (l)-->(mYIELDp)-->(z), (l)-->(m) "
+               "MATCH (n)-->()-->(a), (p)-->(z), (l)-->(Dp)-->(z), (l)-->(m) "
+               "MATCH (q) WHERE n = p.age/10 AND m.age < p.age+2/p.age/10 "
+               "AND m.age < 0 AND m.age < p.age+2/8 RETURN n, m, z, p",
+               {});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
