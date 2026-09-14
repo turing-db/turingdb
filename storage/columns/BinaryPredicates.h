@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <concepts>
 #include <functional>
+#include <optional>
+#include <span>
 #include <type_traits>
 #include <utility>
 
@@ -439,6 +441,36 @@ struct BinaryPredicate {
 };
 
 struct TuringEqual {
+    std::optional<CustomBool> operator()(const ListView a, const ListView b) const {
+        const std::span<const ListElementView> lhs = a.elements();
+        const std::span<const ListElementView> rhs = b.elements();
+
+        if (lhs.size() != rhs.size()) {
+            return CustomBool {false};
+        }
+
+        bool unknown = false;
+
+        for (size_t index = 0; index < lhs.size(); index++) {
+            const bool holdsNull = lhs[index].getTag() == ListBufferTypeTag::Null
+                                || rhs[index].getTag() == ListBufferTypeTag::Null;
+            if (holdsNull) {
+                unknown = true;
+                continue;
+            }
+
+            if (!(lhs[index] == rhs[index])) {
+                return CustomBool {false};
+            }
+        }
+
+        if (unknown) {
+            return std::nullopt;
+        }
+
+        return CustomBool {true};
+    }
+
     bool operator()(const types::Embedding::Primitive& a, const types::Embedding::Primitive& b) {
         const bool equal =
             (a.size() == b.size()) && std::equal(a.begin(), a.end(), b.begin());
@@ -472,6 +504,15 @@ struct TuringEqual {
 };
 
 struct TuringNotEqual {
+    std::optional<CustomBool> operator()(const ListView a, const ListView b) const {
+        const std::optional<CustomBool> equal = TuringEqual {}(a, b);
+        if (!equal.has_value()) {
+            return std::nullopt;
+        }
+
+        return CustomBool {!*equal};
+    }
+
     template <typename T, typename U>
     bool operator()(T&& a, U&& b) {
         return !TuringEqual {}(std::forward<T>(a), std::forward<U>(b));
