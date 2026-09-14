@@ -1960,7 +1960,7 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
     } else if (isList) {
         fill = NLExecutor::selectConstantListBroadcast();
     } else {
-        fill = NLExecutor::selectConstantBroadcast(nullableChunkValueType(resultType));
+        fill = NLExecutor::selectConstantBroadcast(nullableChunkValueType(resultType), value);
     }
 
     NLBroadcastConstantData* data = _program->allocFunctionData<NLBroadcastConstantData>(value, cardinality, output, fill);

@@ -924,6 +924,17 @@ void broadcastConstantColumn(const Column* value, size_t rowCount, Column* outpu
     std::fill_n(outputRaw.begin(), rowCount, std::optional<Primitive>(typedValue->getRaw()));
 }
 
+template <typename Primitive>
+void broadcastNullableConstantColumn(const Column* value, size_t rowCount, Column* output) {
+    const auto* typedValue = static_cast<const ColumnConst<std::optional<Primitive>>*>(value);
+    ColumnOptVector<Primitive>* typedOutput = static_cast<ColumnOptVector<Primitive>*>(output);
+
+    auto& outputRaw = typedOutput->getRaw();
+    outputRaw.resize(rowCount);
+
+    std::fill_n(outputRaw.begin(), rowCount, typedValue->getRaw());
+}
+
 // The null literal laid out over every row of the step: it holds no value to repeat, so
 // each row is the absent value. An untyped null is carried as a null integer, which is
 // the column the layout fills.
@@ -6115,10 +6126,16 @@ NLBroadcastConstantFunction NLExecutor::selectConstantListBroadcast() {
     return &broadcastConstantListColumn;
 }
 
-NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(ValueType valueType) {
+NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(ValueType valueType, const Column* value) {
     NLBroadcastConstantFunction fill = nullptr;
     const auto select = [&]<SupportedType T>() {
-        fill = &broadcastConstantColumn<typename T::Primitive>;
+        using Primitive = typename T::Primitive;
+
+        if (value->getInternalKind() == InternalKind::code<std::optional<Primitive>>()) {
+            fill = &broadcastNullableConstantColumn<Primitive>;
+        } else {
+            fill = &broadcastConstantColumn<Primitive>;
+        }
     };
     ValueTypeDispatcher(valueType).execute(select);
 
