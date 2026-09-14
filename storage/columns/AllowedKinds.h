@@ -160,6 +160,9 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs,
 
         std::tuple<
+            // Two lists are equal when their elements are, in order
+            KindPair<ListView, ListView>,
+
             // Filtering by ID or labels/edge type
             KindPair<NodeID, NodeID>,
             KindPair<EdgeID, EdgeID>,

@@ -241,7 +241,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::Embedding, EvaluatedType::Embedding)
                 || pair == TypePairBitset(EvaluatedType::Label, EvaluatedType::Label)
                 || pair == TypePairBitset(EvaluatedType::EdgeType, EvaluatedType::EdgeType)
-                || pair == TypePairBitset(EvaluatedType::PropertyType, EvaluatedType::PropertyType)) {
+                || pair == TypePairBitset(EvaluatedType::PropertyType, EvaluatedType::PropertyType)
+                || pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)) {
                 break;
             }
 

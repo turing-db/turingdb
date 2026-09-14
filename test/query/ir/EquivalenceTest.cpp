@@ -813,6 +813,14 @@ TEST_F(EquivalenceTest, conversionFunctions) {
     //expectEquivalent("MATCH (n) RETURN toFloat('2.5')");
 }
 
+TEST_F(EquivalenceTest, listEquality) {
+    expectEquivalent("RETURN [1, 2, 3] = [1, 2, 3]");
+    expectEquivalent("RETURN [1, 2] = [2, 1]");
+    expectEquivalent("RETURN [1, 2] = [1, 2, 3]");
+    expectEquivalent("RETURN ['a', 'b'] <> ['a', 'c']");
+    expectEquivalent("RETURN [1, null] = [1, null]");
+}
+
 TEST_F(EquivalenceTest, embeddingFunctions) {
     expectEquivalent("RETURN cosine_similarity((1.0, 2.0, 3.0), (0.4, 0.3, 0.8))");
     expectEquivalent("RETURN euclidean_distance((0.5, 0.5), (0.5, 0.5))");
