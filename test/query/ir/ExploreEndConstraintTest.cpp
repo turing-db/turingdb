@@ -629,8 +629,9 @@ TEST_F(ExploreEndConstraintGeneratedGraphTest, pruningIndexKeepsTheFilteredRows)
         seeds.push_back(NodeID(node));
     }
 
-    const double fanOut = PathDistanceIndex::sampleSeedFanOut(PartDirectory(view), PathExplorationDir::FORWARD, std::nullopt, seeds);
-    EXPECT_TRUE(PathDistanceIndex::isWorthBuilding(view, fanOut, nodeCount, 4));
+    PathDistanceIndex::SeedExpansion expansion;
+    PathDistanceIndex::sampleSeedExpansion(PartDirectory(view), PathExplorationDir::FORWARD, std::nullopt, seeds, expansion);
+    EXPECT_TRUE(PathDistanceIndex::isWorthBuilding(view, expansion, nodeCount, 4));
 
     RowSink filtered;
     runProgram(generatedFilterProgram, view, filtered);

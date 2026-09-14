@@ -254,16 +254,17 @@ TEST_F(PathTargetIndexTest, costGateChargesEveryBatch) {
         seeds.push_back(NodeID(node));
     }
 
-    const double fanOut = PathDistanceIndex::sampleSeedFanOut(PartDirectory(view), PathExplorationDir::FORWARD, std::nullopt, seeds);
+    PathDistanceIndex::SeedExpansion expansion;
+    PathDistanceIndex::sampleSeedExpansion(PartDirectory(view), PathExplorationDir::FORWARD, std::nullopt, seeds, expansion);
 
-    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, fanOut, 1, 1, 4));
-    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, fanOut, 100000, 0, 4));
-    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, fanOut, 100000, 1, 4));
-    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, fanOut, 100000, 64, 4));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 1, 1, 4));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 0, 4));
+    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 1, 4));
+    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 64, 4));
 
     // Fifty thousand batches of words cost more than a hundred thousand seeds fanning out
-    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, fanOut, 100000, 3000000, 4));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 3000000, 4));
 
     // And ten million batches would not fit in memory, whatever the walk costs
-    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, fanOut, 100000, 640000000, unbounded));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 640000000, unbounded));
 }

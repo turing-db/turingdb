@@ -23,12 +23,13 @@ constexpr double indexUnitCostInChecks = 0.35;
 
 constexpr size_t fanOutSampleTarget = 4096;
 
-// The seeds expanded to measure the branching where a walk starts, the levels they are
-// expanded over and the nodes one level of that expansion may reach. Measured on reactome:
-// 16 seeds misread a broad seed set by half, and 256 cost four times 64 to read it lower,
-// since a wider base spends the budget earlier. Where seeds die off it takes six levels for
-// the survivors to show, and a seventh moves the reading by under a tenth. The budget only
-// binds on an untyped walk, where quadrupling it costs 2.5x and moves the reading by 1%.
+// The seeds expanded to measure what a walk costs, the levels they are expanded over and the
+// nodes one level of that expansion may reach. Measured on reactome, against a walk of every
+// reaction whose own cost is known: three levels read it five times under, since most seeds
+// die at once and the levels past them are where the survivors show, and six read it within
+// a tenth. 16 seeds read a broad set half of what 64 does, and 256 cost four times 64 to read
+// it lower still, a wider base spending the budget earlier. The budget only binds on an
+// untyped walk, where quadrupling it costs 2.5x and moves the reading by 1%.
 constexpr size_t seedSampleTarget = 64;
 constexpr size_t seedSampleLevels = 6;
 constexpr size_t seedSampleBudget = 4096;
@@ -242,12 +243,15 @@ void PathDistanceIndex::sampleBranching(const PartDirectory& parts,
     cache.store(direction, edgeType, nodeCount, edgeCount, branching);
 }
 
-double PathDistanceIndex::sampleSeedFanOut(const PartDirectory& parts,
-                                           PathExplorationDir direction,
-                                           std::optional<EdgeTypeID> edgeType,
-                                           std::span<const NodeID> seeds) {
+void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
+                                            PathExplorationDir direction,
+                                            std::optional<EdgeTypeID> edgeType,
+                                            std::span<const NodeID> seeds,
+                                            SeedExpansion& expansion) {
+    expansion = SeedExpansion {};
+
     if (seeds.empty() || parts.getAllocatedNodeCount() == 0) {
-        return 0.0;
+        return;
     }
 
     const bool walksOuts = direction != PathExplorationDir::BACKWARD;
@@ -260,12 +264,14 @@ double PathDistanceIndex::sampleSeedFanOut(const PartDirectory& parts,
         frontier.push_back(seeds[seed]);
     }
 
-    double arrivals = 0.0;
-    double continuations = 0.0;
+    double frontierPerSeed = 1.0;
 
     std::vector<NodeID> next;
     for (size_t level = 0; level < seedSampleLevels && !frontier.empty(); level++) {
         next.clear();
+
+        double arrivals = 0.0;
+        double continuations = 0.0;
 
         for (const NodeID node : frontier) {
             if (next.size() >= seedSampleBudget) {
@@ -301,14 +307,21 @@ double PathDistanceIndex::sampleSeedFanOut(const PartDirectory& parts,
             continuations += static_cast<double>(continuing);
         }
 
+        if (arrivals == 0.0) {
+            break;
+        }
+
+        // A level's ratio is measured over the nodes of it the budget let through, so a
+        // truncated level still reports what the frontier it sampled branched by
+        const double levelFanOut = continuations / arrivals;
+
+        frontierPerSeed = frontierPerSeed * levelFanOut;
+        expansion._frontierPerSeed[expansion._levels] = frontierPerSeed;
+        expansion._levels++;
+        expansion._tailFanOut = levelFanOut;
+
         std::swap(frontier, next);
     }
-
-    if (arrivals == 0.0) {
-        return 0.0;
-    }
-
-    return continuations / arrivals;
 }
 
 double PathDistanceIndex::estimatedSearchChecks(const PartDirectory& parts,
@@ -346,7 +359,7 @@ double PathDistanceIndex::estimatedSearchChecks(const PartDirectory& parts,
 }
 
 double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
-                                                     double fanOut,
+                                                     const SeedExpansion& expansion,
                                                      size_t seedCount,
                                                      uint64_t maxHops,
                                                      double hopPassRate) {
@@ -356,16 +369,27 @@ double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
         return 0.0;
     }
 
-    const double perHop = std::max(1.0, fanOut);
     const uint64_t levelCount = std::min<uint64_t>(maxHops, farthest);
+    const uint64_t measured = std::min<uint64_t>(expansion._levels, levelCount);
+    const double tailFanOut = std::max(1.0, expansion._tailFanOut);
 
     double candidatesPerSeed = 0.0;
     double frontier = 1.0;
+    double pass = 1.0;
 
-    for (uint64_t level = 0; level < levelCount; level++) {
-        candidatesPerSeed += frontier * perHop;
+    for (uint64_t level = 0; level < measured; level++) {
+        const double checks = expansion._frontierPerSeed[level] * pass;
 
-        frontier = frontier * perHop * hopPassRate;
+        candidatesPerSeed += checks;
+        frontier = checks * hopPassRate;
+        pass *= hopPassRate;
+    }
+
+    for (uint64_t level = measured; level < levelCount; level++) {
+        const double checks = frontier * tailFanOut;
+
+        candidatesPerSeed += checks;
+        frontier = checks * hopPassRate;
     }
 
     return static_cast<double>(seedCount) * candidatesPerSeed;
@@ -423,14 +447,14 @@ double PathDistanceIndex::sampleHopPassRate(const PartDirectory& parts,
 }
 
 bool PathDistanceIndex::isWorthBuilding(const GraphView& view,
-                                        double fanOut,
+                                        const SeedExpansion& expansion,
                                         size_t seedCount,
                                         uint64_t maxHops,
                                         double hopPassRate) {
     const PartDirectory parts(view);
     const double indexCost = indexUnitCostInChecks * static_cast<double>(parts.getAllocatedNodeCount() + parts.getAllocatedEdgeCount());
 
-    return estimatedEnumerationChecks(parts, fanOut, seedCount, maxHops, hopPassRate) > indexCost;
+    return estimatedEnumerationChecks(parts, expansion, seedCount, maxHops, hopPassRate) > indexCost;
 }
 
 void PathDistanceIndex::collectEnds(const PartDirectory& parts, const LabelSet& endLabels, std::vector<NodeID>& ends) {
