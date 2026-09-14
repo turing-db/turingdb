@@ -360,11 +360,23 @@ MatchLabelSetIterator GraphReader::matchLabelSets(const LabelSetHandle& labelSet
 }
 
 bool GraphReader::nodeHasProperty(PropertyTypeID ptID, NodeID nodeID) const {
-    for (const auto& part : _view.dataparts()) {
-        if (part->nodeProperties().has(ptID, nodeID.getValue())) {
-            return true;
+    const EntityID entityID {nodeID.getValue()};
+
+    for (const auto& part : rv::reverse(_view.dataparts())) {
+        const PropertyManager& properties = part->nodeProperties();
+        const auto containerIt = properties.find(ptID);
+
+        if (containerIt == properties.end()) {
+            continue;
+        }
+
+        const PropertyContainer& container = *containerIt->second;
+
+        if (container.hasEntry(entityID)) {
+            return container.has(entityID);
         }
     }
+
     return false;
 }
 
