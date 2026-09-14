@@ -19,6 +19,7 @@ namespace db {
 
 class NLEdgeLoopData;
 class NLExecutionContext;
+class NLScanEdgesLoopData;
 
 // The edges this change has written, under the node each hangs off. A hop reads the graph
 // by the node it walks from, and the write buffer is a flat log, so it is indexed here
@@ -53,7 +54,7 @@ private:
 // every edge the query itself wrote. It fills the same chunks the committed step fills and
 // runs once that one is drained, so the rows of a hop are the graph's edges then this
 // change's.
-class NLPendingEdges {
+class NLPendingEdgeHop {
 public:
     enum class Direction {
         Out,
@@ -61,11 +62,11 @@ public:
         Either,
     };
 
-    NLPendingEdges(NLExecutionContext* context,
-                   NLEdgeLoopData* loopData,
-                   Direction direction,
-                   ColumnNodeIDs* others);
-    ~NLPendingEdges();
+    NLPendingEdgeHop(NLExecutionContext* context,
+                     NLEdgeLoopData* loopData,
+                     Direction direction,
+                     ColumnNodeIDs* others);
+    ~NLPendingEdgeHop();
 
     void setEdgeType(EdgeTypeID edgeType) { _edgeType = edgeType; }
 
@@ -88,8 +89,10 @@ private:
     size_t _firstPendingNodeID {0};
     size_t _firstPendingEdgeID {0};
 
-    // What the buffer held when the hop started. A create in the hop's own body writes
-    // past this, and what the hop walks is what the query wrote before it ran.
+    // The range of the buffer the hop walks: what an earlier statement of the change staged
+    // is below it and is read once it commits, and a create in the hop's own body writes
+    // past it, so what the hop walks is what its own query wrote before it ran.
+    size_t _firstQueryEdge {0};
     size_t _pendingEdgeCount {0};
 
     Direction _direction {Direction::Out};
@@ -113,6 +116,39 @@ private:
     // Whether the hop keeps the pending edge at @param offset, and the node at its other
     // end when it does
     bool walks(size_t offset, NodeID& other) const;
+};
+
+// The step of an edge scan that reads the edges this change has written, the scan sibling
+// of NLPendingEdgeHop: it walks the write buffer in order rather than off a chunk of input
+// nodes, and fills the same four chunks the committed step fills.
+class NLPendingEdgeScan {
+public:
+    NLPendingEdgeScan(NLExecutionContext* context, NLScanEdgesLoopData* loopData);
+    ~NLPendingEdgeScan();
+
+    void setEdgeType(EdgeTypeID edgeType) { _edgeType = edgeType; }
+
+    bool isValid() const { return _edge < _pendingEdgeCount; }
+
+    void fill(size_t maxCount);
+
+private:
+    const CommitWriteBuffer* _writeBuffer {nullptr};
+
+    ColumnNodeIDs* _srcs {nullptr};
+    ColumnEdgeIDs* _edgeIDs {nullptr};
+    ColumnEdgeTypes* _types {nullptr};
+    ColumnNodeIDs* _tgts {nullptr};
+
+    size_t _firstPendingNodeID {0};
+    size_t _firstPendingEdgeID {0};
+
+    size_t _pendingEdgeCount {0};
+    size_t _edge {0};
+
+    std::optional<EdgeTypeID> _edgeType;
+
+    void clearChunks();
 };
 
 }

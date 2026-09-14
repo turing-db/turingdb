@@ -314,6 +314,12 @@ private:
     // CREATE earlier in the program introduced, which live in the change's own schema and
     // nowhere else until the commit
     std::optional<EdgeTypeID> findEdgeType(llvm::StringRef name) const;
+    std::optional<LabelID> findLabel(llvm::StringRef name) const;
+    std::optional<PropertyType> findPropertyType(llvm::StringRef name) const;
+
+    // Records on @param data the ID of every label set this change knows that a node must
+    // carry at least @param constraint to be in
+    void collectMatchingLabelSets(const LabelSet& constraint, NLCheckLabelConstraintData* data) const;
 
     // Translate an nl.limit: allocate its runtime counter, map the handle to it,
     // and record the reset statement (run each time the enclosing block runs)

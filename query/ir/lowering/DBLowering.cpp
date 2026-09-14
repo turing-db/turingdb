@@ -23,10 +23,6 @@
 
 #include "views/GraphView.h"
 #include "metadata/GraphMetadata.h"
-#include "metadata/LabelSet.h"
-#include "metadata/LabelSetHandle.h"
-#include "metadata/LabelSetMap.h"
-#include "metadata/LabelMap.h"
 #include "metadata/PropertyType.h"
 
 #include "IRValueTypes.h"
@@ -1378,38 +1374,6 @@ void DBLowering::lowerGetEdgeTypes(mlir::db::GetEdgeTypes getEdgeTypes) {
 }
 
 void DBLowering::lowerCheckLabelConstraint(mlir::db::CheckLabelConstraint checkLabelConstraint) {
-    const LabelMap& labelMap = _view->metadata().labels();
-
-    LabelSet constraintLabelSet;
-    bool graphHasEveryLabel = true;
-    for (const mlir::Attribute labelAttr : checkLabelConstraint.getLabels()) {
-        const llvm::StringRef labelName = mlir::cast<mlir::StringAttr>(labelAttr).getValue();
-        const std::optional<LabelID> labelID = labelMap.get(
-            std::string_view(labelName.data(), labelName.size()));
-
-        if (!labelID) {
-            graphHasEveryLabel = false;
-            break;
-        }
-
-        constraintLabelSet.set(*labelID);
-    }
-
-    // The labels are a conjunction, so one the graph never assigned makes the whole test
-    // false: matching no label set is that answer, where skipping the missing label would
-    // test a weaker constraint than the query wrote.
-    llvm::SmallVector<int64_t> matchingIDs;
-    if (graphHasEveryLabel) {
-        const LabelSetHandle constraintHandle(constraintLabelSet);
-
-        for (const LabelSetMap::Pair& pair : _view->metadata().labelsets()) {
-            const LabelSetHandle candidate(*pair._value);
-            if (candidate.hasAtLeastLabels(constraintHandle)) {
-                matchingIDs.push_back(static_cast<int64_t>(pair._id.getValue()));
-            }
-        }
-    }
-
     const mlir::Value inputChunk = mapValue(checkLabelConstraint.getLabelsetIds());
 
     setInsertionInto(ownerBlock(inputChunk));
@@ -1422,28 +1386,12 @@ void DBLowering::lowerCheckLabelConstraint(mlir::db::CheckLabelConstraint checkL
         _builder.getUnknownLoc(),
         boolChunkType,
         inputChunk,
-        _builder.getDenseI64ArrayAttr(matchingIDs));
+        checkLabelConstraint.getLabels());
 
     _valueMap[checkLabelConstraint.getResult()] = check.getResult();
 }
 
 void DBLowering::lowerCheckEdgeTypeConstraint(mlir::db::CheckEdgeTypeConstraint checkEdgeTypeConstraint) {
-    const EdgeTypeMap& edgeTypeMap = _view->metadata().edgeTypes();
-
-    // The types are a disjunction, so one the graph never assigned drops out of it
-    llvm::SmallVector<int64_t> matchingIDs;
-    for (const mlir::Attribute typeAttr : checkEdgeTypeConstraint.getEdgeTypes()) {
-        const llvm::StringRef typeName = mlir::cast<mlir::StringAttr>(typeAttr).getValue();
-        const std::optional<EdgeTypeID> edgeTypeID = edgeTypeMap.get(
-            std::string_view(typeName.data(), typeName.size()));
-
-        if (!edgeTypeID) {
-            continue;
-        }
-
-        matchingIDs.push_back(static_cast<int64_t>(edgeTypeID->getValue()));
-    }
-
     const mlir::Value inputChunk = mapValue(checkEdgeTypeConstraint.getEdgeTypeIds());
 
     setInsertionInto(ownerBlock(inputChunk));
@@ -1456,7 +1404,7 @@ void DBLowering::lowerCheckEdgeTypeConstraint(mlir::db::CheckEdgeTypeConstraint 
         _builder.getUnknownLoc(),
         boolChunkType,
         inputChunk,
-        _builder.getDenseI64ArrayAttr(matchingIDs));
+        checkEdgeTypeConstraint.getEdgeTypes());
 
     _valueMap[checkEdgeTypeConstraint.getResult()] = check.getResult();
 }

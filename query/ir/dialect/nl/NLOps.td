@@ -617,43 +617,52 @@ def GetEdgeTypes : NLOp<"get_edge_types", [Pure, RowAlignedThroughOperands]> {
 }
 
 def CheckLabelConstraint : NLOp<"check_label_constraint", [Pure, RowAlignedThroughOperands]> {
-  let summary = "Test each label-set ID against a precomputed matching set";
+  let summary = "Test each label-set ID against a required-label constraint";
   let description = [{
-    For each LabelSetID in the input chunk, emits true if the ID appears in
-    `matching_ids`.
+    For each LabelSetID in the input chunk, emits true if the label set it names
+    carries every label in `labels` - a superset match.
 
       nl.for %nodes in %scan {
         %ls  = nl.get_node_label_set(%nodes) : !nl.chunk<!storage.labelset_id>
-        %ok  = nl.check_label_constraint(%ls, [3, 7]) : !nl.chunk<!storage.bool>
+        %ok  = nl.check_label_constraint(%ls, ["Person"]) : !nl.chunk<!storage.bool>
         ...
       }
+
+    The names are turned into the IDs of the label sets that satisfy them when the
+    program is translated rather than when it is lowered: a CREATE ahead of the test
+    interns a label set of its own, and that one is in the change's schema only once
+    the create has been translated.
   }];
 
-  let arguments = (ins NLLabelSetIDChunk:$labelset_ids, DenseI64ArrayAttr:$matching_ids);
+  let arguments = (ins NLLabelSetIDChunk:$labelset_ids, StrArrayAttr:$labels);
   let results   = (outs NLChunk:$result);
 
   let assemblyFormat = [{
-    `(` $labelset_ids `,` $matching_ids `)` attr-dict `:` qualified(type($result))
+    `(` $labelset_ids `,` $labels `)` attr-dict `:` qualified(type($result))
   }];
 }
 
 def CheckEdgeTypeConstraint : NLOp<"check_edge_type_constraint", [Pure, RowAlignedThroughOperands]> {
-  let summary = "Test each edge type ID against a precomputed allowed set";
+  let summary = "Test each edge type ID against an allowed-type constraint";
   let description = [{
-    For each EdgeTypeID in the input chunk, emits true if the ID appears in
-    `matching_ids` (OR semantics: any match passes).
+    For each EdgeTypeID in the input chunk, emits true if it is one of `edge_types`
+    (OR semantics: any match passes).
 
       nl.for %etypes in %scan {
-        %ok = nl.check_edge_type_constraint(%etypes, [2, 5]) : !nl.chunk<!storage.bool>
+        %ok = nl.check_edge_type_constraint(%etypes, ["KNOWS"]) : !nl.chunk<!storage.bool>
         ...
       }
+
+    The names are resolved when the program is translated, for the reason
+    nl.check_label_constraint's are: a CREATE ahead of the test may be what put the
+    type in the change's schema.
   }];
 
-  let arguments = (ins NLEdgeTypeIDChunk:$edge_type_ids, DenseI64ArrayAttr:$matching_ids);
+  let arguments = (ins NLEdgeTypeIDChunk:$edge_type_ids, StrArrayAttr:$edge_types);
   let results   = (outs NLChunk:$result);
 
   let assemblyFormat = [{
-    `(` $edge_type_ids `,` $matching_ids `)` attr-dict `:` qualified(type($result))
+    `(` $edge_type_ids `,` $edge_types `)` attr-dict `:` qualified(type($result))
   }];
 }
 

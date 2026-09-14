@@ -18,10 +18,20 @@ LabelID MetadataBuilder::getOrCreateLabel(std::string_view labelName) {
     return _metadata->_labelMap.getOrCreate(labelName);
 }
 
+std::optional<LabelID> MetadataBuilder::findLabel(std::string_view labelName) const {
+    std::shared_lock lock(_spinLock);
+
+    return _metadata->_labelMap.get(labelName);
+}
+
 LabelSetHandle MetadataBuilder::getOrCreateLabelSet(const LabelSet& labelset) {
     std::unique_lock lock(_spinLock);
 
     return _metadata->_labelsetMap.getOrCreate(labelset);
+}
+
+const LabelSetMap& MetadataBuilder::labelsets() const {
+    return _metadata->labelsets();
 }
 
 EdgeTypeID MetadataBuilder::getOrCreateEdgeType(std::string_view edgeTypeName) {
