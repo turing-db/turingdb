@@ -24,9 +24,13 @@ constexpr double indexUnitCostInChecks = 0.35;
 constexpr size_t fanOutSampleTarget = 4096;
 
 // The seeds expanded to measure the branching where a walk starts, the levels they are
-// expanded over and the nodes that expansion may reach
+// expanded over and the nodes one level of that expansion may reach. Measured on reactome:
+// 16 seeds misread a broad seed set by half, and 256 cost four times 64 to read it lower,
+// since a wider base spends the budget earlier. Where seeds die off it takes six levels for
+// the survivors to show, and a seventh moves the reading by under a tenth. The budget only
+// binds on an untyped walk, where quadrupling it costs 2.5x and moves the reading by 1%.
 constexpr size_t seedSampleTarget = 64;
-constexpr size_t seedSampleLevels = 3;
+constexpr size_t seedSampleLevels = 6;
 constexpr size_t seedSampleBudget = 4096;
 
 // Fewer than the fan-out sample takes: every node of this one costs an evaluation of the
