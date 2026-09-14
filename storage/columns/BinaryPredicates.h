@@ -211,6 +211,14 @@ struct BinaryPredicateExecutor {
         res->set(val);
     }
 
+    // const x const for op whose result is unconditionally null e.g. IN
+    static void apply(ColumnConst<std::optional<CustomBool>>* res,
+                      const ColumnConst<T>* lhs,
+                      const ColumnConst<U>* rhs) {
+        auto op = Op {};
+        res->set(op(lhs->getRaw(), rhs->getRaw()));
+    }
+
     static void apply(ColumnMask* res,
                       const ColumnConst<T>* lhs,
                       const ColumnConst<U>* rhs) {

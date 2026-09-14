@@ -426,7 +426,7 @@ public:
 
     // The fill that lays a constant column's single value out over a step's rows,
     // for a nullable value chunk of this value type (nl.broadcast_constant).
-    static NLBroadcastConstantFunction selectConstantBroadcast(ValueType valueType);
+    static NLBroadcastConstantFunction selectConstantBroadcast(ValueType valueType, const Column* value);
 
     // The broadcast of the null literal, whose rows are the absent value rather than
     // copies of a value the constant holds

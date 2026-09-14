@@ -8,6 +8,7 @@
 
 #include "GraphPath.h"
 #include "ID.h"
+#include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "list/ListBufferTypeTag.h"
@@ -148,6 +149,14 @@ bool textOfPath(const Column* chunk, size_t rowIndex, std::string& text) {
     return true;
 }
 
+std::string boolText(const std::optional<CustomBool>& value) {
+    if (!value) {
+        return "null";
+    }
+
+    return *value ? "true" : "false";
+}
+
 // A nullable boolean, which a three-valued predicate such as IN produces
 bool textOfOptionalBool(const Column* chunk, size_t rowIndex, std::string& text) {
     const auto* column = dynamic_cast<const ColumnOptVector<CustomBool>*>(chunk);
@@ -155,13 +164,19 @@ bool textOfOptionalBool(const Column* chunk, size_t rowIndex, std::string& text)
         return false;
     }
 
-    const std::optional<CustomBool>& value = column->getRaw()[rowIndex];
-    if (!value) {
-        text = "null";
-        return true;
+    text = boolText(column->getRaw()[rowIndex]);
+    return true;
+}
+
+// The same predicate over constant operands alone, which stays a constant: it holds the
+// one value every row of the projection reads.
+bool textOfConstOptionalBool(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnConst<std::optional<CustomBool>>*>(chunk);
+    if (!column) {
+        return false;
     }
 
-    text = *value ? "true" : "false";
+    text = boolText(column->at(rowIndex));
     return true;
 }
 
@@ -239,6 +254,8 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfOptional<std::string>(chunk, rowIndex, text)) {
         return text;
     } else if (textOfOptionalBool(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfConstOptionalBool(chunk, rowIndex, text)) {
         return text;
     } else if (textOfListElement(chunk, rowIndex, text)) {
         return text;

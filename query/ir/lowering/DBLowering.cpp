@@ -3218,7 +3218,8 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
 
     const bool comparesTwoEntities = isEntityChunk(lhsChunk.getType()) && isEntityChunk(rhsChunk.getType());
 
-    const bool readsScalarOperands = kind != BinaryResultKind::Index;
+    const bool readsScalarOperands = kind != BinaryResultKind::Index
+                                  && kind != BinaryResultKind::Membership;
 
     const bool nullAgainstRhs = readsScalarOperands
                              && isUntypedNullChunk(rhsChunk.getType())

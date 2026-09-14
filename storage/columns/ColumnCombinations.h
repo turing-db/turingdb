@@ -176,7 +176,7 @@ template <typename Op, typename T, typename U>
     requires NullableResultPredicate<Op, T, U>
 class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnConst<U>> {
 public:
-    using ResultColumnType = ColumnOptMask;
+    using ResultColumnType = ColumnConst<std::optional<CustomBool>>;
 };
 
 /*
