@@ -310,6 +310,11 @@ private:
                            NLLimitState* limit,
                            NLStmtContainer* body);
 
+    // What this change knows an edge type name by: the graph's schema, plus the names a
+    // CREATE earlier in the program introduced, which live in the change's own schema and
+    // nowhere else until the commit
+    std::optional<EdgeTypeID> findEdgeType(llvm::StringRef name) const;
+
     // Translate an nl.limit: allocate its runtime counter, map the handle to it,
     // and record the reset statement (run each time the enclosing block runs)
     void translateLimit(mlir::nl::Limit limit, NLStmtContainer* body);

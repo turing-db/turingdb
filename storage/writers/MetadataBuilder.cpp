@@ -30,6 +30,12 @@ EdgeTypeID MetadataBuilder::getOrCreateEdgeType(std::string_view edgeTypeName) {
     return _metadata->_edgeTypeMap.getOrCreate(edgeTypeName);
 }
 
+std::optional<EdgeTypeID> MetadataBuilder::findEdgeType(std::string_view edgeTypeName) const {
+    std::shared_lock lock(_spinLock);
+
+    return _metadata->_edgeTypeMap.get(edgeTypeName);
+}
+
 PropertyType MetadataBuilder::getOrCreatePropertyType(std::string_view propTypeName, ValueType valueType) {
     std::unique_lock lock(_spinLock);
 

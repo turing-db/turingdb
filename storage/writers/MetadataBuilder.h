@@ -23,6 +23,7 @@ public:
 
     // EdgeTypes
     EdgeTypeID getOrCreateEdgeType(std::string_view edgeTypeName);
+    [[nodiscard]] std::optional<EdgeTypeID> findEdgeType(std::string_view edgeTypeName) const;
 
     // PropertyTypes
     PropertyType getOrCreatePropertyType(std::string_view propTypeName, ValueType valueType);

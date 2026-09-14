@@ -17,6 +17,7 @@ namespace db {
 class CommitWriteBuffer;
 class GraphView;
 class NLOutputSink;
+class NLPendingEdgeIndex;
 class NLSystemContext;
 class NLWrittenValues;
 
@@ -55,6 +56,10 @@ public:
     // What the change has written so far, as a read later in the same program sees it
     NLWrittenValues& getWrittenValues() const { return *_writtenValues; }
 
+    // The edges of that, under the node each hangs off, so every hop of a program indexes
+    // the write buffer once between them
+    NLPendingEdgeIndex& getPendingEdges() const { return *_pendingEdges; }
+
 private:
     const GraphView* _view {nullptr};
     NLOutputSink* _sink {nullptr};
@@ -62,6 +67,7 @@ private:
     CommitWriteBuffer* _writeBuffer {nullptr};
     const NLSystemContext* _system {nullptr};
     std::unique_ptr<NLWrittenValues> _writtenValues;
+    std::unique_ptr<NLPendingEdgeIndex> _pendingEdges;
 };
 
 }

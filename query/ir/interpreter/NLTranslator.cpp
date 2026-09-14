@@ -1278,6 +1278,15 @@ void NLTranslator::translateScanEdgesByTypeLoop(const IteratorConfig& config,
     translateBlock(loopBody, loopData->getStmts());
 }
 
+std::optional<EdgeTypeID> NLTranslator::findEdgeType(llvm::StringRef name) const {
+    const std::optional<EdgeTypeID> edgeTypeID = _view->metadata().edgeTypes().get(name);
+    if (edgeTypeID || !_metadataBuilder) {
+        return edgeTypeID;
+    }
+
+    return _metadataBuilder->findEdgeType(name);
+}
+
 void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
                                      mlir::Block& loopBody,
                                      NLLimitState* limit,
@@ -1310,7 +1319,7 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
         // translateScanByLabelLoop resolves its labels. A name absent from the
         // schema matches no edge, so the loop is marked unmatchable and emits
         // nothing rather than filtering against a bogus type.
-        const std::optional<EdgeTypeID> edgeTypeID = _view->metadata().edgeTypes().get(config._edgeType);
+        const std::optional<EdgeTypeID> edgeTypeID = findEdgeType(config._edgeType);
         const bool matchable = edgeTypeID.has_value();
         const EdgeTypeID resolvedType = matchable ? *edgeTypeID : EdgeTypeID();
 
