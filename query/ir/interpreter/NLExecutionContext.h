@@ -60,12 +60,20 @@ public:
     // the write buffer once between them
     NLPendingEdgeIndex& getPendingEdges() const { return *_pendingEdges; }
 
+    // Where this query's own writes start in the change's buffer. A read sees what its own
+    // query wrote and not what an earlier statement of the change staged: that one becomes
+    // readable when it commits, as a write of any other change does.
+    size_t getFirstQueryNode() const { return _firstQueryNode; }
+    size_t getFirstQueryEdge() const { return _firstQueryEdge; }
+
 private:
     const GraphView* _view {nullptr};
     NLOutputSink* _sink {nullptr};
     size_t _chunkSize {0};
     CommitWriteBuffer* _writeBuffer {nullptr};
     const NLSystemContext* _system {nullptr};
+    size_t _firstQueryNode {0};
+    size_t _firstQueryEdge {0};
     std::unique_ptr<NLWrittenValues> _writtenValues;
     std::unique_ptr<NLPendingEdgeIndex> _pendingEdges;
 };

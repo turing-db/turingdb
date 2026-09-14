@@ -67,6 +67,7 @@
 #include "NLProgram.h"
 #include "NLMergeExecutor.h"
 #include "NLPendingEdges.h"
+#include "NLPendingNodes.h"
 #include "NLWriteProperties.h"
 #include "NLWrittenValues.h"
 #include "NLMergeWorkingSet.h"
@@ -3054,12 +3055,52 @@ NLGroupAggregateFoldFunction selectGroupMinMaxFold(ValueType inputType) {
     return nullptr;
 }
 
+// Execute a scan loop: the rows the graph holds, then the ones this change has written,
+// which the pending step reads once the committed one is drained. @param rows is the chunk
+// a step fills that measures it - the node chunk of a node scan, the source chunk of an
+// edge scan.
+template <typename ChunkWriterType, typename PendingScanType>
+void runScanLoopSteps(NLExecutionContext* context,
+                      ChunkWriterType* chunkWriter,
+                      PendingScanType* pendingScan,
+                      const ColumnNodeIDs* rows,
+                      const NLStmtContainer* loopBody,
+                      const NLLimitState* limit) {
+    const auto hasStep = [&]() {
+        return chunkWriter->isValid() || pendingScan->isValid();
+    };
+
+    const auto runIteration = [&]() {
+        if (chunkWriter->isValid()) {
+            chunkWriter->fill(context->getChunkSize());
+        } else {
+            pendingScan->fill(context->getChunkSize());
+        }
+
+        if (rows->empty()) {
+            return;
+        }
+
+        runBody(context, loopBody);
+    };
+
+    if (limit) {
+        while (hasStep() && limit->getRemaining() > 0) {
+            runIteration();
+        }
+    } else {
+        while (hasStep()) {
+            runIteration();
+        }
+    }
+}
+
 // Execute a get_out_edges/get_in_edges loop
 template <typename ChunkWriterType>
 void runEdgeLoopSteps(NLExecutionContext* context,
                       NLEdgeLoopData* loopData,
                       ChunkWriterType* chunkWriter,
-                      NLPendingEdges* pendingEdges,
+                      NLPendingEdgeHop* pendingEdges,
                       ColumnNodeIDs* gatheredNodeIDs) {
     const NLStmtContainer* loopBody = loopData->getStmts();
 
@@ -3212,6 +3253,18 @@ std::optional<typename T::Primitive> readWrittenValue(NLWrittenValues& written,
     };
 
     return std::visit(convert, retainIfBorrowed<T>(written, value));
+}
+
+// The searched value as the write buffer holds one, so a scan can compare it against what
+// a pending node was written with. A string the scan borrows is copied: the buffer's own
+// values are owning.
+template <typename T>
+CommitWriteBuffer::SupportedTypeVariant pendingValueOf(typename T::Primitive value) {
+    if constexpr (std::is_same_v<T, types::String>) {
+        return std::string(value);
+    } else {
+        return value;
+    }
 }
 
 template <typename T>
@@ -3930,7 +3983,6 @@ void NLExecutor::runScanNodesLoop(NLExecutionContext* context, NLFunctionData* d
     NLScanLoopData* loopData = static_cast<NLScanLoopData*>(data);
     const NLStmtContainer* loopBody = loopData->getStmts();
     ColumnNodeIDs* nodeIDs = loopData->getNodeIDs();
-    const size_t chunkSize = context->getChunkSize();
 
     // A null limit leaves the loop unbounded; otherwise it stops once the budget
     // is spent. nl.limit_update inside runBody mutates remaining, so the next
@@ -3943,25 +3995,9 @@ void NLExecutor::runScanNodesLoop(NLExecutionContext* context, NLFunctionData* d
     ScanNodesChunkWriter chunkWriter(*context->getView());
     chunkWriter.setNodeIDs(nodeIDs);
 
-    const auto runIteration = [&]() {
-        chunkWriter.fill(chunkSize);
+    NLPendingNodeScan pendingNodes(context, nodeIDs);
 
-        if (nodeIDs->empty()) {
-            return;
-        }
-
-        runBody(context, loopBody);
-    };
-
-    if (limit) {
-        while (chunkWriter.isValid() && limit->getRemaining() > 0) {
-            runIteration();
-        }
-    } else {
-        while (chunkWriter.isValid()) {
-            runIteration();
-        }
-    }
+    runScanLoopSteps(context, &chunkWriter, &pendingNodes, nodeIDs, loopBody, limit);
 }
 
 void NLExecutor::runScanNodesByLabelLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -3975,7 +4011,6 @@ void NLExecutor::runScanNodesByLabelLoop(NLExecutionContext* context, NLFunction
 
     const NLStmtContainer* loopBody = loopData->getStmts();
     ColumnNodeIDs* nodeIDs = loopData->getNodeIDs();
-    const size_t chunkSize = context->getChunkSize();
 
     // A null limit leaves the loop unbounded, exactly as in runScanNodesLoop.
     const NLLimitState* limit = loopData->getLimit();
@@ -3988,32 +4023,16 @@ void NLExecutor::runScanNodesByLabelLoop(NLExecutionContext* context, NLFunction
     ScanNodesByLabelChunkWriter chunkWriter(view, labelset);
     chunkWriter.setNodeIDs(nodeIDs);
 
-    const auto runIteration = [&]() {
-        chunkWriter.fill(chunkSize);
+    NLPendingNodeScan pendingNodes(context, nodeIDs);
+    pendingNodes.setLabelSet(loopData->getLabelSet());
 
-        if (nodeIDs->empty()) {
-            return;
-        }
-
-        runBody(context, loopBody);
-    };
-
-    if (limit) {
-        while (chunkWriter.isValid() && limit->getRemaining() > 0) {
-            runIteration();
-        }
-    } else {
-        while (chunkWriter.isValid()) {
-            runIteration();
-        }
-    }
+    runScanLoopSteps(context, &chunkWriter, &pendingNodes, nodeIDs, loopBody, limit);
 }
 
 template <SupportedType T>
 void NLExecutor::runScanNodesByPropertyValueLoopAs(NLExecutionContext* context, NLScanByPropertyValueLoopData* loopData) {
     const NLStmtContainer* loopBody = loopData->getStmts();
     ColumnNodeIDs* nodeIDs = loopData->getNodeIDs();
-    const size_t chunkSize = context->getChunkSize();
     const NLLimitState* limit = loopData->getLimit();
     const GraphView& view = *context->getView();
 
@@ -4026,25 +4045,14 @@ void NLExecutor::runScanNodesByPropertyValueLoopAs(NLExecutionContext* context, 
     ScanNodesByPropertyValueChunkWriter<T> chunkWriter(view, loopData->getPropertyTypeID(), value, labelset);
     chunkWriter.setNodeIDs(nodeIDs);
 
-    const auto runIteration = [&]() {
-        chunkWriter.fill(chunkSize);
+    NLPendingNodeScan pendingNodes(context, nodeIDs);
+    pendingNodes.setProperty(loopData->getPropertyTypeID(), pendingValueOf<T>(value));
 
-        if (nodeIDs->empty()) {
-            return;
-        }
-
-        runBody(context, loopBody);
-    };
-
-    if (limit) {
-        while (chunkWriter.isValid() && limit->getRemaining() > 0) {
-            runIteration();
-        }
-    } else {
-        while (chunkWriter.isValid()) {
-            runIteration();
-        }
+    if (loopData->isByLabel()) {
+        pendingNodes.setLabelSet(loopData->getLabelSet());
     }
+
+    runScanLoopSteps(context, &chunkWriter, &pendingNodes, nodeIDs, loopBody, limit);
 }
 
 void NLExecutor::runScanNodesByPropertyValueLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -4439,7 +4447,6 @@ void NLExecutor::runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* d
     NLScanEdgesLoopData* loopData = static_cast<NLScanEdgesLoopData*>(data);
     const NLStmtContainer* loopBody = loopData->getStmts();
     ColumnNodeIDs* sources = loopData->getSources();
-    const size_t chunkSize = context->getChunkSize();
 
     // A null limit leaves the loop unbounded; otherwise it stops once the budget
     // is spent, exactly as in runScanNodesLoop.
@@ -4451,27 +4458,10 @@ void NLExecutor::runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* d
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setTgtIDs(loopData->getTargets());
 
-    const auto runIteration = [&]() {
-        chunkWriter.fill(chunkSize);
+    NLPendingEdgeScan pendingEdges(context, loopData);
 
-        // The four columns are row-aligned, so the source column measures the
-        // step; an empty fill means the scan is drained and there is nothing to emit.
-        if (sources->empty()) {
-            return;
-        }
-
-        runBody(context, loopBody);
-    };
-
-    if (limit) {
-        while (chunkWriter.isValid() && limit->getRemaining() > 0) {
-            runIteration();
-        }
-    } else {
-        while (chunkWriter.isValid()) {
-            runIteration();
-        }
-    }
+    // The four columns are row-aligned, so the source column measures the step.
+    runScanLoopSteps(context, &chunkWriter, &pendingEdges, sources, loopBody, limit);
 }
 
 void NLExecutor::runScanEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -4484,7 +4474,6 @@ void NLExecutor::runScanEdgesByTypeLoop(NLExecutionContext* context, NLFunctionD
 
     const NLStmtContainer* loopBody = loopData->getStmts();
     ColumnNodeIDs* sources = loopData->getSources();
-    const size_t chunkSize = context->getChunkSize();
 
     const NLLimitState* limit = loopData->getLimit();
 
@@ -4494,27 +4483,10 @@ void NLExecutor::runScanEdgesByTypeLoop(NLExecutionContext* context, NLFunctionD
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setTgtIDs(loopData->getTargets());
 
-    // A fill stops only once it has a full chunk of matches or the scan is drained,
-    // so an empty step means drained - the same measure runScanEdgesLoop uses.
-    const auto runIteration = [&]() {
-        chunkWriter.fill(chunkSize);
+    NLPendingEdgeScan pendingEdges(context, loopData);
+    pendingEdges.setEdgeType(loopData->getEdgeType());
 
-        if (sources->empty()) {
-            return;
-        }
-
-        runBody(context, loopBody);
-    };
-
-    if (limit) {
-        while (chunkWriter.isValid() && limit->getRemaining() > 0) {
-            runIteration();
-        }
-    } else {
-        while (chunkWriter.isValid()) {
-            runIteration();
-        }
-    }
+    runScanLoopSteps(context, &chunkWriter, &pendingEdges, sources, loopBody, limit);
 }
 
 void NLExecutor::runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -4531,7 +4503,7 @@ void NLExecutor::runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData*
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setTgtIDs(loopData->getTargets());
 
-    NLPendingEdges pendingEdges(context, loopData, NLPendingEdges::Direction::Out, loopData->getTargets());
+    NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::Out, loopData->getTargets());
 
     runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getSources());
 }
@@ -4550,7 +4522,7 @@ void NLExecutor::runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* 
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setSrcIDs(loopData->getSources());
 
-    NLPendingEdges pendingEdges(context, loopData, NLPendingEdges::Direction::In, loopData->getSources());
+    NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::In, loopData->getSources());
 
     runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getTargets());
 }
@@ -4569,7 +4541,7 @@ void NLExecutor::runGetEdgesLoop(NLExecutionContext* context, NLFunctionData* da
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setOtherIDs(loopData->getTargets());
 
-    NLPendingEdges pendingEdges(context, loopData, NLPendingEdges::Direction::Either, loopData->getTargets());
+    NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::Either, loopData->getTargets());
 
     runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getSources());
 }
@@ -4590,7 +4562,7 @@ void NLExecutor::runGetOutEdgesByTypeLoop(NLExecutionContext* context, NLFunctio
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setTgtIDs(loopData->getTargets());
 
-    NLPendingEdges pendingEdges(context, loopData, NLPendingEdges::Direction::Out, loopData->getTargets());
+    NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::Out, loopData->getTargets());
     pendingEdges.setEdgeType(loopData->getEdgeType());
 
     runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getSources());
@@ -4610,7 +4582,7 @@ void NLExecutor::runGetInEdgesByTypeLoop(NLExecutionContext* context, NLFunction
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setSrcIDs(loopData->getSources());
 
-    NLPendingEdges pendingEdges(context, loopData, NLPendingEdges::Direction::In, loopData->getSources());
+    NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::In, loopData->getSources());
     pendingEdges.setEdgeType(loopData->getEdgeType());
 
     runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getTargets());
@@ -7601,6 +7573,27 @@ void NLExecutor::runGetNodeLabelSet(NLExecutionContext* context, NLFunctionData*
     GetNodeLabelSetChunkWriter writer(view, input);
     writer.setLabelSetIDs(output);
     writer.fill(input->size());
+
+    // The graph holds no label set for a node this change wrote: the write buffer holds the
+    // handle the CREATE spelled, under the ID the commit will know the set by.
+    CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
+    if (!writeBuffer || writeBuffer->numPendingNodes() == 0) {
+        return;
+    }
+
+    const size_t committedCount = committedNodeCount(&view);
+    const PendingRows pendingRows(nullptr, false, committedCount, writeBuffer->numPendingNodes());
+
+    auto& raw = output->getRaw();
+    const auto& inputRaw = input->getRaw();
+    for (size_t row = 0; row < raw.size(); row++) {
+        const uint64_t nodeID = inputRaw[row].getValue();
+        if (!pendingRows.has(row, nodeID)) {
+            continue;
+        }
+
+        raw[row] = writeBuffer->getPendingNode(nodeID - committedCount).labelsetHandle.getID();
+    }
 }
 
 void NLExecutor::runGetEdgeTypes(NLExecutionContext* context, NLFunctionData* data) {

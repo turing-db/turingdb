@@ -188,3 +188,62 @@ TEST_F(MatchCreatedEdgeTest, refusesToDeleteANodeItWalkedToWithoutDetaching) {
     runWriteExpectingError("MATCH (p:Person {name: 'Remy'}) CREATE (p)-[:KNOWS_WELL]->(b:Person {name: 'Bo'}) WITH p MATCH (p)-[:KNOWS_WELL]->(m) DELETE m",
                            "Cannot delete a node with relationships");
 }
+
+// The hop reads the change's tip the way a scan does: an edge an earlier statement of the
+// change staged is walked once that write commits.
+TEST_F(MatchCreatedEdgeTest, walksNoEdgeAnEarlierStatementStaged) {
+    StringRowSink sink;
+    runWritesInOneChange("MATCH (p:Person {name: 'Remy'}) CREATE (p)-[:MENTORS]->(:Person {name: 'Bo'})",
+                         "MATCH (p:Person {name: 'Remy'})-[:MENTORS]->(m) RETURN m.name",
+                         sink);
+
+    EXPECT_TRUE(sink.getRows().empty());
+}
+
+// A label on the pattern's far node tests the label set the CREATE spelled: the graph holds
+// none for a node it has not committed.
+TEST_F(MatchCreatedEdgeTest, keepsACreatedNodeItWalkedToThatCarriesTheLabel) {
+    StringRowSink sink;
+    runWrite("CREATE (a:Person {name: 'Ana'})-[:KNOWS_WELL]->(b:Person {name: 'Bo'}) WITH a MATCH (a)-->(m:Person) RETURN m.name",
+             sink);
+
+    const std::vector<StringRowSink::Row> expected {{"Bo"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+// The label is one the change introduced, so the label set the test matches is in the
+// change's schema and nowhere else.
+TEST_F(MatchCreatedEdgeTest, keepsACreatedNodeUnderALabelTheChangeIntroduced) {
+    StringRowSink sink;
+    runWrite("CREATE (a:Person {name: 'Ana'})-[:KNOWS_WELL]->(b:Brand {name: 'Ora'}) WITH a MATCH (a)-->(m:Brand) RETURN m.name",
+             sink);
+
+    const std::vector<StringRowSink::Row> expected {{"Ora"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+TEST_F(MatchCreatedEdgeTest, dropsACreatedNodeItWalkedToThatLacksTheLabel) {
+    StringRowSink sink;
+    runWrite("CREATE (a:Person {name: 'Ana'})-[:KNOWS_WELL]->(b:Person {name: 'Bo'}) WITH a MATCH (a)-->(m:Interest) RETURN m.name",
+             sink);
+
+    EXPECT_TRUE(sink.getRows().empty());
+}
+
+// The same test written as a predicate rather than as part of the pattern, on the node and
+// on the edge the hop bound.
+TEST_F(MatchCreatedEdgeTest, testsTheLabelAndTheTypeOfWhatItWalkedInAWhere) {
+    StringRowSink node;
+    runWrite("CREATE (a:Person {name: 'Ana'})-[:MENTORS]->(b:Brand {name: 'Ora'}) WITH a MATCH (a)-[e]->(m) WHERE m:Brand RETURN m.name",
+             node);
+
+    const std::vector<StringRowSink::Row> expected {{"Ora"}};
+    EXPECT_EQ(node.getRows(), expected);
+
+    StringRowSink edge;
+    runWrite("CREATE (a:Person {name: 'Ivo'})-[:MENTORS]->(b:Brand {name: 'Uma'}) WITH a MATCH (a)-[e]->(m) WHERE e:MENTORS RETURN m.name",
+             edge);
+
+    const std::vector<StringRowSink::Row> typed {{"Uma"}};
+    EXPECT_EQ(edge.getRows(), typed);
+}

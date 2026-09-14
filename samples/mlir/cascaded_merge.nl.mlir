@@ -12,9 +12,6 @@
 // nl.filter of every live chunk. The cascade is the chain of two - the first pairs e2's
 // copy with KNOWS_WELL's, the second pairs e1's against the first's survivor - and needs
 // no state across chunks, so it lowers entirely inside the innermost loop.
-//
-// Needs -graph: check_edge_type_constraint resolves KNOWS_WELL to an edge type ID, so the
-// constraint prints as [0] here where the db dialect still names it.
 module {
   func.func @main() {
     %0 = nl.count
@@ -32,7 +29,7 @@ module {
           %5 = nl.get_out_edges(%arg5, {%arg9, %arg10, %arg6, %arg8, %arg7, %arg11}) : !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.edge_type_id>
           nl.for %arg12, %arg13, %arg14, %arg15, %arg16, %arg17, %arg18, %arg19, %arg20, %arg21 in %5 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.edge_type_id>> {
             // The KNOWS_WELL constraint, on hop 3's edge type.
-            %6 = nl.check_edge_type_constraint(%arg14, [0]) : !nl.chunk<!storage.bool>
+            %6 = nl.check_edge_type_constraint(%arg14, ["KNOWS_WELL"]) : !nl.chunk<!storage.bool>
             %7:10 = nl.filter %6, (%arg13, %arg15, %arg18, %arg19, %arg16, %arg17, %arg12, %arg14, %arg20, %arg21) : (!nl.chunk<!storage.bool>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.edge_type_id>) -> (!nl.chunk<!storage.edge_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.edge_type_id>)
 
             // First merge: e2's copy of `b` (%7#5) against KNOWS_WELL's (%7#1). Its

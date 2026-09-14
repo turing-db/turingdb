@@ -9,7 +9,7 @@ func.func @main() {
     nl.for %arg1 in %3 : !nl.iter<!nl.chunk<!storage.node_id>> {
       %4 = nl.get_out_edges(%arg1, {})
       nl.for %arg2, %arg3, %arg4, %arg5 in %4 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.edge_type_id>, !nl.chunk<!storage.node_id>> {
-        %5 = nl.check_edge_type_constraint(%arg4, [1]) : !nl.chunk<!storage.bool>
+        %5 = nl.check_edge_type_constraint(%arg4, ["INTERESTED_IN"]) : !nl.chunk<!storage.bool>
         %6:4 = nl.filter %5, (%arg3, %arg5, %arg2, %arg4) : (!nl.chunk<!storage.bool>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_type_id>) -> (!nl.chunk<!storage.edge_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_type_id>)
         %7 = nl.cross_product{%arg0} {%6#2, %6#0, %6#1} : {!nl.chunk<!storage.node_id>} {!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.node_id>}
         nl.for %arg6, %arg7, %arg8, %arg9 in %7 : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.node_id>> {

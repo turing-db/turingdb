@@ -92,6 +92,22 @@ void CallV3Test::runWriteExpectingError(std::string_view query, std::string_view
     EXPECT_NE(error.find(reason), std::string::npos) << query << ": " << error;
 }
 
+void CallV3Test::runWritesInOneChange(std::string_view first, std::string_view second, NLOutputSink& sink) {
+    ChangeID changeID;
+    newChange(changeID);
+
+    NullSink staged;
+    QueryStatus firstStatus;
+    _interpreter->execute(firstStatus, first, _graphName, CommitHash::head(), changeID, &_env->getMem(), &staged);
+    ASSERT_TRUE(firstStatus.isOk()) << first << ": " << firstStatus.getError();
+
+    QueryStatus secondStatus;
+    _interpreter->execute(secondStatus, second, _graphName, CommitHash::head(), changeID, &_env->getMem(), &sink);
+    ASSERT_TRUE(secondStatus.isOk()) << second << ": " << secondStatus.getError();
+
+    submitChange(changeID);
+}
+
 // A query the MLIR engine does not run yet, applied through the legacy engine and committed
 // so the head carries its effect.
 void CallV3Test::runLegacyWrite(std::string_view query) {

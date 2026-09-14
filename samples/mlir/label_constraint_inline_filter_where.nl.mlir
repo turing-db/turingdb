@@ -10,7 +10,7 @@ func.func @main() {
     %6 = nl.eq %5, %2 : (!nl.chunk<!storage.nullable<!storage.string>>, !nl.chunk<!storage.string>) -> !nl.chunk<!storage.nullable<i1>>
     %7 = nl.filter %6, (%arg0) : (!nl.chunk<!storage.nullable<i1>>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.node_id>
     %8 = nl.get_node_label_set(%7) : !nl.chunk<!storage.labelset_id>
-    %9 = nl.check_label_constraint(%8, [0, 1, 6, 7, 9]) : !nl.chunk<!storage.bool>
+    %9 = nl.check_label_constraint(%8, ["Person"]) : !nl.chunk<!storage.bool>
     %10 = nl.filter %9, (%7) : (!nl.chunk<!storage.bool>, !nl.chunk<!storage.node_id>) -> !nl.chunk<!storage.node_id>
     %11 = nl.get_node_properties(%10, %1) : !nl.chunk<!storage.nullable<i64>>
     %12 = nl.eq %11, %0 : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<i1>>

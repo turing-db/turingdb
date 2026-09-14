@@ -31,6 +31,7 @@
 #include "metadata/GraphMetadata.h"
 #include "metadata/LabelSet.h"
 #include "metadata/LabelSetHandle.h"
+#include "metadata/LabelSetMap.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
@@ -962,7 +963,7 @@ void NLTranslator::translateScanByPropertyValueLoop(const IteratorConfig& config
     const bool labelsResolved = !byLabel || resolveLabelSet(config._labels, labelset);
 
     const llvm::StringRef property = config._property;
-    const std::optional<PropertyType> propertyType = _view->metadata().propTypes().get(std::string_view(property.data(), property.size()));
+    const std::optional<PropertyType> propertyType = findPropertyType(property);
 
     PropertyTypeID propertyTypeID;
     ValueType valueType = ValueType::Invalid;
@@ -990,10 +991,8 @@ void NLTranslator::translateScanByPropertyValueLoop(const IteratorConfig& config
 }
 
 bool NLTranslator::resolveLabelSet(llvm::ArrayRef<llvm::StringRef> labels, LabelSet& labelset) const {
-    const LabelMap& labelMap = _view->metadata().labels();
-
     for (const llvm::StringRef label : labels) {
-        const std::optional<LabelID> id = labelMap.get(label);
+        const std::optional<LabelID> id = findLabel(label);
         if (!id) {
             return false;
         }
@@ -1002,6 +1001,18 @@ bool NLTranslator::resolveLabelSet(llvm::ArrayRef<llvm::StringRef> labels, Label
     }
 
     return true;
+}
+
+// What this change knows a label by: the graph's schema, plus the names a CREATE earlier in
+// the program introduced, which live in the change's own schema and nowhere else until the
+// commit. The edge type sibling of this is findEdgeType.
+std::optional<LabelID> NLTranslator::findLabel(llvm::StringRef name) const {
+    const std::optional<LabelID> labelID = _view->metadata().labels().get(name);
+    if (labelID || !_metadataBuilder) {
+        return labelID;
+    }
+
+    return _metadataBuilder->findLabel(name);
 }
 
 void NLTranslator::translateUnwindConstLoop(const IteratorConfig& config,
@@ -1295,7 +1306,7 @@ void NLTranslator::translateScanEdgesByTypeLoop(const IteratorConfig& config,
     // does for a by-type hop. A name absent from the schema matches no edge, so the
     // loop is marked unmatchable and emits nothing rather than scanning for a bogus
     // type.
-    const std::optional<EdgeTypeID> edgeTypeID = _view->metadata().edgeTypes().get(config._edgeType);
+    const std::optional<EdgeTypeID> edgeTypeID = findEdgeType(config._edgeType);
     const bool matchable = edgeTypeID.has_value();
     const EdgeTypeID resolvedType = matchable ? *edgeTypeID : EdgeTypeID();
 
@@ -1311,6 +1322,17 @@ void NLTranslator::translateScanEdgesByTypeLoop(const IteratorConfig& config,
     body->addStmt(NLFunctionDescriptor {&NLExecutor::runScanEdgesByTypeLoop, loopData});
 
     translateBlock(loopBody, loopData->getStmts());
+}
+
+std::optional<PropertyType> NLTranslator::findPropertyType(llvm::StringRef name) const {
+    const std::string_view propertyName(name.data(), name.size());
+
+    const std::optional<PropertyType> propertyType = _view->metadata().propTypes().get(propertyName);
+    if (propertyType || !_metadataBuilder) {
+        return propertyType;
+    }
+
+    return _metadataBuilder->findPropertyType(propertyName);
 }
 
 std::optional<EdgeTypeID> NLTranslator::findEdgeType(llvm::StringRef name) const {
@@ -1436,12 +1458,7 @@ void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
     // PropertyTypeID and value type and never sees the name again. A CREATE earlier in the
     // program may have introduced the name, which puts it in the change's own schema and
     // nowhere else until the commit
-    const std::string_view propertyName(name.data(), name.size());
-    std::optional<PropertyType> propertyType = _view->metadata().propTypes().get(propertyName);
-    if (!propertyType && _metadataBuilder) {
-        propertyType = _metadataBuilder->findPropertyType(propertyName);
-    }
-
+    const std::optional<PropertyType> propertyType = findPropertyType(name);
     if (!propertyType) {
         throw IRException("Unknown property '" + name.str() + "'");
     }
@@ -1498,11 +1515,33 @@ void NLTranslator::translateCheckLabelConstraint(nl::CheckLabelConstraint op, NL
     _valueSlots[op.getResult()] = output;
 
     NLCheckLabelConstraintData* data = _program->allocFunctionData<NLCheckLabelConstraintData>(input, output);
-    for (const int64_t rawID : op.getMatchingIds()) {
-        data->addMatchingID(LabelSetID(static_cast<uint32_t>(rawID)));
+
+    llvm::SmallVector<llvm::StringRef> labels;
+    for (const mlir::Attribute labelAttr : op.getLabels()) {
+        labels.push_back(mlir::cast<mlir::StringAttr>(labelAttr).getValue());
+    }
+
+    // The labels are a conjunction, so one no node has ever carried makes the whole test
+    // false: matching no label set is that answer, where dropping the missing label would
+    // test a weaker constraint than the query wrote.
+    LabelSet constraint;
+    if (resolveLabelSet(labels, constraint)) {
+        collectMatchingLabelSets(constraint, data);
     }
 
     body->emplaceStmt(&NLExecutor::runCheckLabelConstraint, data);
+}
+
+void NLTranslator::collectMatchingLabelSets(const LabelSet& constraint, NLCheckLabelConstraintData* data) const {
+    const LabelSetMap& labelsets = _metadataBuilder ? _metadataBuilder->labelsets() : _view->metadata().labelsets();
+    const LabelSetHandle constraintHandle(constraint);
+
+    for (const LabelSetMap::Pair& pair : labelsets) {
+        const LabelSetHandle candidate(*pair._value);
+        if (candidate.hasAtLeastLabels(constraintHandle)) {
+            data->addMatchingID(pair._id);
+        }
+    }
 }
 
 void NLTranslator::translateCheckEdgeTypeConstraint(nl::CheckEdgeTypeConstraint op, NLStmtContainer* body) {
@@ -1515,8 +1554,13 @@ void NLTranslator::translateCheckEdgeTypeConstraint(nl::CheckEdgeTypeConstraint 
     _valueSlots[op.getResult()] = output;
 
     NLCheckEdgeTypeConstraintData* data = _program->allocFunctionData<NLCheckEdgeTypeConstraintData>(input, output);
-    for (const int64_t rawID : op.getMatchingIds()) {
-        data->addMatchingID(EdgeTypeID(static_cast<uint64_t>(rawID)));
+
+    // The types are a disjunction, so one no edge has ever carried drops out of it
+    for (const mlir::Attribute typeAttr : op.getEdgeTypes()) {
+        const std::optional<EdgeTypeID> edgeTypeID = findEdgeType(mlir::cast<mlir::StringAttr>(typeAttr).getValue());
+        if (edgeTypeID) {
+            data->addMatchingID(*edgeTypeID);
+        }
     }
 
     body->emplaceStmt(&NLExecutor::runCheckEdgeTypeConstraint, data);

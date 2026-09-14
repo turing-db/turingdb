@@ -36,6 +36,11 @@ protected:
     // The rows a write reports, for a query whose WITH or RETURN projects what it wrote
     void runWrite(std::string_view query, db::NLOutputSink& sink);
     void runWriteExpectingError(std::string_view query, std::string_view reason);
+
+    // Two writing queries in one change, with no commit between them: what @param first
+    // wrote is staged, and @param second reads the change's committed tip - so the rows it
+    // reports are the ones the staged write is invisible to
+    void runWritesInOneChange(std::string_view first, std::string_view second, db::NLOutputSink& sink);
     void runLegacyWrite(std::string_view query);
 
 private:

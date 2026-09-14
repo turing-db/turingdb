@@ -56,10 +56,10 @@ std::span<const size_t> NLPendingEdgeIndex::lookup(const Edges& edges, NodeID no
     return findIt->second;
 }
 
-NLPendingEdges::NLPendingEdges(NLExecutionContext* context,
-                               NLEdgeLoopData* loopData,
-                               Direction direction,
-                               ColumnNodeIDs* others)
+NLPendingEdgeHop::NLPendingEdgeHop(NLExecutionContext* context,
+                                   NLEdgeLoopData* loopData,
+                                   Direction direction,
+                                   ColumnNodeIDs* others)
     : _writeBuffer(context->getWriteBuffer()),
     _inputNodeIDs(loopData->getInput()),
     _indices(loopData->getIndices()),
@@ -74,6 +74,7 @@ NLPendingEdges::NLPendingEdges(NLExecutionContext* context,
         return;
     }
 
+    _firstQueryEdge = context->getFirstQueryEdge();
     _firstPendingNodeID = committedNodeCount(context->getView());
     _firstPendingEdgeID = committedEdgeCount(context->getView());
 
@@ -84,10 +85,10 @@ NLPendingEdges::NLPendingEdges(NLExecutionContext* context,
     beginRun();
 }
 
-NLPendingEdges::~NLPendingEdges() {
+NLPendingEdgeHop::~NLPendingEdgeHop() {
 }
 
-void NLPendingEdges::fill(size_t maxCount) {
+void NLPendingEdgeHop::fill(size_t maxCount) {
     clearChunks();
 
     const size_t rowCount = _inputNodeIDs->size();
@@ -129,11 +130,11 @@ void NLPendingEdges::fill(size_t maxCount) {
     }
 }
 
-bool NLPendingEdges::walksIn() const {
+bool NLPendingEdgeHop::walksIn() const {
     return _direction == Direction::In || (_direction == Direction::Either && _incoming);
 }
 
-void NLPendingEdges::clearChunks() {
+void NLPendingEdgeHop::clearChunks() {
     _indices->clear();
 
     if (_edgeIDs) {
@@ -147,7 +148,7 @@ void NLPendingEdges::clearChunks() {
     }
 }
 
-void NLPendingEdges::beginRun() {
+void NLPendingEdgeHop::beginRun() {
     _position = 0;
 
     if (_row >= _inputNodeIDs->size()) {
@@ -159,7 +160,7 @@ void NLPendingEdges::beginRun() {
     _offsets = walksIn() ? _index->into(node) : _index->outOf(node);
 }
 
-void NLPendingEdges::nextRun() {
+void NLPendingEdgeHop::nextRun() {
     const bool walksEitherWay = _direction == Direction::Either;
 
     if (walksEitherWay && !_incoming) {
@@ -172,8 +173,8 @@ void NLPendingEdges::nextRun() {
     beginRun();
 }
 
-bool NLPendingEdges::walks(size_t offset, NodeID& other) const {
-    if (_writeBuffer->deletedPendingEdges().contains(offset)) {
+bool NLPendingEdgeHop::walks(size_t offset, NodeID& other) const {
+    if (offset < _firstQueryEdge || _writeBuffer->deletedPendingEdges().contains(offset)) {
         return false;
     }
 
@@ -185,4 +186,59 @@ bool NLPendingEdges::walks(size_t offset, NodeID& other) const {
     other = walksIn() ? nodeIDOf(edge.src, _firstPendingNodeID) : nodeIDOf(edge.tgt, _firstPendingNodeID);
 
     return true;
+}
+
+NLPendingEdgeScan::NLPendingEdgeScan(NLExecutionContext* context, NLScanEdgesLoopData* loopData)
+    : _writeBuffer(context->getWriteBuffer()),
+    _srcs(loopData->getSources()),
+    _edgeIDs(loopData->getEdgeIDs()),
+    _types(loopData->getEdgeTypes()),
+    _tgts(loopData->getTargets()),
+    _pendingEdgeCount(_writeBuffer ? _writeBuffer->numPendingEdges() : 0)
+{
+    _edge = context->getFirstQueryEdge();
+
+    if (_pendingEdgeCount == 0) {
+        return;
+    }
+
+    _firstPendingNodeID = committedNodeCount(context->getView());
+    _firstPendingEdgeID = committedEdgeCount(context->getView());
+}
+
+NLPendingEdgeScan::~NLPendingEdgeScan() {
+}
+
+void NLPendingEdgeScan::fill(size_t maxCount) {
+    clearChunks();
+
+    size_t remainingToMax = maxCount;
+
+    while (remainingToMax > 0 && _edge < _pendingEdgeCount) {
+        const size_t offset = _edge;
+        _edge++;
+
+        if (_writeBuffer->deletedPendingEdges().contains(offset)) {
+            continue;
+        }
+
+        const CommitWriteBuffer::PendingEdge& edge = _writeBuffer->getPendingEdge(offset);
+        if (_edgeType && edge.edgeType != *_edgeType) {
+            continue;
+        }
+
+        _srcs->push_back(nodeIDOf(edge.src, _firstPendingNodeID));
+        _edgeIDs->push_back(EdgeID(_firstPendingEdgeID + offset));
+        _types->push_back(edge.edgeType);
+        _tgts->push_back(nodeIDOf(edge.tgt, _firstPendingNodeID));
+
+        remainingToMax--;
+    }
+}
+
+void NLPendingEdgeScan::clearChunks() {
+    _srcs->clear();
+    _edgeIDs->clear();
+    _types->clear();
+    _tgts->clear();
 }
