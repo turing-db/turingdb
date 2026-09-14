@@ -106,13 +106,17 @@ TaggedListTailFunction::ResultType TaggedListTailFunction::operator()(const ArgT
     return list->tail();
 }
 
-LabelsFunction::LabelsFunction(GraphView view)
-    : _view(view)
+LabelsFunction::LabelsFunction(GraphView view, QueryListBuffer* listBuffer)
+    : _view(view),
+    _listBuffer(listBuffer)
 {
 }
 
-LabelsFunction::LabelsFunction(GraphView view, const CommitWriteBuffer* writeBuffer)
+LabelsFunction::LabelsFunction(GraphView view,
+                               QueryListBuffer* listBuffer,
+                               const CommitWriteBuffer* writeBuffer)
     : _view(view),
+    _listBuffer(listBuffer),
     _writeBuffer(writeBuffer)
 {
     if (_writeBuffer) {
@@ -135,41 +139,32 @@ LabelSetHandle LabelsFunction::readLabelSet(NodeID node) const {
     return _view.read().getNodeLabelSet(node);
 }
 
-void LabelsFunction::getLabelString(std::string& out, NodeID node) {
-    out.clear();
+LabelsFunction::ResultType LabelsFunction::operator()(const NodeID node) {
+    bioassert(_listBuffer, "labels() null list buffer.");
+
+    _elements.clear();
 
     const bool exists = isPendingNode(node) || _view.read().graphHasNode(node);
     if (!exists) {
-        out = "null";
-        return;
+        return ListView {};
     }
 
     const LabelSetHandle lblset = readLabelSet(node);
 
-    std::vector<LabelID> labels;
-    lblset.decompose(labels);
+    _labels.clear();
+    lblset.decompose(_labels);
 
-    bioassert(!labels.empty(), "Could not retrieve labels for node {}.", node.getValue());
+    bioassert(!_labels.empty(), "Could not retrieve labels for node {}.",
+              node.getValue());
 
     const LabelMap& lblMap = _view.metadata().labels();
 
-    {
-        const LabelID fstLbl = labels.front();
-        const std::optional<std::string_view> fstName = lblMap.getName(fstLbl);
-        bioassert(fstName, "Could not get name of LabelID {}.", fstLbl.getValue());
-        const std::string_view fstNameUnwrapped = *fstName;
-
-        out = std::string {fstNameUnwrapped};
-    }
-
-    for (const LabelID label : labels | rv::drop(1)) {
-        out += ", ";
-
+    for (const LabelID label : _labels) {
         const std::optional<std::string_view> name = lblMap.getName(label);
-        bioassert(name, "Could not get name of LabelID {}.", label.getValue());
-
-        out += *name;
+        _elements.emplace_back(name.value_or("?"));
     }
+
+    return _listBuffer->insert(_elements);
 }
 
 EdgeTypesFunction::EdgeTypesFunction(GraphView view)
