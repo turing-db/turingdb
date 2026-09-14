@@ -596,6 +596,7 @@ struct OutputtedTypes {
         EntityList,
 
         ListView,
+        std::optional<ListView>,
         ListElementView,
         std::optional<ListElementView>,
         std::optional<ListView>

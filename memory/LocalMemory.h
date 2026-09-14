@@ -100,6 +100,7 @@ public:
         MakeMemoryPool<ColumnStringTable>::type,
 
         MakeMemoryPool<ColumnVector<ListView>>::type,
+        MakeMemoryPool<ColumnOptVector<ListView>>::type,
         MakeMemoryPool<ColumnConst<ListView>>::type,
         MakeMemoryPool<ColumnVector<ListElementView>>::type,
         MakeMemoryPool<ColumnOptVector<ListElementView>>::type,
