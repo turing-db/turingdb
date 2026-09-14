@@ -10,6 +10,7 @@
 #include "metadata/LabelSetHandle.h"
 #include "metadata/SupportedType.h"
 #include "properties/PropertyManager.h"
+#include "views/GraphView.h"
 
 namespace db {
 
@@ -21,7 +22,6 @@ class DataPartMerger;
 class CommitBuilder;
 class Graph;
 class JobSystem;
-class GraphView;
 
 class DataPartBuilder {
 public:
@@ -32,11 +32,12 @@ public:
 
     ~DataPartBuilder();
 
-    [[nodiscard]] static std::unique_ptr<DataPartBuilder> prepare(
-        MetadataBuilder& metadata,
-        size_t nodeCount,
-        size_t edgeCount,
-        size_t partIndex);
+    [[nodiscard]] static std::unique_ptr<DataPartBuilder> prepare(MetadataBuilder& metadata,
+                                                                  const GraphView& view,
+                                                                  size_t partIndex);
+
+    [[nodiscard]] static std::unique_ptr<DataPartBuilder> prepareMerge(MetadataBuilder& metadata,
+                                                                       const GraphView& view);
 
     NodeID addNode(const LabelSetHandle& labelset);
     NodeID addNode(const LabelSet& labelset);
@@ -89,6 +90,7 @@ private:
     NodeID _nextNodeID {0};
     EdgeID _nextEdgeID {0};
     MetadataBuilder* _metadata {nullptr};
+    GraphView _view;
     size_t _outPatchEdgeCount {0};
     size_t _inPatchEdgeCount {0};
     size_t _partIndex {0};
@@ -122,6 +124,15 @@ private:
     size_t patchNodeEdgeDataCount() const {
         return _nodeHasPatchEdges.size();
     }
+
+    [[nodiscard]] static std::unique_ptr<DataPartBuilder> create(MetadataBuilder& metadata,
+                                                                 const GraphView& view,
+                                                                 size_t nodeCount,
+                                                                 size_t edgeCount,
+                                                                 size_t partIndex);
+
+    size_t getNodeEmbeddingDimension(PropertyTypeID ptID) const;
+    size_t getEdgeEmbeddingDimension(PropertyTypeID ptID) const;
 
     DataPartBuilder() = default;
 };
