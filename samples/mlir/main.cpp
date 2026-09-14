@@ -43,6 +43,8 @@
 #include "columns/ColumnConst.h"
 #include "columns/ColumnOptVector.h"
 
+#include "GraphPath.h"
+
 #include "list/ListView.h"
 #include "list/ListElementView.h"
 #include "list/ListBufferTypeTag.h"
@@ -345,6 +347,8 @@ private:
             // The one list a list-valued nl.constant holds for every row
         } else if (printListElementCell(column, row)) {
             // A tagged scalar from a heterogeneous unwind
+        } else if (printPathCell(column, row)) {
+            // The alternating node and edge IDs a db.shortest_path emits
         } else {
             std::cout << "?";
         }
@@ -523,6 +527,29 @@ private:
         }
 
         printList((*lists)[row]);
+
+        return true;
+    }
+
+    // Print one cell of a path column (a ColumnVector<Path> from an nl.shortest_path)
+    // as the alternating node and edge IDs it holds, target first; returns whether the
+    // column matched.
+    static bool printPathCell(const Column* column, size_t row) {
+        const auto* paths = dynamic_cast<const ColumnVector<Path>*>(column);
+        if (!paths) {
+            return false;
+        }
+
+        std::cout << "[";
+        for (size_t index = 0; const EntityID entity : (*paths)[row]) {
+            if (index > 0) {
+                std::cout << ", ";
+            }
+
+            std::cout << entity.getValue();
+            index++;
+        }
+        std::cout << "]";
 
         return true;
     }
