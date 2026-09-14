@@ -17,7 +17,7 @@ void FunctionDecls::initDefault() {
 
     FunctionSignature* labels = createFunction("labels");
     labels->setArguments({EvaluatedType::NodePattern});
-    labels->setReturnTypes({{EvaluatedType::String}});
+    labels->setReturnTypes({{EvaluatedType::List}});
 
     // The ends of an edge, in the order the graph stores it: a hop walked backwards or
     // undirected binds the same edge, so its start is the node the edge leaves whichever

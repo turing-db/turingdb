@@ -5224,19 +5224,20 @@ mlir::Value DBProgramGenerator::constantString(llvm::StringRef value) {
     return _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(), resultType, valueAttr).getResult();
 }
 
-mlir::Value DBProgramGenerator::constantLabelString(llvm::ArrayRef<std::string> labels) {
-    static constexpr std::string_view labelSeparator = ", ";
+mlir::Value DBProgramGenerator::constantLabelList(llvm::ArrayRef<std::string> labels) {
+    const mlir::Type stringType = mlir::storage::StringType::get(_mlirCtxt);
 
-    std::string joined;
-    for (size_t index = 0; index < labels.size(); index++) {
-        if (index > 0) {
-            joined += labelSeparator;
-        }
+    llvm::SmallVector<mlir::Attribute> elements;
+    elements.reserve(labels.size());
 
-        joined += labels[index];
+    for (const std::string& label : labels) {
+        elements.push_back(mlir::StringAttr::get(label, stringType));
     }
 
-    return constantString(joined);
+    mlir::db::ConstantOp constant = _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(),
+                                                                           _opBuilder.getArrayAttr(elements));
+
+    return constant.getResult();
 }
 
 // The graph answers for the type of a property it already carries, so the read is left

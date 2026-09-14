@@ -676,7 +676,7 @@ private:
 
     mlir::Value constantBool(bool value);
     mlir::Value constantString(llvm::StringRef value);
-    mlir::Value constantLabelString(llvm::ArrayRef<std::string> labels);
+    mlir::Value constantLabelList(llvm::ArrayRef<std::string> labels);
 
     // Taken in the order the query declares its variables, so the choice is the query's
     // and not the addresses'
