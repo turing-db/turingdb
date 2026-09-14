@@ -73,10 +73,7 @@ DataPartBuilder& CommitBuilder::newBuilder() {
 
     const GraphView view = GraphView(_commitData.get());
     const size_t partIndex = view.dataparts().size() + _builders.size();
-    auto& builder = _builders.emplace_back(DataPartBuilder::prepare(*_metadataBuilder,
-                                                                    view.read().getTotalNodesAllocated(),
-                                                                    view.read().getTotalEdgesAllocated(),
-                                                                    partIndex));
+    auto& builder = _builders.emplace_back(DataPartBuilder::prepare(*_metadataBuilder, view, partIndex));
 
     return *builder;
 }
