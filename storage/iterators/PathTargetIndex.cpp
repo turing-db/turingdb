@@ -102,7 +102,7 @@ void PathTargetBatch::setQueued(NodeID node, bool queued) {
 }
 
 void PathTargetBatch::beginLevel() {
-    if (_dense) {
+    if (_dense && _levels.size() <= farthestLevel) {
         _levels.push_back(_levels.back());
     }
 }
@@ -178,7 +178,7 @@ void PathTargetIndex::planBatch(const PartDirectory& parts,
     const double nodeCount = static_cast<double>(parts.getAllocatedNodeCount());
 
     // A batch's search reaches at most what its targets fan out to, and at most the graph
-    const double candidatesPerTarget = PathDistanceIndex::estimatedEnumerationChecks(parts, direction, edgeType, 1, maxHops);
+    const double candidatesPerTarget = PathDistanceIndex::estimatedSearchChecks(parts, direction, edgeType, 1, maxHops);
     const double reachedPerBatch = std::min(nodeCount, static_cast<double>(targetsPerBatch) * candidatesPerTarget);
     const double levelCount = static_cast<double>(std::min<uint64_t>(maxHops, PathDistanceIndex::farthest) + 1);
     const double words = levelCount * nodeCount;
@@ -199,7 +199,6 @@ void PathTargetIndex::build(const GraphView& view,
     const PartDirectory parts(view);
     const Tombstones& tombstones = view.tombstones();
     const Tombstones* edgeTombstones = tombstones.hasEdges() ? &tombstones : nullptr;
-    const uint64_t levelCap = std::min<uint64_t>(maxHops, PathDistanceIndex::farthest);
 
     BatchPlan plan;
     planBatch(parts, direction, edgeType, maxHops, plan);
@@ -218,7 +217,7 @@ void PathTargetIndex::build(const GraphView& view,
             batch.setDense(parts.getAllocatedNodeCount());
         }
 
-        buildBatch(parts, targets.subspan(first, count), direction, edgeType, edgeTombstones, levelCap, batch);
+        buildBatch(parts, targets.subspan(first, count), direction, edgeType, edgeTombstones, maxHops, batch);
     }
 
     _built = true;
@@ -283,7 +282,7 @@ void PathTargetIndex::buildBatch(const PartDirectory& parts,
                                  PathExplorationDir direction,
                                  std::optional<EdgeTypeID> edgeType,
                                  const Tombstones* tombstones,
-                                 uint64_t levelCap,
+                                 uint64_t maxHops,
                                  PathTargetBatch& batch) {
     std::vector<NodeID> frontier;
     for (size_t bit = 0; bit < targets.size(); bit++) {
@@ -313,8 +312,12 @@ void PathTargetIndex::buildBatch(const PartDirectory& parts,
     const bool walksOuts = direction != PathExplorationDir::FORWARD;
 
     std::vector<NodeID> next;
-    for (uint64_t level = 1; level <= levelCap && !frontier.empty(); level++) {
-        const uint8_t distance = static_cast<uint8_t>(level);
+
+    // A hop count saturates at the farthest one byte holds, so past that it reads "at least
+    // that many hops". canReachWithin then keeps a node a deeper bound may not be able to
+    // use, which costs a walk that never completes; capping the search instead would drop it.
+    for (uint64_t level = 1; level <= maxHops && !frontier.empty(); level++) {
+        const uint8_t distance = static_cast<uint8_t>(std::min<uint64_t>(level, PathTargetBatch::farthestLevel));
         batch.beginLevel();
         next.clear();
 

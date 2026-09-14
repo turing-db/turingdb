@@ -97,7 +97,10 @@ TEST_F(PathBranchingSampleTest, chargesACascadeMoreThanAChainPerHop) {
     const PartDirectory parts(reader.getView());
 
     const auto checks = [&parts](std::optional<EdgeTypeID> edgeType, uint64_t maxHops) {
-        return PathDistanceIndex::estimatedEnumerationChecks(parts, PathExplorationDir::FORWARD, edgeType, 1, maxHops);
+        PathDistanceIndex::TypeBranching branching;
+        PathDistanceIndex::sampleBranching(parts, PathExplorationDir::FORWARD, edgeType, branching);
+
+        return PathDistanceIndex::estimatedEnumerationChecks(parts, branching, 1, maxHops);
     };
 
     // A frontier that trebles every hop outgrows one that holds, which is the whole of what
@@ -105,21 +108,48 @@ TEST_F(PathBranchingSampleTest, chargesACascadeMoreThanAChainPerHop) {
     EXPECT_GT(checks(_cascade, 4), 3.0 * checks(_chain, 4));
 }
 
-TEST_F(PathBranchingSampleTest, theFrontierStopsAtTheNodesCarryingTheType) {
+TEST_F(PathBranchingSampleTest, theSearchFrontierStopsAtTheNodesCarryingTheType) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
     const PartDirectory parts(reader.getView());
 
     const auto checks = [&parts](std::optional<EdgeTypeID> edgeType, uint64_t maxHops) {
-        return PathDistanceIndex::estimatedEnumerationChecks(parts, PathExplorationDir::FORWARD, edgeType, 1, maxHops);
+        return PathDistanceIndex::estimatedSearchChecks(parts, PathExplorationDir::FORWARD, edgeType, 1, maxHops);
     };
 
-    // The cascade spans forty nodes, so its frontier covers them within a few hops
+    // The cascade spans forty nodes, so a search covers them within a few hops
     EXPECT_GT(checks(_cascade, 3), checks(_cascade, 2));
     EXPECT_DOUBLE_EQ(checks(_cascade, 100), checks(_cascade, PathDistanceIndex::farthest));
 
-    // Past that the estimate has nothing left to predict and charges no deeper bound for it,
-    // where multiplying the covered frontier by the levels of an unbounded walk would price
-    // a walk of forty nodes above an index over the whole graph
+    // A search reaches a node once, so past that there is nothing left for a deeper bound to
+    // cost: an index over the cascade costs the cascade, whatever bound the pattern carries
     EXPECT_LT(checks(_cascade, PathDistanceIndex::farthest), static_cast<double>(nodeCount));
+}
+
+// The two estimates part company here, and the parting is what lets a gate buy an index. A
+// search reaches a node once, so its frontier holds at the nodes the type carries. A trail
+// arrives at that node once per path that reaches it, so the enumeration's frontier does not
+// hold, and every deeper bound goes on costing more.
+TEST_F(PathBranchingSampleTest, theEnumerationFrontierOutgrowsTheNodesCarryingTheType) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const PartDirectory parts(reader.getView());
+
+    PathDistanceIndex::TypeBranching cascade;
+    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::FORWARD, _cascade, cascade);
+
+    const auto searchChecks = [&parts, this](uint64_t maxHops) {
+        return PathDistanceIndex::estimatedSearchChecks(parts, PathExplorationDir::FORWARD, _cascade, 1, maxHops);
+    };
+
+    const auto walkChecks = [&parts, &cascade](uint64_t maxHops) {
+        return PathDistanceIndex::estimatedEnumerationChecks(parts, cascade, 1, maxHops);
+    };
+
+    EXPECT_DOUBLE_EQ(searchChecks(24), searchChecks(12));
+    EXPECT_GT(walkChecks(24), walkChecks(12));
+
+    // Which is what a walk of a forty-node cascade costs against an index over it
+    EXPECT_LT(searchChecks(24), static_cast<double>(nodeCount));
+    EXPECT_GT(walkChecks(24), static_cast<double>(nodeCount));
 }
