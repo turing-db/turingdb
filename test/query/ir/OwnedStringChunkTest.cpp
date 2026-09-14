@@ -23,10 +23,10 @@
 using namespace db;
 using namespace turing::test;
 
-// labels() and type() are the two functions whose rows own the characters they hold,
-// where a string property column borrows them from the graph. That makes their chunk a
-// nullable of owned strings, an element type every step carrying a chunk on has to know:
-// a limit, a skip, a grouping key, a cross product.
+// type() is the one function whose rows own the characters they hold, where a string
+// property column borrows them from the graph. That makes its chunk a nullable of owned
+// strings, an element type every step carrying a chunk on has to know: a limit, a skip, a
+// grouping key, a cross product.
 class OwnedStringChunkTest : public TuringTest {
 protected:
     void initialize() override {
@@ -81,56 +81,36 @@ protected:
     std::unique_ptr<QueryInterpreterV3> _interpreter;
 };
 
-// simpledb holds 18 nodes and 18 edges
-TEST_F(OwnedStringChunkTest, limitsAColumnOfLabels) {
-    expectRowCount("MATCH (n) RETURN labels(n) LIMIT 3", 3);
-}
-
-TEST_F(OwnedStringChunkTest, skipsAColumnOfLabels) {
-    expectRowCount("MATCH (n) RETURN labels(n) SKIP 1", 17);
+// simpledb holds 18 edges
+TEST_F(OwnedStringChunkTest, limitsAColumnOfEdgeTypes) {
+    expectRowCount("MATCH ()-[e]->() RETURN type(e) LIMIT 3", 3);
 }
 
 TEST_F(OwnedStringChunkTest, skipsAColumnOfEdgeTypes) {
     expectRowCount("MATCH ()-[e]->() RETURN type(e) SKIP 2", 16);
 }
 
-TEST_F(OwnedStringChunkTest, dedupsAColumnOfLabels) {
-    expectRows("MATCH (p:Person) RETURN DISTINCT labels(p)",
-               {{"Person, SoftwareEngineering, Founder"},
-                {"Person, Founder, Bioinformatics"},
-                {"Person, Bioinformatics"},
-                {"Person, SoftwareEngineering"},
-                {"Person, Sales"}});
+TEST_F(OwnedStringChunkTest, dedupsAColumnOfEdgeTypes) {
+    expectRows("MATCH ()-[e]->() RETURN DISTINCT type(e)",
+               {{"KNOWS_WELL"}, {"INTERESTED_IN"}});
 }
 
-// The eight Persons carry five label sets between them: three write software, two do
-// bioinformatics, and the two founders and Doruk stand alone
-TEST_F(OwnedStringChunkTest, groupsOnAColumnOfLabels) {
-    expectRows("MATCH (p:Person) RETURN labels(p), count(*)",
-               {{"Person, SoftwareEngineering, Founder", "1"},
-                {"Person, Founder, Bioinformatics", "1"},
-                {"Person, Bioinformatics", "2"},
-                {"Person, SoftwareEngineering", "3"},
-                {"Person, Sales", "1"}});
+// Remy's edge type crossed with the ten interests: the one row the WITH published is
+// repeated once per interest, carrying its string along
+TEST_F(OwnedStringChunkTest, carriesAColumnOfEdgeTypesAcrossACrossProduct) {
+    expectRows("MATCH (p:Person {name: 'Remy'})-[e:KNOWS_WELL]->() WITH type(e) AS kind "
+               "MATCH (i:Interest) RETURN kind, i.name",
+               {{"KNOWS_WELL", "Animals"},
+                {"KNOWS_WELL", "Bio"},
+                {"KNOWS_WELL", "Computers"},
+                {"KNOWS_WELL", "Cooking"},
+                {"KNOWS_WELL", "Eighties"},
+                {"KNOWS_WELL", "Ghosts"},
+                {"KNOWS_WELL", "Gym"},
+                {"KNOWS_WELL", "JiuJitsu"},
+                {"KNOWS_WELL", "Padel"},
+                {"KNOWS_WELL", "Travel"}});
 }
-
-// Remy's labels crossed with the ten interests: the one row the WITH published is repeated
-// once per interest, carrying its string along
-TEST_F(OwnedStringChunkTest, carriesAColumnOfLabelsAcrossACrossProduct) {
-    expectRows("MATCH (p:Person {name: 'Remy'}) WITH labels(p) AS tags "
-               "MATCH (i:Interest) RETURN tags, i.name",
-               {{"Person, SoftwareEngineering, Founder", "Animals"},
-                {"Person, SoftwareEngineering, Founder", "Bio"},
-                {"Person, SoftwareEngineering, Founder", "Computers"},
-                {"Person, SoftwareEngineering, Founder", "Cooking"},
-                {"Person, SoftwareEngineering, Founder", "Eighties"},
-                {"Person, SoftwareEngineering, Founder", "Ghosts"},
-                {"Person, SoftwareEngineering, Founder", "Gym"},
-                {"Person, SoftwareEngineering, Founder", "JiuJitsu"},
-                {"Person, SoftwareEngineering, Founder", "Padel"},
-                {"Person, SoftwareEngineering, Founder", "Travel"}});
-}
-
 
 // An edge the pattern missed is null, so the grouping key it holds is one too: the two
 // edges Remy and Adam walk form the named group, the six padded rows the null one

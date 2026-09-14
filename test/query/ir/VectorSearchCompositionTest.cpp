@@ -380,5 +380,5 @@ TEST_F(VectorSearchCompositionTest, readsTheLabelsOfTheNeighbour) {
     loadPeopleVectors();
 
     expectRows(std::string(searchOne) + "YIELD ids RETURN labels(ids)",
-               {{"Person, SoftwareEngineering, Founder"}});
+               {{"[Person, SoftwareEngineering, Founder]"}});
 }

@@ -3,8 +3,8 @@
   "graph": "simpledb",
   "query": "match (n) return labels(n) as l limit 1",
   "expect": {
-    "result": "l\n\"Person, SoftwareEngineering, Founder\"",
-    "resultJson": "{\"header\":{\"column_names\":[\"l\"],\"column_types\":[\"String\"]},\"data\":[[[\"Person, SoftwareEngineering, Founder\"]]]}"
+    "result": "l\n\"[Person, SoftwareEngineering, Founder]\"",
+    "resultJson": "{\"header\":{\"column_names\":[\"l\"],\"column_types\":[\"List\"]},\"data\":[[[[\"Person\", \"SoftwareEngineering\", \"Founder\"]]]]}"
   },
   "tags": [
     "functions",

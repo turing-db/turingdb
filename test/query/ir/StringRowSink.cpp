@@ -165,6 +165,16 @@ bool textOfConstOptionalListElement(const Column* chunk, size_t rowIndex, std::s
 }
 
 // A list cell reads as its elements joined by ", ", in the order the list holds them.
+void appendListText(const ListView& list, std::string& text) {
+    for (const ListElementView& element : list) {
+        if (!text.empty()) {
+            text += ", ";
+        }
+
+        text += elementText(element);
+    }
+}
+
 bool textOfList(const Column* chunk, size_t rowIndex, std::string& text) {
     const auto* column = dynamic_cast<const ColumnVector<ListView>*>(chunk);
     if (!column) {
@@ -172,12 +182,24 @@ bool textOfList(const Column* chunk, size_t rowIndex, std::string& text) {
     }
 
     text.clear();
-    for (const ListElementView& element : column->getRaw()[rowIndex]) {
-        if (!text.empty()) {
-            text += ", ";
-        }
+    appendListText(column->getRaw()[rowIndex], text);
 
-        text += elementText(element);
+    return true;
+}
+
+bool textOfOptionalList(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnOptVector<ListView>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    const std::optional<ListView>& list = column->getRaw()[rowIndex];
+
+    text.clear();
+    if (list.has_value()) {
+        appendListText(*list, text);
+    } else {
+        text = "null";
     }
 
     return true;
@@ -370,6 +392,8 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfConstOptionalListElement(chunk, rowIndex, text)) {
         return text;
     } else if (textOfList(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfOptionalList(chunk, rowIndex, text)) {
         return text;
     } else if (textOfPath(chunk, rowIndex, text)) {
         return text;

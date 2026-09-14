@@ -12,6 +12,8 @@
 #include "SystemManager.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnOptVector.h"
+#include "list/ListElementView.h"
+#include "list/ListView.h"
 #include "metadata/LabelSetHandle.h"
 #include "metadata/PropertyType.h"
 #include "ID.h"
@@ -2719,6 +2721,7 @@ TEST_F(QueriesTest, labelsFunction) {
             ASSERT_TRUE(fstLabelName.has_value());
 
             expStr.clear();
+            expStr += '[';
             expStr += *fstLabelName;
 
             for (const LabelID lid : lbls | rv::drop(1)) {
@@ -2727,6 +2730,8 @@ TEST_F(QueriesTest, labelsFunction) {
                 expStr += ", ";
                 expStr += *labelName;
             }
+
+            expStr += ']';
 
             expected.add({n, expStr});
         }
@@ -2738,12 +2743,26 @@ TEST_F(QueriesTest, labelsFunction) {
         auto res = runQuery(matchLabels, [&actual](const Dataframe* df) {
             ASSERT_TRUE(df);
             auto* ns = findColumn(df, "n")->as<ColumnNodeIDs>();
-            auto* labels = findColumn(df, "labels")->as<ColumnVector<std::string>>();
+            auto* labels = findColumn(df, "labels")->as<ColumnVector<ListView>>();
             ASSERT_TRUE(ns && labels);
             ASSERT_EQ(ns->size(), labels->size());
 
-            for (const auto& [n, lbl] : rv::zip(*ns, *labels)) {
-                actual.add({n, lbl});
+            std::string text;
+            for (const auto& [n, list] : rv::zip(*ns, *labels)) {
+                text.clear();
+                text += '[';
+
+                for (const ListElementView element : list) {
+                    if (text.size() > 1) {
+                        text += ", ";
+                    }
+
+                    text += element.getAs<std::string_view>();
+                }
+
+                text += ']';
+
+                actual.add({n, text});
             }
         });
     }

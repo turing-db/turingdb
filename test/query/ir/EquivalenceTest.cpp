@@ -798,8 +798,8 @@ TEST_F(EquivalenceTest, labelsAndTypeFunctions) {
     expectEquivalent("MATCH (a)-[e:INTERESTED_IN]->(b) RETURN type(e)");
     expectEquivalent("MATCH (a)-[e]->(b) RETURN a, type(e), b");
 
-    expectEquivalent("MATCH (n) WHERE labels(n) = 'Interest' RETURN *");
-    expectEquivalent("MATCH (n) WHERE labels(n) = 'Person' RETURN *");
+    expectEquivalent("MATCH (n) WHERE labels(n) = ['Interest'] RETURN *");
+    expectEquivalent("MATCH (n) WHERE labels(n) = ['Person'] RETURN *");
 
     expectEquivalent("MATCH (n) RETURN n, toInteger('42')");
     expectEquivalent("MATCH (n) RETURN count(labels(n))");
