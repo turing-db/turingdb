@@ -7,20 +7,26 @@
 #include <string>
 #include <system_error>
 #include <type_traits>
+#include <vector>
 
 #include "columns/ColumnConst.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "TypeUtils.h"
 #include "list/ListElementView.h"
+
+#include "list/ListBuffer.h"
+
 #include "metadata/LabelSetHandle.h"
 #include "metadata/PropertyType.h"
+
 #include "views/GraphView.h"
 
 #include "ID.h"
 
+#include "TypeUtils.h"
+
 #include "BioAssert.h"
-#include "TuringException.h"
 
 namespace db {
 
@@ -57,26 +63,26 @@ auto optionalGenericFunc(T&& a, U&& b) -> TypeUtils::optional_invoke_result<Func
 class LabelsFunction {
 public:
     using ArgType = NodeID;
-    using ResultType = std::string;
+    using ResultType = ListView;
 
-    explicit LabelsFunction(GraphView view);
+    LabelsFunction(GraphView view, QueryListBuffer* listBuffer);
 
     // The graph holds none of a change's writes until they commit, so the labels of a
     // node this one wrote are read out of @param writeBuffer
-    LabelsFunction(GraphView view, const CommitWriteBuffer* writeBuffer);
+    LabelsFunction(GraphView view,
+                   QueryListBuffer* listBuffer,
+                   const CommitWriteBuffer* writeBuffer);
 
-    ResultType operator()(const NodeID node) {
-        getLabelString(_tmp, node);
-        return _tmp;
-    }
+    ResultType operator()(NodeID node);
 
 private:
     GraphView _view;
+    QueryListBuffer* _listBuffer {nullptr};
     const CommitWriteBuffer* _writeBuffer {nullptr};
     size_t _firstPendingNodeID {0};
-    std::string _tmp;
+    std::vector<LabelID> _labels;
+    std::vector<QueryListBuffer::ListItemVariant> _elements;
 
-    void getLabelString(std::string& out, NodeID node);
     bool isPendingNode(NodeID node) const;
     LabelSetHandle readLabelSet(NodeID node) const;
 };
@@ -485,16 +491,17 @@ struct FunctionExecutor {
 /// Specialisation for labels()
 template <typename Res, typename Arg>
 struct FunctionExecutor<LabelsFunction, Res, Arg> {
-    static void apply(ColumnVector<std::string>* res,
+    static void apply(ColumnVector<ListView>* res,
                       const ColumnNodeIDs* arg,
-                      GraphView view) {
+                      GraphView view,
+                      QueryListBuffer* listBuffer) {
         const size_t size = arg->size();
         res->resize(size);
 
         const auto& argd = arg->getRaw();
         auto& resd = res->getRaw();
 
-        LabelsFunction labels(view);
+        LabelsFunction labels(view, listBuffer);
         for (size_t i = 0; i < size ; i ++) {
             resd[i] = labels(argd[i]);
         }

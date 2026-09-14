@@ -163,7 +163,17 @@ struct MaskOperators {
 };
 
 struct ColumnFunctions {
-    /// labels() function; result type is string
+    template <typename Op, typename ColT>
+    static void exec(ColumnVector<ListView>* res,
+                     const ColT* arg,
+                     const GraphView view,
+                     QueryListBuffer* listBuffer) {
+        using DecayColT = TypeUtils::decay_col_t<ColT>;
+        using InternalT = InnerTypeHelper<DecayColT>::type;
+
+        FunctionExecutor<Op, ListView, InternalT>::apply(res, arg, view, listBuffer);
+    }
+
     template <typename Op, typename ColT>
     static void exec(ColumnVector<std::string>* res, const ColT* arg, const GraphView view) {
         using DecayColT = TypeUtils::decay_col_t<ColT>;
