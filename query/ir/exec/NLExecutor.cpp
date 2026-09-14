@@ -4133,16 +4133,17 @@ void runEdgeLoopSteps(NLExecutionContext* context,
     // loop carrying the same handle. The limit is fixed for the whole loop, so
     // the null check is hoisted out of the per-iteration condition.
     const NLLimitState* limit = loopData->getLimit();
+    const size_t chunkSize = context->getChunkSize();
 
     const auto hasStep = [&]() {
         return chunkWriter->isValid() || pendingEdges->isValid();
     };
 
-    const auto runIteration = [&]() {
+    const auto runIteration = [&](size_t rowBudget) {
         if (chunkWriter->isValid()) {
-            chunkWriter->fill(context->getChunkSize());
+            chunkWriter->fill(rowBudget);
         } else {
-            pendingEdges->fill(context->getChunkSize());
+            pendingEdges->fill(rowBudget);
         }
 
         const ColumnVector<size_t>* indices = loopData->getIndices();
@@ -4165,12 +4166,19 @@ void runEdgeLoopSteps(NLExecutionContext* context,
     };
 
     if (limit) {
+        // A body that filters keeps the budget unspent, so asking for exactly what the
+        // limit still needs would pay a chunk's fixed cost once per surviving row: the
+        // request doubles until it is back at a whole chunk.
+        size_t rowBudget = 0;
+
         while (hasStep() && limit->getRemaining() > 0) {
-            runIteration();
+            rowBudget = std::min(chunkSize, std::max(rowBudget * 2, limit->getRemaining()));
+
+            runIteration(rowBudget);
         }
     } else {
         while (hasStep()) {
-            runIteration();
+            runIteration(chunkSize);
         }
     }
 }
