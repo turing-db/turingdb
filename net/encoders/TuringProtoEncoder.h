@@ -365,11 +365,11 @@ public:
                 writeListView(val.has_value() ? *val : db::ListView {});
             }
         } else if constexpr (db::IsEntityList<T>) {
-            // EntityList is only used as ColumnVector<EntityList>, never optional.
-            // sizeof(T) == 0 (never true) keeps the assert dependent on T so it only
-            // fires if this branch is ever instantiated; a bare static_assert(false)
-            // is diagnosed eagerly by pre-P2593 compilers even when discarded.
             static_assert(sizeof(T) == 0, "Sending ColumnOptVector<EntityList> not supported");
+        } else if constexpr (db::IsListView<T>) {
+            for (const auto& val : *col) {
+                writeListView(val.has_value() ? *val : db::ListView {});
+            }
         } else if constexpr (db::IsListElement<T>) {
             writeOptionalListElements(values);
         } else if constexpr (db::IsNull<T>) {
@@ -461,6 +461,8 @@ public:
             // EntityList is only used as ColumnVector<EntityList>, never optional.
             // Dependent condition (see the ColumnOptVector<EntityList> branch above).
             static_assert(sizeof(T) == 0, "ColumnOptConst<EntityList> is not supported");
+        } else if constexpr (db::IsListView<T>) {
+            writeListView(*opt);
         } else if constexpr (db::IsListElement<T>) {
             const db::ListElementView element = *opt;
             writeListElements(std::span<const db::ListElementView>(&element, 1));

@@ -484,14 +484,14 @@ struct OptionalVectorColumnDecoder<SinkListView<Sink>, Sink> {
                        Sink* sink,
                        SinkColumnOptVector<T, Sink>* typedColumn,
                        ProtoColumnState* columnState) {
-        // Every row carries a list header, so a null one is read and reserved like any other
-        // and simply leaves its entry empty.
         const size_t numRows = columnState->getNumRows();
+        const ProtoColumnState::BitMask& mask = columnState->getBitMask();
 
         while (context->_rowIndex < numRows) {
-            // An open list is this row's, resumed mid-element; none means the row's header is
-            // still to come.
-            if (!sink->hasOpenList()) {
+            auto& entry = (*typedColumn)[context->_rowIndex];
+
+            const bool listStarted = entry.has_value();
+            if (!listStarted) {
                 if (context->_inBuf->readable() < 2 * sizeof(WireSize)) {
                     return false;
                 }
@@ -501,11 +501,12 @@ struct OptionalVectorColumnDecoder<SinkListView<Sink>, Sink> {
                 context->_inBuf->readData(&elementCount, sizeof(elementCount));
                 context->_inBuf->readData(&listByteSize, sizeof(listByteSize));
 
-                const SinkListView<Sink> view = sink->beginList(elementCount, listByteSize);
-
-                if (columnState->getBitMask().test(context->_rowIndex)) {
-                    (*typedColumn)[context->_rowIndex] = view;
+                if (!mask.test(context->_rowIndex)) {
+                    ++context->_rowIndex;
+                    continue;
                 }
+
+                entry.emplace(sink->beginList(elementCount, listByteSize));
             }
 
             auto onTopLevelElement = [](size_t, const SinkListElementView<Sink>&) {};
