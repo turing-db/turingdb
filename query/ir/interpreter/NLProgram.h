@@ -3322,25 +3322,34 @@ private:
     std::vector<Element> _elements;
 };
 
-using NLUnaryFunctionKernel = void (*)(NLExecutionContext* context, Column* result, const Column* input);
+using NLUnaryFunctionKernel = void (*)(NLExecutionContext* context,
+                                       Column* result,
+                                       const Column* input,
+                                       LocalMemory* mem);
 
 class NLUnaryFunctionData : public NLFunctionData {
 public:
-    NLUnaryFunctionData(const Column* input, Column* result, NLUnaryFunctionKernel kernel)
+    NLUnaryFunctionData(const Column* input,
+                        Column* result,
+                        NLUnaryFunctionKernel kernel,
+                        LocalMemory* mem)
         : _input(input),
         _result(result),
-        _kernel(kernel)
+        _kernel(kernel),
+        _mem(mem)
     {
     }
 
     const Column* getInput() const { return _input; }
     Column* getResult() const { return _result; }
     NLUnaryFunctionKernel getKernel() const { return _kernel; }
+    LocalMemory* getMemory() const { return _mem; }
 
 private:
     const Column* _input {nullptr};
     Column* _result {nullptr};
     NLUnaryFunctionKernel _kernel {nullptr};
+    LocalMemory* _mem {nullptr};
 };
 
 // Type of handle that fills a column with a run of null rows - for an ID column an

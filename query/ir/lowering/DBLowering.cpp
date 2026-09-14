@@ -60,6 +60,11 @@ mlir::Type nodeIDFunctionElement(mlir::OpBuilder& builder, mlir::Type inputEleme
     return storage::NodeIDType::get(builder.getContext());
 }
 
+mlir::Type labelListFunctionElement(mlir::OpBuilder& builder) {
+    mlir::MLIRContext* const context = builder.getContext();
+    return storage::ListType::get(context, storage::StringType::get(context));
+}
+
 mlir::Type integerFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
     return builder.getI64Type();
 }
@@ -153,7 +158,7 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     // Both read an entity column, which carries its null in the ID an OPTIONAL MATCH left
     // invalid rather than in an optional, so their result is nullable whatever the input
     // chunk's own type says
-    {"db.labels",     {&emitNLUnaryFunction<nl::Labels>,    &ownedStringFunctionElement, ResultNullability::AlwaysNullable}},
+    {"db.labels",     {&emitNLUnaryFunction<nl::Labels>,    &labelListFunctionElement,   ResultNullability::AlwaysNullable}},
     {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>,  &ownedStringFunctionElement, ResultNullability::AlwaysNullable}},
 
     // An end of an edge is a node, and a node column spells its null as an invalid ID, so

@@ -856,6 +856,7 @@ private:
     // unwind emits and a cross product broadcasts - reserving a full chunk.
     // A column of list cells, each a view over the query's list buffer
     Column* allocListColumn();
+    Column* allocOptListColumn();
 
     Column* allocListElementColumn();
     Column* allocOptListElementColumn();

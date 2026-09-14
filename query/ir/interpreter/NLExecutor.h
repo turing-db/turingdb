@@ -506,6 +506,16 @@ public:
     static NLBroadcastFunction selectListBlockRepeatFunction();
     static NLCopyFunction selectListCopyFunction();
 
+    static NLBroadcastFunction selectOptListBlockRepeatFunction();
+    static NLBroadcastFunction selectOptListTileFunction();
+    static NLAppendFunction selectOptListAppendFunction();
+    static NLGatherFunction selectOptListGatherFunction();
+    static NLCompareFunction selectOptListCompareFunction();
+    static NLKeyAppendFunction selectOptListKeyAppendFunction();
+    static NLCountFunction selectOptListCountFunction();
+    static NLGroupKeyGatherFunction selectOptListGroupKeyGatherFunction();
+    static NLCopyFunction selectOptListCopyFunction();
+
     // Range copy for an ID chunk of this kind (skip suffix copy).
     static NLCopyFunction selectCopyFunction(NLChunkKind kind);
 
@@ -599,6 +609,8 @@ public:
     static NLGroupAggregateFoldFunction selectGroupCountOptListElementFold();
     static NLGroupAggregateFoldFunction selectGroupCountDistinctListElementFold();
     static NLGroupAggregateFoldFunction selectGroupCountDistinctOptListElementFold();
+    static NLGroupAggregateFoldFunction selectGroupCountOptListFold();
+    static NLGroupAggregateFoldFunction selectGroupCountDistinctOptListFold();
     static NLGroupAggregateEmitFunction selectGroupAggregateEmit(GroupAggregateKind kind, ValueType resultType);
 
     // The append (onto a key buffer's tail) for an ID chunk of this kind / a
@@ -649,6 +661,7 @@ public:
     static NLListItemReadFunction selectNodeListItemRead();
     static NLListItemReadFunction selectEdgeListItemRead();
     static NLListItemReadFunction selectNestedListItemRead();
+    static NLListItemReadFunction selectOptNestedListItemRead();
     static NLListItemReadFunction selectTaggedListItemRead(bool nullable);
     static NLListItemReadFunction selectOwnedStringListItemRead(bool nullable);
 
@@ -670,6 +683,9 @@ public:
                                             NLCollectFoldFunction& fold,
                                             NLCollectListEmitFunction& listEmit);
 
+    static void selectCollectOptListHandlers(bool distinctValues,
+                                             NLCollectFoldFunction& fold,
+                                             NLCollectListEmitFunction& listEmit);
     static void selectCollectOptTaggedHandlers(bool distinctValues,
                                                NLCollectFoldFunction& fold,
                                                NLCollectListEmitFunction& listEmit);
