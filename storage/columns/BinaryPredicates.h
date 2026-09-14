@@ -399,7 +399,7 @@ struct BinaryPredicateExecutor {
  */
 template <typename F>
 struct BinaryPredicate {
-    // Handle predicates that resolve their own nulls
+    // Predicate whose result is always null irrespective of input nullity
     template <typename T, typename U>
         requires NullableResultPredicate<F, T, U>
     inline std::optional<CustomBool> operator()(T&& a, U&& b) {
@@ -548,13 +548,7 @@ struct StringContains {
     }
 };
 
-/**
- * @brief Tests whether a value is an element of a list, as Cypher's IN does.
- *
- * An OR-fold of equality over the elements, so an empty list is false whatever the left
- * operand is, and an element that is null - or a left operand that is - leaves an
- * otherwise unmatched answer unknown rather than false.
- */
+/// IN [ ... ]
 struct TuringIn {
     std::optional<CustomBool> operator()(const PropertyNull& /*unused*/,
                                          const ListView list) const {
