@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <optional>
 #include <span>
 #include <stdint.h>
@@ -64,13 +65,27 @@ public:
                                     std::optional<EdgeTypeID> edgeType,
                                     PathHopFilter& hopFilter);
 
-    // The branching of the region the walk enters, measured by expanding a sample of its own
-    // seeds a few levels: what a walk costs turns on the fan-out of where it starts, and an
-    // average over every node carrying the type misses that by the exponent of the bound.
-    static double sampleSeedFanOut(const PartDirectory& parts,
-                                   PathExplorationDir direction,
-                                   std::optional<EdgeTypeID> edgeType,
-                                   std::span<const NodeID> seeds);
+    // What a sample of a walk's own seeds expanded to, level by level, and the ratio the last
+    // measured level grew by. A walk's frontier is not one fan-out held constant: seeds that
+    // die at once hold the early levels down while the region the survivors reach decides
+    // every later one, so no single number stands for both and the levels that were measured
+    // are the estimate rather than a parameter of it.
+    struct SeedExpansion {
+        static constexpr size_t maxLevels = 8;
+
+        std::array<double, maxLevels> _frontierPerSeed {};
+        size_t _levels {0};
+        double _tailFanOut {1.0};
+    };
+
+    // Expands a sample of the seeds along the walk's direction, one level at a time. What a
+    // walk costs turns on the fan-out of where it starts, and an average over every node
+    // carrying the type misses that by the exponent of the bound.
+    static void sampleSeedExpansion(const PartDirectory& parts,
+                                    PathExplorationDir direction,
+                                    std::optional<EdgeTypeID> edgeType,
+                                    std::span<const NodeID> seeds,
+                                    SeedExpansion& expansion);
 
     // The candidate checks one search from each source is expected to make: its frontier is
     // distinct nodes, so it cannot grow past the nodes the type reaches and holds at the
@@ -81,22 +96,22 @@ public:
                                         size_t sourceCount,
                                         uint64_t maxHops);
 
-    // The candidate checks the unpruned walk is expected to make: the seeds fanning out over
-    // every hop of the bound. Its frontier is partial paths, not nodes - a trail reaches the
-    // same node as often as a path arrives at it - so nothing caps it at the nodes the type
-    // carries, and it grows with the bound the way the enumeration itself does.
+    // The candidate checks the unpruned walk is expected to make: the levels the sample
+    // measured as measured, and past them the frontier growing by the last ratio it saw. Its
+    // frontier is partial paths, not nodes - a trail reaches the same node as often as a path
+    // arrives at it - so nothing caps it at the nodes the type carries.
     // hopPassRate is the share of each level's candidates the query's hop predicate lets
     // through: they all cost a check, and the ones that pass are all that reach the next
     // level, so it shrinks the frontier rather than the candidates.
     static double estimatedEnumerationChecks(const PartDirectory& parts,
-                                             double fanOut,
+                                             const SeedExpansion& expansion,
                                              size_t seedCount,
                                              uint64_t maxHops,
                                              double hopPassRate = 1.0);
 
     // Whether the enumeration the seeds imply is expected to cost more than the index
     static bool isWorthBuilding(const GraphView& view,
-                                double fanOut,
+                                const SeedExpansion& expansion,
                                 size_t seedCount,
                                 uint64_t maxHops,
                                 double hopPassRate = 1.0);

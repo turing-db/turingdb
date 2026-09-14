@@ -5773,9 +5773,9 @@ double hopPassRateFor(const GraphView& view, NLExplorePathsLoopData* loopData, P
     return rate;
 }
 
-// The branching of the region this chunk's seeds open onto: both gates price the walk by it,
-// and it is what the walk does rather than what the average node carrying the type does
-double seedFanOutFor(const GraphView& view, NLExplorePathsLoopData* loopData) {
+// What this chunk's own seeds expand to: both gates price the walk by it, and it is what the
+// walk does rather than what the average node carrying the type does
+void sampleSeedsOf(const GraphView& view, NLExplorePathsLoopData* loopData, PathDistanceIndex::SeedExpansion& expansion) {
     std::optional<EdgeTypeID> edgeType;
     if (loopData->filtersByType()) {
         edgeType = loopData->getEdgeType();
@@ -5783,14 +5783,14 @@ double seedFanOutFor(const GraphView& view, NLExplorePathsLoopData* loopData) {
 
     const PartDirectory parts(view);
 
-    return PathDistanceIndex::sampleSeedFanOut(parts, loopData->getDirection(), edgeType, loopData->getInput()->getRaw());
+    PathDistanceIndex::sampleSeedExpansion(parts, loopData->getDirection(), edgeType, loopData->getInput()->getRaw(), expansion);
 }
 
 const PathDistanceIndex* pruningIndexFor(const GraphView& view,
                                          NLExplorePathsLoopData* loopData,
                                          uint64_t maxHops,
                                          size_t seedCount,
-                                         double fanOut,
+                                         const PathDistanceIndex::SeedExpansion& expansion,
                                          double hopPassRate) {
     PathDistanceIndex* index = loopData->getDistanceIndex();
     if (index->isBuilt()) {
@@ -5805,7 +5805,7 @@ const PathDistanceIndex* pruningIndexFor(const GraphView& view,
     }
 
     const PathExplorationDir direction = loopData->getDirection();
-    const bool worthBuilding = PathDistanceIndex::isWorthBuilding(view, fanOut, loopData->getSeedsSeen(), maxHops, hopPassRate);
+    const bool worthBuilding = PathDistanceIndex::isWorthBuilding(view, expansion, loopData->getSeedsSeen(), maxHops, hopPassRate);
     if (!worthBuilding) {
         return nullptr;
     }
@@ -5820,7 +5820,7 @@ const PathDistanceIndex* pruningIndexFor(const GraphView& view,
 const PathTargetIndex* targetIndexFor(const GraphView& view,
                                       NLExplorePathsLoopData* loopData,
                                       uint64_t maxHops,
-                                      double fanOut,
+                                      const PathDistanceIndex::SeedExpansion& expansion,
                                       double hopPassRate) {
     const std::vector<NodeID>& endNodes = loopData->getEndNodes()->getRaw();
 
@@ -5834,7 +5834,7 @@ const PathTargetIndex* targetIndexFor(const GraphView& view,
     }
 
     const PathExplorationDir direction = loopData->getDirection();
-    const bool worthBuilding = PathTargetIndex::isWorthBuilding(view, direction, edgeType, fanOut, endNodes.size(), targets.size(), maxHops, hopPassRate);
+    const bool worthBuilding = PathTargetIndex::isWorthBuilding(view, direction, edgeType, expansion, endNodes.size(), targets.size(), maxHops, hopPassRate);
     if (!worthBuilding) {
         return nullptr;
     }
@@ -5895,19 +5895,23 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
     const bool prunes = !distinctEnds && (filtersByEndLabels || loopData->getEndNodes());
 
     const double hopPassRate = prunes ? hopPassRateFor(view, loopData, hopFilter ? &*hopFilter : nullptr) : 1.0;
-    const double fanOut = prunes ? seedFanOutFor(view, loopData) : 0.0;
+
+    PathDistanceIndex::SeedExpansion expansion;
+    if (prunes) {
+        sampleSeedsOf(view, loopData, expansion);
+    }
 
     if (filtersByEndLabels) {
         explorator.setEndLabels(&loopData->getEndLabels());
         if (!distinctEnds) {
-            explorator.setDistanceIndex(pruningIndexFor(view, loopData, maxHops, inputNodeIDs->size(), fanOut, hopPassRate));
+            explorator.setDistanceIndex(pruningIndexFor(view, loopData, maxHops, inputNodeIDs->size(), expansion, hopPassRate));
         }
     }
 
     if (loopData->getEndNodes()) {
         explorator.setEndNodes(loopData->getEndNodes());
         if (!distinctEnds) {
-            explorator.setTargetIndex(targetIndexFor(view, loopData, maxHops, fanOut, hopPassRate));
+            explorator.setTargetIndex(targetIndexFor(view, loopData, maxHops, expansion, hopPassRate));
         }
     }
 

@@ -17,7 +17,10 @@ namespace {
 // between 3.5 and 7 checks; a dense batch writes one word per node per level sequentially,
 // about a tenth of a check each. A sparse slot is this many bytes, kept at most half full, and
 // the tables or words of one build stay under this many bytes whatever the walk would cost.
-constexpr double reachedNodeCostInChecks = 5.0;
+// One node the search reaches costs this many candidate checks of the walk it spares:
+// measured at 78 ns a node against 30 ns a check on a generated degree-8 graph, and 141
+// against 47 on reactome, so the higher of the two shapes with nothing rounded away
+constexpr double reachedNodeCostInChecks = 3.0;
 constexpr double wordCostInChecks = 0.1;
 constexpr double bytesPerReachedNode = 2.0 * (sizeof(uint64_t) + sizeof(uint64_t) + PathTargetBatch::targetsPerBatch + sizeof(uint8_t));
 constexpr double bytesLimit = 1024.0 * 1024.0 * 1024.0;
@@ -248,7 +251,7 @@ PathTargetHandle PathTargetIndex::find(NodeID target) const {
 bool PathTargetIndex::isWorthBuilding(const GraphView& view,
                                       PathExplorationDir direction,
                                       std::optional<EdgeTypeID> edgeType,
-                                      double fanOut,
+                                      const PathDistanceIndex::SeedExpansion& expansion,
                                       size_t seedCount,
                                       size_t targetCount,
                                       uint64_t maxHops,
@@ -272,7 +275,7 @@ bool PathTargetIndex::isWorthBuilding(const GraphView& view,
 
     const double budget = batchCount * plan._checks;
 
-    return PathDistanceIndex::estimatedEnumerationChecks(parts, fanOut, seedCount, maxHops, hopPassRate) > budget;
+    return PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, seedCount, maxHops, hopPassRate) > budget;
 }
 
 void PathTargetIndex::buildBatch(const PartDirectory& parts,

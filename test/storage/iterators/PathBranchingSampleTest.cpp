@@ -22,6 +22,17 @@
 using namespace db;
 using namespace turing::test;
 
+namespace {
+
+// A sample that measured no level of its own, so every level of the bound grows by the one
+// ratio: the plain geometric walk the estimate tests here are about
+void flatExpansion(double fanOut, PathDistanceIndex::SeedExpansion& expansion) {
+    expansion = PathDistanceIndex::SeedExpansion {};
+    expansion._tailFanOut = fanOut;
+}
+
+}
+
 // Two edge types over one graph, each held by a small share of its nodes, as every relation
 // of a real schema is: a cascade whose nodes each continue along three edges, and a path
 // whose nodes continue along one. What a walk of either branches by is a property of the
@@ -127,7 +138,10 @@ TEST_F(PathBranchingSampleTest, measuresTheBranchingWhereTheSeedsAre) {
     }
 
     const auto fanOut = [&parts](const std::vector<NodeID>& seeds) {
-        return PathDistanceIndex::sampleSeedFanOut(parts, PathExplorationDir::FORWARD, std::nullopt, seeds);
+        PathDistanceIndex::SeedExpansion expansion;
+        PathDistanceIndex::sampleSeedExpansion(parts, PathExplorationDir::FORWARD, std::nullopt, seeds, expansion);
+
+        return expansion._levels == 0 ? 0.0 : expansion._tailFanOut;
     };
 
     EXPECT_GT(fanOut(cascadeSeeds), 2.0);
@@ -148,7 +162,10 @@ TEST_F(PathBranchingSampleTest, chargesACascadeMoreThanAChainPerHop) {
         PathDistanceIndex::TypeBranching branching;
         PathDistanceIndex::sampleBranching(parts, PathExplorationDir::FORWARD, edgeType, branching);
 
-        return PathDistanceIndex::estimatedEnumerationChecks(parts, branching._fanOut, 1, maxHops);
+        PathDistanceIndex::SeedExpansion expansion;
+        flatExpansion(branching._fanOut, expansion);
+
+        return PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, 1, maxHops);
     };
 
     // A frontier that trebles every hop outgrows one that holds, which is the whole of what
@@ -191,7 +208,10 @@ TEST_F(PathBranchingSampleTest, theEnumerationFrontierOutgrowsTheNodesCarryingTh
     };
 
     const auto walkChecks = [&parts, &cascade](uint64_t maxHops) {
-        return PathDistanceIndex::estimatedEnumerationChecks(parts, cascade._fanOut, 1, maxHops);
+        PathDistanceIndex::SeedExpansion expansion;
+        flatExpansion(cascade._fanOut, expansion);
+
+        return PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, 1, maxHops);
     };
 
     EXPECT_DOUBLE_EQ(searchChecks(24), searchChecks(12));

@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "PathDistanceIndex.h"
 #include "PathExplorationDir.h"
 #include "datapart/EdgeRecord.h"
 #include "views/GraphView.h"
@@ -149,7 +150,7 @@ public:
     static bool isWorthBuilding(const GraphView& view,
                                 PathExplorationDir direction,
                                 std::optional<EdgeTypeID> edgeType,
-                                double fanOut,
+                                const PathDistanceIndex::SeedExpansion& expansion,
                                 size_t seedCount,
                                 size_t targetCount,
                                 uint64_t maxHops,

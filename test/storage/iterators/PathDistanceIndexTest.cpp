@@ -85,6 +85,13 @@ void sortedDistances(const PathDistanceIndex& index, size_t nodeCount, Distances
     std::sort(distances.begin(), distances.end());
 }
 
+// A sample that measured no level of its own, so every level of the bound grows by the one
+// ratio: the plain geometric walk these estimate tests are about
+void flatExpansion(double fanOut, PathDistanceIndex::SeedExpansion& expansion) {
+    expansion = PathDistanceIndex::SeedExpansion {};
+    expansion._tailFanOut = fanOut;
+}
+
 size_t reachedCount(const Distances& distances) {
     return static_cast<size_t>(std::count_if(distances.begin(), distances.end(), [](uint8_t distance) {
         return distance != unreachable;
@@ -337,8 +344,10 @@ TEST_F(PathDistanceIndexTest, costGateNeedsEnoughSeeds) {
     }
 
     const PartDirectory parts(view);
-    const double forward = PathDistanceIndex::sampleSeedFanOut(parts, PathExplorationDir::FORWARD, std::nullopt, seeds);
-    const double both = PathDistanceIndex::sampleSeedFanOut(parts, PathExplorationDir::BOTH, std::nullopt, seeds);
+    PathDistanceIndex::SeedExpansion forward;
+    PathDistanceIndex::SeedExpansion both;
+    PathDistanceIndex::sampleSeedExpansion(parts, PathExplorationDir::FORWARD, std::nullopt, seeds, forward);
+    PathDistanceIndex::sampleSeedExpansion(parts, PathExplorationDir::BOTH, std::nullopt, seeds, both);
 
     EXPECT_FALSE(PathDistanceIndex::isWorthBuilding(view, forward, 1, 4));
     EXPECT_TRUE(PathDistanceIndex::isWorthBuilding(view, forward, 100000, 4));
@@ -355,14 +364,17 @@ TEST_F(PathDistanceIndexTest, estimatesAnUnboundedWalkFinitely) {
     PathDistanceIndex::TypeBranching branching;
     PathDistanceIndex::sampleBranching(parts, PathExplorationDir::FORWARD, std::nullopt, branching);
 
-    const double bounded = PathDistanceIndex::estimatedEnumerationChecks(parts, branching._fanOut, 1, 4);
-    const double unboundedChecks = PathDistanceIndex::estimatedEnumerationChecks(parts, branching._fanOut, 1, unbounded);
+    PathDistanceIndex::SeedExpansion expansion;
+    flatExpansion(branching._fanOut, expansion);
+
+    const double bounded = PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, 1, 4);
+    const double unboundedChecks = PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, 1, unbounded);
 
     EXPECT_TRUE(std::isfinite(unboundedChecks));
     EXPECT_GT(unboundedChecks, bounded);
 
     // The estimate charges the levels the index itself would build and no more
-    const double capped = PathDistanceIndex::estimatedEnumerationChecks(parts, branching._fanOut, 1, PathDistanceIndex::farthest);
+    const double capped = PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, 1, PathDistanceIndex::farthest);
     EXPECT_DOUBLE_EQ(unboundedChecks, capped);
 }
 
@@ -378,8 +390,11 @@ TEST_F(PathDistanceIndexTest, estimatesTheWalkAPredicateLeaves) {
     PathDistanceIndex::sampleBranching(parts, PathExplorationDir::BOTH, std::nullopt, branching);
     ASSERT_GT(branching._fanOut, 1.0);
 
-    const double unfiltered = PathDistanceIndex::estimatedEnumerationChecks(parts, branching._fanOut, 100, 6);
-    const double filtered = PathDistanceIndex::estimatedEnumerationChecks(parts, branching._fanOut, 100, 6, 0.01);
+    PathDistanceIndex::SeedExpansion expansion;
+    flatExpansion(branching._fanOut, expansion);
+
+    const double unfiltered = PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, 100, 6);
+    const double filtered = PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, 100, 6, 0.01);
     const double firstLevel = 100.0 * branching._fanOut;
 
     EXPECT_GT(unfiltered, filtered);
@@ -387,7 +402,7 @@ TEST_F(PathDistanceIndexTest, estimatesTheWalkAPredicateLeaves) {
     EXPECT_LT(filtered, 1.1 * firstLevel);
 
     // A predicate letting everything through is the walk the type alone predicts
-    EXPECT_DOUBLE_EQ(PathDistanceIndex::estimatedEnumerationChecks(parts, branching._fanOut, 100, 6, 1.0), unfiltered);
+    EXPECT_DOUBLE_EQ(PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, 100, 6, 1.0), unfiltered);
 }
 
 TEST_F(PathDistanceIndexTest, estimatesTheWalkOfTheTypeItFollows) {
@@ -402,8 +417,13 @@ TEST_F(PathDistanceIndexTest, estimatesTheWalkOfTheTypeItFollows) {
     PathDistanceIndex::sampleBranching(parts, PathExplorationDir::BOTH, std::nullopt, untypedBranching);
     PathDistanceIndex::sampleBranching(parts, PathExplorationDir::BOTH, _typeB, typedBranching);
 
-    const double untyped = PathDistanceIndex::estimatedEnumerationChecks(parts, untypedBranching._fanOut, 100, 6);
-    const double typedB = PathDistanceIndex::estimatedEnumerationChecks(parts, typedBranching._fanOut, 100, 6);
+    PathDistanceIndex::SeedExpansion untypedExpansion;
+    PathDistanceIndex::SeedExpansion typedExpansion;
+    flatExpansion(untypedBranching._fanOut, untypedExpansion);
+    flatExpansion(typedBranching._fanOut, typedExpansion);
+
+    const double untyped = PathDistanceIndex::estimatedEnumerationChecks(parts, untypedExpansion, 100, 6);
+    const double typedB = PathDistanceIndex::estimatedEnumerationChecks(parts, typedExpansion, 100, 6);
 
     EXPECT_GT(untyped, typedB);
 }

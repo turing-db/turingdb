@@ -515,8 +515,9 @@ int main(int argc, char** argv) {
             appendFixed(prunedRow, indexMilliseconds, 2);
             appendRunCells(prunedRow, prunedRun);
 
-            const double fanOut = PathDistanceIndex::sampleSeedFanOut(PartDirectory(view), PathExplorationDir::FORWARD, std::nullopt, seeds.getRaw());
-            const bool worthBuilding = PathDistanceIndex::isWorthBuilding(view, fanOut, seeds.size(), maxHops);
+            PathDistanceIndex::SeedExpansion expansion;
+            PathDistanceIndex::sampleSeedExpansion(PartDirectory(view), PathExplorationDir::FORWARD, std::nullopt, seeds.getRaw(), expansion);
+            const bool worthBuilding = PathDistanceIndex::isWorthBuilding(view, expansion, seeds.size(), maxHops);
 
             std::cout << "==== End labels: filter against the reverse-distance index ====\n";
             printAsciiTable(headers, rows);
@@ -568,8 +569,9 @@ int main(int argc, char** argv) {
             appendFixed(prunedRow, indexMilliseconds, 2);
             appendRunCells(prunedRow, prunedRun);
 
-            const double fanOut = PathDistanceIndex::sampleSeedFanOut(PartDirectory(view), PathExplorationDir::FORWARD, std::nullopt, seeds.getRaw());
-            const bool worthBuilding = PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, fanOut, seeds.size(), distinctTargets.size(), maxHops);
+            PathDistanceIndex::SeedExpansion expansion;
+            PathDistanceIndex::sampleSeedExpansion(PartDirectory(view), PathExplorationDir::FORWARD, std::nullopt, seeds.getRaw(), expansion);
+            const bool worthBuilding = PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, seeds.size(), distinctTargets.size(), maxHops);
 
             std::cout << "==== Bound ends: filter against the target index ====\n";
             printAsciiTable(headers, rows);
