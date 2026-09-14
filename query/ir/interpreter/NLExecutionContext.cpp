@@ -5,6 +5,7 @@
 #include "TuringConfig.h"
 #include "VectorDatabase.h"
 
+#include "NLPendingEdges.h"
 #include "NLSystemContext.h"
 #include "NLWrittenValues.h"
 
@@ -20,7 +21,8 @@ NLExecutionContext::NLExecutionContext(const GraphView* view,
     _chunkSize(chunkSize),
     _writeBuffer(writeBuffer),
     _system(system),
-    _writtenValues(std::make_unique<NLWrittenValues>())
+    _writtenValues(std::make_unique<NLWrittenValues>()),
+    _pendingEdges(std::make_unique<NLPendingEdgeIndex>())
 {
 }
 

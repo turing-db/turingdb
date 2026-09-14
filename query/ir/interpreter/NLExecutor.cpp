@@ -66,6 +66,7 @@
 
 #include "NLProgram.h"
 #include "NLMergeExecutor.h"
+#include "NLPendingEdges.h"
 #include "NLWriteProperties.h"
 #include "NLWrittenValues.h"
 #include "NLMergeWorkingSet.h"
@@ -3058,6 +3059,7 @@ template <typename ChunkWriterType>
 void runEdgeLoopSteps(NLExecutionContext* context,
                       NLEdgeLoopData* loopData,
                       ChunkWriterType* chunkWriter,
+                      NLPendingEdges* pendingEdges,
                       ColumnNodeIDs* gatheredNodeIDs) {
     const NLStmtContainer* loopBody = loopData->getStmts();
 
@@ -3067,8 +3069,16 @@ void runEdgeLoopSteps(NLExecutionContext* context,
     // the null check is hoisted out of the per-iteration condition.
     const NLLimitState* limit = loopData->getLimit();
 
+    const auto hasStep = [&]() {
+        return chunkWriter->isValid() || pendingEdges->isValid();
+    };
+
     const auto runIteration = [&]() {
-        chunkWriter->fill(context->getChunkSize());
+        if (chunkWriter->isValid()) {
+            chunkWriter->fill(context->getChunkSize());
+        } else {
+            pendingEdges->fill(context->getChunkSize());
+        }
 
         const ColumnVector<size_t>* indices = loopData->getIndices();
         if (indices->empty()) {
@@ -3090,25 +3100,13 @@ void runEdgeLoopSteps(NLExecutionContext* context,
     };
 
     if (limit) {
-        while (chunkWriter->isValid() && limit->getRemaining() > 0) {
+        while (hasStep() && limit->getRemaining() > 0) {
             runIteration();
         }
     } else {
-        while (chunkWriter->isValid()) {
+        while (hasStep()) {
             runIteration();
         }
-    }
-}
-
-CommitWriteBuffer::ExistingOrPendingNode resolveNode(const ColumnNodeIDs* column,
-                                                     size_t row,
-                                                     bool isPending,
-                                                     size_t firstPendingNodeID) {
-    const NodeID nodeID = (*column)[row];
-    if (isPending) {
-        return CommitWriteBuffer::PendingNodeOffset(nodeID.getValue() - firstPendingNodeID);
-    } else {
-        return nodeID;
     }
 }
 
@@ -3120,6 +3118,48 @@ bool isPendingRow(const ColumnMask* pending, bool isPendingColumn, size_t row) {
     }
 
     return isPendingColumn;
+}
+
+// Which rows of an ID column name an entity this change has written and not committed. A
+// column a write bound says so through the mask or the flag codegen put on the op; a hop
+// produces its own rows, and the ID is what tells the two spaces apart there - this
+// change's own start where the graph's end.
+class PendingRows {
+public:
+    PendingRows(const ColumnMask* pending, bool isPendingColumn, size_t committedCount, size_t pendingCount)
+        : _pending(pending),
+        _isPendingColumn(isPendingColumn),
+        _committedCount(committedCount),
+        _pendingCount(pendingCount)
+    {
+    }
+
+    bool has(size_t row, uint64_t id) const {
+        const bool marked = isPendingRow(_pending, _isPendingColumn, row);
+        const bool namesWritten = id >= _committedCount && id - _committedCount < _pendingCount;
+
+        return marked || namesWritten;
+    }
+
+private:
+    const ColumnMask* _pending {nullptr};
+    bool _isPendingColumn {false};
+    size_t _committedCount {0};
+    size_t _pendingCount {0};
+};
+
+// The write buffer knows a node this change wrote by its offset, so a row naming one is
+// resolved back to it; every other row names a node the graph holds.
+CommitWriteBuffer::ExistingOrPendingNode resolveNode(const ColumnNodeIDs* column,
+                                                     size_t row,
+                                                     const PendingRows& pendingRows,
+                                                     size_t firstPendingNodeID) {
+    const NodeID nodeID = (*column)[row];
+    if (pendingRows.has(row, nodeID.getValue())) {
+        return CommitWriteBuffer::PendingNodeOffset(nodeID.getValue() - firstPendingNodeID);
+    } else {
+        return nodeID;
+    }
 }
 
 // The write buffer builds one column per property of a pending entity, so a second entry
@@ -3688,15 +3728,17 @@ void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data
 
     const GraphView* view = context->getView();
     const size_t firstPendingNodeID = committedNodeCount(view);
+    const size_t numPendingNodes = writeBuffer->numPendingNodes();
+
+    const PendingRows srcRows(srcPending, srcIsPending, firstPendingNodeID, numPendingNodes);
+    const PendingRows tgtRows(tgtPending, tgtIsPending, firstPendingNodeID, numPendingNodes);
 
     // Must extract this value before adding in the loop
     const size_t numPendingEdges = writeBuffer->numPendingEdges();
 
     for (size_t row = 0; row < rowCount; row++) {
-        const CommitWriteBuffer::ExistingOrPendingNode srcNode =
-            resolveNode(src, row, isPendingRow(srcPending, srcIsPending, row), firstPendingNodeID);
-        const CommitWriteBuffer::ExistingOrPendingNode tgtNode =
-            resolveNode(tgt, row, isPendingRow(tgtPending, tgtIsPending, row), firstPendingNodeID);
+        const CommitWriteBuffer::ExistingOrPendingNode srcNode = resolveNode(src, row, srcRows, firstPendingNodeID);
+        const CommitWriteBuffer::ExistingOrPendingNode tgtNode = resolveNode(tgt, row, tgtRows, firstPendingNodeID);
 
         CommitWriteBuffer::PendingEdge& edge = writeBuffer->newPendingEdge(srcNode, tgtNode);
         edge.edgeType = edgeTypeID;
@@ -3739,6 +3781,7 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
     const ColumnMask* rows = setData->getRows();
 
     const size_t firstPendingNodeID = committedNodeCount(context->getView());
+    const PendingRows pendingRows(pending, allPending, firstPendingNodeID, writeBuffer->numPendingNodes());
 
     // A node an OPTIONAL MATCH did not match is an invalid ID, which Cypher writes nothing
     // for: staging it would have the commit look the ID up among the nodes this change
@@ -3749,7 +3792,7 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
             continue;
         }
 
-        if (isPendingRow(pending, allPending, row)) {
+        if (pendingRows.has(row, raw[row].getValue())) {
             CommitWriteBuffer::PendingNode& node =
                 writeBuffer->getPendingNode(raw[row].getValue() - firstPendingNodeID);
             setPendingProperty(node.properties, propsBuffer[row]);
@@ -3777,6 +3820,7 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
     const ColumnMask* rows = setData->getRows();
 
     const size_t firstPendingEdgeID = committedEdgeCount(context->getView());
+    const PendingRows pendingRows(pending, allPending, firstPendingEdgeID, writeBuffer->numPendingEdges());
 
     const auto& raw = edges->getRaw();
     for (size_t row = 0; row < rowCount; row++) {
@@ -3784,7 +3828,7 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
             continue;
         }
 
-        if (isPendingRow(pending, allPending, row)) {
+        if (pendingRows.has(row, raw[row].getValue())) {
             CommitWriteBuffer::PendingEdge& edge =
                 writeBuffer->getPendingEdge(raw[row].getValue() - firstPendingEdgeID);
             setPendingProperty(edge.properties, propsBuffer[row]);
@@ -3809,6 +3853,7 @@ void NLExecutor::runDeleteNode(NLExecutionContext* context, NLFunctionData* data
     committed->clear();
 
     const size_t firstPendingNodeID = committedNodeCount(view);
+    const PendingRows pendingRows(pending, allPending, firstPendingNodeID, writeBuffer->numPendingNodes());
 
     const auto& raw = nodes->getRaw();
 
@@ -3820,9 +3865,8 @@ void NLExecutor::runDeleteNode(NLExecutionContext* context, NLFunctionData* data
             continue;
         }
 
-        const bool isPending = isPendingRow(pending, allPending, row);
         const CommitWriteBuffer::ExistingOrPendingNode node =
-            resolveNode(nodes, row, isPending, firstPendingNodeID);
+            resolveNode(nodes, row, pendingRows, firstPendingNodeID);
 
         // A relationship this query wrote counts as much as one the graph holds, whether
         // it hangs off a node the query wrote or off one already committed
@@ -3830,7 +3874,7 @@ void NLExecutor::runDeleteNode(NLExecutionContext* context, NLFunctionData* data
             throw IRException("Cannot delete a node with relationships; use DETACH DELETE");
         }
 
-        if (isPending) {
+        if (std::holds_alternative<CommitWriteBuffer::PendingNodeOffset>(node)) {
             writeBuffer->addDeletedPendingNode(std::get<CommitWriteBuffer::PendingNodeOffset>(node));
         } else {
             committed->push_back(raw[row]);
@@ -3864,6 +3908,7 @@ void NLExecutor::runDeleteEdge(NLExecutionContext* context, NLFunctionData* data
     committed->clear();
 
     const size_t firstPendingEdgeID = committedEdgeCount(context->getView());
+    const PendingRows pendingRows(pending, allPending, firstPendingEdgeID, writeBuffer->numPendingEdges());
 
     const auto& raw = edges->getRaw();
     for (size_t row = 0; row < raw.size(); row++) {
@@ -3871,7 +3916,7 @@ void NLExecutor::runDeleteEdge(NLExecutionContext* context, NLFunctionData* data
             continue;
         }
 
-        if (isPendingRow(pending, allPending, row)) {
+        if (pendingRows.has(row, raw[row].getValue())) {
             writeBuffer->addDeletedPendingEdge(raw[row].getValue() - firstPendingEdgeID);
         } else {
             committed->push_back(raw[row]);
@@ -4486,7 +4531,9 @@ void NLExecutor::runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData*
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setTgtIDs(loopData->getTargets());
 
-    runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getSources());
+    NLPendingEdges pendingEdges(context, loopData, NLPendingEdges::Direction::Out, loopData->getTargets());
+
+    runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getSources());
 }
 
 void NLExecutor::runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -4503,7 +4550,9 @@ void NLExecutor::runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* 
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setSrcIDs(loopData->getSources());
 
-    runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getTargets());
+    NLPendingEdges pendingEdges(context, loopData, NLPendingEdges::Direction::In, loopData->getSources());
+
+    runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getTargets());
 }
 
 void NLExecutor::runGetEdgesLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -4520,7 +4569,9 @@ void NLExecutor::runGetEdgesLoop(NLExecutionContext* context, NLFunctionData* da
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setOtherIDs(loopData->getTargets());
 
-    runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getSources());
+    NLPendingEdges pendingEdges(context, loopData, NLPendingEdges::Direction::Either, loopData->getTargets());
+
+    runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getSources());
 }
 
 void NLExecutor::runGetOutEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -4539,7 +4590,10 @@ void NLExecutor::runGetOutEdgesByTypeLoop(NLExecutionContext* context, NLFunctio
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setTgtIDs(loopData->getTargets());
 
-    runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getSources());
+    NLPendingEdges pendingEdges(context, loopData, NLPendingEdges::Direction::Out, loopData->getTargets());
+    pendingEdges.setEdgeType(loopData->getEdgeType());
+
+    runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getSources());
 }
 
 void NLExecutor::runGetInEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -4556,7 +4610,10 @@ void NLExecutor::runGetInEdgesByTypeLoop(NLExecutionContext* context, NLFunction
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setSrcIDs(loopData->getSources());
 
-    runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getTargets());
+    NLPendingEdges pendingEdges(context, loopData, NLPendingEdges::Direction::In, loopData->getSources());
+    pendingEdges.setEdgeType(loopData->getEdgeType());
+
+    runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getTargets());
 }
 
 void NLExecutor::runCrossProductLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -7489,14 +7546,19 @@ void NLExecutor::runPropertyFetch(NLExecutionContext* context, NLFunctionData* d
     NLWrittenValues& written = context->getWrittenValues();
     written.indexUpdates(writeBuffer);
 
-    if (!pending && !allPending && !written.hasUpdates()) {
+    const bool isNode = std::is_same_v<ID, NodeID>;
+    const size_t committedCount = isNode ? committedNodeCount(&view) : committedEdgeCount(&view);
+    const size_t pendingCount = isNode ? writeBuffer->numPendingNodes() : writeBuffer->numPendingEdges();
+    const PendingRows pendingRows(pending, allPending, committedCount, pendingCount);
+
+    if (!pending && !allPending && !written.hasUpdates() && pendingCount == 0) {
         return;
     }
 
     auto& raw = output->getRaw();
     const auto& inputRaw = inputIDs->getRaw();
     for (size_t row = 0; row < raw.size(); row++) {
-        if (isPendingRow(pending, allPending, row)) {
+        if (pendingRows.has(row, inputRaw[row].getValue())) {
             raw[row] = readPendingEntityProperty<ID, T>(writeBuffer,
                                                         written,
                                                         &view,

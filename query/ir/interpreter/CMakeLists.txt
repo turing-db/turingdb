@@ -8,6 +8,7 @@ set(ir_interpreter_sources
     NLExecutor.cpp
     NLMergeExecutor.cpp
     NLMergeWorkingSet.cpp
+    NLPendingEdges.cpp
     NLTranslator.cpp
     NLInterpreter.cpp
     NLSystemContext.cpp
