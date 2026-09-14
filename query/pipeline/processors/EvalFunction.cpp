@@ -17,6 +17,7 @@ template <ColumnOperator Op>
 struct UnaryEval {
     Column* _res {nullptr};
     GraphView _view;
+    QueryListBuffer* _listBuffer {nullptr};
 
     template <typename T>
     void operator()(const T* arg) {
@@ -31,7 +32,7 @@ struct UnaryEval {
             auto* result = dynamic_cast<ResultType*>(_res);
             bioassert(result, "Invalid cast to result column for labels().");
 
-            ColumnFunctions::exec<LabelsFunction>(result, arg, _view);
+            ColumnFunctions::exec<LabelsFunction>(result, arg, _view, _listBuffer);
         } else if constexpr (Op == OP_FUNC_EDGE_TYPES) {
             bioassert(_view.isValid(),
                       "Attempted to evaluate edgeTypes() with invalid GraphView.");
@@ -84,6 +85,16 @@ void EvalFunction::eval(Column* res, const Column* arg, GraphView view) {
 }
 
 template <ColumnOperator Op>
+void EvalFunction::eval(Column* res, const Column* arg, GraphView view, QueryListBuffer* listBuffer) {
+    using Types = TypeRestrictions<Op>;
+    UnaryEval<Op> fn {res, view, listBuffer};
+    using Dispatcher = ColumnSingleDispatcher<typename Types::Allowed,
+                                              UnaryEval<Op>,
+                                              typename Types::Excluded>;
+    Dispatcher::dispatch(arg, fn);
+}
+
+template <ColumnOperator Op>
 void EvalFunction::eval(Column* res, const Column* arg) {
     using Types = TypeRestrictions<Op>;
     UnaryEval<Op> fn {res, {}};
@@ -93,7 +104,7 @@ void EvalFunction::eval(Column* res, const Column* arg) {
     Dispatcher::dispatch(arg, fn);
 }
 
-template void EvalFunction::eval<OP_FUNC_LABELS>(Column* res, const Column* arg, GraphView view);
+template void EvalFunction::eval<OP_FUNC_LABELS>(Column* res, const Column* arg, GraphView view, QueryListBuffer* listBuffer);
 template void EvalFunction::eval<OP_FUNC_EDGE_TYPES>(Column* res, const Column* arg, GraphView view);
 
 template void EvalFunction::eval<OP_TO_INTEGER>(Column* res, const Column* arg);

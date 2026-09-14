@@ -4,6 +4,7 @@
 
 #include "columns/ColumnOperator.h"
 
+#include "list/ListBuffer.h"
 #include "views/GraphView.h"
 
 namespace db {
@@ -39,10 +40,16 @@ public:
 
     void setView(GraphView view) { _view = view; }
 
+    // The query's list buffer, which labels() builds its rows in. Set by the generator
+    // when it emits an instruction needing one, so a program without such an instruction
+    // holds none.
+    void setListBuffer(QueryListBuffer* listBuffer) { _listBuffer = listBuffer; }
+
 private:
     // All instructions which need be evaluated
     Instructions _instrs;
     GraphView _view;
+    QueryListBuffer* _listBuffer {nullptr};
 
     ExprProgram() = default;
     virtual ~ExprProgram() = default;
