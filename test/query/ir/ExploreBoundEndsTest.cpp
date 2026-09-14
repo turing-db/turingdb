@@ -29,6 +29,8 @@
 #include "SimpleGraph.h"
 #include "iterators/ChunkConfig.h"
 #include "iterators/PathExplorationDir.h"
+#include "iterators/PartDirectory.h"
+#include "iterators/PathDistanceIndex.h"
 #include "iterators/PathTargetIndex.h"
 #include "metadata/LabelSet.h"
 #include "reader/GraphReader.h"
@@ -537,7 +539,13 @@ TEST_F(ExploreBoundEndsGeneratedGraphTest, targetIndexKeepsTheFilteredRows) {
 
     // Every node's out-neighbours are the targets: at most one batch per sixty-four of
     // them, and the seeds are the edges
-    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, nodeCount * outDegree, nodeCount, 3));
+    std::vector<NodeID> seeds;
+    for (size_t node = 0; node < nodeCount; node++) {
+        seeds.push_back(NodeID(node));
+    }
+
+    const double fanOut = PathDistanceIndex::sampleSeedFanOut(PartDirectory(view), PathExplorationDir::FORWARD, std::nullopt, seeds);
+    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, fanOut, nodeCount * outDegree, nodeCount, 3));
 
     RowSink filtered;
     runProgram(generatedFilterProgram, view, filtered);

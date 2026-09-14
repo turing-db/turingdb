@@ -26,6 +26,7 @@
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "iterators/ChunkConfig.h"
+#include "iterators/PartDirectory.h"
 #include "iterators/PathDistanceIndex.h"
 #include "iterators/PathExplorationDir.h"
 #include "iterators/PathExplorator.h"
@@ -514,7 +515,8 @@ int main(int argc, char** argv) {
             appendFixed(prunedRow, indexMilliseconds, 2);
             appendRunCells(prunedRow, prunedRun);
 
-            const bool worthBuilding = PathDistanceIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, seeds.size(), maxHops);
+            const double fanOut = PathDistanceIndex::sampleSeedFanOut(PartDirectory(view), PathExplorationDir::FORWARD, std::nullopt, seeds.getRaw());
+            const bool worthBuilding = PathDistanceIndex::isWorthBuilding(view, fanOut, seeds.size(), maxHops);
 
             std::cout << "==== End labels: filter against the reverse-distance index ====\n";
             printAsciiTable(headers, rows);
@@ -566,7 +568,8 @@ int main(int argc, char** argv) {
             appendFixed(prunedRow, indexMilliseconds, 2);
             appendRunCells(prunedRow, prunedRun);
 
-            const bool worthBuilding = PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, seeds.size(), distinctTargets.size(), maxHops);
+            const double fanOut = PathDistanceIndex::sampleSeedFanOut(PartDirectory(view), PathExplorationDir::FORWARD, std::nullopt, seeds.getRaw());
+            const bool worthBuilding = PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, fanOut, seeds.size(), distinctTargets.size(), maxHops);
 
             std::cout << "==== Bound ends: filter against the target index ====\n";
             printAsciiTable(headers, rows);

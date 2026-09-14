@@ -2,6 +2,7 @@
 #include <optional>
 #include <vector>
 
+#include "PathExplorationReference.h"
 #include "TuringTest.h"
 
 #include "Graph.h"
@@ -91,6 +92,49 @@ TEST_F(PathBranchingSampleTest, branchesByTheNodesTheWalkReaches) {
     EXPECT_LT(chain._supportNodes, 2.0 * chainNodeCount);
 }
 
+// The fan-out a walk meets is the fan-out where it starts. Seeded in the cascade it branches
+// by three and seeded in the chain by one, and a sample spread over the graph reports neither.
+TEST_F(PathBranchingSampleTest, measuresTheBranchingWhereTheSeedsAre) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const PartDirectory parts(reader.getView());
+
+    Adjacency adjacency;
+    buildAdjacency(reader.getView(), nodeCount, adjacency);
+
+    const auto seedsOf = [&adjacency](EdgeTypeID edgeType, std::vector<NodeID>& seeds) {
+        seeds.clear();
+        for (size_t node = 0; node < nodeCount; node++) {
+            for (const ReferenceEdge& edge : adjacency._outs[node]) {
+                if (edge._type == edgeType.getValue()) {
+                    seeds.push_back(NodeID(node));
+                    break;
+                }
+            }
+        }
+    };
+
+    std::vector<NodeID> cascadeSeeds;
+    std::vector<NodeID> chainSeeds;
+    seedsOf(_cascade, cascadeSeeds);
+    seedsOf(_chain, chainSeeds);
+    ASSERT_FALSE(cascadeSeeds.empty());
+    ASSERT_FALSE(chainSeeds.empty());
+
+    std::vector<NodeID> everyNode;
+    for (size_t node = 0; node < nodeCount; node++) {
+        everyNode.push_back(NodeID(node));
+    }
+
+    const auto fanOut = [&parts](const std::vector<NodeID>& seeds) {
+        return PathDistanceIndex::sampleSeedFanOut(parts, PathExplorationDir::FORWARD, std::nullopt, seeds);
+    };
+
+    EXPECT_GT(fanOut(cascadeSeeds), 2.0);
+    EXPECT_NEAR(fanOut(chainSeeds), 1.0, 0.1);
+    EXPECT_LT(fanOut(everyNode), fanOut(chainSeeds));
+}
+
 TEST_F(PathBranchingSampleTest, chargesACascadeMoreThanAChainPerHop) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
@@ -100,7 +144,7 @@ TEST_F(PathBranchingSampleTest, chargesACascadeMoreThanAChainPerHop) {
         PathDistanceIndex::TypeBranching branching;
         PathDistanceIndex::sampleBranching(parts, PathExplorationDir::FORWARD, edgeType, branching);
 
-        return PathDistanceIndex::estimatedEnumerationChecks(parts, branching, 1, maxHops);
+        return PathDistanceIndex::estimatedEnumerationChecks(parts, branching._fanOut, 1, maxHops);
     };
 
     // A frontier that trebles every hop outgrows one that holds, which is the whole of what
@@ -143,7 +187,7 @@ TEST_F(PathBranchingSampleTest, theEnumerationFrontierOutgrowsTheNodesCarryingTh
     };
 
     const auto walkChecks = [&parts, &cascade](uint64_t maxHops) {
-        return PathDistanceIndex::estimatedEnumerationChecks(parts, cascade, 1, maxHops);
+        return PathDistanceIndex::estimatedEnumerationChecks(parts, cascade._fanOut, 1, maxHops);
     };
 
     EXPECT_DOUBLE_EQ(searchChecks(24), searchChecks(12));
