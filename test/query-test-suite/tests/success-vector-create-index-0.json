@@ -1,11 +1,11 @@
 {
   "enabled": true,
   "graph": "simpledb",
-  "query": "CREATE VECTOR INDEX embeddings WITH DIMENSION 4 METRIC EUCLID",
+  "query": "CREATE VECTOR INDEX embs WITH DIMENSION 4 METRIC EUCLID",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __CREATE_VECTOR_INDEX__\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
-    "result": "PARSE ERROR\n-------* Cypher parser\n     1 | CREATE VECTOR INDEX embeddings WITH DIMENSION 4 METRIC EUCLID\n       |                     ^^^^^^^^^^\n-------* syntax error, unexpected EMBEDDINGS, expecting ID",
-    "resultJson": "{\"error\":\"PARSE_ERROR\",\"error_details\":\"-------* Cypher parser\\n     1 | CREATE VECTOR INDEX embeddings WITH DIMENSION 4 METRIC EUCLID\\n       |                     ^^^^^^^^^^\\n-------* syntax error, unexpected EMBEDDINGS, expecting ID\"}"
+    "result": "indexName\nembs",
+    "resultJson": "{\"header\":{\"column_names\":[\"indexName\"],\"column_types\":[\"String\"]},\"data\":[[[\"embs\"]]]}"
   },
   "tags": [
     "success",
