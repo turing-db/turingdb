@@ -6589,12 +6589,17 @@ NLBroadcastConstantFunction NLExecutor::selectConstantListBroadcast() {
 
 NLBroadcastConstantFunction NLExecutor::selectOptListElementBroadcast(const Column* value) {
     const bool isConst = value->getContainerKind() == ContainerKind::code<ColumnConst>();
+    const bool holdsOptional = value->getInternalKind() == InternalKind::code<std::optional<ListElementView>>();
 
-    if (isConst) {
+    // A tagged cell carries its own null, so head() and last() answer with a plain cell rather
+    // than an optional even where the chunk it is laid out over is a nullable one.
+    if (!isConst) {
+        return &broadcastSingleRowColumn<ListElementView>;
+    } else if (holdsOptional) {
         return &broadcastNullableConstantColumn<ListElementView>;
     }
 
-    return &broadcastSingleRowColumn<ListElementView>;
+    return &broadcastConstantColumn<ListElementView>;
 }
 
 NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(ValueType valueType, const Column* value) {
