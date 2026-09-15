@@ -3856,12 +3856,9 @@ void DBProgramGenerator::generateWith(const WithStmt* with) {
 }
 
 void DBProgramGenerator::generateOptionalMatch(std::span<Stmt* const> stmt) {
-    // An optional pattern pads the rows it misses with an invalid ID, which is no offset
-    // into the write buffer the entity's rows live in: what the query wrote cannot be
-    // carried through one
-    if (!_part._writtenEntities.empty()) {
-        throwError("An OPTIONAL MATCH cannot read what a CREATE in the same query wrote", stmt.front());
-    }
+    const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt.front());
+
+    throwOnOptionalOverWrittenEntity(matchStmt);
 
     llvm::SmallVector<PublishedColumn> scopeColumns;
     collectPublishedColumns(scopeColumns);
@@ -3906,7 +3903,7 @@ void DBProgramGenerator::generateOptionalMatch(std::span<Stmt* const> stmt) {
 
     patternScope.append(constants.begin(), constants.end());
 
-    rebindScope(patternScope);
+    rebindScopeKeepingWrittenEntities(patternScope);
 
     const VariableDependency* tagVariable = nullptr;
     if (tagsRows) {
@@ -3971,10 +3968,9 @@ void DBProgramGenerator::generateOptionalMatch(std::span<Stmt* const> stmt) {
 
     published.append(constants.begin(), constants.end());
 
-    rebindScope(published);
+    rebindScopeKeepingWrittenEntities(published);
 
     // An OPTIONAL MATCH's cut reads the rows the join produced, the padded ones included
-    const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt.front());
     generateMatchOrderBy(matchStmt);
     generateMatchWindow(matchStmt);
 }
@@ -4066,6 +4062,25 @@ void DBProgramGenerator::throwOnPublishedMerge(const Projection* projection, con
                projection);
 }
 
+// An optional pattern reads the graph, which holds nothing this change wrote until the
+// commit. A pattern naming such an entity is turned away; one that only carries it past the
+// join is not, because the join hands its input columns back unchanged
+void DBProgramGenerator::throwOnOptionalOverWrittenEntity(const MatchStmt* matchStmt) const {
+    const Pattern* pattern = matchStmt->getPattern();
+
+    for (const PatternElement* element : pattern->elements()) {
+        for (const EntityPattern* entity : element->getEntities()) {
+            const VarDecl* decl = entity->getDecl();
+
+            if (isPendingThroughout(decl)) {
+                throwError(fmt::format("An OPTIONAL MATCH cannot read what a CREATE in the same query wrote: '{}'",
+                                       decl->getName()),
+                           matchStmt);
+            }
+        }
+    }
+}
+
 void DBProgramGenerator::rebindScope(llvm::ArrayRef<PublishedColumn> published) {
     _part = PartScope {};
     _vdg.clear();
@@ -4074,6 +4089,22 @@ void DBProgramGenerator::rebindScope(llvm::ArrayRef<PublishedColumn> published) 
         bioassert(!column._name.empty(), "Bound column without a name");
 
         registerValue(_vdg.registerBoundVariable(column._name, column._decl), column._column);
+    }
+}
+
+void DBProgramGenerator::rebindScopeKeepingWrittenEntities(llvm::ArrayRef<PublishedColumn> published) {
+    CarriedEntities carried;
+    for (const PublishedColumn& column : published) {
+        const PartScope::WrittenEntity* written = findWrittenEntity(column._decl);
+        if (written) {
+            carried.emplace_back(column._decl, *written);
+        }
+    }
+
+    rebindScope(published);
+
+    for (auto& [decl, written] : carried) {
+        _part._writtenEntities[decl] = std::move(written);
     }
 }
 
@@ -4103,7 +4134,7 @@ void DBProgramGenerator::publishInFlightColumns() {
     llvm::SmallVector<PublishedColumn> published;
     collectPublishedColumns(published);
 
-    rebindScope(published);
+    rebindScopeKeepingWrittenEntities(published);
 }
 
 void DBProgramGenerator::forEachVariableColumn(const VariableColumnBinding& bind) const {
@@ -5282,7 +5313,9 @@ bool DBProgramGenerator::writtenEntityHasTypes(const PartScope::WrittenEntity& w
                                                std::span<const std::string_view> typeNames,
                                                bool isNode) {
     if (!isNode) {
-        return typeNames.size() == 1 && typeNames.front() == written._edgeType;
+        return std::ranges::any_of(typeNames, [&written](std::string_view typeName) {
+            return typeName == written._edgeType;
+        });
     }
 
     return std::ranges::all_of(typeNames, [&written](std::string_view typeName) {
