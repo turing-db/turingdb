@@ -237,6 +237,8 @@ mlir::Value emitUnaryFunction(mlir::OpBuilder& builder,
 const std::unordered_map<std::string_view, UnaryFunctionEmitter> unaryFunctionEmitters = {
     {"labels", &emitUnaryFunction<mlir::db::Labels>},
     {"type", &emitUnaryFunction<mlir::db::EdgeType>},
+    {"startNode", &emitUnaryFunction<mlir::db::StartNode>},
+    {"endNode", &emitUnaryFunction<mlir::db::EndNode>},
     {"toInteger", &emitUnaryFunction<mlir::db::ToInteger>},
     {"toFloat", &emitUnaryFunction<mlir::db::ToFloat>},
     {"toBoolean", &emitUnaryFunction<mlir::db::ToBoolean>},

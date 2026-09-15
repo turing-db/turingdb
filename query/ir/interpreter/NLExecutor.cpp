@@ -496,6 +496,34 @@ void functionEntityKernel(NLExecutionContext* context, Column* result, const Col
     }
 }
 
+// The sibling of functionEntityKernel for a function whose answer is an entity too: a node
+// column spells its null as an invalid ID, so an unmatched edge writes one straight out
+// rather than needing a nullable column to hold it.
+template <typename Functor>
+void functionEntityToEntityKernel(NLExecutionContext* context, Column* result, const Column* input) {
+    using Arg = typename Functor::ArgType;
+    using Res = typename Functor::ResultType;
+
+    const auto* typedInput = dynamic_cast<const ColumnVector<Arg>*>(input);
+    bioassert(typedInput, "Function operand has an unexpected column type.");
+    auto* output = static_cast<ColumnVector<Res>*>(result);
+
+    const std::vector<Arg>& inputRaw = typedInput->getRaw();
+    const size_t size = inputRaw.size();
+
+    output->resize(size);
+    auto& outputRaw = output->getRaw();
+
+    Functor functor = makeFunctor<Functor>(context);
+    for (size_t row = 0; row < size; row++) {
+        if (inputRaw[row].isValid()) {
+            outputRaw[row] = functor(inputRaw[row]);
+        } else {
+            outputRaw[row] = Res {};
+        }
+    }
+}
+
 template <typename Functor, typename Element>
 void applyFunctionOverOptVector(Functor& functor,
                                 const ColumnOptVector<Element>* input,
@@ -5363,25 +5391,33 @@ NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool input
         return &functionConstKernel<Functor>;
     }
 
-    if (inputNullable) {
-        if constexpr (ReadsItsNulls<Functor>) {
-            result = memory->alloc<ColumnVector<Res>>();
-            return &functionNullReadingKernel<Functor>;
-        } else {
-            result = memory->alloc<ColumnOptVector<JustRes>>();
-            return &functionOptKernel<Functor>;
+    // An entity answers with the invalid ID where it is absent, so a function answering one
+    // needs no nullable column to carry that: it fills the plain ID column every other
+    // entity column in the engine is, and its rows say for themselves which matched nothing
+    if constexpr (TypedInternalID<Res>) {
+        result = memory->alloc<ColumnVector<Res>>();
+        return &functionEntityToEntityKernel<Functor>;
+    } else {
+        if (inputNullable) {
+            if constexpr (ReadsItsNulls<Functor>) {
+                result = memory->alloc<ColumnVector<Res>>();
+                return &functionNullReadingKernel<Functor>;
+            } else {
+                result = memory->alloc<ColumnOptVector<JustRes>>();
+                return &functionOptKernel<Functor>;
+            }
         }
-    }
 
-    // An entity column carries its null in the ID rather than in an optional, so it is
-    // read row by row for validity and its result is nullable all the same
-    if constexpr (TypedInternalID<typename Functor::ArgType>) {
-        result = memory->alloc<ColumnOptVector<JustRes>>();
-        return &functionEntityKernel<Functor>;
-    }
+        // An entity column carries its null in the ID rather than in an optional, so it is
+        // read row by row for validity and its result is nullable all the same
+        if constexpr (TypedInternalID<typename Functor::ArgType>) {
+            result = memory->alloc<ColumnOptVector<JustRes>>();
+            return &functionEntityKernel<Functor>;
+        }
 
-    result = memory->alloc<ColumnVector<Res>>();
-    return &functionVectorKernel<Functor>;
+        result = memory->alloc<ColumnVector<Res>>();
+        return &functionVectorKernel<Functor>;
+    }
 }
 
 template <typename StringFunctor>
@@ -5405,6 +5441,8 @@ NLUnaryFunctionKernel NLExecutor::selectConversion(const Column* input, bool inp
 
 template NLUnaryFunctionKernel NLExecutor::selectFunction<LabelsFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<EdgeTypesFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<StartNodeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<EndNodeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<toBoolFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListSizeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListHeadFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);

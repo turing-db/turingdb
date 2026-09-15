@@ -1414,6 +1414,13 @@ class UnaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure]> {
 
 def Labels : UnaryFunctionOp<"labels">;
 def EdgeType : UnaryFunctionOp<"edge_type">;
+
+// The two ends of each edge of a column, as node columns of their own. The edge is read as
+// the graph stores it, so a hop that walked it backwards or undirected reports the same
+// pair rather than the one its own direction suggests.
+def StartNode : UnaryFunctionOp<"start_node">;
+def EndNode : UnaryFunctionOp<"end_node">;
+
 def ToInteger : UnaryFunctionOp<"to_integer">;
 def ToFloat : UnaryFunctionOp<"to_float">;
 def ToBoolean : UnaryFunctionOp<"to_boolean">;

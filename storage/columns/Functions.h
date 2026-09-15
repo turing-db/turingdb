@@ -104,6 +104,49 @@ private:
     EdgeTypeID readEdgeType(EdgeID edge) const;
 };
 
+// The ends of an edge, read as the graph stores it: the start is the node the edge leaves
+// and the end the node it reaches, whichever way the pattern walked it. An invalid edge -
+// what an OPTIONAL MATCH leaves where it matched nothing - has no end, so the answer is the
+// invalid node ID a node column carries its null as.
+class EdgeEndsFunction {
+public:
+    using ArgType = EdgeID;
+    using ResultType = NodeID;
+
+    explicit EdgeEndsFunction(GraphView view);
+
+    // The graph holds none of a change's writes until they commit, so the ends of an edge
+    // this one wrote are read out of @param writeBuffer
+    EdgeEndsFunction(GraphView view, const CommitWriteBuffer* writeBuffer);
+
+protected:
+    NodeID getStartNode(EdgeID edge) const;
+    NodeID getEndNode(EdgeID edge) const;
+
+private:
+    GraphView _view;
+    const CommitWriteBuffer* _writeBuffer {nullptr};
+    size_t _firstPendingNodeID {0};
+    size_t _firstPendingEdgeID {0};
+
+    void readEnds(EdgeID edge, NodeID& start, NodeID& end) const;
+    void readPendingEnds(EdgeID edge, NodeID& start, NodeID& end) const;
+};
+
+class StartNodeFunction : public EdgeEndsFunction {
+public:
+    using EdgeEndsFunction::EdgeEndsFunction;
+
+    ResultType operator()(const EdgeID edge) const { return getStartNode(edge); }
+};
+
+class EndNodeFunction : public EdgeEndsFunction {
+public:
+    using EdgeEndsFunction::EdgeEndsFunction;
+
+    ResultType operator()(const EdgeID edge) const { return getEndNode(edge); }
+};
+
 class toIntegerFunction {
 public:
     using ArgType = types::String::Primitive;

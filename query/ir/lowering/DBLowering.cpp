@@ -56,6 +56,10 @@ mlir::Type ownedStringFunctionElement(mlir::OpBuilder& builder, mlir::Type input
     return storage::OwnedStringType::get(builder.getContext());
 }
 
+mlir::Type nodeIDFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
+    return storage::NodeIDType::get(builder.getContext());
+}
+
 mlir::Type integerFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
     return builder.getI64Type();
 }
@@ -151,6 +155,12 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     // chunk's own type says
     {"db.labels",     {&emitNLUnaryFunction<nl::Labels>,    &ownedStringFunctionElement, ResultNullability::AlwaysNullable}},
     {"db.edge_type",  {&emitNLUnaryFunction<nl::EdgeType>,  &ownedStringFunctionElement, ResultNullability::AlwaysNullable}},
+
+    // An end of an edge is a node, and a node column spells its null as an invalid ID, so
+    // the result stays a plain node chunk where labels() and type() need a nullable one
+    {"db.start_node", {&emitNLUnaryFunction<nl::StartNode>,  &nodeIDFunctionElement,      ResultNullability::NeverNullable}},
+    {"db.end_node",   {&emitNLUnaryFunction<nl::EndNode>,    &nodeIDFunctionElement,      ResultNullability::NeverNullable}},
+
     {"db.to_integer", {&emitNLUnaryFunction<nl::ToInteger>, &integerFunctionElement,     ResultNullability::AlwaysNullable}},
     {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,       ResultNullability::AlwaysNullable}},
     {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, &booleanFunctionElement,     ResultNullability::AlwaysNullable}},

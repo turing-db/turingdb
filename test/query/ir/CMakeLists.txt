@@ -2534,7 +2534,6 @@ target_link_libraries(test_query_ir_null_comparison_disjunction PRIVATE
         turing_db_storage_s
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_null_comparison_disjunction PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-
 # A node or an edge indexed out of a collected list, run end to end against simpledb.
 add_turing_test(test_query_ir_collected_entity_index CollectedEntityIndexTest.cpp)
 target_sources(test_query_ir_collected_entity_index PRIVATE StringRowSink.cpp)
@@ -2559,3 +2558,15 @@ target_link_libraries(test_query_ir_multi_part_entity_pick PRIVATE
         turing_db_storage_s
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_multi_part_entity_pick PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# startNode() and endNode() over the edges of simpledb, run end to end.
+add_turing_test(test_query_ir_edge_endpoints EdgeEndpointsTest.cpp)
+target_link_libraries(test_query_ir_edge_endpoints PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_edge_endpoints PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
