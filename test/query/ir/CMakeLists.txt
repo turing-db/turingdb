@@ -2645,3 +2645,47 @@ target_link_libraries(test_query_ir_id_function PRIVATE
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_id_function PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_null_column_aggregate_pair NullColumnAggregatePairTest.cpp)
+target_link_libraries(test_query_ir_null_column_aggregate_pair PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_null_column_aggregate_pair PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_min_max_over_nullable MinMaxOverNullableTest.cpp)
+target_link_libraries(test_query_ir_min_max_over_nullable PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_min_max_over_nullable PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_cross_type_comparison CrossTypeComparisonTest.cpp)
+target_link_libraries(test_query_ir_cross_type_comparison PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_cross_type_comparison PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_list_scalar_concat ListScalarConcatTest.cpp)
+target_link_libraries(test_query_ir_list_scalar_concat PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_list_scalar_concat PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
