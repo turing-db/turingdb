@@ -1,15 +1,14 @@
+// Copyright Turing Biosystems Ltd
+// SPDX-License-Identifier: Apache-2.0
+
 // Node smoke test for the wasm TuringClient: serves hand-crafted wire packets through
 // a fake fetch (sliced into small stream chunks to exercise packet reassembly) and
 // checks the decoded JS values, list columns and error handling included.
-// Run from wasm/: node client_smoke.mjs
+// Run from wasm/npm/: node client_smoke.mjs
 
 import assert from "assert";
-import { createRequire } from "module";
 
 import { Column, TuringClient, TuringQueryError } from "./TuringClient.mjs";
-
-const require = createRequire(import.meta.url);
-const createTuringDecoderModule = require("./build/turing_wasm_decoder.js");
 
 const MESSAGE_CHUNK_HEADER = 0;
 const MESSAGE_CHUNK = 1;
@@ -24,7 +23,7 @@ const TYPE_LIST_VIEW = 6;
 const TYPE_CELL_VIEW = 8;
 const TYPE_NODE_ID = 9;
 const TYPE_MAP_VIEW = 18;
-const TYPE_GRAPH_PATH = 22;
+const TYPE_GRAPH_PATH = 21;
 
 const ENCODING_VECTOR = 0;
 const ENCODING_OPTIONAL_VECTOR = 1;
@@ -385,7 +384,7 @@ function makeEndChunk(rowCount) {
     return frame(MESSAGE_END_CHUNK, footer);
 }
 
-async function testQuery(module) {
+async function testQuery() {
     const bytes = concatPackets([
         ...makeFirstDataframe(),
         makeEndChunk(3),
@@ -395,7 +394,7 @@ async function testQuery(module) {
     ]);
 
     const captured = {};
-    const client = new TuringClient(module, {
+    const client = new TuringClient({
         url: "/api/query",
         graph: "simpledb",
         authToken: "secret",
@@ -436,14 +435,14 @@ async function testQuery(module) {
     assert.deepStrictEqual(chunks[1].columns[3].toArray(), [null, "y"]);
 }
 
-async function testQueryData(module) {
+async function testQueryData() {
     const bytes = concatPackets([
         ...makeFirstDataframe(),
         makeEndChunk(3),
         makeEnd(1.0),
     ]);
 
-    const client = new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) });
+    const client = new TuringClient({ fetch: makeFakeFetch(bytes, {}) });
     const data = await client.queryData("MATCH (n) RETURN n");
 
     assert.deepStrictEqual(data, [[
@@ -454,13 +453,13 @@ async function testQueryData(module) {
     ]]);
 }
 
-async function testError(module) {
+async function testError() {
     const error = new Writer();
     error.u8(2); // PARSE_ERROR
     error.raw(encoder.encode("boom"));
     const bytes = concatPackets([frame(MESSAGE_ERROR, error), makeEnd(0.5)]);
 
-    const client = new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) });
+    const client = new TuringClient({ fetch: makeFakeFetch(bytes, {}) });
 
     await assert.rejects(client.query("MATCH ("), (raised) => {
         assert.ok(raised instanceof TuringQueryError);
@@ -470,10 +469,10 @@ async function testError(module) {
     });
 }
 
-async function testMaps(module, split) {
+async function testMaps(split) {
     const bytes = concatPackets([...makeMapDataframe(split), makeEndChunk(3), makeEnd(1.0)]);
 
-    const client = new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) });
+    const client = new TuringClient({ fetch: makeFakeFetch(bytes, {}) });
     const { chunks } = await client.query("RETURN {a: 1}");
     const [person, mixed, row, tags] = chunks[0].columns;
 
@@ -492,13 +491,13 @@ async function testMaps(module, split) {
     assert.ok(tags.isConstant);
     assert.deepStrictEqual(tags.toArray(), [{ k: "v", n: 1.5 }, { k: "v", n: 1.5 }, { k: "v", n: 1.5 }]);
 
-    const data = await new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) }).queryData("RETURN {a: 1}");
+    const data = await new TuringClient({ fetch: makeFakeFetch(bytes, {}) }).queryData("RETURN {a: 1}");
     assert.deepStrictEqual(data[0][0], [{ age: 32, name: "remy" }, {}, { id: 9, inner: { a: 1 }, xs: [true] }]);
 }
 
 // A column may carry fewer items than the dataframe has rows; queryData reads the missing
 // rows as undefined rather than failing, map columns included.
-async function testRaggedQueryData(module) {
+async function testRaggedQueryData() {
     const header = makeHeader([
         { name: "name", typeCode: TYPE_STRING, encoding: ENCODING_VECTOR },
         { name: "props", typeCode: TYPE_MAP_VIEW, encoding: ENCODING_VECTOR },
@@ -523,7 +522,7 @@ async function testRaggedQueryData(module) {
     chunk.u64(3n);
 
     const bytes = concatPackets([frame(MESSAGE_CHUNK_HEADER, header), frame(MESSAGE_CHUNK, chunk), makeEndChunk(3), makeEnd(1.0)]);
-    const data = await new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) }).queryData("RETURN 1");
+    const data = await new TuringClient({ fetch: makeFakeFetch(bytes, {}) }).queryData("RETURN 1");
 
     assert.deepStrictEqual(data, [[
         ["a", undefined, undefined],
@@ -534,7 +533,7 @@ async function testRaggedQueryData(module) {
 
 // A path reads as its IDs in the order it runs, node, edge, node. query() keeps them BigInt,
 // so an id above 2^53 survives exactly.
-async function testGraphPathIdsStayExact(module) {
+async function testGraphPathIdsStayExact() {
     const header = makeHeader([{ name: "path", typeCode: TYPE_GRAPH_PATH, encoding: ENCODING_VECTOR }]);
 
     const chunk = new Writer();
@@ -545,14 +544,14 @@ async function testGraphPathIdsStayExact(module) {
     chunk.u64(5n);
 
     const bytes = concatPackets([frame(MESSAGE_CHUNK_HEADER, header), frame(MESSAGE_CHUNK, chunk), makeEndChunk(1), makeEnd(1.0)]);
-    const { chunks } = await new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) }).query("RETURN 1");
+    const { chunks } = await new TuringClient({ fetch: makeFakeFetch(bytes, {}) }).query("RETURN 1");
 
     assert.deepStrictEqual(chunks[0].columns[0].toArray(), [[9007199254740993n, 9007199254740995n, 5n]]);
 }
 
 // The null path an OPTIONAL MATCH leaves arrives as a path of 0 nodes and reads as null,
 // as the JSON and Python clients read it.
-async function testNullGraphPath(module) {
+async function testNullGraphPath() {
     const header = makeHeader([{ name: "path", typeCode: TYPE_GRAPH_PATH, encoding: ENCODING_VECTOR }]);
 
     const chunk = new Writer();
@@ -562,19 +561,18 @@ async function testNullGraphPath(module) {
     chunk.u32(0);
 
     const bytes = concatPackets([frame(MESSAGE_CHUNK_HEADER, header), frame(MESSAGE_CHUNK, chunk), makeEndChunk(2), makeEnd(1.0)]);
-    const data = await new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) }).queryData("RETURN 1");
+    const data = await new TuringClient({ fetch: makeFakeFetch(bytes, {}) }).queryData("RETURN 1");
 
     assert.deepStrictEqual(data, [[[[7], null]]]);
 }
 
-createTuringDecoderModule().then(async (module) => {
-    await testQuery(module);
-    await testQueryData(module);
-    await testError(module);
-    await testMaps(module, false);
-    await testMaps(module, true);
-    await testRaggedQueryData(module);
-    await testGraphPathIdsStayExact(module);
-    await testNullGraphPath(module);
-    console.log("wasm client smoke test passed: query, queryData, error, maps, ragged, paths, null paths");
-});
+await testQuery();
+await testQueryData();
+await testError();
+await testMaps(false);
+await testMaps(true);
+await testRaggedQueryData();
+await testGraphPathIdsStayExact();
+await testNullGraphPath();
+
+console.log("wasm client smoke test passed: query, queryData, error, maps, ragged, paths, null paths");
