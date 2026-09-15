@@ -123,10 +123,12 @@ TEST_F(MatchCreatedEdgeTest, commitsTheEdgeItWalked) {
 }
 
 // More pending edges than one chunk holds, so the walk fills several: what the hop reports
-// is what the commit holds.
+// is what the commit holds. The count between the two cuts drains every step of the CREATE
+// before the hop runs, so the hop walks all of what was written and not the slice one step
+// of it wrote.
 TEST_F(MatchCreatedEdgeTest, walksMoreCreatedEdgesThanAChunkHolds) {
     StringRowSink walked;
-    runWrite("MATCH (a:Person {name: 'Remy'}), (b), (c), (d), (e) CREATE (a)-[:CHUNKY]->(b) WITH DISTINCT a MATCH (a)-[:CHUNKY]->(m) RETURN count(m)",
+    runWrite("MATCH (a:Person {name: 'Remy'}), (b), (c), (d), (e) CREATE (a)-[:CHUNKY]->(b) WITH count(a) AS made MATCH (p:Person {name: 'Remy'})-[:CHUNKY]->(m) RETURN count(m)",
              walked);
 
     ASSERT_EQ(walked.getRows().size(), 1u);
