@@ -5,7 +5,7 @@
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): embedding\n__expr__ (LITERAL): v8\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
     "result": "embedding,\"[true, \"\"i love turingdb\"\", 20.3, embedding]\"\n\"[1, 2, 3, 4]\",\"[true, i love turingdb, 20.3, [1, 2, 3, 4]]\"",
-    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"Non-literal list elements are not yet supported\"}"
+    "resultJson": "{\"header\":{\"column_names\":[\"embedding\",\"[true, \\\"i love turingdb\\\", 20.3, embedding]\"],\"column_types\":[\"List\",\"List\"]},\"data\":[[[[1,2,3,4]],[[true,\"i love turingdb\",20.3,[1,2,3,4]]]]]}"
   },
   "tags": [],
   "write-required": false

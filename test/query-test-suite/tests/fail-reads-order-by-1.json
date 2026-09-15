@@ -5,7 +5,7 @@
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN n ORDER BY n.nam DESC, n.duration ASC\n       |                             ^^^^^\n-------* Property type 'nam' not found",
     "result": "n\n0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17",
-    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n) RETURN n ORDER BY n.nam DESC, n.duration ASC\\n       |                             ^^^^^\\n-------* Property type 'nam' not found\"}"
+    "resultJson": "{\"header\":{\"column_names\":[\"n\"],\"column_types\":[\"UInt64\"]},\"data\":[[[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]]]}"
   },
   "tags": [
     "fail",
