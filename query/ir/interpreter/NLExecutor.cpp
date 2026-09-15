@@ -134,11 +134,20 @@ ListView sourceList(const ColumnOptVector<ListView>* source, size_t row) {
     return *source->getRaw()[row];
 }
 
+size_t unwoundListSize(const ListView& list) {
+    return list.size();
+}
+
+size_t unwoundListSize(const std::optional<ListView>& list) {
+    return list.has_value() ? list->size() : 0;
+}
+
 // The rows one cell of a list column unwinds into: one per element, so an empty list
-// contributes none.
+// contributes none - as does a cell holding no list at all.
+template <typename SourceColumn>
 size_t unwindListElementCount(const Column* source, size_t row) {
-    const auto* lists = static_cast<const ColumnVector<ListView>*>(source);
-    return (*lists)[row].size();
+    const auto* lists = static_cast<const SourceColumn*>(source);
+    return unwoundListSize(lists->getRaw()[row]);
 }
 
 // The nullable sibling: an absent list unwinds into no row at all, as a null value does.

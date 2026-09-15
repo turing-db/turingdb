@@ -33,6 +33,9 @@
 #include "SystemManager.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
+#include "list/ListBufferTypeTag.h"
+#include "list/ListElementView.h"
+#include "list/ListView.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 
@@ -44,25 +47,30 @@ using namespace turing::test;
 
 namespace {
 
-class OwnedStringSink : public NLOutputSink {
+class LabelListSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 1u);
 
-        const auto* strings = dynamic_cast<const ColumnOptVector<std::string>*>(chunks[0]);
-        ASSERT_NE(strings, nullptr);
+        const auto* lists = dynamic_cast<const ColumnOptVector<ListView>*>(chunks[0]);
+        ASSERT_NE(lists, nullptr);
 
-        const auto& raw = strings->getRaw();
+        const auto& raw = lists->getRaw();
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             ASSERT_TRUE(raw[rowIndex].has_value());
-            _values.push_back(*raw[rowIndex]);
+
+            std::vector<std::string>& names = _values.emplace_back();
+            for (const ListElementView element : *raw[rowIndex]) {
+                ASSERT_EQ(element.getTag(), ListBufferTypeTag::String);
+                names.emplace_back(element.getAs<std::string_view>());
+            }
         }
     }
 
-    const std::vector<std::string>& values() const { return _values; }
+    const std::vector<std::vector<std::string>>& values() const { return _values; }
 
 private:
-    std::vector<std::string> _values;
+    std::vector<std::vector<std::string>> _values;
 };
 
 }
@@ -123,16 +131,19 @@ protected:
     Graph* _graph {nullptr};
 };
 
-TEST_F(OrderByLabelsTest, ownedLabelStringSortsWithoutCrash) {
-    OwnedStringSink sink;
+// A list column sorts element by element and then on length, which is how two vectors of
+// names compare, so the rows read back are sorted exactly when the column was
+TEST_F(OrderByLabelsTest, labelListSortsWithoutCrash) {
+    LabelListSink sink;
     runQuery("MATCH (n) RETURN labels(n) ORDER BY labels(n)", &sink);
 
-    const std::vector<std::string>& values = sink.values();
+    const std::vector<std::vector<std::string>>& values = sink.values();
 
     EXPECT_EQ(values.size(), 18u);
     EXPECT_TRUE(std::is_sorted(values.begin(), values.end()));
 
-    for (const std::string& value : values) {
-        EXPECT_FALSE(value.empty());
+    // Every node carries at least one label
+    for (const std::vector<std::string>& names : values) {
+        EXPECT_FALSE(names.empty());
     }
 }
