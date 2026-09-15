@@ -253,11 +253,9 @@ void unwindListValidIDEmit(const Column* source,
     }
 }
 
-// The rows one cell of a type-erased column unwinds into: a tagged list its elements, a
-// tagged null none, and any other tagged scalar the single row it is.
-size_t unwindTaggedElementCount(const Column* source, size_t row) {
-    const auto* elements = static_cast<const ColumnVector<ListElementView>*>(source);
-    const ListElementView element = (*elements)[row];
+// The rows one tagged cell unwinds into: a tagged list its elements, a tagged null none,
+// and any other tagged scalar the single row it is.
+size_t taggedCellRowCount(const ListElementView element) {
     const ListBufferTypeTag tag = element.getTag();
 
     if (tag == ListBufferTypeTag::ListView) {
@@ -265,6 +263,35 @@ size_t unwindTaggedElementCount(const Column* source, size_t row) {
     }
 
     return tag == ListBufferTypeTag::Null ? 0 : 1;
+}
+
+// The element one tagged cell gives up at @param position: that of the list it holds, or
+// the cell itself where it holds anything else.
+ListElementView taggedCellElement(const ListElementView element, size_t position) {
+    if (element.getTag() != ListBufferTypeTag::ListView) {
+        return element;
+    }
+
+    return element.getAs<ListView>().elements()[position];
+}
+
+size_t unwindTaggedElementCount(const Column* source, size_t row) {
+    const auto* elements = static_cast<const ColumnVector<ListElementView>*>(source);
+
+    return taggedCellRowCount((*elements)[row]);
+}
+
+// The nullable sibling: an absent cell contributes no row, as the tagged null it stands
+// for does.
+size_t unwindOptTaggedElementCount(const Column* source, size_t row) {
+    const auto* elements = static_cast<const ColumnOptVector<ListElementView>*>(source);
+    const std::optional<ListElementView>& element = (*elements)[row];
+
+    if (!element.has_value()) {
+        return 0;
+    }
+
+    return taggedCellRowCount(*element);
 }
 
 // Fill the element chunk from a type-erased column: a cell holding a nested list gives up
@@ -281,11 +308,26 @@ void unwindTaggedElementEmit(const Column* source,
     outputRaw.resize(rowsRaw.size());
 
     for (size_t index = 0; index < rowsRaw.size(); index++) {
-        const ListElementView element = elements[rowsRaw[index]];
+        outputRaw[index] = taggedCellElement(elements[rowsRaw[index]], positionsRaw[index]);
+    }
+}
 
-        outputRaw[index] = element.getTag() == ListBufferTypeTag::ListView
-                               ? element.getAs<ListView>().elements()[positionsRaw[index]]
-                               : element;
+// The nullable sibling: only a present cell is drained, so every row the step covers holds
+// one and the element column carries no absent value.
+void unwindOptTaggedElementEmit(const Column* source,
+                                const ColumnVector<size_t>* rows,
+                                const ColumnVector<size_t>* positions,
+                                Column* output) {
+    const std::vector<std::optional<ListElementView>>& elements =
+        static_cast<const ColumnOptVector<ListElementView>*>(source)->getRaw();
+    const std::vector<size_t>& rowsRaw = rows->getRaw();
+    const std::vector<size_t>& positionsRaw = positions->getRaw();
+
+    std::vector<ListElementView>& outputRaw = static_cast<ColumnVector<ListElementView>*>(output)->getRaw();
+    outputRaw.resize(rowsRaw.size());
+
+    for (size_t index = 0; index < rowsRaw.size(); index++) {
+        outputRaw[index] = taggedCellElement(*elements[rowsRaw[index]], positionsRaw[index]);
     }
 }
 
@@ -712,6 +754,29 @@ struct BinaryOpSelector {
     }
 };
 
+template <typename Primitive, typename ResCol, typename LhsCol, typename RhsCol>
+void applyValueListIndex(Column* result, const Column* lhs, const Column* rhs, LocalMemory* memory) {
+    BinaryOperators::exec<ValueListIndex<Primitive>>(static_cast<ResCol*>(result),
+                                                     static_cast<const LhsCol*>(lhs),
+                                                     static_cast<const RhsCol*>(rhs));
+}
+
+template <typename Primitive>
+struct ValueListIndexSelector {
+    LocalMemory* _memory {nullptr};
+    Column* _result {nullptr};
+    NLBinaryFn _fn {nullptr};
+
+    template <typename LhsCol, typename RhsCol>
+    void operator()(const LhsCol*, const RhsCol*) {
+        using ResCol = ColumnCombination<ValueListIndex<Primitive>, LhsCol, RhsCol>;
+        using ResColType = ResCol::ResultColumnType;
+
+        _result = _memory->alloc<ResColType>();
+        _fn = &applyValueListIndex<Primitive, ResColType, LhsCol, RhsCol>;
+    }
+};
+
 // Execute a body of statements
 void runBody(NLExecutionContext* context, const NLStmtContainer* body) {
     for (const NLFunctionDescriptor& descriptor : body->stmts()) {
@@ -935,6 +1000,21 @@ void broadcastNullableConstantColumn(const Column* value, size_t rowCount, Colum
     outputRaw.resize(rowCount);
 
     std::fill_n(outputRaw.begin(), rowCount, typedValue->getRaw());
+}
+
+// A constant chunk is not always a ColumnConst: a kernel computing over literals writes
+// its one row into an ordinary column. That row is the one every row of the step reads.
+template <typename Primitive>
+void broadcastSingleRowColumn(const Column* value, size_t rowCount, Column* output) {
+    const auto& valueRaw = static_cast<const ColumnOptVector<Primitive>*>(value)->getRaw();
+    ColumnOptVector<Primitive>* typedOutput = static_cast<ColumnOptVector<Primitive>*>(output);
+
+    if (valueRaw.empty()) {
+        typedOutput->getRaw().assign(rowCount, std::optional<Primitive> {});
+        return;
+    }
+
+    typedOutput->getRaw().assign(rowCount, valueRaw.front());
 }
 
 // The null literal laid out over every row of the step: it holds no value to repeat, so
@@ -4992,6 +5072,31 @@ NLBinaryFn NLExecutor::selectBinary(const Column* lhs,
     return selector._fn;
 }
 
+NLBinaryFn NLExecutor::selectValueListIndex(ValueType valueType,
+                                            const Column* lhs,
+                                            const Column* rhs,
+                                            LocalMemory* memory,
+                                            Column*& result) {
+    using Pairs = PairRestrictions<OP_INDEX>;
+
+    NLBinaryFn selected = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        using Selector = ValueListIndexSelector<typename T::Primitive>;
+
+        Selector selector {._memory = memory};
+        ColumnDoubleDispatcher<typename Pairs::Allowed,
+                               typename Pairs::AllowedMixed,
+                               Selector,
+                               typename Pairs::Excluded>::dispatch(lhs, rhs, selector);
+
+        result = selector._result;
+        selected = selector._fn;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return selected;
+}
+
 void NLExecutor::runUnaryFunction(NLExecutionContext* context, NLFunctionData* data) {
     const NLUnaryFunctionData* funcData = static_cast<NLUnaryFunctionData*>(data);
     funcData->getKernel()(context, funcData->getResult(), funcData->getInput());
@@ -5859,6 +5964,14 @@ NLUnwindElementEmitFunction NLExecutor::selectTaggedUnwindElementEmit() {
     return &unwindTaggedElementEmit;
 }
 
+NLUnwindElementCountFunction NLExecutor::selectOptTaggedUnwindElementCount() {
+    return &unwindOptTaggedElementCount;
+}
+
+NLUnwindElementEmitFunction NLExecutor::selectOptTaggedUnwindElementEmit() {
+    return &unwindOptTaggedElementEmit;
+}
+
 NLUnwindCollectValueEmitFunction NLExecutor::selectUnwindCollectValueEmit(ValueType valueType) {
     switch (valueType) {
         case ValueType::Int64:
@@ -6199,12 +6312,26 @@ NLBroadcastConstantFunction NLExecutor::selectConstantListBroadcast() {
     return &broadcastConstantListColumn;
 }
 
+NLBroadcastConstantFunction NLExecutor::selectOptListElementBroadcast(const Column* value) {
+    const bool isConst = value->getContainerKind() == ContainerKind::code<ColumnConst>();
+
+    if (isConst) {
+        return &broadcastNullableConstantColumn<ListElementView>;
+    }
+
+    return &broadcastSingleRowColumn<ListElementView>;
+}
+
 NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(ValueType valueType, const Column* value) {
+    const bool isConst = value->getContainerKind() == ContainerKind::code<ColumnConst>();
+
     NLBroadcastConstantFunction fill = nullptr;
     const auto select = [&]<SupportedType T>() {
         using Primitive = typename T::Primitive;
 
-        if (value->getInternalKind() == InternalKind::code<std::optional<Primitive>>()) {
+        if (!isConst) {
+            fill = &broadcastSingleRowColumn<Primitive>;
+        } else if (value->getInternalKind() == InternalKind::code<std::optional<Primitive>>()) {
             fill = &broadcastNullableConstantColumn<Primitive>;
         } else {
             fill = &broadcastConstantColumn<Primitive>;
@@ -6356,6 +6483,45 @@ NLBroadcastFunction NLExecutor::selectOptOwnedStringBlockRepeat() {
 
 NLBroadcastFunction NLExecutor::selectOptOwnedStringTile() {
     return &tileColumn<std::optional<types::String::OwningPrimitive>>;
+}
+
+// The owned-string reductions. Only min and max read a string, and they order the
+// characters the rows own exactly as they order a property's borrowed ones, so each
+// handler is the std::string instantiation of the one a string property takes.
+NLAggregateResetFunction NLExecutor::selectOptOwnedStringAggregateReset() {
+    return &aggregateResetNull<types::String::OwningPrimitive>;
+}
+
+NLAggregateUpdateFunction NLExecutor::selectOptOwnedStringAggregateUpdate(AggregateKind kind) {
+    if (kind == AggregateKind::Min) {
+        return &aggregateUpdateMinMax<types::String::OwningPrimitive, /*IsMax=*/false>;
+    } else if (kind == AggregateKind::Max) {
+        return &aggregateUpdateMinMax<types::String::OwningPrimitive, /*IsMax=*/true>;
+    }
+
+    throw IRException("only min/max reduce a column of strings");
+}
+
+NLAggregateResultFunction NLExecutor::selectOptOwnedStringAggregateResult() {
+    return &aggregateResultCopy<types::String::OwningPrimitive>;
+}
+
+NLGroupAggregateGrowFunction NLExecutor::selectOptOwnedStringGroupAggregateGrow() {
+    return &groupGrowNull<types::String::OwningPrimitive>;
+}
+
+NLGroupAggregateFoldFunction NLExecutor::selectOptOwnedStringGroupAggregateFold(GroupAggregateKind kind) {
+    if (kind == GroupAggregateKind::Min) {
+        return &groupFoldMinMax<types::String::OwningPrimitive, /*IsMax=*/false>;
+    } else if (kind == GroupAggregateKind::Max) {
+        return &groupFoldMinMax<types::String::OwningPrimitive, /*IsMax=*/true>;
+    }
+
+    throw IRException("only min/max reduce a column of strings");
+}
+
+NLGroupAggregateEmitFunction NLExecutor::selectOptOwnedStringGroupAggregateEmit() {
+    return &groupEmitCopy<types::String::OwningPrimitive>;
 }
 
 NLGatherFunction NLExecutor::selectMaskGather() {

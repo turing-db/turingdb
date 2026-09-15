@@ -501,6 +501,13 @@ TEST_F(CypherUnwindExprTest, reducesOverAListLiteralPublishedByAWith) {
                {{"11"}, {"21"}});
 }
 
+TEST_F(CypherUnwindExprTest, computesOverAMixedNumericUnwoundCell) {
+    // A list mixing numeric types unwinds into tagged cells, which carry their type per
+    // row rather than in the column's, so the arithmetic over one computes in a double
+    // where the list of integers above stays an integer.
+    expectRows("UNWIND [1, 2.5] AS v RETURN v + 1", {{"2.000000"}, {"3.500000"}});
+}
+
 TEST_F(CypherUnwindExprTest, crossesTheUnwoundElementsWithAFollowingMatch) {
     expectRows("MATCH (p:Person) WHERE p.name = 'Adam' "
                "MATCH (p)-[:INTERESTED_IN]->(i:Interest) "

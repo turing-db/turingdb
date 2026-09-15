@@ -54,6 +54,15 @@ EvaluatedType unifiedBranchType(EvaluatedType carried, EvaluatedType branch) {
     return EvaluatedType::Invalid;
 }
 
+// Whether an arithmetic operator's operands are a type-erased cell and a number, or two
+// cells. A cell is numeric only once read, and its tag names a type per row rather than
+// one for the column, so the answer is the double a reduction over cells lands on too.
+bool computesOverListItem(TypePairBitset pair) {
+    return pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem)
+        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Integer)
+        || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Double);
+}
+
 // The types a list is homogeneous in: the scalars a value column holds, the entities a
 // pattern binds - [n, m] is a list of nodes, as collect(n) gathers one - and the lists a
 // nesting is made of.
@@ -345,6 +354,21 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
+            // A type-erased cell is ordered as an element holding the other side would be,
+            // so it orders against the scalar types it can hold. Only the MLIR engine runs
+            // such a comparison: the legacy planner hands the operator no cell column
+            const bool ordersListItem =
+                pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Integer)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Double)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::String)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Char)
+                || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Bool);
+
+            if (_isV3 && ordersListItem) {
+                break;
+            }
+
             const std::string error = fmt::format(
                 "Operands are not valid or compatible numeric types: '{}' and '{}'",
                 EvaluatedTypeName::value(a),
@@ -382,6 +406,11 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
+            if (_isV3 && computesOverListItem(pair)) {
+                type = EvaluatedType::Double;
+                break;
+            }
+
             const std::string error = fmt::format(
                 "Operands are not valid and compatible types for '+': '{}' and '{}'",
                 EvaluatedTypeName::value(a),
@@ -405,6 +434,11 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
+            if (_isV3 && computesOverListItem(pair)) {
+                type = EvaluatedType::Double;
+                break;
+            }
+
             const std::string error = fmt::format(
                 "Operands are not valid and compatible numeric types: '{} ' and '{}'",
                 EvaluatedTypeName::value(a),
@@ -420,6 +454,11 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
 
             // As per OpenCypher spec
             if (bothInteger || bothDouble || mixedNumeric) {
+                type = EvaluatedType::Double;
+                break;
+            }
+
+            if (_isV3 && computesOverListItem(pair)) {
                 type = EvaluatedType::Double;
                 break;
             }
@@ -741,7 +780,11 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     }
 
     if (indexesAList) {
-        expr->setType(EvaluatedType::ListItem);
+        const EvaluatedType elementType = base->getListShape().unwoundType();
+        const bool readsAValue = convertibleToValueType(elementType);
+        const EvaluatedType indexedType = readsAValue ? elementType : EvaluatedType::ListItem;
+
+        expr->setType(indexedType);
 
         if (base->isDynamic() || indexExpr->isDynamic()) {
             expr->setDynamic();
@@ -751,7 +794,7 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
             expr->setAggregate();
         }
 
-        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::ListItem));
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, indexedType));
 
         return;
     }

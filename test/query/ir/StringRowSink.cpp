@@ -137,6 +137,33 @@ bool textOfListElement(const Column* chunk, size_t rowIndex, std::string& text) 
     return true;
 }
 
+// The nullable sibling of textOfListElement: what an index into a list naming no one type
+// produces, absent where the position held no element.
+bool textOfOptionalListElement(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnOptVector<ListElementView>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    const std::optional<ListElementView>& element = column->getRaw()[rowIndex];
+    text = element ? elementText(*element) : "null";
+
+    return true;
+}
+
+// The same index over literal operands alone, which stays a constant.
+bool textOfConstOptionalListElement(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnConst<std::optional<ListElementView>>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    const std::optional<ListElementView>& element = (*column)[rowIndex];
+    text = element ? elementText(*element) : "null";
+
+    return true;
+}
+
 // A list cell reads as its elements joined by ", ", in the order the list holds them.
 bool textOfList(const Column* chunk, size_t rowIndex, std::string& text) {
     const auto* column = dynamic_cast<const ColumnVector<ListView>*>(chunk);
@@ -213,6 +240,31 @@ bool textOfOptional(const Column* chunk, size_t rowIndex, std::string& text) {
     }
 
     const std::optional<Primitive>& value = column->getRaw()[rowIndex];
+    text = value ? fmt::format("{}", *value) : "null";
+    return true;
+}
+
+// An expression over constants alone is computed once and reaches the sink as the single
+// value it stands for, in a ColumnConst rather than in a column of rows.
+template <typename ElementType>
+bool textOfConst(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnConst<ElementType>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    text = fmt::format("{}", (*column)[rowIndex]);
+    return true;
+}
+
+template <typename Primitive>
+bool textOfOptionalConst(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnConst<std::optional<Primitive>>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    const std::optional<Primitive>& value = (*column)[rowIndex];
     text = value ? fmt::format("{}", *value) : "null";
     return true;
 }
@@ -295,7 +347,27 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
         return text;
     } else if (textOfConstOptionalBool(chunk, rowIndex, text)) {
         return text;
+    } else if (textOfConst<int64_t>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfConst<uint64_t>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfConst<double>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfConst<std::string_view>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfOptionalConst<int64_t>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfOptionalConst<uint64_t>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfOptionalConst<double>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfOptionalConst<std::string_view>(chunk, rowIndex, text)) {
+        return text;
     } else if (textOfListElement(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfOptionalListElement(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfConstOptionalListElement(chunk, rowIndex, text)) {
         return text;
     } else if (textOfList(chunk, rowIndex, text)) {
         return text;

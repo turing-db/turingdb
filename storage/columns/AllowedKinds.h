@@ -206,8 +206,23 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs,
         OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs,
-        // Lexicographic ordering of strings
-        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs
+
+        // Lexicographic ordering of strings, whether each side borrows its characters
+        // from the graph or owns them - what labels(), type() and a CSV field answer -
+        // either way round, since which side the query writes it on is its choice
+        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
+        OptionalKindPairs<types::String::Primitive, types::String::OwningPrimitive>::Pairs,
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::Primitive>::Pairs,
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs,
+
+        // Ordering against a type-erased cell, which holds its own type: it is ordered as
+        // an element holding the other side would be
+        ListElementKindPairs<types::Int64::Primitive>::Pairs,
+        ListElementKindPairs<types::UInt64::Primitive>::Pairs,
+        ListElementKindPairs<types::Double::Primitive>::Pairs,
+        ListElementKindPairs<types::String::Primitive>::Pairs,
+        ListElementKindPairs<types::Bool::Primitive>::Pairs,
+        OptionalKindPairs<ListElementView, ListElementView>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<
@@ -232,8 +247,23 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs,
         OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs,
-        // Lexicographic ordering of strings
-        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs
+
+        // Lexicographic ordering of strings, whether each side borrows its characters
+        // from the graph or owns them - what labels(), type() and a CSV field answer -
+        // either way round, since which side the query writes it on is its choice
+        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
+        OptionalKindPairs<types::String::Primitive, types::String::OwningPrimitive>::Pairs,
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::Primitive>::Pairs,
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs,
+
+        // Ordering against a type-erased cell, which holds its own type: it is ordered as
+        // an element holding the other side would be
+        ListElementKindPairs<types::Int64::Primitive>::Pairs,
+        ListElementKindPairs<types::UInt64::Primitive>::Pairs,
+        ListElementKindPairs<types::Double::Primitive>::Pairs,
+        ListElementKindPairs<types::String::Primitive>::Pairs,
+        ListElementKindPairs<types::Bool::Primitive>::Pairs,
+        OptionalKindPairs<ListElementView, ListElementView>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<
@@ -309,7 +339,13 @@ struct PairRestrictions<Op> {
         // Mixed arithmetic types
         OptionalKindPairs<types::Int64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::Int64::Primitive, types::Double::Primitive>::Pairs,
-        OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs
+        OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs,
+
+        // Arithmetic over a type-erased cell, read as the number its tag says it holds
+        ListElementKindPairs<types::Int64::Primitive>::Pairs,
+        ListElementKindPairs<types::UInt64::Primitive>::Pairs,
+        ListElementKindPairs<types::Double::Primitive>::Pairs,
+        OptionalKindPairs<ListElementView, ListElementView>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<>;

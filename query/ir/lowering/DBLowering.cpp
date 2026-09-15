@@ -243,7 +243,7 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
     const bool isBool = integerType && integerType.getWidth() == 1;
     const bool isInteger = integerType && !isBool;
     const bool isNumeric = isFloat || isInteger;
-    const bool isString = mlir::isa<storage::StringType>(inputElement);
+    const bool isString = mlir::isa<storage::StringType, storage::OwnedStringType>(inputElement);
     const bool isTaggedCell = mlir::isa<storage::ListElementType>(inputElement);
 
     // An untyped null holds no value to reduce - a name no property in the graph carries,
@@ -307,6 +307,13 @@ NumericOperand numericOperand(mlir::Type chunkType) {
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(element)) {
         nullable = true;
         element = nullableType.getValueType();
+    }
+
+    // A type-erased cell is numeric only once read, and its tag names a type per row
+    // rather than one for the column: it computes in the f64 its mixed numeric tags land
+    // on, as a reduction over cells does, and answers null on a row holding no number.
+    if (mlir::isa<storage::ListElementType>(element)) {
+        return {.numeric = mlir::Float64Type::get(chunkType.getContext()), .nullable = true};
     }
 
     const bool isFloat = mlir::isa<mlir::Float64Type>(element);
@@ -385,6 +392,36 @@ bool isIndexableChunk(mlir::Type chunkType) {
     const mlir::Type indexed = nullable ? nullable.getValueType() : element;
 
     return mlir::isa<storage::ListType, storage::ListElementType>(indexed);
+}
+
+// The element type an indexed list hands out, read through the nullable an optional list
+// wears. None when the indexed operand is a type-erased cell rather than a list.
+mlir::Type indexedListElementType(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        return {};
+    }
+
+    const mlir::Type element = chunk.getElementType();
+    const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
+    const mlir::Type indexed = nullable ? nullable.getValueType() : element;
+
+    const auto listType = mlir::dyn_cast<storage::ListType>(indexed);
+    return listType ? listType.getElementType() : mlir::Type {};
+}
+
+// The element types an index reads out as a value column rather than as a tagged cell:
+// the scalars a value column holds.
+bool namesAnIndexedValueType(mlir::Type element) {
+    if (!element) {
+        return false;
+    }
+
+    if (const auto integerType = mlir::dyn_cast<mlir::IntegerType>(element)) {
+        return integerType.getWidth() == 1 || integerType.getWidth() == 64;
+    }
+
+    return mlir::isa<mlir::Float64Type, storage::StringType, storage::EmbeddingType>(element);
 }
 
 // Internal type of listChunk
@@ -1053,6 +1090,16 @@ void DBLowering::lowerVectorSearch(mlir::db::VectorSearch vectorSearch) {
 }
 
 mlir::Type DBLowering::unwoundElementType(mlir::MLIRContext* context, mlir::Type sourceElement) {
+    // A cell that may be absent - what an index into a list hands back - contributes no
+    // row where it is absent, so what the drain hands on is the tagged scalar itself.
+    const auto nullableSource = mlir::dyn_cast<storage::NullableType>(sourceElement);
+    const bool drainsATaggedCell = nullableSource
+                                && mlir::isa<storage::ListElementType>(nullableSource.getValueType());
+
+    if (drainsATaggedCell) {
+        return nullableSource.getValueType();
+    }
+
     // Any source but a list keeps the column it already rides - its cells are the
     // elements, and a tagged cell holding a list gives up tagged scalars again.
     const auto listType = mlir::dyn_cast<storage::ListType>(sourceElement);
@@ -3111,16 +3158,18 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
             const NumericOperand lhs = numericOperand(lhsType);
             const NumericOperand rhs = numericOperand(rhsType);
             const mlir::Type promoted = promoteNumeric(_builder, lhs.numeric, rhs.numeric);
-            return operandNullable ? storage::NullableType::get(ctx, promoted) : promoted;
+            const bool nullable = operandNullable || lhs.nullable || rhs.nullable;
+            return nullable ? storage::NullableType::get(ctx, promoted) : promoted;
         }
         break;
 
         case BinaryResultKind::Double: {
-            numericOperand(lhsType);
-            numericOperand(rhsType);
+            const NumericOperand lhs = numericOperand(lhsType);
+            const NumericOperand rhs = numericOperand(rhsType);
+            const bool nullable = operandNullable || lhs.nullable || rhs.nullable;
 
             const mlir::Type doubleElement = _builder.getF64Type();
-            return operandNullable ? storage::NullableType::get(ctx, doubleElement) : doubleElement;
+            return nullable ? storage::NullableType::get(ctx, doubleElement) : doubleElement;
         }
         break;
 
@@ -3149,7 +3198,12 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
                 throw IRException("db.list_index requires a list as its indexed operand");
             }
 
-            return storage::NullableType::get(ctx, storage::ListElementType::get(ctx));
+            const mlir::Type element = indexedListElementType(lhsType);
+            const mlir::Type indexed = namesAnIndexedValueType(element)
+                                           ? element
+                                           : storage::ListElementType::get(ctx);
+
+            return storage::NullableType::get(ctx, indexed);
         }
         break;
 
