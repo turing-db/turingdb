@@ -27,29 +27,6 @@ set(V3_QUERY_SUITE_LIBS
     turing_db_ir_common_s
     turing_db_frontend_cypher_s)
 
-add_query_suite_target(test_query_test_suite
-    QueryTestSuite.cpp
-    QueryTestRunner.cpp
-    QueryResultFormatter.cpp)
-
-add_test(NAME test_query_test_suite COMMAND test_query_test_suite)
-set_tests_properties(test_query_test_suite PROPERTIES
-    ENVIRONMENT "OPENBLAS_NUM_THREADS=1")
-
-add_query_suite_target(test_remote_query_test_suite
-    RemoteQueryTestSuite.cpp
-    QueryTestRunner.cpp
-    RemoteQueryTestRunner.cpp
-    QueryResultFormatter.cpp)
-
-target_link_libraries(test_remote_query_test_suite
-    PRIVATE turing_db_server_s
-            turing_db_proto_client_s)
-
-add_test(NAME test_remote_query_test_suite COMMAND test_remote_query_test_suite)
-set_tests_properties(test_remote_query_test_suite PROPERTIES
-    ENVIRONMENT "OPENBLAS_NUM_THREADS=1")
-
 add_query_suite_target(test_query_v3_test_suite
     V3QueryTestSuite.cpp
     V3QueryTestRunner.cpp
@@ -77,12 +54,6 @@ target_link_libraries(query_test_suite_cli
 
 set(QUERY_TEST_SUITE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests)
 set(QUERY_TEST_SUITE_DATA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data)
-
-target_compile_definitions(test_query_test_suite
-    PRIVATE QUERY_TEST_SUITE_DIR="${QUERY_TEST_SUITE_DIR}")
-
-target_compile_definitions(test_remote_query_test_suite
-    PRIVATE QUERY_TEST_SUITE_DIR="${QUERY_TEST_SUITE_DIR}")
 
 target_compile_definitions(test_query_v3_test_suite
     PRIVATE QUERY_TEST_SUITE_DIR="${QUERY_TEST_SUITE_DIR}"
