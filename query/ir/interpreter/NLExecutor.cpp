@@ -399,7 +399,8 @@ bool readsTaggedCells(const Column* input) {
     const ColumnKind::Code kind = input->getKind();
 
     return kind == ColumnVector<ListElementView>::staticKind()
-        || kind == ColumnConst<ListElementView>::staticKind();
+        || kind == ColumnConst<ListElementView>::staticKind()
+        || kind == ColumnOptVector<ListElementView>::staticKind();
 }
 
 template <typename Functor>
@@ -450,16 +451,22 @@ void functionNullReadingKernel(NLExecutionContext* context, Column* result, cons
     }
 }
 
-// The kernel serving a column of type-erased cells: such a column holds a cell per row,
-// or the single cell a constant is, and never rides a nullable column - a cell holds its
-// null in its own tag - so these two shapes are all there are.
+// The kernel serving a column of type-erased cells: a cell per row, the single cell a
+// constant is, or - what an index of a stored list answers, where the row may hold no
+// element at all - a cell that can be absent. The functor reads that absence itself, as it
+// reads the null a cell's own tag carries, so its answer fills a plain column either way.
 template <typename Functor>
-NLUnaryFunctionKernel selectTaggedCellFunction(const Column* input, LocalMemory* memory, Column*& result) {
+NLUnaryFunctionKernel selectTaggedCellFunction(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result) {
     using Res = typename Functor::ResultType;
 
     if (input->getContainerKind() == ContainerKind::code<ColumnConst>()) {
         result = memory->alloc<ColumnConst<Res>>();
         return &functionConstKernel<Functor>;
+    }
+
+    if (inputNullable) {
+        result = memory->alloc<ColumnVector<Res>>();
+        return &functionNullReadingKernel<Functor>;
     }
 
     result = memory->alloc<ColumnVector<Res>>();
@@ -5382,7 +5389,7 @@ NLUnaryFunctionKernel NLExecutor::selectFunction(const Column* input, bool input
     // answers over the same rows but reads its argument - and its nulls - out of the tag
     if constexpr (HasTaggedCounterpart<Functor>) {
         if (readsTaggedCells(input)) {
-            return selectTaggedCellFunction<typename Functor::TaggedCounterpart>(input, memory, result);
+            return selectTaggedCellFunction<typename Functor::TaggedCounterpart>(input, inputNullable, memory, result);
         }
     }
 
@@ -5443,6 +5450,7 @@ template NLUnaryFunctionKernel NLExecutor::selectFunction<LabelsFunction>(const 
 template NLUnaryFunctionKernel NLExecutor::selectFunction<EdgeTypesFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<StartNodeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<EndNodeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+template NLUnaryFunctionKernel NLExecutor::selectFunction<TaggedIdFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<toBoolFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListSizeFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 template NLUnaryFunctionKernel NLExecutor::selectFunction<ListHeadFunction>(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);

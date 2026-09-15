@@ -497,3 +497,21 @@ TEST_F(ListFunctionsTest, rejectsAListFunctionOnANonList) {
     expectRejected("MATCH (n:Person) RETURN last(n.age)", "last");
     expectRejected("MATCH (n:Person) RETURN tail(n.name)", "tail");
 }
+
+TEST_F(ListFunctionsTest, sizesAListIndexedOutOfAStoredNestedList) {
+    write("CREATE (n:Tagged {name: 'a', tags: [[1, 2], [3]]})");
+
+    expectRows("MATCH (n:Tagged) RETURN size(n.tags[0]), size(n.tags[1])", {{"2", "1"}});
+}
+
+TEST_F(ListFunctionsTest, headsAListIndexedOutOfAStoredNestedList) {
+    write("CREATE (n:Tagged {name: 'a', tags: [[1, 2], [3]]})");
+
+    expectRows("MATCH (n:Tagged) RETURN head(n.tags[1])", {{"3"}});
+}
+
+TEST_F(ListFunctionsTest, readsNullWhereTheIndexIsPastTheEndOfAStoredNestedList) {
+    write("CREATE (n:Tagged {name: 'a', tags: [[1, 2]]})");
+
+    expectRows("MATCH (n:Tagged) RETURN size(n.tags[5]), head(n.tags[5])", {{"null", "null"}});
+}

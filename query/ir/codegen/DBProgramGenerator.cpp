@@ -5483,13 +5483,22 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     }
 
     // An entity is named by its ID throughout the engine, so the column holding it already
-    // holds what id() answers: the call emits no op and stands for its argument's column.
+    // holds what id() answers: the call emits no op and stands for its argument's column. A
+    // type-erased cell holds its entity behind a tag, so that one is read out of it.
     if (funcName == "id") {
         if (!args || args->size() != 1) {
             throwError("id() expects 1 argument.", expr);
         }
 
-        _part._exprMap[expr] = translateArg(args->front());
+        const Expr* argExpr = args->front();
+        const mlir::Value input = translateArg(argExpr);
+
+        if (argExpr->getType() == EvaluatedType::ListItem) {
+            _part._exprMap[expr] = _opBuilder.create<mlir::db::ElementID>(loc, noneType, input).getResult();
+        } else {
+            _part._exprMap[expr] = input;
+        }
+
         return;
     }
 

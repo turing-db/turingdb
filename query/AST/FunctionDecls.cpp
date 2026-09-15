@@ -44,6 +44,24 @@ void FunctionDecls::initDefault() {
     idOfEdge->setReturnTypes({{EvaluatedType::Integer}});
     idOfEdge->setIsV3Only(true);
 
+    // The three over a type-erased cell, which is what an UNWIND or an index of a stored
+    // list binds: the list names no element type, so its entities are known per row rather
+    // than in the plan. A cell holding neither a node nor an edge is the row's type error.
+    FunctionSignature* startNodeOfCell = createFunction("startNode");
+    startNodeOfCell->setArguments({EvaluatedType::ListItem});
+    startNodeOfCell->setReturnTypes({{EvaluatedType::NodePattern}});
+    startNodeOfCell->setIsV3Only(true);
+
+    FunctionSignature* endNodeOfCell = createFunction("endNode");
+    endNodeOfCell->setArguments({EvaluatedType::ListItem});
+    endNodeOfCell->setReturnTypes({{EvaluatedType::NodePattern}});
+    endNodeOfCell->setIsV3Only(true);
+
+    FunctionSignature* idOfCell = createFunction("id");
+    idOfCell->setArguments({EvaluatedType::ListItem});
+    idOfCell->setReturnTypes({{EvaluatedType::Integer}});
+    idOfCell->setIsV3Only(true);
+
     FunctionSignature* keysNodes = createFunction("keys");
     keysNodes->setArguments({EvaluatedType::NodePattern});
     keysNodes->setReturnTypes({{EvaluatedType::String}});

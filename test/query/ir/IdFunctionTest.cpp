@@ -243,3 +243,42 @@ TEST_F(IdFunctionTest, rejectsAPropertyArgument) {
     expectRejected("MATCH (n:Person) RETURN id(n.name)",
                    "Invalid arguments for function 'id'");
 }
+
+TEST_F(IdFunctionTest, readsTheIDOfAnEdgeUnwoundFromAStoredList) {
+    write("MATCH (a)-[e:KNOWS_WELL]->(b) WITH collect(e) AS es CREATE (m:Bag {items: es})");
+
+    expectRows("MATCH (m:Bag) UNWIND m.items AS e RETURN id(e)", {{"0"}, {"4"}, {"7"}});
+}
+
+TEST_F(IdFunctionTest, readsTheIDOfANodeUnwoundFromAStoredList) {
+    write("MATCH (n:Person) WITH collect(n) AS ns CREATE (m:Bag {items: ns})");
+
+    expectRows("MATCH (m:Bag) UNWIND m.items AS n RETURN id(n)",
+               {{"0"}, {"1"}, {"8"}, {"9"}, {"11"}, {"12"}, {"15"}, {"17"}});
+}
+
+TEST_F(IdFunctionTest, readsTheIDOfAnEntityIndexedOutOfAStoredList) {
+    write("MATCH (a)-[e:KNOWS_WELL]->(b) WITH collect(e) AS es CREATE (m:Bag {items: es})");
+
+    expectRows("MATCH (m:Bag) RETURN id(m.items[1])", {{"4"}});
+}
+
+// A cell holds its entity behind a tag, so comparing the cell itself against the number
+// answers false: the ID has to be read out of the tag for the two to meet
+TEST_F(IdFunctionTest, comparesAStoredListElementAgainstItsID) {
+    write("MATCH (a)-[e:KNOWS_WELL]->(b) WITH collect(e) AS es CREATE (m:Bag {items: es})");
+
+    expectRows("MATCH (m:Bag) RETURN id(m.items[0]) = 0", {{"true"}});
+}
+
+TEST_F(IdFunctionTest, readsNullFromAStoredListElementThatIsNull) {
+    write("CREATE (m:Bag {items: [null]})");
+
+    expectRows("MATCH (m:Bag) UNWIND m.items AS x RETURN id(x)", {{"null"}});
+}
+
+TEST_F(IdFunctionTest, rejectsAStoredListElementThatIsNoEntity) {
+    write("CREATE (m:Bag {items: ['a']})");
+
+    expectRejected("MATCH (m:Bag) UNWIND m.items AS x RETURN id(x)", "reads a node or an edge");
+}

@@ -104,6 +104,7 @@ const std::unordered_map<std::string_view, NLUnaryFunctionSelector> unaryFunctio
     {"nl.to_integer", &NLExecutor::selectConversion<toIntegerFunction>},
     {"nl.to_float",   &NLExecutor::selectConversion<toFloatFunction>},
     {"nl.to_boolean", &NLExecutor::selectFunction<toBoolFunction>},
+    {"nl.element_id", &NLExecutor::selectFunction<TaggedIdFunction>},
     {"nl.size",       &NLExecutor::selectFunction<ListSizeFunction>},
     {"nl.head",       &NLExecutor::selectFunction<ListHeadFunction>},
     {"nl.last",       &NLExecutor::selectFunction<ListLastFunction>},
