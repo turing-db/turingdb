@@ -1,15 +1,11 @@
 // Node smoke test for the wasm TuringClient: serves hand-crafted wire packets through
 // a fake fetch (sliced into small stream chunks to exercise packet reassembly) and
 // checks the decoded JS values, list columns and error handling included.
-// Run from wasm/: node client_smoke.mjs
+// Run from wasm/npm/: node client_smoke.mjs
 
 import assert from "assert";
-import { createRequire } from "module";
 
 import { Column, TuringClient, TuringQueryError } from "./TuringClient.mjs";
-
-const require = createRequire(import.meta.url);
-const createTuringDecoderModule = require("./build/turing_wasm_decoder.js");
 
 const MESSAGE_CHUNK_HEADER = 0;
 const MESSAGE_CHUNK = 1;
@@ -239,7 +235,7 @@ function makeEndChunk(rowCount) {
     return frame(MESSAGE_END_CHUNK, footer);
 }
 
-async function testQuery(module) {
+async function testQuery() {
     const bytes = concatPackets([
         ...makeFirstDataframe(),
         makeEndChunk(3),
@@ -249,7 +245,7 @@ async function testQuery(module) {
     ]);
 
     const captured = {};
-    const client = new TuringClient(module, {
+    const client = new TuringClient({
         url: "/api/query",
         graph: "simpledb",
         authToken: "secret",
@@ -290,14 +286,14 @@ async function testQuery(module) {
     assert.deepStrictEqual(chunks[1].columns[3].toArray(), [null, "y"]);
 }
 
-async function testQueryData(module) {
+async function testQueryData() {
     const bytes = concatPackets([
         ...makeFirstDataframe(),
         makeEndChunk(3),
         makeEnd(1.0),
     ]);
 
-    const client = new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) });
+    const client = new TuringClient({ fetch: makeFakeFetch(bytes, {}) });
     const data = await client.queryData("MATCH (n) RETURN n");
 
     assert.deepStrictEqual(data, [[
@@ -308,13 +304,13 @@ async function testQueryData(module) {
     ]]);
 }
 
-async function testError(module) {
+async function testError() {
     const error = new Writer();
     error.u8(2); // PARSE_ERROR
     error.raw(encoder.encode("boom"));
     const bytes = concatPackets([frame(MESSAGE_ERROR, error), makeEnd(0.5)]);
 
-    const client = new TuringClient(module, { fetch: makeFakeFetch(bytes, {}) });
+    const client = new TuringClient({ fetch: makeFakeFetch(bytes, {}) });
 
     await assert.rejects(client.query("MATCH ("), (raised) => {
         assert.ok(raised instanceof TuringQueryError);
@@ -324,9 +320,8 @@ async function testError(module) {
     });
 }
 
-createTuringDecoderModule().then(async (module) => {
-    await testQuery(module);
-    await testQueryData(module);
-    await testError(module);
-    console.log("wasm client smoke test passed: query, queryData, error");
-});
+await testQuery();
+await testQueryData();
+await testError();
+
+console.log("wasm client smoke test passed: query, queryData, error");

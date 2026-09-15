@@ -1,9 +1,10 @@
 // Node smoke test for the wasm Turing Proto decoder: hand-crafts wire packets
 // (CHUNK_HEADER + CHUNK + END_CHUNK) and checks the column buffers handed to JS.
-// Run from wasm/: node decoder_smoke.js
+// Run from wasm/: node decoder_smoke.mjs
 
-const assert = require("assert");
-const createTuringDecoderModule = require("./build/turing_wasm_decoder.js");
+import assert from "assert";
+
+import createTuringDecoderModule from "./npm/turing_wasm_decoder.mjs";
 
 const MESSAGE_CHUNK_HEADER = 0;
 const MESSAGE_CHUNK = 1;
@@ -104,52 +105,52 @@ chunk.u64(10n);
 chunk.u64(0n);
 chunk.u64(30n);
 
-createTuringDecoderModule().then((Module) => {
-    const decoder = new Module.TuringDecoder(1 << 20);
+const Module = await createTuringDecoderModule();
+const decoder = new Module.TuringDecoder(1 << 20);
 
-    decoder.decodePacket(frame(MESSAGE_CHUNK_HEADER, header));
-    decoder.decodePacket(frame(MESSAGE_CHUNK, chunk));
-    // The chunk closes with its row count: a constant column holds one value however
-    // many rows it stands for, so nothing else on the wire states how many there are.
-    const footer = new Writer();
-    footer.u32(3);
-    decoder.decodePacket(frame(MESSAGE_END_CHUNK, footer));
+decoder.decodePacket(frame(MESSAGE_CHUNK_HEADER, header));
+decoder.decodePacket(frame(MESSAGE_CHUNK, chunk));
+// The chunk closes with its row count: a constant column holds one value however
+// many rows it stands for, so nothing else on the wire states how many there are.
+const footer = new Writer();
+footer.u32(3);
+decoder.decodePacket(frame(MESSAGE_END_CHUNK, footer));
 
-    assert.strictEqual(decoder.getRowCount(), 3);
+assert.strictEqual(decoder.getRowCount(), 3);
 
-    assert.strictEqual(decoder.getColumnCount(), 4);
-    assert.strictEqual(decoder.getColumnName(0), "ids");
-    assert.strictEqual(decoder.getColumnName(3), "counts");
+assert.strictEqual(decoder.getColumnCount(), 4);
+assert.strictEqual(decoder.getColumnName(0), "ids");
+assert.strictEqual(decoder.getColumnName(3), "counts");
 
-    const ids = decoder.getColumnBuffers(0);
-    assert.strictEqual(ids.typeCode, TYPE_NODE_ID);
-    assert.strictEqual(ids.encoding, ENCODING_VECTOR);
-    assert.strictEqual(ids.count, 3);
-    assert.strictEqual(ids.elementSize, 8);
-    assert.deepStrictEqual(Array.from(new BigUint64Array(ids.values.buffer)), [1n, 2n, 999999999999999999n]);
-    assert.strictEqual(ids.validity, undefined);
+const ids = decoder.getColumnBuffers(0);
+assert.strictEqual(ids.typeCode, TYPE_NODE_ID);
+assert.strictEqual(ids.encoding, ENCODING_VECTOR);
+assert.strictEqual(ids.count, 3);
+assert.strictEqual(ids.elementSize, 8);
+assert.deepStrictEqual(Array.from(new BigUint64Array(ids.values.buffer)), [1n, 2n, 999999999999999999n]);
+assert.strictEqual(ids.validity, undefined);
 
-    const labels = decoder.getColumnBuffers(1);
-    assert.strictEqual(labels.typeCode, TYPE_STRING);
-    assert.strictEqual(labels.count, 3);
-    assert.strictEqual(new TextDecoder().decode(labels.values), "remyadamcomputers");
-    assert.deepStrictEqual(Array.from(new Uint32Array(labels.offsets.buffer)), [0, 4, 8, 17]);
-    assert.deepStrictEqual(Array.from(new Uint32Array(labels.utf16Offsets.buffer)), [0, 4, 8, 17]);
+const labels = decoder.getColumnBuffers(1);
+assert.strictEqual(labels.typeCode, TYPE_STRING);
+assert.strictEqual(labels.count, 3);
+assert.strictEqual(new TextDecoder().decode(labels.values), "remyadamcomputers");
+assert.deepStrictEqual(Array.from(new Uint32Array(labels.offsets.buffer)), [0, 4, 8, 17]);
+assert.deepStrictEqual(Array.from(new Uint32Array(labels.utf16Offsets.buffer)), [0, 4, 8, 17]);
 
-    const score = decoder.getColumnBuffers(2);
-    assert.strictEqual(score.encoding, ENCODING_CONSTANT);
-    assert.strictEqual(score.count, 1);
-    assert.deepStrictEqual(Array.from(new Float64Array(score.values.buffer)), [1.5]);
+const score = decoder.getColumnBuffers(2);
+assert.strictEqual(score.encoding, ENCODING_CONSTANT);
+assert.strictEqual(score.count, 1);
+assert.deepStrictEqual(Array.from(new Float64Array(score.values.buffer)), [1.5]);
 
-    const counts = decoder.getColumnBuffers(3);
-    assert.strictEqual(counts.encoding, ENCODING_OPTIONAL_VECTOR);
-    assert.strictEqual(counts.count, 3);
-    assert.deepStrictEqual(Array.from(new BigUint64Array(counts.values.buffer)), [10n, 0n, 30n]);
-    assert.deepStrictEqual(Array.from(counts.validity), [0b101]);
+const counts = decoder.getColumnBuffers(3);
+assert.strictEqual(counts.encoding, ENCODING_OPTIONAL_VECTOR);
+assert.strictEqual(counts.count, 3);
+assert.deepStrictEqual(Array.from(new BigUint64Array(counts.values.buffer)), [10n, 0n, 30n]);
+assert.deepStrictEqual(Array.from(counts.validity), [0b101]);
 
-    assert.strictEqual(decoder.getListBytes().length, 0);
-    assert.strictEqual(decoder.getListStrings().count, 0);
+assert.strictEqual(decoder.getListBytes().length, 0);
+assert.strictEqual(decoder.getListStrings().count, 0);
 
-    decoder.delete();
-    console.log("wasm decoder smoke test passed: 4 columns decoded");
-});
+decoder.delete();
+
+console.log("wasm decoder smoke test passed: 4 columns decoded");

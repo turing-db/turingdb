@@ -1,0 +1,99 @@
+name: CI Wasm Client
+
+# No paths filter, unlike code_review.yml: the build is ~3s (the job is all checkout and
+# emsdk restore), so a filter would only save runner occupancy, and the list of inputs to
+# filter on is 52 files across net/, common/ and storage/ that a hand-written list gets
+# wrong - the first attempt missed six of them.
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+  workflow_call:
+    inputs:
+      dev_version_suffix:
+        required: false
+        type: string
+        default: ''
+
+  workflow_dispatch:
+
+
+concurrency:
+  group: ci-wasm-${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && github.ref) || github.run_id }}
+  cancel-in-progress: true
+
+
+jobs:
+  build:
+    name: Build npm package
+    runs-on: ubuntu-24.04-turing
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 500
+
+    - name: Fetch tags
+      run: git fetch --tags --force
+
+    # The decoder compiles spdlog's bundled fmt header-only; external/expected is
+    # in-tree. Nothing else the wasm build needs comes from a submodule, so this
+    # skips the LLVM/OpenBLAS/curl trees the native build pulls.
+    - name: Checkout spdlog
+      run: |
+        attempt=1
+        until git submodule update --init --depth 1 external/spdlog; do
+            if [ "$attempt" -ge 3 ]; then
+                echo "Submodule init failed after $attempt attempts"
+                exit 1
+            fi
+            echo "Submodule init attempt $attempt failed; retrying after backoff"
+            sleep $((attempt * 10))
+            attempt=$((attempt + 1))
+        done
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Resolve pinned Emscripten version
+      id: emscripten
+      run: echo "version=$(grep -oP '^EMSCRIPTEN_VERSION=\"\K[^\"]+' dependencies.sh)" >> "$GITHUB_OUTPUT"
+
+    # emsdk lives at the workspace root rather than in external/dependencies, where
+    # dependencies.sh puts it: that tree is the native build's cache entry, and saving
+    # a whole LLVM build under an emsdk key would waste the runner's disk.
+    - name: Cache emsdk
+      id: cache-emsdk
+      uses: corca-ai/local-cache@v2
+      with:
+        base: /opt/actions-local-cache
+        path: emsdk
+        key: emsdk-${{ steps.emscripten.outputs.version }}
+
+    - name: Install Emscripten
+      if: steps.cache-emsdk.outputs.cache-hit != 'true'
+      run: |
+        git clone https://github.com/emscripten-core/emsdk.git emsdk
+        ./emsdk/emsdk install ${{ steps.emscripten.outputs.version }}
+        ./emsdk/emsdk activate ${{ steps.emscripten.outputs.version }}
+
+    - name: Build npm package
+      run: |
+        source ./emsdk/emsdk_env.sh
+        ./build_npm.sh
+      env:
+        DEV_VERSION_SUFFIX: ${{ inputs.dev_version_suffix }}
+
+    - name: Upload npm package artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: turingdb-npm-package
+        path: npm/*.tgz
+
+    - name: Reclaim disk (self-hosted)
+      if: always()
+      uses: ./.github/actions/clean-self-hosted-runner
