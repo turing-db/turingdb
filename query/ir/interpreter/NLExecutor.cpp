@@ -935,9 +935,8 @@ void broadcastNullableConstantColumn(const Column* value, size_t rowCount, Colum
     std::fill_n(outputRaw.begin(), rowCount, typedValue->getRaw());
 }
 
-// A chunk standing for every row is a literal's ColumnConst only where a literal bound
-// it: computed over literals, it is the column its kernel writes, and a predicate reading
-// a null writes a single-row nullable one. That row is what the layout repeats.
+// A constant chunk is not always a ColumnConst: a kernel computing over literals writes
+// its one row into an ordinary column. That row is the one every row of the step reads.
 template <typename Primitive>
 void broadcastSingleRowColumn(const Column* value, size_t rowCount, Column* output) {
     const auto& valueRaw = static_cast<const ColumnOptVector<Primitive>*>(value)->getRaw();
