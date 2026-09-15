@@ -8,6 +8,7 @@
 #include "MapView.h"
 #include "list/ListView.h"
 
+#include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
 using namespace db;
@@ -51,6 +52,16 @@ void MapByteBuffer<N>::reserveContiguous(size_t numBytes) {
 
     const size_t newBufferSize = std::max(numBytes, N);
     allocateNextChunk(newBufferSize);
+}
+
+template <size_t N>
+std::byte* MapByteBuffer<N>::reserveAndCommit(size_t numBytes) {
+    reserveContiguous(numBytes);
+
+    std::byte* startPtr = &_last->_buf[_last->_size];
+    _last->_size += numBytes;
+
+    return startPtr;
 }
 
 template <size_t N>
@@ -114,4 +125,5 @@ template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag,
 template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const types::Embedding::Primitive&);
 template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const ListView&);
 template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const MapView&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const PropertyNull&);
 }

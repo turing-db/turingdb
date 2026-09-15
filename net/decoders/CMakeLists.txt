@@ -1,5 +1,6 @@
 add_library(turing_db_decoders_s STATIC
 	DecodedColumnSchema.cpp
+	NestedContainerCursor.cpp
 	TuringSink.cpp
 	TuringSinkColumnContainer.cpp)
 

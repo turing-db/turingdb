@@ -54,6 +54,10 @@ static EvaluatedType procTypeToEvaluatedType(ProcedureType type) {
             return EvaluatedType::List;
         break;
 
+        case ProcedureType::MAP:
+            return EvaluatedType::Map;
+        break;
+
         case ProcedureType::INVALID:
         case ProcedureType::_SIZE:
             return EvaluatedType::Invalid;

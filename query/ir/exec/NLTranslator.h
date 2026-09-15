@@ -340,9 +340,15 @@ private:
     // execution - not just this call.
     ListView materializeListView(mlir::ArrayAttr elements);
 
+    MapView materializeMapView(mlir::DictionaryAttr entries);
+
     // The bytes the elements' values occupy, which sizes the region materializeListView
     // reserves before writing them
     static size_t listValueBytes(mlir::ArrayAttr elements);
+
+    // The bytes the entries' values occupy, which sizes the region materializeMapView
+    // reserves before writing them
+    static size_t mapValueBytes(mlir::DictionaryAttr entries);
 
     // Translate the nl.for over an nl.scan_edges iterator: allocate the four
     // fixed edge loop variables (sources, edge IDs, edge type IDs, targets) and

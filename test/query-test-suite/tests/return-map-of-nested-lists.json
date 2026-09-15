@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN {items: [[1, 2], [3, 4]]}",
+  "expect": {
+    "result": "\"{items: [[1, 2], [3, 4]]}\"\n\"{items: [[1, 2], [3, 4]]}\"",
+    "resultJson": "{\"header\":{\"column_names\":[\"{items: [[1, 2], [3, 4]]}\"],\"column_types\":[\"Map\"]},\"data\":[[[{\"items\": [[1, 2], [3, 4]]}]]]}"
+  },
+  "tags": [
+    "map",
+    "lists",
+    "literal",
+    "return",
+    "nested"
+  ],
+  "write-required": false
+}

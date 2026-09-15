@@ -887,13 +887,23 @@ mlir::Attribute DBProgramGenerator::literalAttr(const Literal* literal) {
         translateListElements(nested, nestedElements);
 
         return _opBuilder.getArrayAttr(nestedElements);
+    } else if (kind == Literal::Kind::MAP) {
+        const MapLiteral* nested = static_cast<const MapLiteral*>(literal);
+
+        llvm::SmallVector<mlir::NamedAttribute> nestedEntries;
+        translateMapEntries(nested, nestedEntries);
+
+        return _opBuilder.getDictionaryAttr(nestedEntries);
     }
 
     return scalarLiteralAttr(literal);
 }
 
 mlir::Attribute DBProgramGenerator::listElementAttr(const Literal* literal) {
-    const mlir::Attribute element = literalAttr(literal);
+    const bool isMap = literal->getKind() == Literal::Kind::MAP;
+    //Maps aren't allowed in lists for now
+    const mlir::Attribute element = isMap ? mlir::Attribute {} : literalAttr(literal);
+
     if (!element) {
         throwError("Only booleans, integers, floats, strings, nulls, embeddings and "
                    "lists are supported as list elements.",
@@ -945,6 +955,44 @@ mlir::Value DBProgramGenerator::translateListOfColumns(const ListLiteral* list) 
                                                                         mlir::ValueRange {elementColumns});
 
     return makeList.getResult();
+}
+
+mlir::Value DBProgramGenerator::translateMapLiteral(const MapLiteral* map) {
+    llvm::SmallVector<mlir::NamedAttribute> entries;
+    translateMapEntries(map, entries);
+
+    // DictionaryAttr canonicalises by sorting on key name, so the entries reach the
+    // interpreter sorted rather than in the order MapLiteral holds them.
+    mlir::db::ConstantOp constant = _opBuilder.create<mlir::db::ConstantOp>(_opBuilder.getUnknownLoc(),
+                                                                            _opBuilder.getDictionaryAttr(entries));
+
+    return constant.getResult();
+}
+
+void DBProgramGenerator::translateMapEntries(const MapLiteral* map,
+                                             llvm::SmallVectorImpl<mlir::NamedAttribute>& entries) {
+    entries.reserve(map->size());
+
+    for (const auto& [key, valueExpr] : *map) {
+        const LiteralExpr* literalExpr = dynamic_cast<const LiteralExpr*>(valueExpr);
+
+        if (!literalExpr) {
+            throwError("Only literal values are supported in a map.", valueExpr);
+        }
+
+        const Literal* literal = literalExpr->getLiteral();
+        const mlir::Attribute value = literalAttr(literal);
+
+        if (!value) {
+            throwError("Only booleans, integers, floats, strings, nulls, embeddings, "
+                       "lists and maps are supported as map values.",
+                       literal);
+        }
+
+        const std::string_view keyName = key->getName();
+        entries.emplace_back(_opBuilder.getStringAttr(llvm::StringRef(keyName.data(), keyName.size())),
+                             value);
+    }
 }
 
 template<typename EdgeOp>
@@ -5888,7 +5936,9 @@ mlir::Value DBProgramGenerator::translateLiteralExpr(const Literal* literal) {
         case Literal::Kind::LIST:
             return translateListLiteral(static_cast<const ListLiteral*>(literal));
         break;
-
+        case Literal::Kind::MAP:
+            return translateMapLiteral(static_cast<const MapLiteral*>(literal));
+        break;
         default:
             throw FatalException("Unsupported literal kind in WHERE clause expression.");
         break;

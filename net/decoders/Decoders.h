@@ -13,177 +13,10 @@
 #include "TuringProtoDecoderConcepts.h"
 #include "TuringProtoHeaders.h"
 #include "TuringProtoInBuf.h"
-#include "list/ListUtils.h"
+#include "TuringProtoNestedReader.h"
+#include "DecodeUtils.h"
 
 namespace net::proto {
-
-template <typename T>
-inline size_t checkedElementCount(WireSize numBytes, const char* valueType) {
-    if (numBytes % sizeof(T) != 0) {
-        throw TuringException(std::string("Invalid ") + valueType + " byte size");
-    }
-    return numBytes / sizeof(T);
-}
-
-// Copies numBytes into the (stable) dest, queueing a resume through the
-// context's buffer state if the payload is split across the buffer boundary.
-inline bool readVarLenPayload(DecodeContext* context, char* dest, WireSize numBytes) {
-    if (numBytes <= context->_inBuf->readable()) {
-        context->_inBuf->readData(dest, numBytes);
-        return true;
-    }
-
-    const size_t numBytesToRead = context->_inBuf->readable();
-    context->_inBuf->readData(dest, numBytesToRead);
-
-    context->_bufferState._start = dest;
-    context->_bufferState._len = numBytes;
-    context->_bufferState._offset = numBytesToRead;
-    return false;
-}
-
-/**
- * @brief Reads one list element off the wire and appends it into the list buffer's
- * reserved space, dispatched on the element's tag via @ref db::ListTagDispatcher.
- *
- * The element's tag is glanced (not yet consumed) by the caller; this visitor consumes
- * the tag together with its value once enough is buffered. Returns true if the element
- * was fully consumed, false if the read buffer ran dry: either before the element could
- * start (nothing consumed, retried next time) or partway through a String/Embedding
- * payload (the view is already appended and its bytes resume via @ref _bufferState).
- */
-template <ProtoDecodeSink Sink>
-struct ListElementReadVisitor {
-    DecodeContext* _context {nullptr};
-    Sink* _sink {nullptr};
-    // Optional: if set, receives the view of each element appended to the list buffer
-    // (used by the ListElementView columns, which store one view per row).
-    SinkListElementView<Sink>* _outView {nullptr};
-
-    template <typename T>
-    bool operator()(const db::ListElementView unusedView) const {
-        constexpr size_t tagSize = sizeof(db::ListBufferTypeTag);
-
-        if constexpr (std::is_same_v<T, db::types::String::Primitive>) {
-            if (_context->_inBuf->readable() < tagSize + sizeof(WireSize)) {
-                return false;
-            }
-            _context->_inBuf->increaseReadOffset(tagSize);
-
-            WireSize numBytes = 0;
-            _context->_inBuf->readData(&numBytes, sizeof(numBytes));
-
-            char* dest = _sink->allocString(numBytes);
-            const T view = _sink->getStringView(dest, numBytes);
-            captureOutView(_sink->writeListValue(view));
-
-            return readVarLenPayload(_context, dest, numBytes);
-        } else if constexpr (std::is_same_v<T, db::types::Embedding::Primitive>) {
-            if (_context->_inBuf->readable() < tagSize + sizeof(WireSize)) {
-                return false;
-            }
-            _context->_inBuf->increaseReadOffset(tagSize);
-
-            WireSize numBytes = 0;
-            _context->_inBuf->readData(&numBytes, sizeof(numBytes));
-
-            const size_t numFloats = checkedElementCount<float>(numBytes, "embedding");
-            float* dest = _sink->allocEmbedding(numFloats);
-            const T view = _sink->getEmbeddingView(dest, numFloats);
-            captureOutView(_sink->writeListValue(view));
-
-            return readVarLenPayload(_context, reinterpret_cast<char*>(dest), numBytes);
-        } else if constexpr (std::is_same_v<T, db::ListView>) {
-            if (_context->_inBuf->readable() < tagSize + sizeof(WireSize) + sizeof(WireSize)) {
-                return false;
-            }
-            _context->_inBuf->increaseReadOffset(tagSize);
-
-            WireSize numElements = 0;
-            WireSize numBytes = 0;
-            _context->_inBuf->readData(&numElements, sizeof(numElements));
-            _context->_inBuf->readData(&numBytes, sizeof(numBytes));
-
-            captureOutView(_sink->beginNestedList(numElements, numBytes));
-
-            return true;
-        } else {
-            // Fixed-width element: the wire layout [tag][value] is identical to the stored
-            // layout, so copy it straight into the reserved slot — no intermediate value.
-            const size_t elementBytes = tagSize + sizeof(T);
-            if (_context->_inBuf->readable() < elementBytes) {
-                return false;
-            }
-
-            captureOutView(_sink->writeListElementBytes(_context->_inBuf->readPtr(), elementBytes));
-            _context->_inBuf->increaseReadOffset(elementBytes);
-
-            return true;
-        }
-    }
-
-private:
-    // If a caller asked for it (the ListElementView columns, which store one view per row),
-    // hands back the view of the element just written.
-    void captureOutView(const SinkListElementView<Sink> view) const {
-        if (_outView) {
-            *_outView = view;
-        }
-    }
-};
-
-/**
- * @brief Drains the list cursor stack in @ref _listStack, reading elements off the wire into
- * the reserved buffers until the stack empties (the whole top-level list is decoded) or the
- * read buffer runs dry (returns false; the stack and @ref _bufferState carry the resume point).
- *
- * For each top-level element completed (one written through the column's own cursor, i.e. stack
- * depth 1 — nested elements live deeper and are not column rows), @param onTopLevelElement is
- * invoked with its 0-based index and view. ListElementView columns store the view; ListView
- * columns pass a no-op.
- *
- * return false if we have an incomplete element in the input buffer.
- */
-template <ProtoDecodeSink Sink, typename OnTopLevelElement>
-inline bool drainListStack(DecodeContext* context,
-                           Sink* sink,
-                           const OnTopLevelElement& onTopLevelElement) {
-    SinkListElementView<Sink> view;
-    const ListElementReadVisitor<Sink> readVisitor {context, sink, &view};
-
-    while (sink->hasOpenList()) {
-        if (sink->topListComplete()) {
-            sink->popList();
-            continue;
-        }
-
-        if (context->_inBuf->readable() < sizeof(db::ListBufferTypeTag)) {
-            return false;
-        }
-
-        db::ListBufferTypeTag tag {};
-        // Peek the tag (don't consume): keeping it in the buffer lets the fixed-width path
-        // memcpy [tag][value] in one go.
-        memcpy(&tag, context->_inBuf->readPtr(), sizeof(tag));
-
-        const bool topLevel = (sink->openListCount() == 1);
-        const size_t elementIndex = sink->topLevelElementsWritten();
-
-        const bool elementComplete = db::ListTagDispatcher {tag}.execute(readVisitor, db::ListElementView {});
-
-        // In the special case of list element view where each element corresponds to a
-        // container column row - onTopLevelElement is used to write the value into the
-        // column
-        if (topLevel && sink->topLevelElementsWritten() > elementIndex) {
-            onTopLevelElement(elementIndex, view);
-        }
-        if (!elementComplete) {
-            return false;
-        }
-    }
-
-    return true;
-}
 
 // Per-wire-type column decoders. T comes from the wire type code (supplied explicitly by the
 // dispatch layer).
@@ -280,7 +113,50 @@ struct VectorColumnDecoder<SinkListView<Sink>, Sink> {
 
             // Stream this row's list (and any nested children) straight into the reserved space.
             auto onTopLevelElement = [](size_t, const SinkListElementView<Sink>&) {};
-            if (!drainListStack(context, sink, onTopLevelElement)) {
+            if (!drainContainerStack(context, sink, onTopLevelElement)) {
+                return false;
+            }
+
+            ++context->_rowIndex;
+        }
+
+        return true;
+    }
+};
+
+template <ProtoDecodeSink Sink>
+struct VectorColumnDecoder<SinkMapView<Sink>, Sink> {
+    using T = SinkMapView<Sink>;
+
+    static bool decode(DecodeContext* context,
+                       Sink* sink,
+                       SinkColumnVector<T, Sink>* typedColumn,
+                       ProtoColumnState* columnState) {
+        size_t numRows = columnState->getNumRows();
+        if (context->_rowIndex == 0 && typedColumn->size() == 0) {
+            typedColumn->reserve(numRows);
+        }
+
+        while (context->_rowIndex < numRows) {
+            // _rowIndex indicates the last fully processed column row index - if the
+            // column size is _rowIndex + 1 this means we are in the middle of decoding a map.
+            const bool mapStarted = (typedColumn->size() == context->_rowIndex + 1);
+            if (!mapStarted) {
+                if (context->_inBuf->readable() < 2 * sizeof(WireSize)) {
+                    return false;
+                }
+
+                WireSize entryCount = 0;
+                WireSize mapByteSize = 0;
+                context->_inBuf->readData(&entryCount, sizeof(entryCount));
+                context->_inBuf->readData(&mapByteSize, sizeof(mapByteSize));
+
+                typedColumn->emplace_back(sink->beginMap(entryCount, mapByteSize));
+            }
+
+            //we are in the middle of processing a map and should drain the container stack
+            auto onTopLevelElement = [](size_t, const SinkListElementView<Sink>&) {};
+            if (!drainContainerStack(context, sink, onTopLevelElement)) {
                 return false;
             }
 
@@ -322,7 +198,7 @@ struct VectorColumnDecoder<SinkListElementView<Sink>, Sink> {
         auto onTopLevelElement = [typedColumn](size_t index, const SinkListElementView<Sink>& view) {
             typedColumn->data()[index] = view;
         };
-        return drainListStack(context, sink, onTopLevelElement);
+        return drainContainerStack(context, sink, onTopLevelElement);
     }
 };
 
@@ -510,7 +386,7 @@ struct OptionalVectorColumnDecoder<SinkListView<Sink>, Sink> {
             }
 
             auto onTopLevelElement = [](size_t, const SinkListElementView<Sink>&) {};
-            if (!drainListStack(context, sink, onTopLevelElement)) {
+            if (!drainContainerStack(context, sink, onTopLevelElement)) {
                 return false;
             }
 
@@ -551,7 +427,7 @@ struct OptionalVectorColumnDecoder<SinkListElementView<Sink>, Sink> {
             }
         };
 
-        return drainListStack(context, sink, onTopLevelElement);
+        return drainContainerStack(context, sink, onTopLevelElement);
     }
 };
 
@@ -761,7 +637,7 @@ struct ConstColumnDecoder<SinkListView<Sink>, Sink> {
             context->_constListStarted = true;
         }
         auto onTopLevelElement = [](size_t, const SinkListElementView<Sink>&) {};
-        return drainListStack(context, sink, onTopLevelElement);
+        return drainContainerStack(context, sink, onTopLevelElement);
     }
 };
 
@@ -791,7 +667,36 @@ struct ConstColumnDecoder<SinkListElementView<Sink>, Sink> {
             typedColumn->set(view);
         };
 
-        return drainListStack(context, sink, onTopLevelElement);
+        return drainContainerStack(context, sink, onTopLevelElement);
+    }
+};
+
+template <ProtoDecodeSink Sink>
+struct ConstColumnDecoder<SinkMapView<Sink>, Sink> {
+    using T = SinkMapView<Sink>;
+
+    template <ConstColumnOf<T, Sink> Column>
+    static bool decode(DecodeContext* context, Sink* sink, Column* typedColumn) {
+        // Const columns have no row dimension, so _constListStarted carries the "map
+        // started" state (the driver clears it before this column). Set means we have read
+        // the header, reserved the space, and set the (initially unfilled) MapView on the
+        // column.
+        if (!context->_constListStarted) {
+            if (context->_inBuf->readable() < 2 * sizeof(WireSize)) {
+                return false;
+            }
+
+            WireSize entryCount = 0;
+            WireSize mapByteSize = 0;
+            context->_inBuf->readData(&entryCount, sizeof(entryCount));
+            context->_inBuf->readData(&mapByteSize, sizeof(mapByteSize));
+
+            typedColumn->set(sink->beginMap(entryCount, mapByteSize));
+            context->_constListStarted = true;
+        }
+
+        auto onTopLevelElement = [](size_t, const SinkListElementView<Sink>&) {};
+        return drainContainerStack(context, sink, onTopLevelElement);
     }
 };
 

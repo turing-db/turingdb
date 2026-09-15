@@ -316,6 +316,10 @@ mlir::Type procedureElementType(mlir::OpBuilder& builder, ProcedureType procedur
             return storage::ListType::get(context, mlir::NoneType::get(context));
         break;
 
+        case ProcedureType::MAP:
+            throw IRException("Unsupported procedure return type: MAP");
+        break;
+
         case ProcedureType::INVALID:
         case ProcedureType::_SIZE:
             throw IRException("Invalid procedure value type");
@@ -4855,13 +4859,13 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
     }
 
     // The rows are laid out as a nullable value chunk - present in every row - which is
-    // what every fold, key serialization and reduction reads a value column as. A list is
-    // laid out as the plain list chunk an nl.collect drain emits instead: the value being
-    // laid out is a literal, so no row of it is absent.
+    // what every fold, key serialization and reduction reads a value column as. A list or
+    // a map is laid out as the plain container chunk an nl.collect drain emits instead: the
+    // value being laid out is a literal, so no row of it is absent.
     mlir::MLIRContext* const context = _builder.getContext();
-    const bool isList = llvm::isa<storage::ListType>(valueElement);
-    const mlir::Type resultElement = isList ? valueElement
-                                            : storage::NullableType::get(context, valueElement);
+    const bool isContainer = llvm::isa<storage::ListType, storage::MapType>(valueElement);
+    const mlir::Type resultElement = isContainer ? valueElement
+                                                : storage::NullableType::get(context, valueElement);
     const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);
 
     // With no relation driving the projection the value is laid out over the single row

@@ -23,6 +23,7 @@ enum class ProcedureType : uint8_t {
     STRING_VIEW,
     STRING,
     LIST,
+    MAP,
     _SIZE,
 };
 
@@ -40,7 +41,8 @@ using ProcedureTypeName = EnumToString<ProcedureType>::Create<
     EnumStringPair<ProcedureType::BOOL, "BOOLEAN">,
     EnumStringPair<ProcedureType::STRING_VIEW, "STRING">,
     EnumStringPair<ProcedureType::STRING, "STRING">,
-    EnumStringPair<ProcedureType::LIST, "LIST">>;
+    EnumStringPair<ProcedureType::LIST, "LIST">,
+    EnumStringPair<ProcedureType::MAP, "MAP">>;
 
 struct NamedProcedureType {
     std::string_view _name;

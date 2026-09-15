@@ -46,6 +46,24 @@ MapView MapBuffer<N>::insert(std::span<const MapKeyValuePair> entries) {
 }
 
 template <size_t N>
+MapWriteCursor MapBuffer<N>::reserveMap(size_t numEntries, size_t valueBytes) {
+    constexpr size_t entryOverhead = sizeof(std::string_view) + MapByteBuffer<N>::tagSize();
+    const size_t numBytes = numEntries * entryOverhead + valueBytes;
+
+    // Reserve and commit both stores up front so the raw writes that follow never relocate the
+    // bytes or the views: the cursor's pointers and MapView stay valid as it is filled in, and
+    // any later reservation lands after this region rather than inside it.
+    std::byte* entryWritePtr = _entries.reserveAndCommit(numBytes);
+    MapEntryView* viewWritePtr = _views.reserveAndCommit(numEntries);
+
+    return MapWriteCursor {
+        MapView {viewWritePtr, numEntries},
+        entryWritePtr,
+        viewWritePtr,
+    };
+}
+
+template <size_t N>
 void MapBuffer<N>::clear() {
     _entries.clear();
     _views.clear();

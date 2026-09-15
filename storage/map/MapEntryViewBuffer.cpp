@@ -51,6 +51,16 @@ void MapEntryViewBuffer<N>::write(MapEntryView view) {
 }
 
 template <size_t N>
+MapEntryView* MapEntryViewBuffer<N>::reserveAndCommit(size_t numViews) {
+    reserveContiguous(numViews);
+
+    MapEntryView* startPtr = &_last->_buf[_last->_size];
+    _last->_size += numViews;
+
+    return startPtr;
+}
+
+template <size_t N>
 void MapEntryViewBuffer<N>::clear() {
     auto* cur = _first;
     while (cur) {

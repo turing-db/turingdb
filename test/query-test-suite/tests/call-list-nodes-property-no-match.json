@@ -1,7 +1,7 @@
 {
   "enabled": true,
   "graph": "simpledb",
-  "query": "CALL db.listNodes([], ['name'], ['zzznope'], 0, 1000) YIELD id, labels, properties RETURN id, labels, properties",
+  "query": "CALL db.listNodes([], {name: 'zzznope'}, 0, 1000) YIELD id, labels, properties RETURN id, labels, properties",
   "expect": {
     "result": "id,labels,properties",
     "resultJson": "{\"header\":{\"column_names\":[\"id\",\"labels\",\"properties\"],\"column_types\":[\"UInt64\",\"List\",\"String\"]},\"data\":[[[],[],[]]]}"

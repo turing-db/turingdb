@@ -843,7 +843,8 @@ LogicalResult CallProcedure::verify() {
 // Allows inline declaration of a constant type
 LogicalResult ConstantOp::inferReturnTypes(MLIRContext* context,
                                            std::optional<Location> location,
-                                           ValueRange operands, DictionaryAttr attributes,
+                                           ValueRange operands,
+                                           DictionaryAttr attributes,
                                            PropertyRef properties,
                                            RegionRange regions,
                                            SmallVectorImpl<Type>& inferredReturnTypes) {
@@ -866,6 +867,13 @@ LogicalResult ConstantOp::inferReturnTypes(MLIRContext* context,
         const mlir::Type embeddingType = storage::EmbeddingType::get(context);
 
         inferredReturnTypes.emplace_back(mlir::db::ColumnType::get(context, embeddingType));
+        return success();
+    }
+
+    if (llvm::isa<mlir::DictionaryAttr>(adaptor.getValue())) {
+        const mlir::Type mapType = storage::MapType::get(context);
+
+        inferredReturnTypes.emplace_back(mlir::db::ColumnType::get(context, mapType));
         return success();
     }
 

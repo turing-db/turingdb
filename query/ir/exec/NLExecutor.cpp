@@ -1302,6 +1302,16 @@ void broadcastConstantListColumn(const Column* value, size_t rowCount, Column* o
     std::fill_n(outputRaw.begin(), rowCount, typedValue->getRaw());
 }
 
+void broadcastConstantMapColumn(const Column* value, size_t rowCount, Column* output) {
+    const ColumnConst<MapView>* typedValue = static_cast<const ColumnConst<MapView>*>(value);
+    ColumnVector<MapView>* typedOutput = static_cast<ColumnVector<MapView>*>(output);
+
+    auto& outputRaw = typedOutput->getRaw();
+    outputRaw.resize(rowCount);
+
+    std::fill_n(outputRaw.begin(), rowCount, typedValue->getRaw());
+}
+
 // Range copy: rows [inputOffset, inputOffset + rowCount) of the input land at
 // output indices [0, rowCount). This lifts a skip's surviving suffix to the front
 // of a fresh chunk - nl.skip_truncate passes inputOffset = skipThisStep and
@@ -7154,6 +7164,10 @@ NLBroadcastConstantFunction NLExecutor::selectConstantListBroadcast() {
     return &broadcastConstantListColumn;
 }
 
+NLBroadcastConstantFunction NLExecutor::selectConstantMapBroadcast() {
+    return &broadcastConstantMapColumn;
+}
+
 NLBroadcastConstantFunction NLExecutor::selectOptListElementBroadcast(const Column* value) {
     const bool isConst = value->getContainerKind() == ContainerKind::code<ColumnConst>();
     const bool holdsOptional = value->getInternalKind() == InternalKind::code<std::optional<ListElementView>>();
@@ -7263,16 +7277,8 @@ NLCopyFunction NLExecutor::selectOptListElementCopyFunction() {
     return &copyRangeColumn<std::optional<ListElementView>>;
 }
 
-NLBroadcastFunction NLExecutor::selectListBlockRepeatFunction() {
-    return &blockRepeatColumn<ListView>;
-}
-
 NLCompareFunction NLExecutor::selectListCompareFunction() {
     return &compareListColumn;
-}
-
-NLCopyFunction NLExecutor::selectListCopyFunction() {
-    return &copyRangeColumn<ListView>;
 }
 
 // The nullable list family, which labels() produces: a node an OPTIONAL MATCH did not
@@ -7628,6 +7634,10 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
             return &distinctKeyAppendListColumn;
         break;
 
+        case NLChunkKind::Map:
+            throw IRException("A map column cannot be a DISTINCT or grouping key: a map has no scalar value to key on");
+        break;
+
         case NLChunkKind::Path:
             throw IRException("A path column cannot be a DISTINCT or grouping key: a path has no scalar value to key on");
         break;
@@ -7771,6 +7781,10 @@ NLJoinKeyFunctions NLExecutor::selectJoinKeyFunctions(NLChunkKind kind) {
 
         case NLChunkKind::List:
             return {&hashListKeyColumn, &keyEqualColumn<ListView>};
+        break;
+
+        case NLChunkKind::Map:
+            throw IRException("A map column cannot be a join key: a map has no scalar value to key on");
         break;
 
         case NLChunkKind::Path:
@@ -8179,6 +8193,10 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctChunkFold(NLChu
             throw IRException("count(DISTINCT) cannot key on a list column: a list has no scalar value to count distinct");
         break;
 
+        case NLChunkKind::Map:
+            throw IRException("count(DISTINCT) cannot key on a map column: a map has no scalar value to count distinct");
+        break;
+
         case NLChunkKind::Path:
             throw IRException("count(DISTINCT) cannot key on a path column: a path has no scalar value to count distinct");
         break;
@@ -8362,6 +8380,7 @@ NLKeyAppendFunction NLExecutor::selectPlainMergeKeyAppendFunction(NLChunkKind ki
         case NLChunkKind::PropertyTypeID:
         case NLChunkKind::ValueTypeCode:
         case NLChunkKind::List:
+        case NLChunkKind::Map:
         case NLChunkKind::Path:
             throw IRException("a MERGE pattern cannot constrain a property to this value");
         break;
@@ -8576,6 +8595,10 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
 
         case NLChunkKind::List:
             return &compareListColumn;
+        break;
+
+        case NLChunkKind::Map:
+            throw IRException("A map column cannot be a sort key: a map has no order here");
         break;
 
         case NLChunkKind::Path:

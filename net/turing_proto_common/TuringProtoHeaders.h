@@ -74,6 +74,8 @@ enum class ColumnInternalKind : uint32_t {
     COMMIT_HASH,
     CHANGE_ID,
     PROPERTY_NULL,
+    MAP_VIEW,
+    MAP_ENTRY_VIEW,
 };
 
 enum class ColumnKind : uint8_t {

@@ -155,6 +155,14 @@ def List : StorageType<"List", "list"> {
     let assemblyFormat = "`<` $elementType `>`";
 }
 
+def Map : StorageType<"Map", "map"> {
+    let summary = "A Map Value";
+    let description = [{
+        The element type of a chunk holding one map per row - storage's ColumnVector<Map>.
+        Each cell is a MapView: a span over contiguous MapEntityViews forming one map.
+        }];
+}
+
 // One string array per entity of a MERGE pattern: the label set of each chain node,
 // or the property names of each node and each hop. Both db.merge and nl.merge carry
 // these lists, so the constraint lives beside the types the two dialects share.

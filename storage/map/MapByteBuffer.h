@@ -29,6 +29,11 @@ public:
     /// Deallocates all owned chunks
     ~MapByteBuffer();
 
+    MapByteBuffer(const MapByteBuffer&) = delete;
+    MapByteBuffer(MapByteBuffer&&) = delete;
+    MapByteBuffer& operator=(const MapByteBuffer&) = delete;
+    MapByteBuffer& operator=(MapByteBuffer&&) = delete;
+
     static consteval size_t tagSize() { return _tagSize; }
 
     /**
@@ -38,6 +43,16 @@ public:
      * @warn Can allocate unbounded amounts of memory; no size check is performed.
      */
     void reserveContiguous(size_t numBytes);
+
+    /**
+     * @brief Reserves @param numBytes and commits them (advancing the write position past the
+     * whole region), returning a writable pointer to the first byte.
+     *
+     * Unlike @ref write, which writes at the internal append position, the caller fills the
+     * reserved region itself through the returned pointer.
+     * @warn Can allocate unbounded amounts of memory; no size check is performed.
+     */
+    std::byte* reserveAndCommit(size_t numBytes);
 
     /**
      * @brief Writes @param key, followed by @param tag, followed by the bytes of @param val,
@@ -93,11 +108,16 @@ public:
         delete[] _buf;
     }
 
+    ByteChunk(const ByteChunk&) = delete;
+    ByteChunk(ByteChunk&&) = delete;
+    ByteChunk& operator=(const ByteChunk&) = delete;
+    ByteChunk& operator=(ByteChunk&&) = delete;
+
     /// Returns true if @ref _buf has at least @param numBytes remaining capacity
     [[nodiscard]] bool canFit(size_t numBytes) const;
 
 private:
-    std::byte* _buf;
+    std::byte* _buf {nullptr};
     /// The number of elements of @ref _buf that have been written to
     size_t _size {0};
     size_t _capacity {0};

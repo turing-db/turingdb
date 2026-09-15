@@ -29,6 +29,7 @@ set(storage_sources
         map/MapByteBuffer.cpp
         map/MapBuffer.cpp
         map/MapEntryViewBuffer.cpp
+        map/MapWriteCursor.cpp
 
         metadata/EdgeTypeMap.cpp
         metadata/PropertyTypeMap.cpp

@@ -1,7 +1,7 @@
 {
   "enabled": true,
   "graph": "simpledb",
-  "query": "CALL db.listNodes(['Person'], ['name'], ['a'], 0, 1000) YIELD id, labels, properties RETURN properties",
+  "query": "CALL db.listNodes(['Person'], {name: 'a'}, 0, 1000) YIELD id, labels, properties RETURN properties",
   "expect": {
     "result": "properties\n\"{\"\"age\"\":32,\"\"dob\"\":\"\"18/08\"\",\"\"hasPhD\"\":true,\"\"isFrench\"\":true,\"\"name\"\":\"\"Adam\"\"}\"\n\"{\"\"dob\"\":\"\"24/07\"\",\"\"hasPhD\"\":false,\"\"isFrench\"\":true,\"\"name\"\":\"\"Maxime\"\"}\"\n\"{\"\"hasPhD\"\":true,\"\"isFrench\"\":false,\"\"name\"\":\"\"Martina\"\"}\"\n\"{\"\"hasPhD\"\":false,\"\"isFrench\"\":false,\"\"name\"\":\"\"Suhas\"\"}\"",
     "resultJson": "{\"header\":{\"column_names\":[\"properties\"],\"column_types\":[\"String\"]},\"data\":[[[\"{\\\"age\\\":32,\\\"dob\\\":\\\"18/08\\\",\\\"hasPhD\\\":true,\\\"isFrench\\\":true,\\\"name\\\":\\\"Adam\\\"}\",\"{\\\"dob\\\":\\\"24/07\\\",\\\"hasPhD\\\":false,\\\"isFrench\\\":true,\\\"name\\\":\\\"Maxime\\\"}\",\"{\\\"hasPhD\\\":true,\\\"isFrench\\\":false,\\\"name\\\":\\\"Martina\\\"}\",\"{\\\"hasPhD\\\":false,\\\"isFrench\\\":false,\\\"name\\\":\\\"Suhas\\\"}\"]]]}"

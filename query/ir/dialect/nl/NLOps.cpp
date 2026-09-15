@@ -355,6 +355,13 @@ LogicalResult Constant::inferReturnTypes(MLIRContext* context,
         return success();
     }
 
+    if (llvm::isa<mlir::DictionaryAttr>(adaptor.getValue())) {
+        const mlir::Type mapType = storage::MapType::get(context);
+
+        inferredReturnTypes.emplace_back(ChunkType::get(context, mapType));
+        return success();
+    }
+
     // Inference runs during parsing, ahead of the operand constraint, so an attribute that
     // is neither typed nor an array is rejected here rather than cast blindly.
     const auto value = dyn_cast<TypedAttr>(adaptor.getValue());

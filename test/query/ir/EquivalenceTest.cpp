@@ -48,6 +48,9 @@
 #include "list/ListElementView.h"
 #include "list/ListUtils.h"
 #include "list/ListView.h"
+#include "map/MapEntryView.h"
+#include "map/MapUtils.h"
+#include "map/MapView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "versioning/CommitHash.h"
@@ -145,6 +148,7 @@ std::string valueToString(const T& value) {
 
 std::string valueToString(const ListElementView element);
 std::string valueToString(ListView view);
+std::string valueToString(MapView view);
 
 template <typename T>
 std::string valueToString(const std::optional<T>& value) {
@@ -202,6 +206,40 @@ std::string valueToString(const ListView view) {
     }
 
     result += "]";
+    return result;
+}
+
+std::string valueToString(const MapEntryView entry) {
+    const auto writeTyped = []<typename T>(const MapEntryView entry) -> std::string {
+        return valueToString(entry.getValueAs<T>());
+    };
+
+    const MapBufferTypeTag tag = entry.getValueTag();
+    MapTagDispatcher writer {._tag = tag};
+
+    std::string result {entry.getKey()};
+    result += ": ";
+    result += writer.execute(writeTyped, entry);
+
+    return result;
+}
+
+std::string valueToString(const MapView view) {
+    if (view.empty()) {
+        return "{}";
+    }
+
+    std::string result = "{";
+    size_t index = 0;
+
+    for (const MapEntryView entry : view.entries()) {
+        if (index++ > 0) {
+            result += ", ";
+        }
+        result += valueToString(entry);
+    }
+
+    result += "}";
     return result;
 }
 

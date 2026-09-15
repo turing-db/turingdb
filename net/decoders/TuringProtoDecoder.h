@@ -98,6 +98,10 @@ decltype(auto) TuringProtoDecoder<Sink>::dispatchColumnType(ColumnInternalKind t
             return fn.template operator()<db::EntityList>(encoding);
         case ColumnInternalKind::LIST_VIEW:
             return fn.template operator()<SinkListView<Sink>>(encoding);
+        case net::proto::ColumnInternalKind::MAP_VIEW:
+            return fn.template operator()<SinkMapView<Sink>>(encoding);
+        case net::proto::ColumnInternalKind::MAP_ENTRY_VIEW:
+            throw TuringException("Unsupported incoming column type");
         case ColumnInternalKind::LIST_ELEMENT_VIEW:
             return fn.template operator()<SinkListElementView<Sink>>(encoding);
         case ColumnInternalKind::NODE_ID:

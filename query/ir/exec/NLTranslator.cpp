@@ -1,6 +1,5 @@
 #include "NLTranslator.h"
 
-#include <algorithm>
 #include <optional>
 #include <string_view>
 #include <unordered_map>
@@ -12,6 +11,7 @@
 #include "IRConstantColumn.h"
 #include "IRRowAlignment.h"
 #include "list/ListBuffer.h"
+#include "map/MapBuffer.h"
 #include "mlir/IR/Block.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -1348,6 +1348,90 @@ size_t NLTranslator::listValueBytes(mlir::ArrayAttr elements) {
     return valueBytes;
 }
 
+// The bytes the values of a literal map's entries occupy, key and tag bytes excluded - what
+// MapBuffer::reserveMap sizes the region from. Each entry stores the same value object the
+// write below hands it, so the two walks must recognise the same attribute kinds in the same
+// order.
+size_t NLTranslator::mapValueBytes(mlir::DictionaryAttr entries) {
+    size_t valueBytes = 0;
+
+    for (const mlir::NamedAttribute entry : entries) {
+        const mlir::Attribute value = entry.getValue();
+
+        // BoolAttr is an i1 IntegerAttr, so it must be tested before IntegerAttr; an
+        // i64 literal falls through to the integer case.
+        if (mlir::isa<mlir::BoolAttr>(value)) {
+            valueBytes += sizeof(types::Bool::Primitive);
+        } else if (mlir::isa<mlir::IntegerAttr>(value)) {
+            valueBytes += sizeof(types::Int64::Primitive);
+        } else if (mlir::isa<mlir::FloatAttr>(value)) {
+            valueBytes += sizeof(types::Double::Primitive);
+        } else if (mlir::isa<mlir::StringAttr>(value)) {
+            valueBytes += sizeof(types::String::Primitive);
+        } else if (mlir::isa<mlir::DenseF32ArrayAttr>(value)) {
+            valueBytes += sizeof(types::Embedding::Primitive);
+        } else if (mlir::isa<mlir::ArrayAttr>(value)) {
+            valueBytes += sizeof(ListView);
+        } else if (mlir::isa<mlir::DictionaryAttr>(value)) {
+            // A nested map is one entry of this one, storing the child's view
+            valueBytes += sizeof(MapView);
+        } else if (mlir::isa<mlir::UnitAttr>(value)) {
+            valueBytes += sizeof(PropertyNull);
+        } else {
+            throw IRException("Unsupported literal attribute in a constant map");
+        }
+    }
+
+    return valueBytes;
+}
+
+MapView NLTranslator::materializeMapView(mlir::DictionaryAttr entries) {
+    // The region is reserved and committed up front, so the entries are written straight
+    // into their final place - no staging container between the attributes and the buffer.
+    // A later reservation lands after this region rather than inside it, which is what lets
+    // a nested map be materialized part-way through filling its parent.
+    MapWriteCursor cursor = _memory->mapBuffer().reserveMap(entries.size(),
+                                                            mapValueBytes(entries));
+
+    for (const mlir::NamedAttribute entry : entries) {
+        const mlir::StringAttr name = entry.getName();
+        const mlir::Attribute value = entry.getValue();
+
+        cursor.writeKey(std::string_view {name.data(), name.size()});
+
+        if (const auto boolAttr = mlir::dyn_cast<mlir::BoolAttr>(value)) {
+            cursor.writeValue(MapBufferTypeTag::Bool, types::Bool::Primitive(boolAttr.getValue()));
+        } else if (const auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(value)) {
+            cursor.writeValue(MapBufferTypeTag::Int,
+                              static_cast<types::Int64::Primitive>(intAttr.getInt()));
+        } else if (const auto floatAttr = mlir::dyn_cast<mlir::FloatAttr>(value)) {
+            cursor.writeValue(MapBufferTypeTag::Double,
+                              static_cast<types::Double::Primitive>(floatAttr.getValueAsDouble()));
+        } else if (const auto stringAttr = mlir::dyn_cast<mlir::StringAttr>(value)) {
+            // The payload stays in the attribute, which outlives the query, so the stored
+            // view points at it rather than at a copy
+            cursor.writeValue(MapBufferTypeTag::String,
+                              types::String::Primitive(stringAttr.data(), stringAttr.size()));
+        } else if (const auto embeddingAttr = mlir::dyn_cast<mlir::DenseF32ArrayAttr>(value)) {
+            // The floats stay in the attribute, as a string entry's bytes do, so the
+            // stored span points at them rather than at a copy
+            const llvm::ArrayRef<float> floats = embeddingAttr.asArrayRef();
+            cursor.writeValue(MapBufferTypeTag::Embedding,
+                              types::Embedding::Primitive(floats.data(), floats.size()));
+        } else if (const auto nestedList = mlir::dyn_cast<mlir::ArrayAttr>(value)) {
+            cursor.writeValue(MapBufferTypeTag::ListView, materializeListView(nestedList));
+        } else if (const auto nestedMap = mlir::dyn_cast<mlir::DictionaryAttr>(value)) {
+            cursor.writeValue(MapBufferTypeTag::MapView, materializeMapView(nestedMap));
+        } else if (mlir::isa<mlir::UnitAttr>(value)) {
+            cursor.writeValue(MapBufferTypeTag::Null, PropertyNull {});
+        } else {
+            throw IRException("Unsupported literal attribute in a constant map");
+        }
+    }
+
+    return cursor.getView();
+}
+
 ListView NLTranslator::materializeListView(mlir::ArrayAttr elements) {
     // The region is reserved and committed up front, so the elements are written straight
     // into their final place - no staging container between the attributes and the buffer.
@@ -2157,6 +2241,16 @@ void NLTranslator::translateConstant(nl::Constant constant) {
         return;
     }
 
+    if (llvm::isa<storage::MapType>(elementType)) {
+        const auto entries = mlir::cast<mlir::DictionaryAttr>(constant.getValue());
+
+        ColumnConst<MapView>* map = _memory->alloc<ColumnConst<MapView>>();
+        map->set(materializeMapView(entries));
+
+        _valueSlots[res] = map;
+        return;
+    }
+
     const mlir::Attribute value = constant.getValue();
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
@@ -2195,18 +2289,21 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
     _valueSlots[result] = output;
 
     // The untyped null constant is a ColumnConst<PropertyNull>, which holds no value to
-    // repeat: its rows are absent values rather than copies of one. A list rides a list
-    // chunk rather than a nullable value one, so its fill repeats the one view the constant
-    // holds instead of dispatching on a value type.
+    // repeat: its rows are absent values rather than copies of one. A list or a map rides
+    // its own container chunk rather than a nullable value one, so its fill repeats the one
+    // view the constant holds instead of dispatching on a value type.
     const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultType).getElementType();
     const bool isUntypedNull = isUntypedNullChunk(broadcast.getValue().getType());
     const bool isList = llvm::isa<storage::ListType>(resultElement);
+    const bool isMap = llvm::isa<storage::MapType>(resultElement);
 
     NLBroadcastConstantFunction fill = nullptr;
     if (isUntypedNull) {
         fill = NLExecutor::selectNullConstantBroadcast();
     } else if (isList) {
         fill = NLExecutor::selectConstantListBroadcast();
+    } else if (isMap) {
+        fill = NLExecutor::selectConstantMapBroadcast();
     } else if (isNullableListElement(resultElement)) {
         fill = NLExecutor::selectOptListElementBroadcast(value);
     } else {
@@ -2772,9 +2869,6 @@ void NLTranslator::addTruncateColumn(mlir::Value inputValue,
         const ValueType valueType = valueTypeFromElementType(elementType);
         output = allocPlainColumn(valueType);
         copyPrefix = NLExecutor::selectPlainBlockRepeatFunction(valueType);
-    } else if (llvm::isa<storage::ListType>(elementType)) {
-        output = allocListColumn();
-        copyPrefix = NLExecutor::selectListBlockRepeatFunction();
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         output = allocListElementColumn();
         copyPrefix = NLExecutor::selectListElementBlockRepeatFunction();
@@ -2886,9 +2980,6 @@ void NLTranslator::addSkipColumn(mlir::Value inputValue,
         const ValueType valueType = valueTypeFromElementType(elementType);
         output = allocPlainColumn(valueType);
         copySuffix = NLExecutor::selectPlainCopyFunction(valueType);
-    } else if (llvm::isa<storage::ListType>(elementType)) {
-        output = allocListColumn();
-        copySuffix = NLExecutor::selectListCopyFunction();
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         output = allocListElementColumn();
         copySuffix = NLExecutor::selectListElementCopyFunction();
@@ -4540,6 +4631,10 @@ Column* NLTranslator::allocColumnForProcedureType(const NamedProcedureType& retu
             return allocProcedureChunkColumn<ListView>(_memory, chunkSize, nullable);
         break;
 
+        case ProcedureType::MAP:
+            throw IRException("Unsupported procedure return type: MAP");
+        break;
+
         case ProcedureType::INVALID:
         case ProcedureType::_SIZE:
             throw IRException("Invalid procedure return type");
@@ -4582,10 +4677,6 @@ Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
 
     if (isPlainValueElementType(elementType)) {
         return allocPlainColumn(valueTypeFromElementType(elementType));
-    }
-
-    if (llvm::isa<storage::ListType>(elementType)) {
-        return allocListColumn();
     }
 
     return allocColumnForKind(chunkKindFromElementType(elementType));
@@ -4997,12 +5088,6 @@ Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
 
     if (isPlainValueElementType(elementType)) {
         return allocPlainColumn(valueTypeFromElementType(elementType));
-    }
-
-    // A list chunk (the nl.collect drain's per-group cell) is a column of ListViews,
-    // each spanning that group's run in the accumulator's list buffer.
-    if (llvm::isa<storage::ListType>(elementType)) {
-        return allocListColumn();
     }
 
     return allocColumnForKind(chunkKindFromElementType(elementType));
@@ -5425,6 +5510,8 @@ NLChunkKind NLTranslator::chunkKindFromElementType(mlir::Type elementType) {
         return NLChunkKind::OwnedString;
     } else if (mlir::isa<storage::ListType>(elementType)) {
         return NLChunkKind::List;
+    } else if (mlir::isa<storage::MapType>(elementType)) {
+        return NLChunkKind::Map;
     } else if (mlir::isa<storage::PathType>(elementType)) {
         return NLChunkKind::Path;
     } else if (mlir::isa<storage::BoolType>(elementType)) {

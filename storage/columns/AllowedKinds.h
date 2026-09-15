@@ -7,6 +7,7 @@
 #include "columns/ColumnConst.h"
 #include "list/ListBuffer.h"
 #include "ID.h"
+#include "map/MapBuffer.h"
 #include "map/MapEntryView.h"
 #include "versioning/ChangeID.h"
 #include "ColumnOperator.h"
@@ -758,7 +759,16 @@ struct ListableTypes {
     >;
 };
 
-using MappableTypes = ListableTypes;
+struct MappableTypes {
+    using Allowed = GenerateKindList<MapBuffer<>::MappableTypes>;
+
+    /// For constructing map literals: all elements should be const
+    using LiteralExcluded = ExcludedContainers<
+        ContainerKind::code<ColumnVector>(),
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
+};
 
 // NOTE: This should be synced with @ref JoinNode::joinableTypes
 struct ValueHashJoinPairs {
