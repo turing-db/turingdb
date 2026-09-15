@@ -436,7 +436,10 @@ public:
     static NLBroadcastFunction selectOptTileFunction(ValueType valueType);
 
     // The fill that lays a constant column's single value out over a step's rows,
-    // for a nullable value chunk of this value type (nl.broadcast_constant).
+    // for a nullable value chunk of this value type (nl.broadcast_constant). A chunk
+    // standing for every row is a ColumnConst where a literal bound it and a single-row
+    // column where a kernel computed it over literals, so the value column picks the fill
+    // beside its value type.
     static NLBroadcastConstantFunction selectConstantBroadcast(ValueType valueType, const Column* value);
 
     // The broadcast of the null literal, whose rows are the absent value rather than
