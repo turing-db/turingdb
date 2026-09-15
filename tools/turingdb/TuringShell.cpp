@@ -748,29 +748,17 @@ private:
 
 }
 
-void TuringShell::runMLIRQuery(std::string_view query) {
-    if (_remoteConnected) {
-        spdlog::error("#v3 is only available in local mode");
-        return;
-    }
-
+void TuringShell::runLocalQuery(std::string_view query) {
     TuringShellNLSink sink(_quiet);
     QueryStatus status;
-    QueryInterpreterV3 interp(&_turingDB.getSystemManager());
-    interp.execute(status, query, _graphName, _hash, _changeID, _mem, &sink);
 
-    if (_mem) {
-        _mem->clear();
-    }
+    QueryInterpreterV3 interpreter(&_turingDB.getSystemManager());
+    const QueryConfig& queryConfig = _turingDB.getDefaultQueryConfig();
+    interpreter.setChunkSize(queryConfig.getChunkSize());
+    interpreter.execute(status, query, _graphName, _hash, _changeID, _mem, &sink);
 
     if (!status.isOk()) {
-        if (status.hasErrorMessage()) {
-            std::string errorMsg = status.getError();
-            formatMessage(errorMsg);
-            spdlog::error("{}: {}", QueryStatusDescription::value(status.getStatus()), errorMsg);
-        } else {
-            spdlog::error("{}", QueryStatusDescription::value(status.getStatus()));
-        }
+        printQueryError(status);
         return;
     }
 
@@ -781,6 +769,62 @@ void TuringShell::runMLIRQuery(std::string_view query) {
 
     std::cout << "Query returned " << sink.getRowCount() << " rows.\n";
     std::cout << "Query executed in " << status.getTotalTime().count() << " ms.\n";
+}
+
+void TuringShell::runRemoteQuery(const std::string& query) {
+    ShellTable table;
+    size_t rowCount = 0;
+    size_t execCount = 0;
+
+    const auto shellOutputCallback = [&table, &execCount, &rowCount, this](const Dataframe* df) -> void {
+        rowCount += df->getLogicalRowCount();
+
+        if (_quiet) {
+            return;
+        }
+
+        queryCallback(execCount++, df, table);
+    };
+
+    QueryStatus status;
+    Milliseconds remoteQueryTime {0};
+
+    try {
+        const TimePoint start = Clock::now();
+        status = _client.sendQuery(query, shellOutputCallback);
+        const TimePoint end = Clock::now();
+
+        remoteQueryTime = end - start;
+
+    } catch (const TuringException& e) {
+        spdlog::error("Remote query failed: {}", e.what());
+        disconnectRemote();
+        return;
+    }
+
+    if (!status.isOk()) {
+        printQueryError(status);
+        return;
+    }
+
+    if (!_quiet) {
+        table.print(std::cout);
+        std::cout << "\n";
+    }
+
+    std::cout << "Query returned " << rowCount << " rows.\n";
+    std::cout << "Query executed in " << status.getTotalTime().count() << " ms.\n";
+    std::cout << "Remote query executed in " << remoteQueryTime.count() << " ms.\n";
+}
+
+void TuringShell::printQueryError(const QueryStatus& status) {
+    if (status.hasErrorMessage()) {
+        std::string errorMsg = status.getError();
+        formatMessage(errorMsg);
+        spdlog::error("{}: {}", QueryStatusDescription::value(status.getStatus()), errorMsg);
+    } else {
+        spdlog::error("{}", QueryStatusDescription::value(status.getStatus()));
+    }
 }
 
 // Cleans double-escaped characters to single-escaped characters
@@ -824,55 +868,10 @@ void TuringShell::processLine(std::string& line) {
         }
     }
 
-    // Check for #v3 prefix to route through the MLIR executor
-    constexpr std::string_view v3Prefix = "#v3 ";
-    const bool useMLIR = line.size() >= v3Prefix.size() && line.substr(0, v3Prefix.size()) == v3Prefix;
-    if (useMLIR) {
-        line = line.substr(v3Prefix.size());
-        trim(line);
-        runMLIRQuery(line);
-        return;
-    }
-
-    // Execute query
-    ShellTable table;
-    size_t rowCount = 0;
-
-    QueryStatus res;
-    Milliseconds remoteQueryTime {0};
-    {
-        size_t execCount = 0;
-
-        auto shellOutPutCallBack = [&table, &execCount, &rowCount, this](const Dataframe* df) -> void {
-            rowCount += df->getLogicalRowCount();
-
-            if (_quiet) {
-                return;
-            }
-
-            queryCallback(execCount++, df, table);
-        };
-
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData(shellOutPutCallBack);
-
-        if (_remoteConnected) {
-            try {
-                const TimePoint start = Clock::now();
-                res = _client.sendQuery(line, shellOutPutCallBack);
-                const TimePoint end = Clock::now();
-
-                remoteQueryTime = end - start;
-
-            } catch (const TuringException& e) {
-                spdlog::error("Remote query failed: {}", e.what());
-                disconnectRemote();
-            }
-
-        } else {
-            const QueryState state(_graphName, _mem, &_turingDB.getDefaultQueryConfig(), &callbacks, _hash, _changeID);
-            res = _turingDB.query(line, state);
-        }
+    if (_remoteConnected) {
+        runRemoteQuery(line);
+    } else {
+        runLocalQuery(line);
     }
 
     checkShellContext();
@@ -881,36 +880,12 @@ void TuringShell::processLine(std::string& line) {
         _mem->clear();
     }
 
-    if (!res.isOk()) {
-        if (res.hasErrorMessage()) {
-            std::string errorMsg = res.getError();
-            formatMessage(errorMsg);
-            spdlog::error("{}: {}", QueryStatusDescription::value(res.getStatus()),
-                          errorMsg);
-        } else {
-            spdlog::error("{}", QueryStatusDescription::value(res.getStatus()));
-        }
-        return;
-    }
-
-    if (!_quiet) {
-        table.print(std::cout);
-        std::cout << "\n";
-    }
-
     {
         std::string profilerOutput;
         Profiler::dumpAndClear(profilerOutput);
         if (!profilerOutput.empty()) {
             fmt::print("{}\n", profilerOutput);
         }
-    }
-
-    std::cout << "Query returned " << rowCount << " rows.\n";
-    std::cout << "Query executed in " << res.getTotalTime().count() << " ms.\n";
-
-    if (_remoteConnected) {
-        std::cout << "Remote query executed in " << remoteQueryTime.count() << " ms.\n";
     }
 }
 
