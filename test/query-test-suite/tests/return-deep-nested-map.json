@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN {a: {b: {c: {d: {e: {f: 'six'}}}}}}",
+  "expect": {
+    "result": "{a: {b: {c: {d: {e: {f: 'six'}}}}}}\n{a: {b: {c: {d: {e: {f: six}}}}}}",
+    "resultJson": "{\"header\":{\"column_names\":[\"{a: {b: {c: {d: {e: {f: 'six'}}}}}}\"],\"column_types\":[\"Map\"]},\"data\":[[[{\"a\": {\"b\": {\"c\": {\"d\": {\"e\": {\"f\": \"six\"}}}}}}]]]}"
+  },
+  "tags": [
+    "map",
+    "literal",
+    "return",
+    "nested"
+  ],
+  "write-required": false
+}

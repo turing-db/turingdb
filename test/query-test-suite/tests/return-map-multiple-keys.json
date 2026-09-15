@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN {zebra: 1, apple: 2, mango: 3}",
+  "expect": {
+    "result": "\"{zebra: 1, apple: 2, mango: 3}\"\n\"{apple: 2, mango: 3, zebra: 1}\"",
+    "resultJson": "{\"header\":{\"column_names\":[\"{zebra: 1, apple: 2, mango: 3}\"],\"column_types\":[\"Map\"]},\"data\":[[[{\"apple\": 2, \"mango\": 3, \"zebra\": 1}]]]}"
+  },
+  "tags": [
+    "map",
+    "literal",
+    "return"
+  ],
+  "write-required": false
+}

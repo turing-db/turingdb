@@ -3,11 +3,29 @@
 #include <algorithm>
 
 #include "CypherAST.h"
+#include "Symbol.h"
 #include "expr/LiteralExpr.h"
 
 using namespace db;
 
 namespace {
+
+bool isLiteralTreeExpr(const Expr* expr) {
+    if (expr->getKind() != Expr::Kind::LITERAL) {
+        return false;
+    }
+
+    const Literal* literal = static_cast<const LiteralExpr*>(expr)->getLiteral();
+    const Literal::Kind kind = literal->getKind();
+
+    if (kind == Literal::Kind::LIST) {
+        return static_cast<const ListLiteral*>(literal)->isLiteralTree();
+    } else if (kind == Literal::Kind::MAP) {
+        return static_cast<const MapLiteral*>(literal)->isLiteralTree();
+    }
+
+    return true;
+}
 
 bool isHexDigit(char c) {
     return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
@@ -179,20 +197,7 @@ void ListLiteral::addItem(Expr* item) {
 }
 
 bool ListLiteral::isLiteralTree() const {
-    const auto isLiteralItem = [](const Expr* item) {
-        if (item->getKind() != Expr::Kind::LITERAL) {
-            return false;
-        }
-
-        const Literal* literal = static_cast<const LiteralExpr*>(item)->getLiteral();
-        if (literal->getKind() != Kind::LIST) {
-            return true;
-        }
-
-        return static_cast<const ListLiteral*>(literal)->isLiteralTree();
-    };
-
-    return std::ranges::all_of(_items, isLiteralItem);
+    return std::ranges::all_of(_items, isLiteralTreeExpr);
 }
 
 MapLiteral::MapLiteral()
@@ -209,7 +214,24 @@ MapLiteral* MapLiteral::create(CypherAST* ast) {
 }
 
 void MapLiteral::set(Symbol* key, Expr* value) {
-    _map[key] = value;
+    const std::string_view name = key->getName();
+
+    for (std::pair<Symbol*, Expr*>& entry : _entries) {
+        if (entry.first->getName() == name) {
+            entry.second = value;
+            return;
+        }
+    }
+
+    _entries.emplace_back(key, value);
+}
+
+bool MapLiteral::isLiteralTree() const {
+    const auto isLiteralEntry = [](const std::pair<Symbol*, Expr*>& entry) {
+        return isLiteralTreeExpr(entry.second);
+    };
+
+    return std::ranges::all_of(_entries, isLiteralEntry);
 }
 
 EmbeddingLiteral::EmbeddingLiteral()

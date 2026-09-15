@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN {values: [1, 'x', true, 2.5, null]}",
+  "expect": {
+    "result": "\"{values: [1, 'x', true, 2.5, null]}\"\n\"{values: [1, x, true, 2.5, null]}\"",
+    "resultJson": "{\"header\":{\"column_names\":[\"{values: [1, 'x', true, 2.5, null]}\"],\"column_types\":[\"Map\"]},\"data\":[[[{\"values\": [1, \"x\", true, 2.500000, null]}]]]}"
+  },
+  "tags": [
+    "map",
+    "lists",
+    "literal",
+    "return"
+  ],
+  "write-required": false
+}

@@ -1,7 +1,7 @@
 {
   "enabled": true,
   "graph": "simpledb",
-  "query": "CALL db.listNodes([], [], [], 15, 5) YIELD id, labels, properties RETURN count(*)",
+  "query": "CALL db.listNodes([], {}, 15, 5) YIELD id, labels, properties RETURN count(*)",
   "expect": {
     "result": "count(*)\n3",
     "resultJson": "{\"header\":{\"column_names\":[\"count(*)\"],\"column_types\":[\"UInt64\"]},\"data\":[[[3]]]}"

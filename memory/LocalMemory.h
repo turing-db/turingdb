@@ -120,6 +120,7 @@ public:
         MakeMemoryPool<ColumnOptVector<ListView>>::type,
         MakeMemoryPool<ColumnConst<std::optional<ListView>>>::type,
 
+        MakeMemoryPool<ColumnVector<MapView>>::type,
         MakeMemoryPool<ColumnConst<MapView>>::type
     >;
 

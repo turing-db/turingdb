@@ -9,6 +9,7 @@
 #include "TuringProtoInBuf.h"
 #include "TuringProtoHeaders.h"
 #include "list/ListBuffer.h"
+#include "map/MapBuffer.h"
 #include "QueryCallbacks.h"
 #include "QueryStatus.h"
 #include "versioning/ChangeID.h"
@@ -90,6 +91,7 @@ private:
     net::proto::ChunkedBuffer<float> _embeddingBuffer;
     net::proto::ChunkedBuffer<char> _stringBuffer;
     db::ListBuffer<> _listBuffer;
+    db::MapBuffer<> _mapBuffer;
 
     void sendRequest(const std::string& query);
     void recvHttpResponseHeaders();

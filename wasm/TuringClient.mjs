@@ -53,6 +53,8 @@ export const ColumnType = Object.freeze({
     COMMIT_HASH: 17,
     CHANGE_ID: 18,
     PROPERTY_NULL: 19,
+    MAP_VIEW: 20,
+    MAP_ENTRY_VIEW: 21,
 });
 
 export const ColumnEncoding = Object.freeze({

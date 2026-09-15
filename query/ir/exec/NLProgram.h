@@ -27,6 +27,7 @@
 #include "iterators/ChunkConfig.h"
 #include "list/ListBuffer.h"
 #include "list/ListView.h"
+#include "map/MapView.h"
 #include "metadata/LabelSet.h"
 #include "metadata/LabelSetHandle.h"
 #include "metadata/PropertyType.h"
@@ -64,6 +65,7 @@ enum class NLChunkKind {
     String,
     OwnedString,
     List,
+    Map,
     Path,
 };
 
@@ -127,6 +129,10 @@ void dispatchChunkKind(NLChunkKind kind, Handler&& handler) {
 
         case NLChunkKind::List:
             return handler.template operator()<ListView>();
+        break;
+
+        case NLChunkKind::Map:
+            return handler.template operator()<MapView>();
         break;
 
         case NLChunkKind::Path:

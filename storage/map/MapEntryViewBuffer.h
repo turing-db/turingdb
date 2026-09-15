@@ -26,6 +26,11 @@ public:
     /// Deallocates all owned chunks
     ~MapEntryViewBuffer();
 
+    MapEntryViewBuffer(const MapEntryViewBuffer&) = delete;
+    MapEntryViewBuffer(MapEntryViewBuffer&&) = delete;
+    MapEntryViewBuffer& operator=(const MapEntryViewBuffer&) = delete;
+    MapEntryViewBuffer& operator=(MapEntryViewBuffer&&) = delete;
+
     /**
      * @brief Ensures that after this call is complete, the current @ref Chunk
      * contains at least enough free space at the end of its internal buffer to store
@@ -41,6 +46,16 @@ public:
      * @warn Does not perform bounds checking.
      */
     void write(MapEntryView view);
+
+    /**
+     * @brief Reserves space for @param numViews views and commits it (advancing the write
+     * position past the whole region), returning a writable pointer to the first slot.
+     *
+     * Unlike @ref write, which writes at the internal append position, the caller fills the
+     * reserved slots itself through the returned pointer.
+     * @warn Can allocate unbounded amounts of memory; no size check is performed.
+     */
+    MapEntryView* reserveAndCommit(size_t numViews);
 
     /// Returns a pointer to the next free available slot in the last buffer
     const MapEntryView* nextPtr() const { return &_last->_buf[_last->_size]; }
@@ -91,11 +106,16 @@ public:
         delete[] _buf;
     }
 
+    Chunk(const Chunk&) = delete;
+    Chunk(Chunk&&) = delete;
+    Chunk& operator=(const Chunk&) = delete;
+    Chunk& operator=(Chunk&&) = delete;
+
     /// Returns true if @ref _buf has at least @param numViews remaining capacity
     [[nodiscard]] bool canFit(size_t numViews) const;
 
 private:
-    MapEntryView* _buf;
+    MapEntryView* _buf {nullptr};
     /// The number of elements of @ref _buf that have been written to
     size_t _size {0};
     size_t _capacity {0};

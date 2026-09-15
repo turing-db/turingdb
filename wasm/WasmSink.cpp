@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "ID.h"
+#include "TuringException.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
@@ -82,24 +83,52 @@ ListElementView WasmSink::writeListElementBytes(const char* bytes, size_t byteSi
     return element;
 }
 
-bool WasmSink::hasOpenList() const {
+MapView WasmSink::beginMap(size_t entryCount, size_t byteSize) {
+    throwMapUnsupported();
+}
+
+void WasmSink::beginNestedMap(size_t entryCount, size_t byteSize) {
+    throwMapUnsupported();
+}
+
+void WasmSink::writeMapKey(std::string_view key) {
+    throwMapUnsupported();
+}
+
+void WasmSink::writeMapValueBytes(const char* bytes, size_t byteSize) {
+    throwMapUnsupported();
+}
+
+bool WasmSink::topMapExpectsValue() const {
+    throwMapUnsupported();
+}
+
+void WasmSink::throwMapUnsupported() {
+    throw TuringException("Map columns are not supported by the wasm decoder");
+}
+
+bool WasmSink::hasOpenContainer() const {
     return !_listStack.empty();
 }
 
-bool WasmSink::topListComplete() const {
+bool WasmSink::topContainerIsMap() const {
+    return false;
+}
+
+bool WasmSink::topContainerComplete() const {
     const OpenList& top = _listStack.back();
     return top._writtenCount == top._expectedCount;
 }
 
-void WasmSink::popList() {
+void WasmSink::popContainer() {
     _listStack.pop_back();
 }
 
-size_t WasmSink::openListCount() const {
+size_t WasmSink::openContainerCount() const {
     return _listStack.size();
 }
 
-size_t WasmSink::topLevelElementsWritten() const {
+size_t WasmSink::topLevelValuesWritten() const {
     return _listStack.front()._writtenCount;
 }
 

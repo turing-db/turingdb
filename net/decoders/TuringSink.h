@@ -1,18 +1,21 @@
 #pragma once
 
 #include <stddef.h>
-#include <deque>
 #include <optional>
 #include <span>
 #include <string_view>
 
 #include "ChunkedBuffer.h"
 #include "LocalMemory.h"
+#include "NestedContainerCursor.h"
 #include "TuringSinkColumnContainer.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnVector.h"
 #include "list/ListBuffer.h"
 #include "list/ListUtils.h"
+#include "map/MapBuffer.h"
+#include "map/MapUtils.h"
+#include "map/MapView.h"
 #include "metadata/PropertyType.h"
 
 namespace net::proto {
@@ -35,14 +38,16 @@ public:
     template <typename T>
     using ColumnOptConst = db::ColumnConst<std::optional<T>>;
 
-    // List handle types of this family: the decoder writes lists through these.
+    // Container handle types of this family: the decoder writes lists and maps through these.
     using ListView = db::ListView;
     using ListElementView = db::ListElementView;
+    using MapView = db::MapView;
 
     TuringSink(db::LocalMemory* localMemory,
                ChunkedBuffer<float>* embeddingBuffer,
                ChunkedBuffer<char>* stringBuffer,
-               db::ListBuffer<>* listBuffer);
+               db::ListBuffer<>* listBuffer,
+               db::MapBuffer<>* mapBuffer);
     ~TuringSink();
 
     float* allocEmbedding(size_t numFloats) { return _embeddingBuffer->alloc(numFloats); }
@@ -54,29 +59,47 @@ public:
     template <typename T>
     Column* alloc() { return _localMemory->alloc<T>(); }
 
-    // List builder surface: the decoder reports list structure as it comes off the
-    // wire; this family stores elements as tagged bytes in the list arena behind a
-    // stack of write cursors (one per open nesting level, resumable across chunks).
+    // Container builder surface: the decoder reports list and map structure as it comes off
+    // the wire. Both kinds are reserved up front and filled through a write cursor, so a
+    // container's view is valid from the moment it opens and the parent can be given it
+    // before any of its contents land.
     db::ListView beginList(size_t elementCount, size_t byteSize);
     db::ListElementView beginNestedList(size_t elementCount, size_t byteSize);
 
     db::ListElementView writeListValue(std::string_view value) {
-        return _listStack.back().writeValue<db::types::String::Primitive>(db::TypeToListBufferTag<db::types::String::Primitive>::Tag, value);
+        return listCursor().writeValue<db::types::String::Primitive>(db::TypeToListBufferTag<db::types::String::Primitive>::Tag, value);
     }
 
     db::ListElementView writeListValue(std::span<const float> value) {
-        return _listStack.back().writeValue<db::types::Embedding::Primitive>(db::TypeToListBufferTag<db::types::Embedding::Primitive>::Tag, value);
+        return listCursor().writeValue<db::types::Embedding::Primitive>(db::TypeToListBufferTag<db::types::Embedding::Primitive>::Tag, value);
     }
 
     db::ListElementView writeListElementBytes(const char* bytes, size_t byteSize) {
-        return _listStack.back().writeRaw(bytes, byteSize);
+        return listCursor().writeRaw(bytes, byteSize);
     }
 
-    bool hasOpenList() const { return !_listStack.empty(); }
-    bool topListComplete() const { return _listStack.back().isComplete(); }
-    void popList() { _listStack.pop_back(); }
-    size_t openListCount() const { return _listStack.size(); }
-    size_t topLevelElementsWritten() const { return _listStack.front().getWritten(); }
+    db::MapView beginMap(size_t entryCount, size_t byteSize);
+    void beginNestedMap(size_t entryCount, size_t byteSize);
+
+    void writeMapKey(std::string_view key) { mapCursor().writeKey(key); }
+
+    template <typename T>
+    void writeMapValue(const T& value) {
+        mapCursor().writeValue<T>(db::TypeToMapBufferTag<T>::Tag, value);
+    }
+
+    void writeMapValueBytes(const char* bytes, size_t byteSize) {
+        mapCursor().writeValueBytes(bytes, byteSize);
+    }
+
+    bool topMapExpectsValue() const { return mapCursor().expectsValue(); }
+
+    bool hasOpenContainer() const { return !_containerStack.empty(); }
+    bool topContainerIsMap() const { return _containerStack.back().isMap(); }
+    bool topContainerComplete() const;
+    void popContainer() { _containerStack.pop_back(); }
+    size_t openContainerCount() const { return _containerStack.size(); }
+    size_t topLevelValuesWritten() const { return _containerStack.front().getWritten(); }
 
     void reset();
 
@@ -85,8 +108,13 @@ private:
     ChunkedBuffer<float>* _embeddingBuffer {nullptr};
     ChunkedBuffer<char>* _stringBuffer {nullptr};
     db::QueryListBuffer* _listBuffer {nullptr};
+    db::MapBuffer<>* _mapBuffer {nullptr};
 
-    // Front is the column's own (top-level) cursor; back is the innermost open list.
-    std::deque<db::ListWriteCursor> _listStack;
+    // Front is the column's own (top-level) container; back is the innermost open one.
+    NestedContainerCursor::Stack _containerStack;
+
+    db::ListWriteCursor& listCursor() { return _containerStack.back().getList(); }
+    db::MapWriteCursor& mapCursor() { return _containerStack.back().getMap(); }
+    const db::MapWriteCursor& mapCursor() const { return _containerStack.back().getMap(); }
 };
 }

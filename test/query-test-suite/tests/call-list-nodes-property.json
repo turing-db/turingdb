@@ -1,7 +1,7 @@
 {
   "enabled": true,
   "graph": "simpledb",
-  "query": "CALL db.listNodes([], ['name'], ['remy'], 0, 1000) YIELD id, labels, properties RETURN id, labels, properties",
+  "query": "CALL db.listNodes([], {name: 'remy'}, 0, 1000) YIELD id, labels, properties RETURN id, labels, properties",
   "expect": {
     "result": "id,labels,properties\n0,\"[Person, SoftwareEngineering, Founder]\",\"{\"\"age\"\":32,\"\"dob\"\":\"\"18/01\"\",\"\"hasPhD\"\":true,\"\"isFrench\"\":true,\"\"name\"\":\"\"Remy\"\"}\"",
     "resultJson": "{\"header\":{\"column_names\":[\"id\",\"labels\",\"properties\"],\"column_types\":[\"UInt64\",\"List\",\"String\"]},\"data\":[[[0],[[\"Person\", \"SoftwareEngineering\", \"Founder\"]],[\"{\\\"age\\\":32,\\\"dob\\\":\\\"18/01\\\",\\\"hasPhD\\\":true,\\\"isFrench\\\":true,\\\"name\\\":\\\"Remy\\\"}\"]]]}"

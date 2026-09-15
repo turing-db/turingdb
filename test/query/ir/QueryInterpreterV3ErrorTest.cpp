@@ -63,8 +63,7 @@ protected:
 };
 
 // A codegen rejection carries the span of the query it came from, so an expression the
-// generator turns away is reported under the caret naming it, rather than being dressed up
-// as the internal failure the case below is.
+// generator turns away is reported under the caret naming it.
 TEST_F(QueryInterpreterV3ErrorTest, reportsRejectedExpressionWithItsLocation) {
     QueryStatus status;
     runQuery("MATCH (n) DELETE n.name", status);
@@ -77,16 +76,18 @@ TEST_F(QueryInterpreterV3ErrorTest, reportsRejectedExpressionWithItsLocation) {
               "-------* Expressions in DELETE statements can only be symbols");
 }
 
-// An internal generator failure is a FatalException and must keep reading as
-// one, rather than being dressed up as a deliberate rejection. A map literal
-// reading a row is one: the key varies, so it is not dropped as a constant, and
-// the generator has no column to read a map into.
-TEST_F(QueryInterpreterV3ErrorTest, reportsInternalGeneratorFailureAsUnexpected) {
+// A map is built once as a constant, so a value reading a row has no attribute to ride.
+// The rejection names that value rather than the map holding it.
+TEST_F(QueryInterpreterV3ErrorTest, reportsMapValueReadingARowWithItsLocation) {
     QueryStatus status;
     runQuery("MATCH (n) RETURN n.name ORDER BY {a: n.age}", status);
 
     EXPECT_EQ(status.getStatus(), QueryStatus::Status::PLAN_ERROR);
-    EXPECT_EQ(status.getError(), "Unexpected exception: Unsupported literal kind in WHERE clause expression.");
+    EXPECT_EQ(status.getError(),
+              "-------* Query error\n"
+              "     1 | MATCH (n) RETURN n.name ORDER BY {a: n.age}\n"
+              "       |                                      ^^^^^\n"
+              "-------* Only literal values are supported in a map.");
 }
 
 TEST_F(QueryInterpreterV3ErrorTest, deleteOutsideWrite) {

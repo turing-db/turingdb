@@ -103,6 +103,7 @@ public:
 
     using ListView = wasm::ListView;
     using ListElementView = wasm::ListElementView;
+    using MapView = wasm::MapView;
 
     WasmSink();
     ~WasmSink();
@@ -121,11 +122,27 @@ public:
     ListElementView writeListValue(std::string_view value);
     ListElementView writeListValue(std::span<const float> value);
     ListElementView writeListElementBytes(const char* bytes, size_t byteSize);
-    bool hasOpenList() const;
-    bool topListComplete() const;
-    void popList();
-    size_t openListCount() const;
-    size_t topLevelElementsWritten() const;
+    // Maps are not decodable by this family yet: the flat-bytes layout and the JS reader
+    // for one do not exist, so every entry point throws rather than writing a half-format.
+    MapView beginMap(size_t entryCount, size_t byteSize);
+    void beginNestedMap(size_t entryCount, size_t byteSize);
+    void writeMapKey(std::string_view key);
+
+    template <typename T>
+    void writeMapValue(const T& value) {
+        throwMapUnsupported();
+    }
+
+    void writeMapValueBytes(const char* bytes, size_t byteSize);
+
+    bool topMapExpectsValue() const;
+
+    bool hasOpenContainer() const;
+    bool topContainerIsMap() const;
+    bool topContainerComplete() const;
+    void popContainer();
+    size_t openContainerCount() const;
+    size_t topLevelValuesWritten() const;
 
     std::span<const char> getListBytes();
     std::span<const std::string_view> getListStrings() const;
@@ -157,6 +174,7 @@ private:
     uint32_t appendBytes(const void* bytes, size_t byteSize);
     uint32_t appendListHeader(size_t elementCount);
     ListElementView appendDeferredPayload(db::ListBufferTypeTag tag, const char* source, size_t byteSize);
+    [[noreturn]] static void throwMapUnsupported();
     void countElementWritten();
 };
 

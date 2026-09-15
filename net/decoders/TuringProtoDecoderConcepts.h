@@ -42,6 +42,7 @@ concept SupportedColumnVectorTypes = std::is_same_v<T, db::types::UInt64::Primit
 || std::is_same_v<T, db::EntityList>
 || std::is_same_v<T, typename Sink::ListElementView>
 || std::is_same_v<T, typename Sink::ListView>
+|| std::is_same_v<T, typename Sink::MapView>
 || std::is_same_v<T, db::types::String::Primitive>;
 
 template <typename T, typename Sink>
@@ -68,6 +69,7 @@ concept SupportedColumnConstTypes = std::is_same_v<T, db::types::UInt64::Primiti
 || std::is_same_v<T, db::types::Embedding::Primitive>
 || std::is_same_v<T, db::PropertyNull>
 || std::is_same_v<T, typename Sink::ListView>
+|| std::is_same_v<T, typename Sink::MapView>
 || std::is_same_v<T, db::types::String::Primitive>;
 //|| std::is_same_v<T, typename Sink::ListElementView> - disabled: no ColumnConst<ListElementView> memory pool
 

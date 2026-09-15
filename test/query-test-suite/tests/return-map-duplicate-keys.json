@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN {a: 1, a: 2}",
+  "expect": {
+    "result": "\"{a: 1, a: 2}\"\n{a: 2}",
+    "resultJson": "{\"header\":{\"column_names\":[\"{a: 1, a: 2}\"],\"column_types\":[\"Map\"]},\"data\":[[[{\"a\": 2}]]]}"
+  },
+  "tags": [
+    "map",
+    "literal",
+    "return"
+  ],
+  "write-required": false
+}

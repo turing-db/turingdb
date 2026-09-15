@@ -14,6 +14,7 @@ enum class MapBufferTypeTag : uint8_t {
     Embedding,
     ListView,
     MapView,
+    Null,
 
     INVALID,
 };

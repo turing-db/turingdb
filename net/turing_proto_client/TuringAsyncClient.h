@@ -18,6 +18,7 @@
 #include "dataframe/Dataframe.h"
 #include "dataframe/DataframeManager.h"
 #include "list/ListBuffer.h"
+#include "map/MapBuffer.h"
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
@@ -135,6 +136,7 @@ private:
     net::proto::ChunkedBuffer<float> _embeddingBuffer;
     net::proto::ChunkedBuffer<char> _stringBuffer;
     db::ListBuffer<> _listBuffer;
+    db::MapBuffer<> _mapBuffer;
     net::proto::TuringSink _sink;
 
     // Decoded-response state, persisted across recv() resumptions for the in-flight query

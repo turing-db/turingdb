@@ -52,6 +52,7 @@ class Literal;
 class ListLiteral;
 class ListComprehensionExpr;
 class LoadCSVStmt;
+class MapLiteral;
 class MatchStmt;
 class MergeStmt;
 class NodePattern;
@@ -878,6 +879,10 @@ private:
     // The column holding a list literal's value: the one list, standing for every row -
     // or, where an item is read per row, one list per row
     mlir::Value translateListLiteral(const ListLiteral* list);
+
+    mlir::Value translateMapLiteral(const MapLiteral* map);
+    void translateMapEntries(const MapLiteral* map,
+                             llvm::SmallVectorImpl<mlir::NamedAttribute>& entries);
 
     // The column of the lists a db.make_list builds out of the column each item rides:
     // what a list whose items are not all literals evaluates to

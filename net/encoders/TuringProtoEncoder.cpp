@@ -12,7 +12,8 @@ using namespace net::proto;
 namespace rv = ranges::views;
 
 TuringProtoEncoder::TuringProtoEncoder(net::proto::TuringProtoOutBuf* outBuf)
-    : _outBuf(outBuf)
+    : _outBuf(outBuf),
+    _nestedWriter(outBuf)
 {
 }
 
@@ -41,7 +42,7 @@ void TuringProtoEncoder::writeColumns(std::span<const db::Column* const> columns
 
     using Encoder = db::ColumnSingleDispatcher<db::OutputtedTypes::Allowed, DataWriter, db::OutputtedTypes::Excluded>;
 
-    DataWriter writer(_outBuf, _stack, offset, rowCount);
+    DataWriter writer(_outBuf, _nestedWriter, offset, rowCount);
     for (const db::Column* column : columns) {
         Encoder::dispatch(column, writer);
     }

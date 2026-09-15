@@ -514,8 +514,9 @@ public:
     // copies of a value the constant holds
     static NLBroadcastConstantFunction selectNullConstantBroadcast();
 
-    // The list sibling: a list constant lays its one view out over the step's rows
+    // The list and map siblings: a list/map constant lays its one view out over the step's rows
     static NLBroadcastConstantFunction selectConstantListBroadcast();
+    static NLBroadcastConstantFunction selectConstantMapBroadcast();
 
     // The tagged-cell sibling: a cell that may be absent carries its own type, so there is
     // no value type to dispatch on
@@ -552,11 +553,6 @@ public:
     static NLCountFunction selectOptListElementCountFunction();
     static NLGroupKeyGatherFunction selectOptListElementGroupKeyGatherFunction();
     static NLCopyFunction selectOptListElementCopyFunction();
-
-    // The cut families for a list chunk: a list cell copies as a view, so a prefix or a
-    // suffix of them is the plain range copy every other cell column uses
-    static NLBroadcastFunction selectListBlockRepeatFunction();
-    static NLCopyFunction selectListCopyFunction();
 
     static NLBroadcastFunction selectOptListBlockRepeatFunction();
     static NLBroadcastFunction selectOptListTileFunction();

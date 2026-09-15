@@ -22,6 +22,9 @@
 #include "list/ListElementView.h"
 #include "list/ListUtils.h"
 #include "list/ListView.h"
+#include "map/MapEntryView.h"
+#include "map/MapUtils.h"
+#include "map/MapView.h"
 #include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 #include "versioning/ChangeID.h"
@@ -145,12 +148,12 @@ nb::object embeddingToNdarray(std::span<const float> s) {
 
 namespace {
 
-// Converts a list value (or a single list element) to plain Python objects — scalars, a list
-// of floats for an embedding, or nested lists. Deliberately plain objects, not ndarrays, so
-// the result compares equal to the JSON-parsed expectation. A nested list recurses through
-// view() -> element() -> operator(); keeping both as members of one struct lets them call each
-// other without a forward declaration.
-struct ListToPyObject {
+// Converts a list or map value (or a single list element / map entry) to plain Python
+// objects — scalars, a list of floats for an embedding, nested lists, and dicts for maps.
+// Deliberately plain objects, not ndarrays, so the result compares equal to the JSON-parsed
+// expectation. Nesting recurses through view() -> element()/entry() -> operator(); keeping
+// them as members of one struct lets them call each other without a forward declaration.
+struct ValueToPyObject {
     nb::object view(const db::ListView& listView) const {
         nb::list out;
         for (const db::ListElementView element : listView.elements()) {
@@ -163,12 +166,24 @@ struct ListToPyObject {
         return db::ListTagDispatcher {element.getTag()}.execute(*this, element);
     }
 
+    nb::object view(const db::MapView& mapView) const {
+        nb::dict out;
+        for (const db::MapEntryView entry : mapView.entries()) {
+            out[nb::cast(entry.getKey())] = this->entry(entry);
+        }
+        return out;
+    }
+
+    nb::object entry(const db::MapEntryView entry) const {
+        return db::MapTagDispatcher {entry.getValueTag()}.execute(*this, entry);
+    }
+
     template <typename T>
     nb::object operator()(const db::ListElementView element) const {
         if constexpr (std::is_same_v<T, db::types::Bool::Primitive>) {
             return nb::cast(element.getAs<T>()._boolean);
         } else if constexpr (std::is_same_v<T, db::types::String::Primitive>) {
-            return nb::cast(std::string(element.getAs<T>()));
+            return nb::cast(element.getAs<T>());
         } else if constexpr (std::is_same_v<T, db::types::Embedding::Primitive>) {
             nb::list floats;
             for (const float value : element.getAs<T>()) {
@@ -181,6 +196,29 @@ struct ListToPyObject {
             return nb::cast(element.getAs<T>());
         }
     }
+
+    template <typename T>
+    nb::object operator()(const db::MapEntryView entry) const {
+        if constexpr (std::is_same_v<T, db::types::Bool::Primitive>) {
+            return nb::cast(entry.getValueAs<T>()._boolean);
+        } else if constexpr (std::is_same_v<T, db::types::String::Primitive>) {
+            return nb::cast(entry.getValueAs<T>());
+        } else if constexpr (std::is_same_v<T, db::types::Embedding::Primitive>) {
+            nb::list floats;
+            for (const float value : entry.getValueAs<T>()) {
+                floats.append(nb::cast(value));
+            }
+            return floats;
+        } else if constexpr (std::is_same_v<T, db::ListView>) {
+            return view(entry.getValueAs<T>());
+        } else if constexpr (std::is_same_v<T, db::MapView>) {
+            return view(entry.getValueAs<T>());
+        } else if constexpr (std::is_same_v<T, db::PropertyNull>) {
+            return nb::none();
+        } else {
+            return nb::cast(entry.getValueAs<T>());
+        }
+    }
 };
 
 }
@@ -188,7 +226,7 @@ struct ListToPyObject {
 nb::dict dataframeToNumpy(db::Dataframe* df) {
     nb::dict data;
     nb::dict dtypes;
-    ListToPyObject listVisitor;
+    ValueToPyObject listVisitor;
 
     const size_t rowCount = df->getLogicalRowCount();
 
@@ -531,6 +569,17 @@ nb::dict dataframeToNumpy(db::Dataframe* df) {
                 }
                 value = lst;
                 dtypeName = "ListElement";
+                break;
+            }
+            case db::ColumnConst<db::MapView>::staticKind(): {
+                const auto& v = static_cast<const db::ColumnConst<db::MapView>*>(col)->getRaw();
+                const nb::object mapObj = listVisitor.view(v);
+                nb::list lst;
+                for (size_t i = 0; i < rowCount; ++i) {
+                    lst.append(mapObj);
+                }
+                value = lst;
+                dtypeName = "Map";
                 break;
             }
             default:
