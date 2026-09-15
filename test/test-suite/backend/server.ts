@@ -223,7 +223,6 @@ Bun.serve({
 
 		if (pathname === "/api/update" && req.method === "POST") {
 			const body = await req.json().catch(() => null);
-			const hasPlan = typeof body?.plan === "string";
 			const hasResult = typeof body?.result === "string";
 			const hasResultJson = typeof body?.resultJson === "string";
 			const hasMlir = typeof body?.mlir === "string";
@@ -237,8 +236,7 @@ Bun.serve({
 				typeof body?.name === "string" ? idToFilename(body.name.trim()) : "";
 			if (
 				!targetName ||
-				(!hasPlan &&
-					!hasResult &&
+				(!hasResult &&
 					!hasResultJson &&
 					!hasMlir &&
 					!hasQuery &&
@@ -261,7 +259,6 @@ Bun.serve({
 				}
 			}
 			const updatedSource = await updateTestFile(sourceTestsDir, targetName, {
-				plan: body.plan,
 				result: body.result,
 				resultJson: body.resultJson,
 				mlir: body.mlir,
@@ -275,8 +272,7 @@ Bun.serve({
 			let updatedBuild = false;
 			try {
 				updatedBuild = await updateTestFile(sourceTestsDir, targetName, {
-					plan: body.plan,
-					result: body.result,
+						result: body.result,
 					resultJson: body.resultJson,
 					mlir: body.mlir,
 					query: body.query,

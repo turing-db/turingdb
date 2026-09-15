@@ -132,7 +132,6 @@ QueryTestResult RemoteQueryTestRunner::runTest(const QueryTestSpec& spec,
         QueryTestRunner::normalizeOutput(
             result._resultOutput,
             QueryResultFormatter::formatResultOutput(status, columnNames, rows));
-        result._planMatched = true;
 
         std::string expected;
         QueryTestRunner::normalizeOutput(expected, spec._expectResult);

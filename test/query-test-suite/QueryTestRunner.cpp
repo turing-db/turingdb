@@ -9,20 +9,12 @@
 
 #include <range/v3/view/drop.hpp>
 
-#include "CompilerException.h"
-#include "CypherAST.h"
-#include "CypherAnalyzer.h"
-#include "CypherParser.h"
 #include "File.h"
 #include "Graph.h"
 #include "ID.h"
 #include "JsonEncoder.h"
 #include "list/ListElementView.h"
 #include "list/ListView.h"
-#include "PlanGraph.h"
-#include "PlanGraphDebug.h"
-#include "PlanGraphGenerator.h"
-#include "PlanOptimizer.h"
 #include "QueryCallbacks.h"
 #include "QueryConfig.h"
 #include "QueryResultFormatter.h"
@@ -37,9 +29,6 @@
 #include "columns/ColumnVector.h"
 #include "dataframe/Dataframe.h"
 #include "metadata/PropertyType.h"
-#include "ProcedureManager.h"
-#include "versioning/Transaction.h"
-#include "views/GraphView.h"
 
 namespace rg = ranges;
 namespace rv = ranges::views;
@@ -89,51 +78,6 @@ void trimTrailingEmptyLines(std::string& trimmed,
     }
 
     trimmed = out.str();
-}
-
-void generatePlanGraph(std::string_view query,
-                       db::GraphView view,
-                       std::ostream& out,
-                       db::PlanGenConfig* planGenConfig) {
-    auto procedures = std::make_unique<db::ProcedureManager>();
-    procedures->init();
-
-    db::CypherAST ast(procedures.get(), query);
-    db::CypherParser parser(&ast);
-    db::CypherAnalyzer analyzer(&ast, view);
-    db::PlanGraphGenerator planGen(planGenConfig, ast, view);
-
-    try {
-        parser.parse(query);
-    } catch (const db::CompilerException& e) {
-        fmt::println(out, "PARSE ERROR");
-        fmt::println(out, "{}", e.what());
-        return;
-    }
-
-    try {
-        analyzer.analyze();
-    } catch (const db::CompilerException& e) {
-        fmt::println(out, "ANALYZE ERROR");
-        fmt::println(out, "{}", e.what());
-        return;
-    }
-
-    try {
-        planGen.generate(ast.queries().front());
-    } catch (const db::CompilerException& e) {
-        fmt::println(out, "PLAN ERROR");
-        fmt::println(out, "{}", e.what());
-        return;
-    }
-
-    db::PlanGraph& planGraph = planGen.getPlanGraph();
-
-    db::LocalMemory mem;
-    db::PlanOptimizer planOpt(&mem, &planGraph, view, &ast);
-    planOpt.optimize();
-
-    db::PlanGraphDebug::dumpMermaidContent(out, view, planGraph);
 }
 
 struct StringStreamWriter {
@@ -298,7 +242,6 @@ void QueryTestRunner::loadTestsFromDir(std::vector<QueryTestSpec>& specs,
 
         if (doc.contains("expect")) {
             const auto& expect = doc["expect"];
-            spec._expectPlan = expect.value("plan", "");
             spec._expectResult = expect.value("result", "");
             spec._expectResultJson = expect.value("resultJson", "");
             spec._expectMlir = expect.value("mlir", "");
@@ -328,14 +271,6 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
                        != spec._tags.end();
     if (forceVHJ) {
         queryConfig.getPlanGenConfig().setForceValueHashJoin(true);
-    }
-
-    std::stringstream planOut;
-    {
-        const db::Transaction tx = graph->openTransaction();
-        const db::GraphView view = tx.viewGraph();
-        generatePlanGraph(spec._query, view, planOut,
-                          &queryConfig.getPlanGenConfig());
     }
 
     std::vector<std::vector<std::string>> rows;
@@ -417,16 +352,12 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
         db->query("CHANGE SUBMIT", submitState);
     }
 
-    normalizeOutput(result._planOutput, planOut.str());
     normalizeOutput(
         result._resultOutput,
         QueryResultFormatter::formatResultOutput(status, columnNames, rows));
     result._resultJsonOutput = jsonOutput;
 
     std::string expected;
-
-    normalizeOutput(expected, spec._expectPlan);
-    result._planMatched = expected == result._planOutput;
 
     normalizeOutput(expected, spec._expectResult);
     result._resultMatched = expected == result._resultOutput;

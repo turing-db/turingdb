@@ -1,5 +1,4 @@
 import React from "react";
-import mermaid from "mermaid";
 import { JsonView, darkStyles } from "react-json-view-lite";
 import "react-json-view-lite/dist/index.css";
 import { Button } from "@/components/ui/button";
@@ -41,7 +40,7 @@ type TestMeta = {
   disabledReason?: string;
   mainVersion?: {
     query?: string;
-    expect?: { plan?: string; result?: string; resultJson?: string; mlir?: string };
+    expect?: { result?: string; resultJson?: string; mlir?: string };
     tags?: string[];
     enabled?: boolean;
     ["write-required"]?: boolean;
@@ -53,12 +52,10 @@ type TestMeta = {
 
 type TestResult = {
   name: string;
-  planOutput: string;
   resultOutput: string;
   resultJsonOutput?: string;
   resultJsonMatched?: boolean;
   resultJsonValid?: boolean;
-  planMatched: boolean;
   resultMatched: boolean;
   error?: string;
   timeUs?: number;
@@ -132,7 +129,7 @@ export default function App() {
   const [search, setSearch] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [confirmTarget, setConfirmTarget] = React.useState<"plan" | "result" | "resultJson" | "mlir" | null>(null);
+  const [confirmTarget, setConfirmTarget] = React.useState<"result" | "resultJson" | "mlir" | null>(null);
   const [nameDraft, setNameDraft] = React.useState("");
   const [queryDraft, setQueryDraft] = React.useState("");
   const [isEditingQuery, setIsEditingQuery] = React.useState(false);
@@ -147,10 +144,6 @@ export default function App() {
   const [newTestName, setNewTestName] = React.useState("");
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [duplicateOpen, setDuplicateOpen] = React.useState(false);
-  const [planSvg, setPlanSvg] = React.useState<string | null>(null);
-  const [planSvgExpected, setPlanSvgExpected] = React.useState<string | null>(null);
-  const [planSvgMain, setPlanSvgMain] = React.useState<string | null>(null);
-  const renderSeq = React.useRef(0);
   const [parsedResult, setParsedResult] = React.useState<string[][] | null>(null);
   const [parsedRemoteResult, setParsedRemoteResult] = React.useState<string[][] | null>(null);
   const [parsedExpectedResult, setParsedExpectedResult] = React.useState<string[][] | null>(null);
@@ -161,16 +154,13 @@ export default function App() {
   const shareTimerRef = React.useRef<number | null>(null);
   const [failNotice, setFailNotice] = React.useState<string | null>(null);
   const failTimerRef = React.useRef<number | null>(null);
-  const [expectedPlan, setExpectedPlan] = React.useState<string>("");
   const [expectedResult, setExpectedResult] = React.useState<string>("");
   const [expectedResultJson, setExpectedResultJson] = React.useState<string>("");
   const [expectedMlir, setExpectedMlir] = React.useState<string>("");
-  const [mainPlan, setMainPlan] = React.useState<string>("");
   const [mainResult, setMainResult] = React.useState<string>("");
   const [mainResultJson, setMainResultJson] = React.useState<string>("");
   const [mainMlir, setMainMlir] = React.useState<string>("");
   const [resultTab, setResultTab] = React.useState<"actual" | "expected" | "main">("actual");
-  const [planTab, setPlanTab] = React.useState<"actual" | "expected" | "main">("actual");
   const [jsonTab, setJsonTab] = React.useState<"actual" | "expected" | "main">("actual");
   const [remoteResultTab, setRemoteResultTab] = React.useState<"actual" | "expected" | "main">("actual");
   const [resultV3Tab, setResultV3Tab] = React.useState<"actual" | "expected" | "main">("actual");
@@ -222,7 +212,6 @@ export default function App() {
     setDisabledReasonDraft(selected?.disabledReason ?? "");
     setIsEditingQuery(false);
     setResultTab("actual");
-    setPlanTab("actual");
     setJsonTab("actual");
     setRemoteResultTab("actual");
     setResultV3Tab("actual");
@@ -231,11 +220,9 @@ export default function App() {
 
   React.useEffect(() => {
     if (!selected) {
-      setExpectedPlan("");
       setExpectedResult("");
       setExpectedResultJson("");
       setExpectedMlir("");
-      setMainPlan("");
       setMainResult("");
       setMainResultJson("");
       setMainMlir("");
@@ -246,21 +233,18 @@ export default function App() {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!active) return;
-        setExpectedPlan(typeof data?.plan === "string" ? data.plan : "");
         setExpectedResult(typeof data?.result === "string" ? data.result : "");
         setExpectedResultJson(typeof data?.resultJson === "string" ? data.resultJson : "");
         setExpectedMlir(typeof data?.mlir === "string" ? data.mlir : "");
       })
       .catch(() => {
         if (!active) return;
-        setExpectedPlan("");
         setExpectedResult("");
         setExpectedResultJson("");
         setExpectedMlir("");
       });
     const mainExpect = selected.mainVersion?.expect ?? {};
-    if (typeof mainExpect.plan === "string" || typeof mainExpect.result === "string") {
-      setMainPlan(typeof mainExpect.plan === "string" ? mainExpect.plan : "");
+    if (typeof mainExpect.result === "string") {
       setMainResult(typeof mainExpect.result === "string" ? mainExpect.result : "");
       setMainResultJson(typeof mainExpect.resultJson === "string" ? mainExpect.resultJson : "");
       setMainMlir(typeof mainExpect.mlir === "string" ? mainExpect.mlir : "");
@@ -269,14 +253,12 @@ export default function App() {
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (!active) return;
-          setMainPlan(typeof data?.plan === "string" ? data.plan : "");
           setMainResult(typeof data?.result === "string" ? data.result : "");
           setMainResultJson(typeof data?.resultJson === "string" ? data.resultJson : "");
           setMainMlir(typeof data?.mlir === "string" ? data.mlir : "");
         })
         .catch(() => {
           if (!active) return;
-          setMainPlan("");
           setMainResult("");
           setMainResultJson("");
           setMainMlir("");
@@ -296,7 +278,7 @@ export default function App() {
 
   const isLocalPass = React.useCallback(
     (result: TestResult) =>
-      result.planMatched && result.resultMatched && result.resultJsonMatched === true,
+      result.resultMatched && result.resultJsonMatched === true,
     []
   );
 
@@ -420,7 +402,7 @@ export default function App() {
     }
   };
 
-  const acceptOutputs = async (target: "plan" | "result" | "resultJson" | "mlir") => {
+  const acceptOutputs = async (target: "result" | "resultJson" | "mlir") => {
     if (!selected) return;
     const isV3Target = target === "mlir";
     const localResult = selectedResult;
@@ -431,12 +413,10 @@ export default function App() {
     try {
       const payload: {
         name: string;
-        plan?: string;
         result?: string;
         resultJson?: string;
         mlir?: string;
       } = { name: selected.name };
-      if (target === "plan" && localResult) payload.plan = localResult.planOutput;
       if (target === "result" && localResult) payload.result = localResult.resultOutput;
       if (target === "resultJson" && localResult) payload.resultJson = localResult.resultJsonOutput;
       if (target === "mlir" && v3Result) payload.mlir = v3Result.mlirProgram;
@@ -469,7 +449,6 @@ export default function App() {
           ...prev,
           [selected.name]: {
             ...localResult,
-            planMatched: target === "plan" ? true : localResult.planMatched,
             resultMatched: target === "result" ? true : localResult.resultMatched,
             resultJsonMatched: target === "resultJson" ? true : localResult.resultJsonMatched
           }
@@ -898,7 +877,6 @@ export default function App() {
       lines.push(
         "",
         "## Last Run",
-        `- Plan matched: ${selectedResult.planMatched ? "true" : "false"}`,
         `- Result matched: ${selectedResult.resultMatched ? "true" : "false"}`,
         `- Result JSON matched: ${selectedResult.resultJsonMatched ? "true" : "false"}`,
         typeof selectedResult.timeUs === "number"
@@ -1037,84 +1015,6 @@ export default function App() {
       }
     };
   }, []);
-
-  React.useEffect(() => {
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: "dark",
-      securityLevel: "strict",
-      themeVariables: {
-        primaryColor: "#0f172a",
-        primaryTextColor: "#e2e8f0",
-        lineColor: "#38bdf8",
-        nodeBorder: "#38bdf8",
-        edgeLabelBackground: "#0b0f14"
-      }
-    });
-  }, []);
-
-  React.useEffect(() => {
-    const source = selectedResult?.planOutput?.trim();
-    if (!source || (!source.startsWith("flowchart") && !source.startsWith("graph"))) {
-      setPlanSvg(null);
-      return;
-    }
-    let cancelled = false;
-    const id = `plan-${renderSeq.current++}`;
-    mermaid
-      .render(id, source)
-      .then((res) => {
-        if (!cancelled) setPlanSvg(res.svg);
-      })
-      .catch(() => {
-        if (!cancelled) setPlanSvg(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedResult?.planOutput]);
-
-  React.useEffect(() => {
-    const source = expectedPlan?.trim();
-    if (!source || (!source.startsWith("flowchart") && !source.startsWith("graph"))) {
-      setPlanSvgExpected(null);
-      return;
-    }
-    let cancelled = false;
-    const id = `plan-expected-${renderSeq.current++}`;
-    mermaid
-      .render(id, source)
-      .then((res) => {
-        if (!cancelled) setPlanSvgExpected(res.svg);
-      })
-      .catch(() => {
-        if (!cancelled) setPlanSvgExpected(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [expectedPlan]);
-
-  React.useEffect(() => {
-    const source = mainPlan?.trim();
-    if (!source || (!source.startsWith("flowchart") && !source.startsWith("graph"))) {
-      setPlanSvgMain(null);
-      return;
-    }
-    let cancelled = false;
-    const id = `plan-main-${renderSeq.current++}`;
-    mermaid
-      .render(id, source)
-      .then((res) => {
-        if (!cancelled) setPlanSvgMain(res.svg);
-      })
-      .catch(() => {
-        if (!cancelled) setPlanSvgMain(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [mainPlan]);
 
   React.useEffect(() => {
     const parseCsv = (output: string) => {
@@ -1505,8 +1405,6 @@ export default function App() {
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold">Run Output</h2>
             <div className="flex items-center gap-2 text-xs text-ink/60">
-              <span>Plan</span>
-              <span>•</span>
               <span>Result</span>
             </div>
           </div>
@@ -1720,85 +1618,6 @@ export default function App() {
                   : resultTab === "expected"
                     ? renderCsvOrText(parsedExpectedResult, expectedResult)
                     : renderCsvOrText(parsedMainResult, mainResult)}
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-steel/40 p-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs uppercase tracking-[0.2em] text-ink/60">Plan Output</p>
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center rounded-full border border-white/10 bg-paper/60 p-1 text-[10px] uppercase tracking-[0.18em] text-ink/70">
-                      <button
-                        className={`rounded-full px-2 py-1 ${planTab === "actual" ? "bg-white/10 text-ink" : ""}`}
-                        onClick={() => setPlanTab("actual")}
-                      >
-                        Actual
-                      </button>
-                      <button
-                        className={`rounded-full px-2 py-1 ${planTab === "expected" ? "bg-white/10 text-ink" : ""}`}
-                        onClick={() => setPlanTab("expected")}
-                      >
-                        Expected
-                      </button>
-                      <button
-                        className={`rounded-full px-2 py-1 ${planTab === "main" ? "bg-white/10 text-ink" : ""}`}
-                        onClick={() => setPlanTab("main")}
-                        disabled={!selected?.changed}
-                      >
-                        Main
-                      </button>
-                    </div>
-                    <span
-                      className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${
-                        selectedResult.planMatched
-                          ? "bg-moss/15 text-moss"
-                          : "bg-accent/15 text-accent"
-                      }`}
-                    >
-                      {selectedResult.planMatched ? "match" : "mismatch"}
-                    </span>
-                    {!selectedResult.planMatched && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setConfirmTarget("plan")}
-                        disabled={loading}
-                      >
-                        Accept
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                {planTab === "actual" ? (
-                  planSvg ? (
-                    <div
-                      className="mt-3 max-h-[36rem] overflow-auto rounded-xl bg-paper p-3"
-                      dangerouslySetInnerHTML={{ __html: planSvg }}
-                    />
-                  ) : (
-                    <pre className="mt-3 max-h-[36rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
-{selectedResult.planOutput || "(empty)"}
-                    </pre>
-                  )
-                ) : planTab === "expected" ? (
-                  planSvgExpected ? (
-                    <div
-                      className="mt-3 max-h-[36rem] overflow-auto rounded-xl bg-paper p-3"
-                      dangerouslySetInnerHTML={{ __html: planSvgExpected }}
-                    />
-                  ) : (
-                    <pre className="mt-3 max-h-[36rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
-{expectedPlan || "(empty)"}
-                    </pre>
-                  )
-                ) : planSvgMain ? (
-                  <div
-                    className="mt-3 max-h-[36rem] overflow-auto rounded-xl bg-paper p-3"
-                    dangerouslySetInnerHTML={{ __html: planSvgMain }}
-                  />
-                ) : (
-                  <pre className="mt-3 max-h-[36rem] overflow-auto whitespace-pre-wrap rounded-xl bg-paper p-3 text-xs font-mono text-ink">
-{mainPlan || "(empty)"}
-                  </pre>
-                )}
               </div>
               <div className="rounded-2xl border border-white/10 bg-steel/40 p-4">
                 <div className="flex items-center justify-between">
@@ -2071,8 +1890,8 @@ export default function App() {
           {(!selected || !selectedResult) && !loading && !error && (
             <div className="mt-6 rounded-2xl border border-white/10 bg-steel/40 p-4 text-sm text-ink/70">
               {selected
-                ? "Run the local query path to populate local plan/result output."
-                : "Connect the C++ runner API to populate plan/result output."}
+                ? "Run the local query path to populate local result output."
+                : "Connect the C++ runner API to populate result output."}
             </div>
           )}
         </section>
