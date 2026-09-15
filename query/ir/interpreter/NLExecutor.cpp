@@ -843,6 +843,57 @@ struct ValueListIndexSelector {
     }
 };
 
+// The entity sibling of applyValueListIndex: an ID column spells a null entity as an
+// invalid ID, so a position past the end - or the tagged null a list holds for an entity
+// an OPTIONAL MATCH did not match - reads back as one rather than as an absent optional.
+template <typename IDType, typename LhsCol, typename RhsCol>
+void applyEntityListIndex(Column* result, const Column* lhs, const Column* rhs, LocalMemory*) {
+    const std::vector<ListView>& lists = static_cast<const LhsCol*>(lhs)->getRaw();
+    const RhsCol* indices = static_cast<const RhsCol*>(rhs);
+
+    std::vector<IDType>& ids = static_cast<ColumnVector<IDType>*>(result)->getRaw();
+    ids.assign(lists.size(), IDType {});
+
+    for (size_t row = 0; row < lists.size(); row++) {
+        const std::optional<IDType> id = ValueListIndex<IDType> {}(lists[row], (*indices)[row]);
+
+        if (id.has_value()) {
+            ids[row] = *id;
+        }
+    }
+}
+
+// A collect over a pattern variable gathers into a plain list column, which is the one
+// shape an entity is read out of; any other leaves the kernel unselected.
+template <typename IDType>
+struct EntityListIndexSelector {
+    LocalMemory* _memory {nullptr};
+    Column* _result {nullptr};
+    NLBinaryFn _fn {nullptr};
+
+    template <typename LhsCol, typename RhsCol>
+    void operator()(const LhsCol*, const RhsCol*) {
+        if constexpr (std::is_same_v<LhsCol, ColumnVector<ListView>>) {
+            _result = _memory->alloc<ColumnVector<IDType>>();
+            _fn = &applyEntityListIndex<IDType, LhsCol, RhsCol>;
+        }
+    }
+};
+
+template <typename IDType>
+NLBinaryFn selectEntityListIndexOf(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result) {
+    using Pairs = PairRestrictions<OP_INDEX>;
+
+    EntityListIndexSelector<IDType> selector {._memory = memory};
+    ColumnDoubleDispatcher<typename Pairs::Allowed,
+                           typename Pairs::AllowedMixed,
+                           EntityListIndexSelector<IDType>,
+                           typename Pairs::Excluded>::dispatch(lhs, rhs, selector);
+
+    result = selector._result;
+    return selector._fn;
+}
+
 // Execute a body of statements
 void runBody(NLExecutionContext* context, const NLStmtContainer* body) {
     for (const NLFunctionDescriptor& descriptor : body->stmts()) {
@@ -5234,6 +5285,28 @@ NLBinaryFn NLExecutor::selectBinary(const Column* lhs,
 
     result = selector._result;
     return selector._fn;
+}
+
+NLBinaryFn NLExecutor::selectEntityListIndex(NLChunkKind kind,
+                                             const Column* lhs,
+                                             const Column* rhs,
+                                             LocalMemory* memory,
+                                             Column*& result) {
+    NLBinaryFn selected = nullptr;
+
+    if (kind == NLChunkKind::NodeID) {
+        selected = selectEntityListIndexOf<NodeID>(lhs, rhs, memory, result);
+    } else if (kind == NLChunkKind::EdgeID) {
+        selected = selectEntityListIndexOf<EdgeID>(lhs, rhs, memory, result);
+    } else {
+        throw IRException("Only a node or an edge column can hold an entity read out of a list");
+    }
+
+    if (!selected) {
+        throw IRException("An entity is read out of a plain list column, not out of a constant or a type-erased one");
+    }
+
+    return selected;
 }
 
 NLBinaryFn NLExecutor::selectValueListIndex(ValueType valueType,

@@ -2083,17 +2083,28 @@ void NLTranslator::translateListIndex(nl::ListIndex index, NLStmtContainer* body
     const Column* rhs = getColumn(index.getRhs());
 
     const auto resultChunk = mlir::cast<nl::ChunkType>(index.getResult().getType());
-    const auto nullableType = mlir::cast<storage::NullableType>(resultChunk.getElementType());
-    const mlir::Type elementType = nullableType.getValueType();
-    const bool readsATaggedCell = mlir::isa<storage::ListElementType>(elementType);
+    const mlir::Type resultElement = resultChunk.getElementType();
+    const bool readsAnEntity = mlir::isa<storage::NodeIDType, storage::EdgeIDType>(resultElement);
 
     Column* result = nullptr;
     NLBinaryFn fn = nullptr;
 
-    if (readsATaggedCell) {
-        fn = NLExecutor::selectBinary<OP_INDEX>(lhs, rhs, _memory, result);
+    if (readsAnEntity) {
+        fn = NLExecutor::selectEntityListIndex(chunkKindFromElementType(resultElement),
+                                               lhs,
+                                               rhs,
+                                               _memory,
+                                               result);
     } else {
-        fn = NLExecutor::selectValueListIndex(valueTypeFromElementType(elementType), lhs, rhs, _memory, result);
+        const auto nullableType = mlir::cast<storage::NullableType>(resultElement);
+        const mlir::Type elementType = nullableType.getValueType();
+        const bool readsATaggedCell = mlir::isa<storage::ListElementType>(elementType);
+
+        if (readsATaggedCell) {
+            fn = NLExecutor::selectBinary<OP_INDEX>(lhs, rhs, _memory, result);
+        } else {
+            fn = NLExecutor::selectValueListIndex(valueTypeFromElementType(elementType), lhs, rhs, _memory, result);
+        }
     }
 
     bioassert(result, "Failed to translate list index result.");

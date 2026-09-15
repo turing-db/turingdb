@@ -1618,6 +1618,11 @@ def ListIndex : NLOp<"list_index", [Pure, ConstantThroughOperands, RowAlignedThr
   let summary = "Row-wise read of one element of a list chunk, by position";
   let description = [{
       %e = nl.list_index %xs, %i : (!nl.chunk<!storage.list<i64>>, !nl.chunk<i64>) -> !nl.chunk<!storage.nullable<!storage.list_element>>
+
+      A list of nodes or of edges hands its elements back as the entity chunk they were
+      gathered from, an invalid ID standing for a position the list does not hold:
+
+      %n = nl.list_index %ns, %i : (!nl.chunk<!storage.list<!storage.node_id>>, !nl.chunk<i64>) -> !nl.chunk<!storage.node_id>
   }];
 
   let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
