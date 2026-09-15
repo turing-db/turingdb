@@ -269,6 +269,12 @@ public:
     static NLBinaryFn selectValueListIndex(ValueType valueType, const Column* lhs, const Column* rhs,
                                            LocalMemory* memory, Column*& result);
 
+    // Index a list of nodes or of edges, reading each element out as the entity column it
+    // was gathered from. A position past the end reads as the invalid ID, which is how an
+    // entity column spells a null.
+    static NLBinaryFn selectEntityListIndex(NLChunkKind kind, const Column* lhs, const Column* rhs,
+                                            LocalMemory* memory, Column*& result);
+
     static void runUnary(NLExecutionContext* context, NLFunctionData* data);
 
     static NLUnaryFn selectNot(const Column* operand, LocalMemory* memory, Column*& result);

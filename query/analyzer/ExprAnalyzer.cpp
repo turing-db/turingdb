@@ -782,7 +782,11 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     if (indexesAList) {
         const EvaluatedType elementType = base->getListShape().unwoundType();
         const bool readsAValue = convertibleToValueType(elementType);
-        const EvaluatedType indexedType = readsAValue ? elementType : EvaluatedType::ListItem;
+        const bool readsAnEntity = _isV3
+                                && (elementType == EvaluatedType::NodePattern
+                                    || elementType == EvaluatedType::EdgePattern);
+        const bool readsTheElementType = readsAValue || readsAnEntity;
+        const EvaluatedType indexedType = readsTheElementType ? elementType : EvaluatedType::ListItem;
 
         expr->setType(indexedType);
 

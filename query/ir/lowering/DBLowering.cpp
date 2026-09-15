@@ -410,6 +410,16 @@ mlir::Type indexedListElementType(mlir::Type chunkType) {
     return listType ? listType.getElementType() : mlir::Type {};
 }
 
+// The element types a list gathers entities under, which an index reads back out as the
+// entity column they came from.
+bool namesAnEntityType(mlir::Type element) {
+    if (!element) {
+        return false;
+    }
+
+    return mlir::isa<storage::NodeIDType, storage::EdgeIDType>(element);
+}
+
 // The element types an index reads out as a value column rather than as a tagged cell:
 // the scalars a value column holds.
 bool namesAnIndexedValueType(mlir::Type element) {
@@ -3199,6 +3209,13 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
             }
 
             const mlir::Type element = indexedListElementType(lhsType);
+
+            // An entity column carries its null in the ID, so a list of nodes or edges
+            // hands its elements back as the entity column they were gathered from
+            if (namesAnEntityType(element)) {
+                return element;
+            }
+
             const mlir::Type indexed = namesAnIndexedValueType(element)
                                            ? element
                                            : storage::ListElementType::get(ctx);
