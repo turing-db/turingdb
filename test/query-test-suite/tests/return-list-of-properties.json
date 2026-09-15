@@ -5,7 +5,7 @@
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): v1\n    `\"]\n    4[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ name\n    `\"]\n    5[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->4\n    2-->1\n    3-->5\n    4-->3",
     "result": "[n.name]\n[Remy]\n[Adam]\n[Computers]\n[Eighties]\n[Bio]\n[Cooking]\n[Ghosts]\n[Padel]\n[Maxime]\n[Luc]\n[Animals]\n[Martina]\n[Suhas]\n[Gym]\n[Travel]\n[Cyrus]\n[JiuJitsu]\n[Doruk]",
-    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"Non-literal list elements are not yet supported\"}"
+    "resultJson": "{\"header\":{\"column_names\":[\"[n.name]\"],\"column_types\":[\"List\"]},\"data\":[[[[\"Remy\"],[\"Adam\"],[\"Computers\"],[\"Eighties\"],[\"Bio\"],[\"Cooking\"],[\"Ghosts\"],[\"Padel\"],[\"Maxime\"],[\"Luc\"],[\"Animals\"],[\"Martina\"],[\"Suhas\"],[\"Gym\"],[\"Travel\"],[\"Cyrus\"],[\"JiuJitsu\"],[\"Doruk\"]]]]}"
   },
   "tags": [
     "lists",

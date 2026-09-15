@@ -5,7 +5,7 @@
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __EXPR_EVAL__\n        __exprs__\n__expr__ (LITERAL): v6\n__expr__ (LITERAL): v0\n__expr__ (LITERAL): v1\n__expr__ (LITERAL): v3\n__expr__ (LITERAL): v4\n    `\"]\n    1[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->1",
     "result": "\"[(10 + 3), (true AND false)]\"\n\"[13, false]\"",
-    "resultJson": "{\"error\":\"PLAN_ERROR\",\"error_details\":\"Non-literal list elements are not yet supported\"}"
+    "resultJson": "{\"header\":{\"column_names\":[\"[(10 + 3), (true AND false)]\"],\"column_types\":[\"List\"]},\"data\":[[[[13,false]]]]}"
   },
   "tags": [],
   "write-required": false
