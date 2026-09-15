@@ -70,6 +70,16 @@ TEST_F(CreateWithTest, readsTheLabelsACreateWroteBelowTheCut) {
     EXPECT_TRUE(other.getRows().empty());
 }
 
+// A label the graph has never held, on a node carrying no property: what the cut publishes is
+// a label set this change interned, which no commit holds.
+TEST_F(CreateWithTest, readsALabelTheChangeIntroducedBelowTheCut) {
+    StringRowSink sink;
+    runWrite("CREATE (n:Tag) WITH n RETURN labels(n)", sink);
+
+    const std::vector<StringRowSink::Row> expected {{"Tag"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
 // The WITH renames the node, and the part below it reads the property through the name that
 // part knows it by.
 TEST_F(CreateWithTest, readsACreatedNodeUnderTheNameTheCutPublishesIt) {
