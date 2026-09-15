@@ -132,6 +132,21 @@ TEST_F(MatchCutUnwindTest, cutsWhenAMatchFollowsTheUnwind) {
                  {40});
 }
 
+// A list built per row expands the rows already in flight rather than opening a dataflow of
+// its own, so the cut stands where it is written: each of the two people the limit kept
+// expands to one row of its own name.
+TEST_F(MatchCutUnwindTest, expandsTheRowsTheLimitKeptWithAPerRowList) {
+    expectRows("MATCH (a:Person) ORDER BY a.name LIMIT 2 UNWIND [a.name] AS x RETURN a.name, x",
+               {{"Adam", "Adam"}, {"Cyrus", "Cyrus"}});
+}
+
+// Two elements per row, so the limit is charged to the two people and not to what they
+// expand into: four rows, where a cut spent on the expansion would report two.
+TEST_F(MatchCutUnwindTest, countsTheRowsAPerRowListExpandsTheCutInto) {
+    expectCounts("MATCH (a:Person) ORDER BY a.name LIMIT 2 UNWIND [a.name, a.name] AS x RETURN count(*)",
+                 {4});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

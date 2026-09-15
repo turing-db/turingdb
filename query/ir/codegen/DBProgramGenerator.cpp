@@ -1166,7 +1166,7 @@ bool DBProgramGenerator::closesPartOnItsCut(const Stmt* stmt, std::span<Stmt* co
 
         if (kind == Stmt::Kind::WITH) {
             return false;
-        } else if (kind == Stmt::Kind::MATCH || kind == Stmt::Kind::UNWIND) {
+        } else if (kind == Stmt::Kind::MATCH) {
             return true;
         } else if (kind == Stmt::Kind::UNWIND) {
             // A literal UNWIND opens a dataflow of its own, multiplying the rows the cut
