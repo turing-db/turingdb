@@ -110,21 +110,21 @@ TEST_F(NestedAggregateProjectionTest, generatesTheSameAggregateOutsideAMap) {
     EXPECT_NO_THROW(generateProgram("MATCH (n:Person) RETURN n.name, count(n)"));
 }
 
-// A map holding a constant next to the same grouping key: nothing here aggregates, so the
-// map is turned away where every literal codegen has no column for is. This is the
-// outcome the aggregate spelling has to match.
-TEST_F(NestedAggregateProjectionTest, rejectsAMapHoldingAConstant) {
-    EXPECT_THROW(generateProgram("MATCH (n:Person) RETURN n.name, {total: 1}"), TuringException);
+// A map holding a constant next to the same grouping key: every value is a literal, so the
+// map builds as a constant and generates. What the cases below reject is the aggregate
+// inside the map, not the map itself.
+TEST_F(NestedAggregateProjectionTest, generatesAMapHoldingAConstant) {
+    EXPECT_NO_THROW(generateProgram("MATCH (n:Person) RETURN n.name, {total: 1}"));
 }
 
 // The map on its own leaves the projection with no grouping key, so the grouped aggregate
-// codegen does not run and the map is turned away on its own account
+// codegen does not run and the aggregate is turned away as a value no constant map carries
 TEST_F(NestedAggregateProjectionTest, rejectsAMapHoldingAnAggregateAlone) {
     EXPECT_THROW(generateProgram("MATCH (n:Person) RETURN {total: count(n)}"), TuringException);
 }
 
 // An expression over an aggregate is computed from the aggregate's result, but a map is
-// not a value this codegen can build at all, so the aggregate it holds has nowhere to go.
+// built once as a constant, so the aggregate it holds has nowhere to go.
 TEST_F(NestedAggregateProjectionTest, rejectsAMapHoldingAnAggregateBesideAGroupingKey) {
     expectRejected("MATCH (n:Person) RETURN n.name, {total: count(n)}", nestedAggregateReason);
 }

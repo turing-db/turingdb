@@ -8,6 +8,7 @@
 #include "MapView.h"
 #include "list/ListView.h"
 
+#include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
 using namespace db;
@@ -114,4 +115,5 @@ template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag,
 template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const types::Embedding::Primitive&);
 template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const ListView&);
 template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const MapView&);
+template MapEntryView MapByteBuffer<>::write(std::string_view, MapBufferTypeTag, const PropertyNull&);
 }

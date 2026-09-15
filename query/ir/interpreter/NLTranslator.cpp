@@ -1217,6 +1217,49 @@ size_t NLTranslator::listValueBytes(mlir::ArrayAttr elements) {
     return valueBytes;
 }
 
+MapView NLTranslator::materializeMapView(mlir::DictionaryAttr entries) {
+    std::vector<MapBuffer<>::MapKeyValuePair> mapEntries;
+    mapEntries.reserve(entries.size());
+
+    for (const mlir::NamedAttribute entry : entries) {
+        mlir::StringAttr name = entry.getName();
+        std::string_view nameView = std::string_view { name.data(), name.size() };
+
+        if (const auto boolAttr = mlir::dyn_cast<mlir::BoolAttr>(entry.getValue())) {
+            mapEntries.emplace_back(nameView,
+                                    types::Bool::Primitive(boolAttr.getValue())); 
+        } else if (const auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(entry.getValue())) {
+            mapEntries.emplace_back(nameView,
+                                    static_cast<types::Int64::Primitive>(intAttr.getInt())); 
+        } else if (const auto floatAttr = mlir::dyn_cast<mlir::FloatAttr>(entry.getValue())) {
+            mapEntries.emplace_back(nameView,
+                                    static_cast<types::Double::Primitive>(floatAttr.getValueAsDouble())); 
+        } else if (const auto stringAttr = mlir::dyn_cast<mlir::StringAttr>(entry.getValue())) {
+            // The payload stays in the attribute, which outlives the query, so the stored
+            // view points at it rather than at a copy
+            mapEntries.emplace_back(nameView, types::String::Primitive(stringAttr.data(), stringAttr.size()));
+        } else if (const auto embeddingAttr = mlir::dyn_cast<mlir::DenseF32ArrayAttr>(entry.getValue())) {
+            // The floats stay in the attribute, as a string entry.getValue()'s bytes do, so the
+            // stored span points at them rather than at a copy
+            const llvm::ArrayRef<float> floats = embeddingAttr.asArrayRef();
+            mapEntries.emplace_back(nameView,
+                                    types::Embedding::Primitive(floats.data(), floats.size()));
+        } else if (const auto nestedList = mlir::dyn_cast<mlir::ArrayAttr>(entry.getValue())) {
+            mapEntries.emplace_back(nameView,
+                                    materializeListView(nestedList));
+        } else if (const auto nestedMap = mlir::dyn_cast<mlir::DictionaryAttr>(entry.getValue())) {
+            mapEntries.emplace_back(nameView,
+                                    materializeMapView(nestedMap));
+        } else if (mlir::isa<mlir::UnitAttr>(entry.getValue())) {
+            mapEntries.emplace_back(nameView, PropertyNull{});
+        } else {
+            throw IRException("Unsupported literal attribute in a constant list");
+        }
+    }
+
+    return _memory->mapBuffer().insert(mapEntries);
+}
+
 ListView NLTranslator::materializeListView(mlir::ArrayAttr elements) {
     // The region is reserved and committed up front, so the elements are written straight
     // into their final place - no staging container between the attributes and the buffer.
@@ -1907,6 +1950,16 @@ void NLTranslator::translateConstant(nl::Constant constant) {
         lists->set(materializeListView(elements));
 
         _valueSlots[res] = lists;
+        return;
+    }
+
+    if (llvm::isa<storage::MapType>(elementType)) {
+        const auto entries = mlir::cast<mlir::DictionaryAttr>(constant.getValue());
+
+        ColumnConst<MapView>* map = _memory->alloc<ColumnConst<MapView>>();
+        map->set(materializeMapView(entries));
+
+        _valueSlots[res] = map;
         return;
     }
 
@@ -4069,6 +4122,10 @@ Column* NLTranslator::allocColumnForProcedureType(ProcedureType procedureType) {
 
         case ProcedureType::LIST:
             return allocPlainChunkColumn<ListView>(_memory, chunkSize);
+        break;
+
+        case ProcedureType::MAP:
+            throw IRException("Unsupported procedure return type: MAP");
         break;
 
         case ProcedureType::INVALID:

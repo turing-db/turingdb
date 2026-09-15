@@ -1492,7 +1492,7 @@ def Constant : NLOp<"constant", [Pure, ConstantLike, InferTypeOpAdaptor]> {
       %c = nl.constant(30 : i64) : !nl.chunk<i64>
   }];
 
-  let arguments = (ins AnyAttrOf<[TypedAttrInterface, DenseF32ArrayAttr, ArrayAttr]>:$value);
+  let arguments = (ins AnyAttrOf<[TypedAttrInterface, DenseF32ArrayAttr, ArrayAttr, DictionaryAttr]>: $value);
   let results   = (outs NLChunk:$result);
 
   let assemblyFormat = "`(` $value `)` attr-dict";

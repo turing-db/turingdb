@@ -31,7 +31,7 @@ TEST_F(EmptyResultColumnNamesTest, namesTheColumnsOfAnEmptyGetEdges) {
 
 TEST_F(EmptyResultColumnNamesTest, namesTheColumnsOfAListNodesMatchingNothing) {
     StringRowSink sink;
-    runQuery("CALL db.listNodes([], ['name'], ['zzznope'], 0, 1000) YIELD id, labels, properties RETURN id, labels, properties", sink);
+    runQuery("CALL db.listNodes([], {name: 'zzznope'}, 0, 1000) YIELD id, labels, properties RETURN id, labels, properties", sink);
 
     const std::vector<std::string> expectedNames {"id", "labels", "properties"};
     EXPECT_EQ(sink.getNames(), expectedNames);

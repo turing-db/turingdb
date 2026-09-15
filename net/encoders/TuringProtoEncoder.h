@@ -115,6 +115,10 @@ struct ColInternalKindToProtoEnum {
             return Enum::ENTITY_LIST;
         } else if constexpr (db::IsListView<T>) {
             return Enum::LIST_VIEW;
+        } else if constexpr (db::IsMap<T>) {
+            return Enum::MAP_VIEW;
+        } else if constexpr (db::IsMapEntry<T>) {
+            return Enum::MAP_ENTRY_VIEW;
         } else if constexpr (db::IsListElement<T>) {
             return Enum::LIST_ELEMENT_VIEW;
         } else if constexpr (db::IsValueType<T>) {

@@ -257,6 +257,10 @@ nl::ChunkType procedureChunkType(mlir::OpBuilder& builder, ProcedureType procedu
             return nl::ChunkType::get(context, storage::ListType::get(context, mlir::NoneType::get(context)));
         break;
 
+        case ProcedureType::MAP:
+            throw IRException("Unsupported procedure return type: MAP");
+        break;
+
         case ProcedureType::INVALID:
         case ProcedureType::_SIZE:
             throw IRException("Invalid procedure value type");

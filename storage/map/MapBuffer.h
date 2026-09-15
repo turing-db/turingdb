@@ -17,7 +17,7 @@ using MapableTypesImpl =
     std::tuple<db::types::Int64::Primitive, db::types::UInt64::Primitive,
                db::types::Double::Primitive, db::types::String::Primitive,
                db::types::Bool::Primitive, db::types::Embedding::Primitive,
-               db::ListView, db::MapView>;
+               db::ListView, db::MapView, db::PropertyNull>;
 }
 
 namespace db {

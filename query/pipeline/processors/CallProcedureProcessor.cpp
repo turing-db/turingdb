@@ -189,6 +189,9 @@ void CallProcedureProcessor::allocReturnValues(LocalMemory* mem,
                 col = mem->alloc<ColumnVector<ListView>>();
                 data.setReturnColumn(colIndex, col);
             } break;
+            case ProcedureType::MAP: {
+                throw PipelineException("Unsupported procedure return type: MAP");
+            } break;
             case ProcedureType::_SIZE: {
                 throw PipelineException("Invalid procedure return type: _SIZE");
             } break;

@@ -5,6 +5,7 @@
 #include "MapBufferTypeTag.h"
 
 #include "list/ListView.h"
+#include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
 #include "FatalException.h"
@@ -41,6 +42,8 @@ struct MapTagDispatcher {
             case MapBufferTypeTag::MapView:
                 return executor.template operator()<MapView>(view);
             break;
+            case MapBufferTypeTag::Null:
+                return executor.template operator()<PropertyNull>(view);
 
             case MapBufferTypeTag::INVALID:
             break;
@@ -91,6 +94,11 @@ struct TypeToMapBufferTag<ListView> {
 template <>
 struct TypeToMapBufferTag<MapView> {
     static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::MapView;
+};
+
+template <>
+struct TypeToMapBufferTag<PropertyNull> {
+    static constexpr MapBufferTypeTag Tag = MapBufferTypeTag::Null;
 };
 
 }

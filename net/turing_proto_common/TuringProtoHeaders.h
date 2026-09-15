@@ -63,6 +63,8 @@ enum class ColumnInternalKind : uint32_t {
     EMBEDDING,
     ENTITY_LIST,
     LIST_VIEW,
+    MAP_VIEW,
+    MAP_ENTRY_VIEW,
     VALUE_TYPE,
     LIST_ELEMENT_VIEW,
     NODE_ID,

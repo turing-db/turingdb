@@ -317,6 +317,8 @@ private:
     // execution - not just this call.
     ListView materializeListView(mlir::ArrayAttr elements);
 
+    MapView materializeMapView(mlir::DictionaryAttr entries);
+
     // The bytes the elements' values occupy, which sizes the region materializeListView
     // reserves before writing them
     static size_t listValueBytes(mlir::ArrayAttr elements);

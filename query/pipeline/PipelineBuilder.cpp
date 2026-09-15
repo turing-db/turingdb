@@ -129,6 +129,7 @@ void addProcedureColumnToStep(MaterializeData& matData,
         case ProcedureType::LIST:
             matData.addToStep<ColumnVector<ListView>>(col);
         break;
+        case ProcedureType::MAP:
         case ProcedureType::_SIZE:
         case ProcedureType::INVALID:
             throw TuringException("Unknown materialise type.");

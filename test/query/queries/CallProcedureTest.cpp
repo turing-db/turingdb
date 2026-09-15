@@ -287,11 +287,11 @@ TEST_F(CallProcedureTest, ListNodesExcludesDeletedNodes) {
 
     // Doruk is a Person + Sales node named "Doruk".
     const std::string ALL =
-        "CALL db.listNodes([], [], [], 0, 1000) YIELD id, labels, properties RETURN count(*)";
+        "CALL db.listNodes([], {}, 0, 1000) YIELD id, labels, properties RETURN count(*)";
     const std::string PERSON =
-        "CALL db.listNodes(['Person'], [], [], 0, 1000) YIELD id, labels, properties RETURN count(*)";
+        "CALL db.listNodes(['Person'], {}, 0, 1000) YIELD id, labels, properties RETURN count(*)";
     const std::string BY_NAME =
-        "CALL db.listNodes([], ['name'], ['doruk'], 0, 1000) YIELD id, labels, properties RETURN id";
+        "CALL db.listNodes([], {name: 'doruk'}, 0, 1000) YIELD id, labels, properties RETURN id";
 
     EXPECT_EQ(scalarCount(ALL), 18u);
     EXPECT_EQ(scalarCount(PERSON), 8u);
@@ -429,7 +429,7 @@ TEST_F(CallProcedureTest, NonFiniteDoublePropertySerializesAsNull) {
 
     std::string props;
     const auto res = query(
-        "CALL db.listNodes(['InfTest'], [], [], 0, 10) YIELD id, labels, properties "
+        "CALL db.listNodes(['InfTest'], {}, 0, 10) YIELD id, labels, properties "
         "RETURN properties",
         [&](const Dataframe* df) {
             if (!df) {

@@ -82,7 +82,7 @@ TEST_F(ShowProceduresTest, showProcedures) {
         ASSERT_EQ(colSignature->at(6), "db.showIndexes() :: (name :: STRING, size :: INTEGER)");
         ASSERT_EQ(colSignature->at(7), "db.hierarchicalLabelCounts(currentLabels :: LIST) :: (label :: STRING, nodeCount :: INTEGER)");
         ASSERT_EQ(colSignature->at(8),
-                  "db.listNodes(labels :: LIST, propertyKeys :: LIST, propertyValues :: LIST, "
+                  "db.listNodes(labels :: LIST, properties :: MAP, "
                   "skip :: INTEGER, limit :: INTEGER) :: (id :: NODE, labels :: LIST, properties :: STRING)");
         ASSERT_EQ(colSignature->at(9),
                   "db.getEdges(edgeIDs :: LIST) :: (id :: EDGE, src :: NODE, tgt :: NODE, "
