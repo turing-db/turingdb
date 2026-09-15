@@ -83,29 +83,24 @@ std::string serializeTest(const QueryTestSpec& test) {
 std::string serializeResult(const QueryTestResult& result, bool includeJsonFields = true) {
     if (!includeJsonFields) {
         return fmt::format(
-            "{{\"name\":\"{}\",\"planOutput\":\"{}\","
-            "\"resultOutput\":\"{}\","
-            "\"planMatched\":{},\"resultMatched\":{},"
+            "{{\"name\":\"{}\",\"resultOutput\":\"{}\","
+            "\"resultMatched\":{},"
             "\"timeUs\":{}}}",
             escapeJson(result._name),
-            escapeJson(result._planOutput),
             escapeJson(result._resultOutput),
-            result._planMatched ? "true" : "false",
             result._resultMatched ? "true" : "false",
             result._timeUs);
     }
 
     return fmt::format(
-        "{{\"name\":\"{}\",\"planOutput\":\"{}\","
-        "\"resultOutput\":\"{}\",\"resultJsonOutput\":\"{}\","
-        "\"resultJsonError\":\"{}\","
-        "\"planMatched\":{},\"resultMatched\":{},"
+        "{{\"name\":\"{}\",\"resultOutput\":\"{}\","
+        "\"resultJsonOutput\":\"{}\",\"resultJsonError\":\"{}\","
+        "\"resultMatched\":{},"
         "\"resultJsonMatched\":{},\"resultJsonValid\":{},"
         "\"timeUs\":{}}}",
-        escapeJson(result._name), escapeJson(result._planOutput),
-        escapeJson(result._resultOutput), escapeJson(result._resultJsonOutput),
+        escapeJson(result._name), escapeJson(result._resultOutput),
+        escapeJson(result._resultJsonOutput),
         escapeJson(result._resultJsonError),
-        result._planMatched ? "true" : "false",
         result._resultMatched ? "true" : "false",
         result._resultJsonMatched ? "true" : "false",
         result._resultJsonValid ? "true" : "false", result._timeUs);
