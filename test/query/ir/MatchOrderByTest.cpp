@@ -22,7 +22,7 @@
 using namespace db;
 using namespace turing::test;
 
-// The query test suite's fail-reads-order-by-0 case on the v3 engine. An ORDER BY written on
+// The query test suite's success-reads-order-by-4 case on the v3 engine. An ORDER BY written on
 // the MATCH orders the rows the match produced, which the RETURN then reads in that order.
 class MatchOrderByTest : public TuringTest {
 public:
@@ -59,7 +59,7 @@ protected:
     std::unique_ptr<QueryInterpreterV3> _interpreter;
 };
 
-// fail-reads-order-by-0: the eighteen nodes of simpledb by name, Adam (1) first and Travel
+// success-reads-order-by-4: the eighteen nodes of simpledb by name, Adam (1) first and Travel
 // (14) last, where the match alone would answer them by id
 TEST_F(MatchOrderByTest, ordersTheMatchedRowsByTheKeyTheMatchNames) {
     const std::vector<StringRowSink::Row> expected {{"1"},

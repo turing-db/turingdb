@@ -22,7 +22,7 @@
 using namespace db;
 using namespace turing::test;
 
-// The query test suite's fail-reads-loop-0 case on the v3 engine. A pattern whose last node
+// The query test suite's success-reads-loop-3 case on the v3 engine. A pattern whose last node
 // is its first walks back to where it started, which the v1 planner turned away as a loop;
 // here it is a hop joined to the node it left.
 class PatternLoopTest : public TuringTest {
@@ -63,7 +63,7 @@ protected:
     std::unique_ptr<QueryInterpreterV3> _interpreter;
 };
 
-// fail-reads-loop-0: simpledb closes a two-hop loop through the two pairs answering each
+// success-reads-loop-3: simpledb closes a two-hop loop through the two pairs answering each
 // other, Remy (0) with Adam (1) and Remy with Ghosts (6), read from either end
 TEST_F(PatternLoopTest, walksBackToTheNodeThePatternStartedFrom) {
     const std::vector<StringRowSink::Row> expected {{"0", "1"}, {"0", "6"}, {"1", "0"}, {"6", "0"}};

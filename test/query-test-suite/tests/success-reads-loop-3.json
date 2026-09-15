@@ -8,7 +8,7 @@
     "resultJson": "{\"header\":{\"column_names\":[\"a\",\"b\"],\"column_types\":[\"UInt64\",\"UInt64\"]},\"data\":[[[0,0,1,6],[1,6,0,0]]]}"
   },
   "tags": [
-    "fail",
+    "success",
     "reads",
     "loop"
   ],
