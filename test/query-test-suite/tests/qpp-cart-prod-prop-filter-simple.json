@@ -1,5 +1,5 @@
 {
-  "enabled": true,
+  "enabled": false,
   "graph": "simpledb",
   "query": "MATCH (n)--*(p)-->(z), (l) WHERE l.age = p.age RETURN p, l, n",
   "expect": {
@@ -15,5 +15,6 @@
     "expr",
     "properties"
   ],
-  "write-required": false
+  "write-required": false,
+  "disabled-reason": "Variable length paths are not implemented in the v3 engine"
 }

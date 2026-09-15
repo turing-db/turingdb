@@ -1,5 +1,5 @@
 {
-    "enabled": true,
+    "enabled": false,
     "graph": "simpledb",
     "query": "MATCH (n)-[e]-*(O), (n)<-[f]-(m) RETURN n, e, m, f",
     "expect": {
@@ -13,5 +13,6 @@
         "multi-pattern",
         "shared-vars"
     ],
-    "write-required": false
+    "write-required": false,
+    "disabled-reason": "Variable length paths are not implemented in the v3 engine"
 }

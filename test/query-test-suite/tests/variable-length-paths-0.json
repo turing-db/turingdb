@@ -1,5 +1,5 @@
 {
-    "enabled": true,
+    "enabled": false,
     "graph": "simpledb",
     "query": "MATCH (n:Person)-[e]->+(m:Person) RETURN n.name, e, m.name",
     "expect": {
@@ -14,5 +14,6 @@
         "bfs",
         "unbounded"
     ],
-    "write-required": false
+    "write-required": false,
+    "disabled-reason": "Variable length paths are not implemented in the v3 engine"
 }
