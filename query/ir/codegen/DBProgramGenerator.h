@@ -369,6 +369,8 @@ private:
 
     void throwOnPublishedMerge(const Projection* projection, const VarDecl* decl) const;
 
+    void throwOnOptionalOverWrittenEntity(const MatchStmt* matchStmt) const;
+
     // Records what a CREATE wrote for one named entity of its pattern, so the projection
     // reads that back rather than fetching an ID the graph does not hold yet
     void publishCreatedEntity(const VarDecl* decl,
@@ -577,6 +579,10 @@ private:
     // a cut publishes, and what an OPTIONAL MATCH hands to its pattern and then to the rest
     // of the query
     void rebindScope(llvm::ArrayRef<PublishedColumn> published);
+
+    // The same, keeping what the query has written under the declarations these columns
+    // already carry - where a WITH re-keys it to the ones its projection declares
+    void rebindScopeKeepingWrittenEntities(llvm::ArrayRef<PublishedColumn> published);
 
     // The column each variable in scope is bound to, under the declaration and the name
     // it carries: the traversal variables, what a CALL yielded, what a CREATE wrote, and

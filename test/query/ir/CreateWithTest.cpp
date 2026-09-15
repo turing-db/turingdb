@@ -169,10 +169,46 @@ TEST_F(CreateWithTest, rejectsAReadingClauseAfterAnUpdatingOne) {
                            "A reading clause cannot follow an updating clause");
 }
 
-// An optional pattern pads the rows it misses with an invalid ID, which names no entry of
-// the write buffer the created node lives in.
+// The pattern walks from the created node, and the graph the pattern reads holds it nowhere
+// until the commit.
 TEST_F(CreateWithTest, rejectsAnOptionalMatchOverANodeCreatedAboveTheCut) {
     runWriteExpectingError("CREATE (n:Person {name: 'Ola'}) WITH n OPTIONAL MATCH (n)-[:KNOWS]->(m) RETURN m.name",
+                           "An OPTIONAL MATCH cannot read what a CREATE in the same query wrote");
+}
+
+// The optional pattern names none of what the CREATE wrote, so the created node is no part
+// of the join: it comes back out of it - matched row or padded one - and is read below.
+TEST_F(CreateWithTest, carriesACreatedNodePastAnOptionalMatch) {
+    StringRowSink matched;
+    runWrite("CREATE (n:Person {name: 'Rex'}) WITH n OPTIONAL MATCH (p:Person {name: 'Remy'})-[:KNOWS_WELL]->(f) RETURN n.name, f.name",
+             matched);
+
+    const std::vector<StringRowSink::Row> expected {{"Rex", "Adam"}};
+    EXPECT_EQ(matched.getRows(), expected);
+
+    StringRowSink missed;
+    runWrite("CREATE (n:Person {name: 'Pia'}) WITH n OPTIONAL MATCH (p:Person {name: 'Cyrus'})-[:KNOWS_WELL]->(f) RETURN n.name, f.name",
+             missed);
+
+    const std::vector<StringRowSink::Row> padded {{"Pia", "null"}};
+    EXPECT_EQ(missed.getRows(), padded);
+}
+
+// The MATCH's own ORDER BY and LIMIT close the part, with no WITH to publish what the CREATE
+// wrote: the read below that cut still goes to the change and not to the graph.
+TEST_F(CreateWithTest, readsACreatedNodeAcrossAnImplicitCut) {
+    StringRowSink sink;
+    runWrite("CREATE (n:Person {name: 'Zoe'}) WITH n MATCH (p:Person) ORDER BY p.name LIMIT 1 MATCH (i:Interest {name: 'Cooking'}) RETURN n.name, labels(n), p.name",
+             sink);
+
+    const std::vector<StringRowSink::Row> expected {{"Zoe", "Person", "Adam"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+// A MATCH closing the part on its own cut carries what the CREATE wrote exactly as a WITH
+// does, so the same rule applies over it.
+TEST_F(CreateWithTest, rejectsAnOptionalMatchOverACreatedNodeAcrossAnImplicitCut) {
+    runWriteExpectingError("CREATE (n:Person {name: 'Ola'}) WITH n MATCH (p:Person) ORDER BY p.name LIMIT 1 MATCH (i:Interest {name: 'Cooking'}) OPTIONAL MATCH (n)-[:KNOWS_WELL]->(f) RETURN f.name",
                            "An OPTIONAL MATCH cannot read what a CREATE in the same query wrote");
 }
 
