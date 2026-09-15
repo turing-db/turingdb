@@ -203,8 +203,14 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs,
         OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs,
-        // Lexicographic ordering of strings
-        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs
+
+        // Lexicographic ordering of strings, whether each side borrows its characters
+        // from the graph or owns them - what labels(), type() and a CSV field answer -
+        // either way round, since which side the query writes it on is its choice
+        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
+        OptionalKindPairs<types::String::Primitive, types::String::OwningPrimitive>::Pairs,
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::Primitive>::Pairs,
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<
@@ -229,8 +235,14 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs,
         OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs,
-        // Lexicographic ordering of strings
-        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs
+
+        // Lexicographic ordering of strings, whether each side borrows its characters
+        // from the graph or owns them - what labels(), type() and a CSV field answer -
+        // either way round, since which side the query writes it on is its choice
+        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
+        OptionalKindPairs<types::String::Primitive, types::String::OwningPrimitive>::Pairs,
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::Primitive>::Pairs,
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<
