@@ -1,0 +1,42 @@
+{
+  "name": "turingdb",
+  "version": "0.0.0",
+  "description": "TuringDB JavaScript Client",
+  "license": "BUSL-1.1",
+  "homepage": "https://github.com/turing-db/turingdb",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/turing-db/turingdb.git",
+    "directory": "wasm/npm"
+  },
+  "bugs": {
+    "url": "https://github.com/turing-db/turingdb/issues"
+  },
+  "keywords": [
+    "turingdb",
+    "graph",
+    "graph-database",
+    "database",
+    "cypher",
+    "wasm",
+    "client"
+  ],
+  "exports": {
+    ".": "./TuringClient.mjs",
+    "./turing_wasm_decoder.wasm": "./turing_wasm_decoder.wasm",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "TuringClient.mjs",
+    "turing_wasm_decoder.mjs",
+    "turing_wasm_decoder.wasm",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -335,6 +335,15 @@ add_subdirectory(report)
 add_subdirectory(vector)
 add_subdirectory(extensions)
 add_subdirectory(net)
+
+# The wasm client's portable sources, so a compile error in them fails the native build
+# rather than waiting for ci_wasm. The decoder itself needs emscripten and is skipped
+# here by the EMSCRIPTEN guard in wasm/CMakeLists.txt; build_npm.sh builds that.
+option(TURINGDB_BUILD_WASM "Build the wasm client's portable sources and their test" ON)
+if (TURINGDB_BUILD_WASM)
+    add_subdirectory(wasm)
+endif()
+
 add_subdirectory(db)
 add_subdirectory(server)
 add_subdirectory(tools)
