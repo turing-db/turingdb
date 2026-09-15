@@ -3164,7 +3164,13 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
     switch (kind) {
         case BinaryResultKind::Boolean: {
             const mlir::Type boolElement = _builder.getI1Type();
-            return operandNullable ? storage::NullableType::get(ctx, boolElement) : boolElement;
+
+            // List comparison always nullable; either having a null element => null
+            const bool comparesTwoLists = isListChunk(lhsType) && isListChunk(rhsType);
+            const bool alwaysNullable = operandNullable || comparesTwoLists;
+
+            return alwaysNullable ? storage::NullableType::get(ctx, boolElement)
+                                  : boolElement;
         }
         break;
 
