@@ -251,11 +251,9 @@ void unwindListValidIDEmit(const Column* source,
     }
 }
 
-// The rows one cell of a type-erased column unwinds into: a tagged list its elements, a
-// tagged null none, and any other tagged scalar the single row it is.
-size_t unwindTaggedElementCount(const Column* source, size_t row) {
-    const auto* elements = static_cast<const ColumnVector<ListElementView>*>(source);
-    const ListElementView element = (*elements)[row];
+// The rows one tagged cell unwinds into: a tagged list its elements, a tagged null none,
+// and any other tagged scalar the single row it is.
+size_t taggedCellRowCount(const ListElementView element) {
     const ListBufferTypeTag tag = element.getTag();
 
     if (tag == ListBufferTypeTag::ListView) {
@@ -263,6 +261,35 @@ size_t unwindTaggedElementCount(const Column* source, size_t row) {
     }
 
     return tag == ListBufferTypeTag::Null ? 0 : 1;
+}
+
+// The element one tagged cell gives up at @param position: that of the list it holds, or
+// the cell itself where it holds anything else.
+ListElementView taggedCellElement(const ListElementView element, size_t position) {
+    if (element.getTag() != ListBufferTypeTag::ListView) {
+        return element;
+    }
+
+    return element.getAs<ListView>().elements()[position];
+}
+
+size_t unwindTaggedElementCount(const Column* source, size_t row) {
+    const auto* elements = static_cast<const ColumnVector<ListElementView>*>(source);
+
+    return taggedCellRowCount((*elements)[row]);
+}
+
+// The nullable sibling: an absent cell contributes no row, as the tagged null it stands
+// for does.
+size_t unwindOptTaggedElementCount(const Column* source, size_t row) {
+    const auto* elements = static_cast<const ColumnOptVector<ListElementView>*>(source);
+    const std::optional<ListElementView>& element = (*elements)[row];
+
+    if (!element.has_value()) {
+        return 0;
+    }
+
+    return taggedCellRowCount(*element);
 }
 
 // Fill the element chunk from a type-erased column: a cell holding a nested list gives up
@@ -279,11 +306,26 @@ void unwindTaggedElementEmit(const Column* source,
     outputRaw.resize(rowsRaw.size());
 
     for (size_t index = 0; index < rowsRaw.size(); index++) {
-        const ListElementView element = elements[rowsRaw[index]];
+        outputRaw[index] = taggedCellElement(elements[rowsRaw[index]], positionsRaw[index]);
+    }
+}
 
-        outputRaw[index] = element.getTag() == ListBufferTypeTag::ListView
-                               ? element.getAs<ListView>().elements()[positionsRaw[index]]
-                               : element;
+// The nullable sibling: only a present cell is drained, so every row the step covers holds
+// one and the element column carries no absent value.
+void unwindOptTaggedElementEmit(const Column* source,
+                                const ColumnVector<size_t>* rows,
+                                const ColumnVector<size_t>* positions,
+                                Column* output) {
+    const std::vector<std::optional<ListElementView>>& elements =
+        static_cast<const ColumnOptVector<ListElementView>*>(source)->getRaw();
+    const std::vector<size_t>& rowsRaw = rows->getRaw();
+    const std::vector<size_t>& positionsRaw = positions->getRaw();
+
+    std::vector<ListElementView>& outputRaw = static_cast<ColumnVector<ListElementView>*>(output)->getRaw();
+    outputRaw.resize(rowsRaw.size());
+
+    for (size_t index = 0; index < rowsRaw.size(); index++) {
+        outputRaw[index] = taggedCellElement(*elements[rowsRaw[index]], positionsRaw[index]);
     }
 }
 
@@ -5849,6 +5891,14 @@ NLUnwindElementEmitFunction NLExecutor::selectTaggedUnwindElementEmit() {
     return &unwindTaggedElementEmit;
 }
 
+NLUnwindElementCountFunction NLExecutor::selectOptTaggedUnwindElementCount() {
+    return &unwindOptTaggedElementCount;
+}
+
+NLUnwindElementEmitFunction NLExecutor::selectOptTaggedUnwindElementEmit() {
+    return &unwindOptTaggedElementEmit;
+}
+
 NLUnwindCollectValueEmitFunction NLExecutor::selectUnwindCollectValueEmit(ValueType valueType) {
     switch (valueType) {
         case ValueType::Int64:
@@ -6187,6 +6237,16 @@ NLBroadcastConstantFunction NLExecutor::selectNullConstantBroadcast() {
 
 NLBroadcastConstantFunction NLExecutor::selectConstantListBroadcast() {
     return &broadcastConstantListColumn;
+}
+
+NLBroadcastConstantFunction NLExecutor::selectOptListElementBroadcast(const Column* value) {
+    const bool isConst = value->getContainerKind() == ContainerKind::code<ColumnConst>();
+
+    if (isConst) {
+        return &broadcastNullableConstantColumn<ListElementView>;
+    }
+
+    return &broadcastSingleRowColumn<ListElementView>;
 }
 
 NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(ValueType valueType, const Column* value) {

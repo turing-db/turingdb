@@ -1142,6 +1142,9 @@ void NLTranslator::translateUnwindLoop(const IteratorConfig& config,
     } else if (llvm::isa<storage::ListElementType>(sourceElement)) {
         elementCount = NLExecutor::selectTaggedUnwindElementCount();
         elementEmit = NLExecutor::selectTaggedUnwindElementEmit();
+    } else if (isNullableListElement(sourceElement)) {
+        elementCount = NLExecutor::selectOptTaggedUnwindElementCount();
+        elementEmit = NLExecutor::selectOptTaggedUnwindElementEmit();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(sourceElement)) {
         const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
         elementCount = NLExecutor::selectOptUnwindElementCount(valueType);
@@ -1951,14 +1954,17 @@ void NLTranslator::translateBroadcastConstant(nl::BroadcastConstant broadcast, N
     // repeat: its rows are absent values rather than copies of one. A list rides a list
     // chunk rather than a nullable value one, so its fill repeats the one view the constant
     // holds instead of dispatching on a value type.
+    const mlir::Type resultElement = mlir::cast<nl::ChunkType>(resultType).getElementType();
     const bool isUntypedNull = isUntypedNullChunk(broadcast.getValue().getType());
-    const bool isList = llvm::isa<storage::ListType>(mlir::cast<nl::ChunkType>(resultType).getElementType());
+    const bool isList = llvm::isa<storage::ListType>(resultElement);
 
     NLBroadcastConstantFunction fill = nullptr;
     if (isUntypedNull) {
         fill = NLExecutor::selectNullConstantBroadcast();
     } else if (isList) {
         fill = NLExecutor::selectConstantListBroadcast();
+    } else if (isNullableListElement(resultElement)) {
+        fill = NLExecutor::selectOptListElementBroadcast(value);
     } else {
         fill = NLExecutor::selectConstantBroadcast(nullableChunkValueType(resultType), value);
     }

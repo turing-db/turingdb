@@ -1128,6 +1128,16 @@ void DBLowering::lowerVectorSearch(mlir::db::VectorSearch vectorSearch) {
 }
 
 mlir::Type DBLowering::unwoundElementType(mlir::MLIRContext* context, mlir::Type sourceElement) {
+    // A cell that may be absent - what an index into a list hands back - contributes no
+    // row where it is absent, so what the drain hands on is the tagged scalar itself.
+    const auto nullableSource = mlir::dyn_cast<storage::NullableType>(sourceElement);
+    const bool drainsATaggedCell = nullableSource
+                                && mlir::isa<storage::ListElementType>(nullableSource.getValueType());
+
+    if (drainsATaggedCell) {
+        return nullableSource.getValueType();
+    }
+
     // Any source but a list keeps the column it already rides - its cells are the
     // elements, and a tagged cell holding a list gives up tagged scalars again.
     const auto listType = mlir::dyn_cast<storage::ListType>(sourceElement);

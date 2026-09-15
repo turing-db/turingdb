@@ -454,6 +454,10 @@ public:
     // The list sibling: a list constant lays its one view out over the step's rows
     static NLBroadcastConstantFunction selectConstantListBroadcast();
 
+    // The tagged-cell sibling: a cell that may be absent carries its own type, so there is
+    // no value type to dispatch on
+    static NLBroadcastConstantFunction selectOptListElementBroadcast(const Column* value);
+
     // Block-repeat (outer column) and tile (inner column) for a list_element chunk: a
     // tagged scalar carries its own type, so there is no value type to dispatch on.
     static NLBroadcastFunction selectListElementBlockRepeatFunction();
@@ -608,6 +612,7 @@ public:
     // row spreads each of them to the single row it is.
     static NLUnwindElementCountFunction selectListUnwindElementCount();
     static NLUnwindElementCountFunction selectTaggedUnwindElementCount();
+    static NLUnwindElementCountFunction selectOptTaggedUnwindElementCount();
     static NLUnwindElementCountFunction selectOptUnwindElementCount(ValueType valueType);
     static NLUnwindElementCountFunction selectValueUnwindElementCount();
 
@@ -621,6 +626,7 @@ public:
     static NLUnwindElementEmitFunction selectListUnwindEdgeEmit();
     static NLUnwindElementEmitFunction selectListUnwindListEmit();
     static NLUnwindElementEmitFunction selectTaggedUnwindElementEmit();
+    static NLUnwindElementEmitFunction selectOptTaggedUnwindElementEmit();
     static NLCollectListEmitFunction selectCollectListEmit(ValueType valueType);
 
     // The reads an nl.make_list takes one element out of a column with: a nullable value
