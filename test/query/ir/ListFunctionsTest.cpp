@@ -246,6 +246,13 @@ TEST_F(ListFunctionsTest, countsTheNonNullHeadsOfStoredLists) {
     expectRows("MATCH (n:Tagged) RETURN count(head(n.tags))", {{"2"}});
 }
 
+// A head of a literal list is one tagged cell standing for every row, and an UNWIND of it
+// drains the list that cell holds.
+TEST_F(ListFunctionsTest, unwindsTheHeadOfALiteralList) {
+    expectRows("UNWIND head([[1, 2], [3, 4]]) AS element RETURN element",
+               {{"1"}, {"2"}});
+}
+
 TEST_F(ListFunctionsTest, tailsALiteralList) {
     expectRows("RETURN tail([1, 2, 3])", {{"[2, 3]"}});
 }
