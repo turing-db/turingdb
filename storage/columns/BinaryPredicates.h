@@ -39,6 +39,10 @@ concept BooleanOpt = std::same_as<TypeUtils::unwrap_optional_t<T>, types::Bool::
 template <typename... Ts>
 concept HoldsPropertyNull = (std::same_as<std::decay_t<Ts>, PropertyNull> || ...);
 
+template <typename T>
+concept ListOperand =
+    std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<T>>, ListView>;
+
 template <typename F>
 concept TestsEquality =
     (std::is_same_v<F, std::equal_to<>> || std::is_same_v<F, std::not_equal_to<>>
@@ -441,9 +445,23 @@ struct BinaryPredicate {
 };
 
 struct TuringEqual {
-    std::optional<CustomBool> operator()(const ListView a, const ListView b) const {
-        const std::span<const ListElementView> lhs = a.elements();
-        const std::span<const ListElementView> rhs = b.elements();
+    template <typename T, typename U>
+        requires ListOperand<T> && ListOperand<U>
+    std::optional<CustomBool> operator()(const T& a, const U& b) {
+        if constexpr (TypeUtils::is_optional_v<T>) {
+            if (!a.has_value()) {
+                return std::nullopt;
+            }
+        }
+
+        if constexpr (TypeUtils::is_optional_v<U>) {
+            if (!b.has_value()) {
+                return std::nullopt;
+            }
+        }
+
+        const std::span<const ListElementView> lhs = TypeUtils::unwrap(a).elements();
+        const std::span<const ListElementView> rhs = TypeUtils::unwrap(b).elements();
 
         if (lhs.size() != rhs.size()) {
             return CustomBool {false};
@@ -498,13 +516,16 @@ struct TuringEqual {
 
     // Generalist fallback for all other types
     template <typename T, typename U>
+        requires (!ListOperand<T> || !ListOperand<U>)
     bool operator()(const T& a, const U& b) {
         return std::equal_to<> {}(a, b);
     }
 };
 
 struct TuringNotEqual {
-    std::optional<CustomBool> operator()(const ListView a, const ListView b) const {
+    template <typename T, typename U>
+        requires ListOperand<T> && ListOperand<U>
+    std::optional<CustomBool> operator()(const T& a, const U& b) {
         const std::optional<CustomBool> equal = TuringEqual {}(a, b);
         if (!equal.has_value()) {
             return std::nullopt;
@@ -514,6 +535,7 @@ struct TuringNotEqual {
     }
 
     template <typename T, typename U>
+        requires (!ListOperand<T> || !ListOperand<U>)
     bool operator()(T&& a, U&& b) {
         return !TuringEqual {}(std::forward<T>(a), std::forward<U>(b));
     }
