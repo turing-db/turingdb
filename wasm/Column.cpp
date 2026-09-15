@@ -1,3 +1,6 @@
+// Copyright Turing Biosystems Ltd
+// SPDX-License-Identifier: Apache-2.0
+
 #include "Column.h"
 
 using namespace wasm;
