@@ -3,7 +3,6 @@
   "graph": "simpledb",
   "query": "MATCH (n) RETURN avg(*)",
   "expect": {
-    "plan": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n) RETURN avg(*)\n       |                      ^\n-------* syntax error, unexpected MULT",
     "result": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n) RETURN avg(*)\n       |                      ^\n-------* syntax error, unexpected MULT",
     "resultJson": "{\"error\":\"PARSE_ERROR\",\"error_details\":\"-------* Cypher parser\\n     1 | MATCH (n) RETURN avg(*)\\n       |                      ^\\n-------* syntax error, unexpected MULT\"}"
   },

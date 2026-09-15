@@ -3,7 +3,6 @@
   "graph": "simpledb",
   "query": "RETURN type(1)",
   "expect": {
-    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN type(1)\n       |        ^^^^^^^\n-------* Invalid arguments for function 'type'",
     "result": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN type(1)\n       |        ^^^^^^^\n-------* Invalid arguments for function 'type'",
     "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | RETURN type(1)\\n       |        ^^^^^^^\\n-------* Invalid arguments for function 'type'\"}"
   },

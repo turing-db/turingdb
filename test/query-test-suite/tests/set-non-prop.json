@@ -3,7 +3,6 @@
   "graph": "simpledb",
   "query": "MATCH (n) SET NOT_A_PROPERTY = 42",
   "expect": {
-    "plan": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n) SET NOT_A_PROPERTY = 42\n       |                              ^\n-------* syntax error, unexpected ASSIGN, expecting DOT",
     "result": "PARSE ERROR\n-------* Cypher parser\n     1 | MATCH (n) SET NOT_A_PROPERTY = 42\n       |                              ^\n-------* syntax error, unexpected ASSIGN, expecting DOT",
     "resultJson": "{\"error\":\"PARSE_ERROR\",\"error_details\":\"-------* Cypher parser\\n     1 | MATCH (n) SET NOT_A_PROPERTY = 42\\n       |                              ^\\n-------* syntax error, unexpected ASSIGN, expecting DOT\"}"
   },

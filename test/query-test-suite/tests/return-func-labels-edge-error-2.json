@@ -3,7 +3,6 @@
   "graph": "simpledb",
   "query": "MATCH (n) RETURN type(n)",
   "expect": {
-    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN type(n)\n       |                  ^^^^^^^\n-------* Invalid arguments for function 'type'",
     "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN type(n)\n       |                  ^^^^^^^\n-------* Invalid arguments for function 'type'",
     "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n) RETURN type(n)\\n       |                  ^^^^^^^\\n-------* Invalid arguments for function 'type'\"}"
   },

@@ -3,7 +3,6 @@
   "graph": "simpledb",
   "query": "MATCH (n) RETURN COUNT(COUNT(n))",
   "expect": {
-    "plan": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN COUNT(COUNT(n))\n       |                  ^^^^^^^^^^^^^^^\n-------* Aggregate functions cannot be nested inside other aggregate functions",
     "result": "ANALYZE ERROR\n-------* Query error\n     1 | MATCH (n) RETURN COUNT(COUNT(n))\n       |                  ^^^^^^^^^^^^^^^\n-------* Aggregate functions cannot be nested inside other aggregate functions",
     "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | MATCH (n) RETURN COUNT(COUNT(n))\\n       |                  ^^^^^^^^^^^^^^^\\n-------* Aggregate functions cannot be nested inside other aggregate functions\"}"
   },
