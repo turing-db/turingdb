@@ -115,6 +115,13 @@
 
     #undef yylex
     #define yylex scanner.lex
+
+    namespace {
+
+    constexpr const char* quantifierTwiceMessage = "A relationship takes one length quantifier: "
+                                                   "either [e*1..3] inside the brackets or {1,3} after them";
+
+    }
 }
 
 %token PROG_END 0
@@ -354,6 +361,8 @@
 %type<db::QuantifiedPath*> quantifiedPath
 %type<db::QuantifiedPath*> opt_quantifiedPath
 %type<db::QuantifiedPath*> quantifiedPathRange
+%type<db::QuantifiedPath*> opt_edgeRange
+%type<db::QuantifiedPath*> edgeRange
 
 %type<db::SinglePartQuery*> singlePartQuery
 %type<db::ChangeQuery*> changeQuery
@@ -690,6 +699,10 @@ createEdgePropertyIndexQuery
     : CREATE INDEX ID FOR OBRACK edgeDetail CBRACK ON propertyExpr {
         if ($6->getWhere()) {
             scanner.syntaxError(@6, "WHERE is not allowed in an index pattern");
+        }
+
+        if ($6->getQuantifiedPath()) {
+            scanner.syntaxError(@6, "An edge property index takes no length quantifier");
         }
 
         $$ = CreateEdgePropertyIndexQuery::create(ast, $3, $6, dynamic_cast<PropertyExpr*>($9));
@@ -1443,11 +1456,23 @@ patternElem
 
 patternElemChain
     : edgePattern opt_quantifiedPath nodePattern {
-        if ($2) $1->setQuantifiedPath($2);
+        if ($2) {
+            if ($1->getQuantifiedPath()) {
+                scanner.syntaxError(@2, quantifierTwiceMessage);
+            }
+
+            $1->setQuantifiedPath($2);
+        }
+
         $$ = std::make_pair($1, $3);
     }
     | OPAREN nodePattern edgePattern nodePattern opt_whereClause CPAREN quantifiedPath nodePattern {
         EdgePattern* edge = $3;
+
+        if (edge->getQuantifiedPath()) {
+            scanner.syntaxError(@7, quantifierTwiceMessage);
+        }
+
         edge->setQuantifiedPath($7);
         edge->setHopSource($2);
         edge->setHopEnd($4);
@@ -1459,6 +1484,10 @@ patternElemChain
 exprPatternElemChain
     : exprEdgePattern opt_quantifiedPath nodePattern {
         if ($2) {
+            if ($1->getQuantifiedPath()) {
+                scanner.syntaxError(@2, quantifierTwiceMessage);
+            }
+
             $1->setQuantifiedPath($2);
         }
         $$ = std::make_pair($1, $3);
@@ -1538,14 +1567,29 @@ exprEdgePattern
     ;
 
 edgeDetail
-    : opt_symbol opt_edgeTypes opt_properties opt_whereClause {
+    : opt_symbol opt_edgeTypes opt_edgeRange opt_properties opt_whereClause {
         $$ = EdgePattern::create(ast, nullptr, EdgePattern::Direction::Undirected);
         $$->setSymbol($1);
         $$->setTypes($2);
-        $$->setProperties($3);
-        $$->setWhere($4);
+        $$->setQuantifiedPath($3);
+        $$->setProperties($4);
+        $$->setWhere($5);
         LOC($$, @$);
       }
+    ;
+
+opt_edgeRange
+    : /* empty */ { $$ = nullptr; }
+    | edgeRange { $$ = $1; LOC($$, @$); }
+    ;
+
+// A `*` inside the brackets starts at one hop, where the quantifier after them starts at none
+edgeRange
+    : MULT { $$ = QuantifiedPath::create(ast); $$->setLhs(1); LOC($$, @$); }
+    | MULT DIGIT { $$ = QuantifiedPath::create(ast); $$->setLhs($2); $$->setRhs($2); LOC($$, @$); }
+    | MULT DIGIT RANGE { $$ = QuantifiedPath::create(ast); $$->setLhs($2); LOC($$, @$); }
+    | MULT RANGE DIGIT { $$ = QuantifiedPath::create(ast); $$->setLhs(1); $$->setRhs($3); LOC($$, @$); }
+    | MULT DIGIT RANGE DIGIT { $$ = QuantifiedPath::create(ast); $$->setLhs($2); $$->setRhs($4); LOC($$, @$); }
     ;
 
 edgeTypes
