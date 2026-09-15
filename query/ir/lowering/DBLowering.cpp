@@ -85,7 +85,7 @@ mlir::Type listSizeFunctionElement(mlir::OpBuilder& builder, mlir::Type inputEle
 // A stored list may mix the types of its elements, so one read out of a cell is the
 // type-erased tagged scalar a heterogeneous list's elements ride, whatever element type
 // the cell's own column resolved to.
-mlir::Type listHeadFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
+mlir::Type listElementFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
     throwIfNotAListInput(inputElement);
 
     return storage::ListElementType::get(builder.getContext());
@@ -155,7 +155,8 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,       ResultNullability::AlwaysNullable}},
     {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, &booleanFunctionElement,     ResultNullability::AlwaysNullable}},
     {"db.size",       {&emitNLUnaryFunction<nl::Size>,      &listSizeFunctionElement,    ResultNullability::FollowsInput}},
-    {"db.head",       {&emitNLUnaryFunction<nl::Head>,      &listHeadFunctionElement,    ResultNullability::NeverNullable}},
+    {"db.head",       {&emitNLUnaryFunction<nl::Head>,      &listElementFunctionElement, ResultNullability::NeverNullable}},
+    {"db.last",       {&emitNLUnaryFunction<nl::Last>,      &listElementFunctionElement, ResultNullability::NeverNullable}},
     {"db.tail",       {&emitNLUnaryFunction<nl::Tail>,      &listTailFunctionElement,    ResultNullability::FollowsInput}},
 };
 

@@ -273,6 +273,14 @@ public:
     ResultType operator()(ArgType cell) const;
 };
 
+class TaggedListLastFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = ListElementView;
+
+    ResultType operator()(ArgType cell) const;
+};
+
 class TaggedListTailFunction {
 public:
     using ArgType = ListElementView;
@@ -304,6 +312,23 @@ public:
 
     ResultType operator()(const ArgType list) const {
         return list.empty() ? ListElementView::nullElement() : list.front();
+    }
+
+    ResultType operator()(const std::optional<ArgType>& list) const {
+        return list.has_value() ? (*this)(*list) : ListElementView::nullElement();
+    }
+};
+
+class ListLastFunction {
+public:
+    using ArgType = types::List::Primitive;
+    using ResultType = ListElementView;
+    using TaggedCounterpart = TaggedListLastFunction;
+
+    static constexpr bool ReadsNullsItself = true;
+
+    ResultType operator()(const ArgType list) const {
+        return list.empty() ? ListElementView::nullElement() : list.back();
     }
 
     ResultType operator()(const std::optional<ArgType>& list) const {

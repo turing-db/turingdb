@@ -312,6 +312,14 @@ void FunctionDecls::initDefault() {
     head->setReturnTypes({{EvaluatedType::ListItem}});
     head->setIsV3Only(true);
 
+    // A stored list may mix the types of its elements, so last answers with the same tagged
+    // scalar head does; an empty list - and an absent one - has no final element, so it
+    // reads as the null such a cell holds.
+    FunctionSignature* last = createFunction("last");
+    last->setArguments({EvaluatedType::List});
+    last->setReturnTypes({{EvaluatedType::ListItem}});
+    last->setIsV3Only(true);
+
     // Dropping the first element leaves a list over the same elements, so it nests as
     // deeply as the one it came from; the tail of an empty list is empty, not null.
     FunctionSignature* tail = createFunction("tail");
@@ -320,7 +328,7 @@ void FunctionDecls::initDefault() {
     tail->setReturnsItsArgumentShape(true);
     tail->setIsV3Only(true);
 
-    // The same three over a type-erased cell, which is the only thing an UNWIND of a
+    // The same four over a type-erased cell, which is the only thing an UNWIND of a
     // stored list of lists can bind: a stored list names no element type, so what its
     // elements are is known per row rather than in the plan. A cell holding a null
     // answers null; one holding no list at all is the type error the row raises.
@@ -333,6 +341,11 @@ void FunctionDecls::initDefault() {
     headCell->setArguments({EvaluatedType::ListItem});
     headCell->setReturnTypes({{EvaluatedType::ListItem}});
     headCell->setIsV3Only(true);
+
+    FunctionSignature* lastCell = createFunction("last");
+    lastCell->setArguments({EvaluatedType::ListItem});
+    lastCell->setReturnTypes({{EvaluatedType::ListItem}});
+    lastCell->setIsV3Only(true);
 
     // The cell names no element type, so the list left of it names none either: an UNWIND
     // of this tail binds tagged cells again rather than a type it could promise

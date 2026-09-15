@@ -31,7 +31,7 @@ std::optional<ListView> taggedList(const ListElementView cell) {
         return std::nullopt;
     }
 
-    throw TuringException("size(), head() and tail() read a list, and this row holds a value that is not one");
+    throw TuringException("size(), head(), last() and tail() read a list, and this row holds a value that is not one");
 }
 
 }
@@ -52,6 +52,15 @@ TaggedListHeadFunction::ResultType TaggedListHeadFunction::operator()(const ArgT
     }
 
     return list->front();
+}
+
+TaggedListLastFunction::ResultType TaggedListLastFunction::operator()(const ArgType cell) const {
+    const std::optional<ListView> list = taggedList(cell);
+    if (!list || list->empty()) {
+        return ListElementView::nullElement();
+    }
+
+    return list->back();
 }
 
 TaggedListTailFunction::ResultType TaggedListTailFunction::operator()(const ArgType cell) const {
