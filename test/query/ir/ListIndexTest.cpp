@@ -70,9 +70,10 @@ std::optional<types::Int64::Primitive> elementAsInteger(const std::optional<List
     return element->getAs<types::Int64::Primitive>();
 }
 
-// Reads the first projected column as one optional integer per row, accepting both shapes
-// an index result takes: a constant, when list and position are both literals, and a
-// per-row nullable column otherwise.
+// Reads the first projected column as one optional integer per row, accepting every shape
+// an index result takes: the integer column a list of integers is read out into, the
+// tagged cell a list naming no one type hands out, and the constant either becomes when
+// list and position are both literals.
 class ElementSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
@@ -80,22 +81,50 @@ public:
 
         const Column* column = chunks[0];
 
-        const auto* constElement = dynamic_cast<const ColumnConst<std::optional<ListElementView>>*>(column);
-        const auto* vectorElement = dynamic_cast<const ColumnOptVector<ListElementView>*>(column);
-        ASSERT_TRUE(constElement || vectorElement);
-
-        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            const std::optional<ListElementView> element =
-                constElement ? (*constElement)[rowIndex] : vectorElement->getRaw()[rowIndex];
-
-            _rows.push_back(elementAsInteger(element));
+        if (appendIntegers(column, offset, rowCount)) {
+            return;
         }
+
+        ASSERT_TRUE(appendCells(column, offset, rowCount));
     }
 
     const std::vector<std::optional<types::Int64::Primitive>>& rows() const { return _rows; }
 
 private:
     std::vector<std::optional<types::Int64::Primitive>> _rows;
+
+    bool appendIntegers(const Column* column, size_t offset, size_t rowCount) {
+        const auto* constantColumn = dynamic_cast<const ColumnConst<std::optional<types::Int64::Primitive>>*>(column);
+        const auto* vectorColumn = dynamic_cast<const ColumnOptVector<types::Int64::Primitive>*>(column);
+
+        if (!constantColumn && !vectorColumn) {
+            return false;
+        }
+
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            _rows.push_back(constantColumn ? (*constantColumn)[rowIndex] : vectorColumn->getRaw()[rowIndex]);
+        }
+
+        return true;
+    }
+
+    bool appendCells(const Column* column, size_t offset, size_t rowCount) {
+        const auto* constantColumn = dynamic_cast<const ColumnConst<std::optional<ListElementView>>*>(column);
+        const auto* vectorColumn = dynamic_cast<const ColumnOptVector<ListElementView>*>(column);
+
+        if (!constantColumn && !vectorColumn) {
+            return false;
+        }
+
+        for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
+            const std::optional<ListElementView> element =
+                constantColumn ? (*constantColumn)[rowIndex] : vectorColumn->getRaw()[rowIndex];
+
+            _rows.push_back(elementAsInteger(element));
+        }
+
+        return true;
+    }
 };
 
 // Reads the tally an aggregate with no grouping key emits.
@@ -288,20 +317,22 @@ protected:
     Graph* _graph {nullptr};
 };
 
-TEST_F(ListIndexTest, typesAnIndexAsANullableTaggedScalar) {
+// A list homogeneous in one type is read out as that type, so an integer stays an integer
+// through the arithmetic that follows, as an UNWIND of the same list does.
+TEST_F(ListIndexTest, typesAnIndexIntoAListOfIntegersAsANullableInteger) {
     const std::string resultType = indexResultType("MATCH (n) WHERE n.name = 'Remy' RETURN [1, 2, 3][1]");
 
     EXPECT_NE(resultType.find("nullable"), std::string::npos) << "index result type: " << resultType;
-    EXPECT_NE(resultType.find("list_element"), std::string::npos) << "index result type: " << resultType;
+    EXPECT_NE(resultType.find("i64"), std::string::npos) << "index result type: " << resultType;
 }
 
-// A homogeneous list gives the access no more specific type than a mixed one does: the
-// element read carries its own tag either way.
-TEST_F(ListIndexTest, typesAnIndexIntoAMixedListTheSameWay) {
-    const std::string homogeneous = indexResultType("MATCH (n) WHERE n.name = 'Remy' RETURN [1, 2, 3][1]");
-    const std::string mixed = indexResultType("MATCH (n) WHERE n.name = 'Remy' RETURN [1, 'a'][1]");
+// A mixed list names no type to read its cells out as, so the access hands back the tagged
+// scalar the cell carries.
+TEST_F(ListIndexTest, typesAnIndexIntoAMixedListAsANullableTaggedScalar) {
+    const std::string resultType = indexResultType("MATCH (n) WHERE n.name = 'Remy' RETURN [1, 'a'][1]");
 
-    EXPECT_EQ(homogeneous, mixed);
+    EXPECT_NE(resultType.find("nullable"), std::string::npos) << "index result type: " << resultType;
+    EXPECT_NE(resultType.find("list_element"), std::string::npos) << "index result type: " << resultType;
 }
 
 // Out of range reads null, so the result is nullable however the index is written.

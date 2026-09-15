@@ -735,6 +735,10 @@ private:
     template <ColumnOperator Op, typename OpType>
     void translateBinaryOp(OpType op, NLStmtContainer* body);
 
+    // Binds the index kernel an nl.list_index runs, chosen by what its result holds: a
+    // value of the type its list names, or the tagged cell a mixed list holds
+    void translateListIndex(mlir::nl::ListIndex index, NLStmtContainer* body);
+
     void translateNot(mlir::nl::Not notOp, NLStmtContainer* body);
     void translateToNullable(mlir::nl::ToNullable toNullable, NLStmtContainer* body);
 

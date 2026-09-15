@@ -434,6 +434,36 @@ bool isIndexableChunk(mlir::Type chunkType) {
     return mlir::isa<storage::ListType, storage::ListElementType>(indexed);
 }
 
+// The element type an indexed list hands out, read through the nullable an optional list
+// wears. None when the indexed operand is a type-erased cell rather than a list.
+mlir::Type indexedListElementType(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        return {};
+    }
+
+    const mlir::Type element = chunk.getElementType();
+    const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
+    const mlir::Type indexed = nullable ? nullable.getValueType() : element;
+
+    const auto listType = mlir::dyn_cast<storage::ListType>(indexed);
+    return listType ? listType.getElementType() : mlir::Type {};
+}
+
+// The element types an index reads out as a value column rather than as a tagged cell:
+// the scalars a value column holds.
+bool namesAnIndexedValueType(mlir::Type element) {
+    if (!element) {
+        return false;
+    }
+
+    if (const auto integerType = mlir::dyn_cast<mlir::IntegerType>(element)) {
+        return integerType.getWidth() == 1 || integerType.getWidth() == 64;
+    }
+
+    return mlir::isa<mlir::Float64Type, storage::StringType, storage::EmbeddingType>(element);
+}
+
 // Internal type of listChunk
 mlir::Type listInternalType(mlir::Type chunkType) {
     const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
@@ -3203,7 +3233,12 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
                 throw IRException("db.list_index requires a list as its indexed operand");
             }
 
-            return storage::NullableType::get(ctx, storage::ListElementType::get(ctx));
+            const mlir::Type element = indexedListElementType(lhsType);
+            const mlir::Type indexed = namesAnIndexedValueType(element)
+                                           ? element
+                                           : storage::ListElementType::get(ctx);
+
+            return storage::NullableType::get(ctx, indexed);
         }
         break;
 

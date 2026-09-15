@@ -259,6 +259,11 @@ public:
     static NLBinaryFn selectBinary(const Column* lhs, const Column* rhs,
                                    LocalMemory* memory, Column*& result);
 
+    // Index a list whose cells all hold @param valueType, reading each one out as that
+    // type. selectBinary<OP_INDEX> is the sibling for a list naming no one type.
+    static NLBinaryFn selectValueListIndex(ValueType valueType, const Column* lhs, const Column* rhs,
+                                           LocalMemory* memory, Column*& result);
+
     static void runUnary(NLExecutionContext* context, NLFunctionData* data);
 
     static NLUnaryFn selectNot(const Column* operand, LocalMemory* memory, Column*& result);

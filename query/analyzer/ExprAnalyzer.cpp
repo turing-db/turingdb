@@ -778,7 +778,11 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     }
 
     if (indexesAList) {
-        expr->setType(EvaluatedType::ListItem);
+        const EvaluatedType elementType = base->getListShape().unwoundType();
+        const bool readsAValue = convertibleToValueType(elementType);
+        const EvaluatedType indexedType = readsAValue ? elementType : EvaluatedType::ListItem;
+
+        expr->setType(indexedType);
 
         if (base->isDynamic() || indexExpr->isDynamic()) {
             expr->setDynamic();
@@ -788,7 +792,7 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
             expr->setAggregate();
         }
 
-        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::ListItem));
+        expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, indexedType));
 
         return;
     }

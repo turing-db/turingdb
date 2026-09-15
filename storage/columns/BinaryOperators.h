@@ -12,6 +12,7 @@
 #include "TypeUtils.h"
 #include "buffers/StringBuffer.h"
 #include "list/ListBuffer.h"
+#include "list/ListUtils.h"
 
 #include "BioAssert.h"
 #include "TuringException.h"
@@ -390,6 +391,26 @@ struct ListIndexImpl {
     }
 };
 
+/**
+ * @brief The indexed element read as the type its list names, rather than as the tagged
+ * cell @ref ListIndexImpl hands back. A cell carrying another tag - the tagged null a
+ * nullable column puts in a list - reads as the absent value.
+ */
+template <typename T>
+struct ValueListIndexImpl {
+    template <typename Base, typename Index>
+        requires std::is_invocable_v<ListIndexImpl, Base, Index>
+    inline std::optional<T> operator()(const Base& base, const Index& index) const {
+        const std::optional<ListElementView> cell = ListIndexImpl {}(base, index);
+
+        if (!cell.has_value() || cell->getTag() != TypeToListBufferTag<T>::Tag) {
+            return std::nullopt;
+        }
+
+        return cell->getAs<T>();
+    }
+};
+
 }
 
 using Add = BinaryOp<std::plus<>>;
@@ -400,6 +421,9 @@ using Mod = BinaryOp<SafeModulo>;
 using Pow = BinaryOp<Power>;
 using Concat = Concatenate;
 using ListIndex = BinaryOp<ListIndexImpl, /*NarrowsUnsigned=*/false>;
+
+template <typename T>
+using ValueListIndex = BinaryOp<ValueListIndexImpl<T>, /*NarrowsUnsigned=*/false>;
 
 }
 

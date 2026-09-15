@@ -80,6 +80,42 @@ TEST_F(ListElementOperandTest, comparesAnIndexedElementForEquality) {
     expectRows("MATCH (n:Person) WHERE [n.name][0] = 'Remy' RETURN n.name", {{"Remy"}});
 }
 
+TEST_F(ListElementOperandTest, dividesAnIndexedIntegerElement) {
+    expectRows("RETURN [7,2][0] / 2", {{"3"}});
+}
+
+TEST_F(ListElementOperandTest, dividesAnIndexedIntegerElementThroughAnAlias) {
+    expectRows("WITH [7,2][0] AS x RETURN x / 2", {{"3"}});
+}
+
+TEST_F(ListElementOperandTest, dividesAnIndexedPropertyElement) {
+    expectRows("MATCH (n:Person) WHERE n.name = 'Remy' RETURN [n.age][0] / 5", {{"6"}});
+}
+
+TEST_F(ListElementOperandTest, dividesAnIndexedDoubleElement) {
+    expectRows("RETURN [7.0,2.0][0] / 2", {{"3.5"}});
+}
+
+TEST_F(ListElementOperandTest, dividesAnIndexedCellOfAMixedList) {
+    expectRows("RETURN [7,2.0][0] / 2", {{"3.5"}});
+}
+
+TEST_F(ListElementOperandTest, concatenatesAnIndexedStringElement) {
+    expectRows("RETURN ['ab','cd'][0] + 'ef'", {{"abef"}});
+}
+
+TEST_F(ListElementOperandTest, readsAnIndexedStringElement) {
+    expectRows("RETURN ['ab','cd'][1]", {{"cd"}});
+}
+
+TEST_F(ListElementOperandTest, readsAnIndexedBooleanElement) {
+    expectRows("RETURN [true,false][0]", {{"true"}});
+}
+
+TEST_F(ListElementOperandTest, readsAnIndexPastTheEndAsNull) {
+    expectRows("RETURN [1,2,3][7]", {{"null"}});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }

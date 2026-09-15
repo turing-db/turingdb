@@ -639,7 +639,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
         } else if (nl::Concat concat = mlir::dyn_cast<nl::Concat>(operation)) {
             translateBinaryOp<OP_CONCAT>(concat, body);
         } else if (nl::ListIndex index = mlir::dyn_cast<nl::ListIndex>(operation)) {
-            translateBinaryOp<OP_INDEX>(index, body);
+            translateListIndex(index, body);
         } else if (nl::Sub sub = mlir::dyn_cast<nl::Sub>(operation)) {
             translateBinaryOp<OP_SUB>(sub, body);
         } else if (nl::Mul mul = mlir::dyn_cast<nl::Mul>(operation)) {
@@ -1977,6 +1977,32 @@ void NLTranslator::translateBinaryOp(OpType op, NLStmtContainer* body) {
     bioassert(result, "Failed to translate binary operator result.");
 
     _valueSlots[op.getResult()] = result;
+
+    NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn, _memory);
+    body->emplaceStmt(&NLExecutor::runBinary, data);
+}
+
+void NLTranslator::translateListIndex(nl::ListIndex index, NLStmtContainer* body) {
+    const Column* lhs = getColumn(index.getLhs());
+    const Column* rhs = getColumn(index.getRhs());
+
+    const auto resultChunk = mlir::cast<nl::ChunkType>(index.getResult().getType());
+    const auto nullableType = mlir::cast<storage::NullableType>(resultChunk.getElementType());
+    const mlir::Type elementType = nullableType.getValueType();
+    const bool readsATaggedCell = mlir::isa<storage::ListElementType>(elementType);
+
+    Column* result = nullptr;
+    NLBinaryFn fn = nullptr;
+
+    if (readsATaggedCell) {
+        fn = NLExecutor::selectBinary<OP_INDEX>(lhs, rhs, _memory, result);
+    } else {
+        fn = NLExecutor::selectValueListIndex(valueTypeFromElementType(elementType), lhs, rhs, _memory, result);
+    }
+
+    bioassert(result, "Failed to translate list index result.");
+
+    _valueSlots[index.getResult()] = result;
 
     NLBinaryData* data = _program->allocFunctionData<NLBinaryData>(lhs, rhs, result, fn, _memory);
     body->emplaceStmt(&NLExecutor::runBinary, data);

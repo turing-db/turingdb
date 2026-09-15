@@ -710,6 +710,29 @@ struct BinaryOpSelector {
     }
 };
 
+template <typename Primitive, typename ResCol, typename LhsCol, typename RhsCol>
+void applyValueListIndex(Column* result, const Column* lhs, const Column* rhs, LocalMemory* memory) {
+    BinaryOperators::exec<ValueListIndex<Primitive>>(static_cast<ResCol*>(result),
+                                                     static_cast<const LhsCol*>(lhs),
+                                                     static_cast<const RhsCol*>(rhs));
+}
+
+template <typename Primitive>
+struct ValueListIndexSelector {
+    LocalMemory* _memory {nullptr};
+    Column* _result {nullptr};
+    NLBinaryFn _fn {nullptr};
+
+    template <typename LhsCol, typename RhsCol>
+    void operator()(const LhsCol*, const RhsCol*) {
+        using ResCol = ColumnCombination<ValueListIndex<Primitive>, LhsCol, RhsCol>;
+        using ResColType = ResCol::ResultColumnType;
+
+        _result = _memory->alloc<ResColType>();
+        _fn = &applyValueListIndex<Primitive, ResColType, LhsCol, RhsCol>;
+    }
+};
+
 // Execute a body of statements
 void runBody(NLExecutionContext* context, const NLStmtContainer* body) {
     for (const NLFunctionDescriptor& descriptor : body->stmts()) {
@@ -4971,6 +4994,31 @@ NLBinaryFn NLExecutor::selectBinary(const Column* lhs,
 
     result = selector._result;
     return selector._fn;
+}
+
+NLBinaryFn NLExecutor::selectValueListIndex(ValueType valueType,
+                                            const Column* lhs,
+                                            const Column* rhs,
+                                            LocalMemory* memory,
+                                            Column*& result) {
+    using Pairs = PairRestrictions<OP_INDEX>;
+
+    NLBinaryFn selected = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        using Selector = ValueListIndexSelector<typename T::Primitive>;
+
+        Selector selector {._memory = memory};
+        ColumnDoubleDispatcher<typename Pairs::Allowed,
+                               typename Pairs::AllowedMixed,
+                               Selector,
+                               typename Pairs::Excluded>::dispatch(lhs, rhs, selector);
+
+        result = selector._result;
+        selected = selector._fn;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return selected;
 }
 
 void NLExecutor::runUnaryFunction(NLExecutionContext* context, NLFunctionData* data) {
