@@ -8,7 +8,7 @@
     "resultJson": "{\"header\":{\"column_names\":[],\"column_types\":[]},\"data\":[]}"
   },
   "tags": [
-    "fail",
+    "success",
     "writes",
     "create",
     "delete"

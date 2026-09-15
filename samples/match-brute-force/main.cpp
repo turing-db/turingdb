@@ -1042,7 +1042,7 @@ constexpr SuiteCase suiteCases[] = {
      "MATCH (a)-->(b),(c)-->(d)-->(e),(a)-->(f)-->(g),(c)-->(g),(h),(i),(e),(h),(c)-->(j) RETURN a,c,e,g LIMIT 10",
      matchDoubleDiamond, nullptr, returnACEG, 10},
 
-    {"fail-reads-loop-0",
+    {"success-reads-loop-3",
      "MATCH (a)-->(b)-->(a) RETURN a, b;",
      matchTwoHopLoop, nullptr, returnAB},
 
@@ -1070,7 +1070,7 @@ constexpr SuiteCase suiteCases[] = {
      "MATCH (n) RETURN avg(n.age), n",
      matchEveryNode, nullptr, returnAverageAgeAndA},
 
-    {"fail-reads-order-by-0",
+    {"success-reads-order-by-4",
      "MATCH (n) ORDER BY n.name RETURN n",
      matchEveryNode, nullptr, returnA, 0, nameOfFirstNode},
 };
