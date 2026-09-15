@@ -30,8 +30,12 @@ LabelSetHandle MetadataBuilder::getOrCreateLabelSet(const LabelSet& labelset) {
     return _metadata->_labelsetMap.getOrCreate(labelset);
 }
 
-const LabelSetMap& MetadataBuilder::labelsets() const {
-    return _metadata->labelsets();
+void MetadataBuilder::forEachLabelSet(const LabelSetVisitor& visit) const {
+    std::shared_lock lock(_spinLock);
+
+    for (const LabelSetMap::Pair& pair : _metadata->labelsets()) {
+        visit(pair._id, *pair._value);
+    }
 }
 
 EdgeTypeID MetadataBuilder::getOrCreateEdgeType(std::string_view edgeTypeName) {

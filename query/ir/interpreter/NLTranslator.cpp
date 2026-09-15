@@ -1498,13 +1498,20 @@ void NLTranslator::translateCheckLabelConstraint(nl::CheckLabelConstraint op, NL
 }
 
 void NLTranslator::collectMatchingLabelSets(const LabelSet& constraint, NLCheckLabelConstraintData* data) const {
-    const LabelSetMap& labelsets = _metadataBuilder ? _metadataBuilder->labelsets() : _view->metadata().labelsets();
     const LabelSetHandle constraintHandle(constraint);
 
-    for (const LabelSetMap::Pair& pair : labelsets) {
-        const LabelSetHandle candidate(*pair._value);
+    const auto collectMatching = [&constraintHandle, data](LabelSetID id, const LabelSet& labelset) {
+        const LabelSetHandle candidate(labelset);
         if (candidate.hasAtLeastLabels(constraintHandle)) {
-            data->addMatchingID(pair._id);
+            data->addMatchingID(id);
+        }
+    };
+
+    if (_metadataBuilder) {
+        _metadataBuilder->forEachLabelSet(collectMatching);
+    } else {
+        for (const LabelSetMap::Pair& pair : _view->metadata().labelsets()) {
+            collectMatching(pair._id, *pair._value);
         }
     }
 }
