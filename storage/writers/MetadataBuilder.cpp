@@ -1,6 +1,7 @@
 #include "MetadataBuilder.h"
 
 #include <mutex>
+#include <shared_mutex>
 
 #include "Profiler.h"
 #include "metadata/LabelMap.h"
@@ -17,10 +18,24 @@ LabelID MetadataBuilder::getOrCreateLabel(std::string_view labelName) {
     return _metadata->_labelMap.getOrCreate(labelName);
 }
 
+std::optional<LabelID> MetadataBuilder::findLabel(std::string_view labelName) const {
+    std::shared_lock lock(_spinLock);
+
+    return _metadata->_labelMap.get(labelName);
+}
+
 LabelSetHandle MetadataBuilder::getOrCreateLabelSet(const LabelSet& labelset) {
     std::unique_lock lock(_spinLock);
 
     return _metadata->_labelsetMap.getOrCreate(labelset);
+}
+
+void MetadataBuilder::forEachLabelSet(const LabelSetVisitor& visit) const {
+    std::shared_lock lock(_spinLock);
+
+    for (const LabelSetMap::Pair& pair : _metadata->labelsets()) {
+        visit(pair._id, *pair._value);
+    }
 }
 
 EdgeTypeID MetadataBuilder::getOrCreateEdgeType(std::string_view edgeTypeName) {
@@ -29,10 +44,22 @@ EdgeTypeID MetadataBuilder::getOrCreateEdgeType(std::string_view edgeTypeName) {
     return _metadata->_edgeTypeMap.getOrCreate(edgeTypeName);
 }
 
+std::optional<EdgeTypeID> MetadataBuilder::findEdgeType(std::string_view edgeTypeName) const {
+    std::shared_lock lock(_spinLock);
+
+    return _metadata->_edgeTypeMap.get(edgeTypeName);
+}
+
 PropertyType MetadataBuilder::getOrCreatePropertyType(std::string_view propTypeName, ValueType valueType) {
     std::unique_lock lock(_spinLock);
 
     return  _metadata->_propTypeMap.getOrCreate(propTypeName, valueType);
+}
+
+std::optional<PropertyType> MetadataBuilder::findPropertyType(std::string_view propTypeName) const {
+    std::shared_lock lock(_spinLock);
+
+    return _metadata->_propTypeMap.get(propTypeName);
 }
 
 std::unique_ptr<MetadataBuilder> MetadataBuilder::create(const GraphMetadata& prevMetadata, GraphMetadata* metadata) {

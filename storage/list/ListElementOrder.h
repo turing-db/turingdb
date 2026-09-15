@@ -43,4 +43,17 @@ bool operator==(ListElementView element, types::Double::Primitive value);
 bool operator==(ListElementView element, types::String::Primitive value);
 bool operator==(ListElementView element, types::Bool::Primitive value);
 
+/**
+ * @brief Orders an element of a @ref ListByteBuffer against a value of a known type.
+ *
+ * The value is ordered as an element holding it would be, so the cross-type order above
+ * settles a pair of different types - a string element sorts before any number, whichever
+ * way round the query wrote the two - and a pair of one type compares in its own order.
+ */
+std::strong_ordering operator<=>(ListElementView element, types::Int64::Primitive value);
+std::strong_ordering operator<=>(ListElementView element, types::UInt64::Primitive value);
+std::strong_ordering operator<=>(ListElementView element, types::Double::Primitive value);
+std::strong_ordering operator<=>(ListElementView element, types::String::Primitive value);
+std::strong_ordering operator<=>(ListElementView element, types::Bool::Primitive value);
+
 }

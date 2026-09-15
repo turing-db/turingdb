@@ -23,11 +23,9 @@
 
 #include "views/GraphView.h"
 #include "metadata/GraphMetadata.h"
-#include "metadata/LabelSet.h"
-#include "metadata/LabelSetHandle.h"
-#include "metadata/LabelSetMap.h"
-#include "metadata/LabelMap.h"
 #include "metadata/PropertyType.h"
+
+#include "IRValueTypes.h"
 
 #include "IRException.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -158,44 +156,6 @@ const BinaryFunctionLowering* lookupBinaryFunctionLowering(mlir::Operation& oper
     return it == binaryFunctionLowerings.end() ? nullptr : &it->second;
 }
 
-// Map a stored property value type to the MLIR element type baked into the
-// nullable value chunk. The element only has to round-trip back to this value
-// type during translation, so each kind takes a distinct builtin.
-mlir::Type valueTypeToElementType(mlir::OpBuilder& builder, ValueType valueType) {
-    switch (valueType) {
-        case ValueType::Int64:
-            return builder.getIntegerType(64);
-        break;
-
-        case ValueType::UInt64:
-            return builder.getIntegerType(64, /*isSigned=*/false);
-        break;
-
-        case ValueType::Double:
-            return builder.getF64Type();
-        break;
-
-        case ValueType::Bool:
-            return builder.getI1Type();
-        break;
-
-        case ValueType::String:
-            return storage::StringType::get(builder.getContext());
-        break;
-
-        case ValueType::Embedding:
-            return storage::EmbeddingType::get(builder.getContext());
-        break;
-
-        case ValueType::Invalid:
-        case ValueType::_SIZE:
-            throw IRException("Invalid property value type");
-        break;
-    }
-
-    throw IRException("Unhandled property value type");
-}
-
 // The chunk a procedure's return value of this type is read as. The element type
 // names the concrete column the procedure writes into, so an nl chunk of a
 // procedure result is as fully typed as a property chunk: an ID column for the
@@ -283,7 +243,7 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
     const bool isBool = integerType && integerType.getWidth() == 1;
     const bool isInteger = integerType && !isBool;
     const bool isNumeric = isFloat || isInteger;
-    const bool isString = mlir::isa<storage::StringType>(inputElement);
+    const bool isString = mlir::isa<storage::StringType, storage::OwnedStringType>(inputElement);
     const bool isTaggedCell = mlir::isa<storage::ListElementType>(inputElement);
 
     // An untyped null holds no value to reduce - a name no property in the graph carries,
@@ -347,6 +307,13 @@ NumericOperand numericOperand(mlir::Type chunkType) {
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(element)) {
         nullable = true;
         element = nullableType.getValueType();
+    }
+
+    // A type-erased cell is numeric only once read, and its tag names a type per row
+    // rather than one for the column: it computes in the f64 its mixed numeric tags land
+    // on, as a reduction over cells does, and answers null on a row holding no number.
+    if (mlir::isa<storage::ListElementType>(element)) {
+        return {.numeric = mlir::Float64Type::get(chunkType.getContext()), .nullable = true};
     }
 
     const bool isFloat = mlir::isa<mlir::Float64Type>(element);
@@ -425,6 +392,36 @@ bool isIndexableChunk(mlir::Type chunkType) {
     const mlir::Type indexed = nullable ? nullable.getValueType() : element;
 
     return mlir::isa<storage::ListType, storage::ListElementType>(indexed);
+}
+
+// The element type an indexed list hands out, read through the nullable an optional list
+// wears. None when the indexed operand is a type-erased cell rather than a list.
+mlir::Type indexedListElementType(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        return {};
+    }
+
+    const mlir::Type element = chunk.getElementType();
+    const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
+    const mlir::Type indexed = nullable ? nullable.getValueType() : element;
+
+    const auto listType = mlir::dyn_cast<storage::ListType>(indexed);
+    return listType ? listType.getElementType() : mlir::Type {};
+}
+
+// The element types an index reads out as a value column rather than as a tagged cell:
+// the scalars a value column holds.
+bool namesAnIndexedValueType(mlir::Type element) {
+    if (!element) {
+        return false;
+    }
+
+    if (const auto integerType = mlir::dyn_cast<mlir::IntegerType>(element)) {
+        return integerType.getWidth() == 1 || integerType.getWidth() == 64;
+    }
+
+    return mlir::isa<mlir::Float64Type, storage::StringType, storage::EmbeddingType>(element);
 }
 
 // Internal type of listChunk
@@ -861,6 +858,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerRemoveDuplicates(distinct);
     } else if (mlir::db::Count count = mlir::dyn_cast<mlir::db::Count>(operation)) {
         lowerCount(count);
+    } else if (mlir::db::CountScanRows countScanRows = mlir::dyn_cast<mlir::db::CountScanRows>(operation)) {
+        lowerCountScanRows(countScanRows);
     } else if (mlir::db::Sum sum = mlir::dyn_cast<mlir::db::Sum>(operation)) {
         lowerAggregate(sum.getInput(), sum.getResult(), storage::AggregateKind::Sum, sum.getDistinct());
     } else if (mlir::db::Min min = mlir::dyn_cast<mlir::db::Min>(operation)) {
@@ -907,6 +906,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerBinaryOp<nl::EndsWith>(operation, BinaryResultKind::Boolean);
     } else if (mlir::isa<mlir::db::ContainsOp>(operation)) {
         lowerBinaryOp<nl::Contains>(operation, BinaryResultKind::Boolean);
+    } else if (mlir::isa<mlir::db::InOp>(operation)) {
+        lowerBinaryOp<nl::In>(operation, BinaryResultKind::Membership);
     } else if (mlir::isa<mlir::db::AndOp>(operation)) {
         lowerBinaryOp<nl::And>(operation, BinaryResultKind::Boolean);
     } else if (mlir::isa<mlir::db::OrOp>(operation)) {
@@ -1089,6 +1090,16 @@ void DBLowering::lowerVectorSearch(mlir::db::VectorSearch vectorSearch) {
 }
 
 mlir::Type DBLowering::unwoundElementType(mlir::MLIRContext* context, mlir::Type sourceElement) {
+    // A cell that may be absent - what an index into a list hands back - contributes no
+    // row where it is absent, so what the drain hands on is the tagged scalar itself.
+    const auto nullableSource = mlir::dyn_cast<storage::NullableType>(sourceElement);
+    const bool drainsATaggedCell = nullableSource
+                                && mlir::isa<storage::ListElementType>(nullableSource.getValueType());
+
+    if (drainsATaggedCell) {
+        return nullableSource.getValueType();
+    }
+
     // Any source but a list keeps the column it already rides - its cells are the
     // elements, and a tagged cell holding a list gives up tagged scalars again.
     const auto listType = mlir::dyn_cast<storage::ListType>(sourceElement);
@@ -1351,7 +1362,7 @@ void DBLowering::lowerGetNodeProperties(mlir::db::GetNodeProperties getNodePrope
 
     // Resolve the name once, hoisted above the loops, and bake the value type.
     const mlir::Value handle = getOrCreatePropertyTypeHandle(property);
-    const mlir::Type valueChunkType = propertyValueChunkType(property);
+    const mlir::Type valueChunkType = propertyValueChunkType(property, columnType(getNodeProperties.getResult()));
 
     // A property read maps the input chunk in place, one value per node, so the
     // fetch nests in the loop that binds that chunk - it opens no loop of its own.
@@ -1361,7 +1372,8 @@ void DBLowering::lowerGetNodeProperties(mlir::db::GetNodeProperties getNodePrope
                                                                          valueChunkType,
                                                                          inputChunk,
                                                                          handle,
-                                                                         mapOptionalMask(getNodeProperties.getPending()));
+                                                                         mapOptionalMask(getNodeProperties.getPending()),
+                                                                         getNodeProperties.getAllPending());
     _valueMap[getNodeProperties.getResult()] = fetch.getValues();
 }
 
@@ -1370,7 +1382,7 @@ void DBLowering::lowerGetEdgeProperties(mlir::db::GetEdgeProperties getEdgePrope
     const llvm::StringRef property = getEdgeProperties.getProperty();
 
     const mlir::Value handle = getOrCreatePropertyTypeHandle(property);
-    const mlir::Type valueChunkType = propertyValueChunkType(property);
+    const mlir::Type valueChunkType = propertyValueChunkType(property, columnType(getEdgeProperties.getResult()));
 
     setInsertionInto(ownerBlock(inputChunk));
 
@@ -1378,7 +1390,8 @@ void DBLowering::lowerGetEdgeProperties(mlir::db::GetEdgeProperties getEdgePrope
                                                                          valueChunkType,
                                                                          inputChunk,
                                                                          handle,
-                                                                         mapOptionalMask(getEdgeProperties.getPending()));
+                                                                         mapOptionalMask(getEdgeProperties.getPending()),
+                                                                         getEdgeProperties.getAllPending());
     _valueMap[getEdgeProperties.getResult()] = fetch.getValues();
 }
 
@@ -1417,38 +1430,6 @@ void DBLowering::lowerGetEdgeTypes(mlir::db::GetEdgeTypes getEdgeTypes) {
 }
 
 void DBLowering::lowerCheckLabelConstraint(mlir::db::CheckLabelConstraint checkLabelConstraint) {
-    const LabelMap& labelMap = _view->metadata().labels();
-
-    LabelSet constraintLabelSet;
-    bool graphHasEveryLabel = true;
-    for (const mlir::Attribute labelAttr : checkLabelConstraint.getLabels()) {
-        const llvm::StringRef labelName = mlir::cast<mlir::StringAttr>(labelAttr).getValue();
-        const std::optional<LabelID> labelID = labelMap.get(
-            std::string_view(labelName.data(), labelName.size()));
-
-        if (!labelID) {
-            graphHasEveryLabel = false;
-            break;
-        }
-
-        constraintLabelSet.set(*labelID);
-    }
-
-    // The labels are a conjunction, so one the graph never assigned makes the whole test
-    // false: matching no label set is that answer, where skipping the missing label would
-    // test a weaker constraint than the query wrote.
-    llvm::SmallVector<int64_t> matchingIDs;
-    if (graphHasEveryLabel) {
-        const LabelSetHandle constraintHandle(constraintLabelSet);
-
-        for (const LabelSetMap::Pair& pair : _view->metadata().labelsets()) {
-            const LabelSetHandle candidate(*pair._value);
-            if (candidate.hasAtLeastLabels(constraintHandle)) {
-                matchingIDs.push_back(static_cast<int64_t>(pair._id.getValue()));
-            }
-        }
-    }
-
     const mlir::Value inputChunk = mapValue(checkLabelConstraint.getLabelsetIds());
 
     setInsertionInto(ownerBlock(inputChunk));
@@ -1461,28 +1442,12 @@ void DBLowering::lowerCheckLabelConstraint(mlir::db::CheckLabelConstraint checkL
         _builder.getUnknownLoc(),
         boolChunkType,
         inputChunk,
-        _builder.getDenseI64ArrayAttr(matchingIDs));
+        checkLabelConstraint.getLabels());
 
     _valueMap[checkLabelConstraint.getResult()] = check.getResult();
 }
 
 void DBLowering::lowerCheckEdgeTypeConstraint(mlir::db::CheckEdgeTypeConstraint checkEdgeTypeConstraint) {
-    const EdgeTypeMap& edgeTypeMap = _view->metadata().edgeTypes();
-
-    // The types are a disjunction, so one the graph never assigned drops out of it
-    llvm::SmallVector<int64_t> matchingIDs;
-    for (const mlir::Attribute typeAttr : checkEdgeTypeConstraint.getEdgeTypes()) {
-        const llvm::StringRef typeName = mlir::cast<mlir::StringAttr>(typeAttr).getValue();
-        const std::optional<EdgeTypeID> edgeTypeID = edgeTypeMap.get(
-            std::string_view(typeName.data(), typeName.size()));
-
-        if (!edgeTypeID) {
-            continue;
-        }
-
-        matchingIDs.push_back(static_cast<int64_t>(edgeTypeID->getValue()));
-    }
-
     const mlir::Value inputChunk = mapValue(checkEdgeTypeConstraint.getEdgeTypeIds());
 
     setInsertionInto(ownerBlock(inputChunk));
@@ -1495,7 +1460,7 @@ void DBLowering::lowerCheckEdgeTypeConstraint(mlir::db::CheckEdgeTypeConstraint 
         _builder.getUnknownLoc(),
         boolChunkType,
         inputChunk,
-        _builder.getDenseI64ArrayAttr(matchingIDs));
+        checkEdgeTypeConstraint.getEdgeTypes());
 
     _valueMap[checkEdgeTypeConstraint.getResult()] = check.getResult();
 }
@@ -1774,7 +1739,18 @@ mlir::Value DBLowering::getOrCreateEdgeTypeHandle(llvm::StringRef edgeTypeName) 
     return handle;
 }
 
-mlir::Type DBLowering::propertyValueChunkType(llvm::StringRef propertyName) {
+mlir::Type DBLowering::columnType(mlir::Value column) {
+    return mlir::cast<mlir::db::ColumnType>(column.getType()).getType();
+}
+
+// `declared` is the db read's own result type: none for a name the graph carries, whose
+// type the schema answers for, and the nullable value type the analyzer resolved for a name
+// only this query's CREATE introduces, which no schema holds until the commit
+mlir::Type DBLowering::propertyValueChunkType(llvm::StringRef propertyName, mlir::Type declared) {
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(declared)) {
+        return nl::ChunkType::get(_builder.getContext(), nullableType);
+    }
+
     if (!_view) {
         throw IRException("Lowering a property fetch needs a graph to resolve the type of '" + propertyName.str() + "'");
     }
@@ -2105,6 +2081,20 @@ void DBLowering::lowerCount(mlir::db::Count count) {
     // into a function-scope nl.output reading it - the block that holds the chunk is
     // the entry block, so lowerOutput places nl.output there.
     _valueMap[count.getResult()] = result.getResult();
+}
+
+void DBLowering::lowerCountScanRows(mlir::db::CountScanRows countScanRows) {
+    // The tally comes from the graph's node counts rather than from a relation, so the op
+    // reads no column and is loop-invariant: hoist it the way lowerConstant hoists a
+    // constant, where it dominates every loop a later op may emit from.
+    _builder.setInsertionPointToStart(_entryBlock);
+
+    nl::CountScanRows rows = _builder.create<nl::CountScanRows>(_builder.getUnknownLoc(),
+                                                                countScanRows.getLabelsAttr(),
+                                                                countScanRows.getPropertyAttr(),
+                                                                countScanRows.getPropertyScanAttr());
+
+    _valueMap[countScanRows.getResult()] = rows.getResult();
 }
 
 void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::AggregateKind kind, bool distinct) {
@@ -2960,7 +2950,9 @@ void DBLowering::lowerCreateEdge(mlir::db::CreateEdge createEdge) {
         createEdge.getPropNamesAttr(),
         propChunks,
         mapOptionalMask(createEdge.getSrcPending()),
-        mapOptionalMask(createEdge.getTgtPending()));
+        mapOptionalMask(createEdge.getTgtPending()),
+        createEdge.getSrcAllPending(),
+        createEdge.getTgtAllPending());
     _valueMap[createEdge.getResult()] = create.getResult();
 }
 
@@ -3076,7 +3068,8 @@ void DBLowering::lowerSetNodeProperty(mlir::db::SetNodeProperty setNodeProperty)
         setNodeProperty.getPropertyAttr(),
         valueChunk,
         mapOptionalMask(setNodeProperty.getPending()),
-        mapOptionalMask(setNodeProperty.getRows()));
+        mapOptionalMask(setNodeProperty.getRows()),
+        setNodeProperty.getAllPending());
 }
 
 void DBLowering::lowerSetEdgeProperty(mlir::db::SetEdgeProperty setEdgeProperty) {
@@ -3097,7 +3090,8 @@ void DBLowering::lowerSetEdgeProperty(mlir::db::SetEdgeProperty setEdgeProperty)
         setEdgeProperty.getPropertyAttr(),
         valueChunk,
         mapOptionalMask(setEdgeProperty.getPending()),
-        mapOptionalMask(setEdgeProperty.getRows()));
+        mapOptionalMask(setEdgeProperty.getRows()),
+        setEdgeProperty.getAllPending());
 }
 
 void DBLowering::lowerDeleteNode(mlir::db::DeleteNode deleteNode) {
@@ -3110,7 +3104,8 @@ void DBLowering::lowerDeleteNode(mlir::db::DeleteNode deleteNode) {
     _builder.create<nl::DeleteNode>(loc,
                                     inputChunk,
                                     deleteNode.getDetach(),
-                                    mapOptionalMask(deleteNode.getPending()));
+                                    mapOptionalMask(deleteNode.getPending()),
+                                    deleteNode.getAllPending());
 }
 
 void DBLowering::lowerDeleteEdge(mlir::db::DeleteEdge deleteEdge) {
@@ -3119,7 +3114,10 @@ void DBLowering::lowerDeleteEdge(mlir::db::DeleteEdge deleteEdge) {
 
     setInsertionInto(ownerBlock(inputChunk));
 
-    _builder.create<nl::DeleteEdge>(loc, inputChunk, mapOptionalMask(deleteEdge.getPending()));
+    _builder.create<nl::DeleteEdge>(loc,
+                                    inputChunk,
+                                    mapOptionalMask(deleteEdge.getPending()),
+                                    deleteEdge.getAllPending());
 }
 
 void DBLowering::lowerConstant(mlir::db::ConstantOp constant) {
@@ -3146,7 +3144,13 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
     switch (kind) {
         case BinaryResultKind::Boolean: {
             const mlir::Type boolElement = _builder.getI1Type();
-            return operandNullable ? storage::NullableType::get(ctx, boolElement) : boolElement;
+
+            // List comparison always nullable; either having a null element => null
+            const bool comparesTwoLists = isListChunk(lhsType) && isListChunk(rhsType);
+            const bool alwaysNullable = operandNullable || comparesTwoLists;
+
+            return alwaysNullable ? storage::NullableType::get(ctx, boolElement)
+                                  : boolElement;
         }
         break;
 
@@ -3154,16 +3158,18 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
             const NumericOperand lhs = numericOperand(lhsType);
             const NumericOperand rhs = numericOperand(rhsType);
             const mlir::Type promoted = promoteNumeric(_builder, lhs.numeric, rhs.numeric);
-            return operandNullable ? storage::NullableType::get(ctx, promoted) : promoted;
+            const bool nullable = operandNullable || lhs.nullable || rhs.nullable;
+            return nullable ? storage::NullableType::get(ctx, promoted) : promoted;
         }
         break;
 
         case BinaryResultKind::Double: {
-            numericOperand(lhsType);
-            numericOperand(rhsType);
+            const NumericOperand lhs = numericOperand(lhsType);
+            const NumericOperand rhs = numericOperand(rhsType);
+            const bool nullable = operandNullable || lhs.nullable || rhs.nullable;
 
             const mlir::Type doubleElement = _builder.getF64Type();
-            return operandNullable ? storage::NullableType::get(ctx, doubleElement) : doubleElement;
+            return nullable ? storage::NullableType::get(ctx, doubleElement) : doubleElement;
         }
         break;
 
@@ -3192,7 +3198,21 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
                 throw IRException("db.list_index requires a list as its indexed operand");
             }
 
-            return storage::NullableType::get(ctx, storage::ListElementType::get(ctx));
+            const mlir::Type element = indexedListElementType(lhsType);
+            const mlir::Type indexed = namesAnIndexedValueType(element)
+                                           ? element
+                                           : storage::ListElementType::get(ctx);
+
+            return storage::NullableType::get(ctx, indexed);
+        }
+        break;
+
+        case BinaryResultKind::Membership: {
+            if (!isListChunk(rhsType)) {
+                throw IRException("db.in requires a list as its right operand");
+            }
+
+            return storage::NullableType::get(ctx, _builder.getI1Type());
         }
         break;
     }
@@ -3207,7 +3227,8 @@ void DBLowering::lowerBinaryOp(mlir::Operation& op, BinaryResultKind kind) {
 
     const bool comparesTwoEntities = isEntityChunk(lhsChunk.getType()) && isEntityChunk(rhsChunk.getType());
 
-    const bool readsScalarOperands = kind != BinaryResultKind::Index;
+    const bool readsScalarOperands = kind != BinaryResultKind::Index
+                                  && kind != BinaryResultKind::Membership;
 
     const bool nullAgainstRhs = readsScalarOperands
                              && isUntypedNullChunk(rhsChunk.getType())

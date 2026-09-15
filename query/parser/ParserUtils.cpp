@@ -8,7 +8,9 @@
 
 #include "expr/ListExpr.h"
 #include "expr/LiteralExpr.h"
+#include "stmt/CallStmt.h"
 #include "stmt/SetStmt.h"
+#include "stmt/StmtContainer.h"
 #include "Literal.h"
 #include "ParserException.h"
 
@@ -71,4 +73,18 @@ EmbeddingLiteral* ParserUtils::listExprToEmbeddingLiteral(CypherAST* ast, const 
     std::vector<float> data;
     listExprToFloatVector(list, data);
     return EmbeddingLiteral::create(ast, std::move(data));
+}
+
+void ParserUtils::markStandaloneCall(StmtContainer* stmts) {
+    const StmtContainer::Stmts& statements = stmts->stmts();
+    if (statements.size() != 1) {
+        return;
+    }
+
+    Stmt* stmt = statements.front();
+    if (stmt->getKind() != Stmt::Kind::CALL) {
+        return;
+    }
+
+    static_cast<CallStmt*>(stmt)->setStandaloneCall(true);
 }

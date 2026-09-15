@@ -35,6 +35,7 @@ class Skip;
 class Limit;
 class ReturnStmt;
 class Stmt;
+class StmtContainer;
 class WithStmt;
 class Projection;
 class CreateNodePropertyIndexQuery;
@@ -106,6 +107,7 @@ private:
     bool isGroupWise(const Expr* expr, const Projection* projection) const;
     bool isGroupWise(std::span<const Expr* const> exprs, const Projection* projection) const;
 
+    void throwOnReadAfterUpdate(const StmtContainer* stmts) const;
     void analyzeShortestPathReturn(const SinglePartQuery* query) const;
     const VarDecl* findConsumedVariable(const Expr* expr,
                                         const VarDecl* distDecl,

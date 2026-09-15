@@ -66,6 +66,13 @@ struct ListElementKindPairs {
 };
 
 template <typename T>
+struct ListMembershipKindPairs {
+    using Pairs = std::tuple<
+        KindPair<T, ListView>,
+        KindPair<std::optional<T>, ListView>>;
+};
+
+template <typename T>
 struct OptionalKinds {
     using Types = std::tuple<
         T,
@@ -153,6 +160,9 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs,
 
         std::tuple<
+            // Two lists are equal when their elements are, in order
+            KindPair<ListView, ListView>,
+
             // Filtering by ID or labels/edge type
             KindPair<NodeID, NodeID>,
             KindPair<EdgeID, EdgeID>,
@@ -196,8 +206,23 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs,
         OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs,
-        // Lexicographic ordering of strings
-        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs
+
+        // Lexicographic ordering of strings, whether each side borrows its characters
+        // from the graph or owns them - what labels(), type() and a CSV field answer -
+        // either way round, since which side the query writes it on is its choice
+        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
+        OptionalKindPairs<types::String::Primitive, types::String::OwningPrimitive>::Pairs,
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::Primitive>::Pairs,
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs,
+
+        // Ordering against a type-erased cell, which holds its own type: it is ordered as
+        // an element holding the other side would be
+        ListElementKindPairs<types::Int64::Primitive>::Pairs,
+        ListElementKindPairs<types::UInt64::Primitive>::Pairs,
+        ListElementKindPairs<types::Double::Primitive>::Pairs,
+        ListElementKindPairs<types::String::Primitive>::Pairs,
+        ListElementKindPairs<types::Bool::Primitive>::Pairs,
+        OptionalKindPairs<ListElementView, ListElementView>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<
@@ -222,8 +247,23 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<types::UInt64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs,
         OptionalKindPairs<types::Double::Primitive, types::Double::Primitive>::Pairs,
-        // Lexicographic ordering of strings
-        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs
+
+        // Lexicographic ordering of strings, whether each side borrows its characters
+        // from the graph or owns them - what labels(), type() and a CSV field answer -
+        // either way round, since which side the query writes it on is its choice
+        OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
+        OptionalKindPairs<types::String::Primitive, types::String::OwningPrimitive>::Pairs,
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::Primitive>::Pairs,
+        OptionalKindPairs<types::String::OwningPrimitive, types::String::OwningPrimitive>::Pairs,
+
+        // Ordering against a type-erased cell, which holds its own type: it is ordered as
+        // an element holding the other side would be
+        ListElementKindPairs<types::Int64::Primitive>::Pairs,
+        ListElementKindPairs<types::UInt64::Primitive>::Pairs,
+        ListElementKindPairs<types::Double::Primitive>::Pairs,
+        ListElementKindPairs<types::String::Primitive>::Pairs,
+        ListElementKindPairs<types::Bool::Primitive>::Pairs,
+        OptionalKindPairs<ListElementView, ListElementView>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<
@@ -299,7 +339,13 @@ struct PairRestrictions<Op> {
         // Mixed arithmetic types
         OptionalKindPairs<types::Int64::Primitive, types::UInt64::Primitive>::Pairs,
         OptionalKindPairs<types::Int64::Primitive, types::Double::Primitive>::Pairs,
-        OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs
+        OptionalKindPairs<types::UInt64::Primitive, types::Double::Primitive>::Pairs,
+
+        // Arithmetic over a type-erased cell, read as the number its tag says it holds
+        ListElementKindPairs<types::Int64::Primitive>::Pairs,
+        ListElementKindPairs<types::UInt64::Primitive>::Pairs,
+        ListElementKindPairs<types::Double::Primitive>::Pairs,
+        OptionalKindPairs<ListElementView, ListElementView>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<>;
@@ -316,6 +362,30 @@ struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
         OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
         std::tuple<KindPair<ListView, ListView>>
+    >;
+
+    using AllowedMixed = AllowedMixedList<>;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
+};
+
+template <ColumnOperator Op>
+    requires (Op == OP_IN)
+struct PairRestrictions<Op> {
+    using Allowed = GenerateKindPairList<
+        ListMembershipKindPairs<types::Int64::Primitive>::Pairs,
+        ListMembershipKindPairs<types::UInt64::Primitive>::Pairs,
+        ListMembershipKindPairs<types::Double::Primitive>::Pairs,
+        ListMembershipKindPairs<types::String::Primitive>::Pairs,
+        ListMembershipKindPairs<types::String::OwningPrimitive>::Pairs,
+        ListMembershipKindPairs<types::Bool::Primitive>::Pairs,
+
+        ListMembershipKindPairs<ListElementView>::Pairs,
+
+        std::tuple<KindPair<PropertyNull, ListView>>
     >;
 
     using AllowedMixed = AllowedMixedList<>;

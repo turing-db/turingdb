@@ -23,6 +23,10 @@ db::Column* TuringSinkColumnContainer::operator[](size_t index) {
     return _dataframe->cols()[index]->getColumn();
 }
 
+void TuringSinkColumnContainer::setRowCount(size_t rowCount) {
+    _dataframe->setDeclaredRowCount(rowCount);
+}
+
 void TuringSinkColumnContainer::addColumn(db::Column* column, std::string_view name) {
     db::NamedColumn* namedColumn = db::NamedColumn::create(_dataframeManager, column, _dataframeManager->allocTag());
 

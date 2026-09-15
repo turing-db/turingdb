@@ -151,6 +151,34 @@ public:
     using ResultColumnType = ColumnOptMask;
 };
 
+template <typename Op, typename T, typename U>
+    requires NullableResultPredicate<Op, T, U>
+class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnVector<U>> {
+public:
+    using ResultColumnType = ColumnOptMask;
+};
+
+template <typename Op, typename T, typename U>
+    requires NullableResultPredicate<Op, T, U>
+class ColumnCombinationImpl<Op, ColumnVector<T>, ColumnConst<U>> {
+public:
+    using ResultColumnType = ColumnOptMask;
+};
+
+template <typename Op, typename T, typename U>
+    requires NullableResultPredicate<Op, T, U>
+class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnVector<U>> {
+public:
+    using ResultColumnType = ColumnOptMask;
+};
+
+template <typename Op, typename T, typename U>
+    requires NullableResultPredicate<Op, T, U>
+class ColumnCombinationImpl<Op, ColumnConst<T>, ColumnConst<U>> {
+public:
+    using ResultColumnType = ColumnConst<std::optional<CustomBool>>;
+};
+
 /*
  * @brief General operators (potentially optional)
  * @detail Operators whose result container/internal type is determined by their operands.

@@ -173,6 +173,11 @@ public:
     // the chunk at function scope.
     static void runCountResult(NLExecutionContext* context, NLFunctionData* data);
 
+    // The whole of a COUNT the graph already knows the answer to: read one node count
+    // per listed label conjunction and write their product into the output chunk's single
+    // unsigned i64 row. Walks no row, so it runs once at function scope.
+    static void runCountScanRows(NLExecutionContext* context, NLFunctionData* data);
+
     // Re-initialize an aggregate accumulator; runs each time its block runs.
     static void runAggregateReset(NLExecutionContext* context, NLFunctionData* data);
 
@@ -259,6 +264,11 @@ public:
     static NLBinaryFn selectBinary(const Column* lhs, const Column* rhs,
                                    LocalMemory* memory, Column*& result);
 
+    // Index a list whose cells all hold @param valueType, reading each one out as that
+    // type. selectBinary<OP_INDEX> is the sibling for a list naming no one type.
+    static NLBinaryFn selectValueListIndex(ValueType valueType, const Column* lhs, const Column* rhs,
+                                           LocalMemory* memory, Column*& result);
+
     static void runUnary(NLExecutionContext* context, NLFunctionData* data);
 
     static NLUnaryFn selectNot(const Column* operand, LocalMemory* memory, Column*& result);
@@ -330,6 +340,17 @@ public:
     static NLCountFunction selectOptOwnedStringCount();
     static NLBroadcastFunction selectOptOwnedStringBlockRepeat();
     static NLBroadcastFunction selectOptOwnedStringTile();
+
+    // The owned-string members of the reduction families. min and max order the strings
+    // labels() and type() answer as they order a property's, so they fold into a
+    // std::string accumulator; no other reduction reads a string, and the lowering
+    // rejects those before the selection reaches here.
+    static NLAggregateResetFunction selectOptOwnedStringAggregateReset();
+    static NLAggregateUpdateFunction selectOptOwnedStringAggregateUpdate(AggregateKind kind);
+    static NLAggregateResultFunction selectOptOwnedStringAggregateResult();
+    static NLGroupAggregateGrowFunction selectOptOwnedStringGroupAggregateGrow();
+    static NLGroupAggregateFoldFunction selectOptOwnedStringGroupAggregateFold(GroupAggregateKind kind);
+    static NLGroupAggregateEmitFunction selectOptOwnedStringGroupAggregateEmit();
 
     // The mask members of the handler families, for a !storage.bool chunk: a ColumnMask -
     // what a label test, an edge type test and a merge produce - where an i1 value chunk
@@ -425,8 +446,11 @@ public:
     static NLBroadcastFunction selectOptTileFunction(ValueType valueType);
 
     // The fill that lays a constant column's single value out over a step's rows,
-    // for a nullable value chunk of this value type (nl.broadcast_constant).
-    static NLBroadcastConstantFunction selectConstantBroadcast(ValueType valueType);
+    // for a nullable value chunk of this value type (nl.broadcast_constant). A chunk
+    // standing for every row is a ColumnConst where a literal bound it and a single-row
+    // column where a kernel computed it over literals, so the value column picks the fill
+    // beside its value type.
+    static NLBroadcastConstantFunction selectConstantBroadcast(ValueType valueType, const Column* value);
 
     // The broadcast of the null literal, whose rows are the absent value rather than
     // copies of a value the constant holds
@@ -434,6 +458,10 @@ public:
 
     // The list sibling: a list constant lays its one view out over the step's rows
     static NLBroadcastConstantFunction selectConstantListBroadcast();
+
+    // The tagged-cell sibling: a cell that may be absent carries its own type, so there is
+    // no value type to dispatch on
+    static NLBroadcastConstantFunction selectOptListElementBroadcast(const Column* value);
 
     // Block-repeat (outer column) and tile (inner column) for a list_element chunk: a
     // tagged scalar carries its own type, so there is no value type to dispatch on.
@@ -589,6 +617,7 @@ public:
     // row spreads each of them to the single row it is.
     static NLUnwindElementCountFunction selectListUnwindElementCount();
     static NLUnwindElementCountFunction selectTaggedUnwindElementCount();
+    static NLUnwindElementCountFunction selectOptTaggedUnwindElementCount();
     static NLUnwindElementCountFunction selectOptUnwindElementCount(ValueType valueType);
     static NLUnwindElementCountFunction selectValueUnwindElementCount();
 
@@ -602,6 +631,7 @@ public:
     static NLUnwindElementEmitFunction selectListUnwindEdgeEmit();
     static NLUnwindElementEmitFunction selectListUnwindListEmit();
     static NLUnwindElementEmitFunction selectTaggedUnwindElementEmit();
+    static NLUnwindElementEmitFunction selectOptTaggedUnwindElementEmit();
     static NLCollectListEmitFunction selectCollectListEmit(ValueType valueType);
 
     // The reads an nl.make_list takes one element out of a column with: a nullable value

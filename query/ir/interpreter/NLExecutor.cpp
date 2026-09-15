@@ -66,6 +66,8 @@
 
 #include "NLProgram.h"
 #include "NLMergeExecutor.h"
+#include "NLPendingEdges.h"
+#include "NLPendingNodes.h"
 #include "NLWriteProperties.h"
 #include "NLWrittenValues.h"
 #include "NLMergeWorkingSet.h"
@@ -251,11 +253,9 @@ void unwindListValidIDEmit(const Column* source,
     }
 }
 
-// The rows one cell of a type-erased column unwinds into: a tagged list its elements, a
-// tagged null none, and any other tagged scalar the single row it is.
-size_t unwindTaggedElementCount(const Column* source, size_t row) {
-    const auto* elements = static_cast<const ColumnVector<ListElementView>*>(source);
-    const ListElementView element = (*elements)[row];
+// The rows one tagged cell unwinds into: a tagged list its elements, a tagged null none,
+// and any other tagged scalar the single row it is.
+size_t taggedCellRowCount(const ListElementView element) {
     const ListBufferTypeTag tag = element.getTag();
 
     if (tag == ListBufferTypeTag::ListView) {
@@ -263,6 +263,35 @@ size_t unwindTaggedElementCount(const Column* source, size_t row) {
     }
 
     return tag == ListBufferTypeTag::Null ? 0 : 1;
+}
+
+// The element one tagged cell gives up at @param position: that of the list it holds, or
+// the cell itself where it holds anything else.
+ListElementView taggedCellElement(const ListElementView element, size_t position) {
+    if (element.getTag() != ListBufferTypeTag::ListView) {
+        return element;
+    }
+
+    return element.getAs<ListView>().elements()[position];
+}
+
+size_t unwindTaggedElementCount(const Column* source, size_t row) {
+    const auto* elements = static_cast<const ColumnVector<ListElementView>*>(source);
+
+    return taggedCellRowCount((*elements)[row]);
+}
+
+// The nullable sibling: an absent cell contributes no row, as the tagged null it stands
+// for does.
+size_t unwindOptTaggedElementCount(const Column* source, size_t row) {
+    const auto* elements = static_cast<const ColumnOptVector<ListElementView>*>(source);
+    const std::optional<ListElementView>& element = (*elements)[row];
+
+    if (!element.has_value()) {
+        return 0;
+    }
+
+    return taggedCellRowCount(*element);
 }
 
 // Fill the element chunk from a type-erased column: a cell holding a nested list gives up
@@ -279,11 +308,26 @@ void unwindTaggedElementEmit(const Column* source,
     outputRaw.resize(rowsRaw.size());
 
     for (size_t index = 0; index < rowsRaw.size(); index++) {
-        const ListElementView element = elements[rowsRaw[index]];
+        outputRaw[index] = taggedCellElement(elements[rowsRaw[index]], positionsRaw[index]);
+    }
+}
 
-        outputRaw[index] = element.getTag() == ListBufferTypeTag::ListView
-                               ? element.getAs<ListView>().elements()[positionsRaw[index]]
-                               : element;
+// The nullable sibling: only a present cell is drained, so every row the step covers holds
+// one and the element column carries no absent value.
+void unwindOptTaggedElementEmit(const Column* source,
+                                const ColumnVector<size_t>* rows,
+                                const ColumnVector<size_t>* positions,
+                                Column* output) {
+    const std::vector<std::optional<ListElementView>>& elements =
+        static_cast<const ColumnOptVector<ListElementView>*>(source)->getRaw();
+    const std::vector<size_t>& rowsRaw = rows->getRaw();
+    const std::vector<size_t>& positionsRaw = positions->getRaw();
+
+    std::vector<ListElementView>& outputRaw = static_cast<ColumnVector<ListElementView>*>(output)->getRaw();
+    outputRaw.resize(rowsRaw.size());
+
+    for (size_t index = 0; index < rowsRaw.size(); index++) {
+        outputRaw[index] = taggedCellElement(*elements[rowsRaw[index]], positionsRaw[index]);
     }
 }
 
@@ -640,6 +684,16 @@ struct BinaryOpTraits<OP_CONTAINS> {
 };
 
 template <>
+struct BinaryOpTraits<OP_IN> {
+    using Functor = In;
+
+    template <typename ResCol, typename LhsCol, typename RhsCol>
+    static void exec(ResCol* result, const LhsCol* lhs, const RhsCol* rhs) {
+        BinaryPredicates::exec<Functor>(result, lhs, rhs);
+    }
+};
+
+template <>
 struct BinaryOpTraits<OP_FUNC_COSINE_SIMILARITY> {
     using Functor = CosineSimilarityFunction;
 
@@ -697,6 +751,29 @@ struct BinaryOpSelector {
 
         _result = _memory->alloc<ResColType>();
         _fn = &applyBinaryOp<Op, ResColType, LhsCol, RhsCol>;
+    }
+};
+
+template <typename Primitive, typename ResCol, typename LhsCol, typename RhsCol>
+void applyValueListIndex(Column* result, const Column* lhs, const Column* rhs, LocalMemory* memory) {
+    BinaryOperators::exec<ValueListIndex<Primitive>>(static_cast<ResCol*>(result),
+                                                     static_cast<const LhsCol*>(lhs),
+                                                     static_cast<const RhsCol*>(rhs));
+}
+
+template <typename Primitive>
+struct ValueListIndexSelector {
+    LocalMemory* _memory {nullptr};
+    Column* _result {nullptr};
+    NLBinaryFn _fn {nullptr};
+
+    template <typename LhsCol, typename RhsCol>
+    void operator()(const LhsCol*, const RhsCol*) {
+        using ResCol = ColumnCombination<ValueListIndex<Primitive>, LhsCol, RhsCol>;
+        using ResColType = ResCol::ResultColumnType;
+
+        _result = _memory->alloc<ResColType>();
+        _fn = &applyValueListIndex<Primitive, ResColType, LhsCol, RhsCol>;
     }
 };
 
@@ -912,6 +989,32 @@ void broadcastConstantColumn(const Column* value, size_t rowCount, Column* outpu
     outputRaw.resize(rowCount);
 
     std::fill_n(outputRaw.begin(), rowCount, std::optional<Primitive>(typedValue->getRaw()));
+}
+
+template <typename Primitive>
+void broadcastNullableConstantColumn(const Column* value, size_t rowCount, Column* output) {
+    const auto* typedValue = static_cast<const ColumnConst<std::optional<Primitive>>*>(value);
+    ColumnOptVector<Primitive>* typedOutput = static_cast<ColumnOptVector<Primitive>*>(output);
+
+    auto& outputRaw = typedOutput->getRaw();
+    outputRaw.resize(rowCount);
+
+    std::fill_n(outputRaw.begin(), rowCount, typedValue->getRaw());
+}
+
+// A constant chunk is not always a ColumnConst: a kernel computing over literals writes
+// its one row into an ordinary column. That row is the one every row of the step reads.
+template <typename Primitive>
+void broadcastSingleRowColumn(const Column* value, size_t rowCount, Column* output) {
+    const auto& valueRaw = static_cast<const ColumnOptVector<Primitive>*>(value)->getRaw();
+    ColumnOptVector<Primitive>* typedOutput = static_cast<ColumnOptVector<Primitive>*>(output);
+
+    if (valueRaw.empty()) {
+        typedOutput->getRaw().assign(rowCount, std::optional<Primitive> {});
+        return;
+    }
+
+    typedOutput->getRaw().assign(rowCount, valueRaw.front());
 }
 
 // The null literal laid out over every row of the step: it holds no value to repeat, so
@@ -3032,11 +3135,52 @@ NLGroupAggregateFoldFunction selectGroupMinMaxFold(ValueType inputType) {
     return nullptr;
 }
 
+// Execute a scan loop: the rows the graph holds, then the ones this change has written,
+// which the pending step reads once the committed one is drained. @param rows is the chunk
+// a step fills that measures it - the node chunk of a node scan, the source chunk of an
+// edge scan.
+template <typename ChunkWriterType, typename PendingScanType>
+void runScanLoopSteps(NLExecutionContext* context,
+                      ChunkWriterType* chunkWriter,
+                      PendingScanType* pendingScan,
+                      const ColumnNodeIDs* rows,
+                      const NLStmtContainer* loopBody,
+                      const NLLimitState* limit) {
+    const auto hasStep = [&]() {
+        return chunkWriter->isValid() || pendingScan->isValid();
+    };
+
+    const auto runIteration = [&]() {
+        if (chunkWriter->isValid()) {
+            chunkWriter->fill(context->getChunkSize());
+        } else {
+            pendingScan->fill(context->getChunkSize());
+        }
+
+        if (rows->empty()) {
+            return;
+        }
+
+        runBody(context, loopBody);
+    };
+
+    if (limit) {
+        while (hasStep() && limit->getRemaining() > 0) {
+            runIteration();
+        }
+    } else {
+        while (hasStep()) {
+            runIteration();
+        }
+    }
+}
+
 // Execute a get_out_edges/get_in_edges loop
 template <typename ChunkWriterType>
 void runEdgeLoopSteps(NLExecutionContext* context,
                       NLEdgeLoopData* loopData,
                       ChunkWriterType* chunkWriter,
+                      NLPendingEdgeHop* pendingEdges,
                       ColumnNodeIDs* gatheredNodeIDs) {
     const NLStmtContainer* loopBody = loopData->getStmts();
 
@@ -3046,8 +3190,16 @@ void runEdgeLoopSteps(NLExecutionContext* context,
     // the null check is hoisted out of the per-iteration condition.
     const NLLimitState* limit = loopData->getLimit();
 
+    const auto hasStep = [&]() {
+        return chunkWriter->isValid() || pendingEdges->isValid();
+    };
+
     const auto runIteration = [&]() {
-        chunkWriter->fill(context->getChunkSize());
+        if (chunkWriter->isValid()) {
+            chunkWriter->fill(context->getChunkSize());
+        } else {
+            pendingEdges->fill(context->getChunkSize());
+        }
 
         const ColumnVector<size_t>* indices = loopData->getIndices();
         if (indices->empty()) {
@@ -3069,25 +3221,13 @@ void runEdgeLoopSteps(NLExecutionContext* context,
     };
 
     if (limit) {
-        while (chunkWriter->isValid() && limit->getRemaining() > 0) {
+        while (hasStep() && limit->getRemaining() > 0) {
             runIteration();
         }
     } else {
-        while (chunkWriter->isValid()) {
+        while (hasStep()) {
             runIteration();
         }
-    }
-}
-
-CommitWriteBuffer::ExistingOrPendingNode resolveNode(const ColumnNodeIDs* column,
-                                                     size_t row,
-                                                     bool isPending,
-                                                     size_t firstPendingNodeID) {
-    const NodeID nodeID = (*column)[row];
-    if (isPending) {
-        return CommitWriteBuffer::PendingNodeOffset(nodeID.getValue() - firstPendingNodeID);
-    } else {
-        return nodeID;
     }
 }
 
@@ -3099,6 +3239,48 @@ bool isPendingRow(const ColumnMask* pending, bool isPendingColumn, size_t row) {
     }
 
     return isPendingColumn;
+}
+
+// Which rows of an ID column name an entity this change has written and not committed. A
+// column a write bound says so through the mask or the flag codegen put on the op; a hop
+// produces its own rows, and the ID is what tells the two spaces apart there - this
+// change's own start where the graph's end.
+class PendingRows {
+public:
+    PendingRows(const ColumnMask* pending, bool isPendingColumn, size_t committedCount, size_t pendingCount)
+        : _pending(pending),
+        _isPendingColumn(isPendingColumn),
+        _committedCount(committedCount),
+        _pendingCount(pendingCount)
+    {
+    }
+
+    bool has(size_t row, uint64_t id) const {
+        const bool marked = isPendingRow(_pending, _isPendingColumn, row);
+        const bool namesWritten = id >= _committedCount && id - _committedCount < _pendingCount;
+
+        return marked || namesWritten;
+    }
+
+private:
+    const ColumnMask* _pending {nullptr};
+    bool _isPendingColumn {false};
+    size_t _committedCount {0};
+    size_t _pendingCount {0};
+};
+
+// The write buffer knows a node this change wrote by its offset, so a row naming one is
+// resolved back to it; every other row names a node the graph holds.
+CommitWriteBuffer::ExistingOrPendingNode resolveNode(const ColumnNodeIDs* column,
+                                                     size_t row,
+                                                     const PendingRows& pendingRows,
+                                                     size_t firstPendingNodeID) {
+    const NodeID nodeID = (*column)[row];
+    if (pendingRows.has(row, nodeID.getValue())) {
+        return CommitWriteBuffer::PendingNodeOffset(nodeID.getValue() - firstPendingNodeID);
+    } else {
+        return nodeID;
+    }
 }
 
 // The write buffer builds one column per property of a pending entity, so a second entry
@@ -3151,6 +3333,18 @@ std::optional<typename T::Primitive> readWrittenValue(NLWrittenValues& written,
     };
 
     return std::visit(convert, retainIfBorrowed<T>(written, value));
+}
+
+// The searched value as the write buffer holds one, so a scan can compare it against what
+// a pending node was written with. A string the scan borrows is copied: the buffer's own
+// values are owning.
+template <typename T>
+CommitWriteBuffer::SupportedTypeVariant pendingValueOf(typename T::Primitive value) {
+    if constexpr (std::is_same_v<T, types::String>) {
+        return std::string(value);
+    } else {
+        return value;
+    }
 }
 
 template <typename T>
@@ -3589,11 +3783,14 @@ NLExecutor::~NLExecutor() {
 
 void NLExecutor::run() {
     NLOutputSink* const sink = _ctxt.getSink();
-    const std::span<const std::string_view> columnNames = _prog->columnNames();
+    if (sink) {
+        NLOutputData* const outputData = _prog->getOutputData();
+        std::span<const Column* const> outputs;
+        if (outputData) {
+            outputs = outputData->outputs();
+        }
 
-    const bool hasNamesToPublish = sink && !columnNames.empty();
-    if (hasNamesToPublish) {
-        sink->setColumnNames(columnNames);
+        sink->declareOutput(_prog->columnNames(), outputs);
     }
 
     runBody(&_ctxt, _prog->getStmts());
@@ -3664,15 +3861,17 @@ void NLExecutor::runCreateEdge(NLExecutionContext* context, NLFunctionData* data
 
     const GraphView* view = context->getView();
     const size_t firstPendingNodeID = committedNodeCount(view);
+    const size_t numPendingNodes = writeBuffer->numPendingNodes();
+
+    const PendingRows srcRows(srcPending, srcIsPending, firstPendingNodeID, numPendingNodes);
+    const PendingRows tgtRows(tgtPending, tgtIsPending, firstPendingNodeID, numPendingNodes);
 
     // Must extract this value before adding in the loop
     const size_t numPendingEdges = writeBuffer->numPendingEdges();
 
     for (size_t row = 0; row < rowCount; row++) {
-        const CommitWriteBuffer::ExistingOrPendingNode srcNode =
-            resolveNode(src, row, isPendingRow(srcPending, srcIsPending, row), firstPendingNodeID);
-        const CommitWriteBuffer::ExistingOrPendingNode tgtNode =
-            resolveNode(tgt, row, isPendingRow(tgtPending, tgtIsPending, row), firstPendingNodeID);
+        const CommitWriteBuffer::ExistingOrPendingNode srcNode = resolveNode(src, row, srcRows, firstPendingNodeID);
+        const CommitWriteBuffer::ExistingOrPendingNode tgtNode = resolveNode(tgt, row, tgtRows, firstPendingNodeID);
 
         CommitWriteBuffer::PendingEdge& edge = writeBuffer->newPendingEdge(srcNode, tgtNode);
         edge.edgeType = edgeTypeID;
@@ -3711,9 +3910,11 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
     extractColumnProperties(nodeCol, rowCount, propID, propsBuffer);
 
     const ColumnMask* pending = setData->getPending();
+    const bool allPending = setData->isAllPending();
     const ColumnMask* rows = setData->getRows();
 
     const size_t firstPendingNodeID = committedNodeCount(context->getView());
+    const PendingRows pendingRows(pending, allPending, firstPendingNodeID, writeBuffer->numPendingNodes());
 
     // A node an OPTIONAL MATCH did not match is an invalid ID, which Cypher writes nothing
     // for: staging it would have the commit look the ID up among the nodes this change
@@ -3724,7 +3925,7 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
             continue;
         }
 
-        if (pending && (*pending)[row]) {
+        if (pendingRows.has(row, raw[row].getValue())) {
             CommitWriteBuffer::PendingNode& node =
                 writeBuffer->getPendingNode(raw[row].getValue() - firstPendingNodeID);
             setPendingProperty(node.properties, propsBuffer[row]);
@@ -3748,9 +3949,11 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
     extractColumnProperties(edgeCol, rowCount, propID, propsBuffer);
 
     const ColumnMask* pending = setData->getPending();
+    const bool allPending = setData->isAllPending();
     const ColumnMask* rows = setData->getRows();
 
     const size_t firstPendingEdgeID = committedEdgeCount(context->getView());
+    const PendingRows pendingRows(pending, allPending, firstPendingEdgeID, writeBuffer->numPendingEdges());
 
     const auto& raw = edges->getRaw();
     for (size_t row = 0; row < rowCount; row++) {
@@ -3758,7 +3961,7 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
             continue;
         }
 
-        if (pending && (*pending)[row]) {
+        if (pendingRows.has(row, raw[row].getValue())) {
             CommitWriteBuffer::PendingEdge& edge =
                 writeBuffer->getPendingEdge(raw[row].getValue() - firstPendingEdgeID);
             setPendingProperty(edge.properties, propsBuffer[row]);
@@ -3783,6 +3986,7 @@ void NLExecutor::runDeleteNode(NLExecutionContext* context, NLFunctionData* data
     committed->clear();
 
     const size_t firstPendingNodeID = committedNodeCount(view);
+    const PendingRows pendingRows(pending, allPending, firstPendingNodeID, writeBuffer->numPendingNodes());
 
     const auto& raw = nodes->getRaw();
 
@@ -3794,9 +3998,8 @@ void NLExecutor::runDeleteNode(NLExecutionContext* context, NLFunctionData* data
             continue;
         }
 
-        const bool isPending = isPendingRow(pending, allPending, row);
         const CommitWriteBuffer::ExistingOrPendingNode node =
-            resolveNode(nodes, row, isPending, firstPendingNodeID);
+            resolveNode(nodes, row, pendingRows, firstPendingNodeID);
 
         // A relationship this query wrote counts as much as one the graph holds, whether
         // it hangs off a node the query wrote or off one already committed
@@ -3804,7 +4007,7 @@ void NLExecutor::runDeleteNode(NLExecutionContext* context, NLFunctionData* data
             throw IRException("Cannot delete a node with relationships; use DETACH DELETE");
         }
 
-        if (isPending) {
+        if (std::holds_alternative<CommitWriteBuffer::PendingNodeOffset>(node)) {
             writeBuffer->addDeletedPendingNode(std::get<CommitWriteBuffer::PendingNodeOffset>(node));
         } else {
             committed->push_back(raw[row]);
@@ -3838,6 +4041,7 @@ void NLExecutor::runDeleteEdge(NLExecutionContext* context, NLFunctionData* data
     committed->clear();
 
     const size_t firstPendingEdgeID = committedEdgeCount(context->getView());
+    const PendingRows pendingRows(pending, allPending, firstPendingEdgeID, writeBuffer->numPendingEdges());
 
     const auto& raw = edges->getRaw();
     for (size_t row = 0; row < raw.size(); row++) {
@@ -3845,7 +4049,7 @@ void NLExecutor::runDeleteEdge(NLExecutionContext* context, NLFunctionData* data
             continue;
         }
 
-        if (isPendingRow(pending, allPending, row)) {
+        if (pendingRows.has(row, raw[row].getValue())) {
             writeBuffer->addDeletedPendingEdge(raw[row].getValue() - firstPendingEdgeID);
         } else {
             committed->push_back(raw[row]);
@@ -3859,7 +4063,6 @@ void NLExecutor::runScanNodesLoop(NLExecutionContext* context, NLFunctionData* d
     NLScanLoopData* loopData = static_cast<NLScanLoopData*>(data);
     const NLStmtContainer* loopBody = loopData->getStmts();
     ColumnNodeIDs* nodeIDs = loopData->getNodeIDs();
-    const size_t chunkSize = context->getChunkSize();
 
     // A null limit leaves the loop unbounded; otherwise it stops once the budget
     // is spent. nl.limit_update inside runBody mutates remaining, so the next
@@ -3872,25 +4075,9 @@ void NLExecutor::runScanNodesLoop(NLExecutionContext* context, NLFunctionData* d
     ScanNodesChunkWriter chunkWriter(*context->getView());
     chunkWriter.setNodeIDs(nodeIDs);
 
-    const auto runIteration = [&]() {
-        chunkWriter.fill(chunkSize);
+    NLPendingNodeScan pendingNodes(context, nodeIDs);
 
-        if (nodeIDs->empty()) {
-            return;
-        }
-
-        runBody(context, loopBody);
-    };
-
-    if (limit) {
-        while (chunkWriter.isValid() && limit->getRemaining() > 0) {
-            runIteration();
-        }
-    } else {
-        while (chunkWriter.isValid()) {
-            runIteration();
-        }
-    }
+    runScanLoopSteps(context, &chunkWriter, &pendingNodes, nodeIDs, loopBody, limit);
 }
 
 void NLExecutor::runScanNodesByLabelLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -3904,7 +4091,6 @@ void NLExecutor::runScanNodesByLabelLoop(NLExecutionContext* context, NLFunction
 
     const NLStmtContainer* loopBody = loopData->getStmts();
     ColumnNodeIDs* nodeIDs = loopData->getNodeIDs();
-    const size_t chunkSize = context->getChunkSize();
 
     // A null limit leaves the loop unbounded, exactly as in runScanNodesLoop.
     const NLLimitState* limit = loopData->getLimit();
@@ -3917,32 +4103,16 @@ void NLExecutor::runScanNodesByLabelLoop(NLExecutionContext* context, NLFunction
     ScanNodesByLabelChunkWriter chunkWriter(view, labelset);
     chunkWriter.setNodeIDs(nodeIDs);
 
-    const auto runIteration = [&]() {
-        chunkWriter.fill(chunkSize);
+    NLPendingNodeScan pendingNodes(context, nodeIDs);
+    pendingNodes.setLabelSet(loopData->getLabelSet());
 
-        if (nodeIDs->empty()) {
-            return;
-        }
-
-        runBody(context, loopBody);
-    };
-
-    if (limit) {
-        while (chunkWriter.isValid() && limit->getRemaining() > 0) {
-            runIteration();
-        }
-    } else {
-        while (chunkWriter.isValid()) {
-            runIteration();
-        }
-    }
+    runScanLoopSteps(context, &chunkWriter, &pendingNodes, nodeIDs, loopBody, limit);
 }
 
 template <SupportedType T>
 void NLExecutor::runScanNodesByPropertyValueLoopAs(NLExecutionContext* context, NLScanByPropertyValueLoopData* loopData) {
     const NLStmtContainer* loopBody = loopData->getStmts();
     ColumnNodeIDs* nodeIDs = loopData->getNodeIDs();
-    const size_t chunkSize = context->getChunkSize();
     const NLLimitState* limit = loopData->getLimit();
     const GraphView& view = *context->getView();
 
@@ -3955,25 +4125,14 @@ void NLExecutor::runScanNodesByPropertyValueLoopAs(NLExecutionContext* context, 
     ScanNodesByPropertyValueChunkWriter<T> chunkWriter(view, loopData->getPropertyTypeID(), value, labelset);
     chunkWriter.setNodeIDs(nodeIDs);
 
-    const auto runIteration = [&]() {
-        chunkWriter.fill(chunkSize);
+    NLPendingNodeScan pendingNodes(context, nodeIDs);
+    pendingNodes.setProperty(loopData->getPropertyTypeID(), pendingValueOf<T>(value));
 
-        if (nodeIDs->empty()) {
-            return;
-        }
-
-        runBody(context, loopBody);
-    };
-
-    if (limit) {
-        while (chunkWriter.isValid() && limit->getRemaining() > 0) {
-            runIteration();
-        }
-    } else {
-        while (chunkWriter.isValid()) {
-            runIteration();
-        }
+    if (loopData->isByLabel()) {
+        pendingNodes.setLabelSet(loopData->getLabelSet());
     }
+
+    runScanLoopSteps(context, &chunkWriter, &pendingNodes, nodeIDs, loopBody, limit);
 }
 
 void NLExecutor::runScanNodesByPropertyValueLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -4368,7 +4527,6 @@ void NLExecutor::runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* d
     NLScanEdgesLoopData* loopData = static_cast<NLScanEdgesLoopData*>(data);
     const NLStmtContainer* loopBody = loopData->getStmts();
     ColumnNodeIDs* sources = loopData->getSources();
-    const size_t chunkSize = context->getChunkSize();
 
     // A null limit leaves the loop unbounded; otherwise it stops once the budget
     // is spent, exactly as in runScanNodesLoop.
@@ -4380,27 +4538,10 @@ void NLExecutor::runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* d
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setTgtIDs(loopData->getTargets());
 
-    const auto runIteration = [&]() {
-        chunkWriter.fill(chunkSize);
+    NLPendingEdgeScan pendingEdges(context, loopData);
 
-        // The four columns are row-aligned, so the source column measures the
-        // step; an empty fill means the scan is drained and there is nothing to emit.
-        if (sources->empty()) {
-            return;
-        }
-
-        runBody(context, loopBody);
-    };
-
-    if (limit) {
-        while (chunkWriter.isValid() && limit->getRemaining() > 0) {
-            runIteration();
-        }
-    } else {
-        while (chunkWriter.isValid()) {
-            runIteration();
-        }
-    }
+    // The four columns are row-aligned, so the source column measures the step.
+    runScanLoopSteps(context, &chunkWriter, &pendingEdges, sources, loopBody, limit);
 }
 
 void NLExecutor::runScanEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -4413,7 +4554,6 @@ void NLExecutor::runScanEdgesByTypeLoop(NLExecutionContext* context, NLFunctionD
 
     const NLStmtContainer* loopBody = loopData->getStmts();
     ColumnNodeIDs* sources = loopData->getSources();
-    const size_t chunkSize = context->getChunkSize();
 
     const NLLimitState* limit = loopData->getLimit();
 
@@ -4423,27 +4563,10 @@ void NLExecutor::runScanEdgesByTypeLoop(NLExecutionContext* context, NLFunctionD
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setTgtIDs(loopData->getTargets());
 
-    // A fill stops only once it has a full chunk of matches or the scan is drained,
-    // so an empty step means drained - the same measure runScanEdgesLoop uses.
-    const auto runIteration = [&]() {
-        chunkWriter.fill(chunkSize);
+    NLPendingEdgeScan pendingEdges(context, loopData);
+    pendingEdges.setEdgeType(loopData->getEdgeType());
 
-        if (sources->empty()) {
-            return;
-        }
-
-        runBody(context, loopBody);
-    };
-
-    if (limit) {
-        while (chunkWriter.isValid() && limit->getRemaining() > 0) {
-            runIteration();
-        }
-    } else {
-        while (chunkWriter.isValid()) {
-            runIteration();
-        }
-    }
+    runScanLoopSteps(context, &chunkWriter, &pendingEdges, sources, loopBody, limit);
 }
 
 void NLExecutor::runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -4460,7 +4583,9 @@ void NLExecutor::runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData*
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setTgtIDs(loopData->getTargets());
 
-    runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getSources());
+    NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::Out, loopData->getTargets());
+
+    runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getSources());
 }
 
 void NLExecutor::runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -4477,7 +4602,9 @@ void NLExecutor::runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* 
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setSrcIDs(loopData->getSources());
 
-    runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getTargets());
+    NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::In, loopData->getSources());
+
+    runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getTargets());
 }
 
 void NLExecutor::runGetEdgesLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -4494,7 +4621,9 @@ void NLExecutor::runGetEdgesLoop(NLExecutionContext* context, NLFunctionData* da
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setOtherIDs(loopData->getTargets());
 
-    runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getSources());
+    NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::Either, loopData->getTargets());
+
+    runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getSources());
 }
 
 void NLExecutor::runGetOutEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -4513,7 +4642,10 @@ void NLExecutor::runGetOutEdgesByTypeLoop(NLExecutionContext* context, NLFunctio
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setTgtIDs(loopData->getTargets());
 
-    runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getSources());
+    NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::Out, loopData->getTargets());
+    pendingEdges.setEdgeType(loopData->getEdgeType());
+
+    runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getSources());
 }
 
 void NLExecutor::runGetInEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -4530,7 +4662,10 @@ void NLExecutor::runGetInEdgesByTypeLoop(NLExecutionContext* context, NLFunction
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setSrcIDs(loopData->getSources());
 
-    runEdgeLoopSteps(context, loopData, &chunkWriter, loopData->getTargets());
+    NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::In, loopData->getSources());
+    pendingEdges.setEdgeType(loopData->getEdgeType());
+
+    runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getTargets());
 }
 
 void NLExecutor::runCrossProductLoop(NLExecutionContext* context, NLFunctionData* data) {
@@ -4935,6 +5070,31 @@ NLBinaryFn NLExecutor::selectBinary(const Column* lhs,
 
     result = selector._result;
     return selector._fn;
+}
+
+NLBinaryFn NLExecutor::selectValueListIndex(ValueType valueType,
+                                            const Column* lhs,
+                                            const Column* rhs,
+                                            LocalMemory* memory,
+                                            Column*& result) {
+    using Pairs = PairRestrictions<OP_INDEX>;
+
+    NLBinaryFn selected = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        using Selector = ValueListIndexSelector<typename T::Primitive>;
+
+        Selector selector {._memory = memory};
+        ColumnDoubleDispatcher<typename Pairs::Allowed,
+                               typename Pairs::AllowedMixed,
+                               Selector,
+                               typename Pairs::Excluded>::dispatch(lhs, rhs, selector);
+
+        result = selector._result;
+        selected = selector._fn;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return selected;
 }
 
 void NLExecutor::runUnaryFunction(NLExecutionContext* context, NLFunctionData* data) {
@@ -5393,6 +5553,45 @@ void NLExecutor::runCountResult(NLExecutionContext* context, NLFunctionData* dat
     raw.assign(1, static_cast<uint64_t>(count));
 }
 
+void NLExecutor::runCountScanRows(NLExecutionContext* context, NLFunctionData* data) {
+    const NLCountScanRowsData* scanRows = static_cast<NLCountScanRowsData*>(data);
+
+    ColumnVector<uint64_t>* output = static_cast<ColumnVector<uint64_t>*>(scanRows->getOutput());
+    std::vector<uint64_t>& raw = output->getRaw();
+
+    // A conjunction naming a label, or a property, the schema never had matches no node, so
+    // the scan it stands for contributes no row and the product is empty.
+    if (!scanRows->isMatchable()) {
+        raw.assign(1, 0);
+        return;
+    }
+
+    // Each scan contributes the nodes carrying its labels, and crossed together they make
+    // the product of those counts. An empty conjunction filters nothing, so its scan is
+    // every node of the graph; a named property narrows the one scan it is read from to the
+    // nodes that hold it, which is what count(b.name) tallies over a product.
+    const GraphReader reader(*context->getView());
+    const std::span<const LabelSet> labelSets = scanRows->getLabelSets();
+    const PropertyTypeID propertyTypeID = scanRows->getPropertyTypeID();
+    const size_t propertyScan = scanRows->getPropertyScan();
+
+    size_t rows = 1;
+    for (size_t scanIndex = 0; scanIndex < labelSets.size(); scanIndex++) {
+        const LabelSet& labelset = labelSets[scanIndex];
+        const LabelSetHandle labelsetHandle {labelset};
+
+        if (propertyTypeID.isValid() && scanIndex == propertyScan) {
+            rows *= reader.getNodeCountWithProperty(labelsetHandle, propertyTypeID);
+        } else if (labelset.empty()) {
+            rows *= reader.getNodeCount();
+        } else {
+            rows *= reader.getNodeCountMatchingLabelset(labelsetHandle);
+        }
+    }
+
+    raw.assign(1, static_cast<uint64_t>(rows));
+}
+
 void NLExecutor::runAggregateReset(NLExecutionContext* context, NLFunctionData* data) {
     const NLAggregateResetData* reset = static_cast<NLAggregateResetData*>(data);
     reset->getReset()(reset->getState());
@@ -5765,6 +5964,14 @@ NLUnwindElementEmitFunction NLExecutor::selectTaggedUnwindElementEmit() {
     return &unwindTaggedElementEmit;
 }
 
+NLUnwindElementCountFunction NLExecutor::selectOptTaggedUnwindElementCount() {
+    return &unwindOptTaggedElementCount;
+}
+
+NLUnwindElementEmitFunction NLExecutor::selectOptTaggedUnwindElementEmit() {
+    return &unwindOptTaggedElementEmit;
+}
+
 NLUnwindCollectValueEmitFunction NLExecutor::selectUnwindCollectValueEmit(ValueType valueType) {
     switch (valueType) {
         case ValueType::Int64:
@@ -6105,10 +6312,30 @@ NLBroadcastConstantFunction NLExecutor::selectConstantListBroadcast() {
     return &broadcastConstantListColumn;
 }
 
-NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(ValueType valueType) {
+NLBroadcastConstantFunction NLExecutor::selectOptListElementBroadcast(const Column* value) {
+    const bool isConst = value->getContainerKind() == ContainerKind::code<ColumnConst>();
+
+    if (isConst) {
+        return &broadcastNullableConstantColumn<ListElementView>;
+    }
+
+    return &broadcastSingleRowColumn<ListElementView>;
+}
+
+NLBroadcastConstantFunction NLExecutor::selectConstantBroadcast(ValueType valueType, const Column* value) {
+    const bool isConst = value->getContainerKind() == ContainerKind::code<ColumnConst>();
+
     NLBroadcastConstantFunction fill = nullptr;
     const auto select = [&]<SupportedType T>() {
-        fill = &broadcastConstantColumn<typename T::Primitive>;
+        using Primitive = typename T::Primitive;
+
+        if (!isConst) {
+            fill = &broadcastSingleRowColumn<Primitive>;
+        } else if (value->getInternalKind() == InternalKind::code<std::optional<Primitive>>()) {
+            fill = &broadcastNullableConstantColumn<Primitive>;
+        } else {
+            fill = &broadcastConstantColumn<Primitive>;
+        }
     };
     ValueTypeDispatcher(valueType).execute(select);
 
@@ -6256,6 +6483,45 @@ NLBroadcastFunction NLExecutor::selectOptOwnedStringBlockRepeat() {
 
 NLBroadcastFunction NLExecutor::selectOptOwnedStringTile() {
     return &tileColumn<std::optional<types::String::OwningPrimitive>>;
+}
+
+// The owned-string reductions. Only min and max read a string, and they order the
+// characters the rows own exactly as they order a property's borrowed ones, so each
+// handler is the std::string instantiation of the one a string property takes.
+NLAggregateResetFunction NLExecutor::selectOptOwnedStringAggregateReset() {
+    return &aggregateResetNull<types::String::OwningPrimitive>;
+}
+
+NLAggregateUpdateFunction NLExecutor::selectOptOwnedStringAggregateUpdate(AggregateKind kind) {
+    if (kind == AggregateKind::Min) {
+        return &aggregateUpdateMinMax<types::String::OwningPrimitive, /*IsMax=*/false>;
+    } else if (kind == AggregateKind::Max) {
+        return &aggregateUpdateMinMax<types::String::OwningPrimitive, /*IsMax=*/true>;
+    }
+
+    throw IRException("only min/max reduce a column of strings");
+}
+
+NLAggregateResultFunction NLExecutor::selectOptOwnedStringAggregateResult() {
+    return &aggregateResultCopy<types::String::OwningPrimitive>;
+}
+
+NLGroupAggregateGrowFunction NLExecutor::selectOptOwnedStringGroupAggregateGrow() {
+    return &groupGrowNull<types::String::OwningPrimitive>;
+}
+
+NLGroupAggregateFoldFunction NLExecutor::selectOptOwnedStringGroupAggregateFold(GroupAggregateKind kind) {
+    if (kind == GroupAggregateKind::Min) {
+        return &groupFoldMinMax<types::String::OwningPrimitive, /*IsMax=*/false>;
+    } else if (kind == GroupAggregateKind::Max) {
+        return &groupFoldMinMax<types::String::OwningPrimitive, /*IsMax=*/true>;
+    }
+
+    throw IRException("only min/max reduce a column of strings");
+}
+
+NLGroupAggregateEmitFunction NLExecutor::selectOptOwnedStringGroupAggregateEmit() {
+    return &groupEmitCopy<types::String::OwningPrimitive>;
 }
 
 NLGatherFunction NLExecutor::selectMaskGather() {
@@ -7406,24 +7672,31 @@ void NLExecutor::runPropertyFetch(NLExecutionContext* context, NLFunctionData* d
     // whose entity the change wrote holds a write-buffer offset rather than an ID the
     // graph knows, and a row it merely updated still reads the value from before.
     const ColumnMask* pending = fetchData->getPending();
+    const bool allPending = fetchData->isAllPending();
     CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
 
     if (!writeBuffer) {
-        bioassert(!pending, "a property fetch over written entities requires an active write transaction");
+        bioassert(!pending && !allPending,
+                  "a property fetch over written entities requires an active write transaction");
         return;
     }
 
     NLWrittenValues& written = context->getWrittenValues();
     written.indexUpdates(writeBuffer);
 
-    if (!pending && !written.hasUpdates()) {
+    const bool isNode = std::is_same_v<ID, NodeID>;
+    const size_t committedCount = isNode ? committedNodeCount(&view) : committedEdgeCount(&view);
+    const size_t pendingCount = isNode ? writeBuffer->numPendingNodes() : writeBuffer->numPendingEdges();
+    const PendingRows pendingRows(pending, allPending, committedCount, pendingCount);
+
+    if (!pending && !allPending && !written.hasUpdates() && pendingCount == 0) {
         return;
     }
 
     auto& raw = output->getRaw();
     const auto& inputRaw = inputIDs->getRaw();
     for (size_t row = 0; row < raw.size(); row++) {
-        if (pending && (*pending)[row]) {
+        if (pendingRows.has(row, inputRaw[row].getValue())) {
             raw[row] = readPendingEntityProperty<ID, T>(writeBuffer,
                                                         written,
                                                         &view,
@@ -7466,6 +7739,27 @@ void NLExecutor::runGetNodeLabelSet(NLExecutionContext* context, NLFunctionData*
     GetNodeLabelSetChunkWriter writer(view, input);
     writer.setLabelSetIDs(output);
     writer.fill(input->size());
+
+    // The graph holds no label set for a node this change wrote: the write buffer holds the
+    // handle the CREATE spelled, under the ID the commit will know the set by.
+    CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
+    if (!writeBuffer || writeBuffer->numPendingNodes() == 0) {
+        return;
+    }
+
+    const size_t committedCount = committedNodeCount(&view);
+    const PendingRows pendingRows(nullptr, false, committedCount, writeBuffer->numPendingNodes());
+
+    auto& raw = output->getRaw();
+    const auto& inputRaw = input->getRaw();
+    for (size_t row = 0; row < raw.size(); row++) {
+        const uint64_t nodeID = inputRaw[row].getValue();
+        if (!pendingRows.has(row, nodeID)) {
+            continue;
+        }
+
+        raw[row] = writeBuffer->getPendingNode(nodeID - committedCount).labelsetHandle.getID();
+    }
 }
 
 void NLExecutor::runGetEdgeTypes(NLExecutionContext* context, NLFunctionData* data) {
@@ -7478,6 +7772,27 @@ void NLExecutor::runGetEdgeTypes(NLExecutionContext* context, NLFunctionData* da
     GetEdgeTypesChunkWriter writer(view, input);
     writer.setEdgeTypes(output);
     writer.fill(input->size());
+
+    // The graph holds no type for an edge this change wrote: the write buffer holds the one
+    // the CREATE spelled, under the ID the commit will know the edge by.
+    CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
+    if (!writeBuffer || writeBuffer->numPendingEdges() == 0) {
+        return;
+    }
+
+    const size_t committedCount = committedEdgeCount(&view);
+    const PendingRows pendingRows(nullptr, false, committedCount, writeBuffer->numPendingEdges());
+
+    auto& raw = output->getRaw();
+    const auto& inputRaw = input->getRaw();
+    for (size_t row = 0; row < raw.size(); row++) {
+        const uint64_t edgeID = inputRaw[row].getValue();
+        if (!pendingRows.has(row, edgeID)) {
+            continue;
+        }
+
+        raw[row] = writeBuffer->getPendingEdge(edgeID - committedCount).edgeType;
+    }
 }
 
 void NLExecutor::runCheckLabelConstraint(NLExecutionContext* context, NLFunctionData* data) {
@@ -7530,5 +7845,6 @@ template NLBinaryFn NLExecutor::selectBinary<OP_XOR>(const Column* lhs, const Co
 template NLBinaryFn NLExecutor::selectBinary<OP_STARTS_WITH>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_ENDS_WITH>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_CONTAINS>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
+template NLBinaryFn NLExecutor::selectBinary<OP_IN>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_FUNC_COSINE_SIMILARITY>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);
 template NLBinaryFn NLExecutor::selectBinary<OP_FUNC_EUCLIDEAN_DISTANCE>(const Column* lhs, const Column* rhs, LocalMemory* memory, Column*& result);

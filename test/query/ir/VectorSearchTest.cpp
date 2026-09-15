@@ -42,7 +42,8 @@ using ScoreColumn = ColumnOptVector<types::Double::Primitive>;
 // crossing them with a match, leaves the columns it did not ask for empty.
 class VectorSearchSink : public NLOutputSink {
 public:
-    void setColumnNames(std::span<const std::string_view> names) override {
+    void declareOutput(std::span<const std::string_view> names,
+                       std::span<const Column* const> chunks) override {
         _columnNames.assign(names.begin(), names.end());
     }
 

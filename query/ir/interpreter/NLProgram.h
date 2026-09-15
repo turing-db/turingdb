@@ -789,14 +789,19 @@ public:
 
     // The rows holding a write-buffer offset rather than an ID the graph knows, or null
     // for an input no merge produced. Such a row reads its value out of the write buffer.
+    // A column a create produced is such a row throughout, which is what _allPending says.
     const ColumnMask* getPending() const { return _pending; }
     void setPending(const ColumnMask* pending) { _pending = pending; }
+
+    bool isAllPending() const { return _allPending; }
+    void setAllPending(bool allPending) { _allPending = allPending; }
 
 private:
     const Column* _input {nullptr};
     Column* _output {nullptr};
     const ColumnMask* _pending {nullptr};
     PropertyTypeID _propertyTypeID;
+    bool _allPending {false};
 };
 
 class NLGetNodeLabelSetData : public NLFunctionData {
@@ -1740,6 +1745,46 @@ public:
 private:
     NLCountState* _state {nullptr};
     Column* _output {nullptr};
+};
+
+// nl.count_scan_rows data: the whole of a COUNT that reads the graph's node counts
+// instead of walking rows. Holds one label set per counted scan and the output column
+// to fill with the single product row - the same unsigned i64 count column
+// NLCountResultData fills. The label sets are owned here so the LabelSetHandle the
+// executor builds each run points at storage that outlives it (this data lives for the
+// whole program); the translator resolves them in place through addLabelSet after
+// allocating the data. An invalid property type ID is a tally over the scanned nodes
+// themselves rather than over the ones holding a property; a valid one narrows the scan
+// _propertyScan indexes and leaves the others whole. _matchable is false when a requested
+// label or the property was absent from the schema, leaving the conjunction unsatisfiable,
+// so the product counts 0.
+class NLCountScanRowsData : public NLFunctionData {
+public:
+    NLCountScanRowsData(Column* output)
+        : _output(output)
+    {
+    }
+
+    Column* getOutput() const { return _output; }
+    std::span<const LabelSet> getLabelSets() const { return _labelSets; }
+    PropertyTypeID getPropertyTypeID() const { return _propertyTypeID; }
+    size_t getPropertyScan() const { return _propertyScan; }
+    bool isMatchable() const { return _matchable; }
+
+    void reserveLabelSets(size_t count) { _labelSets.reserve(count); }
+    void addLabelSet(const LabelSet& labelset) { _labelSets.push_back(labelset); }
+    void setProperty(PropertyTypeID propertyTypeID, size_t propertyScan) {
+        _propertyTypeID = propertyTypeID;
+        _propertyScan = propertyScan;
+    }
+    void markUnmatchable() { _matchable = false; }
+
+private:
+    Column* _output {nullptr};
+    std::vector<LabelSet> _labelSets;
+    PropertyTypeID _propertyTypeID;
+    size_t _propertyScan {0};
+    bool _matchable {true};
 };
 
 // The reduction one nl.aggregate applies. The runtime counterpart of the MLIR
@@ -2972,6 +3017,9 @@ public:
     const ColumnMask* getPending() const { return _pending; }
     void setPending(const ColumnMask* pending) { _pending = pending; }
 
+    bool isAllPending() const { return _allPending; }
+    void setAllPending(bool allPending) { _allPending = allPending; }
+
     // The rows the write touches, or null for a write that touches every one: Cypher's
     // ON CREATE hands over the merge's created mask and ON MATCH its negation.
     const ColumnMask* getRows() const { return _rows; }
@@ -2983,6 +3031,7 @@ private:
     const ColumnMask* _pending {nullptr};
     const ColumnMask* _rows {nullptr};
     PropertyTypeID _propertyTypeID;
+    bool _allPending {false};
 };
 
 class NLSetEdgePropertyData : public NLFunctionData {
@@ -3003,6 +3052,9 @@ public:
     const ColumnMask* getPending() const { return _pending; }
     void setPending(const ColumnMask* pending) { _pending = pending; }
 
+    bool isAllPending() const { return _allPending; }
+    void setAllPending(bool allPending) { _allPending = allPending; }
+
     const ColumnMask* getRows() const { return _rows; }
     void setRows(const ColumnMask* rows) { _rows = rows; }
 
@@ -3012,6 +3064,7 @@ private:
     const ColumnMask* _pending {nullptr};
     const ColumnMask* _rows {nullptr};
     PropertyTypeID _propertyTypeID;
+    bool _allPending {false};
 };
 
 class NLDeleteNodeData : public NLFunctionData {
@@ -3603,12 +3656,18 @@ public:
     std::span<const std::string_view> columnNames() const { return _columnNames; }
     void setColumnNames(std::span<const std::string_view> names);
 
+    NLOutputData* getOutputData() const { return _outputData; }
+    void setOutputData(NLOutputData* outputData);
+
 private:
     size_t _chunkSize {ChunkConfig::CHUNK_SIZE};
     // The result column names nl.output carried, one per emitted column, or empty when it
     // named none. The views point into the MLIRContext's uniqued attribute storage, which
     // outlives the module the names were read from.
     std::vector<std::string_view> _columnNames;
+    // The output statement's payload, owned by _functionData; null for a program
+    // that emits nothing.
+    NLOutputData* _outputData {nullptr};
     std::vector<std::unique_ptr<NLFunctionData>> _functionData;
     std::vector<std::unique_ptr<NLLimitState>> _limitStates;
     std::vector<std::unique_ptr<NLSkipState>> _skipStates;

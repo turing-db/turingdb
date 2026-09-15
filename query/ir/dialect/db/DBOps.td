@@ -683,20 +683,30 @@ def GetNodeProperties : TuringOp<"get_node_properties", [Pure]> {
 
       %v = db.get_node_properties(%n, "age") pending %mask
              : (!db.column<!storage.node_id>, !db.column<!storage.bool>) -> !db.column<none>
+
+    `all_pending` says the same of every row without a mask to say it row by row,
+    which is what a db.create_node's column is: the read comes wholly out of the
+    write buffer.
+
+      %v = db.get_node_properties(%n, "age") all_pending
+             : (!db.column<!storage.node_id>) -> !db.column<none>
   }];
 
   // `property` is the symbolic property name, the same `name`/`age` spelled in
   // the query. Being an attribute and not an SSA value, it is absent from
   // `operands` below; lowering resolves it to a storage PropertyTypeID.
-  let arguments = (ins Column:$input_nodes, StrAttr:$property, Optional<Column>:$pending);
+  let arguments = (ins Column:$input_nodes,
+                       StrAttr:$property,
+                       Optional<Column>:$pending,
+                       UnitAttr:$all_pending);
   let results   = (outs Column:$result);
 
   // The string attribute prints inside the parens, ahead of the colon, and MLIR
   // elides it from attr-dict because the format already names it. The optional
   // mask prints after a `pending` keyword, which anchors its group.
   let assemblyFormat = [{
-    `(` $input_nodes `,` $property `)` (`pending` $pending^)? attr-dict `:`
-    functional-type(operands, results)
+    `(` $input_nodes `,` $property `)` (`pending` $pending^)? (`all_pending` $all_pending^)?
+    attr-dict `:` functional-type(operands, results)
   }];
 }
 
@@ -721,14 +731,18 @@ def GetEdgeProperties : TuringOp<"get_edge_properties", [Pure]> {
 
     `pending` is get_node_properties' mask, over edges: a row a db.merge wrote
     holds a write-buffer offset, and its value is read out of the write buffer.
+    `all_pending` is its maskless form, which a db.create_edge's column is.
   }];
 
-  let arguments = (ins Column:$input_edges, StrAttr:$property, Optional<Column>:$pending);
+  let arguments = (ins Column:$input_edges,
+                       StrAttr:$property,
+                       Optional<Column>:$pending,
+                       UnitAttr:$all_pending);
   let results   = (outs Column:$result);
 
   let assemblyFormat = [{
-    `(` $input_edges `,` $property `)` (`pending` $pending^)? attr-dict `:`
-    functional-type(operands, results)
+    `(` $input_edges `,` $property `)` (`pending` $pending^)? (`all_pending` $all_pending^)?
+    attr-dict `:` functional-type(operands, results)
   }];
 }
 
@@ -1272,6 +1286,74 @@ def Count : TuringOp<"count", [Pure]> {
 }
 
 /**
+* CountScanRows
+*/
+def CountScanRows : TuringOp<"count_scan_rows", [Pure]> {
+  let summary = "Count the rows of whole node scans from the graph's node counts";
+
+  let description = [{
+    What a db.count collapses to when the rows it tallies are whole node scans and
+    nothing else. `MATCH (a:Reaction) RETURN count(*)` asks how many Reaction nodes
+    there are, not which ones, and the graph already holds that number per label -
+    so the answer is a metadata read rather than a walk.
+
+    `labels` lists one label conjunction per scan, in factor order, and the result
+    is the product of their node counts - the row count of the cartesian product
+    those scans form:
+
+      %n = db.count_scan_rows([["Reaction"]]) : !db.column<none>
+      %m = db.count_scan_rows([["Reaction"], ["Pathway"]]) : !db.column<none>
+
+    An empty conjunction is an unlabelled scan and counts every node, so
+    `MATCH (a) RETURN count(*)` is db.count_scan_rows([[]]). The list itself must
+    not be empty: with no scan listed there is nothing to count. A label absent from
+    the schema matches no node, so its factor counts 0 and the whole product is 0 -
+    the same unsatisfiable conjunction db.scan_nodes_by_label yields no row for.
+
+    `property`, when given, narrows one scan to the nodes holding that property -
+    Cypher's count(a.name), which counts the rows in which a.name is not null, so the
+    answer is how many of that scan's nodes hold it rather than how many there are.
+    That too the graph knows without reading a value: it indexes each property by the
+    label set of the nodes holding it.
+
+      %n = db.count_scan_rows([["Person"]]) property "name" : !db.column<none>
+
+    `propertyScan` is which of the listed scans it is read from, counted from 0 and
+    defaulting to the first. `MATCH (a:Reaction), (b:Pathway) RETURN count(b.stId)`
+    reads it from the second, so the tally is every Reaction crossed with the Pathways
+    that hold stId:
+
+      %m = db.count_scan_rows([["Reaction"], ["Pathway"]]) property "stId" of scan 1
+             : !db.column<none>
+
+    A count reads one column, so at most one scan is ever narrowed; the others
+    contribute their whole node count.
+
+    The result is the single-row unsigned tally db.count produces, typed as loosely
+    as db.count types its own so that replacing one leaves its consumers untouched.
+    Reading the counts is a deterministic read, so the op is Pure.
+  }];
+
+  // `labels` is one label conjunction per scan, `property` the name whose holders one
+  // of them is narrowed to and `propertyScan` which one. Being attributes and not SSA
+  // values, they are absent from `operands`; lowering forwards them as-is.
+  let arguments = (ins StrArrayArrayAttr:$labels,
+                       OptionalAttr<StrAttr>:$property,
+                       OptionalAttr<UI64Attr>:$propertyScan);
+  let results   = (outs Column:$result);
+  let hasVerifier = 1;
+
+  // The conjunctions print inside the parens as `[["Reaction"], ["Pathway"]]`, ahead
+  // of the colon, the same place db.scan_nodes_by_label prints its labels; the
+  // property and the scan it is read from follow their keywords when set, the way
+  // db.count prints its flags; the result type follows, qualified, as db.count prints
+  // its own.
+  let assemblyFormat = [{
+    `(` $labels `)` (`property` $property^)? (`of` `scan` $propertyScan^)? attr-dict `:` qualified(type($result))
+  }];
+}
+
+/**
 * Aggregates: Sum / Min / Max / Avg
 */
 // The value-reducing counterparts of db.count. Each consumes the whole dataflow of
@@ -1550,6 +1632,10 @@ def ContainsOp : PredicateOp<"contains", [Pure]> {
   let summary = "Row-wise test of whether each string column value contains the given substring";
 }
 
+def InOp : PredicateOp<"in", [Pure]> {
+  let summary = "Row-wise test of whether each value is an element of the given list";
+}
+
 def Case : TuringOp<"case", [Pure, AttrSizedOperandSegments]> {
   let summary = "Row-wise selection of the first branch whose condition holds";
 
@@ -1659,17 +1745,21 @@ def CreateEdge : TuringOp<"create_edge", [AttrSizedOperandSegments]> {
                        StrArrayAttr:$prop_names,
                        Variadic<Column>:$prop_values,
                        Optional<Column>:$src_pending,
-                       Optional<Column>:$tgt_pending);
+                       Optional<Column>:$tgt_pending,
+                       UnitAttr:$src_all_pending,
+                       UnitAttr:$tgt_all_pending);
   let results   = (outs ColumnEdgeIDs:$result);
   let hasVerifier = 1;
 
   // The two optional masks say, row by row, which endpoints are entities this change
   // wrote and has not committed - what a db.merge's node column mixes. A column a
-  // db.create_node produced is pending in every row and carries no mask; one a scan or a
-  // traversal bound is pending in none and carries none either.
+  // db.create_node produced is pending in every row and says so with the matching
+  // all_pending flag; one a scan or a traversal bound is pending in none and carries
+  // neither a mask nor a flag.
   let assemblyFormat = [{
     `(` $src_ids `,` $tgt_ids `,` $edge_type `,` $prop_names `,` `{` $prop_values `}` `)`
-    (`src_pending` $src_pending^)? (`tgt_pending` $tgt_pending^)? attr-dict `:`
+    (`src_pending` $src_pending^)? (`tgt_pending` $tgt_pending^)?
+    (`src_all_pending` $src_all_pending^)? (`tgt_all_pending` $tgt_all_pending^)? attr-dict `:`
     functional-type(operands, results)
   }];
 }
@@ -1771,15 +1861,17 @@ def SetNodeProperty : TuringOp<"set_node_property", [AttrSizedOperandSegments]> 
                        StrAttr:$property,
                        Column:$value,
                        Optional<Column>:$pending,
-                       Optional<Column>:$rows);
+                       Optional<Column>:$rows,
+                       UnitAttr:$all_pending);
 
   // `pending` says, row by row, which entities this change wrote and has not committed -
   // those are written in the write buffer rather than recorded as an update to a
-  // committed entity. `rows` narrows which rows are written at all: Cypher's ON CREATE
-  // passes the merge's created mask, ON MATCH its negation, and a plain SET passes none.
+  // committed entity, and `all_pending` says it of every row without a mask. `rows`
+  // narrows which rows are written at all: Cypher's ON CREATE passes the merge's created
+  // mask, ON MATCH its negation, and a plain SET passes none.
   let assemblyFormat = [{
     `(` $input_nodes `,` $property `,` $value `)` (`pending` $pending^)? (`rows` $rows^)?
-    attr-dict `:` functional-type(operands, results)
+    (`all_pending` $all_pending^)? attr-dict `:` functional-type(operands, results)
   }];
 
   let hasVerifier = 1;
@@ -1799,11 +1891,12 @@ def SetEdgeProperty : TuringOp<"set_edge_property", [AttrSizedOperandSegments]> 
                        StrAttr:$property,
                        Column:$value,
                        Optional<Column>:$pending,
-                       Optional<Column>:$rows);
+                       Optional<Column>:$rows,
+                       UnitAttr:$all_pending);
 
   let assemblyFormat = [{
     `(` $input_edges `,` $property `,` $value `)` (`pending` $pending^)? (`rows` $rows^)?
-    attr-dict `:` functional-type(operands, results)
+    (`all_pending` $all_pending^)? attr-dict `:` functional-type(operands, results)
   }];
 
   let hasVerifier = 1;
@@ -1820,13 +1913,17 @@ def DeleteNode : TuringOp<"delete_node"> {
     `pending` is the mask a db.merge produced beside its node column: those rows
     hold an offset into the change's write buffer rather than an ID the graph
     knows, so the change drops the write instead of tombstoning an ID.
+    `all_pending` says that of every row, which a db.create_node's column is.
   }];
 
-  let arguments = (ins Column:$input_nodes, UnitAttr:$detach, Optional<Column>:$pending);
+  let arguments = (ins Column:$input_nodes,
+                       UnitAttr:$detach,
+                       Optional<Column>:$pending,
+                       UnitAttr:$all_pending);
 
   let assemblyFormat = [{
-    `(` $input_nodes `)` (`detach` $detach^)? (`pending` $pending^)? attr-dict `:`
-    functional-type(operands, results)
+    `(` $input_nodes `)` (`detach` $detach^)? (`pending` $pending^)?
+    (`all_pending` $all_pending^)? attr-dict `:` functional-type(operands, results)
   }];
 }
 
@@ -1836,13 +1933,14 @@ def DeleteEdge : TuringOp<"delete_edge"> {
   let description = [{
       db.delete_edge(%e) : (!db.column<!storage.edge_id>) -> ()
 
-    `pending` is delete_node's mask, over edges.
+    `pending` is delete_node's mask, over edges, and `all_pending` its maskless form.
   }];
 
-  let arguments = (ins Column:$input_edges, Optional<Column>:$pending);
+  let arguments = (ins Column:$input_edges, Optional<Column>:$pending, UnitAttr:$all_pending);
 
   let assemblyFormat = [{
-    `(` $input_edges `)` (`pending` $pending^)? attr-dict `:` functional-type(operands, results)
+    `(` $input_edges `)` (`pending` $pending^)? (`all_pending` $all_pending^)? attr-dict `:`
+    functional-type(operands, results)
   }];
 }
 

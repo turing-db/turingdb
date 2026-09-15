@@ -5,6 +5,9 @@
 #include "TuringConfig.h"
 #include "VectorDatabase.h"
 
+#include "versioning/CommitWriteBuffer.h"
+
+#include "NLPendingEdges.h"
 #include "NLSystemContext.h"
 #include "NLWrittenValues.h"
 
@@ -20,7 +23,10 @@ NLExecutionContext::NLExecutionContext(const GraphView* view,
     _chunkSize(chunkSize),
     _writeBuffer(writeBuffer),
     _system(system),
-    _writtenValues(std::make_unique<NLWrittenValues>())
+    _firstQueryNode(writeBuffer ? writeBuffer->numPendingNodes() : 0),
+    _firstQueryEdge(writeBuffer ? writeBuffer->numPendingEdges() : 0),
+    _writtenValues(std::make_unique<NLWrittenValues>()),
+    _pendingEdges(std::make_unique<NLPendingEdgeIndex>())
 {
 }
 

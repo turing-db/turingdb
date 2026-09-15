@@ -89,10 +89,31 @@ double asDouble(const ListElementView element) {
     }
 }
 
+// Orders two numbers read as doubles. A NaN sorts after every number, as Cypher orders it.
+std::strong_ordering compareDoubles(const double lhs, const double rhs) {
+    const bool lhsIsNaN = std::isnan(lhs);
+    const bool rhsIsNaN = std::isnan(rhs);
+
+    if (lhsIsNaN || rhsIsNaN) {
+        if (lhsIsNaN && rhsIsNaN) {
+            return std::strong_ordering::equal;
+        }
+
+        return lhsIsNaN ? std::strong_ordering::greater : std::strong_ordering::less;
+    }
+
+    if (lhs < rhs) {
+        return std::strong_ordering::less;
+    } else if (rhs < lhs) {
+        return std::strong_ordering::greater;
+    }
+
+    return std::strong_ordering::equal;
+}
+
 // Two numbers compare numerically whatever they are tagged as. A pair of integers of one
 // signedness compares in its own type, so neighbouring values above 2^53 keep their
-// order; any other pair goes through double, the type holding both. A NaN sorts after
-// every number, as Cypher orders it.
+// order; any other pair goes through double, the type holding both.
 std::strong_ordering compareNumbers(const ListElementView lhs, const ListElementView rhs) {
     const ListBufferTypeTag lhsTag = lhs.getTag();
     const ListBufferTypeTag rhsTag = rhs.getTag();
@@ -103,27 +124,7 @@ std::strong_ordering compareNumbers(const ListElementView lhs, const ListElement
         return lhs.getAs<types::UInt64::Primitive>() <=> rhs.getAs<types::UInt64::Primitive>();
     }
 
-    const double lhsValue = asDouble(lhs);
-    const double rhsValue = asDouble(rhs);
-
-    const bool lhsIsNaN = std::isnan(lhsValue);
-    const bool rhsIsNaN = std::isnan(rhsValue);
-
-    if (lhsIsNaN || rhsIsNaN) {
-        if (lhsIsNaN && rhsIsNaN) {
-            return std::strong_ordering::equal;
-        }
-
-        return lhsIsNaN ? std::strong_ordering::greater : std::strong_ordering::less;
-    }
-
-    if (lhsValue < rhsValue) {
-        return std::strong_ordering::less;
-    } else if (rhsValue < lhsValue) {
-        return std::strong_ordering::greater;
-    }
-
-    return std::strong_ordering::equal;
+    return compareDoubles(asDouble(lhs), asDouble(rhs));
 }
 
 // Compares a stored number against a value of another numeric type. Two integers
@@ -155,6 +156,48 @@ bool elementEqualsNumber(const ListElementView element, const Value value) {
 
         default:
             return false;
+        break;
+    }
+}
+
+// Orders a stored number against one of another numeric type, on the rules compareNumbers
+// follows between two stored ones - a pair of integers compares exactly whatever their
+// signedness, which std::cmp_less gives for the mixed pair too.
+template <typename Stored, typename Value>
+std::strong_ordering compareNumericValues(const Stored stored, const Value value) {
+    if constexpr (std::is_integral_v<Stored> && std::is_integral_v<Value>) {
+        if (std::cmp_less(stored, value)) {
+            return std::strong_ordering::less;
+        } else if (std::cmp_less(value, stored)) {
+            return std::strong_ordering::greater;
+        }
+
+        return std::strong_ordering::equal;
+    } else {
+        return compareDoubles(static_cast<double>(stored), static_cast<double>(value));
+    }
+}
+
+// Orders an element against a value of a known type: the element's class against the
+// value's when the two differ, and the two values themselves when they agree.
+template <typename Value>
+std::strong_ordering compareElementWithNumber(const ListElementView element, const Value value) {
+    const ListElementOrderClass elementClass = orderClassOf(element.getTag());
+    if (elementClass != ListElementOrderClass::Number) {
+        return elementClass <=> ListElementOrderClass::Number;
+    }
+
+    switch (element.getTag()) {
+        case ListBufferTypeTag::Int:
+            return compareNumericValues(element.getAs<types::Int64::Primitive>(), value);
+        break;
+
+        case ListBufferTypeTag::UInt:
+            return compareNumericValues(element.getAs<types::UInt64::Primitive>(), value);
+        break;
+
+        default:
+            return compareNumericValues(element.getAs<types::Double::Primitive>(), value);
         break;
     }
 }
@@ -246,4 +289,34 @@ bool db::operator==(const ListElementView element, const types::String::Primitiv
 bool db::operator==(const ListElementView element, const types::Bool::Primitive value) {
     return element.getTag() == ListBufferTypeTag::Bool
         && static_cast<bool>(element.getAs<types::Bool::Primitive>()) == static_cast<bool>(value);
+}
+
+std::strong_ordering db::operator<=>(const ListElementView element, const types::Int64::Primitive value) {
+    return compareElementWithNumber(element, value);
+}
+
+std::strong_ordering db::operator<=>(const ListElementView element, const types::UInt64::Primitive value) {
+    return compareElementWithNumber(element, value);
+}
+
+std::strong_ordering db::operator<=>(const ListElementView element, const types::Double::Primitive value) {
+    return compareElementWithNumber(element, value);
+}
+
+std::strong_ordering db::operator<=>(const ListElementView element, const types::String::Primitive value) {
+    const ListElementOrderClass elementClass = orderClassOf(element.getTag());
+    if (elementClass != ListElementOrderClass::String) {
+        return elementClass <=> ListElementOrderClass::String;
+    }
+
+    return element.getAs<types::String::Primitive>() <=> value;
+}
+
+std::strong_ordering db::operator<=>(const ListElementView element, const types::Bool::Primitive value) {
+    const ListElementOrderClass elementClass = orderClassOf(element.getTag());
+    if (elementClass != ListElementOrderClass::Bool) {
+        return elementClass <=> ListElementOrderClass::Bool;
+    }
+
+    return static_cast<bool>(element.getAs<types::Bool::Primitive>()) <=> static_cast<bool>(value);
 }

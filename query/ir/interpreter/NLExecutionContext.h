@@ -17,6 +17,7 @@ namespace db {
 class CommitWriteBuffer;
 class GraphView;
 class NLOutputSink;
+class NLPendingEdgeIndex;
 class NLSystemContext;
 class NLWrittenValues;
 
@@ -55,13 +56,26 @@ public:
     // What the change has written so far, as a read later in the same program sees it
     NLWrittenValues& getWrittenValues() const { return *_writtenValues; }
 
+    // The edges of that, under the node each hangs off, so every hop of a program indexes
+    // the write buffer once between them
+    NLPendingEdgeIndex& getPendingEdges() const { return *_pendingEdges; }
+
+    // Where this query's own writes start in the change's buffer. A read sees what its own
+    // query wrote and not what an earlier statement of the change staged: that one becomes
+    // readable when it commits, as a write of any other change does.
+    size_t getFirstQueryNode() const { return _firstQueryNode; }
+    size_t getFirstQueryEdge() const { return _firstQueryEdge; }
+
 private:
     const GraphView* _view {nullptr};
     NLOutputSink* _sink {nullptr};
     size_t _chunkSize {0};
     CommitWriteBuffer* _writeBuffer {nullptr};
     const NLSystemContext* _system {nullptr};
+    size_t _firstQueryNode {0};
+    size_t _firstQueryEdge {0};
     std::unique_ptr<NLWrittenValues> _writtenValues;
+    std::unique_ptr<NLPendingEdgeIndex> _pendingEdges;
 };
 
 }

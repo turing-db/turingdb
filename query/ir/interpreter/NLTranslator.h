@@ -333,6 +333,17 @@ private:
                            NLLimitState* limit,
                            NLStmtContainer* body);
 
+    // What this change knows an edge type name by: the graph's schema, plus the names a
+    // CREATE earlier in the program introduced, which live in the change's own schema and
+    // nowhere else until the commit
+    std::optional<EdgeTypeID> findEdgeType(llvm::StringRef name) const;
+    std::optional<LabelID> findLabel(llvm::StringRef name) const;
+    std::optional<PropertyType> findPropertyType(llvm::StringRef name) const;
+
+    // Records on @param data the ID of every label set this change knows that a node must
+    // carry at least @param constraint to be in
+    void collectMatchingLabelSets(const LabelSet& constraint, NLCheckLabelConstraintData* data) const;
+
     // Translate an nl.limit: allocate its runtime counter, map the handle to it,
     // and record the reset statement (run each time the enclosing block runs)
     void translateLimit(mlir::nl::Limit limit, NLStmtContainer* body);
@@ -452,6 +463,12 @@ private:
     // unsigned i64 count chunk it produces, map the op result to it, and record the
     // emit statement (materialize the final tally as the chunk's single row)
     void translateCountResult(mlir::nl::CountResult result, NLStmtContainer* body);
+
+    // Translate an nl.count_scan_rows: resolve each listed conjunction to a label set,
+    // allocate the unsigned i64 count chunk the op produces, map the op result to it, and
+    // record the single statement that reads the graph's node counts into that chunk's
+    // one row - the whole of a count that walks nothing
+    void translateCountScanRows(mlir::nl::CountScanRows countScanRows, NLStmtContainer* body);
 
     // The runtime tally a count handle names. The handle is a required operand of
     // nl.count_update and nl.count_result, so this throws if it was not produced by
@@ -681,9 +698,15 @@ private:
     void translatePropertyFetch(mlir::Value inputValue,
                                 mlir::Value propertyTypeValue,
                                 mlir::Value pendingValue,
+                                bool allPending,
                                 mlir::Value resultValue,
                                 bool isNode,
                                 NLStmtContainer* body);
+
+    // Whether a chunk holds nothing but entities this change wrote and has not committed.
+    // The op says so when a query part cut stands between the create and the read; within
+    // one part the chunk is the create's own result, which is what the sets hold
+    bool isPendingValue(mlir::Value value, bool isNode) const;
 
     void translateGetNodeLabelSet(mlir::nl::GetNodeLabelSet op, NLStmtContainer* body);
     void translateGetEdgeTypes(mlir::nl::GetEdgeTypes op, NLStmtContainer* body);
@@ -734,6 +757,10 @@ private:
 
     template <ColumnOperator Op, typename OpType>
     void translateBinaryOp(OpType op, NLStmtContainer* body);
+
+    // Binds the index kernel an nl.list_index runs, chosen by what its result holds: a
+    // value of the type its list names, or the tagged cell a mixed list holds
+    void translateListIndex(mlir::nl::ListIndex index, NLStmtContainer* body);
 
     void translateNot(mlir::nl::Not notOp, NLStmtContainer* body);
     void translateToNullable(mlir::nl::ToNullable toNullable, NLStmtContainer* body);
@@ -809,8 +836,12 @@ private:
     // the value type alone does not say: labels() and type() format their own text
     // where a string property column borrows the graph's
     static bool isOwnedStringElement(mlir::Type elementType);
+    static bool isOwnedStringChunk(mlir::Type chunkType);
 
+    // The per-step variant reserves a full chunk; the sized one is what an accumulator
+    // holding a single row takes.
     Column* allocOptOwnedStringColumn();
+    Column* allocOptOwnedStringColumn(size_t reserveSize);
 
     static bool isMaskElementType(mlir::Type elementType);
 

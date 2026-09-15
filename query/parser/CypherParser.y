@@ -377,7 +377,8 @@
 %type<db::Stmt*> readingStatement
 %type<db::Stmt*> updatingStatement
 %type<db::StmtContainer*> readingStatements
-%type<db::StmtContainer*> updatingStatements
+%type<db::Stmt*> queryStatement
+%type<db::StmtContainer*> queryStatements
 %type<db::ChangeOp> changeOp
 %type<db::MatchStmt*> matchSt
 %type<db::WithStmt*> withSt
@@ -488,7 +489,6 @@ unionList
 
 singleQuery
     : singlePartQuery { $$ = $1; }
-    | multiPartQuery { scanner.notImplemented(@$, "Multi-part queries"); }
     | createConstraint { scanner.notImplemented(@$, "CREATE CONSTRAINT"); }
     | dropConstraint { scanner.notImplemented(@$, "DROP CONSTRAINT"); }
     | loadGraph { $$ = $1; }
@@ -797,23 +797,17 @@ singlePartQuery
         $$->setReturnStmt($1);
         LOC($$, @$);
       }
-    | callSt {
+    | queryStatements {
         $$ = SinglePartQuery::create(ast);
-        auto* stmts = StmtContainer::create(ast);
-        $1->setStandaloneCall(true);
-        stmts->add($1);
-        $$->setReadStmts(stmts);
+        $$->setStmts($1);
+        ParserUtils::markStandaloneCall($1);
         LOC($$, @$);
       }
-    | updatingStatements { $$ = SinglePartQuery::create(ast); $$->setUpdateStmts($1); LOC($$, @$); }
-    | updatingStatements returnSt { $$ = SinglePartQuery::create(ast); $$->setUpdateStmts($1); $$->setReturnStmt($2); LOC($$, @$); }
-    | readingStatements returnSt { $$ = SinglePartQuery::create(ast); $$->setReadStmts($1); $$->setReturnStmt($2); LOC($$, @$); }
-    | readingStatements updatingStatements { $$ = SinglePartQuery::create(ast); $$->setReadStmts($1); $$->setUpdateStmts($2); LOC($$, @$); }
-    | readingStatements updatingStatements returnSt { $$ = SinglePartQuery::create(ast); $$->setReadStmts($1); $$->setUpdateStmts($2); $$->setReturnStmt($3); LOC($$, @$); }
-    | readingStatements shortestPathSt returnSt {
+    | queryStatements returnSt { $$ = SinglePartQuery::create(ast); $$->setStmts($1); $$->setReturnStmt($2); LOC($$, @$); }
+    | queryStatements shortestPathSt returnSt {
         $$ = SinglePartQuery::create(ast);
-        $$->setReadStmts($1);
-        $$->addReadStmt($2);
+        $$->setStmts($1);
+        $$->addStmt($2);
         $$->setReturnStmt($3);
         LOC($$, @$); }
     ;
@@ -842,19 +836,14 @@ readingStatements
     | readingStatements readingStatement { $$ = $1; $$->add($2); LOC($$, @$); }
     ;
 
-updatingStatements
-    : updatingStatement { $$ = StmtContainer::create(ast); $$->add($1); LOC($$, @$); }
-    | updatingStatements updatingStatement { $$ = $1; $$->add($2); LOC($$, @$); }
-    ;
- 
-multiPartQuery
-    : updateWithSt singlePartQuery { scanner.notImplemented(@$, "Update + With + Reading"); }
-    | readingStatements updateWithSt singlePartQuery { scanner.notImplemented(@$, "Reading + With + Update + Reading"); }
+queryStatements
+    : queryStatement { $$ = StmtContainer::create(ast); $$->add($1); LOC($$, @$); }
+    | queryStatements queryStatement { $$ = $1; $$->add($2); LOC($$, @$); }
     ;
 
-updateWithSt
-    : updatingStatements withSt { scanner.notImplemented(@$, "Update + With"); }
-    | updateWithSt updatingStatements withSt { scanner.notImplemented(@$, "Update + With + Update"); }
+queryStatement
+    : readingStatement { $$ = $1; }
+    | updatingStatement { $$ = $1; }
     ;
 
 matchSt

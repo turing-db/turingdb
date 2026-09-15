@@ -36,7 +36,7 @@ static VariableDependencyGraph getVDG(CypherAST* ast) {
     const QueryCommand* q = ast->queries().front();
     const auto* spq = dynamic_cast<const SinglePartQuery*>(q);
 
-    const StmtContainer* stmtsContainer = spq->getReadStmts();
+    const StmtContainer* stmtsContainer = spq->getStmts();
     const StmtContainer::Stmts& stmts = stmtsContainer->stmts();
 
     VariableDependencyGraph vdg;

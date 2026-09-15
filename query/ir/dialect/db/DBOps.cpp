@@ -458,6 +458,27 @@ LogicalResult ScanNodesByLabel::verify() {
     return success();
 }
 
+LogicalResult CountScanRows::verify() {
+    if (getLabels().empty()) {
+        return emitOpError("requires at least one scan to count");
+    }
+
+    const std::optional<llvm::StringRef> property = getProperty();
+    if (property && property->empty()) {
+        return emitOpError("requires a non-empty property name");
+    }
+
+    if (!property && getPropertyScan()) {
+        return emitOpError("names the scan of a property it does not read");
+    }
+
+    if (getPropertyScan().value_or(0) >= getLabels().size()) {
+        return emitOpError("reads a property from a scan it does not list");
+    }
+
+    return success();
+}
+
 LogicalResult ScanNodesByPropertyValue::verify() {
     if (getProperty().empty()) {
         return emitOpError("requires a non-empty property name");

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ranges>
+#include <span>
+#include <string_view>
 #include <spdlog/fmt/bundled/format.h>
 #include <range/v3/view/drop.hpp>
 
@@ -19,6 +21,8 @@
 
 #include "ControlCharacters.h"
 
+#include "BioAssert.h"
+
 namespace rg = ranges;
 namespace rv = ranges::views;
 
@@ -27,9 +31,10 @@ namespace db {
 template <Writer WriterT>
 class ChunkJsonEncoder {
 public:
-    ChunkJsonEncoder(WriterT& writer, size_t rowcnt)
+    ChunkJsonEncoder(WriterT& writer, size_t offset, size_t rowCount)
         : _writer(writer),
-        _logicalRowCount(rowcnt)
+        _offset(offset),
+        _rowCount(rowCount)
     {
     }
 
@@ -37,14 +42,15 @@ public:
 
     template <typename T>
     void operator()(const ColumnVector<T>* col) {
-        if (_logicalRowCount == 0) {
+        if (_rowCount == 0) {
             return;
         }
 
-        const T& firstValue = col->operator[](0);
+        const T& firstValue = col->operator[](_offset);
         encodeValue(firstValue);
 
-        for (size_t row = 1; row < _logicalRowCount; row++) {
+        const size_t rowEnd = _offset + _rowCount;
+        for (size_t row = _offset + 1; row < rowEnd; row++) {
             _writer.write(",");
 
             const T& value = col->operator[](row);
@@ -55,14 +61,14 @@ public:
 
     template <typename T>
     void operator()(const ColumnConst<T>* col) {
-        if (_logicalRowCount == 0) {
+        if (_rowCount == 0) {
             return;
         }
 
         const T& firstValue = col->operator[](0);
         encodeValue(firstValue);
 
-        for (size_t row = 1; row < _logicalRowCount; row++) {
+        for (size_t row = 1; row < _rowCount; row++) {
             _writer.write(",");
 
             const T& value = col->operator[](row);
@@ -72,13 +78,14 @@ public:
     }
 
     void operator()(const ColumnMask* col) {
-        if (_logicalRowCount == 0) {
+        if (_rowCount == 0) {
             return;
         }
 
-        encodeValue(col->operator[](0));
+        encodeValue(col->operator[](_offset));
 
-        for (size_t row = 1; row < _logicalRowCount; row++) {
+        const size_t rowEnd = _offset + _rowCount;
+        for (size_t row = _offset + 1; row < rowEnd; row++) {
             _writer.write(",");
 
             encodeValue(col->operator[](row));
@@ -87,7 +94,8 @@ public:
 
 private:
     WriterT& _writer;
-    const size_t _logicalRowCount {0};
+    const size_t _offset {0};
+    const size_t _rowCount {0};
     std::string _sanitized;
 
     template <Optional T>
@@ -320,13 +328,68 @@ public:
         using Types = OutputtedTypes;
         using Encoder = ColumnSingleDispatcher<Types::Allowed, JsonWriter, Types::Excluded>;
 
-        JsonWriter encoder(_writer, logicalRowCount);
+        JsonWriter encoder(_writer, 0, logicalRowCount);
         for (const NamedColumn* namedCol : df.cols()) {
             arr();
 
             const Column* col = namedCol->getColumn();
 
             Encoder::dispatch(col, encoder);
+
+            end();
+        }
+
+        end();
+    }
+
+    void writeColumnHeaders(std::span<const std::string_view> names, std::span<const Column* const> columns) {
+        bioassert(names.size() == columns.size(), "The JSON schema needs one name per column");
+
+        key("header");
+        obj();
+
+        key("column_names");
+        arr();
+
+        for (const std::string_view name : names) {
+            value(name);
+        }
+
+        end();
+
+        key("column_types");
+        arr();
+
+        std::string columnType;
+        ColumnTypeGenerator generator(columnType);
+
+        using Types = OutputtedTypes;
+        using ColTypeGen = ColumnSingleDispatcher<Types::Allowed, ColumnTypeGenerator, Types::Excluded>;
+
+        for (const Column* column : columns) {
+            ColTypeGen::dispatch(column, generator);
+
+            value(columnType);
+        }
+
+        end();
+        end();
+
+        startData();
+    }
+
+    void writeColumns(std::span<const Column* const> columns, size_t offset, size_t rowCount) {
+        arr();
+
+        using JsonWriter = ChunkJsonEncoder<WriterT>;
+        using Types = OutputtedTypes;
+        using Encoder = ColumnSingleDispatcher<Types::Allowed, JsonWriter, Types::Excluded>;
+
+        JsonWriter encoder(_writer, offset, rowCount);
+        for (const Column* column : columns) {
+            arr();
+
+            Encoder::dispatch(column, encoder);
 
             end();
         }

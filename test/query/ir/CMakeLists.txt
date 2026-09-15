@@ -192,6 +192,10 @@ add_call_v3_test(test_query_ir_call_order_by CallOrderByTest.cpp)
 add_call_v3_test(test_query_ir_call_grouped_aggregate CallGroupedAggregateTest.cpp)
 add_call_v3_test(test_query_ir_call_unwind CallUnwindTest.cpp)
 add_call_v3_test(test_query_ir_call_pattern_shapes CallPatternShapesTest.cpp)
+add_call_v3_test(test_query_ir_create_with CreateWithTest.cpp)
+add_call_v3_test(test_query_ir_create_edge_property CreateEdgePropertyTest.cpp)
+add_call_v3_test(test_query_ir_match_created_edge MatchCreatedEdgeTest.cpp)
+add_call_v3_test(test_query_ir_scan_created_entity ScanCreatedEntityTest.cpp)
 add_call_v3_test(test_query_ir_call_undirected_row_count CallUndirectedRowCountTest.cpp)
 add_call_v3_test(test_query_ir_call_components CallComponentsTest.cpp)
 add_call_v3_test(test_query_ir_call_carried_scalar CallCarriedScalarTest.cpp)
@@ -277,6 +281,7 @@ add_ir_tests(test_query_ir_fuse_scan_by_property_value FuseScanByPropertyValueTe
 add_ir_tests(test_query_ir_trim_unread_columns TrimUnreadColumnsTest.cpp)
 add_ir_tests(test_query_ir_trim_call_carry_set TrimCallCarrySetTest.cpp)
 add_ir_tests(test_query_ir_reuse_property_reads ReusePropertyReadsTest.cpp)
+add_ir_tests(test_query_ir_count_from_metadata CountFromMetadataTest.cpp)
 
 # The edge-scan fusion tests check the rewritten db program, then lower and run it
 # against the shared SimpleGraph fixture to compare its rows with the unfused hop's.
@@ -1808,6 +1813,16 @@ target_link_libraries(test_query_ir_count_wildcard_empty_input PRIVATE
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_count_wildcard_empty_input PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_turing_test(test_query_ir_count_from_metadata_query CountFromMetadataQueryTest.cpp)
+target_link_libraries(test_query_ir_count_from_metadata_query PRIVATE
+        turing_ir_test_write_query_s
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+
 add_turing_test(test_query_ir_repeated_edge_variable RepeatedEdgeVariableTest.cpp)
 target_link_libraries(test_query_ir_repeated_edge_variable PRIVATE
         turing_db_s
@@ -1928,6 +1943,28 @@ target_link_libraries(test_query_ir_string_predicates PRIVATE
         turing_db_storage_s
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_string_predicates PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_list_equality ListEqualityTest.cpp)
+target_sources(test_query_ir_list_equality PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_list_equality PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_list_equality PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_list_in ListInTest.cpp)
+target_sources(test_query_ir_list_in PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_list_in PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_list_in PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The EXPLAIN dumps run the whole compilation of a query against the shared SimpleGraph
 # fixture, so the test needs the db dialect - whose passes the prefix reports on -
@@ -2374,6 +2411,19 @@ target_link_libraries(test_query_ir_unwind_variables PRIVATE
         turing_db_storage_s
         turing_db_interpreter_v3_s)
 target_include_directories(test_query_ir_unwind_variables PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# SHORTESTPATH under a WHERE whose predicate reads both endpoints, run end to end against
+# simpledb. The path column is rendered to text by StringRowSink.
+add_turing_test(test_query_ir_shortest_path_endpoint_predicate ShortestPathEndpointPredicateTest.cpp)
+target_sources(test_query_ir_shortest_path_endpoint_predicate PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_shortest_path_endpoint_predicate PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_shortest_path_endpoint_predicate PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Ordering a string type() owns against another string, run end to end against simpledb.
 add_turing_test(test_query_ir_owned_string_ordering OwnedStringOrderingTest.cpp)

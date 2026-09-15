@@ -541,14 +541,17 @@ def GetNodeProperties : NLOp<"get_node_properties", [Pure, RowAlignedThroughOper
   // node chunk: such a row holds a write-buffer offset rather than an ID the graph
   // knows, so its value is read out of the write buffer rather than off the node the
   // offset collides with - null there when the write set the property on none.
+  // `all_pending` says that of every row without a mask, which an nl.create_node's
+  // chunk is.
   let arguments = (ins NLNodeIDChunk:$input_nodes,
                        NLPropertyTypeHandle:$property_type,
-                       Optional<NLBoolChunk>:$pending);
+                       Optional<NLBoolChunk>:$pending,
+                       UnitAttr:$all_pending);
   let results   = (outs NLChunk:$values);
 
   let assemblyFormat = [{
-    `(` $input_nodes `,` $property_type `)` (`pending` $pending^)? attr-dict `:`
-    qualified(type($values))
+    `(` $input_nodes `,` $property_type `)` (`pending` $pending^)? (`all_pending` $all_pending^)?
+    attr-dict `:` qualified(type($values))
   }];
 }
 
@@ -565,12 +568,13 @@ def GetEdgeProperties : NLOp<"get_edge_properties", [Pure, RowAlignedThroughOper
 
   let arguments = (ins NLEdgeIDChunk:$input_edges,
                        NLPropertyTypeHandle:$property_type,
-                       Optional<NLBoolChunk>:$pending);
+                       Optional<NLBoolChunk>:$pending,
+                       UnitAttr:$all_pending);
   let results   = (outs NLChunk:$values);
 
   let assemblyFormat = [{
-    `(` $input_edges `,` $property_type `)` (`pending` $pending^)? attr-dict `:`
-    qualified(type($values))
+    `(` $input_edges `,` $property_type `)` (`pending` $pending^)? (`all_pending` $all_pending^)?
+    attr-dict `:` qualified(type($values))
   }];
 }
 
@@ -613,43 +617,52 @@ def GetEdgeTypes : NLOp<"get_edge_types", [Pure, RowAlignedThroughOperands]> {
 }
 
 def CheckLabelConstraint : NLOp<"check_label_constraint", [Pure, RowAlignedThroughOperands]> {
-  let summary = "Test each label-set ID against a precomputed matching set";
+  let summary = "Test each label-set ID against a required-label constraint";
   let description = [{
-    For each LabelSetID in the input chunk, emits true if the ID appears in
-    `matching_ids`.
+    For each LabelSetID in the input chunk, emits true if the label set it names
+    carries every label in `labels` - a superset match.
 
       nl.for %nodes in %scan {
         %ls  = nl.get_node_label_set(%nodes) : !nl.chunk<!storage.labelset_id>
-        %ok  = nl.check_label_constraint(%ls, [3, 7]) : !nl.chunk<!storage.bool>
+        %ok  = nl.check_label_constraint(%ls, ["Person"]) : !nl.chunk<!storage.bool>
         ...
       }
+
+    The names are turned into the IDs of the label sets that satisfy them when the
+    program is translated rather than when it is lowered: a CREATE ahead of the test
+    interns a label set of its own, and that one is in the change's schema only once
+    the create has been translated.
   }];
 
-  let arguments = (ins NLLabelSetIDChunk:$labelset_ids, DenseI64ArrayAttr:$matching_ids);
+  let arguments = (ins NLLabelSetIDChunk:$labelset_ids, StrArrayAttr:$labels);
   let results   = (outs NLChunk:$result);
 
   let assemblyFormat = [{
-    `(` $labelset_ids `,` $matching_ids `)` attr-dict `:` qualified(type($result))
+    `(` $labelset_ids `,` $labels `)` attr-dict `:` qualified(type($result))
   }];
 }
 
 def CheckEdgeTypeConstraint : NLOp<"check_edge_type_constraint", [Pure, RowAlignedThroughOperands]> {
-  let summary = "Test each edge type ID against a precomputed allowed set";
+  let summary = "Test each edge type ID against an allowed-type constraint";
   let description = [{
-    For each EdgeTypeID in the input chunk, emits true if the ID appears in
-    `matching_ids` (OR semantics: any match passes).
+    For each EdgeTypeID in the input chunk, emits true if it is one of `edge_types`
+    (OR semantics: any match passes).
 
       nl.for %etypes in %scan {
-        %ok = nl.check_edge_type_constraint(%etypes, [2, 5]) : !nl.chunk<!storage.bool>
+        %ok = nl.check_edge_type_constraint(%etypes, ["KNOWS"]) : !nl.chunk<!storage.bool>
         ...
       }
+
+    The names are resolved when the program is translated, for the reason
+    nl.check_label_constraint's are: a CREATE ahead of the test may be what put the
+    type in the change's schema.
   }];
 
-  let arguments = (ins NLEdgeTypeIDChunk:$edge_type_ids, DenseI64ArrayAttr:$matching_ids);
+  let arguments = (ins NLEdgeTypeIDChunk:$edge_type_ids, StrArrayAttr:$edge_types);
   let results   = (outs NLChunk:$result);
 
   let assemblyFormat = [{
-    `(` $edge_type_ids `,` $matching_ids `)` attr-dict `:` qualified(type($result))
+    `(` $edge_type_ids `,` $edge_types `)` attr-dict `:` qualified(type($result))
   }];
 }
 
@@ -1386,6 +1399,50 @@ def CountResult : NLOp<"count_result", []> {
 }
 
 /**
+* CountScanRows
+*/
+def CountScanRows : NLOp<"count_scan_rows", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Materialize the node counts of whole scans as their single-row product";
+  let description = [{
+    Imperative counterpart of db.count_scan_rows. Reads one node count per label
+    conjunction listed in `labels` and materializes their product as a single-row
+    chunk - one unsigned i64, the chunk nl.count_result emits:
+
+      %n = nl.count_scan_rows([["Reaction"], ["Pathway"]])
+
+    Unlike a count it opens no loop and reads no chunk: the counts come from the
+    graph's own per-label node counts, so there is no relation to walk and nothing
+    to accumulate. It produces the chunk in place at function scope, where nl.output
+    consumes it.
+
+    `property`, when given, narrows the scan `propertyScan` names to the nodes holding
+    that property - the count(a.name) form, answered off the index the graph keeps of
+    each property by the label set of its holders. The scan is counted from 0 and
+    defaults to the first:
+
+      %m = nl.count_scan_rows([["Person"]]) property "name"
+      %p = nl.count_scan_rows([["Reaction"], ["Pathway"]]) property "stId" of scan 1
+
+    `labels` is the list db.count_scan_rows carried; translation resolves each name
+    to a storage LabelID, the same way an nl.scan_nodes_by_label name is resolved, and
+    the property name to a storage PropertyTypeID. A name absent from the schema leaves
+    the conjunction unsatisfiable, so that factor counts 0 and the product is 0. An
+    empty conjunction filters nothing and counts every node.
+
+    The chunk is always a !nl.chunk<ui64> - a non-negative tally that is never null -
+    so the result type is inferred, not spelled out.
+  }];
+
+  let arguments = (ins StrArrayArrayAttr:$labels,
+                       OptionalAttr<StrAttr>:$property,
+                       OptionalAttr<UI64Attr>:$propertyScan);
+  let results   = (outs NLChunk:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = "`(` $labels `)` (`property` $property^)? (`of` `scan` $propertyScan^)? attr-dict";
+}
+
+/**
 * Aggregate
 */
 // NOT Pure: the value-reducing sibling of nl.count. Each nl.aggregate is a
@@ -1749,6 +1806,18 @@ def Contains : NLOp<"contains", [Pure, ConstantThroughOperands, RowAlignedThroug
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
 }
 
+def In : NLOp<"in", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
+  let summary = "Row-wise test of whether each chunk value is an element of the given list";
+  let description = [{
+      %r = nl.in %x, %y : (!nl.chunk<i64>, !nl.chunk<!storage.list<i64>>) -> !nl.chunk<!storage.nullable<i1>>
+  }];
+
+  let arguments = (ins NLChunk:$lhs, NLChunk:$rhs);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` functional-type(operands, results)";
+}
+
 def And : NLOp<"and", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Row-wise logical AND of two boolean chunks";
   let description = [{
@@ -1806,7 +1875,7 @@ def Not : NLOp<"not", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]
   let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
 }
 
-def ToNullable : NLOp<"to_nullable", [Pure]> {
+def ToNullable : NLOp<"to_nullable", [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {
   let summary = "Read a plain value chunk as a nullable value chunk holding a value in every row";
   let description = [{
       %r = nl.to_nullable %x : (!nl.chunk<ui64>) -> !nl.chunk<!storage.nullable<ui64>>
@@ -2220,16 +2289,20 @@ def CreateEdge : NLOp<"create_edge", [AttrSizedOperandSegments]> {
                        StrArrayAttr:$prop_names,
                        Variadic<NLChunk>:$prop_values,
                        Optional<NLBoolChunk>:$src_pending,
-                       Optional<NLBoolChunk>:$tgt_pending);
+                       Optional<NLBoolChunk>:$tgt_pending,
+                       UnitAttr:$src_all_pending,
+                       UnitAttr:$tgt_all_pending);
   let results   = (outs NLEdgeIDChunk:$result);
   let hasVerifier = 1;
 
   // The two optional masks say, row by row, which endpoints are nodes this change wrote
   // and has not committed - what an nl.merge's node chunk mixes. A chunk an
-  // nl.create_node produced is pending in every row and carries no mask.
+  // nl.create_node produced is pending in every row and says so with the matching
+  // all_pending flag instead of a mask.
   let assemblyFormat = [{
     $src_ids `,` $tgt_ids `,` $edge_type `,` $prop_names `,` `{` $prop_values `}`
-    (`src_pending` $src_pending^)? (`tgt_pending` $tgt_pending^)? attr-dict
+    (`src_pending` $src_pending^)? (`tgt_pending` $tgt_pending^)?
+    (`src_all_pending` $src_all_pending^)? (`tgt_all_pending` $tgt_all_pending^)? attr-dict
     ( `:` qualified(type($prop_values))^ )?
   }];
 }
@@ -2306,11 +2379,12 @@ def SetNodeProperty : NLOp<"set_node_property", [AttrSizedOperandSegments]> {
                        StrAttr:$property,
                        NLChunk:$value,
                        Optional<NLBoolChunk>:$pending,
-                       Optional<NLBoolChunk>:$rows);
+                       Optional<NLBoolChunk>:$rows,
+                       UnitAttr:$all_pending);
 
   let assemblyFormat = [{
     $input_nodes `,` $property `,` $value (`pending` $pending^)? (`rows` $rows^)?
-    attr-dict `:` qualified(type($value))
+    (`all_pending` $all_pending^)? attr-dict `:` qualified(type($value))
   }];
 
   let hasVerifier = 1;
@@ -2328,11 +2402,12 @@ def SetEdgeProperty : NLOp<"set_edge_property", [AttrSizedOperandSegments]> {
                        StrAttr:$property,
                        NLChunk:$value,
                        Optional<NLBoolChunk>:$pending,
-                       Optional<NLBoolChunk>:$rows);
+                       Optional<NLBoolChunk>:$rows,
+                       UnitAttr:$all_pending);
 
   let assemblyFormat = [{
     $input_edges `,` $property `,` $value (`pending` $pending^)? (`rows` $rows^)?
-    attr-dict `:` qualified(type($value))
+    (`all_pending` $all_pending^)? attr-dict `:` qualified(type($value))
   }];
 
   let hasVerifier = 1;
@@ -2348,11 +2423,15 @@ def DeleteNode : NLOp<"delete_node"> {
 
   // `pending` is the mask an nl.merge produced beside its node chunk: such a row names
   // a node this change wrote and has not committed, which is dropped from the write
-  // buffer rather than tombstoned by an ID the graph does not hold.
-  let arguments = (ins NLNodeIDChunk:$input_nodes, UnitAttr:$detach, Optional<NLBoolChunk>:$pending);
+  // buffer rather than tombstoned by an ID the graph does not hold. `all_pending` says
+  // that of every row without a mask, which an nl.create_node's chunk is.
+  let arguments = (ins NLNodeIDChunk:$input_nodes,
+                       UnitAttr:$detach,
+                       Optional<NLBoolChunk>:$pending,
+                       UnitAttr:$all_pending);
 
   let assemblyFormat = [{
-    $input_nodes (`detach` $detach^)? (`pending` $pending^)? attr-dict
+    $input_nodes (`detach` $detach^)? (`pending` $pending^)? (`all_pending` $all_pending^)? attr-dict
   }];
 }
 
@@ -2364,10 +2443,12 @@ def DeleteEdge : NLOp<"delete_edge"> {
       }
   }];
 
-  let arguments = (ins NLEdgeIDChunk:$input_edges, Optional<NLBoolChunk>:$pending);
+  let arguments = (ins NLEdgeIDChunk:$input_edges,
+                       Optional<NLBoolChunk>:$pending,
+                       UnitAttr:$all_pending);
 
   let assemblyFormat = [{
-    $input_edges (`pending` $pending^)? attr-dict
+    $input_edges (`pending` $pending^)? (`all_pending` $all_pending^)? attr-dict
   }];
 }
 

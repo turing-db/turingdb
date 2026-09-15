@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <vector>
 #include <ostream>
 
@@ -35,6 +36,11 @@ public:
      * @warn Does not check for validity of pointers to columns.
      */
     size_t getLogicalRowCount() const;
+
+    // States the row count outright, for a frame whose columns cannot imply it. This concerns
+    // frames derived from the network protocol that only contain ColumnConsts.
+    void setDeclaredRowCount(size_t rowCount) { _declaredRowCount = rowCount; }
+    size_t getDeclaredRowCount() const { return _declaredRowCount.value_or(0); }
 
     /**
      * @brief Determines whether all columns in a dataframe of equal logical
@@ -83,6 +89,7 @@ public:
 private:
     NamedColumns _cols;
     DynamicLookupTable<NamedColumn*> _tagToColumnMap;
+    std::optional<size_t> _declaredRowCount;
 };
 
 }

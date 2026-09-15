@@ -271,6 +271,13 @@ private:
     // update - so the tally charges each distinct value once.
     void lowerCount(mlir::db::Count count);
 
+    // Lower a db.count_scan_rows: the tally is already known from the graph's node counts,
+    // so there is no relation to walk and no accumulator to thread. Emit one
+    // nl.count_scan_rows carrying the same label conjunctions, hoisted to the top of the
+    // entry block the way a constant is, which materializes the single tally row (an
+    // unsigned i64, !nl.chunk<ui64>) the db result maps to.
+    void lowerCountScanRows(mlir::db::CountScanRows countScanRows);
+
     // Lower a db.sum / db.min / db.max / db.avg: the value-reducing siblings of
     // lowerCount. The db op names the reduction (`kind`); the input and result SSA
     // values are the column being reduced and the single-row result. Hoist an
@@ -302,6 +309,7 @@ private:
         Double,    // pow: always f64 per openCypher, nullable if either operand is
         Concat,    // concat: string or list (determined at lowering)
         Index,     // index: a nullable tagged scalar, whatever the list holds
+        Membership, // in: a nullable i1, since a list element can be null
     };
 
     template <typename NLOp>
@@ -419,9 +427,11 @@ private:
     // sibling of getOrCreatePropertyTypeHandle
     mlir::Value getOrCreateEdgeTypeHandle(llvm::StringRef edgeTypeName);
 
-    // The !nl.chunk<!storage.nullable<T>> a fetch of this property produces, with T
-    // the value type the name resolves to in the schema
-    mlir::Type propertyValueChunkType(llvm::StringRef propertyName);
+    static mlir::Type columnType(mlir::Value column);
+
+    // The !nl.chunk<!storage.nullable<T>> a fetch of this property produces, with T the
+    // value type the name resolves to in the schema, or the one the read declares
+    mlir::Type propertyValueChunkType(llvm::StringRef propertyName, mlir::Type declared);
 
     // Point the builder just before the terminator of block, where the next
     // lowered op belongs

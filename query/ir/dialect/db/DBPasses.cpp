@@ -41,6 +41,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_REUSEPROPERTYREADS
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
+#define GEN_PASS_DEF_COUNTFROMMETADATA
 #include "DBPasses.h.inc"
 
 namespace {
@@ -257,7 +258,7 @@ Value climbToLineageAnchor(Value column, bool& crossedProducer, llvm::SmallVecto
 
 bool isMaskComputeOp(Operation* op) {
     return isa<EqOp, NeqOp, GtOp, LtOp, GteOp, LteOp,
-               StartsWithOp, EndsWithOp, ContainsOp,
+               StartsWithOp, EndsWithOp, ContainsOp, InOp,
                AndOp, OrOp, XorOp, NotOp,
                AddOp, SubOp, MulOp, DivOp, ModOp, PowOp, ConcatOp,
                ConstantOp,
@@ -2597,6 +2598,189 @@ struct FuseHashJoin : public impl::FuseHashJoinBase<FuseHashJoin> {
 
 private:
     DBPassContext _context;
+};
+
+// The node scans a column's rows come off, in factor order. A cross product's rows are its
+// two factors' together, and a factor is free to be a product of its own, so each is walked
+// through the column it yields first. Anything else a column can come off - a filter, a hop,
+// a property read - has a row count only the engine can reach, so the match fails.
+bool collectScans(Value column, llvm::SmallVectorImpl<Operation*>& scans) {
+    Operation* const def = column.getDefiningOp();
+    if (!def) {
+        return false;
+    }
+
+    if (isa<ScanNodes, ScanNodesByLabel>(def)) {
+        scans.push_back(def);
+
+        return true;
+    } else if (CrossProduct product = dyn_cast<CrossProduct>(def)) {
+        const Operation::operand_range leftColumns = factorYieldColumns(product.getLeftFactor());
+        const Operation::operand_range rightColumns = factorYieldColumns(product.getRightFactor());
+        if (leftColumns.empty() || rightColumns.empty()) {
+            return false;
+        }
+
+        if (!collectScans(leftColumns.front(), scans)) {
+            return false;
+        }
+
+        return collectScans(rightColumns.front(), scans);
+    }
+
+    return false;
+}
+
+// The one scan a column carries the nodes of. Unlike collectScans this follows the result a
+// product was read at: its results are the left factor's yielded columns then the right's,
+// so an index past the left's count names a column of the right factor.
+Operation* scanBehind(Value column) {
+    for (;;) {
+        Operation* const def = column.getDefiningOp();
+        if (!def) {
+            return nullptr;
+        }
+
+        if (isa<ScanNodes, ScanNodesByLabel>(def)) {
+            return def;
+        }
+
+        CrossProduct product = dyn_cast<CrossProduct>(def);
+        if (!product) {
+            return nullptr;
+        }
+
+        const Operation::operand_range leftColumns = factorYieldColumns(product.getLeftFactor());
+        const Operation::operand_range rightColumns = factorYieldColumns(product.getRightFactor());
+        const size_t resultIndex = cast<OpResult>(column).getResultNumber();
+        if (resultIndex >= leftColumns.size() + rightColumns.size()) {
+            return nullptr;
+        }
+
+        column = resultIndex < leftColumns.size() ? leftColumns[resultIndex]
+                                                  : rightColumns[resultIndex - leftColumns.size()];
+    }
+}
+
+// What a count reads: the scans it tallies, the property whose holders one of them is
+// narrowed to, if any, and which scan that is.
+struct ScanTally {
+    llvm::SmallVector<Operation*> scans;
+    StringAttr property;
+    size_t propertyScan {0};
+};
+
+// The label conjunction db.count_scan_rows spells for one scan: its own label list, or an
+// empty one for an unlabelled scan.
+Attribute scanLabels(Operation* scan, mlir::OpBuilder& builder) {
+    if (ScanNodesByLabel scanByLabel = dyn_cast<ScanNodesByLabel>(scan)) {
+        return scanByLabel.getLabelsAttr();
+    }
+
+    return builder.getStrArrayAttr({});
+}
+
+// Whether this count tallies nothing but whole node scans, and what it reads off them.
+// count(DISTINCT x) is a different tally over the same rows, so it is left alone.
+bool countsWholeScans(Count count, ScanTally& tally) {
+    if (count.getDistinct()) {
+        return false;
+    }
+
+    Value rows = count.getInput();
+
+    // A property read keeps every row and nulls the ones without the value, so count(*)
+    // reads through it to the nodes underneath while a plain count tallies the holders.
+    if (GetNodeProperties fetch = rows.getDefiningOp<GetNodeProperties>()) {
+        rows = fetch.getInputNodes();
+        if (!count.getRows()) {
+            tally.property = fetch.getPropertyAttr();
+        }
+    } else {
+        // A plain count over anything else charges the non-null rows, which is the row
+        // count only on a column that holds no null - the node IDs a scan emits.
+        const ColumnType rowsType = dyn_cast<ColumnType>(rows.getType());
+        if (!count.getRows() && !(rowsType && isa<storage::NodeIDType>(rowsType.getType()))) {
+            return false;
+        }
+    }
+
+    if (!collectScans(rows, tally.scans)) {
+        return false;
+    }
+
+    if (!tally.property) {
+        return true;
+    }
+
+    // The property was read of one of the scans' columns; that scan is the one its holders
+    // narrow, and the others contribute their whole node count.
+    Operation* const propertyScan = scanBehind(rows);
+    const auto scanIt = std::ranges::find(tally.scans, propertyScan);
+    if (scanIt == tally.scans.end()) {
+        return false;
+    }
+
+    tally.propertyScan = static_cast<size_t>(scanIt - tally.scans.begin());
+
+    return true;
+}
+
+void countFromMetadata(Count count, const ScanTally& tally, mlir::OpBuilder& builder) {
+    llvm::SmallVector<Attribute> labels;
+    for (Operation* const scan : tally.scans) {
+        labels.push_back(scanLabels(scan, builder));
+    }
+
+    // The first scan is where a property is read from unless the op says otherwise, so the
+    // common single-scan form carries no index.
+    const mlir::Type indexType = builder.getIntegerType(64, /*isSigned=*/false);
+    const IntegerAttr propertyScan = tally.propertyScan > 0 ? IntegerAttr::get(indexType, tally.propertyScan)
+                                                            : IntegerAttr();
+
+    builder.setInsertionPoint(count);
+    CountScanRows scanRows = builder.create<CountScanRows>(count.getLoc(),
+                                                           count.getResult().getType(),
+                                                           builder.getArrayAttr(labels),
+                                                           tally.property,
+                                                           propertyScan);
+
+    Operation* const countOp = count.getOperation();
+    const Value countedRows = count.getInput();
+
+    countOp->getResult(0).replaceAllUsesWith(scanRows.getResult());
+    countOp->erase();
+
+    // Drop the now-dead chain, consumer to producer, each only if unused; a cross product
+    // takes the scans in its factor regions down with it.
+    Operation* const countedOp = countedRows.getDefiningOp();
+    GetNodeProperties fetch = dyn_cast<GetNodeProperties>(countedOp);
+    const Value scanned = fetch ? fetch.getInputNodes() : Value();
+
+    eraseIfUnused(countedOp);
+    if (scanned) {
+        eraseIfUnused(scanned.getDefiningOp());
+    }
+}
+
+struct CountFromMetadata : public impl::CountFromMetadataBase<CountFromMetadata> {
+    void runOnOperation() override {
+        // Collect the counts first, since rewriting erases ops and would invalidate the walk.
+        llvm::SmallVector<Count> counts;
+        getOperation()->walk([&](Count count) {
+            counts.push_back(count);
+        });
+
+        mlir::OpBuilder builder(&getContext());
+        for (const Count count : counts) {
+            ScanTally tally;
+            if (!countsWholeScans(count, tally)) {
+                continue;
+            }
+
+            countFromMetadata(count, tally, builder);
+        }
+    }
 };
 
 }
