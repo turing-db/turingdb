@@ -4,7 +4,7 @@
   "query": "CREATE (n:Person)-[e:NewEdge]->(m:Person) DELETE e",
   "expect": {
     "plan": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n:Person)-[e:NewEdge]->(m:Person) DELETE e\n       |                                           ^^^^^^^^\n-------* CREATE ... DELETE is not yet supported.",
-    "result": "ANALYZE ERROR\n-------* Query error\n     1 | CREATE (n:Person)-[e:NewEdge]->(m:Person) DELETE e\n       |                                           ^^^^^^^^\n-------* CREATE ... DELETE is not yet supported.",
+    "result": "",
     "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | CREATE (n:Person)-[e:NewEdge]->(m:Person) DELETE e\\n       |                                           ^^^^^^^^\\n-------* CREATE ... DELETE is not yet supported.\"}"
   },
   "tags": [
