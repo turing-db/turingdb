@@ -32,6 +32,18 @@ void FunctionDecls::initDefault() {
     endNode->setReturnTypes({{EvaluatedType::NodePattern}});
     endNode->setIsV3Only(true);
 
+    // The engine names an entity by its ID, so id() hands back the column it was given and
+    // the answer is that name read as a number. Only the MLIR engine evaluates it.
+    FunctionSignature* idOfNode = createFunction("id");
+    idOfNode->setArguments({EvaluatedType::NodePattern});
+    idOfNode->setReturnTypes({{EvaluatedType::Integer}});
+    idOfNode->setIsV3Only(true);
+
+    FunctionSignature* idOfEdge = createFunction("id");
+    idOfEdge->setArguments({EvaluatedType::EdgePattern});
+    idOfEdge->setReturnTypes({{EvaluatedType::Integer}});
+    idOfEdge->setIsV3Only(true);
+
     FunctionSignature* keysNodes = createFunction("keys");
     keysNodes->setArguments({EvaluatedType::NodePattern});
     keysNodes->setReturnTypes({{EvaluatedType::String}});
