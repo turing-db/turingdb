@@ -112,6 +112,33 @@ bool textOfListElement(const Column* chunk, size_t rowIndex, std::string& text) 
     return true;
 }
 
+// The nullable sibling of textOfListElement: what an index into a list naming no one type
+// produces, absent where the position held no element.
+bool textOfOptionalListElement(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnOptVector<ListElementView>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    const std::optional<ListElementView>& element = column->getRaw()[rowIndex];
+    text = element ? elementText(*element) : "null";
+
+    return true;
+}
+
+// The same index over literal operands alone, which stays a constant.
+bool textOfConstOptionalListElement(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnConst<std::optional<ListElementView>>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    const std::optional<ListElementView>& element = (*column)[rowIndex];
+    text = element ? elementText(*element) : "null";
+
+    return true;
+}
+
 // A list cell reads as its elements joined by ", ", in the order the list holds them.
 bool textOfList(const Column* chunk, size_t rowIndex, std::string& text) {
     const auto* column = dynamic_cast<const ColumnVector<ListView>*>(chunk);
@@ -299,6 +326,10 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfOptionalConst<std::string_view>(chunk, rowIndex, text)) {
         return text;
     } else if (textOfListElement(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfOptionalListElement(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfConstOptionalListElement(chunk, rowIndex, text)) {
         return text;
     } else if (textOfList(chunk, rowIndex, text)) {
         return text;

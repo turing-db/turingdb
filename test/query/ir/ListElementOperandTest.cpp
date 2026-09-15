@@ -116,6 +116,42 @@ TEST_F(ListElementOperandTest, readsAnIndexPastTheEndAsNull) {
     expectRows("RETURN [1,2,3][7]", {{"null"}});
 }
 
+TEST_F(ListElementOperandTest, readsAnIndexedCellOfAMixedList) {
+    expectRows("RETURN [1,'ab'][1]", {{"ab"}});
+}
+
+TEST_F(ListElementOperandTest, readsANullCellOfAMixedList) {
+    expectRows("RETURN [1,null,3][1]", {{"null"}});
+}
+
+TEST_F(ListElementOperandTest, readsAnIndexPastTheEndOfAMixedListAsNull) {
+    expectRows("RETURN [1,'ab'][7]", {{"null"}});
+}
+
+TEST_F(ListElementOperandTest, addsToAnIndexedCellOfAMixedList) {
+    expectRows("RETURN [1,'ab'][0] + 1", {{"2"}});
+}
+
+TEST_F(ListElementOperandTest, comparesAnIndexedCellOfAMixedListForEquality) {
+    expectRows("MATCH (n:Person) WHERE [1,'Remy'][1] = n.name RETURN n.name", {{"Remy"}});
+}
+
+TEST_F(ListElementOperandTest, ordersAPropertyAgainstAnIndexedCellOfAMixedList) {
+    expectRows("MATCH (n:Person) WHERE [30,'x'][0] < n.age RETURN n.name", {{"Remy"}, {"Adam"}});
+}
+
+TEST_F(ListElementOperandTest, indexesTheListAnUnwindBinds) {
+    expectRows("UNWIND [[1,2],[3,4]] AS xs RETURN xs[0]", {{"1"}, {"3"}});
+}
+
+TEST_F(ListElementOperandTest, computesOverTheListAnUnwindBinds) {
+    expectRows("UNWIND [[1,2],[3,4]] AS xs RETURN xs[0] + 1", {{"2"}, {"4"}});
+}
+
+TEST_F(ListElementOperandTest, indexesByThePositionAnUnwindBinds) {
+    expectRows("UNWIND [1,2,3] AS i RETURN [10,20,30][i - 1]", {{"10"}, {"20"}, {"30"}});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
