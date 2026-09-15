@@ -1904,6 +1904,12 @@ class NLUnaryFunctionOp<string mnemonic, list<Trait> extraTraits = []>
 
 def Labels : NLUnaryFunctionOp<"labels">;
 def EdgeType : NLUnaryFunctionOp<"edge_type">;
+
+// db.start_node and db.end_node lower to these: an edge chunk in, the node chunk holding
+// the end of each of its edges out.
+def StartNode : NLUnaryFunctionOp<"start_node">;
+def EndNode : NLUnaryFunctionOp<"end_node">;
+
 def ToInteger : NLUnaryFunctionOp<"to_integer", [ConstantThroughOperands]>;
 def ToFloat : NLUnaryFunctionOp<"to_float", [ConstantThroughOperands]>;
 def ToBoolean : NLUnaryFunctionOp<"to_boolean", [ConstantThroughOperands]>;

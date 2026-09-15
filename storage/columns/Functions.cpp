@@ -4,6 +4,7 @@
 
 #include <range/v3/view/drop.hpp>
 
+#include "datapart/EdgeRecord.h"
 #include "list/ListBufferTypeTag.h"
 #include "metadata/LabelMap.h"
 #include "reader/GraphReader.h"
@@ -170,6 +171,75 @@ void EdgeTypesFunction::getEdgeTypeString(std::string& out, EdgeID edge) {
     bioassert(name, "Could not get name of EdgeTypeID {}.", et.getValue());
 
     out = *name;
+}
+
+EdgeEndsFunction::EdgeEndsFunction(GraphView view)
+    : _view(view)
+{
+}
+
+EdgeEndsFunction::EdgeEndsFunction(GraphView view, const CommitWriteBuffer* writeBuffer)
+    : _view(view),
+    _writeBuffer(writeBuffer)
+{
+    if (_writeBuffer) {
+        const GraphReader reader = _view.read();
+
+        _firstPendingNodeID = reader.getTotalNodesAllocated();
+        _firstPendingEdgeID = reader.getTotalEdgesAllocated();
+    }
+}
+
+// A node this change wrote is held in the write buffer under its offset there, and will
+// commit as the ID one past the last the graph holds plus that offset. An end the change
+// did not write is already a committed ID and stands as it is.
+void EdgeEndsFunction::readPendingEnds(EdgeID edge, NodeID& start, NodeID& end) const {
+    const CommitWriteBuffer::PendingEdge& pending =
+        _writeBuffer->getPendingEdge(edge.getValue() - _firstPendingEdgeID);
+
+    const auto resolve = [this](const CommitWriteBuffer::ExistingOrPendingNode& node) -> NodeID {
+        const NodeID* committed = std::get_if<NodeID>(&node);
+        if (committed) {
+            return *committed;
+        }
+
+        return NodeID {std::get<CommitWriteBuffer::PendingNodeOffset>(node) + _firstPendingNodeID};
+    };
+
+    start = resolve(pending.src);
+    end = resolve(pending.tgt);
+}
+
+void EdgeEndsFunction::readEnds(EdgeID edge, NodeID& start, NodeID& end) const {
+    const bool isPending = _writeBuffer && edge.getValue() >= _firstPendingEdgeID;
+    if (isPending) {
+        readPendingEnds(edge, start, end);
+        return;
+    }
+
+    const EdgeRecord* record = _view.read().getEdge(edge);
+    if (!record) {
+        return;
+    }
+
+    start = record->_nodeID;
+    end = record->_otherID;
+}
+
+NodeID EdgeEndsFunction::getStartNode(EdgeID edge) const {
+    NodeID start;
+    NodeID end;
+    readEnds(edge, start, end);
+
+    return start;
+}
+
+NodeID EdgeEndsFunction::getEndNode(EdgeID edge) const {
+    NodeID start;
+    NodeID end;
+    readEnds(edge, start, end);
+
+    return end;
 }
 
 void toBoolFunction::strToLower(std::string& lower, std::string_view src) {

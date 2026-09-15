@@ -19,6 +19,19 @@ void FunctionDecls::initDefault() {
     labels->setArguments({EvaluatedType::NodePattern});
     labels->setReturnTypes({{EvaluatedType::String}});
 
+    // The ends of an edge, in the order the graph stores it: a hop walked backwards or
+    // undirected binds the same edge, so its start is the node the edge leaves whichever
+    // way the pattern reached it. Only the MLIR engine reads an entity out of a function.
+    FunctionSignature* startNode = createFunction("startNode");
+    startNode->setArguments({EvaluatedType::EdgePattern});
+    startNode->setReturnTypes({{EvaluatedType::NodePattern}});
+    startNode->setIsV3Only(true);
+
+    FunctionSignature* endNode = createFunction("endNode");
+    endNode->setArguments({EvaluatedType::EdgePattern});
+    endNode->setReturnTypes({{EvaluatedType::NodePattern}});
+    endNode->setIsV3Only(true);
+
     FunctionSignature* keysNodes = createFunction("keys");
     keysNodes->setArguments({EvaluatedType::NodePattern});
     keysNodes->setReturnTypes({{EvaluatedType::String}});
