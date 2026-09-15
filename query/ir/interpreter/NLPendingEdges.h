@@ -4,7 +4,6 @@
 #include <stdint.h>
 
 #include <optional>
-#include <span>
 #include <unordered_map>
 #include <vector>
 
@@ -35,8 +34,10 @@ public:
     // appends while a program runs, so what is indexed stays indexed.
     void indexEdges(const CommitWriteBuffer* writeBuffer, size_t firstPendingNodeID);
 
-    std::span<const size_t> outOf(NodeID node) const;
-    std::span<const size_t> into(NodeID node) const;
+    // The offsets of the edges hanging off @param node, null when it holds none. A later
+    // indexEdges() appends to that vector, which moves what a span into it would point at
+    const Offsets* outOf(NodeID node) const;
+    const Offsets* into(NodeID node) const;
 
 private:
     using Edges = std::unordered_map<uint64_t, Offsets>;
@@ -46,7 +47,7 @@ private:
 
     size_t _indexedEdges {0};
 
-    static std::span<const size_t> lookup(const Edges& edges, NodeID node);
+    static const Offsets* lookup(const Edges& edges, NodeID node);
 };
 
 // The step of a hop that walks the edges this change has written and not committed. The
@@ -102,7 +103,7 @@ private:
     // hop that walks either way - whether these are the edges into the row's node rather
     // than the ones out of it
     size_t _row {0};
-    std::span<const size_t> _offsets;
+    const NLPendingEdgeIndex::Offsets* _offsets {nullptr};
     size_t _position {0};
     bool _incoming {false};
 

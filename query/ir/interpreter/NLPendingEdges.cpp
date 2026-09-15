@@ -39,21 +39,21 @@ void NLPendingEdgeIndex::indexEdges(const CommitWriteBuffer* writeBuffer, size_t
     }
 }
 
-std::span<const size_t> NLPendingEdgeIndex::outOf(NodeID node) const {
+const NLPendingEdgeIndex::Offsets* NLPendingEdgeIndex::outOf(NodeID node) const {
     return lookup(_outgoing, node);
 }
 
-std::span<const size_t> NLPendingEdgeIndex::into(NodeID node) const {
+const NLPendingEdgeIndex::Offsets* NLPendingEdgeIndex::into(NodeID node) const {
     return lookup(_incoming, node);
 }
 
-std::span<const size_t> NLPendingEdgeIndex::lookup(const Edges& edges, NodeID node) {
+const NLPendingEdgeIndex::Offsets* NLPendingEdgeIndex::lookup(const Edges& edges, NodeID node) {
     const auto findIt = edges.find(node.getValue());
     if (findIt == end(edges)) {
-        return {};
+        return nullptr;
     }
 
-    return findIt->second;
+    return &findIt->second;
 }
 
 NLPendingEdgeHop::NLPendingEdgeHop(NLExecutionContext* context,
@@ -95,18 +95,18 @@ void NLPendingEdgeHop::fill(size_t maxCount) {
     size_t remainingToMax = maxCount;
 
     while (remainingToMax > 0 && _row < rowCount) {
-        const bool runDrained = _position == _offsets.size();
+        const bool runDrained = !_offsets || _position == _offsets->size();
 
         // A run's offsets ascend, so the first one the hop did not start with ends it: the
         // rest of the run is what the hop's own body has written since.
-        const bool runIsNewerThanTheHop = !runDrained && _offsets[_position] >= _pendingEdgeCount;
+        const bool runIsNewerThanTheHop = !runDrained && (*_offsets)[_position] >= _pendingEdgeCount;
 
         if (runDrained || runIsNewerThanTheHop) {
             nextRun();
             continue;
         }
 
-        const size_t offset = _offsets[_position];
+        const size_t offset = (*_offsets)[_position];
         _position++;
 
         NodeID other;
@@ -152,7 +152,7 @@ void NLPendingEdgeHop::beginRun() {
     _position = 0;
 
     if (_row >= _inputNodeIDs->size()) {
-        _offsets = {};
+        _offsets = nullptr;
         return;
     }
 
@@ -227,18 +227,34 @@ void NLPendingEdgeScan::fill(size_t maxCount) {
             continue;
         }
 
-        _srcs->push_back(nodeIDOf(edge.src, _firstPendingNodeID));
-        _edgeIDs->push_back(EdgeID(_firstPendingEdgeID + offset));
-        _types->push_back(edge.edgeType);
-        _tgts->push_back(nodeIDOf(edge.tgt, _firstPendingNodeID));
+        if (_srcs) {
+            _srcs->push_back(nodeIDOf(edge.src, _firstPendingNodeID));
+        }
+        if (_edgeIDs) {
+            _edgeIDs->push_back(EdgeID(_firstPendingEdgeID + offset));
+        }
+        if (_types) {
+            _types->push_back(edge.edgeType);
+        }
+        if (_tgts) {
+            _tgts->push_back(nodeIDOf(edge.tgt, _firstPendingNodeID));
+        }
 
         remainingToMax--;
     }
 }
 
 void NLPendingEdgeScan::clearChunks() {
-    _srcs->clear();
-    _edgeIDs->clear();
-    _types->clear();
-    _tgts->clear();
+    if (_srcs) {
+        _srcs->clear();
+    }
+    if (_edgeIDs) {
+        _edgeIDs->clear();
+    }
+    if (_types) {
+        _types->clear();
+    }
+    if (_tgts) {
+        _tgts->clear();
+    }
 }
