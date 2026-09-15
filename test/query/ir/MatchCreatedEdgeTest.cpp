@@ -249,3 +249,21 @@ TEST_F(MatchCreatedEdgeTest, testsTheLabelAndTheTypeOfWhatItWalkedInAWhere) {
     const std::vector<StringRowSink::Row> typed {{"Uma"}};
     EXPECT_EQ(edge.getRows(), typed);
 }
+
+// The second cut publishes the edge but not the column of types the hop filled, so the type
+// is read again - off the write buffer, which is the only place a created edge has one.
+TEST_F(MatchCreatedEdgeTest, readsTheTypeOfACreatedEdgeTwoCutsDown) {
+    StringRowSink named;
+    runWrite("CREATE (a:Person {name: 'Ivo'})-[:MENTORS]->(b:Brand {name: 'Uma'}) WITH a MATCH (a)-[e]->(m) WITH e, m RETURN type(e), m.name",
+             named);
+
+    const std::vector<StringRowSink::Row> expected {{"MENTORS", "Uma"}};
+    EXPECT_EQ(named.getRows(), expected);
+
+    StringRowSink tested;
+    runWrite("CREATE (a:Person {name: 'Ada'})-[:MENTORS]->(b:Brand {name: 'Eos'}) WITH a MATCH (a)-[e]->(m) WITH e, m WHERE e:MENTORS RETURN m.name",
+             tested);
+
+    const std::vector<StringRowSink::Row> typed {{"Eos"}};
+    EXPECT_EQ(tested.getRows(), typed);
+}
