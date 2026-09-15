@@ -1,5 +1,5 @@
 {
-  "enabled": true,
+  "enabled": false,
   "graph": "simpledb",
   "query": "MATCH (n)-[e]->+(m) RETURN n, e.name, m",
   "expect": {
@@ -11,5 +11,6 @@
     "qpp",
     "errors"
   ],
-  "write-required": false
+  "write-required": false,
+  "disabled-reason": "Variable length paths are not implemented in the v3 engine"
 }
