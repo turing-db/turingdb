@@ -1420,12 +1420,13 @@ def ToBoolean : UnaryFunctionOp<"to_boolean">;
 
 // The list family. Each reads a whole !storage.list cell and answers per row: db.size the
 // element count as an integer, db.tail the same list one element shorter - a subspan of
-// the cell, so the row still costs O(1) - and db.head the list's first element. A stored
-// list may mix types, so a head is the type-erased !storage.list_element every element of
-// a heterogeneous list rides, and an empty list heads into the null such a cell carries
-// itself rather than into a nullable column of its own.
+// the cell, so the row still costs O(1) - and db.head and db.last the list's first and
+// final element. A stored list may mix types, so those two answer with the type-erased
+// !storage.list_element every element of a heterogeneous list rides, and an empty list
+// reads as the null such a cell carries itself rather than as a nullable column of its own.
 def Size : UnaryFunctionOp<"size">;
 def Head : UnaryFunctionOp<"head">;
+def Last : UnaryFunctionOp<"last">;
 def Tail : UnaryFunctionOp<"tail">;
 
 class BinaryFunctionOp<string mnemonic> : TuringOp<mnemonic, [Pure]> {

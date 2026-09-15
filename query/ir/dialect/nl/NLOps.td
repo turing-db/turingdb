@@ -1908,11 +1908,12 @@ def ToInteger : NLUnaryFunctionOp<"to_integer", [ConstantThroughOperands]>;
 def ToFloat : NLUnaryFunctionOp<"to_float", [ConstantThroughOperands]>;
 def ToBoolean : NLUnaryFunctionOp<"to_boolean", [ConstantThroughOperands]>;
 
-// The list family db.size / db.head / db.tail lower to. A literal list is one cell
-// standing for every row, and so is what these read off it, so each carries its operand's
-// constancy rather than being spread over the rows it was read on.
+// The list family db.size / db.head / db.last / db.tail lower to. A literal list is one
+// cell standing for every row, and so is what these read off it, so each carries its
+// operand's constancy rather than being spread over the rows it was read on.
 def Size : NLUnaryFunctionOp<"size", [ConstantThroughOperands]>;
 def Head : NLUnaryFunctionOp<"head", [ConstantThroughOperands]>;
+def Last : NLUnaryFunctionOp<"last", [ConstantThroughOperands]>;
 def Tail : NLUnaryFunctionOp<"tail", [ConstantThroughOperands]>;
 
 class NLBinaryFunctionOp<string mnemonic> : NLOp<mnemonic, [Pure, ConstantThroughOperands, RowAlignedThroughOperands]> {

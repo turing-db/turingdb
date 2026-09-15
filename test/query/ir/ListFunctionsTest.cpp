@@ -25,7 +25,7 @@
 using namespace db;
 using namespace turing::test;
 
-// size(), head() and tail() over the two kinds of list a query holds: the literal one it
+// size(), head(), last() and tail() over the two kinds of list a query holds: the one it
 // spells out, which rides a constant cell, and the stored one a property fetch reads back
 // out of a datapart, which rides a nullable cell. Each write runs in its own change and is
 // submitted, so a read sees a committed value rather than the writing query's own column.
@@ -246,11 +246,100 @@ TEST_F(ListFunctionsTest, countsTheNonNullHeadsOfStoredLists) {
     expectRows("MATCH (n:Tagged) RETURN count(head(n.tags))", {{"2"}});
 }
 
-// A head of a literal list is one tagged cell standing for every row, and an UNWIND of it
-// drains the list that cell holds.
+TEST_F(ListFunctionsTest, readsTheLastOfALiteralList) {
+    expectRows("RETURN last([1, 2, 3])", {{"3"}});
+}
+
+TEST_F(ListFunctionsTest, readsTheLastOfAStringList) {
+    expectRows("RETURN last(['x', 'yy'])", {{"yy"}});
+}
+
+TEST_F(ListFunctionsTest, readsTheLastOfAnEmptyListAsNull) {
+    expectRows("RETURN last([])", {{"null"}});
+}
+
+TEST_F(ListFunctionsTest, readsTheLastOfAHeterogeneousListByTheElementTag) {
+    expectRows("RETURN last([1, 'two', true])", {{"true"}});
+}
+
+TEST_F(ListFunctionsTest, readsTheLastOfANestedListAsItsFinalList) {
+    expectRows("RETURN last([[1, 2], [3]])", {{"[3]"}});
+}
+
+TEST_F(ListFunctionsTest, readsTheLastOfAListEndingWithNull) {
+    expectRows("RETURN last([1, null])", {{"null"}});
+}
+
+TEST_F(ListFunctionsTest, readsTheLastOfAStoredList) {
+    write("CREATE (n:Tagged {name: 'a', tags: ['x', 'yy']})");
+    expectRows("MATCH (n:Tagged) RETURN last(n.tags)", {{"yy"}});
+}
+
+TEST_F(ListFunctionsTest, readsNullForTheLastWhereTheNodeHasNoList) {
+    write("CREATE (a:Tagged {name: 'a', tags: [1, 2]})");
+    write("CREATE (b:Tagged {name: 'b', tags: []})");
+    write("CREATE (c:Tagged {name: 'c'})");
+
+    expectRows("MATCH (n:Tagged) RETURN n.name, last(n.tags)",
+               {{"a", "2"}, {"b", "null"}, {"c", "null"}});
+}
+
+TEST_F(ListFunctionsTest, readsTheLastOfACollectedList) {
+    expectRows("MATCH (n:Person {name: 'Remy'}) RETURN last(collect(n.name))", {{"Remy"}});
+}
+
+TEST_F(ListFunctionsTest, testsTheLastOfAnEmptyListForNull) {
+    write("CREATE (a:Tagged {name: 'a', tags: [1, 2]})");
+    write("CREATE (b:Tagged {name: 'b', tags: []})");
+    write("CREATE (c:Tagged {name: 'c'})");
+
+    expectRows("MATCH (n:Tagged) WHERE last(n.tags) IS NULL RETURN n.name",
+               {{"b"}, {"c"}});
+    expectRows("MATCH (n:Tagged) WHERE last(n.tags) IS NOT NULL RETURN n.name", {{"a"}});
+}
+
+TEST_F(ListFunctionsTest, testsALastHoldingNullForNull) {
+    write("CREATE (a:Tagged {name: 'a', tags: [2, null]})");
+    write("CREATE (b:Tagged {name: 'b', tags: [3]})");
+
+    expectRows("MATCH (n:Tagged) WHERE last(n.tags) IS NULL RETURN n.name", {{"a"}});
+}
+
+TEST_F(ListFunctionsTest, comparesALastAgainstAValue) {
+    write("CREATE (a:Tagged {name: 'a', tags: [1, 2]})");
+    write("CREATE (b:Tagged {name: 'b', tags: [2, 1]})");
+
+    expectRows("MATCH (n:Tagged) WHERE last(n.tags) = 1 RETURN n.name", {{"b"}});
+}
+
+TEST_F(ListFunctionsTest, countsTheNonNullLastsOfStoredLists) {
+    write("CREATE (a:Tagged {name: 'a', tags: [1, 2]})");
+    write("CREATE (b:Tagged {name: 'b', tags: []})");
+    write("CREATE (c:Tagged {name: 'c', tags: [3]})");
+
+    expectRows("MATCH (n:Tagged) RETURN count(last(n.tags))", {{"2"}});
+}
+
+// A head or a last of a literal list is one tagged cell standing for every row, and an
+// UNWIND of it drains the list that cell holds.
 TEST_F(ListFunctionsTest, unwindsTheHeadOfALiteralList) {
     expectRows("UNWIND head([[1, 2], [3, 4]]) AS element RETURN element",
                {{"1"}, {"2"}});
+}
+
+TEST_F(ListFunctionsTest, unwindsTheLastOfALiteralList) {
+    expectRows("UNWIND last([[1, 2], [3, 4]]) AS element RETURN element",
+               {{"3"}, {"4"}});
+}
+
+TEST_F(ListFunctionsTest, unwindsTheLastOfAnEmptyListIntoNoRow) {
+    expectRows("UNWIND last([]) AS element RETURN element", {});
+}
+
+TEST_F(ListFunctionsTest, unwindsTheLastOfAStoredList) {
+    write("CREATE (n:Tagged {name: 'a', tags: [[1, 2], [3, 4]]})");
+    expectRows("MATCH (n:Tagged) UNWIND last(n.tags) AS element RETURN element",
+               {{"3"}, {"4"}});
 }
 
 TEST_F(ListFunctionsTest, tailsALiteralList) {
@@ -309,8 +398,8 @@ TEST_F(ListFunctionsTest, readsACollectedListBoundByWith) {
 // An unwind of a list of lists hands each nested list on as a tagged cell rather than as
 // a list column of its own, so the functions read the list back out of the cell.
 TEST_F(ListFunctionsTest, readsANestedListUnwoundAsATaggedCell) {
-    expectRows("UNWIND [[1, 2], [3]] AS l RETURN head(l), size(l)",
-               {{"1", "2"}, {"3", "1"}});
+    expectRows("UNWIND [[1, 2], [3]] AS l RETURN head(l), last(l), size(l)",
+               {{"1", "2", "2"}, {"3", "3", "1"}});
     expectRows("UNWIND [[1, 2, 3], [4]] AS l RETURN tail(l)",
                {{"[2, 3]"}, {"[]"}});
     expectRows("UNWIND [[1, 2], [3]] AS l RETURN size(tail(l))", {{"1"}, {"0"}});
@@ -323,6 +412,7 @@ TEST_F(ListFunctionsTest, readsAStoredNestedListUnwoundAsATaggedCell) {
 
     expectRows("MATCH (n:Tagged) UNWIND n.tags AS l RETURN size(l)", {{"2"}, {"1"}});
     expectRows("MATCH (n:Tagged) UNWIND n.tags AS l RETURN head(l)", {{"1"}, {"3"}});
+    expectRows("MATCH (n:Tagged) UNWIND n.tags AS l RETURN last(l)", {{"2"}, {"3"}});
     expectRows("MATCH (n:Tagged) UNWIND n.tags AS l RETURN tail(l)", {{"[2]"}, {"[]"}});
 }
 
@@ -331,6 +421,7 @@ TEST_F(ListFunctionsTest, readsANullCellAsNull) {
 
     expectRows("MATCH (n:Tagged) UNWIND n.tags AS l RETURN size(l)", {{"2"}, {"null"}});
     expectRows("MATCH (n:Tagged) UNWIND n.tags AS l RETURN head(l)", {{"1"}, {"null"}});
+    expectRows("MATCH (n:Tagged) UNWIND n.tags AS l RETURN last(l)", {{"2"}, {"null"}});
     expectRows("MATCH (n:Tagged) UNWIND n.tags AS l RETURN tail(l)", {{"[2]"}, {"null"}});
 }
 
@@ -356,6 +447,7 @@ TEST_F(ListFunctionsTest, readsATaggedCellHeadedOutOfALiteral) {
 
 TEST_F(ListFunctionsTest, nestsTheListFunctions) {
     expectRows("RETURN head(tail([1, 2, 3])), size(tail([1, 2, 3]))", {{"2", "2"}});
+    expectRows("RETURN last(tail([1, 2, 3])), last(head([[1, 2], [3]]))", {{"3", "2"}});
 }
 
 TEST_F(ListFunctionsTest, sizesTheTailOfAStoredList) {
@@ -402,5 +494,6 @@ TEST_F(ListFunctionsTest, ordersStoredListsByTheirHead) {
 TEST_F(ListFunctionsTest, rejectsAListFunctionOnANonList) {
     expectRejected("MATCH (n:Person) RETURN size(n.name)", "size");
     expectRejected("MATCH (n:Person) RETURN head(n.age)", "head");
+    expectRejected("MATCH (n:Person) RETURN last(n.age)", "last");
     expectRejected("MATCH (n:Person) RETURN tail(n.name)", "tail");
 }
