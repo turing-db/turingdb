@@ -19,6 +19,8 @@ $TURING_HOME/samples/simpledb/simpledb -turing-dir $SCRIPT_DIR/.turing
 rm -rf $SCRIPT_DIR/.turing/graphs/simpledb
 cp -r $SCRIPT_DIR/simpledb.out/simpledb $SCRIPT_DIR/.turing/graphs/simpledb
 
+export USE_TURING_V3=1
+
 turingdb -demon -turing-dir $SCRIPT_DIR/.turing
 
 rm -f pyproject.toml
