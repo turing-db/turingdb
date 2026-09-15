@@ -5482,6 +5482,17 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
         return;
     }
 
+    // An entity is named by its ID throughout the engine, so the column holding it already
+    // holds what id() answers: the call emits no op and stands for its argument's column.
+    if (funcName == "id") {
+        if (!args || args->size() != 1) {
+            throwError("id() expects 1 argument.", expr);
+        }
+
+        _part._exprMap[expr] = translateArg(args->front());
+        return;
+    }
+
     const auto unaryIt = unaryFunctionEmitters.find(funcName);
     if (unaryIt != end(unaryFunctionEmitters)) {
         if (!args || args->size() != 1) {
