@@ -349,6 +349,13 @@ NumericOperand numericOperand(mlir::Type chunkType) {
         element = nullableType.getValueType();
     }
 
+    // A type-erased cell is numeric only once read, and its tag names a type per row
+    // rather than one for the column: it computes in the f64 its mixed numeric tags land
+    // on, as a reduction over cells does, and answers null on a row holding no number.
+    if (mlir::isa<storage::ListElementType>(element)) {
+        return {.numeric = mlir::Float64Type::get(chunkType.getContext()), .nullable = true};
+    }
+
     const bool isFloat = mlir::isa<mlir::Float64Type>(element);
     const auto integerType = mlir::dyn_cast<mlir::IntegerType>(element);
     const bool isInt64 = integerType && integerType.getWidth() == 64;
@@ -3156,16 +3163,18 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
             const NumericOperand lhs = numericOperand(lhsType);
             const NumericOperand rhs = numericOperand(rhsType);
             const mlir::Type promoted = promoteNumeric(_builder, lhs.numeric, rhs.numeric);
-            return operandNullable ? storage::NullableType::get(ctx, promoted) : promoted;
+            const bool nullable = operandNullable || lhs.nullable || rhs.nullable;
+            return nullable ? storage::NullableType::get(ctx, promoted) : promoted;
         }
         break;
 
         case BinaryResultKind::Double: {
-            numericOperand(lhsType);
-            numericOperand(rhsType);
+            const NumericOperand lhs = numericOperand(lhsType);
+            const NumericOperand rhs = numericOperand(rhsType);
+            const bool nullable = operandNullable || lhs.nullable || rhs.nullable;
 
             const mlir::Type doubleElement = _builder.getF64Type();
-            return operandNullable ? storage::NullableType::get(ctx, doubleElement) : doubleElement;
+            return nullable ? storage::NullableType::get(ctx, doubleElement) : doubleElement;
         }
         break;
 

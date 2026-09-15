@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <concepts>
 #include <functional>
 #include <optional>
 #include <string_view>
@@ -18,6 +19,10 @@
 namespace db {
 
 namespace {
+
+struct SafeDivides;
+struct SafeModulo;
+struct Power;
 
 /**
  * @brief Generic function to apply a generic invokable to two possibly-optional
@@ -141,6 +146,73 @@ inline auto asSignedInteger(T&& value) {
 }
 
 /**
+ * @brief The number a type-erased cell holds, whatever numeric type it is tagged as.
+ * Absent when the cell holds no number - a string, a nested list or a null - so the
+ * arithmetic over it answers null the way it does over an absent operand.
+ */
+inline std::optional<double> cellNumber(const ListElementView cell) {
+    switch (cell.getTag()) {
+        case ListBufferTypeTag::Int:
+            return static_cast<double>(cell.getAs<types::Int64::Primitive>());
+        break;
+
+        case ListBufferTypeTag::UInt:
+            return static_cast<double>(cell.getAs<types::UInt64::Primitive>());
+        break;
+
+        case ListBufferTypeTag::Double:
+            return cell.getAs<types::Double::Primitive>();
+        break;
+
+        default:
+            return std::nullopt;
+        break;
+    }
+}
+
+/**
+ * @brief An operand of an arithmetic operation one side of which is a type-erased cell,
+ * read as the double every side of such an operation computes in: mixed tags name no
+ * single integer type, which is why a reduction over cells lands on a double too.
+ */
+template <typename T>
+inline std::optional<double> cellOperand(const T& value) {
+    if constexpr (std::is_same_v<std::decay_t<T>, ListElementView>) {
+        return cellNumber(value);
+    } else if constexpr (TypeUtils::is_optional_v<T>) {
+        if (!value.has_value()) {
+            return std::nullopt;
+        }
+
+        return cellOperand(*value);
+    } else {
+        return static_cast<double>(value);
+    }
+}
+
+template <typename T>
+concept TaggedCell = std::same_as<TypeUtils::unwrap_optional_t<T>, ListElementView>;
+
+// The operators that compute a number out of two, as opposed to the index, which reads a
+// cell as the list it may hold rather than as a number
+template <typename F>
+concept ComputesNumbers = std::is_same_v<F, std::plus<>>
+                       || std::is_same_v<F, std::minus<>>
+                       || std::is_same_v<F, std::multiplies<>>
+                       || std::is_same_v<F, SafeDivides>
+                       || std::is_same_v<F, SafeModulo>
+                       || std::is_same_v<F, Power>;
+
+template <typename F, typename T, typename U>
+concept ComputesOverTaggedCell = ComputesNumbers<F> && (TaggedCell<T> || TaggedCell<U>);
+
+// Every other pair: the operands are computed in a type the column names. Spelled as a
+// concept of its own so the two operators below order against each other - a negation
+// written twice is two constraints, one written once is one
+template <typename F, typename T, typename U>
+concept ComputesOverColumnType = !ComputesOverTaggedCell<F, T, U>;
+
+/**
  * @brief Thin wrapper over a provided functor @param F to dispatch optional logic
  * accordingly
  */
@@ -156,14 +228,31 @@ struct BinaryOp {
     }
 
     template <typename T, typename U>
-        requires TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>
+        requires (TypeUtils::is_optional_v<T> || TypeUtils::is_optional_v<U>)
+              && ComputesOverColumnType<F, T, U>
     inline decltype(auto) operator()(T&& a, U&& b) const {
         return optionalGeneric<F>(operand(std::forward<T>(a)), operand(std::forward<U>(b)));
     }
 
     template <typename T, typename U>
+        requires ComputesOverColumnType<F, T, U>
     inline decltype(auto) operator()(T&& a, U&& b) const {
         return F {}(operand(std::forward<T>(a)), operand(std::forward<U>(b)));
+    }
+
+    // A cell carries its type per row rather than in the column's, so the operands are
+    // read through the tag each row holds instead of computed in a type the column names
+    template <typename T, typename U>
+        requires ComputesOverTaggedCell<F, T, U>
+    inline std::optional<double> operator()(T&& a, U&& b) const {
+        const std::optional<double> lhs = cellOperand(a);
+        const std::optional<double> rhs = cellOperand(b);
+
+        if (!lhs.has_value() || !rhs.has_value()) {
+            return std::nullopt;
+        }
+
+        return F {}(*lhs, *rhs);
     }
 };
 
