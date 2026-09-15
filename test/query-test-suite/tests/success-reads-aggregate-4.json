@@ -1,16 +1,15 @@
 {
-  "enabled": false,
+  "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n) RETURN n, avg(n.duration)",
   "expect": {
     "plan": "flowchart TD\n    0[\"`\n        __SCAN_NODES__\n    `\"]\n    1[\"`\n        __VAR__\n        __name__: n\n    `\"]\n    2[\"`\n        __FILTER_NODE__\n    `\"]\n    3[\"`\n        __AGGREGATE_EVAL__\n        __aggregate_func__: avg\n        __has grouping keys__: 1\n    `\"]\n    4[\"`\n        __GET_PROPERTY_WITH_NULL__\n        __var__ n\n        __prop__ duration\n    `\"]\n    5[\"`\n        __PRODUCE_RESULTS__\n    `\"]\n    0-->2\n    1-->4\n    2-->1\n    3-->5\n    4-->3",
-    "result": "PLAN ERROR\nGroup by keys are not supported yet"
+    "result": "n,avg(n.duration)\n0,null\n1,null\n2,null\n3,null\n4,null\n5,null\n6,null\n7,null\n8,null\n9,null\n10,null\n11,null\n12,null\n13,null\n14,null\n15,null\n16,null\n17,null"
   },
   "tags": [
     "success",
     "reads",
     "aggregate"
   ],
-  "write-required": false,
-  "disabled-reason": "Group by keys are not supported"
+  "write-required": false
 }
