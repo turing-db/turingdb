@@ -613,18 +613,34 @@ struct StringContains {
 
 /// IN [ ... ]
 struct TuringIn {
-    std::optional<CustomBool> operator()(const PropertyNull& /*unused*/,
-                                         const ListView list) const {
-        if (list.empty()) {
+    template <typename L>
+        requires ListOperand<L>
+    std::optional<CustomBool> operator()(const PropertyNull& null, const L& list) const {
+        if constexpr (TypeUtils::is_optional_v<L>) {
+            if (!list.has_value()) {
+                return std::nullopt;
+            }
+        }
+
+        if (TypeUtils::unwrap(list).empty()) {
             return CustomBool {false};
         }
 
         return std::nullopt;
     }
 
-    template <typename T>
-    std::optional<CustomBool> operator()(const T& value, const ListView list) const {
-        if (list.empty()) {
+    template <typename T, typename L>
+        requires ListOperand<L>
+    std::optional<CustomBool> operator()(const T& value, const L& list) const {
+        if constexpr (TypeUtils::is_optional_v<L>) {
+            if (!list.has_value()) {
+                return std::nullopt;
+            }
+        }
+
+        const ListView elements = TypeUtils::unwrap(list);
+
+        if (elements.empty()) {
             return CustomBool {false};
         }
 
@@ -645,7 +661,7 @@ struct TuringIn {
 
         bool unknown = false;
 
-        for (const ListElementView element : list) {
+        for (const ListElementView element : elements) {
             if (element.getTag() == ListBufferTypeTag::Null) {
                 unknown = true;
                 continue;
@@ -664,8 +680,9 @@ struct TuringIn {
     }
 
     // Unused but needed to satisfy symmetry of dispatcher
-    template <typename T>
-    std::optional<CustomBool> operator()(const ListView /*unused*/, const T& /*unused*/) {
+    template <typename L, typename T>
+        requires ListOperand<L> && (!ListOperand<T>)
+    std::optional<CustomBool> operator()(const L& list, const T& value) const {
         throw FatalException("IN operands in incorrect order");
     }
 

@@ -213,6 +213,13 @@ concept ComputesOverTaggedCell = ComputesNumbers<F> && (TaggedCell<T> || TaggedC
 template <typename F, typename T, typename U>
 concept ComputesOverColumnType = !ComputesOverTaggedCell<F, T, U>;
 
+// The concatenation of two lists, as opposed to the two strings the same operator joins.
+// Either side may be nullable, a stored list being read out of a nullable column.
+template <typename A, typename B>
+concept ConcatenatesLists =
+    std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<A>>, ListView>
+    && std::same_as<TypeUtils::unwrap_optional_t<std::decay_t<B>>, ListView>;
+
 /**
  * @brief Thin wrapper over a provided functor @param F to dispatch optional logic
  * accordingly
@@ -301,7 +308,8 @@ struct Concatenate {
     }
 
     template <typename A, typename B>
-        requires TypeUtils::is_optional_v<A> || TypeUtils::is_optional_v<B>
+        requires (TypeUtils::is_optional_v<A> || TypeUtils::is_optional_v<B>)
+              && (!ConcatenatesLists<A, B>)
     inline std::optional<std::string_view> operator()(const A& a, const B& b) const {
         if constexpr (TypeUtils::is_optional_v<A>) {
             if (!a.has_value()) {
@@ -323,6 +331,25 @@ struct Concatenate {
 
     inline ListView operator()(ListView a, ListView b) const {
         return _listBuffer->concatenate(a, b);
+    }
+
+    template <typename A, typename B>
+        requires ConcatenatesLists<A, B>
+              && (TypeUtils::is_optional_v<A> || TypeUtils::is_optional_v<B>)
+    inline std::optional<ListView> operator()(const A& a, const B& b) const {
+        if constexpr (TypeUtils::is_optional_v<A>) {
+            if (!a.has_value()) {
+                return std::nullopt;
+            }
+        }
+
+        if constexpr (TypeUtils::is_optional_v<B>) {
+            if (!b.has_value()) {
+                return std::nullopt;
+            }
+        }
+
+        return _listBuffer->concatenate(TypeUtils::unwrap(a), TypeUtils::unwrap(b));
     }
 };
 
