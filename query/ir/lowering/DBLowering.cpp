@@ -164,6 +164,7 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     {"db.to_integer", {&emitNLUnaryFunction<nl::ToInteger>, &integerFunctionElement,     ResultNullability::AlwaysNullable}},
     {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,       ResultNullability::AlwaysNullable}},
     {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, &booleanFunctionElement,     ResultNullability::AlwaysNullable}},
+    {"db.element_id", {&emitNLUnaryFunction<nl::ElementID>,  &integerFunctionElement,     ResultNullability::FollowsInput}},
     {"db.size",       {&emitNLUnaryFunction<nl::Size>,      &listSizeFunctionElement,    ResultNullability::FollowsInput}},
     {"db.head",       {&emitNLUnaryFunction<nl::Head>,      &listElementFunctionElement, ResultNullability::NeverNullable}},
     {"db.last",       {&emitNLUnaryFunction<nl::Last>,      &listElementFunctionElement, ResultNullability::NeverNullable}},

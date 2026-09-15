@@ -35,6 +35,27 @@ std::optional<ListView> taggedList(const ListElementView cell) {
     throw TuringException("size(), head(), last() and tail() read a list, and this row holds a value that is not one");
 }
 
+// The edge a tagged cell holds, or nothing when it holds a null. Anything else is an edge
+// function applied to something that is no edge, which no plan can see coming because the
+// cell carries its type per row.
+std::optional<EdgeID> taggedEdge(const ListElementView cell) {
+    const ListBufferTypeTag tag = cell.getTag();
+
+    if (tag == ListBufferTypeTag::EdgeID) {
+        return cell.getAs<EdgeID>();
+    } else if (tag == ListBufferTypeTag::Null) {
+        return std::nullopt;
+    }
+
+    throw TuringException("startNode() and endNode() read an edge, and this row holds a value that is not one");
+}
+
+}
+
+// A row holding no cell at all - an index past the end of a stored list, or a list the row
+// does not carry - answers what the cell holding a null answers.
+TaggedListSizeFunction::ResultType TaggedListSizeFunction::operator()(const std::optional<ArgType>& cell) const {
+    return cell.has_value() ? (*this)(*cell) : std::nullopt;
 }
 
 TaggedListSizeFunction::ResultType TaggedListSizeFunction::operator()(const ArgType cell) const {
@@ -46,6 +67,10 @@ TaggedListSizeFunction::ResultType TaggedListSizeFunction::operator()(const ArgT
     return static_cast<types::Int64::Primitive>(list->size());
 }
 
+TaggedListHeadFunction::ResultType TaggedListHeadFunction::operator()(const std::optional<ArgType>& cell) const {
+    return cell.has_value() ? (*this)(*cell) : ListElementView::nullElement();
+}
+
 TaggedListHeadFunction::ResultType TaggedListHeadFunction::operator()(const ArgType cell) const {
     const std::optional<ListView> list = taggedList(cell);
     if (!list || list->empty()) {
@@ -55,6 +80,10 @@ TaggedListHeadFunction::ResultType TaggedListHeadFunction::operator()(const ArgT
     return list->front();
 }
 
+TaggedListLastFunction::ResultType TaggedListLastFunction::operator()(const std::optional<ArgType>& cell) const {
+    return cell.has_value() ? (*this)(*cell) : ListElementView::nullElement();
+}
+
 TaggedListLastFunction::ResultType TaggedListLastFunction::operator()(const ArgType cell) const {
     const std::optional<ListView> list = taggedList(cell);
     if (!list || list->empty()) {
@@ -62,6 +91,10 @@ TaggedListLastFunction::ResultType TaggedListLastFunction::operator()(const ArgT
     }
 
     return list->back();
+}
+
+TaggedListTailFunction::ResultType TaggedListTailFunction::operator()(const std::optional<ArgType>& cell) const {
+    return cell.has_value() ? (*this)(*cell) : std::nullopt;
 }
 
 TaggedListTailFunction::ResultType TaggedListTailFunction::operator()(const ArgType cell) const {
@@ -240,6 +273,46 @@ NodeID EdgeEndsFunction::getEndNode(EdgeID edge) const {
     readEnds(edge, start, end);
 
     return end;
+}
+
+TaggedStartNodeFunction::ResultType TaggedStartNodeFunction::operator()(const std::optional<ArgType>& cell) const {
+    return cell.has_value() ? (*this)(*cell) : NodeID {};
+}
+
+TaggedStartNodeFunction::ResultType TaggedStartNodeFunction::operator()(const ArgType cell) const {
+    const std::optional<EdgeID> edge = taggedEdge(cell);
+    if (!edge) {
+        return NodeID {};
+    }
+
+    return getStartNode(*edge);
+}
+
+TaggedEndNodeFunction::ResultType TaggedEndNodeFunction::operator()(const std::optional<ArgType>& cell) const {
+    return cell.has_value() ? (*this)(*cell) : NodeID {};
+}
+
+TaggedEndNodeFunction::ResultType TaggedEndNodeFunction::operator()(const ArgType cell) const {
+    const std::optional<EdgeID> edge = taggedEdge(cell);
+    if (!edge) {
+        return NodeID {};
+    }
+
+    return getEndNode(*edge);
+}
+
+TaggedIdFunction::ResultType TaggedIdFunction::operator()(const ArgType cell) const {
+    const ListBufferTypeTag tag = cell.getTag();
+
+    if (tag == ListBufferTypeTag::NodeID) {
+        return static_cast<types::Int64::Primitive>(cell.getAs<NodeID>().getValue());
+    } else if (tag == ListBufferTypeTag::EdgeID) {
+        return static_cast<types::Int64::Primitive>(cell.getAs<EdgeID>().getValue());
+    } else if (tag == ListBufferTypeTag::Null) {
+        return std::nullopt;
+    }
+
+    throw TuringException("id() reads a node or an edge, and this row holds a value that is neither");
 }
 
 void toBoolFunction::strToLower(std::string& lower, std::string_view src) {

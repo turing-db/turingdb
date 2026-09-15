@@ -258,3 +258,30 @@ TEST_F(EdgeEndpointsTest, rejectsAPropertyArgument) {
     expectRejected("MATCH (n:Person) RETURN endNode(n.name)",
                    "Invalid arguments for function 'endNode'");
 }
+
+TEST_F(EdgeEndpointsTest, readsTheEndsOfAnEdgeUnwoundFromAStoredList) {
+    write("MATCH (a)-[e:KNOWS_WELL]->(b) WITH collect(e) AS es CREATE (m:Bag {items: es})");
+
+    expectRows("MATCH (m:Bag) UNWIND m.items AS e RETURN startNode(e), endNode(e)",
+               {{"0", "1"}, {"1", "0"}, {"6", "0"}});
+}
+
+TEST_F(EdgeEndpointsTest, readsTheEndsOfAnEdgeIndexedOutOfAStoredList) {
+    write("MATCH (a)-[e:KNOWS_WELL]->(b) WITH collect(e) AS es CREATE (m:Bag {items: es})");
+
+    expectRows("MATCH (m:Bag) RETURN startNode(m.items[2]), endNode(m.items[2])",
+               {{"6", "0"}});
+}
+
+TEST_F(EdgeEndpointsTest, readsNullFromAStoredListElementThatIsNull) {
+    write("CREATE (m:Bag {items: [null]})");
+
+    expectRows("MATCH (m:Bag) UNWIND m.items AS e RETURN startNode(e), endNode(e)",
+               {{"null", "null"}});
+}
+
+TEST_F(EdgeEndpointsTest, rejectsAStoredListElementThatIsNoEdge) {
+    write("CREATE (m:Bag {items: [1, 2]})");
+
+    expectRejected("MATCH (m:Bag) UNWIND m.items AS e RETURN startNode(e)", "read an edge");
+}

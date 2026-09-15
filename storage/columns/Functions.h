@@ -133,9 +133,32 @@ private:
     void readPendingEnds(EdgeID edge, NodeID& start, NodeID& end) const;
 };
 
+// The same two over a type-erased cell, which is what an UNWIND or an index of a stored
+// list binds: a stored list names no element type, so what its elements are is known per
+// row rather than in the plan. A cell holding a null answers the invalid node such a
+// column carries; one holding no edge at all is the type error the row raises.
+class TaggedStartNodeFunction : public EdgeEndsFunction {
+public:
+    using EdgeEndsFunction::EdgeEndsFunction;
+    using ArgType = ListElementView;
+
+    ResultType operator()(ArgType cell) const;
+    ResultType operator()(const std::optional<ArgType>& cell) const;
+};
+
+class TaggedEndNodeFunction : public EdgeEndsFunction {
+public:
+    using EdgeEndsFunction::EdgeEndsFunction;
+    using ArgType = ListElementView;
+
+    ResultType operator()(ArgType cell) const;
+    ResultType operator()(const std::optional<ArgType>& cell) const;
+};
+
 class StartNodeFunction : public EdgeEndsFunction {
 public:
     using EdgeEndsFunction::EdgeEndsFunction;
+    using TaggedCounterpart = TaggedStartNodeFunction;
 
     ResultType operator()(const EdgeID edge) const { return getStartNode(edge); }
 };
@@ -143,8 +166,20 @@ public:
 class EndNodeFunction : public EdgeEndsFunction {
 public:
     using EdgeEndsFunction::EdgeEndsFunction;
+    using TaggedCounterpart = TaggedEndNodeFunction;
 
     ResultType operator()(const EdgeID edge) const { return getEndNode(edge); }
+};
+
+// The ID a type-erased cell's entity is named by. id() over a node or an edge is the
+// column it was handed, but a cell holds its entity behind a tag, so the number has to be
+// read out of it before anything can be compared against it.
+class TaggedIdFunction {
+public:
+    using ArgType = ListElementView;
+    using ResultType = std::optional<types::Int64::Primitive>;
+
+    ResultType operator()(ArgType cell) const;
 };
 
 class toIntegerFunction {
@@ -306,6 +341,7 @@ public:
     using ResultType = std::optional<types::Int64::Primitive>;
 
     ResultType operator()(ArgType cell) const;
+    ResultType operator()(const std::optional<ArgType>& cell) const;
 };
 
 class TaggedListHeadFunction {
@@ -314,6 +350,7 @@ public:
     using ResultType = ListElementView;
 
     ResultType operator()(ArgType cell) const;
+    ResultType operator()(const std::optional<ArgType>& cell) const;
 };
 
 class TaggedListLastFunction {
@@ -322,6 +359,7 @@ public:
     using ResultType = ListElementView;
 
     ResultType operator()(ArgType cell) const;
+    ResultType operator()(const std::optional<ArgType>& cell) const;
 };
 
 class TaggedListTailFunction {
@@ -330,6 +368,7 @@ public:
     using ResultType = std::optional<types::List::Primitive>;
 
     ResultType operator()(ArgType cell) const;
+    ResultType operator()(const std::optional<ArgType>& cell) const;
 };
 
 class ListSizeFunction {
