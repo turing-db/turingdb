@@ -205,22 +205,20 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
             if (Stmt::isUpdating(kind)) {
                 returnMandatory = false;
                 _writeAnalyzer->analyze(stmt);
-                continue;
-            }
+            } else if (kind == Stmt::Kind::WITH) {
+                // A part of its own opens here: `CREATE (n) WITH n MATCH (m)` ends on a
+                // reading clause, and a query ending on one needs a RETURN
+                returnMandatory = true;
 
-            if (kind == Stmt::Kind::WITH) {
                 analyze(static_cast<const WithStmt*>(stmt));
                 _writeAnalyzer->startPart();
-                continue;
-            }
-
-            if (kind == Stmt::Kind::CALL) {
-                if (static_cast<const CallStmt*>(stmt)->isStandaloneCall()) {
+            } else {
+                if (kind == Stmt::Kind::CALL && static_cast<const CallStmt*>(stmt)->isStandaloneCall()) {
                     returnMandatory = false;
                 }
-            }
 
-            _readAnalyzer->analyze(stmt);
+                _readAnalyzer->analyze(stmt);
+            }
         }
     }
 

@@ -175,3 +175,10 @@ TEST_F(CreateWithTest, rejectsAnOptionalMatchOverANodeCreatedAboveTheCut) {
     runWriteExpectingError("CREATE (n:Person {name: 'Ola'}) WITH n OPTIONAL MATCH (n)-[:KNOWS]->(m) RETURN m.name",
                            "An OPTIONAL MATCH cannot read what a CREATE in the same query wrote");
 }
+
+// A cut opens a part like any other, and this one ends on its MATCH. Writing earlier in the
+// query does not excuse the RETURN that part needs.
+TEST_F(CreateWithTest, rejectsAQueryThatEndsOnAReadingClause) {
+    runWriteExpectingError("CREATE (n:Person {name: 'Rae'}) WITH n MATCH (m:Person)",
+                           "Return statement is missing");
+}
