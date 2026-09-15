@@ -809,8 +809,12 @@ private:
     // the value type alone does not say: labels() and type() format their own text
     // where a string property column borrows the graph's
     static bool isOwnedStringElement(mlir::Type elementType);
+    static bool isOwnedStringChunk(mlir::Type chunkType);
 
+    // The per-step variant reserves a full chunk; the sized one is what an accumulator
+    // holding a single row takes.
     Column* allocOptOwnedStringColumn();
+    Column* allocOptOwnedStringColumn(size_t reserveSize);
 
     static bool isMaskElementType(mlir::Type elementType);
 

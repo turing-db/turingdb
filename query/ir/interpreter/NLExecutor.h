@@ -331,6 +331,17 @@ public:
     static NLBroadcastFunction selectOptOwnedStringBlockRepeat();
     static NLBroadcastFunction selectOptOwnedStringTile();
 
+    // The owned-string members of the reduction families. min and max order the strings
+    // labels() and type() answer as they order a property's, so they fold into a
+    // std::string accumulator; no other reduction reads a string, and the lowering
+    // rejects those before the selection reaches here.
+    static NLAggregateResetFunction selectOptOwnedStringAggregateReset();
+    static NLAggregateUpdateFunction selectOptOwnedStringAggregateUpdate(AggregateKind kind);
+    static NLAggregateResultFunction selectOptOwnedStringAggregateResult();
+    static NLGroupAggregateGrowFunction selectOptOwnedStringGroupAggregateGrow();
+    static NLGroupAggregateFoldFunction selectOptOwnedStringGroupAggregateFold(GroupAggregateKind kind);
+    static NLGroupAggregateEmitFunction selectOptOwnedStringGroupAggregateEmit();
+
     // The mask members of the handler families, for a !storage.bool chunk: a ColumnMask -
     // what a label test, an edge type test and a merge produce - where an i1 value chunk
     // is a ColumnVector<CustomBool>.

@@ -283,7 +283,7 @@ mlir::Type aggregateResultElementType(mlir::OpBuilder& builder,
     const bool isBool = integerType && integerType.getWidth() == 1;
     const bool isInteger = integerType && !isBool;
     const bool isNumeric = isFloat || isInteger;
-    const bool isString = mlir::isa<storage::StringType>(inputElement);
+    const bool isString = mlir::isa<storage::StringType, storage::OwnedStringType>(inputElement);
     const bool isTaggedCell = mlir::isa<storage::ListElementType>(inputElement);
 
     // An untyped null holds no value to reduce - a name no property in the graph carries,

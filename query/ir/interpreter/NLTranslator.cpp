@@ -3065,17 +3065,26 @@ void NLTranslator::translateAggregateState(nl::Aggregate aggregate, NLStmtContai
 
     // The state handle's element type is the accumulator's value type (f64 for an
     // avg, the input type otherwise), baked during lowering. Allocate the single-row
-    // nullable value column the reduction folds into.
+    // nullable value column the reduction folds into, and the reset that
+    // re-initializes it each time the block holding this nl.aggregate runs (once at
+    // function scope for a top-level aggregate): a present zero for sum/avg, null for
+    // min/max.
     const auto stateType = mlir::cast<nl::AggregateStateType>(aggregate.getState().getType());
-    const ValueType accumulatorType = valueTypeFromElementType(stateType.getElementType());
-    Column* accumulator = allocSingleRowOptColumnForValueType(accumulatorType);
-    state->setAccumulator(accumulator);
-
-    // The reset re-initializes the accumulator each time the block holding this
-    // nl.aggregate runs (once at function scope for a top-level aggregate): a present
-    // zero for sum/avg, null for min/max.
+    const mlir::Type accumulatorElement = stateType.getElementType();
     const AggregateKind kind = toRuntimeAggregateKind(aggregate.getKind());
-    const NLAggregateResetFunction reset = NLExecutor::selectAggregateReset(kind, accumulatorType);
+
+    Column* accumulator = nullptr;
+    NLAggregateResetFunction reset = nullptr;
+    if (isOwnedStringElement(accumulatorElement)) {
+        accumulator = allocOptOwnedStringColumn(1);
+        reset = NLExecutor::selectOptOwnedStringAggregateReset();
+    } else {
+        const ValueType accumulatorType = valueTypeFromElementType(accumulatorElement);
+        accumulator = allocSingleRowOptColumnForValueType(accumulatorType);
+        reset = NLExecutor::selectAggregateReset(kind, accumulatorType);
+    }
+
+    state->setAccumulator(accumulator);
 
     NLAggregateResetData* resetData = _program->allocFunctionData<NLAggregateResetData>(state, reset);
     body->emplaceStmt(&NLExecutor::runAggregateReset, resetData);
@@ -3107,12 +3116,20 @@ void NLTranslator::translateAggregateResult(nl::AggregateResult result, NLStmtCo
     // the reduced value. Allocate its ColumnOptVector on the result value type and
     // map the op result to it.
     const mlir::Value resultChunk = result.getResult();
-    const ValueType resultType = nullableChunkValueType(resultChunk.getType());
-    Column* output = allocOptColumnForValueType(resultType);
-    _valueSlots[resultChunk] = output;
-
     const AggregateKind kind = toRuntimeAggregateKind(result.getKind());
-    const NLAggregateResultFunction emit = NLExecutor::selectAggregateResult(kind, resultType);
+
+    Column* output = nullptr;
+    NLAggregateResultFunction emit = nullptr;
+    if (isOwnedStringChunk(resultChunk.getType())) {
+        output = allocOptOwnedStringColumn();
+        emit = NLExecutor::selectOptOwnedStringAggregateResult();
+    } else {
+        const ValueType resultType = nullableChunkValueType(resultChunk.getType());
+        output = allocOptColumnForValueType(resultType);
+        emit = NLExecutor::selectAggregateResult(kind, resultType);
+    }
+
+    _valueSlots[resultChunk] = output;
 
     NLAggregateResultData* data = _program->allocFunctionData<NLAggregateResultData>(state, output, emit);
     body->emplaceStmt(&NLExecutor::runAggregateResult, data);
@@ -3231,6 +3248,18 @@ void NLTranslator::buildGroupAggregate(mlir::storage::GroupAggregateKind mlirKin
         case GroupAggregateKind::Max:
         case GroupAggregateKind::Avg:
         case GroupAggregateKind::AvgDistinct: {
+            // A column whose rows own their characters - what type() and labels() answer
+            // - reduces into a std::string accumulator, which its value type of String
+            // does not say on its own.
+            if (isOwnedStringChunk(chunkType)) {
+                aggregate._accumulator = allocOptOwnedStringColumn();
+                aggregate._grow = NLExecutor::selectOptOwnedStringGroupAggregateGrow();
+                aggregate._emit = NLExecutor::selectOptOwnedStringGroupAggregateEmit();
+                aggregate._fold = NLExecutor::selectOptOwnedStringGroupAggregateFold(kind);
+
+                break;
+            }
+
             // sum/min/max/avg reduce the values themselves, so the input must be a
             // nullable value chunk; avg accumulates as f64, the rest in the input's
             // own type. nullableChunkValueType rejects an ID chunk here. The distinct
@@ -4311,6 +4340,8 @@ NLAggregateUpdateFunction NLTranslator::selectAggregateUpdateForChunkType(Aggreg
         return NLExecutor::selectOptTaggedAggregateUpdate(kind);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectTaggedAggregateUpdate(kind);
+    } else if (isOwnedStringChunk(chunkType)) {
+        return NLExecutor::selectOptOwnedStringAggregateUpdate(kind);
     }
 
     return NLExecutor::selectAggregateUpdate(kind, nullableChunkValueType(chunkType));
@@ -4594,9 +4625,20 @@ bool NLTranslator::isOwnedStringElement(mlir::Type elementType) {
     return mlir::isa<storage::OwnedStringType>(elementType);
 }
 
+bool NLTranslator::isOwnedStringChunk(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+    const auto nullableType = mlir::dyn_cast<storage::NullableType>(chunk.getElementType());
+
+    return nullableType && isOwnedStringElement(nullableType.getValueType());
+}
+
 Column* NLTranslator::allocOptOwnedStringColumn() {
+    return allocOptOwnedStringColumn(_program->getChunkSize());
+}
+
+Column* NLTranslator::allocOptOwnedStringColumn(size_t reserveSize) {
     auto* column = _memory->alloc<ColumnOptVector<types::String::OwningPrimitive>>();
-    column->reserve(_program->getChunkSize());
+    column->reserve(reserveSize);
 
     return column;
 }

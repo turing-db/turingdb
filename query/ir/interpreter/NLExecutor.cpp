@@ -6285,6 +6285,45 @@ NLBroadcastFunction NLExecutor::selectOptOwnedStringTile() {
     return &tileColumn<std::optional<types::String::OwningPrimitive>>;
 }
 
+// The owned-string reductions. Only min and max read a string, and they order the
+// characters the rows own exactly as they order a property's borrowed ones, so each
+// handler is the std::string instantiation of the one a string property takes.
+NLAggregateResetFunction NLExecutor::selectOptOwnedStringAggregateReset() {
+    return &aggregateResetNull<types::String::OwningPrimitive>;
+}
+
+NLAggregateUpdateFunction NLExecutor::selectOptOwnedStringAggregateUpdate(AggregateKind kind) {
+    if (kind == AggregateKind::Min) {
+        return &aggregateUpdateMinMax<types::String::OwningPrimitive, /*IsMax=*/false>;
+    } else if (kind == AggregateKind::Max) {
+        return &aggregateUpdateMinMax<types::String::OwningPrimitive, /*IsMax=*/true>;
+    }
+
+    throw IRException("only min/max reduce a column of strings");
+}
+
+NLAggregateResultFunction NLExecutor::selectOptOwnedStringAggregateResult() {
+    return &aggregateResultCopy<types::String::OwningPrimitive>;
+}
+
+NLGroupAggregateGrowFunction NLExecutor::selectOptOwnedStringGroupAggregateGrow() {
+    return &groupGrowNull<types::String::OwningPrimitive>;
+}
+
+NLGroupAggregateFoldFunction NLExecutor::selectOptOwnedStringGroupAggregateFold(GroupAggregateKind kind) {
+    if (kind == GroupAggregateKind::Min) {
+        return &groupFoldMinMax<types::String::OwningPrimitive, /*IsMax=*/false>;
+    } else if (kind == GroupAggregateKind::Max) {
+        return &groupFoldMinMax<types::String::OwningPrimitive, /*IsMax=*/true>;
+    }
+
+    throw IRException("only min/max reduce a column of strings");
+}
+
+NLGroupAggregateEmitFunction NLExecutor::selectOptOwnedStringGroupAggregateEmit() {
+    return &groupEmitCopy<types::String::OwningPrimitive>;
+}
+
 NLGatherFunction NLExecutor::selectMaskGather() {
     return &gatherColumn<ColumnMask::Bool_t, ColumnMask>;
 }
