@@ -1666,6 +1666,12 @@ target_link_libraries(test_query_ir_list_property_order_collect PRIVATE
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_list_property_order_collect PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_turing_test(test_query_ir_list_property_in ListPropertyInTest.cpp)
+target_link_libraries(test_query_ir_list_property_in PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_list_property_index_concat ListPropertyIndexConcatTest.cpp)
+target_link_libraries(test_query_ir_list_property_index_concat PRIVATE turing_ir_test_write_query_s)
+
 add_turing_test(test_query_ir_with_write WithWriteTest.cpp)
 target_link_libraries(test_query_ir_with_write PRIVATE turing_ir_test_write_query_s)
 

@@ -67,9 +67,7 @@ struct ListElementKindPairs {
 
 template <typename T>
 struct ListMembershipKindPairs {
-    using Pairs = std::tuple<
-        KindPair<T, ListView>,
-        KindPair<std::optional<T>, ListView>>;
+    using Pairs = typename OptionalKindPairs<T, ListView>::Pairs;
 };
 
 template <typename T>
@@ -368,7 +366,7 @@ template <ColumnOperator Op>
 struct PairRestrictions<Op> {
     using Allowed = GenerateKindPairList<
         OptionalKindPairs<types::String::Primitive, types::String::Primitive>::Pairs,
-        std::tuple<KindPair<ListView, ListView>>
+        OptionalKindPairs<ListView, ListView>::Pairs
     >;
 
     using AllowedMixed = AllowedMixedList<>;
@@ -392,7 +390,10 @@ struct PairRestrictions<Op> {
 
         ListMembershipKindPairs<ListElementView>::Pairs,
 
-        std::tuple<KindPair<PropertyNull, ListView>>
+        std::tuple<
+            KindPair<PropertyNull, ListView>,
+            KindPair<PropertyNull, std::optional<ListView>>
+        >
     >;
 
     using AllowedMixed = AllowedMixedList<>;
@@ -410,13 +411,14 @@ struct PairRestrictions<Op> {
         OptionalKindPairs<ListElementView, types::Int64::Primitive>::Pairs,
         OptionalKindPairs<ListElementView, types::UInt64::Primitive>::Pairs,
 
-        std::tuple<
-            KindPair<ListView, types::Int64::Primitive>,
-            KindPair<ListView, types::UInt64::Primitive>,
-            KindPair<ListView, std::optional<types::Int64::Primitive>>,
-            KindPair<ListView, std::optional<types::UInt64::Primitive>>,
+        // A stored list is read through a nullable column, a node carrying none reading
+        // as absent there, so every position is indexed on either shape of list column
+        OptionalKindPairs<ListView, types::Int64::Primitive>::Pairs,
+        OptionalKindPairs<ListView, types::UInt64::Primitive>::Pairs,
 
+        std::tuple<
             KindPair<ListView, PropertyNull>,
+            KindPair<std::optional<ListView>, PropertyNull>,
             KindPair<ListElementView, PropertyNull>,
             KindPair<std::optional<ListElementView>, PropertyNull>
         >

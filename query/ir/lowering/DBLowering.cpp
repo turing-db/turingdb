@@ -412,13 +412,19 @@ bool isEntityChunk(mlir::Type chunkType) {
     return mlir::isa<storage::NodeIDType, storage::EdgeIDType>(chunk.getElementType());
 }
 
+// A list column, read through the nullable a stored list wears: a property fetch produces
+// its values nullable, since a node carrying no list reads as absent there.
 bool isListChunk(mlir::Type chunkType) {
     const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
     if (!chunk) {
         return false;
     }
 
-    return mlir::isa<storage::ListType>(chunk.getElementType());
+    const mlir::Type element = chunk.getElementType();
+    const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
+    const mlir::Type listed = nullable ? nullable.getValueType() : element;
+
+    return mlir::isa<storage::ListType>(listed);
 }
 
 bool isIndexableChunk(mlir::Type chunkType) {
@@ -471,7 +477,11 @@ mlir::Type listInternalType(mlir::Type chunkType) {
         return {};
     }
 
-    const auto listType = mlir::dyn_cast<storage::ListType>(chunk.getElementType());
+    const mlir::Type element = chunk.getElementType();
+    const auto nullable = mlir::dyn_cast<storage::NullableType>(element);
+    const mlir::Type listed = nullable ? nullable.getValueType() : element;
+
+    const auto listType = mlir::dyn_cast<storage::ListType>(listed);
     return listType ? listType.getElementType() : mlir::Type {};
 }
 
@@ -3246,7 +3256,10 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
             const bool sharedType = lhsInnerType == rhsInnerType;
             const mlir::Type resultInnerType =
                 sharedType ? lhsInnerType : storage::ListElementType::get(ctx);
-            return storage::ListType::get(ctx, resultInnerType);
+            const mlir::Type concatenated = storage::ListType::get(ctx, resultInnerType);
+
+            return operandNullable ? storage::NullableType::get(ctx, concatenated)
+                                   : concatenated;
 
         }
         break;
