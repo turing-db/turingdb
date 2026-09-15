@@ -7030,6 +7030,27 @@ void NLExecutor::runGetEdgeTypes(NLExecutionContext* context, NLFunctionData* da
     GetEdgeTypesChunkWriter writer(view, input);
     writer.setEdgeTypes(output);
     writer.fill(input->size());
+
+    // The graph holds no type for an edge this change wrote: the write buffer holds the one
+    // the CREATE spelled, under the ID the commit will know the edge by.
+    CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
+    if (!writeBuffer || writeBuffer->numPendingEdges() == 0) {
+        return;
+    }
+
+    const size_t committedCount = committedEdgeCount(&view);
+    const PendingRows pendingRows(nullptr, false, committedCount, writeBuffer->numPendingEdges());
+
+    auto& raw = output->getRaw();
+    const auto& inputRaw = input->getRaw();
+    for (size_t row = 0; row < raw.size(); row++) {
+        const uint64_t edgeID = inputRaw[row].getValue();
+        if (!pendingRows.has(row, edgeID)) {
+            continue;
+        }
+
+        raw[row] = writeBuffer->getPendingEdge(edgeID - committedCount).edgeType;
+    }
 }
 
 void NLExecutor::runCheckLabelConstraint(NLExecutionContext* context, NLFunctionData* data) {
