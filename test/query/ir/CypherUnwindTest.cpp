@@ -135,9 +135,25 @@ std::optional<std::string> renderTaggedCell(const Column* column, size_t row) {
     return renderTaggedElement((*elements)[row]);
 }
 
+// Render one cell of an optional list column - the column an UNWIND over a list of lists
+// emits, whose elements are lists rather than scalars.
+std::optional<std::string> renderOptListCell(const Column* column, size_t row) {
+    const auto* lists = dynamic_cast<const ColumnOptVector<ListView>*>(column);
+    if (!lists) {
+        return std::nullopt;
+    }
+
+    const std::optional<ListView>& list = (*lists)[row];
+    if (!list) {
+        return "null";
+    }
+
+    return renderTaggedList(*list);
+}
+
 // Render one output cell, whatever column shape the program emitted: a node ID from a
-// scan, a nullable value from an unwound homogeneous list, or a tagged scalar from an
-// unwound heterogeneous one.
+// scan, a nullable value from an unwound homogeneous list, a list from an unwound list of
+// lists, or a tagged scalar from an unwound heterogeneous one.
 std::string renderCell(const Column* column, size_t row) {
     if (const auto* nodeIDs = dynamic_cast<const ColumnNodeIDs*>(column)) {
         return std::to_string((*nodeIDs)[row].getValue());
@@ -155,6 +171,8 @@ std::string renderCell(const Column* column, size_t row) {
         return *boolean;
     } else if (const std::optional<std::string> text = renderOptCell<std::string_view>(column, row)) {
         return *text;
+    } else if (const std::optional<std::string> list = renderOptListCell(column, row)) {
+        return *list;
     } else if (const std::optional<std::string> tagged = renderTaggedCell(column, row)) {
         return *tagged;
     }

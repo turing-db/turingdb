@@ -1610,6 +1610,10 @@ target_link_libraries(test_query_ir_create_return PRIVATE turing_ir_test_write_q
 add_turing_test(test_query_ir_create_chain CreateChainTest.cpp)
 target_link_libraries(test_query_ir_create_chain PRIVATE turing_ir_test_write_query_s)
 
+# An element indexed out of a list bound by an UNWIND over a list of lists.
+add_turing_test(test_query_ir_nested_list_index_property NestedListIndexPropertyTest.cpp)
+target_link_libraries(test_query_ir_nested_list_index_property PRIVATE turing_ir_test_write_query_s)
+
 # DELETE of an entity the same query wrote, which the change holds as a pending write.
 add_turing_test(test_query_ir_delete_written DeleteWrittenTest.cpp)
 target_link_libraries(test_query_ir_delete_written PRIVATE turing_ir_test_write_query_s)

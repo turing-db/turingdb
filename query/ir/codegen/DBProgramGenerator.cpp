@@ -41,6 +41,7 @@
 #include "StorageEnums.h"
 #include "StorageTypes.h"
 #include "IRConstantColumn.h"
+#include "IRLiteralList.h"
 #include "IRValueTypes.h"
 #include "ExplainReport.h"
 
@@ -448,30 +449,6 @@ void collectCutColumns(const Projection* projection,
     }
 }
 
-// The one type every element attribute shares, or a null type when they differ or the
-// list is empty - the homogeneity verdict db.unwind_const and db.const_list read, which
-// decides whether the elements ride a column of that type or a type-erased one of tagged
-// scalars. A null and a nested list carry no type, so a list holding one is type-erased.
-mlir::Type sharedAttrType(llvm::ArrayRef<mlir::Attribute> elements) {
-    if (elements.empty()) {
-        return nullptr;
-    }
-
-    const mlir::TypedAttr firstElement = mlir::dyn_cast<mlir::TypedAttr>(elements.front());
-    if (!firstElement) {
-        return nullptr;
-    }
-
-    const mlir::Type firstType = firstElement.getType();
-
-    const auto hasFirstType = [firstType](mlir::Attribute element) {
-        const mlir::TypedAttr typedElement = mlir::dyn_cast<mlir::TypedAttr>(element);
-        return typedElement && typedElement.getType() == firstType;
-    };
-
-    return std::ranges::all_of(elements, hasFirstType) ? firstType : nullptr;
-}
-
 // The element type of the lists a db.make_list builds: the one type its element columns
 // name, or the type-erased tagged scalar where they name no single one. A column whose own
 // type is resolved during lowering names `none`, and no verdict can be taken against a
@@ -736,12 +713,13 @@ void DBProgramGenerator::addUnwindConst(const VariableDependency* var, const Unw
         translateListElements(list, elements);
     }
 
-    const mlir::Type sharedType = sharedAttrType(elements);
+    const mlir::ArrayAttr elementsAttr = _opBuilder.getArrayAttr(elements);
+
+    const mlir::Type sharedType = sharedLiteralElementType(elementsAttr);
     const mlir::Type elementType = sharedType ? sharedType
                                               : mlir::storage::ListElementType::get(_mlirCtxt);
 
     const mlir::db::ColumnType resultType = allocColumnType(elementType);
-    const mlir::ArrayAttr elementsAttr = _opBuilder.getArrayAttr(elements);
 
     mlir::db::UnwindConst unwindConst = _opBuilder.create<mlir::db::UnwindConst>(_opBuilder.getUnknownLoc(),
                                                                                 resultType,

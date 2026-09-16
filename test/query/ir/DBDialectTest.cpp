@@ -1349,12 +1349,12 @@ func.func @main() {
 }
 )mlir";
 
-// Only nested lists: the elements do agree, but on a type none of them carries, so this is
-// the type-erased form again rather than a list of lists of i64.
+// Only nested lists: each takes the list type its own verdict names, so they agree on a
+// list of i64 and the outer list is a list of those.
 const char* const nestedOnlyConstListProgram = R"mlir(
 func.func @main() {
   %xs = db.constant([[1, 2], [3]])
-  db.output(%xs) : !db.column<!storage.list<!storage.list_element>>
+  db.output(%xs) : !db.column<!storage.list<!storage.list<i64>>>
   return
 }
 )mlir";
@@ -1889,16 +1889,17 @@ TEST_F(DBDialectTest, infersAnErasedListFromANullElement) {
     EXPECT_EQ(listConstant.getResult().getType(), mlir::db::ColumnType::get(&_context, erasedListType));
 }
 
-TEST_F(DBDialectTest, infersAnErasedListFromNestedElementsAlone) {
-    // The elements agree, but on a type none of them carries.
+TEST_F(DBDialectTest, infersAListOfListsFromNestedElementsAlone) {
+    // Each nested list carries the type its own verdict names, so the elements agree on it.
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(nestedOnlyConstListProgram);
     ASSERT_TRUE(module);
 
     mlir::db::ConstantOp listConstant = findListConstant(module.get());
     ASSERT_TRUE(listConstant);
 
-    const mlir::Type erasedListType = mlir::storage::ListType::get(&_context, mlir::storage::ListElementType::get(&_context));
-    EXPECT_EQ(listConstant.getResult().getType(), mlir::db::ColumnType::get(&_context, erasedListType));
+    const mlir::Type integerListType = mlir::storage::ListType::get(&_context, mlir::IntegerType::get(&_context, 64));
+    const mlir::Type nestedListType = mlir::storage::ListType::get(&_context, integerListType);
+    EXPECT_EQ(listConstant.getResult().getType(), mlir::db::ColumnType::get(&_context, nestedListType));
 }
 
 TEST_F(DBDialectTest, rejectsAListSpelledWithADisagreeingType) {
