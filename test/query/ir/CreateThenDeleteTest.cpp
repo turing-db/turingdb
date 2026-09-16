@@ -15,7 +15,6 @@
 #include "SystemAccessor.h"
 #include "SystemManager.h"
 #include "TuringDB.h"
-#include "dataframe/Dataframe.h"
 #include "versioning/Change.h"
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
@@ -81,13 +80,10 @@ protected:
         const QueryStatus status = runWrite(query, changeID);
         ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
 
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData([](const Dataframe*) {});
-
         const QueryState submitState(_graphName,
                                      &_env->getMem(),
                                      &_queryConfig,
-                                     &callbacks,
+                                     nullptr,
                                      CommitHash::head(),
                                      changeID);
         const QueryStatus submitStatus = _env->getDB().query("CHANGE SUBMIT", submitState);

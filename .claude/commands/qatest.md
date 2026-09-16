@@ -73,15 +73,15 @@ Read-only, v3 only, ~1s, no port:
 
 Add `-d` for the db dialect and `-l` for the lowered nl dialect when triaging a hit.
 
-Differential, v2 then v3, same process, one query each:
+The shell, which runs the same engine through `TuringDB::query`:
 
 ```bash
-printf 'MATCH (n) RETURN count(n)\n#v3 MATCH (n) RETURN count(n)\n' \
+printf 'MATCH (n) RETURN count(n)\n' \
   | ./build/tools/turingdb/turingdb -turing-dir <scratch>/qa/turing -load simpledb -p 71NN
 ```
 
-`#v3` routes that one query through `QueryInterpreterV3`; the bare line runs v2. Give each
-concurrent shell its own port (`-p 7101`, `7102`, …) — the default 6666 collides.
+Give each concurrent shell its own port (`-p 7101`, `7102`, …) — the default 6666
+collides.
 
 Writes (`CREATE`, `MERGE`, `DELETE`, `SET`) go through the shell only; the mlir driver has
 no isolated turing directory. In the shell a write needs the change dance: `CHANGE NEW`
@@ -97,8 +97,7 @@ A candidate is a **hit** only when all four hold:
 
 1. It reproduces twice from a clean fixture.
 2. You can state the expected result and the openCypher rule that decides it —
-   independently of what either engine printed. v2 is a witness, not an oracle; both
-   engines can be wrong at once.
+   independently of what the engine printed. What it prints is a witness, not an oracle.
 3. It is not on the known-limitations list below.
 4. It is reduced to the smallest query that still fails.
 
@@ -112,7 +111,7 @@ It does not fill one of the four test slots, because the harness hands
 `QueryInterpreterV3` its own sink and a test of it would pass. Keep hunting for four hits
 beside it.
 
-Keep `<scratch>/qa/hits.md` current: query, expected, v3 actual, v2 actual, the rule.
+Keep `<scratch>/qa/hits.md` current: query, expected, actual, the rule.
 
 Stop the loop at 4 hits, or at the deadline.
 

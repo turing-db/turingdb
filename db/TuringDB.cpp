@@ -1,12 +1,21 @@
 #include "TuringDB.h"
 
-#include <spdlog/spdlog.h>
+#include <span>
 
 #include "SystemManager.h"
-#include "QueryInterpreterV2.h"
-#include "InterpreterContext.h"
+#include "NLOutputSink.h"
+#include "QueryInterpreterV3.h"
 
 using namespace db;
+
+namespace {
+
+class DiscardedOutputSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {}
+};
+
+}
 
 TuringDB::TuringDB(const TuringConfig* config)
     : TuringDB(config, QueryConfig{})
@@ -24,27 +33,31 @@ TuringDB::~TuringDB() {
 
 void TuringDB::init() {
     _systemManager->init();
-
-    // Disable value hash join if requested in environment
-    const char* vhjEnv = getenv("TURING_VALUE_HASH_JOIN");
-    if (vhjEnv) {
-        if(strcmp(vhjEnv, "0") == 0) {
-            _defaultQueryConfig.getPlanGenConfig().setUseValueHashJoin(false);
-        }
-    }
 }
 
 QueryStatus TuringDB::query(std::string_view query, const QueryState& state) {
-    QueryInterpreterV2 interp(_systemManager.get());
+    const QueryConfig* queryConfig = state.getQueryConfig();
+    const PlanGenConfig& planGenConfig = queryConfig->getPlanGenConfig();
+
+    QueryInterpreterV3 interp(_systemManager.get());
+    interp.setChunkSize(queryConfig->getChunkSize());
+    interp.setForceValueHashJoin(planGenConfig.getForceValueHashJoin());
+    interp.setUseValueHashJoin(planGenConfig.getUseValueHashJoin());
+
+    DiscardedOutputSink discardedSink;
+    NLOutputSink* sink = state.getSink();
+    if (!sink) {
+        sink = &discardedSink;
+    }
 
     QueryStatus status;
-    InterpreterContext ctxt(state.getMemory(),
-                            state.getCallbacks(),
-                            _systemManager.get(),
-                            state.getCommitHash(),
-                            state.getChangeID());
-    ctxt.setQueryConfig(state.getQueryConfig());
-    interp.execute(ctxt, status, query, state.getGraphName());
+    interp.execute(status,
+                   query,
+                   state.getGraphName(),
+                   state.getCommitHash(),
+                   state.getChangeID(),
+                   state.getMemory(),
+                   sink);
 
     return status;
 }

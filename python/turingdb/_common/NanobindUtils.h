@@ -66,17 +66,17 @@ PyObj toPy(const std::optional<T>& v) {
     return toPy(*v);
 }
 
-// Bulk-appends one ColumnVector<T>'s contents onto another. Used by the
-// streaming query callback to gather chunked dataframes into one buffered
+// Bulk-appends rows [offset, offset + rowCount) of one ColumnVector<T> onto
+// another. Used by the streaming query sink to gather chunks into one buffered
 // result. vector::insert with random-access iterators is specialized in the
 // stdlib to memcpy for trivially-copyable T, so this works for plain
 // numerics, IDs, and std::string alike with no per-call-site special casing.
 template <typename T>
-void copyColumnVector(const db::Column* col, db::Column* newCol) {
+void copyColumnVector(const db::Column* col, db::Column* newCol, size_t offset, size_t rowCount) {
     const auto& castedVec = static_cast<const db::ColumnVector<T>*>(col)->getRaw();
     auto& castedNewVec = static_cast<db::ColumnVector<T>*>(newCol)->getRaw();
 
-    castedNewVec.insert(castedNewVec.end(), castedVec.begin(), castedVec.end());
+    castedNewVec.insert(castedNewVec.end(), castedVec.begin() + offset, castedVec.begin() + offset + rowCount);
 }
 
 // Moves the source std::vector onto the heap and lets numpy own it. The
@@ -162,13 +162,29 @@ void allocColumns(const db::Dataframe* incomingDf,
                   db::LocalMemory* localMem,
                   std::vector<std::string>* nameStorage);
 
-// Runtime dispatcher that appends a single column of unknown kind onto its
-// destination. Wraps copyColumnVector with a switch over the column-kind enum.
-void addToColumn(const db::Column* col, db::Column* newCol);
+// Runtime dispatcher that appends rows [offset, offset + rowCount) of a single
+// column of unknown kind onto its destination. Wraps copyColumnVector with a
+// switch over the column-kind enum.
+void addToColumn(const db::Column* col, db::Column* newCol, size_t offset, size_t rowCount);
 
 // Appends every column of src onto the corresponding column of dst, skipping
 // ColumnConst columns (already handled by allocColumns).
 void appendDfs(const db::Dataframe* src, db::Dataframe* dst);
+
+// The chunk siblings of allocColumns and appendDfs, for a result arriving through
+// an NLOutputSink rather than a dataframe. names is either empty or holds one name
+// per chunk, and a chunk a query leaves unnamed gets none.
+void allocChunkColumns(std::span<const std::string_view> names,
+                       std::span<const db::Column* const> chunks,
+                       db::Dataframe* bufferedDf,
+                       db::DataframeManager* dfMan,
+                       db::LocalMemory* localMem,
+                       std::vector<std::string>* nameStorage);
+
+void appendChunkColumns(std::span<const db::Column* const> chunks,
+                        size_t offset,
+                        size_t rowCount,
+                        db::Dataframe* dst);
 
 // Each embedding is a variable-length float vector, so the natural
 // representation is one numpy array per row. The enclosing column ends up as a

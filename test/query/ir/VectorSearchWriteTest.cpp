@@ -84,8 +84,7 @@ protected:
     }
 
     void submitChange(ChangeID change) {
-        QueryCallbacks callbacks;
-        const QueryState submitState(_graphName, &_env->getMem(), &_queryConfig, &callbacks, CommitHash::head(), change);
+        const QueryState submitState(_graphName, &_env->getMem(), &_queryConfig, nullptr, CommitHash::head(), change);
 
         const QueryStatus status = _env->getDB().query("CHANGE SUBMIT", submitState);
         ASSERT_TRUE(status.isOk()) << status.getError();

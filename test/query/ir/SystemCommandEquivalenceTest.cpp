@@ -23,8 +23,6 @@
 #include "TuringDB.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnVector.h"
-#include "dataframe/Dataframe.h"
-#include "dataframe/NamedColumn.h"
 #include "metadata/PropertyType.h"
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
@@ -154,30 +152,14 @@ protected:
     void runPipeline(std::string_view query,
                      std::vector<std::string>& columnNames,
                      Rows& rows) {
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData([&columnNames, &rows](const Dataframe* dataframe) {
-            ASSERT_TRUE(dataframe != nullptr);
+        SystemTableSink sink;
 
-            const Dataframe::NamedColumns& columns = dataframe->cols();
-            const size_t rowCount = dataframe->getLogicalRowCount();
-
-            columnNames.clear();
-            for (const NamedColumn* column : columns) {
-                columnNames.emplace_back(column->getName());
-            }
-
-            for (size_t row = 0; row < rowCount; row++) {
-                Row& cells = rows.emplace_back();
-                cells.resize(columns.size());
-
-                for (size_t column = 0; column < columns.size(); column++) {
-                    renderCell(columns[column]->getColumn(), row, cells[column]);
-                }
-            }
-        });
-
-        const QueryState state(_graphName, &_env->getMem(), &_queryConfig, &callbacks);
+        const QueryState state(_graphName, &_env->getMem(), &_queryConfig, &sink);
         const QueryStatus status = _db->query(query, state);
+
+        columnNames = sink.getColumnNames();
+        rows = sink.getRows();
+
         ASSERT_TRUE(status.isOk()) << "the pipeline rejected '" << query << "'";
     }
 

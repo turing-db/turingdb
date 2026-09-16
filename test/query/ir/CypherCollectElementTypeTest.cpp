@@ -22,7 +22,6 @@
 #include "SystemAccessor.h"
 #include "SystemManager.h"
 #include "TuringDB.h"
-#include "dataframe/Dataframe.h"
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
@@ -157,9 +156,7 @@ protected:
         _interp3->execute(createStatus, query, _graphName, CommitHash::head(), changeID, &_env->getMem(), &discardSink);
         ASSERT_TRUE(createStatus.isOk()) << "CREATE failed: " << createStatus.getError();
 
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData([](const Dataframe*) {});
-        const QueryState submitState(_graphName, &_env->getMem(), &_queryConfig, &callbacks, CommitHash::head(), changeID);
+        const QueryState submitState(_graphName, &_env->getMem(), &_queryConfig, nullptr, CommitHash::head(), changeID);
         const QueryStatus submitStatus = _env->getDB().query("CHANGE SUBMIT", submitState);
         ASSERT_TRUE(submitStatus.isOk()) << "CHANGE SUBMIT failed";
     }

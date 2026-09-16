@@ -99,11 +99,10 @@ protected:
     }
 
     void submitChange(ChangeID change) {
-        QueryCallbacks callbacks;
         const QueryState submitState(_graphName,
                                      &_env->getMem(),
                                      &_queryConfig,
-                                     &callbacks,
+                                     nullptr,
                                      CommitHash::head(),
                                      change);
 

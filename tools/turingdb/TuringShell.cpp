@@ -25,7 +25,6 @@
 #include "LocalMemory.h"
 
 #include "NLOutputSink.h"
-#include "QueryInterpreterV3.h"
 
 #include "columns/Block.h"
 #include "columns/Column.h"
@@ -679,8 +678,10 @@ namespace {
 
 class TuringShellNLSink : public NLOutputSink {
 public:
-    explicit TuringShellNLSink(bool quiet)
-        : _quiet(quiet)
+    TuringShellNLSink(ShellTable& table, size_t& rowCount, bool quiet)
+        : _table(table),
+        _rowCount(rowCount),
+        _quiet(quiet)
     {
     }
 
@@ -729,13 +730,10 @@ public:
         }
     }
 
-    ShellTable& getTable() { return _table; }
-    size_t getRowCount() const { return _rowCount; }
-
 private:
-    ShellTable _table;
+    ShellTable& _table;
+    size_t& _rowCount;
     std::vector<std::string> _columnNames;
-    size_t _rowCount {0};
     bool _headerWritten {false};
     bool _quiet {false};
 
@@ -749,41 +747,6 @@ private:
     }
 };
 
-}
-
-void TuringShell::runMLIRQuery(std::string_view query) {
-    if (_remoteConnected) {
-        spdlog::error("#v3 is only available in local mode");
-        return;
-    }
-
-    TuringShellNLSink sink(_quiet);
-    QueryStatus status;
-    QueryInterpreterV3 interp(&_turingDB.getSystemManager());
-    interp.execute(status, query, _graphName, _hash, _changeID, _mem, &sink);
-
-    if (_mem) {
-        _mem->clear();
-    }
-
-    if (!status.isOk()) {
-        if (status.hasErrorMessage()) {
-            std::string errorMsg = status.getError();
-            formatMessage(errorMsg);
-            spdlog::error("{}: {}", QueryStatusDescription::value(status.getStatus()), errorMsg);
-        } else {
-            spdlog::error("{}", QueryStatusDescription::value(status.getStatus()));
-        }
-        return;
-    }
-
-    if (!_quiet) {
-        sink.getTable().print(std::cout);
-        std::cout << "\n";
-    }
-
-    std::cout << "Query returned " << sink.getRowCount() << " rows.\n";
-    std::cout << "Query executed in " << status.getTotalTime().count() << " ms.\n";
 }
 
 // Cleans double-escaped characters to single-escaped characters
@@ -827,23 +790,13 @@ void TuringShell::processLine(std::string& line) {
         }
     }
 
-    // Check for #v3 prefix to route through the MLIR executor
-    constexpr std::string_view v3Prefix = "#v3 ";
-    const bool useMLIR = line.size() >= v3Prefix.size() && line.substr(0, v3Prefix.size()) == v3Prefix;
-    if (useMLIR) {
-        line = line.substr(v3Prefix.size());
-        trim(line);
-        runMLIRQuery(line);
-        return;
-    }
-
     // Execute query
     ShellTable table;
     size_t rowCount = 0;
 
     QueryStatus res;
     Milliseconds remoteQueryTime {0};
-    {
+    if (_remoteConnected) {
         size_t execCount = 0;
 
         auto shellOutPutCallBack = [&table, &execCount, &rowCount, this](const Dataframe* df) -> void {
@@ -856,26 +809,22 @@ void TuringShell::processLine(std::string& line) {
             queryCallback(execCount++, df, table);
         };
 
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData(shellOutPutCallBack);
+        try {
+            const TimePoint start = Clock::now();
+            res = _client.sendQuery(line, shellOutPutCallBack);
+            const TimePoint end = Clock::now();
 
-        if (_remoteConnected) {
-            try {
-                const TimePoint start = Clock::now();
-                res = _client.sendQuery(line, shellOutPutCallBack);
-                const TimePoint end = Clock::now();
+            remoteQueryTime = end - start;
 
-                remoteQueryTime = end - start;
-
-            } catch (const TuringException& e) {
-                spdlog::error("Remote query failed: {}", e.what());
-                disconnectRemote();
-            }
-
-        } else {
-            const QueryState state(_graphName, _mem, &_turingDB.getDefaultQueryConfig(), &callbacks, _hash, _changeID);
-            res = _turingDB.query(line, state);
+        } catch (const TuringException& e) {
+            spdlog::error("Remote query failed: {}", e.what());
+            disconnectRemote();
         }
+
+    } else {
+        TuringShellNLSink sink(table, rowCount, _quiet);
+        const QueryState state(_graphName, _mem, &_turingDB.getDefaultQueryConfig(), &sink, _hash, _changeID);
+        res = _turingDB.query(line, state);
     }
 
     checkShellContext();

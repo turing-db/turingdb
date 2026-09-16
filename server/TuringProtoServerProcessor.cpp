@@ -7,24 +7,19 @@
 #include "HTTPParser.h"
 #include "NetException.h"
 #include "ProtocolException.h"
-#include "QueryCallbacks.h"
-#include "QueryInterpreterV3.h"
+#include "QueryState.h"
 #include "QueryStatus.h"
 #include "TCPConnection.h"
 #include "TuringDB.h"
 #include "TuringProtoWriter.h"
 #include "AuthGate.h"
-#include "dataframe/Dataframe.h"
 
 using namespace db;
 
-TuringProtoServerProcessor::TuringProtoServerProcessor(TuringDB& db,
-                                                       net::TCPConnection& connection,
-                                                       bool useV3)
+TuringProtoServerProcessor::TuringProtoServerProcessor(TuringDB& db, net::TCPConnection& connection)
     : _db(db),
     _connection(connection),
-    _protoNLSink(&connection.getWriter<net::proto::TuringProtoWriter>()),
-    _useV3(useV3)
+    _protoNLSink(&connection.getWriter<net::proto::TuringProtoWriter>())
 {
 }
 
@@ -82,55 +77,19 @@ void TuringProtoServerProcessor::handleQuery() {
     const TransactionInfo info = getTransactionInfo();
     const QueryConfig& queryConfig = _db.getDefaultQueryConfig();
 
-    if (_useV3) {
-        QueryInterpreterV3 interpreter(&_db.getSystemManager());
-        interpreter.setChunkSize(queryConfig.getChunkSize());
+    const QueryState state(info.graphName, &mem, &queryConfig, &_protoNLSink, info.commit, info.change);
+    const QueryStatus status = _db.query(info.query, state);
 
-        QueryStatus status;
-        interpreter.execute(status, info.query, info.graphName, info.commit, info.change, &mem, &_protoNLSink);
+    if (!status.isOk()) {
+        writer.reset();
+        writer.writeError(&status);
+    }
 
-        if (!status.isOk()) {
-            writer.reset();
-            writer.writeError(&status);
-        }
-
-        if (writer.errorOccured()) {
-            return;
-        }
-
-        writer.writeEndPacket(status.getTotalTime().count());
+    if (writer.errorOccured()) {
         return;
     }
 
-    QueryCallbacks callbacks;
-
-    callbacks.setOnOutputHeader([&](const Dataframe* df) {
-        bioassert(df != nullptr, "Cannot output header of a null dataframe");
-        writer.writeDataframeHeader(df);
-    });
-
-    callbacks.setOnOutputData([&](const Dataframe* df) {
-        bioassert(df != nullptr, "Cannot output data of a null dataframe");
-        writer.writeDataframe(df);
-    });
-
-    callbacks.setOnEnd([&](QueryCallbacks::ExecTimeMilliseconds milliseconds) {
-        if (writer.errorOccured()) {
-            return;
-        }
-        writer.writeEndPacket(milliseconds);
-    });
-
-    callbacks.setOnError([&](const QueryStatus& status) {
-        writer.reset();
-        if (writer.errorOccured()) {
-            return;
-        }
-        writer.writeError(&status);
-    });
-
-    const QueryState state(info.graphName, &mem, &queryConfig, &callbacks, info.commit, info.change);
-    _db.query(info.query, state);
+    writer.writeEndPacket(status.getTotalTime().count());
 }
 
 // Extract the transaction info from the URI params; the query string comes from the HTTP body.

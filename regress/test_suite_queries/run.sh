@@ -22,8 +22,6 @@ cp -r $SCRIPT_DIR/simpledb.out/simpledb $SCRIPT_DIR/.turing/graphs/simpledb
 # A LOAD CSV resolves its path inside the instance's data directory, which starts empty
 cp $TURING_SRC/test/query-test-suite/data/* $SCRIPT_DIR/.turing/data/
 
-export USE_TURING_V3=1
-
 turingdb -demon -turing-dir $SCRIPT_DIR/.turing
 
 rm -f pyproject.toml

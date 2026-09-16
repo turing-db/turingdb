@@ -2,14 +2,16 @@
 
 #include <stdint.h>
 #include <memory>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "NanobindUtils.h"
 
 #include "LocalMemory.h"
+#include "NLOutputSink.h"
 #include "Path.h"
-#include "QueryCallbacks.h"
 #include "QueryState.h"
 #include "QueryStatus.h"
 #include "TuringDB.h"
@@ -19,6 +21,38 @@
 #include "TuringException.h"
 
 namespace pybindings {
+
+namespace {
+
+class PyEmbeddedNLSink : public db::NLOutputSink {
+public:
+    PyEmbeddedNLSink(db::Dataframe* bufferedDf,
+                     db::DataframeManager* dfMan,
+                     db::LocalMemory* localMem)
+        : _bufferedDf(bufferedDf),
+        _dfMan(dfMan),
+        _localMem(localMem)
+    {
+    }
+
+    void declareOutput(std::span<const std::string_view> names,
+                       std::span<const db::Column* const> chunks) override {
+        allocChunkColumns(names, chunks, _bufferedDf, _dfMan, _localMem, &_nameStorage);
+    }
+
+    void appendChunks(std::span<const db::Column* const> chunks, size_t offset, size_t rowCount) override {
+        appendChunkColumns(chunks, offset, rowCount, _bufferedDf);
+    }
+
+private:
+    db::Dataframe* _bufferedDf {nullptr};
+    db::DataframeManager* _dfMan {nullptr};
+    db::LocalMemory* _localMem {nullptr};
+    // Owning storage for column names - see allocColumns docs.
+    std::vector<std::string> _nameStorage;
+};
+
+}
 
 PyTuringEmbedded::PyTuringEmbedded()
     : _localMem(std::make_unique<db::LocalMemory>())
@@ -51,26 +85,12 @@ void PyTuringEmbedded::setCommitHash(const std::string& s) {
 nb::dict PyTuringEmbedded::query(const std::string& cypher) {
     db::DataframeManager dfMan;
     db::Dataframe bufferedDf;
-    // Owning storage for column names — see allocColumns docs.
-    std::vector<std::string> nameStorage;
-    bool columnsAlloced = false;
-    db::LocalMemory* localMem = _localMem.get();
-
-    const auto onData = [&bufferedDf, &nameStorage, &columnsAlloced, &dfMan, localMem](const db::Dataframe* df) {
-        if (!columnsAlloced) {
-            allocColumns(df, &bufferedDf, &dfMan, localMem, &nameStorage);
-            columnsAlloced = true;
-        }
-        appendDfs(df, &bufferedDf);
-    };
-
-    db::QueryCallbacks callbacks;
-    callbacks.setOnOutputData(onData);
+    PyEmbeddedNLSink sink(&bufferedDf, &dfMan, _localMem.get());
 
     const db::QueryState state(_graphName,
                                _localMem.get(),
                                &_queryConfig,
-                               &callbacks,
+                               &sink,
                                _commitHash,
                                _changeID);
 

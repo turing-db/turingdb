@@ -7,7 +7,6 @@
 #include "QueryStatus.h"
 
 #include "TuringDB.h"
-#include "dataframe/Dataframe.h"
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
@@ -33,24 +32,6 @@ protected:
                               changeID,
                               &_env->getMem(),
                               &sink);
-    }
-
-    // The v2 engine, which the analyzer turns a MERGE away from
-    QueryStatus runOnPipelineEngine(std::string_view query) {
-        ChangeID changeID;
-        openChange(changeID);
-
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData([](const Dataframe*) {});
-
-        const QueryState state(_graphName,
-                               &_env->getMem(),
-                               &_queryConfig,
-                               &callbacks,
-                               CommitHash::head(),
-                               changeID);
-
-        return _env->getDB().query(query, state);
     }
 };
 
@@ -85,16 +66,6 @@ TEST_F(MergeRejectionTest, rejectsAPatternBindingWhatACreateInTheSameQueryWrote)
     EXPECT_FALSE(status.isOk()) << status.getError();
     EXPECT_NE(status.getError().find("a CREATE in the same query writes it"), std::string::npos)
         << "status: " << status.getError();
-}
-
-// The pipeline engine has no MERGE, and says so rather than reporting a shape it failed
-// to plan
-TEST_F(MergeRejectionTest, rejectsMergeOnThePipelineEngine) {
-    const QueryStatus status = runOnPipelineEngine("MERGE (n:Tag {name: 'x'})");
-
-    EXPECT_FALSE(status.isOk());
-    EXPECT_NE(status.getError().find("MERGE is only supported by the MLIR query engine"), std::string::npos)
-        << status.getError();
 }
 
 // MERGE writes the pattern it does not find, and a variable-length hop names no one
