@@ -2839,3 +2839,14 @@ target_link_libraries(test_query_ir_call_subquery_codegen PRIVATE
         turing_db_system_s
         turing_db_ir_exec_s)
 target_include_directories(test_query_ir_call_subquery_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# LDBC SNB BI query 16, whose CALL subquery aggregates over an OPTIONAL MATCH.
+add_turing_test(test_query_ir_ldbc_bi16 LdbcBi16Test.cpp)
+target_link_libraries(test_query_ir_ldbc_bi16 PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_ldbc_bi16 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
