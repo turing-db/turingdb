@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <span>
 #include <sstream>
 
 #include <nlohmann/json.hpp>
@@ -15,7 +16,7 @@
 #include "JsonEncoder.h"
 #include "list/ListElementView.h"
 #include "list/ListView.h"
-#include "QueryCallbacks.h"
+#include "NLOutputSink.h"
 #include "QueryConfig.h"
 #include "QueryResultFormatter.h"
 #include "QueryStatus.h"
@@ -27,7 +28,6 @@
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnVector.h"
-#include "dataframe/Dataframe.h"
 #include "metadata/PropertyType.h"
 
 namespace rg = ranges;
@@ -85,6 +85,58 @@ struct StringStreamWriter {
 
     void write(std::string_view content) { _output->append(content); }
     void write(char c) { _output->push_back(c); }
+};
+
+// Encodes the result as JSON and collects it as rows at the same time, so one run
+// feeds both the tabular expectation and the JSON one
+class QueryTestNLSink : public db::NLOutputSink {
+public:
+    QueryTestNLSink(db::JsonEncoder<StringStreamWriter>* encoder,
+                    std::vector<std::string>& columnNames,
+                    std::vector<std::vector<std::string>>& rows)
+        : _encoder(encoder),
+        _columnNames(columnNames),
+        _rows(rows)
+    {
+    }
+
+    void declareOutput(std::span<const std::string_view> names,
+                       std::span<const db::Column* const> chunks) override {
+        _encoder->writeColumnHeaders(names, chunks);
+        _columnNames.assign(names.begin(), names.end());
+    }
+
+    void appendChunks(std::span<const db::Column* const> chunks, size_t offset, size_t rowCount) override {
+        if (rowCount == 0) {
+            return;
+        }
+
+        _encoder->writeColumns(chunks, offset, rowCount);
+        QueryResultFormatter::appendChunkRows(_rows, _values, chunks, offset, rowCount);
+    }
+
+private:
+    db::JsonEncoder<StringStreamWriter>* _encoder {nullptr};
+    std::vector<std::string>& _columnNames;
+    std::vector<std::vector<std::string>>& _rows;
+    std::vector<std::string> _values;
+};
+
+class ChangeIDNLSink : public db::NLOutputSink {
+public:
+    explicit ChangeIDNLSink(db::ChangeID& changeID)
+        : _changeID(changeID)
+    {
+    }
+
+    void appendChunks(std::span<const db::Column* const> chunks, size_t offset, size_t rowCount) override {
+        bioassert(rowCount == 1, "Expected 1 change");
+
+        _changeID = (*static_cast<const db::ColumnVector<db::ChangeID>*>(chunks[0]))[offset];
+    }
+
+private:
+    db::ChangeID& _changeID;
 };
 
 bool validateResultJson(std::string& error, std::string_view jsonStr) {
@@ -279,64 +331,28 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
     std::string jsonOutput;
     StringStreamWriter jsonWriter(&jsonOutput);
     db::JsonEncoder<StringStreamWriter> jsonEncoder(jsonWriter);
-    bool jsonErrorEncoded = false;
 
-    db::QueryCallbacks queryCallbacks;
-
-    queryCallbacks.setOnBegin([&] { jsonEncoder.start(); });
-
-    queryCallbacks.setOnOutputHeader([&](const db::Dataframe* df) {
-        bioassert(df != nullptr, "Dataframe is null");
-
-        // Write the header in the JSON output
-        jsonEncoder.writeDataframeHeader(*df);
-
-        QueryResultFormatter::appendHeader(columnNames, df);
-    });
-
-    std::vector<std::string> values;
-
-    queryCallbacks.setOnOutputData([&](const db::Dataframe* df) {
-        bioassert(df != nullptr, "Dataframe is null");
-
-        // Write the data in the JSON output
-        jsonEncoder.writeDataframe(*df);
-
-        QueryResultFormatter::appendRows(rows, values, df);
-    });
-
-    queryCallbacks.setOnError([&](const db::QueryStatus& qs) {
-        jsonEncoder.encodeError(qs.getStatus(), qs.getError());
-        jsonErrorEncoded = true;
-    });
+    QueryTestNLSink sink(&jsonEncoder, columnNames, rows);
 
     db::ChangeID changeID = db::ChangeID::head();
 
     if (spec._writeRequired) {
-        db::QueryCallbacks changeNewCallbacks;
-        changeNewCallbacks.setOnOutputData([&](const db::Dataframe* df) {
-            NamedColumn* col = df->getColumn(ColumnTag {0});
-            bioassert(col, "Column not found");
-
-            auto& c = *static_cast<ColumnVector<ChangeID>*>(col->getColumn());
-            bioassert(c.size() == 1, "Expected 1 change");
-
-            changeID = c[0];
-        });
-
+        ChangeIDNLSink changeNewSink(changeID);
         const db::QueryState changeNewState(spec._graphName, &env->getMem(),
-                                            &queryConfig, &changeNewCallbacks);
+                                            &queryConfig, &changeNewSink);
         db->query("CHANGE NEW", changeNewState);
     }
 
+    jsonEncoder.start();
+
     const db::QueryState queryState(spec._graphName, &env->getMem(), &queryConfig,
-                                    &queryCallbacks, db::CommitHash::head(),
+                                    &sink, db::CommitHash::head(),
                                     changeID);
     const auto queryStart = Clock::now();
     const db::QueryStatus status = db->query(spec._query, queryState);
     const auto queryEnd = Clock::now();
 
-    if (!status.isOk() && !jsonErrorEncoded) {
+    if (!status.isOk()) {
         jsonEncoder.encodeError(status.getStatus(), status.getError());
     }
 
@@ -345,9 +361,8 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
         static_cast<uint64_t>(duration<Microseconds>(queryStart, queryEnd));
 
     if (spec._writeRequired) {
-        db::QueryCallbacks submitCallbacks;
         const db::QueryState submitState(spec._graphName, &env->getMem(),
-                                         &queryConfig, &submitCallbacks,
+                                         &queryConfig, nullptr,
                                          db::CommitHash::head(), changeID);
         db->query("CHANGE SUBMIT", submitState);
     }

@@ -69,10 +69,7 @@ protected:
         _interpreter->execute(status, query, _graphName, CommitHash::head(), changeID, &_env->getMem(), &sink);
         ASSERT_TRUE(status.isOk()) << query << ": " << status.getError();
 
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData([](const Dataframe*) {});
-
-        const QueryState submitState(_graphName, &_env->getMem(), &_queryConfig, &callbacks, CommitHash::head(), changeID);
+        const QueryState submitState(_graphName, &_env->getMem(), &_queryConfig, nullptr, CommitHash::head(), changeID);
         const QueryStatus submitStatus = _env->getDB().query("CHANGE SUBMIT", submitState);
         ASSERT_TRUE(submitStatus.isOk()) << submitStatus.getError();
     }

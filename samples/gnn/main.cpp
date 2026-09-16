@@ -3,8 +3,10 @@
 #include <stdio.h>
 #include <algorithm>
 #include <charconv>
+#include <functional>
 #include <numeric>
 #include <random>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -21,7 +23,8 @@
 #include "Graph.h"
 #include "SimpleGraph.h"
 #include "LocalMemory.h"
-#include "dataframe/Dataframe.h"
+#include "NLOutputSink.h"
+#include "columns/ColumnIDs.h"
 #include "columns/ColumnOptVector.h"
 #include "columns/ColumnVector.h"
 #include "metadata/PropertyType.h"
@@ -34,6 +37,27 @@
 #include "ToolInit.h"
 
 using namespace db;
+
+namespace {
+
+class LambdaNLSink : public NLOutputSink {
+public:
+    using OnChunks = std::function<void(std::span<const Column* const>, size_t, size_t)>;
+
+    explicit LambdaNLSink(const OnChunks& onChunks)
+        : _onChunks(onChunks)
+    {
+    }
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        _onChunks(chunks, offset, rowCount);
+    }
+
+private:
+    OnChunks _onChunks;
+};
+
+}
 
 // ---------------------------------------------------------------------------
 // GNN link-prediction sample on simpledb
@@ -175,11 +199,10 @@ int main(int argc, const char** argv) {
     std::string q;
 
     const auto queryWithCb = [&](std::string_view q,
-                                 const QueryCallbacks::OnOutputData& cb,
+                                 const LambdaNLSink::OnChunks& cb,
                                  ChangeID chg = ChangeID::head()) {
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData(cb);
-        const QueryState state(graphName, &mem, &queryConfig, &callbacks, CommitHash::head(), chg);
+        LambdaNLSink sink(cb);
+        const QueryState state(graphName, &mem, &queryConfig, &sink, CommitHash::head(), chg);
         const auto res = db.query(q, state);
         if (!res.isOk()) {
             spdlog::error("Query failed: {}\n  {}", q, res.getError());
@@ -188,7 +211,12 @@ int main(int argc, const char** argv) {
     };
 
     const auto mustQuery = [&](std::string_view q, ChangeID chg = ChangeID::head()) {
-        queryWithCb(q, [](const Dataframe*) {}, chg);
+        const QueryState state(graphName, &mem, &queryConfig, nullptr, CommitHash::head(), chg);
+        const auto res = db.query(q, state);
+        if (!res.isOk()) {
+            spdlog::error("Query failed: {}\n  {}", q, res.getError());
+            exit(EXIT_FAILURE);
+        }
     };
 
     // -----------------------------------------------------------------
@@ -203,14 +231,12 @@ int main(int argc, const char** argv) {
 
     queryWithCb(
         R"(MATCH (n) RETURN n, n.name)",
-        [&](const Dataframe* df) {
-            const auto* idCol = df->cols()[0]->as<ColumnNodeIDs>();
-            const auto* nameCol = df->cols()[1]->as<ColumnOptVector<types::String::Primitive>>();
-            if (!idCol || !nameCol) {
-                return;
-            }
+        [&](std::span<const Column* const> chunks, size_t offset, size_t rowCount) {
+            const ColumnNodeIDs* idCol = static_cast<const ColumnNodeIDs*>(chunks[0]);
+            const ColumnOptVector<types::String::Primitive>* nameCol
+                = static_cast<const ColumnOptVector<types::String::Primitive>*>(chunks[1]);
 
-            for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
+            for (size_t i = offset; i < offset + rowCount; i++) {
                 const NodeID nid = (*idCol)[i];
                 const size_t idx = nodeIDs.size();
                 const std::string name = nameCol->at(i) ? std::string(*nameCol->at(i)) : "";
@@ -245,14 +271,11 @@ int main(int argc, const char** argv) {
 
     queryWithCb(
         R"(MATCH (a)-[]->(b) RETURN a, b)",
-        [&](const Dataframe* df) {
-            const auto* srcCol = df->cols()[0]->as<ColumnNodeIDs>();
-            const auto* dstCol = df->cols()[1]->as<ColumnNodeIDs>();
-            if (!srcCol || !dstCol) {
-                return;
-            }
+        [&](std::span<const Column* const> chunks, size_t offset, size_t rowCount) {
+            const ColumnNodeIDs* srcCol = static_cast<const ColumnNodeIDs*>(chunks[0]);
+            const ColumnNodeIDs* dstCol = static_cast<const ColumnNodeIDs*>(chunks[1]);
 
-            for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
+            for (size_t i = offset; i < offset + rowCount; i++) {
                 const auto si = idToIdx.find((*srcCol)[i].getValue());
                 const auto di = idToIdx.find((*dstCol)[i].getValue());
                 if (si == idToIdx.end() || di == idToIdx.end()) {
@@ -480,14 +503,12 @@ int main(int argc, const char** argv) {
         // --- Read current embeddings from DB ---
         queryWithCb(
             R"(MATCH (n) RETURN n, n.emb)",
-            [&](const Dataframe* df) {
-                const auto* idCol = df->cols()[0]->as<ColumnNodeIDs>();
-                const auto* embCol = df->cols()[1]->as<ColumnOptVector<types::Embedding::Primitive>>();
-                if (!idCol || !embCol) {
-                    return;
-                }
+            [&](std::span<const Column* const> chunks, size_t offset, size_t rowCount) {
+                const ColumnNodeIDs* idCol = static_cast<const ColumnNodeIDs*>(chunks[0]);
+                const ColumnOptVector<types::Embedding::Primitive>* embCol
+                    = static_cast<const ColumnOptVector<types::Embedding::Primitive>*>(chunks[1]);
 
-                for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
+                for (size_t i = offset; i < offset + rowCount; i++) {
                     if (!embCol->at(i)) {
                         continue;
                     }
@@ -620,14 +641,12 @@ int main(int argc, const char** argv) {
     // Read final embeddings
     queryWithCb(
         R"(MATCH (n) RETURN n, n.emb)",
-        [&](const Dataframe* df) {
-            const auto* idCol = df->cols()[0]->as<ColumnNodeIDs>();
-            const auto* embCol = df->cols()[1]->as<ColumnOptVector<types::Embedding::Primitive>>();
-            if (!idCol || !embCol) {
-                return;
-            }
+        [&](std::span<const Column* const> chunks, size_t offset, size_t rowCount) {
+            const ColumnNodeIDs* idCol = static_cast<const ColumnNodeIDs*>(chunks[0]);
+            const ColumnOptVector<types::Embedding::Primitive>* embCol
+                = static_cast<const ColumnOptVector<types::Embedding::Primitive>*>(chunks[1]);
 
-            for (size_t i = 0; i < df->getLogicalRowCount(); i++) {
+            for (size_t i = offset; i < offset + rowCount; i++) {
                 if (!embCol->at(i)) {
                     continue;
                 }

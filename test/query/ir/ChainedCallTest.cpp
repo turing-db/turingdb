@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <span>
 #include <string_view>
 
 #include "Graph.h"
@@ -8,8 +9,8 @@
 #include "SimpleGraph.h"
 #include "SystemAccessor.h"
 #include "SystemManager.h"
+#include "NLOutputSink.h"
 #include "TuringDB.h"
-#include "dataframe/Dataframe.h"
 
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
@@ -19,22 +20,30 @@ using namespace turing::test;
 
 namespace {
 
+class CountingSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        _rowCount += rowCount;
+    }
+
+    size_t getRowCount() const { return _rowCount; }
+
+private:
+    size_t _rowCount {0};
+};
+
 size_t countRows(TuringDB* db,
                  LocalMemory* mem,
                  const QueryConfig* queryConfig,
                  std::string_view graphName,
                  std::string_view query) {
-    size_t rowCount = 0;
-    QueryCallbacks callbacks;
-    callbacks.setOnOutputData([&rowCount](const Dataframe* dataframe) {
-        rowCount += dataframe->getLogicalRowCount();
-    });
+    CountingSink sink;
 
-    const QueryState state(graphName, mem, queryConfig, &callbacks);
+    const QueryState state(graphName, mem, queryConfig, &sink);
     const QueryStatus status = db->query(query, state);
     EXPECT_TRUE(status.isOk()) << query;
 
-    return rowCount;
+    return sink.getRowCount();
 }
 
 }

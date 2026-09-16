@@ -1008,9 +1008,8 @@ whose `MATCH` cases are disabled for the gap above.
 3. **The whole record**: `RETURN row` is rejected. Neo4j reports a list (or a map, with
    headers); TuringDB has no map value, and a list per record would cost an allocation per
    row on a path whose point is bulk loading.
-4. **No server route**: the MLIR engine is reached through the shell's `#v3` prefix and
-   the C++ interpreter, not through the REST or binary protocol, so the v3 behaviour has
-   unit coverage rather than regression coverage.
+4. **One engine**: `TuringDB::query` runs the MLIR engine, so the shell, the REST route
+   and the binary protocol all reach it.
 
 ---
 

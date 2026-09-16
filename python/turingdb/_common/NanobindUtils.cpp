@@ -54,15 +54,15 @@ void allocColumns(const db::Dataframe* incomingDf,
     }
 }
 
-void addToColumn(const db::Column* col, db::Column* newCol) {
+void addToColumn(const db::Column* col, db::Column* newCol, size_t offset, size_t rowCount) {
     // ColumnConst columns are handled once in allocColumns via assign() and
     // skipped in appendDfs, so only ColumnVector kinds reach here. Const/Set/Mask
     // containers are excluded from the dispatcher below, so any non-vector column
     // hits the dispatcher's unsupported() path and throws a FatalException — an
     // unsupported column type still produces a clear failure.
-    const auto appendCol = [newCol](const auto* typedCol) {
+    const auto appendCol = [newCol, offset, rowCount](const auto* typedCol) {
         using T = typename std::decay_t<decltype(*typedCol)>::ValueType;
-        copyColumnVector<T>(typedCol, newCol);
+        copyColumnVector<T>(typedCol, newCol, offset, rowCount);
     };
 
     using ExcludedNonVector = db::ExcludedContainers<
@@ -92,7 +92,49 @@ void appendDfs(const db::Dataframe* src, db::Dataframe* dst) {
             continue;
         }
 
-        addToColumn(srcCols[i]->getColumn(), dstCol);
+        const db::Column* srcCol = srcCols[i]->getColumn();
+        addToColumn(srcCol, dstCol, 0, srcCol->size());
+    }
+}
+
+void allocChunkColumns(std::span<const std::string_view> names,
+                       std::span<const db::Column* const> chunks,
+                       db::Dataframe* bufferedDf,
+                       db::DataframeManager* dfMan,
+                       db::LocalMemory* localMem,
+                       std::vector<std::string>* nameStorage) {
+    nameStorage->reserve(chunks.size());
+
+    for (size_t columnIndex = 0; columnIndex < chunks.size(); columnIndex++) {
+        db::Column* newCol = localMem->allocSame(chunks[columnIndex]);
+        db::NamedColumn* newNamedCol = db::NamedColumn::create(dfMan, newCol, dfMan->allocTag());
+
+        nameStorage->emplace_back(columnIndex < names.size() ? names[columnIndex] : std::string_view {});
+        newNamedCol->rename(nameStorage->back());
+
+        bufferedDf->addColumn(newNamedCol);
+    }
+}
+
+void appendChunkColumns(std::span<const db::Column* const> chunks,
+                        size_t offset,
+                        size_t rowCount,
+                        db::Dataframe* dst) {
+    const auto& dstCols = dst->cols();
+
+    dst->setDeclaredRowCount(dst->getDeclaredRowCount() + rowCount);
+
+    for (size_t columnIndex = 0; columnIndex < chunks.size(); columnIndex++) {
+        const db::Column* srcCol = chunks[columnIndex];
+        db::Column* dstCol = dstCols[columnIndex]->getColumn();
+
+        // A constant stands for every row, so it is copied whole rather than windowed
+        if (dstCol->getContainerKind() == db::ContainerKind::code<db::ColumnConst>()) {
+            dstCol->assign(srcCol);
+            continue;
+        }
+
+        addToColumn(srcCol, dstCol, offset, rowCount);
     }
 }
 

@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <map>
 #include <set>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -16,7 +17,7 @@
 #include "SystemManager.h"
 #include "Graph.h"
 #include "LocalMemory.h"
-#include "dataframe/Dataframe.h"
+#include "NLOutputSink.h"
 #include "columns/ColumnVector.h"
 #include "versioning/Change.h"
 #include "versioning/Transaction.h"
@@ -26,6 +27,73 @@
 #include "ToolInit.h"
 
 using namespace db;
+
+namespace {
+
+struct Connection {
+    std::string station1;
+    std::string station2;
+    std::string line;
+    double _time = 0.0;
+};
+
+using StringColumn = ColumnVector<std::string>;
+
+class ConnectionNLSink : public NLOutputSink {
+public:
+    ConnectionNLSink(std::vector<Connection>& connections, std::set<std::string>& stations)
+        : _connections(connections),
+        _stations(stations)
+    {
+    }
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        const StringColumn* station1Column = static_cast<const StringColumn*>(chunks[0]);
+        const StringColumn* station2Column = static_cast<const StringColumn*>(chunks[1]);
+        const StringColumn* lineColumn = static_cast<const StringColumn*>(chunks[2]);
+        const StringColumn* timeColumn = static_cast<const StringColumn*>(chunks[3]);
+
+        for (size_t row = offset; row < offset + rowCount; row++) {
+            _connections.push_back({
+                (*station1Column)[row],
+                (*station2Column)[row],
+                (*lineColumn)[row],
+                std::stod((*timeColumn)[row]),
+            });
+
+            _stations.insert((*station1Column)[row]);
+            _stations.insert((*station2Column)[row]);
+        }
+    }
+
+private:
+    std::vector<Connection>& _connections;
+    std::set<std::string>& _stations;
+};
+
+class ShortestPathNLSink : public NLOutputSink {
+public:
+    ShortestPathNLSink(double& distance, Path& path)
+        : _distance(distance),
+        _path(path)
+    {
+    }
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        if (rowCount == 0) {
+            return;
+        }
+
+        _distance = (*static_cast<const ColumnVector<double>*>(chunks[0]))[offset];
+        _path = (*static_cast<const ColumnVector<Path>*>(chunks[1]))[offset];
+    }
+
+private:
+    double& _distance;
+    Path& _path;
+};
+
+}
 
 int main(int argc, const char** argv) {
     ToolInit toolInit("tfl");
@@ -84,47 +152,20 @@ int main(int argc, const char** argv) {
         "RETURN row.station1 AS s1, row.station2 AS s2, "
         "row.line AS line, row.time AS time";
 
-    struct Connection {
-        std::string station1;
-        std::string station2;
-        std::string line;
-        double _time = 0.0;
-    };
-
     std::vector<Connection> connections;
     std::set<std::string> stationSet;
 
     QueryConfig queryConfig;
 
     const auto runQuery = [&](std::string_view q,
-                              const QueryCallbacks::OnOutputData& cb,
+                              NLOutputSink* sink,
                               ChangeID chg = ChangeID::head()) {
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData(cb);
-        const QueryState state(graphName, &mem, &queryConfig, &callbacks, CommitHash::head(), chg);
+        const QueryState state(graphName, &mem, &queryConfig, sink, CommitHash::head(), chg);
         return db.query(q, state);
     };
 
-    const auto status = runQuery(loadQuery,
-        [&](const Dataframe* df) {
-            using StringCol = ColumnVector<std::string>;
-
-            auto* s1Col = df->cols()[0]->as<StringCol>();
-            auto* s2Col = df->cols()[1]->as<StringCol>();
-            auto* lineCol = df->cols()[2]->as<StringCol>();
-            auto* timeCol = df->cols()[3]->as<StringCol>();
-
-            for (size_t i = 0; i < s1Col->size(); i++) {
-                connections.push_back({
-                    std::string((*s1Col)[i]),
-                    std::string((*s2Col)[i]),
-                    std::string((*lineCol)[i]),
-                    std::stod(std::string((*timeCol)[i])),
-                });
-                stationSet.insert(std::string((*s1Col)[i]));
-                stationSet.insert(std::string((*s2Col)[i]));
-            }
-        });
+    ConnectionNLSink connectionSink(connections, stationSet);
+    const auto status = runQuery(loadQuery, &connectionSink);
 
     if (!status.isOk()) {
         spdlog::error("LOAD CSV failed: {}", status.getError());
@@ -282,13 +323,13 @@ int main(int argc, const char** argv) {
         changeID = change->id();
     }
 
-    const auto createStatus = runQuery(createQuery, [](const Dataframe*) {}, changeID);
+    const auto createStatus = runQuery(createQuery, nullptr, changeID);
     if (!createStatus.isOk()) {
         spdlog::error("CREATE failed: {}", createStatus.getError());
         return EXIT_FAILURE;
     }
 
-    const auto submitStatus = runQuery("CHANGE SUBMIT", [](const Dataframe*) {}, changeID);
+    const auto submitStatus = runQuery("CHANGE SUBMIT", nullptr, changeID);
     if (!submitStatus.isOk()) {
         spdlog::error("CHANGE SUBMIT failed: {}",
                       submitStatus.getError());
@@ -311,20 +352,8 @@ int main(int argc, const char** argv) {
     double distance = 0;
     Path pathResult;
 
-    const auto spStatus = runQuery(spQuery,
-        [&](const Dataframe* df) {
-            auto* distCol =
-                df->cols()[0]->as<ColumnVector<double>>();
-            auto* pathCol =
-                df->cols()[1]->as<ColumnVector<Path>>();
-
-            if (distCol && distCol->size() > 0) {
-                distance = (*distCol)[0];
-            }
-            if (pathCol && pathCol->size() > 0) {
-                pathResult = (*pathCol)[0];
-            }
-        });
+    ShortestPathNLSink shortestPathSink(distance, pathResult);
+    const auto spStatus = runQuery(spQuery, &shortestPathSink);
 
     if (!spStatus.isOk()) {
         spdlog::error("SHORTESTPATH failed: {}",

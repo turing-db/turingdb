@@ -33,7 +33,6 @@
 #include "Graph.h"
 #include "ID.h"
 #include "ProcedureManager.h"
-#include "QueryCallbacks.h"
 #include "QueryConfig.h"
 #include "QueryInterpreterV3.h"
 #include "QueryResultFormatter.h"
@@ -48,8 +47,6 @@
 #include "TuringTestEnv.h"
 #include "TuringTime.h"
 #include "columns/ColumnVector.h"
-#include "dataframe/Dataframe.h"
-#include "dataframe/NamedColumn.h"
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 #include "versioning/Transaction.h"
@@ -86,6 +83,23 @@ void stageDataFiles(const fs::Path& dataDir) {
         destination << source.rdbuf();
     }
 }
+
+class ChangeIDNLSink : public NLOutputSink {
+public:
+    explicit ChangeIDNLSink(ChangeID& changeID)
+        : _changeID(changeID)
+    {
+    }
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        bioassert(rowCount == 1, "Expected 1 change");
+
+        _changeID = (*static_cast<const ColumnVector<ChangeID>*>(chunks[0]))[offset];
+    }
+
+private:
+    ChangeID& _changeID;
+};
 
 class CollectingNLSink : public NLOutputSink {
 public:
@@ -205,18 +219,8 @@ V3QueryTestResult V3QueryTestRunner::runTest(const QueryTestSpec& spec, const fs
 
     ChangeID changeID = ChangeID::head();
     if (spec._writeRequired) {
-        QueryCallbacks changeNewCallbacks;
-        changeNewCallbacks.setOnOutputData([&](const Dataframe* df) {
-            NamedColumn* col = df->getColumn(ColumnTag {0});
-            bioassert(col, "Column not found");
-
-            ColumnVector<ChangeID>& changeIDs = *static_cast<ColumnVector<ChangeID>*>(col->getColumn());
-            bioassert(changeIDs.size() == 1, "Expected 1 change");
-
-            changeID = changeIDs[0];
-        });
-
-        const QueryState changeNewState(spec._graphName, &env->getMem(), &queryConfig, &changeNewCallbacks);
+        ChangeIDNLSink changeNewSink(changeID);
+        const QueryState changeNewState(spec._graphName, &env->getMem(), &queryConfig, &changeNewSink);
         db->query("CHANGE NEW", changeNewState);
     }
 
@@ -233,8 +237,7 @@ V3QueryTestResult V3QueryTestRunner::runTest(const QueryTestSpec& spec, const fs
     result._timeUs = static_cast<uint64_t>(duration<Microseconds>(queryStart, queryEnd));
 
     if (spec._writeRequired) {
-        QueryCallbacks submitCallbacks;
-        const QueryState submitState(spec._graphName, &env->getMem(), &queryConfig, &submitCallbacks,
+        const QueryState submitState(spec._graphName, &env->getMem(), &queryConfig, nullptr,
                                      CommitHash::head(), changeID);
         db->query("CHANGE SUBMIT", submitState);
     }

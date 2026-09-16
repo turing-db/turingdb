@@ -114,10 +114,7 @@ void CallV3Test::runLegacyWrite(std::string_view query) {
     ChangeID changeID;
     newChange(changeID);
 
-    QueryCallbacks callbacks;
-    callbacks.setOnOutputData([](const Dataframe*) {});
-
-    const QueryState writeState(_graphName, &_env->getMem(), &_queryConfig, &callbacks, CommitHash::head(), changeID);
+    const QueryState writeState(_graphName, &_env->getMem(), &_queryConfig, nullptr, CommitHash::head(), changeID);
     const QueryStatus writeStatus = _env->getDB().query(query, writeState);
     ASSERT_TRUE(writeStatus.isOk()) << query << ": " << writeStatus.getError();
 
@@ -136,10 +133,7 @@ void CallV3Test::newChange(ChangeID& changeID) {
 }
 
 void CallV3Test::submitChange(ChangeID changeID) {
-    QueryCallbacks callbacks;
-    callbacks.setOnOutputData([](const Dataframe*) {});
-
-    const QueryState submitState(_graphName, &_env->getMem(), &_queryConfig, &callbacks, CommitHash::head(), changeID);
+    const QueryState submitState(_graphName, &_env->getMem(), &_queryConfig, nullptr, CommitHash::head(), changeID);
     const QueryStatus submitStatus = _env->getDB().query("CHANGE SUBMIT", submitState);
     ASSERT_TRUE(submitStatus.isOk()) << submitStatus.getError();
 }

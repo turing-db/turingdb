@@ -44,7 +44,6 @@
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOperatorDispatcher.h"
 #include "columns/ColumnVector.h"
-#include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
 #include "list/ListElementView.h"
 #include "list/ListUtils.h"
@@ -234,20 +233,6 @@ void renderCell(const Column* column, size_t row, std::string& out) {
     Dispatcher::dispatch(column, stringify);
 }
 
-void collectPipelineRows(const Dataframe* dataframe, Rows& rows) {
-    const Dataframe::NamedColumns& columns = dataframe->cols();
-    const size_t rowCount = dataframe->getLogicalRowCount();
-
-    for (size_t row = 0; row < rowCount; row++) {
-        Row& cells = rows.emplace_back();
-        cells.resize(columns.size());
-
-        for (size_t column = 0; column < columns.size(); column++) {
-            renderCell(columns[column]->getColumn(), row, cells[column]);
-        }
-    }
-}
-
 class EquivalenceSink : public NLOutputSink {
 public:
     explicit EquivalenceSink(Rows& rows)
@@ -285,13 +270,9 @@ protected:
     }
 
     void runViaPipeline(std::string_view query, Rows& rows) {
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData([&rows](const Dataframe* dataframe) {
-            ASSERT_TRUE(dataframe != nullptr);
-            collectPipelineRows(dataframe, rows);
-        });
+        EquivalenceSink sink(rows);
 
-        const QueryState state(_graphName, &_env->getMem(), &_queryConfig, &callbacks);
+        const QueryState state(_graphName, &_env->getMem(), &_queryConfig, &sink);
         const QueryStatus status = _db->query(query, state);
         ASSERT_TRUE(status.isOk()) << "Pipeline query failed: " << query;
     }

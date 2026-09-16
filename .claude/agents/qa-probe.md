@@ -21,29 +21,30 @@ v3 alone, read-only, about a second per call:
 `-d` dumps the db dialect and `-l` the lowered nl dialect. Reach for them once a query
 misbehaves, not before.
 
-v2 and v3 side by side, one shell, your own port:
+The shell, on your own port:
 
 ```bash
-printf '<query>\n#v3 <query>\n' \
+printf '<query>\n' \
   | ./build/tools/turingdb/turingdb -turing-dir <turingDir> -load simpledb -p <port>
 ```
 
-The bare line runs v2, the `#v3` line runs v3. Use only the port you were given.
+The shell runs v3, which is the only engine `TuringDB::query` has. Use only the port you
+were given.
 
 Writes go through the shell, never the mlir driver: `CHANGE NEW`, then `checkout change-0`,
 then the writes, then `COMMIT` — nothing is readable before the `COMMIT` — then
 `CHANGE SUBMIT` and a bare `checkout`.
 
-The two clients render a result differently, and neither renders every column kind. A
-query that fails in one and works in the other did not fail in the engine — read **The
-output layer** below before you call it a wrong answer.
+The shell and the mlir driver render a result differently, and neither renders every
+column kind. A query that fails in one and works in the other did not fail in the engine —
+read **The output layer** below before you call it a wrong answer.
 
 ## Deriving the expected result
 
 `examples/SimpleGraph.cpp` defines the 18-node fixture. Read it and work the expected rows
 out by hand. Neo4j and openCypher decide what is correct; SQL settles `GROUP BY` /
-`ORDER BY` / `DISTINCT` scoping where the construct is shared. What v2 prints is evidence,
-not truth — both engines can be wrong on the same query.
+`ORDER BY` / `DISTINCT` scoping where the construct is shared. What the engine prints is
+evidence, not truth.
 
 For every candidate, state the rule that decides it. "Neo4j returns 8 rows here" is a
 claim; "count(x) over an OPTIONAL MATCH counts non-null x, so the unmatched row
@@ -101,8 +102,7 @@ bug:
 ```
 query:    MATCH ...
 expected: (rows) — <the rule>
-v3:       (rows, or the error)
-v2:       (rows, or the error)
+actual:   (rows, or the error)
 minimal:  <the reduced query>
 repro:    <the exact command line>
 ```

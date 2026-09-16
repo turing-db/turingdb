@@ -1,11 +1,9 @@
 #include <gtest/gtest.h>
 
-#include "QueryCallbacks.h"
 #include "QueryState.h"
 #include "QueryStatus.h"
 
 #include "TuringDB.h"
-#include "dataframe/Dataframe.h"
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
 
@@ -19,13 +17,10 @@ using namespace turing::test;
 class DeletedPendingEdgeConflictTest : public WriteQueryTest {
 protected:
     QueryStatus trySubmit(const ChangeID& changeID) {
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData([](const Dataframe*) {});
-
         const QueryState submitState(_graphName,
                                      &_env->getMem(),
                                      &_queryConfig,
-                                     &callbacks,
+                                     nullptr,
                                      CommitHash::head(),
                                      changeID);
 

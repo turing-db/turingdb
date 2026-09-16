@@ -2,7 +2,13 @@
 
 #include <math.h>
 
+#include <span>
+
+#include "NLOutputSink.h"
 #include "SystemManager.h"
+#include "columns/ColumnConst.h"
+#include "columns/ColumnIDs.h"
+#include "columns/ColumnVector.h"
 #include "Graph.h"
 #include "TuringDB.h"
 #include "QueryConfig.h"
@@ -26,6 +32,56 @@
 
 using namespace db;
 using namespace turing::test;
+
+namespace {
+
+class NodeIDNLSink : public NLOutputSink {
+public:
+    explicit NodeIDNLSink(NodeID& nodeID)
+        : _nodeID(nodeID)
+    {
+    }
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        if (rowCount == 0) {
+            return;
+        }
+
+        _nodeID = (*static_cast<const ColumnNodeIDs*>(chunks.front()))[offset];
+    }
+
+private:
+    NodeID& _nodeID;
+};
+
+// Reads the single value a COUNT projection returns, which reaches the sink either
+// as a one-row vector or as a constant depending on how the query was compiled
+class CountNLSink : public NLOutputSink {
+public:
+    explicit CountNLSink(uint64_t& count)
+        : _count(count)
+    {
+    }
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        if (rowCount == 0) {
+            return;
+        }
+
+        const Column* column = chunks.front();
+        if (column->getContainerKind() == ContainerKind::code<ColumnConst>()) {
+            _count = static_cast<const ColumnConst<uint64_t>*>(column)->getRaw();
+            return;
+        }
+
+        _count = (*static_cast<const ColumnVector<uint64_t>*>(column))[offset];
+    }
+
+private:
+    uint64_t& _count;
+};
+
+}
 
 // Road network Cypher query - creates 100 cities and 400 roads
 static const char* ROAD_NETWORK_CYPHER = R"(
@@ -578,10 +634,10 @@ public:
                 changeId = change->id();
             }
 
-            auto status = runQuery(ROAD_NETWORK_CYPHER, _graphName, [](const Dataframe*) {}, changeId);
+            auto status = runQuery(ROAD_NETWORK_CYPHER, _graphName, nullptr, changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create road network: " << status.getError();
 
-            auto submitStatus = runQuery("CHANGE SUBMIT", _graphName, [](const Dataframe*) {}, changeId);
+            auto submitStatus = runQuery("CHANGE SUBMIT", _graphName, nullptr, changeId);
             ASSERT_TRUE(submitStatus.isOk()) << "Failed to submit change: "
                                              << submitStatus.getError();
         }
@@ -599,11 +655,11 @@ public:
                 changeId = change->id();
             }
 
-            auto status = runQuery(NEGATIVE_WEIGHT_GRAPH_CYPHER, _negGraphName, [](const Dataframe*) {}, changeId);
+            auto status = runQuery(NEGATIVE_WEIGHT_GRAPH_CYPHER, _negGraphName, nullptr, changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create negative weight graph: "
                                        << status.getError();
 
-            auto submitStatus = runQuery("CHANGE SUBMIT", _negGraphName, [](const Dataframe*) {}, changeId);
+            auto submitStatus = runQuery("CHANGE SUBMIT", _negGraphName, nullptr, changeId);
             ASSERT_TRUE(submitStatus.isOk()) << "Failed to submit negative weight change: "
                                              << submitStatus.getError();
         }
@@ -621,10 +677,10 @@ public:
                 changeId = change->id();
             }
 
-            auto status = runQuery(DISJOINT_GRAPH_CYPHER, _disjGraphName, [](const Dataframe*) {}, changeId);
+            auto status = runQuery(DISJOINT_GRAPH_CYPHER, _disjGraphName, nullptr, changeId);
             ASSERT_TRUE(status.isOk()) << "Failed to create disjoint graph: " << status.getError();
 
-            auto submitStatus = runQuery("CHANGE SUBMIT", _disjGraphName, [](const Dataframe*) {}, changeId);
+            auto submitStatus = runQuery("CHANGE SUBMIT", _disjGraphName, nullptr, changeId);
             ASSERT_TRUE(submitStatus.isOk()) << "Failed to submit disjoint change: "
                                              << submitStatus.getError();
         }
@@ -646,11 +702,9 @@ public:
 
     static QueryStatus runQuery(std::string_view q,
                                 std::string_view graphName,
-                                QueryCallbacks::OnOutputData onData = [](const Dataframe*) {},
+                                NLOutputSink* sink = nullptr,
                                 ChangeID changeId = ChangeID::head()) {
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData(onData);
-        const QueryState state(graphName, &_env->getMem(), &_queryConfig, &callbacks, CommitHash::head(), changeId);
+        const QueryState state(graphName, &_env->getMem(), &_queryConfig, sink, CommitHash::head(), changeId);
         return _db->query(q, state);
     }
 
@@ -674,14 +728,8 @@ protected:
         std::string query = fmt::format(
             "MATCH (n:{}) WHERE n.id = '{}' RETURN n", label, nodeID);
 
-        auto status = runQuery(query, graphName, [&](const Dataframe* df) -> void {
-            if (df && !df->cols().empty()) {
-                const auto* nodeCol = df->cols()[0]->as<ColumnNodeIDs>();
-                if (nodeCol && !nodeCol->empty()) {
-                    result = (*nodeCol)[0];
-                }
-            }
-        });
+        NodeIDNLSink sink(result);
+        auto status = runQuery(query, graphName, &sink);
 
         if (!status.isOk() || !result.isValid()) {
             throw std::runtime_error(fmt::format("Node not found: {}", nodeID));
@@ -805,15 +853,8 @@ protected:
 TEST_F(ShortestPathProcessorTest, graphLoadedCorrectly) {
     // Verify node count
     uint64_t nodeCount = 0;
-    auto status = runQuery("MATCH (n:City) RETURN COUNT(n) AS cnt", _graphName,
-                           [&](const Dataframe* df) -> void {
-                               if (df && !df->cols().empty()) {
-                                   const auto* col = df->cols()[0]->as<ColumnConst<uint64_t>>();
-                                   if (col) {
-                                       nodeCount = col->getRaw();
-                                   }
-                               }
-                           });
+    CountNLSink nodeCountSink(nodeCount);
+    auto status = runQuery("MATCH (n:City) RETURN COUNT(n) AS cnt", _graphName, &nodeCountSink);
 
     ASSERT_TRUE(status.isOk());
     ASSERT_EQ(nodeCount, 100) << "Expected 100 cities in the graph";
@@ -825,15 +866,8 @@ TEST_F(ShortestPathProcessorTest, graphLoadedCorrectly) {
 TEST_F(ShortestPathProcessorTest, edgesLoadedCorrectly) {
     // Count edges
     uint64_t edgeCount = 0;
-    auto status = runQuery("MATCH ()-[r:ROAD]->() RETURN COUNT(r) AS cnt", _graphName,
-                           [&](const Dataframe* df) -> void {
-                               if (df && !df->cols().empty()) {
-                                   const auto* col = df->cols()[0]->as<ColumnConst<uint64_t>>();
-                                   if (col) {
-                                       edgeCount = col->getRaw();
-                                   }
-                               }
-                           });
+    CountNLSink edgeCountSink(edgeCount);
+    auto status = runQuery("MATCH ()-[r:ROAD]->() RETURN COUNT(r) AS cnt", _graphName, &edgeCountSink);
 
     ASSERT_TRUE(status.isOk());
     ASSERT_EQ(edgeCount, 400) << "Expected 400 roads in the graph";

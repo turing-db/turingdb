@@ -1,6 +1,8 @@
 #include <cstdlib>
 #include <fstream>
+#include <iostream>
 #include <memory>
+#include <span>
 #include <string>
 
 #include <argparse.hpp>
@@ -10,17 +12,30 @@
 #include "JobSystem.h"
 #include "JsonlParser.h"
 #include "LocalMemory.h"
-#include "QueryCallbacks.h"
+#include "NLOutputSink.h"
 #include "SystemManager.h"
 #include "TuringConfig.h"
 #include "TuringDB.h"
-#include "dataframe/Dataframe.h"
+#include "columns/Column.h"
 #include "reader/GraphReader.h"
 #include "versioning/Change.h"
 #include "versioning/ChangeAccessor.h"
 #include "versioning/Transaction.h"
 
 using namespace db;
+
+namespace {
+
+class DumpingNLSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        for (const Column* column : chunks) {
+            column->dump(std::cout);
+        }
+    }
+};
+
+}
 
 int main(int argc, char** argv) {
     argparse::ArgumentParser parser("jsonl-import", "1.0", argparse::default_arguments::help);
@@ -102,10 +117,8 @@ int main(int argc, char** argv) {
 
     if (!query.empty()) {
         LocalMemory mem;
-        QueryCallbacks cbs;
-        const auto dump = [](const Dataframe* d) { d->dump(std::cout); };
-        cbs.setOnOutputData(dump);
-        QueryState state(graphName, &mem, &db.getDefaultQueryConfig(), &cbs);
+        DumpingNLSink sink;
+        QueryState state(graphName, &mem, &db.getDefaultQueryConfig(), &sink);
         const auto res = db.query(query, state);
         if (!res) {
             spdlog::error(res.getError());

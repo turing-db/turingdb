@@ -3,7 +3,7 @@
 #include "TuringDB.h"
 #include "JsonEncoder.h"
 #include "DBServerNlSink.h"
-#include "QueryInterpreterV3.h"
+#include "QueryState.h"
 
 #include "DBThreadContext.h"
 #include "HTTPParser.h"
@@ -16,13 +16,10 @@
 
 using namespace db;
 
-DBServerProcessor::DBServerProcessor(TuringDB& db,
-                                     net::TCPConnection& connection,
-                                     bool useV3)
+DBServerProcessor::DBServerProcessor(TuringDB& db, net::TCPConnection& connection)
     : _writer(&connection.getWriter<net::HTTPWriter>()),
     _db(db),
-    _connection(connection),
-    _useV3(useV3)
+    _connection(connection)
 {
 }
 
@@ -133,51 +130,17 @@ void DBServerProcessor::queryImpl(std::string_view query,
 
     JsonEncoder<net::NetWriter> encoder(*writer);
 
-    if (_useV3) {
-        encoder.start();
+    encoder.start();
 
-        DBServerNlSink sink(&encoder);
-        QueryInterpreterV3 interpreter(&_db.getSystemManager());
-        const QueryConfig& queryConfig = _db.getDefaultQueryConfig();
-        interpreter.setChunkSize(queryConfig.getChunkSize());
+    DBServerNlSink sink(&encoder);
 
-        QueryStatus status;
-        interpreter.execute(status, query, graphName, commit, change, &mem, &sink);
+    const QueryState state(graphName, &mem, &_db.getDefaultQueryConfig(), &sink, commit, change);
+    const QueryStatus status = _db.query(query, state);
 
-        if (!status.isOk()) {
-            encoder.encodeError(status.getStatus(), status.getError());
-        }
-
-        encoder.encodeTime(status.getTotalTime().count());
-        encoder.finish();
-        return;
+    if (!status.isOk()) {
+        encoder.encodeError(status.getStatus(), status.getError());
     }
 
-    QueryCallbacks queryCallbacks;
-
-    queryCallbacks.setOnBegin([&] {
-        encoder.start();
-    });
-
-    queryCallbacks.setOnOutputData([&] (const Dataframe* df) {
-        bioassert(df != nullptr, "Cannot output data of a null dataframe");
-        encoder.writeDataframe(*df);
-    });
-
-    queryCallbacks.setOnOutputHeader([&] (const Dataframe* df) {
-        bioassert(df != nullptr, "Cannot output header of a null dataframe");
-        encoder.writeDataframeHeader(*df);
-    });
-
-    queryCallbacks.setOnError([&] (const QueryStatus& status) {
-        encoder.encodeError(status.getStatus(), status.getError());
-    });
-
-    queryCallbacks.setOnEnd([&] (QueryCallbacks::ExecTimeMilliseconds milliseconds) {
-        encoder.encodeTime(milliseconds);
-        encoder.finish();
-    });
-
-    const QueryState state(graphName, &mem, &_db.getDefaultQueryConfig(), &queryCallbacks, commit, change);
-    _db.query(query, state);
+    encoder.encodeTime(status.getTotalTime().count());
+    encoder.finish();
 }

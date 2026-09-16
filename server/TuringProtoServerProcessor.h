@@ -18,9 +18,7 @@ class TuringDB;
 
 class TuringProtoServerProcessor {
 public:
-    TuringProtoServerProcessor(TuringDB& db,
-                               net::TCPConnection& connection,
-                               bool useV3);
+    TuringProtoServerProcessor(TuringDB& db, net::TCPConnection& connection);
     ~TuringProtoServerProcessor();
 
     TuringProtoServerProcessor(const TuringProtoServerProcessor&) = delete;
@@ -42,7 +40,6 @@ private:
     net::TCPConnection& _connection;
     DBThreadContext* _threadContext {nullptr};
     TuringProtoServerNlSink _protoNLSink;
-    bool _useV3 {false};
 
     void handleQuery();
     void writeQueryError(std::string_view message);

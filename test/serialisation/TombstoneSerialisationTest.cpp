@@ -1,18 +1,20 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <span>
 #include <unordered_set>
 
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
+#include "NLOutputSink.h"
 #include "QueryConfig.h"
 #include "SystemManager.h"
 #include "metadata/PropertyType.h"
 #include "versioning/Tombstones.h"
 #include "Graph.h"
 #include "dump/GraphLoader.h"
-#include "dataframe/Dataframe.h"
+#include "columns/ColumnOptVector.h"
 #include "versioning/Change.h"
 #include "versioning/Transaction.h"
 #include "columns/ColumnIDs.h"
@@ -20,6 +22,47 @@
 
 using namespace db;
 using namespace turing::test;
+
+namespace {
+
+using ColumnIDProp = ColumnOptVector<types::Int64::Primitive>;
+
+class IDCollectingNLSink : public NLOutputSink {
+public:
+    explicit IDCollectingNLSink(std::unordered_set<size_t>& ids)
+        : _ids(ids)
+    {
+    }
+
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        ASSERT_EQ(chunks.size(), 1u);
+
+        const ColumnIDProp* idColumn = static_cast<const ColumnIDProp*>(chunks.front());
+        for (size_t row = offset; row < offset + rowCount; row++) {
+            _ids.insert(idColumn->at(row).value());
+        }
+    }
+
+private:
+    std::unordered_set<size_t>& _ids;
+};
+
+class CountingNLSink : public NLOutputSink {
+public:
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        _columnCount = chunks.size();
+        _rowCount += rowCount;
+    }
+
+    size_t getColumnCount() const { return _columnCount; }
+    size_t getRowCount() const { return _rowCount; }
+
+private:
+    size_t _columnCount {0};
+    size_t _rowCount {0};
+};
+
+}
 
 class TombstoneSerialisationTest : public TuringTest {
 public:
@@ -63,16 +106,12 @@ public:
         ASSERT_TRUE(query("change submit", change->id()));
         spdlog::info("Submitted change");
 
-        const auto VERIFY = [](const Dataframe* df) {
-            if (df->size() == 0) {
-                panic("Failed to populate graph.");
-            }
-            if (df->cols().front()->getColumn()->size() != NUM_NODES) {
-                panic("Failed to populate graph.");
-            }
-        };
+        CountingNLSink populatedSink;
+        ASSERT_TRUE(query("match (n) return n", ChangeID::head(), &populatedSink));
 
-        ASSERT_TRUE(query("match (n) return n", ChangeID::head(), VERIFY));
+        if (populatedSink.getColumnCount() == 0 || populatedSink.getRowCount() != NUM_NODES) {
+            panic("Failed to populate graph.");
+        }
 
         spdlog::info("Successfully populated graph");
     }
@@ -88,17 +127,20 @@ public:
             delChange = delRes.value();
         }
 
-        for (size_t node : DELETED_NODES) {
-            const std::string queryStr = "match (n{id: " + std::to_string(node) + "}) delete n";
-            const auto res = query(queryStr, delChange->id());
-            spdlog::info(queryStr);
-            ASSERT_TRUE(res);
-        }
         for (size_t edge : DELETED_EDGES) {
             const std::string queryStr = "match (n)-[e{id: "+ std::to_string(edge)+"}]->(m) delete e";
             const auto res = query(queryStr, delChange->id());
             spdlog::info(queryStr);
-            ASSERT_TRUE(res);
+            ASSERT_TRUE(res) << res.getError();
+        }
+
+        ASSERT_TRUE(query("commit", delChange->id()));
+
+        for (size_t node : DELETED_NODES) {
+            const std::string queryStr = "match (n{id: " + std::to_string(node) + "}) delete n";
+            const auto res = query(queryStr, delChange->id());
+            spdlog::info(queryStr);
+            ASSERT_TRUE(res) << res.getError();
         }
         // implicit dump on change submit
         ASSERT_TRUE(query("change submit", delChange->id()));
@@ -106,11 +148,8 @@ public:
         spdlog::info("Submitted deletions change");
     }
 
-    QueryStatus query(std::string_view q, ChangeID changeID,
-                      QueryCallbacks::OnOutputData onData = [](const Dataframe*) {}) {
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData(onData);
-        const QueryState state(_workingGraphName, &_env->getMem(), &_queryConfig, &callbacks, CommitHash::head(), changeID);
+    QueryStatus query(std::string_view q, ChangeID changeID, NLOutputSink* sink = nullptr) {
+        const QueryState state(_workingGraphName, &_env->getMem(), &_queryConfig, sink, CommitHash::head(), changeID);
         return _env->getDB().query(q, state);
     }
 
@@ -172,35 +211,17 @@ TEST_F(TombstoneSerialisationTest, deleteNodesThenLoad) {
 
     // Get actual nodes & edges
     {
-        using ColumnIDProp = ColumnOptVector<types::Int64::Primitive>;
-        auto callback = [&actualNodes](const Dataframe* df) {
-            ASSERT_TRUE(df->size() == 1);
-            ColumnIDProp* nodes = df->cols().front()->as<ColumnIDProp>();
-            ASSERT_TRUE(nodes);
+        IDCollectingNLSink nodeSink(actualNodes);
 
-            for (const auto& id : *nodes) {
-                actualNodes.insert(id.value());
-            }
-        };
-
-        const auto res = query("match (n) return n.id", ChangeID::head(), callback);
+        const auto res = query("match (n) return n.id", ChangeID::head(), &nodeSink);
         ASSERT_TRUE(res);
         ASSERT_TRUE(!actualNodes.empty());
         ASSERT_EQ(actualNodes.size(), NUM_NODES-DELETED_NODES.size());
     }
     {
-        using ColumnIDProp = ColumnOptVector<types::Int64::Primitive>;
-        auto callback = [&actualEdges](const Dataframe* df) {
-            ASSERT_TRUE(df->size() == 1);
-            ColumnIDProp* edges = df->cols().front()->as<ColumnIDProp>();
-            ASSERT_TRUE(edges);
+        IDCollectingNLSink edgeSink(actualEdges);
 
-            for (const auto& id : *edges) {
-                actualEdges.insert(id.value());
-            }
-        };
-
-        const auto res = query("match (n)-[e]->(m) return e.id", ChangeID::head(), callback);
+        const auto res = query("match (n)-[e]->(m) return e.id", ChangeID::head(), &edgeSink);
         ASSERT_TRUE(res);
         ASSERT_TRUE(!actualEdges.empty());
         ASSERT_EQ(actualEdges.size(), NUM_EDGES-DELETED_EDGES.size());

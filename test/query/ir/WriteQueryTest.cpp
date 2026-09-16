@@ -10,7 +10,6 @@
 #include "SystemAccessor.h"
 #include "SystemManager.h"
 #include "TuringDB.h"
-#include "dataframe/Dataframe.h"
 #include "versioning/Change.h"
 #include "versioning/CommitHash.h"
 
@@ -41,13 +40,10 @@ void WriteQueryTest::openChange(ChangeID& changeID) {
 }
 
 void WriteQueryTest::submit(const ChangeID& changeID) {
-    QueryCallbacks callbacks;
-    callbacks.setOnOutputData([](const Dataframe*) {});
-
     const QueryState submitState(_graphName,
                                  &_env->getMem(),
                                  &_queryConfig,
-                                 &callbacks,
+                                 nullptr,
                                  CommitHash::head(),
                                  changeID);
     const QueryStatus status = _env->getDB().query("CHANGE SUBMIT", submitState);

@@ -8,7 +8,6 @@
 
 #include <range/v3/view/zip.hpp>
 
-#include "dataframe/Dataframe.h"
 #include "dataframe/NamedColumn.h"
 
 #include "NLOutputSink.h"
@@ -57,14 +56,11 @@ protected:
             changeID = res.value()->id();
         }
 
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData([](const Dataframe*) {});
-
-        const QueryState writeState(graphName, &_env->getMem(), &_queryConfig, &callbacks, CommitHash::head(), changeID);
+        const QueryState writeState(graphName, &_env->getMem(), &_queryConfig, nullptr, CommitHash::head(), changeID);
         const QueryStatus writeStatus = _db->query(writeQuery, writeState);
         ASSERT_TRUE(writeStatus.isOk()) << "V2 write failed: " << writeQuery;
 
-        const QueryState submitState(graphName, &_env->getMem(), &_queryConfig, &callbacks, CommitHash::head(), changeID);
+        const QueryState submitState(graphName, &_env->getMem(), &_queryConfig, nullptr, CommitHash::head(), changeID);
         const QueryStatus submitStatus = _db->query("CHANGE SUBMIT", submitState);
         ASSERT_TRUE(submitStatus.isOk()) << "V2 CHANGE SUBMIT failed";
     }
@@ -84,24 +80,19 @@ protected:
         _interp3->execute(writeStatus, writeQuery, graphName, CommitHash::head(), changeID, &_env->getMem(), &sink);
         ASSERT_TRUE(writeStatus.isOk()) << "V3 write failed: " << writeQuery << " — " << writeStatus.getError();
 
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData([](const Dataframe*) {});
-
-        const QueryState submitState(graphName, &_env->getMem(), &_queryConfig, &callbacks, CommitHash::head(), changeID);
+        const QueryState submitState(graphName, &_env->getMem(), &_queryConfig, nullptr, CommitHash::head(), changeID);
         const QueryStatus submitStatus = _db->query("CHANGE SUBMIT", submitState);
         ASSERT_TRUE(submitStatus.isOk()) << "V3 CHANGE SUBMIT failed";
     }
 
     // Run a MATCH query via the v2 pipeline and collect results as strings.
     void matchV2(std::string_view graphName, std::string_view matchQuery, Rows& rows) {
-        QueryCallbacks callbacks;
-        callbacks.setOnOutputData([&rows](const Dataframe* dataframe) {
-            ASSERT_TRUE(dataframe != nullptr);
-            collectPipelineRows(dataframe, rows);
-        });
+        RowSink sink;
 
-        const QueryState state(graphName, &_env->getMem(), &_queryConfig, &callbacks);
+        const QueryState state(graphName, &_env->getMem(), &_queryConfig, &sink);
         const QueryStatus status = _db->query(matchQuery, state);
+        rows = sink.rows();
+
         ASSERT_TRUE(status.isOk()) << "MATCH query failed: " << matchQuery;
     }
 
