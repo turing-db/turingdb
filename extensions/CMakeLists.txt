@@ -9,7 +9,7 @@ target_include_directories(turing_extensions_s
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(turing_extensions_s PUBLIC
-    turing_db_pipeline_s
+    turing_db_procedures_s
     ${CMAKE_DL_LIBS})
 
 add_subdirectory(builtin)

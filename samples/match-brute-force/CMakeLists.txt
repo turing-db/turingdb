@@ -9,6 +9,6 @@ target_link_libraries(${SAMPLE_NAME} PRIVATE
     turing_db_memory_s
     turing_db_system_s
     turing_db_examples_s
-    turing_db_interpreter_v3_s
+    turing_db_ir_exec_s
     turing_db_s
 )

@@ -101,10 +101,11 @@ target_include_directories(turing_db_ast_s
 
 target_link_libraries(turing_db_ast_s
   PRIVATE turing_db_query_common_s
-          turing_db_storage_s
           turing_db_import_common_s
+          turing_db_procedures_s
           turing_vector_s
           range-v3
-  PUBLIC turing_db_pipeline_s
-         turing_common_s)
+  PUBLIC  
+          turing_db_storage_s
+          turing_common_s)
 

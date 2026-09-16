@@ -1,3 +1,0 @@
-MATCH (a)-[e]->(b), (b)-->(c)
-WHERE a:Person AND a.name = "Luc"
-RETURN a

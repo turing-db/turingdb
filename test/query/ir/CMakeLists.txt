@@ -4,7 +4,7 @@ function(add_ir_tests exe_name cpp_file)
             turing_common_s
             turing_db_storage_s
             turing_db_jobs_s
-            turing_db_ir_interpreter_s
+            turing_db_ir_exec_s
             turing_db_ir_lowering_s
             turing_db_ir_dbdialect_s
             turing_db_ir_common_s
@@ -18,7 +18,7 @@ target_link_libraries(turing_ir_test_rows_s
     PUBLIC  GTest::gtest
             turing_db_s
             turing_db_storage_s
-            turing_db_interpreter_v3_s)
+            turing_db_ir_exec_s)
 target_include_directories(turing_ir_test_rows_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The change / write / read plumbing every test of a writing query needs, over the shared
@@ -32,7 +32,7 @@ target_link_libraries(turing_ir_test_write_query_s
             turing_db_examples_s
             turing_db_system_s
             turing_db_storage_s
-            turing_db_interpreter_v3_s)
+            turing_db_ir_exec_s)
 target_include_directories(turing_ir_test_write_query_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Compiles a query against the shared SimpleGraph with the join forced, for the hash join
@@ -46,7 +46,7 @@ target_link_libraries(turing_ir_test_hash_join_s
             turing_db_ir_codegen_s
             turing_db_ir_dbdialect_s
             turing_db_ir_lowering_s
-            turing_db_ir_interpreter_s
+            turing_db_ir_exec_s
             turing_db_ir_common_s
             turing_db_frontend_cypher_s
             turing_db_parser_s
@@ -73,14 +73,14 @@ target_link_libraries(test_query_ir_cypher_shortest_path PRIVATE
         turing_testenv_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_cypher_shortest_path PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 add_ir_tests(test_query_ir_group_aggregate GroupAggregateTest.cpp)
 target_link_libraries(test_query_ir_group_aggregate PRIVATE
         turing_db_s
         turing_testenv_s
         turing_db_system_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 add_ir_tests(test_query_ir_collect CollectTest.cpp)
 
 # The chunked collect tests force the collect fold to span chunk boundaries.
@@ -191,7 +191,7 @@ function(add_call_v3_test exe_name cpp_file)
             turing_db_examples_s
             turing_db_system_s
             turing_db_storage_s
-            turing_db_interpreter_v3_s)
+            turing_db_ir_exec_s)
     target_include_directories(${exe_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 endfunction()
 
@@ -264,35 +264,35 @@ target_link_libraries(test_query_ir_cypher_collect PRIVATE
         turing_db_s
         turing_testenv_s
         turing_db_system_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 
 add_ir_tests(test_query_ir_cypher_collect_distinct_entity CypherCollectDistinctEntityTest.cpp)
 target_link_libraries(test_query_ir_cypher_collect_distinct_entity PRIVATE
         turing_db_s
         turing_testenv_s
         turing_db_system_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 
 add_ir_tests(test_query_ir_cypher_collect_element_type CypherCollectElementTypeTest.cpp)
 target_link_libraries(test_query_ir_cypher_collect_element_type PRIVATE
         turing_db_s
         turing_testenv_s
         turing_db_system_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 
 add_ir_tests(test_query_ir_cypher_collect_aggregate CypherCollectAggregateTest.cpp)
 target_link_libraries(test_query_ir_cypher_collect_aggregate PRIVATE
         turing_db_s
         turing_testenv_s
         turing_db_system_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 
 add_ir_tests(test_query_ir_cypher_collect_input CypherCollectInputTest.cpp)
 target_link_libraries(test_query_ir_cypher_collect_input PRIVATE
         turing_db_s
         turing_testenv_s
         turing_db_system_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 
 add_ir_tests(test_query_ir_dbdialect DBDialectTest.cpp)
 add_ir_tests(test_query_ir_push_down_filter PushDownFilterTest.cpp)
@@ -523,29 +523,29 @@ target_link_libraries(test_query_ir_create_equivalence PRIVATE
         turing_testenv_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_create_equivalence PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-add_turing_test(test_query_ir_interpreter_v3_error QueryInterpreterV3ErrorTest.cpp)
-target_link_libraries(test_query_ir_interpreter_v3_error PRIVATE
+add_turing_test(test_query_ir_exec_v3_error QueryInterpreterV3ErrorTest.cpp)
+target_link_libraries(test_query_ir_exec_v3_error PRIVATE
         turing_db_s
         turing_testenv_s
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
-target_include_directories(test_query_ir_interpreter_v3_error PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_exec_v3_error PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-add_turing_test(test_query_ir_interpreter_v3_call QueryInterpreterV3CallTest.cpp)
-target_link_libraries(test_query_ir_interpreter_v3_call PRIVATE
+add_turing_test(test_query_ir_exec_v3_call QueryInterpreterV3CallTest.cpp)
+target_link_libraries(test_query_ir_exec_v3_call PRIVATE
         turing_db_s
         turing_testenv_s
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
-target_include_directories(test_query_ir_interpreter_v3_call PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_exec_v3_call PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_system_command_equivalence SystemCommandEquivalenceTest.cpp)
 target_link_libraries(test_query_ir_system_command_equivalence PRIVATE
@@ -554,7 +554,7 @@ target_link_libraries(test_query_ir_system_command_equivalence PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_system_command_equivalence PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_ir_tests(test_query_ir_system_command_context SystemCommandContextTest.cpp)
@@ -573,7 +573,7 @@ target_link_libraries(test_query_ir_system_command PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_system_command PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # LOAD PARQUET imports the split-export fixture pair the importer's own tests use, and
@@ -586,7 +586,7 @@ target_link_libraries(test_query_ir_load_parquet_v3 PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_load_parquet_v3 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(test_query_ir_load_parquet_v3
     PRIVATE PARQUET_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/test/import/parquet")
@@ -600,7 +600,7 @@ target_link_libraries(test_query_ir_load_embedding_v3 PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_db_io_parquet_s)
 target_include_directories(test_query_ir_load_embedding_v3 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -615,7 +615,7 @@ target_link_libraries(test_query_ir_vector_search PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_vector_search PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The composition cases drive the search through a WITH, a CALL and an aggregate, so they
@@ -628,7 +628,7 @@ target_link_libraries(test_query_ir_vector_search_composition PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_vector_search_composition PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The metric / index-kind cases build one index per case, so they drive the whole engine
@@ -641,7 +641,7 @@ target_link_libraries(test_query_ir_vector_search_index_kind PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_vector_search_index_kind PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The write cases run their statements inside a change and submit it, so they need the
@@ -654,7 +654,7 @@ target_link_libraries(test_query_ir_vector_search_write PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_vector_search_write PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_vector_search_rejection VectorSearchRejectionTest.cpp)
@@ -665,7 +665,7 @@ target_link_libraries(test_query_ir_vector_search_rejection PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_vector_search_rejection PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # LOAD CSV reads a file out of the data directory, which the system manager's config
@@ -678,7 +678,7 @@ target_link_libraries(test_query_ir_load_csv_source PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_load_csv_source PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The join cases cross a load with the SimpleGraph fixture, so they need the graph the
@@ -691,7 +691,7 @@ target_link_libraries(test_query_ir_load_csv_match PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_load_csv_match PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The import cases run their statements inside a change and submit it, so they need the
@@ -704,7 +704,7 @@ target_link_libraries(test_query_ir_load_csv_write PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_load_csv_write PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_call_yield_group_aggregate CallYieldGroupAggregateTest.cpp)
@@ -714,7 +714,7 @@ target_link_libraries(test_query_ir_call_yield_group_aggregate PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_call_yield_group_aggregate PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_call_yield_count_distinct CallYieldCountDistinctTest.cpp)
@@ -724,7 +724,7 @@ target_link_libraries(test_query_ir_call_yield_count_distinct PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_call_yield_count_distinct PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_function_input_column FunctionInputColumnTest.cpp)
@@ -734,7 +734,7 @@ target_link_libraries(test_query_ir_function_input_column PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_function_input_column PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_set_equivalence SetEquivalenceTest.cpp)
@@ -743,7 +743,7 @@ target_link_libraries(test_query_ir_set_equivalence PRIVATE
         turing_testenv_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_set_equivalence PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -753,7 +753,7 @@ target_link_libraries(test_query_ir_delete_equivalence PRIVATE
         turing_testenv_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_delete_equivalence PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -768,7 +768,7 @@ target_link_libraries(test_query_ir_equivalence PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -789,7 +789,7 @@ target_link_libraries(test_query_ir_order_by PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -810,7 +810,7 @@ target_link_libraries(test_query_ir_order_by_labels PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -831,7 +831,7 @@ target_link_libraries(test_query_ir_optional_match_cut PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -850,7 +850,7 @@ target_link_libraries(test_query_ir_cross_product_cut PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -871,7 +871,7 @@ target_link_libraries(test_query_ir_order_by_alias_key PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -892,7 +892,7 @@ target_link_libraries(test_query_ir_order_by_constant_alias_key PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -913,7 +913,7 @@ target_link_libraries(test_query_ir_constant_alias_expr_column PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -934,7 +934,7 @@ target_link_libraries(test_query_ir_order_by_count PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -955,7 +955,7 @@ target_link_libraries(test_query_ir_chained_call PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -976,7 +976,7 @@ target_link_libraries(test_query_ir_constant_output PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -997,7 +997,7 @@ target_link_libraries(test_query_ir_arithmetic_ext PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1018,7 +1018,7 @@ target_link_libraries(test_query_ir_string_concat PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1039,7 +1039,7 @@ target_link_libraries(test_query_ir_list_concat PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1060,7 +1060,7 @@ target_link_libraries(test_query_ir_list_index PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1081,7 +1081,7 @@ target_link_libraries(test_query_ir_list_index_aggregate PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1102,7 +1102,7 @@ target_link_libraries(test_query_ir_group_aggregate_arithmetic PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1123,7 +1123,7 @@ target_link_libraries(test_query_ir_group_aggregate_expression PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1144,7 +1144,7 @@ target_link_libraries(test_query_ir_distinct PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1160,7 +1160,7 @@ target_link_libraries(test_query_ir_distinct_order_by_property PRIVATE
         turing_testenv_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_distinct_order_by_property PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1175,7 +1175,7 @@ target_link_libraries(test_query_ir_count_distinct PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1196,7 +1196,7 @@ target_link_libraries(test_query_ir_cypher_unwind PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1217,7 +1217,7 @@ target_link_libraries(test_query_ir_unwind_collect_seed PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1238,7 +1238,7 @@ target_link_libraries(test_query_ir_unwind_value_filter_codegen PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1259,7 +1259,7 @@ target_link_libraries(test_query_ir_cypher_unwind_expr PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1281,7 +1281,7 @@ target_link_libraries(test_query_ir_cypher_list_literal PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1334,7 +1334,7 @@ target_link_libraries(test_query_ir_cypher_output PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1374,7 +1374,7 @@ target_link_libraries(test_query_ir_output_column_names PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1395,7 +1395,7 @@ target_link_libraries(test_query_ir_limit_skip PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1416,7 +1416,7 @@ target_link_libraries(test_query_ir_wildcard_return PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1433,7 +1433,7 @@ target_link_libraries(test_query_ir_unwind_constant_projection PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_unwind_constant_projection PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_constant_only_projection ConstantOnlyProjectionTest.cpp)
@@ -1443,7 +1443,7 @@ target_link_libraries(test_query_ir_constant_only_projection PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_constant_only_projection PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_aggregate_over_constant_alias AggregateOverConstantAliasTest.cpp)
@@ -1453,7 +1453,7 @@ target_link_libraries(test_query_ir_aggregate_over_constant_alias PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_aggregate_over_constant_alias PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1468,7 +1468,7 @@ target_link_libraries(test_query_ir_optional_match_composition PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_optional_match_composition PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_optional_match OptionalMatchTest.cpp)
@@ -1478,7 +1478,7 @@ target_link_libraries(test_query_ir_optional_match PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_optional_match PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1489,7 +1489,7 @@ target_link_libraries(test_query_ir_null_predicate PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_null_predicate PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1500,7 +1500,7 @@ target_link_libraries(test_query_ir_absent_property_name PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_absent_property_name PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1511,7 +1511,7 @@ target_link_libraries(test_query_ir_absent_schema_name PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_absent_schema_name PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1522,7 +1522,7 @@ target_link_libraries(test_query_ir_optional_match_write PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_optional_match_write PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1533,7 +1533,7 @@ target_link_libraries(test_query_ir_with PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_with PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1543,7 +1543,7 @@ target_link_libraries(test_query_ir_ldbc_bi11 PRIVATE
         turing_testenv_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_ldbc_bi11 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1553,7 +1553,7 @@ target_link_libraries(test_query_ir_ldbc_is7 PRIVATE
         turing_testenv_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_ldbc_is7 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1564,7 +1564,7 @@ target_link_libraries(test_query_ir_with_multi_part PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_with_multi_part PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1575,7 +1575,7 @@ target_link_libraries(test_query_ir_with_aggregate PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_with_aggregate PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1586,7 +1586,7 @@ target_link_libraries(test_query_ir_with_cut PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_with_cut PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1597,7 +1597,7 @@ target_link_libraries(test_query_ir_constant_return_after_with_limit PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_constant_return_after_with_limit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1608,7 +1608,7 @@ target_link_libraries(test_query_ir_with_collect PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_with_collect PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1619,7 +1619,7 @@ target_link_libraries(test_query_ir_cypher_multi_collect PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_cypher_multi_collect PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1630,7 +1630,7 @@ target_link_libraries(test_query_ir_with_scope PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_with_scope PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1697,7 +1697,7 @@ target_link_libraries(test_query_ir_list_property PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_list_property PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1708,7 +1708,7 @@ target_link_libraries(test_query_ir_list_property_equality PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_list_property_equality PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1719,7 +1719,7 @@ target_link_libraries(test_query_ir_list_functions PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_list_functions PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1730,7 +1730,7 @@ target_link_libraries(test_query_ir_list_property_order_collect PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_list_property_order_collect PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1754,7 +1754,7 @@ target_link_libraries(test_query_ir_order_by_aggregate_unprojected_key PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1771,7 +1771,7 @@ target_link_libraries(test_query_ir_constant_predicate_projection PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_constant_predicate_projection PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The crossed-source constant tests run a query whose constant is in flight when a search
@@ -1783,7 +1783,7 @@ target_link_libraries(test_query_ir_crossed_source_constant PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_crossed_source_constant PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -1817,7 +1817,7 @@ target_link_libraries(test_query_ir_count_distinct_ordering PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1838,7 +1838,7 @@ target_link_libraries(test_query_ir_count_distinct_argument PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1859,7 +1859,7 @@ target_link_libraries(test_query_ir_count_distinct_grouping PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1880,7 +1880,7 @@ target_link_libraries(test_query_ir_count_distinct_value PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1901,7 +1901,7 @@ target_link_libraries(test_query_ir_cascaded_merge_join PRIVATE
         turing_db_analyzer_s
         turing_db_frontend_cypher_s
         turing_db_ir_codegen_s
-        turing_db_ir_interpreter_s
+        turing_db_ir_exec_s
         turing_db_ir_lowering_s
         turing_db_ir_dbdialect_s
         turing_db_ir_nldialect_s
@@ -1918,7 +1918,7 @@ target_link_libraries(test_query_ir_aggregate_over_constant_arithmetic PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_aggregate_over_constant_arithmetic PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_count_wildcard_empty_input CountWildcardEmptyInputTest.cpp)
@@ -1928,7 +1928,7 @@ target_link_libraries(test_query_ir_count_wildcard_empty_input PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_count_wildcard_empty_input PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_count_from_metadata_query CountFromMetadataQueryTest.cpp)
@@ -1939,7 +1939,7 @@ target_link_libraries(test_query_ir_count_from_metadata_query PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 
 add_turing_test(test_query_ir_repeated_edge_variable RepeatedEdgeVariableTest.cpp)
 target_link_libraries(test_query_ir_repeated_edge_variable PRIVATE
@@ -1948,7 +1948,7 @@ target_link_libraries(test_query_ir_repeated_edge_variable PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_repeated_edge_variable PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The chunked hash join cases run hand-written db IR through the lowering at several chunk
@@ -2001,7 +2001,7 @@ target_link_libraries(test_query_ir_comma_pattern_join_keys PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_comma_pattern_join_keys PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_variable_type_conflict VariableTypeConflictTest.cpp)
@@ -2011,7 +2011,7 @@ target_link_libraries(test_query_ir_variable_type_conflict PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_variable_type_conflict PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_unknown_variable UnknownVariableTest.cpp)
@@ -2021,7 +2021,7 @@ target_link_libraries(test_query_ir_unknown_variable PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_unknown_variable PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_aggregate_with_return_items AggregateWithReturnItemsTest.cpp)
@@ -2032,7 +2032,7 @@ target_link_libraries(test_query_ir_aggregate_with_return_items PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_aggregate_with_return_items PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_string_predicates StringPredicateTest.cpp)
@@ -2043,7 +2043,7 @@ target_link_libraries(test_query_ir_string_predicates PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_string_predicates PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_list_equality ListEqualityTest.cpp)
@@ -2054,7 +2054,7 @@ target_link_libraries(test_query_ir_list_equality PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_list_equality PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_list_in ListInTest.cpp)
@@ -2065,7 +2065,7 @@ target_link_libraries(test_query_ir_list_in PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_list_in PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The EXPLAIN dumps run the whole compilation of a query against the shared SimpleGraph
@@ -2078,7 +2078,7 @@ target_link_libraries(test_query_ir_explain PRIVATE
         turing_testenv_s
         turing_db_examples_s
         turing_db_system_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_explain PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_pattern_loop PatternLoopTest.cpp)
@@ -2089,7 +2089,7 @@ target_link_libraries(test_query_ir_pattern_loop PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_pattern_loop PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_multi_pattern_join MultiPatternJoinTest.cpp)
@@ -2100,7 +2100,7 @@ target_link_libraries(test_query_ir_multi_pattern_join PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_multi_pattern_join PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_match_order_by MatchOrderByTest.cpp)
@@ -2111,7 +2111,7 @@ target_link_libraries(test_query_ir_match_order_by PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_match_order_by PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_match_skip_limit MatchSkipLimitTest.cpp)
@@ -2122,7 +2122,7 @@ target_link_libraries(test_query_ir_match_skip_limit PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_match_skip_limit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_return_heterogeneous_list ReturnHeterogeneousListTest.cpp)
@@ -2132,7 +2132,7 @@ target_link_libraries(test_query_ir_return_heterogeneous_list PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_return_heterogeneous_list PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_unwind_heterogeneous_list UnwindHeterogeneousListTest.cpp)
@@ -2143,7 +2143,7 @@ target_link_libraries(test_query_ir_unwind_heterogeneous_list PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_unwind_heterogeneous_list PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_avg_unwind AvgUnwindTest.cpp)
@@ -2154,7 +2154,7 @@ target_link_libraries(test_query_ir_avg_unwind PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_avg_unwind PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_avg_empty AvgEmptyTest.cpp)
@@ -2165,7 +2165,7 @@ target_link_libraries(test_query_ir_avg_empty PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_avg_empty PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The null-predicate tests read a Double property that half the fixture's nodes carry, so
@@ -2177,7 +2177,7 @@ target_link_libraries(test_query_ir_null_predicate_on_double PRIVATE
         turing_testenv_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_null_predicate_on_double PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_avg_literal AvgLiteralTest.cpp)
@@ -2188,7 +2188,7 @@ target_link_libraries(test_query_ir_avg_literal PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_avg_literal PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_multi_match MultiMatchTest.cpp)
@@ -2202,7 +2202,7 @@ target_link_libraries(test_query_ir_anonymous_match PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_anonymous_match PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_anonymous_pattern_property AnonymousPatternPropertyTest.cpp)
@@ -2213,7 +2213,7 @@ target_link_libraries(test_query_ir_anonymous_pattern_property PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_anonymous_pattern_property PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_numeric_conversion NumericConversionTest.cpp)
@@ -2224,7 +2224,7 @@ target_link_libraries(test_query_ir_numeric_conversion PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_numeric_conversion PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_count_alias CountAliasTest.cpp)
@@ -2235,7 +2235,7 @@ target_link_libraries(test_query_ir_count_alias PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_count_alias PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_trim_unread_columns_cypher TrimUnreadColumnsCypherTest.cpp)
@@ -2246,7 +2246,7 @@ target_link_libraries(test_query_ir_trim_unread_columns_cypher PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_trim_unread_columns_cypher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_reuse_property_reads_cypher ReusePropertyReadsCypherTest.cpp)
@@ -2257,7 +2257,7 @@ target_link_libraries(test_query_ir_reuse_property_reads_cypher PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_reuse_property_reads_cypher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_order_by_aggregate_key OrderByAggregateKeyTest.cpp)
@@ -2267,7 +2267,7 @@ target_link_libraries(test_query_ir_order_by_aggregate_key PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_order_by_aggregate_key PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -2278,7 +2278,7 @@ target_link_libraries(test_query_ir_complex_composition PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_complex_composition PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -2289,7 +2289,7 @@ target_link_libraries(test_query_ir_match_cut_unwind PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_match_cut_unwind PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -2300,7 +2300,7 @@ target_link_libraries(test_query_ir_list_grouping_key PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_list_grouping_key PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -2311,7 +2311,7 @@ target_link_libraries(test_query_ir_min_max_orderable PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_min_max_orderable PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -2322,7 +2322,7 @@ target_link_libraries(test_query_ir_mask_comparison PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_mask_comparison PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -2333,7 +2333,7 @@ target_link_libraries(test_query_ir_label_predicate PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_label_predicate PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -2344,7 +2344,7 @@ target_link_libraries(test_query_ir_mask_column_carry PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_mask_column_carry PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -2391,7 +2391,7 @@ target_link_libraries(test_query_ir_embedding_neighbour_ranking PRIVATE
         turing_testenv_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_embedding_neighbour_ranking PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # The similarity-guided traversal tests prune each hop of a walk over an embedding graph.
@@ -2402,7 +2402,7 @@ target_link_libraries(test_query_ir_similarity_guided_traversal PRIVATE
         turing_testenv_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_similarity_guided_traversal PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_label_list_chunk LabelListChunkTest.cpp)
@@ -2412,7 +2412,7 @@ target_link_libraries(test_query_ir_label_list_chunk PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_label_list_chunk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -2423,7 +2423,7 @@ target_link_libraries(test_query_ir_owned_string_chunk PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_owned_string_chunk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -2434,7 +2434,7 @@ target_link_libraries(test_query_ir_create_then_delete PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_create_then_delete PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -2448,7 +2448,7 @@ target_link_libraries(test_query_ir_null_comparison PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_null_comparison PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -2461,7 +2461,7 @@ target_link_libraries(test_query_ir_case_expression PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_case_expression PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -2476,7 +2476,7 @@ target_link_libraries(test_query_ir_coalesce_function PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_coalesce_function PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -2488,7 +2488,7 @@ target_link_libraries(test_query_ir_null_aggregate PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_null_aggregate PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -2509,7 +2509,7 @@ target_link_libraries(test_query_ir_shadowed_alias PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_shadowed_alias PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -2522,7 +2522,7 @@ target_link_libraries(test_query_ir_unwind_variables PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_unwind_variables PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # SHORTESTPATH under a WHERE whose predicate reads both endpoints, run end to end against
@@ -2535,7 +2535,7 @@ target_link_libraries(test_query_ir_shortest_path_endpoint_predicate PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_shortest_path_endpoint_predicate PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Ordering a string type() owns against another string, run end to end against simpledb.
@@ -2547,7 +2547,7 @@ target_link_libraries(test_query_ir_owned_string_ordering PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_owned_string_ordering PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # min() and max() over a string type() owns, run end to end against simpledb.
@@ -2559,7 +2559,7 @@ target_link_libraries(test_query_ir_owned_string_reduction PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_owned_string_reduction PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # coalesce over an argument list holding a literal, run end to end against simpledb.
@@ -2571,7 +2571,7 @@ target_link_libraries(test_query_ir_coalesce_literal_argument PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_coalesce_literal_argument PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # An indexed list element as the operand of an operator, run end to end against simpledb.
@@ -2583,7 +2583,7 @@ target_link_libraries(test_query_ir_list_element_operand PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_list_element_operand PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # A comparison against null disjoined with a constant, run end to end against simpledb.
@@ -2595,7 +2595,7 @@ target_link_libraries(test_query_ir_null_comparison_disjunction PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_null_comparison_disjunction PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 # A node or an edge indexed out of a collected list, run end to end against simpledb.
 add_turing_test(test_query_ir_collected_entity_index CollectedEntityIndexTest.cpp)
@@ -2606,7 +2606,7 @@ target_link_libraries(test_query_ir_collected_entity_index PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_collected_entity_index PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # A five-part query picking entities out of the lists its barriers collect, run end to end
@@ -2619,7 +2619,7 @@ target_link_libraries(test_query_ir_multi_part_entity_pick PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s)
+        turing_db_ir_exec_s)
 target_include_directories(test_query_ir_multi_part_entity_pick PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # startNode() and endNode() over the edges of simpledb, run end to end.
@@ -2630,7 +2630,7 @@ target_link_libraries(test_query_ir_edge_endpoints PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_edge_endpoints PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -2642,6 +2642,6 @@ target_link_libraries(test_query_ir_id_function PRIVATE
         turing_db_examples_s
         turing_db_system_s
         turing_db_storage_s
-        turing_db_interpreter_v3_s
+        turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_id_function PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

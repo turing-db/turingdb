@@ -4,6 +4,7 @@ function(test exe_name cpp_file)
         PRIVATE turing_db_analyzer_s
                 turing_db_ast_s
                 turing_db_parser_s
+                turing_db_procedures_s
                 turing_db_examples_s)
 endfunction()
 
