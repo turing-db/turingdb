@@ -10,10 +10,10 @@ from graph_utils import *
 # edges, and checkUpdatedEdgeConflicts only fires when the Change itself updates
 # the edge. The question is whether any check catches the conflict.
 #
-# Expected path: WriteProcessor::performDeletions invokes
-# CommitWriteBuffer::addHangingEdges on DELETE, which inserts X's incident edges
-# (including E) into the Change's _deletedEdges. checkDeletedEdgeConflicts then
-# rebases E and finds it in main's edgeWriteSet -> rejects the submit.
+# Expected path: the DETACH DELETE invokes CommitWriteBuffer::addHangingEdges,
+# which inserts X's incident edges (including E) into the Change's _deletedEdges.
+# checkDeletedEdgeConflicts then rebases E and finds it in main's edgeWriteSet
+# -> rejects the submit.
 #
 # This test locks in that coverage so the rebase-over-merge spec (which adds
 # IDRemap-based edge renumbering) cannot silently regress it.
@@ -34,9 +34,9 @@ def run(client : TuringDB) -> None:
     submit_current_change(client)
 
     # change_deletor: delete one endpoint of the edge main just property-updated.
-    # DELETE cascades E into the Change's _deletedEdges via addHangingEdges.
+    # DETACH DELETE cascades E into the Change's _deletedEdges via addHangingEdges.
     client.set_change(change=change_deletor)
-    client.query("MATCH (n) WHERE n.id = 6 DELETE n")
+    client.query("MATCH (n) WHERE n.id = 6 DETACH DELETE n")
     client.query("commit")
 
     try:
