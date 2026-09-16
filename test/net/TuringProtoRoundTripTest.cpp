@@ -64,6 +64,13 @@ size_t countPacketsOfType(const std::vector<FramedPacket>& packets,
 // Drive the encoder with tiny buffers so the tests can force the same
 // CHUNK_HEADER/CHUNK/END_CHUNK boundaries that the network path emits.
 std::vector<FramedPacket> encodeDataframeWithChunkSize(const db::Dataframe& df, size_t chunkSize) {
+    std::vector<std::string_view> names;
+    std::vector<const db::Column*> columns;
+    for (const db::NamedColumn* namedColumn : df.cols()) {
+        names.push_back(namedColumn->getName());
+        columns.push_back(namedColumn->getColumn());
+    }
+
     std::vector<FramedPacket> packets;
     net::proto::TuringProtoOutBuf schemaBuf(chunkSize);
     net::proto::TuringProtoOutBuf dataBuf(chunkSize);
@@ -77,7 +84,7 @@ std::vector<FramedPacket> encodeDataframeWithChunkSize(const db::Dataframe& df, 
 
     {
         net::proto::TuringProtoEncoder encoder(&schemaBuf);
-        encoder.writeDataframeHeader(&df);
+        encoder.writeColumnHeaders(names, columns);
         emitPacket(net::proto::MessageTypes::CHUNK_HEADER, &schemaBuf);
     }
 
@@ -86,11 +93,12 @@ std::vector<FramedPacket> encodeDataframeWithChunkSize(const db::Dataframe& df, 
         emitPacket(net::proto::MessageTypes::CHUNK, &dataBuf);
     });
 
-    encoder.writeDataframe(&df);
+    const size_t rowCount = df.getLogicalRowCount();
+    encoder.writeColumns(columns, 0, rowCount);
     if (dataBuf.size() > 0) {
         emitPacket(net::proto::MessageTypes::CHUNK, &dataBuf);
     }
-    encoder.writeChunkFooter(df.getLogicalRowCount());
+    encoder.writeChunkFooter(rowCount);
     packets.push_back(FramedPacket {
         ._type = net::proto::MessageTypes::END_CHUNK,
         ._bytes = framePacket(net::proto::MessageTypes::END_CHUNK,

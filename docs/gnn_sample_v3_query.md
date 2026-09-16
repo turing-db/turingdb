@@ -1,8 +1,9 @@
 # 3-hop GNN neighbourhood sampling — `gnn.neighbourhoodSample`, v3 syntax
 
-The `#v3 ` prefix routes the statement to `QueryInterpreterV3`. The same text
-without the prefix runs on v2, so both engines can be compared on one server
-process.
+The `#v3 ` prefix in the commands below was the shell's route to
+`QueryInterpreterV3` while v2 was the default engine. The same text without the
+prefix ran on v2, so both engines could be compared on one server process. The
+shell now runs every line on v3 and the prefix is gone.
 
 Three chained calls, one per hop. Each call yields into the next hop's
 variable, so the result is the same four columns the pattern-match form

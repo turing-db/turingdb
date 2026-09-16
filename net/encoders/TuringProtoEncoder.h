@@ -12,7 +12,6 @@
 #include "TuringProtoHeaders.h"
 #include "columns/ColumnMask.h"
 #include "columns/ColumnVector.h"
-#include "dataframe/Dataframe.h"
 #include "metadata/PropertyType.h"
 #include "list/ListUtils.h"
 #include "QueryCallbacks.h"
@@ -583,8 +582,6 @@ class TuringProtoEncoder {
 public:
     explicit TuringProtoEncoder(net::proto::TuringProtoOutBuf* outBuf);
 
-    void writeDataframeHeader(const db::Dataframe* df);
-    void writeDataframe(const db::Dataframe* df);
     void writeColumnHeaders(std::span<const std::string_view> names,
                             std::span<const db::Column* const> columns);
     void writeColumns(std::span<const db::Column* const> columns, size_t offset, size_t rowCount);

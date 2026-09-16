@@ -687,64 +687,40 @@ public:
 
     void declareOutput(std::span<const std::string_view> names,
                        std::span<const Column* const> chunks) override {
-        _columnNames.assign(names.begin(), names.end());
-
-        if (_quiet || names.empty()) {
+        if (_quiet || chunks.empty()) {
             return;
         }
 
         _table.startRow();
-        std::string header;
-        for (size_t columnIndex = 0; columnIndex < _columnNames.size(); columnIndex++) {
-            columnHeader(header, columnIndex);
-            _table.addCell(header);
+        for (size_t columnIndex = 0; columnIndex < chunks.size(); columnIndex++) {
+            const bool isNamed = columnIndex < names.size() && !names[columnIndex].empty();
+            if (isNamed) {
+                _table.addCell(names[columnIndex]);
+            } else {
+                _table.addCell("$" + std::to_string(columnIndex));
+            }
         }
-
-        _headerWritten = true;
     }
 
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        _rowCount += rowCount;
+
         if (_quiet) {
-            _rowCount += rowCount;
             return;
-        }
-
-        if (!_headerWritten) {
-            _table.startRow();
-            std::string header;
-            for (size_t columnIndex = 0; columnIndex < chunks.size(); columnIndex++) {
-                columnHeader(header, columnIndex);
-                _table.addCell(header);
-            }
-
-            _headerWritten = true;
         }
 
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
             _table.startRow();
-            for (const Column* col : chunks) {
-                writeColumnCell(_table, col, rowIndex);
+            for (const Column* column : chunks) {
+                writeColumnCell(_table, column, rowIndex);
             }
-
-            _rowCount++;
         }
     }
 
 private:
     ShellTable& _table;
     size_t& _rowCount;
-    std::vector<std::string> _columnNames;
-    bool _headerWritten {false};
     bool _quiet {false};
-
-    void columnHeader(std::string& header, size_t columnIndex) const {
-        const bool isNamed = columnIndex < _columnNames.size() && !_columnNames[columnIndex].empty();
-        if (isNamed) {
-            header = _columnNames[columnIndex];
-        } else {
-            header = "$" + std::to_string(columnIndex);
-        }
-    }
 };
 
 }
