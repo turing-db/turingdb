@@ -62,24 +62,24 @@
     "personId": 999999999, "personFirstName": "'Bench'", "personLastName": "'Mark'",
     "gender": "'female'", "birthday": 558921600000, "creationDate": 1290673245079,
     "locationIP": "'127.0.0.1'", "browserUsed": "'Firefox'", "cityId": 1073,
-    "languages": "'en'", "emails": "'bench@turing.bio'", "tagIds": 1524,
-    "studyAt": 2435, "workAt": 296
+    "languages": "'en'", "emails": "'bench@turing.bio'", "tagIds": [1524],
+    "studyAt": [[2435, 2004]], "workAt": [[296, 2010]]
   },
   "interactive-update-2": {"personId": 4398046511333, "postId": 343597383680, "creationDate": 1290673245079},
   "interactive-update-3": {"personId": 4398046511333, "commentId": 206158431892, "creationDate": 1290673245079},
-  "interactive-update-4": {"forumId": 999999999, "forumTitle": "'Bench forum'", "creationDate": 1290673245079, "moderatorPersonId": 4398046511333, "tagIds": 1524},
+  "interactive-update-4": {"forumId": 999999999, "forumTitle": "'Bench forum'", "creationDate": 1290673245079, "moderatorPersonId": 4398046511333, "tagIds": [1524]},
   "interactive-update-5": {"forumId": 274877906944, "personId": 4398046511333, "joinDate": 1290673245079},
   "interactive-update-6": {
     "postId": 999999999, "imageFile": "'bench.jpg'", "creationDate": 1290673245079,
     "locationIP": "'127.0.0.1'", "browserUsed": "'Firefox'", "language": "'en'",
     "content": "'bench post'", "length": 10, "authorPersonId": 4398046511333,
-    "forumId": 274877906944, "countryId": 0, "tagIds": 1524
+    "forumId": 274877906944, "countryId": 0, "tagIds": [1524]
   },
   "interactive-update-7": {
     "commentId": 999999998, "creationDate": 1290673245079, "locationIP": "'127.0.0.1'",
     "browserUsed": "'Firefox'", "content": "'bench comment'", "length": 13,
     "authorPersonId": 4398046511333, "countryId": 0, "replyToPostId": 343597383680,
-    "replyToCommentId": -1, "tagIds": 1524
+    "replyToCommentId": -1, "tagIds": [1524]
   },
   "interactive-update-8": {"person1Id": 4398046511333, "person2Id": 6597069766660, "creationDate": 1290673245079}
 }
