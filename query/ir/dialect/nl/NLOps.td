@@ -844,6 +844,29 @@ def PathLength : NLOp<"path_length", [Pure, RowAlignedThroughOperands]> {
 }
 
 /**
+* MakePath
+*/
+def MakePath : NLOp<"make_path", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Build the path of a named pattern element, one entity sequence per row";
+  let description = [{
+    Imperative counterpart of db.make_path: one sequence of graph entities per row, the
+    nodes and edges the element runs through in written order, a path operand expanded
+    into the hops it stands for.
+
+      %p = nl.make_path(%a, %x, %b)
+             : (!nl.chunk<!storage.node_id>, !nl.chunk<!storage.edge_id>, !nl.chunk<!storage.node_id>)
+               -> !nl.chunk<!storage.entity_list>
+  }];
+
+  let arguments = (ins Variadic<NLChunk>:$entities);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = [{
+    `(` $entities `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
 * GetPropertyType
 */
 def GetPropertyType : NLOp<"get_property_type", [Pure]> {

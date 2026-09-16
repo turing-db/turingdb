@@ -139,6 +139,13 @@ void WriteStmtAnalyzer::throwOnEntityWhere(const Pattern* pattern, std::string_v
 }
 
 void WriteStmtAnalyzer::analyze(const PatternElement* element) {
+    if (const Symbol* pathSymbol = element->getPathSymbol()) {
+        throwError(fmt::format("Variable '{}' names the path of a written pattern, "
+                               "which is not supported yet",
+                               pathSymbol->getName()),
+                   element);
+    }
+
     const auto& entities = element->getEntities();
 
     for (EntityPattern* entity : entities) {

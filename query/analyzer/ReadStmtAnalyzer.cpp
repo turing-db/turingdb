@@ -141,6 +141,10 @@ void ReadStmtAnalyzer::analyze(const MatchStmt* matchSt) {
 
     analyze(pattern);
 
+    if (matchSt->isOptional()) {
+        throwOnNamedPath(pattern);
+    }
+
     if (matchSt->hasOrderBy()) {
         analyze(matchSt->getOrderBy());
     }
@@ -335,7 +339,7 @@ void ReadStmtAnalyzer::analyze(Limit* limit) {
 }
 
 void ReadStmtAnalyzer::analyze(const Pattern* pattern) {
-    for (const PatternElement* element : pattern->elements()) {
+    for (PatternElement* element : pattern->elements()) {
         analyze(element);
     }
 
@@ -353,7 +357,7 @@ void ReadStmtAnalyzer::analyze(const Pattern* pattern) {
     }
 }
 
-void ReadStmtAnalyzer::analyze(const PatternElement* element) {
+void ReadStmtAnalyzer::analyze(PatternElement* element) {
     const auto& entities = element->getEntities();
 
     for (EntityPattern* entity : entities) {
@@ -365,6 +369,43 @@ void ReadStmtAnalyzer::analyze(const PatternElement* element) {
             throwError("Unsupported pattern entity type", entity);
         }
     }
+
+    analyzeNamedPath(element);
+}
+
+// A row an OPTIONAL MATCH missed carries a null for every variable the pattern binds, and
+// a path column holds no null: there is no nullable entity sequence to send back
+void ReadStmtAnalyzer::throwOnNamedPath(const Pattern* pattern) {
+    for (const PatternElement* element : pattern->elements()) {
+        if (const Symbol* pathSymbol = element->getPathSymbol()) {
+            throwError(fmt::format("Variable '{}' names the path of an OPTIONAL MATCH, "
+                                   "which is not supported yet: a path has no null to "
+                                   "stand for the rows nothing matched",
+                                   pathSymbol->getName()),
+                       element);
+        }
+    }
+}
+
+void ReadStmtAnalyzer::analyzeNamedPath(PatternElement* element) {
+    Symbol* symbol = element->getPathSymbol();
+    if (!symbol) {
+        return;
+    }
+
+    const std::string_view name = symbol->getName();
+
+    if (!_isV3) {
+        throwError("Named paths are not supported yet", element);
+    }
+
+    if (_ctxt->getDecl(name)) {
+        throwError(fmt::format("Variable '{}' is already bound: a named path takes a name of its own", name),
+                   element);
+    }
+
+    VarDecl* decl = _ctxt->getOrCreateNamedVariable(_ast, EvaluatedType::GraphPath, name);
+    element->setPathDecl(decl);
 }
 
 void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {

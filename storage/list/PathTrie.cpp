@@ -83,6 +83,23 @@ PathRef PathTrie::handleOf(size_t arena, size_t index) {
     return PathRef((static_cast<uint64_t>(arena) << indexBits) | index);
 }
 
+void PathTrie::appendHops(PathRef path, EntityList& entities) const {
+    const uint64_t depth = getDepth(path);
+    const size_t firstEntry = entities.size();
+    entities.resize(firstEntry + depth * 2);
+
+    PathRef current = path;
+    for (uint64_t hop = depth; hop > 0; hop--) {
+        const PathTrieEntry& entry = get(current);
+        const size_t entryIndex = firstEntry + (hop - 1) * 2;
+
+        entities[entryIndex] = {EntityType::Edge, EntityID(entry._edge.getValue())};
+        entities[entryIndex + 1] = {EntityType::Node, EntityID(entry._node.getValue())};
+
+        current = entry._parent;
+    }
+}
+
 ListView PathTrie::expandEdges(PathRef path, QueryListBuffer& buffer) const {
     const uint64_t depth = getDepth(path);
     ListWriteCursor cursor = buffer.reserveList(depth, depth * sizeof(EdgeID));

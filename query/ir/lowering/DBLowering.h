@@ -253,6 +253,10 @@ private:
 
     void lowerExpandPath(mlir::db::ExpandPath expandPath);
     void lowerPathLength(mlir::db::PathLength pathLength);
+
+    // Lower a db.make_path into the loop body its entity chunks are bound in, where each
+    // row already holds every node, edge and path the element runs through
+    void lowerMakePath(mlir::db::MakePath makePath);
     void lowerGetNodeProperties(mlir::db::GetNodeProperties getNodeProperties);
     void lowerGetEdgeProperties(mlir::db::GetEdgeProperties getEdgeProperties);
     void lowerGetNodeLabelSet(mlir::db::GetNodeLabelSet getNodeLabelSet);

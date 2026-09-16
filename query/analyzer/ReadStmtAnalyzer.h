@@ -60,7 +60,7 @@ public:
 
     // Pattern
     void analyze(const Pattern* pattern);
-    void analyze(const PatternElement* element);
+    void analyze(PatternElement* element);
     void analyze(NodePattern* node);
     void analyze(EdgePattern* edge);
 
@@ -85,6 +85,12 @@ private:
     // scope of their own, where the names bind one entity; outside it the same names bind
     // the whole path's lists
     void analyzeHop(EdgePattern* edgePattern, EdgePatternData* data);
+
+    // Declares the variable a `MATCH p = ...` names the whole element with, once its
+    // entities are bound
+    void analyzeNamedPath(PatternElement* element);
+
+    void throwOnNamedPath(const Pattern* pattern);
 
     void enterScope(DeclContext* scope);
 

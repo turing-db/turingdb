@@ -1276,6 +1276,45 @@ def PathLength : TuringOp<"path_length", [Pure]> {
 }
 
 /**
+* MakePath
+*/
+def MakePath : TuringOp<"make_path", [Pure]> {
+  let summary = "Build the path a named pattern element binds, one entity sequence per row";
+
+  let description = [{
+    `MATCH p = (a)-[x]->(b)` binds `p` to the path the element spells out. This op lays
+    that path out as one sequence of graph entities per row - the nodes and the edges it
+    runs through, in the order they are written, each entry saying which of the two it is.
+
+      %p = db.make_path(%a, %x, %b)
+             : (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.node_id>)
+               -> !db.column<!storage.entity_list>
+
+    The operands are the element's entities in written order. A node column contributes
+    one node entry, an edge column one edge entry, and a path column - what a quantified
+    relationship binds - the whole walk it stands for: one edge entry and one node entry
+    per hop, its seed left out because the node operand ahead of it already holds it. So
+    `MATCH p = (a)-[e]->+(b)` is `db.make_path(%a, %pe)`, with no operand for `b`: the
+    last node the walk reaches is `b`.
+
+      %p = db.make_path(%a, %pe) : (...) -> !db.column<!storage.entity_list>
+      %p = db.make_path(%a, %x, %b, %pe) : (...) -> !db.column<!storage.entity_list>
+
+    A path of no hops contributes no entry, so `MATCH p = (a)-[e]->*(m)` reads back as
+    the single node `a` on the rows where the walk stayed put.
+  }];
+
+  let arguments = (ins Variadic<Column>:$entities);
+  let results   = (outs ColumnEntityList:$result);
+
+  let assemblyFormat = [{
+    `(` $entities `)` attr-dict `:` functional-type(operands, results)
+  }];
+
+  let hasVerifier = 1;
+}
+
+/**
 * GetNodeProperties
 */
 def GetNodeProperties : TuringOp<"get_node_properties", [Pure]> {

@@ -161,6 +161,16 @@ def PathRef : StorageType<"PathRef", "path_ref"> {
     }];
 }
 
+def EntityList : StorageType<"EntityList", "entity_list"> {
+    let summary = "A sequence of graph entities";
+    let description = [{
+        The element type of a chunk holding one entity sequence per row - storage's
+        ColumnVector<EntityList>. Each entry carries whether it is a node or an edge
+        beside its ID, so a path reads back as the nodes and the relationships it runs
+        through, told apart at output. Produced by db.make_path.
+    }];
+}
+
 def List : StorageType<"List", "list"> {
     let summary = "A list value";
     let description = [{

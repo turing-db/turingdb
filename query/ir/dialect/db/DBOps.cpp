@@ -430,6 +430,46 @@ LogicalResult ExpandPath::verify() {
     return success();
 }
 
+LogicalResult MakePath::verify() {
+    const OperandRange entities = getEntities();
+    if (entities.empty()) {
+        return emitOpError("a path runs through at least one node");
+    }
+
+    const auto elementOf = [](Value value) -> Type {
+        const auto column = dyn_cast<ColumnType>(value.getType());
+        return column ? column.getType() : Type();
+    };
+
+    if (!isa_and_nonnull<storage::NodeIDType>(elementOf(entities.front()))) {
+        return emitOpError("a path opens on a node column");
+    }
+
+    size_t entityIndex = 1;
+    while (entityIndex < entities.size()) {
+        const Type element = elementOf(entities[entityIndex]);
+
+        if (isa_and_nonnull<storage::PathRefType>(element)) {
+            entityIndex++;
+            continue;
+        }
+
+        if (!isa_and_nonnull<storage::EdgeIDType>(element)) {
+            return emitOpError("a hop of a path is an edge column or a path column, at operand ") << entityIndex;
+        }
+
+        const bool landsOnANode = entityIndex + 1 < entities.size()
+                               && isa_and_nonnull<storage::NodeIDType>(elementOf(entities[entityIndex + 1]));
+        if (!landsOnANode) {
+            return emitOpError("the edge column at operand ") << entityIndex << " lands on no node column";
+        }
+
+        entityIndex += 2;
+    }
+
+    return success();
+}
+
 void GetInEdges::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     for (Value result : getResults()) {
         setNameFn(result, "");

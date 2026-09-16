@@ -6,6 +6,7 @@
 
 #include <spdlog/fmt/bundled/format.h>
 
+#include "EntityList.h"
 #include "GraphPath.h"
 #include "ID.h"
 #include "columns/ColumnConst.h"
@@ -317,6 +318,29 @@ bool textOfConstOptionalBool(const Column* chunk, size_t rowIndex, std::string& 
     return true;
 }
 
+// A named path, read as its nodes and edges in order: a node as (id), an edge as [id]
+bool textOfEntityList(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnVector<EntityList>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    text.clear();
+    for (const EntityList::Entry& entry : column->getRaw()[rowIndex]) {
+        if (!text.empty()) {
+            text += ", ";
+        }
+
+        if (entry._type == EntityType::Node) {
+            text += fmt::format("({})", entry._id.getValue());
+        } else {
+            text += fmt::format("[{}]", entry._id.getValue());
+        }
+    }
+
+    return true;
+}
+
 template <typename Primitive>
 bool textOfOptional(const Column* chunk, size_t rowIndex, std::string& text) {
     const auto* column = dynamic_cast<const ColumnOptVector<Primitive>*>(chunk);
@@ -467,6 +491,8 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfOptionalList(chunk, rowIndex, text)) {
         return text;
     } else if (textOfPath(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfEntityList(chunk, rowIndex, text)) {
         return text;
     }
 

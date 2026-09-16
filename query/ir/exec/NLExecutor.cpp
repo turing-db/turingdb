@@ -5968,6 +5968,57 @@ void NLExecutor::runPathLength(NLExecutionContext* context, NLFunctionData* data
     }
 }
 
+void NLExecutor::runMakePath(NLExecutionContext* context, NLFunctionData* data) {
+    const NLMakePathData* make = static_cast<NLMakePathData*>(data);
+    const NLMakePathData::PathEntities& entities = make->entities();
+    std::vector<EntityList>& paths = make->getOutput()->getRaw();
+    const PathTrie& trie = *make->getTrie();
+
+    bioassert(!entities.empty(), "nl.make_path builds a path out of at least one node");
+
+    // Every entity column is row-aligned with the others, so the first gives the rows
+    const size_t rowCount = entities.front()._column->size();
+
+    const auto isRowAligned = [rowCount](const NLPathEntity& entity) {
+        return entity._column->size() == rowCount;
+    };
+    bioassert(std::ranges::all_of(entities, isRowAligned),
+              "Entity columns of a path build are not row-aligned.");
+
+    paths.resize(rowCount);
+    for (EntityList& path : paths) {
+        path.clear();
+    }
+
+    for (const NLPathEntity& entity : entities) {
+        switch (entity._kind) {
+            case NLPathEntity::Kind::Node: {
+                const std::vector<NodeID>& nodes = static_cast<const ColumnNodeIDs*>(entity._column)->getRaw();
+                for (size_t row = 0; row < rowCount; row++) {
+                    paths[row].add(EntityType::Node, EntityID(nodes[row].getValue()));
+                }
+            }
+            break;
+
+            case NLPathEntity::Kind::Edge: {
+                const std::vector<EdgeID>& edges = static_cast<const ColumnEdgeIDs*>(entity._column)->getRaw();
+                for (size_t row = 0; row < rowCount; row++) {
+                    paths[row].add(EntityType::Edge, EntityID(edges[row].getValue()));
+                }
+            }
+            break;
+
+            case NLPathEntity::Kind::Path: {
+                const std::vector<PathRef>& handles = static_cast<const ColumnVector<PathRef>*>(entity._column)->getRaw();
+                for (size_t row = 0; row < rowCount; row++) {
+                    trie.appendHops(handles[row], paths[row]);
+                }
+            }
+            break;
+        }
+    }
+}
+
 void NLExecutor::runCrossProductLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLCrossProductLoopData* loopData = static_cast<NLCrossProductLoopData*>(data);
 
@@ -8927,6 +8978,10 @@ NLKeyAppendFunction NLExecutor::selectKeyAppendFunction(NLChunkKind kind) {
         case NLChunkKind::PathRef:
             throw IRException("A path column cannot be a DISTINCT or grouping key: expand it into its list first");
         break;
+
+        case NLChunkKind::EntityList:
+            throw IRException("A path column cannot be a DISTINCT or grouping key: a path has no scalar value to key on");
+        break;
     }
 
     bioassert(false, "Unknown NLChunkKind");
@@ -9514,6 +9569,10 @@ NLGroupAggregateFoldFunction NLExecutor::selectGroupCountDistinctChunkFold(NLChu
         case NLChunkKind::PathRef:
             throw IRException("count(DISTINCT) cannot key on a path column: expand it into its list first");
         break;
+
+        case NLChunkKind::EntityList:
+            throw IRException("count(DISTINCT) cannot key on a path column: a path has no scalar value to count distinct");
+        break;
     }
 
     bioassert(false, "Unknown NLChunkKind");
@@ -9697,6 +9756,7 @@ NLKeyAppendFunction NLExecutor::selectPlainMergeKeyAppendFunction(NLChunkKind ki
         case NLChunkKind::Map:
         case NLChunkKind::Path:
         case NLChunkKind::PathRef:
+        case NLChunkKind::EntityList:
             throw IRException("a MERGE pattern cannot constrain a property to this value");
         break;
 
@@ -9940,6 +10000,10 @@ NLCompareFunction NLExecutor::selectCompareFunction(NLChunkKind kind) {
 
         case NLChunkKind::PathRef:
             throw IRException("A path column cannot be a sort key: expand it into its list first");
+        break;
+
+        case NLChunkKind::EntityList:
+            throw IRException("A path column cannot be a sort key: a path has no order here");
         break;
     }
 
