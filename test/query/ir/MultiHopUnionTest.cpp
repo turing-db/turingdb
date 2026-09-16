@@ -43,6 +43,15 @@ constexpr const char* threeHopUnionAll =
     "MATCH (s {name: 'Remy'})--()--(b) RETURN id(b) AS id UNION ALL "
     "MATCH (s {name: 'Remy'})--()--()--(c) RETURN id(c) AS id";
 
+// The same three hops under a per-hop fanout limit: each branch keeps at most two of the
+// nodes its hop reaches, so the neighbourhood is gathered from a bounded slice of every
+// layer instead of all of it. The limit is the branch's own, charged before the union
+// dedups, so it bounds what a hop contributes and not what the union keeps.
+constexpr const char* cappedThreeHopUnion =
+    "MATCH (s {name: 'Remy'})--(a) RETURN DISTINCT id(a) AS id LIMIT 2 UNION "
+    "MATCH (s {name: 'Remy'})--()--(b) RETURN DISTINCT id(b) AS id LIMIT 2 UNION "
+    "MATCH (s {name: 'Remy'})--()--()--(c) RETURN DISTINCT id(c) AS id LIMIT 2";
+
 // The out-edge walk of the same three hops, which reaches less of the graph
 constexpr const char* directedThreeHopUnion =
     "MATCH (s {name: 'Remy'})-->(a) RETURN id(a) AS id UNION "
@@ -198,6 +207,29 @@ TEST_F(MultiHopUnionTest, dropsAHopThatReachesNothingNew) {
                idRows({"1", "6", "2", "3"}));
     expectRows("MATCH (s {name: 'Remy'})-->()-->()-->(c) RETURN DISTINCT id(c) AS id",
                idRows({"1", "6", "2", "3"}));
+}
+
+// A fanout of two per hop keeps Adam(1) and Ghosts(6) of the first, Remy itself(0) and
+// Bio(4) of the second, and of the third only nodes the first already had - four nodes
+// where the uncapped walk of the same three hops gathers eleven.
+TEST_F(MultiHopUnionTest, capsEachHopAtItsOwnFanoutLimit) {
+    expectRows(cappedThreeHopUnion, idRows({"1", "6", "0", "4"}));
+
+    expectRows("MATCH (s {name: 'Remy'})--(a) RETURN DISTINCT id(a) AS id LIMIT 2",
+               idRows({"1", "6"}));
+    expectRows("MATCH (s {name: 'Remy'})--()--(b) RETURN DISTINCT id(b) AS id LIMIT 2",
+               idRows({"0", "4"}));
+    expectRows("MATCH (s {name: 'Remy'})--()--()--(c) RETURN DISTINCT id(c) AS id LIMIT 2",
+               idRows({"1", "6"}));
+}
+
+// The limit is charged per branch, so three hops capped at two each report six rows under
+// UNION ALL - one budget per hop, not one shared by the union
+TEST_F(MultiHopUnionTest, chargesTheFanoutLimitPerHop) {
+    expectRowCount("MATCH (s {name: 'Remy'})--(a) RETURN DISTINCT id(a) AS id LIMIT 2 UNION ALL "
+                   "MATCH (s {name: 'Remy'})--()--(b) RETURN DISTINCT id(b) AS id LIMIT 2 UNION ALL "
+                   "MATCH (s {name: 'Remy'})--()--()--(c) RETURN DISTINCT id(c) AS id LIMIT 2",
+                   6);
 }
 
 // The seen-set spans every branch and every chunk of each, so a node first reached in one
