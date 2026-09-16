@@ -194,6 +194,8 @@ private:
     void lowerMakeList(mlir::db::MakeList makeList);
     void lowerScanEdges(mlir::db::ScanEdges scanEdges);
     void lowerScanEdgesByType(mlir::db::ScanEdgesByType scanEdgesByType);
+    void lowerScanOutEdgesByLabel(mlir::db::ScanOutEdgesByLabel scanOutEdgesByLabel);
+    void lowerScanInEdgesByLabel(mlir::db::ScanInEdgesByLabel scanInEdgesByLabel);
     void lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges);
     void lowerGetInEdges(mlir::db::GetInEdges getInEdges);
     void lowerGetEdges(mlir::db::GetEdges getEdges);

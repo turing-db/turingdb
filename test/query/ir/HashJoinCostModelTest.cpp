@@ -227,9 +227,9 @@ TEST_F(HashJoinCostModelTest, buildsTheScanRatherThanTheEdgesItIsCrossedWith) {
     EXPECT_LT(program.find("db.scan_edges"), program.find("} factor {")) << program;
 }
 
-// A hop no edge scan swallowed - one out of a labelled scan - carries its fan-out: ten
-// Rare nodes of average degree three make thirty rows, so the bare scan of the same ten is
-// the smaller side and the one to hold.
+// A hop out of a labelled scan carries its fan-out, whether it still reads as a hop or as
+// the by-label edge scan it fuses into: ten Rare nodes of average degree three make thirty
+// rows, so the bare scan of the same ten is the smaller side and the one to hold.
 TEST_F(HashJoinCostModelTest, sizesAHopByItsFanOut) {
     buildGraph(100, 10, 3);
 
@@ -242,7 +242,7 @@ TEST_F(HashJoinCostModelTest, sizesAHopByItsFanOut) {
     generate("MATCH (m:Rare), (n:Rare)-->(x) WHERE m.name = x.name RETURN m, x", forced, program);
 
     // The hop is the side that streams, so it stands in the join's first factor.
-    EXPECT_LT(program.find("db.get_out_edges"), program.find("} factor {")) << program;
+    EXPECT_LT(program.find("db.scan_out_edges_by_label"), program.find("} factor {")) << program;
 }
 
 // An unwind of a literal list makes a row per element, and the elements are in the IR, so

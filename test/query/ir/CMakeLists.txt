@@ -320,6 +320,50 @@ target_link_libraries(test_query_ir_fuse_edges_by_type PRIVATE turing_db_example
 add_ir_tests(test_query_ir_fuse_scan_edges_by_type FuseScanEdgesByTypeTest.cpp)
 target_link_libraries(test_query_ir_fuse_scan_edges_by_type PRIVATE turing_db_examples_s)
 
+# The by-label out-edge fusion tests check the rewritten db program, then lower and run it
+# against the shared SimpleGraph fixture to compare its rows with the label scan and hop's.
+add_ir_tests(test_query_ir_fuse_scan_out_edges_by_label FuseScanOutEdgesByLabelTest.cpp)
+target_link_libraries(test_query_ir_fuse_scan_out_edges_by_label PRIVATE turing_db_examples_s)
+
+add_turing_test(test_query_ir_fuse_scan_out_edges_by_label_codegen FuseScanOutEdgesByLabelCodegenTest.cpp)
+target_link_libraries(test_query_ir_fuse_scan_out_edges_by_label_codegen PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s
+        turing_db_ir_dbdialect_s
+        turing_db_ir_nldialect_s
+        turing_db_ir_storagedialect_s
+        turing_db_ir_common_s
+        turing_db_storage_s)
+target_include_directories(test_query_ir_fuse_scan_out_edges_by_label_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_ir_tests(test_query_ir_fuse_scan_in_edges_by_label FuseScanInEdgesByLabelTest.cpp)
+target_link_libraries(test_query_ir_fuse_scan_in_edges_by_label PRIVATE turing_db_examples_s)
+
+add_turing_test(test_query_ir_fuse_scan_in_edges_by_label_codegen FuseScanInEdgesByLabelCodegenTest.cpp)
+target_link_libraries(test_query_ir_fuse_scan_in_edges_by_label_codegen PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s
+        turing_db_ir_dbdialect_s
+        turing_db_ir_nldialect_s
+        turing_db_ir_storagedialect_s
+        turing_db_ir_common_s
+        turing_db_storage_s)
+target_include_directories(test_query_ir_fuse_scan_in_edges_by_label_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_fuse_edges_by_type_codegen FuseEdgesByTypeCodegenTest.cpp)
 target_link_libraries(test_query_ir_fuse_edges_by_type_codegen PRIVATE
         turing_db_s

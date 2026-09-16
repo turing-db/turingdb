@@ -38,6 +38,8 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSESCANEDGES
 #define GEN_PASS_DEF_FUSEEDGESBYTYPE
 #define GEN_PASS_DEF_FUSESCANEDGESBYTYPE
+#define GEN_PASS_DEF_FUSESCANOUTEDGESBYLABEL
+#define GEN_PASS_DEF_FUSESCANINEDGESBYLABEL
 #define GEN_PASS_DEF_REUSEPROPERTYREADS
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
@@ -1218,6 +1220,81 @@ struct FuseScanEdgesByType : public impl::FuseScanEdgesByTypeBase<FuseScanEdgesB
     }
 };
 
+// A directed hop over a by-label node scan walks the edges hanging off every node carrying
+// those labels, which is what the matching by-label edge scan reads off the edge index -
+// without building the node column the hop walks from.
+template <typename HopOp>
+bool matchLabelledEdgeScan(HopOp hop, ScanNodesByLabel& scan) {
+    // The carry set is row-aligned with the scan and the fused form has nothing of its own
+    // to hand back in its place.
+    if (!hop.getColumnsToFilter().empty()) {
+        return false;
+    }
+
+    scan = hop.getInputNodes().template getDefiningOp<ScanNodesByLabel>();
+    if (!scan) {
+        return false;
+    }
+
+    // The fused form drops the node column, so a second reader of it keeps the scan alive.
+    return scan.getResult().hasOneUse();
+}
+
+template <typename ScanOp, typename HopOp>
+void fuseScanEdgesByLabel(HopOp hop, ScanNodesByLabel scan, mlir::OpBuilder& builder) {
+    builder.setInsertionPoint(hop);
+
+    // The fused scan declares the same four results in the same order the hop declares its
+    // fixed ones, so they map one for one. Both hold the edge as the graph stores it, so
+    // the direction changes which edges are produced, not which column holds what.
+    ScanOp edgeScan = builder.create<ScanOp>(hop.getLoc(),
+                                             hop.getSrcids().getType(),
+                                             hop.getEids().getType(),
+                                             hop.getEtypes().getType(),
+                                             hop.getTgtids().getType(),
+                                             scan.getLabelsAttr());
+
+    Operation* const hopOp = hop.getOperation();
+    hopOp->replaceAllUsesWith(edgeScan.getOperation());
+    hopOp->erase();
+    scan.erase();
+}
+
+template <typename ScanOp, typename HopOp>
+void runScanEdgesByLabelPass(Operation* root, mlir::OpBuilder& builder) {
+    // Collect first: fusing erases the hop and its scan, which would invalidate the walk.
+    llvm::SmallVector<HopOp> hops;
+    root->walk([&](HopOp hop) {
+        ScanNodesByLabel scan;
+        if (matchLabelledEdgeScan(hop, scan)) {
+            hops.push_back(hop);
+        }
+    });
+
+    for (HopOp hop : hops) {
+        ScanNodesByLabel scan;
+        if (!matchLabelledEdgeScan(hop, scan)) {
+            continue;
+        }
+
+        fuseScanEdgesByLabel<ScanOp>(hop, scan, builder);
+    }
+}
+
+struct FuseScanOutEdgesByLabel : public impl::FuseScanOutEdgesByLabelBase<FuseScanOutEdgesByLabel> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+        runScanEdgesByLabelPass<ScanOutEdgesByLabel, GetOutEdges>(getOperation(), builder);
+    }
+};
+
+struct FuseScanInEdgesByLabel : public impl::FuseScanInEdgesByLabelBase<FuseScanInEdgesByLabel> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+        runScanEdgesByLabelPass<ScanInEdgesByLabel, GetInEdges>(getOperation(), builder);
+    }
+};
+
 // Where an op's carry set sits: the carried operands start at _operandOffset and each comes
 // back as the result at the same position from _resultOffset.
 struct CarrySetLayout {
@@ -2278,6 +2355,15 @@ bool prefersTheProduct(const EqualityCross& match, const DBPassContext& context)
 // yielded item at.
 constexpr size_t uncountableRows = 10;
 
+size_t multiplySaturating(size_t rows, size_t factor) {
+    constexpr size_t rowCeiling = std::numeric_limits<size_t>::max();
+    if (factor != 0 && rows > rowCeiling / factor) {
+        return rowCeiling;
+    }
+
+    return rows * factor;
+}
+
 // The rows an op seeds a factor with, and nothing at all when it seeds none - a fetch, a
 // filter or a hop reads a column rather than making one. A listed set of IDs is its own
 // count, a literal list one row per element, a by-label scan what the graph holds under
@@ -2297,6 +2383,20 @@ std::optional<size_t> estimateSourceRows(Operation* op,
         return estimation.estimateNodeCount(labels);
     } else if (isa<ScanNodes, ScanNodesByPropertyValue>(op)) {
         return estimation.estimateNodeCount(::db::LabelSet {});
+    } else if (isa<ScanOutEdgesByLabel, ScanInEdgesByLabel>(op)) {
+        const size_t nodeCount = estimation.estimateNodeCount(::db::LabelSet {});
+        if (nodeCount == 0) {
+            return 0;
+        }
+
+        const ArrayAttr scanLabels = isa<ScanOutEdgesByLabel>(op) ? cast<ScanOutEdgesByLabel>(op).getLabels()
+                                                                  : cast<ScanInEdgesByLabel>(op).getLabels();
+        ::db::LabelSet labels;
+        collectScanLabels(scanLabels, metadata, labels);
+
+        // The edges hanging off those nodes, read as the by-label scan and hop it fused
+        // were: the node count the labels select, at the graph's average degree.
+        return multiplySaturating(estimation.estimateNodeCount(labels), estimation.estimateEdgeCount()) / nodeCount;
     } else if (isa<ScanEdges, ScanEdgesByType>(op)) {
         return estimation.estimateEdgeCount();
     }
@@ -2336,15 +2436,6 @@ std::optional<RowMultiplier> estimateRowMultiplier(Operation* op, const ::db::Ca
     const size_t edgeCount = estimation.estimateEdgeCount();
 
     return RowMultiplier {walksBoth ? 2 * edgeCount : edgeCount, nodeCount};
-}
-
-size_t multiplySaturating(size_t rows, size_t factor) {
-    constexpr size_t rowCeiling = std::numeric_limits<size_t>::max();
-    if (factor != 0 && rows > rowCeiling / factor) {
-        return rowCeiling;
-    }
-
-    return rows * factor;
 }
 
 // The rows a factor makes: the product of what its sources seed it with, a factor crossing

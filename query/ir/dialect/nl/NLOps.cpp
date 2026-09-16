@@ -196,6 +196,24 @@ LogicalResult ScanEdgesByType::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+// Keeping the edges of one label's nodes narrows only the rows, never their shape,
+// so a by-label out-edge scan produces the same four-chunk edge iterator as ScanEdges.
+LogicalResult ScanOutEdgesByLabel::inferReturnTypes(MLIRContext* context,
+                                                    std::optional<Location> location,
+                                                    ScanOutEdgesByLabel::Adaptor adaptor,
+                                                    SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(getEdgeIteratorType(context, {}));
+    return success();
+}
+
+LogicalResult ScanInEdgesByLabel::inferReturnTypes(MLIRContext* context,
+                                                   std::optional<Location> location,
+                                                   ScanInEdgesByLabel::Adaptor adaptor,
+                                                   SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(getEdgeIteratorType(context, {}));
+    return success();
+}
+
 // An out-edges fetch produces one row of edge chunks per step, then one
 // filtered chunk per carried column, mirroring db.get_out_edges
 LogicalResult GetOutEdges::inferReturnTypes(MLIRContext* context,

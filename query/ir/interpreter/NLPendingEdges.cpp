@@ -2,6 +2,8 @@
 
 #include <variant>
 
+#include "reader/GraphReader.h"
+
 #include "NLExecutionContext.h"
 #include "NLProgram.h"
 #include "NLWriteProperties.h"
@@ -190,6 +192,7 @@ bool NLPendingEdgeHop::walks(size_t offset, NodeID& other) const {
 
 NLPendingEdgeScan::NLPendingEdgeScan(NLExecutionContext* context, NLScanEdgesLoopData* loopData)
     : _writeBuffer(context->getWriteBuffer()),
+    _view(context->getView()),
     _srcs(loopData->getSources()),
     _edgeIDs(loopData->getEdgeIDs()),
     _types(loopData->getEdgeTypes()),
@@ -209,6 +212,16 @@ NLPendingEdgeScan::NLPendingEdgeScan(NLExecutionContext* context, NLScanEdgesLoo
 NLPendingEdgeScan::~NLPendingEdgeScan() {
 }
 
+void NLPendingEdgeScan::setSourceLabelSet(const LabelSet& labelset) {
+    _endpointLabels = LabelSetHandle(labelset);
+    _labelsTheTarget = false;
+}
+
+void NLPendingEdgeScan::setTargetLabelSet(const LabelSet& labelset) {
+    _endpointLabels = LabelSetHandle(labelset);
+    _labelsTheTarget = true;
+}
+
 void NLPendingEdgeScan::fill(size_t maxCount) {
     clearChunks();
 
@@ -223,7 +236,7 @@ void NLPendingEdgeScan::fill(size_t maxCount) {
         }
 
         const CommitWriteBuffer::PendingEdge& edge = _writeBuffer->getPendingEdge(offset);
-        if (_edgeType && edge.edgeType != *_edgeType) {
+        if (!keeps(edge)) {
             continue;
         }
 
@@ -242,6 +255,34 @@ void NLPendingEdgeScan::fill(size_t maxCount) {
 
         remainingToMax--;
     }
+}
+
+bool NLPendingEdgeScan::keeps(const CommitWriteBuffer::PendingEdge& edge) const {
+    if (_edgeType && edge.edgeType != *_edgeType) {
+        return false;
+    }
+
+    if (!_endpointLabels.isValid()) {
+        return true;
+    }
+
+    return carriesTheLabels(_labelsTheTarget ? edge.tgt : edge.src);
+}
+
+bool NLPendingEdgeScan::carriesTheLabels(const CommitWriteBuffer::ExistingOrPendingNode& node) const {
+    // A node this change wrote carries its labels in the buffer; one the graph already
+    // holds is read off the graph, and a node neither holds carries no label to match.
+    if (std::holds_alternative<CommitWriteBuffer::PendingNodeOffset>(node)) {
+        const CommitWriteBuffer::PendingNodeOffset offset = std::get<CommitWriteBuffer::PendingNodeOffset>(node);
+        const CommitWriteBuffer::PendingNode& pending = _writeBuffer->getPendingNode(offset);
+
+        return pending.labelsetHandle.hasAtLeastLabels(_endpointLabels);
+    }
+
+    const GraphReader reader(*_view);
+    const LabelSetHandle labels = reader.getNodeLabelSet(std::get<NodeID>(node));
+
+    return labels.isValid() && labels.hasAtLeastLabels(_endpointLabels);
 }
 
 void NLPendingEdgeScan::clearChunks() {

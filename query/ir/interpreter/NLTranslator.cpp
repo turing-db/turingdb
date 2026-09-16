@@ -547,6 +547,18 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             IteratorConfig config {IteratorKind::ScanEdgesByType, {}, {}};
             config._edgeType = edgeTypeName(scanEdgesByType.getEdgeType());
             _iteratorConfigs[scanEdgesByType.getResult()] = config;
+        } else if (nl::ScanOutEdgesByLabel scanOutEdgesByLabel = mlir::dyn_cast<nl::ScanOutEdgesByLabel>(operation)) {
+            IteratorConfig config {IteratorKind::ScanOutEdgesByLabel, {}, {}};
+            for (const mlir::Attribute label : scanOutEdgesByLabel.getLabels()) {
+                config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
+            }
+            _iteratorConfigs[scanOutEdgesByLabel.getResult()] = config;
+        } else if (nl::ScanInEdgesByLabel scanInEdgesByLabel = mlir::dyn_cast<nl::ScanInEdgesByLabel>(operation)) {
+            IteratorConfig config {IteratorKind::ScanInEdgesByLabel, {}, {}};
+            for (const mlir::Attribute label : scanInEdgesByLabel.getLabels()) {
+                config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
+            }
+            _iteratorConfigs[scanInEdgesByLabel.getResult()] = config;
         } else if (nl::GetOutEdges getOutEdges = mlir::dyn_cast<nl::GetOutEdges>(operation)) {
             IteratorConfig config {IteratorKind::GetOutEdges, getOutEdges.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getOutEdges.getColumnsToFilter();
@@ -859,6 +871,10 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         translateScanEdgesLoop(loopBody, limit, body);
     } else if (config._kind == IteratorKind::ScanEdgesByType) {
         translateScanEdgesByTypeLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::ScanOutEdgesByLabel) {
+        translateScanEdgesByLabelLoop(config, loopBody, limit, body, &NLExecutor::runScanOutEdgesByLabelLoop);
+    } else if (config._kind == IteratorKind::ScanInEdgesByLabel) {
+        translateScanEdgesByLabelLoop(config, loopBody, limit, body, &NLExecutor::runScanInEdgesByLabelLoop);
     } else if (config._kind == IteratorKind::Sort) {
         translateSortLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::GroupAggregate) {
@@ -1342,6 +1358,35 @@ void NLTranslator::translateScanEdgesByTypeLoop(const IteratorConfig& config,
     loopData->setLimit(limit);
 
     body->addStmt(NLFunctionDescriptor {&NLExecutor::runScanEdgesByTypeLoop, loopData});
+
+    translateBlock(loopBody, loopData->getStmts());
+}
+
+void NLTranslator::translateScanEdgesByLabelLoop(const IteratorConfig& config,
+                                                 mlir::Block& loopBody,
+                                                 NLLimitState* limit,
+                                                 NLStmtContainer* body,
+                                                 NLHandlerFunction executor) {
+    ColumnNodeIDs* sources = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(0)));
+    ColumnEdgeIDs* edgeIDs = static_cast<ColumnEdgeIDs*>(allocColumn(loopBody.getArgument(1)));
+    ColumnEdgeTypes* edgeTypes = static_cast<ColumnEdgeTypes*>(allocColumn(loopBody.getArgument(2)));
+    ColumnNodeIDs* targets = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(3)));
+
+    // An unmatchable scan emits nothing rather than dropping the absent name and
+    // matching a weaker set, exactly as translateScanByLabelLoop does.
+    LabelSet labelset;
+    const bool matchable = resolveLabelSet(config._labels, labelset);
+
+    NLScanEdgesByLabelLoopData* loopData =
+        _program->allocFunctionData<NLScanEdgesByLabelLoopData>(sources,
+                                                                edgeIDs,
+                                                                edgeTypes,
+                                                                targets,
+                                                                labelset,
+                                                                matchable);
+    loopData->setLimit(limit);
+
+    body->addStmt(NLFunctionDescriptor {executor, loopData});
 
     translateBlock(loopBody, loopData->getStmts());
 }
