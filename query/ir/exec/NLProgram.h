@@ -3726,6 +3726,9 @@ public:
     std::span<const std::string_view> columnNames() const { return _columnNames; }
     void setColumnNames(std::span<const std::string_view> names);
 
+    // The output whose columns the result schema is declared from. A union emits one
+    // output per branch, all naming the same columns of the same types, so the first is
+    // the whole result's schema.
     NLOutputData* getOutputData() const { return _outputData; }
     void setOutputData(NLOutputData* outputData);
 
@@ -3735,7 +3738,7 @@ private:
     // named none. The views point into the MLIRContext's uniqued attribute storage, which
     // outlives the module the names were read from.
     std::vector<std::string_view> _columnNames;
-    // The output statement's payload, owned by _functionData; null for a program
+    // The first output statement's payload, owned by _functionData; null for a program
     // that emits nothing.
     NLOutputData* _outputData {nullptr};
     std::vector<std::unique_ptr<NLFunctionData>> _functionData;

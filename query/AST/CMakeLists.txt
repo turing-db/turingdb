@@ -52,6 +52,7 @@ set(ast_sources
     Projection.cpp
     QueryCommand.cpp
     SinglePartQuery.cpp
+    UnionQuery.cpp
     LoadGraphQuery.cpp
     ChangeQuery.cpp
     CommitQuery.cpp

@@ -2,6 +2,7 @@
 
 #include "CypherAST.h"
 #include "SinglePartQuery.h"
+#include "UnionQuery.h"
 #include "stmt/WithStmt.h"
 #include "ChangeQuery.h"
 #include "CommitQuery.h"
@@ -192,7 +193,31 @@ void CypherASTDumper::dump(std::ostream& out) {
             case QueryCommand::Kind::MERGE_DATAPARTS_QUERY:
                 dump(out, static_cast<const MergeDataPartsQuery*>(query));
             break;
+
+            case QueryCommand::Kind::UNION_QUERY:
+                dump(out, static_cast<const UnionQuery*>(query));
+            break;
         }
+    }
+}
+
+void CypherASTDumper::dump(std::ostream& out, const UnionQuery* query) {
+    out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
+    out << "    _" << std::hex << query << " {\n";
+    out << "        ASTType UnionQuery\n";
+    out << "    }\n";
+
+    // The first branch is joined to nothing, so the operator labelling an edge is the
+    // one written ahead of the branch it leads to
+    bool isFirstBranch = true;
+    for (const UnionQuery::Branch& branch : query->branches()) {
+        const char* const label = isFirstBranch ? "" : (branch._all ? "UNION ALL" : "UNION");
+        isFirstBranch = false;
+
+        out << "    _" << std::hex << query << " ||--o{ _" << std::hex << branch._query
+            << " : \"" << label << "\"\n";
+
+        dump(out, branch._query);
     }
 }
 

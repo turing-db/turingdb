@@ -50,6 +50,7 @@
     #include "NodePattern.h"
     #include "EdgePattern.h"
     #include "SinglePartQuery.h"
+    #include "UnionQuery.h"
     #include "ChangeQuery.h"
     #include "CommitQuery.h"
     #include "ListGraphQuery.h"
@@ -367,7 +368,10 @@
 %type<db::Expr*> listLitItem
 %type<db::QueryCommand*> singleQuery
 %type<db::QueryCommand*> query
+%type<db::QueryCommand*> regularQuery
 %type<db::QueryCommand*> explainQuery
+%type<db::UnionQuery::Branches> unionList
+%type<db::UnionQuery::Branch> unionSt
 %type<std::vector<std::string_view>> explainPassNames
 %type<db::LoadGraphQuery*> loadGraph
 %type<db::LoadGMLQuery*> loadGML
@@ -425,17 +429,21 @@ queries
     ;
 
 query
-    : singleQuery
-    | singleQuery unionList { scanner.notImplemented(@$, "Query + Unions"); }
+    : regularQuery
     | explainQuery
     ;
 
+regularQuery
+    : singleQuery
+    | singlePartQuery unionList { $$ = UnionQuery::create(ast, $1, $2); LOC($$, @$); }
+    ;
+
 explainQuery
-    : EXPLAIN singleQuery {
+    : EXPLAIN regularQuery {
         ast->explainRequest().requestDefaults();
         $$ = $2;
       }
-    | EXPLAIN OPAREN explainOptions CPAREN singleQuery { $$ = $5; }
+    | EXPLAIN OPAREN explainOptions CPAREN regularQuery { $$ = $5; }
     ;
 
 explainOptions
@@ -483,8 +491,8 @@ explainPassNames
     ;
 
 unionList
-    : unionSt { scanner.notImplemented(@$, "Unions"); }
-    | unionList unionSt
+    : unionSt { $$.push_back($1); }
+    | unionList unionSt { $$ = std::move($1); $$.push_back($2); }
     ;
 
 singleQuery
@@ -1359,8 +1367,8 @@ edgeTypes
     ;
 
 unionSt
-    : UNION singleQuery { scanner.notImplemented(@$, "UNION"); }
-    | UNION ALL singleQuery { scanner.notImplemented(@$, "UNION ALL"); }
+    : UNION singlePartQuery { $$ = {$2, false}; }
+    | UNION ALL singlePartQuery { $$ = {$3, true}; }
     ;
 
 subqueryExist

@@ -30,6 +30,20 @@ const char* const factorKeyword = "factor";
 // The keyword db.hash_join spells its two key column indices after.
 const char* const keysKeyword = "on";
 
+// The db.output a union branch ends with, or a null Output when the branch is empty or
+// ends on something else. A branch's output is what fills the union's result table.
+Output getBranchOutput(Region& branch) {
+    Operation* last = nullptr;
+    if (!branch.empty()) {
+        Block& block = branch.front();
+        if (!block.empty()) {
+            last = &block.back();
+        }
+    }
+
+    return dyn_cast_or_null<Output>(last);
+}
+
 // The db.yield that terminates a factor region, or a null Yield if the region
 // is empty or does not end with one. A factor's yield names the columns that
 // factor contributes to the product.
@@ -323,6 +337,81 @@ void CrossProduct::print(OpAsmPrinter& printer) {
 
 LogicalResult CrossProduct::verify() {
     return verifyFactorResults(getOperation(), getLeftFactor(), getRightFactor());
+}
+
+// Builds the op from the branch count alone and creates that many empty blocks. The
+// caller fills each region with a query body and ends it with a db.output. The insertion
+// guard keeps the block creation from leaking out of the builder, as CrossProduct's does.
+void Union::build(OpBuilder& builder, OperationState& state, size_t branchCount) {
+    const OpBuilder::InsertionGuard guard(builder);
+
+    for (size_t branchIndex = 0; branchIndex < branchCount; branchIndex++) {
+        Region* branch = state.addRegion();
+        builder.createBlock(branch);
+    }
+}
+
+// Custom syntax, one region per branch separated by commas:
+//
+//   db.union { ... db.output(%a) names ["name"] : ... },
+//             { ... db.output(%b) names ["name"] : ... }
+//
+// Nothing is spelled after the regions: the op has no operands and no results, and the
+// result table is the one every branch's db.output names.
+ParseResult Union::parse(OpAsmParser& parser, OperationState& result) {
+    do {
+        Region* branch = result.addRegion();
+        if (parser.parseRegion(*branch, {})) {
+            return failure();
+        }
+    } while (succeeded(parser.parseOptionalComma()));
+
+    return parser.parseOptionalAttrDict(result.attributes);
+}
+
+void Union::print(OpAsmPrinter& printer) {
+    llvm::interleave(getBranches(),
+                     printer,
+                     [&](Region& branch) {
+                         printer << " ";
+                         printer.printRegion(branch);
+                     },
+                     ",");
+
+    printer.printOptionalAttrDict((*this)->getAttrs());
+}
+
+// A union emits one result table, so every branch has to end in a db.output and all of
+// them have to name the same columns. The names are the query's, checked by the analyzer;
+// what is re-checked here is the shape a hand-written module can still get wrong.
+LogicalResult Union::verify() {
+    const MutableArrayRef<Region> branches = getBranches();
+    if (branches.size() < 2) {
+        return emitOpError("requires at least two branches");
+    }
+
+    Output first;
+    for (Region& branch : branches) {
+        Output output = getBranchOutput(branch);
+        if (!output) {
+            return emitOpError("each branch must end with a db.output");
+        }
+
+        if (!first) {
+            first = output;
+            continue;
+        }
+
+        if (output.getColumns().size() != first.getColumns().size()) {
+            return emitOpError("every branch must output the same number of columns");
+        }
+
+        if (output.getColumnNamesAttr() != first.getColumnNamesAttr()) {
+            return emitOpError("every branch must output the same column names");
+        }
+    }
+
+    return success();
 }
 
 // Builds the op from the result types - the left factor's yielded columns followed

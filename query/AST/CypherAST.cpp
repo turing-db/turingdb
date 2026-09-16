@@ -1,5 +1,8 @@
 #include "CypherAST.h"
 
+#include <algorithm>
+
+#include "BioAssert.h"
 #include "DiagnosticsManager.h"
 #include "SourceManager.h"
 #include "FunctionInvocation.h"
@@ -129,6 +132,10 @@ CypherAST::~CypherAST() {
         delete query;
     }
 
+    for (QueryCommand* query : _subQueries) {
+        delete query;
+    }
+
     for (DeclContext* ctxt : _declContexts) {
         delete ctxt;
     }
@@ -243,6 +250,14 @@ void CypherAST::addStmtContainer(StmtContainer* container) {
 
 void CypherAST::addQuery(QueryCommand* query) {
     _queries.push_back(query);
+}
+
+void CypherAST::nestQuery(QueryCommand* query) {
+    const auto findIt = std::find(_queries.begin(), _queries.end(), query);
+    bioassert(findIt != _queries.end(), "Nesting a command the AST does not hold");
+
+    _queries.erase(findIt);
+    _subQueries.push_back(query);
 }
 
 void CypherAST::addDeclContext(DeclContext* ctxt) {

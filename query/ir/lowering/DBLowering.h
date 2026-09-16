@@ -123,7 +123,8 @@ private:
     // only a module containing a db.call_procedure notices.
     const ProcedureManager* _procedures {nullptr};
 
-    // db column SSA value -> the nl chunk
+    // db column SSA value -> the nl chunk, and a db.distinct_set -> the nl.distinct
+    // handle the branches of a union share
     llvm::DenseMap<mlir::Value, mlir::Value> _valueMap;
 
     // Property name -> the hoisted nl.get_property_type handle, so a name is
@@ -221,6 +222,22 @@ private:
     void lowerDeleteEdge(mlir::db::DeleteEdge deleteEdge);
     void lowerCrossProduct(mlir::db::CrossProduct product);
     void lowerHashJoin(mlir::db::HashJoin join);
+
+    // Lowers each branch of a union in turn into the entry block, so the branches become
+    // sibling loop nests run one after another. The nests share no chunk, so the state
+    // the loop builders carry is dropped between them.
+    void lowerUnion(mlir::db::Union unionOp);
+
+    // Opens the one nl.distinct seen-set the branches of a deduping union record their
+    // rows in, hoisted where every branch's filter can reach it
+    void lowerDistinctSet(mlir::db::DistinctSet distinctSet);
+
+    // The types the first branch of a union resolved its result columns to, which the
+    // branches after it are checked against
+    void collectBranchResultTypes(mlir::Region& branch, llvm::SmallVectorImpl<mlir::Type>& resultTypes);
+
+    void throwOnDisagreeingBranchTypes(mlir::Region& branch,
+                                       llvm::SmallVectorImpl<mlir::Type>& resultTypes);
 
     // Lower a db.optional_match into an nl.optional_buffer, the pattern's own loop nest,
     // an nl.optional_collect at its deepest point and an nl.optional_drain loop yielding

@@ -24,7 +24,9 @@ void NLProgram::setColumnNames(std::span<const std::string_view> names) {
 }
 
 void NLProgram::setOutputData(NLOutputData* outputData) {
-    bioassert(!_outputData, "A program carries at most one output statement");
+    if (_outputData) {
+        return;
+    }
 
     _outputData = outputData;
 }

@@ -1442,7 +1442,7 @@ def Sort : TuringOp<"sort", [Pure]> {
 /**
 * RemoveDuplicates
 */
-def RemoveDuplicates : TuringOp<"remove_duplicates", [Pure]> {
+def RemoveDuplicates : TuringOp<"remove_duplicates", [Pure, AttrSizedOperandSegments]> {
   let summary = "Emit each distinct row of a column set once";
   let description = [{
     The declarative counterpart of a Cypher RETURN DISTINCT / WITH DISTINCT. Takes
@@ -1469,18 +1469,96 @@ def RemoveDuplicates : TuringOp<"remove_duplicates", [Pure]> {
   }];
 
   // The columns flow through unchanged; every column is part of the dedup key, so
-  // - unlike db.sort's keys - no key attribute is needed.
-  let arguments = (ins Variadic<Column>:$columns);
+  // - unlike db.sort's keys - no key attribute is needed. The optional set is the
+  // seen-set this dedup shares with its siblings; absent, it keeps one of its own.
+  let arguments = (ins Variadic<Column>:$columns, Optional<DistinctSetType>:$set);
   let results   = (outs Variadic<Column>:$results);
 
   // One result per input column, same types; functional-type prints the
-  // `(operandTypes) -> resultTypes` form, the same as db.limit and db.sort.
+  // `(operandTypes) -> resultTypes` form, the same as db.limit and db.sort. The set
+  // prints after an `against` keyword, ahead of the colon, so the functional type
+  // stays the columns alone.
   let assemblyFormat = [{
-    `(` $columns `)` attr-dict `:` functional-type(operands, results)
+    `(` $columns `)` (`against` $set^)? attr-dict `:` functional-type($columns, $results)
   }];
 
   // results arity and types must equal the columns (the shared pass-through check).
   let hasVerifier = 1;
+}
+
+/**
+* DistinctSet
+*/
+def DistinctSet : TuringOp<"distinct_set", [Pure]> {
+  let summary = "Open a dedup key set for several db.remove_duplicates to share";
+  let description = [{
+    A UNION dedups its whole result, but each of its branches reaches that result
+    through a db.output of its own, so no single db.remove_duplicates sees every row.
+    This produces the set they all record their rows in, making the dedup one:
+
+      %s = db.distinct_set : !db.distinct_set
+      db.union {
+        ...
+        %da = db.remove_duplicates(%a) against %s : (!db.column<none>) -> !db.column<none>
+        db.output(%da) names ["name"] : !db.column<none>
+      }, {
+        ...
+      }
+
+    It lowers to the single nl.distinct handle every branch's nl.distinct_filter reads.
+    A db.remove_duplicates naming no set is unaffected: it keeps a set of its own.
+  }];
+
+  let results = (outs DistinctSetType:$set);
+  let assemblyFormat = "attr-dict `:` qualified(type($set))";
+}
+
+/**
+* Union
+*/
+def Union : TuringOp<"union", [NoTerminator]> {
+  let summary = "Emit the results of several query bodies as one result table";
+  let description = [{
+    The declarative counterpart of Cypher's UNION and UNION ALL. Holds one region per
+    branch, each a self-contained db query body ending in its own db.output, and emits
+    their rows one branch after another:
+
+      db.union {
+        %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
+        %n = db.get_node_properties(%a, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+        db.output(%n) names ["name"] : !db.column<none>
+      }, {
+        %c = db.scan_nodes_by_label(["City"]) : !db.column<!storage.node_id>
+        %m = db.get_node_properties(%c, "name") : (!db.column<!storage.node_id>) -> !db.column<none>
+        db.output(%m) names ["name"] : !db.column<none>
+      }
+
+    The branches share no SSA value and read none from outside, bar the db.distinct_set
+    a deduping union hands each of them. Every branch outputs the same number of columns
+    under the same names - one result table - so the op needs no result of its own and is
+    the whole program, as a lone db.output is for a query without a union.
+
+    UNION (as against UNION ALL) is not held here: a deduping union is spelled as a
+    db.distinct_set above the op and a db.remove_duplicates against it in each branch it
+    covers, so the dedup is in the dataflow it applies to rather than in a flag on the
+    holder. It lowers to one loop nest per branch, run in order, in the same nl function -
+    the concatenation is the sink seeing each nest's rows in turn. Not Pure: its branches
+    emit the result, so it must survive dead-code elimination as db.output does.
+  }];
+
+  // One region per branch, each exactly one block. The blocks have no arguments: a
+  // branch reads nothing the branch before it bound.
+  let regions = (region VariadicRegion<SizedRegion<1>>:$branches);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  // The only builder takes the branch count and creates that many empty blocks; the
+  // caller fills each region and ends it with a db.output.
+  let skipDefaultBuilders = 1;
+  let builders = [
+      OpBuilder<(ins "size_t":$branchCount)>
+  ];
 }
 
 /**

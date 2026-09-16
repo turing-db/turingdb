@@ -65,6 +65,7 @@ class VariableDependency;
 class DependencyEdge;
 class SetStmt;
 class SinglePartQuery;
+class UnionQuery;
 class Stmt;
 class WhereClause;
 class WithStmt;
@@ -218,6 +219,22 @@ private:
     [[noreturn]] void throwError(std::string_view msg, const void* obj = nullptr) const;
 
     void createMain();
+
+    // What being one branch of a union asks of a query body's result: its projected
+    // constants laid out over its rows, so every branch emits the result table's columns
+    // in one shape, and - where the union dedups - the seen-set the branches it covers
+    // record their rows in. Null on a dedup-free branch.
+    struct UnionBranch {
+        mlir::Value _distinctSet;
+    };
+
+    // One whole query body: the parts its barriers cut it into, then the result those
+    // parts produce. @param branch is null for a query that is not part of a union.
+    void generateQuery(const SinglePartQuery* query, const UnionBranch* branch);
+
+    // Emits the db.union of a UNION, one region per branch, each generated as a query
+    // body in its own right
+    void generateUnion(const UnionQuery* unionQuery);
 
     void generateQueryParts(const SinglePartQuery* query);
 
@@ -461,7 +478,22 @@ private:
     // row for a plain SET, which passes a null mask
     void generateSetItems(const SetStmt* setStmt, mlir::Value rows);
     void generateDeleteStmt(const DeleteStmt* deleteStmt);
-    void generateOutput(const Projection* projection);
+    void generateOutput(const Projection* projection, const UnionBranch* branch);
+
+    // Lays every constant of a union branch's projection out over its rows. A constant
+    // column holds one value standing for every row, which is a shape of its own on the
+    // wire, and the result table declares one shape per column for every branch.
+    void broadcastUnionProjection(llvm::SmallVectorImpl<mlir::Value>& projected);
+
+    // Records the rows a union branch contributes in the set its siblings share, so
+    // the dedup spans the branches rather than each of them
+    void dedupUnionBranch(mlir::Value distinctSet, llvm::SmallVectorImpl<mlir::Value>& projected);
+
+    // The relation a projected constant is laid out over: a column of the projection
+    // itself where one carries rows - the rows a cut left, where a cut ran - and otherwise
+    // the relation driving the scope. Null where no relation drives it at all, as for a
+    // bare `RETURN 1`, whose projection is the single row its constants are.
+    mlir::Value resolveProjectionDriver(llvm::ArrayRef<mlir::Value> projected) const;
 
     static bool writesToTheGraph(const SinglePartQuery* query);
 

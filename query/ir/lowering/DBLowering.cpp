@@ -4,8 +4,11 @@
 #include <array>
 #include <mlir/IR/Location.h>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <unordered_map>
+
+#include <spdlog/fmt/fmt.h>
 
 #include "mlir/IR/Block.h"
 #include "mlir/IR/Builders.h"
@@ -37,6 +40,45 @@ namespace nl = mlir::nl;
 namespace storage = mlir::storage;
 
 namespace {
+
+// The name a result column's value type goes out under. A rejection is read by whoever
+// wrote the query, so it names the type the value has rather than the chunk spelling it
+// is carried in.
+void describeColumnType(mlir::Type chunkType, std::string& out) {
+    out.clear();
+
+    mlir::Type element = mlir::cast<nl::ChunkType>(chunkType).getElementType();
+    if (const auto nullable = mlir::dyn_cast<storage::NullableType>(element)) {
+        element = nullable.getValueType();
+    }
+
+    if (mlir::isa<storage::StringType>(element) || mlir::isa<storage::OwnedStringType>(element)) {
+        out = "String";
+    } else if (mlir::isa<mlir::Float64Type>(element)) {
+        out = "Double";
+    } else if (mlir::isa<storage::NodeIDType>(element)) {
+        out = "Node";
+    } else if (mlir::isa<storage::EdgeIDType>(element)) {
+        out = "Edge";
+    } else if (mlir::isa<storage::ListType>(element)) {
+        out = "List";
+    } else if (mlir::isa<storage::EmbeddingType>(element)) {
+        out = "Embedding";
+    } else if (mlir::isa<storage::PathType>(element)) {
+        out = "Path";
+    } else if (const auto integer = mlir::dyn_cast<mlir::IntegerType>(element)) {
+        if (integer.getWidth() == 1) {
+            out = "Bool";
+        } else if (integer.isUnsigned()) {
+            out = "UInt64";
+        } else {
+            out = "Int64";
+        }
+    } else {
+        llvm::raw_string_ostream stream(out);
+        stream << element;
+    }
+}
 
 using NLUnaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder,
                                                mlir::Location loc,
@@ -946,6 +988,10 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerCrossProduct(crossProduct);
     } else if (mlir::db::HashJoin hashJoin = mlir::dyn_cast<mlir::db::HashJoin>(operation)) {
         lowerHashJoin(hashJoin);
+    } else if (mlir::db::Union unionOp = mlir::dyn_cast<mlir::db::Union>(operation)) {
+        lowerUnion(unionOp);
+    } else if (mlir::db::DistinctSet distinctSet = mlir::dyn_cast<mlir::db::DistinctSet>(operation)) {
+        lowerDistinctSet(distinctSet);
     } else if (mlir::db::OptionalMatch optionalMatch = mlir::dyn_cast<mlir::db::OptionalMatch>(operation)) {
         lowerOptionalMatch(optionalMatch);
     } else if (mlir::db::Limit limit = mlir::dyn_cast<mlir::db::Limit>(operation)) {
@@ -2159,6 +2205,85 @@ void DBLowering::lowerSort(mlir::db::Sort sort) {
     buildLoopForSource(sortOp.getResult(), sort.getOperation());
 }
 
+// Each branch is lowered as a program of its own rooted in the entry block, so its loops
+// are appended after the ones the branch before it opened and the sink sees one branch's
+// rows and then the next. What a branch binds is unreachable from the next, so the
+// innermost-loop record is cleared between them rather than carried over.
+void DBLowering::lowerUnion(mlir::db::Union unionOp) {
+    const mlir::MutableArrayRef<mlir::Region> branches = unionOp.getBranches();
+
+    llvm::SmallVector<mlir::Type, 4> resultTypes;
+
+    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
+        mlir::Region& branch = branches[branchIndex];
+
+        _rootBlock = _entryBlock;
+        _innermostLoopBody = nullptr;
+        _innermostCardinality = mlir::Value();
+
+        for (mlir::Operation& operation : branch.front()) {
+            lowerOperation(operation);
+        }
+
+        if (branchIndex == 0) {
+            collectBranchResultTypes(branch, resultTypes);
+        } else {
+            throwOnDisagreeingBranchTypes(branch, resultTypes);
+        }
+    }
+}
+
+void DBLowering::collectBranchResultTypes(mlir::Region& branch,
+                                          llvm::SmallVectorImpl<mlir::Type>& resultTypes) {
+    mlir::db::Output output = mlir::cast<mlir::db::Output>(branch.front().back());
+
+    for (const mlir::Value column : output.getColumns()) {
+        resultTypes.push_back(mapValue(column).getType());
+    }
+}
+
+// A result column carries one value type for the whole result, so every branch has to
+// resolve its columns to the same types. The types are only known here: a property fetch
+// is typed none until its name is resolved against the schema, so a union of columns that
+// turn out to disagree is a program the db level cannot tell from a valid one.
+void DBLowering::throwOnDisagreeingBranchTypes(mlir::Region& branch,
+                                               llvm::SmallVectorImpl<mlir::Type>& resultTypes) {
+    mlir::db::Output output = mlir::cast<mlir::db::Output>(branch.front().back());
+    const mlir::OperandRange columns = output.getColumns();
+
+    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        const mlir::Type branchType = mapValue(columns[columnIndex]).getType();
+        if (branchType == resultTypes[columnIndex]) {
+            continue;
+        }
+
+        std::string branchName;
+        describeColumnType(branchType, branchName);
+
+        std::string firstName;
+        describeColumnType(resultTypes[columnIndex], firstName);
+
+        const std::optional<mlir::ArrayAttr> names = output.getColumnNames();
+        const llvm::StringRef columnName = names ? mlir::cast<mlir::StringAttr>((*names)[columnIndex]).getValue()
+                                                 : llvm::StringRef();
+
+        throw IRException(fmt::format("A UNION column holds one value type for the whole result: "
+                                      "'{}' is {} in this sub-query and {} in the first",
+                                      std::string_view {columnName.data(), columnName.size()},
+                                      branchName,
+                                      firstName));
+    }
+}
+
+// The shared seen-set is hoisted to the top of the entry block, above every branch's
+// loops, so it is emptied once per execution and dominates each branch's filter - the
+// same placement lowerRemoveDuplicates gives a dedup's private set.
+void DBLowering::lowerDistinctSet(mlir::db::DistinctSet distinctSet) {
+    _builder.setInsertionPointToStart(_entryBlock);
+
+    _valueMap[distinctSet.getSet()] = _builder.create<nl::Distinct>(_builder.getUnknownLoc()).getState();
+}
+
 void DBLowering::lowerRemoveDuplicates(mlir::db::RemoveDuplicates distinct) {
     // The nl chunks the deduped columns lowered to; these are what the filter
     // reads to build each row's key, and gathers the survivors from.
@@ -2179,9 +2304,15 @@ void DBLowering::lowerRemoveDuplicates(mlir::db::RemoveDuplicates distinct) {
     // loop, so it is reset once at function scope and dominates the filter placed
     // in the producing loop body. A correlated DISTINCT (reset per enclosing step)
     // would hoist into its enclosing loop body instead - future work, as for the
-    // streaming limit.
-    _builder.setInsertionPointToStart(_entryBlock);
-    const mlir::Value state = _builder.create<nl::Distinct>(loc).getState();
+    // streaming limit. A dedup naming a shared set reads that one instead, so every
+    // branch of a union records its rows in the same set.
+    mlir::Value state;
+    if (const mlir::Value sharedSet = distinct.getSet()) {
+        state = mapValue(sharedSet);
+    } else {
+        _builder.setInsertionPointToStart(_entryBlock);
+        state = _builder.create<nl::Distinct>(loc).getState();
+    }
 
     // The filter sits in the innermost producing loop body, where all deduped
     // columns are bound together (the same block db.output would emit from), and

@@ -16,6 +16,7 @@ class WriteStmtAnalyzer;
 class ExprAnalyzer;
 class QueryCommand;
 class SinglePartQuery;
+class UnionQuery;
 class LoadGraphQuery;
 class CreateGraphQuery;
 class DeclContext;
@@ -58,6 +59,7 @@ public:
 
     // Query types
     void analyze(const SinglePartQuery* query);
+    void analyze(const UnionQuery* query);
     void analyze(const ReturnStmt* returnSt);
     void analyze(const WithStmt* withSt);
     void analyze(const LoadGraphQuery* loadGraph);
@@ -102,6 +104,14 @@ private:
     void analyzeAggregateOrderBy(const Projection* projection) const;
     bool isGroupWise(const Expr* expr, const Projection* projection) const;
     bool isGroupWise(std::span<const Expr* const> exprs, const Projection* projection) const;
+
+    // Every branch of a union must project the same columns, in the same order and
+    // under the same names: the union emits one result table, so a branch naming
+    // other columns has no column of that table to fill
+    void analyzeUnionColumns(const UnionQuery* query) const;
+    const Projection* unionBranchProjection(const SinglePartQuery* branch) const;
+    static void collectProjectionNames(const Projection* projection,
+                                       std::vector<std::string_view>& names);
 
     void throwOnReadAfterUpdate(const StmtContainer* stmts) const;
     void analyzeShortestPathReturn(const SinglePartQuery* query) const;
