@@ -12,18 +12,20 @@ namespace db {
 class GraphSAGESampler {
 public:
     constexpr static size_t hops = 3;
+    using Fanouts = std::array<size_t, hops>;
 
     explicit GraphSAGESampler(const GraphView* view, const ColumnNodeIDs* seeds,
-                              std::span<size_t> fanouts);
+                              Fanouts fanouts);
 
     void sample();
 
 private:
-    NeighbourhoodSampleChunkWriter _sampleWriter;
     const GraphView* _view {nullptr};
-    ColumnNodeIDs* _seeds {nullptr};
+    const ColumnNodeIDs* _seeds {nullptr};
 
     std::array<size_t, 3> _fanouts;
+
+    size_t _requiredLength {0};
 
     ColumnOptVector<NodeID>* _srcs1 {nullptr};
     ColumnOptVector<NodeID>* _tgts1 {nullptr};
@@ -31,6 +33,8 @@ private:
 
     ColumnOptVector<NodeID>* _srcs2 {nullptr};
     ColumnOptVector<NodeID>* _tgts2 {nullptr};
+    // TODO: check whether dst_nodes should include srcs of previous
+    // i.e. unique(seeds_k ∪ tgts_k)
     ColumnOptVector<NodeID>* _dstNodes2 {nullptr};
 
     ColumnOptVector<NodeID>* _srcs3 {nullptr};
