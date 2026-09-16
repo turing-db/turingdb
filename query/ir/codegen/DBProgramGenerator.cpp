@@ -60,6 +60,7 @@
 #include "Projection.h"
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
+#include "UnionQuery.h"
 #include "Symbol.h"
 #include "WhereClause.h"
 #include "YieldClause.h"
@@ -1002,21 +1003,17 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
         throwError("Multiple queries not yet supported.", queries.front());
     }
 
-    const SinglePartQuery* query = dynamic_cast<const SinglePartQuery*>(queries.front());
-    if (!query) {
-        throwError("Non-single part queries are not yet supported.", queries.front());
-    }
+    const QueryCommand* command = queries.front();
 
-    generateQueryParts(query);
-
-    const ReturnStmt* returnStmt = query->getReturnStmt();
-    const Projection* projection = returnStmt ? returnStmt->getProjection() : nullptr;
-
-    if (projection) {
-        generateGroupAggregate(projection);
-        generateOutput(projection);
+    if (command->getKind() == QueryCommand::Kind::UNION_QUERY) {
+        generateUnion(static_cast<const UnionQuery*>(command));
     } else {
-        generateYieldedOutput(query);
+        const SinglePartQuery* query = dynamic_cast<const SinglePartQuery*>(command);
+        if (!query) {
+            throwError("Non-single part queries are not yet supported.", command);
+        }
+
+        generateQuery(query, nullptr);
     }
 
     _opBuilder.create<mlir::func::ReturnOp>(uloc);
@@ -1073,6 +1070,51 @@ void DBProgramGenerator::explainDependencyGraph() {
 
     const std::string label = "vdg " + std::to_string(_explainedParts);
     _explain->addText(label, graph.str());
+}
+
+void DBProgramGenerator::generateQuery(const SinglePartQuery* query, const UnionBranch* branch) {
+    generateQueryParts(query);
+
+    const ReturnStmt* returnStmt = query->getReturnStmt();
+    const Projection* projection = returnStmt ? returnStmt->getProjection() : nullptr;
+
+    if (projection) {
+        generateGroupAggregate(projection);
+        generateOutput(projection, branch);
+    } else {
+        generateYieldedOutput(query);
+    }
+}
+
+// Each branch is generated into a region of its own, as a query body in its own right:
+// the branches share no variable, so the scope and the dependency graph are dropped
+// between them the way a barrier drops them.
+void DBProgramGenerator::generateUnion(const UnionQuery* unionQuery) {
+    const UnionQuery::Branches& branches = unionQuery->branches();
+    const size_t dedupedBranches = unionQuery->getDedupedBranchCount();
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+    mlir::Value distinctSet;
+    if (dedupedBranches > 0) {
+        distinctSet = _opBuilder.create<mlir::db::DistinctSet>(loc).getSet();
+    }
+
+    mlir::db::Union unionOp = _opBuilder.create<mlir::db::Union>(loc, branches.size());
+
+    for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
+        _part = PartScope {};
+        _vdg.clear();
+
+        _opBuilder.setInsertionPointToStart(&unionOp.getBranches()[branchIndex].front());
+
+        const bool dedupsWithTheBranchesBeforeIt = branchIndex < dedupedBranches;
+        const UnionBranch branch {dedupsWithTheBranchesBeforeIt ? distinctSet : mlir::Value()};
+
+        generateQuery(branches[branchIndex]._query, &branch);
+    }
+
+    _opBuilder.setInsertionPointAfter(unionOp);
 }
 
 void DBProgramGenerator::generateQueryParts(const SinglePartQuery* query) {
@@ -3764,7 +3806,17 @@ void DBProgramGenerator::generateShortestPath(std::span<Stmt* const> stmts) {
     _part._yieldedColumns.push_back({stmt->getPathDecl(), pathName, shortestPath.getPath()});
 }
 
-void DBProgramGenerator::generateOutput(const Projection* projection) {
+mlir::Value DBProgramGenerator::resolveProjectionDriver(llvm::ArrayRef<mlir::Value> projected) const {
+    for (const mlir::Value column : projected) {
+        if (!yieldsConstantColumn(column)) {
+            return column;
+        }
+    }
+
+    return resolveRowCarryingColumn();
+}
+
+void DBProgramGenerator::generateOutput(const Projection* projection, const UnionBranch* branch) {
     VariableColumnMap variableColumns;
     collectVariableColumns(variableColumns);
 
@@ -3774,9 +3826,54 @@ void DBProgramGenerator::generateOutput(const Projection* projection) {
 
     translateProjectionTail(projection, variableColumns, outputted);
 
+    if (branch) {
+        broadcastUnionProjection(outputted);
+
+        if (branch->_distinctSet) {
+            dedupUnionBranch(branch->_distinctSet, outputted);
+        }
+    }
+
     _opBuilder.create<mlir::db::Output>(_opBuilder.getUnknownLoc(),
                                        mlir::ValueRange {outputted},
                                        _opBuilder.getStrArrayAttr(outputNames));
+}
+
+void DBProgramGenerator::broadcastUnionProjection(llvm::SmallVectorImpl<mlir::Value>& projected) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    const mlir::Value driver = resolveProjectionDriver(projected);
+
+    for (mlir::Value& column : projected) {
+        if (yieldsConstantColumn(column)) {
+            column = _opBuilder.create<mlir::db::BroadcastConstant>(loc, noneType, column, driver).getResult();
+        }
+    }
+}
+
+// The rows a branch contributes, recorded in the set its siblings share, so that the
+// union tells apart rows reaching the result through different branches. Every column is
+// part of the key here - unlike RETURN DISTINCT, which leaves a constant one out: `RETURN
+// n.name, 1` and `RETURN m.name, 2` are distinct rows, and the constant is what says so.
+void DBProgramGenerator::dedupUnionBranch(mlir::Value distinctSet,
+                                          llvm::SmallVectorImpl<mlir::Value>& projected) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+
+    llvm::SmallVector<mlir::Type> dedupedTypes;
+    for (const mlir::Value column : projected) {
+        dedupedTypes.push_back(column.getType());
+    }
+
+    auto distinctOp = _opBuilder.create<mlir::db::RemoveDuplicates>(loc,
+                                                                   dedupedTypes,
+                                                                   mlir::ValueRange {projected},
+                                                                   distinctSet);
+
+    const mlir::ResultRange results = distinctOp.getResults();
+    for (size_t index = 0; index < projected.size(); index++) {
+        projected[index] = results[index];
+    }
 }
 
 bool DBProgramGenerator::writesToTheGraph(const SinglePartQuery* query) {
@@ -4312,7 +4409,10 @@ void DBProgramGenerator::translateDistinct(const Projection* projection,
         }
 
         const mlir::Location loc = _opBuilder.getUnknownLoc();
-        auto distinctOp = _opBuilder.create<mlir::db::RemoveDuplicates>(loc, dedupedTypes, mlir::ValueRange{dedupedColumns});
+        auto distinctOp = _opBuilder.create<mlir::db::RemoveDuplicates>(loc,
+                                                                       dedupedTypes,
+                                                                       mlir::ValueRange {dedupedColumns},
+                                                                       mlir::Value());
 
         // The dedup hands back one column per column it read, so its results take the place
         // of the ones it was given and the constant columns stay as they were

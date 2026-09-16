@@ -18,6 +18,7 @@
 #include "ExprAnalyzer.h"
 #include "QueryCommand.h"
 #include "SinglePartQuery.h"
+#include "UnionQuery.h"
 #include "LoadGraphQuery.h"
 #include "CreateGraphQuery.h"
 #include "LoadGMLQuery.h"
@@ -118,6 +119,10 @@ void CypherAnalyzer::analyze() {
         switch (query->getKind()) {
             case QueryCommand::Kind::SINGLE_PART_QUERY:
                 analyze(static_cast<const SinglePartQuery*>(query));
+            break;
+
+            case QueryCommand::Kind::UNION_QUERY:
+                analyze(static_cast<const UnionQuery*>(query));
             break;
 
             case QueryCommand::Kind::LOAD_GRAPH_QUERY:
@@ -233,6 +238,86 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
     }
 
     analyzeShortestPathReturn(query);
+}
+
+void CypherAnalyzer::analyze(const UnionQuery* query) {
+    if (!_isV3) { // only supported by MLIR v3
+        throwError("UNION not yet supported.", query);
+    }
+
+    // Each branch is a query body of its own: it declares its own variables and writes
+    // its own clauses, so the scope and the part the write analyzer is tracking are both
+    // opened fresh for it, exactly as a WITH opens them
+    for (const UnionQuery::Branch& branch : query->branches()) {
+        _ctxt = branch._query->getDeclContext();
+
+        _exprAnalyzer->setDeclContext(_ctxt);
+        _readAnalyzer->setDeclContext(_ctxt);
+        _writeAnalyzer->setDeclContext(_ctxt);
+        _writeAnalyzer->startPart();
+
+        analyze(branch._query);
+    }
+
+    analyzeUnionColumns(query);
+}
+
+void CypherAnalyzer::analyzeUnionColumns(const UnionQuery* query) const {
+    const UnionQuery::Branches& branches = query->branches();
+    const Projection* first = unionBranchProjection(branches.front()._query);
+
+    std::vector<std::string_view> firstNames;
+    collectProjectionNames(first, firstNames);
+
+    std::vector<std::string_view> names;
+    for (const UnionQuery::Branch& branch : branches) {
+        const Projection* projection = unionBranchProjection(branch._query);
+
+        collectProjectionNames(projection, names);
+
+        if (names.size() != firstNames.size()) {
+            throwError(fmt::format("All sub-queries of a UNION must return the same number of columns: "
+                                   "this one returns {} where the first returns {}",
+                                   names.size(),
+                                   firstNames.size()),
+                       branch._query);
+        }
+
+        for (size_t index = 0; index < names.size(); index++) {
+            if (names[index] != firstNames[index]) {
+                throwError(fmt::format("All sub-queries of a UNION must return the same column names: "
+                                       "column {} is '{}' where the first returns '{}'",
+                                       index + 1,
+                                       names[index],
+                                       firstNames[index]),
+                           branch._query);
+            }
+        }
+    }
+}
+
+// The union emits one result table, so each branch has to say which columns it fills it
+// with. A branch ending on a write or on a standalone CALL names none.
+const Projection* CypherAnalyzer::unionBranchProjection(const SinglePartQuery* branch) const {
+    const ReturnStmt* returnStmt = branch->getReturnStmt();
+    if (!returnStmt) {
+        throwError("Every sub-query of a UNION must end with a RETURN clause", branch);
+    }
+
+    return returnStmt->getProjection();
+}
+
+void CypherAnalyzer::collectProjectionNames(const Projection* projection,
+                                            std::vector<std::string_view>& names) {
+    names.clear();
+
+    for (const Projection::ReturnItem& item : projection->items()) {
+        const std::optional<std::string_view> name = std::visit([projection](auto&& projected) {
+            return projection->getName(projected);
+        }, item);
+
+        names.push_back(name.value_or(std::string_view {}));
+    }
 }
 
 // A query part reads then writes: once a part has written, the only clause that may read

@@ -1504,6 +1504,30 @@ target_link_libraries(test_query_ir_absent_property_name PRIVATE
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_absent_property_name PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_turing_test(test_query_ir_union UnionTest.cpp)
+target_link_libraries(test_query_ir_union PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_union PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# The k-hop neighbourhood a GraphSAGE layer aggregates over, gathered as one union
+# branch per hop.
+add_turing_test(test_query_ir_multi_hop_union MultiHopUnionTest.cpp)
+target_link_libraries(test_query_ir_multi_hop_union PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_multi_hop_union PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_absent_schema_name AbsentSchemaNameTest.cpp)
 target_link_libraries(test_query_ir_absent_schema_name PRIVATE
         turing_db_s
@@ -1655,6 +1679,9 @@ target_link_libraries(test_query_ir_merge_chain_match PRIVATE turing_ir_test_wri
 
 # What a merge keys its entities on: the properties one spec names, told apart from
 # another's, and compared against the type the schema holds them as.
+add_turing_test(test_query_ir_union_write UnionWriteTest.cpp)
+target_link_libraries(test_query_ir_union_write PRIVATE turing_ir_test_write_query_s)
+
 add_turing_test(test_query_ir_merge_key MergeKeyTest.cpp)
 target_link_libraries(test_query_ir_merge_key PRIVATE turing_ir_test_write_query_s)
 
@@ -2467,6 +2494,8 @@ target_include_directories(test_query_ir_case_expression PRIVATE ${CMAKE_CURRENT
 
 # The db.case dialect tests parse hand-written selections, so they need only the dialect.
 add_ir_tests(test_query_ir_case_op CaseOpTest.cpp)
+
+add_ir_tests(test_query_ir_union_op UnionOpTest.cpp)
 
 # coalesce, run end to end through QueryInterpreterV3 over the shared SimpleGraph fixture.
 add_turing_test(test_query_ir_coalesce_function CoalesceFunctionTest.cpp)

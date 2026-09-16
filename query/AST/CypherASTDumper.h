@@ -7,6 +7,7 @@ namespace db {
 
 class CypherAST;
 class SinglePartQuery;
+class UnionQuery;
 class ChangeQuery;
 class CommitQuery;
 class MatchStmt;
@@ -74,6 +75,7 @@ private:
     std::unordered_set<const VarDecl*> _dumpedVariables;
 
     void dump(std::ostream& out, const SinglePartQuery* query);
+    void dump(std::ostream& out, const UnionQuery* query);
     void dump(std::ostream& out, const WithStmt* with);
     void dump(std::ostream& out, const LoadGraphQuery* query);
     void dump(std::ostream& out, const LoadJsonlQuery* query);

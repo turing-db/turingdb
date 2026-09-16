@@ -71,4 +71,16 @@ def ColumnRowTags : Type<
     BuildableType<"::mlir::db::ColumnType::get($_builder.getContext(), "
                   "$_builder.getIntegerType(64, false))">;
 
+// The seen-set several db.remove_duplicates share, so that one dedup spans dataflows
+// that never meet: the branches of a UNION, whose rows reach the result through one
+// db.output each and are still deduped against one another.
+def DistinctSetType : TuringType<"DistinctSet", "distinct_set"> {
+    let summary = "A dedup key set shared by several db.remove_duplicates";
+    let description = [{
+        Produced by db.distinct_set and read by every db.remove_duplicates that dedups
+        against the same rows. A dedup naming no set keeps one of its own, which is what
+        a plain RETURN DISTINCT emits.
+    }];
+}
+
 #endif // TURINGDB_TYPES

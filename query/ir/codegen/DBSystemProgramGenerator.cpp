@@ -125,6 +125,7 @@ DBSystemProgramGenerator::~DBSystemProgramGenerator() {
 bool DBSystemProgramGenerator::generate(const QueryCommand* query) {
     switch (query->getKind()) {
         case QueryCommand::Kind::SINGLE_PART_QUERY:
+        case QueryCommand::Kind::UNION_QUERY:
             return false;
         break;
 

@@ -63,6 +63,7 @@ class SetStmt;
 class DeleteStmt;
 class QueryCommand;
 class SinglePartQuery;
+class UnionQuery;
 class ChangeQuery;
 class ReturnStmt;
 class WhereClause;
@@ -161,6 +162,7 @@ public:
     friend YieldClause;
     friend YieldItems;
     friend SinglePartQuery;
+    friend UnionQuery;
     friend ChangeQuery;
     friend DeclContext;
     friend VarDecl;
@@ -258,6 +260,11 @@ private:
     std::vector<OrderByItem*> _orderByItems;
     std::vector<StmtContainer*> _stmtContainers;
     QueryCommands _queries;
+
+    // The commands a top-level one holds: the branches of a union, which the AST
+    // owns like any other command but which queries() must not report as scripts of
+    // their own
+    QueryCommands _subQueries;
     std::vector<DeclContext*> _declContexts;
     std::vector<VarDecl*> _varDecls;
     std::vector<NodePatternData*> _nodePatternDatas;
@@ -288,6 +295,10 @@ private:
     void addOrderByItem(OrderByItem* item);
     void addStmtContainer(StmtContainer* container);
     void addQuery(QueryCommand* query);
+
+    // Moves a command out of the top-level list and into the one a holder reads it
+    // through, once that holder is built over it
+    void nestQuery(QueryCommand* query);
     void addDeclContext(DeclContext* ctxt);
     void addVarDecl(VarDecl* decl);
     void addNodePatternData(NodePatternData* data);
