@@ -52,53 +52,50 @@ open change, so the update queries run after `CHANGE NEW` / `checkout change-0`.
 
 ## Results
 
-Run on 2026-09-16 against main at ec20eb10d, release build, `--repeat 5`.
+Run on 2026-09-16 against main at 7f2b0883f, release build, `--repeat 5`.
 
-**17 of the 55 queries run.** Setting aside the 10 that call a Neo4j library (`gds.*` in
-BI 15, 19 and 20; `apoc.*` in BI 10) rather than the Cypher language, it is 17 of 45.
+**18 of the 55 queries run.** Setting aside the 10 that call a Neo4j library (`gds.*` in
+BI 15, 19 and 20; `apoc.*` in BI 10) rather than the Cypher language, it is 18 of 45.
 
 | query | rows | ms |
 | --- | --- | --- |
-| interactive-short-1 | 1 | 0.54 |
-| interactive-short-3 | 48 | 0.58 |
-| interactive-short-4 | 1 | 0.51 |
-| interactive-short-5 | 1 | 0.53 |
-| interactive-short-7 | 14 | 0.88 |
-| interactive-complex-2 | 20 | 0.73 |
-| interactive-complex-8 | 20 | 0.67 |
-| interactive-update-2 | 0 | 0.49 |
-| interactive-update-3 | 0 | 0.50 |
-| interactive-update-4 | 0 | 0.96 |
-| interactive-update-5 | 0 | 0.50 |
-| interactive-update-6 | 0 | 1.07 |
-| interactive-update-7 | 0 | 1.24 |
-| interactive-update-8 | 0 | 0.49 |
-| bi-5 | 20 | 0.96 |
-| bi-6 | 20 | 1.21 |
-| bi-11 | 1 | 12.27 |
+| interactive-short-1 | 1 | 0.90 |
+| interactive-short-3 | 48 | 0.95 |
+| interactive-short-4 | 1 | 0.83 |
+| interactive-short-5 | 1 | 0.84 |
+| interactive-short-7 | 14 | 1.40 |
+| interactive-complex-2 | 20 | 1.08 |
+| interactive-complex-8 | 20 | 0.97 |
+| interactive-update-1 | 0 | 2.59 |
+| interactive-update-2 | 0 | 0.83 |
+| interactive-update-3 | 0 | 0.82 |
+| interactive-update-4 | 0 | 1.48 |
+| interactive-update-5 | 0 | 0.83 |
+| interactive-update-6 | 0 | 1.63 |
+| interactive-update-7 | 0 | 1.75 |
+| interactive-update-8 | 0 | 0.81 |
+| bi-5 | 20 | 1.34 |
+| bi-6 | 20 | 1.83 |
+| bi-11 | 1 | 12.70 |
 
 The answers are right, not just the row counts. BI 11 counts 25 friend triangles in India,
 which is what counting them over the CSVs in Python gives. IC 8's top 20 replies match that
 computation row for row, ids, names, dates and order. IS 3 returns 48 friends for person
 4398046511333, its degree in `person_knows_person`.
 
-The three that run now and did not on 2026-09-12 are the updates IU 4, 6 and 7, which
-`CREATE` and then `WITH`. Each was read back after `COMMIT`. IU 4's forum 999999999 has its
-`HAS_MODERATOR` edge to person 4398046511333 and its `HAS_TAG` edge to tag 1524. IU 6's post
-carries `bench post` and the same tag. IU 7's comment replies to message 343597383680, which
-is `$replyToPostId + $replyToCommentId + 1`.
+The one that runs now and did not at ec20eb10d is IU 1, which indexes an element of a nested
+list. It was read back after `COMMIT`. Person 999999999 is Bench Mark, its `STUDY_AT` edge
+carries classYear 2004 to organisation 2435, its `WORKS_AT` edge carries workFrom 2010 to
+organisation 296, its `HAS_INTEREST` edge reaches tag 1524 and its `IS_LOCATED_IN` edge
+reaches city 1073. The two years come from `s[1]` and `w[1]`, the two organisations from
+`s[0]` and `w[0]`.
 
-Two of the blockers written up on 2026-09-12 are gone and the queries stopped one step
-further on. IC 7 passes `head` and now stops at `collect` of a map literal, where BI 14
-already stopped. IU 1 passes `CREATE` followed by `WITH` and now stops at `s[0]`, indexing
-an element of a nested list, with `EXEC_ERROR: Unsupported nullable value chunk element
-type`.
+Every query timed 0.3 to 0.6 ms higher than at ec20eb10d: IS 1 0.54 ms to 0.90 ms, IC 2
+0.73 ms to 1.08 ms, BI 11 12.27 ms to 12.70 ms. A second run on a freshly loaded graph
+reproduced this within 5%. The same constant lands on queries that share no code path, so it
+is read as the machine rather than the engine.
 
-BI 11 timed 9.11 ms on 2026-09-12 and 12.27 ms here. The machine carried other load during
-this run, and repeated runs of the short queries moved by a comparable fraction, so this is
-not read as a regression.
-
-### What stops the other 28
+### What stops the other 27
 
 | queries | blocked on |
 | --- | --- |
@@ -111,7 +108,6 @@ not read as a regression.
 | IC 12 | edge type alternation, `[:A\|B]` |
 | BI 8 | pattern comprehensions, `size([(a)-[r]-(b) \| r])` |
 | BI 16 | `CALL { subquery }` |
-| IU 1 | indexing an element of a nested list, `s[0]` |
 | IC 4 | chained comparison, `a <= b < c` |
 
 The last one is not a missing feature. It is a query the engine has every piece to run and
