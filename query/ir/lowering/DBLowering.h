@@ -142,7 +142,9 @@ private:
     // The block a root scan opens its loop in. It is the entry block at top
     // level, but a db.cross_product lowers its inner factor with the outer
     // factor's innermost loop body as the root, so the inner factor's scans
-    // nest inside the outer loop (the nested-loop join).
+    // nest inside the outer loop (the nested-loop join). A pipeline breaker hoists
+    // its accumulator here too, so one inside a subquery body run one row at a time
+    // resets once per row of that body's loop.
     mlir::Block* _rootBlock {nullptr};
 
     // The body of the most recent loop buildLoopForSource opened. A factor's
@@ -178,6 +180,12 @@ private:
     llvm::DenseSet<mlir::Operation*> _fusedLimits;          // db.limits fused into a sort
 
     void lowerOperation(mlir::Operation& operation);
+
+    // Hoist one nl.limit handle per db.limit of @param region to the top of @param
+    // hoistBlock and assign it to the loops producing the limited columns. A limit
+    // inside a body run one row at a time belongs to that body, so only the limits
+    // whose innermost such body is @param holder - none at function level - are taken.
+    void hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock, mlir::db::CallSubquery holder);
 
     // Lower one op of the system-command family - db.load_graph, db.change,
     // db.commit and their siblings - by copying it to its nl sibling at function
@@ -248,6 +256,37 @@ private:
     // the matched rows then one null-padded row per input row the pattern missed. A
     // pipeline breaker like db.sort, but its accumulator covers one step, not the relation.
     void lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch);
+
+    // Lower a db.call_subquery. A body carrying its scope, and a unit body, are lowered in
+    // place: the block arguments become the step's chunks, the body's loops nest in the
+    // step block, and the yielded chunks are what the results map to. A returning body
+    // that carries nothing runs one input row at a time instead, see lowerSubqueryPerRow.
+    void lowerCallSubquery(mlir::db::CallSubquery call);
+
+    // Lower the body of a db.call_subquery rooted in @param stepBlock, mapping each block
+    // argument to the chunk @param inputChunks holds for it, and fill @param yieldedChunks
+    // with the chunks the body's db.subquery_yield names and @param yieldedTag with the
+    // tag it names, null when it names none.
+    void lowerSubqueryBody(mlir::db::CallSubquery call,
+                           mlir::Block* stepBlock,
+                           llvm::ArrayRef<mlir::Value> inputChunks,
+                           llvm::SmallVectorImpl<mlir::Value>& yieldedChunks,
+                           mlir::Value& yieldedTag);
+
+    // Lower an optional db.call_subquery: the body - run in place or one row at a time,
+    // as lowerCallSubquery would run it - feeds an nl.optional_buffer, nl.optional_collect
+    // and nl.optional_drain around it, so an input row the body yields nothing for comes
+    // back once with the body's columns null.
+    void lowerOptionalSubquery(mlir::db::CallSubquery call,
+                               mlir::Block* stepBlock,
+                               llvm::ArrayRef<mlir::Value> inputChunks);
+
+    // Lower a returning body that carries nothing: an nl.each_row over the step's input
+    // chunks drives the body once per input row, every accumulator of the body resets in
+    // that step, and the row's own chunks are crossed with what the body yields.
+    void lowerSubqueryPerRow(mlir::db::CallSubquery call,
+                             mlir::Block* stepBlock,
+                             llvm::ArrayRef<mlir::Value> inputChunks);
 
     // The most deeply nested block any of @param chunks is bound in, or @param fallback
     // when they are all bound at or above it: where an op reading them all belongs

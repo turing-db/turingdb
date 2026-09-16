@@ -38,6 +38,7 @@ class ReturnStmt;
 class Stmt;
 class StmtContainer;
 class WithStmt;
+class CallSubqueryStmt;
 class Projection;
 class CreateNodePropertyIndexQuery;
 class CreateEdgePropertyIndexQuery;
@@ -62,6 +63,7 @@ public:
     void analyze(const UnionQuery* query);
     void analyze(const ReturnStmt* returnSt);
     void analyze(const WithStmt* withSt);
+    void analyze(CallSubqueryStmt* subquery);
     void analyze(const LoadGraphQuery* loadGraph);
     void analyze(const CreateGraphQuery* createGraph);
     void analyze(LoadGMLQuery* loadGML);
@@ -91,8 +93,37 @@ private:
     std::unique_ptr<ReadStmtAnalyzer> _readAnalyzer;
     std::unique_ptr<WriteStmtAnalyzer> _writeAnalyzer;
 
+    // The names the scope clause of the subquery being analyzed imports, empty outside one
+    // and while a nested body is analyzed under its own. A body importing through a
+    // leading WITH holds none: those names are an ordinary projection, which an ordinary
+    // WITH descopes.
+    std::vector<std::string_view> _subqueryImports;
+
     void analyzeProjection(Projection* projection, const Stmt* clause);
     void openWithScope(Projection* projection);
+
+    // Declares one variable per projected item in @param scope, under the name the item
+    // publishes, and records it on the projection for the code generator to bind
+    void publishProjection(Projection* projection, DeclContext* scope);
+
+    void setScope(DeclContext* scope);
+
+    // A body opening on a WITH of plain variables imports them, when no scope clause says
+    // what the body reads
+    void importThroughLeadingWith(CallSubqueryStmt* subquery) const;
+
+    // Declares what a returning body publishes in the scope around the CALL, rejecting a
+    // name that scope already holds
+    void publishSubqueryReturn(const CallSubqueryStmt* subquery);
+
+    // Adds to a barrier of a subquery body the imports it does not project, so what the
+    // scope clause named stays readable below it
+    void carrySubqueryImports(Projection* projection) const;
+
+    // Rejects the item that publishes an imported name under another variable
+    void throwOnRedeclaredImport(const Projection* projection,
+                                 std::string_view import,
+                                 const VarDecl* decl) const;
     void analyzeWithAliases(const Projection* projection) const;
     void analyzeWithOrderBy(const Projection* projection) const;
     void throwOnUnpublishedKeyVariable(const Expr* keyExpr, const Projection* projection) const;

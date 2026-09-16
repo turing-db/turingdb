@@ -33,6 +33,7 @@ set(ast_sources
     stmt/SetStmt.cpp
     stmt/SetItem.cpp
     stmt/CallStmt.cpp
+    stmt/CallSubqueryStmt.cpp
     stmt/CreateStmt.cpp
     stmt/MergeStmt.cpp
     stmt/DeleteStmt.cpp

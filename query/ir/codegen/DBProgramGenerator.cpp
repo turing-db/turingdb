@@ -66,7 +66,9 @@
 #include "YieldClause.h"
 #include "YieldItems.h"
 #include "stmt/CallStmt.h"
+#include "stmt/CallSubqueryStmt.h"
 #include "stmt/StmtContainer.h"
+#include "decl/DeclContext.h"
 #include "decl/EvaluatedType.h"
 #include "decl/PatternData.h"
 #include "decl/VarDecl.h"
@@ -226,6 +228,24 @@ size_t passRunNumber(std::span<const std::string_view> pipelinePasses, size_t pa
 // can appear in no Cypher identifier, quoted or not, so no variable of the query's own is
 // ever taken for the tag - the columns are keyed by name.
 constexpr std::string_view optionalTagName {"`optional_tag"};
+
+// The columns a CALL subquery carries past its body are bound under this prefix, so no
+// clause of the body resolves or drops them - the columns are keyed by name.
+constexpr std::string_view hiddenColumnPrefix {"`hidden_"};
+
+std::string hiddenName(std::string_view name) {
+    std::string hidden {hiddenColumnPrefix};
+    hidden += name;
+    return hidden;
+}
+
+bool isHiddenName(std::string_view name) {
+    return name.starts_with(hiddenColumnPrefix);
+}
+
+// The row tag an OPTIONAL CALL body carries, under a hidden name no input's own hidden
+// name can be: an identifier holds no backtick
+constexpr std::string_view subqueryTagName {"`hidden_`tag"};
 
 using UnaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder,
                                              mlir::Location loc,
@@ -1162,7 +1182,7 @@ void DBProgramGenerator::generateQueryParts(const SinglePartQuery* query) {
 // rejected a part that reads again after writing, so the split is a single cut
 void DBProgramGenerator::generatePartStatements(std::span<Stmt* const> stmts) {
     const auto isUpdating = [](const Stmt* stmt) {
-        return Stmt::isUpdating(stmt->getKind());
+        return Stmt::isUpdating(stmt);
     };
 
     const auto firstUpdate = std::ranges::find_if(stmts, isUpdating);
@@ -1176,19 +1196,33 @@ void DBProgramGenerator::generatePartStatements(std::span<Stmt* const> stmts) {
 }
 
 void DBProgramGenerator::generateOptionalParts(std::span<Stmt* const> stmts) {
-    const auto isOptionalMatch = [](const Stmt* stmt) {
-        return stmt->getKind() == Stmt::Kind::MATCH
-               && static_cast<const MatchStmt*>(stmt)->isOptional();
+    // A CALL subquery closes the traversal before it as an optional pattern does: its body
+    // reads the rows in flight through a region of its own
+    const auto closesTheTraversal = [](const Stmt* stmt) {
+        const Stmt::Kind kind = stmt->getKind();
+
+        if (kind == Stmt::Kind::MATCH) {
+            return static_cast<const MatchStmt*>(stmt)->isOptional();
+        }
+
+        return kind == Stmt::Kind::CALL_SUBQUERY;
     };
 
     size_t partBegin = 0;
     for (size_t index = 0; index < stmts.size(); index++) {
-        if (!isOptionalMatch(stmts[index])) {
+        const Stmt* stmt = stmts[index];
+        if (!closesTheTraversal(stmt)) {
             continue;
         }
 
         generatePart(stmts.subspan(partBegin, index - partBegin));
-        generateOptionalMatch(stmts.subspan(index, 1));
+
+        if (stmt->getKind() == Stmt::Kind::MATCH) {
+            generateOptionalMatch(stmts.subspan(index, 1));
+        } else {
+            generateCallSubquery(static_cast<const CallSubqueryStmt*>(stmt));
+        }
+
         partBegin = index + 1;
     }
 
@@ -1214,7 +1248,7 @@ bool DBProgramGenerator::closesPartOnItsCut(const Stmt* stmt, std::span<Stmt* co
 
         if (kind == Stmt::Kind::WITH) {
             return false;
-        } else if (kind == Stmt::Kind::MATCH) {
+        } else if (kind == Stmt::Kind::MATCH || kind == Stmt::Kind::CALL_SUBQUERY) {
             return true;
         } else if (kind == Stmt::Kind::UNWIND) {
             // A literal UNWIND opens a dataflow of its own, multiplying the rows the cut
@@ -3062,6 +3096,10 @@ void DBProgramGenerator::generateUpdates(std::span<Stmt* const> stmts) {
                 generateDeleteStmt(static_cast<const DeleteStmt*>(stmt));
             break;
 
+            case Stmt::Kind::CALL_SUBQUERY:
+                generateCallSubquery(static_cast<const CallSubqueryStmt*>(stmt));
+            break;
+
             default:
                 throw TuringException(fmt::format("Unsupported update statement of kind {}",
                                                   static_cast<int>(stmt->getKind())));
@@ -3916,7 +3954,7 @@ bool DBProgramGenerator::writesToTheGraph(const SinglePartQuery* query) {
     }
 
     return std::ranges::any_of(stmts->stmts(), [](const Stmt* stmt) {
-        return Stmt::isUpdating(stmt->getKind());
+        return Stmt::isUpdating(stmt);
     });
 }
 
@@ -3954,6 +3992,20 @@ void DBProgramGenerator::generateYieldedOutput(const SinglePartQuery* query) {
 void DBProgramGenerator::generateWith(const WithStmt* with) {
     const Projection* projection = with->getProjection();
 
+    publishProjection(projection);
+
+    const WhereClause* where = with->getWhere();
+    if (!where) {
+        return;
+    }
+
+    std::vector<const Expr*> conjuncts;
+    flattenConjuncts(where->getExpr(), conjuncts);
+
+    applyPredicateFilters(conjuncts);
+}
+
+void DBProgramGenerator::publishProjection(const Projection* projection) {
     generateGroupAggregate(projection);
 
     VariableColumnMap variableColumns;
@@ -3968,16 +4020,261 @@ void DBProgramGenerator::generateWith(const WithStmt* with) {
     translateProjectionTail(projection, variableColumns, projected);
 
     publishBoundColumns(projection, names, projected);
+}
 
-    const WhereClause* where = with->getWhere();
-    if (!where) {
+bool DBProgramGenerator::subqueryCarriesRows(const SinglePartQuery* body) {
+    const auto breaksRows = [](const Projection* projection) {
+        return projection->isAggregate()
+               || projection->isDistinct()
+               || projection->hasOrderBy()
+               || projection->hasSkip()
+               || projection->hasLimit();
+    };
+
+    if (const StmtContainer* stmts = body->getStmts()) {
+        for (const Stmt* stmt : stmts->stmts()) {
+            const Stmt::Kind kind = stmt->getKind();
+
+            if (kind == Stmt::Kind::MATCH) {
+                const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt);
+                const bool cutsRows = matchStmt->hasOrderBy() || matchStmt->hasSkip() || matchStmt->hasLimit();
+
+                if (cutsRows) {
+                    return false;
+                }
+            } else if (kind == Stmt::Kind::WITH) {
+                if (breaksRows(static_cast<const WithStmt*>(stmt)->getProjection())) {
+                    return false;
+                }
+            } else if (kind == Stmt::Kind::SHORTESTPATH) {
+                return false;
+            }
+        }
+    }
+
+    const ReturnStmt* returnStmt = body->getReturnStmt();
+
+    return !returnStmt || !breaksRows(returnStmt->getProjection());
+}
+
+void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) {
+    const SinglePartQuery* body = subquery->getBody();
+    const bool returning = subquery->isReturning();
+    const bool carriesScope = returning && subqueryCarriesRows(body);
+    const bool optional = returning && subquery->isOptional();
+
+    llvm::SmallVector<PublishedColumn> scopeColumns;
+    collectPublishedColumns(scopeColumns);
+
+    // A constant holds one value standing for every row rather than rows of its own, so it
+    // is no input of the body: an imported one is read where it is bound
+    llvm::SmallVector<PublishedColumn> inputs;
+    llvm::SmallVector<PublishedColumn> constants;
+
+    for (const PublishedColumn& column : scopeColumns) {
+        if (yieldsConstantColumn(column._column)) {
+            constants.push_back(column);
+        } else {
+            inputs.push_back(column);
+        }
+    }
+
+    const DeclContext* bodyContext = body->getDeclContext();
+    const CallSubqueryStmt::Imports& imports = subquery->imports();
+
+    const auto importedDecl = [&imports, bodyContext](std::string_view name) -> const VarDecl* {
+        const auto namesIt = [name](const Symbol* import) {
+            return import->getName() == name;
+        };
+
+        if (!std::ranges::any_of(imports, namesIt)) {
+            return nullptr;
+        }
+
+        return bodyContext->getDecl(name);
+    };
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    mlir::Block* const outerBlock = _opBuilder.getInsertionBlock();
+
+    // Built into a scratch region: the op's results are the columns the body turns out to
+    // yield, which is known only once it is generated
+    mlir::Region bodyRegion;
+    mlir::Block* const bodyBlock = new mlir::Block(); // Region destructor frees it
+    bodyRegion.push_back(bodyBlock);
+
+    // The body reads an import under the declaration its own context holds for it. A body
+    // carrying the scope holds every input under a hidden name too, so the input comes back
+    // as the body's rows left it whatever its clauses publish; a unit body holds them so
+    // that a write reading no import still writes once per row in flight
+    const bool bindsHidden = carriesScope || !returning;
+
+    llvm::SmallVector<mlir::Value> inputColumns;
+    llvm::SmallVector<PublishedColumn> bodyScope;
+    CarriedEntities importedEntities;
+
+    for (const PublishedColumn& input : inputs) {
+        inputColumns.push_back(input._column);
+        const mlir::Value argument = bodyBlock->addArgument(input._column.getType(), loc);
+
+        if (const VarDecl* imported = importedDecl(input._name)) {
+            bodyScope.push_back({imported, input._name, argument});
+
+            if (const PartScope::WrittenEntity* written = findWrittenEntity(input._decl)) {
+                importedEntities.emplace_back(imported, *written);
+            }
+        }
+
+        if (bindsHidden) {
+            bodyScope.push_back({nullptr, hiddenName(input._name), argument});
+        }
+    }
+
+    // An optional body carrying the scope carries the row tag with it, so the rows it
+    // yields are known against the rows it was given; no input row means no row to tag
+    const bool tagsRows = optional && carriesScope && !inputs.empty();
+    if (tagsRows) {
+        const mlir::db::ColumnType tagType = allocColumnType(_opBuilder.getIntegerType(64, /*isSigned=*/false));
+        bodyScope.push_back({nullptr, std::string(subqueryTagName), bodyBlock->addArgument(tagType, loc)});
+    }
+
+    for (const PublishedColumn& constant : constants) {
+        if (const VarDecl* imported = importedDecl(constant._name)) {
+            bodyScope.push_back({imported, constant._name, constant._column});
+        }
+    }
+
+    // What the query holds is set aside while the body builds a scope of its own. A unit
+    // body leaves the rows as they were, so it all comes back; a returning body's results
+    // are bound afresh under the declarations the inputs and the RETURN carry
+    PartScope outerPart = _part;
+    VariableDependencyGraph outerGraph = std::move(_vdg);
+
+    rebindScope(bodyScope);
+
+    for (auto& [decl, written] : importedEntities) {
+        _part._writtenEntities[decl] = std::move(written);
+    }
+
+    _opBuilder.setInsertionPointToStart(bodyBlock);
+    generateQueryParts(body);
+
+    llvm::SmallVector<PublishedColumn> yielded;
+    CarriedEntities returnedEntities;
+    mlir::Value yieldedTag;
+
+    if (returning) {
+        publishProjection(body->getReturnStmt()->getProjection());
+
+        llvm::SmallVector<PublishedColumn> bodyColumns;
+        collectPublishedColumns(bodyColumns);
+
+        if (tagsRows) {
+            const auto tagIt = std::ranges::find(bodyColumns, subqueryTagName, &PublishedColumn::_name);
+            bioassert(tagIt != bodyColumns.end(), "Row tag lost by a CALL subquery body");
+
+            yieldedTag = tagIt->_column;
+        }
+
+        if (carriesScope) {
+            for (const PublishedColumn& input : inputs) {
+                const std::string hidden = hiddenName(input._name);
+                const auto foundIt = std::ranges::find(bodyColumns, hidden, &PublishedColumn::_name);
+                bioassert(foundIt != bodyColumns.end(), "Column '{}' lost by a CALL subquery body", input._name);
+
+                yielded.push_back({input._decl, input._name, foundIt->_column});
+            }
+        }
+
+        for (const PublishedColumn& column : bodyColumns) {
+            if (isHiddenName(column._name)) {
+                continue;
+            }
+
+            yielded.push_back(column);
+
+            if (const PartScope::WrittenEntity* written = findWrittenEntity(column._decl)) {
+                returnedEntities.emplace_back(column._decl, *written);
+            }
+        }
+    }
+
+    llvm::SmallVector<mlir::Value> yieldedColumns;
+    for (const PublishedColumn& column : yielded) {
+        yieldedColumns.push_back(column._column);
+    }
+
+    _opBuilder.create<mlir::db::SubqueryYield>(loc, yieldedTag, yieldedColumns);
+
+    // The results stand for the inputs then the body's own columns: the yield holds both
+    // when the body carries the scope, its own alone otherwise
+    llvm::SmallVector<mlir::Type> resultTypes;
+    if (returning && !carriesScope) {
+        for (const mlir::Value column : inputColumns) {
+            resultTypes.push_back(column.getType());
+        }
+    }
+
+    for (const mlir::Value column : yieldedColumns) {
+        resultTypes.push_back(column.getType());
+    }
+
+    _opBuilder.setInsertionPointToEnd(outerBlock);
+
+    auto callOp = _opBuilder.create<mlir::db::CallSubquery>(loc,
+                                                           resultTypes,
+                                                           inputColumns,
+                                                           /*unit=*/!returning,
+                                                           carriesScope,
+                                                           optional);
+    callOp.getBody().takeBody(bodyRegion);
+
+    _part = std::move(outerPart);
+    _vdg = std::move(outerGraph);
+
+    if (!returning) {
         return;
     }
 
-    std::vector<const Expr*> conjuncts;
-    flattenConjuncts(where->getExpr(), conjuncts);
+    const mlir::ResultRange results = callOp.getResults();
+    size_t resultIndex = 0;
 
-    applyPredicateFilters(conjuncts);
+    llvm::SmallVector<PublishedColumn> published;
+    if (!carriesScope) {
+        for (const PublishedColumn& input : inputs) {
+            published.push_back({input._decl, input._name, results[resultIndex]});
+            resultIndex++;
+        }
+    }
+
+    for (const PublishedColumn& column : yielded) {
+        published.push_back({column._decl, column._name, results[resultIndex]});
+        resultIndex++;
+    }
+
+    published.append(constants.begin(), constants.end());
+
+    rebindScopeKeepingWrittenEntities(published);
+
+    for (auto& [decl, written] : returnedEntities) {
+        _part._writtenEntities[decl] = std::move(written);
+    }
+}
+
+void DBProgramGenerator::appendHiddenColumns(llvm::SmallVectorImpl<PublishedColumn>& published) const {
+    forEachVariableColumn([&published](const VarDecl* decl, std::string_view name, mlir::Value column) {
+        if (!isHiddenName(name)) {
+            return;
+        }
+
+        const auto foundIt = std::ranges::find(published, name, &PublishedColumn::_name);
+        if (foundIt != published.end()) {
+            foundIt->_column = column;
+            return;
+        }
+
+        published.push_back({decl, std::string(name), column});
+    });
 }
 
 void DBProgramGenerator::generateOptionalMatch(std::span<Stmt* const> stmt) {
@@ -4141,6 +4438,8 @@ void DBProgramGenerator::publishBoundColumns(const Projection* projection,
 
     CarriedEntities carried;
     carryWrittenEntities(projection, published, carried);
+
+    appendHiddenColumns(published);
 
     rebindScope(published);
 

@@ -57,6 +57,7 @@ class StmtContainer;
 class MatchStmt;
 class ShortestPathStmt;
 class CallStmt;
+class CallSubqueryStmt;
 class CreateStmt;
 class MergeStmt;
 class SetStmt;
@@ -153,6 +154,7 @@ public:
     friend MatchStmt;
     friend ShortestPathStmt;
     friend CallStmt;
+    friend CallSubqueryStmt;
     friend CreateStmt;
     friend MergeStmt;
     friend SetStmt;
