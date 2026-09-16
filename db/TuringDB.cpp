@@ -36,13 +36,8 @@ void TuringDB::init() {
 }
 
 QueryStatus TuringDB::query(std::string_view query, const QueryState& state) {
-    const QueryConfig* queryConfig = state.getQueryConfig();
-    const PlanGenConfig& planGenConfig = queryConfig->getPlanGenConfig();
-
     QueryInterpreterV3 interp(_systemManager.get());
-    interp.setChunkSize(queryConfig->getChunkSize());
-    interp.setForceValueHashJoin(planGenConfig.getForceValueHashJoin());
-    interp.setUseValueHashJoin(planGenConfig.getUseValueHashJoin());
+    interp.setChunkSize(state.getQueryConfig()->getChunkSize());
 
     DiscardedOutputSink discardedSink;
     NLOutputSink* sink = state.getSink();
