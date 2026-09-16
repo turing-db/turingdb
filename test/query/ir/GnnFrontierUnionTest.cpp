@@ -12,9 +12,11 @@ class GnnFrontierUnionTest : public CallV3Test {
 
 namespace {
 
-// Remy(0) cites Adam(1), Computers(2), Eighties(3) and Ghosts(6); Adam cites Remy, Bio(4)
-// and Cooking(5); Ghosts cites Remy; the rest cite nobody. A fan-out of 8 exceeds every
-// out-degree, so each sample takes the whole neighbourhood and the expectation is exact.
+// The sample is undirected, so a node's neighbourhood is what it points to and what points
+// to it. Remy(0) is joined to Adam(1) twice, to Ghosts(6) twice and to Computers(2) and
+// Eighties(3) once; Adam to Remy twice, Bio(4) and Cooking(5); Computers to Remy and
+// Luc(9). A fan-out of 8 exceeds every degree, so each sample takes the whole
+// neighbourhood and the expectation is exact.
 constexpr const char* newestHopQuery =
     "MATCH (n {name: 'Remy'}) "
     "CALL gnn.neighbourhoodSample(n, 8, 42) YIELD tgt AS t1 "
@@ -22,10 +24,13 @@ constexpr const char* newestHopQuery =
     "RETURN DISTINCT s2, t2";
 
 // The second call samples what the first yielded - Adam, Computers, Eighties and Ghosts.
-// Remy is a destination of that layer but never a source, so its own four edges are absent.
+// Remy is a neighbour of that layer but never a seed of it, so its own edges are absent.
 const std::vector<StringRowSink::Row> newestHopEdges {{"1", "0"},
                                                       {"1", "4"},
                                                       {"1", "5"},
+                                                      {"2", "0"},
+                                                      {"2", "9"},
+                                                      {"3", "0"},
                                                       {"6", "0"}};
 
 }

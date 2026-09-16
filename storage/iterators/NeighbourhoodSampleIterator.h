@@ -16,8 +16,8 @@ namespace db {
 class GraphView;
 
 /**
- * @brief Tombstone-aware iterator over the out of edges of each NodeID in @ref _inputNodeIDs 
- * @detail Traverses each DataPart for every NodeID, as opposed to GetOutEdgesIterator 
+ * @brief Tombstone-aware iterator over the edges of each NodeID in @ref _inputNodeIDs
+ * @detail Traverses each DataPart for every NodeID, as opposed to GetOutEdgesIterator.
  */
 class NeighbourhoodSampleIterator : public Iterator {
 public:
@@ -35,14 +35,20 @@ protected:
     std::span<const EdgeRecord> _edges;
     std::span<const EdgeRecord>::iterator _edgeIt;
 
+    bool _onInEdges {false};
+
     void init();
     void nextValidForCurrentNode();
     void syncEdges();
-    bool deleted(const EdgeRecord& e) const;
+    bool skipped(const EdgeRecord& e) const;
+    void loadEdges();
+    /// @returns false once every side of every DataPart is read for @ref _nodeIt
+    bool changeDirection();
+    void nextValidEdge();
 };
 
 /**
- * @brief Uniform random sample of the out edges of each NodeID in @ref _inputNodeIDs
+ * @brief Uniform random sample of the edges of each NodeID in @ref _inputNodeIDs
  */
 class NeighbourhoodSampleChunkWriter final : public NeighbourhoodSampleIterator {
 public:
