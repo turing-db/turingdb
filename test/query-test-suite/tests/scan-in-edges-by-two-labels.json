@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (a:Interest:Exotic)<--(b) RETURN a.name, b.name ORDER BY a.name, b.name",
+  "expect": {
+    "result": "a.name,b.name\nEighties,Remy\nGhosts,Remy",
+    "resultJson": "{\"header\":{\"column_names\":[\"a.name\",\"b.name\"],\"column_types\":[\"String\",\"String\"]},\"data\":[[[\"Eighties\",\"Ghosts\"],[\"Remy\",\"Remy\"]]]}"
+  },
+  "tags": [
+    "match",
+    "labels",
+    "edges"
+  ],
+  "write-required": false
+}
