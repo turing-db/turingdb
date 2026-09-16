@@ -124,6 +124,8 @@ protected:
 
     mlir::Type listElementType() { return mlir::storage::ListElementType::get(&_context); }
 
+    mlir::Type listOfType(mlir::Type element) { return mlir::storage::ListType::get(&_context, element); }
+
     const std::string _graphName = "simpledb";
     std::unique_ptr<TuringTestEnv> _env;
     Graph* _graph {nullptr};
@@ -192,10 +194,23 @@ TEST_F(ListLiteralElementTypeTest, typesAListHoldingAListAsTaggedScalars) {
     expectListElementType("RETURN [10, true, [1, 2]]", listElementType());
 }
 
-TEST_F(ListLiteralElementTypeTest, typesAListOfListsAsTaggedScalars) {
-    // Every element is a list here, so they do agree - but on a type none of them carries,
-    // which is the type-erased form again.
-    expectListElementType("RETURN [[1, 2], [3]]", listElementType());
+TEST_F(ListLiteralElementTypeTest, typesAListOfListsAsAListOfTheirSharedElement) {
+    // A nested list takes the list type its own verdict names, so these two agree on a
+    // list of integers. That verdict is what lets an element indexed out of one be read -
+    // and written to a property - as an integer rather than as a tagged scalar.
+    expectListElementType("RETURN [[1, 2], [3]]", listOfType(mlir::IntegerType::get(&_context, 64)));
+}
+
+TEST_F(ListLiteralElementTypeTest, typesListsOfDisagreeingElementsAsTaggedScalars) {
+    // The nested lists carry a type of their own, so they disagree like any other pair of
+    // elements: a list of integers and a list of strings share none.
+    expectListElementType("RETURN [[1, 2], ['a']]", listElementType());
+}
+
+TEST_F(ListLiteralElementTypeTest, typesListsOfMixedElementsAsAListOfTaggedScalars) {
+    // Neither nested list reaches a verdict of its own, so both are the type-erased list -
+    // one type, which they share.
+    expectListElementType("RETURN [[1, 'a'], [2, 'b']]", listOfType(listElementType()));
 }
 
 TEST_F(ListLiteralElementTypeTest, typesAListBesideAMatchedRowAsIntegers) {
