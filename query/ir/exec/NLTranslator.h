@@ -453,6 +453,7 @@ private:
     // nl.path_length: allocate the count column its rows are read into
     void translateExpandPath(mlir::nl::ExpandPath expand, NLStmtContainer* body);
     void translatePathLength(mlir::nl::PathLength length, NLStmtContainer* body);
+    void translateMakePath(mlir::nl::MakePath makePath, NLStmtContainer* body);
 
     // Translate an nl.limit: allocate its runtime counter, map the handle to it,
     // and record the reset statement (run each time the enclosing block runs)
@@ -1074,6 +1075,7 @@ private:
     // A column of list cells, each a view over the query's list buffer
     Column* allocListColumn();
     Column* allocOptListColumn();
+    Column* allocEntityListColumn();
 
     Column* allocListElementColumn();
     Column* allocOptListElementColumn();

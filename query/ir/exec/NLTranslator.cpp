@@ -848,6 +848,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
                                    body);
         } else if (nl::ExpandPath expandPath = mlir::dyn_cast<nl::ExpandPath>(operation)) {
             translateExpandPath(expandPath, body);
+        } else if (nl::MakePath makePath = mlir::dyn_cast<nl::MakePath>(operation)) {
+            translateMakePath(makePath, body);
         } else if (nl::PathLength pathLength = mlir::dyn_cast<nl::PathLength>(operation)) {
             translatePathLength(pathLength, body);
         } else if (nl::GetNodeLabelSet getNodeLabelSet = mlir::dyn_cast<nl::GetNodeLabelSet>(operation)) {
@@ -1937,6 +1939,40 @@ void NLTranslator::translatePathLength(nl::PathLength length, NLStmtContainer* b
 
     NLPathLengthData* data = _program->allocFunctionData<NLPathLengthData>(paths, output, &_memory->pathTrie());
     body->emplaceStmt(&NLExecutor::runPathLength, data);
+}
+
+void NLTranslator::translateMakePath(nl::MakePath makePath, NLStmtContainer* body) {
+    ColumnVector<EntityList>* output = static_cast<ColumnVector<EntityList>*>(allocEntityListColumn());
+    _valueSlots[makePath.getResult()] = output;
+
+    NLMakePathData* data = _program->allocFunctionData<NLMakePathData>(output, &_memory->pathTrie());
+
+    for (const mlir::Value entityValue : makePath.getEntities()) {
+        NLPathEntity entity;
+        entity._column = getColumn(entityValue);
+
+        switch (getChunkKind(entityValue.getType())) {
+            case NLChunkKind::NodeID:
+                entity._kind = NLPathEntity::Kind::Node;
+            break;
+
+            case NLChunkKind::EdgeID:
+                entity._kind = NLPathEntity::Kind::Edge;
+            break;
+
+            case NLChunkKind::PathRef:
+                entity._kind = NLPathEntity::Kind::Path;
+            break;
+
+            default:
+                throw IRException("nl.make_path runs through nodes, edges and paths alone");
+            break;
+        }
+
+        data->addEntity(entity);
+    }
+
+    body->emplaceStmt(&NLExecutor::runMakePath, data);
 }
 
 void NLTranslator::translatePropertyFetch(mlir::Value inputValue,
@@ -6156,6 +6192,13 @@ Column* NLTranslator::allocOptListColumn() {
     return column;
 }
 
+Column* NLTranslator::allocEntityListColumn() {
+    ColumnVector<EntityList>* column = _memory->alloc<ColumnVector<EntityList>>();
+    column->reserve(_program->getChunkSize());
+
+    return column;
+}
+
 Column* NLTranslator::allocListElementColumn() {
     ColumnVector<ListElementView>* column = _memory->alloc<ColumnVector<ListElementView>>();
     column->reserve(_program->getChunkSize());
@@ -6235,6 +6278,8 @@ NLChunkKind NLTranslator::chunkKindFromElementType(mlir::Type elementType) {
         return NLChunkKind::DateTime;
     } else if (mlir::isa<storage::PathRefType>(elementType)) {
         return NLChunkKind::PathRef;
+    } else if (mlir::isa<storage::EntityListType>(elementType)) {
+        return NLChunkKind::EntityList;
     } else if (mlir::isa<storage::BoolType>(elementType)) {
         return NLChunkKind::Bool;
     } else if (mlir::isa<mlir::Float64Type>(elementType)) {

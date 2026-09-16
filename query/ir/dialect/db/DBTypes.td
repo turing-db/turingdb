@@ -42,6 +42,7 @@ def ColumnEdgeIDs : ColumnOf<"::mlir::storage::EdgeIDType", "edgeid">;
 def ColumnEdgeTypes : ColumnOf<"::mlir::storage::EdgeTypeIDType", "edge_type_id">;
 def ColumnPath : ColumnOf<"::mlir::storage::PathType", "path">;
 def ColumnPathRefs : ColumnOf<"::mlir::storage::PathRefType", "path_ref">;
+def ColumnEntityList : ColumnOf<"::mlir::storage::EntityListType", "entity_list">;
 
 def ColumnChangeIDs : ColumnOf<"::mlir::storage::ChangeIDType", "change_id">;
 

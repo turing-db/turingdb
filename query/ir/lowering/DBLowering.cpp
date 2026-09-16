@@ -1092,6 +1092,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerExpandPath(expandPath);
     } else if (mlir::db::PathLength pathLength = mlir::dyn_cast<mlir::db::PathLength>(operation)) {
         lowerPathLength(pathLength);
+    } else if (mlir::db::MakePath makePath = mlir::dyn_cast<mlir::db::MakePath>(operation)) {
+        lowerMakePath(makePath);
     } else if (mlir::db::GetNodeProperties getNodeProperties = mlir::dyn_cast<mlir::db::GetNodeProperties>(operation)) {
         lowerGetNodeProperties(getNodeProperties);
     } else if (mlir::db::GetEdgeProperties getEdgeProperties = mlir::dyn_cast<mlir::db::GetEdgeProperties>(operation)) {
@@ -5271,6 +5273,21 @@ void DBLowering::lowerPathLength(mlir::db::PathLength pathLength) {
 
     nl::PathLength length = _builder.create<nl::PathLength>(_builder.getUnknownLoc(), resultType, pathsChunk);
     _valueMap[pathLength.getResult()] = length.getResult();
+}
+
+void DBLowering::lowerMakePath(mlir::db::MakePath makePath) {
+    llvm::SmallVector<mlir::Value, 4> entityChunks;
+    for (const mlir::Value entityColumn : makePath.getEntities()) {
+        entityChunks.push_back(mapValue(entityColumn));
+    }
+
+    setInsertionForNaryOp(entityChunks);
+
+    const auto resultColumn = mlir::cast<mlir::db::ColumnType>(makePath.getResult().getType());
+    const nl::ChunkType resultType = nl::ChunkType::get(_builder.getContext(), resultColumn.getType());
+
+    nl::MakePath path = _builder.create<nl::MakePath>(_builder.getUnknownLoc(), resultType, entityChunks);
+    _valueMap[makePath.getResult()] = path.getResult();
 }
 
 void DBLowering::buildLoopForSource(mlir::Value iterator, mlir::Operation* dbOp) {

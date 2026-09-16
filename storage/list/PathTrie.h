@@ -7,6 +7,7 @@
 
 #include "ListBuffer.h"
 #include "ListView.h"
+#include "EntityList.h"
 #include "ID.h"
 
 namespace db {
@@ -46,6 +47,10 @@ public:
     size_t size() const;
 
     void clear();
+
+    // Appends the hops of the path in walk order, an edge entry then the node it lands
+    // on for each, to what the caller has already built
+    void appendHops(PathRef path, EntityList& entities) const;
 
     ListView expandEdges(PathRef path, QueryListBuffer& buffer) const;
     ListView expandEnds(PathRef path, QueryListBuffer& buffer) const;

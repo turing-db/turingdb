@@ -104,6 +104,7 @@ public:
     // handle's hop count (nl.path_length)
     static void runExpandPath(NLExecutionContext* context, NLFunctionData* data);
     static void runPathLength(NLExecutionContext* context, NLFunctionData* data);
+    static void runMakePath(NLExecutionContext* context, NLFunctionData* data);
 
     static void runGetNodeLabelSet(NLExecutionContext* context, NLFunctionData* data);
     static void runGetEdgeTypes(NLExecutionContext* context, NLFunctionData* data);

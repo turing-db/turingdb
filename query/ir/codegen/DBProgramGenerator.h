@@ -60,6 +60,7 @@ class MergeStmt;
 class NodePattern;
 class PatternComprehensionExpr;
 class PatternData;
+class PatternElement;
 class Projection;
 class PropertyExpr;
 class ReturnStmt;
@@ -232,6 +233,22 @@ private:
 
         std::unordered_map<const VarDecl*, PathBinding> _pathBindings;
 
+        // The walk a `MATCH p = ...` names when its element is one quantified relationship:
+        // the variable holding the seeds and the one holding the handles, which is the
+        // relationship's own column. The path is built from the two where it is read, so
+        // the rows carry a handle rather than a sequence of their own.
+        struct NamedPathWalk {
+            const VariableDependency* _seed {nullptr};
+            const VariableDependency* _path {nullptr};
+        };
+
+        std::unordered_map<const VarDecl*, NamedPathWalk> _namedPathWalks;
+
+        // The entity sequence each `MATCH p = ...` built for an element that names no
+        // single walk. A path variable appears in no pattern, so it is no VDG variable and
+        // cannot live in _varMap.
+        std::unordered_map<const VarDecl*, mlir::Value> _namedPaths;
+
         // The quantified edge pattern each variable-length variable was declared by, whose
         // hop constraints the exploration's region is generated from
         std::unordered_map<const VarDecl*, const EdgePattern*> _quantifiedEdges;
@@ -367,6 +384,7 @@ private:
         llvm::SmallVector<size_t> _yieldedIndices;
         llvm::SmallVector<const VarDecl*> _comprehensionDecls;
         llvm::SmallVector<const Expr*> _exprs;
+        llvm::SmallVector<const VarDecl*> _namedPathDecls;
     };
 
     // Generates the statements a part writes ahead of its first MATCH that bind variables
@@ -618,6 +636,28 @@ private:
     const ShortestPathStmt* findShortestPathStmt(std::span<Stmt* const> stmts) const;
 
     void generateMatchFilter(const MatchStmt* matchStmt);
+
+    // Binds every element a `MATCH p = ...` named: to the walk when the element is one
+    // quantified relationship, and otherwise to the entity sequence built here out of the
+    // columns its entities are bound to
+    void generateNamedPaths(const MatchStmt* matchStmt);
+    void generateNamedPath(const PatternElement* element, const VarDecl* pathDecl);
+
+    // The one quantified relationship an element is, or null for every other shape:
+    // a fixed hop, a chain of them, or a walk with hops written beside it
+    static const EdgePattern* singleQuantifiedRelationship(const PatternElement* element);
+
+    // The handle column a quantified relationship bound, which is what its walk
+    // contributes to the path its element is named by
+    mlir::Value pathHandleColumn(const VarDecl* edgeDecl);
+
+    // Builds the path of a walk out of its seeds and its handles, at the point it is read
+    mlir::Value namedPathColumn(const PartScope::NamedPathWalk& walk);
+
+    // Builds the path of every named-path item a projection publishes or outputs. A handle
+    // column says nothing about which of a path's lists it stands for, so the sink would
+    // read it as the walk's edges.
+    void buildNamedPathItems(const Projection* projection, llvm::SmallVectorImpl<mlir::Value>& projected);
 
     // Emits the Sort a MATCH's ORDER BY asks for, over everything in flight: the rows the
     // rest of the query reads are then the ordered ones.

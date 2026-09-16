@@ -194,6 +194,13 @@ void FunctionDecls::initDefault() {
     countMaps->setReturnTypes({{EvaluatedType::Integer}});
     countMaps->setIsAggregate(true);
 
+    // count over a named path, which the legacy engine has no column of
+    FunctionSignature* countPaths = createFunction("count");
+    countPaths->setArguments({EvaluatedType::GraphPath});
+    countPaths->setReturnTypes({{EvaluatedType::Integer}});
+    countPaths->setIsAggregate(true);
+    countPaths->setIsV3Only(true);
+
     FunctionSignature* countEmbeddings = createFunction("count");
     countEmbeddings->setArguments({EvaluatedType::Embedding});
     countEmbeddings->setReturnTypes({{EvaluatedType::Integer}});

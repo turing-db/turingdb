@@ -14,6 +14,7 @@
 #include <variant>
 #include <vector>
 
+#include "EntityList.h"
 #include "GraphPath.h"
 #include "ID.h"
 #include "LocalMemory.h"
@@ -73,6 +74,7 @@ enum class NLChunkKind {
     Path,
     DateTime,
     PathRef,
+    EntityList,
 };
 
 // Invoke handler with the column element type a chunk kind stands for, so the families of
@@ -151,6 +153,10 @@ void dispatchChunkKind(NLChunkKind kind, Handler&& handler) {
 
         case NLChunkKind::PathRef:
             return handler.template operator()<PathRef>();
+        break;
+
+        case NLChunkKind::EntityList:
+            return handler.template operator()<EntityList>();
         break;
     }
 
@@ -991,6 +997,45 @@ public:
 private:
     const ColumnVector<PathRef>* _paths {nullptr};
     ColumnVector<uint64_t>* _output {nullptr};
+    const PathTrie* _trie {nullptr};
+};
+
+// One entity of a path being built: the column holding it on each row, and which of the
+// three kinds of entity the column carries
+struct NLPathEntity {
+    enum class Kind : uint8_t {
+        Node,
+        Edge,
+        Path,
+    };
+
+    const Column* _column {nullptr};
+    Kind _kind {Kind::Node};
+};
+
+// nl.make_path data: one entity sequence per row, appended in operand order. A Path
+// entity contributes the hops its handle stands for, read out of the trie.
+class NLMakePathData : public NLFunctionData {
+public:
+    using PathEntities = std::vector<NLPathEntity>;
+
+    NLMakePathData(ColumnVector<EntityList>* output, const PathTrie* trie)
+        : _output(output),
+        _trie(trie)
+    {
+    }
+
+    const PathEntities& entities() const { return _entities; }
+    ColumnVector<EntityList>* getOutput() const { return _output; }
+    const PathTrie* getTrie() const { return _trie; }
+
+    void addEntity(const NLPathEntity& entity) {
+        _entities.push_back(entity);
+    }
+
+private:
+    PathEntities _entities;
+    ColumnVector<EntityList>* _output {nullptr};
     const PathTrie* _trie {nullptr};
 };
 

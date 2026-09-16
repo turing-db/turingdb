@@ -343,6 +343,7 @@
 %type<db::Pattern*> pattern
 %type<db::Pattern*> patternWhere
 %type<db::PatternElement*> patternPart
+%type<db::PatternElement*> patternAlias
 %type<db::PatternElement*> patternElem
 %type<db::PatternElement*> pathExprElem
 %type<db::NodePattern*> nodePattern
@@ -1443,11 +1444,12 @@ collectExpr
 
 patternPart
     : patternElem { $$ = $1; }
-    | patternAlias { scanner.notImplemented(@$, "Pattern alias: Symbol = ()-[]-()-[]-()..."); }
+    | patternAlias { $$ = $1; }
     ;
 
 patternAlias
-    : symbol ASSIGN patternElem { scanner.notImplemented(@$, "Pattern alias: Symbol = ()-[]-()-[]-()..."); }
+    : symbol ASSIGN patternElem { $$ = $3; $$->setPathSymbol($1); LOC($$, @$); }
+    ;
 
 patternElem
     : nodePattern { $$ = PatternElement::create(ast); $$->addEntity($1); LOC($$, @$); }

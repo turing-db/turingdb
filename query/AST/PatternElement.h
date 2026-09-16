@@ -8,6 +8,8 @@
 namespace db {
 
 class CypherAST;
+class Symbol;
+class VarDecl;
 
 class PatternElement {
 public:
@@ -82,6 +84,14 @@ public:
 
     const EntityPatterns& getEntities() const { return _entities; }
 
+    // The name a `MATCH p = ...` gives the whole element, and the variable it declares.
+    // Null on an element written without one.
+    Symbol* getPathSymbol() const { return _pathSymbol; }
+    VarDecl* getPathDecl() const { return _pathDecl; }
+
+    void setPathSymbol(Symbol* symbol) { _pathSymbol = symbol; }
+    void setPathDecl(VarDecl* decl) { _pathDecl = decl; }
+
     size_t size() const { return _entities.size(); }
 
     EntityPattern* getRootEntity() const { return _entities.front(); }
@@ -96,6 +106,8 @@ public:
 
 private:
     EntityPatterns _entities;
+    Symbol* _pathSymbol {nullptr};
+    VarDecl* _pathDecl {nullptr};
 
     PatternElement();
     ~PatternElement();
