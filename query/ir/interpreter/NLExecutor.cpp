@@ -134,20 +134,11 @@ ListView sourceList(const ColumnOptVector<ListView>* source, size_t row) {
     return *source->getRaw()[row];
 }
 
-size_t unwoundListSize(const ListView& list) {
-    return list.size();
-}
-
-size_t unwoundListSize(const std::optional<ListView>& list) {
-    return list.has_value() ? list->size() : 0;
-}
-
 // The rows one cell of a list column unwinds into: one per element, so an empty list
-// contributes none - as does a cell holding no list at all.
-template <typename SourceColumn>
+// contributes none.
 size_t unwindListElementCount(const Column* source, size_t row) {
-    const auto* lists = static_cast<const SourceColumn*>(source);
-    return unwoundListSize(lists->getRaw()[row]);
+    const auto* lists = static_cast<const ColumnVector<ListView>*>(source);
+    return (*lists)[row].size();
 }
 
 // The nullable sibling: an absent list unwinds into no row at all, as a null value does.
@@ -442,7 +433,7 @@ void functionVectorKernel(NLExecutionContext* context, Column* result, const Col
 // The nullable-input kernel of a function that reads its own nulls: the absent value goes
 // to the functor as it is, so the result rides the plain column its answers always fill.
 template <typename Functor>
-void functionNullReadingKernel(NLExecutionContext* context, Column* result, const Column* input) {
+void functionNullReadingKernel(NLExecutionContext* context, Column* result, const Column* input, LocalMemory* memory) {
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
 
@@ -456,7 +447,7 @@ void functionNullReadingKernel(NLExecutionContext* context, Column* result, cons
     output->resize(size);
     auto& outputRaw = output->getRaw();
 
-    Functor functor = makeFunctor<Functor>(context);
+    Functor functor = makeFunctor<Functor>(context, memory);
     for (size_t row = 0; row < size; row++) {
         outputRaw[row] = functor(inputRaw[row]);
     }
@@ -518,7 +509,7 @@ void functionEntityKernel(NLExecutionContext* context, Column* result, const Col
 // column spells its null as an invalid ID, so an unmatched edge writes one straight out
 // rather than needing a nullable column to hold it.
 template <typename Functor>
-void functionEntityToEntityKernel(NLExecutionContext* context, Column* result, const Column* input) {
+void functionEntityToEntityKernel(NLExecutionContext* context, Column* result, const Column* input, LocalMemory* memory) {
     using Arg = typename Functor::ArgType;
     using Res = typename Functor::ResultType;
 
@@ -532,7 +523,7 @@ void functionEntityToEntityKernel(NLExecutionContext* context, Column* result, c
     output->resize(size);
     auto& outputRaw = output->getRaw();
 
-    Functor functor = makeFunctor<Functor>(context);
+    Functor functor = makeFunctor<Functor>(context, memory);
     for (size_t row = 0; row < size; row++) {
         if (inputRaw[row].isValid()) {
             outputRaw[row] = functor(inputRaw[row]);
@@ -2729,31 +2720,6 @@ void groupFoldCountPresentListElement(Column* accumulator,
     for (size_t row = 0; row < inputRaw.size(); row++) {
         if (presentCell(inputRaw[row])) {
             counts[groups[row]]++;
-        }
-    }
-}
-
-void groupFoldCountDistinctPresentList(Column* accumulator,
-                                       std::vector<uint64_t>& counts,
-                                       const Column* input,
-                                       const std::vector<size_t>& groups,
-                                       NLGroupDistinctTally& distinct) {
-    const std::vector<std::optional<ListView>>& inputRaw =
-        static_cast<const ColumnOptVector<ListView>*>(input)->getRaw();
-
-    for (size_t row = 0; row < inputRaw.size(); row++) {
-        const std::optional<ListView>& list = inputRaw[row];
-        if (!list.has_value()) {
-            continue;
-        }
-
-        const size_t group = groups[row];
-
-        distinct.beginKey(group);
-        distinctAppendListBytes(distinct.getKey(), *list);
-
-        if (distinct.insertIfNew()) {
-            counts[group]++;
         }
     }
 }

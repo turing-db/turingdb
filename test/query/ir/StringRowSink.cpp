@@ -187,6 +187,20 @@ bool textOfList(const Column* chunk, size_t rowIndex, std::string& text) {
     return true;
 }
 
+// The labels of a node the query created fold to a constant, which holds the one list
+// every row of the projection reads
+bool textOfConstList(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnConst<ListView>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    text.clear();
+    appendListText(column->at(0), text);
+
+    return true;
+}
+
 bool textOfOptionalList(const Column* chunk, size_t rowIndex, std::string& text) {
     const auto* column = dynamic_cast<const ColumnOptVector<ListView>*>(chunk);
     if (!column) {
@@ -392,6 +406,8 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfConstOptionalListElement(chunk, rowIndex, text)) {
         return text;
     } else if (textOfList(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfConstList(chunk, rowIndex, text)) {
         return text;
     } else if (textOfOptionalList(chunk, rowIndex, text)) {
         return text;

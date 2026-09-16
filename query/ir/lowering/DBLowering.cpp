@@ -60,7 +60,7 @@ mlir::Type nodeIDFunctionElement(mlir::OpBuilder& builder, mlir::Type inputEleme
     return storage::NodeIDType::get(builder.getContext());
 }
 
-mlir::Type labelListFunctionElement(mlir::OpBuilder& builder) {
+mlir::Type labelListFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
     mlir::MLIRContext* const context = builder.getContext();
     return storage::ListType::get(context, storage::StringType::get(context));
 }
@@ -173,7 +173,7 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     {"db.size",       {&emitNLUnaryFunction<nl::Size>,      &listSizeFunctionElement,    ResultNullability::FollowsInput}},
     {"db.head",       {&emitNLUnaryFunction<nl::Head>,      &listElementFunctionElement, ResultNullability::NeverNullable}},
     {"db.last",       {&emitNLUnaryFunction<nl::Last>,      &listElementFunctionElement, ResultNullability::NeverNullable}},
-    {"db.tail",       {&emitNLUnaryFunction<nl::Tail>,      &listTailFunctionElement,    ResultNullability::FollowsInput}},
+    {"db.tail",       {&emitNLUnaryFunction<nl::Tail>,      &listTailFunctionElement,    ResultNullability::FollowsInput}}
 };
 
 const UnaryFunctionLowering* lookupUnaryFunctionLowering(mlir::Operation& operation) {

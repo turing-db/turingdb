@@ -5431,7 +5431,7 @@ mlir::Value DBProgramGenerator::translateCreatedMetadata(std::string_view funcNa
     }
 
     if (funcName == "labels" && !written->_labels.empty()) {
-        return constantLabelString(written->_labels);
+        return constantLabelList(written->_labels);
     } else if (funcName == "type" && !written->_edgeType.empty()) {
         return constantString(written->_edgeType);
     } else {
