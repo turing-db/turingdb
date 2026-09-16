@@ -39,11 +39,17 @@ int64_t valueOf(size_t node) {
     return static_cast<int64_t>(node) * 10;
 }
 
-// Node 2 is rewritten in the second part and again in the third, so two older parts still
-// carry a value for it. Node 5 is rewritten once. Node 4 is nulled in the third part.
-const std::vector<NodeValue> secondPartOverrides {{2, 222}, {5, 555}};
-const std::vector<NodeValue> thirdPartOverrides {{2, 999}};
-const std::vector<uint64_t> thirdPartNulls {4};
+// The first part writes nodes in creation order, but a part lays its nodes out grouped by
+// label set, so a node's final ID is not the order it was added in. The rewrites below
+// name final IDs, and every expectation is read back from the graph rather than derived
+// from creation order.
+constexpr uint64_t twiceRewrittenNode = 2;
+constexpr uint64_t rewrittenNode = 5;
+constexpr uint64_t nulledNode = 4;
+
+constexpr int64_t secondPartValue = 222;
+constexpr int64_t thirdPartValue = 999;
+constexpr int64_t rewrittenValue = 555;
 
 }
 
@@ -55,8 +61,8 @@ protected:
         _graph = Graph::create();
 
         writePart(0, nodeCount, {}, {});
-        writePart(nodeCount, 0, secondPartOverrides, {});
-        writePart(nodeCount, 0, thirdPartOverrides, thirdPartNulls);
+        writePart(nodeCount, 0, {{twiceRewrittenNode, secondPartValue}, {rewrittenNode, rewrittenValue}}, {});
+        writePart(nodeCount, 0, {{twiceRewrittenNode, thirdPartValue}}, {nulledNode});
     }
 
     void writePart(size_t firstNode,
@@ -94,6 +100,30 @@ protected:
         }
 
         ASSERT_TRUE(change->access().submit(*_jobSystem));
+    }
+
+    // What the per-node lookup resolves for every labelled node: the newest part carrying
+    // the property decides, and a node nulled there holds no value at all.
+    void expectedRows(const GraphView& view, const LabelSetHandle& labelset, std::vector<NodeValue>& rows) {
+        const GraphReader reader(view);
+
+        rows.clear();
+        for (uint64_t node = 0; node < nodeCount; node++) {
+            const NodeID nodeID {node};
+
+            if (!reader.getNodeLabelSet(nodeID).hasAtLeastLabels(labelset)) {
+                continue;
+            }
+
+            const std::optional<const int64_t*> value = reader.tryGetNodeProperty<types::Int64>(_valueID, nodeID);
+            const bool explicitNull = !value.has_value();
+
+            if (explicitNull || !value.value()) {
+                continue;
+            }
+
+            rows.emplace_back(node, *value.value());
+        }
     }
 
     void scanRange(const GraphView& view, const LabelSetHandle& labelset, std::vector<NodeValue>& rows) {
@@ -134,6 +164,15 @@ protected:
         std::sort(rows.begin(), rows.end());
     }
 
+    static bool holds(const std::vector<NodeValue>& rows, uint64_t node, int64_t value) {
+        return std::find(rows.begin(), rows.end(), NodeValue {node, value}) != rows.end();
+    }
+
+    static bool mentions(const std::vector<NodeValue>& rows, uint64_t node) {
+        const auto isNode = [node](const NodeValue& row) { return row.first == node; };
+        return std::any_of(rows.begin(), rows.end(), isNode);
+    }
+
     std::unique_ptr<JobSystem> _jobSystem;
     std::unique_ptr<Graph> _graph;
     PropertyTypeID _valueID;
@@ -141,28 +180,32 @@ protected:
     LabelID _evenLabel;
 };
 
+TEST_F(ScanNodePropertiesByLabelTest, expectationsPinTheRewritesAndTheNull) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphView view = transaction.viewGraph();
+
+    const LabelSet row = LabelSet::fromList({_rowLabel});
+
+    std::vector<NodeValue> expected;
+    expectedRows(view, LabelSetHandle(row), expected);
+
+    EXPECT_EQ(expected.size(), nodeCount - 1);
+    EXPECT_TRUE(holds(expected, twiceRewrittenNode, thirdPartValue));
+    EXPECT_TRUE(holds(expected, rewrittenNode, rewrittenValue));
+    EXPECT_FALSE(mentions(expected, nulledNode));
+}
+
 TEST_F(ScanNodePropertiesByLabelTest, rangeYieldsOneCurrentValuePerNode) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphView view = transaction.viewGraph();
 
     const LabelSet row = LabelSet::fromList({_rowLabel});
 
+    std::vector<NodeValue> expected;
+    expectedRows(view, LabelSetHandle(row), expected);
+
     std::vector<NodeValue> found;
     scanRange(view, LabelSetHandle(row), found);
-
-    const std::vector<NodeValue> expected {
-        {0, 0},
-        {1, 10},
-        {2, 999},
-        {3, 30},
-        {5, 555},
-        {6, 60},
-        {7, 70},
-        {8, 80},
-        {9, 90},
-        {10, 100},
-        {11, 110},
-    };
 
     EXPECT_EQ(found, expected);
 }
@@ -173,19 +216,8 @@ TEST_F(ScanNodePropertiesByLabelTest, chunkWriterYieldsOneCurrentValuePerNode) {
 
     const LabelSet row = LabelSet::fromList({_rowLabel});
 
-    const std::vector<NodeValue> expected {
-        {0, 0},
-        {1, 10},
-        {2, 999},
-        {3, 30},
-        {5, 555},
-        {6, 60},
-        {7, 70},
-        {8, 80},
-        {9, 90},
-        {10, 100},
-        {11, 110},
-    };
+    std::vector<NodeValue> expected;
+    expectedRows(view, LabelSetHandle(row), expected);
 
     for (const size_t chunkSize : {size_t {1}, size_t {2}, size_t {5}, size_t {64}}) {
         std::vector<NodeValue> found;
@@ -204,8 +236,7 @@ TEST_F(ScanNodePropertiesByLabelTest, nulledNodeIsNotEmittedWithItsOlderValue) {
     std::vector<NodeValue> found;
     scanRange(view, LabelSetHandle(row), found);
 
-    const auto isNulledNode = [](const NodeValue& value) { return value.first == thirdPartNulls.front(); };
-    EXPECT_TRUE(std::none_of(found.begin(), found.end(), isNulledNode));
+    EXPECT_FALSE(mentions(found, nulledNode));
 }
 
 TEST_F(ScanNodePropertiesByLabelTest, labelRestrictedScanResolvesAcrossParts) {
@@ -214,13 +245,9 @@ TEST_F(ScanNodePropertiesByLabelTest, labelRestrictedScanResolvesAcrossParts) {
 
     const LabelSet even = LabelSet::fromList({_evenLabel});
 
-    const std::vector<NodeValue> expected {
-        {0, 0},
-        {2, 999},
-        {6, 60},
-        {8, 80},
-        {10, 100},
-    };
+    std::vector<NodeValue> expected;
+    expectedRows(view, LabelSetHandle(even), expected);
+    ASSERT_TRUE(holds(expected, twiceRewrittenNode, thirdPartValue));
 
     std::vector<NodeValue> found;
     scanRange(view, LabelSetHandle(even), found);
