@@ -7,6 +7,7 @@
 #include "CypherParser.h"
 #include "CypherAST.h"
 #include "CypherAnalyzer.h"
+#include "PlanGenConfig.h"
 #include "PlanGraphGenerator.h"
 #include "PipelineV2.h"
 #include "PlanOptimizer.h"
@@ -132,8 +133,8 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
     }
 
     // Generate plan graph
-    const QueryConfig* queryConfig = ctxt.getQueryConfig();
-    PlanGraphGenerator planGen(&queryConfig->getPlanGenConfig(), ast, view);
+    const PlanGenConfig planGenConfig;
+    PlanGraphGenerator planGen(&planGenConfig, ast, view);
     try {
         planGen.generate(ast.queries().front());
     } catch (const CompilerException& e) {
@@ -197,6 +198,7 @@ void QueryInterpreterV2::executeImpl(const InterpreterContext& ctxt,
     }
 
     // Execute pipeline
+    const QueryConfig* queryConfig = ctxt.getQueryConfig();
     ExecutionContext execCtxt(_sysMan, view);
     execCtxt.setSystemAccessor(&system);
     execCtxt.setChunkSize(queryConfig->getChunkSize());
