@@ -82,6 +82,8 @@ void ScanInEdgesByLabelChunkWriter::filterTombstones() {
     // Base column of this ChunkWriter is _edgeIDs
     _filter.populateRanges(_edgeIDs);
 
+    _filter.filter(_edgeIDs);
+
     if (_srcs) {
         _filter.filter(_srcs);
     }
