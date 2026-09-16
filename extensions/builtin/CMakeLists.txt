@@ -1,5 +1,5 @@
 add_library(greeter_obj OBJECT GreeterExtension.cpp)
-target_link_libraries(greeter_obj PRIVATE turing_db_pipeline_s)
+target_link_libraries(greeter_obj PRIVATE turing_db_procedures_s)
 target_include_directories(greeter_obj PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 set_property(TARGET greeter_obj PROPERTY POSITION_INDEPENDENT_CODE ON)
 

@@ -1,4 +1,4 @@
-set(ir_interpreter_sources
+set(exec_sources
     NLProgram.cpp
     NLHashJoinIndex.cpp
     NLOutputSink.cpp
@@ -17,9 +17,9 @@ set(ir_interpreter_sources
     NLSystemTranslator.cpp
     DBDialectInterpreter.cpp)
 
-add_library(turing_db_ir_interpreter_s STATIC ${ir_interpreter_sources})
+add_library(turing_db_ir_exec_s STATIC ${exec_sources})
 
-target_link_libraries(turing_db_ir_interpreter_s
+target_link_libraries(turing_db_ir_exec_s
     PUBLIC
         turing_db_ir_nldialect_s
         turing_db_ir_lowering_s
@@ -34,5 +34,5 @@ target_link_libraries(turing_db_ir_interpreter_s
         turing_db_io_csv_s
         turing_db_io_parquet_s)
 
-target_include_directories(turing_db_ir_interpreter_s PUBLIC
+target_include_directories(turing_db_ir_exec_s PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR})

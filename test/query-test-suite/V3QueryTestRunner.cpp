@@ -1,38 +1,19 @@
 #include "V3QueryTestRunner.h"
 
 #include <fstream>
-#include <memory>
-#include <optional>
 #include <span>
 #include <string>
-#include <variant>
 #include <vector>
 
 #include <spdlog/fmt/bundled/format.h>
 
-#include "llvm/Support/raw_ostream.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/IR/Builders.h"
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/MLIRContext.h"
-#include "mlir/IR/OwningOpRef.h"
-
-#include "DBDialect.h"
-#include "DBProgramGenerator.h"
-#include "NLDialect.h"
 #include "NLOutputSink.h"
-#include "StorageDialect.h"
 
 #include "BioAssert.h"
-#include "CompilerException.h"
-#include "CypherAST.h"
-#include "CypherAnalyzer.h"
-#include "CypherParser.h"
 #include "TuringException.h"
 
 #include "Graph.h"
 #include "ID.h"
-#include "ProcedureManager.h"
 #include "QueryConfig.h"
 #include "QueryInterpreterV3.h"
 #include "QueryResultFormatter.h"
@@ -49,8 +30,6 @@
 #include "columns/ColumnVector.h"
 #include "versioning/ChangeID.h"
 #include "versioning/CommitHash.h"
-#include "versioning/Transaction.h"
-#include "views/GraphView.h"
 
 using namespace db;
 
@@ -103,9 +82,16 @@ private:
 
 class CollectingNLSink : public NLOutputSink {
 public:
-    explicit CollectingNLSink(std::vector<std::vector<std::string>>& rows)
-        : _rows(rows)
+    CollectingNLSink(std::vector<std::string>& columnNames,
+                     std::vector<std::vector<std::string>>& rows)
+        : _columnNames(columnNames),
+        _rows(rows)
     {
+    }
+
+    void declareOutput(std::span<const std::string_view> names,
+                       std::span<const Column* const> chunks) override {
+        _columnNames.assign(names.begin(), names.end());
     }
 
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
@@ -113,81 +99,39 @@ public:
     }
 
 private:
+    std::vector<std::string>& _columnNames;
     std::vector<std::vector<std::string>>& _rows;
     std::vector<std::string> _values;
 };
 
-// The names the emitted program gives its result columns. Reading them off the db.output
-// op rather than the RETURN projection is what lets a standalone CALL be named too: it
-// yields its columns with no RETURN clause for a projection to be read from.
-void collectOutputColumnNames(mlir::ModuleOp module, std::vector<std::string>& columnNames) {
-    columnNames.clear();
+void explainDBProgram(std::string& mlirOutput,
+                      QueryInterpreterV3& interpreter,
+                      const QueryTestSpec& spec,
+                      LocalMemory* mem) {
+    const std::string explainQuery = "EXPLAIN(db) " + spec._query;
 
-    module.walk([&columnNames](mlir::db::Output output) {
-        const std::optional<mlir::ArrayAttr> names = output.getColumnNames();
-        if (!names) {
-            return;
-        }
+    std::vector<std::string> columnNames;
+    std::vector<std::vector<std::string>> rows;
+    CollectingNLSink sink(columnNames, rows);
 
-        for (const mlir::Attribute name : *names) {
-            columnNames.emplace_back(mlir::cast<mlir::StringAttr>(name).getValue());
-        }
-    });
-}
+    QueryStatus status;
+    interpreter.execute(status,
+                        explainQuery,
+                        spec._graphName,
+                        CommitHash::head(),
+                        ChangeID::head(),
+                        mem,
+                        &sink);
 
-void generateMLIRProgram(std::string& out,
-                         std::vector<std::string>& columnNames,
-                         std::string_view query,
-                         GraphView view) {
-    out.clear();
-    columnNames.clear();
-
-    auto procedures = std::make_unique<ProcedureManager>();
-    procedures->init();
-
-    CypherAST ast(procedures.get(), query);
-    CypherParser parser(&ast);
-    try {
-        parser.parse(query);
-    } catch (const CompilerException& e) {
-        out = fmt::format("PARSE ERROR\n{}", e.what());
+    if (!status.isOk()) {
+        mlirOutput = QueryResultFormatter::formatResultOutput(status, columnNames, rows);
         return;
     }
 
-    CypherAnalyzer analyzer(&ast, view);
-    analyzer.setV3();
-    try {
-        analyzer.analyze();
-    } catch (const CompilerException& e) {
-        out = fmt::format("ANALYZE ERROR\n{}", e.what());
-        return;
+    mlirOutput.clear();
+    for (const std::vector<std::string>& row : rows) {
+        mlirOutput += row.back();
     }
-
-    mlir::MLIRContext context;
-    context.getOrLoadDialect<mlir::func::FuncDialect>();
-    context.getOrLoadDialect<mlir::storage::Storage>();
-    context.getOrLoadDialect<mlir::db::DB>();
-    context.getOrLoadDialect<mlir::nl::NL>();
-
-    mlir::OpBuilder builder(&context);
-    mlir::OwningOpRef<mlir::ModuleOp> owningModule = mlir::ModuleOp::create(builder.getUnknownLoc());
-    mlir::ModuleOp module = owningModule.get();
-
-    DBProgramGenerator generator(&module);
-    try {
-        generator.generate(&ast);
-    } catch (const CompilerException& e) {
-        out = fmt::format("PLAN ERROR\n{}", e.what());
-        return;
-    } catch (const TuringException& e) {
-        out = fmt::format("PLAN ERROR\n{}", e.what());
-        return;
-    }
-
-    collectOutputColumnNames(module, columnNames);
-
-    llvm::raw_string_ostream stream(out);
-    module.print(stream);
 }
 
 }
@@ -207,13 +151,10 @@ V3QueryTestResult V3QueryTestRunner::runTest(const QueryTestSpec& spec, const fs
     SimpleGraph::createSimpleGraph(graph);
     TuringDB* db = &env->getDB();
 
+    QueryInterpreterV3 interpreter(&env->getSystemManager());
+
     std::string mlirOutput;
-    std::vector<std::string> columnNames;
-    {
-        const Transaction tx = graph->openTransaction();
-        const GraphView view = tx.viewGraph();
-        generateMLIRProgram(mlirOutput, columnNames, spec._query, view);
-    }
+    explainDBProgram(mlirOutput, interpreter, spec, &env->getMem());
 
     QueryConfig queryConfig;
 
@@ -224,11 +165,11 @@ V3QueryTestResult V3QueryTestRunner::runTest(const QueryTestSpec& spec, const fs
         db->query("CHANGE NEW", changeNewState);
     }
 
+    std::vector<std::string> columnNames;
     std::vector<std::vector<std::string>> rows;
-    CollectingNLSink sink(rows);
+    CollectingNLSink sink(columnNames, rows);
 
     QueryStatus status;
-    QueryInterpreterV3 interpreter(&env->getSystemManager());
 
     const auto queryStart = Clock::now();
     interpreter.execute(status, spec._query, spec._graphName, CommitHash::head(), changeID, &env->getMem(), &sink);
