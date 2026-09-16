@@ -43,6 +43,16 @@ def FuseScanEdgesByType : Pass<"fuse_scan_edges_by_type"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseScanOutEdgesByLabel : Pass<"fuse_scan_out_edges_by_label"> {
+    let summary = "Fuse a by-label node scan and its directed untyped out-hop into a scan_out_edges_by_label";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
+def FuseScanInEdgesByLabel : Pass<"fuse_scan_in_edges_by_label"> {
+    let summary = "Fuse a by-label node scan and its directed untyped in-hop into a scan_in_edges_by_label";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def ReusePropertyReads : Pass<"reuse_property_reads"> {
     let summary = "Reuse a property already read of the same rows instead of reading it again";
     let dependentDialects = ["mlir::db::DB"];

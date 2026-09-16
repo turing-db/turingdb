@@ -10,7 +10,9 @@
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
+#include "metadata/LabelSetHandle.h"
 #include "versioning/CommitWriteBuffer.h"
+#include "views/GraphView.h"
 
 #include "ID.h"
 
@@ -129,12 +131,19 @@ public:
 
     void setEdgeType(EdgeTypeID edgeType) { _edgeType = edgeType; }
 
+    // The label set one endpoint of the edge must carry at least for the scan to keep it -
+    // its source for an out-edge scan, its target for an in-edge scan. The label set is
+    // borrowed, so it must outlive the scan.
+    void setSourceLabelSet(const LabelSet& labelset);
+    void setTargetLabelSet(const LabelSet& labelset);
+
     bool isValid() const { return _edge < _pendingEdgeCount; }
 
     void fill(size_t maxCount);
 
 private:
     const CommitWriteBuffer* _writeBuffer {nullptr};
+    const GraphView* _view {nullptr};
 
     ColumnNodeIDs* _srcs {nullptr};
     ColumnEdgeIDs* _edgeIDs {nullptr};
@@ -148,8 +157,13 @@ private:
     size_t _edge {0};
 
     std::optional<EdgeTypeID> _edgeType;
+    LabelSetHandle _endpointLabels;
+    bool _labelsTheTarget {false};
 
     void clearChunks();
+
+    bool keeps(const CommitWriteBuffer::PendingEdge& edge) const;
+    bool carriesTheLabels(const CommitWriteBuffer::ExistingOrPendingNode& node) const;
 };
 
 }

@@ -46,6 +46,8 @@ private:
         ScanNodesByPropertyValue,
         ScanEdges,
         ScanEdgesByType,
+        ScanOutEdgesByLabel,
+        ScanInEdgesByLabel,
         GetOutEdges,
         GetInEdges,
         GetEdges,
@@ -327,6 +329,7 @@ private:
     // translateScanLoop - a source loop with no input chunk and no carry set.
     void translateScanEdgesLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
     void translateScanEdgesByTypeLoop(const IteratorConfig& config, mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
+    void translateScanEdgesByLabelLoop(const IteratorConfig& config, mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body, NLHandlerFunction executor);
 
     void translateEdgeLoop(const IteratorConfig& config,
                            mlir::Block& loopBody,

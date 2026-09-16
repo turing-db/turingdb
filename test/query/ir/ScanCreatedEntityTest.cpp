@@ -127,6 +127,71 @@ TEST_F(ScanCreatedEntityTest, scansACreatedEdgeByType) {
     EXPECT_EQ(sink.getRows(), expected);
 }
 
+// The by-label out-edge scan reads the created edge out of the write buffer too, and keeps
+// it on the label its source carries rather than on the edge's own.
+TEST_F(ScanCreatedEntityTest, scansACreatedEdgeByTheLabelOfItsSource) {
+    StringRowSink sink;
+    runWrite("CREATE (a:Person {name: 'Ana'})-[:MENTORS]->(b:Interest {name: 'Bo'}) WITH a MATCH (x:Person)-->(y) RETURN count(x)",
+             sink);
+
+    const std::vector<StringRowSink::Row> expected {{"18"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+// The created edge leaves a Brand, so a scan of what leaves the Persons has none of it.
+TEST_F(ScanCreatedEntityTest, scansNoCreatedEdgeOutOfAnotherLabel) {
+    StringRowSink sink;
+    runWrite("CREATE (a:Brand {name: 'Ora'})-[:MENTORS]->(b:Person {name: 'Bo'}) WITH a MATCH (x:Person)-->(y) RETURN count(x)",
+             sink);
+
+    const std::vector<StringRowSink::Row> expected {{"17"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+// The source label is the change's own, so the scan resolves the name against what the
+// change wrote and matches the pending edge with it, as a node scan does.
+TEST_F(ScanCreatedEntityTest, scansACreatedEdgeByASourceLabelTheChangeIntroduced) {
+    StringRowSink sink;
+    runWrite("CREATE (a:Brand {name: 'Ora'})-[:MENTORS]->(b:Person {name: 'Bo'}) WITH a MATCH (x:Brand)-->(y) RETURN x.name, y.name",
+             sink);
+
+    const std::vector<StringRowSink::Row> expected {{"Ora", "Bo"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+// The in-edge scan keeps the created edge on the label its target carries, the end its own
+// walk arrives at.
+TEST_F(ScanCreatedEntityTest, scansACreatedEdgeByTheLabelOfItsTarget) {
+    StringRowSink sink;
+    runWrite("CREATE (a:Interest {name: 'Ora'})-[:MENTORS]->(b:Person {name: 'Bo'}) WITH a MATCH (x:Person)<--(y) RETURN count(x)",
+             sink);
+
+    const std::vector<StringRowSink::Row> expected {{"4"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+// The created edge arrives at a Brand, so a scan of what arrives at the Persons has none
+// of it.
+TEST_F(ScanCreatedEntityTest, scansNoCreatedEdgeIntoAnotherLabel) {
+    StringRowSink sink;
+    runWrite("CREATE (a:Person {name: 'Ana'})-[:MENTORS]->(b:Brand {name: 'Ora'}) WITH a MATCH (x:Person)<--(y) RETURN count(x)",
+             sink);
+
+    const std::vector<StringRowSink::Row> expected {{"3"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+// The target label is the change's own, and the scan reports the edge as the graph stores
+// it: the Brand is what the walk arrived at, so it is the target and the Person the source.
+TEST_F(ScanCreatedEntityTest, scansACreatedEdgeByATargetLabelTheChangeIntroduced) {
+    StringRowSink sink;
+    runWrite("CREATE (a:Person {name: 'Ana'})-[:MENTORS]->(b:Brand {name: 'Ora'}) WITH a MATCH (x:Brand)<--(y) RETURN x.name, y.name",
+             sink);
+
+    const std::vector<StringRowSink::Row> expected {{"Ora", "Ana"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
 // A type the created edge does not carry leaves the scan with the graph's own rows.
 TEST_F(ScanCreatedEntityTest, scansNoCreatedEdgeOfAnotherType) {
     StringRowSink sink;

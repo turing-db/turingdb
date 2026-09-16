@@ -479,6 +479,92 @@ def ScanEdgesByType : TuringOp<"scan_edges_by_type", [Pure, DeclareOpInterfaceMe
 }
 
 /**
+* ScanOutEdgesByLabel
+*/
+def ScanOutEdgesByLabel : TuringOp<"scan_out_edges_by_label", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+  let summary = "Produce every out-edge of the nodes carrying every given label as four row-aligned columns";
+
+  let description = [{
+    The by-label sibling of db.scan_edges: where that produces every edge, this
+    produces the edges leaving the nodes whose label set is a superset of `labels`,
+    in the same four row-aligned columns - the source node, the edge, its type and
+    the target node:
+
+      %srcs, %eids, %etypes, %tgts = db.scan_out_edges_by_label(["Person"]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+
+    It is `MATCH (a:Person)-->(b)` read off the edge index rather than walked: the
+    same edges a db.scan_nodes_by_label feeding a db.get_out_edges produces, in one
+    op that never builds the node column between them. `labels` is the label set
+    db.scan_nodes_by_label carried, matched the same way - a node labelled
+    `Person:Employee` still matches `["Person"]`, and a label absent from the schema
+    leaves the conjunction unsatisfiable, so the scan yields no rows. Like
+    db.scan_edges it reads no column and takes no input, so it opens a dataflow
+    rather than consuming one.
+
+    The label list must not be empty: a label-free scan of every edge is
+    db.scan_edges.
+  }];
+
+  // `labels` is the set of symbolic label names the source nodes must carry. Being
+  // an attribute and not an SSA value, the op still has no operands; lowering
+  // resolves each name to a storage LabelID.
+  let arguments = (ins StrArrayAttr:$labels);
+
+  let results = (outs ColumnNodeIDs:$srcids,
+                      ColumnEdgeIDs:$eids,
+                      ColumnEdgeTypes:$etypes,
+                      ColumnNodeIDs:$tgtids);
+  let hasVerifier = 1;
+
+  // The label list prints inside the parens where db.scan_edges_by_type prints its
+  // type name; the result types follow the colon, as on db.scan_edges, since a
+  // source op has no meaningful operand arrow.
+  let assemblyFormat = [{
+    `(` $labels `)` attr-dict `:` qualified(type($srcids)) `,` qualified(type($eids)) `,`
+    qualified(type($etypes)) `,` qualified(type($tgtids))
+  }];
+}
+
+/**
+* ScanInEdgesByLabel
+*/
+def ScanInEdgesByLabel : TuringOp<"scan_in_edges_by_label", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+  let summary = "Produce every in-edge of the nodes carrying every given label as four row-aligned columns";
+
+  let description = [{
+    The reverse-direction sibling of db.scan_out_edges_by_label: where that produces
+    the edges leaving the nodes whose label set is a superset of `labels`, this
+    produces the edges arriving at them, in the same four row-aligned columns:
+
+      %srcs, %eids, %etypes, %tgts = db.scan_in_edges_by_label(["Person"]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+
+    It is `MATCH (a:Person)<--(b)` read off the edge index rather than walked: the
+    same edges a db.scan_nodes_by_label feeding a db.get_in_edges produces. The
+    labels constrain the node the walk arrives at, which is the edge's target, so
+    `srcids` holds the unconstrained end and `tgtids` the labelled one - the reverse
+    of the out-edge scan, where the labelled end is the source. Both columns still
+    hold the edge as the graph stores it, exactly as db.get_in_edges fills them, so
+    a consumer reads them the same way whichever scan produced them.
+
+    The label list must not be empty: a label-free scan of every edge is
+    db.scan_edges.
+  }];
+
+  let arguments = (ins StrArrayAttr:$labels);
+
+  let results = (outs ColumnNodeIDs:$srcids,
+                      ColumnEdgeIDs:$eids,
+                      ColumnEdgeTypes:$etypes,
+                      ColumnNodeIDs:$tgtids);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $labels `)` attr-dict `:` qualified(type($srcids)) `,` qualified(type($eids)) `,`
+    qualified(type($etypes)) `,` qualified(type($tgtids))
+  }];
+}
+
+/**
 * GetOutEdges
 */
 def GetOutEdges : TuringOp<"get_out_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {

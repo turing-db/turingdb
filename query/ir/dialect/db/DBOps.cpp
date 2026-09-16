@@ -193,6 +193,18 @@ void ScanEdgesByType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     }
 }
 
+void ScanOutEdgesByLabel::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    for (Value result : getResults()) {
+        setNameFn(result, "");
+    }
+}
+
+void ScanInEdgesByLabel::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    for (Value result : getResults()) {
+        setNameFn(result, "");
+    }
+}
+
 // Ensures each variable has a numeric name
 void GetOutEdges::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     for (Value result : getResults()) {
@@ -451,6 +463,24 @@ LogicalResult SetEdgeProperty::verify() {
 // A label scan must name at least one label to filter by; a label-free scan of
 // every node is db.scan_nodes, so an empty label list is malformed IR here.
 LogicalResult ScanNodesByLabel::verify() {
+    if (getLabels().empty()) {
+        return emitOpError("requires at least one label");
+    }
+
+    return success();
+}
+
+// The edge sibling of ScanNodesByLabel::verify: a label-free scan of every edge is
+// db.scan_edges, so an empty label list is malformed IR here too.
+LogicalResult ScanOutEdgesByLabel::verify() {
+    if (getLabels().empty()) {
+        return emitOpError("requires at least one label");
+    }
+
+    return success();
+}
+
+LogicalResult ScanInEdgesByLabel::verify() {
     if (getLabels().empty()) {
         return emitOpError("requires at least one label");
     }
