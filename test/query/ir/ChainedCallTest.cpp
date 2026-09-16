@@ -84,16 +84,18 @@ TEST_F(ChainedCallTest, chainedCallNeverCrashes) {
     }
 }
 
-// age=32 matches exactly Remy (4 out-edges) and Adam (3 out-edges).
-// Total is deterministically 5 regardless of scan order or random replacements.
+// age=32 matches exactly Remy (degree 6) and Adam (degree 4). A first fan-out of six takes
+// both neighbourhoods whole, and the second emits min(2, degree) rows for each of the ten
+// nodes it is handed, so the total is deterministically 19 regardless of scan order or
+// random replacements.
 TEST_F(ChainedCallTest, chainedCallYieldsRowsWithPersonNodes) {
     const size_t rowCount = run(
         "MATCH (n) WHERE n.age = 32 "
-        "CALL gnn.neighbourhoodSample(n, 4) YIELD tgt AS m "
+        "CALL gnn.neighbourhoodSample(n, 6) YIELD tgt AS m "
         "CALL gnn.neighbourhoodSample(m, 2) YIELD tgt AS o "
         "RETURN o");
 
-    EXPECT_EQ(rowCount, 5u);
+    EXPECT_EQ(rowCount, 19u);
 }
 
 int main(int argc, char** argv) {

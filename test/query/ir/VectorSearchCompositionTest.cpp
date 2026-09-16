@@ -219,6 +219,8 @@ TEST_F(VectorSearchCompositionTest, callSamplesTheNodeTheSearchYielded) {
                + std::string(sampleWhole) +
                "RETURN ids.name, tgt.name",
                {{"Remy", "Adam"},
+                {"Remy", "Adam"},
+                {"Remy", "Ghosts"},
                 {"Remy", "Ghosts"},
                 {"Remy", "Computers"},
                 {"Remy", "Eighties"}});
@@ -231,9 +233,12 @@ TEST_F(VectorSearchCompositionTest, callCarriesTheScoreOfTheRowThatDroveIt) {
                + std::string(sampleWhole) +
                "RETURN score, tgt.name",
                {{"0", "Adam"},
+                {"0", "Adam"},
+                {"0", "Ghosts"},
                 {"0", "Ghosts"},
                 {"0", "Computers"},
                 {"0", "Eighties"},
+                {"9", "Remy"},
                 {"9", "Remy"},
                 {"9", "Bio"},
                 {"9", "Cooking"}});
@@ -246,7 +251,7 @@ TEST_F(VectorSearchCompositionTest, searchAfterACallCrossesWhatTheCallYielded) {
                "CALL gnn.neighbourhoodSample(n, 8, 42) YIELD tgt "
                + std::string(searchOne) + "YIELD ids "
                "RETURN tgt.name, ids.name",
-               {{"Remy", "Remy"}, {"Bio", "Remy"}, {"Cooking", "Remy"}});
+               {{"Remy", "Remy"}, {"Remy", "Remy"}, {"Bio", "Remy"}, {"Cooking", "Remy"}});
 }
 
 // A search between two calls: the first reads what the search yielded, the second what the
@@ -259,15 +264,27 @@ TEST_F(VectorSearchCompositionTest, searchDrivesTwoChainedCalls) {
                "CALL gnn.neighbourhoodSample(tgt, 8, 42) YIELD tgt AS hop2 "
                "RETURN tgt.name, hop2.name",
                {{"Adam", "Remy"},
+                {"Adam", "Remy"},
+                {"Adam", "Remy"},
+                {"Adam", "Remy"},
+                {"Adam", "Bio"},
                 {"Adam", "Bio"},
                 {"Adam", "Cooking"},
+                {"Adam", "Cooking"},
+                {"Computers", "Remy"},
+                {"Computers", "Luc"},
+                {"Eighties", "Remy"},
+                {"Ghosts", "Remy"},
+                {"Ghosts", "Remy"},
+                {"Ghosts", "Remy"},
                 {"Ghosts", "Remy"}});
 }
 
 // Both statements ahead of the MATCH bind variables of their own, so the root the
 // traversal is driven from is looked for across a VECTOR SEARCH's YIELD and a CALL's
-// alike: Remy is the neighbour, its out-neighbours are what the sample hands the MATCH,
-// and the MATCH walks one hop on from each of them.
+// alike: Remy is the neighbour, its six incident edges are what the sample hands the
+// MATCH, and the MATCH walks one out-edge on from each of them - none at all from the
+// two interests.
 TEST_F(VectorSearchCompositionTest, aSearchAndACallTogetherDriveTheMatchTheyYieldInto) {
     loadPeopleVectors();
 
@@ -276,8 +293,12 @@ TEST_F(VectorSearchCompositionTest, aSearchAndACallTogetherDriveTheMatchTheyYiel
                "MATCH (tgt)-->(m) "
                "RETURN tgt.name, m.name",
                {{"Adam", "Remy"},
+                {"Adam", "Remy"},
+                {"Adam", "Bio"},
                 {"Adam", "Bio"},
                 {"Adam", "Cooking"},
+                {"Adam", "Cooking"},
+                {"Ghosts", "Remy"},
                 {"Ghosts", "Remy"}});
 }
 

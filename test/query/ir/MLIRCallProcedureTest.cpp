@@ -2366,8 +2366,9 @@ TEST_F(MLIRCallProcedureTest, cypherCallSamplesANeighbourhood) {
     // gnn.neighbourhoodSample is the registered procedure that reports the input row of
     // the rows it emits, so this is the carry set over a real one rather than a
     // test-local stand-in. It also reads its argument column in its prepare step, which
-    // is why the call is prepared on its first drive. A sample size above the out-degree
-    // of every node takes all four edges, making the rows deterministic.
+    // is why the call is prepared on its first drive. The sample is undirected and a size
+    // of two is above every node's degree, so each of the four edges comes back twice,
+    // once from either end, and the rows are deterministic.
     NodePairSink sink;
     runQuery("MATCH (n) CALL gnn.neighbourhoodSample(n, 2, 42) YIELD tgt RETURN n, tgt",
              graph.get(),
@@ -2376,7 +2377,8 @@ TEST_F(MLIRCallProcedureTest, cypherCallSamplesANeighbourhood) {
 
     std::vector<NodePairSink::Row> rows;
     sink.sortedRows(rows);
-    const std::vector<NodePairSink::Row> expected {{0, 1}, {0, 2}, {1, 4}, {2, 3}};
+    const std::vector<NodePairSink::Row> expected {{0, 1}, {0, 2}, {1, 0}, {1, 4},
+                                                   {2, 0}, {2, 3}, {3, 2}, {4, 1}};
     EXPECT_EQ(rows, expected);
 }
 
@@ -2386,10 +2388,11 @@ TEST_F(MLIRCallProcedureTest, cypherSampledTargetExpandsThreeHops) {
     const GraphReader reader = transaction.readGraph();
 
     // The pattern is rooted at the sampled targets, so its hops run from a column the call
-    // yielded rather than from a scan. A sample size above every out-degree takes all of a
+    // yielded rather than from a scan. A sample size above every degree takes all of a
     // node's edges, so the sample is the whole neighbourhood whatever the seed: node 0
-    // yields 1, 2 and 3. Only node 1 has three hops below it (1 -> 4 -> 6 -> 8 and
-    // 1 -> 4 -> 7 -> 9), so `n` must come back beside the two rows that survive.
+    // yields 1, 2 and 3, and the sample being undirected 1, 2 and 3 each yield 0 back.
+    // Only 0 and 1 have three directed hops below them, so the surviving rows are the
+    // three seeds that reach 0 and the two that reach 1, two rows each.
     NodeTripleSink sink;
     runQuery("MATCH (n) CALL gnn.neighbourhoodSample(n, 3, 42) YIELD tgt "
              "MATCH (tgt)-->(a)-->(b)-->(c) RETURN n, tgt, c",
@@ -2400,7 +2403,9 @@ TEST_F(MLIRCallProcedureTest, cypherSampledTargetExpandsThreeHops) {
 
     std::vector<NodeTripleSink::Row> rows;
     sink.sortedRows(rows);
-    const std::vector<NodeTripleSink::Row> expected {{0, 1, 8}, {0, 1, 9}};
+    const std::vector<NodeTripleSink::Row> expected {{0, 1, 8}, {0, 1, 9}, {1, 0, 6}, {1, 0, 7},
+                                                     {2, 0, 6}, {2, 0, 7}, {3, 0, 6}, {3, 0, 7},
+                                                     {4, 1, 8}, {4, 1, 9}};
     EXPECT_EQ(rows, expected);
 }
 
@@ -2411,8 +2416,8 @@ TEST_F(MLIRCallProcedureTest, cypherCallOmittingAnOptionalArgument) {
 
     // The seed of gnn.neighbourhoodSample is optional, so the call may write the two
     // required arguments alone and leave the procedure to pick a seed of its own. The
-    // sample size is still above the out-degree of every node, so which seed it picks
-    // does not change the rows: the same four edges as the seeded call.
+    // sample size is still above the degree of every node, so which seed it picks does
+    // not change the rows: the same eight as the seeded call.
     NodePairSink sink;
     runQuery("MATCH (n) CALL gnn.neighbourhoodSample(n, 2) YIELD tgt RETURN n, tgt",
              graph.get(),
@@ -2421,7 +2426,8 @@ TEST_F(MLIRCallProcedureTest, cypherCallOmittingAnOptionalArgument) {
 
     std::vector<NodePairSink::Row> rows;
     sink.sortedRows(rows);
-    const std::vector<NodePairSink::Row> expected {{0, 1}, {0, 2}, {1, 4}, {2, 3}};
+    const std::vector<NodePairSink::Row> expected {{0, 1}, {0, 2}, {1, 0}, {1, 4},
+                                                   {2, 0}, {2, 3}, {3, 2}, {4, 1}};
     EXPECT_EQ(rows, expected);
 }
 
