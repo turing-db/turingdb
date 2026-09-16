@@ -123,12 +123,11 @@ EndToEndResult runEndToEnd(const std::string& outDir,
 
 class TuringProtoEndToEndTest : public TuringTest {};
 
-// chunkRows=1 forces the query pipeline to emit one Dataframe per row. Each
-// server-side writeDataframe() produces its own CHUNK_HEADER + CHUNK +
-// END_CHUNK group on the wire and the client fires onOutputData once per
-// END_CHUNK. With 12 seeded rows we therefore expect exactly 12 client
-// callbacks. Verifies the streaming path delivers many small dataframes in
-// order without losing or merging rows.
+// chunkRows=1 forces the engine to emit one chunk per row. Each server-side
+// writeColumns() produces its own CHUNK + END_CHUNK group on the wire and the
+// client fires onOutputData once per END_CHUNK. With 12 seeded rows we
+// therefore expect exactly 12 client callbacks. Verifies the streaming path
+// delivers many small chunks in order without losing or merging rows.
 TEST_F(TuringProtoEndToEndTest, ManySmallQueryChunks) {
     constexpr size_t ROW_COUNT = 12;
 

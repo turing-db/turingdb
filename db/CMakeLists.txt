@@ -8,7 +8,6 @@ target_include_directories(turing_db_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(turing_db_s PUBLIC
     turing_vector_s
     turing_extensions_s
-    turing_db_pipeline_s
     turing_db_interpreter_v3_s
     turing_db_plan_s
     turing_db_system_s

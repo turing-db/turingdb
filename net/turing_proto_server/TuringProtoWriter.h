@@ -18,7 +18,6 @@
 namespace db {
 class Column;
 class QueryStatus;
-class Dataframe;
 }
 
 namespace net::proto {
@@ -53,8 +52,6 @@ public:
     [[nodiscard]] bool wroteNonEmptyChunk() const override { return _wroteNonEmptyChunk; }
     [[nodiscard]] bool errorOccured() const override { return _errorOccured; }
 
-    void writeDataframeHeader(const db::Dataframe* frame);
-    void writeDataframe(const db::Dataframe* frame);
     void writeColumnHeaders(std::span<const std::string_view> names,
                             std::span<const db::Column* const> columns);
     void writeColumns(std::span<const db::Column* const> columns, size_t offset, size_t rowCount);
@@ -76,7 +73,7 @@ private:
     // Proto payload (encoder writes into it). Reset after each successful flush.
     net::proto::TuringProtoOutBuf _buffer;
 
-    //Encoder to convert dataframes to encoded bytes
+    // Encoder to convert columns to encoded bytes
     net::proto::TuringProtoEncoder _encoder;
     // HTTP chunk trailer: "\r\n", pre-filled once in the constructor.
     std::array<char, net::http::CHUNK_TRAILER_SIZE> _trailerBuffer {'\r','\n'};

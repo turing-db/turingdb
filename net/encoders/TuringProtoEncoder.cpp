@@ -16,23 +16,6 @@ TuringProtoEncoder::TuringProtoEncoder(net::proto::TuringProtoOutBuf* outBuf)
 {
 }
 
-void TuringProtoEncoder::writeDataframeHeader(const db::Dataframe* df) {
-    const db::Dataframe::NamedColumns& columns = df->cols();
-
-    size_t chunkHeaderLen = sizeof(WireSize);
-    for (const db::NamedColumn* namedColumn : columns) {
-        chunkHeaderLen += net::proto::ColumnWireHeader::wireSize();
-        chunkHeaderLen += namedColumn->getName().size();
-    }
-    bioassert(chunkHeaderLen <= _outBuf->capacity(), "Dataframe schema exceeds maximum chunk size");
-
-    writeColumnCount(columns.size());
-
-    for (const db::NamedColumn* namedColumn : columns) {
-        writeColumnHeader(namedColumn->getName(), namedColumn->getColumn());
-    }
-}
-
 void TuringProtoEncoder::writeColumnHeaders(std::span<const std::string_view> names,
                                             std::span<const db::Column* const> columns) {
     bioassert(names.size() == columns.size(), "The wire schema needs one name per column");
@@ -48,20 +31,6 @@ void TuringProtoEncoder::writeColumnHeaders(std::span<const std::string_view> na
 
     for (const auto [name, column] : rv::zip(names, columns)) {
         writeColumnHeader(name, column);
-    }
-}
-
-void TuringProtoEncoder::writeDataframe(const db::Dataframe* df) {
-    const size_t rowCount = df->getLogicalRowCount();
-    if (rowCount == 0) {
-        return;
-    }
-
-    using Encoder = db::ColumnSingleDispatcher<db::OutputtedTypes::Allowed, DataWriter, db::OutputtedTypes::Excluded>;
-
-    DataWriter writer(_outBuf, _stack, 0, rowCount);
-    for (const db::NamedColumn* namedColumn : df->cols()) {
-        Encoder::dispatch(namedColumn->getColumn(), writer);
     }
 }
 

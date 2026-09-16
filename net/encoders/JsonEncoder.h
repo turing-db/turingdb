@@ -14,7 +14,6 @@
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnMask.h"
 #include "columns/ColumnOperatorDispatcher.h"
-#include "dataframe/Dataframe.h"
 
 #include "OutputWriter.h"
 #include "OutputValues.h"
@@ -274,72 +273,6 @@ public:
 
         key("data");
         arr();
-    }
-
-    void writeDataframeHeader(const Dataframe& df) {
-        key("header");
-        obj();
-
-        key("column_names");
-        arr();
-
-        for (const NamedColumn* namedCol : df.cols()) {
-            const std::string_view name = namedCol->getName();
-
-            if (name.empty()) {
-                const ColumnTag tag = namedCol->getTag();
-                value(fmt::format("${}", tag.getValue()));
-            } else {
-                value(name);
-            }
-        }
-
-        end(); // column_names
-
-        key("column_types");
-        arr();
-
-        std::string columnType;
-        ColumnTypeGenerator generator(columnType);
-
-        using Types = OutputtedTypes;
-        using ColTypeGen = ColumnSingleDispatcher<Types::Allowed, ColumnTypeGenerator, Types::Excluded>;
-
-        for (const NamedColumn* namedCol : df.cols()) {
-            const Column* col = namedCol->getColumn();
-
-            ColTypeGen::dispatch(col, generator);
-
-            value(columnType);
-        }
-
-        end(); // column_types
-        end(); // header
-
-        startData();
-    }
-
-    void writeDataframe(const Dataframe& df) {
-        arr();
-
-        const size_t logicalRowCount = df.getLogicalRowCount();
-
-        using JsonWriter = ChunkJsonEncoder<WriterT>;
-        using Types = OutputtedTypes;
-        using Encoder = ColumnSingleDispatcher<Types::Allowed, JsonWriter, Types::Excluded>;
-
-        JsonWriter encoder(_writer, 0, logicalRowCount);
-        for (const NamedColumn* namedCol : df.cols()) {
-            arr();
-
-            const Column* col = namedCol->getColumn();
-
-            Encoder::dispatch(col, encoder);
-
-            end();
-        }
-
-        end();
     }
 
     void writeColumnHeaders(std::span<const std::string_view> names, std::span<const Column* const> columns) {

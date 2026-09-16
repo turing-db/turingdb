@@ -64,18 +64,6 @@ void TuringProtoWriter::startResponse(net::ConnectionHeader connection) {
     sendRaw(buffer.data(), offset);
 }
 
-void TuringProtoWriter::writeDataframeHeader(const db::Dataframe* frame) {
-    // Schema must fit in a single CHUNK_HEADER packet. The encoder's capacity
-    // check enforces that, so a buffer-full trigger here would be a bug.
-    _buffer.setOnBufferFullCallBack([]() {
-        bioassert(false, "Dataframe schema exceeded buffer capacity");
-    });
-
-    _encoder.writeDataframeHeader(frame);
-
-    writePacket(MessageTypes::CHUNK_HEADER);
-}
-
 void TuringProtoWriter::writeColumnHeaders(std::span<const std::string_view> names,
                                            std::span<const db::Column* const> columns) {
     _buffer.setOnBufferFullCallBack([]() {
@@ -85,23 +73,6 @@ void TuringProtoWriter::writeColumnHeaders(std::span<const std::string_view> nam
     _encoder.writeColumnHeaders(names, columns);
 
     writePacket(MessageTypes::CHUNK_HEADER);
-}
-
-void TuringProtoWriter::writeDataframe(const db::Dataframe* frame) {
-    auto onBufferFull = [&]() {
-        writePacket(MessageTypes::CHUNK);
-    };
-
-    _buffer.setOnBufferFullCallBack(onBufferFull);
-
-    _encoder.writeDataframe(frame);
-
-    if (_buffer.size() > 0) {
-        writePacket(MessageTypes::CHUNK);
-    }
-
-    _encoder.writeChunkFooter(frame->getLogicalRowCount());
-    writePacket(MessageTypes::END_CHUNK);
 }
 
 void TuringProtoWriter::writeColumns(std::span<const db::Column* const> columns, size_t offset, size_t rowCount) {
