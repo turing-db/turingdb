@@ -97,8 +97,7 @@ public:
         ListView,
         std::optional<ListView>,
         ListElementView,
-        std::optional<ListElementView>,
-        std::optional<ListView>
+        std::optional<ListElementView>
     >;
 
     using Code = uint8_t;
