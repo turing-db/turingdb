@@ -29,7 +29,7 @@ CLANG_BUILD=1 ./dependencies.sh
 
 | Flag | Harness | What it tests |
 |------|---------|---------------|
-| `--cypher` | `fuzz_query_engine` | Full query pipeline: parse, analyze, plan, optimize, execute against SimpleGraph data |
+| `--cypher` | `fuzz_query_engine` | Query engine: parse, analyze, generate the db program, lower and execute against SimpleGraph data |
 | `--http` | `fuzz_http_parser` | Custom HTTP parser: method, URI, headers, Content-Length, payload handling |
 | `--csv` | `fuzz_csv_parser` | CSV parser: `parseCSVLine()` and `peekFileStructure()` |
 | `--gml` | `fuzz_gml_importer` | GML importer: `importContent()` with arbitrary GML data |
@@ -83,9 +83,9 @@ valgrind --leak-check=full --track-origins=yes \
 
 ## Exception Policy
 
-The harnesses only catch expected user-input errors (`CompilerException`, `PipelineException`, `VersionControlException`). The following are **not caught** and will crash the process for AFL to report:
+The harnesses only catch expected user-input errors. For the query engine that is the `CompilerException` of the parser and analyzer, and the plain `TuringException` codegen and execution reject a query with. The following are **not caught** and will crash the process for AFL to report:
 
-- `FatalException` — internal logic errors
+- `FatalException` — internal logic errors, rethrown even where a `TuringException` is caught
 - `bioassert` failures — assertion violations (throw `FatalException`)
 - Any other unexpected exception
 
