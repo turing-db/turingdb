@@ -22,6 +22,7 @@
 #include "CypherParser.h"
 #include "CypherAST.h"
 #include "CypherAnalyzer.h"
+#include "PlanGenConfig.h"
 #include "PlanGraphGenerator.h"
 #include "PlanOptimizer.h"
 #include "PipelineGenerator.h"
@@ -61,8 +62,6 @@ static int fuzzOne(const char* data, size_t size) {
     db::SystemAccessor system = sysMan.accessShared();
     const db::ProcedureManager* procedures = system.getProcedures();
 
-    const db::QueryConfig queryConfig;
-
     // Open transaction
     auto txRes = system.openTransaction(g_graphName,
                                         db::CommitHash::head(),
@@ -95,7 +94,8 @@ static int fuzzOne(const char* data, size_t size) {
     }
 
     // Plan
-    db::PlanGraphGenerator planGen(&queryConfig.getPlanGenConfig(), ast, view);
+    const db::PlanGenConfig planGenConfig;
+    db::PlanGraphGenerator planGen(&planGenConfig, ast, view);
     try {
         planGen.generate(ast.queries().front());
     } catch (const db::CompilerException&) {
