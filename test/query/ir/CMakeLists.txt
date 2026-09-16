@@ -35,6 +35,26 @@ target_link_libraries(turing_ir_test_write_query_s
             turing_db_interpreter_v3_s)
 target_include_directories(turing_ir_test_write_query_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
+# Compiles a query against the shared SimpleGraph with the join forced, for the hash join
+# tests that read the db program, the nl program or the rows it runs to.
+add_library(turing_ir_test_hash_join_s STATIC HashJoinQueryTest.cpp StringRowSink.cpp)
+target_link_libraries(turing_ir_test_hash_join_s
+    PUBLIC  GTest::gtest
+            turing_testutils_s
+            turing_db_storage_s
+            turing_db_examples_s
+            turing_db_ir_codegen_s
+            turing_db_ir_dbdialect_s
+            turing_db_ir_lowering_s
+            turing_db_ir_interpreter_s
+            turing_db_ir_common_s
+            turing_db_frontend_cypher_s
+            turing_db_parser_s
+            turing_db_analyzer_s
+            turing_db_ast_s
+            turing_db_procedures_s)
+target_include_directories(turing_ir_test_hash_join_s PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_ir_tests(test_query_ir_nlexecutor NLExecutorTest.cpp)
 add_ir_tests(test_query_ir_create_node_edge CreateNodeEdgeTest.cpp)
 add_ir_tests(test_query_ir_dblowering DBLoweringTest.cpp)
@@ -1964,28 +1984,12 @@ add_ir_tests(test_query_ir_hash_join_index NLHashJoinIndexTest.cpp)
 # The hash join fusion is checked at both IR levels and run against the shared SimpleGraph,
 # so it needs the frontend engine beside the dialects.
 add_turing_test(test_query_ir_hash_join HashJoinTest.cpp)
-target_sources(test_query_ir_hash_join PRIVATE StringRowSink.cpp)
-target_link_libraries(test_query_ir_hash_join PRIVATE
-        turing_db_s
-        turing_testenv_s
-        turing_db_examples_s
-        turing_db_system_s
-        turing_db_storage_s
-        turing_db_interpreter_v3_s)
-target_include_directories(test_query_ir_hash_join PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(test_query_ir_hash_join PRIVATE turing_ir_test_hash_join_s)
 
 # The projected-key cases check that a cut still fuses when the query returns the property
 # it joins on, so they need the frontend engine beside the dialects.
 add_turing_test(test_query_ir_hash_join_projected_key HashJoinProjectedKeyTest.cpp)
-target_sources(test_query_ir_hash_join_projected_key PRIVATE StringRowSink.cpp)
-target_link_libraries(test_query_ir_hash_join_projected_key PRIVATE
-        turing_db_s
-        turing_testenv_s
-        turing_db_examples_s
-        turing_db_system_s
-        turing_db_storage_s
-        turing_db_interpreter_v3_s)
-target_include_directories(test_query_ir_hash_join_projected_key PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(test_query_ir_hash_join_projected_key PRIVATE turing_ir_test_hash_join_s)
 
 # The comma-pattern join key tests read the rows of a four-pattern MATCH as text, so they
 # need StringRowSink beside the v3 engine.

@@ -2,33 +2,15 @@
 
 #include <stddef.h>
 
-#include <memory>
 #include <string>
-#include <string_view>
 #include <vector>
 
-#include "QueryInterpreterV3.h"
-#include "QueryStatus.h"
-
-#include "Graph.h"
-#include "SimpleGraph.h"
-#include "SystemAccessor.h"
-#include "SystemManager.h"
-#include "versioning/ChangeID.h"
-#include "versioning/CommitHash.h"
-
+#include "HashJoinQueryTest.h"
 #include "StringRowSink.h"
 #include "TuringTest.h"
-#include "TuringTestEnv.h"
 
 using namespace db;
 using namespace turing::test;
-
-namespace {
-
-using Rows = std::vector<StringRowSink::Row>;
-
-}
 
 // The fuse_hash_join pass and the db.hash_join it emits, end to end on the shared
 // SimpleGraph: which shapes fuse, what the fused program looks like at both levels, and
@@ -37,78 +19,11 @@ using Rows = std::vector<StringRowSink::Row>;
 // SimpleGraph's 18 nodes carry a distinct name each, so a join on the name is the
 // diagonal; only Remy (0) and Adam (1) carry an age, so a join on the age is where the
 // null keys have to stay unmatched.
-class HashJoinTest : public TuringTest {
-protected:
-    void initialize() override {
-        _env = TuringTestEnv::create(fs::Path {_outDir} / "turing");
-
-        SystemAccessor system = _env->getSystemManager().accessUnique();
-        Graph* graph = system.createGraph(_graphName);
-        SimpleGraph::createSimpleGraph(graph);
-
-        _interpreter = std::make_unique<QueryInterpreterV3>(&_env->getSystemManager());
-
-        // SimpleGraph is 18 nodes, so the cost model would leave every one of these cuts
-        // as the product it stands as - what the join does with a cut it takes is what
-        // these cases are about, so they force it, as the v2 join tests force theirs.
-        _interpreter->setForceValueHashJoin(true);
-    }
-
-    void runQuery(std::string_view query, StringRowSink& sink) {
-        QueryStatus status;
-        _interpreter->execute(status,
-                              query,
-                              _graphName,
-                              CommitHash::head(),
-                              ChangeID::head(),
-                              &_env->getMem(),
-                              &sink);
-
-        ASSERT_TRUE(status.isOk()) << "query: " << query << "\nerror: " << status.getError();
-    }
-
-    void expectCount(std::string_view query, size_t expected) {
-        StringRowSink sink;
-        runQuery(query, sink);
-
-        const Rows expectedRows {{std::to_string(expected)}};
-        EXPECT_EQ(sink.getRows(), expectedRows) << "query: " << query;
-    }
-
-    void expectRows(std::string_view query, const Rows& expected) {
-        StringRowSink sink;
-        runQuery(query, sink);
-
-        EXPECT_EQ(sink.getRows(), expected) << "query: " << query;
-    }
-
-    // The db or nl program the pipeline produced for a query, as EXPLAIN reports it.
-    void explainStage(std::string_view query, std::string_view stage, std::string& program) {
-        StringRowSink sink;
-        runQuery(query, sink);
-
-        program.clear();
-        for (const StringRowSink::Row& row : sink.getRows()) {
-            if (row.front() == stage) {
-                program = row.back();
-            }
-        }
-
-        EXPECT_FALSE(program.empty()) << "query: " << query << "\nno " << stage << " stage reported";
-    }
-
-    static bool contains(std::string_view text, std::string_view part) {
-        return text.find(part) != std::string_view::npos;
-    }
-
-    const std::string _graphName = "simpledb";
-    std::unique_ptr<TuringTestEnv> _env;
-    std::unique_ptr<QueryInterpreterV3> _interpreter;
-};
+class HashJoinTest : public HashJoinQueryTest {};
 
 TEST_F(HashJoinTest, fusesAProductAndItsPropertyEqualityIntoAHashJoin) {
     std::string program;
-    explainStage("EXPLAIN (db) MATCH (n), (m) WHERE n.name = m.name RETURN n, m", "db", program);
+    dbProgram("MATCH (n), (m) WHERE n.name = m.name RETURN n, m", program);
 
     EXPECT_TRUE(contains(program, "db.hash_join")) << program;
     EXPECT_TRUE(contains(program, "on 1, 1")) << program;
@@ -121,7 +36,7 @@ TEST_F(HashJoinTest, fusesAProductAndItsPropertyEqualityIntoAHashJoin) {
 // the build side as it walks it, so the property fetch moves in beside the scan.
 TEST_F(HashJoinTest, sinksTheKeyIntoBothFactors) {
     std::string program;
-    explainStage("EXPLAIN (db) MATCH (n), (m) WHERE n.name = m.name RETURN n, m", "db", program);
+    dbProgram("MATCH (n), (m) WHERE n.name = m.name RETURN n, m", program);
 
     const size_t firstFetch = program.find("db.get_node_properties");
     const size_t secondFetch = program.find("db.get_node_properties", firstFetch + 1);
@@ -135,7 +50,7 @@ TEST_F(HashJoinTest, sinksTheKeyIntoBothFactors) {
 // yielded rather than adding one.
 TEST_F(HashJoinTest, joinsOnTheColumnItselfWhenTheKeyIsTheVariable) {
     std::string program;
-    explainStage("EXPLAIN (db) MATCH (n), (m) WHERE n = m RETURN n", "db", program);
+    dbProgram("MATCH (n), (m) WHERE n = m RETURN n", program);
 
     EXPECT_TRUE(contains(program, "db.hash_join")) << program;
     EXPECT_TRUE(contains(program, "on 0, 0")) << program;
@@ -143,7 +58,7 @@ TEST_F(HashJoinTest, joinsOnTheColumnItselfWhenTheKeyIsTheVariable) {
 
 TEST_F(HashJoinTest, lowersTheJoinToASiblingBuildLoopAndProbeLoop) {
     std::string program;
-    explainStage("EXPLAIN (nl) MATCH (n), (m) WHERE n.name = m.name RETURN n, m", "nl", program);
+    nlProgram("MATCH (n), (m) WHERE n.name = m.name RETURN n, m", program);
 
     EXPECT_TRUE(contains(program, "nl.hash_join_buffer build_key 1 probe_key 1")) << program;
     EXPECT_TRUE(contains(program, "nl.hash_join_collect")) << program;
@@ -193,9 +108,7 @@ TEST_F(HashJoinTest, joinsEveryPairSharingABooleanProperty) {
 // are loop nests and not single scans.
 TEST_F(HashJoinTest, joinsTwoTraversalsOnAPropertyOfTheirEnds) {
     std::string program;
-    explainStage("EXPLAIN (db) MATCH (a)-->(b), (c)-->(d) WHERE b.name = c.name RETURN a, d",
-                 "db",
-                 program);
+    dbProgram("MATCH (a)-->(b), (c)-->(d) WHERE b.name = c.name RETURN a, d", program);
     EXPECT_TRUE(contains(program, "db.hash_join")) << program;
 
     // Each node's name is its own, so the join holds exactly where b and c are one node:
@@ -210,9 +123,7 @@ TEST_F(HashJoinTest, joinsTwoTraversalsOnAPropertyOfTheirEnds) {
 // behind it, so neither b nor c is buffered on the build side or gathered on the probe.
 TEST_F(HashJoinTest, dropsTheColumnAKeyWasReadFromWhenNothingElseReadsIt) {
     std::string program;
-    explainStage("EXPLAIN (db) MATCH (a)-->(b), (c)-->(d) WHERE b.name = c.name RETURN a, d",
-                 "db",
-                 program);
+    dbProgram("MATCH (a)-->(b), (c)-->(d) WHERE b.name = c.name RETURN a, d", program);
 
     // Two columns per factor - the one the projection reads and the key it matches on -
     // where the fusion left three, b and c among them.
@@ -243,7 +154,7 @@ TEST_F(HashJoinTest, cutsTheJoinedRowsWithALimit) {
 // would answer a comparison the equality did not.
 TEST_F(HashJoinTest, keepsTheProductWhenTheKeysNeedNotShareAType) {
     std::string program;
-    explainStage("EXPLAIN (db) MATCH (n), (m) WHERE n = m.age RETURN n, m", "db", program);
+    dbProgram("MATCH (n), (m) WHERE n = m.age RETURN n, m", program);
 
     EXPECT_TRUE(contains(program, "db.cross_product")) << program;
     EXPECT_FALSE(contains(program, "db.hash_join")) << program;
@@ -253,7 +164,7 @@ TEST_F(HashJoinTest, keepsTheProductWhenTheKeysNeedNotShareAType) {
 // shared name fuses.
 TEST_F(HashJoinTest, keepsTheProductWhenTheSidesReadDifferentProperties) {
     std::string program;
-    explainStage("EXPLAIN (db) MATCH (n), (m) WHERE n.name = m.dob RETURN n, m", "db", program);
+    dbProgram("MATCH (n), (m) WHERE n.name = m.dob RETURN n, m", program);
 
     EXPECT_TRUE(contains(program, "db.cross_product")) << program;
     EXPECT_FALSE(contains(program, "db.hash_join")) << program;
@@ -263,7 +174,7 @@ TEST_F(HashJoinTest, keepsTheProductWhenTheSidesReadDifferentProperties) {
 // product.
 TEST_F(HashJoinTest, keepsTheProductWhenThePredicateIsNotAnEquality) {
     std::string program;
-    explainStage("EXPLAIN (db) MATCH (n), (m) WHERE n.age > m.age RETURN n, m", "db", program);
+    dbProgram("MATCH (n), (m) WHERE n.age > m.age RETURN n, m", program);
 
     EXPECT_TRUE(contains(program, "db.cross_product")) << program;
     EXPECT_FALSE(contains(program, "db.hash_join")) << program;
@@ -273,7 +184,7 @@ TEST_F(HashJoinTest, keepsTheProductWhenThePredicateIsNotAnEquality) {
 // there is no join to make of it.
 TEST_F(HashJoinTest, keepsTheProductWhenTheEqualityReadsOneFactor) {
     std::string program;
-    explainStage("EXPLAIN (db) MATCH (n), (m) WHERE n.name = n.dob RETURN n, m", "db", program);
+    dbProgram("MATCH (n), (m) WHERE n.name = n.dob RETURN n, m", program);
 
     EXPECT_FALSE(contains(program, "db.hash_join")) << program;
 }
@@ -283,10 +194,9 @@ TEST_F(HashJoinTest, keepsTheProductWhenTheEqualityReadsOneFactor) {
 // the way the filter does, and the product stays.
 TEST_F(HashJoinTest, keepsTheProductWhenNeitherKeyHasAResolvedType) {
     std::string program;
-    explainStage("EXPLAIN (db) CALL db.labels() YIELD label CALL db.edgeTypes() YIELD edgeType "
-                 "WHERE label = edgeType RETURN label, edgeType",
-                 "db",
-                 program);
+    dbProgram("CALL db.labels() YIELD label CALL db.edgeTypes() YIELD edgeType "
+              "WHERE label = edgeType RETURN label, edgeType",
+              program);
 
     EXPECT_TRUE(contains(program, "db.cross_product")) << program;
     EXPECT_FALSE(contains(program, "db.hash_join")) << program;
@@ -297,7 +207,7 @@ TEST_F(HashJoinTest, keepsTheProductWhenNeitherKeyHasAResolvedType) {
 // hold every pair of b and c where the scan holds one row per node.
 TEST_F(HashJoinTest, buildsTheFactorWithNoProductAndProbesTheOther) {
     std::string program;
-    explainStage("EXPLAIN (nl) MATCH (a), (b), (c) WHERE a.name = c.name RETURN a, b, c", "nl", program);
+    nlProgram("MATCH (a), (b), (c) WHERE a.name = c.name RETURN a, b, c", program);
 
     // The collect fills the build side, so what stands after it is on the probed side.
     const size_t collect = program.find("nl.hash_join_collect");
@@ -317,7 +227,7 @@ TEST_F(HashJoinTest, joinsThreePatternsOnAPropertyOfTwoOfThem) {
 // cut can emit and the loop stops once the budget is spent.
 TEST_F(HashJoinTest, boundsTheProbeWithALimit) {
     std::string program;
-    explainStage("EXPLAIN (nl) MATCH (n), (m) WHERE n.name = m.name RETURN n, m LIMIT 3", "nl", program);
+    nlProgram("MATCH (n), (m) WHERE n.name = m.name RETURN n, m LIMIT 3", program);
 
     const size_t probe = program.find("nl.hash_join_probe");
     ASSERT_NE(probe, std::string::npos) << program;

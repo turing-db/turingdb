@@ -317,13 +317,7 @@ QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
     db::SimpleGraph::createSimpleGraph(graph);
     db::TuringDB* db = &env->getDB();
 
-    db::QueryConfig queryConfig;
-    const bool forceVHJ = std::find(spec._tags.begin(), spec._tags.end(),
-                                    "value-hash-join")
-                       != spec._tags.end();
-    if (forceVHJ) {
-        queryConfig.getPlanGenConfig().setForceValueHashJoin(true);
-    }
+    const db::QueryConfig queryConfig;
 
     std::vector<std::vector<std::string>> rows;
     std::vector<std::string> columnNames;

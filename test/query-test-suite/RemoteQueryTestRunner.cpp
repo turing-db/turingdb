@@ -28,12 +28,7 @@ QueryTestResult RemoteQueryTestRunner::runTest(const QueryTestSpec& spec,
     QueryTestResult result;
     result._name = spec._name;
 
-    db::QueryConfig queryConfig;
-    const bool forceVHJ =
-        std::find(spec._tags.begin(), spec._tags.end(), "value-hash-join") != spec._tags.end();
-    if (forceVHJ) {
-        queryConfig.getPlanGenConfig().setForceValueHashJoin(true);
-    }
+    const db::QueryConfig queryConfig;
 
     auto env = turing::test::TuringTestEnv::create(outDir, queryConfig);
     db::Graph* graph = nullptr;

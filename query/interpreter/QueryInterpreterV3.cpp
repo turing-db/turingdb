@@ -178,7 +178,7 @@ void QueryInterpreterV3::executeImpl(QueryStatus& status,
     mlir::OwningOpRef<mlir::ModuleOp> owningModule = mlir::ModuleOp::create(builder.getUnknownLoc());
     mlir::ModuleOp module = owningModule.get();
 
-    const mlir::db::DBPassContext passContext {&view, _forcesValueHashJoin, _usesValueHashJoin};
+    const mlir::db::DBPassContext passContext {&view};
 
     DBProgramGenerator generator(&module, explain, passContext);
     try {
