@@ -2597,3 +2597,54 @@ target_link_libraries(test_query_ir_id_function PRIVATE
         turing_db_interpreter_v3_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_id_function PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# CALL { ... } subqueries whose body carries the rows it is given through to its RETURN.
+add_turing_test(test_query_ir_call_subquery CallSubqueryTest.cpp)
+target_link_libraries(test_query_ir_call_subquery PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_call_subquery PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Unit subqueries: a body ending on an updating clause, run once per row in flight.
+add_turing_test(test_query_ir_call_subquery_write CallSubqueryWriteTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_write PRIVATE turing_ir_test_write_query_s)
+
+# Subqueries whose body aggregates, sorts, cuts or dedups, run one input row at a time.
+add_turing_test(test_query_ir_call_subquery_per_row CallSubqueryPerRowTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_per_row PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_call_subquery_per_row PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# OPTIONAL CALL { ... }: the input rows the body yields nothing for, padded with null.
+add_turing_test(test_query_ir_call_subquery_optional CallSubqueryOptionalTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_optional PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_call_subquery_optional PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# The region op and the loops a CALL subquery compiles to, read off EXPLAIN.
+add_ir_tests(test_query_ir_call_subquery_codegen CallSubqueryCodegenTest.cpp)
+target_sources(test_query_ir_call_subquery_codegen PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_call_subquery_codegen PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_interpreter_v3_s)
+target_include_directories(test_query_ir_call_subquery_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

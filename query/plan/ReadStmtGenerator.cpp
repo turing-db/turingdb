@@ -130,6 +130,10 @@ void ReadStmtGenerator::generateStmt(const Stmt* stmt) {
             throwError("WITH is only supported by the MLIR query engine.", stmt);
         break;
 
+        case Stmt::Kind::CALL_SUBQUERY:
+            throwError("CALL subqueries are only supported by the MLIR query engine.", stmt);
+        break;
+
         case Stmt::Kind::CREATE:
         case Stmt::Kind::MERGE:
         case Stmt::Kind::SET:

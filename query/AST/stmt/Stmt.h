@@ -21,11 +21,15 @@ public:
         VECTOR_SEARCH,
         UNWIND,
         WITH,
+        CALL_SUBQUERY,
     };
 
     // A clause that writes to the graph. Cypher orders a query part's clauses reading
     // first and updating last, so this is what tells the two halves of a part apart
     static bool isUpdating(Kind kind);
+
+    // The same over a statement: a CALL subquery is one or the other by what its body ends on
+    static bool isUpdating(const Stmt* stmt);
 
     virtual Kind getKind() const = 0;
 

@@ -129,6 +129,10 @@ CypherAST::~CypherAST() {
         delete query;
     }
 
+    for (QueryCommand* subquery : _subqueries) {
+        delete subquery;
+    }
+
     for (DeclContext* ctxt : _declContexts) {
         delete ctxt;
     }
@@ -243,6 +247,11 @@ void CypherAST::addStmtContainer(StmtContainer* container) {
 
 void CypherAST::addQuery(QueryCommand* query) {
     _queries.push_back(query);
+}
+
+void CypherAST::adoptSubquery(QueryCommand* query) {
+    std::erase(_queries, query);
+    _subqueries.push_back(query);
 }
 
 void CypherAST::addDeclContext(DeclContext* ctxt) {

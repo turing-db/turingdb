@@ -1084,3 +1084,100 @@ LogicalResult OptionalMatch::verify() {
 
     return success();
 }
+
+LogicalResult CallSubquery::verify() {
+    Block& bodyBlock = getBody().front();
+
+    auto yield = dyn_cast_or_null<SubqueryYield>(bodyBlock.empty() ? nullptr : &bodyBlock.back());
+    if (!yield) {
+        return emitOpError("body region must end with a db.subquery_yield");
+    }
+
+    const OperandRange inputs = getInputColumns();
+    const size_t inputCount = inputs.size();
+
+    // The body carries the row tag through its dataflow only when it carries the scope,
+    // and only over rows it has: a body run one row at a time, or over the single empty
+    // row, is tagged by the lowering instead.
+    const bool tagsRows = getOptional() && getCarriesScope() && inputCount > 0;
+
+    const size_t expectedArguments = tagsRows ? inputCount + 1 : inputCount;
+    if (bodyBlock.getNumArguments() != expectedArguments) {
+        return emitOpError("body region takes one argument per input column")
+               << (tagsRows ? " plus the row tag" : "") << ", expected " << expectedArguments
+               << " but has " << bodyBlock.getNumArguments();
+    }
+
+    for (size_t inputIndex = 0; inputIndex < inputCount; inputIndex++) {
+        if (bodyBlock.getArgument(inputIndex).getType() != inputs[inputIndex].getType()) {
+            return emitOpError("body argument ") << inputIndex << " must have the type of input column "
+                                                 << inputIndex;
+        }
+    }
+
+    const bool yieldsATag = yield.getTag() != nullptr;
+    if (tagsRows != yieldsATag) {
+        return emitOpError("the body yields a row tag exactly when it takes one");
+    }
+
+    const ValueRange yieldedColumns = yield.getColumns();
+    const Operation::result_type_range resultTypes = getOperation()->getResultTypes();
+
+    if (getUnit()) {
+        if (!yieldedColumns.empty()) {
+            return emitOpError("a unit body yields no column");
+        }
+
+        if (resultTypes.size() != 0) {
+            return emitOpError("a unit subquery has no result");
+        }
+
+        return success();
+    }
+
+    // The columns the results stand for: what the body yields when it carries the scope
+    // itself, and the inputs ahead of what it yields otherwise.
+    llvm::SmallVector<Type, 8> expectedResults;
+    if (getCarriesScope()) {
+        if (yieldedColumns.size() < inputCount) {
+            return emitOpError("a body carrying its scope yields at least one column per input column, expected ")
+                   << inputCount << " but has " << yieldedColumns.size();
+        }
+
+        for (size_t inputIndex = 0; inputIndex < inputCount; inputIndex++) {
+            const Type inputType = inputs[inputIndex].getType();
+
+            // A traversal rebinds its source to a typed ID column, so a body walking from a
+            // column whose element type is still unspecified hands it back refined.
+            const auto inputColumn = llvm::dyn_cast<ColumnType>(inputType);
+            const bool refinesAnUnspecifiedColumn = inputColumn && llvm::isa<mlir::NoneType>(inputColumn.getType());
+
+            if (yieldedColumns[inputIndex].getType() != inputType && !refinesAnUnspecifiedColumn) {
+                return emitOpError("yielded column ") << inputIndex << " must have the type of input column "
+                                                      << inputIndex;
+            }
+        }
+    } else {
+        for (const Value input : inputs) {
+            expectedResults.push_back(input.getType());
+        }
+    }
+
+    for (const Value yielded : yieldedColumns) {
+        expectedResults.push_back(yielded.getType());
+    }
+
+    if (resultTypes.size() != expectedResults.size()) {
+        return emitOpError("expects ") << expectedResults.size()
+                                       << " results, one per input column then one per yielded column, but has "
+                                       << resultTypes.size();
+    }
+
+    for (size_t resultIndex = 0; resultIndex < expectedResults.size(); resultIndex++) {
+        if (resultTypes[resultIndex] != expectedResults[resultIndex]) {
+            return emitOpError("result ") << resultIndex << " must have type " << expectedResults[resultIndex];
+        }
+    }
+
+    return success();
+}

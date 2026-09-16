@@ -955,6 +955,32 @@ private:
     NLStmtContainer _stmts;
 };
 
+// nl.each_row loop data: the step's chunks and a one-row output per chunk, each filled
+// through the gather an edge hop uses, over an index column holding the one row the step
+// is at. A plain source over the step's rows, so a downstream LIMIT can bound it.
+class NLEachRowLoopData : public NLFunctionData {
+public:
+    using Columns = std::vector<NLCarriedColumn>;
+
+    const Columns& columns() const { return _columns; }
+
+    void addColumn(const NLCarriedColumn& column) { _columns.push_back(column); }
+
+    ColumnVector<size_t>* getIndices() { return &_indices; }
+
+    NLLimitState* getLimit() const { return _limit; }
+    void setLimit(NLLimitState* limit) { _limit = limit; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
+    Columns _columns;
+    ColumnVector<size_t> _indices;
+    NLLimitState* _limit {nullptr};
+    NLStmtContainer _stmts;
+};
+
 // Lay a constant column's single value out over rowCount rows of a fresh output
 // chunk, as one present value per row. The cross product's broadcast repeats a
 // chunk's several values; this one repeats the single value a ColumnConst holds,

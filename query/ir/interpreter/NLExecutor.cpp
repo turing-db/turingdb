@@ -1004,9 +1004,9 @@ void gatherColumn(const Column* input,
 // Fill a chunk with a run of null rows. Every element type reads its own
 // default-constructed value as null: an ID defaults to the invalid ID that ID::isValid
 // rejects, which is how an entity an OPTIONAL MATCH did not match is spelled.
-template <typename ElementType>
+template <typename ElementType, typename ColumnType = ColumnVector<ElementType>>
 void fillNullColumn(Column* output, size_t rowCount) {
-    ColumnVector<ElementType>* typedOutput = static_cast<ColumnVector<ElementType>*>(output);
+    ColumnType* typedOutput = static_cast<ColumnType*>(output);
 
     typedOutput->getRaw().assign(rowCount, ElementType {});
 }
@@ -4990,6 +4990,31 @@ void NLExecutor::runGetInEdgesByTypeLoop(NLExecutionContext* context, NLFunction
     runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getTargets());
 }
 
+void NLExecutor::runEachRowLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLEachRowLoopData* loopData = static_cast<NLEachRowLoopData*>(data);
+    const NLStmtContainer* loopBody = loopData->getStmts();
+    const NLEachRowLoopData::Columns& columns = loopData->columns();
+    ColumnVector<size_t>* indices = loopData->getIndices();
+    std::vector<size_t>& indicesRaw = indices->getRaw();
+
+    // A null limit leaves the loop unbounded, exactly as in runUnwindConstLoop.
+    const NLLimitState* limit = loopData->getLimit();
+    const auto budgetLeft = [&]() { return !limit || limit->getRemaining() > 0; };
+
+    const size_t rowCount = columns.front().getInput()->size();
+    indicesRaw.resize(1);
+
+    for (size_t row = 0; row < rowCount && budgetLeft(); row++) {
+        indicesRaw[0] = row;
+
+        for (const NLCarriedColumn& column : columns) {
+            column.getGatherFunc()(column.getInput(), indices, column.getOutput());
+        }
+
+        runBody(context, loopBody);
+    }
+}
+
 void NLExecutor::runCrossProductLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLCrossProductLoopData* loopData = static_cast<NLCrossProductLoopData*>(data);
 
@@ -6637,6 +6662,56 @@ NLFillNullFunction NLExecutor::selectFillNullFunction(NLChunkKind kind) {
     dispatchChunkKind(kind, [&]<typename ElementType>() { selected = &fillNullColumn<ElementType>; });
 
     return selected;
+}
+
+NLFillNullFunction NLExecutor::selectOptFillNullFunction(ValueType valueType) {
+    NLFillNullFunction fill = nullptr;
+    const auto select = [&]<SupportedType T>() {
+        fill = &fillNullColumn<std::optional<typename T::Primitive>>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return fill;
+}
+
+NLFillNullFunction NLExecutor::selectPlainFillNullFunction(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &fillNullColumn<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &fillNullColumn<types::UInt64::Primitive>;
+        break;
+
+        case ValueType::Double:
+            return &fillNullColumn<types::Double::Primitive>;
+        break;
+
+        default:
+            throw IRException("a plain value column must be numeric");
+        break;
+    }
+}
+
+NLFillNullFunction NLExecutor::selectMaskFillNull() {
+    return &fillNullColumn<ColumnMask::Bool_t, ColumnMask>;
+}
+
+NLFillNullFunction NLExecutor::selectOptListFillNull() {
+    return &fillNullColumn<std::optional<ListView>>;
+}
+
+NLFillNullFunction NLExecutor::selectOptListElementFillNull() {
+    return &fillNullColumn<std::optional<ListElementView>>;
+}
+
+NLFillNullFunction NLExecutor::selectListElementFillNull() {
+    return &fillNullColumn<ListElementView>;
+}
+
+NLFillNullFunction NLExecutor::selectOptOwnedStringFillNull() {
+    return &fillNullColumn<std::optional<types::String::OwningPrimitive>>;
 }
 
 NLGatherFunction NLExecutor::selectGatherFunction(NLChunkKind kind) {

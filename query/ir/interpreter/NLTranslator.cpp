@@ -730,6 +730,14 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateCheckLabelConstraint(checkLabelConstraint, body);
         } else if (nl::CheckEdgeTypeConstraint checkEdgeTypeConstraint = mlir::dyn_cast<nl::CheckEdgeTypeConstraint>(operation)) {
             translateCheckEdgeTypeConstraint(checkEdgeTypeConstraint, body);
+        } else if (nl::EachRow eachRow = mlir::dyn_cast<nl::EachRow>(operation)) {
+            IteratorConfig config;
+            config._kind = IteratorKind::EachRow;
+
+            const mlir::OperandRange columns = eachRow.getColumns();
+            config._eachRowColumns.assign(columns.begin(), columns.end());
+
+            _iteratorConfigs[eachRow.getResult()] = config;
         } else if (nl::CrossProduct crossProduct = mlir::dyn_cast<nl::CrossProduct>(operation)) {
             IteratorConfig config;
             config._kind = IteratorKind::CrossProduct;
@@ -901,6 +909,8 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         // A probe expands the rows it is given the way a product does, so a downstream
         // LIMIT bounds its loop through the same early-exit.
         translateHashJoinProbeLoop(config, loopBody, limit, body);
+    } else if (config._kind == IteratorKind::EachRow) {
+        translateEachRowLoop(config, loopBody, limit, body);
     } else {
         translateEdgeLoop(config, loopBody, limit, body);
     }
@@ -2897,7 +2907,7 @@ void NLTranslator::translateOptionalDrainLoop(const IteratorConfig& config,
         column._input = joinedOnto ? inputColumns[columnIndex] : nullptr;
         column._output = output;
         column._gather = selectGatherForChunkType(chunkType);
-        column._fillNull = joinedOnto ? nullptr : NLExecutor::selectFillNullFunction(getChunkKind(chunkType));
+        column._fillNull = joinedOnto ? nullptr : selectFillNullForChunkType(chunkType);
 
         loopData->addColumn(column);
     }
@@ -4412,6 +4422,36 @@ NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
     return NLExecutor::selectGatherFunction(chunkKindFromElementType(elementType));
 }
 
+NLFillNullFunction NLTranslator::selectFillNullForChunkType(mlir::Type chunkType) {
+    const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
+    const mlir::Type elementType = chunk.getElementType();
+
+    if (isNullableList(elementType)) {
+        return NLExecutor::selectOptListFillNull();
+    } else if (isNullableListElement(elementType)) {
+        return NLExecutor::selectOptListElementFillNull();
+    }
+
+    if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
+        if (isOwnedStringElement(nullableType.getValueType())) {
+            return NLExecutor::selectOptOwnedStringFillNull();
+        }
+
+        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        return NLExecutor::selectOptFillNullFunction(valueType);
+    } else if (mlir::isa<storage::ListElementType>(elementType)) {
+        return NLExecutor::selectListElementFillNull();
+    } else if (isMaskElementType(elementType)) {
+        return NLExecutor::selectMaskFillNull();
+    }
+
+    if (isPlainValueElementType(elementType)) {
+        return NLExecutor::selectPlainFillNullFunction(valueTypeFromElementType(elementType));
+    }
+
+    return NLExecutor::selectFillNullFunction(chunkKindFromElementType(elementType));
+}
+
 NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) {
     const auto chunk = mlir::cast<nl::ChunkType>(chunkType);
     const mlir::Type elementType = chunk.getElementType();
@@ -4692,6 +4732,45 @@ Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
     }
 
     return allocColumnForKind(chunkKindFromElementType(elementType));
+}
+
+void NLTranslator::translateEachRowLoop(const IteratorConfig& config,
+                                        mlir::Block& loopBody,
+                                        NLLimitState* limit,
+                                        NLStmtContainer* body) {
+    const std::span<const mlir::Value> columns = config._eachRowColumns;
+
+    // The row count is read from the first column, so a walk over no column cannot be
+    // sized. DBLowering never emits it, but the nl IR may come from elsewhere.
+    if (columns.empty()) {
+        throw IRException("nl.each_row needs at least one column");
+    }
+
+    if (loopBody.getNumArguments() != columns.size()) {
+        throw IRException("nl.each_row loop must bind one variable per column");
+    }
+
+    NLEachRowLoopData* loopData = _program->allocFunctionData<NLEachRowLoopData>();
+    loopData->setLimit(limit);
+    loopData->getIndices()->resize(1);
+
+    // Each loop variable is a one-row chunk of its column's own kind, filled by the gather
+    // an edge hop uses over a one-row index column.
+    for (size_t columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+        const mlir::Value loopVariable = loopBody.getArgument(static_cast<unsigned>(columnIndex));
+        const mlir::Type chunkType = loopVariable.getType();
+
+        Column* output = allocColumnForChunkType(chunkType);
+        _valueSlots[loopVariable] = output;
+
+        loopData->addColumn(NLCarriedColumn {getColumn(columns[columnIndex]),
+                                             output,
+                                             selectGatherForChunkType(chunkType)});
+    }
+
+    body->emplaceStmt(&NLExecutor::runEachRowLoop, loopData);
+
+    translateBlock(loopBody, loopData->getStmts());
 }
 
 void NLTranslator::translateCrossProductLoop(const IteratorConfig& config,

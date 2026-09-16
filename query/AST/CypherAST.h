@@ -57,6 +57,7 @@ class StmtContainer;
 class MatchStmt;
 class ShortestPathStmt;
 class CallStmt;
+class CallSubqueryStmt;
 class CreateStmt;
 class MergeStmt;
 class SetStmt;
@@ -152,6 +153,7 @@ public:
     friend MatchStmt;
     friend ShortestPathStmt;
     friend CallStmt;
+    friend CallSubqueryStmt;
     friend CreateStmt;
     friend MergeStmt;
     friend SetStmt;
@@ -258,6 +260,9 @@ private:
     std::vector<OrderByItem*> _orderByItems;
     std::vector<StmtContainer*> _stmtContainers;
     QueryCommands _queries;
+
+    // The bodies of the CALL subqueries, owned here since they are no query of the script
+    QueryCommands _subqueries;
     std::vector<DeclContext*> _declContexts;
     std::vector<VarDecl*> _varDecls;
     std::vector<NodePatternData*> _nodePatternDatas;
@@ -288,6 +293,9 @@ private:
     void addOrderByItem(OrderByItem* item);
     void addStmtContainer(StmtContainer* container);
     void addQuery(QueryCommand* query);
+
+    // Moves a query the parser built as one of the script into the subquery bodies
+    void adoptSubquery(QueryCommand* query);
     void addDeclContext(DeclContext* ctxt);
     void addVarDecl(VarDecl* decl);
     void addNodePatternData(NodePatternData* data);
