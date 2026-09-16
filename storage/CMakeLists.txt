@@ -72,6 +72,8 @@ set(storage_sources
 
         iterators/TombstoneFilter.cpp
 
+        samplers/GraphSAGESampler.cpp
+
         columns/Block.cpp
         columns/Column.cpp
         columns/ColumnConst.cpp
