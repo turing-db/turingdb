@@ -2659,3 +2659,14 @@ target_link_libraries(test_query_ir_ldbc_bi16 PRIVATE
         turing_db_interpreter_v3_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_ldbc_bi16 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# What a CALL subquery expresses per input row that the clauses around it cannot.
+add_turing_test(test_query_ir_call_subquery_teams CallSubqueryTeamsTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_teams PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_call_subquery_teams PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
