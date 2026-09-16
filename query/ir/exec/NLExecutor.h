@@ -63,6 +63,11 @@ public:
     // a time, with the carry set gathered by the source row each emitted row came from.
     static void runUnwindLoop(NLExecutionContext* context, NLFunctionData* data);
 
+    // Walk the loop data's columns one row at a time: each step gathers row k of every
+    // column into its one-row output and runs the body over it. A null limit leaves it
+    // unbounded.
+    static void runEachRowLoop(NLExecutionContext* context, NLFunctionData* data);
+
     static void runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runScanEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data);
 
@@ -395,6 +400,16 @@ public:
     // The null fill for a chunk of this kind: an invalid ID for an ID chunk, which is how
     // an entity an OPTIONAL MATCH did not match is spelled.
     static NLFillNullFunction selectFillNullFunction(NLChunkKind kind);
+
+    // The null pad of every other chunk shape, the siblings of the gather selectors: an
+    // absent value in a nullable column, a default value in a plain one, a cleared mask
+    static NLFillNullFunction selectOptFillNullFunction(ValueType valueType);
+    static NLFillNullFunction selectPlainFillNullFunction(ValueType valueType);
+    static NLFillNullFunction selectMaskFillNull();
+    static NLFillNullFunction selectOptListFillNull();
+    static NLFillNullFunction selectOptListElementFillNull();
+    static NLFillNullFunction selectListElementFillNull();
+    static NLFillNullFunction selectOptOwnedStringFillNull();
 
     // Gather for a nullable value chunk of this value type (sort emit re-chunk).
     static NLGatherFunction selectOptGatherFunction(ValueType valueType);

@@ -318,6 +318,21 @@ LogicalResult CrossProduct::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+LogicalResult EachRow::inferReturnTypes(MLIRContext* context,
+                                        std::optional<Location> location,
+                                        EachRow::Adaptor adaptor,
+                                        SmallVectorImpl<Type>& inferredReturnTypes) {
+    SmallVector<Type, 8> chunkTypes;
+
+    for (const Type columnType : adaptor.getColumns().getTypes()) {
+        chunkTypes.push_back(columnType);
+    }
+
+    inferredReturnTypes.push_back(IteratorType::get(context, chunkTypes));
+
+    return success();
+}
+
 LogicalResult Constant::inferReturnTypes(MLIRContext* context,
                                          std::optional<Location> location,
                                          Constant::Adaptor adaptor,

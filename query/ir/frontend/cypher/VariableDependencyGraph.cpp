@@ -72,6 +72,10 @@ void VariableDependencyGraph::throwError(std::string_view msg, const void* obj) 
 VariableDependencyGraph::~VariableDependencyGraph() {
 }
 
+VariableDependencyGraph::VariableDependencyGraph(VariableDependencyGraph&& other) = default;
+
+VariableDependencyGraph& VariableDependencyGraph::operator=(VariableDependencyGraph&& other) = default;
+
 void VariableDependencyGraph::build(std::span<Stmt* const> stmts) {
     for (const Stmt* stmt : stmts) {
         if (const MatchStmt* match = dynamic_cast<const MatchStmt*>(stmt)) {

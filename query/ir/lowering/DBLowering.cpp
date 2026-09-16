@@ -758,7 +758,11 @@ bool opensSourceLoop(mlir::Operation* operation) {
 // or a hash join builds, and the emit loop a pipeline breaker opens over what it
 // accumulated
 bool opensRowLoop(mlir::Operation* operation) {
+    const bool returningSubquery = mlir::isa<mlir::db::CallSubquery>(operation)
+                                   && operation->getNumResults() > 0;
+
     return opensSourceLoop(operation)
+        || returningSubquery
         || mlir::isa<mlir::db::CrossProduct,
                      mlir::db::HashJoin,
                      mlir::db::Sort,
@@ -778,12 +782,30 @@ bool reducesToOneRow(mlir::Operation* operation) {
 
 // Passes some of its rows on and keeps the rest back, so the rows reaching a cut below it
 // are fewer than the rows a producer above it made
+// A returning body that carries nothing back runs one input row at a time
+bool runsPerRow(mlir::db::CallSubquery call) {
+    return !call.getUnit() && !call.getCarriesScope();
+}
+
+// The innermost body run one row at a time that holds the op, or null when none does
+mlir::db::CallSubquery nearestPerRowSubquery(mlir::Operation* operation) {
+    for (mlir::Operation* parent = operation->getParentOp(); parent; parent = parent->getParentOp()) {
+        mlir::db::CallSubquery call = mlir::dyn_cast<mlir::db::CallSubquery>(parent);
+        if (call && runsPerRow(call)) {
+            return call;
+        }
+    }
+
+    return mlir::db::CallSubquery {};
+}
+
 bool dropsRows(mlir::Operation* operation) {
     return mlir::isa<mlir::db::FilterOp,
                      mlir::db::HashJoin,
                      mlir::db::Skip,
                      mlir::db::Limit,
-                     mlir::db::RemoveDuplicates>(operation);
+                     mlir::db::RemoveDuplicates,
+                     mlir::db::CallSubquery>(operation);
 }
 
 // The list element types an unwind can drain into a column of that very type: the entity
@@ -859,23 +881,54 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     // the bound. Detect before the limit pre-scan so the fused ones are skipped.
     detectTopKFusion(dbFunction);
 
+    hoistLimitHandles(dbFunction.getBody(), _entryBlock, mlir::db::CallSubquery {});
+
+    for (mlir::Operation& operation : dbBody.front()) {
+        lowerOperation(operation);
+    }
+
+    // Peephole: a terminal LIMIT lowers to an nl.limit_truncate whose only
+    // consumer is the nl.output right after it. Fold that pair into a single
+    // limit-bearing nl.output, which emits the budgeted prefix off the handle
+    // instead of copying it - the copy-free path for a LIMIT that feeds the sink.
+    foldTruncatesIntoOutputs(nlFunction);
+
+    // The skip sibling: a terminal SKIP folds its nl.skip_truncate into a
+    // skip-bearing nl.output that emits the surviving suffix in place (at an
+    // offset) instead of copying it to the front - the copy-free post-skip tail.
+    foldSkipTruncatesIntoOutputs(nlFunction);
+
+    // Run MLIR verifier on the nlFunction
+    if (mlir::failed(mlir::verify(nlFunction))) {
+        throw IRException("DBLowering produced an invalid nl function");
+    }
+
+    return nlFunction;
+}
+
+void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock, mlir::db::CallSubquery holder) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+
     // Pre-scan for db.limits before any loop is built: nl.for's limit operand is
     // fixed at build time, so each handle must exist first to be threaded in, and
     // which loops a handle attaches to must be known up front. A limit fused into
-    // a sort's top-K carries no streaming handle, so it is left out here.
+    // a sort's top-K carries no streaming handle, so it is left out here - and so is
+    // one inside a body run one row at a time, which that body hoists into its own
+    // step, so the budget resets per input row.
     llvm::SmallVector<mlir::db::Limit, 2> limits;
-    dbFunction.walk([&](mlir::db::Limit limit) {
-        if (!_fusedLimits.count(limit.getOperation())) {
+    region.walk([&](mlir::db::Limit limit) {
+        const bool fused = _fusedLimits.count(limit.getOperation());
+        const bool heldHere = nearestPerRowSubquery(limit.getOperation()) == holder;
+
+        if (!fused && heldHere) {
             limits.push_back(limit);
         }
     });
 
-    // Hoist one nl.limit handle per db.limit to the top of the entry block, where
-    // each dominates the loops, the update and the truncate that read it. The
-    // reset scope is function scope (uncorrelated); a correlated limit would hoist
-    // into its enclosing loop body instead - future work.
+    // Hoist one nl.limit handle per db.limit to the top of the hoist block, where
+    // each dominates the loops, the update and the truncate that read it.
     if (!limits.empty()) {
-        _builder.setInsertionPointToStart(_entryBlock);
+        _builder.setInsertionPointToStart(hoistBlock);
         for (mlir::db::Limit limit : limits) {
             nl::Limit limitOp = _builder.create<nl::Limit>(loc, limit.getCount());
             _limitHandles[limit.getOperation()] = limitOp.getState();
@@ -902,28 +955,6 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
             assignCardinalityDriverLoop(limit, handle);
         }
     }
-
-    for (mlir::Operation& operation : dbBody.front()) {
-        lowerOperation(operation);
-    }
-
-    // Peephole: a terminal LIMIT lowers to an nl.limit_truncate whose only
-    // consumer is the nl.output right after it. Fold that pair into a single
-    // limit-bearing nl.output, which emits the budgeted prefix off the handle
-    // instead of copying it - the copy-free path for a LIMIT that feeds the sink.
-    foldTruncatesIntoOutputs(nlFunction);
-
-    // The skip sibling: a terminal SKIP folds its nl.skip_truncate into a
-    // skip-bearing nl.output that emits the surviving suffix in place (at an
-    // offset) instead of copying it to the front - the copy-free post-skip tail.
-    foldSkipTruncatesIntoOutputs(nlFunction);
-
-    // Run MLIR verifier on the nlFunction
-    if (mlir::failed(mlir::verify(nlFunction))) {
-        throw IRException("DBLowering produced an invalid nl function");
-    }
-
-    return nlFunction;
 }
 
 void DBLowering::lowerOperation(mlir::Operation& operation) {
@@ -1007,6 +1038,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerDistinctSet(distinctSet);
     } else if (mlir::db::OptionalMatch optionalMatch = mlir::dyn_cast<mlir::db::OptionalMatch>(operation)) {
         lowerOptionalMatch(optionalMatch);
+    } else if (mlir::db::CallSubquery callSubquery = mlir::dyn_cast<mlir::db::CallSubquery>(operation)) {
+        lowerCallSubquery(callSubquery);
     } else if (mlir::db::Limit limit = mlir::dyn_cast<mlir::db::Limit>(operation)) {
         lowerLimit(limit);
     } else if (mlir::db::Skip skip = mlir::dyn_cast<mlir::db::Skip>(operation)) {
@@ -1812,6 +1845,236 @@ void DBLowering::lowerOptionalMatch(mlir::db::OptionalMatch optionalMatch) {
     buildLoopForSource(drain.getResult(), optionalMatch.getOperation());
 }
 
+void DBLowering::lowerCallSubquery(mlir::db::CallSubquery call) {
+    llvm::SmallVector<mlir::Value, 4> inputChunks;
+    for (const mlir::Value column : call.getInputColumns()) {
+        inputChunks.push_back(mapValue(column));
+    }
+
+    // The step the body runs over is the one binding the columns it reads, so its loops
+    // nest in that block and re-run once per chunk of them.
+    mlir::Block* const stepBlock = deepestOwnerBlock(inputChunks, _rootBlock);
+
+    const bool returning = !call.getUnit();
+    if (returning && call.getOptional()) {
+        lowerOptionalSubquery(call, stepBlock, inputChunks);
+        return;
+    } else if (returning && !call.getCarriesScope()) {
+        lowerSubqueryPerRow(call, stepBlock, inputChunks);
+        return;
+    }
+
+    mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+
+    llvm::SmallVector<mlir::Value, 4> yieldedChunks;
+    mlir::Value yieldedTag;
+    lowerSubqueryBody(call, stepBlock, inputChunks, yieldedChunks, yieldedTag);
+
+    // A unit body leaves the rows in flight as they were, so what follows the op reads the
+    // step's own chunks again. A body carrying its scope hands the rows on: its yielded
+    // chunks are the results, bound in the body's innermost loop, which is where the rest
+    // of the query goes on from - unless the body opened no loop and the step is still the
+    // relation in flight.
+    const bool bodyOpenedALoop = _innermostLoopBody != nullptr;
+    if (!returning || !bodyOpenedALoop) {
+        _innermostLoopBody = previousInnermostLoopBody;
+        _innermostCardinality = previousInnermostCardinality;
+    }
+
+    if (!returning) {
+        return;
+    }
+
+    const mlir::ResultRange results = call.getResults();
+    for (size_t resultIndex = 0; resultIndex < results.size(); resultIndex++) {
+        _valueMap[results[resultIndex]] = yieldedChunks[resultIndex];
+    }
+}
+
+void DBLowering::lowerSubqueryBody(mlir::db::CallSubquery call,
+                                   mlir::Block* stepBlock,
+                                   llvm::ArrayRef<mlir::Value> inputChunks,
+                                   llvm::SmallVectorImpl<mlir::Value>& yieldedChunks,
+                                   mlir::Value& yieldedTag) {
+    mlir::Block& bodyBlock = call.getBody().front();
+    for (size_t inputIndex = 0; inputIndex < inputChunks.size(); inputIndex++) {
+        _valueMap[bodyBlock.getArgument(static_cast<unsigned>(inputIndex))] = inputChunks[inputIndex];
+    }
+
+    // A dataflow of its own, rooted in the step so its loops nest inside it - and so its
+    // accumulators, hoisted to the root, reset once per step. The caller's root comes back
+    // once the body is lowered; the innermost loop is left as the body set it.
+    mlir::Block* const previousRoot = _rootBlock;
+    _rootBlock = stepBlock;
+    _innermostLoopBody = nullptr;
+    _innermostCardinality = mlir::Value();
+
+    for (mlir::Operation& operation : bodyBlock) {
+        mlir::db::SubqueryYield yield = mlir::dyn_cast<mlir::db::SubqueryYield>(operation);
+        if (!yield) {
+            lowerOperation(operation);
+            continue;
+        }
+
+        for (const mlir::Value column : yield.getColumns()) {
+            yieldedChunks.push_back(mapValue(column));
+        }
+
+        if (yield.getTag()) {
+            yieldedTag = mapValue(yield.getTag());
+        }
+    }
+
+    _rootBlock = previousRoot;
+}
+
+void DBLowering::lowerSubqueryPerRow(mlir::db::CallSubquery call,
+                                     mlir::Block* stepBlock,
+                                     llvm::ArrayRef<mlir::Value> inputChunks) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+    llvm::SmallVector<mlir::Value, 4> yieldedChunks;
+
+    // No input column means the step is the single empty row Cypher starts from: the body
+    // runs once, in the step block, and what it yields is the result
+    if (inputChunks.empty()) {
+        mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+        const mlir::Value previousInnermostCardinality = _innermostCardinality;
+
+        hoistLimitHandles(call.getBody(), stepBlock, call);
+
+        mlir::Value yieldedTag;
+        lowerSubqueryBody(call, stepBlock, inputChunks, yieldedChunks, yieldedTag);
+
+        if (!_innermostLoopBody) {
+            _innermostLoopBody = previousInnermostLoopBody;
+            _innermostCardinality = previousInnermostCardinality;
+        }
+
+        const mlir::ResultRange results = call.getResults();
+        for (size_t resultIndex = 0; resultIndex < results.size(); resultIndex++) {
+            _valueMap[results[resultIndex]] = yieldedChunks[resultIndex];
+        }
+
+        return;
+    }
+
+    // The loop over the step's rows carries the handle of a limit downstream of the op,
+    // as the loops feeding that limit do, so a spent budget stops the walk over the rows
+    const mlir::Value limitHandle = _loopLimitHandle.lookup(call.getOperation());
+
+    setInsertionInto(stepBlock);
+    nl::EachRow eachRow = _builder.create<nl::EachRow>(loc, inputChunks);
+    nl::For rowLoop = _builder.create<nl::For>(loc, eachRow.getResult(), limitHandle);
+    mlir::Block* const rowBody = rowLoop.getBody();
+
+    llvm::SmallVector<mlir::Value, 4> rowChunks;
+    for (const mlir::BlockArgument rowChunk : rowBody->getArguments()) {
+        rowChunks.push_back(rowChunk);
+    }
+
+    // The body roots in the row loop, so its accumulators and the handles of its own
+    // limits are hoisted into that body and cover one input row at a time
+    hoistLimitHandles(call.getBody(), rowBody, call);
+
+    mlir::Value yieldedTag;
+    lowerSubqueryBody(call, rowBody, rowChunks, yieldedChunks, yieldedTag);
+
+    // One row against N pairs the input row with each of the N rows the body yielded for
+    // it, which is the op's result: the inputs then the body's columns
+    setInsertionInto(deepestOwnerBlock(yieldedChunks, rowBody));
+    nl::CrossProduct cross = _builder.create<nl::CrossProduct>(loc, rowChunks, yieldedChunks);
+
+    buildLoopForSource(cross.getResult(), call.getOperation());
+}
+
+void DBLowering::lowerOptionalSubquery(mlir::db::CallSubquery call,
+                                       mlir::Block* stepBlock,
+                                       llvm::ArrayRef<mlir::Value> inputChunks) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    // A body run one row at a time makes the accumulator's step one input row: the loop
+    // over the rows is opened first and the body roots in it. A body carrying the scope,
+    // and one over the single empty row, run in the step block as they otherwise would.
+    const bool perRow = runsPerRow(call) && !inputChunks.empty();
+
+    mlir::Block* bodyRoot = stepBlock;
+    llvm::SmallVector<mlir::Value, 4> stepChunks(inputChunks.begin(), inputChunks.end());
+
+    if (perRow) {
+        const mlir::Value limitHandle = _loopLimitHandle.lookup(call.getOperation());
+
+        setInsertionInto(stepBlock);
+        nl::EachRow eachRow = _builder.create<nl::EachRow>(loc, inputChunks);
+        nl::For rowLoop = _builder.create<nl::For>(loc, eachRow.getResult(), limitHandle);
+        bodyRoot = rowLoop.getBody();
+
+        stepChunks.clear();
+        for (const mlir::BlockArgument rowChunk : bodyRoot->getArguments()) {
+            stepChunks.push_back(rowChunk);
+        }
+    }
+
+    setInsertionInto(bodyRoot);
+    nl::OptionalBuffer buffer = _builder.create<nl::OptionalBuffer>(loc, stepChunks);
+    const mlir::Value state = buffer.getState();
+
+    // A body carrying the scope reads the tag through its trailing argument and hands it
+    // back; the others are tagged here
+    mlir::Block& bodyBlock = call.getBody().front();
+    if (bodyBlock.getNumArguments() > inputChunks.size()) {
+        _valueMap[bodyBlock.getArgument(static_cast<unsigned>(inputChunks.size()))] = buffer.getTag();
+    }
+
+    if (runsPerRow(call)) {
+        hoistLimitHandles(call.getBody(), bodyRoot, call);
+    }
+
+    llvm::SmallVector<mlir::Value, 4> yieldedChunks;
+    mlir::Value yieldedTag;
+    lowerSubqueryBody(call, bodyRoot, stepChunks, yieldedChunks, yieldedTag);
+
+    // What the collect appends: the inputs as the body left them then its own columns
+    // when it carries the scope, and the row's chunks crossed with its columns when it
+    // runs per row - one row against N, with the tag in the outer group so it lines up
+    llvm::SmallVector<mlir::Value, 4> collected;
+    mlir::Value collectedTag = yieldedTag;
+
+    if (perRow) {
+        llvm::SmallVector<mlir::Value, 4> outer(stepChunks.begin(), stepChunks.end());
+        outer.push_back(buffer.getTag());
+
+        setInsertionInto(deepestOwnerBlock(yieldedChunks, bodyRoot));
+        nl::CrossProduct cross = _builder.create<nl::CrossProduct>(loc, outer, yieldedChunks);
+        nl::For pairs = _builder.create<nl::For>(loc, cross.getResult(), mlir::Value {});
+
+        const mlir::Block::BlockArgListType pairChunks = pairs.getBody()->getArguments();
+        const size_t inputCount = stepChunks.size();
+
+        collected.assign(pairChunks.begin(), pairChunks.begin() + inputCount);
+        collectedTag = pairChunks[inputCount];
+        collected.append(pairChunks.begin() + inputCount + 1, pairChunks.end());
+    } else {
+        collected.assign(yieldedChunks.begin(), yieldedChunks.end());
+    }
+
+    setInsertionInto(deepestOwnerBlock(collected, bodyRoot));
+    _builder.create<nl::OptionalCollect>(loc, state, collectedTag, collected);
+
+    llvm::SmallVector<mlir::Type, 4> chunkTypes;
+    for (const mlir::Value chunk : collected) {
+        chunkTypes.push_back(chunk.getType());
+    }
+
+    // The drain's loop binds the op's results: the inputs then the body's columns, padded
+    // where it yielded nothing
+    const nl::IteratorType iteratorType = nl::IteratorType::get(_builder.getContext(), chunkTypes);
+    setInsertionInto(bodyRoot);
+    nl::OptionalDrain drain = _builder.create<nl::OptionalDrain>(loc, iteratorType, state);
+
+    buildLoopForSource(drain.getResult(), call.getOperation());
+}
+
 void DBLowering::lowerCrossProduct(mlir::db::CrossProduct product) {
     // The outer factor roots where this op would have - the entry block at top
     // level. The inner factor roots inside the outer factor's innermost loop
@@ -2079,13 +2342,14 @@ void DBLowering::lowerSkip(mlir::db::Skip skip) {
 
     const mlir::Location loc = _builder.getUnknownLoc();
 
-    // Hoist the skip handle to the top of the entry block, above every loop, so it
-    // dominates the update and the truncate placed in the producing loop body.
+    // Hoist the skip handle to the top of the root block, above every loop of this
+    // dataflow, so it dominates the update and the truncate placed in the producing loop
+    // body.
     // Unlike a limit, a skip threads no operand onto the loops (it cannot
     // early-exit - every row past the dropped prefix must still be produced), so it
     // needs no up-front pre-scan: the handle is created here, in program order,
     // once the producing loops already exist.
-    _builder.setInsertionPointToStart(_entryBlock);
+    _builder.setInsertionPointToStart(_rootBlock);
     const mlir::Value handle = _builder.create<nl::Skip>(loc, skip.getCount()).getState();
 
     // The representative is the first skipped column, in the innermost producing
@@ -2167,12 +2431,12 @@ void DBLowering::lowerSort(mlir::db::Sort sort) {
 
     const mlir::Location loc = _builder.getUnknownLoc();
 
-    // The accumulator and its sort spec are hoisted to the top of the entry
-    // block, above every loop, so the buffers exist before the producing loop
-    // fills them and the handle dominates the collect and the emit loop. A sort
+    // The accumulator and its sort spec are hoisted to the top of the root block,
+    // above every loop of this dataflow, so the buffers exist before the producing
+    // loop fills them and the handle dominates the collect and the emit loop. A sort
     // fused with a terminal db.limit carries that count as its top-K bound, so the
     // accumulator keeps only the best k rows; an unfused sort keeps every row.
-    _builder.setInsertionPointToStart(_entryBlock);
+    _builder.setInsertionPointToStart(_rootBlock);
 
     const auto topK = _sortTopK.find(sort.getOperation());
     mlir::IntegerAttr topKAttr;
@@ -2205,7 +2469,7 @@ void DBLowering::lowerSort(mlir::db::Sort sort) {
 
     const nl::IteratorType iteratorType = nl::IteratorType::get(_builder.getContext(), chunkTypes);
 
-    setInsertionInto(_entryBlock);
+    setInsertionInto(_rootBlock);
     nl::Sort sortOp = _builder.create<nl::Sort>(loc, iteratorType, state);
 
     // The emit loop binds one variable per sorted column. It is the only loop of this
@@ -2358,17 +2622,15 @@ void DBLowering::lowerRemoveDuplicates(mlir::db::RemoveDuplicates distinct) {
 
     const mlir::Location loc = _builder.getUnknownLoc();
 
-    // The seen-set handle is hoisted to the top of the entry block, above every
-    // loop, so it is reset once at function scope and dominates the filter placed
-    // in the producing loop body. A correlated DISTINCT (reset per enclosing step)
-    // would hoist into its enclosing loop body instead - future work, as for the
-    // streaming limit. A dedup naming a shared set reads that one instead, so every
-    // branch of a union records its rows in the same set.
+    // The seen-set handle is hoisted to the top of the root block, above every loop
+    // of this dataflow, so it is reset once per step of that block and dominates the
+    // filter placed in the producing loop body. A dedup naming a shared set reads that
+    // one instead, so every branch of a union records its rows in the same set.
     mlir::Value state;
     if (const mlir::Value sharedSet = distinct.getSet()) {
         state = mapValue(sharedSet);
     } else {
-        _builder.setInsertionPointToStart(_entryBlock);
+        _builder.setInsertionPointToStart(_rootBlock);
         state = _builder.create<nl::Distinct>(loc).getState();
     }
 
@@ -2401,12 +2663,10 @@ void DBLowering::lowerCount(mlir::db::Count count) {
 
     const mlir::Location loc = _builder.getUnknownLoc();
 
-    // The tally is hoisted to the top of the entry block, above every loop, so it
-    // is reset once at function scope and dominates the update placed in the
-    // producing loop body and the emit that reads it after the loop. A correlated
-    // COUNT (reset per enclosing step) would hoist into its enclosing loop body
-    // instead - future work, as for the streaming limit.
-    _builder.setInsertionPointToStart(_entryBlock);
+    // The tally is hoisted to the top of the root block, above every loop of this
+    // dataflow, so it is reset once per step of that block and dominates the update
+    // placed in the producing loop body and the emit that reads it after the loop.
+    _builder.setInsertionPointToStart(_rootBlock);
     const mlir::Value state = _builder.create<nl::Count>(loc).getState();
 
     // count(DISTINCT x) feeds the tally the survivors of a DISTINCT instead of the raw
@@ -2494,12 +2754,10 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
     // the input type. This also validates the reduction against the value type.
     const mlir::Type resultElement = aggregateResultElementType(_builder, kind, inputElement);
 
-    // The accumulator is hoisted to the top of the entry block, above every loop,
-    // so it is reset once at function scope and dominates the update in the
-    // producing loop body and the emit that reads it after the loop. The count
-    // sibling; a correlated aggregate (reset per enclosing step) would hoist into
-    // its enclosing loop body instead - future work, as for the streaming limit.
-    _builder.setInsertionPointToStart(_entryBlock);
+    // The accumulator is hoisted to the top of the root block, above every loop of
+    // this dataflow, so it is reset once per step of that block and dominates the
+    // update in the producing loop body and the emit that reads it after the loop.
+    _builder.setInsertionPointToStart(_rootBlock);
     const nl::AggregateStateType stateType = nl::AggregateStateType::get(context, resultElement);
     const mlir::Value state = _builder.create<nl::Aggregate>(loc, stateType, kind).getState();
 
@@ -2590,10 +2848,11 @@ void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
     const mlir::Location loc = _builder.getUnknownLoc();
 
     // The accumulator - with its keyCount / aggregate-kind spec - is hoisted to the
-    // top of the entry block, above every loop, so the group table exists before the
-    // producing loop fills it and the handle dominates the update and the emit loop.
+    // top of the root block, above every loop of this dataflow, so the group table
+    // exists before the producing loop fills it and the handle dominates the update
+    // and the emit loop.
     // The grouped sibling of lowerSort's nl.sort_buffer.
-    _builder.setInsertionPointToStart(_entryBlock);
+    _builder.setInsertionPointToStart(_rootBlock);
     nl::GroupAggregateBuffer bufferOp = _builder.create<nl::GroupAggregateBuffer>(loc,
                                                                                  keyCount,
                                                                                  groupAggregate.getKindsAttr());
@@ -2637,7 +2896,7 @@ void DBLowering::lowerGroupAggregate(mlir::db::GroupAggregate groupAggregate) {
     // sort, this emit loop is the only loop of this aggregation a limit may bound -
     // assignProducerLoops stops at the breaker and hands the handle to it, never to
     // the producing loops, which had to fold every row.
-    setInsertionInto(_entryBlock);
+    setInsertionInto(_rootBlock);
     nl::GroupAggregate groupOp = _builder.create<nl::GroupAggregate>(loc, iteratorType, state);
     buildLoopForSource(groupOp.getResult(), groupAggregate.getOperation());
 }
@@ -2708,10 +2967,11 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
 
     const mlir::Location loc = _builder.getUnknownLoc();
 
-    // The accumulator is hoisted to the top of the entry block, above every loop, so
-    // the group table exists before the producing loop fills it and the handle
-    // dominates the update. The collect sibling of lowerGroupAggregate's buffer.
-    _builder.setInsertionPointToStart(_entryBlock);
+    // The accumulator is hoisted to the top of the root block, above every loop of
+    // this dataflow, so the group table exists before the producing loop fills it and
+    // the handle dominates the update. The collect sibling of lowerGroupAggregate's
+    // buffer.
+    _builder.setInsertionPointToStart(_rootBlock);
     nl::CollectBuffer bufferOp = _builder.create<nl::CollectBuffer>(loc,
                                                                     keyCount,
                                                                     collect.getKindsAttr(),
@@ -2761,7 +3021,7 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
 
     const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunkTypes);
 
-    setInsertionInto(_entryBlock);
+    setInsertionInto(_rootBlock);
     nl::Collect collectOp = _builder.create<nl::Collect>(loc, iteratorType, state);
     buildLoopForSource(collectOp.getResult(), collect.getOperation());
 }
@@ -2776,7 +3036,7 @@ void DBLowering::lowerShortestPath(mlir::db::ShortestPath shortestPath) {
 
     // The search accumulator is hoisted above every loop, so its node-set buffers exist
     // before the producing loops fill them and the handle dominates both updates.
-    _builder.setInsertionPointToStart(_entryBlock);
+    _builder.setInsertionPointToStart(_rootBlock);
     const mlir::Value state = _builder.create<nl::ShortestPathBuffer>(loc).getState();
 
     // The source and target sets are filled by two updates, each spliced into the loop that
@@ -2813,7 +3073,7 @@ void DBLowering::lowerShortestPath(mlir::db::ShortestPath shortestPath) {
 
     const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunkTypes);
 
-    setInsertionInto(_entryBlock);
+    setInsertionInto(_rootBlock);
     nl::ShortestPath searchOp = _builder.create<nl::ShortestPath>(loc, iteratorType, state, handle);
     buildLoopForSource(searchOp.getResult(), shortestPath.getOperation());
 }
@@ -2840,7 +3100,7 @@ void DBLowering::lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect) {
 
     // The accumulate phase is identical to lowerCollect: a hoisted nl.collect_buffer
     // and an nl.collect_update in the producing loop body.
-    _builder.setInsertionPointToStart(_entryBlock);
+    _builder.setInsertionPointToStart(_rootBlock);
     nl::CollectBuffer bufferOp = _builder.create<nl::CollectBuffer>(loc,
                                                                     keyCount,
                                                                     mlir::DenseI64ArrayAttr {},
@@ -2863,7 +3123,7 @@ void DBLowering::lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect) {
 
     const nl::IteratorType iteratorType = nl::IteratorType::get(context, chunkTypes);
 
-    setInsertionInto(_entryBlock);
+    setInsertionInto(_rootBlock);
     nl::UnwindCollect unwindCollectOp = _builder.create<nl::UnwindCollect>(loc, iteratorType, state);
     buildLoopForSource(unwindCollectOp.getResult(), unwindCollect.getOperation());
 }
@@ -2930,12 +3190,11 @@ void DBLowering::lowerCallProcedure(mlir::db::CallProcedure call) {
     mlir::MLIRContext* const context = _builder.getContext();
     const mlir::Location loc = _builder.getUnknownLoc();
 
-    // The call handle is hoisted to the top of the entry block, above every loop, so
-    // the procedure is prepared once - its data allocated and its result columns
-    // bound - before the loops that drive it, and the handle dominates every op that
-    // names it. A correlated CALL (re-prepared per enclosing step) would hoist into
-    // its enclosing loop body instead - future work, as for the streaming limit.
-    _builder.setInsertionPointToStart(_entryBlock);
+    // The call handle is hoisted to the top of the root block, above every loop of
+    // this dataflow, so the procedure is prepared once per step of that block - its
+    // data allocated and its result columns bound - before the loops that drive it,
+    // and the handle dominates every op that names it.
+    _builder.setInsertionPointToStart(_rootBlock);
     const mlir::Value state = _builder.create<nl::Procedure>(loc, call.getProcedureAttr(), yields).getState();
 
     llvm::SmallVector<mlir::Value, 4> inputChunks;
@@ -3006,19 +3265,30 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
                                      bool rowsDroppedBeforeTheCut) {
     mlir::Operation* const definingOp = column.getDefiningOp();
     if (!definingOp) {
-        // A cross-product factor's loop variable is a block argument with no
-        // defining op; its producing loop is reached through the factor's yield
-        // in the cross-product branch below, not from here.
-        return false;
+        // A subquery body reads the rows in flight through its block arguments, so the
+        // walk carries on from the input column each one stands for. A cross-product
+        // factor's loop variable is a block argument too, with no producer to reach from
+        // here: its loop is reached through the factor's yield in the branch below.
+        const mlir::BlockArgument argument = mlir::cast<mlir::BlockArgument>(column);
+        mlir::db::CallSubquery call = mlir::dyn_cast<mlir::db::CallSubquery>(argument.getOwner()->getParentOp());
+
+        const bool standsForAnInput = call && argument.getArgNumber() < call.getInputColumns().size();
+        if (!standsForAnInput) {
+            return false;
+        }
+
+        return assignProducerLoops(call.getInputColumns()[argument.getArgNumber()], handle, rowsDroppedBeforeTheCut);
     }
 
     const bool opensLoop = opensSourceLoop(definingOp);
     const bool isCrossProduct = mlir::isa<mlir::db::CrossProduct>(definingOp);
     const bool isHashJoin = mlir::isa<mlir::db::HashJoin>(definingOp);
+    const bool isSubquery = mlir::isa<mlir::db::CallSubquery>(definingOp);
 
-    const bool emitsThroughLoop = mlir::isa<mlir::db::Sort,
-                                            mlir::db::GroupAggregate,
-                                            mlir::db::OptionalMatch>(definingOp);
+    const bool emitsThroughLoop = isSubquery
+                                  || mlir::isa<mlir::db::Sort,
+                                               mlir::db::GroupAggregate,
+                                               mlir::db::OptionalMatch>(definingOp);
 
     // A sort or a grouped aggregate accumulates the whole relation before emitting any of
     // it, so the loops feeding it have to see every row: the walk stops and the limit
@@ -3074,6 +3344,22 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
             mlir::Operation* const yield = factor->front().getTerminator();
             for (const mlir::Value yielded : yield->getOperands()) {
                 reachedALoop |= assignProducerLoops(yielded, handle, rowsDropped);
+            }
+        }
+    } else if (isSubquery) {
+        // A subquery's results come out of its body, so the walk goes through the body's
+        // yield to the loops inside it, and from them through the block arguments back to
+        // the inputs' own loops. A body that carries nothing hands its inputs back through
+        // the op itself, so the walk reaches them from here.
+        mlir::db::CallSubquery call = mlir::cast<mlir::db::CallSubquery>(definingOp);
+        mlir::Operation* const yield = call.getBody().front().getTerminator();
+        for (const mlir::Value yielded : yield->getOperands()) {
+            reachedALoop |= assignProducerLoops(yielded, handle, rowsDropped);
+        }
+
+        if (!call.getCarriesScope()) {
+            for (const mlir::Value input : call.getInputColumns()) {
+                reachedALoop |= assignProducerLoops(input, handle, rowsDropped);
             }
         }
     } else {
@@ -4104,13 +4390,13 @@ void DBLowering::setInsertionInto(mlir::Block* block) {
 }
 
 void DBLowering::setInsertionAfterProducingLoop(mlir::Block* updateBlock) {
-    if (updateBlock == _entryBlock) {
-        setInsertionInto(_entryBlock);
+    if (updateBlock == _rootBlock) {
+        setInsertionInto(_rootBlock);
         return;
     }
 
     mlir::Operation* enclosing = updateBlock->getParentOp();
-    while (enclosing->getBlock() != _entryBlock) {
+    while (enclosing->getBlock() != _rootBlock) {
         enclosing = enclosing->getBlock()->getParentOp();
     }
 

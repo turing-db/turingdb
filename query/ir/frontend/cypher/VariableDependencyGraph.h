@@ -46,6 +46,9 @@ public:
     VariableDependencyGraph();
     ~VariableDependencyGraph();
 
+    VariableDependencyGraph(VariableDependencyGraph&& other);
+    VariableDependencyGraph& operator=(VariableDependencyGraph&& other);
+
     /// Inserts the variables of one query part, keeping the ones @ref
     /// registerBoundVariable already declared so a pattern naming one depends on it
     void build(std::span<Stmt* const> stmts);

@@ -54,6 +54,7 @@
 #include "stmt/OrderByItem.h"
 #include "stmt/Skip.h"
 #include "stmt/CallStmt.h"
+#include "stmt/CallSubqueryStmt.h"
 #include "stmt/Limit.h"
 #include "CreateNodePropertyIndexQuery.h"
 #include "CreateEdgePropertyIndexQuery.h"
@@ -106,11 +107,7 @@ void CypherAnalyzer::analyze() {
     _ast->getFunctionDecls()->initDefault();
 
     for (QueryCommand* query : _ast->queries()) {
-        _ctxt = query->getDeclContext();
-
-        _exprAnalyzer->setDeclContext(_ctxt);
-        _readAnalyzer->setDeclContext(_ctxt);
-        _writeAnalyzer->setDeclContext(_ctxt);
+        setScope(query->getDeclContext());
 
         switch (query->getKind()) {
             case QueryCommand::Kind::SINGLE_PART_QUERY:
@@ -203,7 +200,14 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
         for (Stmt* stmt : stmts->stmts()) {
             const Stmt::Kind kind = stmt->getKind();
 
-            if (Stmt::isUpdating(kind)) {
+            if (kind == Stmt::Kind::CALL_SUBQUERY) {
+                CallSubqueryStmt* subquery = static_cast<CallSubqueryStmt*>(stmt);
+                analyze(subquery);
+
+                if (!subquery->isReturning()) {
+                    returnMandatory = false;
+                }
+            } else if (Stmt::isUpdating(kind)) {
                 returnMandatory = false;
                 _writeAnalyzer->analyze(stmt);
             } else if (kind == Stmt::Kind::WITH) {
@@ -324,7 +328,7 @@ void CypherAnalyzer::throwOnReadAfterUpdate(const StmtContainer* stmts) const {
 
         if (kind == Stmt::Kind::WITH) {
             hasWritten = false;
-        } else if (Stmt::isUpdating(kind)) {
+        } else if (Stmt::isUpdating(stmt)) {
             hasWritten = true;
         } else if (hasWritten) {
             throwError("A reading clause cannot follow an updating clause: separate them with a WITH",
@@ -342,6 +346,7 @@ void CypherAnalyzer::analyze(const WithStmt* withSt) {
 
     analyzeWithAliases(projection);
     analyzeProjection(projection, withSt);
+    carrySubqueryImports(projection);
     analyzeWithOrderBy(projection);
 
     openWithScope(projection);
@@ -414,6 +419,12 @@ void CypherAnalyzer::throwOnUnpublishedKeyVariable(const Expr* keyExpr,
 void CypherAnalyzer::openWithScope(Projection* projection) {
     DeclContext* scope = DeclContext::create(_ast, _ctxt);
 
+    publishProjection(projection, scope);
+
+    setScope(scope);
+}
+
+void CypherAnalyzer::publishProjection(Projection* projection, DeclContext* scope) {
     for (const Projection::ReturnItem& returnItem : projection->items()) {
         if (const auto* declPtr = std::get_if<VarDecl*>(&returnItem)) {
             const VarDecl* decl = *declPtr;
@@ -431,11 +442,197 @@ void CypherAnalyzer::openWithScope(Projection* projection) {
         published->setListShape(item->getListShape());
         projection->addPublishedDecl(published);
     }
+}
 
+void CypherAnalyzer::setScope(DeclContext* scope) {
     _ctxt = scope;
     _exprAnalyzer->setDeclContext(_ctxt);
     _readAnalyzer->setDeclContext(_ctxt);
     _writeAnalyzer->setDeclContext(_ctxt);
+}
+
+void CypherAnalyzer::analyze(CallSubqueryStmt* subquery) {
+    if (!subquery->hasScopeClause()) {
+        importThroughLeadingWith(subquery);
+    }
+
+    // The body reads the imported variables and nothing else of the scope around it, so
+    // its context is seeded with a declaration per import and the body resolves in that
+    const SinglePartQuery* body = subquery->getBody();
+    DeclContext* const outer = _ctxt;
+    DeclContext* const inner = body->getDeclContext();
+
+    for (const Symbol* import : subquery->imports()) {
+        const std::string_view name = import->getName();
+
+        const VarDecl* decl = outer->getDecl(name);
+        if (!decl) {
+            throwError(fmt::format("Variable '{}' not found", name), import);
+        }
+
+        VarDecl* imported = inner->getOrCreateNamedVariable(_ast, decl->getType(), name);
+        imported->setListShape(decl->getListShape());
+    }
+
+    const bool outerHasCreate = _writeAnalyzer->hasCreate();
+
+    // What the scope clause names is readable everywhere in the body. A body importing
+    // through a leading WITH carries nothing this way: that WITH is an ordinary
+    // projection, and an ordinary WITH below it descopes what it does not project.
+    std::vector<std::string_view> outerImports;
+    if (subquery->hasScopeClause()) {
+        for (const Symbol* import : subquery->imports()) {
+            outerImports.push_back(import->getName());
+        }
+    }
+
+    std::swap(_subqueryImports, outerImports);
+
+    setScope(inner);
+    _writeAnalyzer->startPart();
+
+    analyze(body);
+
+    std::swap(_subqueryImports, outerImports);
+
+    setScope(outer);
+    _writeAnalyzer->setHasCreate(outerHasCreate);
+
+    if (subquery->isReturning()) {
+        publishSubqueryReturn(subquery);
+    }
+}
+
+void CypherAnalyzer::importThroughLeadingWith(CallSubqueryStmt* subquery) const {
+    const StmtContainer* stmts = subquery->getBody()->getStmts();
+    if (!stmts || stmts->stmts().empty()) {
+        return;
+    }
+
+    const Stmt* first = stmts->stmts().front();
+    if (first->getKind() != Stmt::Kind::WITH) {
+        return;
+    }
+
+    const WithStmt* with = static_cast<const WithStmt*>(first);
+    const Projection* projection = with->getProjection();
+
+    const bool plainProjection = !with->getWhere()
+                                 && !projection->isDistinct()
+                                 && !projection->hasOrderBy()
+                                 && !projection->hasSkip()
+                                 && !projection->hasLimit()
+                                 && !projection->isReturningAll();
+
+    if (!plainProjection) {
+        throwError("An importing WITH holds plain variable references only, "
+                   "with no WHERE, DISTINCT, ORDER BY, SKIP or LIMIT",
+                   with);
+    }
+
+    for (const Projection::ReturnItem& returnItem : projection->items()) {
+        const auto* exprPtr = std::get_if<Expr*>(&returnItem);
+        const Expr* item = exprPtr ? *exprPtr : nullptr;
+
+        const bool plainSymbol = item
+                                 && item->getKind() == Expr::Kind::SYMBOL
+                                 && item->getName().empty();
+
+        if (!plainSymbol) {
+            throwError("An importing WITH holds plain variable references only: "
+                       "an expression or an alias cannot be imported",
+                       with);
+        }
+
+        subquery->addImport(static_cast<const SymbolExpr*>(item)->getSymbol());
+    }
+}
+
+// A WITH inside a subquery body publishes the imports beside its own items, so a clause
+// below it reads them as the clauses above it did. They ride the barrier as the items do:
+// a cut keeps them with the rows it keeps, and a dedup reads them with the rest of the row.
+void CypherAnalyzer::carrySubqueryImports(Projection* projection) const {
+    // A reduction over no grouping key answers for the rows it read with a single row,
+    // even when it read none. Carrying an import would key it, and a keyed reduction over
+    // no row has no group to report, so the import stops at such a barrier.
+    const bool keylessAggregate = projection->isAggregate() && !projection->hasGroupingKeys();
+    if (keylessAggregate) {
+        return;
+    }
+
+    for (const std::string_view import : _subqueryImports) {
+        VarDecl* decl = _ctxt->getDecl(import);
+        if (!decl) {
+            continue;
+        }
+
+        if (projection->hasName(import)) {
+            throwOnRedeclaredImport(projection, import, decl);
+            continue;
+        }
+
+        projection->pushFrontDecl(decl);
+        projection->setName(decl, import);
+    }
+}
+
+void CypherAnalyzer::throwOnRedeclaredImport(const Projection* projection,
+                                             std::string_view import,
+                                             const VarDecl* decl) const {
+    for (const Projection::ReturnItem& returnItem : projection->items()) {
+        if (const auto* declPtr = std::get_if<VarDecl*>(&returnItem)) {
+            if (projection->getName(*declPtr) != import) {
+                continue;
+            }
+
+            // The variable itself, projected under its own name: the barrier publishes
+            // what it already held rather than binding the name to something else
+            if (*declPtr == decl) {
+                return;
+            }
+        } else {
+            const Expr* item = std::get<Expr*>(returnItem);
+            if (projection->getName(item) != import) {
+                continue;
+            }
+
+            const bool namesTheImport = item->getKind() == Expr::Kind::SYMBOL
+                                        && static_cast<const SymbolExpr*>(item)->getDecl() == decl;
+            if (namesTheImport) {
+                return;
+            }
+        }
+
+        throwError(fmt::format("Variable '{}' is imported by the CALL: a clause of the subquery "
+                               "cannot declare it again",
+                               import),
+                   projection);
+    }
+}
+
+void CypherAnalyzer::publishSubqueryReturn(const CallSubqueryStmt* subquery) {
+    const ReturnStmt* returnStmt = subquery->getBody()->getReturnStmt();
+    Projection* projection = returnStmt->getProjection();
+
+    for (const Projection::ReturnItem& returnItem : projection->items()) {
+        std::optional<std::string_view> name;
+        if (const auto* declPtr = std::get_if<VarDecl*>(&returnItem)) {
+            name = projection->getName(*declPtr);
+        } else {
+            name = projection->getName(std::get<Expr*>(returnItem));
+        }
+
+        bioassert(name.has_value(), "Returned item of a CALL subquery without a name.");
+
+        if (_ctxt->hasDecl(*name)) {
+            throwError(fmt::format("Variable '{}' already declared in the outer scope: "
+                                   "a CALL subquery cannot return it, rename it with AS",
+                                   *name),
+                       returnStmt);
+        }
+    }
+
+    publishProjection(projection, _ctxt);
 }
 
 // RETURN needs no such rule: it names its columns for the caller and nothing downstream

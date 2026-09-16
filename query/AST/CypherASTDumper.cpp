@@ -12,6 +12,7 @@
 #include "stmt/MatchStmt.h"
 #include "stmt/ReturnStmt.h"
 #include "stmt/CallStmt.h"
+#include "stmt/CallSubqueryStmt.h"
 #include "stmt/DeleteStmt.h"
 #include "stmt/SetStmt.h"
 #include "stmt/Limit.h"
@@ -311,6 +312,16 @@ void CypherASTDumper::dumpQueryBody(std::ostream& out, const SinglePartQuery* qu
                     const WithStmt* withStmt = static_cast<const WithStmt*>(stmt);
                     out << "    _" << std::hex << query << " ||--o{ _" << std::hex << withStmt << " : \"\"\n";
                     dump(out, withStmt);
+                }
+                break;
+
+                case Stmt::Kind::CALL_SUBQUERY: {
+                    const CallSubqueryStmt* subquery = static_cast<const CallSubqueryStmt*>(stmt);
+                    out << "    _" << std::hex << query << " ||--o{ _" << std::hex << subquery << " : \"\"\n";
+                    out << "    _" << std::hex << subquery << " {\n";
+                    out << "        ASTType CALL_SUBQUERY\n";
+                    out << "    }\n";
+                    dump(out, subquery->getBody());
                 }
                 break;
 
