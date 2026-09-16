@@ -16,12 +16,12 @@ def run(client : TuringDB) -> None:
 
   # Delete Node 9, also deletes edge 1
   client.set_change(change=change_fst_deletor)
-  client.query("MATCH (n) WHERE n.id = 9 DELETE n")
+  client.query("MATCH (n) WHERE n.id = 9 DETACH DELETE n")
   submit_current_change(client);
 
   # Obvious write-write conflict
   client.set_change(change=change_snd_deletor)
-  client.query("MATCH (n) WHERE n.id = 9 DELETE n")
+  client.query("MATCH (n) WHERE n.id = 9 DETACH DELETE n")
   client.query("commit") # Committing locally is fine
 
   # We expect an exception here
