@@ -11,11 +11,15 @@ target_link_libraries(fuzz_query_engine PRIVATE
     turing_db_parser_s
     turing_db_ast_s
     turing_db_analyzer_s
-    turing_db_plan_s
-    turing_db_optimizer_s
-    turing_db_pipeline_s
-    turing_db_interpreter_s
+    turing_db_ir_common_s
+    turing_db_ir_dbdialect_s
+    turing_db_ir_nldialect_s
+    turing_db_ir_storagedialect_s
+    turing_db_ir_interpreter_s
+    turing_db_ir_codegen_s
+    turing_db_frontend_cypher_s
     turing_db_query_common_s)
+target_include_directories(fuzz_query_engine PRIVATE ${MLIR_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 
 add_executable(fuzz_csv_parser fuzz_csv_parser.cpp)
 target_link_libraries(fuzz_csv_parser PRIVATE
