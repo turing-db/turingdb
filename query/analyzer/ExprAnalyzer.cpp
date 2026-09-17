@@ -253,7 +253,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
         case BinaryOperator::And: {
             type = EvaluatedType::Bool;
 
-            if (pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Bool)) {
+            if (pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Bool)
+                || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Null)) {
                 break;
             }
 

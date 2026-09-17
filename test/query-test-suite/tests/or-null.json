@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) RETURN n.isFrench OR NULL",
+  "expect": {
+    "plan": "",
+    "result": ""
+  },
+  "tags": [
+  ],
+  "write-required": false
+}
