@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Procedure.h"
+
 #include "samplers/GraphSAGESampler.h"
 
 #include <stddef.h>
