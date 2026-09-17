@@ -125,6 +125,7 @@ set(storage_sources
         versioning/Commit.cpp
         versioning/CommitView.cpp
         versioning/CommitBuilder.cpp
+        versioning/PendingAdjacency.cpp
         versioning/ChangeRebaser.cpp
         versioning/ChangeConflictChecker.cpp
         versioning/MetadataRebaser.cpp

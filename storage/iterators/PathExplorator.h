@@ -10,6 +10,7 @@
 #include "PathExplorationDir.h"
 #include "PathReachTable.h"
 #include "PathTargetIndex.h"
+#include "versioning/PendingAdjacency.h"
 #include "columns/ColumnIDs.h"
 #include "columns/ColumnVector.h"
 #include "datapart/EdgeRecord.h"
@@ -48,6 +49,9 @@ public:
     void setEndNodes(const ColumnNodeIDs* endNodes) { _endNodes = endNodes; }
     void setDistanceIndex(const PathDistanceIndex* index) { _distances = index; }
     void setTargetIndex(const PathTargetIndex* index) { _targetIndex = index; }
+    // The edges this change has written and not committed, walked beside the graph's own
+    void setPendingAdjacency(const PendingAdjacency* adjacency) { _pendingAdjacency = adjacency; }
+
     void setDistinctEnds(bool distinct);
     void setWalkerCount(size_t walkerCount);
     void setCandidateLookahead(size_t lookahead) { _lookahead = lookahead; }
@@ -131,6 +135,7 @@ private:
     const ColumnNodeIDs* _endNodes {nullptr};
     const PathDistanceIndex* _distances {nullptr};
     const PathTargetIndex* _targetIndex {nullptr};
+    const PendingAdjacency* _pendingAdjacency {nullptr};
     bool _distinctEnds {false};
     size_t _lookahead {1};
 
@@ -147,6 +152,14 @@ private:
     size_t _candidateChecks {0};
     bool _valid {false};
 
+    // Whether the node is one this change wrote, which no data part holds and whose
+    // adjacency and labels are read from the write buffer instead
+    bool isPendingNode(NodeID node) const;
+    size_t nodeIDBound() const;
+
+    // The labels of a node, wherever it lives: a data part, or this change's buffer
+    LabelSetHandle labelSetOf(NodeID node) const;
+
     void prefetchNodeData(NodeID node, size_t partIndex) const;
     bool hasWork() const;
     bool isEnd(size_t seedRow, NodeID node) const;
@@ -160,6 +173,7 @@ private:
     void readRanges(Walker& walker);
     void pushFrame(Walker& walker);
     void generateCandidates(Walker& walker, std::span<const EdgeRecord> edges);
+    void generatePendingCandidates(Walker& walker, NodeID node);
     void emit(size_t seedRow, NodeID target, PathRef path);
 
     void acquireArenas();
@@ -173,6 +187,7 @@ private:
     void expandLevel();
     void collectReachCandidates(NodeID node);
     void appendReachCandidates(std::span<const EdgeRecord> edges);
+    void appendPendingReachCandidates(NodeID node);
     void finishBatch();
 };
 

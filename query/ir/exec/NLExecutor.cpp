@@ -58,6 +58,7 @@
 
 #include "reader/GraphReader.h"
 #include "versioning/CommitWriteBuffer.h"
+#include "versioning/PendingAdjacency.h"
 #include "views/GraphView.h"
 
 #include "CSVParser.h"
@@ -5891,6 +5892,20 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
     const bool distinctEnds = loopData->isDistinctEnds();
     explorator.setDistinctEnds(distinctEnds);
 
+    PendingAdjacency pendingAdjacency;
+    const CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
+    if (writeBuffer) {
+        pendingAdjacency.index(*writeBuffer,
+                               context->getFirstQueryEdge(),
+                               committedNodeCount(&view),
+                               committedEdgeCount(&view));
+        explorator.setPendingAdjacency(&pendingAdjacency);
+    }
+
+    // A change that wrote only nodes opens no path the committed graph does not already
+    // hold, so only a pending edge puts the two pruning indexes below out of date.
+    const bool walksPendingEdges = !pendingAdjacency.isEmpty();
+
     std::optional<NLHopFilter> hopFilter;
     if (loopData->hasHopFilter()) {
         hopFilter.emplace(context, loopData);
@@ -5898,7 +5913,7 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
     }
 
     // The distinct mode is a breadth-first search already, so it prunes by no index
-    const bool prunes = !distinctEnds && (filtersByEndLabels || loopData->getEndNodes());
+    const bool prunes = !distinctEnds && !walksPendingEdges && (filtersByEndLabels || loopData->getEndNodes());
 
     const double hopPassRate = prunes ? hopPassRateFor(view, loopData, hopFilter ? &*hopFilter : nullptr) : 1.0;
 
@@ -5909,14 +5924,14 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
 
     if (filtersByEndLabels) {
         explorator.setEndLabels(&loopData->getEndLabels());
-        if (!distinctEnds) {
+        if (prunes) {
             explorator.setDistanceIndex(pruningIndexFor(view, loopData, maxHops, inputNodeIDs->size(), expansion, hopPassRate));
         }
     }
 
     if (loopData->getEndNodes()) {
         explorator.setEndNodes(loopData->getEndNodes());
-        if (!distinctEnds) {
+        if (prunes) {
             explorator.setTargetIndex(targetIndexFor(view, loopData, maxHops, expansion, hopPassRate));
         }
     }
