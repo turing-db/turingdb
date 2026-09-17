@@ -4859,6 +4859,48 @@ void DBProgramGenerator::translateCaseExpr(const Expr* expr, const CaseExpr* cas
                                .getResult();
 }
 
+mlir::Value DBProgramGenerator::disjointComparison(mlir::Value lhs, mlir::Value rhs, bool equality) {
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
+
+    // A literal carries a value on every row it stands for, so only a column operand can be
+    // absent, and a null test on the literal would meet its one row against the relation's
+    llvm::SmallVector<mlir::Value, 2> columns;
+    for (const mlir::Value operand : {lhs, rhs}) {
+        if (!yieldsConstantColumn(operand)) {
+            columns.push_back(operand);
+        }
+    }
+
+    if (columns.empty()) {
+        return constantBool(!equality);
+    }
+
+    mlir::Value condition;
+    for (const mlir::Value column : columns) {
+        mlir::Value test;
+        if (equality) {
+            test = _opBuilder.create<mlir::db::EqOp>(loc, boolType, column, nullConstantColumn()).getResult();
+        } else {
+            test = _opBuilder.create<mlir::db::NeqOp>(loc, boolType, column, nullConstantColumn()).getResult();
+        }
+
+        if (!condition) {
+            condition = test;
+        } else if (equality) {
+            condition = _opBuilder.create<mlir::db::OrOp>(loc, boolType, condition, test).getResult();
+        } else {
+            condition = _opBuilder.create<mlir::db::AndOp>(loc, boolType, condition, test).getResult();
+        }
+    }
+
+    if (equality) {
+        return _opBuilder.create<mlir::db::AndOp>(loc, boolType, condition, nullConstantColumn()).getResult();
+    }
+
+    return _opBuilder.create<mlir::db::OrOp>(loc, boolType, condition, nullConstantColumn()).getResult();
+}
+
 mlir::Value DBProgramGenerator::translateCaseTest(mlir::Value subject, const CaseExpr::Test& test) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
@@ -4934,6 +4976,11 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
     const bool comparesAgainstNull = lhsExpr->getType() == EvaluatedType::Null
                                      || rhsExpr->getType() == EvaluatedType::Null;
 
+    // Two types that can never hold equal values answer the equality without reading a
+    // row. The ordering operators are left out: they answer null across types rather than
+    // false, and the analyzer turns them away ahead of here
+    const bool comparesDisjointTypes = comparesAsDisjointTypes(lhsExpr->getType(), rhsExpr->getType());
+
     // AND, OR and XOR read a null side as an unknown boolean, which the runtime truth
     // tables answer against the other side's value per row. With both sides null there is
     // no value to answer against and the result is null, whichever of the three it is
@@ -4949,6 +4996,8 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
         case BinaryOperator::Equal:
             if (comparesAgainstNull) {
                 _part._exprMap[expr] = nullConstantColumn();
+            } else if (comparesDisjointTypes) {
+                _part._exprMap[expr] = disjointComparison(lhs, rhs, /*equality=*/true);
             } else {
                 _part._exprMap[expr] = _opBuilder.create<mlir::db::EqOp>(loc, boolType, lhs, rhs).getResult();
             }
@@ -5024,6 +5073,8 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
         case BinaryOperator::NotEqual:
             if (comparesAgainstNull) {
                 _part._exprMap[expr] = nullConstantColumn();
+            } else if (comparesDisjointTypes) {
+                _part._exprMap[expr] = disjointComparison(lhs, rhs, /*equality=*/false);
             } else {
                 _part._exprMap[expr] = _opBuilder.create<mlir::db::NeqOp>(loc, boolType, lhs, rhs).getResult();
             }
