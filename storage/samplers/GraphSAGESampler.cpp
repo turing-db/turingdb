@@ -1,9 +1,14 @@
 #include "GraphSAGESampler.h"
-#include "columns/ColumnIDs.h"
-#include "columns/ColumnOptVector.h"
+
+#include <algorithm>
+#include <stddef.h>
+
 #include "iterators/ChunkConfig.h"
 #include "iterators/NeighbourhoodSampleIterator.h"
-#include <algorithm>
+
+#include "columns/ColumnIDs.h"
+#include "columns/ColumnOptVector.h"
+
 
 using namespace db;
 
@@ -29,51 +34,62 @@ static void deduplicate(const ColumnOptVector<NodeID>* src, ColumnOptVector<Node
     raw.erase(newEnd, oldEnd);
 }
 
-GraphSAGESampler::GraphSAGESampler(const GraphView* view, const ColumnNodeIDs* seeds,
-                                   Fanouts fanouts)
-    : _view(view),
-      _seeds(seeds),
-      _fanouts(fanouts) {
+GraphSAGESampler::GraphSAGESampler(const GraphView* view)
+    : _view(view)
+{
 }
 
-void GraphSAGESampler::sample() {
-    // dst_nodes for step 1 is precisely the seeds
-    colAssign(_seeds, _dstNodes1);
-    _requiredLength = std::max(_requiredLength, _seeds->size());
+void GraphSAGESampler::setHopData(size_t idx, NodeCol* srcs, NodeCol* tgts, NodeCol* dst, size_t fanout) {
+    bioassert(idx < hops, "Tried to set OOB hop data");
+    HopData& hopData = _sampleData[idx];
 
-    ColumnNodeIDs tmpSrc;
-    ColumnNodeIDs tmpTgt;
+    hopData._fanout = fanout;
+    hopData._srcs = srcs;
+    hopData._dstNodes = dst;
+    hopData._tgts = tgts;
+}
+
+void GraphSAGESampler::sample(const ColumnNodeIDs* seeds) {
+    static_assert(hops >= 1);
+
+    colAssign(seeds, _sampleData[0]._dstNodes);
+
+    while (_currentHop < hops) {
+        sampleHop();
+    }
+}
+
+// XXX: TODO: Chunking behaviour
+void GraphSAGESampler::sampleHop() {
+    bioassert(_currentHop < hops, "Tried to sample with OOB hop number");
+
+    HopData& thisHop = _sampleData[_currentHop];
+    NodeCol* seeds = thisHop._dstNodes;
+
     ColumnNodeIDs tmpSeeds;
+    colAssign(seeds, &tmpSeeds);
 
-    const auto sample = [&](size_t step,
-                            const ColumnOptVector<NodeID>* seeds,
-                            ColumnOptVector<NodeID>* srcs,
-                            ColumnOptVector<NodeID>* tgts) -> void {
-        bioassert(step < _fanouts.size(), "Invalid step");
-        const size_t sampleSize = _fanouts[step];
-        colAssign(seeds, &tmpSeeds);
-        NeighbourhoodSampleChunkWriter writer(*_view, &tmpSeeds, sampleSize);
+    const size_t sampleSize = thisHop._fanout;
 
-        // TODO: avoid intermediate copy and pass opt vec directly
-        tmpSrc.clear(), tmpTgt.clear();
-        writer.setOutputColumns(&tmpSrc, nullptr, nullptr, &tmpTgt);
-        writer.fill(ChunkConfig::CHUNK_SIZE);
+    NeighbourhoodSampleChunkWriter writer(*_view, &tmpSeeds, sampleSize);
 
-        colAssign(&tmpSrc, srcs);
-        colAssign(&tmpTgt, tgts);
+    ColumnNodeIDs tmpSrcs;
+    ColumnNodeIDs tmpTgts;
+    writer.setOutputColumns(&tmpSrcs, nullptr, nullptr, &tmpTgts);
+    // XXX: Check for overflowing a chunk, maybe loop untilDone
+    writer.fill(ChunkConfig::CHUNK_SIZE);
 
-        bioassert(srcs->size() == tgts->size(), "Invalid sample");
-        _requiredLength = std::max(_requiredLength, srcs->size());
-    };
+    colAssign(&tmpSrcs, thisHop._srcs);
+    colAssign(&tmpTgts, thisHop._tgts);
 
-    // hop1
-    sample(0, _dstNodes1, _srcs1, _tgts1);
-    deduplicate(_tgts1, _dstNodes2);
+    if (_currentHop == hops - 1) {
+        _currentHop++;
+        return;
+    }
 
-    // hop2
-    sample(1, _dstNodes2, _srcs2, _tgts2);
-    deduplicate(_tgts2, _dstNodes3);
+    HopData& nextHop = _sampleData[_currentHop + 1];
+    NodeCol* nextDst = nextHop._dstNodes;
+    deduplicate(thisHop._tgts, nextDst); // seed the next hop with the targets of current
 
-    // hop3
-    sample(2, _dstNodes3, _srcs3, _tgts3);
+    _currentHop++;
 }

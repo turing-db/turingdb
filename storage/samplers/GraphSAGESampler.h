@@ -11,35 +11,37 @@ namespace db {
 
 class GraphSAGESampler {
 public:
+    using NodeCol = ColumnOptVector<NodeID>;
     constexpr static size_t hops = 3;
     using Fanouts = std::array<size_t, hops>;
 
-    explicit GraphSAGESampler(const GraphView* view, const ColumnNodeIDs* seeds,
-                              Fanouts fanouts);
+    explicit GraphSAGESampler(const GraphView* view);
 
-    void sample();
+    void setHopData(size_t idx, NodeCol* srcs, NodeCol* tgts, NodeCol* dst, size_t fanout);
+
+    void sample(const ColumnNodeIDs* seeds);
 
 private:
-    const GraphView* _view {nullptr};
-    const ColumnNodeIDs* _seeds {nullptr};
+    struct HopData;
+    using Samples = std::array<HopData, hops>;
 
-    std::array<size_t, 3> _fanouts;
-
-    size_t _requiredLength {0};
-
-    ColumnOptVector<NodeID>* _srcs1 {nullptr};
-    ColumnOptVector<NodeID>* _tgts1 {nullptr};
-    ColumnOptVector<NodeID>* _dstNodes1 {nullptr}; // @ref _seeds, null extended
-
-    ColumnOptVector<NodeID>* _srcs2 {nullptr};
-    ColumnOptVector<NodeID>* _tgts2 {nullptr};
     // TODO: check whether dst_nodes should include srcs of previous
     // i.e. unique(seeds_k ∪ tgts_k)
-    ColumnOptVector<NodeID>* _dstNodes2 {nullptr};
+    struct HopData {
+        NodeCol* _srcs {nullptr};     // src nodes of edges for this hop
+        NodeCol* _tgts {nullptr};     // tgt nodes of edges for this hop
+        NodeCol* _dstNodes {nullptr}; // nodes to generate embeddings for this hop (seeds)
+        size_t _fanout {0};           // neighbourhood sample size for this hop
+    };
 
-    ColumnOptVector<NodeID>* _srcs3 {nullptr};
-    ColumnOptVector<NodeID>* _tgts3 {nullptr};
-    ColumnOptVector<NodeID>* _dstNodes3 {nullptr};
+    const GraphView* _view {nullptr};
+
+    Samples _sampleData {};
+
+    size_t _requiredLength {0};
+    size_t _currentHop {0};
+
+    void sampleHop();
 };
 
 }
