@@ -33,7 +33,10 @@ A returned name may not already exist in the outer scope; an imported variable c
 be returned under an alias.
 
 `OPTIONAL CALL` keeps an input row the body produces nothing for, with the returned
-columns null, exactly as OPTIONAL MATCH does.
+columns null, exactly as OPTIONAL MATCH does. Over a unit body it does nothing: such a body
+yields nothing for every input row and every row passes through whatever it wrote, so there
+is no row to pad. `OPTIONAL CALL (p) { CREATE (:Audit) }` answers as the same query without
+the keyword.
 
 Out of scope: `CALL { ... } IN TRANSACTIONS`, and UNION inside the body until UNION itself
 is implemented.
@@ -354,7 +357,9 @@ body yields the RETURN columns alone and `lowerSubqueryPerRow` drives it through
 `nl.each_row`, hoists its accumulators and limit handles into the row loop, and crosses the
 row's one-row chunks with what the body yielded. `optional` wraps either in the optional
 buffer, collect and drain; the body carries the row tag itself only when it carries the
-scope over input rows it has.
+scope over input rows it has. It is set for a returning body alone
+(`optional = returning && subquery->isOptional()`): OPTIONAL over a unit body is accepted
+and does nothing, since there is no row it yields for the drain to pad.
 
 Every pipeline breaker now hoists its state to `_rootBlock` rather than `_entryBlock`, which
 is the entry block at top level and the row loop's body inside a per-row subquery. The
