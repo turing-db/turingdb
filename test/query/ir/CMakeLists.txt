@@ -2702,3 +2702,7 @@ target_link_libraries(test_query_ir_call_subquery_read_only_body PRIVATE
         turing_db_interpreter_v3_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_call_subquery_read_only_body PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# A subquery inside a subquery, and what the inner body reads of the outer one.
+add_turing_test(test_query_ir_call_subquery_nested CallSubqueryNestedTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_nested PRIVATE turing_ir_test_write_query_s)

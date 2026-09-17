@@ -242,6 +242,60 @@ bool isHiddenName(std::string_view name) {
 // name can be: an identifier holds no backtick
 constexpr std::string_view subqueryTagName {"`hidden_`tag"};
 
+bool matchCarriesRows(const MatchStmt* matchStmt) {
+    return !matchStmt->hasOrderBy() && !matchStmt->hasSkip() && !matchStmt->hasLimit();
+}
+
+bool projectionCarriesRows(const Projection* projection) {
+    return !projection->isAggregate()
+           && !projection->isDistinct()
+           && !projection->hasOrderBy()
+           && !projection->hasSkip()
+           && !projection->hasLimit();
+}
+
+// Whether the rows this clause leaves in flight are each still paired with the input row
+// they came from. Fanning out and filtering keep that pairing - the input column rides
+// along - so the question is not whether the row count survives.
+bool statementCarriesRows(const Stmt* stmt) {
+    const Stmt::Kind kind = stmt->getKind();
+
+    switch (kind) {
+        case Stmt::Kind::MATCH:
+            return matchCarriesRows(static_cast<const MatchStmt*>(stmt));
+        break;
+
+        case Stmt::Kind::WITH:
+            return projectionCarriesRows(static_cast<const WithStmt*>(stmt)->getProjection());
+        break;
+
+        // A source of its own is crossed with the rows already in flight, so each row it
+        // makes carries the input row it was paired with; an updating clause writes once
+        // per row and leaves the rows alone
+        case Stmt::Kind::CALL:
+        case Stmt::Kind::CREATE:
+        case Stmt::Kind::MERGE:
+        case Stmt::Kind::SET:
+        case Stmt::Kind::DELETE:
+        case Stmt::Kind::LOAD_CSV:
+        case Stmt::Kind::VECTOR_SEARCH:
+        case Stmt::Kind::UNWIND:
+        case Stmt::Kind::CALL_SUBQUERY:
+            return true;
+        break;
+
+        // A shortest path answers for the whole source and target columns with one
+        // distance and one path, so its rows are not the rows it read. A RETURN is the
+        // body's tail, read off getReturnStmt() rather than walked here.
+        case Stmt::Kind::SHORTESTPATH:
+        case Stmt::Kind::RETURN:
+            return false;
+        break;
+    }
+
+    return false;
+}
+
 using UnaryFunctionEmitter = mlir::Value (*)(mlir::OpBuilder& builder,
                                              mlir::Location loc,
                                              mlir::db::ColumnType resultType,
@@ -3891,30 +3945,9 @@ void DBProgramGenerator::publishProjection(const Projection* projection) {
 }
 
 bool DBProgramGenerator::subqueryCarriesRows(const SinglePartQuery* body) {
-    const auto breaksRows = [](const Projection* projection) {
-        return projection->isAggregate()
-               || projection->isDistinct()
-               || projection->hasOrderBy()
-               || projection->hasSkip()
-               || projection->hasLimit();
-    };
-
     if (const StmtContainer* stmts = body->getStmts()) {
         for (const Stmt* stmt : stmts->stmts()) {
-            const Stmt::Kind kind = stmt->getKind();
-
-            if (kind == Stmt::Kind::MATCH) {
-                const MatchStmt* matchStmt = static_cast<const MatchStmt*>(stmt);
-                const bool cutsRows = matchStmt->hasOrderBy() || matchStmt->hasSkip() || matchStmt->hasLimit();
-
-                if (cutsRows) {
-                    return false;
-                }
-            } else if (kind == Stmt::Kind::WITH) {
-                if (breaksRows(static_cast<const WithStmt*>(stmt)->getProjection())) {
-                    return false;
-                }
-            } else if (kind == Stmt::Kind::SHORTESTPATH) {
+            if (!statementCarriesRows(stmt)) {
                 return false;
             }
         }
@@ -3922,7 +3955,7 @@ bool DBProgramGenerator::subqueryCarriesRows(const SinglePartQuery* body) {
 
     const ReturnStmt* returnStmt = body->getReturnStmt();
 
-    return !returnStmt || !breaksRows(returnStmt->getProjection());
+    return !returnStmt || projectionCarriesRows(returnStmt->getProjection());
 }
 
 void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) {
