@@ -20,6 +20,10 @@ public:
     const StmtContainer* getStmts() const { return _stmts; }
     const ReturnStmt* getReturnStmt() const { return _returnStmt; }
 
+    // A clause of the query writes to the graph, a CALL subquery counting when its own
+    // body does
+    bool writesToTheGraph() const;
+
     void setStmts(StmtContainer* stmts) { _stmts = stmts; }
     void addStmt(Stmt* stmt);
 

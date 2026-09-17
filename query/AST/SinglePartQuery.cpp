@@ -1,5 +1,7 @@
 #include "SinglePartQuery.h"
 
+#include <algorithm>
+
 #include "CypherAST.h"
 #include "decl/DeclContext.h"
 #include "stmt/StmtContainer.h"
@@ -23,4 +25,16 @@ SinglePartQuery* SinglePartQuery::create(CypherAST* ast) {
 
 void SinglePartQuery::addStmt(Stmt* stmt) {
     _stmts->add(stmt);
+}
+
+bool SinglePartQuery::writesToTheGraph() const {
+    if (!_stmts) {
+        return false;
+    }
+
+    const auto isUpdating = [](const Stmt* stmt) {
+        return Stmt::isUpdating(stmt);
+    };
+
+    return std::ranges::any_of(_stmts->stmts(), isUpdating);
 }

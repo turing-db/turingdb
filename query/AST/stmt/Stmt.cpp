@@ -1,5 +1,6 @@
 #include "Stmt.h"
 
+#include "SinglePartQuery.h"
 #include "CallSubqueryStmt.h"
 
 using namespace db;
@@ -36,7 +37,9 @@ bool Stmt::isUpdating(const Stmt* stmt) {
     const Kind kind = stmt->getKind();
 
     if (kind == Kind::CALL_SUBQUERY) {
-        return !static_cast<const CallSubqueryStmt*>(stmt)->isReturning();
+        const CallSubqueryStmt* subquery = static_cast<const CallSubqueryStmt*>(stmt);
+
+        return !subquery->isReturning() && subquery->getBody()->writesToTheGraph();
     }
 
     return isUpdating(kind);
