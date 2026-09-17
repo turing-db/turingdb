@@ -4262,12 +4262,16 @@ mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
 mlir::Value DBLowering::unionColumnChunk(mlir::Value chunk) {
     const mlir::Type element = chunkValueElement(_builder, chunk.getType());
 
-    const bool isString = mlir::isa<storage::StringType>(element);
+    const bool isString = mlir::isa<storage::StringType, storage::OwnedStringType>(element);
     const bool isDouble = mlir::isa<mlir::Float64Type>(element);
     const mlir::IntegerType integerType = mlir::dyn_cast<mlir::IntegerType>(element);
 
     if (!isString && !isDouble && !integerType) {
         return chunk;
+    }
+
+    if (isString) {
+        return ownedStringColumnChunk(chunk);
     }
 
     // Wrapped before it is converted, and not instead: the kernel a conversion selects
@@ -4288,6 +4292,26 @@ mlir::Value DBLowering::unionColumnChunk(mlir::Value chunk) {
     setInsertionForUnaryOp(nullableChunk);
 
     return _builder.create<nl::ToInteger>(_builder.getUnknownLoc(), signedChunk, nullableChunk).getResult();
+}
+
+// One branch reads a string property, borrowing its characters from the graph, and another
+// builds its own - type(e), a CSV field, a procedure's yield. The column carries the owned
+// form, since a view into a chunk the next step refills is not what a dedup keys on, a sort
+// buffers or a sink reads.
+mlir::Value DBLowering::ownedStringColumnChunk(mlir::Value chunk) {
+    mlir::MLIRContext* const context = _builder.getContext();
+    const storage::OwnedStringType ownedElement = storage::OwnedStringType::get(context);
+    const storage::NullableType nullableElement = storage::NullableType::get(context, ownedElement);
+    const nl::ChunkType resultType = nl::ChunkType::get(context, nullableElement);
+
+    if (chunk.getType() == resultType) {
+        return chunk;
+    }
+
+    mlir::OpBuilder::InsertionGuard guard(_builder);
+    setInsertionForUnaryOp(chunk);
+
+    return _builder.create<nl::ToOwnedString>(_builder.getUnknownLoc(), resultType, chunk).getResult();
 }
 
 mlir::Value DBLowering::cardinalityDriver(llvm::ArrayRef<mlir::Value> chunks) const {

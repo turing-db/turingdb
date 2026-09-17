@@ -781,6 +781,7 @@ private:
 
     void translateNot(mlir::nl::Not notOp, NLStmtContainer* body);
     void translateToNullable(mlir::nl::ToNullable toNullable, NLStmtContainer* body);
+    void translateToOwnedString(mlir::nl::ToOwnedString toOwnedString, NLStmtContainer* body);
 
     void translateCase(mlir::nl::Case caseOp, NLStmtContainer* body);
 

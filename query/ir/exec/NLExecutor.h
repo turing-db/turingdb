@@ -298,6 +298,11 @@ public:
 
     static NLUnaryFn selectToNullable(ValueType valueType, const Column* operand, LocalMemory* memory, Column*& result);
 
+    // Read a string column - borrowing its characters or owning them, nullable or not - as
+    // a nullable column that owns them. The result is one column type whichever of the four
+    // @param operand is, which is what makes it the string a union carries.
+    static NLUnaryFn selectToOwnedString(const Column* operand, LocalMemory* memory, Column*& result);
+
     // Write each row of a CASE (nl.case): the value of the first branch whose condition
     // holds, the default when none does, and an absent value when there is no default.
     static void runCase(NLExecutionContext* context, NLFunctionData* data);

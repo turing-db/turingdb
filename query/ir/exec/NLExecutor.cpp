@@ -1298,6 +1298,18 @@ void toNullableColumn(Column* result, const Column* operand) {
     std::copy(values.begin(), values.end(), nullables.begin());
 }
 
+// Copy a string column into a nullable one owning its characters (nl.to_owned_string).
+// @param SourceColumn is any of the four shapes a string column takes, and the result is
+// the one column type for all of them.
+template <typename SourceColumn>
+void toOwnedStringColumn(Column* result, const Column* operand) {
+    const auto& values = static_cast<const SourceColumn*>(operand)->getRaw();
+    auto& owned = static_cast<ColumnOptVector<types::String::OwningPrimitive>*>(result)->getRaw();
+
+    owned.resize(values.size());
+    std::copy(values.begin(), values.end(), owned.begin());
+}
+
 // Read an entity column as a nullable column of its IDs' integers: a node or an edge an
 // OPTIONAL MATCH did not match carries an invalid ID, which is the null. The entity
 // sibling of toNullableColumn, for the column family whose null is not an absent optional.
@@ -5495,6 +5507,24 @@ NLUnaryFn NLExecutor::selectToNullable(ValueType valueType, const Column* operan
     }
 
     return nullptr;
+}
+
+NLUnaryFn NLExecutor::selectToOwnedString(const Column* operand, LocalMemory* memory, Column*& result) {
+    result = memory->alloc<ColumnOptVector<types::String::OwningPrimitive>>();
+
+    const ColumnKind::Code kind = operand->getKind();
+
+    if (kind == ColumnOptVector<types::String::Primitive>::staticKind()) {
+        return &toOwnedStringColumn<ColumnOptVector<types::String::Primitive>>;
+    } else if (kind == ColumnVector<types::String::Primitive>::staticKind()) {
+        return &toOwnedStringColumn<ColumnVector<types::String::Primitive>>;
+    } else if (kind == ColumnOptVector<types::String::OwningPrimitive>::staticKind()) {
+        return &toOwnedStringColumn<ColumnOptVector<types::String::OwningPrimitive>>;
+    } else if (kind == ColumnVector<types::String::OwningPrimitive>::staticKind()) {
+        return &toOwnedStringColumn<ColumnVector<types::String::OwningPrimitive>>;
+    } else {
+        throw IRException("Only a string column can be read as an owned string column");
+    }
 }
 
 template <ColumnOperator Op>

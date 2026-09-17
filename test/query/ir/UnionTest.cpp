@@ -216,6 +216,24 @@ TEST_F(UnionTest, dedupsACountAgainstAnIntegerProperty) {
                expected);
 }
 
+// One branch owns the characters of its strings and the other borrows them from the graph.
+// Both are one Cypher STRING, so the result carries them as one column.
+TEST_F(UnionTest, unionsAnEdgeTypeWithAStringProperty) {
+    const Rows expected {{"KNOWS_WELL"}, {"INTERESTED_IN"}, {"Remy"}, {"Adam"}};
+
+    expectRows("MATCH ()-[e]->() RETURN type(e) AS v UNION "
+               "MATCH (a:Founder) RETURN a.name AS v",
+               expected);
+}
+
+TEST_F(UnionTest, unionsAStringPropertyWithAnEdgeType) {
+    const Rows expected {{"Remy"}, {"Adam"}, {"KNOWS_WELL"}, {"INTERESTED_IN"}};
+
+    expectRows("MATCH (a:Founder) RETURN a.name AS v UNION "
+               "MATCH ()-[e]->() RETURN type(e) AS v",
+               expected);
+}
+
 TEST_F(UnionTest, unionsTraversedBranches) {
     const Rows expected {{"Adam"}, {"Ghosts"}, {"Computers"}, {"Eighties"}, {"Remy"}, {"Bio"}, {"Cooking"}};
 
