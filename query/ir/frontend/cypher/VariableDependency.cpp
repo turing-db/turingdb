@@ -7,6 +7,21 @@
 
 using namespace db;
 
+namespace {
+
+void appendUnique(std::span<const std::string_view> names, std::vector<std::string_view>& out) {
+    for (const std::string_view name : names) {
+        const bool alreadyPresent = std::ranges::find(out, name) != out.end();
+        if (alreadyPresent) {
+            continue;
+        }
+
+        out.push_back(name);
+    }
+}
+
+}
+
 void VariableDependency::addIncoming(DependencyEdge* newEdge) {
     _incoming.push_back(newEdge);
 }
@@ -21,7 +36,7 @@ void VariableDependency::addLabelConstraints(std::span<const std::string_view> l
     }
 
     if (_constraints) {
-        bioassert(!std::holds_alternative<EdgeType>(*_constraints), "Have edge type");
+        bioassert(!std::holds_alternative<EdgeTypeNames>(*_constraints), "Have edge type");
     }
 
     if (!_constraints) {
@@ -30,23 +45,19 @@ void VariableDependency::addLabelConstraints(std::span<const std::string_view> l
 
     LabelNames& labelNames = std::get<LabelNames>(*_constraints);
 
-    for (const std::string_view label : labels) {
-        const bool alreadyPresent =
-            std::ranges::find(labelNames, label) != labelNames.end();
-        if (alreadyPresent) {
-            continue;
-        }
-
-        labelNames.push_back(label);
-    }
+    appendUnique(labels, labelNames);
 }
 
-void VariableDependency::setEdgeTypeConstraint(std::string_view type) {
-    if (type.empty()) {
+void VariableDependency::setEdgeTypeConstraint(std::span<const std::string_view> types) {
+    if (types.empty()) {
         return;
     }
 
-    bioassert(!_constraints.has_value(), "Multiple edge types.");
+    bioassert(!_constraints.has_value(), "Edge already constrained.");
 
-    _constraints = EdgeType {type};
+    _constraints = EdgeTypeNames {};
+
+    EdgeTypeNames& edgeTypeNames = std::get<EdgeTypeNames>(*_constraints);
+
+    appendUnique(types, edgeTypeNames._names);
 }
