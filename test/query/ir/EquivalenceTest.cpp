@@ -568,9 +568,7 @@ TEST_F(EquivalenceTest, labelConstraints) {
 TEST_F(EquivalenceTest, edgeTypeConstraints) {
     expectEquivalent("MATCH (a)-[:KNOWS_WELL]->(b) RETURN a, b");
     expectEquivalent("MATCH (a)-[:INTERESTED_IN]->(b) RETURN a, b");
-
-    // v2 does not support multiple edge types
-    // expectEquivalent("MATCH (a)-[:KNOWS_WELL|INTERESTED_IN]->(b) RETURN a, b");
+    expectEquivalent("MATCH (a)-[:KNOWS_WELL|INTERESTED_IN]->(b) RETURN a, b");
 
     expectEquivalent("MATCH (a)-[e:KNOWS_WELL]->(b) RETURN a, b");
     expectEquivalent("MATCH (a)-[e:INTERESTED_IN]->(b) RETURN a, b");

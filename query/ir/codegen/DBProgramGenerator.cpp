@@ -5171,21 +5171,20 @@ void DBProgramGenerator::applyConstraints(const VariableDependency* var) {
         filterAllColumns(checkNodeLabels(nodeColumn, labels));
     };
 
-    const auto applyEdgeTypeConstraint = [&](const VariableDependency::EdgeType& type) {
+    const auto applyEdgeTypeConstraint = [&](const VariableDependency::EdgeTypeNames& types) {
         const auto findIt = _part._edgeTypeMap.find(var);
         bioassert(findIt != _part._edgeTypeMap.end(),
                   "Type-constrained edge without a type column: {}", var->getName());
         const mlir::Value edgeTypeColumn = findIt->second;
 
-        const std::array<std::string_view, 1> types {type};
-        filterAllColumns(checkEdgeType(edgeTypeColumn, types));
+        filterAllColumns(checkEdgeType(edgeTypeColumn, types._names));
     };
 
     std::visit([&](auto&& constraint) {
         using T = std::decay_t<decltype(constraint)>;
         if constexpr (std::is_same_v<T, VariableDependency::LabelNames>) {
             applyLabelConstraint(constraint);
-        } else if constexpr (std::is_same_v<T, VariableDependency::EdgeType>) {
+        } else if constexpr (std::is_same_v<T, VariableDependency::EdgeTypeNames>) {
             applyEdgeTypeConstraint(constraint);
         } else {
             // sizeof(T) == 0 (never true) keeps the assert dependent on T so it only
