@@ -2225,12 +2225,10 @@ void DBLowering::lowerUnion(mlir::db::Union unionOp) {
         _innermostLoopBody = nullptr;
         _innermostCardinality = mlir::Value();
 
+        mlir::db::Output branchOutput = mlir::cast<mlir::db::Output>(branch.front().back());
+
         for (mlir::Operation& operation : branch.front()) {
-            if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
-                for (const mlir::Value column : output.getColumns()) {
-                    _valueMap[column] = unionColumnChunk(mapValue(column));
-                }
-            }
+            convertUnionResultChunks(operation, branchOutput);
 
             lowerOperation(operation);
         }
@@ -2239,6 +2237,37 @@ void DBLowering::lowerUnion(mlir::db::Union unionOp) {
             collectBranchResultTypes(branch, resultTypes);
         } else {
             throwOnDisagreeingBranchTypes(branch, resultTypes);
+        }
+    }
+}
+
+// A dedup keys a row on the bytes of the chunk it is handed, so a branch's result columns
+// are converted on their way into it rather than on their way out: a count keyed as a
+// plain ui64 and a property keyed as a nullable i64 spell the same number two different
+// ways, and the duplicate the union exists to drop survives.
+void DBLowering::convertUnionResultChunks(mlir::Operation& operation, mlir::db::Output branchOutput) {
+    if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
+        for (const mlir::Value column : output.getColumns()) {
+            _valueMap[column] = unionColumnChunk(mapValue(column));
+        }
+
+        return;
+    }
+
+    mlir::db::RemoveDuplicates dedup = mlir::dyn_cast<mlir::db::RemoveDuplicates>(operation);
+    if (!dedup) {
+        return;
+    }
+
+    const mlir::OperandRange columns = dedup.getColumns();
+    const mlir::ResultRange results = dedup.getResults();
+    const mlir::OperandRange outputColumns = branchOutput.getColumns();
+
+    for (size_t columnIndex = 0; columnIndex < results.size(); columnIndex++) {
+        if (llvm::is_contained(outputColumns, results[columnIndex])) {
+            const mlir::Value column = columns[columnIndex];
+
+            _valueMap[column] = unionColumnChunk(mapValue(column));
         }
     }
 }
