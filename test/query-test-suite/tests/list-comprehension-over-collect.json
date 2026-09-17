@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "remote-enabled": false,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person) WITH collect(n.name) AS names RETURN [x IN names WHERE x = 'Remy'] AS remy",
+  "expect": {
+    "result": "remy\n[Remy]"
+  },
+  "tags": [
+    "lists",
+    "comprehension",
+    "aggregate",
+    "with"
+  ],
+  "write-required": false
+}

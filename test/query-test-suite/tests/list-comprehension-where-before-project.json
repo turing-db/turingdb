@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "remote-enabled": false,
+  "graph": "simpledb",
+  "query": "RETURN [x IN [0, 1, 2] WHERE x <> 0 | 10 / x] AS divided",
+  "expect": {
+    "result": "divided\n\"[10, 5]\""
+  },
+  "tags": [
+    "lists",
+    "comprehension",
+    "return"
+  ],
+  "write-required": false
+}
