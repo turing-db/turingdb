@@ -109,6 +109,10 @@ int fuzzOne(const char* data, size_t size) {
         return 0;
     }
 
+    if (ast.queries().empty()) {
+        return 0;
+    }
+
     mlir::MLIRContext context;
     context.getOrLoadDialect<mlir::func::FuncDialect>();
     context.getOrLoadDialect<mlir::storage::Storage>();
