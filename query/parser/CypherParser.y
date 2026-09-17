@@ -82,6 +82,7 @@
     #include "InstallExtensionQuery.h"
     #include "stmt/VectorSearchStmt.h"
     #include "expr/ListExpr.h"
+    #include "expr/ListComprehensionExpr.h"
     #include "VecLibMetadata.h"
     #include "CreateNodePropertyIndexQuery.h"
     #include "CreateEdgePropertyIndexQuery.h"
@@ -306,6 +307,8 @@
 %type<db::Expr*> propertyExpr
 %type<db::Expr*> atomExpr
 %type<db::Expr*> collectExpr
+%type<db::ListComprehensionExpr*> listComprehension
+%type<db::ListComprehensionExpr*> filterExpr
 %type<db::CaseExpr*> caseExpr
 %type<db::CaseExpr*> whenThenChain
 %type<std::pair<db::CaseExpr::Tests, db::Expr*>> whenThen
@@ -1275,7 +1278,7 @@ atomExpr
     | parameter { scanner.notImplemented(@$, "Parameters"); }
     | caseExpr { $$ = $1; }
     | countFunc { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
-    | listComprehension { scanner.notImplemented(@$, "List comprehensions"); }
+    | listComprehension { $$ = $1; }
     //| patternComprehension { scanner.notImplemented(@$, "Pattern comprehensions"); }
     | filterWith { scanner.notImplemented(@$, "Filter keywords"); }
     | functionInvocation { $$ = FunctionInvocationExpr::create(ast, $1); LOC($$, @$); }
@@ -1551,13 +1554,17 @@ filterKeyword
 //    ;
 
 listComprehension
-    : OBRACK filterExpr CBRACK { scanner.notImplemented(@$, "List comprehensions"); }
-    | OBRACK filterExpr PIPE expr CBRACK { scanner.notImplemented(@$, "List comprehensions"); }
+    : OBRACK filterExpr CBRACK { $$ = $2; LOC($$, @$); }
+    | OBRACK filterExpr PIPE expr CBRACK { $$ = $2; $$->setProjection($4); LOC($$, @$); }
     ;
 
 filterExpr
-    : symbol IN expr { scanner.notImplemented(@$, "IN"); }
-    | symbol IN expr whereClause { scanner.notImplemented(@$, "IN"); }
+    : symbol IN expr { $$ = ListComprehensionExpr::create(ast, $1, $3); LOC($$, @$); }
+    | symbol IN expr whereClause {
+        $$ = ListComprehensionExpr::create(ast, $1, $3);
+        $$->setPredicate($4->getExpr());
+        LOC($$, @$);
+      }
     ;
 
 countFunc

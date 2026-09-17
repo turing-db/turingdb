@@ -265,6 +265,68 @@ def MakeList : NLOp<"make_list", [Pure, RowAlignedThroughOperands]> {
 }
 
 /**
+* ListComprehension
+*/
+def ListComprehension : NLOp<"list_comprehension", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise build of one list per row out of the elements of that row's list";
+
+  let description = [{
+    Imperative counterpart of db.list_comprehension. Row r of the result is the list of
+    what the body yields for the elements of row r that its predicate keeps:
+
+      %ts = nl.list_comprehension(%tags, {%n}) ({
+        ^bb0(%x: !nl.chunk<!storage.nullable<!storage.string>>,
+             %tag: !nl.chunk<ui64>,
+             %nIn: !nl.chunk<!storage.node_id>):
+          %keep = nl.neq %x, %c : ...
+          %xk, %tagk, %nk = nl.filter %keep, (%x, %tag, %nIn) : ...
+          nl.comprehension_yield %tagk, %xk : !nl.chunk<!storage.nullable<!storage.string>>
+      }) : (!nl.chunk<!storage.nullable<!storage.list<!storage.string>>>,
+            !nl.chunk<!storage.node_id>)
+        -> !nl.chunk<!storage.nullable<!storage.list<!storage.string>>>
+
+    A chunk of the elements does not measure the step the source chunk does, so the body
+    runs over chunks of its own: the op walks every (row, element) pair of the source
+    chunk in row order, fills the element chunk, the row tag holding the row each element
+    came from and each carried chunk gathered by that row - the cursor of nl.unwind - and
+    runs the body once per chunkful. The body hands back the tag as it left it, so the
+    elements a WHERE cut are gone from it, and each value goes to the list of the row its
+    tag names. The elements of one row arrive in order and in one run, so a row's list is
+    complete as soon as the run past it starts.
+
+    The result is nullable: a row whose source cell holds no list gets no list, which is
+    how `[x IN null | x]` reads, and a row whose elements were all cut gets the empty list.
+  }];
+
+  let arguments = (ins NLChunk:$source, Variadic<NLChunk>:$columns_to_filter);
+  let results   = (outs NLChunk:$result);
+
+  // Exactly one block, ending in an nl.comprehension_yield.
+  let regions = (region SizedRegion<1>:$body);
+
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $source `,` `{` $columns_to_filter `}` `)` $body attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+/**
+* ComprehensionYield
+*/
+def ComprehensionYield : NLOp<"comprehension_yield", [Pure, Terminator, HasParent<"ListComprehension">]> {
+  let summary = "Name the row each surviving element of an nl.list_comprehension came from and what it contributes";
+
+  let arguments = (ins NLUInt64Chunk:$row_tags, NLChunk:$value);
+
+  // The tag's type is buildable and so left out; only the value's is spelled.
+  let assemblyFormat = [{
+    $row_tags `,` $value attr-dict `:` qualified(type($value))
+  }];
+}
+
+/**
 * ScanEdges
 */
 def ScanEdges : NLOp<"scan_edges", [Pure, InferTypeOpAdaptor]> {

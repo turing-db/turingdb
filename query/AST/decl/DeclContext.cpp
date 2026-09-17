@@ -82,6 +82,16 @@ VarDecl* DeclContext::declareProjectedVariable(CypherAST* ast, EvaluatedType typ
     return decl;
 }
 
+void DeclContext::dropVariable(std::string_view name) {
+    const auto findIt = _declMap.find(name);
+    if (findIt == _declMap.end()) {
+        return;
+    }
+
+    std::erase(_decls, findIt->second);
+    _declMap.erase(findIt);
+}
+
 VarDecl* DeclContext::createUnnamedVariable(CypherAST* ast, EvaluatedType type) {
     std::string* name = ast->createString();
 

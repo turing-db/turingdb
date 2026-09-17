@@ -43,6 +43,12 @@ public:
 
     VarDecl* createUnnamedVariable(CypherAST* ast, EvaluatedType type);
 
+    // Undeclares a name, leaving the scope as it was before it was declared. A list
+    // comprehension binds its variable here so the expressions inside it read the names
+    // around it, and drops it once its body is analyzed: the name is no variable of the
+    // query, so nothing after the comprehension - a wildcard projection included - sees it
+    void dropVariable(std::string_view name);
+
     void declareAlias(std::string_view name, VarDecl* decl);
 
 private:

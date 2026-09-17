@@ -613,6 +613,10 @@ private:
     ColumnVector<size_t> _positions;
 };
 
+// Whether the cell one column holds at @param row holds no list at all - a null, not an
+// empty one. One per source column shape, selected during translation.
+using NLCellAbsentFunction = bool (*)(const Column* source, size_t row);
+
 // nl.scan_edges loop data: the edge sibling of NLScanLoopData. A source loop
 // (no input column, no carry set), so - unlike NLEdgeLoopData - it holds only
 // the four fixed output chunks a step fills (sources, edge IDs, edge type IDs,
@@ -3407,6 +3411,101 @@ private:
     Column* _result {nullptr};
     LocalMemory* _memory {nullptr};
     std::vector<Element> _elements;
+};
+
+// nl.list_comprehension data: the per-row list build of `[x IN xs WHERE p(x) | f(x)]`.
+// Holds the source column with the handler counting the elements each of its cells
+// contributes, the drain filling the element chunk from them and the one telling a cell
+// holding no list from an empty one, the carry set gathered by each element's source row -
+// the same NLCarriedColumn shape the unwind loop uses - and the body computing what each
+// element contributes. The scratch columns hold, per element of the current chunk, the
+// source row it came from and the position of the element inside that row's cell; the row
+// tag column holds that same row for the body to cut alongside the elements, and the
+// staged elements and their per-row counts hold what the whole step gathered, which the
+// lists are built from once every element has been seen.
+class NLListComprehensionData : public NLFunctionData {
+public:
+    using CarriedColumns = std::vector<NLCarriedColumn>;
+
+    // @param elementEmit and @param elementOutput are null when the source's cells are
+    // themselves the elements, exactly as on NLUnwindLoopData.
+    NLListComprehensionData(const Column* source,
+                            NLUnwindElementCountFunction elementCount,
+                            NLUnwindElementEmitFunction elementEmit,
+                            NLCellAbsentFunction cellAbsent,
+                            Column* elementOutput,
+                            ColumnVector<uint64_t>* rowTags,
+                            Column* result,
+                            LocalMemory* memory)
+        : _source(source),
+        _elementCount(elementCount),
+        _elementEmit(elementEmit),
+        _cellAbsent(cellAbsent),
+        _elementOutput(elementOutput),
+        _rowTags(rowTags),
+        _result(result),
+        _memory(memory)
+    {
+    }
+
+    const Column* getSource() const { return _source; }
+    NLUnwindElementCountFunction getElementCountFunc() const { return _elementCount; }
+    NLUnwindElementEmitFunction getElementEmitFunc() const { return _elementEmit; }
+    NLCellAbsentFunction getCellAbsentFunc() const { return _cellAbsent; }
+    Column* getElementOutput() const { return _elementOutput; }
+    ColumnVector<uint64_t>* getRowTags() const { return _rowTags; }
+    Column* getResult() const { return _result; }
+    LocalMemory* getMemory() const { return _memory; }
+
+    const CarriedColumns& carriedColumns() const { return _carriedColumns; }
+
+    void addCarriedColumn(const NLCarriedColumn& carried) {
+        _carriedColumns.push_back(carried);
+    }
+
+    // What the body ends on: the row each surviving element came from, and the value it
+    // contributes to that row's list under the read its column shape takes
+    const Column* getYieldedRowTags() const { return _yieldedRowTags; }
+    const Column* getValue() const { return _value; }
+    NLListItemReadFunction getValueRead() const { return _valueRead; }
+
+    void setYield(const Column* yieldedRowTags, const Column* value, NLListItemReadFunction valueRead) {
+        _yieldedRowTags = yieldedRowTags;
+        _value = value;
+        _valueRead = valueRead;
+    }
+
+    ColumnVector<size_t>* getRows() { return &_rows; }
+    ColumnVector<size_t>* getPositions() { return &_positions; }
+
+    std::vector<ListBuffer<>::ListItemVariant>& stagedElements() { return _stagedElements; }
+    std::vector<size_t>& stagedCounts() { return _stagedCounts; }
+
+    NLStmtContainer* getStmts() { return &_stmts; }
+    const NLStmtContainer* getStmts() const { return &_stmts; }
+
+private:
+    const Column* _source {nullptr};
+    NLUnwindElementCountFunction _elementCount {nullptr};
+    NLUnwindElementEmitFunction _elementEmit {nullptr};
+    NLCellAbsentFunction _cellAbsent {nullptr};
+    Column* _elementOutput {nullptr};
+    ColumnVector<uint64_t>* _rowTags {nullptr};
+    Column* _result {nullptr};
+    LocalMemory* _memory {nullptr};
+
+    const Column* _yieldedRowTags {nullptr};
+    const Column* _value {nullptr};
+    NLListItemReadFunction _valueRead {nullptr};
+
+    CarriedColumns _carriedColumns;
+    NLStmtContainer _stmts;
+
+    ColumnVector<size_t> _rows;
+    ColumnVector<size_t> _positions;
+
+    std::vector<ListBuffer<>::ListItemVariant> _stagedElements;
+    std::vector<size_t> _stagedCounts;
 };
 
 using NLUnaryFunctionKernel = void (*)(NLExecutionContext* context,
