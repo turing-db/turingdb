@@ -3296,7 +3296,13 @@ mlir::Type DBLowering::binaryResultElement(BinaryResultKind kind,
         break;
 
         case BinaryResultKind::Concat: {
-            if (!isListChunk(lhsType) || !isListChunk(rhsType)) {
+            const bool concatenatesLists = isListChunk(lhsType) && isListChunk(rhsType);
+
+            if (!concatenatesLists) {
+                if (isListChunk(lhsType) || isListChunk(rhsType)) {
+                    throw IRException("db.concat joins two lists or two strings, not one of each");
+                }
+
                 // string concat
                 const mlir::Type stringElement = storage::StringType::get(ctx);
                 return operandNullable ? storage::NullableType::get(ctx, stringElement)

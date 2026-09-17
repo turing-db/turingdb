@@ -792,6 +792,17 @@ mlir::Value DBProgramGenerator::translateListLiteral(const ListLiteral* list) {
     return constant.getResult();
 }
 
+mlir::Value DBProgramGenerator::singletonList(mlir::Value column) {
+    const mlir::Type elementType = mlir::cast<mlir::db::ColumnType>(column.getType()).getType();
+    const mlir::Type listType = mlir::storage::ListType::get(_mlirCtxt, elementType);
+
+    mlir::db::MakeList makeList = _opBuilder.create<mlir::db::MakeList>(_opBuilder.getUnknownLoc(),
+                                                                        allocColumnType(listType),
+                                                                        mlir::ValueRange {column});
+
+    return makeList.getResult();
+}
+
 mlir::Value DBProgramGenerator::translateListOfColumns(const ListLiteral* list) {
     llvm::SmallVector<mlir::Value> elementColumns;
     for (const Expr* item : list->items()) {
@@ -5027,7 +5038,16 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
             const bool isConcatenation = resultType == EvaluatedType::String || resultType == EvaluatedType::List;
 
             if (isConcatenation) {
-                _part._exprMap[expr] = _opBuilder.create<mlir::db::ConcatOp>(loc, noneType, lhs, rhs).getResult();
+                // A scalar concatenated with a list joins it as the one-element list it
+                // stands for, so both sides of the concatenation are lists
+                const bool concatenatesLists = resultType == EvaluatedType::List;
+                const bool lhsJoinsAList = concatenatesLists && lhsExpr->getType() != EvaluatedType::List;
+                const bool rhsJoinsAList = concatenatesLists && rhsExpr->getType() != EvaluatedType::List;
+
+                const mlir::Value lhsColumn = lhsJoinsAList ? singletonList(lhs) : lhs;
+                const mlir::Value rhsColumn = rhsJoinsAList ? singletonList(rhs) : rhs;
+
+                _part._exprMap[expr] = _opBuilder.create<mlir::db::ConcatOp>(loc, noneType, lhsColumn, rhsColumn).getResult();
             } else {
                 _part._exprMap[expr] = _opBuilder.create<mlir::db::AddOp>(loc, noneType, lhs, rhs).getResult();
             }
