@@ -39,7 +39,6 @@ protected:
 
         const FrozenCommitTx transaction = _graph->openTransaction();
         CypherAnalyzer analyzer(_ast.get(), transaction.viewGraph());
-        analyzer.setV3();
 
         analyzer.analyze();
     }

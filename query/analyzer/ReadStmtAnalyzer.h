@@ -42,7 +42,6 @@ public:
 
     void setDeclContext(DeclContext* ctxt) { _ctxt = ctxt; }
     void setExprAnalyzer(ExprAnalyzer* exprAnalyzer) { _exprAnalyzer = exprAnalyzer; }
-    void setV3() { _isV3 = true; }
 
     // Statements
     void analyze(Stmt* stmt);
@@ -69,7 +68,6 @@ private:
     DeclContext* _ctxt {nullptr};
     ExprAnalyzer* _exprAnalyzer {nullptr};
     const GraphMetadata& _graphMetadata;
-    bool _isV3 {false};
 
     void yieldEveryReturnValue(const FunctionSignature& signature, YieldClause* yield);
 

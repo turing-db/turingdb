@@ -85,7 +85,6 @@ protected:
         parser.parse(query);
 
         CypherAnalyzer analyzer(&ast, view);
-        analyzer.setV3();
         analyzer.analyze();
 
         mlir::OpBuilder builder(&_context);
@@ -111,7 +110,6 @@ protected:
         parser.parse(query);
 
         CypherAnalyzer analyzer(&ast, view);
-        analyzer.setV3();
         analyzer.analyze();
 
         mlir::OpBuilder builder(&_context);

@@ -102,10 +102,6 @@ CypherAnalyzer::~CypherAnalyzer() {
 }
 
 void CypherAnalyzer::analyze() {
-    if (!_isV3 && _ast->getExplainRequest()) {
-        throwError("EXPLAIN is only supported by the MLIR engine.");
-    }
-
     _ast->getFunctionDecls()->initDefault();
 
     for (QueryCommand* query : _ast->queries()) {
@@ -260,10 +256,6 @@ void CypherAnalyzer::analyze(const ReturnStmt* returnSt) {
 }
 
 void CypherAnalyzer::analyze(const WithStmt* withSt) {
-    if (!_isV3) { // only supported by MLIR v3
-        throwError("WITH not yet supported.", withSt);
-    }
-
     Projection* projection = withSt->getProjection();
 
     analyzeWithAliases(projection);
@@ -465,14 +457,6 @@ void CypherAnalyzer::analyzeProjection(Projection* projection, const Stmt* claus
         }
     }
 
-    if (!_isV3) {
-        const bool multipleReturns = projection->items().size() != 1;
-        if (isAggregate && multipleReturns) {
-            throwError("Aggregates may not yet be combined with multiple return items.",
-                       clause);
-        }
-    }
-
     if (projection->isReturningAll()) {
         // Return all variables defined in the current query
 
@@ -511,7 +495,7 @@ void CypherAnalyzer::analyzeProjection(Projection* projection, const Stmt* claus
     }
 
     if (projection->isDistinct()) {
-        analyzeDistinct(projection, clause, isAggregate);
+        analyzeDistinct(projection, isAggregate);
     }
 
     if (isAggregate) {
@@ -550,20 +534,7 @@ void CypherAnalyzer::declareItemAlias(Expr* item, std::string_view alias) {
     _ctxt->declareAlias(alias, aliasedDecl);
 }
 
-void CypherAnalyzer::setV3() {
-    _isV3 = true;
-    _exprAnalyzer->setV3();
-    _readAnalyzer->setV3();
-    _writeAnalyzer->setV3();
-}
-
-void CypherAnalyzer::analyzeDistinct(const Projection* projection,
-                                     const Stmt* clause,
-                                     bool isAggregate) const {
-    if (!_isV3) { // only supported by MLIR v3
-        throwError("DISTINCT not yet supported.", clause);
-    }
-
+void CypherAnalyzer::analyzeDistinct(const Projection* projection, bool isAggregate) const {
     // An aggregating projection emits one row per group, so no two of its rows are equal
     // and the dedup drops nothing: its keys answer to analyzeAggregateOrderBy instead
     if (isAggregate || !projection->hasOrderBy()) {
@@ -831,12 +802,6 @@ void CypherAnalyzer::analyze(OrderBy* orderBySt, const Projection* projection) {
 
         if (namesAnAggregateItem) {
             expr->setAggregate();
-        }
-
-        // Only MLIR v3 sorts the groups an aggregate reduces to; the pipeline hands the
-        // sort one row and the whole projection's row count, and trips over the mismatch
-        if (!_isV3 && expr->isAggregate()) {
-            throwError("Aggregate expressions in ORDER BY are not supported yet", orderBySt);
         }
     }
 }

@@ -48,7 +48,6 @@ public:
     ExprAnalyzer& operator=(ExprAnalyzer&&) = delete;
 
     void setDeclContext(DeclContext* ctxt) { _ctxt = ctxt; }
-    void setV3() { _isV3 = true; }
 
     // Declares the statement a CSV row variable is loaded by, so `row[2]` and `row.age`
     // resolve to fields of that statement rather than to accesses of their own
@@ -88,7 +87,6 @@ private:
     GraphView _graphView;
     DeclContext* _ctxt {nullptr};
     const GraphMetadata& _graphMetadata;
-    bool _isV3 {false};
 
     std::unordered_map<std::string_view, ValueType> _toBeCreatedTypes;
 

@@ -306,8 +306,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
 
             // A type-erased cell is equal only to a cell holding the same value, so it
             // compares against the types it can hold - a list and a null among them, the
-            // null being what IS (NOT) NULL tests a cell for. Only the MLIR engine runs
-            // such a comparison: the legacy planner hands it no cell column
+            // null being what IS (NOT) NULL tests a cell for
             const bool comparesListItem =
                 pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Integer)
@@ -318,20 +317,18 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::List);
 
             // A stored list compares against another list, and against null for
-            // IS (NOT) NULL. The MLIR engine alone runs it: the legacy planner has no
-            // list column to hand the operator.
+            // IS (NOT) NULL
             const bool comparesList =
                 pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)
                 || pair == TypePairBitset(EvaluatedType::List, EvaluatedType::Null);
 
-            if (_isV3 && (comparesListItem || comparesList)) {
+            if (comparesListItem || comparesList) {
                 break;
             }
 
             // Values of two types that can never be equal are not equal, so the comparison
-            // answers false rather than turning the query away. Only the MLIR engine folds
-            // it; the legacy planner has no kernel for the pair
-            if (_isV3 && comparesAsDisjointTypes(a, b)) {
+            // answers false rather than turning the query away
+            if (comparesAsDisjointTypes(a, b)) {
                 break;
             }
 
@@ -352,12 +349,12 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             }
 
             // n IS NULL over a node or an edge, which an OPTIONAL MATCH leaves null when
-            // its pattern missed. Only the MLIR engine can bind such a variable
+            // its pattern missed
             const bool comparesEntityToNull =
                 pair == TypePairBitset(EvaluatedType::NodePattern, EvaluatedType::Null)
                 || pair == TypePairBitset(EvaluatedType::EdgePattern, EvaluatedType::Null);
 
-            if (_isV3 && comparesEntityToNull) {
+            if (comparesEntityToNull) {
                 break;
             }
 
@@ -397,18 +394,15 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            // Ordering a value against a null is null, the same as comparing it against
-            // one. Only the MLIR engine answers such a comparison: the legacy planner
-            // hands the operator a null column no ordering kernel reads
+            // Ordering a value against a null is null, the same as comparing it against one
             const bool ordersAgainstNull = a == EvaluatedType::Null || b == EvaluatedType::Null;
 
-            if (_isV3 && ordersAgainstNull) {
+            if (ordersAgainstNull) {
                 break;
             }
 
             // A type-erased cell is ordered as an element holding the other side would be,
-            // so it orders against the scalar types it can hold. Only the MLIR engine runs
-            // such a comparison: the legacy planner hands the operator no cell column
+            // so it orders against the scalar types it can hold
             const bool ordersListItem =
                 pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::ListItem)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Integer)
@@ -417,7 +411,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Char)
                 || pair == TypePairBitset(EvaluatedType::ListItem, EvaluatedType::Bool);
 
-            if (_isV3 && ordersListItem) {
+            if (ordersListItem) {
                 break;
             }
 
@@ -442,17 +436,11 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             }
 
             if (pair == TypePairBitset(EvaluatedType::String, EvaluatedType::String)) {
-                if (not _isV3) {
-                    throwError("String concatenation is only supported in V3", expr);
-                }
                 type = EvaluatedType::String;
                 break;
             }
 
             if (pair == TypePairBitset(EvaluatedType::List, EvaluatedType::List)) {
-                if (not _isV3) {
-                    throwError("List concatenation is only supported in V3", expr);
-                }
                 type = EvaluatedType::List;
                 expr->setListShape(concatenatedListShape(lhs->getListShape(), rhs->getListShape()));
                 break;
@@ -464,7 +452,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             const bool oneSideIsAList = leftIsAList || b == EvaluatedType::List;
             const EvaluatedType scalar = leftIsAList ? b : a;
 
-            if (_isV3 && oneSideIsAList && joinsAList(scalar)) {
+            if (oneSideIsAList && joinsAList(scalar)) {
                 const ListShape& listShape = leftIsAList ? lhs->getListShape() : rhs->getListShape();
 
                 type = EvaluatedType::List;
@@ -472,7 +460,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            if (_isV3 && computesOverListItem(pair)) {
+            if (computesOverListItem(pair)) {
                 type = EvaluatedType::Double;
                 break;
             }
@@ -500,7 +488,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            if (_isV3 && computesOverListItem(pair)) {
+            if (computesOverListItem(pair)) {
                 type = EvaluatedType::Double;
                 break;
             }
@@ -524,7 +512,7 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
-            if (_isV3 && computesOverListItem(pair)) {
+            if (computesOverListItem(pair)) {
                 type = EvaluatedType::Double;
                 break;
             }
@@ -759,7 +747,7 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
     ValueType vt = ValueType::Invalid;
 
     // A name no property in the graph carries has no value on any row and no type: the
-    // read is null. v2 cannot plan a null property read, so it still rejects the name.
+    // read is null.
     bool readsAsNull = false;
 
     if (!propTypeFound) {
@@ -773,12 +761,8 @@ ValueType ExprAnalyzer::analyzePropertyExpr(PropertyExpr* expr, bool allowCreate
                 // Property does not exist but is created
                 addToBeCreatedType(propName->getName(), defaultType, expr);
                 it = _toBeCreatedTypes.find(name);
-            } else if (_isV3) {
-                readsAsNull = true;
             } else {
-                // Property does not exist and is not meant to be created in this query
-                const std::string error = fmt::format("Property type '{}' not found", propName->getName());
-                throwError(error, expr);
+                readsAsNull = true;
             }
         }
 
@@ -848,9 +832,8 @@ void ExprAnalyzer::analyzeIndexExpr(IndexExpr* expr) {
     if (indexesAList) {
         const EvaluatedType elementType = base->getListShape().unwoundType();
         const bool readsAValue = convertibleToValueType(elementType);
-        const bool readsAnEntity = _isV3
-                                && (elementType == EvaluatedType::NodePattern
-                                    || elementType == EvaluatedType::EdgePattern);
+        const bool readsAnEntity = elementType == EvaluatedType::NodePattern
+                                || elementType == EvaluatedType::EdgePattern;
         const bool readsTheElementType = readsAValue || readsAnEntity;
         const EvaluatedType indexedType = readsTheElementType ? elementType : EvaluatedType::ListItem;
 
@@ -933,11 +916,11 @@ void ExprAnalyzer::analyzeStringExpr(StringExpr* expr) {
     const EvaluatedType rhsType = rhs->getType();
 
     // A type-erased cell carries its own type, so the characters it holds are read row by
-    // row, exactly as an equality against one is. Only the MLIR engine runs such a test.
+    // row, exactly as an equality against one is.
     const bool lhsReadsAsString = lhsType == EvaluatedType::String
-                               || (_isV3 && lhsType == EvaluatedType::ListItem);
+                               || lhsType == EvaluatedType::ListItem;
     const bool rhsReadsAsString = rhsType == EvaluatedType::String
-                               || (_isV3 && rhsType == EvaluatedType::ListItem);
+                               || rhsType == EvaluatedType::ListItem;
 
     if (!lhsReadsAsString || !rhsReadsAsString) {
         const std::string error = fmt::format(
@@ -1081,13 +1064,6 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
                 // Argument types do not match
                 continue;
             }
-        }
-
-        // An overload the legacy planner cannot answer correctly is declared v3-only
-        // (FunctionDecls names which and why), so it never matches there and another
-        // overload - or the argument error - stands instead.
-        if (!_isV3 && signature->isV3Only()) {
-            continue;
         }
 
         // A constant argument is read once per call, so an expression varying with the row
@@ -1312,10 +1288,6 @@ void ExprAnalyzer::registerEdgePatternDeclaration(const EdgePattern* edge) {
 }
 
 void ExprAnalyzer::analyzeCaseExpr(CaseExpr* expr) {
-    if (not _isV3) {
-        throwError("CASE is only supported in V3", expr);
-    }
-
     const auto contaminate = [expr](const Expr* part) {
         if (part->isDynamic()) {
             expr->setDynamic();
