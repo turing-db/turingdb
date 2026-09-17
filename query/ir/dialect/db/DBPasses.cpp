@@ -49,6 +49,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSEEXPLOREENDCONSTRAINT
 #define GEN_PASS_DEF_FUSEEXPLOREENDNODES
 #define GEN_PASS_DEF_FUSEEXPLOREDISTINCTENDS
+#define GEN_PASS_DEF_COUNTPATHROWS
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
 #define GEN_PASS_DEF_COUNTFROMMETADATA
 #include "DBPasses.h.inc"
@@ -2089,6 +2090,51 @@ struct FuseExploreDistinctEnds : public impl::FuseExploreDistinctEndsBase<FuseEx
                 exploration.setDistinctAttr(builder.getUnitAttr());
             }
         });
+    }
+};
+
+// A count reads no value off a path, and a path is never null, so count(p) tallies the
+// rows its build ran over. The tally moves onto the node the path opens on, which the
+// build already read: row aligned with the path and never null in its own right.
+bool matchBuiltPath(Count count, Value& rows) {
+    if (count.getDistinct() || count.getRows()) {
+        return false;
+    }
+
+    MakePath build = dyn_cast_or_null<MakePath>(count.getInput().getDefiningOp());
+    if (!build) {
+        return false;
+    }
+
+    rows = build.getEntities().front();
+
+    return true;
+}
+
+struct CountPathRows : public impl::CountPathRowsBase<CountPathRows> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+
+        llvm::SmallVector<Count> counts;
+        getOperation()->walk([&counts](Count count) {
+            counts.push_back(count);
+        });
+
+        for (Count count : counts) {
+            Value rows;
+            if (!matchBuiltPath(count, rows)) {
+                continue;
+            }
+
+            Operation* build = count.getInput().getDefiningOp();
+
+            count->setOperand(0, rows);
+            count.setRowsAttr(builder.getUnitAttr());
+
+            if (build->use_empty()) {
+                build->erase();
+            }
+        }
     }
 };
 
