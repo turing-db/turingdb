@@ -684,6 +684,11 @@ private:
 
     mlir::Value resolveRowCarryingColumn() const;
 
+    // Pins a constant column to the relation whose rows it stands for. Left unpinned, a
+    // constant is aligned during lowering against whichever loop is innermost by then,
+    // which a collect in the same projection has already repointed at its own emit loop
+    mlir::Value alignConstantToDriver(mlir::Value column);
+
     // The column count(*) counts: the first variable bound to a column holding the rows
     // flowing past the insertion point. A scope of constants alone is the single row those
     // constants are, which is what count(*) counts there

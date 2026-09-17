@@ -3596,7 +3596,7 @@ mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr,
         return getOrTranslateExprColumn(argExpr);
     } else if (argType != EvaluatedType::Wildcard) {
         translateExpr(argExpr);
-        return _part._exprMap.at(argExpr);
+        return alignConstantToDriver(_part._exprMap.at(argExpr));
     }
 
     const mlir::Value column = resolveWildcardColumn();
@@ -3617,6 +3617,21 @@ mlir::Value DBProgramGenerator::translateAggregateInput(const Expr* argExpr,
 
 mlir::Value DBProgramGenerator::resolveRowCarryingColumn() const {
     return resolveColumnInScope([](mlir::Value column) { return !yieldsConstantColumn(column); });
+}
+
+mlir::Value DBProgramGenerator::alignConstantToDriver(mlir::Value column) {
+    if (!yieldsConstantColumn(column)) {
+        return column;
+    }
+
+    const mlir::Value driver = resolveRowCarryingColumn();
+    if (!driver) {
+        return column;
+    }
+
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+
+    return _opBuilder.create<mlir::db::BroadcastConstant>(_opBuilder.getUnknownLoc(), noneType, column, driver).getResult();
 }
 
 mlir::Value DBProgramGenerator::resolveWildcardColumn() const {

@@ -85,6 +85,16 @@ TEST_F(NullColumnAggregatePairTest, collectsThenSumsAColumnThePropertyHolds) {
     expectRows("MATCH (n:Person) RETURN collect(n.age), sum(n.age)", {{"[32, 32]", "64"}});
 }
 
+TEST_F(NullColumnAggregatePairTest, collectsThenSumsALiteralOverEveryMatchedRow) {
+    expectRows("MATCH (n:Person) RETURN collect(n.name), sum(1)",
+               {{"[Remy, Adam, Maxime, Luc, Martina, Suhas, Cyrus, Doruk]", "8"}});
+}
+
+TEST_F(NullColumnAggregatePairTest, collectsThenCountsALiteralOverEveryMatchedRow) {
+    expectRows("MATCH (n:Person) RETURN collect(n.name), count(1)",
+               {{"[Remy, Adam, Maxime, Luc, Martina, Suhas, Cyrus, Doruk]", "8"}});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
