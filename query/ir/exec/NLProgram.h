@@ -658,10 +658,11 @@ private:
     NLStmtContainer _stmts;
 };
 
-// nl.scan_edges_by_type loop data: the edge scan restricted to one type. Reuses
-// the plain edge scan's chunks, limit and body; adds the resolved EdgeTypeID the
-// ScanEdgesByTypeChunkWriter filters by. _matchable is false when the type name
-// was absent from the schema, so no edge can match and the loop emits no row -
+// nl.scan_edges_by_type loop data: the edge scan restricted to the types the pattern
+// named. Reuses the plain edge scan's chunks, limit and body; adds the resolved
+// EdgeTypeIDs the ScanEdgesByTypeChunkWriter filters by, owned here so the span it
+// walks each run points at storage that outlives it. A name absent from the schema
+// resolves to nothing, so an empty set matches no edge and the loop emits no row -
 // the scan sibling of NLEdgeByTypeLoopData.
 class NLScanEdgesByTypeLoopData : public NLScanEdgesLoopData {
 public:
@@ -669,20 +670,17 @@ public:
                               ColumnEdgeIDs* edgeIDs,
                               ColumnEdgeTypes* edgeTypes,
                               ColumnNodeIDs* targets,
-                              EdgeTypeID edgeType,
-                              bool matchable)
+                              std::span<const EdgeTypeID> requestedTypes)
         : NLScanEdgesLoopData(sources, edgeIDs, edgeTypes, targets),
-        _edgeType(edgeType),
-        _matchable(matchable)
+        _requestedTypes(requestedTypes.begin(), requestedTypes.end())
     {
     }
 
-    EdgeTypeID getEdgeType() const { return _edgeType; }
-    bool isMatchable() const { return _matchable; }
+    std::span<const EdgeTypeID> getRequestedTypes() const { return _requestedTypes; }
+    bool isMatchable() const { return !_requestedTypes.empty(); }
 
 private:
-    EdgeTypeID _edgeType;
-    bool _matchable {true};
+    std::vector<EdgeTypeID> _requestedTypes;
 };
 
 // Loop data of the four by-label edge scans: the edge scan restricted to the edges hanging
@@ -776,11 +774,11 @@ private:
 };
 
 // nl.get_out_edges_by_type / nl.get_in_edges_by_type loop data: an edge hop
-// restricted to one edge type. Reuses the plain edge hop's chunks, limit, carry
-// set and body; adds the resolved EdgeTypeID the Get{Out,In}EdgesByTypeChunkWriter
-// filters by. _matchable is false when the type name was absent from the schema,
-// so no edge can match and the loop emits no row - the edge sibling of
-// NLScanByLabelLoopData.
+// restricted to the types the pattern named. Reuses the plain edge hop's chunks, limit, carry
+// set and body; adds the resolved EdgeTypeIDs the Get{Out,In}EdgesByTypeChunkWriter
+// filters by, owned here so the span it walks each run points at storage that outlives
+// it. A name absent from the schema resolves to nothing, so an empty set matches no
+// edge and the loop emits no row - the edge sibling of NLScanByLabelLoopData.
 class NLEdgeByTypeLoopData : public NLEdgeLoopData {
 public:
     NLEdgeByTypeLoopData(const ColumnNodeIDs* input,
@@ -788,20 +786,17 @@ public:
                          ColumnEdgeIDs* edgeIDs,
                          ColumnEdgeTypes* edgeTypes,
                          ColumnNodeIDs* targets,
-                         EdgeTypeID edgeType,
-                         bool matchable)
+                         std::span<const EdgeTypeID> requestedTypes)
         : NLEdgeLoopData(input, sources, edgeIDs, edgeTypes, targets),
-        _edgeType(edgeType),
-        _matchable(matchable)
+        _requestedTypes(requestedTypes.begin(), requestedTypes.end())
     {
     }
 
-    EdgeTypeID getEdgeType() const { return _edgeType; }
-    bool isMatchable() const { return _matchable; }
+    std::span<const EdgeTypeID> getRequestedTypes() const { return _requestedTypes; }
+    bool isMatchable() const { return !_requestedTypes.empty(); }
 
 private:
-    EdgeTypeID _edgeType;
-    bool _matchable {true};
+    std::vector<EdgeTypeID> _requestedTypes;
 };
 
 // nl.get_out_edges_by_label / nl.get_in_edges_by_label loop data: an edge hop restricted to

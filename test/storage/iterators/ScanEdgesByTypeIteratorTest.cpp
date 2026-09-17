@@ -1,5 +1,7 @@
 #include <algorithm>
+#include <array>
 #include <memory>
+#include <span>
 #include <vector>
 
 #include "TuringTest.h"
@@ -39,16 +41,16 @@ struct ScannedEdge {
 // Drive a by-type edge scan to exhaustion, gathering one row per emitted edge.
 // maxCount is the per-fill row budget: a small value exercises the mid-span
 // resume path across successive fill() calls.
-void collectEdgesByType(const GraphReader& reader,
-                        EdgeTypeID edgeType,
-                        size_t maxCount,
-                        std::vector<ScannedEdge>& out) {
+void collectEdgesByTypes(const GraphReader& reader,
+                         std::span<const EdgeTypeID> edgeTypes,
+                         size_t maxCount,
+                         std::vector<ScannedEdge>& out) {
     ColumnNodeIDs sources;
     ColumnEdgeIDs edgeIDs;
     ColumnNodeIDs targets;
     ColumnEdgeTypes types;
 
-    ScanEdgesByTypeChunkWriter writer(reader.getView(), edgeType);
+    ScanEdgesByTypeChunkWriter writer(reader.getView(), edgeTypes);
     writer.setSrcIDs(&sources);
     writer.setEdgeIDs(&edgeIDs);
     writer.setTgtIDs(&targets);
@@ -62,6 +64,14 @@ void collectEdgesByType(const GraphReader& reader,
             out.push_back({sources[i].getValue(), edgeIDs[i].getValue(), targets[i].getValue(), types[i].getValue()});
         }
     }
+}
+
+void collectEdgesByType(const GraphReader& reader,
+                        EdgeTypeID edgeType,
+                        size_t maxCount,
+                        std::vector<ScannedEdge>& out) {
+    const std::array<EdgeTypeID, 1> edgeTypes {edgeType};
+    collectEdgesByTypes(reader, edgeTypes, maxCount, out);
 }
 
 // Gather every edge via the unfiltered scan - ground truth the by-type scan is
@@ -197,6 +207,50 @@ TEST_F(ScanEdgesByTypeIteratorTest, byTypeScanMatchesFilteredFullScan) {
 
         EXPECT_EQ(expected, actual);
     }
+}
+
+// Two types at once: the scan keeps an edge carrying either, so the disjunction is
+// the union of the two single-type scans.
+TEST_F(ScanEdgesByTypeIteratorTest, byTypeScanOverTwoTypesIsTheirUnion) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    std::vector<ScannedEdge> knowsEdges;
+    collectEdgesByType(reader, _knows, ChunkConfig::CHUNK_SIZE, knowsEdges);
+
+    std::vector<ScannedEdge> likesEdges;
+    collectEdgesByType(reader, _likes, ChunkConfig::CHUNK_SIZE, likesEdges);
+
+    const std::array<EdgeTypeID, 2> bothTypes {_knows, _likes};
+    std::vector<ScannedEdge> bothEdges;
+    collectEdgesByTypes(reader, bothTypes, ChunkConfig::CHUNK_SIZE, bothEdges);
+
+    EXPECT_EQ(bothEdges.size(), knowsEdges.size() + likesEdges.size());
+
+    std::vector<std::pair<uint64_t, uint64_t>> expected;
+    for (const ScannedEdge& edge : knowsEdges) {
+        expected.emplace_back(edge._source, edge._target);
+    }
+    for (const ScannedEdge& edge : likesEdges) {
+        expected.emplace_back(edge._source, edge._target);
+    }
+
+    expectSameContent(expected, bothEdges);
+}
+
+// A name no edge carries drops out, leaving the types that do match.
+TEST_F(ScanEdgesByTypeIteratorTest, byTypeScanIgnoresAnEmptyTypeInTheDisjunction) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    std::vector<ScannedEdge> knowsEdges;
+    collectEdgesByType(reader, _knows, ChunkConfig::CHUNK_SIZE, knowsEdges);
+
+    const std::array<EdgeTypeID, 2> withUnused {_knows, EdgeTypeID {9999}};
+    std::vector<ScannedEdge> actual;
+    collectEdgesByTypes(reader, withUnused, ChunkConfig::CHUNK_SIZE, actual);
+
+    EXPECT_EQ(actual, knowsEdges);
 }
 
 // Hand-derived expected content, so the differential test above cannot be fooled

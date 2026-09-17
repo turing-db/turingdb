@@ -16,6 +16,10 @@
 #include "StorageDialect.h"
 #include "StorageEnums.h"
 
+#include "IRTestEdgeTypes.h"
+
+using namespace turing::test;
+
 namespace {
 
 template <typename OpType>
@@ -311,7 +315,7 @@ const char* const typedSecondHop = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %s1, %e1, %et1, %t1 = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %s2, %e2, %et2, %t2, %sc, %ec = db.get_out_edges_by_type(%t1, "KNOWS", {%s1, %e1}) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>)
+  %s2, %e2, %et2, %t2, %sc, %ec = db.get_out_edges_by_type(%t1, ["KNOWS"], {%s1, %e1}) : (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.edge_id>)
   db.output(%t2) : !db.column<!storage.node_id>
   return
 }
@@ -327,7 +331,7 @@ TEST_F(TrimUnreadColumnsTest, keepsTheEdgeTypeOfAByTypeHop) {
     ASSERT_EQ(typedHops.size(), 1u);
     mlir::db::GetOutEdgesByType typedHop = typedHops.front();
 
-    EXPECT_EQ(typedHop.getEdgeType(), "KNOWS");
+    EXPECT_EQ(onlyEdgeType(typedHop.getEdgeTypes()), "KNOWS");
     EXPECT_EQ(typedHop.getColumnsToFilter().size(), 0u);
     EXPECT_EQ(typedHop->getNumResults(), 4u);
 

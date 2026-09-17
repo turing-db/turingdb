@@ -205,15 +205,16 @@ def NLPropertyType : NLType<"PropertyType", "property_type"> {
     }];
 }
 
-def NLEdgeType : NLType<"EdgeType", "edge_type"> {
-    let summary = "A resolved edge type handle";
+def NLEdgeTypeSet : NLType<"EdgeTypeSet", "edge_type_set"> {
+    let summary = "A resolved set of edge types";
     let description = [{
-        The edge sibling of !nl.property_type. Stands for one relationship type of
-        the graph - storage's EdgeTypeID - once its name has been resolved.
-        Produced by nl.get_edge_type ahead of the loops and consumed by the by-type
-        edge hops, so the name is looked up once rather than per step when a hop is
-        nested in a loop. It is not a chunk element type: it names an edge type, it
-        does not hold values.
+        The edge sibling of !nl.property_type. Stands for the relationship types a
+        pattern named - storage's EdgeTypeIDs - once their names have been resolved.
+        A pattern may name several, as `-[:KNOWS|LIKES]->` does, and an edge matches
+        when it carries any one of them. Produced by nl.get_edge_type_set ahead of the
+        loops and consumed by the by-type edge hops, so the names are looked up once
+        rather than per step when a hop is nested in a loop. It is not a chunk
+        element type: it names edge types, it does not hold values.
     }];
 }
 
@@ -286,14 +287,14 @@ def NLPropertyTypeHandle : Type<
         "property type handle", "::mlir::nl::PropertyTypeType">,
     BuildableType<"::mlir::nl::PropertyTypeType::get($_builder.getContext())">;
 
-// Constrains an operand to a resolved !nl.edge_type handle, the edge sibling of
+// Constrains an operand to a resolved !nl.edge_type_set handle, the edge sibling of
 // NLPropertyTypeHandle. The single concrete type - there is only ever
-// !nl.edge_type - lets the by-type edge hops omit the handle's type in their
+// !nl.edge_type_set - lets the by-type edge hops omit the handle's type in their
 // assembly format, building it from this recipe instead.
 def NLEdgeTypeHandle : Type<
-        CPred<"::llvm::isa<::mlir::nl::EdgeTypeType>($_self)">,
-        "edge type handle", "::mlir::nl::EdgeTypeType">,
-    BuildableType<"::mlir::nl::EdgeTypeType::get($_builder.getContext())">;
+        CPred<"::llvm::isa<::mlir::nl::EdgeTypeSetType>($_self)">,
+        "edge type set handle", "::mlir::nl::EdgeTypeSetType">,
+    BuildableType<"::mlir::nl::EdgeTypeSetType::get($_builder.getContext())">;
 
 // Constrains an operand to an !nl.limit_state handle, the same way
 // NLPropertyTypeHandle constrains the property handle. The single concrete type

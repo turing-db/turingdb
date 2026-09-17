@@ -159,7 +159,7 @@ func.func @main() {
 // label set.
 const char* const typedEdgeScanWithLabelledTarget = R"mlir(
 func.func @main() {
-  %srcs, %eids, %etypes, %tgts = db.scan_edges_by_type("KNOWS_WELL") : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  %srcs, %eids, %etypes, %tgts = db.scan_edges_by_type(["KNOWS_WELL"]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
   %labelsets = db.get_node_label_set(%tgts) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
   %matches = db.check_label_constraint(%labelsets, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
   %kept:2 = db.filter(%matches, {%srcs, %tgts}) : (!db.column<!storage.bool>, !db.column<!storage.node_id>, !db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)

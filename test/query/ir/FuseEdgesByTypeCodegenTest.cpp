@@ -28,6 +28,8 @@
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
+#include "IRTestEdgeTypes.h"
+
 using namespace db;
 using namespace turing::test;
 
@@ -116,7 +118,7 @@ TEST_F(FuseEdgesByTypeCodegenTest, typedHopOffALabelScanBecomesATypedHop) {
     llvm::SmallVector<mlir::db::GetOutEdgesByType> hops = collect<mlir::db::GetOutEdgesByType>(*module);
     ASSERT_EQ(hops.size(), 1u);
     mlir::db::GetOutEdgesByType hop = hops.front();
-    EXPECT_EQ(hop.getEdgeType(), "KNOWS_WELL");
+    EXPECT_EQ(onlyEdgeType(hop.getEdgeTypes()), "KNOWS_WELL");
     EXPECT_TRUE(hop.getInputNodes().getDefiningOp<mlir::db::ScanNodesByLabel>());
 
     llvm::SmallVector<mlir::db::Output> outputs = collect<mlir::db::Output>(*module);
@@ -134,7 +136,7 @@ TEST_F(FuseEdgesByTypeCodegenTest, reverseTypedHopBecomesATypedInHop) {
 
     llvm::SmallVector<mlir::db::GetInEdgesByType> hops = collect<mlir::db::GetInEdgesByType>(*module);
     ASSERT_EQ(hops.size(), 1u);
-    EXPECT_EQ(hops.front().getEdgeType(), "KNOWS_WELL");
+    EXPECT_EQ(onlyEdgeType(hops.front().getEdgeTypes()), "KNOWS_WELL");
 }
 
 TEST_F(FuseEdgesByTypeCodegenTest, edgePropertyIsReadOffTheTypedHop) {
@@ -182,8 +184,8 @@ TEST_F(FuseEdgesByTypeCodegenTest, bothHopsOfATypedChainFuse) {
 
     llvm::SmallVector<mlir::db::GetOutEdgesByType> hops = collect<mlir::db::GetOutEdgesByType>(*module);
     ASSERT_EQ(hops.size(), 2u);
-    EXPECT_EQ(hops[0].getEdgeType(), "KNOWS_WELL");
-    EXPECT_EQ(hops[1].getEdgeType(), "INTERESTED_IN");
+    EXPECT_EQ(onlyEdgeType(hops[0].getEdgeTypes()), "KNOWS_WELL");
+    EXPECT_EQ(onlyEdgeType(hops[1].getEdgeTypes()), "INTERESTED_IN");
     EXPECT_EQ(hops[1].getInputNodes(), hops[0].getTgtids());
 }
 
@@ -196,6 +198,38 @@ TEST_F(FuseEdgesByTypeCodegenTest, typedHopOffAWholeGraphScanBecomesAByTypeEdgeS
     EXPECT_EQ(countOps<mlir::db::ScanEdges>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::GetOutEdgesByType>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::ScanEdgesByType>(*module), 1u);
+}
+
+// A disjunction reaches the hop the same way a single type does: the check the analyzer
+// emits carries both names and the hop walks them, so no filter is left behind.
+TEST_F(FuseEdgesByTypeCodegenTest, typedHopOverADisjunctionFuses) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module =
+        generate("MATCH (a:Person)-[:KNOWS_WELL|INTERESTED_IN]->(b) RETURN a, b");
+
+    expectFusedToTypedHop(*module);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
+
+    llvm::SmallVector<mlir::db::GetOutEdgesByType> hops = collect<mlir::db::GetOutEdgesByType>(*module);
+    ASSERT_EQ(hops.size(), 1u);
+
+    const mlir::ArrayAttr edgeTypes = hops.front().getEdgeTypes();
+    ASSERT_EQ(edgeTypes.size(), 2u);
+    EXPECT_EQ(mlir::cast<mlir::StringAttr>(edgeTypes[0]).getValue(), "KNOWS_WELL");
+    EXPECT_EQ(mlir::cast<mlir::StringAttr>(edgeTypes[1]).getValue(), "INTERESTED_IN");
+}
+
+// The whole-graph sibling: the edge-scan fusion claims it first, as it does for one type.
+TEST_F(FuseEdgesByTypeCodegenTest, disjunctionOffAWholeGraphScanBecomesAByTypeEdgeScan) {
+    const mlir::OwningOpRef<mlir::ModuleOp> module =
+        generate("MATCH (a)-[:KNOWS_WELL|INTERESTED_IN]->(b) RETURN a, b");
+
+    expectFusedToTypedHop(*module);
+    EXPECT_EQ(countOps<mlir::db::ScanEdges>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::GetOutEdgesByType>(*module), 0u);
+
+    llvm::SmallVector<mlir::db::ScanEdgesByType> scans = collect<mlir::db::ScanEdgesByType>(*module);
+    ASSERT_EQ(scans.size(), 1u);
+    EXPECT_EQ(scans.front().getEdgeTypes().size(), 2u);
 }
 
 TEST_F(FuseEdgesByTypeCodegenTest, undirectedTypedHopKeepsItsTypeCheck) {

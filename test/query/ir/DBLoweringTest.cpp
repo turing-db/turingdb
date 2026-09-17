@@ -1387,7 +1387,7 @@ func.func @main() {
 constexpr const char* oneHopOutByTypeKnowsProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %srcs, %eids, %etypes, %b = db.get_out_edges_by_type(%a, "KNOWS", {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %srcs, %eids, %etypes, %b = db.get_out_edges_by_type(%a, ["KNOWS"], {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
   db.output(%srcs, %b) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
@@ -1397,7 +1397,7 @@ func.func @main() {
 constexpr const char* oneHopOutByTypeLikesProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %srcs, %eids, %etypes, %b = db.get_out_edges_by_type(%a, "LIKES", {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %srcs, %eids, %etypes, %b = db.get_out_edges_by_type(%a, ["LIKES"], {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
   db.output(%srcs, %b) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
@@ -1408,7 +1408,40 @@ func.func @main() {
 constexpr const char* oneHopOutByTypeUnknownProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %srcs, %eids, %etypes, %b = db.get_out_edges_by_type(%a, "ROBOTS", {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %srcs, %eids, %etypes, %b = db.get_out_edges_by_type(%a, ["ROBOTS"], {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  db.output(%srcs, %b) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// A by-type hop naming both edge types: an edge matches when it carries either, so
+// the disjunction is the whole out-edge set.
+constexpr const char* oneHopOutByTypeEitherProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %srcs, %eids, %etypes, %b = db.get_out_edges_by_type(%a, ["KNOWS", "LIKES"], {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  db.output(%srcs, %b) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// One name the graph carries and one it never created: the absent one drops out of
+// the disjunction, leaving the KNOWS edges.
+constexpr const char* oneHopOutByTypeKnownAndUnknownProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %srcs, %eids, %etypes, %b = db.get_out_edges_by_type(%a, ["KNOWS", "ROBOTS"], {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  db.output(%srcs, %b) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+// Every name absent from the schema: the set resolves to nothing, so the hop matches
+// no edge at all.
+constexpr const char* oneHopOutByTypeAllUnknownProgram = R"mlir(
+func.func @main() {
+  %a = db.scan_nodes() : !db.column<!storage.node_id>
+  %srcs, %eids, %etypes, %b = db.get_out_edges_by_type(%a, ["ROBOTS", "ALIENS"], {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
   db.output(%srcs, %b) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
@@ -1420,7 +1453,7 @@ func.func @main() {
 constexpr const char* oneHopInByTypeKnowsProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %srcs, %eids, %etypes, %b = db.get_in_edges_by_type(%a, "KNOWS", {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %srcs, %eids, %etypes, %b = db.get_in_edges_by_type(%a, ["KNOWS"], {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
   db.output(%srcs, %b) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
@@ -3394,6 +3427,48 @@ TEST_F(DBLoweringTest, getOutEdgesByTypeUnknownIsEmpty) {
     // "ROBOTS" was never created, so no edge carries it: the hop yields no rows.
     CollectingNodeSink sink;
     runLoweredProgram(oneHopOutByTypeUnknownProgram, reader.getView(), sink);
+
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_TRUE(rows.empty());
+}
+
+TEST_F(DBLoweringTest, executesGetOutEdgesByTypeOverADisjunction) {
+    auto graph = buildTypedEdgeGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    // KNOWS is 0->1 and 1->2, LIKES is 0->2 and 2->3, so naming both is every out-edge.
+    CollectingNodeSink sink;
+    runLoweredProgram(oneHopOutByTypeEitherProgram, reader.getView(), sink);
+
+    const std::vector<std::vector<uint64_t>> expected {{0, 1}, {0, 2}, {1, 2}, {2, 3}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, getOutEdgesByTypeDropsAnUnknownNameFromTheDisjunction) {
+    auto graph = buildTypedEdgeGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runLoweredProgram(oneHopOutByTypeKnownAndUnknownProgram, reader.getView(), sink);
+
+    const std::vector<std::vector<uint64_t>> expected {{0, 1}, {1, 2}};
+    std::vector<std::vector<uint64_t>> rows;
+    sink.sortedRows(rows);
+    EXPECT_EQ(rows, expected);
+}
+
+TEST_F(DBLoweringTest, getOutEdgesByTypeOfAllUnknownNamesIsEmpty) {
+    auto graph = buildTypedEdgeGraph();
+    const FrozenCommitTx transaction = graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    CollectingNodeSink sink;
+    runLoweredProgram(oneHopOutByTypeAllUnknownProgram, reader.getView(), sink);
 
     std::vector<std::vector<uint64_t>> rows;
     sink.sortedRows(rows);

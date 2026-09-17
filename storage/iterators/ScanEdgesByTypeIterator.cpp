@@ -3,6 +3,7 @@
 #include "Bitmask.h"
 #include "datapart/DataPart.h"
 #include "datapart/EdgeContainer.h"
+#include "EdgeTypeMatch.h"
 #include "IteratorUtils.h"
 #include "TombstoneFilter.h"
 
@@ -17,9 +18,10 @@ constexpr size_t NCombinations = 1 << NColumns;
 
 }
 
-ScanEdgesByTypeChunkWriter::ScanEdgesByTypeChunkWriter(const GraphView& view, EdgeTypeID edgeType)
+ScanEdgesByTypeChunkWriter::ScanEdgesByTypeChunkWriter(const GraphView& view,
+                                                       std::span<const EdgeTypeID> edgeTypes)
     : ScanEdgesIterator(view),
-    _edgeType(edgeType),
+    _edgeTypes(edgeTypes),
     _filter(view.tombstones())
 {
 }
@@ -69,17 +71,19 @@ void ScanEdgesByTypeChunkWriter::fill(size_t maxCount) {
         _types->reserve(maxCount);
     }
 
-    // Keeping one type breaks the contiguous-range fill ScanEdgesChunkWriter uses:
-    // the edges of a type are scattered through the part's edge span, not a
-    // sub-range of it, so there is no run to resize over. We walk the span edge by
-    // edge and push only the matches, with the bitmask dispatch lifting the "is
+    // Keeping only some types breaks the contiguous-range fill ScanEdgesChunkWriter
+    // uses: the edges of the requested types are scattered through the part's edge
+    // span, not a sub-range of it, so there is no run to resize over. We walk the span
+    // edge by edge and push only the matches, with the bitmask dispatch lifting the "is
     // this column wired up?" test out of the per-edge loop.
+    const std::span<const EdgeTypeID> edgeTypes = _edgeTypes;
+
     const auto fill = [&]<std::array<bool, NColumns> conditions>() {
         while (isValid() && remainingToMax > 0) {
             const auto partEnd = _edges.end();
 
             while (_edgeIt != partEnd && remainingToMax > 0) {
-                if (_edgeIt->_edgeTypeID == _edgeType) {
+                if (edgeTypeMatches(edgeTypes, _edgeIt->_edgeTypeID)) {
                     if constexpr (conditions[0]) {
                         _srcs->push_back(_edgeIt->_nodeID);
                     }

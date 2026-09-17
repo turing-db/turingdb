@@ -3,8 +3,8 @@
   "graph": "simpledb",
   "query": "MATCH (n)-[e:KNOWS_WELL|INTERESTED_IN]-(m) RETURN n",
   "expect": {
-    "result": "n\n0\n0\n0\n0\n0\n0\n1\n1\n1\n1\n2\n2\n3\n4\n4\n5\n5\n6\n6\n7\n8\n8\n9\n9\n10\n11\n12\n12\n13\n13\n13\n14\n15\n15\n16\n17",
-    "resultJson": "{\"header\":{\"column_names\":[\"n\"],\"column_types\":[\"UInt64\"]},\"data\":[[[0,0,0,0,0,0,1,1,1,1,2,2,3,4,4,5,5,6,6,7,8,8,9,9,10,11,12,12,13,13,13,14,15,15,16,17]]]}"
+    "result": "n\n0\n0\n0\n0\n0\n0\n1\n1\n1\n1\n2\n3\n4\n5\n6\n6\n4\n7\n8\n8\n2\n9\n9\n10\n5\n11\n13\n14\n15\n15\n12\n12\n13\n13\n16\n17",
+    "resultJson": "{\"header\":{\"column_names\":[\"n\"],\"column_types\":[\"UInt64\"]},\"data\":[[[0,0,0,0,0,0,1,1,1,1,2,3,4,5,6,6,4,7,8,8,2,9,9,10,5,11,13,14,15,15,12,12,13,13,16,17]]]}"
   },
   "tags": [
     "success",

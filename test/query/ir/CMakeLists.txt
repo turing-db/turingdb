@@ -9,6 +9,7 @@ function(add_ir_tests exe_name cpp_file)
             turing_db_ir_dbdialect_s
             turing_db_ir_common_s
             MLIRParser)
+    target_include_directories(${exe_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 endfunction()
 
 # The output-row rendering and the count / row sinks that several of the tests below
