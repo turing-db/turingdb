@@ -820,6 +820,89 @@ def GetInEdgesByType : TuringOp<"get_in_edges_by_type", [Pure, DeclareOpInterfac
 }
 
 /**
+* GetOutEdgesByLabel
+*/
+def GetOutEdgesByLabel : TuringOp<"get_out_edges_by_label", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+  let summary = "Fetch the out-edges arriving at the nodes carrying every given label, filtering carried columns alongside";
+
+  let description = [{
+    The by-label sibling of get_out_edges. In `MATCH (a)-->(b:Person)` only the
+    successors that are Person count, so this walks each input node's out-edges but
+    keeps only those whose target's label set is a superset of `labels`:
+
+      %s, %e, %t, %b = get_out_edges_by_label(%a, ["Person"], {})
+      %c, %b2, %a2 = get_out_edges_by_label(%b, ["Movie"], {%a})   // eids/etypes omitted
+
+    The labelled end is the one the hop arrives at - the edge's target - since the
+    end it leaves is the input column, which a by-label node scan constrains
+    instead. db.scan_out_edges_by_label_tgt keeps the same edges of the whole graph;
+    this one keeps them of a chunk of nodes, so the hop carries the input rows the
+    scan has none of.
+
+    `columns_to_filter` is the carry set, exactly as on get_out_edges: each one comes
+    back in `filtered_columns`, and the result chunk shape - srcids, eids, etypes,
+    tgtids - is identical, so a hop is interchangeable with the unfiltered fetch. The
+    label list must not be empty: a label-free hop is db.get_out_edges. A label absent
+    from the schema leaves the conjunction unsatisfiable, so the hop yields no rows.
+  }];
+
+  // `labels` is the label conjunction the target must carry, spelled as in the query.
+  // Being an attribute and not an SSA value, it is absent from `operands`; lowering
+  // hands the list to the nl hop, which resolves each name once.
+  let arguments = (ins Column:$input_nodes, StrArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
+
+  // `filtered_columns`: one per carried column, after the four fixed results.
+  let results   = (outs ColumnNodeIDs:$srcids,
+                        ColumnEdgeIDs:$eids,
+                        ColumnEdgeTypes:$etypes,
+                        ColumnNodeIDs:$tgtids,
+                        Variadic<Column>:$filtered_columns);
+  let hasVerifier = 1;
+
+  // The label list prints inside the parens as `["Person"]`, between input_nodes and
+  // the brace-wrapped carry set, the way get_out_edges_by_type prints its type name.
+  let assemblyFormat = [{
+    `(` $input_nodes `,` $labels `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+/**
+* GetInEdgesByLabel
+*/
+def GetInEdgesByLabel : TuringOp<"get_in_edges_by_label", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+  let summary = "Fetch the in-edges leaving the nodes carrying every given label, filtering carried columns alongside";
+
+  let description = [{
+    The reverse-direction sibling of get_out_edges_by_label: where that keeps the
+    out-edges arriving at a label set, this keeps the in-edges leaving one. In
+    `MATCH (a)<--(b:Person)` only the predecessors that are Person count:
+
+      %s, %e, %t, %b = get_in_edges_by_label(%a, ["Person"], {})
+
+    The labelled end is the one the in-hop leaves, which is the edge's source, so
+    `srcids` holds it and `tgtids` the input node the hop walked from. The result
+    chunk shape and the `columns_to_filter` carry set match get_out_edges_by_label,
+    so the two are interchangeable in a hop; the label list must not be empty and an
+    absent name yields no rows.
+  }];
+
+  let arguments = (ins Column:$input_nodes, StrArrayAttr:$labels, Variadic<Column>:$columns_to_filter);
+
+  let results   = (outs ColumnNodeIDs:$srcids,
+                        ColumnEdgeIDs:$eids,
+                        ColumnEdgeTypes:$etypes,
+                        ColumnNodeIDs:$tgtids,
+                        Variadic<Column>:$filtered_columns);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $input_nodes `,` $labels `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+/**
 * GetNodeProperties
 */
 def GetNodeProperties : TuringOp<"get_node_properties", [Pure]> {

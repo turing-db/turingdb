@@ -554,6 +554,66 @@ def GetInEdgesByType : NLOp<"get_in_edges_by_type", [Pure, InferTypeOpAdaptor]> 
 }
 
 /**
+* GetOutEdgesByLabel
+*/
+def GetOutEdgesByLabel : NLOp<"get_out_edges_by_label", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create a database iterator over the out-edges of a chunk of nodes arriving at the nodes carrying every given label";
+  let description = [{
+    Imperative counterpart of db.get_out_edges_by_label. It fills the same row of
+    chunks as nl.get_out_edges - source node IDs, edge IDs, edge type IDs and target
+    node IDs, then one filtered chunk per carried column - but keeps only the
+    out-edges whose target's label set is a superset of `labels`:
+
+      %edges = nl.get_out_edges_by_label(%a, ["Person"], {})
+      nl.for %srcs, %eids, %etypes, %b in %edges {
+        %hop = nl.get_out_edges_by_label(%b, ["Movie"], {%srcs}) : !nl.chunk<!storage.node_id>
+        ...
+      }
+
+    `labels` is the same list of label names db.get_out_edges_by_label carried, on
+    the op rather than on a handle: it is resolved to a storage LabelSet when the loop
+    is translated, exactly as an nl.scan_nodes_by_label name is. A label absent from
+    the schema leaves the conjunction unsatisfiable, so the loop yields no chunk.
+    Narrowing by the target label changes only the rows, never their shape, so the
+    result iterator type is identical to nl.get_out_edges' and is inferred; only the
+    carried chunk types are spelled out, after the colon.
+  }];
+
+  let arguments = (ins NLNodeIDChunk:$input_nodes, StrArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter);
+  let results   = (outs NLIterator:$result);
+
+  let assemblyFormat = [{
+    `(` $input_nodes `,` $labels `,` `{` $columns_to_filter `}` `)` attr-dict
+    ( `:` qualified(type($columns_to_filter))^ )?
+  }];
+}
+
+/**
+* GetInEdgesByLabel
+*/
+def GetInEdgesByLabel : NLOp<"get_in_edges_by_label", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create a database iterator over the in-edges of a chunk of nodes leaving the nodes carrying every given label";
+  let description = [{
+    The reverse-direction sibling of nl.get_out_edges_by_label and the by-label
+    sibling of nl.get_in_edges: it fills the same chunk shape as in-edges but keeps
+    only the in-edges whose source's label set is a superset of `labels`. The labels
+    constrain the end the hop leaves, so `srcids` holds it and `tgtids` the input node
+    the hop walked from - the chunks carry the edge as the graph stores it, as they do
+    under nl.get_in_edges. The carry set and the result iterator type match
+    nl.get_out_edges_by_label, so the two are interchangeable in a loop; `labels` is
+    resolved the same way and an absent name yields no chunk.
+  }];
+
+  let arguments = (ins NLNodeIDChunk:$input_nodes, StrArrayAttr:$labels, Variadic<NLChunk>:$columns_to_filter);
+  let results   = (outs NLIterator:$result);
+
+  let assemblyFormat = [{
+    `(` $input_nodes `,` $labels `,` `{` $columns_to_filter `}` `)` attr-dict
+    ( `:` qualified(type($columns_to_filter))^ )?
+  }];
+}
+
+/**
 * GetPropertyType
 */
 def GetPropertyType : NLOp<"get_property_type", [Pure]> {

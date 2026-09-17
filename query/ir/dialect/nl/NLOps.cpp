@@ -278,6 +278,24 @@ LogicalResult GetInEdgesByType::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+// The by-label hops: same iterator shape again, narrowed by the label set of the endpoint
+// the hop reaches.
+LogicalResult GetOutEdgesByLabel::inferReturnTypes(MLIRContext* context,
+                                                   std::optional<Location> location,
+                                                   GetOutEdgesByLabel::Adaptor adaptor,
+                                                   SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(getEdgeIteratorType(context, adaptor.getColumnsToFilter()));
+    return success();
+}
+
+LogicalResult GetInEdgesByLabel::inferReturnTypes(MLIRContext* context,
+                                                  std::optional<Location> location,
+                                                  GetInEdgesByLabel::Adaptor adaptor,
+                                                  SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(getEdgeIteratorType(context, adaptor.getColumnsToFilter()));
+    return success();
+}
+
 // A cross product yields one chunk per crossed column - the outer columns
 // followed by the inner - each keeping its input chunk's element type, since
 // the broadcast only changes the row count, not the element kind.

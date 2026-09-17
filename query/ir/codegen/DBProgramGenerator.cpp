@@ -170,7 +170,7 @@ using DBPassFactory = std::unique_ptr<mlir::Pass> (*)(const mlir::db::DBPassCont
 // pipeline it reports on and the pipeline that runs the same one. Every factory is handed
 // the context; only the join's cost model reads it, the rewrites beside it answering off
 // the IR alone.
-const std::array<DBPassFactory, 16> dbPassPipeline = {
+const std::array<DBPassFactory, 17> dbPassPipeline = {
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanByLabel(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createPushDownFilters(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createTrimUnreadColumns(); },
@@ -183,6 +183,7 @@ const std::array<DBPassFactory, 16> dbPassPipeline = {
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanOutEdgesByLabel(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanInEdgesByLabel(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanEdgesByEndpointLabel(); },
+    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseEdgesByEndpointLabel(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createReusePropertyReads(); },
     [](const mlir::db::DBPassContext& context) { return mlir::db::createFuseHashJoin(context); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createTrimUnreadColumns(); },

@@ -218,11 +218,12 @@ TEST_F(FuseScanEdgesByEndpointLabelCodegenTest, typedLabelledHopKeepsItsByTypeSc
 }
 
 // A predicate on the other end anchors the scan on the property index, so the hop never
-// becomes the whole edge scan this pass reads.
+// becomes the whole edge scan this pass reads - it stays a hop, and the by-label hop fusion
+// takes the label instead.
 TEST_F(FuseScanEdgesByEndpointLabelCodegenTest, predicateOnTheFarEndKeepsItsPropertyScan) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (a)-->(b:Person) WHERE a.name = 'Remy' RETURN a, b");
 
     EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabelTgt>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::ScanNodesByPropertyValue>(*module), 1u);
-    EXPECT_EQ(countOps<mlir::db::GetOutEdges>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::GetOutEdgesByLabel>(*module), 1u);
 }

@@ -800,6 +800,36 @@ private:
     bool _matchable {true};
 };
 
+// nl.get_out_edges_by_label / nl.get_in_edges_by_label loop data: an edge hop restricted to
+// the edges whose far endpoint carries a label set - the target of an out-edge, the source
+// of an in-edge. Reuses the plain edge hop's chunks, limit, carry set and body; adds the
+// label set the Get{Out,In}EdgesByLabelChunkWriter filters by, owned here so the
+// LabelSetHandle the executor builds each run points at storage that outlives it.
+// _matchable is false when a requested label was absent from the schema, leaving the
+// conjunction unsatisfiable, so the loop emits no row.
+class NLEdgeByLabelLoopData : public NLEdgeLoopData {
+public:
+    NLEdgeByLabelLoopData(const ColumnNodeIDs* input,
+                          ColumnNodeIDs* sources,
+                          ColumnEdgeIDs* edgeIDs,
+                          ColumnEdgeTypes* edgeTypes,
+                          ColumnNodeIDs* targets,
+                          const LabelSet& labelset,
+                          bool matchable)
+        : NLEdgeLoopData(input, sources, edgeIDs, edgeTypes, targets),
+        _labelset(labelset),
+        _matchable(matchable)
+    {
+    }
+
+    const LabelSet& getLabelSet() const { return _labelset; }
+    bool isMatchable() const { return _matchable; }
+
+private:
+    LabelSet _labelset;
+    bool _matchable {true};
+};
+
 // nl.get_node_properties / nl.get_edge_properties data: a with-null property
 // read that maps the input ID column to a nullable value column, one value per
 // input row (missing values are null, no row dropped). The node-vs-edge ID type

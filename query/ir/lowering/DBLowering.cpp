@@ -694,6 +694,8 @@ bool opensSourceLoop(mlir::Operation* operation) {
                      mlir::db::GetEdges,
                      mlir::db::GetOutEdgesByType,
                      mlir::db::GetInEdgesByType,
+                     mlir::db::GetOutEdgesByLabel,
+                     mlir::db::GetInEdgesByLabel,
                      mlir::db::CallProcedure>(operation);
 }
 
@@ -910,6 +912,10 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerGetOutEdgesByType(getOutEdgesByType);
     } else if (mlir::db::GetInEdgesByType getInEdgesByType = mlir::dyn_cast<mlir::db::GetInEdgesByType>(operation)) {
         lowerGetInEdgesByType(getInEdgesByType);
+    } else if (mlir::db::GetOutEdgesByLabel getOutEdgesByLabel = mlir::dyn_cast<mlir::db::GetOutEdgesByLabel>(operation)) {
+        lowerGetOutEdgesByLabel(getOutEdgesByLabel);
+    } else if (mlir::db::GetInEdgesByLabel getInEdgesByLabel = mlir::dyn_cast<mlir::db::GetInEdgesByLabel>(operation)) {
+        lowerGetInEdgesByLabel(getInEdgesByLabel);
     } else if (mlir::db::GetNodeProperties getNodeProperties = mlir::dyn_cast<mlir::db::GetNodeProperties>(operation)) {
         lowerGetNodeProperties(getNodeProperties);
     } else if (mlir::db::GetEdgeProperties getEdgeProperties = mlir::dyn_cast<mlir::db::GetEdgeProperties>(operation)) {
@@ -1490,6 +1496,44 @@ void DBLowering::lowerGetInEdgesByType(mlir::db::GetInEdgesByType getInEdgesByTy
                                                                        edgeTypeHandle,
                                                                        carriedChunks);
     buildLoopForSource(edges.getResult(), getInEdgesByType.getOperation());
+}
+
+void DBLowering::lowerGetOutEdgesByLabel(mlir::db::GetOutEdgesByLabel getOutEdgesByLabel) {
+    const mlir::Value inputChunk = mapValue(getOutEdgesByLabel.getInputNodes());
+
+    llvm::SmallVector<mlir::Value, 4> carriedChunks;
+    for (const mlir::Value carriedColumn : getOutEdgesByLabel.getColumnsToFilter()) {
+        carriedChunks.push_back(mapValue(carriedColumn));
+    }
+
+    setInsertionInto(ownerBlock(inputChunk));
+
+    // The label list rides on the op the way a by-label scan carries it, rather than
+    // through a handle: it is resolved to a LabelSet when the loop is translated.
+    nl::GetOutEdgesByLabel edges = _builder.create<nl::GetOutEdgesByLabel>(_builder.getUnknownLoc(),
+                                                                           inputChunk,
+                                                                           getOutEdgesByLabel.getLabelsAttr(),
+                                                                           carriedChunks);
+    buildLoopForSource(edges.getResult(), getOutEdgesByLabel.getOperation());
+}
+
+void DBLowering::lowerGetInEdgesByLabel(mlir::db::GetInEdgesByLabel getInEdgesByLabel) {
+    // The predecessor counterpart of lowerGetOutEdgesByLabel: same shape, reverse
+    // direction, the labels constraining the source the hop leaves.
+    const mlir::Value inputChunk = mapValue(getInEdgesByLabel.getInputNodes());
+
+    llvm::SmallVector<mlir::Value, 4> carriedChunks;
+    for (const mlir::Value carriedColumn : getInEdgesByLabel.getColumnsToFilter()) {
+        carriedChunks.push_back(mapValue(carriedColumn));
+    }
+
+    setInsertionInto(ownerBlock(inputChunk));
+
+    nl::GetInEdgesByLabel edges = _builder.create<nl::GetInEdgesByLabel>(_builder.getUnknownLoc(),
+                                                                         inputChunk,
+                                                                         getInEdgesByLabel.getLabelsAttr(),
+                                                                         carriedChunks);
+    buildLoopForSource(edges.getResult(), getInEdgesByLabel.getOperation());
 }
 
 void DBLowering::lowerGetNodeProperties(mlir::db::GetNodeProperties getNodeProperties) {

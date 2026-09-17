@@ -53,6 +53,8 @@ private:
         GetEdges,
         GetOutEdgesByType,
         GetInEdgesByType,
+        GetOutEdgesByLabel,
+        GetInEdgesByLabel,
         Sort,
         GroupAggregate,
         UnwindCollect,
@@ -105,10 +107,10 @@ private:
         mlir::Value _hashJoinState;
         llvm::SmallVector<mlir::Value, 4> _probeColumns;
 
-        // The label names a ScanNodesByLabel or ScanNodesByPropertyValue iterator filters
-        // by; empty for the other kinds. These are views into the op's interned StringAttr
-        // storage, which the MLIRContext keeps alive for the whole translation; they are
-        // resolved to a LabelSet as soon as the loop is translated.
+        // The label names a ScanNodesByLabel, ScanNodesByPropertyValue or by-label edge
+        // iterator filters by; empty for the other kinds. These are views into the op's
+        // interned StringAttr storage, which the MLIRContext keeps alive for the whole
+        // translation; they are resolved to a LabelSet as soon as the loop is translated.
         llvm::SmallVector<llvm::StringRef, 4> _labels;
 
         // The edge type name a ScanEdgesByType / GetOutEdgesByType / GetInEdgesByType iterator
@@ -336,6 +338,12 @@ private:
     // list the same way.
     template <typename ScanOp>
     void bindScanEdgesByLabel(ScanOp scan, IteratorKind kind);
+
+    // Record the iterator config of one of the two by-label edge hops: they differ in the
+    // direction they walk, which the kind names, and each reads its input chunk, carry set
+    // and label list the same way.
+    template <typename HopOp>
+    void bindGetEdgesByLabel(HopOp hop, IteratorKind kind);
 
     void translateEdgeLoop(const IteratorConfig& config,
                            mlir::Block& loopBody,

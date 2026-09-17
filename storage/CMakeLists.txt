@@ -38,12 +38,14 @@ set(storage_sources
 
         iterators/GetInEdgesIterator.cpp
         iterators/GetInEdgesByTypeIterator.cpp
+        iterators/GetInEdgesByLabelIterator.cpp
         iterators/GetPropertiesIterator.cpp
         iterators/GetPropertiesWithNullIterator.cpp
         iterators/GetNodeLabelSetIterator.cpp
         iterators/GetEdgeTypesIterator.cpp
         iterators/GetOutEdgesIterator.cpp
         iterators/GetOutEdgesByTypeIterator.cpp
+        iterators/GetOutEdgesByLabelIterator.cpp
         iterators/GetEdgesIterator.cpp
         iterators/ScanEdgesByTypeIterator.cpp
         iterators/GetNodeViewsIterator.cpp

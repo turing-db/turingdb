@@ -41,6 +41,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSESCANOUTEDGESBYLABEL
 #define GEN_PASS_DEF_FUSESCANINEDGESBYLABEL
 #define GEN_PASS_DEF_FUSESCANEDGESBYENDPOINTLABEL
+#define GEN_PASS_DEF_FUSEEDGESBYENDPOINTLABEL
 #define GEN_PASS_DEF_REUSEPROPERTYREADS
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
@@ -141,11 +142,11 @@ bool isNodeSource(Operation* op) {
 }
 
 bool isEdgeHop(Operation* op) {
-    return isa<GetOutEdges, GetInEdges, GetEdges, GetOutEdgesByType, GetInEdgesByType>(op);
+    return isa<GetOutEdges, GetInEdges, GetEdges, GetOutEdgesByType, GetInEdgesByType, GetOutEdgesByLabel, GetInEdgesByLabel>(op);
 }
 
 bool isReverseHop(Operation* op) {
-    return isa<GetInEdges, GetInEdgesByType>(op);
+    return isa<GetInEdges, GetInEdgesByType, GetInEdgesByLabel>(op);
 }
 
 constexpr size_t hopFixedResultCount = 4;
@@ -1415,6 +1416,132 @@ struct FuseScanEdgesByEndpointLabel : public impl::FuseScanEdgesByEndpointLabelB
     }
 };
 
+// A hop whose rows are then cut down to the edges the endpoint it reaches carries a set of
+// labels on: the by-label hop spelled the long way, since the walk itself can keep those
+// edges and never build the rows the filter goes on to drop.
+struct EndpointLabelledHop {
+    Operation* _hop {nullptr};
+    GetNodeLabelSet _labelSet;
+    CheckLabelConstraint _check;
+    ArrayAttr _labels;
+};
+
+bool matchEndpointLabelledHop(FilterOp filter, EndpointLabelledHop& labelledHop) {
+    CheckLabelConstraint check = filter.getMask().getDefiningOp<CheckLabelConstraint>();
+    if (!check) {
+        return false;
+    }
+
+    GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+    if (!labelSet) {
+        return false;
+    }
+
+    const Value labelledColumn = labelSet.getInputNodes();
+    Operation* const hop = labelledColumn.getDefiningOp();
+    if (!hop || !isa<GetOutEdges, GetInEdges>(hop)) {
+        return false;
+    }
+
+    // Only the end the hop reaches can ride onto it. The end it leaves is the input column,
+    // which a by-label node scan constrains instead - and there the labels are no longer
+    // this hop's to carry.
+    constexpr size_t srcResultIndex = 0;
+    constexpr size_t tgtResultIndex = 3;
+    const size_t reachedResultIndex = isReverseHop(hop) ? srcResultIndex : tgtResultIndex;
+    if (labelledColumn != hop->getResult(reachedResultIndex)) {
+        return false;
+    }
+
+    // Every column the filter cuts has to be one the hop bound, or the fused hop has nothing
+    // of its own to hand back in its place.
+    for (const Value column : filter.getColumnsToFilter()) {
+        if (column.getDefiningOp() != hop) {
+            return false;
+        }
+    }
+
+    // And nothing outside the chain may read the hop, or that reader would go on seeing the
+    // rows the labels turn away.
+    Operation* const filterOp = filter.getOperation();
+    Operation* const labelSetOp = labelSet.getOperation();
+    for (const Value result : hop->getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            const bool readsTheChain = user == filterOp || user == labelSetOp;
+            if (!readsTheChain) {
+                return false;
+            }
+        }
+    }
+
+    const bool chainIsPrivate = labelSet.getResult().hasOneUse() && check.getResult().hasOneUse();
+    if (!chainIsPrivate) {
+        return false;
+    }
+
+    labelledHop = EndpointLabelledHop {._hop = hop,
+                                       ._labelSet = labelSet,
+                                       ._check = check,
+                                       ._labels = check.getLabels()};
+
+    return true;
+}
+
+template <typename ByLabelOp>
+Operation* createByLabelHop(Operation* hop, ArrayAttr labels, mlir::OpBuilder& builder) {
+    const Operation::result_range results = hop->getResults();
+
+    ByLabelOp byLabelHop = builder.create<ByLabelOp>(hop->getLoc(),
+                                                     results[0].getType(),
+                                                     results[1].getType(),
+                                                     results[2].getType(),
+                                                     results[3].getType(),
+                                                     results.drop_front(hopFixedResultCount).getTypes(),
+                                                     hop->getOperand(0),
+                                                     labels,
+                                                     hop->getOperands().drop_front());
+
+    return byLabelHop.getOperation();
+}
+
+void fuseEdgesByEndpointLabel(FilterOp filter, const EndpointLabelledHop& labelledHop, mlir::OpBuilder& builder) {
+    Operation* const hop = labelledHop._hop;
+
+    builder.setInsertionPoint(hop);
+
+    // A by-label hop declares the same four fixed results and the same carry set behind
+    // them, so the plain hop's results map onto it one for one. Which of the two it becomes
+    // is the hop the query wrote: an out-hop reaches its target, an in-hop its source.
+    Operation* const byLabelHop = isReverseHop(hop)
+                                      ? createByLabelHop<GetInEdgesByLabel>(hop, labelledHop._labels, builder)
+                                      : createByLabelHop<GetOutEdgesByLabel>(hop, labelledHop._labels, builder);
+
+    hop->replaceAllUsesWith(byLabelHop);
+
+    // The hop now yields the rows the filter used to leave, so each column the filter handed
+    // on is the one it was given.
+    const Operation::operand_range columns = filter.getColumnsToFilter();
+    const mlir::ResultRange filtered = filter.getFilteredColumns();
+    for (size_t index = 0; index < filtered.size(); index++) {
+        filtered[index].replaceAllUsesWith(columns[index]);
+    }
+
+    filter.erase();
+    eraseIfUnused(labelledHop._check);
+    eraseIfUnused(labelledHop._labelSet);
+    hop->erase();
+}
+
+struct FuseEdgesByEndpointLabel : public impl::FuseEdgesByEndpointLabelBase<FuseEdgesByEndpointLabel> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+        runFilterPass<EndpointLabelledHop>(getOperation(),
+                                           matchEndpointLabelledHop,
+                                           fuseEdgesByEndpointLabel,
+                                           builder);
+    }
+};
+
 // Where an op's carry set sits: the carried operands start at _operandOffset and each comes
 // back as the result at the same position from _resultOffset.
 struct CarrySetLayout {
@@ -2557,7 +2684,7 @@ std::optional<RowMultiplier> estimateRowMultiplier(Operation* op, const ::db::Ca
         return RowMultiplier {uncountableRows, 1};
     }
 
-    const bool walksOneDirection = isa<GetOutEdges, GetInEdges, GetOutEdgesByType, GetInEdgesByType>(op);
+    const bool walksOneDirection = isa<GetOutEdges, GetInEdges, GetOutEdgesByType, GetInEdgesByType, GetOutEdgesByLabel, GetInEdgesByLabel>(op);
     const bool walksBoth = isa<GetEdges>(op);
     if (!walksOneDirection && !walksBoth) {
         return std::nullopt;
