@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "remote-enabled": false,
+  "graph": "simpledb",
+  "query": "RETURN [x IN null | x] AS none",
+  "expect": {
+    "result": "none\nnull"
+  },
+  "tags": [
+    "lists",
+    "comprehension",
+    "return"
+  ],
+  "write-required": false
+}
