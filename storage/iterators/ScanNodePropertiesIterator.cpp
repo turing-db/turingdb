@@ -21,10 +21,12 @@ void ScanNodePropertiesIterator<T>::init() {
     for (; _partIt.isNotEnd(); _partIt.next()) {
         const PropertyManager& properties = _partIt.get()->nodeProperties();
         if (properties.hasPropertyType(_propTypeID)) {
-            _props = properties.template all<T>(_propTypeID);
-            _propIt = _props.begin();
-            _currentID = properties.ids(_propTypeID).begin();
-            return;
+            newPropertySpan();
+            skipOverridden();
+
+            if (_propIt != _props.end()) {
+                return;
+            }
         }
     }
 }
@@ -52,6 +54,8 @@ const T::Primitive& ScanNodePropertiesIterator<T>::get() const {
 
 template <SupportedType T>
 void ScanNodePropertiesIterator<T>::nextValid() {
+    skipOverridden();
+
     while (_propIt == _props.end()) {
         _partIt.next();
         if (!_partIt.isNotEnd()) {
@@ -61,7 +65,7 @@ void ScanNodePropertiesIterator<T>::nextValid() {
         const DataPart* part = _partIt.get();
         if (part->nodeProperties().hasPropertyType(_propTypeID)) {
             newPropertySpan();
-            return;
+            skipOverridden();
         }
     }
 }
@@ -79,6 +83,49 @@ void ScanNodePropertiesIterator<T>::newPropertySpan() {
     _props = properties.template all<T>(_propTypeID);
     _propIt = _props.begin();
     _currentID = properties.ids(_propTypeID).begin();
+
+    collectNewerContainers();
+}
+
+template <SupportedType T>
+void ScanNodePropertiesIterator<T>::collectNewerContainers() {
+    _newerContainers.clear();
+
+    PartIterator newerIt = _partIt;
+
+    for (newerIt.next(); newerIt.isNotEnd(); newerIt.next()) {
+        const PropertyManager& nodeProperties = newerIt.get()->nodeProperties();
+        const TypedPropertyContainer<T>* container = nodeProperties.tryGetContainer<T>(_propTypeID);
+
+        if (container) {
+            _newerContainers.push_back(container);
+        }
+    }
+}
+
+template <SupportedType T>
+void ScanNodePropertiesIterator<T>::skipOverridden() {
+    if (_newerContainers.empty()) {
+        return;
+    }
+
+    while (_propIt != _props.end() && isOverridden(*_currentID)) {
+        _propIt++;
+        _currentID++;
+    }
+}
+
+// hasEntry, not has: a newer part holding an explicit null still answers for the entity,
+// and must drop the value this part stores rather than let it stand.
+template <SupportedType T>
+bool ScanNodePropertiesIterator<T>::isOverridden(EntityID entityID) const {
+    for (const PropertyContainer* container : _newerContainers) {
+        if (container->hasEntry(entityID)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 template <SupportedType T>
@@ -130,26 +177,26 @@ void ScanNodePropertiesChunkWriter<T>::fill(size_t maxCount) {
                     this->_nodeIDs->resize(newSize);
                 }
             }
-            remainingToMax -= rangeSize;
+            const size_t previousSize = size;
 
-            if constexpr (conditions[0]) {
-                auto& properties = *this->_properties;
-                auto& propIt = this->_propIt;
-                for (size_t i = size; i < newSize; i++) {
-                    properties[i] = *propIt;
-                    ++propIt;
+            for (size_t row = 0; row < rangeSize; row++) {
+                if (!this->isOverridden(*this->_currentID)) {
+                    if constexpr (conditions[0]) {
+                        (*this->_properties)[size] = *this->_propIt;
+                    }
+                    if constexpr (conditions[1]) {
+                        (*this->_nodeIDs)[size] = NodeID {this->_currentID->getValue()};
+                    }
+                    size++;
                 }
+
+                ++this->_propIt;
+                ++this->_currentID;
             }
-            if constexpr (conditions[1]) {
-                auto& nodeIDs = *this->_nodeIDs;
-                auto& currentID = this->_currentID;
-                for (size_t i = size; i < newSize; i++) {
-                    nodeIDs[i] = NodeID {this->_currentID->getValue()};
-                    ++currentID++;
-                }
-            }
+
+            remainingToMax -= size - previousSize;
+
             this->nextValid();
-            size = newSize;
         }
 
         if constexpr (conditions[0]) {
