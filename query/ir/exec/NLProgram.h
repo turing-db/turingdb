@@ -681,10 +681,10 @@ private:
     bool _matchable {true};
 };
 
-// nl.scan_out_edges_by_label_src and nl.scan_in_edges_by_label_tgt loop data: the edge scan
-// restricted to the edges hanging off a node whose label set is a superset of _labelset -
-// the ones leaving it in the out direction, the ones arriving at it in the in direction.
-// The state is the same either way, so the two share it and differ only in the executor
+// Loop data of the four by-label edge scans: the edge scan restricted to the edges hanging
+// off a node whose label set is a superset of _labelset - the ones leaving it where the
+// source carries the labels, the ones arriving at it where the target does.
+// The state is the same either way, so the four share it and differ only in the executor
 // they run. Reuses the plain edge scan's chunks, limit and body; adds the resolved label
 // set the by-label chunk writers filter by, owned here so the LabelSetHandle the executor
 // builds each run points at storage that outlives it. _matchable is false when a requested

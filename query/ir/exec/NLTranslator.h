@@ -46,8 +46,8 @@ private:
         ScanNodesByPropertyValue,
         ScanEdges,
         ScanEdgesByType,
-        ScanOutEdgesByLabelSrc,
-        ScanInEdgesByLabelTgt,
+        ScanEdgesBySourceLabel,
+        ScanEdgesByTargetLabel,
         GetOutEdges,
         GetInEdges,
         GetEdges,
@@ -330,6 +330,12 @@ private:
     void translateScanEdgesLoop(mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
     void translateScanEdgesByTypeLoop(const IteratorConfig& config, mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body);
     void translateScanEdgesByLabelLoop(const IteratorConfig& config, mlir::Block& loopBody, NLLimitState* limit, NLStmtContainer* body, NLHandlerFunction executor);
+
+    // Record the iterator config of one of the four by-label edge scans: they differ in
+    // which endpoint carries the labels, which the kind names, and each reads its label
+    // list the same way.
+    template <typename ScanOp>
+    void bindScanEdgesByLabel(ScanOp scan, IteratorKind kind);
 
     void translateEdgeLoop(const IteratorConfig& config,
                            mlir::Block& loopBody,

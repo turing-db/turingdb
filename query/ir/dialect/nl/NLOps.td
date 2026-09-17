@@ -359,6 +359,52 @@ def ScanInEdgesByLabelTgt : NLOp<"scan_in_edges_by_label_tgt", [Pure, InferTypeO
 }
 
 /**
+* ScanOutEdgesByLabelTgt
+*/
+def ScanOutEdgesByLabelTgt : NLOp<"scan_out_edges_by_label_tgt", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create a database iterator over the out-edges arriving at the nodes carrying every given label";
+  let description = [{
+    Imperative counterpart of db.scan_out_edges_by_label_tgt. Each step of an
+    enclosing nl.for fills the same four chunks nl.scan_edges fills, but only for the
+    edges arriving at a node whose label set is a superset of `labels`:
+
+      %edges = nl.scan_out_edges_by_label_tgt(["Person"])
+
+    The labels constrain the edge's target, so `tgtids` holds the labelled end and
+    `srcids` the unconstrained one. `labels` is resolved the way an
+    nl.scan_nodes_by_label name is, and a label absent from the schema leaves the
+    conjunction unsatisfiable, so the loop yields no chunk. The result is the same
+    four-chunk edge iterator nl.scan_edges produces and is inferred, not spelled out.
+  }];
+  let arguments = (ins StrArrayAttr:$labels);
+  let results   = (outs NLIterator:$result);
+  let assemblyFormat = "`(` $labels `)` attr-dict";
+}
+
+/**
+* ScanInEdgesByLabelSrc
+*/
+def ScanInEdgesByLabelSrc : NLOp<"scan_in_edges_by_label_src", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create a database iterator over the in-edges leaving the nodes carrying every given label";
+  let description = [{
+    Imperative counterpart of db.scan_in_edges_by_label_src. Each step of an enclosing
+    nl.for fills the same four chunks nl.scan_edges fills, but only for the edges
+    leaving a node whose label set is a superset of `labels`:
+
+      %edges = nl.scan_in_edges_by_label_src(["Person"])
+
+    The labels constrain the edge's source, so `srcids` holds the labelled end and
+    `tgtids` the unconstrained one. `labels` is resolved the way an
+    nl.scan_nodes_by_label name is, and a label absent from the schema leaves the
+    conjunction unsatisfiable, so the loop yields no chunk. The result is the same
+    four-chunk edge iterator nl.scan_edges produces and is inferred, not spelled out.
+  }];
+  let arguments = (ins StrArrayAttr:$labels);
+  let results   = (outs NLIterator:$result);
+  let assemblyFormat = "`(` $labels `)` attr-dict";
+}
+
+/**
 * GetOutEdges
 */
 def GetOutEdges : NLOp<"get_out_edges", [Pure, InferTypeOpAdaptor]> {

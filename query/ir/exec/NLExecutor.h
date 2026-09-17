@@ -65,8 +65,12 @@ public:
 
     static void runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runScanEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data);
-    static void runScanOutEdgesByLabelSrcLoop(NLExecutionContext* context, NLFunctionData* data);
-    static void runScanInEdgesByLabelTgtLoop(NLExecutionContext* context, NLFunctionData* data);
+
+    // One loop per labelled endpoint rather than per op: both hop directions of a
+    // source-labelled scan read the index keyed by the source's label set, and both of a
+    // target-labelled one the index keyed by the target's.
+    static void runScanEdgesBySourceLabelLoop(NLExecutionContext* context, NLFunctionData* data);
+    static void runScanEdgesByTargetLabelLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetOutEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetInEdgesLoop(NLExecutionContext* context, NLFunctionData* data);
 
