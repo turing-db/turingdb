@@ -7532,8 +7532,10 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
         }
 
         const Expr* argExpr = args->front();
-        _part._exprMap[expr] = pathLengthColumn(argExpr, translateArg(argExpr));
-        return;
+        if (argExpr->getType() == EvaluatedType::EdgePattern) {
+            _part._exprMap[expr] = pathLengthColumn(argExpr, translateArg(argExpr));
+            return;
+        }
     }
 
     if (funcName == "range") {

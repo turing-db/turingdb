@@ -4136,7 +4136,7 @@ void runEdgeLoopSteps(NLExecutionContext* context,
     const size_t chunkSize = context->getChunkSize();
 
     const auto hasStep = [&]() {
-        return chunkWriter->isValid() || pendingEdges->isValid();
+        return chunkWriter->isValid() || (pendingEdges && pendingEdges->isValid());
     };
 
     const auto runIteration = [&](size_t rowBudget) {
@@ -5921,7 +5921,7 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
         }
     }
 
-    runEdgeLoopSteps(context, loopData, &explorator, loopData->getSources());
+    runEdgeLoopSteps(context, loopData, &explorator, nullptr, loopData->getSources());
 }
 
 void NLExecutor::runExpandPath(NLExecutionContext* context, NLFunctionData* data) {
@@ -9142,6 +9142,14 @@ NLJoinKeyFunctions NLExecutor::selectJoinKeyFunctions(NLChunkKind kind) {
 
         case NLChunkKind::DateTime:
             return joinKeyFunctions<types::DateTime::Primitive>();
+        break;
+
+        case NLChunkKind::PathRef:
+            throw IRException("A path column cannot be a join key: expand it into its list first");
+        break;
+
+        case NLChunkKind::EntityList:
+            throw IRException("A path column cannot be a join key: a path has no scalar value to key on");
         break;
     }
 
