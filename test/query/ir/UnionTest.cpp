@@ -187,6 +187,25 @@ TEST_F(UnionTest, unionsAggregatedBranches) {
                expected);
 }
 
+// A count and a stored integer property are one Cypher INTEGER, so they share a column.
+// They reach it as different chunks - a count is an unsigned tally that is never null, a
+// property a nullable signed value - and the column is the nullable signed one.
+TEST_F(UnionTest, unionsACountWithAnIntegerProperty) {
+    const Rows expected {{"8"}, {"32"}, {"32"}};
+
+    expectRows("MATCH (a:Person) RETURN count(a) AS n UNION ALL "
+               "MATCH (b:Founder) RETURN b.age AS n",
+               expected);
+}
+
+TEST_F(UnionTest, unionsAnIntegerPropertyWithACount) {
+    const Rows expected {{"32"}, {"32"}, {"8"}};
+
+    expectRows("MATCH (a:Founder) RETURN a.age AS n UNION ALL "
+               "MATCH (b:Person) RETURN count(b) AS n",
+               expected);
+}
+
 TEST_F(UnionTest, unionsTraversedBranches) {
     const Rows expected {{"Adam"}, {"Ghosts"}, {"Computers"}, {"Eighties"}, {"Remy"}, {"Bio"}, {"Cooking"}};
 

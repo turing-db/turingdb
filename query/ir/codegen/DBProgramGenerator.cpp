@@ -1018,15 +1018,14 @@ void DBProgramGenerator::generate(const CypherAST* ast) {
 
     const QueryCommand* command = queries.front();
 
-    if (command->getKind() == QueryCommand::Kind::UNION_QUERY) {
-        generateUnion(static_cast<const UnionQuery*>(command));
-    } else {
-        const SinglePartQuery* query = dynamic_cast<const SinglePartQuery*>(command);
-        if (!query) {
-            throwError("Non-single part queries are not yet supported.", command);
-        }
+    const QueryCommand::Kind kind = command->getKind();
 
-        generateQuery(query, nullptr);
+    if (kind == QueryCommand::Kind::UNION_QUERY) {
+        generateUnion(static_cast<const UnionQuery*>(command));
+    } else if (kind == QueryCommand::Kind::SINGLE_PART_QUERY) {
+        generateQuery(static_cast<const SinglePartQuery*>(command), nullptr);
+    } else {
+        throwError("Non-single part queries are not yet supported.", command);
     }
 
     _opBuilder.create<mlir::func::ReturnOp>(uloc);
@@ -3880,28 +3879,34 @@ void DBProgramGenerator::broadcastUnionProjection(llvm::SmallVectorImpl<mlir::Va
     }
 }
 
+void DBProgramGenerator::emitRemoveDuplicates(llvm::ArrayRef<mlir::Value> keyColumns,
+                                              mlir::Value distinctSet,
+                                              llvm::SmallVectorImpl<mlir::Value>& deduped) {
+    llvm::SmallVector<mlir::Type> dedupedTypes;
+    for (const mlir::Value column : keyColumns) {
+        dedupedTypes.push_back(column.getType());
+    }
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    auto distinctOp = _opBuilder.create<mlir::db::RemoveDuplicates>(loc,
+                                                                   dedupedTypes,
+                                                                   mlir::ValueRange {keyColumns},
+                                                                   distinctSet);
+
+    const mlir::ResultRange results = distinctOp.getResults();
+    deduped.assign(results.begin(), results.end());
+}
+
 // The rows a branch contributes, recorded in the set its siblings share, so that the
 // union tells apart rows reaching the result through different branches. Every column is
 // part of the key here - unlike RETURN DISTINCT, which leaves a constant one out: `RETURN
 // n.name, 1` and `RETURN m.name, 2` are distinct rows, and the constant is what says so.
 void DBProgramGenerator::dedupUnionBranch(mlir::Value distinctSet,
                                           llvm::SmallVectorImpl<mlir::Value>& projected) {
-    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    llvm::SmallVector<mlir::Value> deduped;
+    emitRemoveDuplicates(projected, distinctSet, deduped);
 
-    llvm::SmallVector<mlir::Type> dedupedTypes;
-    for (const mlir::Value column : projected) {
-        dedupedTypes.push_back(column.getType());
-    }
-
-    auto distinctOp = _opBuilder.create<mlir::db::RemoveDuplicates>(loc,
-                                                                   dedupedTypes,
-                                                                   mlir::ValueRange {projected},
-                                                                   distinctSet);
-
-    const mlir::ResultRange results = distinctOp.getResults();
-    for (size_t index = 0; index < projected.size(); index++) {
-        projected[index] = results[index];
-    }
+    projected.assign(deduped.begin(), deduped.end());
 }
 
 bool DBProgramGenerator::writesToTheGraph(const SinglePartQuery* query) {
@@ -4431,22 +4436,13 @@ void DBProgramGenerator::translateDistinct(const Projection* projection,
     if (dedupedColumns.empty()) {
         translateDistinctOverConstants(projection, projected);
     } else {
-        llvm::SmallVector<mlir::Type> dedupedTypes;
-        for (const mlir::Value column : dedupedColumns) {
-            dedupedTypes.push_back(column.getType());
-        }
-
-        const mlir::Location loc = _opBuilder.getUnknownLoc();
-        auto distinctOp = _opBuilder.create<mlir::db::RemoveDuplicates>(loc,
-                                                                       dedupedTypes,
-                                                                       mlir::ValueRange {dedupedColumns},
-                                                                       mlir::Value());
+        llvm::SmallVector<mlir::Value> deduped;
+        emitRemoveDuplicates(dedupedColumns, mlir::Value(), deduped);
 
         // The dedup hands back one column per column it read, so its results take the place
         // of the ones it was given and the constant columns stay as they were
-        const mlir::ResultRange results = distinctOp.getResults();
         for (size_t resultIndex = 0; resultIndex < dedupedItems.size(); resultIndex++) {
-            projected[dedupedItems[resultIndex]] = results[resultIndex];
+            projected[dedupedItems[resultIndex]] = deduped[resultIndex];
         }
     }
 

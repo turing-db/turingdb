@@ -485,6 +485,13 @@ private:
     // wire, and the result table declares one shape per column for every branch.
     void broadcastUnionProjection(llvm::SmallVectorImpl<mlir::Value>& projected);
 
+    // Emits the dedup of @param keyColumns against @param distinctSet - the set a union's
+    // branches share, null for a dedup keeping one of its own - and fills @param deduped
+    // with the column it hands back for each one it read
+    void emitRemoveDuplicates(llvm::ArrayRef<mlir::Value> keyColumns,
+                              mlir::Value distinctSet,
+                              llvm::SmallVectorImpl<mlir::Value>& deduped);
+
     // Records the rows a union branch contributes in the set its siblings share, so
     // the dedup spans the branches rather than each of them
     void dedupUnionBranch(mlir::Value distinctSet, llvm::SmallVectorImpl<mlir::Value>& projected);
