@@ -1,4 +1,4 @@
-#include "ScanInEdgesByLabelIterator.h"
+#include "ScanInEdgesByTargetLabelIterator.h"
 
 #include "datapart/DataPart.h"
 #include "datapart/EdgeContainer.h"
@@ -9,18 +9,18 @@
 
 namespace db {
 
-ScanInEdgesByLabelIterator::ScanInEdgesByLabelIterator(const GraphView& view,
-                                                       const LabelSetHandle& labelset)
+ScanInEdgesByTargetLabelIterator::ScanInEdgesByTargetLabelIterator(const GraphView& view,
+                                                                   const LabelSetHandle& labelset)
     : Iterator(view),
       _labelset(labelset)
 {
     init();
 }
 
-ScanInEdgesByLabelIterator::~ScanInEdgesByLabelIterator() {
+ScanInEdgesByTargetLabelIterator::~ScanInEdgesByTargetLabelIterator() {
 }
 
-void ScanInEdgesByLabelIterator::init() {
+void ScanInEdgesByTargetLabelIterator::init() {
     for (; _partIt.isNotEnd(); _partIt.next()) {
         const DataPart* part = _partIt.get();
         const auto& indexer = part->edgeIndexer().getInsByLabelSet();
@@ -39,12 +39,12 @@ void ScanInEdgesByLabelIterator::init() {
     }
 }
 
-void ScanInEdgesByLabelIterator::next() {
+void ScanInEdgesByTargetLabelIterator::next() {
     ++_edgeIt;
     nextValid();
 }
 
-void ScanInEdgesByLabelIterator::nextValid() {
+void ScanInEdgesByTargetLabelIterator::nextValid() {
     while (_edgeIt == _edges.end()) {
         ++_spanIt;
 
@@ -72,13 +72,14 @@ void ScanInEdgesByLabelIterator::nextValid() {
     }
 }
 
-ScanInEdgesByLabelChunkWriter::ScanInEdgesByLabelChunkWriter(const GraphView& view, const LabelSetHandle& labelset)
-    : ScanInEdgesByLabelIterator(view, labelset),
+ScanInEdgesByTargetLabelChunkWriter::ScanInEdgesByTargetLabelChunkWriter(const GraphView& view,
+                                                                         const LabelSetHandle& labelset)
+    : ScanInEdgesByTargetLabelIterator(view, labelset),
     _filter(view.tombstones())
 {
 }
 
-void ScanInEdgesByLabelChunkWriter::filterTombstones() {
+void ScanInEdgesByTargetLabelChunkWriter::filterTombstones() {
     // Base column of this ChunkWriter is _edgeIDs
     _filter.populateRanges(_edgeIDs);
 
@@ -100,13 +101,13 @@ void ScanInEdgesByLabelChunkWriter::filterTombstones() {
 static constexpr size_t NColumns = 4;
 static constexpr size_t NCombinations = 1 << NColumns;
 
-void ScanInEdgesByLabelChunkWriter::fill(size_t maxCount) {
+void ScanInEdgesByTargetLabelChunkWriter::fill(size_t maxCount) {
     size_t remainingToMax = maxCount;
     static constexpr auto bools = generateArray<NColumns, NCombinations>();
     static constexpr auto masks = generateBitmasks<NColumns, NCombinations>();
 
     bioassert(_srcs || _tgts || _edgeIDs || _types,
-              "ScanInEdgesByLabelChunkWriter must be initialized with at least one valid column");
+              "ScanInEdgesByTargetLabelChunkWriter must be initialized with at least one valid column");
 
     const auto getPrevSize = [&]() {
         if (_srcs) {

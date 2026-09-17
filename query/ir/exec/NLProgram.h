@@ -681,7 +681,7 @@ private:
     bool _matchable {true};
 };
 
-// nl.scan_out_edges_by_label and nl.scan_in_edges_by_label loop data: the edge scan
+// nl.scan_out_edges_by_label_src and nl.scan_in_edges_by_label_tgt loop data: the edge scan
 // restricted to the edges hanging off a node whose label set is a superset of _labelset -
 // the ones leaving it in the out direction, the ones arriving at it in the in direction.
 // The state is the same either way, so the two share it and differ only in the executor

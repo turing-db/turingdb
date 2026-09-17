@@ -547,18 +547,18 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             IteratorConfig config {IteratorKind::ScanEdgesByType, {}, {}};
             config._edgeType = edgeTypeName(scanEdgesByType.getEdgeType());
             _iteratorConfigs[scanEdgesByType.getResult()] = config;
-        } else if (nl::ScanOutEdgesByLabel scanOutEdgesByLabel = mlir::dyn_cast<nl::ScanOutEdgesByLabel>(operation)) {
-            IteratorConfig config {IteratorKind::ScanOutEdgesByLabel, {}, {}};
-            for (const mlir::Attribute label : scanOutEdgesByLabel.getLabels()) {
+        } else if (nl::ScanOutEdgesByLabelSrc scanOutEdgesByLabelSrc = mlir::dyn_cast<nl::ScanOutEdgesByLabelSrc>(operation)) {
+            IteratorConfig config {IteratorKind::ScanOutEdgesByLabelSrc, {}, {}};
+            for (const mlir::Attribute label : scanOutEdgesByLabelSrc.getLabels()) {
                 config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
             }
-            _iteratorConfigs[scanOutEdgesByLabel.getResult()] = config;
-        } else if (nl::ScanInEdgesByLabel scanInEdgesByLabel = mlir::dyn_cast<nl::ScanInEdgesByLabel>(operation)) {
-            IteratorConfig config {IteratorKind::ScanInEdgesByLabel, {}, {}};
-            for (const mlir::Attribute label : scanInEdgesByLabel.getLabels()) {
+            _iteratorConfigs[scanOutEdgesByLabelSrc.getResult()] = config;
+        } else if (nl::ScanInEdgesByLabelTgt scanInEdgesByLabelTgt = mlir::dyn_cast<nl::ScanInEdgesByLabelTgt>(operation)) {
+            IteratorConfig config {IteratorKind::ScanInEdgesByLabelTgt, {}, {}};
+            for (const mlir::Attribute label : scanInEdgesByLabelTgt.getLabels()) {
                 config._labels.emplace_back(mlir::cast<mlir::StringAttr>(label).getValue());
             }
-            _iteratorConfigs[scanInEdgesByLabel.getResult()] = config;
+            _iteratorConfigs[scanInEdgesByLabelTgt.getResult()] = config;
         } else if (nl::GetOutEdges getOutEdges = mlir::dyn_cast<nl::GetOutEdges>(operation)) {
             IteratorConfig config {IteratorKind::GetOutEdges, getOutEdges.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getOutEdges.getColumnsToFilter();
@@ -871,10 +871,10 @@ void NLTranslator::translateFor(nl::For forLoop, NLStmtContainer* body) {
         translateScanEdgesLoop(loopBody, limit, body);
     } else if (config._kind == IteratorKind::ScanEdgesByType) {
         translateScanEdgesByTypeLoop(config, loopBody, limit, body);
-    } else if (config._kind == IteratorKind::ScanOutEdgesByLabel) {
-        translateScanEdgesByLabelLoop(config, loopBody, limit, body, &NLExecutor::runScanOutEdgesByLabelLoop);
-    } else if (config._kind == IteratorKind::ScanInEdgesByLabel) {
-        translateScanEdgesByLabelLoop(config, loopBody, limit, body, &NLExecutor::runScanInEdgesByLabelLoop);
+    } else if (config._kind == IteratorKind::ScanOutEdgesByLabelSrc) {
+        translateScanEdgesByLabelLoop(config, loopBody, limit, body, &NLExecutor::runScanOutEdgesByLabelSrcLoop);
+    } else if (config._kind == IteratorKind::ScanInEdgesByLabelTgt) {
+        translateScanEdgesByLabelLoop(config, loopBody, limit, body, &NLExecutor::runScanInEdgesByLabelTgtLoop);
     } else if (config._kind == IteratorKind::Sort) {
         translateSortLoop(config, loopBody, limit, body);
     } else if (config._kind == IteratorKind::GroupAggregate) {

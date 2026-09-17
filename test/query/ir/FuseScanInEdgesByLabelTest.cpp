@@ -120,7 +120,7 @@ func.func @main() {
 // The fused form spelled by hand, which is what the pass prints.
 const char* const labelledInEdgeScan = R"mlir(
 func.func @main() {
-  %srcs, %eids, %etypes, %tgts = db.scan_in_edges_by_label(["Person"]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  %srcs, %eids, %etypes, %tgts = db.scan_in_edges_by_label_tgt(["Person"]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
   db.output(%srcs, %tgts) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
@@ -232,7 +232,7 @@ protected:
     }
 
     void expectUntouched(mlir::ModuleOp module, size_t hopCount) {
-        EXPECT_EQ(countOps<mlir::db::ScanInEdgesByLabel>(module), 0u);
+        EXPECT_EQ(countOps<mlir::db::ScanInEdgesByLabelTgt>(module), 0u);
         EXPECT_EQ(countOps<mlir::db::ScanNodes>(module) + countOps<mlir::db::ScanNodesByLabel>(module), 1u);
 
         const size_t hops = countOps<mlir::db::GetOutEdges>(module)
@@ -277,7 +277,7 @@ protected:
         const mlir::OwningOpRef<mlir::ModuleOp> fusedModule = parse(programText);
         ASSERT_TRUE(fusedModule);
         ASSERT_TRUE(runFuse(*fusedModule));
-        ASSERT_EQ(countOps<mlir::db::ScanInEdgesByLabel>(*fusedModule), 1u);
+        ASSERT_EQ(countOps<mlir::db::ScanInEdgesByLabelTgt>(*fusedModule), 1u);
         runPairs(*fusedModule, view, fused);
     }
 
@@ -290,9 +290,9 @@ TEST_F(FuseScanInEdgesByLabelTest, fusesLabelScanAndInHop) {
     ASSERT_TRUE(runFuse(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
 
-    llvm::SmallVector<mlir::db::ScanInEdgesByLabel> edgeScans = collect<mlir::db::ScanInEdgesByLabel>(*module);
+    llvm::SmallVector<mlir::db::ScanInEdgesByLabelTgt> edgeScans = collect<mlir::db::ScanInEdgesByLabelTgt>(*module);
     ASSERT_EQ(edgeScans.size(), 1u);
-    mlir::db::ScanInEdgesByLabel edgeScan = edgeScans.front();
+    mlir::db::ScanInEdgesByLabelTgt edgeScan = edgeScans.front();
 
     ASSERT_EQ(edgeScan.getLabels().size(), 1u);
     EXPECT_EQ(mlir::cast<mlir::StringAttr>(edgeScan.getLabels()[0]).getValue(), "Person");
@@ -314,7 +314,7 @@ TEST_F(FuseScanInEdgesByLabelTest, carriesTheWholeLabelConjunction) {
     ASSERT_TRUE(runFuse(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
 
-    llvm::SmallVector<mlir::db::ScanInEdgesByLabel> edgeScans = collect<mlir::db::ScanInEdgesByLabel>(*module);
+    llvm::SmallVector<mlir::db::ScanInEdgesByLabelTgt> edgeScans = collect<mlir::db::ScanInEdgesByLabelTgt>(*module);
     ASSERT_EQ(edgeScans.size(), 1u);
 
     const mlir::ArrayAttr labels = edgeScans.front().getLabels();
@@ -383,9 +383,9 @@ TEST_F(FuseScanInEdgesByLabelTest, fusesOnlyTheFirstHopOfATwoHopChain) {
     ASSERT_TRUE(runFuse(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
 
-    llvm::SmallVector<mlir::db::ScanInEdgesByLabel> edgeScans = collect<mlir::db::ScanInEdgesByLabel>(*module);
+    llvm::SmallVector<mlir::db::ScanInEdgesByLabelTgt> edgeScans = collect<mlir::db::ScanInEdgesByLabelTgt>(*module);
     ASSERT_EQ(edgeScans.size(), 1u);
-    mlir::db::ScanInEdgesByLabel edgeScan = edgeScans.front();
+    mlir::db::ScanInEdgesByLabelTgt edgeScan = edgeScans.front();
 
     llvm::SmallVector<mlir::db::GetInEdges> hops = collect<mlir::db::GetInEdges>(*module);
     ASSERT_EQ(hops.size(), 1u);
@@ -401,9 +401,9 @@ TEST_F(FuseScanInEdgesByLabelTest, fusesInsideCrossProductFactor) {
     ASSERT_TRUE(runFuse(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
 
-    llvm::SmallVector<mlir::db::ScanInEdgesByLabel> edgeScans = collect<mlir::db::ScanInEdgesByLabel>(*module);
+    llvm::SmallVector<mlir::db::ScanInEdgesByLabelTgt> edgeScans = collect<mlir::db::ScanInEdgesByLabelTgt>(*module);
     ASSERT_EQ(edgeScans.size(), 1u);
-    mlir::db::ScanInEdgesByLabel edgeScan = edgeScans.front();
+    mlir::db::ScanInEdgesByLabelTgt edgeScan = edgeScans.front();
 
     llvm::SmallVector<mlir::db::CrossProduct> products = collect<mlir::db::CrossProduct>(*module);
     ASSERT_EQ(products.size(), 1u);
@@ -475,7 +475,7 @@ TEST_F(FuseScanInEdgesByLabelTest, emitsTheSameEdgesAsTheWrittenEdgeScan) {
     const mlir::OwningOpRef<mlir::ModuleOp> scanModule = parse(labelledInEdgeScan);
     ASSERT_TRUE(scanModule);
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*scanModule)));
-    ASSERT_EQ(countOps<mlir::db::ScanInEdgesByLabel>(*scanModule), 1u);
+    ASSERT_EQ(countOps<mlir::db::ScanInEdgesByLabelTgt>(*scanModule), 1u);
 
     std::vector<std::pair<uint64_t, uint64_t>> scanPairs;
     runPairs(*scanModule, view, scanPairs);

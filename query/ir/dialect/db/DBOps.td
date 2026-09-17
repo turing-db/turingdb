@@ -479,9 +479,9 @@ def ScanEdgesByType : TuringOp<"scan_edges_by_type", [Pure, DeclareOpInterfaceMe
 }
 
 /**
-* ScanOutEdgesByLabel
+* ScanOutEdgesByLabelSrc
 */
-def ScanOutEdgesByLabel : TuringOp<"scan_out_edges_by_label", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+def ScanOutEdgesByLabelSrc : TuringOp<"scan_out_edges_by_label_src", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Produce every out-edge of the nodes carrying every given label as four row-aligned columns";
 
   let description = [{
@@ -490,7 +490,7 @@ def ScanOutEdgesByLabel : TuringOp<"scan_out_edges_by_label", [Pure, DeclareOpIn
     in the same four row-aligned columns - the source node, the edge, its type and
     the target node:
 
-      %srcs, %eids, %etypes, %tgts = db.scan_out_edges_by_label(["Person"]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+      %srcs, %eids, %etypes, %tgts = db.scan_out_edges_by_label_src(["Person"]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
 
     It is `MATCH (a:Person)-->(b)` read off the edge index rather than walked: the
     same edges a db.scan_nodes_by_label feeding a db.get_out_edges produces, in one
@@ -526,17 +526,17 @@ def ScanOutEdgesByLabel : TuringOp<"scan_out_edges_by_label", [Pure, DeclareOpIn
 }
 
 /**
-* ScanInEdgesByLabel
+* ScanInEdgesByLabelTgt
 */
-def ScanInEdgesByLabel : TuringOp<"scan_in_edges_by_label", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+def ScanInEdgesByLabelTgt : TuringOp<"scan_in_edges_by_label_tgt", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Produce every in-edge of the nodes carrying every given label as four row-aligned columns";
 
   let description = [{
-    The reverse-direction sibling of db.scan_out_edges_by_label: where that produces
-    the edges leaving the nodes whose label set is a superset of `labels`, this
-    produces the edges arriving at them, in the same four row-aligned columns:
+    The reverse-direction sibling of db.scan_out_edges_by_label_src: where that
+    produces the edges leaving the nodes whose label set is a superset of `labels`,
+    this produces the edges arriving at them, in the same four row-aligned columns:
 
-      %srcs, %eids, %etypes, %tgts = db.scan_in_edges_by_label(["Person"]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+      %srcs, %eids, %etypes, %tgts = db.scan_in_edges_by_label_tgt(["Person"]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
 
     It is `MATCH (a:Person)<--(b)` read off the edge index rather than walked: the
     same edges a db.scan_nodes_by_label feeding a db.get_in_edges produces. The

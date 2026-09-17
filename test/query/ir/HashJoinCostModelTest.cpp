@@ -242,7 +242,7 @@ TEST_F(HashJoinCostModelTest, sizesAHopByItsFanOut) {
     generate("MATCH (m:Rare), (n:Rare)-->(x) WHERE m.name = x.name RETURN m, x", forced, program);
 
     // The hop is the side that streams, so it stands in the join's first factor.
-    EXPECT_LT(program.find("db.scan_out_edges_by_label"), program.find("} factor {")) << program;
+    EXPECT_LT(program.find("db.scan_out_edges_by_label_src"), program.find("} factor {")) << program;
 }
 
 // An unwind of a literal list makes a row per element, and the elements are in the IR, so

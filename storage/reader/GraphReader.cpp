@@ -255,11 +255,11 @@ ScanNodesByLabelRange GraphReader::scanNodesByLabel(const LabelSetHandle& labels
     return {_view, labelset};
 }
 
-ScanOutEdgesByLabelRange GraphReader::scanOutEdgesByLabel(const LabelSetHandle& labelset) const {
+ScanOutEdgesBySourceLabelRange GraphReader::scanOutEdgesBySourceLabel(const LabelSetHandle& labelset) const {
     return {_view, labelset};
 }
 
-ScanInEdgesByLabelRange GraphReader::scanInEdgesByLabel(const LabelSetHandle& labelset) const {
+ScanInEdgesByTargetLabelRange GraphReader::scanInEdgesByTargetLabel(const LabelSetHandle& labelset) const {
     return {_view, labelset};
 }
 
