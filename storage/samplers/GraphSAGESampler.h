@@ -21,6 +21,8 @@ public:
 
     void sample(const ColumnNodeIDs* seeds);
 
+    void reset();
+
 private:
     struct HopData;
     using Samples = std::array<HopData, hops>;
@@ -32,12 +34,10 @@ private:
         NodeCol* _srcs {nullptr};     // src nodes of edges for this hop
         NodeCol* _tgts {nullptr};     // tgt nodes of edges for this hop
         size_t _fanout {0};           // neighbourhood sample size for this hop
-
-        void resize(size_t size) {
-            _dstNodes->resize(size);
-            _srcs->resize(size);
-            _tgts->resize(size);
-        }
+        void resize(size_t size);
+        void clear();
+        template <typename F, typename... Args>
+        void apply(const F& func, Args&&... args);
     };
 
     GraphView _view;
