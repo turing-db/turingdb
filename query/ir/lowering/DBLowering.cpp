@@ -2150,6 +2150,10 @@ void DBLowering::lowerSort(mlir::db::Sort sort) {
 void DBLowering::lowerUnion(mlir::db::Union unionOp) {
     const mlir::MutableArrayRef<mlir::Region> branches = unionOp.getBranches();
 
+    mlir::Block* const previousRoot = _rootBlock;
+    mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+
     llvm::SmallVector<mlir::Type, 4> resultTypes;
 
     for (size_t branchIndex = 0; branchIndex < branches.size(); branchIndex++) {
@@ -2173,6 +2177,10 @@ void DBLowering::lowerUnion(mlir::db::Union unionOp) {
             throwOnDisagreeingBranchTypes(branch, resultTypes);
         }
     }
+
+    _rootBlock = previousRoot;
+    _innermostLoopBody = previousInnermostLoopBody;
+    _innermostCardinality = previousInnermostCardinality;
 }
 
 // A dedup keys a row on the bytes of the chunk it is handed, so a branch's result columns
