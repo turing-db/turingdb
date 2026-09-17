@@ -4,6 +4,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <vector>
 
 #include <argparse.hpp>
 #include <spdlog/spdlog.h>
@@ -28,11 +29,34 @@ namespace {
 
 class DumpingNLSink : public NLOutputSink {
 public:
-    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
-        for (const Column* column : chunks) {
-            column->dump(std::cout);
+    explicit DumpingNLSink(LocalMemory* memory)
+        : _memory(memory)
+    {
+    }
+
+    void declareOutput(std::span<const std::string_view> names,
+                       std::span<const Column* const> chunks) override {
+        _emitted.reserve(chunks.size());
+
+        for (const Column* chunk : chunks) {
+            _emitted.push_back(_memory->allocSame(chunk));
         }
     }
+
+    // Only [offset, offset + rowCount) of each chunk is part of the result, so the rows
+    // are taken into a column of their own and that one is dumped
+    void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
+        for (size_t columnIndex = 0; columnIndex < chunks.size(); columnIndex++) {
+            Column* const emitted = _emitted[columnIndex];
+
+            emitted->assignFromLine(chunks[columnIndex], offset, rowCount);
+            emitted->dump(std::cout);
+        }
+    }
+
+private:
+    LocalMemory* _memory {nullptr};
+    std::vector<Column*> _emitted;
 };
 
 }
@@ -117,7 +141,7 @@ int main(int argc, char** argv) {
 
     if (!query.empty()) {
         LocalMemory mem;
-        DumpingNLSink sink;
+        DumpingNLSink sink(&mem);
         QueryState state(graphName, &mem, &db.getDefaultQueryConfig(), &sink);
         const auto res = db.query(query, state);
         if (!res) {
