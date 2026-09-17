@@ -41,8 +41,6 @@ public:
         _exprAnalyzer = exprAnalyzer;
     }
 
-    void setV3() { _isV3 = true; }
-
     // A WITH ends the part the CREATE was written in, so what follows it writes to
     // entities the query has already bound rather than to ones it is still spelling out
     void startPart() { _hasCreate = false; }
@@ -58,7 +56,6 @@ private:
     std::unordered_set<const VarDecl*> _toBeCreated;
     const GraphMetadata& _graphMetadata;
     bool _hasCreate {false};
-    bool _isV3 {false};
 
     void analyze(const CreateStmt* createStmt);
     void analyze(const MergeStmt* mergeStmt);

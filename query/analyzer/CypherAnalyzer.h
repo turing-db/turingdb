@@ -79,8 +79,6 @@ public:
     void analyze(Skip* skipSt);
     void analyze(Limit* limitSt);
 
-    void setV3();
-
 private:
     CypherAST* _ast {nullptr};
     GraphView _graphView;
@@ -91,15 +89,13 @@ private:
     std::unique_ptr<ReadStmtAnalyzer> _readAnalyzer;
     std::unique_ptr<WriteStmtAnalyzer> _writeAnalyzer;
 
-    bool _isV3 {false};
-
     void analyzeProjection(Projection* projection, const Stmt* clause);
     void openWithScope(Projection* projection);
     void analyzeWithAliases(const Projection* projection) const;
     void analyzeWithOrderBy(const Projection* projection) const;
     void throwOnUnpublishedKeyVariable(const Expr* keyExpr, const Projection* projection) const;
     void declareItemAlias(Expr* item, std::string_view alias);
-    void analyzeDistinct(const Projection* projection, const Stmt* clause, bool isAggregate) const;
+    void analyzeDistinct(const Projection* projection, bool isAggregate) const;
     void analyzeNestedAggregates(const Projection* projection) const;
     void analyzeAggregateArguments(const Expr* expr, const Projection* projection) const;
     bool readsAnAggregateItem(const Expr* expr, const Projection* projection) const;

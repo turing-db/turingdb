@@ -75,10 +75,6 @@ void WriteStmtAnalyzer::analyze(const CreateStmt* createStmt) {
 }
 
 void WriteStmtAnalyzer::analyze(const MergeStmt* mergeStmt) {
-    if (!_isV3) {
-        throwError("MERGE is only supported by the MLIR query engine.", mergeStmt);
-    }
-
     analyze(mergeStmt->getPattern());
 
     for (const SetStmt* actions : {mergeStmt->getOnCreate(), mergeStmt->getOnMatch()}) {
@@ -102,10 +98,6 @@ void WriteStmtAnalyzer::analyze(const SetStmt* setStmt) {
 }
 
 void WriteStmtAnalyzer::analyze(const DeleteStmt* deleteStmt) {
-    if (_hasCreate && !_isV3) {
-        throwError("CREATE ... DELETE is not yet supported.", deleteStmt);
-    }
-
     const ExprChain* exprs = deleteStmt->getExpressions();
     for (Expr* expr : *exprs) {
         _exprAnalyzer->analyzeRootExpr(expr);

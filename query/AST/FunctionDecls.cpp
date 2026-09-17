@@ -21,28 +21,24 @@ void FunctionDecls::initDefault() {
 
     // The ends of an edge, in the order the graph stores it: a hop walked backwards or
     // undirected binds the same edge, so its start is the node the edge leaves whichever
-    // way the pattern reached it. Only the MLIR engine reads an entity out of a function.
+    // way the pattern reached it.
     FunctionSignature* startNode = createFunction("startNode");
     startNode->setArguments({EvaluatedType::EdgePattern});
     startNode->setReturnTypes({{EvaluatedType::NodePattern}});
-    startNode->setIsV3Only(true);
 
     FunctionSignature* endNode = createFunction("endNode");
     endNode->setArguments({EvaluatedType::EdgePattern});
     endNode->setReturnTypes({{EvaluatedType::NodePattern}});
-    endNode->setIsV3Only(true);
 
     // The engine names an entity by its ID, so id() hands back the column it was given and
-    // the answer is that name read as a number. Only the MLIR engine evaluates it.
+    // the answer is that name read as a number.
     FunctionSignature* idOfNode = createFunction("id");
     idOfNode->setArguments({EvaluatedType::NodePattern});
     idOfNode->setReturnTypes({{EvaluatedType::Integer}});
-    idOfNode->setIsV3Only(true);
 
     FunctionSignature* idOfEdge = createFunction("id");
     idOfEdge->setArguments({EvaluatedType::EdgePattern});
     idOfEdge->setReturnTypes({{EvaluatedType::Integer}});
-    idOfEdge->setIsV3Only(true);
 
     // The three over a type-erased cell, which is what an UNWIND or an index of a stored
     // list binds: the list names no element type, so its entities are known per row rather
@@ -50,17 +46,14 @@ void FunctionDecls::initDefault() {
     FunctionSignature* startNodeOfCell = createFunction("startNode");
     startNodeOfCell->setArguments({EvaluatedType::ListItem});
     startNodeOfCell->setReturnTypes({{EvaluatedType::NodePattern}});
-    startNodeOfCell->setIsV3Only(true);
 
     FunctionSignature* endNodeOfCell = createFunction("endNode");
     endNodeOfCell->setArguments({EvaluatedType::ListItem});
     endNodeOfCell->setReturnTypes({{EvaluatedType::NodePattern}});
-    endNodeOfCell->setIsV3Only(true);
 
     FunctionSignature* idOfCell = createFunction("id");
     idOfCell->setArguments({EvaluatedType::ListItem});
     idOfCell->setReturnTypes({{EvaluatedType::Integer}});
-    idOfCell->setIsV3Only(true);
 
     FunctionSignature* keysNodes = createFunction("keys");
     keysNodes->setArguments({EvaluatedType::NodePattern});
@@ -181,21 +174,16 @@ void FunctionDecls::initDefault() {
     countNulls->setReturnTypes({{EvaluatedType::Integer}});
     countNulls->setIsAggregate(true);
 
-    // count over a whole list: a list is never null, so the tally is every row. Only the
-    // MLIR engine lays a list cell out over the driving relation - the legacy planner
-    // reduces the single row the cell is, and count([1, 2]) answers 1 where the relation
-    // holds more - so this overload and the embedding one below are v3-only.
+    // count over a whole list: a list is never null, so the tally is every row.
     FunctionSignature* countLists = createFunction("count");
     countLists->setArguments({EvaluatedType::List});
     countLists->setReturnTypes({{EvaluatedType::Integer}});
     countLists->setIsAggregate(true);
-    countLists->setIsV3Only(true);
 
     FunctionSignature* countEmbeddings = createFunction("count");
     countEmbeddings->setArguments({EvaluatedType::Embedding});
     countEmbeddings->setReturnTypes({{EvaluatedType::Integer}});
     countEmbeddings->setIsAggregate(true);
-    countEmbeddings->setIsV3Only(true);
 
     // The schema types a CALL can yield are columns like any other, so count tallies their
     // rows too. Without these overloads a YIELD of a label, a property type or a value type
@@ -271,19 +259,16 @@ void FunctionDecls::initDefault() {
     // An extremum of nothing is null, a sum of nothing is 0 and an average of nothing is
     // null, so a column that is null on every row - a name no property in the graph carries,
     // or the null literal - reduces to an answer rather than to an argument error, exactly
-    // as count(null) and collect(null) do. Only the MLIR engine reads a name the graph does
-    // not carry, so the overloads are v3-only.
+    // as count(null) and collect(null) do.
     FunctionSignature* minNulls = createFunction("min");
     minNulls->setArguments({EvaluatedType::Null});
     minNulls->setReturnTypes({{EvaluatedType::Null}});
     minNulls->setIsAggregate(true);
-    minNulls->setIsV3Only(true);
 
     FunctionSignature* maxNulls = createFunction("max");
     maxNulls->setArguments({EvaluatedType::Null});
     maxNulls->setReturnTypes({{EvaluatedType::Null}});
     maxNulls->setIsAggregate(true);
-    maxNulls->setIsV3Only(true);
 
     FunctionSignature* avgInt = createFunction("avg");
     avgInt->setArguments({EvaluatedType::Integer});
@@ -297,21 +282,17 @@ void FunctionDecls::initDefault() {
 
     // avg over a type-erased column of tagged cells - what a list mixing numeric types,
     // holding a null or holding nothing unwinds into. Each cell is read through its tag,
-    // and an average is a double whatever those tags were. Only the MLIR engine folds such
-    // a column, so the overload is v3-only like the whole-cell counts above.
+    // and an average is a double whatever those tags were.
     FunctionSignature* avgListItems = createFunction("avg");
     avgListItems->setArguments({EvaluatedType::ListItem});
     avgListItems->setReturnTypes({{EvaluatedType::Double}});
     avgListItems->setIsAggregate(true);
-    avgListItems->setIsV3Only(true);
 
     FunctionSignature* avgNulls = createFunction("avg");
     avgNulls->setArguments({EvaluatedType::Null});
     avgNulls->setReturnTypes({{EvaluatedType::Null}});
     avgNulls->setIsAggregate(true);
-    avgNulls->setIsV3Only(true);
 
-    // sum() enabled for v3 analyzer 
     FunctionSignature* sumInt = createFunction("sum");
     sumInt->setArguments({EvaluatedType::Integer});
     sumInt->setReturnTypes({{EvaluatedType::Integer}});
@@ -328,24 +309,19 @@ void FunctionDecls::initDefault() {
     sumNulls->setArguments({EvaluatedType::Null});
     sumNulls->setReturnTypes({{EvaluatedType::Integer}});
     sumNulls->setIsAggregate(true);
-    sumNulls->setIsV3Only(true);
 
     // A type-erased cell carries its number's type per row. Mixed numeric tags are what
     // leaves a list type-erased, and Cypher sums those to a float, so this reduces to one
-    // whichever tags turn up - and errors on a cell that is no number at all. Only the
-    // MLIR engine folds such a column, so the overload is v3-only as avg's is.
+    // whichever tags turn up - and errors on a cell that is no number at all.
     FunctionSignature* sumListItems = createFunction("sum");
     sumListItems->setArguments({EvaluatedType::ListItem});
     sumListItems->setReturnTypes({{EvaluatedType::Double}});
     sumListItems->setIsAggregate(true);
-    sumListItems->setIsV3Only(true);
 
-    // List functions. Every one reads a whole list cell, which only the MLIR engine lays
-    // out over the driving relation, so each is v3-only as the whole-cell counts are.
+    // List functions.
     FunctionSignature* size = createFunction("size");
     size->setArguments({EvaluatedType::List});
     size->setReturnTypes({{EvaluatedType::Integer}});
-    size->setIsV3Only(true);
 
     // The first element of a list carries whichever type that element has, and a stored
     // list may mix them, so head answers with the tagged scalar an UNWIND of the list
@@ -353,7 +329,6 @@ void FunctionDecls::initDefault() {
     FunctionSignature* head = createFunction("head");
     head->setArguments({EvaluatedType::List});
     head->setReturnTypes({{EvaluatedType::ListItem}});
-    head->setIsV3Only(true);
 
     // A stored list may mix the types of its elements, so last answers with the same tagged
     // scalar head does; an empty list - and an absent one - has no final element, so it
@@ -361,7 +336,6 @@ void FunctionDecls::initDefault() {
     FunctionSignature* last = createFunction("last");
     last->setArguments({EvaluatedType::List});
     last->setReturnTypes({{EvaluatedType::ListItem}});
-    last->setIsV3Only(true);
 
     // Dropping the first element leaves a list over the same elements, so it nests as
     // deeply as the one it came from; the tail of an empty list is empty, not null.
@@ -369,7 +343,6 @@ void FunctionDecls::initDefault() {
     tail->setArguments({EvaluatedType::List});
     tail->setReturnTypes({{EvaluatedType::List}});
     tail->setReturnsItsArgumentShape(true);
-    tail->setIsV3Only(true);
 
     // The same four over a type-erased cell, which is the only thing an UNWIND of a
     // stored list of lists can bind: a stored list names no element type, so what its
@@ -378,24 +351,20 @@ void FunctionDecls::initDefault() {
     FunctionSignature* sizeCell = createFunction("size");
     sizeCell->setArguments({EvaluatedType::ListItem});
     sizeCell->setReturnTypes({{EvaluatedType::Integer}});
-    sizeCell->setIsV3Only(true);
 
     FunctionSignature* headCell = createFunction("head");
     headCell->setArguments({EvaluatedType::ListItem});
     headCell->setReturnTypes({{EvaluatedType::ListItem}});
-    headCell->setIsV3Only(true);
 
     FunctionSignature* lastCell = createFunction("last");
     lastCell->setArguments({EvaluatedType::ListItem});
     lastCell->setReturnTypes({{EvaluatedType::ListItem}});
-    lastCell->setIsV3Only(true);
 
     // The cell names no element type, so the list left of it names none either: an UNWIND
     // of this tail binds tagged cells again rather than a type it could promise
     FunctionSignature* tailCell = createFunction("tail");
     tailCell->setArguments({EvaluatedType::ListItem});
     tailCell->setReturnTypes({{EvaluatedType::List}});
-    tailCell->setIsV3Only(true);
 
     // Conversion functions
     FunctionSignature* toInteger = createFunction("toInteger");
@@ -428,12 +397,11 @@ void FunctionDecls::initDefault() {
 
     // coalesce answers the first of its arguments that is not null, so it takes any number
     // of them and declares none: the analyzer unifies what it is given, and the type they
-    // share is what the call returns. Only the MLIR engine evaluates it.
+    // share is what the call returns.
     FunctionSignature* coalesce = createFunction("coalesce");
     coalesce->setReturnTypes({{EvaluatedType::Null}});
     coalesce->setRequiredArgCount(1);
     coalesce->setUnifiesItsArguments(true);
-    coalesce->setIsV3Only(true);
 
     // Embedding distance functions
     FunctionSignature* cosineSim = createFunction("cosine_similarity");

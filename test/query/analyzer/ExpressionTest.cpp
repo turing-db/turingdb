@@ -150,15 +150,16 @@ TEST_F(ExpressionTest, BinaryExpressionTest) {
     EXPECT_BINARY_VALID(xLiteral, BinaryOperator::Equal, xLiteral, EvaluatedType::Bool);
     EXPECT_BINARY_VALID(aLiteral, BinaryOperator::NotEqual, aLiteral, EvaluatedType::Bool);
     EXPECT_BINARY_VALID(CharLiteral::create(&_ast, 'z'), BinaryOperator::Equal, CharLiteral::create(&_ast, 'z'), EvaluatedType::Bool);
+    /// Valid: two types that can never hold equal values compare false rather than being rejected
+    EXPECT_BINARY_VALID(trueLiteral, BinaryOperator::NotEqual, fiveLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(fiveLiteral, BinaryOperator::Equal, trueLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(StringLiteral::create(&_ast, "test"), BinaryOperator::NotEqual, fiveLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(trueLiteral, BinaryOperator::Equal, StringLiteral::create(&_ast, "true"), EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(CharLiteral::create(&_ast, 'c'), BinaryOperator::NotEqual, fiveLiteral, EvaluatedType::Bool);
+    EXPECT_BINARY_VALID(fourtyTwoLiteral, BinaryOperator::Equal, CharLiteral::create(&_ast, '4'), EvaluatedType::Bool);
     /// Invalid
-    EXPECT_BINARY_INVALID(trueLiteral, BinaryOperator::NotEqual, fiveLiteral);
-    EXPECT_BINARY_INVALID(fiveLiteral, BinaryOperator::Equal, trueLiteral);
-    EXPECT_BINARY_INVALID(StringLiteral::create(&_ast, "test"), BinaryOperator::NotEqual, fiveLiteral);
     EXPECT_BINARY_INVALID(DoubleLiteral::create(&_ast, 5.3), BinaryOperator::Equal, fiveLiteral);
     EXPECT_BINARY_INVALID(DoubleLiteral::create(&_ast, 5.3), BinaryOperator::NotEqual, DoubleLiteral::create(&_ast, 5.7));
-    EXPECT_BINARY_INVALID(trueLiteral, BinaryOperator::Equal, StringLiteral::create(&_ast, "true"));
-    EXPECT_BINARY_INVALID(CharLiteral::create(&_ast, 'c'), BinaryOperator::NotEqual, fiveLiteral);
-    EXPECT_BINARY_INVALID(fourtyTwoLiteral, BinaryOperator::Equal, CharLiteral::create(&_ast, '4'));
 
     // LessThan - GreaterThan - LessThanOrEqual - GreaterThanOrEqual (Numeric comparisons)
     /// Valid

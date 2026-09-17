@@ -255,7 +255,6 @@ void progGen(std::string_view query, Graph& graph, mlir::ModuleOp* module) {
 
     const auto analyzeStart = Clock::now();
     CypherAnalyzer analyzer(&ast, view);
-    analyzer.setV3();
     analyzer.analyze();
     const double analyzeMs = Ms(Clock::now() - analyzeStart).count();
 

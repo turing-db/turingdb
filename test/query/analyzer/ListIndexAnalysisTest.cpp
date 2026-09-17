@@ -27,7 +27,7 @@ public:
     }
 
 protected:
-    void analyzeQuery(const std::string& query, bool isV3) {
+    void analyzeQuery(const std::string& query) {
         CypherAST ast(_procedures.get(), query);
 
         CypherParser parser(&ast);
@@ -36,20 +36,16 @@ protected:
         const FrozenCommitTx transaction = _graph->openTransaction();
         CypherAnalyzer analyzer(&ast, transaction.viewGraph());
 
-        if (isV3) {
-            analyzer.setV3();
-        }
-
         analyzer.analyze();
     }
 
     void expectAccepted(const std::string& query) {
-        EXPECT_NO_THROW(analyzeQuery(query, true)) << "query: " << query;
+        EXPECT_NO_THROW(analyzeQuery(query)) << "query: " << query;
     }
 
     void expectRejected(const std::string& query, std::string_view reason) {
         try {
-            analyzeQuery(query, true);
+            analyzeQuery(query);
         } catch (const AnalyzeException& error) {
             const std::string message = error.what();
 
@@ -127,10 +123,4 @@ TEST_F(ListIndexAnalysisTest, acceptsAChainedIndex) {
 TEST_F(ListIndexAnalysisTest, acceptsAnIndexIntoAnUnwoundItem) {
     expectAccepted("UNWIND [[1, 2], [3, 4]] AS xs RETURN xs[0]");
     expectAccepted("UNWIND [1, [2, 3]] AS xs RETURN xs[0]");
-}
-
-// The rejection for the pipeline engine, which runs no list operator, belongs to its
-// planner: the analyzer types the access for both engines.
-TEST_F(ListIndexAnalysisTest, typesAListIndexForThePipelineEngineToo) {
-    EXPECT_NO_THROW(analyzeQuery("MATCH (n:Person) RETURN [1, 2, 3][1]", false));
 }

@@ -102,7 +102,6 @@ int fuzzOne(const char* data, size_t size) {
     }
 
     db::CypherAnalyzer analyzer(&ast, view);
-    analyzer.setV3();
     try {
         analyzer.analyze();
     } catch (const db::CompilerException&) {

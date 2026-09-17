@@ -113,7 +113,6 @@ void HashJoinQueryTest::generate(std::string_view query,
     parser.parse(query);
 
     CypherAnalyzer analyzer(&ast, view);
-    analyzer.setV3();
     analyzer.analyze();
 
     const mlir::db::DBPassContext passContext {&view, forcesJoin, true};

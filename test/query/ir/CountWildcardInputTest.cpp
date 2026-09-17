@@ -63,7 +63,6 @@ protected:
         parser.parse(query);
 
         CypherAnalyzer analyzer(ast, view);
-        analyzer.setV3();
         analyzer.analyze();
 
         mlir::MLIRContext* context = &_context;

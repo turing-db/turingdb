@@ -58,15 +58,14 @@ namespace {
 // A tagged scalar carries its type per row rather than in the plan, so no property type
 // rules it out: the comparison the constraint becomes settles it row by row, as the same
 // test written as a WHERE does. Two types that can never hold equal values settle it too -
-// the constraint is false wherever the property is there - which v3 answers rather than
-// rejects.
-bool constraintTypeCompatible(ValueType propertyType, EvaluatedType exprType, bool isV3) {
+// the constraint is false wherever the property is there.
+bool constraintTypeCompatible(ValueType propertyType, EvaluatedType exprType) {
     if (exprType == EvaluatedType::ListItem) {
         return true;
     }
 
     const std::optional<EvaluatedType> propertyEvaluated = toEvaluatedType(propertyType);
-    if (isV3 && propertyEvaluated && comparesAsDisjointTypes(*propertyEvaluated, exprType)) {
+    if (propertyEvaluated && comparesAsDisjointTypes(*propertyEvaluated, exprType)) {
         return true;
     }
 
@@ -134,10 +133,6 @@ void ReadStmtAnalyzer::analyze(Stmt* stmt) {
 }
 
 void ReadStmtAnalyzer::analyze(const MatchStmt* matchSt) {
-    if (matchSt->isOptional() && !_isV3) { // only supported by MLIR v3
-        throwError("OPTIONAL MATCH not yet supported.", matchSt);
-    }
-
     const Pattern* pattern = matchSt->getPattern();
     if (!pattern) {
         throwError("MATCH statement must have a pattern", matchSt);
@@ -387,17 +382,8 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
 
     const auto& labels = nodePattern->labels();
     if (labels && !labels->empty()) {
-        const LabelMap& labelMap = _graphMetadata.labels();
-
         for (const Symbol* label : *labels) {
-            const std::string_view labelName = label->getName();
-            const bool graphHasLabel = labelMap.get(labelName).has_value();
-
-            if (!graphHasLabel && !_isV3) { // v3 matches no node instead of failing
-                throwError(fmt::format("Unknown label: {}", labelName), nodePattern);
-            }
-
-            data->addLabelConstraint(labelName);
+            data->addLabelConstraint(label->getName());
         }
     }
 
@@ -414,12 +400,8 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
 
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
 
-            if (!propType && !_isV3) { // v3 reads it as null, so the constraint matches nothing
-                throwError(fmt::format("Unknown property: {}", propName->getName()), nodePattern);
-            }
-
             const bool incompatibleValue = propType
-                                           && !constraintTypeCompatible(propType->_valueType, expr->getType(), _isV3);
+                                           && !constraintTypeCompatible(propType->_valueType, expr->getType());
             if (incompatibleValue) {
                 throwError(fmt::format("Cannot evaluate node property: types '{}' and '{}' are incompatible",
                                        ValueTypeName::value(propType->_valueType),
@@ -464,17 +446,8 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
 
     const auto& types = edgePattern->types();
     if (types && !types->empty()) {
-        const EdgeTypeMap& edgeTypeMap = _graphMetadata.edgeTypes();
-
         for (const Symbol* edgeTypeSymbol : *types) {
-            const std::string_view edgeTypeName = edgeTypeSymbol->getName();
-            const bool graphHasEdgeType = edgeTypeMap.get(edgeTypeName).has_value();
-
-            if (!graphHasEdgeType && !_isV3) { // v3 matches no edge instead of failing
-                throwError(fmt::format("Unknown edge type: {}", edgeTypeName), edgePattern);
-            }
-
-            data->addEdgeTypeConstraint(edgeTypeName);
+            data->addEdgeTypeConstraint(edgeTypeSymbol->getName());
         }
     }
 
@@ -491,12 +464,8 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
 
             const std::optional<PropertyType> propType = propTypeMap.get(propName->getName());
 
-            if (!propType && !_isV3) { // v3 reads it as null, so the constraint matches nothing
-                throwError(fmt::format("Unknown property: {}", propName->getName()), edgePattern);
-            }
-
             const bool incompatibleValue = propType
-                                           && !constraintTypeCompatible(propType->_valueType, expr->getType(), _isV3);
+                                           && !constraintTypeCompatible(propType->_valueType, expr->getType());
             if (incompatibleValue) {
                 throwError(fmt::format("Cannot evaluate edge property: types '{}' and '{}' are incompatible",
                                        ValueTypeName::value(propType->_valueType),
@@ -547,24 +516,9 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
         }
 
         // The db dialect has no path-explorer op, and the dependency graph reads an edge
-        // pattern without its quantifier: left to run, the MLIR engine would answer a
-        // one-hop query instead of the one that was asked.
-        if (_isV3) {
-            throwError("Variable-length paths are not supported yet", edgePattern);
-        }
-
-        const auto& types = edgePattern->types();
-        if (types && !types->empty()) {
-            throwError("Edge type filters are not supported with "
-                       "variable-length paths yet",
-                       edgePattern);
-        }
-
-        if (properties) {
-            throwError("Edge property filters are not supported with "
-                       "variable-length paths yet",
-                       edgePattern);
-        }
+        // pattern without its quantifier: left to run, the engine would answer a one-hop
+        // query instead of the one that was asked.
+        throwError("Variable-length paths are not supported yet", edgePattern);
     }
 }
 
@@ -602,10 +556,10 @@ void ReadStmtAnalyzer::analyze(const VectorSearchStmt* stmt) {
 
         EvaluatedType yieldType = EvaluatedType::Invalid;
         if (yieldedValue == "ids") {
-            // The MLIR engine reports each neighbour as the node the index holds it under,
-            // so a pattern can walk out of the yielded variable and an equality can compare
-            // a matched node to it. The pipeline reports the raw ID instead.
-            yieldType = _isV3 ? EvaluatedType::NodePattern : EvaluatedType::Integer;
+            // The engine reports each neighbour as the node the index holds it under, so a
+            // pattern can walk out of the yielded variable and an equality can compare a
+            // matched node to it.
+            yieldType = EvaluatedType::NodePattern;
         } else if (yieldedValue == "score") {
             yieldType = EvaluatedType::Double;
         } else {

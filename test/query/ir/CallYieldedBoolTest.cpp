@@ -146,7 +146,6 @@ protected:
         parser.parse(queryText);
 
         CypherAnalyzer analyzer(&ast, view);
-        analyzer.setV3();
         analyzer.analyze();
 
         mlir::MLIRContext context;

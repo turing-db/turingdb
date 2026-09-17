@@ -68,8 +68,6 @@ public:
 
     bool isProcedure() const { return _isProcedure; }
 
-    bool isV3Only() const { return _isV3Only; }
-
     // Whether the list this returns holds the values of its own argument, so a caller
     // reading an element back knows the type it has - collect, and nothing else today.
     bool collectsItsArgument() const { return _collectsItsArgument; }
@@ -100,8 +98,6 @@ public:
 
     void setIsProcedure(bool procedure) { _isProcedure = procedure; }
 
-    void setIsV3Only(bool v3Only) { _isV3Only = v3Only; }
-
     void setCollectsItsArgument(bool collects) { _collectsItsArgument = collects; }
 
     void setUnifiesItsArguments(bool unifies) { _unifiesItsArguments = unifies; }
@@ -118,10 +114,6 @@ private:
     bool _collectsItsArgument {false};
     bool _unifiesItsArguments {false};
     bool _returnsItsArgumentShape {false};
-
-    // An overload only the MLIR engine answers: the legacy planner either cannot lay its
-    // argument out or reduces it over the wrong rows, so it never matches there
-    bool _isV3Only {false};
 };
 
 }
