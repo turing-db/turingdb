@@ -475,8 +475,6 @@ private:
     void generateDeleteStmt(const DeleteStmt* deleteStmt);
     void generateOutput(const Projection* projection);
 
-    static bool writesToTheGraph(const SinglePartQuery* query);
-
     // A standalone CALL ends no projection: what it yielded is the result
     void generateYieldedOutput(const SinglePartQuery* query);
 

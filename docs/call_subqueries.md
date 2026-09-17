@@ -166,8 +166,11 @@ the missed ones.
 
 Add `Stmt::Kind::CALL_SUBQUERY` and a `CallSubqueryStmt` holding the imported symbols, the
 optional flag and the nested `SinglePartQuery*`. `Stmt::isUpdating` answers true for a body
-with no RETURN, so `CypherAnalyzer::analyze(SinglePartQuery)` and `generatePartStatements`
+with no RETURN that writes (`SinglePartQuery::writesToTheGraph`, which recurses through a
+nested subquery), so `CypherAnalyzer::analyze(SinglePartQuery)` and `generatePartStatements`
 place a unit subquery with the updating clauses and a returning one with the reading ones.
+A body that only reads is the reading clause it is, and what it is told about is the RETURN
+it is missing.
 
 The parser builds the body with a constructor that creates the `DeclContext` and skips
 `CypherAST::addQuery`, and rejects a body that is not a `SinglePartQuery`. A leading WITH

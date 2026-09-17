@@ -28,7 +28,8 @@ public:
     // first and updating last, so this is what tells the two halves of a part apart
     static bool isUpdating(Kind kind);
 
-    // The same over a statement: a CALL subquery is one or the other by what its body ends on
+    // The same over a statement: a CALL subquery is updating when its body writes and ends
+    // on no RETURN
     static bool isUpdating(const Stmt* stmt);
 
     virtual Kind getKind() const = 0;

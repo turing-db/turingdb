@@ -2710,3 +2710,6 @@ target_link_libraries(test_query_ir_call_subquery_nested PRIVATE turing_ir_test_
 # A cut below a unit subquery, which stops the walk that feeds it.
 add_turing_test(test_query_ir_call_subquery_limit_below CallSubqueryLimitBelowTest.cpp)
 target_link_libraries(test_query_ir_call_subquery_limit_below PRIVATE turing_ir_test_write_query_s)
+
+# What a CALL before a read-only subquery body yielded is the query's result still.
+add_call_v3_test(test_query_ir_call_subquery_yielded_output CallSubqueryYieldedOutputTest.cpp)

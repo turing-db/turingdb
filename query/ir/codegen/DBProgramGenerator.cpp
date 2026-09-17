@@ -3869,23 +3869,12 @@ void DBProgramGenerator::generateOutput(const Projection* projection) {
                                        _opBuilder.getStrArrayAttr(outputNames));
 }
 
-bool DBProgramGenerator::writesToTheGraph(const SinglePartQuery* query) {
-    const StmtContainer* stmts = query->getStmts();
-    if (!stmts) {
-        return false;
-    }
-
-    return std::ranges::any_of(stmts->stmts(), [](const Stmt* stmt) {
-        return Stmt::isUpdating(stmt);
-    });
-}
-
 // A standalone CALL ends no projection, so what it yielded is the result: the columns go
 // out in yield order, under the names the YIELD gave them. A query that writes is not
 // standalone whatever it yielded - its result is its RETURN, and it has none - so a CALL
 // or a LOAD CSV feeding a CREATE reports no row rather than every row it wrote one for.
 void DBProgramGenerator::generateYieldedOutput(const SinglePartQuery* query) {
-    if (writesToTheGraph(query)) {
+    if (query->writesToTheGraph()) {
         return;
     }
 
