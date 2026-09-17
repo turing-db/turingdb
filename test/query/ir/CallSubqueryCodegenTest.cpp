@@ -125,7 +125,7 @@ TEST_F(CallSubqueryCodegenTest, aUnitBodyHasNoResult) {
 
     const std::string_view codegen = dumpOf(sink, "codegen");
     EXPECT_TRUE(contains(codegen, "db.call_subquery(")) << codegen;
-    EXPECT_TRUE(contains(codegen, ") unit ")) << codegen;
+    EXPECT_TRUE(contains(codegen, ") unit carries_scope ")) << codegen;
     EXPECT_TRUE(contains(codegen, "-> ()")) << codegen;
 }
 

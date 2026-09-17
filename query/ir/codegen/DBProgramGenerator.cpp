@@ -4093,7 +4093,7 @@ bool DBProgramGenerator::subqueryCarriesRows(const SinglePartQuery* body) {
 void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) {
     const SinglePartQuery* body = subquery->getBody();
     const bool returning = subquery->isReturning();
-    const bool carriesScope = returning && subqueryCarriesRows(body);
+    const bool carriesScope = subqueryCarriesRows(body);
     const bool optional = returning && subquery->isOptional();
 
     llvm::SmallVector<PublishedColumn> scopeColumns;
@@ -4138,9 +4138,9 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
 
     // The body reads an import under the declaration its own context holds for it. A body
     // carrying the scope holds every input under a hidden name too, so the input comes back
-    // as the body's rows left it whatever its clauses publish; a unit body holds them so
-    // that a write reading no import still writes once per row in flight
-    const bool bindsHidden = carriesScope || !returning;
+    // as the body's rows left it whatever its clauses publish, and a write reading no import
+    // still has rows to write one of per. A body run per row reads the row it is handed.
+    const bool bindsHidden = carriesScope;
 
     llvm::SmallVector<mlir::Value> inputColumns;
     llvm::SmallVector<PublishedColumn> bodyScope;
