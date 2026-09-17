@@ -2399,7 +2399,7 @@ void DBLowering::lowerCount(mlir::db::Count count) {
     // The update sits in the innermost producing loop body, where the counted
     // column is bound (the same block db.output would emit from), and charges each
     // step's non-null rows against the tally.
-    mlir::Block* const producingBlock = ownerBlock(inputChunk);
+    mlir::Block* const producingBlock = accumulatorUpdateBlock(ownerBlock(inputChunk));
     setInsertionInto(producingBlock);
 
     mlir::Value countedChunk = inputChunk;
@@ -2490,7 +2490,7 @@ void DBLowering::lowerAggregate(mlir::Value input, mlir::Value result, storage::
     // The update sits in the innermost producing loop body, where the aggregated
     // column is bound (the same block db.output would emit from), and folds each
     // step's non-null values into the accumulator.
-    mlir::Block* const producingBlock = ownerBlock(inputChunk);
+    mlir::Block* const producingBlock = accumulatorUpdateBlock(ownerBlock(inputChunk));
     setInsertionInto(producingBlock);
 
     mlir::Value reducedChunk = inputChunk;
@@ -4107,9 +4107,10 @@ void DBLowering::setInsertionAfterProducingLoop(mlir::Block* updateBlock) {
         return;
     }
 
-    mlir::Operation* enclosing = updateBlock->getParentOp();
-    while (enclosing->getBlock() != _rootBlock) {
-        enclosing = enclosing->getBlock()->getParentOp();
+    mlir::Operation* const enclosing = _rootBlock->findAncestorOpInBlock(*updateBlock->getParentOp());
+    if (!enclosing) {
+        setInsertionInto(_rootBlock);
+        return;
     }
 
     _builder.setInsertionPointAfter(enclosing);
@@ -4294,11 +4295,15 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
                                             : storage::NullableType::get(context, valueElement);
     const nl::ChunkType resultType = nl::ChunkType::get(context, resultElement);
 
-    // With no relation driving the projection the value is laid out where the constant
-    // itself is bound, over the single row that projection is
-    mlir::Block* const homeBlock = cardinality ? ownerBlock(cardinality) : ownerBlock(chunk);
+    // With no relation driving the projection the value is laid out over the single row
+    // that projection is, right where the constant is bound: a layout read from a loop
+    // nested under it must not sit below that nest.
+    if (cardinality) {
+        setInsertionInto(ownerBlock(cardinality));
+    } else {
+        _builder.setInsertionPointAfter(chunk.getDefiningOp());
+    }
 
-    setInsertionInto(homeBlock);
     nl::BroadcastConstant broadcast = _builder.create<nl::BroadcastConstant>(_builder.getUnknownLoc(), resultType, chunk, cardinality);
 
     return broadcast.getResult();
@@ -4311,6 +4316,24 @@ size_t DBLowering::blockNestingDepth(mlir::Block* block) {
     }
 
     return depth;
+}
+
+bool DBLowering::enclosesBlock(mlir::Block* outer, mlir::Block* inner) {
+    if (outer == inner) {
+        return true;
+    }
+
+    mlir::Operation* const parent = inner->getParentOp();
+
+    return parent && outer->findAncestorOpInBlock(*parent);
+}
+
+mlir::Block* DBLowering::accumulatorUpdateBlock(mlir::Block* producingBlock) const {
+    if (enclosesBlock(_rootBlock, producingBlock)) {
+        return producingBlock;
+    }
+
+    return _rootBlock;
 }
 
 mlir::Block* DBLowering::ownerBlock(mlir::Value chunkValue) {
