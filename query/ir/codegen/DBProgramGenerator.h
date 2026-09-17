@@ -674,6 +674,9 @@ private:
 
     mlir::Value nullConstantColumn();
 
+    // The one-element list a column makes, the shape a scalar takes to join a list
+    mlir::Value singletonList(mlir::Value column);
+
     // The comparison of two types that can never hold equal values: false where both
     // operands hold a value, and null where either is absent, since nothing compares to a
     // null. The null constant rides the three-valued tables of AND and OR as the unknown

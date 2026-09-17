@@ -126,6 +126,29 @@ ListShape sharedListShape(std::span<Expr* const> elements) {
     return ListShape::collecting(shared, firstShape);
 }
 
+// The types a scalar operand of '+' joins a list as: whatever an element of a list can be,
+// a tagged cell and a null included - appending a null leaves a list with a null in it.
+bool joinsAList(EvaluatedType type) {
+    return namesAListElementType(type)
+        || type == EvaluatedType::Char
+        || type == EvaluatedType::Null
+        || type == EvaluatedType::ListItem;
+}
+
+// The shape of the list appending a scalar makes: the list's own where the scalar is the
+// type its elements carry, and a list of tagged scalars where it is not, as a mixed list
+// literal is. A null carries no type, so it leaves the shape as it found it.
+ListShape appendedListShape(const ListShape& list, EvaluatedType scalar) {
+    const bool joinsTheLeaf = list.getDepth() == 1
+                              && (scalar == EvaluatedType::Null || list.getLeafType() == scalar);
+
+    if (!joinsTheLeaf) {
+        return ListShape(EvaluatedType::Invalid, 1);
+    }
+
+    return list;
+}
+
 // The shape of the list a concatenation makes: the one both sides carry, or a list of
 // tagged scalars when they carry different ones, as a mixed list literal is.
 ListShape concatenatedListShape(const ListShape& left, const ListShape& right) {
@@ -432,6 +455,20 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 }
                 type = EvaluatedType::List;
                 expr->setListShape(concatenatedListShape(lhs->getListShape(), rhs->getListShape()));
+                break;
+            }
+
+            // A scalar joins a list as the one-element list it stands for, from either
+            // side: [1, 2] + 3 and 1 + [2, 3] are both [1, 2, 3]
+            const bool leftIsAList = a == EvaluatedType::List;
+            const bool oneSideIsAList = leftIsAList || b == EvaluatedType::List;
+            const EvaluatedType scalar = leftIsAList ? b : a;
+
+            if (_isV3 && oneSideIsAList && joinsAList(scalar)) {
+                const ListShape& listShape = leftIsAList ? lhs->getListShape() : rhs->getListShape();
+
+                type = EvaluatedType::List;
+                expr->setListShape(appendedListShape(listShape, scalar));
                 break;
             }
 
