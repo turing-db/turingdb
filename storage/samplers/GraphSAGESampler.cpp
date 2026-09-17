@@ -34,9 +34,32 @@ static void deduplicate(const ColumnOptVector<NodeID>* src, ColumnOptVector<Node
     raw.erase(newEnd, oldEnd);
 }
 
+namespace {
+const auto resizeImpl = [](auto* col, size_t size) -> void { col->resize(size); };
+const auto clearImpl = [](auto* col) -> void { col->clear(); };
+}
+
 GraphSAGESampler::GraphSAGESampler(GraphView view)
     : _view(view)
 {
+}
+
+template <typename F, typename... Args>
+void GraphSAGESampler::HopData::apply(const F& func, Args&&... args) {
+    func(_dstNodes, std::forward<Args>(args)...);
+    func(_srcs, std::forward<Args>(args)...);
+    func(_tgts, std::forward<Args>(args)...);
+
+    constexpr size_t numCols = (sizeof(HopData) - sizeof(_fanout)) / sizeof(NodeCol*);
+    static_assert(numCols == 3, "Member added, update apply.");
+}
+
+void GraphSAGESampler::HopData::resize(size_t size) {
+    apply(resizeImpl, size);
+}
+
+void GraphSAGESampler::HopData::clear() {
+    apply(clearImpl);
 }
 
 void GraphSAGESampler::setHopData(size_t idx, NodeCol* srcs, NodeCol* tgts, NodeCol* dst, size_t fanout) {
@@ -49,12 +72,21 @@ void GraphSAGESampler::setHopData(size_t idx, NodeCol* srcs, NodeCol* tgts, Node
     hopData._tgts = tgts;
 }
 
+
+void GraphSAGESampler::reset() {
+    for (HopData& d : _sampleData) {
+        d.clear();
+    }
+    _requiredLength = 0;
+    _currentHop = 0;
+}
+
 void GraphSAGESampler::sample(const ColumnNodeIDs* seeds) {
     static_assert(hops >= 1);
 
     _requiredLength = std::max(_requiredLength, seeds->size());
 
-    // first hops dst_nodes are the query seeds
+    // first hop's dst_nodes are the query seeds
     colAssign(seeds, _sampleData[0]._dstNodes);
     deduplicate(_sampleData[0]._dstNodes, _sampleData[0]._dstNodes);
 
@@ -62,7 +94,7 @@ void GraphSAGESampler::sample(const ColumnNodeIDs* seeds) {
         sampleHop();
     }
 
-    // padd all columns with nulls to ensure square dataframe
+    // pad all columns with nulls to ensure all columns are square
     for (HopData& data : _sampleData) {
         data.resize(_requiredLength);
     }
@@ -108,3 +140,6 @@ void GraphSAGESampler::sampleHop() {
 
     _currentHop++;
 }
+
+template void GraphSAGESampler::HopData::apply<decltype(resizeImpl), size_t>(const decltype(resizeImpl)&, size_t&&);
+template void GraphSAGESampler::HopData::apply<decltype(clearImpl)>(const decltype(clearImpl)&);
