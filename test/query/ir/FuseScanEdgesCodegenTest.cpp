@@ -28,6 +28,8 @@
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
+#include "IRTestEdgeTypes.h"
+
 using namespace db;
 using namespace turing::test;
 
@@ -176,7 +178,7 @@ TEST_F(FuseScanEdgesCodegenTest, typedEdgeFusesIntoAByTypeEdgeScan) {
 
     llvm::SmallVector<mlir::db::ScanEdgesByType> edgeScans = collect<mlir::db::ScanEdgesByType>(*module);
     ASSERT_EQ(edgeScans.size(), 1u);
-    EXPECT_EQ(edgeScans.front().getEdgeType(), "KNOWS_WELL");
+    EXPECT_EQ(onlyEdgeType(edgeScans.front().getEdgeTypes()), "KNOWS_WELL");
 }
 
 TEST_F(FuseScanEdgesCodegenTest, undirectedHopKeepsItsNodeScan) {

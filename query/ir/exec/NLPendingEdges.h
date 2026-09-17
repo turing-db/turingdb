@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include <optional>
+#include <span>
 #include <unordered_map>
 #include <vector>
 
@@ -71,7 +72,7 @@ public:
                      ColumnNodeIDs* others);
     ~NLPendingEdgeHop();
 
-    void setEdgeType(EdgeTypeID edgeType) { _edgeType = edgeType; }
+    void setEdgeTypes(std::span<const EdgeTypeID> edgeTypes) { _edgeTypes = edgeTypes; }
 
     bool isValid() const { return _row < _inputNodeIDs->size(); }
 
@@ -99,7 +100,7 @@ private:
     size_t _pendingEdgeCount {0};
 
     Direction _direction {Direction::Out};
-    std::optional<EdgeTypeID> _edgeType;
+    std::optional<std::span<const EdgeTypeID>> _edgeTypes;
 
     // The input row the walk is on, its edges, how far into them it has read, and - for a
     // hop that walks either way - whether these are the edges into the row's node rather
@@ -129,7 +130,7 @@ public:
     NLPendingEdgeScan(NLExecutionContext* context, NLScanEdgesLoopData* loopData);
     ~NLPendingEdgeScan();
 
-    void setEdgeType(EdgeTypeID edgeType) { _edgeType = edgeType; }
+    void setEdgeTypes(std::span<const EdgeTypeID> edgeTypes) { _edgeTypes = edgeTypes; }
 
     // The label set one endpoint of the edge must carry at least for the scan to keep it -
     // its source for an out-edge scan, its target for an in-edge scan. The label set is
@@ -156,7 +157,7 @@ private:
     size_t _pendingEdgeCount {0};
     size_t _edge {0};
 
-    std::optional<EdgeTypeID> _edgeType;
+    std::optional<std::span<const EdgeTypeID>> _edgeTypes;
     LabelSetHandle _endpointLabels;
     bool _labelsTheTarget {false};
 

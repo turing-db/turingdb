@@ -788,7 +788,7 @@ mlir::func::FuncOp DBLowering::lower(mlir::func::FuncOp dbFunction, mlir::Module
     // in the entry block; a cross product retargets the root per factor.
     _valueMap.clear();
     _propertyTypes.clear();
-    _edgeTypes.clear();
+    _edgeTypeSets.clear();
     _rootBlock = _entryBlock;
     _innermostLoopBody = nullptr;
     _innermostCardinality = mlir::Value();
@@ -1352,9 +1352,9 @@ void DBLowering::lowerScanEdges(mlir::db::ScanEdges scanEdges) {
 
 void DBLowering::lowerScanEdgesByType(mlir::db::ScanEdgesByType scanEdgesByType) {
     // The by-type sibling of lowerScanEdges: same placement at the top of the root
-    // block, with the type name hoisted into the nl.get_edge_type handle the
+    // block, with the type names hoisted into the nl.get_edge_type_set handle the
     // by-type hops already share.
-    const mlir::Value edgeTypeHandle = getOrCreateEdgeTypeHandle(scanEdgesByType.getEdgeType());
+    const mlir::Value edgeTypeHandle = getOrCreateEdgeTypeSetHandle(scanEdgesByType.getEdgeTypes());
 
     setInsertionInto(_rootBlock);
 
@@ -1454,7 +1454,7 @@ void DBLowering::lowerGetEdges(mlir::db::GetEdges getEdges) {
 
 void DBLowering::lowerGetOutEdgesByType(mlir::db::GetOutEdgesByType getOutEdgesByType) {
     const mlir::Value inputChunk = mapValue(getOutEdgesByType.getInputNodes());
-    const mlir::Value edgeTypeHandle = getOrCreateEdgeTypeHandle(getOutEdgesByType.getEdgeType());
+    const mlir::Value edgeTypeHandle = getOrCreateEdgeTypeSetHandle(getOutEdgesByType.getEdgeTypes());
 
     llvm::SmallVector<mlir::Value, 4> carriedChunks;
     for (const mlir::Value carriedColumn : getOutEdgesByType.getColumnsToFilter()) {
@@ -1472,9 +1472,9 @@ void DBLowering::lowerGetOutEdgesByType(mlir::db::GetOutEdgesByType getOutEdgesB
 
 void DBLowering::lowerGetInEdgesByType(mlir::db::GetInEdgesByType getInEdgesByType) {
     // The predecessor counterpart of lowerGetOutEdgesByType: same shape, reverse
-    // direction, edge type hoisted into the same nl.get_edge_type handle.
+    // direction, edge types hoisted into the same nl.get_edge_type_set handle.
     const mlir::Value inputChunk = mapValue(getInEdgesByType.getInputNodes());
-    const mlir::Value edgeTypeHandle = getOrCreateEdgeTypeHandle(getInEdgesByType.getEdgeType());
+    const mlir::Value edgeTypeHandle = getOrCreateEdgeTypeSetHandle(getInEdgesByType.getEdgeTypes());
 
     llvm::SmallVector<mlir::Value, 4> carriedChunks;
     for (const mlir::Value carriedColumn : getInEdgesByType.getColumnsToFilter()) {
@@ -1856,21 +1856,21 @@ mlir::Value DBLowering::getOrCreatePropertyTypeHandle(llvm::StringRef propertyNa
     return handle;
 }
 
-mlir::Value DBLowering::getOrCreateEdgeTypeHandle(llvm::StringRef edgeTypeName) {
-    // The edge sibling of getOrCreatePropertyTypeHandle: dedup per name and hoist
-    // the handle to the top of the entry block, above every loop, so a by-type hop
-    // nested in a loop reuses one resolved handle rather than re-carrying the name.
-    const auto existing = _edgeTypes.find(edgeTypeName);
-    if (existing != _edgeTypes.end()) {
+mlir::Value DBLowering::getOrCreateEdgeTypeSetHandle(mlir::ArrayAttr edgeTypeNames) {
+    // The edge sibling of getOrCreatePropertyTypeHandle: dedup per set of names and
+    // hoist the handle to the top of the entry block, above every loop, so a by-type
+    // hop nested in a loop reuses one resolved handle rather than re-carrying them.
+    const auto existing = _edgeTypeSets.find(edgeTypeNames);
+    if (existing != _edgeTypeSets.end()) {
         return existing->second;
     }
 
     _builder.setInsertionPointToStart(_entryBlock);
 
-    nl::GetEdgeType handleOp = _builder.create<nl::GetEdgeType>(_builder.getUnknownLoc(),
-                                                               _builder.getStringAttr(edgeTypeName));
+    nl::GetEdgeTypeSet handleOp = _builder.create<nl::GetEdgeTypeSet>(_builder.getUnknownLoc(),
+                                                                     edgeTypeNames);
     const mlir::Value handle = handleOp.getResult();
-    _edgeTypes[edgeTypeName] = handle;
+    _edgeTypeSets[edgeTypeNames] = handle;
 
     return handle;
 }

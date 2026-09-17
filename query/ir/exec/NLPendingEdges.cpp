@@ -2,6 +2,7 @@
 
 #include <variant>
 
+#include "iterators/EdgeTypeMatch.h"
 #include "reader/GraphReader.h"
 
 #include "NLExecutionContext.h"
@@ -181,7 +182,7 @@ bool NLPendingEdgeHop::walks(size_t offset, NodeID& other) const {
     }
 
     const CommitWriteBuffer::PendingEdge& edge = _writeBuffer->getPendingEdge(offset);
-    if (_edgeType && edge.edgeType != *_edgeType) {
+    if (_edgeTypes && !edgeTypeMatches(*_edgeTypes, edge.edgeType)) {
         return false;
     }
 
@@ -258,7 +259,7 @@ void NLPendingEdgeScan::fill(size_t maxCount) {
 }
 
 bool NLPendingEdgeScan::keeps(const CommitWriteBuffer::PendingEdge& edge) const {
-    if (_edgeType && edge.edgeType != *_edgeType) {
+    if (_edgeTypes && !edgeTypeMatches(*_edgeTypes, edge.edgeType)) {
         return false;
     }
 

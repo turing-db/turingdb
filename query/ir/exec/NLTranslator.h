@@ -111,12 +111,12 @@ private:
         // resolved to a LabelSet as soon as the loop is translated.
         llvm::SmallVector<llvm::StringRef, 4> _labels;
 
-        // The edge type name a ScanEdgesByType / GetOutEdgesByType / GetInEdgesByType iterator
-        // filters by; empty for the other kinds. Like _labels, a view into the
-        // op's interned StringAttr storage, which the MLIRContext keeps alive for
-        // the whole translation; resolved to an EdgeTypeID when the loop is
-        // translated.
-        llvm::StringRef _edgeType;
+        // The edge type names a ScanEdgesByType / GetOutEdgesByType / GetInEdgesByType
+        // iterator filters by, as a disjunction; empty for the other kinds. Like
+        // _labels, views into the op's interned StringAttr storage, which the
+        // MLIRContext keeps alive for the whole translation; resolved to EdgeTypeIDs
+        // when the loop is translated.
+        llvm::SmallVector<llvm::StringRef, 4> _edgeTypes;
 
         // The node IDs a ConstScanNodes iterator emits; empty for the other kinds.
         // A view into the op's DenseI64ArrayAttr storage, which the MLIRContext
@@ -346,6 +346,14 @@ private:
     // CREATE earlier in the program introduced, which live in the change's own schema and
     // nowhere else until the commit
     std::optional<EdgeTypeID> findEdgeType(llvm::StringRef name) const;
+
+    // The EdgeTypeIDs a by-type loop filters by. The names are a disjunction, so one
+    // absent from the schema drops out rather than failing the query; a set nothing
+    // resolves into matches no edge and the loop emits nothing.
+    void resolveEdgeTypes(llvm::ArrayRef<llvm::StringRef> names,
+                          llvm::SmallVectorImpl<EdgeTypeID>& resolved) const;
+    void resolveEdgeTypes(mlir::ArrayAttr names,
+                          llvm::SmallVectorImpl<EdgeTypeID>& resolved) const;
     std::optional<LabelID> findLabel(llvm::StringRef name) const;
     std::optional<PropertyType> findPropertyType(llvm::StringRef name) const;
 

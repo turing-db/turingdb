@@ -979,13 +979,13 @@ struct FuseScanEdges : public impl::FuseScanEdgesBase<FuseScanEdges> {
     }
 };
 
-// A directed hop whose rows are then cut down to one edge type: the by-type hop spelled the
-// long way, since the walk itself can keep the edges of that type and never build the rows
-// the filter goes on to drop.
+// A directed hop whose rows are then cut down to the types the pattern named: the by-type
+// hop spelled the long way, since the walk itself can keep the edges of those types and
+// never build the rows the filter goes on to drop.
 struct TypedHop {
     Operation* _hop {nullptr};
     CheckEdgeTypeConstraint _check;
-    StringAttr _edgeType;
+    ArrayAttr _edgeTypes;
 };
 
 bool matchTypedHop(FilterOp filter, TypedHop& typedHop) {
@@ -994,15 +994,9 @@ bool matchTypedHop(FilterOp filter, TypedHop& typedHop) {
         return false;
     }
 
-    // An edge carries exactly one type, so a single required type is an equality a hop can
-    // walk; several of them are a set match no one hop expresses.
+    // The hop walks the disjunction itself, so any number of required types fuses.
     const ArrayAttr edgeTypes = check.getEdgeTypes();
-    if (edgeTypes.size() != 1) {
-        return false;
-    }
-
-    StringAttr edgeType = dyn_cast<StringAttr>(edgeTypes[0]);
-    if (!edgeType) {
+    if (edgeTypes.empty()) {
         return false;
     }
 
@@ -1036,13 +1030,13 @@ bool matchTypedHop(FilterOp filter, TypedHop& typedHop) {
         }
     }
 
-    typedHop = TypedHop {._hop = hop, ._check = check, ._edgeType = edgeType};
+    typedHop = TypedHop {._hop = hop, ._check = check, ._edgeTypes = edgeTypes};
 
     return true;
 }
 
 template <typename ByTypeOp>
-Operation* createByTypeHop(Operation* hop, StringAttr edgeType, mlir::OpBuilder& builder) {
+Operation* createByTypeHop(Operation* hop, ArrayAttr edgeTypes, mlir::OpBuilder& builder) {
     const Operation::result_range results = hop->getResults();
 
     ByTypeOp byTypeHop = builder.create<ByTypeOp>(hop->getLoc(),
@@ -1052,7 +1046,7 @@ Operation* createByTypeHop(Operation* hop, StringAttr edgeType, mlir::OpBuilder&
                                                   results[3].getType(),
                                                   results.drop_front(hopFixedResultCount).getTypes(),
                                                   hop->getOperand(0),
-                                                  edgeType,
+                                                  edgeTypes,
                                                   hop->getOperands().drop_front());
 
     return byTypeHop.getOperation();
@@ -1066,8 +1060,8 @@ void fuseEdgesByType(FilterOp filter, const TypedHop& typedHop, mlir::OpBuilder&
     // A by-type hop declares the same four fixed results and the same carry set behind them,
     // so the plain hop's results map onto it one for one.
     Operation* const byTypeHop = isa<GetOutEdges>(hop)
-                                     ? createByTypeHop<GetOutEdgesByType>(hop, typedHop._edgeType, builder)
-                                     : createByTypeHop<GetInEdgesByType>(hop, typedHop._edgeType, builder);
+                                     ? createByTypeHop<GetOutEdgesByType>(hop, typedHop._edgeTypes, builder)
+                                     : createByTypeHop<GetInEdgesByType>(hop, typedHop._edgeTypes, builder);
 
     hop->replaceAllUsesWith(byTypeHop);
 
@@ -1110,13 +1104,13 @@ struct FuseEdgesByType : public impl::FuseEdgesByTypeBase<FuseEdgesByType> {
     }
 };
 
-// An edge scan whose rows are then cut down to one edge type: the by-type scan spelled the
-// long way, since the scan itself can keep the edges of that type and never build the rows
-// the filter goes on to drop.
+// An edge scan whose rows are then cut down to the types the pattern named: the by-type
+// scan spelled the long way, since the scan itself can keep the edges of those types and
+// never build the rows the filter goes on to drop.
 struct TypedEdgeScan {
     ScanEdges _scan;
     CheckEdgeTypeConstraint _check;
-    StringAttr _edgeType;
+    ArrayAttr _edgeTypes;
 };
 
 bool matchTypedEdgeScan(FilterOp filter, TypedEdgeScan& typedScan) {
@@ -1125,13 +1119,10 @@ bool matchTypedEdgeScan(FilterOp filter, TypedEdgeScan& typedScan) {
         return false;
     }
 
+    // As in matchTypedHop: the scan walks the disjunction itself, so any number of
+    // required types fuses.
     const ArrayAttr edgeTypes = check.getEdgeTypes();
-    if (edgeTypes.size() != 1) {
-        return false;
-    }
-
-    StringAttr edgeType = dyn_cast<StringAttr>(edgeTypes[0]);
-    if (!edgeType) {
+    if (edgeTypes.empty()) {
         return false;
     }
 
@@ -1162,7 +1153,7 @@ bool matchTypedEdgeScan(FilterOp filter, TypedEdgeScan& typedScan) {
         }
     }
 
-    typedScan = TypedEdgeScan {._scan = scan, ._check = check, ._edgeType = edgeType};
+    typedScan = TypedEdgeScan {._scan = scan, ._check = check, ._edgeTypes = edgeTypes};
 
     return true;
 }
@@ -1180,7 +1171,7 @@ void fuseScanEdgesByType(FilterOp filter, const TypedEdgeScan& typedScan, mlir::
                                                                  scan.getEids().getType(),
                                                                  scan.getEtypes().getType(),
                                                                  scan.getTgtids().getType(),
-                                                                 typedScan._edgeType);
+                                                                 typedScan._edgeTypes);
 
     scanOp->replaceAllUsesWith(byTypeScan.getOperation());
 

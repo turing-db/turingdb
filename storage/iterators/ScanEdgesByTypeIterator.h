@@ -2,6 +2,8 @@
 
 #include "ScanEdgesIterator.h"
 
+#include <span>
+
 #include "ID.h"
 
 namespace db {
@@ -9,7 +11,7 @@ namespace db {
 class ScanEdgesByTypeChunkWriter : public ScanEdgesIterator {
 public:
     ScanEdgesByTypeChunkWriter() = delete;
-    ScanEdgesByTypeChunkWriter(const GraphView& view, EdgeTypeID edgeType);
+    ScanEdgesByTypeChunkWriter(const GraphView& view, std::span<const EdgeTypeID> edgeTypes);
 
     void fill(size_t maxCount);
 
@@ -19,7 +21,8 @@ public:
     void setEdgeTypes(ColumnEdgeTypes* types) { _types = types; }
 
 private:
-    EdgeTypeID _edgeType;
+    // Borrowed, not owned: the caller keeps the types alive for the writer's lifetime
+    std::span<const EdgeTypeID> _edgeTypes;
 
     ColumnNodeIDs* _srcs {nullptr};
     ColumnEdgeIDs* _edgeIDs {nullptr};

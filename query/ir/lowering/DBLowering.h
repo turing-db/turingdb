@@ -130,10 +130,12 @@ private:
     // resolved once and shared by every fetch that reads it
     llvm::StringMap<mlir::Value> _propertyTypes;
 
-    // Edge type name -> the hoisted nl.get_edge_type handle, so a name is resolved
+    // Edge type names -> the hoisted nl.get_edge_type_set handle, so a set is resolved
     // once and shared by every by-type edge hop that reads it (the edge sibling of
-    // _propertyTypes)
-    llvm::StringMap<mlir::Value> _edgeTypes;
+    // _propertyTypes). Keyed on the ArrayAttr, which MLIR uniques, so two hops naming
+    // the same types in the same order find the same handle; a different order hoists
+    // a second handle for the same set, which costs a resolve and no correctness
+    llvm::DenseMap<mlir::Attribute, mlir::Value> _edgeTypeSets;
 
     // Entry block of the nl function being built
     mlir::Block* _entryBlock {nullptr};
@@ -426,10 +428,10 @@ private:
     // top of the entry block (above every loop) and reused on later lookups
     mlir::Value getOrCreatePropertyTypeHandle(llvm::StringRef propertyName);
 
-    // The nl.get_edge_type handle for an edge type name, inserted once at the top
-    // of the entry block (above every loop) and reused on later lookups - the edge
-    // sibling of getOrCreatePropertyTypeHandle
-    mlir::Value getOrCreateEdgeTypeHandle(llvm::StringRef edgeTypeName);
+    // The nl.get_edge_type_set handle for a set of edge type names, inserted once at
+    // the top of the entry block (above every loop) and reused on later lookups - the
+    // edge sibling of getOrCreatePropertyTypeHandle
+    mlir::Value getOrCreateEdgeTypeSetHandle(mlir::ArrayAttr edgeTypeNames);
 
     static mlir::Type columnType(mlir::Value column);
 

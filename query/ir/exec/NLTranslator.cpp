@@ -140,17 +140,19 @@ Column* allocPlainChunkColumn(LocalMemory* memory, size_t chunkSize) {
     return column;
 }
 
-// The edge type name carried by the nl.get_edge_type handle a by-type hop's
-// edge_type operand names. The name lives on the handle op, not the hop, so it is
-// resolved once above the loops; a hop reads it back through its operand here (the
+// The edge type names carried by the nl.get_edge_type_set handle a by-type hop's
+// edge_types operand names. They live on the handle op, not the hop, so they are
+// resolved once above the loops; a hop reads them back through its operand here (the
 // same way translatePropertyFetch reads a property name off nl.get_property_type).
-llvm::StringRef edgeTypeName(mlir::Value handle) {
-    nl::GetEdgeType handleOp = handle.getDefiningOp<nl::GetEdgeType>();
+void edgeTypeNames(mlir::Value handle, llvm::SmallVectorImpl<llvm::StringRef>& names) {
+    nl::GetEdgeTypeSet handleOp = handle.getDefiningOp<nl::GetEdgeTypeSet>();
     if (!handleOp) {
-        throw IRException("edge_type operand must come from nl.get_edge_type");
+        throw IRException("edge_types operand must come from nl.get_edge_type_set");
     }
 
-    return handleOp.getName();
+    for (const mlir::Attribute nameAttr : handleOp.getNames()) {
+        names.push_back(mlir::cast<mlir::StringAttr>(nameAttr).getValue());
+    }
 }
 
 llvm::StringRef propertyTypeName(mlir::Value handle) {
@@ -555,7 +557,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             _iteratorConfigs[scanEdges.getResult()] = IteratorConfig {IteratorKind::ScanEdges, {}, {}};
         } else if (nl::ScanEdgesByType scanEdgesByType = mlir::dyn_cast<nl::ScanEdgesByType>(operation)) {
             IteratorConfig config {IteratorKind::ScanEdgesByType, {}, {}};
-            config._edgeType = edgeTypeName(scanEdgesByType.getEdgeType());
+            edgeTypeNames(scanEdgesByType.getEdgeTypes(), config._edgeTypes);
             _iteratorConfigs[scanEdgesByType.getResult()] = config;
         } else if (nl::ScanOutEdgesByLabelSrc scanOutEdgesByLabelSrc = mlir::dyn_cast<nl::ScanOutEdgesByLabelSrc>(operation)) {
             bindScanEdgesByLabel(scanOutEdgesByLabelSrc, IteratorKind::ScanEdgesBySourceLabel);
@@ -584,13 +586,13 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             IteratorConfig config {IteratorKind::GetOutEdgesByType, getOutEdgesByType.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getOutEdgesByType.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
-            config._edgeType = edgeTypeName(getOutEdgesByType.getEdgeType());
+            edgeTypeNames(getOutEdgesByType.getEdgeTypes(), config._edgeTypes);
             _iteratorConfigs[getOutEdgesByType.getResult()] = config;
         } else if (nl::GetInEdgesByType getInEdgesByType = mlir::dyn_cast<nl::GetInEdgesByType>(operation)) {
             IteratorConfig config {IteratorKind::GetInEdgesByType, getInEdgesByType.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = getInEdgesByType.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
-            config._edgeType = edgeTypeName(getInEdgesByType.getEdgeType());
+            edgeTypeNames(getInEdgesByType.getEdgeTypes(), config._edgeTypes);
             _iteratorConfigs[getInEdgesByType.getResult()] = config;
         } else if (nl::Sort sort = mlir::dyn_cast<nl::Sort>(operation)) {
             _iteratorConfigs[sort.getResult()] = IteratorConfig {IteratorKind::Sort, {}, {}, sortStateFor(sort.getState())};
@@ -662,8 +664,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             _iteratorConfigs[procedureInit.getResult()] = config;
         } else if (nl::For forLoop = mlir::dyn_cast<nl::For>(operation)) {
             translateFor(forLoop, body);
-        } else if (mlir::isa<nl::GetPropertyType, nl::GetEdgeType>(operation)) {
-            // The handle carries only a name; a fetch/hop resolves it on consumption
+        } else if (mlir::isa<nl::GetPropertyType, nl::GetEdgeTypeSet>(operation)) {
+            // The handle carries only names; a fetch/hop resolves them on consumption
         } else if (nl::Constant constant = mlir::dyn_cast<nl::Constant>(operation)) {
             translateConstant(constant);
         } else if (nl::BroadcastConstant broadcast = mlir::dyn_cast<nl::BroadcastConstant>(operation)) {
@@ -1346,21 +1348,17 @@ void NLTranslator::translateScanEdgesByTypeLoop(const IteratorConfig& config,
     ColumnEdgeTypes* edgeTypes = static_cast<ColumnEdgeTypes*>(allocColumn(loopBody.getArgument(2)));
     ColumnNodeIDs* targets = static_cast<ColumnNodeIDs*>(allocColumn(loopBody.getArgument(3)));
 
-    // Resolve the edge type name against the schema, exactly as translateEdgeLoop
-    // does for a by-type hop. A name absent from the schema matches no edge, so the
-    // loop is marked unmatchable and emits nothing rather than scanning for a bogus
-    // type.
-    const std::optional<EdgeTypeID> edgeTypeID = findEdgeType(config._edgeType);
-    const bool matchable = edgeTypeID.has_value();
-    const EdgeTypeID resolvedType = matchable ? *edgeTypeID : EdgeTypeID();
+    // Resolve the edge type names against the schema, exactly as translateEdgeLoop
+    // does for a by-type hop.
+    llvm::SmallVector<EdgeTypeID, 4> requestedTypes;
+    resolveEdgeTypes(config._edgeTypes, requestedTypes);
 
     NLScanEdgesByTypeLoopData* loopData =
         _program->allocFunctionData<NLScanEdgesByTypeLoopData>(sources,
                                                                edgeIDs,
                                                                edgeTypes,
                                                                targets,
-                                                               resolvedType,
-                                                               matchable);
+                                                               requestedTypes);
     loopData->setLimit(limit);
 
     body->addStmt(NLFunctionDescriptor {&NLExecutor::runScanEdgesByTypeLoop, loopData});
@@ -1417,6 +1415,26 @@ std::optional<EdgeTypeID> NLTranslator::findEdgeType(llvm::StringRef name) const
     return _metadataBuilder->findEdgeType(name);
 }
 
+void NLTranslator::resolveEdgeTypes(llvm::ArrayRef<llvm::StringRef> names,
+                                    llvm::SmallVectorImpl<EdgeTypeID>& resolved) const {
+    for (const llvm::StringRef name : names) {
+        const std::optional<EdgeTypeID> edgeTypeID = findEdgeType(name);
+        if (edgeTypeID) {
+            resolved.push_back(*edgeTypeID);
+        }
+    }
+}
+
+void NLTranslator::resolveEdgeTypes(mlir::ArrayAttr names,
+                                    llvm::SmallVectorImpl<EdgeTypeID>& resolved) const {
+    llvm::SmallVector<llvm::StringRef, 4> nameRefs;
+    for (const mlir::Attribute nameAttr : names) {
+        nameRefs.push_back(mlir::cast<mlir::StringAttr>(nameAttr).getValue());
+    }
+
+    resolveEdgeTypes(nameRefs, resolved);
+}
+
 void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
                                      mlir::Block& loopBody,
                                      NLLimitState* limit,
@@ -1445,21 +1463,17 @@ void NLTranslator::translateEdgeLoop(const IteratorConfig& config,
     // carried columns, body) works through the base pointer either way.
     NLEdgeLoopData* loopData = nullptr;
     if (byType) {
-        // Resolve the edge type name against the schema, exactly as
-        // translateScanByLabelLoop resolves its labels. A name absent from the
-        // schema matches no edge, so the loop is marked unmatchable and emits
-        // nothing rather than filtering against a bogus type.
-        const std::optional<EdgeTypeID> edgeTypeID = findEdgeType(config._edgeType);
-        const bool matchable = edgeTypeID.has_value();
-        const EdgeTypeID resolvedType = matchable ? *edgeTypeID : EdgeTypeID();
+        // Resolve the edge type names against the schema, exactly as
+        // translateScanByLabelLoop resolves its labels.
+        llvm::SmallVector<EdgeTypeID, 4> requestedTypes;
+        resolveEdgeTypes(config._edgeTypes, requestedTypes);
 
         loopData = _program->allocFunctionData<NLEdgeByTypeLoopData>(inputNodeIDs,
                                                                      sources,
                                                                      edgeIDs,
                                                                      edgeTypes,
                                                                      targets,
-                                                                     resolvedType,
-                                                                     matchable);
+                                                                     requestedTypes);
     } else {
         loopData = _program->allocFunctionData<NLEdgeLoopData>(inputNodeIDs,
                                                                sources,
@@ -1635,12 +1649,11 @@ void NLTranslator::translateCheckEdgeTypeConstraint(nl::CheckEdgeTypeConstraint 
 
     NLCheckEdgeTypeConstraintData* data = _program->allocFunctionData<NLCheckEdgeTypeConstraintData>(input, output);
 
-    // The types are a disjunction, so one no edge has ever carried drops out of it
-    for (const mlir::Attribute typeAttr : op.getEdgeTypes()) {
-        const std::optional<EdgeTypeID> edgeTypeID = findEdgeType(mlir::cast<mlir::StringAttr>(typeAttr).getValue());
-        if (edgeTypeID) {
-            data->addMatchingID(*edgeTypeID);
-        }
+    llvm::SmallVector<EdgeTypeID, 4> matchingTypes;
+    resolveEdgeTypes(op.getEdgeTypes(), matchingTypes);
+
+    for (const EdgeTypeID edgeTypeID : matchingTypes) {
+        data->addMatchingID(edgeTypeID);
     }
 
     body->emplaceStmt(&NLExecutor::runCheckEdgeTypeConstraint, data);

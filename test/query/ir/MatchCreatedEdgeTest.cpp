@@ -267,3 +267,60 @@ TEST_F(MatchCreatedEdgeTest, readsTheTypeOfACreatedEdgeTwoCutsDown) {
     const std::vector<StringRowSink::Row> typed {{"Eos"}};
     EXPECT_EQ(tested.getRows(), typed);
 }
+
+// A type disjunction over the write buffer: the hop keeps a pending edge carrying any of
+// the named types, so both created edges come back off the same created node.
+TEST_F(MatchCreatedEdgeTest, walksCreatedEdgesOfEitherTypeInADisjunction) {
+    StringRowSink sink;
+    runWrite("CREATE (a:Person {name: 'Ana'})-[:KNOWS_WELL]->(b:Person {name: 'Bo'}) "
+             "CREATE (a)-[:MENTORS]->(c:Person {name: 'Cy'}) "
+             "WITH a MATCH (a)-[:KNOWS_WELL|MENTORS]->(m) RETURN m.name",
+             sink);
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<StringRowSink::Row> expected {{"Bo"}, {"Cy"}};
+    EXPECT_EQ(rows, expected);
+}
+
+// None of the named types is the one the CREATE wrote, so the pending edge is turned away.
+TEST_F(MatchCreatedEdgeTest, walksNoCreatedEdgeWhenTheDisjunctionNamesOtherTypes) {
+    StringRowSink sink;
+    runWrite("CREATE (a:Person {name: 'Ana'})-[:KNOWS_WELL]->(b:Person {name: 'Bo'}) "
+             "WITH a MATCH (a)-[:MENTORS|INTERESTED_IN]->(m) RETURN m.name",
+             sink);
+
+    EXPECT_TRUE(sink.getRows().empty());
+}
+
+// Off a committed node, so the disjunction runs over both the graph's edges and the
+// change's: it keeps Remy's committed KNOWS_WELL edge and the pending MENTORS one, and
+// drops his three committed INTERESTED_IN edges.
+TEST_F(MatchCreatedEdgeTest, disjunctionMixesCommittedAndCreatedEdges) {
+    StringRowSink sink;
+    runWrite("MATCH (p:Person {name: 'Remy'}) CREATE (p)-[:MENTORS]->(b:Person {name: 'Bo'}) "
+             "WITH p MATCH (p)-[:KNOWS_WELL|MENTORS]->(m) RETURN m.name",
+             sink);
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<StringRowSink::Row> expected {{"Adam"}, {"Bo"}};
+    EXPECT_EQ(rows, expected);
+}
+
+// The whole-graph scan sibling, which reads the write buffer through NLPendingEdgeScan
+// rather than the hop: the KNOWS_WELL edges the graph holds plus the pending MENTORS one.
+TEST_F(MatchCreatedEdgeTest, scanWalksCreatedEdgesOfEitherTypeInADisjunction) {
+    StringRowSink sink;
+    runWrite("CREATE (a:Person {name: 'Ana'})-[:MENTORS]->(b:Person {name: 'Bo'}) "
+             "WITH a MATCH (x)-[:KNOWS_WELL|MENTORS]->(y) RETURN y.name",
+             sink);
+
+    std::vector<StringRowSink::Row> rows;
+    sink.sortedRows(rows);
+
+    const std::vector<StringRowSink::Row> expected {{"Adam"}, {"Bo"}, {"Remy"}, {"Remy"}};
+    EXPECT_EQ(rows, expected);
+}

@@ -147,7 +147,7 @@ func.func @main() {
 const char* const typedHopOverLabelScan = R"mlir(
 func.func @main() {
   %a = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
-  %srcs, %eids, %etypes, %tgts = db.get_out_edges_by_type(%a, "KNOWS_WELL", {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %srcs, %eids, %etypes, %tgts = db.get_out_edges_by_type(%a, ["KNOWS_WELL"], {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
   db.output(%srcs, %tgts) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
