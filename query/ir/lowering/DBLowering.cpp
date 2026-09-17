@@ -4014,9 +4014,12 @@ mlir::Block* DBLowering::deeperBlock(mlir::Value first, mlir::Value second) {
         return firstBlock;
     }
 
-    if (firstBlock == _entryBlock) {
+    // A chunk bound in a block that encloses the other is read once per step of it - a
+    // hoisted constant, a metadata tally, the one row a per-row body walks - so the op
+    // reading both belongs in the deeper block.
+    if (enclosesBlock(firstBlock, secondBlock)) {
         return secondBlock;
-    } else if (secondBlock == _entryBlock) {
+    } else if (enclosesBlock(secondBlock, firstBlock)) {
         return firstBlock;
     }
 
