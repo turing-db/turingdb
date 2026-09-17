@@ -103,6 +103,10 @@ def FuseExploreDistinctEnds : Pass<"fuse_explore_distinct_ends"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def CountPathRows : Pass<"count_path_rows"> {
+    let summary = "Count the rows a path was built over instead of building the path to count it";
+}
+
 def TrimUnreadColumns : Pass<"trim_unread_columns"> {
     let summary = "Drop the columns no later op reads from hops, filters, cuts, sorts, products, grouping ops and calls";
     let dependentDialects = ["mlir::db::DB"];
