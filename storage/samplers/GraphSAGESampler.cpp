@@ -34,7 +34,7 @@ static void deduplicate(const ColumnOptVector<NodeID>* src, ColumnOptVector<Node
     raw.erase(newEnd, oldEnd);
 }
 
-GraphSAGESampler::GraphSAGESampler(const GraphView* view)
+GraphSAGESampler::GraphSAGESampler(GraphView view)
     : _view(view)
 {
 }
@@ -52,10 +52,18 @@ void GraphSAGESampler::setHopData(size_t idx, NodeCol* srcs, NodeCol* tgts, Node
 void GraphSAGESampler::sample(const ColumnNodeIDs* seeds) {
     static_assert(hops >= 1);
 
+    _requiredLength = std::max(_requiredLength, seeds->size());
+
+    // first hops dst_nodes are the query seeds
     colAssign(seeds, _sampleData[0]._dstNodes);
 
     while (_currentHop < hops) {
         sampleHop();
+    }
+
+    // padd all columns with nulls to ensure square dataframe
+    for (HopData& data : _sampleData) {
+        data.resize(_requiredLength);
     }
 }
 
@@ -71,7 +79,7 @@ void GraphSAGESampler::sampleHop() {
 
     const size_t sampleSize = thisHop._fanout;
 
-    NeighbourhoodSampleChunkWriter writer(*_view, &tmpSeeds, sampleSize);
+    NeighbourhoodSampleChunkWriter writer(_view, &tmpSeeds, sampleSize);
 
     ColumnNodeIDs tmpSrcs;
     ColumnNodeIDs tmpTgts;
@@ -79,8 +87,14 @@ void GraphSAGESampler::sampleHop() {
     // XXX: Check for overflowing a chunk, maybe loop untilDone
     writer.fill(ChunkConfig::CHUNK_SIZE);
 
-    colAssign(&tmpSrcs, thisHop._srcs);
-    colAssign(&tmpTgts, thisHop._tgts);
+    NodeCol* thisSrcs = thisHop._srcs;
+    NodeCol* thisTgts = thisHop._tgts;
+
+    colAssign(&tmpSrcs, thisSrcs);
+    colAssign(&tmpTgts, thisTgts);
+
+    bioassert(thisSrcs->size() == thisTgts->size(), "Mismatched srcs, tgts");
+    _requiredLength = std::max(_requiredLength, thisSrcs->size());
 
     if (_currentHop == hops - 1) {
         _currentHop++;
