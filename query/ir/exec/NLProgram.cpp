@@ -24,11 +24,26 @@ void NLProgram::setColumnNames(std::span<const std::string_view> names) {
 }
 
 void NLProgram::setOutputData(NLOutputData* outputData) {
-    if (_outputData) {
+    if (!_outputData) {
+        _outputData = outputData;
         return;
     }
 
-    _outputData = outputData;
+    // The first output's columns are the schema the sink is handed, so a later one writing
+    // a column of another type would stream rows the declared header does not describe
+    const NLOutputData::OutputColumns& declared = _outputData->outputs();
+    const NLOutputData::OutputColumns& emitted = outputData->outputs();
+    bioassert(declared.size() == emitted.size(), "Every output of a program declares the same columns");
+
+    for (size_t index = 0; index < declared.size(); index++) {
+        const Column* const declaredColumn = declared[index];
+        const Column* const emittedColumn = emitted[index];
+
+        const bool sameContainer = declaredColumn->getContainerKind() == emittedColumn->getContainerKind();
+        const bool sameInternal = declaredColumn->getInternalKind() == emittedColumn->getInternalKind();
+
+        bioassert(sameContainer && sameInternal, "Every output of a program declares the same column types");
+    }
 }
 
 NLMergeNodeIndex* NLProgram::findMergeNodeIndex(const std::string& signature) const {

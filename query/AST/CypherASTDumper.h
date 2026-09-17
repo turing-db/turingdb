@@ -75,6 +75,11 @@ private:
     std::unordered_set<const VarDecl*> _dumpedVariables;
 
     void dump(std::ostream& out, const SinglePartQuery* query);
+
+    // The query alone, without the edge joining it to the script: a union branch hangs off
+    // the union rather than off the script, as queries() already reports it
+    void dumpQueryBody(std::ostream& out, const SinglePartQuery* query);
+
     void dump(std::ostream& out, const UnionQuery* query);
     void dump(std::ostream& out, const WithStmt* with);
     void dump(std::ostream& out, const LoadGraphQuery* query);

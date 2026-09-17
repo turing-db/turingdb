@@ -217,12 +217,17 @@ void CypherASTDumper::dump(std::ostream& out, const UnionQuery* query) {
         out << "    _" << std::hex << query << " ||--o{ _" << std::hex << branch._query
             << " : \"" << label << "\"\n";
 
-        dump(out, branch._query);
+        dumpQueryBody(out, branch._query);
     }
 }
 
 void CypherASTDumper::dump(std::ostream& out, const SinglePartQuery* query) {
     out << "    script ||--o{ _" << std::hex << query << " : \"\"\n";
+
+    dumpQueryBody(out, query);
+}
+
+void CypherASTDumper::dumpQueryBody(std::ostream& out, const SinglePartQuery* query) {
     out << "    _" << std::hex << query << " {\n";
     out << "        ASTType SinglePartQuery\n";
     out << "    }\n";

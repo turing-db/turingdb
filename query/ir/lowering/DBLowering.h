@@ -510,6 +510,8 @@ private:
 
     mlir::Value nullableValueChunk(mlir::Value chunk);
 
+    mlir::Value unionColumnChunk(mlir::Value chunk);
+
     // The chunk element type an unwind of @param sourceElement produces: a drained list
     // gives up the type its own elements carry, falling back to the type-erased
     // list_element when they share none, and any other source keeps its own element,

@@ -54,6 +54,10 @@ void describeColumnType(mlir::Type chunkType, std::string& out) {
 
     if (mlir::isa<storage::StringType>(element) || mlir::isa<storage::OwnedStringType>(element)) {
         out = "String";
+    } else if (mlir::isa<storage::BoolType>(element)) {
+        out = "Bool";
+    } else if (mlir::isa<mlir::NoneType>(element)) {
+        out = "Null";
     } else if (mlir::isa<mlir::Float64Type>(element)) {
         out = "Double";
     } else if (mlir::isa<storage::NodeIDType>(element)) {
@@ -2156,6 +2160,12 @@ void DBLowering::lowerUnion(mlir::db::Union unionOp) {
         _innermostCardinality = mlir::Value();
 
         for (mlir::Operation& operation : branch.front()) {
+            if (mlir::db::Output output = mlir::dyn_cast<mlir::db::Output>(operation)) {
+                for (const mlir::Value column : output.getColumns()) {
+                    _valueMap[column] = unionColumnChunk(mapValue(column));
+                }
+            }
+
             lowerOperation(operation);
         }
 
@@ -2169,6 +2179,8 @@ void DBLowering::lowerUnion(mlir::db::Union unionOp) {
 
 void DBLowering::collectBranchResultTypes(mlir::Region& branch,
                                           llvm::SmallVectorImpl<mlir::Type>& resultTypes) {
+    resultTypes.clear();
+
     mlir::db::Output output = mlir::cast<mlir::db::Output>(branch.front().back());
 
     for (const mlir::Value column : output.getColumns()) {
@@ -4132,6 +4144,41 @@ mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
     }
 
     return _builder.create<nl::ToNullable>(_builder.getUnknownLoc(), resultType, chunk).getResult();
+}
+
+// The one column a union result carries, whichever branch filled it. A count is an
+// unsigned tally that is never null and a property a nullable signed value, and the two
+// are one Cypher INTEGER, so a scalar reaches the column as the nullable signed form. An
+// entity, a path, a list and an embedding have one spelling already and are left alone.
+mlir::Value DBLowering::unionColumnChunk(mlir::Value chunk) {
+    const mlir::Type element = chunkValueElement(_builder, chunk.getType());
+
+    const bool isString = mlir::isa<storage::StringType>(element);
+    const bool isDouble = mlir::isa<mlir::Float64Type>(element);
+    const mlir::IntegerType integerType = mlir::dyn_cast<mlir::IntegerType>(element);
+
+    if (!isString && !isDouble && !integerType) {
+        return chunk;
+    }
+
+    // Wrapped before it is converted, and not instead: the kernel a conversion selects
+    // reads the column it was handed, so converting a plain chunk would allocate a plain
+    // column under a type naming a nullable one
+    const mlir::Value nullableChunk = nullableValueChunk(chunk);
+
+    const bool isUnsignedInteger = integerType && integerType.isUnsigned() && integerType.getWidth() == 64;
+    if (!isUnsignedInteger) {
+        return nullableChunk;
+    }
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const storage::NullableType signedElement = storage::NullableType::get(context, _builder.getIntegerType(64));
+    const nl::ChunkType signedChunk = nl::ChunkType::get(context, signedElement);
+
+    mlir::OpBuilder::InsertionGuard guard(_builder);
+    setInsertionForUnaryOp(nullableChunk);
+
+    return _builder.create<nl::ToInteger>(_builder.getUnknownLoc(), signedChunk, nullableChunk).getResult();
 }
 
 mlir::Value DBLowering::cardinalityDriver(llvm::ArrayRef<mlir::Value> chunks) const {

@@ -270,7 +270,8 @@ void CypherAnalyzer::analyzeUnionColumns(const UnionQuery* query) const {
     collectProjectionNames(first, firstNames);
 
     std::vector<std::string_view> names;
-    for (const UnionQuery::Branch& branch : branches) {
+    for (size_t index = 1; index < branches.size(); index++) {
+        const UnionQuery::Branch& branch = branches[index];
         const Projection* projection = unionBranchProjection(branch._query);
 
         collectProjectionNames(projection, names);

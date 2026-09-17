@@ -1282,7 +1282,9 @@ def Sort : TuringOp<"sort", [Pure]> {
 /**
 * RemoveDuplicates
 */
-def RemoveDuplicates : TuringOp<"remove_duplicates", [Pure, AttrSizedOperandSegments]> {
+// NOT Pure: it records each row it emits in a seen-set, so it must run where it sits and
+// must not be hoisted, CSE'd or eliminated (like nl.distinct_filter, which it lowers to).
+def RemoveDuplicates : TuringOp<"remove_duplicates", [AttrSizedOperandSegments]> {
   let summary = "Emit each distinct row of a column set once";
   let description = [{
     The declarative counterpart of a Cypher RETURN DISTINCT / WITH DISTINCT. Takes
@@ -1304,8 +1306,7 @@ def RemoveDuplicates : TuringOp<"remove_duplicates", [Pure, AttrSizedOperandSegm
     further MATCH. Because it streams and shrinks each chunk, a following db.limit
     charges the deduped survivor count and bounds the producing loop through the
     ordinary early-exit, so DISTINCT ... LIMIT k needs no special fusion - the scan
-    stops once k distinct rows are found. Deduplicating a deterministic read of the
-    graph is itself deterministic, so the op is Pure.
+    stops once k distinct rows are found.
   }];
 
   // The columns flow through unchanged; every column is part of the dedup key, so
@@ -1329,7 +1330,9 @@ def RemoveDuplicates : TuringOp<"remove_duplicates", [Pure, AttrSizedOperandSegm
 /**
 * DistinctSet
 */
-def DistinctSet : TuringOp<"distinct_set", [Pure]> {
+// NOT Pure: two seen-sets must never be CSE'd into one, and this op has no operands to
+// tell one from another (like nl.distinct, which it lowers to).
+def DistinctSet : TuringOp<"distinct_set", []> {
   let summary = "Open a dedup key set for several db.remove_duplicates to share";
   let description = [{
     A UNION dedups its whole result, but each of its branches reaches that result

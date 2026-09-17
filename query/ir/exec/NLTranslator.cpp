@@ -2432,7 +2432,6 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
     const bool singleRowStep = stepKeepsASingleRow(outputBlock);
 
     NLOutputData* outputData = _program->allocFunctionData<NLOutputData>();
-    _program->setOutputData(outputData);
 
     outputData->setLimit(limitStateFor(output.getLimit()));
     outputData->setSkip(skipStateFor(output.getSkip()));
@@ -2460,6 +2459,8 @@ void NLTranslator::translateOutput(nl::Output output, NLStmtContainer* body) {
 
         outputData->addOutputColumn(getColumn(column), !isConstant && !isReducedRow);
     }
+
+    _program->setOutputData(outputData);
 
     // The names label the result, not one emission of it, so they go on the program
     // rather than the per-step output data the limit and skip handles sit on.
