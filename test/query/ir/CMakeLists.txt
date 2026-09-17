@@ -384,6 +384,29 @@ target_link_libraries(test_query_ir_fuse_scan_in_edges_by_label_codegen PRIVATE
         turing_db_storage_s)
 target_include_directories(test_query_ir_fuse_scan_in_edges_by_label_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# The endpoint-label fusion tests: the same two checks for the scans read off the label set
+# of the endpoint the hop arrives at or leaves, rather than the one it starts from.
+add_ir_tests(test_query_ir_fuse_scan_edges_by_endpoint_label FuseScanEdgesByEndpointLabelTest.cpp)
+target_link_libraries(test_query_ir_fuse_scan_edges_by_endpoint_label PRIVATE turing_db_examples_s)
+
+add_turing_test(test_query_ir_fuse_scan_edges_by_endpoint_label_codegen FuseScanEdgesByEndpointLabelCodegenTest.cpp)
+target_link_libraries(test_query_ir_fuse_scan_edges_by_endpoint_label_codegen PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s
+        turing_db_ir_dbdialect_s
+        turing_db_ir_nldialect_s
+        turing_db_ir_storagedialect_s
+        turing_db_ir_common_s
+        turing_db_storage_s)
+target_include_directories(test_query_ir_fuse_scan_edges_by_endpoint_label_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_fuse_edges_by_type_codegen FuseEdgesByTypeCodegenTest.cpp)
 target_link_libraries(test_query_ir_fuse_edges_by_type_codegen PRIVATE
         turing_db_s

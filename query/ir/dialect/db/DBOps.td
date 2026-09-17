@@ -565,6 +565,83 @@ def ScanInEdgesByLabelTgt : TuringOp<"scan_in_edges_by_label_tgt", [Pure, Declar
 }
 
 /**
+* ScanOutEdgesByLabelTgt
+*/
+def ScanOutEdgesByLabelTgt : TuringOp<"scan_out_edges_by_label_tgt", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+  let summary = "Produce every out-edge arriving at the nodes carrying every given label as four row-aligned columns";
+
+  let description = [{
+    The other endpoint's sibling of db.scan_out_edges_by_label_src: there the labels
+    constrain the node the hop leaves, here the one it arrives at, which is the edge's
+    target. It produces the edges whose target's label set is a superset of `labels`,
+    in the same four row-aligned columns:
+
+      %srcs, %eids, %etypes, %tgts = db.scan_out_edges_by_label_tgt(["Person"]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+
+    It is `MATCH (a)-->(b:Person)` read off the edge index rather than scanned and
+    filtered: the same edges a db.scan_edges keeps once a db.check_label_constraint
+    over its target column has dropped the rest. `srcids` holds the unconstrained end
+    and `tgtids` the labelled one. Those are the rows db.scan_in_edges_by_label_tgt
+    produces, since both read the index keyed by the target's label set; the two are
+    told apart by the hop the query wrote, not by what they emit.
+
+    The label list must not be empty: a label-free scan of every edge is
+    db.scan_edges.
+  }];
+
+  let arguments = (ins StrArrayAttr:$labels);
+
+  let results = (outs ColumnNodeIDs:$srcids,
+                      ColumnEdgeIDs:$eids,
+                      ColumnEdgeTypes:$etypes,
+                      ColumnNodeIDs:$tgtids);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $labels `)` attr-dict `:` qualified(type($srcids)) `,` qualified(type($eids)) `,`
+    qualified(type($etypes)) `,` qualified(type($tgtids))
+  }];
+}
+
+/**
+* ScanInEdgesByLabelSrc
+*/
+def ScanInEdgesByLabelSrc : TuringOp<"scan_in_edges_by_label_src", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+  let summary = "Produce every in-edge leaving the nodes carrying every given label as four row-aligned columns";
+
+  let description = [{
+    The other endpoint's sibling of db.scan_in_edges_by_label_tgt: there the labels
+    constrain the node the in-hop arrives at, here the one it leaves, which is the
+    edge's source. It produces the edges whose source's label set is a superset of
+    `labels`:
+
+      %srcs, %eids, %etypes, %tgts = db.scan_in_edges_by_label_src(["Person"]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+
+    It is `MATCH (a)<--(b:Person)` read off the edge index rather than scanned and
+    filtered: the same edges a db.scan_edges keeps once a db.check_label_constraint
+    over its source column has dropped the rest. `srcids` holds the labelled end and
+    `tgtids` the unconstrained one. Those are the rows db.scan_out_edges_by_label_src
+    produces, since both read the index keyed by the source's label set.
+
+    The label list must not be empty: a label-free scan of every edge is
+    db.scan_edges.
+  }];
+
+  let arguments = (ins StrArrayAttr:$labels);
+
+  let results = (outs ColumnNodeIDs:$srcids,
+                      ColumnEdgeIDs:$eids,
+                      ColumnEdgeTypes:$etypes,
+                      ColumnNodeIDs:$tgtids);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $labels `)` attr-dict `:` qualified(type($srcids)) `,` qualified(type($eids)) `,`
+    qualified(type($etypes)) `,` qualified(type($tgtids))
+  }];
+}
+
+/**
 * GetOutEdges
 */
 def GetOutEdges : TuringOp<"get_out_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {

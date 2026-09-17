@@ -214,6 +214,22 @@ LogicalResult ScanInEdgesByLabelTgt::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
+LogicalResult ScanOutEdgesByLabelTgt::inferReturnTypes(MLIRContext* context,
+                                                       std::optional<Location> location,
+                                                       ScanOutEdgesByLabelTgt::Adaptor adaptor,
+                                                       SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(getEdgeIteratorType(context, {}));
+    return success();
+}
+
+LogicalResult ScanInEdgesByLabelSrc::inferReturnTypes(MLIRContext* context,
+                                                      std::optional<Location> location,
+                                                      ScanInEdgesByLabelSrc::Adaptor adaptor,
+                                                      SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.push_back(getEdgeIteratorType(context, {}));
+    return success();
+}
+
 // An out-edges fetch produces one row of edge chunks per step, then one
 // filtered chunk per carried column, mirroring db.get_out_edges
 LogicalResult GetOutEdges::inferReturnTypes(MLIRContext* context,

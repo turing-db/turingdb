@@ -40,6 +40,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSESCANEDGESBYTYPE
 #define GEN_PASS_DEF_FUSESCANOUTEDGESBYLABEL
 #define GEN_PASS_DEF_FUSESCANINEDGESBYLABEL
+#define GEN_PASS_DEF_FUSESCANEDGESBYENDPOINTLABEL
 #define GEN_PASS_DEF_REUSEPROPERTYREADS
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
@@ -1295,6 +1296,125 @@ struct FuseScanInEdgesByLabel : public impl::FuseScanInEdgesByLabelBase<FuseScan
     }
 };
 
+// An edge scan whose rows are then cut down to the edges one endpoint of which carries a
+// set of labels: the by-label edge scan spelled the long way, since the index keyed by that
+// endpoint's label set holds exactly those edges and never builds the rows the filter goes
+// on to drop.
+struct EndpointLabelledEdgeScan {
+    ScanEdges _scan;
+    GetNodeLabelSet _labelSet;
+    CheckLabelConstraint _check;
+    ArrayAttr _labels;
+    bool _labelledTarget {false};
+};
+
+bool matchEndpointLabelledEdgeScan(FilterOp filter, EndpointLabelledEdgeScan& labelledScan) {
+    CheckLabelConstraint check = filter.getMask().getDefiningOp<CheckLabelConstraint>();
+    if (!check) {
+        return false;
+    }
+
+    GetNodeLabelSet labelSet = check.getLabelsetIds().getDefiningOp<GetNodeLabelSet>();
+    if (!labelSet) {
+        return false;
+    }
+
+    const Value labelledColumn = labelSet.getInputNodes();
+    ScanEdges scan = labelledColumn.getDefiningOp<ScanEdges>();
+    if (!scan) {
+        return false;
+    }
+
+    const bool labelledTarget = labelledColumn == scan.getTgtids();
+    const bool labelledSource = labelledColumn == scan.getSrcids();
+    if (!labelledTarget && !labelledSource) {
+        return false;
+    }
+
+    for (const Value column : filter.getColumnsToFilter()) {
+        if (column.getDefiningOp() != scan.getOperation()) {
+            return false;
+        }
+    }
+
+    Operation* const filterOp = filter.getOperation();
+    Operation* const labelSetOp = labelSet.getOperation();
+    for (const Value result : scan->getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            const bool readsTheChain = user == filterOp || user == labelSetOp;
+            if (!readsTheChain) {
+                return false;
+            }
+        }
+    }
+
+    const bool chainIsPrivate = labelSet.getResult().hasOneUse() && check.getResult().hasOneUse();
+    if (!chainIsPrivate) {
+        return false;
+    }
+
+    labelledScan = EndpointLabelledEdgeScan {._scan = scan,
+                                             ._labelSet = labelSet,
+                                             ._check = check,
+                                             ._labels = check.getLabels(),
+                                             ._labelledTarget = labelledTarget};
+
+    return true;
+}
+
+void fuseScanEdgesByEndpointLabel(FilterOp filter,
+                                  const EndpointLabelledEdgeScan& labelledScan,
+                                  mlir::OpBuilder& builder) {
+    ScanEdges scan = labelledScan._scan;
+    Operation* const scanOp = scan.getOperation();
+
+    builder.setInsertionPoint(scanOp);
+
+    // Both by-label scans declare the same four results in the same order as the plain
+    // scan, so the plain scan's map onto them one for one. Which of the two the labelled
+    // endpoint picks is the hop the query wrote: an out-hop arrives at its target, an
+    // in-hop leaves its source.
+    Operation* byLabelScan = nullptr;
+    if (labelledScan._labelledTarget) {
+        byLabelScan = builder.create<ScanOutEdgesByLabelTgt>(scan.getLoc(),
+                                                             scan.getSrcids().getType(),
+                                                             scan.getEids().getType(),
+                                                             scan.getEtypes().getType(),
+                                                             scan.getTgtids().getType(),
+                                                             labelledScan._labels);
+    } else {
+        byLabelScan = builder.create<ScanInEdgesByLabelSrc>(scan.getLoc(),
+                                                            scan.getSrcids().getType(),
+                                                            scan.getEids().getType(),
+                                                            scan.getEtypes().getType(),
+                                                            scan.getTgtids().getType(),
+                                                            labelledScan._labels);
+    }
+
+    scanOp->replaceAllUsesWith(byLabelScan);
+
+    const Operation::operand_range columns = filter.getColumnsToFilter();
+    const mlir::ResultRange filtered = filter.getFilteredColumns();
+    for (size_t index = 0; index < filtered.size(); index++) {
+        filtered[index].replaceAllUsesWith(columns[index]);
+    }
+
+    filter.erase();
+    eraseIfUnused(labelledScan._check);
+    eraseIfUnused(labelledScan._labelSet);
+    scanOp->erase();
+}
+
+struct FuseScanEdgesByEndpointLabel : public impl::FuseScanEdgesByEndpointLabelBase<FuseScanEdgesByEndpointLabel> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+        runFilterPass<EndpointLabelledEdgeScan>(getOperation(),
+                                                matchEndpointLabelledEdgeScan,
+                                                fuseScanEdgesByEndpointLabel,
+                                                builder);
+    }
+};
+
 // Where an op's carry set sits: the carried operands start at _operandOffset and each comes
 // back as the result at the same position from _resultOffset.
 struct CarrySetLayout {
@@ -2364,6 +2484,23 @@ size_t multiplySaturating(size_t rows, size_t factor) {
     return rows * factor;
 }
 
+// The labels of whichever of the four by-label edge scans this is, and null for any other
+// op. They all read the edges hanging off the nodes the labels select, so they are counted
+// the same way whichever endpoint carries them.
+ArrayAttr byLabelEdgeScanLabels(Operation* op) {
+    if (ScanOutEdgesByLabelSrc byLabel = dyn_cast<ScanOutEdgesByLabelSrc>(op)) {
+        return byLabel.getLabels();
+    } else if (ScanInEdgesByLabelTgt byLabel = dyn_cast<ScanInEdgesByLabelTgt>(op)) {
+        return byLabel.getLabels();
+    } else if (ScanOutEdgesByLabelTgt byLabel = dyn_cast<ScanOutEdgesByLabelTgt>(op)) {
+        return byLabel.getLabels();
+    } else if (ScanInEdgesByLabelSrc byLabel = dyn_cast<ScanInEdgesByLabelSrc>(op)) {
+        return byLabel.getLabels();
+    }
+
+    return nullptr;
+}
+
 // The rows an op seeds a factor with, and nothing at all when it seeds none - a fetch, a
 // filter or a hop reads a column rather than making one. A listed set of IDs is its own
 // count, a literal list one row per element, a by-label scan what the graph holds under
@@ -2383,14 +2520,12 @@ std::optional<size_t> estimateSourceRows(Operation* op,
         return estimation.estimateNodeCount(labels);
     } else if (isa<ScanNodes, ScanNodesByPropertyValue>(op)) {
         return estimation.estimateNodeCount(::db::LabelSet {});
-    } else if (isa<ScanOutEdgesByLabelSrc, ScanInEdgesByLabelTgt>(op)) {
+    } else if (const ArrayAttr scanLabels = byLabelEdgeScanLabels(op)) {
         const size_t nodeCount = estimation.estimateNodeCount(::db::LabelSet {});
         if (nodeCount == 0) {
             return 0;
         }
 
-        const ArrayAttr scanLabels = isa<ScanOutEdgesByLabelSrc>(op) ? cast<ScanOutEdgesByLabelSrc>(op).getLabels()
-                                                                     : cast<ScanInEdgesByLabelTgt>(op).getLabels();
         ::db::LabelSet labels;
         collectScanLabels(scanLabels, metadata, labels);
 

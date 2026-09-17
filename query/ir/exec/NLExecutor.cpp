@@ -4901,7 +4901,7 @@ void NLExecutor::runScanEdgesByTypeLoop(NLExecutionContext* context, NLFunctionD
     runScanLoopSteps(context, &chunkWriter, &pendingEdges, sources, loopBody, limit);
 }
 
-void NLExecutor::runScanOutEdgesByLabelSrcLoop(NLExecutionContext* context, NLFunctionData* data) {
+void NLExecutor::runScanEdgesBySourceLabelLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLScanEdgesByLabelLoopData* loopData = static_cast<NLScanEdgesByLabelLoopData*>(data);
 
     // A requested label was absent from the schema, so no node carries the full
@@ -4931,7 +4931,7 @@ void NLExecutor::runScanOutEdgesByLabelSrcLoop(NLExecutionContext* context, NLFu
     runScanLoopSteps(context, &chunkWriter, &pendingEdges, sources, loopBody, limit);
 }
 
-void NLExecutor::runScanInEdgesByLabelTgtLoop(NLExecutionContext* context, NLFunctionData* data) {
+void NLExecutor::runScanEdgesByTargetLabelLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLScanEdgesByLabelLoopData* loopData = static_cast<NLScanEdgesByLabelLoopData*>(data);
 
     if (!loopData->isMatchable()) {
@@ -4945,10 +4945,10 @@ void NLExecutor::runScanInEdgesByLabelTgtLoop(NLExecutionContext* context, NLFun
 
     const LabelSetHandle labelset(loopData->getLabelSet());
 
-    // The in-edge writer names its two node columns after the walk rather than after the
-    // edge: the labelled end it hangs each edge off goes to setSrcIDs, and for an in-edge
-    // that end is the edge's target. The chunks hold the edge as the graph stores it, the
-    // way nl.get_in_edges fills them, so the two are crossed here.
+    // The writer names its two node columns after the walk rather than after the edge:
+    // the labelled end it hangs each edge off goes to setSrcIDs, and here that end is the
+    // edge's target. The chunks hold the edge as the graph stores it, the way
+    // nl.get_in_edges fills them, so the two are crossed here.
     ScanInEdgesByTargetLabelChunkWriter chunkWriter(*context->getView(), labelset);
     chunkWriter.setSrcIDs(loopData->getTargets());
     chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
