@@ -117,8 +117,8 @@ private:
     void publishSubqueryReturn(const CallSubqueryStmt* subquery);
 
     // Adds to a barrier of a subquery body the imports it does not project, so what the
-    // scope clause named stays readable below it
-    void carrySubqueryImports(Projection* projection) const;
+    // scope clause named stays readable below it. Answers whether it added one.
+    bool carrySubqueryImports(Projection* projection, bool isAggregate, bool hasGroupingKeys) const;
 
     // Rejects the item that publishes an imported name under another variable
     void throwOnRedeclaredImport(const Projection* projection,

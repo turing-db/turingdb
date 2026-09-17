@@ -346,7 +346,6 @@ void CypherAnalyzer::analyze(const WithStmt* withSt) {
 
     analyzeWithAliases(projection);
     analyzeProjection(projection, withSt);
-    carrySubqueryImports(projection);
     analyzeWithOrderBy(projection);
 
     openWithScope(projection);
@@ -551,14 +550,18 @@ void CypherAnalyzer::importThroughLeadingWith(CallSubqueryStmt* subquery) const 
 // A WITH inside a subquery body publishes the imports beside its own items, so a clause
 // below it reads them as the clauses above it did. They ride the barrier as the items do:
 // a cut keeps them with the rows it keeps, and a dedup reads them with the rest of the row.
-void CypherAnalyzer::carrySubqueryImports(Projection* projection) const {
+bool CypherAnalyzer::carrySubqueryImports(Projection* projection,
+                                          bool isAggregate,
+                                          bool hasGroupingKeys) const {
     // A reduction over no grouping key answers for the rows it read with a single row,
     // even when it read none. Carrying an import would key it, and a keyed reduction over
     // no row has no group to report, so the import stops at such a barrier.
-    const bool keylessAggregate = projection->isAggregate() && !projection->hasGroupingKeys();
+    const bool keylessAggregate = isAggregate && !hasGroupingKeys;
     if (keylessAggregate) {
-        return;
+        return false;
     }
+
+    bool carried = false;
 
     for (const std::string_view import : _subqueryImports) {
         VarDecl* decl = _ctxt->getDecl(import);
@@ -573,7 +576,11 @@ void CypherAnalyzer::carrySubqueryImports(Projection* projection) const {
 
         projection->pushFrontDecl(decl);
         projection->setName(decl, import);
+
+        carried = true;
     }
+
+    return carried;
 }
 
 void CypherAnalyzer::throwOnRedeclaredImport(const Projection* projection,
@@ -771,6 +778,10 @@ void CypherAnalyzer::analyzeProjection(Projection* projection, const Stmt* claus
         if (projection->items().empty()) {
             throwError("Cannot use '*' when there are no variables in scope.", clause);
         }
+    }
+
+    if (clause->getKind() == Stmt::Kind::WITH) {
+        hasGroupingKeys |= carrySubqueryImports(projection, isAggregate, hasGroupingKeys);
     }
 
     if (projection->isDistinct()) {

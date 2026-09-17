@@ -2904,3 +2904,15 @@ target_link_libraries(test_query_ir_call_subquery_limit_below PRIVATE turing_ir_
 
 # What a CALL before a read-only subquery body yielded is the query's result still.
 add_call_v3_test(test_query_ir_call_subquery_yielded_output CallSubqueryYieldedOutputTest.cpp)
+
+# A barrier of a subquery body ordered by an import the CALL carries into it.
+add_turing_test(test_query_ir_call_subquery_import_order_by CallSubqueryImportOrderByTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_import_order_by PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_call_subquery_import_order_by PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
