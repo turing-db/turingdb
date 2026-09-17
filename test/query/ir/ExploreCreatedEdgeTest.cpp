@@ -180,6 +180,40 @@ TEST_F(ExploreCreatedEdgeTest, searchesDistinctEndsFromACreatedSeedWithoutEdges)
     EXPECT_EQ(sink.getRows(), expected);
 }
 
+// A walk driven by a hop runs once per chunk the hop emits, and every run reads the one
+// index the program shares.
+TEST_F(ExploreCreatedEdgeTest, walksNestedInAHopOverCreatedEdges) {
+    StringRowSink sink;
+    runWrite("CREATE (a:Person {name: 'Ana'})-[:MENTORS]->(b:Person {name: 'Bo'})"
+             "-[:MENTORS]->(c:Person {name: 'Cy'}) "
+             "WITH a MATCH (a)-[:MENTORS]->(x) MATCH (x)-[e:MENTORS]->+(m) RETURN m.name",
+             sink);
+
+    const Rows expected {{"Cy"}};
+    EXPECT_EQ(sink.getRows(), expected);
+}
+
+// The walk runs once per row of the relation driving it, and the edges it reads are indexed
+// once for the program: a run that indexed them again would walk each of them twice.
+TEST_F(ExploreCreatedEdgeTest, walksACreatedEdgeOnceInEveryRunOfTheWalk) {
+    StringRowSink sink;
+    runWrite("CREATE (a:Person {name: 'Ana'})-[:MENTORS]->(b:Person {name: 'Bo'}) "
+             "WITH a MATCH (n:Person) MATCH (a)-[e:MENTORS]->+(m) RETURN n.name, m.name",
+             sink);
+
+    Rows rows;
+    sink.sortedRows(rows);
+
+    // The eight people of the fixture and the two the CREATE wrote, each reaching Bo once
+    ASSERT_EQ(rows.size(), 10u);
+
+    const auto reachesBoOnce = [](const StringRowSink::Row& row) {
+        return row[1] == "Bo";
+    };
+    EXPECT_TRUE(std::ranges::all_of(rows, reachesBoOnce));
+    EXPECT_EQ(std::ranges::adjacent_find(rows), rows.end());
+}
+
 // size(e) counts the pending edges of a walk the way it counts committed ones.
 TEST_F(ExploreCreatedEdgeTest, countsTheHopsOverCreatedEdges) {
     StringRowSink sink;

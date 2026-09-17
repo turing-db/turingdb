@@ -102,6 +102,11 @@ void PathExplorator::setWalkerCount(size_t walkerCount) {
     }
 }
 
+void PathExplorator::setPendingAdjacency(const PendingAdjacency* adjacency, size_t edgeIDBound) {
+    _pendingAdjacency = adjacency;
+    _pendingEdgeIDBound = edgeIDBound;
+}
+
 bool PathExplorator::isPendingNode(NodeID node) const {
     return node.getValue() >= _parts.getAllocatedNodeCount();
 }
@@ -385,11 +390,11 @@ void PathExplorator::generatePendingCandidates(Walker& walker, NodeID node) {
     }
 
     if (_direction != PathExplorationDir::BACKWARD) {
-        generateCandidates(walker, _pendingAdjacency->outOf(node));
+        generateCandidates(walker, _pendingAdjacency->outOf(node, _pendingEdgeIDBound));
     }
 
     if (_direction != PathExplorationDir::FORWARD) {
-        generateCandidates(walker, _pendingAdjacency->into(node));
+        generateCandidates(walker, _pendingAdjacency->into(node, _pendingEdgeIDBound));
     }
 }
 
@@ -693,11 +698,11 @@ void PathExplorator::appendPendingReachCandidates(NodeID node) {
     }
 
     if (_direction != PathExplorationDir::BACKWARD) {
-        appendReachCandidates(_pendingAdjacency->outOf(node));
+        appendReachCandidates(_pendingAdjacency->outOf(node, _pendingEdgeIDBound));
     }
 
     if (_direction != PathExplorationDir::FORWARD) {
-        appendReachCandidates(_pendingAdjacency->into(node));
+        appendReachCandidates(_pendingAdjacency->into(node, _pendingEdgeIDBound));
     }
 }
 

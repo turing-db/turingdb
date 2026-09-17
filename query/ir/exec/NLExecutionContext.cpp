@@ -6,6 +6,7 @@
 #include "VectorDatabase.h"
 
 #include "versioning/CommitWriteBuffer.h"
+#include "versioning/PendingAdjacency.h"
 
 #include "NLPendingEdges.h"
 #include "NLSystemContext.h"
@@ -26,7 +27,8 @@ NLExecutionContext::NLExecutionContext(const GraphView* view,
     _firstQueryNode(writeBuffer ? writeBuffer->numPendingNodes() : 0),
     _firstQueryEdge(writeBuffer ? writeBuffer->numPendingEdges() : 0),
     _writtenValues(std::make_unique<NLWrittenValues>()),
-    _pendingEdges(std::make_unique<NLPendingEdgeIndex>())
+    _pendingEdges(std::make_unique<NLPendingEdgeIndex>()),
+    _pendingAdjacency(std::make_unique<PendingAdjacency>())
 {
 }
 
