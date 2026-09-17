@@ -32,25 +32,33 @@ inline mlir::Type literalElementType(mlir::Attribute element) {
 // null when they disagree - or when any of them carries none at all. An empty list has no
 // type to read either.
 //
+// A null element names no type of its own, so it agrees with whatever the others carry and
+// leaves the list nullable rather than type-erased: [1, null, 3] is a list of integers. A
+// list of nothing but nulls names no type at all.
+//
 // A null verdict is the type-erased form, a list of tagged scalars. This is what both
 // dialects' constant ops read to infer the column a list literal produces.
 inline mlir::Type sharedLiteralElementType(mlir::ArrayAttr elements) {
-    if (elements.empty()) {
-        return nullptr;
-    }
-
-    const mlir::Type firstType = literalElementType(elements[0]);
-    if (!firstType) {
-        return nullptr;
-    }
+    mlir::Type sharedType;
 
     for (const mlir::Attribute element : elements) {
-        if (literalElementType(element) != firstType) {
+        if (mlir::isa<mlir::UnitAttr>(element)) {
+            continue;
+        }
+
+        const mlir::Type elementType = literalElementType(element);
+        if (!elementType) {
+            return nullptr;
+        }
+
+        if (!sharedType) {
+            sharedType = elementType;
+        } else if (sharedType != elementType) {
             return nullptr;
         }
     }
 
-    return firstType;
+    return sharedType;
 }
 
 }

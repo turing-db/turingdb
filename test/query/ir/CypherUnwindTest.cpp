@@ -650,11 +650,12 @@ TEST_F(CypherUnwindTest, filtersOnHeterogeneousUnwoundVariableOnEitherSide) {
     expectRows("UNWIND [32, null] AS l MATCH (n) WHERE l = n.age RETURN n.name", expected);
 }
 
-TEST_F(CypherUnwindTest, filtersOnHeterogeneousUnwoundVariableAcrossNumericTags) {
-    // A float cell equals an integer property of the same value, as one number equals
-    // the other in Cypher.
-    const Rows expected = {{"Remy"}, {"Adam"}};
-    expectRows("UNWIND [32.0, null] AS l MATCH (n) WHERE n.age = l RETURN n.name", expected);
+TEST_F(CypherUnwindTest, rejectsAnIntegerPropertyAgainstAnUnwoundFloat) {
+    // The null names no type, so the list is a list of doubles and l is a double - the
+    // pairing the analyzer turns away wherever it meets it, as it does for [32.0, 1.5].
+    Rows rows;
+    EXPECT_THROW(runQuery("UNWIND [32.0, null] AS l MATCH (n) WHERE n.age = l RETURN n.name", rows),
+                 TuringException);
 }
 
 TEST_F(CypherUnwindTest, filtersOnHeterogeneousUnwoundVariableOfAnotherType) {

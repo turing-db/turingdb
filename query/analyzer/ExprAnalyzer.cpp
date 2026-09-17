@@ -76,32 +76,45 @@ bool namesAListElementType(EvaluatedType type) {
 // The shape of the list these elements make: depth 1 over the one type they share, or
 // one level deeper than the lists they are. Elements that share no type - an empty list,
 // a mix of types, lists of differing shape - leave the leaf Invalid, which is what makes
-// the list hand out tagged scalars.
+// the list hand out tagged scalars. A null names no type of its own, so it agrees with
+// every element: [1, null, 3] is a list of integers with a null in it.
 ListShape sharedListShape(std::span<Expr* const> elements) {
-    if (elements.empty()) {
+    const Expr* first = nullptr;
+    for (Expr* const element : elements) {
+        if (element->getType() != EvaluatedType::Null) {
+            first = element;
+            break;
+        }
+    }
+
+    if (!first) {
         return ListShape(EvaluatedType::Invalid, 1);
     }
 
-    const auto differingType = [](const Expr* a, const Expr* b) {
-        return a->getType() != b->getType();
-    };
-
-    const bool homogeneous = std::ranges::adjacent_find(elements, differingType) == end(elements);
-    if (!homogeneous) {
-        return ListShape(EvaluatedType::Invalid, 1);
-    }
-
-    const Expr* first = elements.front();
     const EvaluatedType shared = first->getType();
 
+    const auto agreesWithShared = [shared](const Expr* element) {
+        const EvaluatedType type = element->getType();
+        return type == EvaluatedType::Null || type == shared;
+    };
+
+    if (!std::ranges::all_of(elements, agreesWithShared)) {
+        return ListShape(EvaluatedType::Invalid, 1);
+    }
+
+    const ListShape& firstShape = first->getListShape();
+
     if (shared == EvaluatedType::List) {
-        const auto differingShape = [](const Expr* a, const Expr* b) {
-            const ListShape& left = a->getListShape();
-            const ListShape& right = b->getListShape();
-            return left.getDepth() != right.getDepth() || left.getLeafType() != right.getLeafType();
+        const auto agreesWithFirstShape = [&firstShape](const Expr* element) {
+            if (element->getType() == EvaluatedType::Null) {
+                return true;
+            }
+
+            const ListShape& shape = element->getListShape();
+            return shape.getDepth() == firstShape.getDepth() && shape.getLeafType() == firstShape.getLeafType();
         };
 
-        if (std::ranges::adjacent_find(elements, differingShape) != end(elements)) {
+        if (!std::ranges::all_of(elements, agreesWithFirstShape)) {
             return ListShape(EvaluatedType::Invalid, 1);
         }
     }
@@ -110,7 +123,7 @@ ListShape sharedListShape(std::span<Expr* const> elements) {
         return ListShape(EvaluatedType::Invalid, 1);
     }
 
-    return ListShape::collecting(shared, first->getListShape());
+    return ListShape::collecting(shared, firstShape);
 }
 
 // The shape of the list a concatenation makes: the one both sides carry, or a list of

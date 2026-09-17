@@ -148,24 +148,29 @@ private:
     std::vector<uint64_t> _values;
 };
 
-// Reads the (element, tally) rows a count grouped by an index read emits. A grouped
-// aggregate emits its groups in first-seen order, which the language does not promise, so
-// the rows are compared sorted.
+// Reads the (element, tally) rows a count grouped by an index read emits, from the integer
+// key column or the tagged one, as ElementSink reads its own. A grouped aggregate emits its
+// groups in first-seen order, which the language does not promise, so the rows are compared
+// sorted.
 class GroupedElementCountSink : public NLOutputSink {
 public:
     void appendChunks(std::span<const Column* const> chunks, size_t offset, size_t rowCount) override {
         ASSERT_EQ(chunks.size(), 2u);
 
-        const auto* keys = dynamic_cast<const ColumnOptVector<ListElementView>*>(chunks[0]);
+        const auto* integerKeys = dynamic_cast<const ColumnOptVector<types::Int64::Primitive>*>(chunks[0]);
+        const auto* cellKeys = dynamic_cast<const ColumnOptVector<ListElementView>*>(chunks[0]);
         const auto* counts = dynamic_cast<const ColumnVector<uint64_t>*>(chunks[1]);
-        ASSERT_NE(keys, nullptr);
+        ASSERT_TRUE(integerKeys || cellKeys);
         ASSERT_NE(counts, nullptr);
 
-        const std::vector<std::optional<ListElementView>>& keyRaw = keys->getRaw();
         const std::vector<uint64_t>& countRaw = counts->getRaw();
 
         for (size_t rowIndex = offset; rowIndex < offset + rowCount; rowIndex++) {
-            _rows.emplace_back(elementAsInteger(keyRaw[rowIndex]), countRaw[rowIndex]);
+            const std::optional<types::Int64::Primitive> key = integerKeys
+                ? integerKeys->getRaw()[rowIndex]
+                : elementAsInteger(cellKeys->getRaw()[rowIndex]);
+
+            _rows.emplace_back(key, countRaw[rowIndex]);
         }
     }
 
