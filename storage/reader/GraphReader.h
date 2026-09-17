@@ -11,12 +11,12 @@
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/ScanEdgesIterator.h"
 #include "iterators/ScanEdgePropertiesIterator.h"
-#include "iterators/ScanInEdgesByLabelIterator.h"
+#include "iterators/ScanInEdgesByTargetLabelIterator.h"
 #include "iterators/ScanNodePropertiesIterator.h"
 #include "iterators/ScanNodePropertiesByLabelIterator.h"
 #include "iterators/ScanNodesByLabelIterator.h"
 #include "iterators/ScanNodesIterator.h"
-#include "iterators/ScanOutEdgesByLabelIterator.h"
+#include "iterators/ScanOutEdgesBySourceLabelIterator.h"
 #include "iterators/GetEdgeTypesIterator.h"
 #include "iterators/GetNodeLabelSetIterator.h"
 #include "iterators/MatchLabelSetIterator.h"
@@ -100,8 +100,8 @@ public:
     [[nodiscard]] ScanEdgesRange scanOutEdges() const;
     [[nodiscard]] ScanNodesRange scanNodes() const;
     [[nodiscard]] ScanNodesByLabelRange scanNodesByLabel(const LabelSetHandle& labelset) const;
-    [[nodiscard]] ScanOutEdgesByLabelRange scanOutEdgesByLabel(const LabelSetHandle& labelset) const;
-    [[nodiscard]] ScanInEdgesByLabelRange scanInEdgesByLabel(const LabelSetHandle& labelset) const;
+    [[nodiscard]] ScanOutEdgesBySourceLabelRange scanOutEdgesBySourceLabel(const LabelSetHandle& labelset) const;
+    [[nodiscard]] ScanInEdgesByTargetLabelRange scanInEdgesByTargetLabel(const LabelSetHandle& labelset) const;
     [[nodiscard]] MatchLabelSetIterator matchLabelSets(const LabelSetHandle& labelSet) const;
     [[nodiscard]] bool nodeHasProperty(PropertyTypeID ptID, NodeID nodeID) const;
     [[nodiscard]] bool graphHasNode(NodeID nodeID) const;

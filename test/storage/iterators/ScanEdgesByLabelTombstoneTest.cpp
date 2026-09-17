@@ -10,8 +10,8 @@
 #include "columns/ColumnEdgeTypes.h"
 #include "columns/ColumnIDs.h"
 #include "iterators/ChunkConfig.h"
-#include "iterators/ScanInEdgesByLabelIterator.h"
-#include "iterators/ScanOutEdgesByLabelIterator.h"
+#include "iterators/ScanInEdgesByTargetLabelIterator.h"
+#include "iterators/ScanOutEdgesBySourceLabelIterator.h"
 #include "metadata/GraphMetadata.h"
 #include "metadata/LabelSet.h"
 #include "reader/GraphReader.h"
@@ -87,7 +87,7 @@ protected:
         const GraphReader reader = transaction.readGraph();
 
         ScannedChunk chunk;
-        ScanOutEdgesByLabelChunkWriter chunkWriter(reader.getView(), LabelSetHandle(labelset));
+        ScanOutEdgesBySourceLabelChunkWriter chunkWriter(reader.getView(), LabelSetHandle(labelset));
         fillChunk(chunkWriter, chunk);
 
         for (size_t row = 0; row < chunk._edgeIDs.size(); row++) {
@@ -121,7 +121,7 @@ TEST_F(ScanEdgesByLabelTombstoneTest, theOutScanDropsADeletedEdgeFromEveryColumn
     const GraphReader reader = transaction.readGraph();
 
     ScannedChunk chunk;
-    ScanOutEdgesByLabelChunkWriter chunkWriter(reader.getView(), LabelSetHandle(labelset));
+    ScanOutEdgesBySourceLabelChunkWriter chunkWriter(reader.getView(), LabelSetHandle(labelset));
     fillChunk(chunkWriter, chunk);
 
     EXPECT_FALSE(holdsEdge(chunk._edgeIDs, deleted));
@@ -141,7 +141,7 @@ TEST_F(ScanEdgesByLabelTombstoneTest, theInScanDropsADeletedEdgeFromEveryColumn)
     const GraphReader reader = transaction.readGraph();
 
     ScannedChunk chunk;
-    ScanInEdgesByLabelChunkWriter chunkWriter(reader.getView(), LabelSetHandle(labelset));
+    ScanInEdgesByTargetLabelChunkWriter chunkWriter(reader.getView(), LabelSetHandle(labelset));
     fillChunk(chunkWriter, chunk);
 
     EXPECT_FALSE(holdsEdge(chunk._edgeIDs, deleted));

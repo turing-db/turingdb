@@ -1284,14 +1284,14 @@ void runScanEdgesByLabelPass(Operation* root, mlir::OpBuilder& builder) {
 struct FuseScanOutEdgesByLabel : public impl::FuseScanOutEdgesByLabelBase<FuseScanOutEdgesByLabel> {
     void runOnOperation() override {
         mlir::OpBuilder builder(&getContext());
-        runScanEdgesByLabelPass<ScanOutEdgesByLabel, GetOutEdges>(getOperation(), builder);
+        runScanEdgesByLabelPass<ScanOutEdgesByLabelSrc, GetOutEdges>(getOperation(), builder);
     }
 };
 
 struct FuseScanInEdgesByLabel : public impl::FuseScanInEdgesByLabelBase<FuseScanInEdgesByLabel> {
     void runOnOperation() override {
         mlir::OpBuilder builder(&getContext());
-        runScanEdgesByLabelPass<ScanInEdgesByLabel, GetInEdges>(getOperation(), builder);
+        runScanEdgesByLabelPass<ScanInEdgesByLabelTgt, GetInEdges>(getOperation(), builder);
     }
 };
 
@@ -2383,14 +2383,14 @@ std::optional<size_t> estimateSourceRows(Operation* op,
         return estimation.estimateNodeCount(labels);
     } else if (isa<ScanNodes, ScanNodesByPropertyValue>(op)) {
         return estimation.estimateNodeCount(::db::LabelSet {});
-    } else if (isa<ScanOutEdgesByLabel, ScanInEdgesByLabel>(op)) {
+    } else if (isa<ScanOutEdgesByLabelSrc, ScanInEdgesByLabelTgt>(op)) {
         const size_t nodeCount = estimation.estimateNodeCount(::db::LabelSet {});
         if (nodeCount == 0) {
             return 0;
         }
 
-        const ArrayAttr scanLabels = isa<ScanOutEdgesByLabel>(op) ? cast<ScanOutEdgesByLabel>(op).getLabels()
-                                                                  : cast<ScanInEdgesByLabel>(op).getLabels();
+        const ArrayAttr scanLabels = isa<ScanOutEdgesByLabelSrc>(op) ? cast<ScanOutEdgesByLabelSrc>(op).getLabels()
+                                                                     : cast<ScanInEdgesByLabelTgt>(op).getLabels();
         ::db::LabelSet labels;
         collectScanLabels(scanLabels, metadata, labels);
 

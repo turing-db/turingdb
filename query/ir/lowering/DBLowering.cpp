@@ -685,8 +685,8 @@ bool opensSourceLoop(mlir::Operation* operation) {
                      mlir::db::ScanNodesByPropertyValue,
                      mlir::db::ScanEdges,
                      mlir::db::ScanEdgesByType,
-                     mlir::db::ScanOutEdgesByLabel,
-                     mlir::db::ScanInEdgesByLabel,
+                     mlir::db::ScanOutEdgesByLabelSrc,
+                     mlir::db::ScanInEdgesByLabelTgt,
                      mlir::db::GetOutEdges,
                      mlir::db::GetInEdges,
                      mlir::db::GetEdges,
@@ -890,10 +890,10 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerScanEdges(scanEdges);
     } else if (mlir::db::ScanEdgesByType scanEdgesByType = mlir::dyn_cast<mlir::db::ScanEdgesByType>(operation)) {
         lowerScanEdgesByType(scanEdgesByType);
-    } else if (mlir::db::ScanOutEdgesByLabel scanOutEdgesByLabel = mlir::dyn_cast<mlir::db::ScanOutEdgesByLabel>(operation)) {
-        lowerScanOutEdgesByLabel(scanOutEdgesByLabel);
-    } else if (mlir::db::ScanInEdgesByLabel scanInEdgesByLabel = mlir::dyn_cast<mlir::db::ScanInEdgesByLabel>(operation)) {
-        lowerScanInEdgesByLabel(scanInEdgesByLabel);
+    } else if (mlir::db::ScanOutEdgesByLabelSrc scanOutEdgesByLabelSrc = mlir::dyn_cast<mlir::db::ScanOutEdgesByLabelSrc>(operation)) {
+        lowerScanOutEdgesByLabelSrc(scanOutEdgesByLabelSrc);
+    } else if (mlir::db::ScanInEdgesByLabelTgt scanInEdgesByLabelTgt = mlir::dyn_cast<mlir::db::ScanInEdgesByLabelTgt>(operation)) {
+        lowerScanInEdgesByLabelTgt(scanInEdgesByLabelTgt);
     } else if (mlir::db::GetOutEdges getOutEdges = mlir::dyn_cast<mlir::db::GetOutEdges>(operation)) {
         lowerGetOutEdges(getOutEdges);
     } else if (mlir::db::GetInEdges getInEdges = mlir::dyn_cast<mlir::db::GetInEdges>(operation)) {
@@ -1356,25 +1356,25 @@ void DBLowering::lowerScanEdgesByType(mlir::db::ScanEdgesByType scanEdgesByType)
     buildLoopForSource(edges.getResult(), scanEdgesByType.getOperation());
 }
 
-void DBLowering::lowerScanOutEdgesByLabel(mlir::db::ScanOutEdgesByLabel scanOutEdgesByLabel) {
+void DBLowering::lowerScanOutEdgesByLabelSrc(mlir::db::ScanOutEdgesByLabelSrc scanOutEdgesByLabelSrc) {
     // The by-label sibling of lowerScanEdges: same placement at the top of the root
     // block, with the label list forwarded as-is to the nl op - translation resolves
     // the names against the schema, as it does for nl.scan_nodes_by_label.
     setInsertionInto(_rootBlock);
 
-    nl::ScanOutEdgesByLabel edges = _builder.create<nl::ScanOutEdgesByLabel>(_builder.getUnknownLoc(),
-                                                                             scanOutEdgesByLabel.getLabelsAttr());
-    buildLoopForSource(edges.getResult(), scanOutEdgesByLabel.getOperation());
+    nl::ScanOutEdgesByLabelSrc edges = _builder.create<nl::ScanOutEdgesByLabelSrc>(_builder.getUnknownLoc(),
+                                                                                   scanOutEdgesByLabelSrc.getLabelsAttr());
+    buildLoopForSource(edges.getResult(), scanOutEdgesByLabelSrc.getOperation());
 }
 
-void DBLowering::lowerScanInEdgesByLabel(mlir::db::ScanInEdgesByLabel scanInEdgesByLabel) {
-    // The reverse-direction sibling of lowerScanOutEdgesByLabel, placed and forwarded the
-    // same way.
+void DBLowering::lowerScanInEdgesByLabelTgt(mlir::db::ScanInEdgesByLabelTgt scanInEdgesByLabelTgt) {
+    // The reverse-direction sibling of lowerScanOutEdgesByLabelSrc, placed and forwarded
+    // the same way.
     setInsertionInto(_rootBlock);
 
-    nl::ScanInEdgesByLabel edges = _builder.create<nl::ScanInEdgesByLabel>(_builder.getUnknownLoc(),
-                                                                           scanInEdgesByLabel.getLabelsAttr());
-    buildLoopForSource(edges.getResult(), scanInEdgesByLabel.getOperation());
+    nl::ScanInEdgesByLabelTgt edges = _builder.create<nl::ScanInEdgesByLabelTgt>(_builder.getUnknownLoc(),
+                                                                                 scanInEdgesByLabelTgt.getLabelsAttr());
+    buildLoopForSource(edges.getResult(), scanInEdgesByLabelTgt.getOperation());
 }
 
 void DBLowering::lowerGetOutEdges(mlir::db::GetOutEdges getOutEdges) {

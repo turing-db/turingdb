@@ -12,11 +12,11 @@
 
 namespace db {
 
-class ScanOutEdgesByLabelIterator : public Iterator {
+class ScanOutEdgesBySourceLabelIterator : public Iterator {
 public:
-    ScanOutEdgesByLabelIterator() = default;
-    ScanOutEdgesByLabelIterator(const GraphView& view, const LabelSetHandle& labelset);
-    ~ScanOutEdgesByLabelIterator() override;
+    ScanOutEdgesBySourceLabelIterator() = default;
+    ScanOutEdgesBySourceLabelIterator(const GraphView& view, const LabelSetHandle& labelset);
+    ~ScanOutEdgesBySourceLabelIterator() override;
 
     void reset() {
         Iterator::reset();
@@ -29,7 +29,7 @@ public:
         return *_edgeIt;
     }
 
-    ScanOutEdgesByLabelIterator& operator++() {
+    ScanOutEdgesBySourceLabelIterator& operator++() {
         next();
         return *this;
     }
@@ -54,10 +54,10 @@ protected:
     void nextValid();
 };
 
-class ScanOutEdgesByLabelChunkWriter : public ScanOutEdgesByLabelIterator {
+class ScanOutEdgesBySourceLabelChunkWriter : public ScanOutEdgesBySourceLabelIterator {
 public:
-    ScanOutEdgesByLabelChunkWriter();
-    ScanOutEdgesByLabelChunkWriter(const GraphView& view, const LabelSetHandle& labelset);
+    ScanOutEdgesBySourceLabelChunkWriter();
+    ScanOutEdgesBySourceLabelChunkWriter(const GraphView& view, const LabelSetHandle& labelset);
 
     void fill(size_t maxCount);
 
@@ -77,19 +77,19 @@ private:
     void filterTombstones();
 };
 
-struct ScanOutEdgesByLabelRange {
+struct ScanOutEdgesBySourceLabelRange {
     GraphView _view;
     LabelSetHandle _labelset;
 
-    ScanOutEdgesByLabelIterator begin() const { return {_view, _labelset}; }
+    ScanOutEdgesBySourceLabelIterator begin() const { return {_view, _labelset}; }
     DataPartIterator end() const { return PartIterator(_view).getEndIterator(); }
-    ScanOutEdgesByLabelChunkWriter chunkWriter() const { return ScanOutEdgesByLabelChunkWriter {_view, _labelset}; }
+    ScanOutEdgesBySourceLabelChunkWriter chunkWriter() const { return ScanOutEdgesBySourceLabelChunkWriter {_view, _labelset}; }
 };
 
-static_assert(SrcIDsChunkWriter<ScanOutEdgesByLabelChunkWriter>);
-static_assert(EdgeIDsChunkWriter<ScanOutEdgesByLabelChunkWriter>);
-static_assert(TgtIDsChunkWriter<ScanOutEdgesByLabelChunkWriter>);
-static_assert(EdgeTypesChunkWriter<ScanOutEdgesByLabelChunkWriter>);
+static_assert(SrcIDsChunkWriter<ScanOutEdgesBySourceLabelChunkWriter>);
+static_assert(EdgeIDsChunkWriter<ScanOutEdgesBySourceLabelChunkWriter>);
+static_assert(TgtIDsChunkWriter<ScanOutEdgesBySourceLabelChunkWriter>);
+static_assert(EdgeTypesChunkWriter<ScanOutEdgesBySourceLabelChunkWriter>);
 
 }
 

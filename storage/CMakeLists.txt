@@ -50,7 +50,7 @@ set(storage_sources
         iterators/PartIterator.cpp
         iterators/ScanEdgesIterator.cpp
         iterators/ScanEdgePropertiesIterator.cpp
-        iterators/ScanInEdgesByLabelIterator.cpp
+        iterators/ScanInEdgesByTargetLabelIterator.cpp
         iterators/ScanNodePropertiesIterator.cpp
         iterators/ScanNodePropertiesByLabelIterator.cpp
         iterators/ScanNodesByLabelIterator.cpp
@@ -59,7 +59,7 @@ set(storage_sources
         iterators/ScanLabelsIterator.cpp
         iterators/ScanEdgeTypesIterator.cpp
         iterators/ScanPropertyTypesIterator.cpp
-        iterators/ScanOutEdgesByLabelIterator.cpp
+        iterators/ScanOutEdgesBySourceLabelIterator.cpp
         iterators/MatchLabelSetIterator.cpp
         iterators/NeighbourhoodSampleIterator.cpp
 

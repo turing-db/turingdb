@@ -153,14 +153,14 @@ TEST_F(FuseScanEdgesCodegenTest, edgeVariableAndItsPropertyReadOffTheEdgeScan) {
 }
 
 // A labelled endpoint is no whole-graph scan, so the edge scan fusion leaves it; the
-// by-label fusion later in the pipeline takes it to a scan_out_edges_by_label instead.
+// by-label fusion later in the pipeline takes it to a scan_out_edges_by_label_src instead.
 TEST_F(FuseScanEdgesCodegenTest, labelledEndpointBecomesAByLabelEdgeScan) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (a:Person)-->(b) RETURN a, b");
 
     EXPECT_EQ(countOps<mlir::db::ScanEdges>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::ScanNodesByLabel>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::GetOutEdges>(*module), 0u);
-    EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabel>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabelSrc>(*module), 1u);
 }
 
 // A relationship type compiles to a plain hop and a type check over its edge column, so the

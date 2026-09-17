@@ -44,12 +44,12 @@ def FuseScanEdgesByType : Pass<"fuse_scan_edges_by_type"> {
 }
 
 def FuseScanOutEdgesByLabel : Pass<"fuse_scan_out_edges_by_label"> {
-    let summary = "Fuse a by-label node scan and its directed untyped out-hop into a scan_out_edges_by_label";
+    let summary = "Fuse a by-label node scan and its directed untyped out-hop into a scan_out_edges_by_label_src";
     let dependentDialects = ["mlir::db::DB"];
 }
 
 def FuseScanInEdgesByLabel : Pass<"fuse_scan_in_edges_by_label"> {
-    let summary = "Fuse a by-label node scan and its directed untyped in-hop into a scan_in_edges_by_label";
+    let summary = "Fuse a by-label node scan and its directed untyped in-hop into a scan_in_edges_by_label_tgt";
     let dependentDialects = ["mlir::db::DB"];
 }
 

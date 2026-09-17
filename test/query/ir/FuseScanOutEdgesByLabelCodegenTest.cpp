@@ -96,7 +96,7 @@ protected:
 
     // The program opens on one by-label edge scan and no node scan or hop is left.
     void expectFusedToLabelledEdgeScan(mlir::ModuleOp module) {
-        EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabel>(module), 1u);
+        EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabelSrc>(module), 1u);
         EXPECT_EQ(countOps<mlir::db::ScanNodesByLabel>(module), 0u);
         EXPECT_EQ(countOps<mlir::db::GetOutEdges>(module), 0u);
     }
@@ -113,9 +113,9 @@ TEST_F(FuseScanOutEdgesByLabelCodegenTest, bothEndpointsOfALabelledHopBecomeAnEd
 
     expectFusedToLabelledEdgeScan(*module);
 
-    llvm::SmallVector<mlir::db::ScanOutEdgesByLabel> edgeScans = collect<mlir::db::ScanOutEdgesByLabel>(*module);
+    llvm::SmallVector<mlir::db::ScanOutEdgesByLabelSrc> edgeScans = collect<mlir::db::ScanOutEdgesByLabelSrc>(*module);
     ASSERT_EQ(edgeScans.size(), 1u);
-    mlir::db::ScanOutEdgesByLabel edgeScan = edgeScans.front();
+    mlir::db::ScanOutEdgesByLabelSrc edgeScan = edgeScans.front();
 
     ASSERT_EQ(edgeScan.getLabels().size(), 1u);
     EXPECT_EQ(mlir::cast<mlir::StringAttr>(edgeScan.getLabels()[0]).getValue(), "Person");
@@ -139,7 +139,7 @@ TEST_F(FuseScanOutEdgesByLabelCodegenTest, twoLabelsRideOntoTheEdgeScan) {
 
     expectFusedToLabelledEdgeScan(*module);
 
-    llvm::SmallVector<mlir::db::ScanOutEdgesByLabel> edgeScans = collect<mlir::db::ScanOutEdgesByLabel>(*module);
+    llvm::SmallVector<mlir::db::ScanOutEdgesByLabelSrc> edgeScans = collect<mlir::db::ScanOutEdgesByLabelSrc>(*module);
     ASSERT_EQ(edgeScans.size(), 1u);
     EXPECT_EQ(edgeScans.front().getLabels().size(), 2u);
 }
@@ -149,7 +149,7 @@ TEST_F(FuseScanOutEdgesByLabelCodegenTest, sourcePropertyIsReadOffTheEdgeScan) {
 
     expectFusedToLabelledEdgeScan(*module);
 
-    llvm::SmallVector<mlir::db::ScanOutEdgesByLabel> edgeScans = collect<mlir::db::ScanOutEdgesByLabel>(*module);
+    llvm::SmallVector<mlir::db::ScanOutEdgesByLabelSrc> edgeScans = collect<mlir::db::ScanOutEdgesByLabelSrc>(*module);
     ASSERT_EQ(edgeScans.size(), 1u);
 
     llvm::SmallVector<mlir::db::GetNodeProperties> properties = collect<mlir::db::GetNodeProperties>(*module);
@@ -161,14 +161,14 @@ TEST_F(FuseScanOutEdgesByLabelCodegenTest, sourcePropertyIsReadOffTheEdgeScan) {
 TEST_F(FuseScanOutEdgesByLabelCodegenTest, labelledInHopBecomesTheInEdgeScan) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (a:Person)<--(b) RETURN a, b");
 
-    EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabel>(*module), 0u);
-    EXPECT_EQ(countOps<mlir::db::ScanInEdgesByLabel>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabelSrc>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ScanInEdgesByLabelTgt>(*module), 1u);
 }
 
 TEST_F(FuseScanOutEdgesByLabelCodegenTest, labelledUndirectedHopKeepsItsNodeScan) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (a:Person)--(b) RETURN a, b");
 
-    EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabel>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabelSrc>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::ScanNodesByLabel>(*module), 1u);
     EXPECT_EQ(countOps<mlir::db::GetEdges>(*module), 1u);
 }
@@ -178,7 +178,7 @@ TEST_F(FuseScanOutEdgesByLabelCodegenTest, labelledUndirectedHopKeepsItsNodeScan
 TEST_F(FuseScanOutEdgesByLabelCodegenTest, typedLabelledHopKeepsItsByTypeHop) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (a:Person)-[:KNOWS_WELL]->(b) RETURN a, b");
 
-    EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabel>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabelSrc>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::ScanNodesByLabel>(*module), 1u);
     EXPECT_EQ(countOps<mlir::db::GetOutEdgesByType>(*module), 1u);
 }
@@ -186,14 +186,14 @@ TEST_F(FuseScanOutEdgesByLabelCodegenTest, typedLabelledHopKeepsItsByTypeHop) {
 TEST_F(FuseScanOutEdgesByLabelCodegenTest, unlabelledHopStillBecomesAWholeEdgeScan) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (a)-->(b) RETURN a, b");
 
-    EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabel>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabelSrc>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::ScanEdges>(*module), 1u);
 }
 
 TEST_F(FuseScanOutEdgesByLabelCodegenTest, twoHopChainFusesOnlyItsFirstHop) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (a:Person)-->(b)-->(c) RETURN a, c");
 
-    EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabel>(*module), 1u);
+    EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabelSrc>(*module), 1u);
     EXPECT_EQ(countOps<mlir::db::ScanNodesByLabel>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::GetOutEdges>(*module), 1u);
 }
@@ -203,7 +203,7 @@ TEST_F(FuseScanOutEdgesByLabelCodegenTest, twoHopChainFusesOnlyItsFirstHop) {
 TEST_F(FuseScanOutEdgesByLabelCodegenTest, sourcePredicateSinksToTheScanAndKeepsIt) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = generate("MATCH (a:Person)-->(b) WHERE a.name = 'Remy' RETURN a, b");
 
-    EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabel>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabelSrc>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::ScanNodesByPropertyValue>(*module), 1u);
     EXPECT_EQ(countOps<mlir::db::GetOutEdges>(*module), 1u);
 }

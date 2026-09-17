@@ -308,20 +308,20 @@ def ScanEdgesByType : NLOp<"scan_edges_by_type", [Pure, InferTypeOpAdaptor]> {
 }
 
 /**
-* ScanOutEdgesByLabel
+* ScanOutEdgesByLabelSrc
 */
-def ScanOutEdgesByLabel : NLOp<"scan_out_edges_by_label", [Pure, InferTypeOpAdaptor]> {
+def ScanOutEdgesByLabelSrc : NLOp<"scan_out_edges_by_label_src", [Pure, InferTypeOpAdaptor]> {
   let summary = "Create a database iterator over the out-edges of the nodes carrying every given label";
   let description = [{
-    Imperative counterpart of db.scan_out_edges_by_label. Each step of an enclosing
-    nl.for fills the same four chunks nl.scan_edges fills - source node IDs, edge
-    IDs, edge type IDs and target node IDs - but only for the edges leaving a node
-    whose label set is a superset of `labels`:
+    Imperative counterpart of db.scan_out_edges_by_label_src. Each step of an
+    enclosing nl.for fills the same four chunks nl.scan_edges fills - source node
+    IDs, edge IDs, edge type IDs and target node IDs - but only for the edges
+    leaving a node whose label set is a superset of `labels`:
 
-      %edges = nl.scan_out_edges_by_label(["Person"])
+      %edges = nl.scan_out_edges_by_label_src(["Person"])
 
-    `labels` is the same list of label names db.scan_out_edges_by_label carried;
-    translation resolves each name to a storage LabelID, exactly as an
+    `labels` is the same list of label names db.scan_out_edges_by_label_src
+    carried; translation resolves each name to a storage LabelID, exactly as an
     nl.scan_nodes_by_label name is resolved. A label absent from the schema leaves
     the conjunction unsatisfiable, so the loop yields no chunk. Narrowing by the
     source label changes only the rows, never their shape, so the result is the
@@ -334,17 +334,17 @@ def ScanOutEdgesByLabel : NLOp<"scan_out_edges_by_label", [Pure, InferTypeOpAdap
 }
 
 /**
-* ScanInEdgesByLabel
+* ScanInEdgesByLabelTgt
 */
-def ScanInEdgesByLabel : NLOp<"scan_in_edges_by_label", [Pure, InferTypeOpAdaptor]> {
+def ScanInEdgesByLabelTgt : NLOp<"scan_in_edges_by_label_tgt", [Pure, InferTypeOpAdaptor]> {
   let summary = "Create a database iterator over the in-edges of the nodes carrying every given label";
   let description = [{
-    Imperative counterpart of db.scan_in_edges_by_label, and the reverse-direction
-    sibling of nl.scan_out_edges_by_label: each step of an enclosing nl.for fills the
-    same four chunks nl.scan_edges fills, but only for the edges arriving at a node
-    whose label set is a superset of `labels`:
+    Imperative counterpart of db.scan_in_edges_by_label_tgt, and the
+    reverse-direction sibling of nl.scan_out_edges_by_label_src: each step of an
+    enclosing nl.for fills the same four chunks nl.scan_edges fills, but only for
+    the edges arriving at a node whose label set is a superset of `labels`:
 
-      %edges = nl.scan_in_edges_by_label(["Person"])
+      %edges = nl.scan_in_edges_by_label_tgt(["Person"])
 
     The labels constrain the edge's target, so that is the end `tgtids` holds and the
     unconstrained source is what `srcids` holds - the chunks carry the edge as the

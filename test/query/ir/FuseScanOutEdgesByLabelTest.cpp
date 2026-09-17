@@ -201,7 +201,7 @@ func.func @main() {
 // The fused form spelled by hand, which is what the pass prints.
 const char* const labelledEdgeScan = R"mlir(
 func.func @main() {
-  %srcs, %eids, %etypes, %tgts = db.scan_out_edges_by_label(["Person"]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  %srcs, %eids, %etypes, %tgts = db.scan_out_edges_by_label_src(["Person"]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
   db.output(%srcs, %tgts) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
@@ -247,7 +247,7 @@ protected:
 
     // The module holds exactly its original scan and hop and no by-label edge scan.
     void expectUntouched(mlir::ModuleOp module, size_t hopCount) {
-        EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabel>(module), 0u);
+        EXPECT_EQ(countOps<mlir::db::ScanOutEdgesByLabelSrc>(module), 0u);
         EXPECT_EQ(countOps<mlir::db::ScanNodes>(module) + countOps<mlir::db::ScanNodesByLabel>(module), 1u);
 
         const size_t hops = countOps<mlir::db::GetOutEdges>(module)
@@ -295,7 +295,7 @@ protected:
         const mlir::OwningOpRef<mlir::ModuleOp> fusedModule = parse(programText);
         ASSERT_TRUE(fusedModule);
         ASSERT_TRUE(runFuse(*fusedModule));
-        ASSERT_EQ(countOps<mlir::db::ScanOutEdgesByLabel>(*fusedModule), 1u);
+        ASSERT_EQ(countOps<mlir::db::ScanOutEdgesByLabelSrc>(*fusedModule), 1u);
         runPairs(*fusedModule, view, fused);
     }
 
@@ -308,9 +308,9 @@ TEST_F(FuseScanOutEdgesByLabelTest, fusesLabelScanAndOutHop) {
     ASSERT_TRUE(runFuse(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
 
-    llvm::SmallVector<mlir::db::ScanOutEdgesByLabel> edgeScans = collect<mlir::db::ScanOutEdgesByLabel>(*module);
+    llvm::SmallVector<mlir::db::ScanOutEdgesByLabelSrc> edgeScans = collect<mlir::db::ScanOutEdgesByLabelSrc>(*module);
     ASSERT_EQ(edgeScans.size(), 1u);
-    mlir::db::ScanOutEdgesByLabel edgeScan = edgeScans.front();
+    mlir::db::ScanOutEdgesByLabelSrc edgeScan = edgeScans.front();
 
     ASSERT_EQ(edgeScan.getLabels().size(), 1u);
     EXPECT_EQ(mlir::cast<mlir::StringAttr>(edgeScan.getLabels()[0]).getValue(), "Person");
@@ -333,7 +333,7 @@ TEST_F(FuseScanOutEdgesByLabelTest, carriesTheWholeLabelConjunction) {
     ASSERT_TRUE(runFuse(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
 
-    llvm::SmallVector<mlir::db::ScanOutEdgesByLabel> edgeScans = collect<mlir::db::ScanOutEdgesByLabel>(*module);
+    llvm::SmallVector<mlir::db::ScanOutEdgesByLabelSrc> edgeScans = collect<mlir::db::ScanOutEdgesByLabelSrc>(*module);
     ASSERT_EQ(edgeScans.size(), 1u);
 
     const mlir::ArrayAttr labels = edgeScans.front().getLabels();
@@ -402,9 +402,9 @@ TEST_F(FuseScanOutEdgesByLabelTest, fusesOnlyTheFirstHopOfATwoHopChain) {
     ASSERT_TRUE(runFuse(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
 
-    llvm::SmallVector<mlir::db::ScanOutEdgesByLabel> edgeScans = collect<mlir::db::ScanOutEdgesByLabel>(*module);
+    llvm::SmallVector<mlir::db::ScanOutEdgesByLabelSrc> edgeScans = collect<mlir::db::ScanOutEdgesByLabelSrc>(*module);
     ASSERT_EQ(edgeScans.size(), 1u);
-    mlir::db::ScanOutEdgesByLabel edgeScan = edgeScans.front();
+    mlir::db::ScanOutEdgesByLabelSrc edgeScan = edgeScans.front();
 
     // The second hop walks on from the edge scan's targets, carrying its sources.
     llvm::SmallVector<mlir::db::GetOutEdges> hops = collect<mlir::db::GetOutEdges>(*module);
@@ -423,9 +423,9 @@ TEST_F(FuseScanOutEdgesByLabelTest, fusesInsideCrossProductFactor) {
     ASSERT_TRUE(runFuse(*module));
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
 
-    llvm::SmallVector<mlir::db::ScanOutEdgesByLabel> edgeScans = collect<mlir::db::ScanOutEdgesByLabel>(*module);
+    llvm::SmallVector<mlir::db::ScanOutEdgesByLabelSrc> edgeScans = collect<mlir::db::ScanOutEdgesByLabelSrc>(*module);
     ASSERT_EQ(edgeScans.size(), 1u);
-    mlir::db::ScanOutEdgesByLabel edgeScan = edgeScans.front();
+    mlir::db::ScanOutEdgesByLabelSrc edgeScan = edgeScans.front();
 
     // The edge scan took the hop's place inside the left factor, which now yields its two
     // node columns; the right factor's node scan is untouched.
@@ -461,7 +461,7 @@ TEST_F(FuseScanOutEdgesByLabelTest, emitsTheSameEdgesAsTheWrittenEdgeScan) {
     const mlir::OwningOpRef<mlir::ModuleOp> scanModule = parse(labelledEdgeScan);
     ASSERT_TRUE(scanModule);
     ASSERT_TRUE(mlir::succeeded(mlir::verify(*scanModule)));
-    ASSERT_EQ(countOps<mlir::db::ScanOutEdgesByLabel>(*scanModule), 1u);
+    ASSERT_EQ(countOps<mlir::db::ScanOutEdgesByLabelSrc>(*scanModule), 1u);
 
     std::vector<std::pair<uint64_t, uint64_t>> scanPairs;
     runPairs(*scanModule, view, scanPairs);

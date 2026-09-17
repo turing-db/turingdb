@@ -30,8 +30,8 @@
 #include "iterators/GetPropertiesWithNullIterator.h"
 #include "iterators/ScanEdgesByTypeIterator.h"
 #include "iterators/ScanEdgesIterator.h"
-#include "iterators/ScanInEdgesByLabelIterator.h"
-#include "iterators/ScanOutEdgesByLabelIterator.h"
+#include "iterators/ScanInEdgesByTargetLabelIterator.h"
+#include "iterators/ScanOutEdgesBySourceLabelIterator.h"
 #include "iterators/ScanNodesIterator.h"
 #include "iterators/ScanNodesByLabelIterator.h"
 #include "iterators/ScanNodesByPropertyValueIterator.h"
@@ -4893,7 +4893,7 @@ void NLExecutor::runScanEdgesByTypeLoop(NLExecutionContext* context, NLFunctionD
     runScanLoopSteps(context, &chunkWriter, &pendingEdges, sources, loopBody, limit);
 }
 
-void NLExecutor::runScanOutEdgesByLabelLoop(NLExecutionContext* context, NLFunctionData* data) {
+void NLExecutor::runScanOutEdgesByLabelSrcLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLScanEdgesByLabelLoopData* loopData = static_cast<NLScanEdgesByLabelLoopData*>(data);
 
     // A requested label was absent from the schema, so no node carries the full
@@ -4911,7 +4911,7 @@ void NLExecutor::runScanOutEdgesByLabelLoop(NLExecutionContext* context, NLFunct
     // whole program, so the handle stays valid for every fill below.
     const LabelSetHandle labelset(loopData->getLabelSet());
 
-    ScanOutEdgesByLabelChunkWriter chunkWriter(*context->getView(), labelset);
+    ScanOutEdgesBySourceLabelChunkWriter chunkWriter(*context->getView(), labelset);
     chunkWriter.setSrcIDs(sources);
     chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
@@ -4923,7 +4923,7 @@ void NLExecutor::runScanOutEdgesByLabelLoop(NLExecutionContext* context, NLFunct
     runScanLoopSteps(context, &chunkWriter, &pendingEdges, sources, loopBody, limit);
 }
 
-void NLExecutor::runScanInEdgesByLabelLoop(NLExecutionContext* context, NLFunctionData* data) {
+void NLExecutor::runScanInEdgesByLabelTgtLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLScanEdgesByLabelLoopData* loopData = static_cast<NLScanEdgesByLabelLoopData*>(data);
 
     if (!loopData->isMatchable()) {
@@ -4941,7 +4941,7 @@ void NLExecutor::runScanInEdgesByLabelLoop(NLExecutionContext* context, NLFuncti
     // edge: the labelled end it hangs each edge off goes to setSrcIDs, and for an in-edge
     // that end is the edge's target. The chunks hold the edge as the graph stores it, the
     // way nl.get_in_edges fills them, so the two are crossed here.
-    ScanInEdgesByLabelChunkWriter chunkWriter(*context->getView(), labelset);
+    ScanInEdgesByTargetLabelChunkWriter chunkWriter(*context->getView(), labelset);
     chunkWriter.setSrcIDs(loopData->getTargets());
     chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
