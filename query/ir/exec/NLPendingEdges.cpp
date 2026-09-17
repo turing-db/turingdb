@@ -22,6 +22,26 @@ NodeID nodeIDOf(const CommitWriteBuffer::ExistingOrPendingNode& node, size_t fir
     return NodeID(firstPendingNodeID + std::get<CommitWriteBuffer::PendingNodeOffset>(node));
 }
 
+// Whether @param node carries at least @param labels. A node this change wrote carries its
+// labels in the buffer; one the graph already holds is read off the graph, and a node
+// neither holds carries no label to match.
+bool carriesLabels(const CommitWriteBuffer* writeBuffer,
+                   const GraphView& view,
+                   const CommitWriteBuffer::ExistingOrPendingNode& node,
+                   const LabelSetHandle& labels) {
+    if (std::holds_alternative<CommitWriteBuffer::PendingNodeOffset>(node)) {
+        const CommitWriteBuffer::PendingNodeOffset offset = std::get<CommitWriteBuffer::PendingNodeOffset>(node);
+        const CommitWriteBuffer::PendingNode& pending = writeBuffer->getPendingNode(offset);
+
+        return pending.labelsetHandle.hasAtLeastLabels(labels);
+    }
+
+    const GraphReader reader(view);
+    const LabelSetHandle nodeLabels = reader.getNodeLabelSet(std::get<NodeID>(node));
+
+    return nodeLabels.isValid() && nodeLabels.hasAtLeastLabels(labels);
+}
+
 }
 
 NLPendingEdgeIndex::NLPendingEdgeIndex() {
@@ -63,6 +83,7 @@ NLPendingEdgeHop::NLPendingEdgeHop(NLExecutionContext* context,
                                    Direction direction,
                                    ColumnNodeIDs* others)
     : _writeBuffer(context->getWriteBuffer()),
+    _view(context->getView()),
     _inputNodeIDs(loopData->getInput()),
     _indices(loopData->getIndices()),
     _edgeIDs(loopData->getEdgeIDs()),
@@ -88,6 +109,10 @@ NLPendingEdgeHop::NLPendingEdgeHop(NLExecutionContext* context,
 }
 
 NLPendingEdgeHop::~NLPendingEdgeHop() {
+}
+
+void NLPendingEdgeHop::setEndpointLabelSet(const LabelSet& labelset) {
+    _endpointLabels = LabelSetHandle(labelset);
 }
 
 void NLPendingEdgeHop::fill(size_t maxCount) {
@@ -185,7 +210,12 @@ bool NLPendingEdgeHop::walks(size_t offset, NodeID& other) const {
         return false;
     }
 
-    other = walksIn() ? nodeIDOf(edge.src, _firstPendingNodeID) : nodeIDOf(edge.tgt, _firstPendingNodeID);
+    const CommitWriteBuffer::ExistingOrPendingNode& otherEnd = walksIn() ? edge.src : edge.tgt;
+    if (_endpointLabels.isValid() && !carriesLabels(_writeBuffer, *_view, otherEnd, _endpointLabels)) {
+        return false;
+    }
+
+    other = nodeIDOf(otherEnd, _firstPendingNodeID);
 
     return true;
 }
@@ -266,23 +296,7 @@ bool NLPendingEdgeScan::keeps(const CommitWriteBuffer::PendingEdge& edge) const 
         return true;
     }
 
-    return carriesTheLabels(_labelsTheTarget ? edge.tgt : edge.src);
-}
-
-bool NLPendingEdgeScan::carriesTheLabels(const CommitWriteBuffer::ExistingOrPendingNode& node) const {
-    // A node this change wrote carries its labels in the buffer; one the graph already
-    // holds is read off the graph, and a node neither holds carries no label to match.
-    if (std::holds_alternative<CommitWriteBuffer::PendingNodeOffset>(node)) {
-        const CommitWriteBuffer::PendingNodeOffset offset = std::get<CommitWriteBuffer::PendingNodeOffset>(node);
-        const CommitWriteBuffer::PendingNode& pending = _writeBuffer->getPendingNode(offset);
-
-        return pending.labelsetHandle.hasAtLeastLabels(_endpointLabels);
-    }
-
-    const GraphReader reader(*_view);
-    const LabelSetHandle labels = reader.getNodeLabelSet(std::get<NodeID>(node));
-
-    return labels.isValid() && labels.hasAtLeastLabels(_endpointLabels);
+    return carriesLabels(_writeBuffer, *_view, _labelsTheTarget ? edge.tgt : edge.src, _endpointLabels);
 }
 
 void NLPendingEdgeScan::clearChunks() {

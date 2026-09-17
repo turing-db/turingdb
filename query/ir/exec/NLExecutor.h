@@ -82,6 +82,13 @@ public:
     static void runGetOutEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data);
     static void runGetInEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data);
 
+    // The by-label edge hops: like runGetOutEdgesLoop / runGetInEdgesLoop, but the chunk
+    // writer keeps only the edges whose far endpoint carries the loop data's label set -
+    // the target of an out-edge, the source of an in-edge. An unmatchable conjunction (a
+    // name absent from the schema) emits nothing.
+    static void runGetOutEdgesByLabelLoop(NLExecutionContext* context, NLFunctionData* data);
+    static void runGetInEdgesByLabelLoop(NLExecutionContext* context, NLFunctionData* data);
+
     static void runGetNodeLabelSet(NLExecutionContext* context, NLFunctionData* data);
     static void runGetEdgeTypes(NLExecutionContext* context, NLFunctionData* data);
 

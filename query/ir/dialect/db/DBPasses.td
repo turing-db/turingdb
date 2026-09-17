@@ -58,6 +58,11 @@ def FuseScanEdgesByEndpointLabel : Pass<"fuse_scan_edges_by_endpoint_label"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseEdgesByEndpointLabel : Pass<"fuse_edges_by_endpoint_label"> {
+    let summary = "Fuse a directed hop and the label check on the endpoint it reaches into a by-label hop";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def ReusePropertyReads : Pass<"reuse_property_reads"> {
     let summary = "Reuse a property already read of the same rows instead of reading it again";
     let dependentDialects = ["mlir::db::DB"];

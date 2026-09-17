@@ -215,6 +215,7 @@ add_call_v3_test(test_query_ir_call_pattern_shapes CallPatternShapesTest.cpp)
 add_call_v3_test(test_query_ir_create_with CreateWithTest.cpp)
 add_call_v3_test(test_query_ir_create_edge_property CreateEdgePropertyTest.cpp)
 add_call_v3_test(test_query_ir_match_created_edge MatchCreatedEdgeTest.cpp)
+add_call_v3_test(test_query_ir_match_created_edge_by_label MatchCreatedEdgeByLabelTest.cpp)
 add_call_v3_test(test_query_ir_scan_created_entity ScanCreatedEntityTest.cpp)
 add_call_v3_test(test_query_ir_call_undirected_row_count CallUndirectedRowCountTest.cpp)
 add_call_v3_test(test_query_ir_call_components CallComponentsTest.cpp)
@@ -406,6 +407,29 @@ target_link_libraries(test_query_ir_fuse_scan_edges_by_endpoint_label_codegen PR
         turing_db_ir_common_s
         turing_db_storage_s)
 target_include_directories(test_query_ir_fuse_scan_edges_by_endpoint_label_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# The by-label hop fusion tests: the same two checks for the hops that walk the edges the
+# endpoint they reach carries a set of labels on.
+add_ir_tests(test_query_ir_fuse_edges_by_endpoint_label FuseEdgesByEndpointLabelTest.cpp)
+target_link_libraries(test_query_ir_fuse_edges_by_endpoint_label PRIVATE turing_db_examples_s)
+
+add_turing_test(test_query_ir_fuse_edges_by_endpoint_label_codegen FuseEdgesByEndpointLabelCodegenTest.cpp)
+target_link_libraries(test_query_ir_fuse_edges_by_endpoint_label_codegen PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s
+        turing_db_ir_dbdialect_s
+        turing_db_ir_nldialect_s
+        turing_db_ir_storagedialect_s
+        turing_db_ir_common_s
+        turing_db_storage_s)
+target_include_directories(test_query_ir_fuse_edges_by_endpoint_label_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_turing_test(test_query_ir_fuse_edges_by_type_codegen FuseEdgesByTypeCodegenTest.cpp)
 target_link_libraries(test_query_ir_fuse_edges_by_type_codegen PRIVATE

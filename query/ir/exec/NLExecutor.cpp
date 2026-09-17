@@ -23,9 +23,11 @@
 #include "iterators/GetEdgeTypesIterator.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetInEdgesByTypeIterator.h"
+#include "iterators/GetInEdgesByLabelIterator.h"
 #include "iterators/GetNodeLabelSetIterator.h"
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/GetOutEdgesByTypeIterator.h"
+#include "iterators/GetOutEdgesByLabelIterator.h"
 #include "iterators/GetPropertiesIterator.h"
 #include "iterators/GetPropertiesWithNullIterator.h"
 #include "iterators/ScanEdgesByTypeIterator.h"
@@ -5056,6 +5058,54 @@ void NLExecutor::runGetInEdgesByTypeLoop(NLExecutionContext* context, NLFunction
 
     NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::In, loopData->getSources());
     pendingEdges.setEdgeType(loopData->getEdgeType());
+
+    runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getTargets());
+}
+
+void NLExecutor::runGetOutEdgesByLabelLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLEdgeByLabelLoopData* loopData = static_cast<NLEdgeByLabelLoopData*>(data);
+    const ColumnNodeIDs* inputNodeIDs = loopData->getInput();
+
+    // A requested label absent from the schema is carried by no node, and an empty input
+    // has no edges to walk: either way the loop body never runs.
+    if (!loopData->isMatchable() || inputNodeIDs->empty()) {
+        return;
+    }
+
+    // The LabelSetHandle borrows the loop data's owned LabelSet, which lives for the whole
+    // program, so the handle stays valid for every fill below.
+    const LabelSetHandle labelset(loopData->getLabelSet());
+
+    GetOutEdgesByLabelChunkWriter chunkWriter(*context->getView(), inputNodeIDs, labelset);
+    chunkWriter.setIndices(loopData->getIndices());
+    chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
+    chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
+    chunkWriter.setTgtIDs(loopData->getTargets());
+
+    NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::Out, loopData->getTargets());
+    pendingEdges.setEndpointLabelSet(loopData->getLabelSet());
+
+    runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getSources());
+}
+
+void NLExecutor::runGetInEdgesByLabelLoop(NLExecutionContext* context, NLFunctionData* data) {
+    NLEdgeByLabelLoopData* loopData = static_cast<NLEdgeByLabelLoopData*>(data);
+    const ColumnNodeIDs* inputNodeIDs = loopData->getInput();
+
+    if (!loopData->isMatchable() || inputNodeIDs->empty()) {
+        return;
+    }
+
+    const LabelSetHandle labelset(loopData->getLabelSet());
+
+    GetInEdgesByLabelChunkWriter chunkWriter(*context->getView(), inputNodeIDs, labelset);
+    chunkWriter.setIndices(loopData->getIndices());
+    chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
+    chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
+    chunkWriter.setSrcIDs(loopData->getSources());
+
+    NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::In, loopData->getSources());
+    pendingEdges.setEndpointLabelSet(loopData->getLabelSet());
 
     runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getTargets());
 }

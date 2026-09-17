@@ -73,6 +73,11 @@ public:
 
     void setEdgeType(EdgeTypeID edgeType) { _edgeType = edgeType; }
 
+    // The label set the endpoint the hop reaches must carry at least for it to walk the
+    // edge - the target of an out-hop, the source of an in-hop. The label set is borrowed,
+    // so it must outlive the hop.
+    void setEndpointLabelSet(const LabelSet& labelset);
+
     bool isValid() const { return _row < _inputNodeIDs->size(); }
 
     void fill(size_t maxCount);
@@ -80,6 +85,7 @@ public:
 private:
     const CommitWriteBuffer* _writeBuffer {nullptr};
     const NLPendingEdgeIndex* _index {nullptr};
+    const GraphView* _view {nullptr};
     const ColumnNodeIDs* _inputNodeIDs {nullptr};
 
     ColumnVector<size_t>* _indices {nullptr};
@@ -100,6 +106,7 @@ private:
 
     Direction _direction {Direction::Out};
     std::optional<EdgeTypeID> _edgeType;
+    LabelSetHandle _endpointLabels;
 
     // The input row the walk is on, its edges, how far into them it has read, and - for a
     // hop that walks either way - whether these are the edges into the row's node rather
@@ -163,7 +170,6 @@ private:
     void clearChunks();
 
     bool keeps(const CommitWriteBuffer::PendingEdge& edge) const;
-    bool carriesTheLabels(const CommitWriteBuffer::ExistingOrPendingNode& node) const;
 };
 
 }
