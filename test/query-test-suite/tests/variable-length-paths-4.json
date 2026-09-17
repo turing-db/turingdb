@@ -1,10 +1,9 @@
 {
-    "enabled": false,
+    "enabled": true,
     "graph": "simpledb",
     "query": "MATCH (n:Person)-[e]-*(m) RETURN n.name, e, m.name SKIP 50 LIMIT 5",
     "expect": {
-        "result": "n.name,e,m.name\nRemy,\"[[2], [11]]\",Luc\nAdam,\"[[6], [12]]\",Martina\nSuhas,\"[[15], [13]]\",Cyrus\nDoruk,\"[[17], [13]]\",Cyrus\nCyrus,\"[[13], [15]]\",Suhas",
-        "resultJson": "{\"header\":{\"column_names\":[\"n.name\",\"e\",\"m.name\"],\"column_types\":[\"String\",\"EntityList\",\"String\"]},\"data\":[[[\"Remy\",\"Adam\",\"Suhas\",\"Doruk\",\"Cyrus\"],[[{\"type\":\"edge\",\"id\":2},{\"type\":\"edge\",\"id\":11}],[{\"type\":\"edge\",\"id\":6},{\"type\":\"edge\",\"id\":12}],[{\"type\":\"edge\",\"id\":15},{\"type\":\"edge\",\"id\":13}],[{\"type\":\"edge\",\"id\":17},{\"type\":\"edge\",\"id\":13}],[{\"type\":\"edge\",\"id\":13},{\"type\":\"edge\",\"id\":15}]],[\"Luc\",\"Martina\",\"Cyrus\",\"Cyrus\",\"Suhas\"]]]}"
+        "result": "n.name,e,m.name\nSuhas,[16],JiuJitsu\nCyrus,[14],Travel\nRemy,\"[0, 4, 1, 7, 2, 11, 10]\",Animals\nAdam,\"[4, 0, 6]\",Cooking\nMartina,\"[12, 6, 4, 0, 5, 8, 9]\",Padel"
     },
     "tags": [
         "variable",
@@ -13,6 +12,5 @@
         "bfs",
         "unbounded"
     ],
-    "write-required": false,
-    "disabled-reason": "Variable length paths are not implemented in the v3 engine"
+    "write-required": false
 }

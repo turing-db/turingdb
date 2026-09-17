@@ -1,10 +1,9 @@
 {
-    "enabled": false,
+    "enabled": true,
     "graph": "simpledb",
     "query": "MATCH (n:Person)-[e]->*(m:Person) RETURN n.name, e, m.name",
     "expect": {
-        "result": "n.name,e,m.name\nRemy,[],Remy\nAdam,[],Adam\nMaxime,[],Maxime\nLuc,[],Luc\nMartina,[],Martina\nSuhas,[],Suhas\nCyrus,[],Cyrus\nDoruk,[],Doruk\nRemy,[[0]],Adam\nAdam,[[4]],Remy\nRemy,\"[[0], [4]]\",Remy\nRemy,\"[[1], [7]]\",Remy\nAdam,\"[[4], [0]]\",Adam\nRemy,\"[[1], [7], [0]]\",Adam\nAdam,\"[[4], [1], [7]]\",Remy\nRemy,\"[[0], [4], [1], [7]]\",Remy\nRemy,\"[[1], [7], [0], [4]]\",Remy\nAdam,\"[[4], [1], [7], [0]]\",Adam",
-        "resultJson": "{\"header\":{\"column_names\":[\"n.name\",\"e\",\"m.name\"],\"column_types\":[\"String\",\"EntityList\",\"String\"]},\"data\":[[[\"Remy\",\"Adam\",\"Maxime\",\"Luc\",\"Martina\",\"Suhas\",\"Cyrus\",\"Doruk\",\"Remy\",\"Adam\"],[[],[],[],[],[],[],[],[],[{\"type\":\"edge\",\"id\":0}],[{\"type\":\"edge\",\"id\":4}]],[\"Remy\",\"Adam\",\"Maxime\",\"Luc\",\"Martina\",\"Suhas\",\"Cyrus\",\"Doruk\",\"Adam\",\"Remy\"]],[[\"Remy\",\"Remy\",\"Adam\"],[[{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":4}],[{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7}],[{\"type\":\"edge\",\"id\":4},{\"type\":\"edge\",\"id\":0}]],[\"Remy\",\"Remy\",\"Adam\"]],[[\"Remy\",\"Adam\"],[[{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7},{\"type\":\"edge\",\"id\":0}],[{\"type\":\"edge\",\"id\":4},{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7}]],[\"Adam\",\"Remy\"]],[[\"Remy\",\"Remy\",\"Adam\"],[[{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":4},{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7}],[{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7},{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":4}],[{\"type\":\"edge\",\"id\":4},{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7},{\"type\":\"edge\",\"id\":0}]],[\"Remy\",\"Remy\",\"Adam\"]],[[],[],[]]]}"
+        "result": "n.name,e,m.name\nRemy,[],Remy\nAdam,[],Adam\nMaxime,[],Maxime\nLuc,[],Luc\nMartina,[],Martina\nSuhas,[],Suhas\nCyrus,[],Cyrus\nDoruk,[],Doruk\nRemy,[0],Adam\nAdam,[4],Remy\nRemy,\"[0, 4]\",Remy\nAdam,\"[4, 0]\",Adam\nRemy,\"[0, 4, 1, 7]\",Remy\nAdam,\"[4, 1, 7]\",Remy\nAdam,\"[4, 1, 7, 0]\",Adam\nRemy,\"[1, 7]\",Remy\nRemy,\"[1, 7, 0]\",Adam\nRemy,\"[1, 7, 0, 4]\",Remy"
     },
     "tags": [
         "variable",
@@ -13,6 +12,5 @@
         "bfs",
         "unbounded"
     ],
-    "write-required": false,
-    "disabled-reason": "Variable length paths are not implemented in the v3 engine"
+    "write-required": false
 }

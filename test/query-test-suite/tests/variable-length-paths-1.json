@@ -1,10 +1,9 @@
 {
-    "enabled": false,
+    "enabled": true,
     "graph": "simpledb",
     "query": "MATCH (n:Person)<-[e]-+(m:Person) RETURN n.name, e, m.name",
     "expect": {
-        "result": "n.name,e,m.name\nRemy,[[4]],Adam\nAdam,[[0]],Remy\nRemy,\"[[4], [0]]\",Remy\nRemy,\"[[7], [1]]\",Remy\nAdam,\"[[0], [4]]\",Adam\nRemy,\"[[7], [1], [4]]\",Adam\nAdam,\"[[0], [7], [1]]\",Remy\nRemy,\"[[4], [0], [7], [1]]\",Remy\nRemy,\"[[7], [1], [4], [0]]\",Remy\nAdam,\"[[0], [7], [1], [4]]\",Adam",
-        "resultJson": "{\"header\":{\"column_names\":[\"n.name\",\"e\",\"m.name\"],\"column_types\":[\"String\",\"EntityList\",\"String\"]},\"data\":[[[\"Remy\",\"Adam\"],[[{\"type\":\"edge\",\"id\":4}],[{\"type\":\"edge\",\"id\":0}]],[\"Adam\",\"Remy\"]],[[\"Remy\",\"Remy\",\"Adam\"],[[{\"type\":\"edge\",\"id\":4},{\"type\":\"edge\",\"id\":0}],[{\"type\":\"edge\",\"id\":7},{\"type\":\"edge\",\"id\":1}],[{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":4}]],[\"Remy\",\"Remy\",\"Adam\"]],[[\"Remy\",\"Adam\"],[[{\"type\":\"edge\",\"id\":7},{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":4}],[{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":7},{\"type\":\"edge\",\"id\":1}]],[\"Adam\",\"Remy\"]],[[\"Remy\",\"Remy\",\"Adam\"],[[{\"type\":\"edge\",\"id\":4},{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":7},{\"type\":\"edge\",\"id\":1}],[{\"type\":\"edge\",\"id\":7},{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":4},{\"type\":\"edge\",\"id\":0}],[{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":7},{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":4}]],[\"Remy\",\"Remy\",\"Adam\"]],[[],[],[]]]}"
+        "result": "n.name,e,m.name\nRemy,[4],Adam\nAdam,[0],Remy\nRemy,\"[4, 0]\",Remy\nAdam,\"[0, 4]\",Adam\nRemy,\"[4, 0, 7, 1]\",Remy\nAdam,\"[0, 7, 1]\",Remy\nAdam,\"[0, 7, 1, 4]\",Adam\nRemy,\"[7, 1]\",Remy\nRemy,\"[7, 1, 4]\",Adam\nRemy,\"[7, 1, 4, 0]\",Remy"
     },
     "tags": [
         "variable",
@@ -13,6 +12,5 @@
         "bfs",
         "unbounded"
     ],
-    "write-required": false,
-    "disabled-reason": "Variable length paths are not implemented in the v3 engine"
+    "write-required": false
 }

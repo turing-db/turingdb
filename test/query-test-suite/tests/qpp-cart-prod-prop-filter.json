@@ -1,5 +1,5 @@
 {
-  "enabled": false,
+  "enabled": true,
   "graph": "simpledb",
   "query": "MATCH (n)--*(p)-->(z), (l)-->(m) WHERE l.age = p.age/10 AND z.age = p.age+2 RETURN n,m,z,p",
   "expect": {
@@ -14,6 +14,5 @@
     "expr",
     "properties"
   ],
-  "write-required": false,
-  "disabled-reason": "Variable length paths are not implemented in the v3 engine"
+  "write-required": false
 }
