@@ -2248,16 +2248,20 @@ def CallSubquery : TuringOp<"call_subquery", []> {
           db.subquery_yield %s, %x : !db.column<!storage.node_id>, !db.column<!storage.node_id>
       }) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
 
-    `carries_scope` says the body hands the input columns back itself: it yields
-    them first, as its dataflow left them - filtered and repeated by its hops - then
-    its own columns, and the results line up with that yield. A body whose rows
-    cannot carry the inputs through - one that aggregates, sorts, cuts or dedups -
-    yields its own columns alone, and the lowering runs it one input row at a time
-    and pairs each row it yields with the input row it came from.
+    `carries_scope` says the body's own dataflow keeps every input row paired with
+    what the body made of it, so it runs over a whole chunk of input rows at once. A
+    returning body that carries the scope hands the input columns back itself: it
+    yields them first, as its dataflow left them - filtered and repeated by its hops -
+    then its own columns, and the results line up with that yield. A body whose rows
+    cannot carry the inputs through - one that aggregates, sorts, cuts or dedups - is
+    run one input row at a time instead: a returning one yields its own columns alone
+    and the lowering pairs each row it yields with the input row it came from, a unit
+    one writes over one input row per step.
 
     A `unit` body ends on an updating clause rather than a RETURN. It yields nothing
-    and the op has no results: the rows in flight are the operands still, however
-    many rows the body walked or wrote for each of them.
+    and the op has no results, whether or not it carries the scope: the rows in flight
+    are the operands still, however many rows the body walked or wrote for each of
+    them. A unit body is never `optional` - it yields no row for OPTIONAL to pad.
 
     The body may write to the graph, so the op is not Pure.
   }];

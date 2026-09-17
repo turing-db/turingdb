@@ -1124,6 +1124,10 @@ LogicalResult CallSubquery::verify() {
     const Operation::result_type_range resultTypes = getOperation()->getResultTypes();
 
     if (getUnit()) {
+        if (getOptional()) {
+            return emitOpError("a unit subquery yields no row for OPTIONAL to pad");
+        }
+
         if (!yieldedColumns.empty()) {
             return emitOpError("a unit body yields no column");
         }
