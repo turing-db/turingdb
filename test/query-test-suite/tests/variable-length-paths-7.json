@@ -1,10 +1,9 @@
 {
-    "enabled": false,
+    "enabled": true,
     "graph": "simpledb",
     "query": "MATCH (i:Supernatural)-->(n:Person)-[e]->*(m:Person) RETURN i.name, n.name, e, m.name",
     "expect": {
-        "result": "i.name,n.name,e,m.name\nGhosts,Remy,[],Remy\nGhosts,Remy,[[0]],Adam\nGhosts,Remy,\"[[0], [4]]\",Remy\nGhosts,Remy,\"[[1], [7]]\",Remy\nGhosts,Remy,\"[[1], [7], [0]]\",Adam\nGhosts,Remy,\"[[0], [4], [1], [7]]\",Remy\nGhosts,Remy,\"[[1], [7], [0], [4]]\",Remy",
-        "resultJson": "{\"header\":{\"column_names\":[\"i.name\",\"n.name\",\"e\",\"m.name\"],\"column_types\":[\"String\",\"String\",\"EntityList\",\"String\"]},\"data\":[[[\"Ghosts\",\"Ghosts\"],[\"Remy\",\"Remy\"],[[],[{\"type\":\"edge\",\"id\":0}]],[\"Remy\",\"Adam\"]],[[\"Ghosts\",\"Ghosts\"],[\"Remy\",\"Remy\"],[[{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":4}],[{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7}]],[\"Remy\",\"Remy\"]],[[\"Ghosts\"],[\"Remy\"],[[{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7},{\"type\":\"edge\",\"id\":0}]],[\"Adam\"]],[[\"Ghosts\",\"Ghosts\"],[\"Remy\",\"Remy\"],[[{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":4},{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7}],[{\"type\":\"edge\",\"id\":1},{\"type\":\"edge\",\"id\":7},{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":4}]],[\"Remy\",\"Remy\"]],[[],[],[],[]]]}"
+        "result": "i.name,n.name,e,m.name\nGhosts,Remy,[],Remy\nGhosts,Remy,[0],Adam\nGhosts,Remy,\"[0, 4]\",Remy\nGhosts,Remy,\"[0, 4, 1, 7]\",Remy\nGhosts,Remy,\"[1, 7]\",Remy\nGhosts,Remy,\"[1, 7, 0]\",Adam\nGhosts,Remy,\"[1, 7, 0, 4]\",Remy"
     },
     "tags": [
         "variable",
@@ -13,6 +12,5 @@
         "bfs",
         "unbounded"
     ],
-    "write-required": false,
-    "disabled-reason": "Variable length paths are not implemented in the v3 engine"
+    "write-required": false
 }

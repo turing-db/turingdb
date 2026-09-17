@@ -1,10 +1,9 @@
 {
-    "enabled": false,
+    "enabled": true,
     "graph": "simpledb",
     "query": "MATCH (n:Person)-[e]->{2,4}(m:Interest)-->(p:Person) RETURN n.name, e, m.name, p.name",
     "expect": {
-        "result": "n.name,e,m.name,p.name\nAdam,\"[[4], [1]]\",Ghosts,Remy\nRemy,\"[[0], [4], [1]]\",Ghosts,Remy",
-        "resultJson": "{\"header\":{\"column_names\":[\"n.name\",\"e\",\"m.name\",\"p.name\"],\"column_types\":[\"String\",\"EntityList\",\"String\",\"String\"]},\"data\":[[[\"Adam\"],[[{\"type\":\"edge\",\"id\":4},{\"type\":\"edge\",\"id\":1}]],[\"Ghosts\"],[\"Remy\"]],[[\"Remy\"],[[{\"type\":\"edge\",\"id\":0},{\"type\":\"edge\",\"id\":4},{\"type\":\"edge\",\"id\":1}]],[\"Ghosts\"],[\"Remy\"]],[[],[],[],[]]]}"
+        "result": "n.name,e,m.name,p.name\nRemy,\"[0, 4, 1]\",Ghosts,Remy\nAdam,\"[4, 1]\",Ghosts,Remy"
     },
     "tags": [
         "variable",
@@ -13,6 +12,5 @@
         "bfs",
         "unbounded"
     ],
-    "write-required": false,
-    "disabled-reason": "Variable length paths are not implemented in the v3 engine"
+    "write-required": false
 }
