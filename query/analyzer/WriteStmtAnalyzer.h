@@ -47,6 +47,9 @@ public:
     // entities the query has already bound rather than to ones it is still spelling out
     void startPart() { _hasCreate = false; }
 
+    bool hasCreate() const { return _hasCreate; }
+    void setHasCreate(bool hasCreate) { _hasCreate = hasCreate; }
+
     // Statements
     void analyze(const Stmt* stmt);
 

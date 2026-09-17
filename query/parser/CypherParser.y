@@ -33,6 +33,7 @@
     #include "stmt/MatchStmt.h"
     #include "stmt/ShortestPathStmt.h"
     #include "stmt/CallStmt.h"
+    #include "stmt/CallSubqueryStmt.h"
     #include "stmt/CreateStmt.h"
     #include "stmt/MergeStmt.h"
     #include "stmt/SetStmt.h"
@@ -384,6 +385,8 @@
 %type<db::WithStmt*> withSt
 %type<db::ShortestPathStmt*> shortestPathSt
 %type<db::CallStmt*> callSt
+%type<db::CallSubqueryStmt*> callSubquerySt
+%type<std::vector<const db::Symbol*>> callScope
 %type<db::CreateStmt*> createSt
 %type<db::MergeStmt*> mergeSt
 %type<std::pair<db::SetStmt*, db::SetStmt*>> mergeActionChain
@@ -908,6 +911,7 @@ readingStatement
     | withSt { $$ = $1; }
     | unwindSt { $$ = $1; }
     | callSt { $$ = $1; }
+    | callSubquerySt { $$ = $1; }
     | loadCSVSt { $$ = $1; }
     | vectorSearchSt { $$ = $1; }
     ;
@@ -976,16 +980,51 @@ callSt
         $$->setYield($5);
         LOC($$, @$);
     }
-    | CALL OBRACE query CBRACE { scanner.notImplemented(@$, "CALL { subquery }"); }
-    | CALL OPAREN CPAREN OBRACE query CBRACE { scanner.notImplemented(@$, "CALL () { subquery }"); }
-    | CALL OPAREN callCapture CPAREN OBRACE query CBRACE { scanner.notImplemented(@$, "CALL (..) { subquery }"); }
     ;
 
-callCapture
-    : symbol { scanner.notImplemented(@$, "CALL capture"); }
-    | symbol AS symbol { scanner.notImplemented(@$, "CALL capture"); }
-    | callCapture COMMA symbol { scanner.notImplemented(@$, "CALL capture"); }
-    | callCapture COMMA symbol AS symbol { scanner.notImplemented(@$, "CALL capture"); }
+callSubquerySt
+    : CALL OBRACE singlePartQuery CBRACE {
+        $$ = CallSubqueryStmt::create(ast, $3);
+        LOC($$, @$);
+    }
+    | CALL OPAREN CPAREN OBRACE singlePartQuery CBRACE {
+        $$ = CallSubqueryStmt::create(ast, $5);
+        $$->setHasScopeClause(true);
+        LOC($$, @$);
+    }
+    | CALL OPAREN callScope CPAREN OBRACE singlePartQuery CBRACE {
+        $$ = CallSubqueryStmt::create(ast, $6);
+        $$->setHasScopeClause(true);
+        for (const Symbol* symbol : $3) {
+            $$->addImport(symbol);
+        }
+        LOC($$, @$);
+    }
+    | OPTIONAL CALL OBRACE singlePartQuery CBRACE {
+        $$ = CallSubqueryStmt::create(ast, $4);
+        $$->setOptional(true);
+        LOC($$, @$);
+    }
+    | OPTIONAL CALL OPAREN CPAREN OBRACE singlePartQuery CBRACE {
+        $$ = CallSubqueryStmt::create(ast, $6);
+        $$->setHasScopeClause(true);
+        $$->setOptional(true);
+        LOC($$, @$);
+    }
+    | OPTIONAL CALL OPAREN callScope CPAREN OBRACE singlePartQuery CBRACE {
+        $$ = CallSubqueryStmt::create(ast, $7);
+        $$->setHasScopeClause(true);
+        $$->setOptional(true);
+        for (const Symbol* symbol : $4) {
+            $$->addImport(symbol);
+        }
+        LOC($$, @$);
+    }
+    ;
+
+callScope
+    : symbol { $$.push_back($1); }
+    | callScope COMMA symbol { $$ = std::move($1); $$.push_back($3); }
     ;
 
 exprChain

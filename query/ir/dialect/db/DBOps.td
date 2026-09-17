@@ -2307,4 +2307,84 @@ def OptionalYield : TuringOp<"optional_yield", [Pure, Terminator, AttrSizedOpera
   }];
 }
 
+/**
+* CallSubquery
+*/
+def CallSubquery : TuringOp<"call_subquery", []> {
+  let summary = "Run a query of its own once per row in flight";
+
+  let description = [{
+    Models Cypher's CALL { ... } subquery. `input_columns` are every column the
+    query holds at this point, and the body region takes one argument per input
+    column - the imported ones read through their own names, the rest carried past
+    the body - plus a trailing `!db.column<ui64>` row tag when the op is `optional`
+    and the body carries its scope over input rows it has, as db.optional_match
+    takes one. The body is a self-contained db dataflow ending in a
+    db.subquery_yield.
+
+    The body runs once per input row. For each row a returning body yields, the op
+    produces that row's input columns beside the yielded ones: the results are one
+    per input column, in operand order, then one per yielded column. A body the row
+    yields nothing for drops the row, unless the op is `optional`, which keeps it
+    once with the yielded columns null.
+
+      %p2, %x = db.call_subquery(%p) carries_scope ({
+        ^bb0(%pIn: !db.column<!storage.node_id>):
+          %s, %e, %et, %x = db.get_out_edges(%pIn, {}) : ...
+          db.subquery_yield %s, %x : !db.column<!storage.node_id>, !db.column<!storage.node_id>
+      }) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>)
+
+    `carries_scope` says the body hands the input columns back itself: it yields
+    them first, as its dataflow left them - filtered and repeated by its hops - then
+    its own columns, and the results line up with that yield. A body whose rows
+    cannot carry the inputs through - one that aggregates, sorts, cuts or dedups -
+    yields its own columns alone, and the lowering runs it one input row at a time
+    and pairs each row it yields with the input row it came from.
+
+    A `unit` body ends on an updating clause rather than a RETURN. It yields nothing
+    and the op has no results: the rows in flight are the operands still, however
+    many rows the body walked or wrote for each of them.
+
+    The body may write to the graph, so the op is not Pure.
+  }];
+
+  let arguments = (ins Variadic<Column>:$input_columns,
+                       UnitAttr:$unit,
+                       UnitAttr:$carries_scope,
+                       UnitAttr:$optional);
+
+  let results = (outs Variadic<Column>:$results);
+
+  // Exactly one block, ending in a db.subquery_yield.
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    `(` $input_columns `)` (`unit` $unit^)? (`carries_scope` $carries_scope^)? (`optional` $optional^)?
+    $body attr-dict `:` functional-type($input_columns, results)
+  }];
+
+  let hasVerifier = 1;
+}
+
+/**
+* SubqueryYield
+*/
+def SubqueryYield : TuringOp<"subquery_yield", [Pure, Terminator, AttrSizedOperandSegments, HasParent<"CallSubquery">]> {
+  let summary = "Name the row tag and the columns a db.call_subquery's body contributes";
+
+  let description = [{
+    Terminates a db.call_subquery's body region. `tag` is the row tag as the body
+    left it, present exactly when the body takes one, and `columns` are the columns
+    the body contributes: the input columns as the body left them when the op
+    carries its scope, then the columns the body's RETURN publishes. A unit body
+    yields no column.
+  }];
+
+  let arguments = (ins Optional<ColumnRowTags>:$tag, Variadic<Column>:$columns);
+
+  let assemblyFormat = [{
+    ($tag^ `,`)? `{` $columns `}` attr-dict `:` `{` qualified(type($columns)) `}`
+  }];
+}
+
 #endif //TURINGDB_OPS

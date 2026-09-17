@@ -38,6 +38,7 @@ class FunctionInvocationExpr;
 class FunctionInvocation;
 class UnaryExpr;
 class CallStmt;
+class CallSubqueryStmt;
 class CreateStmt;
 class CypherAST;
 class DeleteStmt;
@@ -232,6 +233,17 @@ private:
 
     // One query part: the statements between two WITH barriers
     void generatePart(std::span<Stmt* const> stmts);
+
+    // Emits the db.call_subquery of one CALL { ... }: the columns in flight become the
+    // inputs its body reads through block arguments, the body is generated into the op's
+    // region as a query of its own, and - for a returning body - the op's results, the
+    // inputs beside what the body returned, take the scope over
+    void generateCallSubquery(const CallSubqueryStmt* subquery);
+
+    // Whether the body's rows carry the columns it was given through to its RETURN: true
+    // unless a clause of it aggregates, sorts, cuts or dedups the rows, which is when the
+    // body has to run one input row at a time instead
+    static bool subqueryCarriesRows(const SinglePartQuery* body);
 
     // Emits the source op of every LOAD CSV of this part. A load reads no column, so it
     // is generated ahead of the predicates - a pattern constraint reading a field
@@ -558,6 +570,14 @@ private:
     mlir::Value findYieldedColumn(const VarDecl* decl) const;
 
     void generateWith(const WithStmt* with);
+
+    // Emits a projection that ends no query - a WITH's, or the RETURN of a subquery body -
+    // and publishes its columns as the scope of what follows
+    void publishProjection(const Projection* projection);
+
+    // Adds the columns a CALL subquery body carries under hidden names to what a barrier
+    // inside it publishes: a name no clause of the body can spell is one it cannot drop
+    void appendHiddenColumns(llvm::SmallVectorImpl<PublishedColumn>& published) const;
 
     // A barrier publishes one row per row it read, not the single row its literals are:
     // this binds a projection of constants alone to the rows of the match under it

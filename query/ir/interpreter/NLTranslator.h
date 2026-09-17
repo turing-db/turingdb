@@ -66,6 +66,7 @@ private:
         OptionalDrain,
         CrossProduct,
         HashJoinProbe,
+        EachRow,
     };
 
     // Settings of the iterators passed to each for loop
@@ -99,6 +100,10 @@ private:
         // empty for the other kinds.
         llvm::SmallVector<mlir::Value, 4> _crossOuterColumns;
         llvm::SmallVector<mlir::Value, 4> _crossInnerColumns;
+
+        // The step's chunks an EachRow iterator walks one row at a time; empty for the
+        // other kinds.
+        llvm::SmallVector<mlir::Value, 4> _eachRowColumns;
 
         // The build side a HashJoinProbe iterator matches against and the probe columns it
         // walks, in db.yield order; null and empty for the other kinds.
@@ -664,6 +669,7 @@ private:
     Column* allocColumnForChunkType(mlir::Type chunkType);
     static NLAppendFunction selectAppendForChunkType(mlir::Type chunkType);
     static NLGatherFunction selectGatherForChunkType(mlir::Type chunkType);
+    static NLFillNullFunction selectFillNullForChunkType(mlir::Type chunkType);
 
     // The appender that keys one row of a merge's property value column, chosen from the
     // shape the column comes in - a nullable value chunk, a constant, or a plain chunk -
@@ -795,6 +801,12 @@ private:
     // crossed column, map each to the matching loop variable, and record the loop
     // that walks the pairs a chunk at a time (outer columns block-repeated, inner
     // columns tiled)
+    // One step per row of the config's columns, each a one-row gather out of them
+    void translateEachRowLoop(const IteratorConfig& config,
+                              mlir::Block& loopBody,
+                              NLLimitState* limit,
+                              NLStmtContainer* body);
+
     void translateCrossProductLoop(const IteratorConfig& config,
                                    mlir::Block& loopBody,
                                    NLLimitState* limit,

@@ -825,6 +825,39 @@ def CrossProduct : NLOp<"cross_product", [Pure, InferTypeOpAdaptor, AttrSizedOpe
 }
 
 /**
+* EachRow
+*/
+def EachRow : NLOp<"each_row", [Pure, InferTypeOpAdaptor]> {
+  let summary = "Create an iterator over the rows of a step, one row per step";
+
+  let description = [{
+    Each step of an enclosing nl.for binds one row of the given chunks, in the order
+    they hold it: step k fills one-row chunks with row k of every column. The
+    iterator's chunk types are the columns' own, so the body reads the row through
+    the same kinds of chunk the step held it in:
+
+      %rows = nl.each_row {%p, %h} : {!nl.chunk<!storage.node_id>, !nl.chunk<none>}
+      nl.for %p1, %h1 in %rows : !nl.iter<!nl.chunk<!storage.node_id>, !nl.chunk<none>> {
+        ...
+      }
+
+    This is how a CALL subquery whose body aggregates, sorts, cuts or dedups runs
+    once per row in flight: the body's loops nest in this loop and its accumulators
+    are hoisted into its body, so they cover one input row at a time. The columns
+    must be row-aligned with each other, and there must be at least one - the step's
+    row count is read from the first. A `limit` on the enclosing nl.for stops the
+    walk over the rows once the budget is spent.
+  }];
+
+  let arguments = (ins Variadic<NLChunk>:$columns);
+  let results   = (outs NLIterator:$result);
+
+  let assemblyFormat = [{
+    `{` $columns `}` attr-dict `:` `{` qualified(type($columns)) `}`
+  }];
+}
+
+/**
 * Output
 */
 def Output : NLOp<"output", [AttrSizedOperandSegments]> {

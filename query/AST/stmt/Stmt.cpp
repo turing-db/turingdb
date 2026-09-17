@@ -1,5 +1,7 @@
 #include "Stmt.h"
 
+#include "CallSubqueryStmt.h"
+
 using namespace db;
 
 Stmt::~Stmt() {
@@ -22,9 +24,20 @@ bool Stmt::isUpdating(Kind kind) {
         case Kind::VECTOR_SEARCH:
         case Kind::UNWIND:
         case Kind::WITH:
+        case Kind::CALL_SUBQUERY:
             return false;
         break;
     }
 
     return false;
+}
+
+bool Stmt::isUpdating(const Stmt* stmt) {
+    const Kind kind = stmt->getKind();
+
+    if (kind == Kind::CALL_SUBQUERY) {
+        return !static_cast<const CallSubqueryStmt*>(stmt)->isReturning();
+    }
+
+    return isUpdating(kind);
 }

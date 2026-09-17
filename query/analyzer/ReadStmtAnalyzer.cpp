@@ -118,6 +118,7 @@ void ReadStmtAnalyzer::analyze(Stmt* stmt) {
         case Stmt::Kind::DELETE:
         case Stmt::Kind::RETURN:
         case Stmt::Kind::WITH:
+        case Stmt::Kind::CALL_SUBQUERY:
             throw FatalException("Attempted to evaluate invalid read statement.");
         break;
     }
