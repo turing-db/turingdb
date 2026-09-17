@@ -342,18 +342,19 @@ descend into `db.optional_match` today, so an untrimmed region is the existing b
 
 The block arguments are every column in flight, imported or not, in both forms. The
 imports are bound in the body under the declarations the body's own `DeclContext` holds
-for them. A body carrying its scope, and a unit body, bind every input under a hidden name
-too, `` `hidden_<name>``, that no clause can spell; a body run per row binds the imports
+for them. A body carrying its scope binds every input under a hidden name too,
+`` `hidden_<name>``, that no clause can spell; a body run per row binds the imports
 alone, since the lowering re-attaches the row. A barrier inside the body appends the hidden
 columns to what it publishes (`appendHiddenColumns`), which is how a WITH in the body keeps
 the input rows beside what it projects.
 
 The op carries three unit attributes. `unit` is a body with no RETURN: no results, the
-rows in flight stay the operands. `carries_scope` is a returning body none of whose
-clauses aggregates, sorts, cuts, dedups or runs a SHORTESTPATH
-(`DBProgramGenerator::subqueryCarriesRows`): it yields the inputs as its rows left them,
-read off the hidden names, then the RETURN columns, and lowers in place. Without it the
-body yields the RETURN columns alone and `lowerSubqueryPerRow` drives it through
+rows in flight stay the operands. `carries_scope` is a body none of whose clauses
+aggregates, sorts, cuts, dedups or runs a SHORTESTPATH
+(`DBProgramGenerator::subqueryCarriesRows`): a returning one yields the inputs as its rows
+left them, read off the hidden names, then the RETURN columns, and either lowers in place.
+Without it the body runs one input row at a time, a unit one writing over one row per step;
+a returning one yields the RETURN columns alone and `lowerSubqueryPerRow` drives it through
 `nl.each_row`, hoists its accumulators and limit handles into the row loop, and crosses the
 row's one-row chunks with what the body yielded. `optional` wraps either in the optional
 buffer, collect and drain; the body carries the row tag itself only when it carries the

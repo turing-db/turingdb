@@ -780,11 +780,10 @@ bool reducesToOneRow(mlir::Operation* operation) {
                      mlir::db::Avg>(operation);
 }
 
-// Passes some of its rows on and keeps the rest back, so the rows reaching a cut below it
-// are fewer than the rows a producer above it made
-// A returning body that carries nothing back runs one input row at a time
+// A body whose own dataflow cannot keep the input rows paired with what it makes of them
+// runs one input row at a time, whatever it ends on
 bool runsPerRow(mlir::db::CallSubquery call) {
-    return !call.getUnit() && !call.getCarriesScope();
+    return !call.getCarriesScope();
 }
 
 // The innermost body run one row at a time that holds the op, or null when none does
@@ -1859,7 +1858,7 @@ void DBLowering::lowerCallSubquery(mlir::db::CallSubquery call) {
     if (returning && call.getOptional()) {
         lowerOptionalSubquery(call, stepBlock, inputChunks);
         return;
-    } else if (returning && !call.getCarriesScope()) {
+    } else if (runsPerRow(call)) {
         lowerSubqueryPerRow(call, stepBlock, inputChunks);
         return;
     }
@@ -1933,20 +1932,22 @@ void DBLowering::lowerSubqueryPerRow(mlir::db::CallSubquery call,
                                      mlir::Block* stepBlock,
                                      llvm::ArrayRef<mlir::Value> inputChunks) {
     const mlir::Location loc = _builder.getUnknownLoc();
+    const bool unit = call.getUnit();
+
+    mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+
     llvm::SmallVector<mlir::Value, 4> yieldedChunks;
 
     // No input column means the step is the single empty row Cypher starts from: the body
     // runs once, in the step block, and what it yields is the result
     if (inputChunks.empty()) {
-        mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
-        const mlir::Value previousInnermostCardinality = _innermostCardinality;
-
         hoistLimitHandles(call.getBody(), stepBlock, call);
 
         mlir::Value yieldedTag;
         lowerSubqueryBody(call, stepBlock, inputChunks, yieldedChunks, yieldedTag);
 
-        if (!_innermostLoopBody) {
+        if (unit || !_innermostLoopBody) {
             _innermostLoopBody = previousInnermostLoopBody;
             _innermostCardinality = previousInnermostCardinality;
         }
@@ -1979,6 +1980,16 @@ void DBLowering::lowerSubqueryPerRow(mlir::db::CallSubquery call,
 
     mlir::Value yieldedTag;
     lowerSubqueryBody(call, rowBody, rowChunks, yieldedChunks, yieldedTag);
+
+    // A unit body hands nothing back, so there is no chunk to pair the row with and no
+    // relation for what follows to walk: the step's own rows are in flight still
+    if (unit) {
+        _innermostLoopBody = previousInnermostLoopBody;
+        _innermostCardinality = previousInnermostCardinality;
+
+        setInsertionInto(stepBlock);
+        return;
+    }
 
     // One row against N pairs the input row with each of the N rows the body yielded for
     // it, which is the op's result: the inputs then the body's columns
@@ -3544,7 +3555,7 @@ void DBLowering::lowerCreateNode(mlir::db::CreateNode createNode) {
     if (cardinalityChunk) {
         setInsertionInto(ownerBlock(cardinalityChunk));
     } else {
-        mlir::Block* targetBlock = _entryBlock;
+        mlir::Block* targetBlock = _rootBlock;
         for (const mlir::OpOperand& use : createNode.getResult().getUses()) {
             auto createEdge = mlir::dyn_cast<mlir::db::CreateEdge>(use.getOwner());
             if (!createEdge) {
@@ -3559,12 +3570,12 @@ void DBLowering::lowerCreateNode(mlir::db::CreateNode createNode) {
                     continue;
                 }
                 mlir::Block* const candidateBlock = ownerBlock(it->second);
-                if (candidateBlock != _entryBlock) {
+                if (candidateBlock != _rootBlock) {
                     targetBlock = candidateBlock;
                     break;
                 }
             }
-            if (targetBlock != _entryBlock) {
+            if (targetBlock != _rootBlock) {
                 break;
             }
         }
