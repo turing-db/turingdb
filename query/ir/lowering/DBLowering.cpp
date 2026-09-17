@@ -737,13 +737,20 @@ mlir::db::CallSubquery nearestPerRowSubquery(mlir::Operation* operation) {
     return mlir::db::CallSubquery {};
 }
 
+// Passes some of its rows on and keeps the rest back, so the rows reaching a cut below it
+// are fewer than the rows a producer above it made. A unit body writes and yields nothing,
+// so the rows come out of it as they went in.
 bool dropsRows(mlir::Operation* operation) {
+    mlir::db::CallSubquery call = mlir::dyn_cast<mlir::db::CallSubquery>(operation);
+    if (call) {
+        return !call.getUnit();
+    }
+
     return mlir::isa<mlir::db::FilterOp,
                      mlir::db::HashJoin,
                      mlir::db::Skip,
                      mlir::db::Limit,
-                     mlir::db::RemoveDuplicates,
-                     mlir::db::CallSubquery>(operation);
+                     mlir::db::RemoveDuplicates>(operation);
 }
 
 // The list element types an unwind can drain into a column of that very type: the entity
