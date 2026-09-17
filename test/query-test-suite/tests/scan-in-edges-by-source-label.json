@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (a)<--(b:Person) RETURN a.name, b.name ORDER BY a.name, b.name",
+  "expect": {
+    "result": "a.name,b.name\nAdam,Remy\nAnimals,Luc\nBio,Adam\nBio,Maxime\nComputers,Luc\nComputers,Remy\nCooking,Adam\nCooking,Martina\nEighties,Remy\nGhosts,Remy\nGym,Cyrus\nGym,Doruk\nGym,Suhas\nJiuJitsu,Suhas\nPadel,Maxime\nRemy,Adam\nTravel,Cyrus",
+    "resultJson": "{\"header\":{\"column_names\":[\"a.name\",\"b.name\"],\"column_types\":[\"String\",\"String\"]},\"data\":[[[\"Adam\",\"Animals\",\"Bio\",\"Bio\",\"Computers\",\"Computers\",\"Cooking\",\"Cooking\",\"Eighties\",\"Ghosts\",\"Gym\",\"Gym\",\"Gym\",\"JiuJitsu\",\"Padel\",\"Remy\",\"Travel\"],[\"Remy\",\"Luc\",\"Adam\",\"Maxime\",\"Luc\",\"Remy\",\"Adam\",\"Martina\",\"Remy\",\"Remy\",\"Cyrus\",\"Doruk\",\"Suhas\",\"Suhas\",\"Maxime\",\"Adam\",\"Cyrus\"]]]}"
+  },
+  "tags": [
+    "match",
+    "labels",
+    "edges"
+  ],
+  "write-required": false
+}
