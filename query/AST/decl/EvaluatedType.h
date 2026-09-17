@@ -129,4 +129,32 @@ inline bool convertibleToValueType(EvaluatedType e) {
     return toValueType(e).has_value();
 }
 
+// The types naming a value an equality can be answered over without reading a row: the
+// scalars and the list, but not a tagged cell, whose type is the row's rather than the
+// column's
+inline bool namesAComparableValue(EvaluatedType e) {
+    return e == EvaluatedType::Integer
+        || e == EvaluatedType::Double
+        || e == EvaluatedType::String
+        || e == EvaluatedType::Char
+        || e == EvaluatedType::Bool
+        || e == EvaluatedType::Embedding
+        || e == EvaluatedType::List;
+}
+
+// Whether two types can never hold equal values, which makes an equality between them
+// false on every row. A numeric pair is not disjoint - 32 equals 32.0 in Cypher - and
+// neither is a string against a char, which compare as the characters they carry.
+inline bool comparesAsDisjointTypes(EvaluatedType a, EvaluatedType b) {
+    if (!namesAComparableValue(a) || !namesAComparableValue(b) || a == b) {
+        return false;
+    }
+
+    const TypePairBitset pair(a, b);
+    const bool bothNumeric = pair == TypePairBitset(EvaluatedType::Integer, EvaluatedType::Double);
+    const bool bothTextual = pair == TypePairBitset(EvaluatedType::String, EvaluatedType::Char);
+
+    return !bothNumeric && !bothTextual;
+}
+
 }

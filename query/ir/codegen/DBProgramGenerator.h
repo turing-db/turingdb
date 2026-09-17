@@ -674,6 +674,11 @@ private:
 
     mlir::Value nullConstantColumn();
 
+    // The comparison of two types that can never hold equal values: false where both
+    // operands hold a value, and null where either is absent, since nothing compares to a
+    // null. The null constant rides the three-valued tables of AND and OR as the unknown
+    mlir::Value disjointComparison(mlir::Value lhs, mlir::Value rhs, bool equality);
+
     mlir::Value constantBool(bool value);
     mlir::Value constantString(llvm::StringRef value);
     mlir::Value constantLabelList(llvm::ArrayRef<std::string> labels);

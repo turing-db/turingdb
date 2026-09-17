@@ -305,6 +305,13 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
+            // Values of two types that can never be equal are not equal, so the comparison
+            // answers false rather than turning the query away. Only the MLIR engine folds
+            // it; the legacy planner has no kernel for the pair
+            if (_isV3 && comparesAsDisjointTypes(a, b)) {
+                break;
+            }
+
             // Allows NodeID <-> NodeID and NodeID <-> Integer comparisons
             if (pair == TypePairBitset(EvaluatedType::NodePattern,
                                        EvaluatedType::NodePattern)

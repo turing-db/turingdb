@@ -101,10 +101,10 @@ TEST_F(ListLiteralPropertyValueTest, acceptsAHeterogeneousListAsANodeProperty) {
     expectAccepted("CREATE (x:Thing {vals: [1, 'two', true]})");
 }
 
-TEST_F(ListLiteralPropertyValueTest, rejectsAListMatchedAgainstAStringProperty) {
-    // name is a stored string, and a list is not a value it can be compared against.
-    expectRejected("MATCH (n {name: [1, 2]}) RETURN n",
-                   "Cannot evaluate node property: types 'String' and 'List' are incompatible");
+TEST_F(ListLiteralPropertyValueTest, acceptsAListMatchedAgainstAStringProperty) {
+    // name is a stored string and a list is never one, so the constraint is false on every
+    // row: the pattern matches nothing rather than turning the query away.
+    expectAccepted("MATCH (n {name: [1, 2]}) RETURN n");
 }
 
 TEST_F(ListLiteralPropertyValueTest, rejectsAListAssignedToAStringProperty) {

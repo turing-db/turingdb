@@ -57,10 +57,20 @@ namespace {
 
 // A tagged scalar carries its type per row rather than in the plan, so no property type
 // rules it out: the comparison the constraint becomes settles it row by row, as the same
-// test written as a WHERE does.
-bool constraintTypeCompatible(ValueType propertyType, EvaluatedType exprType) {
-    return exprType == EvaluatedType::ListItem
-           || ExprAnalyzer::propTypeCompatible(propertyType, exprType);
+// test written as a WHERE does. Two types that can never hold equal values settle it too -
+// the constraint is false wherever the property is there - which v3 answers rather than
+// rejects.
+bool constraintTypeCompatible(ValueType propertyType, EvaluatedType exprType, bool isV3) {
+    if (exprType == EvaluatedType::ListItem) {
+        return true;
+    }
+
+    const std::optional<EvaluatedType> propertyEvaluated = toEvaluatedType(propertyType);
+    if (isV3 && propertyEvaluated && comparesAsDisjointTypes(*propertyEvaluated, exprType)) {
+        return true;
+    }
+
+    return ExprAnalyzer::propTypeCompatible(propertyType, exprType);
 }
 
 // The type each row an UNWIND emits carries: one level out of a list's shape - however
@@ -409,7 +419,7 @@ void ReadStmtAnalyzer::analyze(NodePattern* nodePattern) {
             }
 
             const bool incompatibleValue = propType
-                                           && !constraintTypeCompatible(propType->_valueType, expr->getType());
+                                           && !constraintTypeCompatible(propType->_valueType, expr->getType(), _isV3);
             if (incompatibleValue) {
                 throwError(fmt::format("Cannot evaluate node property: types '{}' and '{}' are incompatible",
                                        ValueTypeName::value(propType->_valueType),
@@ -486,7 +496,7 @@ void ReadStmtAnalyzer::analyze(EdgePattern* edgePattern) {
             }
 
             const bool incompatibleValue = propType
-                                           && !constraintTypeCompatible(propType->_valueType, expr->getType());
+                                           && !constraintTypeCompatible(propType->_valueType, expr->getType(), _isV3);
             if (incompatibleValue) {
                 throwError(fmt::format("Cannot evaluate edge property: types '{}' and '{}' are incompatible",
                                        ValueTypeName::value(propType->_valueType),
