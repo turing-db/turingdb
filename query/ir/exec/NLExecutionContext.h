@@ -20,6 +20,7 @@ class NLOutputSink;
 class NLPendingEdgeIndex;
 class NLSystemContext;
 class NLWrittenValues;
+class PendingAdjacency;
 
 // What every handler of a running NLProgram reads the world through: the graph it runs
 // against, where its rows go, and the change it writes into.
@@ -60,6 +61,10 @@ public:
     // the write buffer once between them
     NLPendingEdgeIndex& getPendingEdges() const { return *_pendingEdges; }
 
+    // The same edges in the shape a traversal reads a data part in, so a walk nested in
+    // another loop indexes the write buffer once for the program rather than once per chunk
+    PendingAdjacency& getPendingAdjacency() const { return *_pendingAdjacency; }
+
     // Where this query's own writes start in the change's buffer. A read sees what its own
     // query wrote and not what an earlier statement of the change staged: that one becomes
     // readable when it commits, as a write of any other change does.
@@ -76,6 +81,7 @@ private:
     size_t _firstQueryEdge {0};
     std::unique_ptr<NLWrittenValues> _writtenValues;
     std::unique_ptr<NLPendingEdgeIndex> _pendingEdges;
+    std::unique_ptr<PendingAdjacency> _pendingAdjacency;
 };
 
 }

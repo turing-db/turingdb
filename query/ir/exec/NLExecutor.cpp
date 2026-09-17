@@ -5892,19 +5892,19 @@ void NLExecutor::runExplorePathsLoop(NLExecutionContext* context, NLFunctionData
     const bool distinctEnds = loopData->isDistinctEnds();
     explorator.setDistinctEnds(distinctEnds);
 
-    PendingAdjacency pendingAdjacency;
     const CommitWriteBuffer* writeBuffer = context->getWriteBuffer();
     if (writeBuffer) {
+        PendingAdjacency& pendingAdjacency = context->getPendingAdjacency();
         pendingAdjacency.index(*writeBuffer,
                                context->getFirstQueryEdge(),
                                committedNodeCount(&view),
                                committedEdgeCount(&view));
-        explorator.setPendingAdjacency(&pendingAdjacency);
+        explorator.setPendingAdjacency(&pendingAdjacency, pendingAdjacency.getEdgeIDBound());
     }
 
     // A change that wrote only nodes opens no path the committed graph does not already
     // hold, so only a pending edge puts the two pruning indexes below out of date.
-    const bool walksPendingEdges = !pendingAdjacency.isEmpty();
+    const bool walksPendingEdges = writeBuffer && writeBuffer->numPendingEdges() > context->getFirstQueryEdge();
 
     std::optional<NLHopFilter> hopFilter;
     if (loopData->hasHopFilter()) {

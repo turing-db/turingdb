@@ -49,8 +49,10 @@ public:
     void setEndNodes(const ColumnNodeIDs* endNodes) { _endNodes = endNodes; }
     void setDistanceIndex(const PathDistanceIndex* index) { _distances = index; }
     void setTargetIndex(const PathTargetIndex* index) { _targetIndex = index; }
-    // The edges this change has written and not committed, walked beside the graph's own
-    void setPendingAdjacency(const PendingAdjacency* adjacency) { _pendingAdjacency = adjacency; }
+    // The edges this change has written and not committed, walked beside the graph's own, up
+    // to @param edgeIDBound: the index is shared between the walks of one program and only
+    // grows, so the bound is what holds this walk to the edges that existed when it started.
+    void setPendingAdjacency(const PendingAdjacency* adjacency, size_t edgeIDBound);
 
     void setDistinctEnds(bool distinct);
     void setWalkerCount(size_t walkerCount);
@@ -136,6 +138,7 @@ private:
     const PathDistanceIndex* _distances {nullptr};
     const PathTargetIndex* _targetIndex {nullptr};
     const PendingAdjacency* _pendingAdjacency {nullptr};
+    size_t _pendingEdgeIDBound {0};
     bool _distinctEnds {false};
     size_t _lookahead {1};
 
