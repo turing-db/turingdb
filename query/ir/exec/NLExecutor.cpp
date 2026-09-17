@@ -4994,7 +4994,7 @@ void NLExecutor::runScanEdgesLoop(NLExecutionContext* context, NLFunctionData* d
 void NLExecutor::runScanEdgesByTypeLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLScanEdgesByTypeLoopData* loopData = static_cast<NLScanEdgesByTypeLoopData*>(data);
 
-    // An edge type absent from the schema matches no edge, so the loop body never runs.
+    // No type the pattern named is in the schema, so no edge can match and the loop body never runs.
     if (!loopData->isMatchable()) {
         return;
     }
@@ -5004,14 +5004,14 @@ void NLExecutor::runScanEdgesByTypeLoop(NLExecutionContext* context, NLFunctionD
 
     const NLLimitState* limit = loopData->getLimit();
 
-    ScanEdgesByTypeChunkWriter chunkWriter(*context->getView(), loopData->getEdgeType());
+    ScanEdgesByTypeChunkWriter chunkWriter(*context->getView(), loopData->getRequestedTypes());
     chunkWriter.setSrcIDs(sources);
     chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setTgtIDs(loopData->getTargets());
 
     NLPendingEdgeScan pendingEdges(context, loopData);
-    pendingEdges.setEdgeType(loopData->getEdgeType());
+    pendingEdges.setEdgeTypes(loopData->getRequestedTypes());
 
     runScanLoopSteps(context, &chunkWriter, &pendingEdges, sources, loopBody, limit);
 }
@@ -5137,20 +5137,20 @@ void NLExecutor::runGetOutEdgesByTypeLoop(NLExecutionContext* context, NLFunctio
     NLEdgeByTypeLoopData* loopData = static_cast<NLEdgeByTypeLoopData*>(data);
     const ColumnNodeIDs* inputNodeIDs = loopData->getInput();
 
-    // An edge type absent from the schema matches no edge, and an empty input has
-    // no edges to walk: either way the loop body never runs.
+    // No type the pattern named is in the schema, so no edge can match; and an empty
+    // input has no edges to walk. Either way the loop body never runs.
     if (!loopData->isMatchable() || inputNodeIDs->empty()) {
         return;
     }
 
-    GetOutEdgesByTypeChunkWriter chunkWriter(*context->getView(), inputNodeIDs, loopData->getEdgeType());
+    GetOutEdgesByTypeChunkWriter chunkWriter(*context->getView(), inputNodeIDs, loopData->getRequestedTypes());
     chunkWriter.setIndices(loopData->getIndices());
     chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setTgtIDs(loopData->getTargets());
 
     NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::Out, loopData->getTargets());
-    pendingEdges.setEdgeType(loopData->getEdgeType());
+    pendingEdges.setEdgeTypes(loopData->getRequestedTypes());
 
     runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getSources());
 }
@@ -5163,14 +5163,14 @@ void NLExecutor::runGetInEdgesByTypeLoop(NLExecutionContext* context, NLFunction
         return;
     }
 
-    GetInEdgesByTypeChunkWriter chunkWriter(*context->getView(), inputNodeIDs, loopData->getEdgeType());
+    GetInEdgesByTypeChunkWriter chunkWriter(*context->getView(), inputNodeIDs, loopData->getRequestedTypes());
     chunkWriter.setIndices(loopData->getIndices());
     chunkWriter.setEdgeIDs(loopData->getEdgeIDs());
     chunkWriter.setEdgeTypes(loopData->getEdgeTypes());
     chunkWriter.setSrcIDs(loopData->getSources());
 
     NLPendingEdgeHop pendingEdges(context, loopData, NLPendingEdgeHop::Direction::In, loopData->getSources());
-    pendingEdges.setEdgeType(loopData->getEdgeType());
+    pendingEdges.setEdgeTypes(loopData->getRequestedTypes());
 
     runEdgeLoopSteps(context, loopData, &chunkWriter, &pendingEdges, loopData->getTargets());
 }

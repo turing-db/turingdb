@@ -790,8 +790,8 @@ TEST_F(NLDialectTest, constListRoundTripsThroughTextualForm) {
 
 // nl.get_out_edges_by_type infers the same four-chunk edge iterator as
 // nl.get_out_edges - sources, edge IDs, edge type IDs, targets - since the edge
-// type filters rows, not columns. The type is a resolved nl.get_edge_type handle,
-// not a name on the op.
+// types filter rows, not columns. They are a resolved nl.get_edge_type_set handle,
+// not names on the op.
 TEST_F(NLDialectTest, getOutEdgesByTypeInfersEdgeIterator) {
     mlir::OpBuilder builder(&_context);
     const mlir::Location loc = builder.getUnknownLoc();
@@ -801,7 +801,7 @@ TEST_F(NLDialectTest, getOutEdgesByTypeInfersEdgeIterator) {
     mlir::Block& entryBlock = function.getBody().front();
     const mlir::Value nodes = entryBlock.getArgument(0);
 
-    mlir::nl::GetEdgeType handle = builder.create<mlir::nl::GetEdgeType>(loc, builder.getStringAttr("KNOWS"));
+    mlir::nl::GetEdgeTypeSet handle = builder.create<mlir::nl::GetEdgeTypeSet>(loc, builder.getStrArrayAttr({"KNOWS", "LIKES"}));
     mlir::nl::GetOutEdgesByType edges = builder.create<mlir::nl::GetOutEdgesByType>(loc,
                                                                                    nodes,
                                                                                    handle.getResult(),
@@ -814,9 +814,9 @@ TEST_F(NLDialectTest, getOutEdgesByTypeInfersEdgeIterator) {
     const mlir::Type iteratorType = mlir::nl::IteratorType::get(&_context, {nodeChunk, edgeIDChunk, edgeTypeIDChunk, nodeChunk});
 
     EXPECT_EQ(edges.getResult().getType(), iteratorType);
-    // The hop's edge_type operand is the get_edge_type handle, which carries the name.
-    EXPECT_EQ(edges.getEdgeType(), handle.getResult());
-    EXPECT_EQ(handle.getName(), "KNOWS");
+    // The hop's edge_types operand is the get_edge_type_set handle, which carries the names.
+    EXPECT_EQ(edges.getEdgeTypes(), handle.getResult());
+    EXPECT_EQ(handle.getNames(), builder.getStrArrayAttr({"KNOWS", "LIKES"}));
     EXPECT_TRUE(mlir::succeeded(mlir::verify(function)));
 }
 

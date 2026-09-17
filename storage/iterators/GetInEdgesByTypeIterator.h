@@ -2,6 +2,8 @@
 
 #include "GetInEdgesIterator.h"
 
+#include <span>
+
 #include "ID.h"
 
 namespace db {
@@ -11,7 +13,7 @@ public:
     GetInEdgesByTypeChunkWriter() = delete;
     GetInEdgesByTypeChunkWriter(const GraphView& view,
                                 const ColumnNodeIDs* inputNodeIDs,
-                                EdgeTypeID edgeType);
+                                std::span<const EdgeTypeID> edgeTypes);
 
     void fill(size_t maxCount);
 
@@ -22,7 +24,8 @@ public:
     void setEdgeTypes(ColumnEdgeTypes* types) { _types = types; }
 
 private:
-    EdgeTypeID _edgeType;
+    // Borrowed, not owned: the caller keeps the types alive for the writer's lifetime
+    std::span<const EdgeTypeID> _edgeTypes;
 
     ColumnVector<size_t>* _indices {nullptr};
     ColumnEdgeIDs* _edgeIDs {nullptr};

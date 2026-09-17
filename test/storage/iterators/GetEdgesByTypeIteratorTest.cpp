@@ -1,5 +1,7 @@
 #include <algorithm>
+#include <array>
 #include <memory>
+#include <span>
 #include <vector>
 
 #include "TuringTest.h"
@@ -40,17 +42,17 @@ struct CollectedEdge {
 // Drive a by-type out-edge writer over the whole input, gathering one row per
 // emitted edge. maxCount is the per-fill row budget: a small value exercises the
 // mid-span resume path across successive fill() calls.
-void collectOutEdgesByType(const GraphReader& reader,
-                           const ColumnNodeIDs* input,
-                           EdgeTypeID edgeType,
-                           size_t maxCount,
-                           std::vector<CollectedEdge>& out) {
+void collectOutEdgesByTypes(const GraphReader& reader,
+                            const ColumnNodeIDs* input,
+                            std::span<const EdgeTypeID> edgeTypes,
+                            size_t maxCount,
+                            std::vector<CollectedEdge>& out) {
     ColumnVector<size_t> indices;
     ColumnEdgeIDs edgeIDs;
     ColumnNodeIDs targets;
     ColumnEdgeTypes types;
 
-    GetOutEdgesByTypeChunkWriter writer(reader.getView(), input, edgeType);
+    GetOutEdgesByTypeChunkWriter writer(reader.getView(), input, edgeTypes);
     writer.setIndices(&indices);
     writer.setEdgeIDs(&edgeIDs);
     writer.setTgtIDs(&targets);
@@ -67,6 +69,15 @@ void collectOutEdgesByType(const GraphReader& reader,
 }
 
 // As collectOutEdgesByType, but for in-edges: the neighbour is the source.
+void collectOutEdgesByType(const GraphReader& reader,
+                           const ColumnNodeIDs* input,
+                           EdgeTypeID edgeType,
+                           size_t maxCount,
+                           std::vector<CollectedEdge>& out) {
+    const std::array<EdgeTypeID, 1> edgeTypes {edgeType};
+    collectOutEdgesByTypes(reader, input, edgeTypes, maxCount, out);
+}
+
 void collectInEdgesByType(const GraphReader& reader,
                           const ColumnNodeIDs* input,
                           EdgeTypeID edgeType,
@@ -77,7 +88,9 @@ void collectInEdgesByType(const GraphReader& reader,
     ColumnNodeIDs sources;
     ColumnEdgeTypes types;
 
-    GetInEdgesByTypeChunkWriter writer(reader.getView(), input, edgeType);
+    const std::array<EdgeTypeID, 1> edgeTypes {edgeType};
+
+    GetInEdgesByTypeChunkWriter writer(reader.getView(), input, edgeTypes);
     writer.setIndices(&indices);
     writer.setEdgeIDs(&edgeIDs);
     writer.setSrcIDs(&sources);
@@ -292,6 +305,33 @@ TEST_F(GetEdgesByTypeIteratorTest, inEdgesByTypeMatchFilteredUnfiltered) {
 
 // Hand-derived expected content, so the differential tests above cannot be fooled
 // by a matching bug in the unfiltered writer.
+// Two types at once: the hop keeps an out-edge carrying either, so the disjunction is
+// the union of the two single-type hops.
+TEST_F(GetEdgesByTypeIteratorTest, outEdgesOverTwoTypesAreTheirUnion) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const ColumnNodeIDs input = {0, 1, 2, 3, 4, 5};
+
+    const std::array<EdgeTypeID, 2> bothTypes {_knows, _likes};
+    std::vector<CollectedEdge> both;
+    collectOutEdgesByTypes(reader, &input, bothTypes, ChunkConfig::CHUNK_SIZE, both);
+
+    expectSameContent({{0, 1}, {0, 3}, {4, 5}, {5, 0}, {0, 2}, {1, 2}, {4, 0}}, both);
+}
+
+// A name no edge carries drops out, leaving the type that does match.
+TEST_F(GetEdgesByTypeIteratorTest, outEdgesIgnoreAnEmptyTypeInTheDisjunction) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const ColumnNodeIDs input = {0, 1, 2, 3, 4, 5};
+
+    const std::array<EdgeTypeID, 2> withUnused {_knows, EdgeTypeID {9999}};
+    std::vector<CollectedEdge> actual;
+    collectOutEdgesByTypes(reader, &input, withUnused, ChunkConfig::CHUNK_SIZE, actual);
+
+    expectSameContent({{0, 1}, {0, 3}, {4, 5}, {5, 0}}, actual);
+}
+
 TEST_F(GetEdgesByTypeIteratorTest, outEdgesByTypeExplicit) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();

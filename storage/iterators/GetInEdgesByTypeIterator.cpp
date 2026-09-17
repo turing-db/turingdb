@@ -3,15 +3,16 @@
 #include <iterator>
 
 #include "columns/ColumnIDs.h"
+#include "EdgeTypeMatch.h"
 #include "IteratorUtils.h"
 
 using namespace db;
 
 GetInEdgesByTypeChunkWriter::GetInEdgesByTypeChunkWriter(const GraphView& view,
                                                          const ColumnNodeIDs* inputNodeIDs,
-                                                         EdgeTypeID edgeType)
+                                                         std::span<const EdgeTypeID> edgeTypes)
     : GetInEdgesIterator(view, inputNodeIDs),
-    _edgeType(edgeType),
+    _edgeTypes(edgeTypes),
     _filter(view.tombstones())
 {
 }
@@ -60,19 +61,21 @@ void GetInEdgesByTypeChunkWriter::fill(size_t maxCount) {
     }
 
     // The by-type in-edge fill mirrors GetOutEdgesByTypeChunkWriter::fill: the
-    // edges of the requested type are scattered through a node's in-edge span, so
+    // edges of the requested types are scattered through a node's in-edge span, so
     // we walk it edge by edge and push only the matches straight into the output
     // columns, with no intermediate unfiltered chunk. For an in-edge the neighbour
     // (_otherID) is the source. The bitmask dispatch lifts the "is this column
     // wired up?" test out of the per-edge loop.
+    const std::span<const EdgeTypeID> edgeTypes = _edgeTypes;
+
     const auto fill = [&]<std::array<bool, NColumns> conditions>() {
         while (isValid() && remainingToMax > 0) {
             const size_t index = std::distance(_inputNodeIDs->cbegin(), _nodeIt);
 
-            // Append this node's remaining in-edges of the requested type until
+            // Append this node's remaining in-edges of a requested type until
             // the span is exhausted or the row budget runs out.
             while (_edgeIt != _edges.end() && remainingToMax > 0) {
-                if (_edgeIt->_edgeTypeID == _edgeType) {
+                if (edgeTypeMatches(edgeTypes, _edgeIt->_edgeTypeID)) {
                     _indices->push_back(index);
 
                     if constexpr (conditions[0]) {

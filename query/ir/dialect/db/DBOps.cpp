@@ -23,6 +23,14 @@ namespace storage = mlir::storage;
 
 namespace {
 
+LogicalResult verifyEdgeTypesNotEmpty(Operation* operation, ArrayAttr edgeTypes) {
+    if (edgeTypes.empty()) {
+        return operation->emitOpError("requires at least one edge type");
+    }
+
+    return success();
+}
+
 // The keyword that introduces each factor region in the textual form
 // `db.cross_product factor { ... } factor { ... }`.
 const char* const factorKeyword = "factor";
@@ -689,11 +697,19 @@ LogicalResult CheckLabelConstraint::verify() {
 }
 
 LogicalResult CheckEdgeTypeConstraint::verify() {
-    if (getEdgeTypes().empty()) {
-        return emitOpError("requires at least one edge type");
-    }
+    return verifyEdgeTypesNotEmpty(getOperation(), getEdgeTypes());
+}
 
-    return success();
+LogicalResult ScanEdgesByType::verify() {
+    return verifyEdgeTypesNotEmpty(getOperation(), getEdgeTypes());
+}
+
+LogicalResult GetOutEdgesByType::verify() {
+    return verifyEdgeTypesNotEmpty(getOperation(), getEdgeTypes());
+}
+
+LogicalResult GetInEdgesByType::verify() {
+    return verifyEdgeTypesNotEmpty(getOperation(), getEdgeTypes());
 }
 
 void Output::build(OpBuilder& builder, OperationState& state, ValueRange columns) {

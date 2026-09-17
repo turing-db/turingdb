@@ -554,40 +554,43 @@ def ScanEdges : TuringOp<"scan_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpI
 * ScanEdgesByType
 */
 def ScanEdgesByType : TuringOp<"scan_edges_by_type", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
-  let summary = "Produce every edge of one type in the graph as four row-aligned columns";
+  let summary = "Produce every edge of the named types in the graph as four row-aligned columns";
 
   let description = [{
     The by-type sibling of db.scan_edges: where that produces every edge, this
-    produces every edge of the named type, in the same four row-aligned columns -
-    the source node, the edge, its type and the target node:
+    produces every edge carrying one of the named types, in the same four
+    row-aligned columns - the source node, the edge, its type and the target node:
 
-      %srcs, %eids, %etypes, %tgts = db.scan_edges_by_type("KNOWS") : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+      %srcs, %eids, %etypes, %tgts = db.scan_edges_by_type(["KNOWS"]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
 
-    An edge carries exactly one type, so the filter is an equality on that type,
-    not a set match. `edge_type` is the type name spelled the same as in the query,
-    resolved against the graph schema; a name absent from the schema matches no
-    edge, so the scan yields no rows. Like db.scan_edges it reads no column and
-    takes no input, so it opens a dataflow rather than consuming one, and the
-    result shape is identical - only the rows are narrowed.
+    An edge carries exactly one type, so `edge_types` is a disjunction over the
+    types the pattern named, as `-[:KNOWS|LIKES]->` spells it: an edge matches when
+    it carries any one of them. The names are spelled the same as in the query and
+    resolved against the graph schema; one absent from the schema drops out, and a
+    set nothing resolved into matches no edge, so the scan yields no rows. Like
+    db.scan_edges it reads no column and takes no input, so it opens a dataflow
+    rather than consuming one, and the result shape is identical - only the rows
+    are narrowed.
   }];
 
-  // `edge_type` is the symbolic relationship-type name. Being an attribute and
-  // not an SSA value, the op still has no operands; lowering hoists it into an
-  // nl.get_edge_type handle so the name is resolved once above the loops.
-  let arguments = (ins StrAttr:$edge_type);
+  // `edge_types` are the symbolic relationship-type names. Being an attribute and
+  // not an SSA value, the op still has no operands; lowering hoists them into an
+  // nl.get_edge_type_set handle so they are resolved once above the loops.
+  let arguments = (ins StrArrayAttr:$edge_types);
 
   let results = (outs ColumnNodeIDs:$srcids,
                       ColumnEdgeIDs:$eids,
                       ColumnEdgeTypes:$etypes,
                       ColumnNodeIDs:$tgtids);
 
-  // The type name prints inside the parens where db.scan_edges prints nothing;
+  // The type names print inside the parens where db.scan_edges prints nothing;
   // the result types follow the colon, as on db.scan_edges, since a source op has
   // no meaningful operand arrow.
   let assemblyFormat = [{
-    `(` $edge_type `)` attr-dict `:` qualified(type($srcids)) `,` qualified(type($eids)) `,`
+    `(` $edge_types `)` attr-dict `:` qualified(type($srcids)) `,` qualified(type($eids)) `,`
     qualified(type($etypes)) `,` qualified(type($tgtids))
   }];
+  let hasVerifier = 1;
 }
 
 /**
@@ -855,31 +858,33 @@ def GetEdges : TuringOp<"get_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInt
 * GetOutEdgesByType
 */
 def GetOutEdgesByType : TuringOp<"get_out_edges_by_type", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
-  let summary = "Fetch the out-edges of one edge type, filtering carried columns alongside";
+  let summary = "Fetch the out-edges of the named types, filtering carried columns alongside";
 
   let description = [{
     The by-type sibling of get_out_edges. In `MATCH (a)-[:KNOWS]->(b)` only the
     successors reached over a KNOWS edge count, so this walks each node's out-edges
-    but keeps only those of the named type - the plain get_out_edges narrowed by
-    the relationship type spelled in the query:
+    but keeps only those carrying one of the named types - the plain get_out_edges
+    narrowed by the relationship types spelled in the query:
 
-      %s, %e, %t, %b = get_out_edges_by_type(%a, "KNOWS", {})
-      %c, %b2, %a2 = get_out_edges_by_type(%b, "LIKES", {%a})   // eids/etypes omitted
+      %s, %e, %t, %b = get_out_edges_by_type(%a, ["KNOWS"], {})
+      %c, %b2, %a2 = get_out_edges_by_type(%b, ["LIKES", "LOVES"], {%a})   // eids/etypes omitted
 
-    An edge carries exactly one type, so the filter is an equality on that type,
-    not a set match. `edge_type` is the type name spelled the same as in the query,
-    resolved against the graph schema; a name absent from the schema matches no
-    edge, so the hop yields no rows. `columns_to_filter` is the carry set, exactly
-    as on get_out_edges: each one comes back in `filtered_columns`, and the result
-    chunk shape - srcids, eids, etypes, tgtids - is identical, so a hop is
-    interchangeable with the unfiltered fetch.
+    An edge carries exactly one type, so `edge_types` is a disjunction over the
+    types the pattern named, as `-[:KNOWS|LIKES]->` spells it: an edge matches when
+    it carries any one of them. The names are spelled the same as in the query and
+    resolved against the graph schema; one absent from the schema drops out, and a
+    set nothing resolved into matches no edge, so the hop yields no rows.
+    `columns_to_filter` is the carry set, exactly as on get_out_edges: each one
+    comes back in `filtered_columns`, and the result chunk shape - srcids, eids,
+    etypes, tgtids - is identical, so a hop is interchangeable with the unfiltered
+    fetch.
   }];
 
-  // `edge_type` is the symbolic relationship-type name. Being an attribute and
-  // not an SSA value, it is absent from `operands`; lowering hoists it into an
-  // nl.get_edge_type handle so the name is resolved once above the loops.
+  // `edge_types` are the symbolic relationship-type names. Being an attribute and
+  // not an SSA value, they are absent from `operands`; lowering hoists them into an
+  // nl.get_edge_type_set handle so they are resolved once above the loops.
   // `columns_to_filter` is the variadic carry set.
-  let arguments = (ins Column:$input_nodes, StrAttr:$edge_type, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, StrArrayAttr:$edge_types, Variadic<Column>:$columns_to_filter);
 
   // `filtered_columns`: one per carried column, after the four fixed results.
   let results   = (outs ColumnNodeIDs:$srcids,
@@ -888,36 +893,37 @@ def GetOutEdgesByType : TuringOp<"get_out_edges_by_type", [Pure, DeclareOpInterf
                         ColumnNodeIDs:$tgtids,
                         Variadic<Column>:$filtered_columns);
 
-  // The type name prints inside the parens as `"KNOWS"`, between input_nodes and
-  // the brace-wrapped carry set; MLIR elides it from attr-dict because the format
-  // already names it. functional-type spells only the operand and result types.
+  // The type names print inside the parens as `["KNOWS"]`, between input_nodes and
+  // the brace-wrapped carry set; MLIR elides them from attr-dict because the format
+  // already names them. functional-type spells only the operand and result types.
   let assemblyFormat = [{
-    `(` $input_nodes `,` $edge_type `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    `(` $input_nodes `,` $edge_types `,` `{` $columns_to_filter `}` `)` attr-dict `:`
     functional-type(operands, results)
   }];
+  let hasVerifier = 1;
 }
 
 /**
 * GetInEdgesByType
 */
 def GetInEdgesByType : TuringOp<"get_in_edges_by_type", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
-  let summary = "Fetch the in-edges of one edge type, filtering carried columns alongside";
+  let summary = "Fetch the in-edges of the named types, filtering carried columns alongside";
 
   let description = [{
     The reverse-direction sibling of get_out_edges_by_type: where that keeps a
-    node's out-edges of the named type, this keeps its in-edges of that type. In
+    node's out-edges of the named types, this keeps its in-edges of those types. In
     `MATCH (a)<-[:KNOWS]-(b)` only the predecessors reached over a KNOWS edge
     count:
 
-      %s, %e, %t, %b = get_in_edges_by_type(%a, "KNOWS", {})
+      %s, %e, %t, %b = get_in_edges_by_type(%a, ["KNOWS"], {})
 
     The result chunk shape - srcids, eids, etypes, tgtids - and the
     `columns_to_filter` carry set match get_out_edges_by_type, so the two are
-    interchangeable in a hop; `edge_type` is resolved the same way and an absent
-    name yields no rows.
+    interchangeable in a hop; `edge_types` is resolved the same way and a set
+    nothing resolved into yields no rows.
   }];
 
-  let arguments = (ins Column:$input_nodes, StrAttr:$edge_type, Variadic<Column>:$columns_to_filter);
+  let arguments = (ins Column:$input_nodes, StrArrayAttr:$edge_types, Variadic<Column>:$columns_to_filter);
 
   let results   = (outs ColumnNodeIDs:$srcids,
                         ColumnEdgeIDs:$eids,
@@ -926,9 +932,10 @@ def GetInEdgesByType : TuringOp<"get_in_edges_by_type", [Pure, DeclareOpInterfac
                         Variadic<Column>:$filtered_columns);
 
   let assemblyFormat = [{
-    `(` $input_nodes `,` $edge_type `,` `{` $columns_to_filter `}` `)` attr-dict `:`
+    `(` $input_nodes `,` $edge_types `,` `{` $columns_to_filter `}` `)` attr-dict `:`
     functional-type(operands, results)
   }];
+  let hasVerifier = 1;
 }
 
 /**

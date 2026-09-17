@@ -133,7 +133,7 @@ func.func @main() {
 const char* const typedHopOverFullScan = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %srcs, %eids, %etypes, %tgts = db.get_out_edges_by_type(%a, "KNOWS", {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %srcs, %eids, %etypes, %tgts = db.get_out_edges_by_type(%a, ["KNOWS"], {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
   db.output(%srcs, %tgts) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }

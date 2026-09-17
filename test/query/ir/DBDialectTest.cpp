@@ -17,6 +17,10 @@
 #include "StorageDialect.h"
 #include "StorageTypes.h"
 
+#include "IRTestEdgeTypes.h"
+
+using namespace turing::test;
+
 namespace {
 
 // Defined below with the other program strings; declared here so the fixture's
@@ -1404,8 +1408,8 @@ func.func @main() {
 const char* const edgesByTypeProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
-  %s0, %e0, %et0, %b = db.get_out_edges_by_type(%a, "KNOWS", {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %s1, %e1, %et1, %c = db.get_in_edges_by_type(%b, "LIKES", {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %s0, %e0, %et0, %b = db.get_out_edges_by_type(%a, ["KNOWS"], {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
+  %s1, %e1, %et1, %c = db.get_in_edges_by_type(%b, ["LIKES"], {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
   db.output(%s0, %c) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
@@ -1957,21 +1961,21 @@ TEST_F(DBDialectTest, parsesGetEdgesByType) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(edgesByTypeProgram);
     ASSERT_TRUE(module);
 
-    // The type name spelled inside each op's parens comes back on the edge_type
+    // The type names spelled inside each op's parens come back on the edge_types
     // attribute.
     mlir::db::GetOutEdgesByType outByType;
     module.get().walk([&](mlir::db::GetOutEdgesByType op) {
         outByType = op;
     });
     ASSERT_TRUE(outByType);
-    EXPECT_EQ(outByType.getEdgeType(), "KNOWS");
+    EXPECT_EQ(onlyEdgeType(outByType.getEdgeTypes()), "KNOWS");
 
     mlir::db::GetInEdgesByType inByType;
     module.get().walk([&](mlir::db::GetInEdgesByType op) {
         inByType = op;
     });
     ASSERT_TRUE(inByType);
-    EXPECT_EQ(inByType.getEdgeType(), "LIKES");
+    EXPECT_EQ(onlyEdgeType(inByType.getEdgeTypes()), "LIKES");
 }
 
 TEST_F(DBDialectTest, edgesByTypeRoundTripThroughTextualForm) {

@@ -32,6 +32,8 @@
 #include "SimpleGraph.h"
 #include "TuringTest.h"
 
+#include "IRTestEdgeTypes.h"
+
 using namespace db;
 using namespace turing::test;
 
@@ -234,7 +236,7 @@ protected:
         EXPECT_EQ(countOps<mlir::db::CheckEdgeTypeConstraint>(module), 0u);
         EXPECT_EQ(countOps<mlir::db::FilterOp>(module), 0u);
 
-        EXPECT_EQ(hop->getAttrOfType<mlir::StringAttr>("edge_type").getValue(), edgeType);
+        EXPECT_EQ(onlyEdgeType(hop->getAttrOfType<mlir::ArrayAttr>("edge_types")), edgeType);
     }
 
     // Lowers the db program as it stands and interprets it over the graph, filling
@@ -351,8 +353,8 @@ TEST_F(FuseEdgesByTypeTest, fusesBothHopsOfATypedChain) {
 
     llvm::SmallVector<mlir::db::GetOutEdgesByType> hops = collect<mlir::db::GetOutEdgesByType>(*module);
     ASSERT_EQ(hops.size(), 2u);
-    EXPECT_EQ(hops[0].getEdgeType(), "KNOWS_WELL");
-    EXPECT_EQ(hops[1].getEdgeType(), "INTERESTED_IN");
+    EXPECT_EQ(onlyEdgeType(hops[0].getEdgeTypes()), "KNOWS_WELL");
+    EXPECT_EQ(onlyEdgeType(hops[1].getEdgeTypes()), "INTERESTED_IN");
 
     EXPECT_EQ(countOps<mlir::db::GetOutEdges>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::CheckEdgeTypeConstraint>(*module), 0u);
@@ -377,12 +379,35 @@ TEST_F(FuseEdgesByTypeTest, fusesInsideCrossProductFactor) {
     expectFusedHop(*module, hops.front(), "KNOWS_WELL");
 }
 
-TEST_F(FuseEdgesByTypeTest, leavesACheckOverTwoTypesAlone) {
+// An edge carries one type, but the hop walks the disjunction itself, so a check over
+// two required types fuses into one by-type hop instead of staying behind a filter.
+TEST_F(FuseEdgesByTypeTest, fusesACheckOverTwoTypes) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(twoRequiredTypes);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runFuse(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
 
-    expectUntouched(*module);
+    EXPECT_EQ(countOps<mlir::db::GetOutEdges>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::CheckEdgeTypeConstraint>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
+
+    llvm::SmallVector<mlir::db::GetOutEdgesByType> hops = collect<mlir::db::GetOutEdgesByType>(*module);
+    ASSERT_EQ(hops.size(), 1u);
+
+    const mlir::ArrayAttr edgeTypes = hops.front().getEdgeTypes();
+    ASSERT_EQ(edgeTypes.size(), 2u);
+    EXPECT_EQ(mlir::cast<mlir::StringAttr>(edgeTypes[0]).getValue(), "KNOWS_WELL");
+    EXPECT_EQ(mlir::cast<mlir::StringAttr>(edgeTypes[1]).getValue(), "INTERESTED_IN");
+}
+
+// Both of simpledb's edge types, so the disjunction is every edge in the graph
+TEST_F(FuseEdgesByTypeTest, twoTypesEmitTheSameEdgesFused) {
+    std::vector<std::pair<uint64_t, uint64_t>> unfused;
+    std::vector<std::pair<uint64_t, uint64_t>> fused;
+    runPairsBeforeAndAfterFusion(twoRequiredTypes, unfused, fused);
+
+    EXPECT_EQ(unfused.size(), 18u);
+    EXPECT_EQ(fused, unfused);
 }
 
 TEST_F(FuseEdgesByTypeTest, leavesAnUndirectedHopAlone) {

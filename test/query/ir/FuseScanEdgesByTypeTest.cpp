@@ -32,6 +32,8 @@
 #include "SimpleGraph.h"
 #include "TuringTest.h"
 
+#include "IRTestEdgeTypes.h"
+
 using namespace db;
 using namespace turing::test;
 
@@ -119,7 +121,7 @@ func.func @main() {
 // the fused rewrite are checked against the same shape.
 const char* const byTypeEdgeScan = R"mlir(
 func.func @main() {
-  %s, %e, %et, %t = db.scan_edges_by_type("KNOWS_WELL") : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  %s, %e, %et, %t = db.scan_edges_by_type(["KNOWS_WELL"]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
   db.output(%s, %t) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
@@ -128,7 +130,7 @@ func.func @main() {
 // A type name absent from the schema matches no edge, so the scan yields no row.
 const char* const byTypeEdgeScanUnknownType = R"mlir(
 func.func @main() {
-  %s, %e, %et, %t = db.scan_edges_by_type("ROBOTS") : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
+  %s, %e, %et, %t = db.scan_edges_by_type(["ROBOTS"]) : !db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>
   db.output(%s, %t) : !db.column<!storage.node_id>, !db.column<!storage.node_id>
   return
 }
@@ -247,7 +249,7 @@ TEST_F(FuseScanEdgesByTypeTest, fusesEdgeScanAndItsTypeCheck) {
     llvm::SmallVector<mlir::db::ScanEdgesByType> scans = collect<mlir::db::ScanEdgesByType>(*module);
     ASSERT_EQ(scans.size(), 1u);
     mlir::db::ScanEdgesByType scan = scans.front();
-    EXPECT_EQ(scan.getEdgeType(), "KNOWS_WELL");
+    EXPECT_EQ(onlyEdgeType(scan.getEdgeTypes()), "KNOWS_WELL");
 
     EXPECT_EQ(countOps<mlir::db::ScanEdges>(*module), 0u);
     EXPECT_EQ(countOps<mlir::db::CheckEdgeTypeConstraint>(*module), 0u);
@@ -262,12 +264,35 @@ TEST_F(FuseScanEdgesByTypeTest, fusesEdgeScanAndItsTypeCheck) {
     EXPECT_EQ(columns[1], scan.getTgtids());
 }
 
-TEST_F(FuseScanEdgesByTypeTest, leavesACheckOverTwoTypesAlone) {
+// The scan walks the disjunction itself, so a check over two required types fuses,
+// exactly as it does on the hop.
+TEST_F(FuseScanEdgesByTypeTest, fusesACheckOverTwoTypes) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(twoRequiredTypes);
     ASSERT_TRUE(module);
     ASSERT_TRUE(runFuse(*module));
+    ASSERT_TRUE(mlir::succeeded(mlir::verify(*module)));
 
-    expectUntouched(*module);
+    EXPECT_EQ(countOps<mlir::db::ScanEdges>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::CheckEdgeTypeConstraint>(*module), 0u);
+    EXPECT_EQ(countOps<mlir::db::FilterOp>(*module), 0u);
+
+    llvm::SmallVector<mlir::db::ScanEdgesByType> scans = collect<mlir::db::ScanEdgesByType>(*module);
+    ASSERT_EQ(scans.size(), 1u);
+
+    const mlir::ArrayAttr edgeTypes = scans.front().getEdgeTypes();
+    ASSERT_EQ(edgeTypes.size(), 2u);
+    EXPECT_EQ(mlir::cast<mlir::StringAttr>(edgeTypes[0]).getValue(), "KNOWS_WELL");
+    EXPECT_EQ(mlir::cast<mlir::StringAttr>(edgeTypes[1]).getValue(), "INTERESTED_IN");
+}
+
+// Both of simpledb's edge types, so the disjunction is every edge in the graph
+TEST_F(FuseScanEdgesByTypeTest, twoTypesEmitTheSameEdgesFused) {
+    std::vector<std::pair<uint64_t, uint64_t>> unfused;
+    std::vector<std::pair<uint64_t, uint64_t>> fused;
+    runPairsBeforeAndAfterFusion(twoRequiredTypes, unfused, fused);
+
+    EXPECT_EQ(unfused.size(), 18u);
+    EXPECT_EQ(fused, unfused);
 }
 
 TEST_F(FuseScanEdgesByTypeTest, leavesAScanReadPastItsFilterAlone) {
