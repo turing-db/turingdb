@@ -316,6 +316,11 @@ public:
     // holds at r, in operand order, as one contiguous run of the query's list buffer.
     static void runMakeList(NLExecutionContext* context, NLFunctionData* data);
 
+    // Build one list per row (nl.list_comprehension): the body runs over the elements of
+    // the step's cells, a chunkful at a time, and row r takes the ones it kept of its own
+    // cell as one contiguous run of the query's list buffer.
+    static void runListComprehension(NLExecutionContext* context, NLFunctionData* data);
+
     // Size the CASE result to the step's rows, all absent
     static NLCaseResetFn selectCaseReset(ValueType valueType);
 
@@ -707,6 +712,14 @@ public:
     static NLListItemReadFunction selectOptNestedListItemRead();
     static NLListItemReadFunction selectTaggedListItemRead(bool nullable);
     static NLListItemReadFunction selectOwnedStringListItemRead(bool nullable);
+
+    // Whether a cell of a list comprehension's source holds no list: a null one where a
+    // column carries nulls, a cell tagged null where it carries tagged scalars, and never
+    // where every cell is a list of its own
+    static NLCellAbsentFunction selectPresentCell();
+    static NLCellAbsentFunction selectListCellAbsent();
+    static NLCellAbsentFunction selectTaggedCellAbsent(bool nullable);
+    static NLCellAbsentFunction selectValueCellAbsent(ValueType valueType);
 
     // The fold and list-emit for an entity chunk of this kind, whose elements carry a
     // node or edge ID. An edge-type ID is no entity, so the kind is rejected.

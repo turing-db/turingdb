@@ -83,6 +83,7 @@
 #include "expr/ExprChildren.h"
 #include "expr/FunctionInvocationExpr.h"
 #include "expr/IndexExpr.h"
+#include "expr/ListComprehensionExpr.h"
 #include "expr/ListExpr.h"
 #include "expr/LiteralExpr.h"
 #include "expr/PropertyExpr.h"
@@ -143,6 +144,29 @@ const VarDecl* projectedVariable(const Projection::ReturnItem& item) {
     }
 
     return itemExpr->getExprVarDecl();
+}
+
+// The variable an expression names of its own: a symbol's declaration, or the entity whose
+// property or labels it reads. Null for anything else, which names a variable only through
+// the expressions below it.
+const VarDecl* namedVariable(const Expr* expr) {
+    switch (expr->getKind()) {
+        case Expr::Kind::SYMBOL:
+            return static_cast<const SymbolExpr*>(expr)->getDecl();
+        break;
+
+        case Expr::Kind::PROPERTY:
+            return static_cast<const PropertyExpr*>(expr)->getEntityVarDecl();
+        break;
+
+        case Expr::Kind::ENTITY_TYPES:
+            return static_cast<const EntityTypeExpr*>(expr)->getEntityVarDecl();
+        break;
+
+        default:
+            return nullptr;
+        break;
+    }
 }
 
 // The untyped null column the null literal compiles to: nullable with no value type of
@@ -1602,9 +1626,13 @@ bool DBProgramGenerator::isRowAlignedHere(mlir::Value column) const {
 }
 
 void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight) {
+    collectInFlightColumns(inFlight, [](const VarDecl*) { return true; });
+}
+
+void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight, DeclPredicate carries) {
     for (auto& [var, values] : _part._varMap) {
         const mlir::Value column = values.back();
-        if (!isRowAlignedHere(column)) {
+        if (!isRowAlignedHere(column) || !carries(var->getDecl())) {
             continue;
         }
 
@@ -1619,7 +1647,7 @@ void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight) {
     }
 
     for (auto& [var, column] : _part._edgeTypeMap) {
-        if (!isRowAlignedHere(column)) {
+        if (!isRowAlignedHere(column) || !carries(var->getDecl())) {
             continue;
         }
 
@@ -1630,34 +1658,51 @@ void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight) {
     // A column an earlier CALL yielded is in flight too: a later op taking the whole row
     // set must take it along, or the rows it holds would stop matching the ones beside it.
     for (size_t yieldedIndex = 0; yieldedIndex < _part._yieldedColumns.size(); yieldedIndex++) {
-        const mlir::Value column = _part._yieldedColumns[yieldedIndex]._column;
-        if (!isRowAlignedHere(column)) {
+        const YieldedColumn& yielded = _part._yieldedColumns[yieldedIndex];
+        if (!isRowAlignedHere(yielded._column) || !carries(yielded._decl)) {
+            continue;
+        }
+
+        inFlight._columns.push_back(yielded._column);
+        inFlight._yieldedIndices.push_back(yieldedIndex);
+    }
+
+    // The element a list comprehension bound is in flight inside its body, which is where
+    // a comprehension nested in that body has to take it along - once per element of its
+    // own, as it takes the rest along
+    for (const auto& [decl, column] : _part._comprehensionElements) {
+        if (!isRowAlignedHere(column) || !carries(decl)) {
             continue;
         }
 
         inFlight._columns.push_back(column);
-        inFlight._yieldedIndices.push_back(yieldedIndex);
+        inFlight._comprehensionDecls.push_back(decl);
     }
 }
 
-void DBProgramGenerator::rebindInFlightColumns(mlir::Operation::result_range results,
-                                               size_t firstResult,
+void DBProgramGenerator::rebindInFlightColumns(mlir::ValueRange columns,
+                                               size_t firstColumn,
                                                const InFlightColumns& inFlight) {
-    size_t resultIndex = firstResult;
+    size_t columnIndex = firstColumn;
 
     for (const VariableDependency* variable : inFlight._variables) {
-        registerValue(variable, results[resultIndex]);
-        resultIndex++;
+        registerValue(variable, columns[columnIndex]);
+        columnIndex++;
     }
 
     for (const VariableDependency* variable : inFlight._edgeTypeVariables) {
-        _part._edgeTypeMap[variable] = results[resultIndex];
-        resultIndex++;
+        _part._edgeTypeMap[variable] = columns[columnIndex];
+        columnIndex++;
     }
 
     for (const size_t yieldedIndex : inFlight._yieldedIndices) {
-        _part._yieldedColumns[yieldedIndex]._column = results[resultIndex];
-        resultIndex++;
+        _part._yieldedColumns[yieldedIndex]._column = columns[columnIndex];
+        columnIndex++;
+    }
+
+    for (const VarDecl* decl : inFlight._comprehensionDecls) {
+        _part._comprehensionElements[decl] = columns[columnIndex];
+        columnIndex++;
     }
 }
 
@@ -3617,6 +3662,13 @@ void DBProgramGenerator::generateCreateStmt(const CreateStmt* createStmt) {
 }
 
 mlir::Value DBProgramGenerator::resolveEntityColumn(const VarDecl* decl) {
+    // The element a list comprehension bound rides the block argument of its body, which
+    // stands only while that body is translated
+    const auto elementIt = _part._comprehensionElements.find(decl);
+    if (elementIt != end(_part._comprehensionElements)) {
+        return elementIt->second;
+    }
+
     for (const auto& [var, values] : _part._varMap) {
         if (var->getDecl() == decl && !values.empty()) {
             return values.back();
@@ -5182,6 +5234,12 @@ void DBProgramGenerator::translateExpr(const Expr* expr) {
         }
         break;
 
+        case Expr::Kind::LIST_COMPREHENSION: {
+            const ListComprehensionExpr* comprehension = static_cast<const ListComprehensionExpr*>(expr);
+            translateListComprehensionExpr(expr, comprehension);
+        }
+        break;
+
         case Expr::Kind::LIST:
         case Expr::Kind::PATH:
             throwError(fmt::format("Unsupported expression: {}",
@@ -5233,6 +5291,122 @@ void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* u
             throwError("Unknown unary operator.", expr);
         break;
     }
+}
+
+void DBProgramGenerator::collectReadVariables(const Expr* expr, DeclSet& read) const {
+    if (!expr) {
+        return;
+    }
+
+    if (const VarDecl* decl = namedVariable(expr)) {
+        read.insert(decl);
+    }
+
+    std::vector<const Expr*> children;
+    if (!ExprChildren::collect(expr, children)) {
+        return;
+    }
+
+    for (const Expr* child : children) {
+        collectReadVariables(child, read);
+    }
+}
+
+void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
+                                                        const ListComprehensionExpr* comprehension) {
+    const mlir::Value source = getOrTranslateExprColumn(comprehension->getSource());
+
+    // The body reads the elements of one row's list rather than the rows in flight, so a
+    // column it names is carried: the op repeats it over the elements of its own row. A
+    // constant stands for every row already and needs no carrying, and neither does a
+    // column the body never names
+    DeclSet read;
+    collectReadVariables(comprehension->getPredicate(), read);
+    collectReadVariables(comprehension->getProjection(), read);
+
+    InFlightColumns inFlight;
+    collectInFlightColumns(inFlight, [&read](const VarDecl* decl) { return read.contains(decl); });
+
+    const mlir::Location loc = _opBuilder.getUnknownLoc();
+    const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
+    const mlir::db::ColumnType rowTagType =
+        allocColumnType(_opBuilder.getIntegerType(64, /*isSigned=*/false));
+
+    auto comprehensionOp = _opBuilder.create<mlir::db::ListComprehension>(loc,
+                                                                          noneType,
+                                                                          source,
+                                                                          inFlight._columns);
+
+    llvm::SmallVector<mlir::Type> argumentTypes {noneType, rowTagType};
+    llvm::SmallVector<mlir::Location> argumentLocations {loc, loc};
+
+    for (const mlir::Value column : inFlight._columns) {
+        argumentTypes.push_back(column.getType());
+        argumentLocations.push_back(loc);
+    }
+
+    const mlir::OpBuilder::InsertionGuard guard(_opBuilder);
+    mlir::Block* const bodyBlock = _opBuilder.createBlock(&comprehensionOp.getBody(),
+                                                          {},
+                                                          argumentTypes,
+                                                          argumentLocations);
+
+    // Inside the body every name resolves to a column of the element rows, so the bindings
+    // of the rows in flight are put back once it is translated - along with the expressions
+    // already computed over those rows, which the body must compute over its own
+    const VariableIdentityMap outerVarMap = _part._varMap;
+    const EdgeTypeColumnMap outerEdgeTypeMap = _part._edgeTypeMap;
+    const std::vector<YieldedColumn> outerYieldedColumns = _part._yieldedColumns;
+    const ProjectedColumnMap outerComprehensionElements = _part._comprehensionElements;
+    const ExprValueMap outerExprMap = _part._exprMap;
+
+    const VarDecl* const itemDecl = comprehension->getDecl();
+
+    _part._exprMap.clear();
+    rebindInFlightColumns(bodyBlock->getArguments().drop_front(2), /*firstColumn=*/0, inFlight);
+    _part._comprehensionElements[itemDecl] = bodyBlock->getArgument(0);
+
+    mlir::Value rowTags = bodyBlock->getArgument(1);
+
+    // The WHERE cuts the elements themselves rather than masking what they contribute, so
+    // the projection below runs over the ones that survive and over nothing else
+    if (const Expr* predicateExpr = comprehension->getPredicate()) {
+        const mlir::Value predicate = getOrTranslateExprColumn(predicateExpr);
+
+        // The element, the row tag and the carried columns, which the body reads in that
+        // order: the block arguments themselves, since nothing has cut them yet
+        const llvm::SmallVector<mlir::Value> filtered(bodyBlock->args_begin(), bodyBlock->args_end());
+
+        llvm::SmallVector<mlir::Type> filteredTypes;
+        for (const mlir::Value column : filtered) {
+            filteredTypes.push_back(column.getType());
+        }
+
+        auto filterOp = _opBuilder.create<mlir::db::FilterOp>(loc, filteredTypes, predicate, filtered);
+
+        _part._comprehensionElements[itemDecl] = filterOp.getResult(0);
+        rowTags = filterOp.getResult(1);
+        rebindInFlightColumns(filterOp.getResults(), /*firstColumn=*/2, inFlight);
+
+        // The predicate is computed over the elements the filter cut, so the expressions
+        // below it have to be computed over the ones it kept
+        _part._exprMap.clear();
+    }
+
+    // A comprehension with no projection hands each element on as it stands
+    const Expr* const projectionExpr = comprehension->getProjection();
+    const mlir::Value value = projectionExpr ? getOrTranslateExprColumn(projectionExpr)
+                                             : _part._comprehensionElements[itemDecl];
+
+    _opBuilder.create<mlir::db::ComprehensionYield>(loc, rowTags, value);
+
+    _part._varMap = outerVarMap;
+    _part._edgeTypeMap = outerEdgeTypeMap;
+    _part._yieldedColumns = outerYieldedColumns;
+    _part._comprehensionElements = outerComprehensionElements;
+    _part._exprMap = outerExprMap;
+
+    _part._exprMap[expr] = comprehensionOp.getResult();
 }
 
 void DBProgramGenerator::translateCaseExpr(const Expr* expr, const CaseExpr* caseExpr) {

@@ -318,6 +318,20 @@ private:
     // element type is what the list resolved to, so it names the column the drain fills
     static NLUnwindElementEmitFunction selectListUnwindEmit(mlir::Type chunkType, bool sourceIsNullable);
 
+    // The handlers a column of @param sourceElement gives its elements up through: how
+    // many each of its cells contributes, and how the element chunk of @param
+    // elementChunkType is filled from them. A column whose cells are the elements already
+    // has no drain of its own, so @param elementEmit comes back null and its element chunk
+    // is gathered like any carried column.
+    static void selectElementDrain(mlir::Type sourceElement,
+                                   mlir::Type elementChunkType,
+                                   NLUnwindElementCountFunction& elementCount,
+                                   NLUnwindElementEmitFunction& elementEmit);
+
+    // Whether a cell of a list comprehension's source holds no list, which is what makes
+    // its row's result the null `[x IN null | x]` reads as
+    static NLCellAbsentFunction selectCellAbsent(mlir::Type sourceElement);
+
     // Materialize a literal element array - an nl.unwind_const's or an nl.const_list's -
     // into a ListView in the query-scoped ListBuffer, which the unwind loop then reads
     // chunk by chunk and a constant list keeps whole. A nested array is materialized
@@ -794,6 +808,11 @@ private:
     // Allocates the list column an nl.make_list writes, and binds the read each element
     // column's cells go into the list buffer through
     void translateMakeList(mlir::nl::MakeList makeList, NLStmtContainer* body);
+
+    // Translate an nl.list_comprehension: allocate the element chunk, one chunk per
+    // carried column and the list column the step fills, pick the handlers that read the
+    // source column's shape, and translate the body the elements run through
+    void translateListComprehension(mlir::nl::ListComprehension comprehension, NLStmtContainer* body);
 
     // The read one element column of an nl.make_list contributes its cell through, chosen
     // by what the chunk holds

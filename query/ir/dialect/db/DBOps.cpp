@@ -1092,6 +1092,38 @@ LogicalResult Unwind::verify() {
     return success();
 }
 
+// The body binds the element, the row tag and one argument per carried column, and ends
+// naming what each element contributes.
+LogicalResult ListComprehension::verify() {
+    Block& bodyBlock = getBody().front();
+
+    auto yield = dyn_cast_or_null<ComprehensionYield>(bodyBlock.empty() ? nullptr : &bodyBlock.back());
+    if (!yield) {
+        return emitOpError("body region must end with a db.comprehension_yield");
+    }
+
+    const size_t carriedCount = getColumnsToFilter().size();
+    const size_t expectedArguments = carriedCount + 2;
+
+    if (bodyBlock.getNumArguments() != expectedArguments) {
+        return emitOpError("body region takes the element and the row tag plus one argument per "
+                           "carried column, ")
+               << "expected " << expectedArguments << " but has " << bodyBlock.getNumArguments();
+    }
+
+    for (size_t carriedIndex = 0; carriedIndex < carriedCount; carriedIndex++) {
+        const mlir::Type argumentType = bodyBlock.getArgument(carriedIndex + 2).getType();
+
+        if (argumentType != getColumnsToFilter()[carriedIndex].getType()) {
+            return emitOpError("body argument ") << carriedIndex + 2
+                                                 << " must have the type of carried column "
+                                                 << carriedIndex;
+        }
+    }
+
+    return success();
+}
+
 // There is a column for the list to be built out of, and what the op produces is a list.
 LogicalResult MakeList::verify() {
     if (getElements().empty()) {

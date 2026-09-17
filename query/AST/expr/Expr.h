@@ -28,6 +28,7 @@ public:
         FUNCTION_INVOCATION,
         INDEX,
         LIST,
+        LIST_COMPREHENSION,
         CASE,
 
         _SIZE
@@ -113,6 +114,7 @@ using ExprKindDescription = EnumToString<Expr::Kind>::Create<
     EnumStringPair<Expr::Kind::FUNCTION_INVOCATION, "FUNCTION_INVOCATION">,
     EnumStringPair<Expr::Kind::INDEX, "INDEX">,
     EnumStringPair<Expr::Kind::LIST, "LIST">,
+    EnumStringPair<Expr::Kind::LIST_COMPREHENSION, "LIST_COMPREHENSION">,
     EnumStringPair<Expr::Kind::CASE, "CASE">
 >;
 

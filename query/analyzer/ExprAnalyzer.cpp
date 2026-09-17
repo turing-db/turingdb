@@ -222,6 +222,9 @@ void ExprAnalyzer::analyzeExpr(Expr* expr) {
         case Expr::Kind::LIST:
             analyzeListExpr(static_cast<ListExpr*>(expr));
         break;
+        case Expr::Kind::LIST_COMPREHENSION:
+            analyzeListComprehensionExpr(static_cast<ListComprehensionExpr*>(expr));
+        break;
         case Expr::Kind::CASE:
             analyzeCaseExpr(static_cast<CaseExpr*>(expr));
         break;
@@ -1447,6 +1450,89 @@ void ExprAnalyzer::requireComparableToEntity(const Expr* subject, const CaseExpr
 
 void ExprAnalyzer::analyzeListExpr(ListExpr* expr) {
     analyzeListElements(expr, expr->getElements());
+}
+
+void ExprAnalyzer::analyzeListComprehensionExpr(ListComprehensionExpr* expr) {
+    Expr* const source = expr->getSource();
+    analyzeExpr(source);
+
+    const EvaluatedType sourceType = source->getType();
+
+    // A tagged cell names no type until a row is in hand, and a null iterates into a null
+    // rather than into a type error - as an UNWIND of one emits no row
+    const bool iteratesAList = sourceType == EvaluatedType::List
+                            || sourceType == EvaluatedType::ListItem
+                            || sourceType == EvaluatedType::Null;
+
+    if (!iteratesAList) {
+        throwError(fmt::format("A list comprehension iterates a list, not '{}'",
+                               EvaluatedTypeName::value(sourceType)),
+                   expr);
+    }
+
+    const std::string_view itemName = expr->getSymbol()->getName();
+
+    // The comprehension names a new variable, as an UNWIND does, so a name already in
+    // scope would put two of them under one name
+    if (_ctxt->hasDecl(itemName)) {
+        throwError(fmt::format("Variable '{}' is already declared", itemName), expr);
+    }
+
+    const ListShape& sourceShape = source->getListShape();
+
+    VarDecl* const itemDecl = _ctxt->getOrCreateNamedVariable(_ast, sourceShape.unwoundType(), itemName);
+    itemDecl->setIsUnwound(true);
+    itemDecl->setListShape(sourceShape.unwound());
+
+    expr->setDecl(itemDecl);
+
+    Expr* const predicate = expr->getPredicate();
+    if (predicate) {
+        analyzeExpr(predicate);
+    }
+
+    Expr* const projection = expr->getProjection();
+    if (projection) {
+        analyzeExpr(projection);
+    }
+
+    _ctxt->dropVariable(itemName);
+
+    if (predicate && predicate->getType() != EvaluatedType::Bool) {
+        throwError("The WHERE of a list comprehension must be a boolean", predicate);
+    }
+
+    const bool aggregatesTheBody = (predicate && predicate->isAggregate())
+                                || (projection && projection->isAggregate());
+
+    if (aggregatesTheBody) {
+        throwError(fmt::format("Aggregate functions may not be used over the elements of a "
+                               "list comprehension: '{}' names one element, not a group",
+                               itemName),
+                   expr);
+    }
+
+    expr->setType(EvaluatedType::List);
+
+    // Filtering leaves the shape the source has; a projection replaces the elements, so
+    // the list gathers whatever it computes - what an UNWIND of the comprehension binds
+    if (projection) {
+        expr->setListShape(ListShape::collecting(projection->getType(), projection->getListShape()));
+    } else {
+        expr->setListShape(sourceShape);
+    }
+
+    // The elements are read row by row, so the list is never the compile-time value an
+    // argument declared constant takes
+    expr->setDynamic();
+
+    // An aggregated source aggregates the comprehension: the projection reduces the rows
+    // to one, and the list is built over that one
+    if (source->isAggregate()) {
+        expr->setAggregate();
+    }
+
+    expr->setExprVarDecl(_ctxt->createUnnamedVariable(_ast, EvaluatedType::List));
 }
 
 void ExprAnalyzer::analyzeListElements(Expr* expr, std::span<Expr* const> elements) {
