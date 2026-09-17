@@ -1,44 +1,13 @@
 #include "QueryTestRunner.h"
 
 #include <algorithm>
-#include <optional>
-#include <span>
 #include <sstream>
 
 #include <nlohmann/json.hpp>
 #include <spdlog/fmt/bundled/format.h>
 
-#include <range/v3/view/drop.hpp>
-
+#include "FatalException.h"
 #include "File.h"
-#include "Graph.h"
-#include "ID.h"
-#include "JsonEncoder.h"
-#include "list/ListElementView.h"
-#include "list/ListView.h"
-#include "NLOutputSink.h"
-#include "QueryConfig.h"
-#include "QueryResultFormatter.h"
-#include "QueryStatus.h"
-#include "SimpleGraph.h"
-#include "SystemManager.h"
-#include "TuringDB.h"
-#include "TuringTestEnv.h"
-#include "TuringTime.h"
-#include "columns/AllowedKinds.h"
-#include "columns/ColumnOperatorDispatcher.h"
-#include "columns/ColumnVector.h"
-#include "metadata/PropertyType.h"
-
-namespace rg = ranges;
-namespace rv = ranges::views;
-
-namespace db {
-
-class CommitBuilder;
-class Change;
-
-} // namespace db
 
 namespace turing::test {
 
@@ -80,161 +49,7 @@ void trimTrailingEmptyLines(std::string& trimmed,
     trimmed = out.str();
 }
 
-struct StringStreamWriter {
-    std::string* _output {nullptr};
-
-    void write(std::string_view content) { _output->append(content); }
-    void write(char c) { _output->push_back(c); }
-};
-
-// Encodes the result as JSON and collects it as rows at the same time, so one run
-// feeds both the tabular expectation and the JSON one
-class QueryTestNLSink : public db::NLOutputSink {
-public:
-    QueryTestNLSink(db::JsonEncoder<StringStreamWriter>* encoder,
-                    std::vector<std::string>& columnNames,
-                    std::vector<std::vector<std::string>>& rows)
-        : _encoder(encoder),
-        _columnNames(columnNames),
-        _rows(rows)
-    {
-    }
-
-    void declareOutput(std::span<const std::string_view> names,
-                       std::span<const db::Column* const> chunks) override {
-        _encoder->writeColumnHeaders(names, chunks);
-        _columnNames.assign(names.begin(), names.end());
-    }
-
-    void appendChunks(std::span<const db::Column* const> chunks, size_t offset, size_t rowCount) override {
-        if (rowCount == 0) {
-            return;
-        }
-
-        _encoder->writeColumns(chunks, offset, rowCount);
-        QueryResultFormatter::appendChunkRows(_rows, _values, chunks, offset, rowCount);
-    }
-
-private:
-    db::JsonEncoder<StringStreamWriter>* _encoder {nullptr};
-    std::vector<std::string>& _columnNames;
-    std::vector<std::vector<std::string>>& _rows;
-    std::vector<std::string> _values;
-};
-
-class ChangeIDNLSink : public db::NLOutputSink {
-public:
-    explicit ChangeIDNLSink(db::ChangeID& changeID)
-        : _changeID(changeID)
-    {
-    }
-
-    void appendChunks(std::span<const db::Column* const> chunks, size_t offset, size_t rowCount) override {
-        bioassert(rowCount == 1, "Expected 1 change");
-
-        _changeID = (*static_cast<const db::ColumnVector<db::ChangeID>*>(chunks[0]))[offset];
-    }
-
-private:
-    db::ChangeID& _changeID;
-};
-
-bool validateResultJson(std::string& error, std::string_view jsonStr) {
-    json doc;
-    try {
-        doc = json::parse(jsonStr);
-    } catch (const json::parse_error& e) {
-        error = fmt::format("Invalid JSON: {}", e.what());
-        return false;
-    }
-
-    if (!doc.is_object()) {
-        error = "Root is not an object";
-        return false;
-    }
-
-    if (doc.contains("error")) {
-        if (!doc["error"].is_string()) {
-            error = "\"error\" is not a string";
-            return false;
-        }
-
-        if (!doc.contains("error_details") || !doc["error_details"].is_string()) {
-            error = "\"error_details\" missing or not a string";
-            return false;
-        }
-        return true;
-    }
-
-    if (!doc.contains("header") || !doc["header"].is_object()) {
-        error = "\"header\" missing or not an object";
-        return false;
-    }
-
-    const auto& header = doc["header"];
-
-    if (!header.contains("column_names") || !header["column_names"].is_array()) {
-        error = "\"column_names\" missing or not an array";
-        return false;
-    }
-
-    if (!header.contains("column_types") || !header["column_types"].is_array()) {
-        error = "\"column_types\" missing or not an array";
-        return false;
-    }
-
-    const size_t numCols = header["column_names"].size();
-
-    if (header["column_types"].size() != numCols) {
-        error = fmt::format("column_types size ({}) != column_names size ({})",
-                            header["column_types"].size(), numCols);
-        return false;
-    }
-
-    if (!doc.contains("data") || !doc["data"].is_array()) {
-        error = "\"data\" missing or not an array";
-        return false;
-    }
-
-    const auto& data = doc["data"];
-
-    for (size_t ci = 0; ci < data.size(); ++ci) {
-        const auto& chunk = data[ci];
-
-        if (!chunk.is_array()) {
-            error = fmt::format("data[{}] is not an array", ci);
-            return false;
-        }
-
-        if (chunk.size() != numCols) {
-            error = fmt::format("data[{}] has {} columns, expected {}", ci,
-                                chunk.size(), numCols);
-            return false;
-        }
-
-        size_t expectedRows = 0;
-
-        for (size_t col = 0; col < numCols; ++col) {
-            if (!chunk[col].is_array()) {
-                error = fmt::format("data[{}][{}] is not an array", ci, col);
-                return false;
-            }
-
-            if (col == 0) {
-                expectedRows = chunk[col].size();
-            } else if (chunk[col].size() != expectedRows) {
-                error = fmt::format("data[{}][{}] has {} rows, expected {} "
-                                    "(from column 0)",
-                                    ci, col, chunk[col].size(), expectedRows);
-                return false;
-            }
-        }
-    }
-
-    return true;
 }
-
-} // namespace
 
 void QueryTestRunner::loadTestsFromDir(std::vector<QueryTestSpec>& specs,
                                        const fs::Path& dir) {
@@ -279,10 +94,8 @@ void QueryTestRunner::loadTestsFromDir(std::vector<QueryTestSpec>& specs,
         spec._graphName = doc.value("graph", spec._graphName);
         spec._query = doc.value("query", "");
         spec._enabled = doc.value("enabled", true);
-        spec._remoteEnabled = doc.value("remote-enabled", true);
         spec._writeRequired = doc.value("write-required", false);
         spec._disabledReason = doc.value("disabled-reason", "");
-        spec._remoteDisabledReason = doc.value("remote-disabled-reason", "");
 
         if (doc.contains("tags") && doc["tags"].is_array()) {
             for (const auto& tag : doc["tags"]) {
@@ -295,88 +108,11 @@ void QueryTestRunner::loadTestsFromDir(std::vector<QueryTestSpec>& specs,
         if (doc.contains("expect")) {
             const auto& expect = doc["expect"];
             spec._expectResult = expect.value("result", "");
-            spec._expectResultJson = expect.value("resultJson", "");
             spec._expectMlir = expect.value("mlir", "");
         }
 
         specs.push_back(std::move(spec));
     }
-}
-
-QueryTestResult QueryTestRunner::runTest(const QueryTestSpec& spec,
-                                         const fs::Path& outDir) {
-    QueryTestResult result;
-    result._name = spec._name;
-
-    auto env = turing::test::TuringTestEnv::create(outDir);
-    db::Graph* graph = nullptr;
-    {
-        db::SystemAccessor system = env->getSystemManager().accessUnique();
-        graph = system.createGraph(spec._graphName);
-    }
-    db::SimpleGraph::createSimpleGraph(graph);
-    db::TuringDB* db = &env->getDB();
-
-    const db::QueryConfig queryConfig;
-
-    std::vector<std::vector<std::string>> rows;
-    std::vector<std::string> columnNames;
-
-    std::string jsonOutput;
-    StringStreamWriter jsonWriter(&jsonOutput);
-    db::JsonEncoder<StringStreamWriter> jsonEncoder(jsonWriter);
-
-    QueryTestNLSink sink(&jsonEncoder, columnNames, rows);
-
-    db::ChangeID changeID = db::ChangeID::head();
-
-    if (spec._writeRequired) {
-        ChangeIDNLSink changeNewSink(changeID);
-        const db::QueryState changeNewState(spec._graphName, &env->getMem(),
-                                            &queryConfig, &changeNewSink);
-        db->query("CHANGE NEW", changeNewState);
-    }
-
-    jsonEncoder.start();
-
-    const db::QueryState queryState(spec._graphName, &env->getMem(), &queryConfig,
-                                    &sink, db::CommitHash::head(),
-                                    changeID);
-    const auto queryStart = Clock::now();
-    const db::QueryStatus status = db->query(spec._query, queryState);
-    const auto queryEnd = Clock::now();
-
-    if (!status.isOk()) {
-        jsonEncoder.encodeError(status.getStatus(), status.getError());
-    }
-
-    jsonEncoder.finish();
-    result._timeUs =
-        static_cast<uint64_t>(duration<Microseconds>(queryStart, queryEnd));
-
-    if (spec._writeRequired) {
-        const db::QueryState submitState(spec._graphName, &env->getMem(),
-                                         &queryConfig, nullptr,
-                                         db::CommitHash::head(), changeID);
-        db->query("CHANGE SUBMIT", submitState);
-    }
-
-    normalizeOutput(
-        result._resultOutput,
-        QueryResultFormatter::formatResultOutput(status, columnNames, rows));
-    result._resultJsonOutput = jsonOutput;
-
-    std::string expected;
-
-    normalizeOutput(expected, spec._expectResult);
-    result._resultMatched = expected == result._resultOutput;
-
-    result._resultJsonValid =
-        validateResultJson(result._resultJsonError, result._resultJsonOutput);
-    result._resultJsonMatched =
-        spec._expectResultJson == result._resultJsonOutput;
-
-    return result;
 }
 
 void QueryTestRunner::normalizeOutput(std::string& normalized,
@@ -420,4 +156,4 @@ void QueryTestRunner::readFile(std::string& content, const fs::Path& path) {
     }
 }
 
-} // namespace turing::test
+}

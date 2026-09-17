@@ -11,25 +11,11 @@ struct QueryTestSpec {
     std::string _graphName {"simpledb"};
     std::string _query;
     std::string _expectResult;
-    std::string _expectResultJson;
     std::string _expectMlir;
     std::vector<std::string> _tags;
     bool _enabled {true};
-    bool _remoteEnabled {true};
     bool _writeRequired {false};
     std::string _disabledReason;
-    std::string _remoteDisabledReason;
-};
-
-struct QueryTestResult {
-    std::string _name;
-    std::string _resultOutput;
-    std::string _resultJsonOutput;
-    std::string _resultJsonError;
-    bool _resultMatched {false};
-    bool _resultJsonMatched {false};
-    bool _resultJsonValid {false};
-    uint64_t _timeUs {0};
 };
 
 struct V3QueryTestResult {
