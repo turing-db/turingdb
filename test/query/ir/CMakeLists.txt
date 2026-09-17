@@ -2897,3 +2897,7 @@ target_include_directories(test_query_ir_call_subquery_read_only_body PRIVATE ${
 # A subquery inside a subquery, and what the inner body reads of the outer one.
 add_turing_test(test_query_ir_call_subquery_nested CallSubqueryNestedTest.cpp)
 target_link_libraries(test_query_ir_call_subquery_nested PRIVATE turing_ir_test_write_query_s)
+
+# A cut below a unit subquery, which stops the walk that feeds it.
+add_turing_test(test_query_ir_call_subquery_limit_below CallSubqueryLimitBelowTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_limit_below PRIVATE turing_ir_test_write_query_s)
