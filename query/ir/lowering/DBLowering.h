@@ -577,6 +577,14 @@ private:
     static mlir::Block* ownerBlock(mlir::Value chunkValue);
     static size_t blockNestingDepth(mlir::Block* block);
 
+    // Whether @param inner is @param outer or lies in a region nested in it
+    static bool enclosesBlock(mlir::Block* outer, mlir::Block* inner);
+
+    // Where an accumulator filled from @param producingBlock is updated. A chunk bound
+    // above the root is loop-invariant - a hoisted constant layout, a metadata tally - and
+    // the accumulator it feeds lives in the root, so it is charged there instead.
+    mlir::Block* accumulatorUpdateBlock(mlir::Block* producingBlock) const;
+
     // The chunk of @param chunks bound deepest - the one whose block every other is
     // valid in, which is where an op reading all of them belongs. A null Value for an
     // empty range, which is an op reading no chunk at all.
