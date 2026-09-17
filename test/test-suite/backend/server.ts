@@ -173,30 +173,6 @@ Bun.serve({
                   );
                 }
 
-                if (pathname === "/api/run-remote") {
-                  const testId = searchParams.get("test");
-                  if (!testId) {
-                    return errorResponse("Missing test parameter", 400);
-                  }
-                  return runCliJsonResponse(
-                      [ "--run-remote", testId ],
-                      "Failed to run remote test",
-                      "Invalid remote run response",
-                  );
-                }
-
-                if (pathname === "/api/run-v3") {
-                  const testId = searchParams.get("test");
-                  if (!testId) {
-                    return errorResponse("Missing test parameter", 400);
-                  }
-                  return runCliJsonResponse(
-                      [ "--run-v3", testId ],
-                      "Failed to run v3 test",
-                      "Invalid v3 run response",
-                  );
-                }
-
                 if (pathname === "/api/run-all") {
 			return runCliJsonResponse(
 				["--run-all"],
@@ -205,26 +181,9 @@ Bun.serve({
 			);
 		}
 
-		if (pathname === "/api/run-all-remote") {
-			return runCliJsonResponse(
-				["--run-all-remote"],
-				"Failed to run all remote tests",
-				"Invalid remote run-all response",
-			);
-		}
-
-		if (pathname === "/api/run-all-v3") {
-			return runCliJsonResponse(
-				["--run-all-v3"],
-				"Failed to run all v3 tests",
-				"Invalid v3 run-all response",
-			);
-		}
-
 		if (pathname === "/api/update" && req.method === "POST") {
 			const body = await req.json().catch(() => null);
 			const hasResult = typeof body?.result === "string";
-			const hasResultJson = typeof body?.resultJson === "string";
 			const hasMlir = typeof body?.mlir === "string";
 			const hasQuery = typeof body?.query === "string";
 			const hasNewName = typeof body?.newName === "string";
@@ -237,7 +196,6 @@ Bun.serve({
 			if (
 				!targetName ||
 				(!hasResult &&
-					!hasResultJson &&
 					!hasMlir &&
 					!hasQuery &&
 					!hasNewName &&
@@ -260,7 +218,6 @@ Bun.serve({
 			}
 			const updatedSource = await updateTestFile(sourceTestsDir, targetName, {
 				result: body.result,
-				resultJson: body.resultJson,
 				mlir: body.mlir,
 				query: body.query,
 				newName: body.newName,
@@ -273,7 +230,6 @@ Bun.serve({
 			try {
 				updatedBuild = await updateTestFile(sourceTestsDir, targetName, {
 						result: body.result,
-					resultJson: body.resultJson,
 					mlir: body.mlir,
 					query: body.query,
 					newName: body.newName,

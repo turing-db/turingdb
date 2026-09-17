@@ -30,3 +30,16 @@ set(QUERY_TEST_SUITE_DATA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data)
 target_compile_definitions(test_query_v3_test_suite
     PRIVATE QUERY_TEST_SUITE_DIR="${QUERY_TEST_SUITE_DIR}"
             QUERY_TEST_SUITE_DATA_DIR="${QUERY_TEST_SUITE_DATA_DIR}")
+
+add_executable(query_test_suite_cli
+    QueryTestSuiteCLI.cpp
+    QueryTestRunner.cpp
+    V3QueryTestRunner.cpp
+    QueryResultFormatter.cpp)
+
+target_link_libraries(query_test_suite_cli
+    PRIVATE ${V3_QUERY_SUITE_LIBS})
+
+target_compile_definitions(query_test_suite_cli
+    PRIVATE QUERY_TEST_SUITE_DIR="${QUERY_TEST_SUITE_DIR}"
+            QUERY_TEST_SUITE_DATA_DIR="${QUERY_TEST_SUITE_DATA_DIR}")

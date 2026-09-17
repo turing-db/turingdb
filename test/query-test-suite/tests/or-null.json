@@ -4,9 +4,11 @@
   "query": "MATCH (n) RETURN n.isFrench OR NULL",
   "expect": {
     "plan": "",
-    "result": ""
+    "result": "n.isFrench OR NULL\ntrue\ntrue\nnull\nnull\nnull\nnull\nnull\nnull\ntrue\ntrue\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull",
+    "mlir": "module {\n  func.func @main() {\n    %0 = db.scan_nodes() : !db.column<!storage.node_id>\n    %1 = db.get_node_properties(%0, \"isFrench\") : (!db.column<!storage.node_id>) -> !db.column<none>\n    %2 = db.constant(\"\" : !storage.nullable<none>)\n    %3 = db.or %1, %2 : (!db.column<none>, !db.column<!storage.nullable<none>>) -> !db.column<!storage.bool>\n    db.output(%3) names [\"n.isFrench OR NULL\"] : !db.column<!storage.bool>\n    return\n  }\n}"
   },
   "tags": [
+    "null"
   ],
   "write-required": false
 }

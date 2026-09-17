@@ -1,6 +1,4 @@
 import React from "react";
-import { JsonView, darkStyles } from "react-json-view-lite";
-import "react-json-view-lite/dist/index.css";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -32,15 +30,13 @@ import { AlertTriangle, Ban, Bug, CheckCircle2, Clock3, Copy, FilePlus, GitCompa
 type TestMeta = {
   name: string;
   enabled: boolean;
-  remoteEnabled?: boolean;
-  remoteDisabledReason?: string;
   query?: string;
   tags?: string[];
   writeRequired?: boolean;
   disabledReason?: string;
   mainVersion?: {
     query?: string;
-    expect?: { result?: string; resultJson?: string; mlir?: string };
+    expect?: { result?: string; mlir?: string };
     tags?: string[];
     enabled?: boolean;
     ["write-required"]?: boolean;
@@ -53,19 +49,8 @@ type TestMeta = {
 type TestResult = {
   name: string;
   resultOutput: string;
-  resultJsonOutput?: string;
-  resultJsonMatched?: boolean;
-  resultJsonValid?: boolean;
-  resultMatched: boolean;
-  error?: string;
-  timeUs?: number;
-};
-
-type V3TestResult = {
-  name: string;
-  resultV3Output: string;
   mlirProgram: string;
-  resultV3Matched: boolean;
+  resultMatched: boolean;
   mlirMatched: boolean;
   error?: string;
   timeUs?: number;
@@ -124,12 +109,10 @@ export default function App() {
   const [tests, setTests] = React.useState<TestMeta[]>([]);
   const [selected, setSelected] = React.useState<TestMeta | null>(null);
   const [results, setResults] = React.useState<Record<string, TestResult>>({});
-  const [remoteResults, setRemoteResults] = React.useState<Record<string, TestResult>>({});
-  const [v3Results, setV3Results] = React.useState<Record<string, V3TestResult>>({});
   const [search, setSearch] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [confirmTarget, setConfirmTarget] = React.useState<"result" | "resultJson" | "mlir" | null>(null);
+  const [confirmTarget, setConfirmTarget] = React.useState<"result" | "mlir" | null>(null);
   const [nameDraft, setNameDraft] = React.useState("");
   const [queryDraft, setQueryDraft] = React.useState("");
   const [isEditingQuery, setIsEditingQuery] = React.useState(false);
@@ -145,25 +128,18 @@ export default function App() {
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [duplicateOpen, setDuplicateOpen] = React.useState(false);
   const [parsedResult, setParsedResult] = React.useState<string[][] | null>(null);
-  const [parsedRemoteResult, setParsedRemoteResult] = React.useState<string[][] | null>(null);
   const [parsedExpectedResult, setParsedExpectedResult] = React.useState<string[][] | null>(null);
   const [parsedMainResult, setParsedMainResult] = React.useState<string[][] | null>(null);
-  const [parsedV3Result, setParsedV3Result] = React.useState<string[][] | null>(null);
   const [disabledReasonDraft, setDisabledReasonDraft] = React.useState("");
   const [shareNotice, setShareNotice] = React.useState<string | null>(null);
   const shareTimerRef = React.useRef<number | null>(null);
   const [failNotice, setFailNotice] = React.useState<string | null>(null);
   const failTimerRef = React.useRef<number | null>(null);
   const [expectedResult, setExpectedResult] = React.useState<string>("");
-  const [expectedResultJson, setExpectedResultJson] = React.useState<string>("");
   const [expectedMlir, setExpectedMlir] = React.useState<string>("");
   const [mainResult, setMainResult] = React.useState<string>("");
-  const [mainResultJson, setMainResultJson] = React.useState<string>("");
   const [mainMlir, setMainMlir] = React.useState<string>("");
   const [resultTab, setResultTab] = React.useState<"actual" | "expected" | "main">("actual");
-  const [jsonTab, setJsonTab] = React.useState<"actual" | "expected" | "main">("actual");
-  const [remoteResultTab, setRemoteResultTab] = React.useState<"actual" | "expected" | "main">("actual");
-  const [resultV3Tab, setResultV3Tab] = React.useState<"actual" | "expected" | "main">("actual");
   const [mlirTab, setMlirTab] = React.useState<"actual" | "expected" | "main">("actual");
 
   const loadTests = React.useCallback(async (preferName?: string) => {
@@ -212,19 +188,14 @@ export default function App() {
     setDisabledReasonDraft(selected?.disabledReason ?? "");
     setIsEditingQuery(false);
     setResultTab("actual");
-    setJsonTab("actual");
-    setRemoteResultTab("actual");
-    setResultV3Tab("actual");
     setMlirTab("actual");
   }, [selected]);
 
   React.useEffect(() => {
     if (!selected) {
       setExpectedResult("");
-      setExpectedResultJson("");
       setExpectedMlir("");
       setMainResult("");
-      setMainResultJson("");
       setMainMlir("");
       return;
     }
@@ -234,19 +205,16 @@ export default function App() {
       .then((data) => {
         if (!active) return;
         setExpectedResult(typeof data?.result === "string" ? data.result : "");
-        setExpectedResultJson(typeof data?.resultJson === "string" ? data.resultJson : "");
         setExpectedMlir(typeof data?.mlir === "string" ? data.mlir : "");
       })
       .catch(() => {
         if (!active) return;
         setExpectedResult("");
-        setExpectedResultJson("");
         setExpectedMlir("");
       });
     const mainExpect = selected.mainVersion?.expect ?? {};
     if (typeof mainExpect.result === "string") {
       setMainResult(typeof mainExpect.result === "string" ? mainExpect.result : "");
-      setMainResultJson(typeof mainExpect.resultJson === "string" ? mainExpect.resultJson : "");
       setMainMlir(typeof mainExpect.mlir === "string" ? mainExpect.mlir : "");
     } else {
       fetch(`${API_BASE}/main?name=${encodeURIComponent(selected.name)}`)
@@ -254,13 +222,11 @@ export default function App() {
         .then((data) => {
           if (!active) return;
           setMainResult(typeof data?.result === "string" ? data.result : "");
-          setMainResultJson(typeof data?.resultJson === "string" ? data.resultJson : "");
           setMainMlir(typeof data?.mlir === "string" ? data.mlir : "");
         })
         .catch(() => {
           if (!active) return;
           setMainResult("");
-          setMainResultJson("");
           setMainMlir("");
         });
     }
@@ -276,24 +242,11 @@ export default function App() {
     window.history.replaceState({}, "", url.toString());
   }, [selected?.name]);
 
-  const isLocalPass = React.useCallback(
-    (result: TestResult) =>
-      result.resultMatched && result.resultJsonMatched === true,
-    []
-  );
-
-  const isRemotePass = React.useCallback(
+  // The MLIR program match is a separate, informational signal shown in its own
+  // panel and does not gate the overall pass/fail.
+  const isResultPass = React.useCallback(
     (result: TestResult) =>
       result.resultMatched === true,
-    []
-  );
-
-  // A test is only a v3 pass when the IR output reproduces the v2 output
-  // (expect.result). The MLIR program match is a separate, informational signal
-  // shown in its own panel and does not gate the overall pass/fail.
-  const isV3Pass = React.useCallback(
-    (result: V3TestResult) =>
-      result.resultV3Matched === true,
     []
   );
 
@@ -328,21 +281,13 @@ export default function App() {
   const runTest = async (name: string) => {
     setLoading(true);
     setError(null);
-    setResults((prev) => ({ ...prev }));
     try {
-      const [localData, v3Data] = await Promise.all([
-        fetchApiJson<TestResult>(
-          `${API_BASE}/run?test=${encodeURIComponent(name)}`,
-          "Failed to run test"
-        ),
-        fetchApiJson<V3TestResult>(
-          `${API_BASE}/run-v3?test=${encodeURIComponent(name)}`,
-          "Failed to run v3 test"
-        )
-      ]);
-      setResults((prev) => ({ ...prev, [localData.name]: localData }));
-      setV3Results((prev) => ({ ...prev, [v3Data.name]: v3Data }));
-      if (!isLocalPass(localData)) {
+      const data = await fetchApiJson<TestResult>(
+        `${API_BASE}/run?test=${encodeURIComponent(name)}`,
+        "Failed to run test"
+      );
+      setResults((prev) => ({ ...prev, [data.name]: data }));
+      if (!isResultPass(data)) {
         showFailToast("1 test failed");
       }
     } catch (err) {
@@ -355,45 +300,16 @@ export default function App() {
   const runAll = async () => {
     setLoading(true);
     setError(null);
-    setResults((prev) => ({ ...prev }));
-    setRemoteResults((prev) => ({ ...prev }));
-    setV3Results((prev) => ({ ...prev }));
     try {
-      const [localData, remoteData, v3Data] = await Promise.all([
-        fetchApiJson<TestResult[]>(`${API_BASE}/run-all`, "Failed to run all tests"),
-        fetchApiJson<TestResult[]>(`${API_BASE}/run-all-remote`, "Failed to run all remote tests"),
-        fetchApiJson<V3TestResult[]>(`${API_BASE}/run-all-v3`, "Failed to run all v3 tests")
-      ]);
-      const nextLocal: Record<string, TestResult> = {};
-      for (const entry of localData) {
-        nextLocal[entry.name] = entry;
+      const data = await fetchApiJson<TestResult[]>(`${API_BASE}/run-all`, "Failed to run all tests");
+      const next: Record<string, TestResult> = {};
+      for (const entry of data) {
+        next[entry.name] = entry;
       }
-      const nextRemote: Record<string, TestResult> = {};
-      for (const entry of remoteData) {
-        nextRemote[entry.name] = entry;
-      }
-      const nextV3: Record<string, V3TestResult> = {};
-      for (const entry of v3Data) {
-        nextV3[entry.name] = entry;
-      }
-      setResults(nextLocal);
-      setRemoteResults(nextRemote);
-      setV3Results(nextV3);
-      const localFailed = localData.filter((entry) => !isLocalPass(entry)).length;
-      const remoteFailed = remoteData.filter((entry) => !isRemotePass(entry)).length;
-      const v3Failed = v3Data.filter((entry) => !isV3Pass(entry)).length;
-      const notices: string[] = [];
-      if (localFailed > 0) {
-        notices.push(`${localFailed} local test${localFailed === 1 ? "" : "s"} failed`);
-      }
-      if (remoteFailed > 0) {
-        notices.push(`${remoteFailed} remote test${remoteFailed === 1 ? "" : "s"} failed`);
-      }
-      if (v3Failed > 0) {
-        notices.push(`${v3Failed} v3 test${v3Failed === 1 ? "" : "s"} failed`);
-      }
-      if (notices.length > 0) {
-        showFailToast(notices.join(" / "));
+      setResults(next);
+      const failed = data.filter((entry) => !isResultPass(entry)).length;
+      if (failed > 0) {
+        showFailToast(`${failed} test${failed === 1 ? "" : "s"} failed`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to run test suite");
@@ -402,24 +318,20 @@ export default function App() {
     }
   };
 
-  const acceptOutputs = async (target: "result" | "resultJson" | "mlir") => {
+  const acceptOutputs = async (target: "result" | "mlir") => {
     if (!selected) return;
-    const isV3Target = target === "mlir";
-    const localResult = selectedResult;
-    const v3Result = selectedV3Result;
-    if (isV3Target ? !v3Result : !localResult) return;
+    const result = selectedResult;
+    if (!result) return;
     setLoading(true);
     setError(null);
     try {
       const payload: {
         name: string;
         result?: string;
-        resultJson?: string;
         mlir?: string;
       } = { name: selected.name };
-      if (target === "result" && localResult) payload.result = localResult.resultOutput;
-      if (target === "resultJson" && localResult) payload.resultJson = localResult.resultJsonOutput;
-      if (target === "mlir" && v3Result) payload.mlir = v3Result.mlirProgram;
+      if (target === "result") payload.result = result.resultOutput;
+      if (target === "mlir") payload.mlir = result.mlirProgram;
       const res = await fetch(`${API_BASE}/update`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -433,29 +345,18 @@ export default function App() {
             : "Failed to update test";
         throw new Error(message);
       }
-      if (isV3Target && v3Result) {
-        setV3Results((prev) => ({
-          ...prev,
-          [selected.name]: {
-            ...v3Result,
-            mlirMatched: target === "mlir" ? true : v3Result.mlirMatched
-          }
-        }));
-        if (target === "mlir") {
-          setExpectedMlir(v3Result.mlirProgram);
+      setResults((prev) => ({
+        ...prev,
+        [selected.name]: {
+          ...result,
+          resultMatched: target === "result" ? true : result.resultMatched,
+          mlirMatched: target === "mlir" ? true : result.mlirMatched
         }
-      } else if (localResult) {
-        setResults((prev) => ({
-          ...prev,
-          [selected.name]: {
-            ...localResult,
-            resultMatched: target === "result" ? true : localResult.resultMatched,
-            resultJsonMatched: target === "resultJson" ? true : localResult.resultJsonMatched
-          }
-        }));
-        if (target === "resultJson") {
-          setExpectedResultJson(localResult.resultJsonOutput ?? "");
-        }
+      }));
+      if (target === "result") {
+        setExpectedResult(result.resultOutput);
+      } else {
+        setExpectedMlir(result.mlirProgram);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to update test JSON.";
@@ -878,7 +779,7 @@ export default function App() {
         "",
         "## Last Run",
         `- Result matched: ${selectedResult.resultMatched ? "true" : "false"}`,
-        `- Result JSON matched: ${selectedResult.resultJsonMatched ? "true" : "false"}`,
+        `- MLIR matched: ${selectedResult.mlirMatched ? "true" : "false"}`,
         typeof selectedResult.timeUs === "number"
           ? `- Time: ${selectedResult.timeUs} μs`
           : "- Time: (not available)"
@@ -893,21 +794,15 @@ export default function App() {
   };
 
   const selectedResult = selected ? results[selected.name] : undefined;
-  const selectedRemoteResult = selected ? remoteResults[selected.name] : undefined;
-  const selectedV3Result = selected ? v3Results[selected.name] : undefined;
   const getTestRunStatus = React.useCallback(
     (test: TestMeta) => {
       if (!test.enabled) return "disabled" as const;
-      const localResult = results[test.name];
-      if (!localResult) return "pending" as const;
-      if (!isLocalPass(localResult)) return "fail" as const;
-      const remoteResult = remoteResults[test.name];
-      if (remoteResult && !isRemotePass(remoteResult)) return "fail" as const;
-      const v3Result = v3Results[test.name];
-      if (v3Result && !isV3Pass(v3Result)) return "fail" as const;
+      const result = results[test.name];
+      if (!result) return "pending" as const;
+      if (!isResultPass(result)) return "fail" as const;
       return "pass" as const;
     },
-    [isLocalPass, isRemotePass, isV3Pass, remoteResults, results, v3Results]
+    [isResultPass, results]
   );
   const allTags = React.useMemo(() => {
     const set = new Set<string>();
@@ -1059,11 +954,9 @@ export default function App() {
     };
 
     setParsedResult(parseCsv(selectedResult?.resultOutput ?? ""));
-    setParsedRemoteResult(parseCsv(selectedRemoteResult?.resultOutput ?? ""));
     setParsedExpectedResult(parseCsv(expectedResult));
     setParsedMainResult(parseCsv(mainResult));
-    setParsedV3Result(parseCsv(selectedV3Result?.resultV3Output ?? ""));
-  }, [selectedRemoteResult?.resultOutput, selectedResult?.resultOutput, selectedV3Result?.resultV3Output, expectedResult, mainResult]);
+  }, [selectedResult?.resultOutput, expectedResult, mainResult]);
 
   const renderTableResult = React.useCallback((rows: string[][]) => (
     <div className="mt-3 max-h-[48rem] overflow-auto rounded-xl border border-white/5 bg-paper">
@@ -1103,22 +996,6 @@ export default function App() {
       rows && rows.length > 0 ? renderTableResult(rows) : renderTextResult(value, heightClass),
     [renderTableResult, renderTextResult]
   );
-
-  const renderJsonOutput = React.useCallback((raw?: string) => {
-    if (!raw) {
-      return renderTextResult(undefined, "max-h-[36rem]");
-    }
-    try {
-      const parsed = JSON.parse(raw);
-      return (
-        <div className="mt-3 max-h-[36rem] overflow-auto rounded-xl bg-paper p-3 text-xs font-mono">
-          <JsonView data={parsed} style={darkStyles} />
-        </div>
-      );
-    } catch {
-      return renderTextResult(raw, "max-h-[36rem]");
-    }
-  }, [renderTextResult]);
 
   return (
     <SidebarProvider ref={sidebarRef} defaultOpen sidebarWidth={sidebarWidth}>
@@ -1220,14 +1097,10 @@ export default function App() {
               <SidebarMenu>
                 {visibleTests.map((test) => {
                   const testResult = results[test.name];
-                  const remoteResult = remoteResults[test.name];
-                  const v3Result = v3Results[test.name];
                   const status = getTestRunStatus(test);
                   const isPending = status === "pending";
                   const isDisabled = status === "disabled";
                   const isPass = status === "pass";
-                  const remoteFailed = !!remoteResult && !isRemotePass(remoteResult);
-                  const v3Failed = !!v3Result && !isV3Pass(v3Result);
                   const statusClass = isDisabled
                     ? "text-amber-400"
                     : isPass
@@ -1271,11 +1144,7 @@ export default function App() {
                               ? "pending"
                               : isPass
                                 ? timingLabel ?? "pass"
-                                : remoteFailed
-                                  ? "remote fail"
-                                  : v3Failed
-                                    ? "ir fail"
-                                    : "fail"}
+                                : "fail"}
                         </span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -1601,6 +1470,11 @@ export default function App() {
                     >
                       {selectedResult.resultMatched ? "match" : "mismatch"}
                     </span>
+                    {typeof selectedResult.timeUs === "number" && (
+                      <span className="rounded-full bg-white/5 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-ink/70">
+                        {selectedResult.timeUs} us
+                      </span>
+                    )}
                     {!selectedResult.resultMatched && (
                       <Button
                         variant="ghost"
@@ -1619,58 +1493,46 @@ export default function App() {
                     ? renderCsvOrText(parsedExpectedResult, expectedResult)
                     : renderCsvOrText(parsedMainResult, mainResult)}
               </div>
+
               <div className="rounded-2xl border border-white/10 bg-steel/40 p-4">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs uppercase tracking-[0.2em] text-ink/60">JSON Result Output</p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-ink/60">MLIR Program</p>
                   <div className="flex items-center gap-2">
                     <div className="flex items-center rounded-full border border-white/10 bg-paper/60 p-1 text-[10px] uppercase tracking-[0.18em] text-ink/70">
                       <button
-                        className={`rounded-full px-2 py-1 ${jsonTab === "actual" ? "bg-white/10 text-ink" : ""}`}
-                        onClick={() => setJsonTab("actual")}
+                        className={`rounded-full px-2 py-1 ${mlirTab === "actual" ? "bg-white/10 text-ink" : ""}`}
+                        onClick={() => setMlirTab("actual")}
                       >
                         Actual
                       </button>
                       <button
-                        className={`rounded-full px-2 py-1 ${jsonTab === "expected" ? "bg-white/10 text-ink" : ""}`}
-                        onClick={() => setJsonTab("expected")}
+                        className={`rounded-full px-2 py-1 ${mlirTab === "expected" ? "bg-white/10 text-ink" : ""}`}
+                        onClick={() => setMlirTab("expected")}
                       >
                         Expected
                       </button>
                       <button
-                        className={`rounded-full px-2 py-1 ${jsonTab === "main" ? "bg-white/10 text-ink" : ""}`}
-                        onClick={() => setJsonTab("main")}
+                        className={`rounded-full px-2 py-1 ${mlirTab === "main" ? "bg-white/10 text-ink" : ""}`}
+                        onClick={() => setMlirTab("main")}
                         disabled={!selected?.changed}
                       >
                         Main
                       </button>
                     </div>
-                    {selectedResult.resultJsonValid != null && (
-                      <span
-                        className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${
-                          selectedResult.resultJsonValid
-                            ? "bg-moss/15 text-moss"
-                            : "bg-accent/15 text-accent"
-                        }`}
-                      >
-                        {selectedResult.resultJsonValid ? "valid" : "invalid"}
-                      </span>
-                    )}
-                    {selectedResult.resultJsonMatched != null && (
-                      <span
-                        className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${
-                          selectedResult.resultJsonMatched
-                            ? "bg-moss/15 text-moss"
-                            : "bg-accent/15 text-accent"
-                        }`}
-                      >
-                        {selectedResult.resultJsonMatched ? "match" : "mismatch"}
-                      </span>
-                    )}
-                    {selectedResult.resultJsonMatched === false && (
+                    <span
+                      className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${
+                        selectedResult.mlirMatched
+                          ? "bg-moss/15 text-moss"
+                          : "bg-accent/15 text-accent"
+                      }`}
+                    >
+                      {selectedResult.mlirMatched ? "match" : "mismatch"}
+                    </span>
+                    {!selectedResult.mlirMatched && (
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => setConfirmTarget("resultJson")}
+                        onClick={() => setConfirmTarget("mlir")}
                         disabled={loading}
                       >
                         Accept
@@ -1678,219 +1540,21 @@ export default function App() {
                     )}
                   </div>
                 </div>
-                {renderJsonOutput(
-                  jsonTab === "actual"
-                    ? selectedResult.resultJsonOutput
-                    : jsonTab === "expected"
-                      ? expectedResultJson
-                      : mainResultJson
+                {renderTextResult(
+                  mlirTab === "actual"
+                    ? selectedResult.mlirProgram
+                    : mlirTab === "expected"
+                      ? expectedMlir
+                      : mainMlir
                 )}
               </div>
-            </div>
-          )}
-
-          {selected && (
-            <div className="mt-6 grid gap-4">
-              <div className="rounded-2xl border border-sky-400/20 bg-sky-500/5 p-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-sky-200/80">Remote Query Output</p>
-                  <p className="mt-1 text-sm text-ink/70">
-                    <code>Run All</code> also runs this test through the binary protocol client/server path. It compares the same
-                    plain-text result corpus as the local suite.
-                  </p>
-                </div>
-              </div>
-
-              {selectedRemoteResult ? (
-                <>
-                  <div className="rounded-2xl border border-white/10 bg-steel/40 p-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs uppercase tracking-[0.2em] text-ink/60">Remote Result Output</p>
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center rounded-full border border-white/10 bg-paper/60 p-1 text-[10px] uppercase tracking-[0.18em] text-ink/70">
-                          <button
-                            className={`rounded-full px-2 py-1 ${remoteResultTab === "actual" ? "bg-white/10 text-ink" : ""}`}
-                            onClick={() => setRemoteResultTab("actual")}
-                          >
-                            Actual
-                          </button>
-                          <button
-                            className={`rounded-full px-2 py-1 ${remoteResultTab === "expected" ? "bg-white/10 text-ink" : ""}`}
-                            onClick={() => setRemoteResultTab("expected")}
-                          >
-                            Expected
-                          </button>
-                          <button
-                            className={`rounded-full px-2 py-1 ${remoteResultTab === "main" ? "bg-white/10 text-ink" : ""}`}
-                            onClick={() => setRemoteResultTab("main")}
-                            disabled={!selected?.changed}
-                          >
-                            Main
-                          </button>
-                        </div>
-                        <span
-                          className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${
-                            selectedRemoteResult.resultMatched
-                              ? "bg-moss/15 text-moss"
-                              : "bg-accent/15 text-accent"
-                          }`}
-                        >
-                          {selectedRemoteResult.resultMatched ? "match" : "mismatch"}
-                        </span>
-                        {typeof selectedRemoteResult.timeUs === "number" && (
-                          <span className="rounded-full bg-white/5 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-ink/70">
-                            {selectedRemoteResult.timeUs} us
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {remoteResultTab === "actual"
-                      ? renderCsvOrText(parsedRemoteResult, selectedRemoteResult.resultOutput)
-                      : remoteResultTab === "expected"
-                        ? renderCsvOrText(parsedExpectedResult, expectedResult)
-                        : renderCsvOrText(parsedMainResult, mainResult)}
-                  </div>
-                </>
-              ) : (
-                <div className="rounded-2xl border border-white/10 bg-steel/40 p-4 text-sm text-ink/70">
-                  {selected?.remoteEnabled === false
-                    ? `Remote run disabled${selected.remoteDisabledReason ? `: ${selected.remoteDisabledReason}` : "."}`
-                    : <>Use <code>Run All</code> to populate remote output for this test.</>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {selected && (
-            <div className="mt-6 grid gap-4">
-              <div className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/5 p-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-fuchsia-200/80">V3 (MLIR) Query Output</p>
-                  <p className="mt-1 text-sm text-ink/70">
-                    <code>Run All</code> also runs this test through the <code>QueryInterpreterV3</code> MLIR path. Its result is
-                    compared against the same <code>expect.result</code> as the local suite; the emitted DB MLIR program is compared
-                    against <code>expect.mlir</code>.
-                  </p>
-                </div>
-              </div>
-
-              {selectedV3Result ? (
-                <>
-                  <div className="rounded-2xl border border-white/10 bg-steel/40 p-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs uppercase tracking-[0.2em] text-ink/60">V3 Result Output</p>
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center rounded-full border border-white/10 bg-paper/60 p-1 text-[10px] uppercase tracking-[0.18em] text-ink/70">
-                          <button
-                            className={`rounded-full px-2 py-1 ${resultV3Tab === "actual" ? "bg-white/10 text-ink" : ""}`}
-                            onClick={() => setResultV3Tab("actual")}
-                          >
-                            Actual
-                          </button>
-                          <button
-                            className={`rounded-full px-2 py-1 ${resultV3Tab === "expected" ? "bg-white/10 text-ink" : ""}`}
-                            onClick={() => setResultV3Tab("expected")}
-                          >
-                            Expected
-                          </button>
-                          <button
-                            className={`rounded-full px-2 py-1 ${resultV3Tab === "main" ? "bg-white/10 text-ink" : ""}`}
-                            onClick={() => setResultV3Tab("main")}
-                            disabled={!selected?.changed}
-                          >
-                            Main
-                          </button>
-                        </div>
-                        <span
-                          className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${
-                            selectedV3Result.resultV3Matched
-                              ? "bg-moss/15 text-moss"
-                              : "bg-accent/15 text-accent"
-                          }`}
-                        >
-                          {selectedV3Result.resultV3Matched ? "match" : "mismatch"}
-                        </span>
-                        {typeof selectedV3Result.timeUs === "number" && (
-                          <span className="rounded-full bg-white/5 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-ink/70">
-                            {selectedV3Result.timeUs} us
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {resultV3Tab === "actual"
-                      ? renderCsvOrText(parsedV3Result, selectedV3Result.resultV3Output)
-                      : resultV3Tab === "expected"
-                        ? renderCsvOrText(parsedExpectedResult, expectedResult)
-                        : renderCsvOrText(parsedMainResult, mainResult)}
-                  </div>
-
-                  <div className="rounded-2xl border border-white/10 bg-steel/40 p-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs uppercase tracking-[0.2em] text-ink/60">MLIR Program</p>
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center rounded-full border border-white/10 bg-paper/60 p-1 text-[10px] uppercase tracking-[0.18em] text-ink/70">
-                          <button
-                            className={`rounded-full px-2 py-1 ${mlirTab === "actual" ? "bg-white/10 text-ink" : ""}`}
-                            onClick={() => setMlirTab("actual")}
-                          >
-                            Actual
-                          </button>
-                          <button
-                            className={`rounded-full px-2 py-1 ${mlirTab === "expected" ? "bg-white/10 text-ink" : ""}`}
-                            onClick={() => setMlirTab("expected")}
-                          >
-                            Expected
-                          </button>
-                          <button
-                            className={`rounded-full px-2 py-1 ${mlirTab === "main" ? "bg-white/10 text-ink" : ""}`}
-                            onClick={() => setMlirTab("main")}
-                            disabled={!selected?.changed}
-                          >
-                            Main
-                          </button>
-                        </div>
-                        <span
-                          className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${
-                            selectedV3Result.mlirMatched
-                              ? "bg-moss/15 text-moss"
-                              : "bg-accent/15 text-accent"
-                          }`}
-                        >
-                          {selectedV3Result.mlirMatched ? "match" : "mismatch"}
-                        </span>
-                        {!selectedV3Result.mlirMatched && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setConfirmTarget("mlir")}
-                            disabled={loading}
-                          >
-                            Accept
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                    {renderTextResult(
-                      mlirTab === "actual"
-                        ? selectedV3Result.mlirProgram
-                        : mlirTab === "expected"
-                          ? expectedMlir
-                          : mainMlir
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="rounded-2xl border border-white/10 bg-steel/40 p-4 text-sm text-ink/70">
-                  Use <code>Run All</code> to populate v3 output for this test.
-                </div>
-              )}
             </div>
           )}
 
           {(!selected || !selectedResult) && !loading && !error && (
             <div className="mt-6 rounded-2xl border border-white/10 bg-steel/40 p-4 text-sm text-ink/70">
               {selected
-                ? "Run the local query path to populate local result output."
+                ? "Run this test to populate its result and MLIR program."
                 : "Connect the C++ runner API to populate result output."}
             </div>
           )}
@@ -1901,7 +1565,7 @@ export default function App() {
               <div className="surface w-full max-w-md rounded-3xl p-6">
                 <h3 className="text-lg font-semibold">Update test expectations?</h3>
               <p className="mt-2 text-sm text-ink/70">
-                This will overwrite the expected {confirmTarget === "resultJson" ? "JSON result" : confirmTarget === "mlir" ? "MLIR program" : confirmTarget} in the JSON file for{" "}
+                This will overwrite the expected {confirmTarget === "mlir" ? "MLIR program" : confirmTarget} in the JSON file for{" "}
                 <span className="font-semibold text-ink">{selected?.name}</span>.
               </p>
                 <div className="mt-6 flex items-center justify-end gap-3">
