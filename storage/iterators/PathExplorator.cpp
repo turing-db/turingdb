@@ -102,6 +102,18 @@ void PathExplorator::setWalkerCount(size_t walkerCount) {
     }
 }
 
+bool PathExplorator::isPendingNode(NodeID node) const {
+    return node.getValue() >= _parts.getAllocatedNodeCount();
+}
+
+size_t PathExplorator::nodeIDBound() const {
+    if (_pendingAdjacency) {
+        return _pendingAdjacency->getNodeIDBound();
+    }
+
+    return _parts.getAllocatedNodeCount();
+}
+
 void PathExplorator::prefetchNodeData(NodeID node, size_t partIndex) const {
     if (partIndex >= _parts.size()) {
         return;
@@ -120,6 +132,19 @@ bool PathExplorator::hasWork() const {
     return _activeWalkers > 0 || _reach._batchActive || _seedCursor < _input->size();
 }
 
+LabelSetHandle PathExplorator::labelSetOf(NodeID node) const {
+    if (isPendingNode(node)) {
+        return _pendingAdjacency ? _pendingAdjacency->labelSetOf(node) : LabelSetHandle {};
+    }
+
+    const size_t owner = _parts.ownerIndex(node);
+    if (owner == _parts.size()) {
+        return {};
+    }
+
+    return _parts.get(owner)._nodes->getNodeLabelSet(node);
+}
+
 bool PathExplorator::isEnd(size_t seedRow, NodeID node) const {
     if (_endNodes && node != (*_endNodes)[seedRow]) {
         return false;
@@ -133,12 +158,7 @@ bool PathExplorator::isEnd(size_t seedRow, NodeID node) const {
         return true;
     }
 
-    const size_t owner = _parts.ownerIndex(node);
-    if (owner == _parts.size()) {
-        return false;
-    }
-
-    const LabelSetHandle labels = _parts.get(owner)._nodes->getNodeLabelSet(node);
+    const LabelSetHandle labels = labelSetOf(node);
 
     return labels.isValid() && labels.hasAtLeastLabels(_endLabels);
 }
@@ -332,7 +352,7 @@ void PathExplorator::popFrame(Walker& walker) {
 
 void PathExplorator::requestDescent(Walker& walker, NodeID node) {
     walker._pendingNode = node;
-    walker._pendingOwner = _parts.ownerIndex(node);
+    walker._pendingOwner = isPendingNode(node) ? _parts.size() : _parts.ownerIndex(node);
     prefetchNodeData(node, walker._pendingOwner);
     walker._stage = Stage::RangeRequested;
 }
@@ -359,12 +379,27 @@ void PathExplorator::readRanges(Walker& walker) {
     walker._stage = Stage::SpanRequested;
 }
 
+void PathExplorator::generatePendingCandidates(Walker& walker, NodeID node) {
+    if (!_pendingAdjacency) {
+        return;
+    }
+
+    if (_direction != PathExplorationDir::BACKWARD) {
+        generateCandidates(walker, _pendingAdjacency->outOf(node));
+    }
+
+    if (_direction != PathExplorationDir::FORWARD) {
+        generateCandidates(walker, _pendingAdjacency->into(node));
+    }
+}
+
 void PathExplorator::pushFrame(Walker& walker) {
     const NodeID node = walker._pendingNode;
     const size_t begin = walker._candidateNodes.size();
 
     generateCandidates(walker, walker._pendingOuts);
     generateCandidates(walker, walker._pendingIns);
+    generatePendingCandidates(walker, node);
 
     for (const size_t patchIndex : _parts.patchPartsAfter(walker._pendingOwner)) {
         const EdgeIndexer& indexer = *_parts.get(patchIndex)._indexer;
@@ -505,7 +540,7 @@ void PathExplorator::fillDistinct(size_t maxCount) {
 
 void PathExplorator::startBatch() {
     Reachability& reach = _reach;
-    const size_t nodeCount = _parts.getAllocatedNodeCount();
+    const size_t nodeCount = nodeIDBound();
     const size_t count = std::min(PathTargetIndex::targetsPerBatch, _input->size() - _seedCursor);
 
     reach._batchFirstRow = _seedCursor;
@@ -622,26 +657,26 @@ void PathExplorator::collectReachCandidates(NodeID node) {
     reach._candidateNodes.clear();
     reach._candidateEdges.clear();
 
-    const size_t owner = _parts.ownerIndex(node);
-    if (owner == _parts.size()) {
-        return;
-    }
+    appendPendingReachCandidates(node);
 
-    const EdgeIndexer& indexer = *_parts.get(owner)._indexer;
-    if (_direction != PathExplorationDir::BACKWARD) {
-        appendReachCandidates(indexer.getNodeOutEdges(node));
-    }
-    if (_direction != PathExplorationDir::FORWARD) {
-        appendReachCandidates(indexer.getNodeInEdges(node));
-    }
-
-    for (const size_t patchIndex : _parts.patchPartsAfter(owner)) {
-        const EdgeIndexer& patchIndexer = *_parts.get(patchIndex)._indexer;
+    const size_t owner = isPendingNode(node) ? _parts.size() : _parts.ownerIndex(node);
+    if (owner < _parts.size()) {
+        const EdgeIndexer& indexer = *_parts.get(owner)._indexer;
         if (_direction != PathExplorationDir::BACKWARD) {
-            appendReachCandidates(patchIndexer.getNodeOutEdges(node));
+            appendReachCandidates(indexer.getNodeOutEdges(node));
         }
         if (_direction != PathExplorationDir::FORWARD) {
-            appendReachCandidates(patchIndexer.getNodeInEdges(node));
+            appendReachCandidates(indexer.getNodeInEdges(node));
+        }
+
+        for (const size_t patchIndex : _parts.patchPartsAfter(owner)) {
+            const EdgeIndexer& patchIndexer = *_parts.get(patchIndex)._indexer;
+            if (_direction != PathExplorationDir::BACKWARD) {
+                appendReachCandidates(patchIndexer.getNodeOutEdges(node));
+            }
+            if (_direction != PathExplorationDir::FORWARD) {
+                appendReachCandidates(patchIndexer.getNodeInEdges(node));
+            }
         }
     }
 
@@ -649,6 +684,20 @@ void PathExplorator::collectReachCandidates(NodeID node) {
         const size_t survivors = _hopFilter->filter(node, reach._candidateNodes, reach._candidateEdges);
         reach._candidateNodes.resize(survivors);
         reach._candidateEdges.resize(survivors);
+    }
+}
+
+void PathExplorator::appendPendingReachCandidates(NodeID node) {
+    if (!_pendingAdjacency) {
+        return;
+    }
+
+    if (_direction != PathExplorationDir::BACKWARD) {
+        appendReachCandidates(_pendingAdjacency->outOf(node));
+    }
+
+    if (_direction != PathExplorationDir::FORWARD) {
+        appendReachCandidates(_pendingAdjacency->into(node));
     }
 }
 
