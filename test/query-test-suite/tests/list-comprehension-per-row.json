@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "remote-enabled": false,
+  "graph": "simpledb",
+  "query": "MATCH (i:Interest) RETURN i.name, [x IN ['Bio', 'Gym'] WHERE x = i.name] AS matched ORDER BY i.name",
+  "expect": {
+    "result": "i.name,matched\nAnimals,[]\nBio,[Bio]\nComputers,[]\nCooking,[]\nEighties,[]\nGhosts,[]\nGym,[Gym]\nJiuJitsu,[]\nPadel,[]\nTravel,[]"
+  },
+  "tags": [
+    "lists",
+    "comprehension",
+    "match",
+    "return"
+  ],
+  "write-required": false
+}

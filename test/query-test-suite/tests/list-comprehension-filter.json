@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "remote-enabled": false,
+  "graph": "simpledb",
+  "query": "RETURN [x IN [1, 2, 3, 4] WHERE x > 2] AS kept",
+  "expect": {
+    "result": "kept\n\"[3, 4]\""
+  },
+  "tags": [
+    "lists",
+    "comprehension",
+    "return"
+  ],
+  "write-required": false
+}

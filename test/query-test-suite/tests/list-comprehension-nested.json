@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "remote-enabled": false,
+  "graph": "simpledb",
+  "query": "RETURN [x IN [[1, 2], [3]] | [y IN x | y * 2]] AS nested",
+  "expect": {
+    "result": "nested\n\"[[2, 4], [6]]\""
+  },
+  "tags": [
+    "lists",
+    "comprehension",
+    "return"
+  ],
+  "write-required": false
+}
