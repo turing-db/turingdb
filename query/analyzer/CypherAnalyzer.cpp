@@ -237,10 +237,6 @@ void CypherAnalyzer::analyze(const SinglePartQuery* query) {
 }
 
 void CypherAnalyzer::analyze(const UnionQuery* query) {
-    if (!_isV3) { // only supported by MLIR v3
-        throwError("UNION not yet supported.", query);
-    }
-
     // Each branch is a query body of its own: it declares its own variables and writes
     // its own clauses, so the scope and the part the write analyzer is tracking are both
     // opened fresh for it, exactly as a WITH opens them
