@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (a)<--(b)<--(c:Person) RETURN a.name, c.name ORDER BY a.name, c.name",
+  "expect": {
+    "result": "a.name,c.name\nAdam,Adam\nBio,Remy\nComputers,Adam\nCooking,Remy\nEighties,Adam\nGhosts,Adam\nRemy,Remy\nRemy,Remy",
+    "resultJson": "{\"header\":{\"column_names\":[\"a.name\",\"c.name\"],\"column_types\":[\"String\",\"String\"]},\"data\":[[[\"Adam\",\"Bio\",\"Computers\",\"Cooking\",\"Eighties\",\"Ghosts\",\"Remy\",\"Remy\"],[\"Adam\",\"Remy\",\"Adam\",\"Remy\",\"Adam\",\"Adam\",\"Remy\",\"Remy\"]]]}"
+  },
+  "tags": [
+    "match",
+    "labels",
+    "edges"
+  ],
+  "write-required": false
+}

@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (a)-->(b)-->(c:Person:SoftwareEngineering) RETURN a.name, c.name ORDER BY a.name, c.name",
+  "expect": {
+    "result": "a.name,c.name\nRemy,Remy\nRemy,Remy",
+    "resultJson": "{\"header\":{\"column_names\":[\"a.name\",\"c.name\"],\"column_types\":[\"String\",\"String\"]},\"data\":[[[\"Remy\",\"Remy\"],[\"Remy\",\"Remy\"]]]}"
+  },
+  "tags": [
+    "match",
+    "labels",
+    "edges"
+  ],
+  "write-required": false
+}

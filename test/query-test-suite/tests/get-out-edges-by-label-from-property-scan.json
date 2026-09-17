@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (a)-->(b:Interest) WHERE a.name = 'Remy' RETURN a.name, b.name ORDER BY b.name",
+  "expect": {
+    "result": "a.name,b.name\nRemy,Computers\nRemy,Eighties\nRemy,Ghosts",
+    "resultJson": "{\"header\":{\"column_names\":[\"a.name\",\"b.name\"],\"column_types\":[\"String\",\"String\"]},\"data\":[[[\"Remy\",\"Remy\",\"Remy\"],[\"Computers\",\"Eighties\",\"Ghosts\"]]]}"
+  },
+  "tags": [
+    "match",
+    "labels",
+    "edges"
+  ],
+  "write-required": false
+}
