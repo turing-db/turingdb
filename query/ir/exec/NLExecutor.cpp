@@ -96,7 +96,8 @@ void fillListElementChunk(Column* output, const ListView list, size_t offset, si
 // Fill a slice of a ListView into a nullable value column, extracting each element as
 // the homogeneous primitive. The homogeneous unwind's fast path, ported from
 // UnwindProcessor::fillHomogeneous onto the ColumnOptVector every other value-chunk
-// consumer reads; a literal list holds no null, so every cell is present.
+// consumer reads; a null element names no type of its own and rides the column as an
+// absent cell.
 void fillHomogeneousChunk(Column* output, ValueType valueType, const ListView list, size_t offset, size_t rows) {
     const std::span<const ListElementView> elements = list.elements();
 
@@ -116,7 +117,14 @@ void fillHomogeneousChunk(Column* output, ValueType valueType, const ListView li
 
         for (size_t index = 0; index < rows; index++) {
             const ListElementView element = elements[offset + index];
-            bioassert(element.getTag() == expectedTag, "Unwound element does not have the unwind's value type.");
+            const ListBufferTypeTag tag = element.getTag();
+
+            if (tag == ListBufferTypeTag::Null) {
+                raw[index] = std::nullopt;
+                continue;
+            }
+
+            bioassert(tag == expectedTag, "Unwound element does not have the unwind's value type.");
 
             raw[index] = element.getAs<Primitive>();
         }

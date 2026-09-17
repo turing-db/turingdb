@@ -1339,12 +1339,12 @@ func.func @main() {
 }
 )mlir";
 
-// A list holding a null: the unit attribute carries no type, so the elements share none
-// however their siblings agree, and the verdict is the type-erased form.
+// A list holding a null: the unit attribute carries no type of its own, so it agrees with
+// the integer beside it and the verdict is a list of integers.
 const char* const nullElementConstListProgram = R"mlir(
 func.func @main() {
   %xs = db.constant([1, unit])
-  db.output(%xs) : !db.column<!storage.list<!storage.list_element>>
+  db.output(%xs) : !db.column<!storage.list<i64>>
   return
 }
 )mlir";
@@ -1878,15 +1878,15 @@ TEST_F(DBDialectTest, infersAnErasedListFromAnEmptyOne) {
     EXPECT_EQ(listConstant.getResult().getType(), mlir::db::ColumnType::get(&_context, erasedListType));
 }
 
-TEST_F(DBDialectTest, infersAnErasedListFromANullElement) {
+TEST_F(DBDialectTest, infersATypedListFromANullElementBesideAnInteger) {
     const mlir::OwningOpRef<mlir::ModuleOp> module = parse(nullElementConstListProgram);
     ASSERT_TRUE(module);
 
     mlir::db::ConstantOp listConstant = findListConstant(module.get());
     ASSERT_TRUE(listConstant);
 
-    const mlir::Type erasedListType = mlir::storage::ListType::get(&_context, mlir::storage::ListElementType::get(&_context));
-    EXPECT_EQ(listConstant.getResult().getType(), mlir::db::ColumnType::get(&_context, erasedListType));
+    const mlir::Type int64ListType = mlir::storage::ListType::get(&_context, mlir::IntegerType::get(&_context, 64));
+    EXPECT_EQ(listConstant.getResult().getType(), mlir::db::ColumnType::get(&_context, int64ListType));
 }
 
 TEST_F(DBDialectTest, infersAListOfListsFromNestedElementsAlone) {

@@ -159,16 +159,16 @@ TEST_F(ListLiteralElementTypeTest, typesAMixedListAsTaggedScalars) {
     expectListElementType("RETURN [true, 'mixed', 10]", listElementType());
 }
 
-TEST_F(ListLiteralElementTypeTest, typesAListEndingInNullAsTaggedScalars) {
-    // A null rides a unit attribute, which carries no type, so it agrees with no element:
-    // the integer ahead of it does not make the list a list of integers.
-    expectListElementType("RETURN [1, null]", listElementType());
+TEST_F(ListLiteralElementTypeTest, typesAListEndingInNullAsIntegers) {
+    // A null rides a unit attribute, which carries no type of its own, so it agrees with
+    // the integer ahead of it: the list is a list of integers with a null in it.
+    expectListElementType("RETURN [1, null]", mlir::IntegerType::get(&_context, 64));
 }
 
-TEST_F(ListLiteralElementTypeTest, typesAListOpeningOnNullAsTaggedScalars) {
-    // The same verdict with the null first, where there is no type yet to disagree with -
-    // the elements are read for a shared type from the front, so this is the other way in.
-    expectListElementType("RETURN [null, 1]", listElementType());
+TEST_F(ListLiteralElementTypeTest, typesAListOpeningOnNullAsIntegers) {
+    // The same verdict with the null first: the shared type is read from the elements
+    // that name one, whichever position they hold.
+    expectListElementType("RETURN [null, 1]", mlir::IntegerType::get(&_context, 64));
 }
 
 TEST_F(ListLiteralElementTypeTest, typesASingletonNullListAsTaggedScalars) {
