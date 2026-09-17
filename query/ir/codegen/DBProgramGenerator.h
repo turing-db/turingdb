@@ -514,8 +514,6 @@ private:
     // bare `RETURN 1`, whose projection is the single row its constants are.
     mlir::Value resolveProjectionDriver(llvm::ArrayRef<mlir::Value> projected) const;
 
-    static bool writesToTheGraph(const SinglePartQuery* query);
-
     // A standalone CALL ends no projection: what it yielded is the result
     void generateYieldedOutput(const SinglePartQuery* query);
 
