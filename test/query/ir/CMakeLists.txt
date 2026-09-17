@@ -2670,3 +2670,35 @@ target_link_libraries(test_query_ir_call_subquery_teams PRIVATE
         turing_db_interpreter_v3_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_call_subquery_teams PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# An aggregate or a cut inside a unit subquery body, which covers one input row.
+add_turing_test(test_query_ir_call_subquery_unit_body_scope CallSubqueryUnitBodyScopeTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_unit_body_scope PRIVATE turing_ir_test_write_query_s)
+
+# OPTIONAL over a unit subquery body, which has no row to pad.
+add_turing_test(test_query_ir_call_subquery_optional_unit CallSubqueryOptionalUnitTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_optional_unit PRIVATE turing_ir_test_write_query_s)
+
+# A reduction over a constant inside a subquery body, folded above the body it sits in.
+add_turing_test(test_query_ir_call_subquery_constant_aggregate CallSubqueryConstantAggregateTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_constant_aggregate PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_call_subquery_constant_aggregate PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# A subquery body that reads and returns nothing, and the error it is rejected with.
+add_turing_test(test_query_ir_call_subquery_read_only_body CallSubqueryReadOnlyBodyTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_read_only_body PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_call_subquery_read_only_body PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
