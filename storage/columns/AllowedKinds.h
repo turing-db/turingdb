@@ -866,4 +866,16 @@ struct NumericallyAggregatedTypes {
     >;
 };
 
+struct GraphSAGEInputs {
+    using Allowed = GenerateKindList<std::tuple<
+        types::List::Primitive,
+        std::optional<types::List::Primitive>
+    >>;
+
+    using Excluded = ExcludedContainers<
+        ContainerKind::code<ColumnSet>(),
+        ContainerKind::code<ColumnMask>()
+    >;
+};
+
 }
