@@ -206,6 +206,16 @@ TEST_F(UnionTest, unionsAnIntegerPropertyWithACount) {
                expected);
 }
 
+// A count and an integer property are one Cypher INTEGER. There are ten Interests and one
+// ten-minute edge, so the union reports 10 once, not twice.
+TEST_F(UnionTest, dedupsACountAgainstAnIntegerProperty) {
+    const Rows expected {{"10"}};
+
+    expectRows("MATCH (a:Interest) RETURN count(a) AS n UNION "
+               "MATCH ()-[e]->() WHERE e.duration = 10 RETURN e.duration AS n",
+               expected);
+}
+
 TEST_F(UnionTest, unionsTraversedBranches) {
     const Rows expected {{"Adam"}, {"Ghosts"}, {"Computers"}, {"Eighties"}, {"Remy"}, {"Bio"}, {"Cooking"}};
 

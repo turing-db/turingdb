@@ -224,6 +224,10 @@ private:
     // the loop builders carry is dropped between them.
     void lowerUnion(mlir::db::Union unionOp);
 
+    // Brings a union branch's result columns to the value type the whole result carries,
+    // reaching them through @param branchOutput, the branch's own db.output
+    void convertUnionResultChunks(mlir::Operation& operation, mlir::db::Output branchOutput);
+
     // Opens the one nl.distinct seen-set the branches of a deduping union record their
     // rows in, hoisted where every branch's filter can reach it
     void lowerDistinctSet(mlir::db::DistinctSet distinctSet);
