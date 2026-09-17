@@ -503,6 +503,46 @@ LogicalResult MakeList::verify() {
     return success();
 }
 
+// The body binds the element, the row tag and one chunk per carried column, and ends
+// naming what each element contributes. The result holds one list per row of the source
+// chunk.
+LogicalResult ListComprehension::verify() {
+    Block& bodyBlock = getBody().front();
+
+    auto yield = dyn_cast_or_null<ComprehensionYield>(bodyBlock.empty() ? nullptr : &bodyBlock.back());
+    if (!yield) {
+        return emitOpError("body region must end with an nl.comprehension_yield");
+    }
+
+    const size_t carriedCount = getColumnsToFilter().size();
+    const size_t expectedArguments = carriedCount + 2;
+
+    if (bodyBlock.getNumArguments() != expectedArguments) {
+        return emitOpError("body region takes the element and the row tag plus one chunk per "
+                           "carried column, ")
+               << "expected " << expectedArguments << " but has " << bodyBlock.getNumArguments();
+    }
+
+    for (size_t carriedIndex = 0; carriedIndex < carriedCount; carriedIndex++) {
+        const Type argumentType = bodyBlock.getArgument(carriedIndex + 2).getType();
+
+        if (argumentType != getColumnsToFilter()[carriedIndex].getType()) {
+            return emitOpError("body argument ") << carriedIndex + 2
+                                                 << " must have the type of carried chunk "
+                                                 << carriedIndex;
+        }
+    }
+
+    const Type elementType = llvm::cast<ChunkType>(getResult().getType()).getElementType();
+    const auto nullableType = llvm::dyn_cast<storage::NullableType>(elementType);
+
+    if (!nullableType || !llvm::isa<storage::ListType>(nullableType.getValueType())) {
+        return emitOpError("result must be a chunk of nullable lists");
+    }
+
+    return success();
+}
+
 void For::build(OpBuilder& builder, OperationState& state, Value iterator) {
     For::build(builder, state, iterator, Value());
 }

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <memory>
 #include <mlir/IR/Location.h>
 #include <optional>
 #include <string_view>
@@ -888,6 +889,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerUnwind(unwind);
     } else if (mlir::db::MakeList makeList = mlir::dyn_cast<mlir::db::MakeList>(operation)) {
         lowerMakeList(makeList);
+    } else if (mlir::db::ListComprehension listComprehension = mlir::dyn_cast<mlir::db::ListComprehension>(operation)) {
+        lowerListComprehension(listComprehension);
     } else if (mlir::db::ScanEdges scanEdges = mlir::dyn_cast<mlir::db::ScanEdges>(operation)) {
         lowerScanEdges(scanEdges);
     } else if (mlir::db::ScanEdgesByType scanEdgesByType = mlir::dyn_cast<mlir::db::ScanEdgesByType>(operation)) {
@@ -1265,6 +1268,129 @@ void DBLowering::lowerUnwind(mlir::db::Unwind unwind) {
                                                   sourceChunk,
                                                   carriedChunks);
     buildLoopForSource(rows.getResult(), unwind.getOperation());
+}
+
+void DBLowering::lowerListComprehension(mlir::db::ListComprehension comprehension) {
+    const mlir::Location loc = _builder.getUnknownLoc();
+    mlir::MLIRContext* const context = _builder.getContext();
+
+    llvm::SmallVector<mlir::Value, 4> carriedChunks;
+    for (const mlir::Value carriedColumn : comprehension.getColumnsToFilter()) {
+        carriedChunks.push_back(mapValue(carriedColumn));
+    }
+
+    // A constant source holds one cell standing for every row rather than one per row, so
+    // it is laid out over the rows it is read against - as lowerUnwind lays its own out
+    const mlir::Value cardinality = cardinalityDriver(carriedChunks);
+    const mlir::Value sourceChunk = rowAlignedChunk(mapValue(comprehension.getSource()), cardinality);
+
+    const mlir::Type sourceElement = mlir::cast<nl::ChunkType>(sourceChunk.getType()).getElementType();
+
+    const nl::ChunkType rowTagType = nl::ChunkType::get(context,
+                                                        _builder.getIntegerType(64, /*isSigned=*/false));
+
+    llvm::SmallVector<mlir::Type, 4> argumentTypes {
+        nl::ChunkType::get(context, unwoundElementType(context, sourceElement)),
+        rowTagType
+    };
+    llvm::SmallVector<mlir::Location, 4> argumentLocations {loc, loc};
+
+    for (const mlir::Value carriedChunk : carriedChunks) {
+        argumentTypes.push_back(carriedChunk.getType());
+        argumentLocations.push_back(loc);
+    }
+
+    // The type of the lists is the type of what the body yields, so the op cannot be
+    // created before its body is lowered: the body goes into a region of its own, which
+    // the op takes once it is built.
+    auto bodyRegion = std::make_unique<mlir::Region>();
+    mlir::Block* const bodyBlock = &bodyRegion->emplaceBlock();
+    bodyBlock->addArguments(argumentTypes, argumentLocations);
+
+    const mlir::Value elementChunk = bodyBlock->getArgument(0);
+
+    // Every insertion into a block goes before its terminator, so the body needs one
+    // before anything is lowered into it. This one stands for the yield the lowered body
+    // decides, which replaces it below.
+    _builder.setInsertionPointToEnd(bodyBlock);
+    mlir::Operation* const placeholderYield =
+        _builder.create<nl::ComprehensionYield>(loc, bodyBlock->getArgument(1), elementChunk);
+
+    mlir::Block& dbBodyBlock = comprehension.getBody().front();
+    for (size_t argumentIndex = 0; argumentIndex < argumentTypes.size(); argumentIndex++) {
+        const unsigned index = static_cast<unsigned>(argumentIndex);
+        _valueMap[dbBodyBlock.getArgument(index)] = bodyBlock->getArgument(index);
+    }
+
+    // The rows the body computes over are the elements of one row's list, so a constant it
+    // reads is laid out over those rather than over the rows the comprehension is read on
+    mlir::Block* const previousInnermostLoopBody = _innermostLoopBody;
+    const mlir::Value previousInnermostCardinality = _innermostCardinality;
+    _innermostLoopBody = bodyBlock;
+    _innermostCardinality = elementChunk;
+
+    mlir::Value rowTagChunk;
+    mlir::Value valueChunk;
+
+    for (mlir::Operation& operation : dbBodyBlock) {
+        mlir::db::ComprehensionYield yield = mlir::dyn_cast<mlir::db::ComprehensionYield>(operation);
+        if (!yield) {
+            lowerOperation(operation);
+            continue;
+        }
+
+        rowTagChunk = mapValue(yield.getRowTags());
+        valueChunk = mapValue(yield.getValue());
+    }
+
+    _innermostLoopBody = previousInnermostLoopBody;
+    _innermostCardinality = previousInnermostCardinality;
+
+    // ComprehensionYield::verify guarantees both, so an empty one here means unverified
+    // IR - the defensive backstop lowerOptionalMatch keeps too.
+    if (!rowTagChunk || !valueChunk) {
+        throw IRException("db.list_comprehension yields no value");
+    }
+
+    // A value computed from constants alone holds one cell standing for every element, so
+    // it is laid out over the elements it is read against - the ones the tag counts, since
+    // a WHERE has cut both together
+    valueChunk = rowAlignedChunk(valueChunk, rowTagChunk);
+
+    // An entity ID, a list, a tagged cell and a CSV field's owned characters are present
+    // in every row and go into the list as they stand; only a scalar value column is read
+    // as nullable, the way lowerMakeList reads the columns it builds from
+    const mlir::Type valueElement = mlir::cast<nl::ChunkType>(valueChunk.getType()).getElementType();
+    const bool holdsCellsPresentInEveryRow = mlir::isa<storage::NodeIDType,
+                                                       storage::EdgeIDType,
+                                                       storage::ListType,
+                                                       storage::ListElementType,
+                                                       storage::OwnedStringType>(valueElement);
+
+    if (!holdsCellsPresentInEveryRow) {
+        valueChunk = nullableValueChunk(valueChunk);
+    }
+
+    _builder.setInsertionPointToEnd(bodyBlock);
+    _builder.create<nl::ComprehensionYield>(loc, rowTagChunk, valueChunk);
+    placeholderYield->erase();
+
+    const mlir::Type listType = storage::ListType::get(context, listedElementType(context, valueChunk));
+    const nl::ChunkType resultType = nl::ChunkType::get(context,
+                                                        storage::NullableType::get(context, listType));
+
+    llvm::SmallVector<mlir::Value, 8> operandChunks {sourceChunk};
+    operandChunks.append(carriedChunks.begin(), carriedChunks.end());
+
+    setInsertionForNaryOp(operandChunks);
+
+    nl::ListComprehension lists = _builder.create<nl::ListComprehension>(loc,
+                                                                         resultType,
+                                                                         sourceChunk,
+                                                                         carriedChunks);
+    lists.getBody().takeBody(*bodyRegion);
+
+    _valueMap[comprehension.getResult()] = lists.getResult();
 }
 
 mlir::Type DBLowering::listedElementType(mlir::MLIRContext* context, llvm::ArrayRef<mlir::Value> chunks) {

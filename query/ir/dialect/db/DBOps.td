@@ -400,6 +400,82 @@ def MakeList : TuringOp<"make_list", [Pure]> {
 }
 
 /**
+* ListComprehension
+*/
+def ListComprehension : TuringOp<"list_comprehension", [Pure]> {
+  let summary = "Build one list per row out of the elements of that row's list, filtered and projected";
+
+  let description = [{
+    Cypher's `[x IN xs WHERE p(x) | f(x)]`. The op reads one list column and produces one
+    list cell per row, so - unlike db.unwind, which spreads the elements over rows of
+    their own - the rows in flight are the ones it started with:
+
+      %ts = db.list_comprehension(%tags, {%n}) ({
+        ^bb0(%x: !db.column<none>, %tag: !db.column<ui64>, %nIn: !db.column<!storage.node_id>):
+          %keep = db.neq %x, %c : (!db.column<none>, !db.column<none>) -> !db.column<!storage.bool>
+          %xk, %tagk, %nk = db.filter(%keep, {%x, %tag, %nIn}) : ...
+          %up = db.concat %xk, %suffix : (!db.column<none>, !db.column<none>) -> !db.column<none>
+          db.comprehension_yield %tagk, %up : !db.column<none>
+      }) : (!db.column<none>, !db.column<!storage.node_id>) -> !db.column<none>
+
+    The region's entry block takes the element the variable is bound to, the row tag - the
+    position of the row whose list that element came from - and then one argument per
+    carried column: the element rows are not the rows in flight, so a column the body
+    reads has to be repeated once per element of its own row, which is what carrying it
+    does - the carry set of db.unwind, laid out the same way. Everything else the body
+    reads stands for every row already: a constant needs no carrying.
+
+    The WHERE is a db.filter over those arguments rather than a mask the op is handed, so
+    an element it drops is one the projection is never computed for - `[x IN xs WHERE x <>
+    0 | 100 / x]` divides by no zero. The yield names the tag as the body left it, which
+    is what says how many elements each row's list ends up with, and the value one element
+    contributes.
+
+    The element column's type is the source's to decide and is resolved during lowering,
+    as db.unwind's element is - a list of tagged scalars hands out tagged scalars, a list
+    of one type hands out that type. So is the result's: the list is of whatever the body
+    yields, and a row whose source cell is null gets a null list rather than an empty one,
+    which is what Cypher reads `[x IN null | x]` as.
+  }];
+
+  let arguments = (ins Column:$source, Variadic<Column>:$columns_to_filter);
+  let results   = (outs Column:$result);
+
+  // Exactly one block, ending in a db.comprehension_yield.
+  let regions = (region SizedRegion<1>:$body);
+
+  let hasVerifier = 1;
+
+  // The carry set prints in braces, as db.unwind's does; the region follows, then the
+  // source and the carried types as a function type.
+  let assemblyFormat = [{
+    `(` $source `,` `{` $columns_to_filter `}` `)` $body attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+/**
+* ComprehensionYield
+*/
+def ComprehensionYield : TuringOp<"comprehension_yield", [Pure, Terminator, HasParent<"ListComprehension">]> {
+  let summary = "Name the row each surviving element of a db.list_comprehension came from and what it contributes";
+
+  let description = [{
+    Terminates a db.list_comprehension's body. `row_tags` is the row tag as the body left
+    it - the row each surviving element came from, which a WHERE cuts alongside the
+    element - and `value` is what that element contributes to its row's list.
+  }];
+
+  let arguments = (ins ColumnRowTags:$row_tags, Column:$value);
+
+  // The tag's type is buildable and so left out, as db.optional_yield leaves it out; only
+  // the value's is spelled.
+  let assemblyFormat = [{
+    $row_tags `,` $value attr-dict `:` qualified(type($value))
+  }];
+}
+
+/**
 * ScanEdges
 */
 def ScanEdges : TuringOp<"scan_edges", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
