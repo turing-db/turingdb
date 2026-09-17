@@ -56,6 +56,7 @@ void GraphSAGESampler::sample(const ColumnNodeIDs* seeds) {
 
     // first hops dst_nodes are the query seeds
     colAssign(seeds, _sampleData[0]._dstNodes);
+    deduplicate(_sampleData[0]._dstNodes, _sampleData[0]._dstNodes);
 
     while (_currentHop < hops) {
         sampleHop();
