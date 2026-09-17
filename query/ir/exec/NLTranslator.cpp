@@ -708,6 +708,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateNot(notOp, body);
         } else if (nl::ToNullable toNullable = mlir::dyn_cast<nl::ToNullable>(operation)) {
             translateToNullable(toNullable, body);
+        } else if (nl::ToOwnedString toOwnedString = mlir::dyn_cast<nl::ToOwnedString>(operation)) {
+            translateToOwnedString(toOwnedString, body);
         } else if (nl::Case caseOp = mlir::dyn_cast<nl::Case>(operation)) {
             translateCase(caseOp, body);
         } else if (nl::MakeList makeList = mlir::dyn_cast<nl::MakeList>(operation)) {
@@ -2210,6 +2212,19 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
     bioassert(result, "Failed to allocate the nullable column of nl.to_nullable.");
 
     _valueSlots[toNullable.getResult()] = result;
+
+    NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
+    body->emplaceStmt(&NLExecutor::runUnary, data);
+}
+
+void NLTranslator::translateToOwnedString(nl::ToOwnedString toOwnedString, NLStmtContainer* body) {
+    const Column* operand = getColumn(toOwnedString.getOperand());
+
+    Column* result = nullptr;
+    const NLUnaryFn fn = NLExecutor::selectToOwnedString(operand, _memory, result);
+    bioassert(result, "Failed to allocate the owned string column of nl.to_owned_string.");
+
+    _valueSlots[toOwnedString.getResult()] = result;
 
     NLUnaryData* data = _program->allocFunctionData<NLUnaryData>(operand, result, fn);
     body->emplaceStmt(&NLExecutor::runUnary, data);

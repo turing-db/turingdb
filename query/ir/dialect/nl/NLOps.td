@@ -1943,6 +1943,21 @@ def ToNullable : NLOp<"to_nullable", [Pure, ConstantThroughOperands, RowAlignedT
   let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
 }
 
+// A string column is spelled two ways: one borrowing its characters from the graph, one
+// owning them. This brings either to the owned one, which a union needs because a view
+// into a chunk the next step refills outlives nothing.
+def ToOwnedString : NLOp<"to_owned_string", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Read a string chunk as a nullable chunk owning its characters";
+  let description = [{
+      %r = nl.to_owned_string %x : (!nl.chunk<!storage.nullable<!storage.string>>) -> !nl.chunk<!storage.nullable<!storage.owned_string>>
+  }];
+
+  let arguments = (ins NLChunk:$operand);
+  let results   = (outs NLChunk:$result);
+
+  let assemblyFormat = "$operand attr-dict `:` functional-type(operands, results)";
+}
+
 class NLUnaryFunctionOp<string mnemonic, list<Trait> extraTraits = []>
     : NLOp<mnemonic, !listconcat([Pure, RowAlignedThroughOperands], extraTraits)> {
   let summary = "Apply a unary scalar function row-wise to a value chunk";
