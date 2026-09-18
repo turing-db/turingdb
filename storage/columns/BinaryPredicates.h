@@ -51,7 +51,7 @@ concept TestsEquality =
 // The following Boolean operators have unique semantics for 3-way logic (i.e.
 // short-circuiting) so are defined explicitly rather than generically
 template <BooleanOpt T, BooleanOpt U>
-inline std::optional<bool> optionalOr(const T& a, const U& b) {
+inline std::optional<CustomBool> optionalOr(const T& a, const U& b) {
     if (a == sentinelTrue || b == sentinelTrue) {
         return true;
     }
@@ -62,7 +62,7 @@ inline std::optional<bool> optionalOr(const T& a, const U& b) {
 }
 
 template <BooleanOpt T, BooleanOpt U>
-inline std::optional<bool> optionalAnd(const T& a, const U& b) {
+inline std::optional<CustomBool> optionalAnd(const T& a, const U& b) {
     if (a == sentinelTrue && b == sentinelTrue) {
         return true;
     }
@@ -79,8 +79,7 @@ inline std::optional<bool> optionalAnd(const T& a, const U& b) {
  */
 template <typename Pred, typename T, typename U>
     requires OptionalPredicate<Pred, T, U>
-inline auto optionalPredicate(T&& a,
-                              U&& b) -> TypeUtils::optional_invoke_result<Pred, T, U> {
+inline std::optional<CustomBool> optionalPredicate(T&& a, U&& b) {
     if constexpr (TypeUtils::is_optional_v<T>) {
         if (!a.has_value()) {
             return std::nullopt;

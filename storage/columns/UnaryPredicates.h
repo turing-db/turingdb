@@ -21,7 +21,7 @@ namespace {
  */
 template <typename Pred, typename T>
     requires OptionalPredicate<Pred, T>
-inline auto optionalUnaryPredicate(T&& a) -> TypeUtils::optional_invoke_result<Pred, T>{
+inline std::optional<CustomBool> optionalUnaryPredicate(T&& a) {
     if constexpr (TypeUtils::is_optional_v<T>) {
         if (!a.has_value()) {
             return std::nullopt;
