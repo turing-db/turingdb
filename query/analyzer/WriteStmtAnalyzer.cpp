@@ -28,6 +28,7 @@
 #include "stmt/CreateStmt.h"
 #include "stmt/MergeStmt.h"
 #include "stmt/SetStmt.h"
+#include "stmt/RemoveStmt.h"
 
 using namespace db;
 
@@ -53,6 +54,10 @@ void WriteStmtAnalyzer::analyze(const Stmt* stmt) {
 
         case Stmt::Kind::SET:
             analyze(static_cast<const SetStmt*>(stmt));
+            break;
+
+        case Stmt::Kind::REMOVE:
+            analyze(static_cast<const RemoveStmt*>(stmt));
             break;
 
         case Stmt::Kind::DELETE:
@@ -94,6 +99,14 @@ void WriteStmtAnalyzer::analyze(const SetStmt* setStmt) {
     }
     for (SetItem* item : setStmt->getItems()) {
         analyze(item);
+    }
+}
+
+void WriteStmtAnalyzer::analyze(const RemoveStmt* removeStmt) {
+    constexpr bool ALLOW_CREATES = false;
+
+    for (PropertyExpr* property : removeStmt->getProperties()) {
+        _exprAnalyzer->analyzePropertyExpr(property, ALLOW_CREATES, ValueType::Invalid);
     }
 }
 

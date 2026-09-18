@@ -755,6 +755,14 @@ private:
                                 std::vector<NLMergeScanProperty>& scanProperties,
                                 bool& matchable);
 
+    // The property a set writes to. A write of a null carries no type on its value chunk,
+    // so the property's own type is what it stages, and a name no property in the graph
+    // carries has nothing to remove - answered by an invalid property rather than by
+    // interning the name.
+    PropertyType setPropertyType(llvm::StringRef propName,
+                                 mlir::Type valueChunkType,
+                                 bool writesNull) const;
+
     void translateSetNodeProperty(mlir::nl::SetNodeProperty setNodeProperty, NLStmtContainer* body);
 
     void translateSetEdgeProperty(mlir::nl::SetEdgeProperty setEdgeProperty, NLStmtContainer* body);
