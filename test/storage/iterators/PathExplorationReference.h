@@ -100,7 +100,6 @@ private:
 
 struct ExplorationOptions {
     size_t _maxCount {db::ChunkConfig::CHUNK_SIZE};
-    size_t _walkerCount {1};
     size_t _lookahead {1};
     std::optional<db::EdgeTypeID> _edgeType;
     db::PathHopFilter* _hopFilter {nullptr};

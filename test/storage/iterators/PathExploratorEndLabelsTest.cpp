@@ -105,13 +105,10 @@ TEST_F(PathExploratorEndLabelsTest, matchesTheReferenceWithAndWithoutTheIndex) {
     for (const PathExplorationDir direction : {PathExplorationDir::FORWARD, PathExplorationDir::BACKWARD, PathExplorationDir::BOTH}) {
         for (const auto& [minHops, maxHops] : bounds) {
             for (const size_t maxCount : {size_t {1}, ChunkConfig::CHUNK_SIZE}) {
-                for (const size_t walkerCount : {size_t {1}, size_t {8}}) {
-                    ExplorationOptions options;
-                    options._maxCount = maxCount;
-                    options._walkerCount = walkerCount;
+                ExplorationOptions options;
+                options._maxCount = maxCount;
 
-                    expectEndRows(view, input, direction, minHops, maxHops, options);
-                }
+                expectEndRows(view, input, direction, minHops, maxHops, options);
             }
         }
     }

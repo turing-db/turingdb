@@ -21,7 +21,7 @@ struct PathTrieEntry {
 
 // The paths one query enumerates, each stored as a chain of parent pointers: a prefix shared
 // by many paths is one chain of entries, and a row holds only the handle of its last entry.
-// Entries live in arenas, one per walker, that grow and shrink with the walk; a handle names
+// Entries live in arenas, one per walk, that grow and shrink with it; a handle names
 // its arena in its high bits and stays valid for the chunk that emitted it.
 class PathTrie {
 public:

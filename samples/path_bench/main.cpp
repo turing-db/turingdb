@@ -225,7 +225,6 @@ void collectNodes(const GraphView& view, const LabelSet& labels, ColumnNodeIDs& 
 
 // Everything one storage-level run sets on the explorator beyond the seeds and bounds.
 struct ExplorationSettings {
-    size_t _walkers {1};
     size_t _lookahead {1};
     const LabelSet* _endLabels {nullptr};
     const PathDistanceIndex* _distances {nullptr};
@@ -265,7 +264,6 @@ void timeExploration(const GraphView& view,
     explorator.setEndNodes(settings._endNodes);
     explorator.setTargetIndex(settings._targets);
     explorator.setDistinctEnds(settings._distinct);
-    explorator.setWalkerCount(settings._walkers);
     explorator.setCandidateLookahead(settings._lookahead);
 
     run = ExplorationRun {};
@@ -349,7 +347,7 @@ std::string uniqueGraphName() {
 int main(int argc, char** argv) {
     argparse::ArgumentParser parser("path_bench");
     parser.add_description("Benchmark variable-length paths on a generated out-of-cache graph: "
-                           "the explorator's walker count and candidate lookahead, the end-label "
+                           "the explorator's candidate lookahead, the end-label "
                            "and bound-end pruning indexes against their cost gate, the distinct "
                            "mode, and the same shapes as Cypher through the MLIR engine");
 
@@ -392,7 +390,7 @@ int main(int argc, char** argv) {
         .store_into(turingDir);
     parser.add_argument("-section")
         .default_value(std::string("all"))
-        .choices("all", "walkers", "labels", "bound", "distinct", "cypher")
+        .choices("all", "lookahead", "labels", "bound", "distinct", "cypher")
         .store_into(section);
 
     try {
@@ -454,29 +452,25 @@ int main(int argc, char** argv) {
 
         const std::vector<std::string> runHeaders {"rows", "candidate checks", "median ms", "M checks/s"};
 
-        // --- Walkers and lookahead: the two latency-hiding knobs of the plain walk ---
-        if (runsSection(section, "walkers")) {
-            std::vector<std::string> headers {"walkers", "lookahead"};
+        // --- Candidate lookahead: how far ahead of the walk a node's data is fetched ---
+        if (runsSection(section, "lookahead")) {
+            std::vector<std::string> headers {"lookahead"};
             headers.insert(headers.end(), runHeaders.begin(), runHeaders.end());
 
             std::vector<std::vector<std::string>> rows;
-            for (const size_t walkers : {size_t {1}, size_t {2}, size_t {4}, size_t {8}, size_t {16}, size_t {32}}) {
-                for (const size_t lookahead : {size_t {0}, size_t {1}, size_t {2}}) {
-                    ExplorationSettings settings;
-                    settings._walkers = walkers;
-                    settings._lookahead = lookahead;
+            for (const size_t lookahead : {size_t {0}, size_t {1}, size_t {2}, size_t {4}}) {
+                ExplorationSettings settings;
+                settings._lookahead = lookahead;
 
-                    ExplorationRun run;
-                    timeExplorationRepeatedly(view, seeds, 1, maxHops, settings, iterations, run);
+                ExplorationRun run;
+                timeExplorationRepeatedly(view, seeds, 1, maxHops, settings, iterations, run);
 
-                    std::vector<std::string>& row = rows.emplace_back();
-                    row.push_back(std::to_string(walkers));
-                    row.push_back(std::to_string(lookahead));
-                    appendRunCells(row, run);
-                }
+                std::vector<std::string>& row = rows.emplace_back();
+                row.push_back(std::to_string(lookahead));
+                appendRunCells(row, run);
             }
 
-            std::cout << "==== Unconstrained walk: walkers x candidate lookahead ====\n";
+            std::cout << "==== Unconstrained walk: candidate lookahead ====\n";
             printAsciiTable(headers, rows);
             std::cout << "\n";
         }

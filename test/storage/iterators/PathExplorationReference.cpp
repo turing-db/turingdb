@@ -191,7 +191,6 @@ size_t turing::test::collectPaths(const GraphView& view,
     explorator.setDistanceIndex(options._distanceIndex);
     explorator.setTargetIndex(options._targetIndex);
     explorator.setDistinctEnds(options._distinctEnds);
-    explorator.setWalkerCount(options._walkerCount);
     explorator.setCandidateLookahead(options._lookahead);
 
     rows.clear();
