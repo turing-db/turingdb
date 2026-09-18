@@ -37,6 +37,7 @@
     #include "stmt/CreateStmt.h"
     #include "stmt/MergeStmt.h"
     #include "stmt/SetStmt.h"
+    #include "stmt/RemoveStmt.h"
     #include "stmt/DeleteStmt.h"
     #include "expr/All.h"
     #include "Literal.h"
@@ -401,6 +402,8 @@
 %type<std::pair<db::SetStmt*, db::SetStmt*>> mergeAction
 %type<db::SetStmt*> setSt
 %type<db::SetItem*> setItem
+%type<db::RemoveStmt*> removeSt
+%type<db::PropertyExpr*> removeItem
 %type<db::LoadCSVStmt*> loadCSVSt
 %type<db::DeleteStmt*> deleteSt
 %type<db::ReturnStmt*> returnSt
@@ -936,7 +939,7 @@ updatingStatement
     | mergeSt { $$ = $1; }
     | deleteSt { $$ = $1; }
     | setSt { $$ = $1; }
-    | removeSt { scanner.notImplemented(@$, "REMOVE"); }
+    | removeSt { $$ = $1; }
     ;
  
 deleteSt
@@ -945,17 +948,13 @@ deleteSt
     ;
 
 removeSt
-    : REMOVE removeItemChain { scanner.notImplemented(@$, "REMOVE"); }
-    ;
-
-removeItemChain
-    : removeItem { scanner.notImplemented(@$, "REMOVE"); }
-    | removeItemChain COMMA removeItem { scanner.notImplemented(@$, "REMOVE multiple items"); }
+    : REMOVE removeItem { $$ = RemoveStmt::create(ast); $$->addProperty($2); LOC($$, @$); }
+    | removeSt COMMA removeItem { $$ = $1; $$->addProperty($3); }
     ;
 
 removeItem
-    : entityTypeExpr { scanner.notImplemented(@$, "REMOVE"); }
-    | propertyExpr { scanner.notImplemented(@$, "REMOVE"); }
+    : propertyExpr { $$ = static_cast<PropertyExpr*>($1); }
+    | entityTypeExpr { scanner.notImplemented(@$, "REMOVE of a label"); }
     ;
 
 callSt

@@ -285,6 +285,14 @@ void CypherASTDumper::dumpQueryBody(std::ostream& out, const SinglePartQuery* qu
                 }
                 break;
 
+                case Stmt::Kind::REMOVE: {
+                    out << "    _" << std::hex << stmt << " {\n";
+                    out << "        ASTType RemoveStmt\n";
+                    out << "    }\n";
+                    out << "    _" << std::hex << query << " ||--o{ _" << std::hex << stmt << " : \"\"\n";
+                }
+                break;
+
                 case Stmt::Kind::SHORTESTPATH: {
                     const ShortestPathStmt* shortestPathStmt = static_cast<const ShortestPathStmt*>(stmt);
                     out << "    _" << std::hex << query << " ||--o{ _" << std::hex << shortestPathStmt << " : \"\"\n";

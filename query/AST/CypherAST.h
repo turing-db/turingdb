@@ -62,6 +62,7 @@ class CallSubqueryStmt;
 class CreateStmt;
 class MergeStmt;
 class SetStmt;
+class RemoveStmt;
 class DeleteStmt;
 class QueryCommand;
 class SinglePartQuery;
@@ -160,6 +161,7 @@ public:
     friend CreateStmt;
     friend MergeStmt;
     friend SetStmt;
+    friend RemoveStmt;
     friend DeleteStmt;
     friend ReturnStmt;
     friend WhereClause;
