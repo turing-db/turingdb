@@ -200,18 +200,14 @@ jobs:
     - name: Setup Python
       run: uv python install ${{ matrix.python_version }}
 
+    # Only for nightlies: a tagged build leaves the version to setuptools-scm, which is
+    # what has produced every release on PyPI so far. The npm package asks the same
+    # script for the same commit's version in its own format, so the two agree.
     - name: Compute version override
       id: version
       if: inputs.dev_version_suffix != ''
       run: |
-        # Always bump patch and add a dev suffix so nightlies never collide with a published tag version on PyPI,
-        # including the edge case where HEAD sits exactly on the latest tag (distance == 0).
-        DESC=$(git describe --tags --match 'v*' --first-parent --abbrev=0)
-        TAG_VERSION=${DESC#v}
-        IFS='.' read -r MAJOR MINOR PATCH <<< "$TAG_VERSION"
-        PATCH=${PATCH:-0}
-        PATCH=$((PATCH + 1))
-        VERSION="${MAJOR}.${MINOR}.${PATCH}.dev${{ inputs.dev_version_suffix }}"
+        VERSION=$(scripts/project_version.py --format pep440 --dev-suffix '${{ inputs.dev_version_suffix }}')
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         echo "Computed version override: $VERSION"
 

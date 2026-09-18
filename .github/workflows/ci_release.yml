@@ -30,6 +30,13 @@ jobs:
       dev_version_suffix: ${{ needs.setup.outputs.dev_version_suffix }}
     secrets: inherit
 
+  build-npm:
+    needs: setup
+    uses: ./.github/workflows/ci_wasm.yml
+    with:
+      dev_version_suffix: ${{ needs.setup.outputs.dev_version_suffix }}
+    secrets: inherit
+
   publish:
     name: Publish to PyPI
     needs: build-release
@@ -45,7 +52,7 @@ jobs:
       name: pypi
       url: https://pypi.org/p/turingdb
     permissions:
-      contents: write
+      contents: read
       id-token: write
     steps:
       - name: Download all wheel artifacts
@@ -63,22 +70,170 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Detected version: $VERSION"
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: wheel/*
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
         with:
           packages-dir: wheel/
           verbose: true
           # Tolerate files already on PyPI so a partial upload can be safely re-run.
+          # This matters here and not for npm: 35 wheels go up in one step, so a failure
+          # halfway leaves a real partial release that only a re-run can finish.
+          #
+          # twine decides this from the index's response alone - skip_upload() matches a
+          # 409, or a 400 whose body says "already exist" - and never compares what is
+          # already there. So a re-run whose wheels differ from the published ones is
+          # skipped silently. The npm job below does check, because one atomic tarball
+          # makes the comparison a two-line hash and costs nothing. Closing it here would
+          # mean querying PyPI's JSON API for each file's digests.sha256 before uploading.
           skip-existing: true
+
+  publish-npm:
+    name: Publish to npm
+    needs: build-npm
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/turingdb
+    # No NPM_TOKEN: the registry authenticates this workflow through OIDC, so the
+    # job needs an id-token. The trusted publisher on npmjs.com is bound to this
+    # repository, this workflow file and the npm environment above.
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download npm package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: turingdb-npm-package
+          path: npm/
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: https://registry.npmjs.org
+
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Read version and dist-tag from the tarball
+        id: get-version
+        run: |
+          TARBALL=$(ls npm/turingdb-*.tgz | head -1)
+          VERSION=$(basename "$TARBALL" .tgz)
+          VERSION=${VERSION#turingdb-}
+
+          # A nightly is a prerelease: publishing it under latest would hand it to
+          # everyone who runs `npm install turingdb`.
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            DIST_TAG=latest
+          else
+            DIST_TAG=next
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "Publishing $VERSION under the $DIST_TAG tag"
+
+      # Republishing a version fails with E403, so a release that got past this job and
+      # failed later - the smoke test below, a dead runner - could not be re-run. Skip
+      # the upload in that case, but only once the bytes are known to match: a version
+      # already on the registry carrying DIFFERENT content means this build is not the
+      # one that was published, and skipping would ship the old package under a green
+      # run. npm publish uploads the tarball verbatim, so its sha512 is what the
+      # registry reports as dist.integrity, and npm pack is reproducible.
+      #
+      # The PyPI job above is deliberately not like this: it uploads 35 wheels and its
+      # skip-existing genuinely resumes a partial upload, which one atomic tarball
+      # cannot have. twine decides purely on the response and never compares content.
+      - name: Publish to npm
+        run: |
+          VERSION='${{ steps.get-version.outputs.version }}'
+          # ./ prefix: without it npm reads the argument as a package spec rather than a
+          # file - npm 9 resolves "npm/turingdb-1.2.3.tgz" as a git repo of that name.
+          TARBALL=$(ls ./npm/turingdb-*.tgz | head -1)
+
+          # || true: the run block is bash -e, and npm view exits non-zero for a
+          # version that is not published - the ordinary case on a first release.
+          PUBLISHED=$(npm view "turingdb@$VERSION" dist.integrity 2>/dev/null || true)
+          BUILT="sha512-$(openssl dgst -sha512 -binary "$TARBALL" | base64 -w0)"
+
+          if [ -z "$PUBLISHED" ]; then
+            npm publish "$TARBALL" --tag '${{ steps.get-version.outputs.dist_tag }}'
+          elif [ "$PUBLISHED" = "$BUILT" ]; then
+            echo "turingdb@$VERSION is already on the registry with these exact bytes, skipping publish"
+          else
+            echo "turingdb@$VERSION is already on the registry with different content." >&2
+            echo "  registry: $PUBLISHED" >&2
+            echo "  built   : $BUILT" >&2
+            echo "npm versions are immutable: bump the version rather than republishing." >&2
+            exit 1
+          fi
+
+  # Both artifacts on one Release, so it is not created until both registries have
+  # accepted. Attaching the wheels from the PyPI job would have meant a Release that
+  # names a version whose client package may never have shipped.
+  github-release:
+    name: Create GitHub Release
+    needs: [publish, publish-npm]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: turingdb-wheel-*
+          path: release/
+          merge-multiple: true
+
+      - name: Download npm package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: turingdb-npm-package
+          path: release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  test-published-package:
+    name: Test published npm package
+    needs: publish-npm
+    runs-on: ubuntu-latest
+    steps:
+      # Only for verify_package.mjs: the package under test comes from the registry,
+      # but the checks it has to pass are the same ones build_npm.sh ran before publish.
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install turingdb from npm
+        run: |
+          mkdir -p "$RUNNER_TEMP/npm-check"
+          cd "$RUNNER_TEMP/npm-check"
+          for i in 1 2 3 4 5; do
+            npm install --no-audit --no-fund turingdb@${{ needs.publish-npm.outputs.version }} && break
+            echo "Attempt $i failed, retrying in 60s..."
+            sleep 60
+          done
+          node -e "console.log(require('turingdb/package.json').version)"
+
+      - name: Verify the published package
+        run: |
+          cp wasm/npm/verify_package.mjs "$RUNNER_TEMP/npm-check/"
+          cd "$RUNNER_TEMP/npm-check"
+          node verify_package.mjs
 
   test-published-wheel:
     name: Test published wheel 
