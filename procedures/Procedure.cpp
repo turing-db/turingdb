@@ -70,6 +70,10 @@ void Procedure::addReturnValue(std::string_view name, ProcedureType type) {
     _returnValues.add(name, type);
 }
 
+void Procedure::addNullableReturnValue(std::string_view name, ProcedureType type) {
+    _returnValues.addNullable(name, type);
+}
+
 void Procedure::addArgument(std::string_view name, ProcedureType type) {
     throwIfOptionalArgumentDeclared();
     _argumentTypes.add(name, type);

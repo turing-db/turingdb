@@ -656,7 +656,7 @@ private:
     // an ID column, a value column or a list column - reserving a full chunk so
     // execution stays allocation-free. This is what fixes the column type a procedure
     // writes through, so it mirrors the pipeline engine's allocReturnValues exactly.
-    Column* allocColumnForProcedureType(ProcedureType procedureType);
+    Column* allocColumnForProcedureType(const NamedProcedureType& returnValue);
 
     // Allocate an emit output column for a group-aggregate output chunk type: an ID
     // column for an ID chunk (a grouping key), a nullable value column for a
@@ -866,6 +866,10 @@ private:
     Column* allocMaskColumn();
 
     static bool isEntityIDElement(mlir::Type elementType);
+
+    static bool isIDElement(mlir::Type elementType);
+    Column* allocOptIDColumn(NLChunkKind kind);
+
     static bool isPlainValueElementType(mlir::Type elementType);
     Column* allocPlainColumn(ValueType valueType);
     ColumnVector<uint64_t>* allocCountColumn();

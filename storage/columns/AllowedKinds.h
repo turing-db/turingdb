@@ -178,6 +178,13 @@ struct PairRestrictions<Op> {
             KindPair<std::optional<ListElementView>, PropertyNull>,
             KindPair<std::optional<ListView>, PropertyNull>,
 
+            KindPair<std::optional<NodeID>, PropertyNull>,
+            KindPair<std::optional<EdgeID>, PropertyNull>,
+            KindPair<std::optional<EdgeTypeID>, PropertyNull>,
+            KindPair<std::optional<LabelID>, PropertyNull>,
+            KindPair<std::optional<PropertyTypeID>, PropertyNull>,
+            KindPair<std::optional<ValueType>, PropertyNull>,
+
             // A tagged cell carries its null in the tag rather than in a nullable
             // column, so it is tested against null as a cell rather than as an optional
             KindPair<ListElementView, PropertyNull>,
@@ -590,6 +597,15 @@ struct OutputtedTypes {
         PropertyTypeID,
         CommitHash,
         ChangeID,
+
+        // A procedure return value declared nullable
+        std::optional<NodeID>,
+        std::optional<EdgeID>,
+        std::optional<EdgeTypeID>,
+        std::optional<LabelID>,
+        std::optional<PropertyTypeID>,
+        std::optional<ValueType>,
+
         std::string,
         size_t,
         EntityList,

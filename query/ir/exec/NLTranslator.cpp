@@ -140,6 +140,22 @@ Column* allocPlainChunkColumn(LocalMemory* memory, size_t chunkSize) {
     return column;
 }
 
+template <typename T>
+Column* allocOptChunkColumn(LocalMemory* memory, size_t chunkSize) {
+    ColumnOptVector<T>* column = memory->alloc<ColumnOptVector<T>>();
+    column->reserve(chunkSize);
+    return column;
+}
+
+template <typename T>
+Column* allocProcedureChunkColumn(LocalMemory* memory, size_t chunkSize, bool nullable) {
+    if (nullable) {
+        return allocOptChunkColumn<T>(memory, chunkSize);
+    }
+
+    return allocPlainChunkColumn<T>(memory, chunkSize);
+}
+
 // The edge type name carried by the nl.get_edge_type handle a by-type hop's
 // edge_type operand names. The name lives on the handle op, not the hop, so it is
 // resolved once above the loops; a hop reads it back through its operand here (the
@@ -4342,7 +4358,7 @@ void NLTranslator::bindProcedureResults(NLProcedureState* state, mlir::ValueRang
 
     for (size_t yieldIndex = 0; yieldIndex < yieldIndices.size(); yieldIndex++) {
         const size_t returnIndex = yieldIndices[yieldIndex];
-        Column* column = allocColumnForProcedureType(procedure->getReturnValueType(returnIndex));
+        Column* column = allocColumnForProcedureType(procedure->returnValues()[returnIndex]);
 
         // The procedure writes through the slot its own declaration order names; the
         // engine reads the same column through the chunk value, and the ordered list
@@ -4353,63 +4369,64 @@ void NLTranslator::bindProcedureResults(NLProcedureState* state, mlir::ValueRang
     }
 }
 
-Column* NLTranslator::allocColumnForProcedureType(ProcedureType procedureType) {
+Column* NLTranslator::allocColumnForProcedureType(const NamedProcedureType& returnValue) {
     const size_t chunkSize = _program->getChunkSize();
+    const bool nullable = returnValue._nullable;
 
     // The column type each declared return type is written through, matching the
     // pipeline engine's allocReturnValues: the procedure static_casts its return
     // column to exactly this type, so the two must not drift.
-    switch (procedureType) {
+    switch (returnValue._type) {
         case ProcedureType::NODE:
-            return allocPlainChunkColumn<NodeID>(_memory, chunkSize);
+            return allocProcedureChunkColumn<NodeID>(_memory, chunkSize, nullable);
         break;
 
         case ProcedureType::EDGE:
-            return allocPlainChunkColumn<EdgeID>(_memory, chunkSize);
+            return allocProcedureChunkColumn<EdgeID>(_memory, chunkSize, nullable);
         break;
 
         case ProcedureType::LABEL_ID:
-            return allocPlainChunkColumn<LabelID>(_memory, chunkSize);
+            return allocProcedureChunkColumn<LabelID>(_memory, chunkSize, nullable);
         break;
 
         case ProcedureType::EDGE_TYPE_ID:
-            return allocPlainChunkColumn<EdgeTypeID>(_memory, chunkSize);
+            return allocProcedureChunkColumn<EdgeTypeID>(_memory, chunkSize, nullable);
         break;
 
         case ProcedureType::PROPERTY_TYPE_ID:
-            return allocPlainChunkColumn<PropertyTypeID>(_memory, chunkSize);
+            return allocProcedureChunkColumn<PropertyTypeID>(_memory, chunkSize, nullable);
         break;
 
         case ProcedureType::VALUE_TYPE:
-            return allocPlainChunkColumn<ValueType>(_memory, chunkSize);
+            return allocProcedureChunkColumn<ValueType>(_memory, chunkSize, nullable);
         break;
 
         case ProcedureType::UINT_64:
-            return allocPlainChunkColumn<types::UInt64::Primitive>(_memory, chunkSize);
+            return allocProcedureChunkColumn<types::UInt64::Primitive>(_memory, chunkSize, nullable);
         break;
 
         case ProcedureType::INT64:
-            return allocPlainChunkColumn<types::Int64::Primitive>(_memory, chunkSize);
+            return allocProcedureChunkColumn<types::Int64::Primitive>(_memory, chunkSize, nullable);
         break;
 
         case ProcedureType::DOUBLE:
-            return allocPlainChunkColumn<types::Double::Primitive>(_memory, chunkSize);
+            return allocProcedureChunkColumn<types::Double::Primitive>(_memory, chunkSize, nullable);
         break;
 
         case ProcedureType::BOOL:
-            return allocPlainChunkColumn<types::Bool::Primitive>(_memory, chunkSize);
+            return allocProcedureChunkColumn<types::Bool::Primitive>(_memory, chunkSize, nullable);
         break;
 
         case ProcedureType::STRING_VIEW:
-            return allocPlainChunkColumn<types::String::Primitive>(_memory, chunkSize);
+            return allocProcedureChunkColumn<types::String::Primitive>(_memory, chunkSize, nullable);
         break;
 
         case ProcedureType::STRING:
-            return allocPlainChunkColumn<std::string>(_memory, chunkSize);
+            return allocProcedureChunkColumn<std::string>(_memory, chunkSize, nullable);
         break;
 
         case ProcedureType::LIST:
-            return allocPlainChunkColumn<ListView>(_memory, chunkSize);
+            return allocProcedureChunkColumn<ListView>(_memory, chunkSize, nullable);
         break;
 
         case ProcedureType::INVALID:
@@ -4435,11 +4452,16 @@ Column* NLTranslator::allocColumnForChunkType(mlir::Type chunkType) {
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        if (isOwnedStringElement(nullableType.getValueType())) {
+        const mlir::Type wrappedType = nullableType.getValueType();
+        if (isOwnedStringElement(wrappedType)) {
             return allocOptOwnedStringColumn();
         }
 
-        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        if (isIDElement(wrappedType)) {
+            return allocOptIDColumn(chunkKindFromElementType(wrappedType));
+        }
+
+        const ValueType valueType = valueTypeFromElementType(wrappedType);
         return allocOptColumnForValueType(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return allocListElementColumn();
@@ -4469,11 +4491,16 @@ NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        if (isOwnedStringElement(nullableType.getValueType())) {
+        const mlir::Type wrappedType = nullableType.getValueType();
+        if (isOwnedStringElement(wrappedType)) {
             return NLExecutor::selectOptOwnedStringAppend();
         }
 
-        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        if (isIDElement(wrappedType)) {
+            return NLExecutor::selectOptAppendFunction(chunkKindFromElementType(wrappedType));
+        }
+
+        const ValueType valueType = valueTypeFromElementType(wrappedType);
         return NLExecutor::selectOptAppendFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementAppendFunction();
@@ -4499,11 +4526,16 @@ NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        if (isOwnedStringElement(nullableType.getValueType())) {
+        const mlir::Type wrappedType = nullableType.getValueType();
+        if (isOwnedStringElement(wrappedType)) {
             return NLExecutor::selectOptOwnedStringGather();
         }
 
-        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        if (isIDElement(wrappedType)) {
+            return NLExecutor::selectOptGatherFunction(chunkKindFromElementType(wrappedType));
+        }
+
+        const ValueType valueType = valueTypeFromElementType(wrappedType);
         return NLExecutor::selectOptGatherFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementGatherFunction();
@@ -4529,11 +4561,16 @@ NLCompareFunction NLTranslator::selectCompareForChunkType(mlir::Type chunkType) 
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        if (isOwnedStringElement(nullableType.getValueType())) {
+        const mlir::Type wrappedType = nullableType.getValueType();
+        if (isOwnedStringElement(wrappedType)) {
             return NLExecutor::selectOptOwnedStringCompare();
         }
 
-        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        if (isIDElement(wrappedType)) {
+            return NLExecutor::selectOptCompareFunction(chunkKindFromElementType(wrappedType));
+        }
+
+        const ValueType valueType = valueTypeFromElementType(wrappedType);
         return NLExecutor::selectOptCompareFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementCompareFunction();
@@ -4598,11 +4635,16 @@ NLKeyAppendFunction NLTranslator::selectKeyAppendForChunkType(mlir::Type chunkTy
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        if (isOwnedStringElement(nullableType.getValueType())) {
+        const mlir::Type wrappedType = nullableType.getValueType();
+        if (isOwnedStringElement(wrappedType)) {
             return NLExecutor::selectOptOwnedStringKeyAppend();
         }
 
-        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        if (isIDElement(wrappedType)) {
+            return NLExecutor::selectOptKeyAppendFunction(chunkKindFromElementType(wrappedType));
+        }
+
+        const ValueType valueType = valueTypeFromElementType(wrappedType);
         return NLExecutor::selectOptKeyAppendFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementKeyAppendFunction();
@@ -4682,11 +4724,16 @@ NLCountFunction NLTranslator::selectCountForChunkType(mlir::Type chunkType) {
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        if (isOwnedStringElement(nullableType.getValueType())) {
+        const mlir::Type wrappedType = nullableType.getValueType();
+        if (isOwnedStringElement(wrappedType)) {
             return NLExecutor::selectOptOwnedStringCount();
         }
 
-        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        if (isIDElement(wrappedType)) {
+            return NLExecutor::selectOptCountFunction(chunkKindFromElementType(wrappedType));
+        }
+
+        const ValueType valueType = valueTypeFromElementType(wrappedType);
         return NLExecutor::selectOptCountFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementCountFunction();
@@ -4713,11 +4760,16 @@ NLGroupKeyGatherFunction NLTranslator::selectGroupKeyGatherForChunkType(mlir::Ty
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        if (isOwnedStringElement(nullableType.getValueType())) {
+        const mlir::Type wrappedType = nullableType.getValueType();
+        if (isOwnedStringElement(wrappedType)) {
             return NLExecutor::selectOptOwnedStringGroupKeyGather();
         }
 
-        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        if (isIDElement(wrappedType)) {
+            return NLExecutor::selectOptGroupKeyGather(chunkKindFromElementType(wrappedType));
+        }
+
+        const ValueType valueType = valueTypeFromElementType(wrappedType);
         return NLExecutor::selectOptGroupKeyGather(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementGroupKeyGatherFunction();
@@ -4743,11 +4795,16 @@ NLCopyFunction NLTranslator::selectCopyForChunkType(mlir::Type chunkType) {
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        if (isOwnedStringElement(nullableType.getValueType())) {
+        const mlir::Type wrappedType = nullableType.getValueType();
+        if (isOwnedStringElement(wrappedType)) {
             return NLExecutor::selectOptOwnedStringCopy();
         }
 
-        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        if (isIDElement(wrappedType)) {
+            return NLExecutor::selectOptCopyFunction(chunkKindFromElementType(wrappedType));
+        }
+
+        const ValueType valueType = valueTypeFromElementType(wrappedType);
         return NLExecutor::selectOptCopyFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementCopyFunction();
@@ -4777,11 +4834,16 @@ Column* NLTranslator::allocColumnForResultChunkType(mlir::Type chunkType) {
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        if (isOwnedStringElement(nullableType.getValueType())) {
+        const mlir::Type wrappedType = nullableType.getValueType();
+        if (isOwnedStringElement(wrappedType)) {
             return allocOptOwnedStringColumn();
         }
 
-        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        if (isIDElement(wrappedType)) {
+            return allocOptIDColumn(chunkKindFromElementType(wrappedType));
+        }
+
+        const ValueType valueType = valueTypeFromElementType(wrappedType);
         return allocOptColumnForValueType(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return allocListElementColumn();
@@ -4867,12 +4929,18 @@ void NLTranslator::addCrossColumn(mlir::Value inputValue,
         broadcast = isOuter ? NLExecutor::selectOptListElementBlockRepeatFunction()
                             : NLExecutor::selectOptListElementTileFunction();
     } else if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        if (isOwnedStringElement(nullableType.getValueType())) {
+        const mlir::Type wrappedType = nullableType.getValueType();
+        if (isOwnedStringElement(wrappedType)) {
             output = allocOptOwnedStringColumn();
             broadcast = isOuter ? NLExecutor::selectOptOwnedStringBlockRepeat()
                                 : NLExecutor::selectOptOwnedStringTile();
+        } else if (isIDElement(wrappedType)) {
+            const NLChunkKind kind = chunkKindFromElementType(wrappedType);
+            output = allocOptIDColumn(kind);
+            broadcast = isOuter ? NLExecutor::selectOptBlockRepeatFunction(kind)
+                                : NLExecutor::selectOptTileFunction(kind);
         } else {
-            const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+            const ValueType valueType = valueTypeFromElementType(wrappedType);
             output = allocOptColumnForValueType(valueType);
             broadcast = isOuter ? NLExecutor::selectOptBlockRepeatFunction(valueType)
                                 : NLExecutor::selectOptTileFunction(valueType);
@@ -4992,6 +5060,54 @@ Column* NLTranslator::allocMaskColumn() {
 
 bool NLTranslator::isEntityIDElement(mlir::Type elementType) {
     return mlir::isa<storage::NodeIDType>(elementType) || mlir::isa<storage::EdgeIDType>(elementType);
+}
+
+// An element type carried as an identifier rather than as a property value: the entity
+// IDs isEntityIDElement names, the schema IDs and the value-type code. No ValueType
+// names any of them, so a nullable chunk over one is selected on its chunk kind.
+bool NLTranslator::isIDElement(mlir::Type elementType) {
+    return mlir::isa<storage::NodeIDType,
+                     storage::EdgeIDType,
+                     storage::EdgeTypeIDType,
+                     storage::LabelIDType,
+                     storage::PropertyTypeIDType,
+                     storage::ValueTypeType>(elementType);
+}
+
+// The nullable ID column a chunk of this kind is read through. Its plain sibling is
+// allocColumnForKind, which the same kinds reach when the chunk is not nullable.
+Column* NLTranslator::allocOptIDColumn(NLChunkKind kind) {
+    const size_t chunkSize = _program->getChunkSize();
+
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return allocOptChunkColumn<NodeID>(_memory, chunkSize);
+        break;
+
+        case NLChunkKind::EdgeID:
+            return allocOptChunkColumn<EdgeID>(_memory, chunkSize);
+        break;
+
+        case NLChunkKind::EdgeTypeID:
+            return allocOptChunkColumn<EdgeTypeID>(_memory, chunkSize);
+        break;
+
+        case NLChunkKind::LabelID:
+            return allocOptChunkColumn<LabelID>(_memory, chunkSize);
+        break;
+
+        case NLChunkKind::PropertyTypeID:
+            return allocOptChunkColumn<PropertyTypeID>(_memory, chunkSize);
+        break;
+
+        case NLChunkKind::ValueTypeCode:
+            return allocOptChunkColumn<ValueType>(_memory, chunkSize);
+        break;
+
+        default:
+            throw IRException("A nullable chunk of this element type is not an ID column");
+        break;
+    }
 }
 
 bool NLTranslator::isPlainValueElementType(mlir::Type elementType) {
