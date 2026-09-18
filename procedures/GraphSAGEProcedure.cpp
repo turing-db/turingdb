@@ -5,6 +5,10 @@
 #include <memory>
 #include <string>
 
+#include <range/v3/view/join.hpp>
+
+#include "samplers/GraphSAGESampler.h"
+
 #include "Procedure.h"
 #include "ProcedureContext.h"
 #include "ProcedureData.h"
@@ -12,32 +16,30 @@
 #include "ProcedureState.h"
 
 #include "ProcedureTypeVector.h"
-#include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
-#include "columns/ColumnOperatorDispatcher.h"
 
 #include "list/ListBufferTypeTag.h"
 
-#include "FatalException.h"
-#include "TuringException.h"
-#include "samplers/GraphSAGESampler.h"
-
 using namespace db;
+
+namespace rg = ranges;
+namespace rv = rg::views;
 
 namespace {
 
 constexpr size_t returnValuesPerHop = 3;
-constexpr size_t returnValueCount = GraphSAGEProcedure::numHops * returnValuesPerHop;
 
-const auto returnValueNames = [] {
-    std::array<std::string, returnValueCount> names;
+using HopReturnValueNames = std::array<std::string, returnValuesPerHop>;
 
-    for (size_t hop = 0; hop < GraphSAGEProcedure::numHops; hop++) {
-        const size_t base = hop * returnValuesPerHop;
+const auto returnValueNames = [] consteval {
+    std::array<HopReturnValueNames, GraphSAGEProcedure::numHops> names;
 
-        names[base] = fmt::format("dst_nodes{}", hop);
-        names[base + 1] = fmt::format("src_nodes{}", hop);
-        names[base + 2] = fmt::format("tgt_nodes{}", hop);
+    for (size_t hop {0}; auto& [dst, src, tgt] : names) {
+        const char hopChar = hop + '0';
+        dst = std::string {"dst_nodes"}, dst += hopChar;
+        src = std::string {"src_nodes"}, src += hopChar;
+        tgt = std::string {"tgt_nodes"}, tgt += hopChar;
+        hop++;
     }
 
     return names;
@@ -53,28 +55,23 @@ void numericList(ListView l) {
     };
     const bool allInts = std::ranges::all_of(l, isInt);
     if (!allInts) {
-        throw FatalException("graphSAGE() seeds must be a list of ints");
+        throw TuringException("graphSAGE() seeds must be a list of ints");
     }
 }
 
 void validateInput(Data& data) {
-    const auto* seeds = [&data] -> const ColumnConst<ListView>* {
+    {
         const Column* erased =  data.getInputColumn(0);
-        const auto* out = dynamic_cast<const ColumnConst<ListView>*>(erased);
-        bioassert(out, "Invalid seed column");
-        return out;
-    }();
-
-    numericList(seeds->getRaw());
-
-    const auto* fanouts = [&data] -> const ColumnConst<ListView>* {
+        const auto* seeds = dynamic_cast<const ColumnConst<ListView>*>(erased);
+        bioassert(seeds, "Invalid seed column");
+        numericList(seeds->getRaw());
+    }
+    {
         const Column* erased = data.getInputColumn(1);
-        const auto* out = dynamic_cast<const ColumnConst<ListView>*>(erased);
-        bioassert(out, "Invalid fanouts column");
-        return out;
-    }();
-
-    numericList(fanouts->getRaw());
+        const auto* fanouts = dynamic_cast<const ColumnConst<ListView>*>(erased);
+        bioassert(fanouts, "Invalid fanouts column");
+        numericList(fanouts->getRaw());
+    }
 }
 
 void prepareImpl(ProcedureState* state) {
@@ -115,7 +112,7 @@ void GraphSAGEProcedure::registerProcedure(ProcedureNamespace* ns) {
     proc->addConstantArgument("fanouts", ProcedureType::LIST);
     proc->addOptionalConstantArgument("seed", ProcedureType::INT64);
 
-    for (const std::string& name : returnValueNames) {
+    for (const std::string_view name : returnValueNames | rv::join) {
         proc->addReturnValue(name, ProcedureType::NODE);
     }
 
