@@ -1,7 +1,9 @@
 #include "GraphSAGEProcedure.h"
 
 #include <algorithm>
+#include <array>
 #include <memory>
+#include <string>
 
 #include "Procedure.h"
 #include "ProcedureContext.h"
@@ -9,7 +11,9 @@
 #include "ProcedureNamespace.h"
 #include "ProcedureState.h"
 
+#include "ProcedureTypeVector.h"
 #include "columns/AllowedKinds.h"
+#include "columns/ColumnConst.h"
 #include "columns/ColumnOperatorDispatcher.h"
 
 #include "list/ListBufferTypeTag.h"
@@ -22,57 +26,55 @@ using namespace db;
 
 namespace {
 
+constexpr size_t returnValuesPerHop = 3;
+constexpr size_t returnValueCount = GraphSAGEProcedure::numHops * returnValuesPerHop;
+
+const auto returnValueNames = [] {
+    std::array<std::string, returnValueCount> names;
+
+    for (size_t hop = 0; hop < GraphSAGEProcedure::numHops; hop++) {
+        const size_t base = hop * returnValuesPerHop;
+
+        names[base] = fmt::format("dst_nodes{}", hop);
+        names[base + 1] = fmt::format("src_nodes{}", hop);
+        names[base + 2] = fmt::format("tgt_nodes{}", hop);
+    }
+
+    return names;
+}();
+
 struct Data final : public IndexedProcedureData {
     std::unique_ptr<GraphSAGESampler> sampler;
 };
 
-struct ListValidate {
-    template <typename T>
-    void operator()(ColumnVector<T>* /*unused*/) {
-        throw FatalException("Instantiated without list");
+void numericList(ListView l) {
+    const auto isInt = [](ListElementView ele) -> bool {
+        return ele.getTag() == ListBufferTypeTag::Int;
+    };
+    const bool allInts = std::ranges::all_of(l, isInt);
+    if (!allInts) {
+        throw FatalException("graphSAGE() seeds must be a list of ints");
     }
-    template <typename T>
-    void operator()(ColumnConst<T>* /*unused*/) {
-        throw FatalException("Instantiated without list");
-    }
-
-
-    template <>
-    void operator()(ColumnVector<ListView>* col) {
-        if (col->size() != 1) {
-            throw TuringException("graphSAGE() seeds must be a single list");
-        }
-        ListView list = col->front();
-        numericList(list);
-    }
-
-    template <>
-    void operator()(ColumnConst<ListView>* col) {
-        ListView list = col->getRaw();
-        numericList(list);
-    }
-
-    static void numericList(ListView l) {
-        const auto isInt = [](ListElementView ele) -> bool {
-            return ele.getTag() == ListBufferTypeTag::Int;
-        };
-        const bool allInts = std::ranges::all_of(l, isInt);
-        if (!allInts) {
-            throw FatalException("graphSAGE() seeds must be a list of ints");
-        }
-    }
-};
+}
 
 void validateInput(Data& data) {
-    { // ensure seeds are a singular list of integers
-        const Column* seeds = data.getInputColumn(0);
-        using Types = GraphSAGEInputs;
-        using Dispatcher =
-            ColumnSingleDispatcher<Types::Allowed, ListValidate, Types::Excluded>;
+    const auto* seeds = [&data] -> const ColumnConst<ListView>* {
+        const Column* erased =  data.getInputColumn(0);
+        const auto* out = dynamic_cast<const ColumnConst<ListView>*>(erased);
+        bioassert(out, "Invalid seed column");
+        return out;
+    }();
 
-        ListValidate validator;
-        Dispatcher::dispatch(seeds, validator);
-    }
+    numericList(seeds->getRaw());
+
+    const auto* fanouts = [&data] -> const ColumnConst<ListView>* {
+        const Column* erased = data.getInputColumn(1);
+        const auto* out = dynamic_cast<const ColumnConst<ListView>*>(erased);
+        bioassert(out, "Invalid fanouts column");
+        return out;
+    }();
+
+    numericList(fanouts->getRaw());
 }
 
 void prepareImpl(ProcedureState* state) {
@@ -86,9 +88,12 @@ void prepareImpl(ProcedureState* state) {
 }
 
 void executeImpl(ProcedureState* state) {
+    /*
     Data& data = state->data<Data>();
     const Column* seeds = data.getInputColumn(0);
+    */
 }
+
 }
 
 ProcedureData* GraphSAGEProcedure::allocData() {
@@ -102,10 +107,18 @@ void GraphSAGEProcedure::deallocData(ProcedureData* data) {
 void GraphSAGEProcedure::registerProcedure(ProcedureNamespace* ns) {
     Procedure* proc = new Procedure("graphSAGE");
 
-    proc->addArgument("seeds", ProcedureType::LIST);
+    proc->setExecuteCallback(&execute);
+    proc->setAllocCallback(&allocData);
+    proc->setDeallocCallback(&deallocData);
+
+    proc->addConstantArgument("seeds", ProcedureType::LIST);
     proc->addConstantArgument("fanouts", ProcedureType::LIST);
     proc->addOptionalConstantArgument("seed", ProcedureType::INT64);
-    
+
+    for (const std::string& name : returnValueNames) {
+        proc->addReturnValue(name, ProcedureType::NODE);
+    }
+
     ns->addProcedure(proc);
 }
 
@@ -125,7 +138,8 @@ void GraphSAGEProcedure::execute(ProcedureState* state) {
 
         case ProcedureState::Step::EXECUTE:
             executeImpl(state);
-            throw FatalException("execute not implemented");
+            state->finish();
+            // throw FatalException("execute not implemented");
         break;
     }
 }
