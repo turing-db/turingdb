@@ -67,6 +67,7 @@ class VectorSearchStmt;
 class VariableDependency;
 class DependencyEdge;
 class SetStmt;
+class RemoveStmt;
 class SinglePartQuery;
 class UnionQuery;
 class Stmt;
@@ -510,9 +511,13 @@ private:
     // for a variable no write bound and for one a CREATE bound - whose every row does
     mlir::Value findPendingMask(const VarDecl* decl) const;
 
-    // The property writes of one SET clause, over the rows @param rows selects - every
-    // row for a plain SET, which passes a null mask
+    void generatePropertyWrite(const PropertyExpr* propertyExpr,
+                               mlir::Value valueColumn,
+                               mlir::Value rows);
+
     void generateSetItems(const SetStmt* setStmt, mlir::Value rows);
+
+    void generateRemoveProperties(const RemoveStmt* removeStmt);
     void generateDeleteStmt(const DeleteStmt* deleteStmt);
     void generateOutput(const Projection* projection, const UnionBranch* branch);
 

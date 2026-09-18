@@ -3115,12 +3115,19 @@ public:
     const ColumnMask* getRows() const { return _rows; }
     void setRows(const ColumnMask* rows) { _rows = rows; }
 
+    // A removal stages a null of the property's own type. Its value column carries no
+    // type to dispatch on, so this is where the type comes from. Invalid when the write
+    // reads its values off the column.
+    ValueType getNullValueType() const { return _nullValueType; }
+    void setNullValueType(ValueType valueType) { _nullValueType = valueType; }
+
 private:
     const ColumnNodeIDs* _input {nullptr};
     const Column* _value {nullptr};
     const ColumnMask* _pending {nullptr};
     const ColumnMask* _rows {nullptr};
     PropertyTypeID _propertyTypeID;
+    ValueType _nullValueType {ValueType::Invalid};
     bool _allPending {false};
 };
 
@@ -3148,12 +3155,19 @@ public:
     const ColumnMask* getRows() const { return _rows; }
     void setRows(const ColumnMask* rows) { _rows = rows; }
 
+    // A removal stages a null of the property's own type. Its value column carries no
+    // type to dispatch on, so this is where the type comes from. Invalid when the write
+    // reads its values off the column.
+    ValueType getNullValueType() const { return _nullValueType; }
+    void setNullValueType(ValueType valueType) { _nullValueType = valueType; }
+
 private:
     const ColumnEdgeIDs* _input {nullptr};
     const Column* _value {nullptr};
     const ColumnMask* _pending {nullptr};
     const ColumnMask* _rows {nullptr};
     PropertyTypeID _propertyTypeID;
+    ValueType _nullValueType {ValueType::Invalid};
     bool _allPending {false};
 };
 

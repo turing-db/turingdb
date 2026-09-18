@@ -2146,6 +2146,23 @@ void NLTranslator::translateMergeProperty(llvm::StringRef propName,
                               ._keyAppend=NLExecutor::selectOptKeyAppendFunction(graphType->_valueType)});
 }
 
+PropertyType NLTranslator::setPropertyType(llvm::StringRef propName,
+                                           mlir::Type valueChunkType,
+                                           bool writesNull) const {
+    if (!writesNull) {
+        const ValueType valueType = valueTypeFromChunkType(valueChunkType);
+
+        return _metadataBuilder->getOrCreatePropertyType(propName, valueType);
+    }
+
+    const std::optional<PropertyType> existing = findPropertyType(propName);
+    if (!existing) {
+        return PropertyType {};
+    }
+
+    return *existing;
+}
+
 void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty, NLStmtContainer* body) {
     if (!_metadataBuilder) {
         throw IRException("Cannot perform SET outside of a write transaction.");
@@ -2154,9 +2171,13 @@ void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty,
     const llvm::StringRef propName = setNodeProperty.getProperty();
     const mlir::Value inputValue = setNodeProperty.getInputNodes();
     const mlir::Value propValue = setNodeProperty.getValue();
+    const mlir::Type valueChunkType = propValue.getType();
+    const bool writesNull = isUntypedNullChunk(valueChunkType);
 
-    const ValueType valueType = valueTypeFromChunkType(propValue.getType());
-    const PropertyType propType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
+    const PropertyType propType = setPropertyType(propName, valueChunkType, writesNull);
+    if (!propType.isValid()) {
+        return;
+    }
 
     const ColumnNodeIDs* inputColumn = static_cast<const ColumnNodeIDs*>(getColumn(inputValue));
     const Column* valueColumn = getColumn(propValue);
@@ -2165,6 +2186,10 @@ void NLTranslator::translateSetNodeProperty(nl::SetNodeProperty setNodeProperty,
         propType._id,
         inputColumn,
         valueColumn);
+
+    if (writesNull) {
+        data->setNullValueType(propType._valueType);
+    }
 
     data->setPending(getMaskColumn(setNodeProperty.getPending()));
     data->setAllPending(setNodeProperty.getAllPending() || isPendingValue(inputValue, /*isNode=*/true));
@@ -2181,9 +2206,13 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
     const llvm::StringRef propName = setEdgeProperty.getProperty();
     const mlir::Value inputValue = setEdgeProperty.getInputEdges();
     const mlir::Value propValue = setEdgeProperty.getValue();
+    const mlir::Type valueChunkType = propValue.getType();
+    const bool writesNull = isUntypedNullChunk(valueChunkType);
 
-    const ValueType valueType = valueTypeFromChunkType(propValue.getType());
-    const PropertyType propType = _metadataBuilder->getOrCreatePropertyType(propName, valueType);
+    const PropertyType propType = setPropertyType(propName, valueChunkType, writesNull);
+    if (!propType.isValid()) {
+        return;
+    }
 
     const ColumnEdgeIDs* inputColumn = static_cast<const ColumnEdgeIDs*>(getColumn(inputValue));
     const Column* valueColumn = getColumn(propValue);
@@ -2192,6 +2221,10 @@ void NLTranslator::translateSetEdgeProperty(nl::SetEdgeProperty setEdgeProperty,
         propType._id,
         inputColumn,
         valueColumn);
+
+    if (writesNull) {
+        data->setNullValueType(propType._valueType);
+    }
 
     data->setPending(getMaskColumn(setEdgeProperty.getPending()));
     data->setAllPending(setEdgeProperty.getAllPending() || isPendingValue(inputValue, /*isNode=*/false));

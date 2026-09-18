@@ -100,6 +100,7 @@
 #include "stmt/MatchStmt.h"
 #include "stmt/OrderBy.h"
 #include "stmt/OrderByItem.h"
+#include "stmt/RemoveStmt.h"
 #include "stmt/ReturnStmt.h"
 #include "stmt/SetItem.h"
 #include "stmt/SetStmt.h"
@@ -3279,6 +3280,10 @@ void DBProgramGenerator::generateUpdates(std::span<Stmt* const> stmts) {
                 generateSetItems(static_cast<const SetStmt*>(stmt), mlir::Value {});
             break;
 
+            case Stmt::Kind::REMOVE:
+                generateRemoveProperties(static_cast<const RemoveStmt*>(stmt));
+            break;
+
             case Stmt::Kind::DELETE:
                 generateDeleteStmt(static_cast<const DeleteStmt*>(stmt));
             break;
@@ -3955,53 +3960,65 @@ mlir::Value DBProgramGenerator::resolveWildcardColumn() const {
     return resolveColumnInScope([](mlir::Value) { return true; });
 }
 
-void DBProgramGenerator::generateSetItems(const SetStmt* setStmt, mlir::Value rows) {
+void DBProgramGenerator::generatePropertyWrite(const PropertyExpr* propertyExpr,
+                                               mlir::Value valueColumn,
+                                               mlir::Value rows) {
     const mlir::Location loc = _opBuilder.getUnknownLoc();
 
+    const VarDecl* entityDecl = propertyExpr->getEntityVarDecl();
+    const std::string_view varName = entityDecl->getName();
+    const std::string_view propName = propertyExpr->getPropName();
+
+    const mlir::Value entityColumn = resolveEntityColumn(entityDecl);
+    bioassert(entityColumn, "Property write on unknown variable: {}", varName);
+
+    // A merge's rows mix entities it wrote with entities it bound, and the two are
+    // written to differently: the mask says which is which
+    const mlir::Value pending = findPendingMask(entityDecl);
+    const bool allPending = isPendingThroughout(entityDecl);
+
+    const mlir::StringAttr propAttr = _opBuilder.getStringAttr(propName);
+    const EvaluatedType entityType = entityDecl->getType();
+    const bool isNode = entityType == EvaluatedType::NodePattern;
+    const bool isEdge = entityType == EvaluatedType::EdgePattern;
+    bioassert(isNode || isEdge, "Property write on non-entity variable: {}", varName);
+
+    if (isNode) {
+        _opBuilder.create<mlir::db::SetNodeProperty>(loc,
+                                                     entityColumn,
+                                                     propAttr,
+                                                     valueColumn,
+                                                     pending,
+                                                     rows,
+                                                     allPending);
+    } else /* (isEdge) */ {
+        _opBuilder.create<mlir::db::SetEdgeProperty>(loc,
+                                                     entityColumn,
+                                                     propAttr,
+                                                     valueColumn,
+                                                     pending,
+                                                     rows,
+                                                     allPending);
+    }
+}
+
+void DBProgramGenerator::generateSetItems(const SetStmt* setStmt, mlir::Value rows) {
     for (const SetItem* item : setStmt->getItems()) {
         const SetItem::PropertyExprAssign* assign =
             std::get_if<SetItem::PropertyExprAssign>(&item->item());
         bioassert(assign, "Only property-assignment SET items are supported");
 
-        const PropertyExpr* propertyExpr = assign->_propTypeExpr;
-        const VarDecl* entityDecl = propertyExpr->getEntityVarDecl();
-        const std::string_view varName = entityDecl->getName();
-        const std::string_view propName = propertyExpr->getPropName();
-
-        const mlir::Value entityColumn = resolveEntityColumn(entityDecl);
-        bioassert(entityColumn, "SET on unknown variable: {}", varName);
-
         translateExpr(assign->_propValueExpr);
-        const mlir::Value valueColumn = _part._exprMap.at(assign->_propValueExpr);
 
-        // A merge's rows mix entities it wrote with entities it bound, and the two are
-        // written to differently: the mask says which is which
-        const mlir::Value pending = findPendingMask(entityDecl);
-        const bool allPending = isPendingThroughout(entityDecl);
+        generatePropertyWrite(assign->_propTypeExpr,
+                              _part._exprMap.at(assign->_propValueExpr),
+                              rows);
+    }
+}
 
-        const mlir::StringAttr propAttr = _opBuilder.getStringAttr(propName);
-        const EvaluatedType entityType = entityDecl->getType();
-        const bool isNode = entityType == EvaluatedType::NodePattern;
-        const bool isEdge = entityType == EvaluatedType::EdgePattern;
-        bioassert(isNode || isEdge, "SET on non-entity variable: {}", varName);
-
-        if (isNode) {
-            _opBuilder.create<mlir::db::SetNodeProperty>(loc,
-                                                         entityColumn,
-                                                         propAttr,
-                                                         valueColumn,
-                                                         pending,
-                                                         rows,
-                                                         allPending);
-        } else /* (isEdge) */ {
-            _opBuilder.create<mlir::db::SetEdgeProperty>(loc,
-                                                         entityColumn,
-                                                         propAttr,
-                                                         valueColumn,
-                                                         pending,
-                                                         rows,
-                                                         allPending);
-        }
+void DBProgramGenerator::generateRemoveProperties(const RemoveStmt* removeStmt) {
+    for (const PropertyExpr* propertyExpr : removeStmt->getProperties()) {
+        generatePropertyWrite(propertyExpr, nullConstantColumn(), mlir::Value {});
     }
 }
 
