@@ -1,6 +1,7 @@
 #pragma once
 
-#include <numeric>
+#include <limits>
+#include <optional>
 #include <unordered_map>
 
 #include <range/v3/algorithm/sort.hpp>
@@ -9,6 +10,7 @@
 #include "embedding/EmbeddingContainer.h"
 #include "list/ListContainer.h"
 #include "StringContainer.h"
+#include "metadata/PropertyNull.h"
 #include "metadata/PropertyType.h"
 
 #include "ID.h"
@@ -54,6 +56,12 @@ public:
     virtual size_t size() const = 0;
 
     virtual bool has(EntityID entityID) const = 0;
+
+    /// @returns true if stores a value or explicit NULL for @param entityID 
+    bool hasEntry(EntityID entityID) const { return _entityIndexMap.contains(entityID); }
+
+    bool empty() const { return size() == 0 && _nullIds.empty(); }
+
     ValueType getValueType() const { return _valueType; }
 
     const IDs& ids() const { return _ids; }
@@ -67,9 +75,18 @@ public:
 
     bool isSorted() const { return _sorted; }
 
+    // One map entry per ID, valued or null: a container an entity was added to twice holds fewer
+    bool hasDistinctIDs() const { return _entityIndexMap.size() == _ids.size() + _nullIds.size(); }
+
+    IDs& nullIds() { return _nullIds; }
+    const IDs& nullIds() const { return _nullIds; }
+
 protected:
     IDs _ids;
+    IDs _nullIds;
     bool _sorted {false};
+    std::unordered_map<EntityID, size_t> _entityIndexMap;
+    static constexpr size_t NULL_INDEX = std::numeric_limits<size_t>::max();
 
 private:
     ValueType _valueType {ValueType::Invalid};
@@ -91,10 +108,20 @@ public:
     TypedPropertyContainer& operator=(TypedPropertyContainer&&) noexcept = default;
     ~TypedPropertyContainer() override = default;
 
-    template <typename... Args>
-    void add(EntityID entityID, Args&&... args) {
+    void add(EntityID entityID, const PropertyNull&) {
+        _nullIds.emplace_back(entityID);
+        _entityIndexMap[entityID] = NULL_INDEX;
+    }
+
+    void add(EntityID entityID, const std::optional<typename T::Primitive>& arg) {
+        if (!arg.has_value()) {
+            _nullIds.emplace_back(entityID);
+            _entityIndexMap[entityID] = NULL_INDEX;
+            return;
+        }
+
         const size_t index = _values.size();
-        _values.emplace_back(std::forward<Args>(args)...);
+        _values.push_back(*arg);
         _ids.emplace_back(entityID);
         _entityIndexMap[entityID] = index;
         _sorted = false;
@@ -113,6 +140,10 @@ public:
         }
 
         const size_t offset = it->second;
+
+        if (offset == NULL_INDEX) {
+            return _values.end();
+        }
 
         return _values.begin() + offset;
     }
@@ -138,6 +169,34 @@ public:
         return &(*it);
     }
 
+    /**
+     * @brief Gets the (possibly null) value of the property associated with @param
+     * entityID.
+     * @returns
+     * - std::nullopt: if the value is explicitly null;
+     * - nullptr:      if there is no associated value;
+     * - the value:    otherwise.
+     */
+    std::optional<const typename T::Primitive*> tryGetWithNull(EntityID entityID) const {
+        const auto findIt = _entityIndexMap.find(entityID);
+
+        const bool present = findIt != _entityIndexMap.end();
+        if (!present) {
+            return nullptr;
+        }
+
+        const size_t offset = findIt->second;
+
+        const bool explicitNull = offset == NULL_INDEX;
+        if (explicitNull) {
+            return std::nullopt;
+        }
+
+        const auto valueIt = _values.begin() + offset;
+
+        return &(*valueIt);
+    }
+
     std::span<const typename T::Primitive> getSpan(size_t first, size_t count) const {
         return std::span {_values}.subspan(first, count);
     }
@@ -151,9 +210,6 @@ public:
         return _values.size();
     }
 
-    // One index per ID: a container an entity was added to twice holds fewer.
-    bool hasDistinctIDs() const { return _entityIndexMap.size() == _ids.size(); }
-
     void sort() override {
         ranges::sort(
             ranges::views::zip(_ids, _values),
@@ -164,12 +220,16 @@ public:
             });
 
         _entityIndexMap.clear();
-        _entityIndexMap.reserve(_ids.size());
+        _entityIndexMap.reserve(_ids.size() + _nullIds.size());
         for (size_t i = 0; i < _ids.size(); i++) {
             _entityIndexMap[_ids[i]] = i;
         }
 
         _sorted = true;
+
+        for (const EntityID id : _nullIds) {
+            _entityIndexMap[id] = NULL_INDEX;
+        }
     }
 
     Values& values() { return _values; }
@@ -179,7 +239,6 @@ private:
     friend TrivialPropertyContainerLoader<T>;
 
     Values _values;
-    std::unordered_map<EntityID, size_t> _entityIndexMap;
 };
 
 template <>
@@ -198,9 +257,15 @@ public:
     TypedPropertyContainer& operator=(TypedPropertyContainer&&) noexcept = default;
     ~TypedPropertyContainer() override = default;
 
-    void add(EntityID entityID, std::string_view v) {
+    void add(EntityID entityID, const std::optional<types::String::Primitive>& arg) {
+        if (!arg.has_value()) {
+            _nullIds.emplace_back(entityID);
+            _entityIndexMap[entityID] = NULL_INDEX;
+            return;
+        }
+
         const size_t index = _values.size();
-        _values.alloc(v);
+        _values.alloc(*arg);
         _ids.emplace_back(entityID);
         _entityIndexMap[entityID] = index;
         _sorted = false;
@@ -219,6 +284,10 @@ public:
         }
 
         const size_t offset = it->second;
+
+        if (offset == NULL_INDEX) {
+            return _values.end();
+        }
 
         return _values.begin() + offset;
     }
@@ -248,6 +317,26 @@ public:
         return &(*it);
     }
 
+    std::optional<const types::String::Primitive*> tryGetWithNull(EntityID entityID) const {
+        const auto findIt = _entityIndexMap.find(entityID);
+
+        const bool present = findIt != _entityIndexMap.end();
+        if (!present) {
+            return nullptr;
+        }
+
+        const size_t offset = findIt->second;
+
+        const bool explicitNull = offset == NULL_INDEX;
+        if (explicitNull) {
+            return std::nullopt;
+        }
+
+        const auto valueIt = _values.begin() + offset;
+
+        return &(*valueIt);
+    }
+
     std::span<const std::string_view> getSpan(size_t first, size_t count) const {
         return std::span {_values.get()}.subspan(first, count);
     }
@@ -261,8 +350,6 @@ public:
         return _values.size();
     }
 
-    bool hasDistinctIDs() const { return _entityIndexMap.size() == _ids.size(); }
-
     void sort() override;
 
 private:
@@ -270,7 +357,6 @@ private:
     friend DataPartMerger;
 
     StringContainer _values;
-    std::unordered_map<EntityID, size_t> _entityIndexMap;
 };
 
 template <>
@@ -288,16 +374,28 @@ public:
     TypedPropertyContainer& operator=(TypedPropertyContainer&&) noexcept = default;
     ~TypedPropertyContainer() override = default;
 
-    void add(EntityID entityID, std::span<const float> v) {
+    void add(EntityID entityID, const std::optional<types::Embedding::Primitive>& arg) {
+        if (!arg.has_value()) {
+            _nullIds.emplace_back(entityID);
+            _entityIndexMap[entityID] = NULL_INDEX;
+            return;
+        }
+
         const size_t index = _values.size();
-        _values.alloc(v);
+        _values.alloc(*arg);
         _ids.emplace_back(entityID);
-        _entityIndexMap[entityID] = index;
         _sorted = false;
+        _entityIndexMap[entityID] = index;
     }
 
     bool has(EntityID entityID) const override {
-        return _entityIndexMap.contains(entityID);
+        const auto it = _entityIndexMap.find(entityID);
+
+        if (it == _entityIndexMap.end()) {
+            return false;
+        }
+
+        return it->second != NULL_INDEX;
     }
 
     types::Embedding::Primitive get(EntityID entityID) const {
@@ -314,8 +412,36 @@ public:
         if (it == _entityIndexMap.end()) {
             return nullptr;
         }
+
+        const size_t offset = it->second;
+
+        if (offset == NULL_INDEX) {
+            return nullptr;
+        }
+
         const auto& views = _values.get();
-        return &views[it->second];
+
+        return &views[offset];
+    }
+
+    std::optional<const types::Embedding::Primitive*> tryGetWithNull(EntityID entityID) const {
+        const auto findIt = _entityIndexMap.find(entityID);
+
+        const bool present = findIt != _entityIndexMap.end();
+        if (!present) {
+            return nullptr;
+        }
+
+        const size_t offset = findIt->second;
+
+        const bool explicitNull = offset == NULL_INDEX;
+        if (explicitNull) {
+            return std::nullopt;
+        }
+
+        const auto& views = _values.get();
+
+        return &views[offset];
     }
 
     std::span<const types::Embedding::Primitive> all() const {
@@ -343,7 +469,6 @@ private:
     friend DataPartMerger;
 
     EmbeddingContainer _values;
-    std::unordered_map<EntityID, size_t> _entityIndexMap;
 };
 
 template <>
@@ -365,6 +490,7 @@ public:
         _values.alloc(v);
         _ids.emplace_back(entityID);
         _entityIndexMap[entityID] = index;
+        _sorted = false;
     }
 
     void add(EntityID entityID, const EncodedList& v) {
@@ -372,10 +498,27 @@ public:
         _values.append(v.decodeInto(_values));
         _ids.emplace_back(entityID);
         _entityIndexMap[entityID] = index;
+        _sorted = false;
+    }
+
+    void add(EntityID entityID, const std::optional<types::List::Primitive>& arg) {
+        if (!arg.has_value()) {
+            _nullIds.emplace_back(entityID);
+            _entityIndexMap[entityID] = NULL_INDEX;
+            return;
+        }
+
+        add(entityID, *arg);
     }
 
     bool has(EntityID entityID) const override {
-        return _entityIndexMap.contains(entityID);
+        const auto it = _entityIndexMap.find(entityID);
+
+        if (it == _entityIndexMap.end()) {
+            return false;
+        }
+
+        return it->second != NULL_INDEX;
     }
 
     types::List::Primitive get(EntityID entityID) const {
@@ -394,6 +537,26 @@ public:
         }
         const auto& views = _values.get();
         return &views[it->second];
+    }
+
+    std::optional<const types::List::Primitive*> tryGetWithNull(EntityID entityID) const {
+        const auto findIt = _entityIndexMap.find(entityID);
+
+        const bool present = findIt != _entityIndexMap.end();
+        if (!present) {
+            return nullptr;
+        }
+
+        const size_t offset = findIt->second;
+
+        const bool explicitNull = offset == NULL_INDEX;
+        if (explicitNull) {
+            return std::nullopt;
+        }
+
+        const auto& views = _values.get();
+
+        return &views[offset];
     }
 
     std::span<const types::List::Primitive> all() const {
@@ -421,7 +584,6 @@ private:
     friend DataPartMerger;
 
     ListContainer _values;
-    std::unordered_map<EntityID, size_t> _entityIndexMap;
 };
 
 }

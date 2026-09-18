@@ -32,7 +32,7 @@ std::unique_ptr<DataPartBuilder> DataPartMerger::merge(DataPartSpan dataParts) c
     const size_t nodeCount = graphReader.getNodeCount();
     const size_t edgeCount = graphReader.getEdgeCount();
 
-    std::unique_ptr<DataPartBuilder> datapartBuilder = DataPartBuilder::prepare(_metadataBuilder, 0, 0, 0);
+    std::unique_ptr<DataPartBuilder> datapartBuilder = DataPartBuilder::prepareMerge(_metadataBuilder, _graphView);
 
     std::vector<LabelSetHandle>& labelSets = datapartBuilder->coreNodeLabelSets();
     std::vector<EdgeRecord>& edges = datapartBuilder->edges();

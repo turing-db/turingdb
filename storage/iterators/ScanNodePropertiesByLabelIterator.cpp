@@ -34,6 +34,8 @@ void ScanNodePropertiesByLabelIterator<T>::init() {
             const TypedPropertyContainer<T>& props = nodeProperties.getContainer<T>(_propTypeID);
             _labelsetIt = indexer.matchIterate(_labelset);
 
+            collectNewerContainers();
+
             for (; _labelsetIt.isValid(); _labelsetIt.next()) {
                 const auto& ranges = _labelsetIt.getValue();
                 _rangeIt = ranges.begin();
@@ -45,7 +47,9 @@ void ScanNodePropertiesByLabelIterator<T>::init() {
                     _propIt = _props.begin();
                     _currentIDIt = std::span {props.ids()}.begin() + range._offset;
 
-                    if (!_props.empty()) {
+                    skipOverridden();
+
+                    if (_propIt != _props.end()) {
                         return;
                     }
                 }
@@ -69,6 +73,8 @@ void ScanNodePropertiesByLabelIterator<T>::reset() {
 
 template <SupportedType T>
 void ScanNodePropertiesByLabelIterator<T>::nextValid() {
+    skipOverridden();
+
     while (_propIt == _props.end()) {
         _rangeIt++;
         while (_rangeIt == _labelsetIt.getValue().end()) {
@@ -87,6 +93,8 @@ void ScanNodePropertiesByLabelIterator<T>::nextValid() {
                 if (nodeProperties.hasPropertyType(_propTypeID)) {
                     const auto& indexer = nodeProperties.getIndexer(_propTypeID);
                     _labelsetIt = indexer.matchIterate(_labelset);
+
+                    collectNewerContainers();
                 }
             }
 
@@ -100,7 +108,48 @@ void ScanNodePropertiesByLabelIterator<T>::nextValid() {
         _props = props.getSpan(range._offset, range._count);
         _propIt = _props.begin();
         _currentIDIt = std::span {props.ids()}.begin() + range._offset;
+
+        skipOverridden();
     }
+}
+
+template <SupportedType T>
+void ScanNodePropertiesByLabelIterator<T>::collectNewerContainers() {
+    _newerContainers.clear();
+
+    PartIterator newerIt = _partIt;
+
+    for (newerIt.next(); newerIt.isNotEnd(); newerIt.next()) {
+        const PropertyManager& nodeProperties = newerIt.get()->nodeProperties();
+        const TypedPropertyContainer<T>* container = nodeProperties.tryGetContainer<T>(_propTypeID);
+
+        if (container) {
+            _newerContainers.push_back(container);
+        }
+    }
+}
+
+template <SupportedType T>
+void ScanNodePropertiesByLabelIterator<T>::skipOverridden() {
+    if (_newerContainers.empty()) {
+        return;
+    }
+
+    while (_propIt != _props.end() && isOverridden(*_currentIDIt)) {
+        _propIt++;
+        _currentIDIt++;
+    }
+}
+
+template <SupportedType T>
+bool ScanNodePropertiesByLabelIterator<T>::isOverridden(EntityID entityID) const {
+    for (const PropertyContainer* container : _newerContainers) {
+        if (container->hasEntry(entityID)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 template <SupportedType T>
@@ -168,18 +217,33 @@ void ScanNodePropertiesByLabelChunkWriter<T>::fill(size_t maxCount) {
             if constexpr (conditions[1]) {
                 this->_nodeIDs->resize(newSize);
             }
-            remainingToMax -= rangeSize;
+
+            size_t written = prevSize;
 
             for (size_t i = prevSize; i < newSize; i++) {
-                if constexpr (conditions[0]) {
-                    (*this->_properties)[i] = *this->_propIt;
+                if (!this->isOverridden(*this->_currentIDIt)) {
+                    if constexpr (conditions[0]) {
+                        (*this->_properties)[written] = *this->_propIt;
+                    }
+                    if constexpr (conditions[1]) {
+                        (*this->_nodeIDs)[written] = this->_currentIDIt->getValue();
+                    }
+                    written++;
                 }
-                if constexpr (conditions[1]) {
-                    (*this->_nodeIDs)[i] = this->_currentIDIt->getValue();
-                }
+
                 ++this->_propIt;
-                ++this->_currentIDIt++;
+                ++this->_currentIDIt;
             }
+
+            if constexpr (conditions[0]) {
+                this->_properties->resize(written);
+            }
+            if constexpr (conditions[1]) {
+                this->_nodeIDs->resize(written);
+            }
+
+            remainingToMax -= written - prevSize;
+
             this->nextValid();
         }
     };

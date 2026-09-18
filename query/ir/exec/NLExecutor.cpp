@@ -3669,10 +3669,14 @@ std::optional<typename T::Primitive> readWrittenValue(NLWrittenValues& written,
     using Primitive = typename T::Primitive;
 
     const auto convert = [](const auto& held) -> std::optional<Primitive> {
-        using Held = std::decay_t<decltype(held)>;
+        using Inner = typename std::decay_t<decltype(held)>::value_type;
 
-        if constexpr (std::is_convertible_v<const Held&, Primitive>) {
-            return Primitive(held);
+        if constexpr (std::is_convertible_v<const Inner&, Primitive>) {
+            if (!held) {
+                return std::nullopt;
+            }
+
+            return Primitive(*held);
         } else {
             return std::nullopt;
         }
@@ -3687,9 +3691,9 @@ std::optional<typename T::Primitive> readWrittenValue(NLWrittenValues& written,
 template <typename T>
 CommitWriteBuffer::SupportedTypeVariant pendingValueOf(typename T::Primitive value) {
     if constexpr (std::is_same_v<T, types::String>) {
-        return std::string(value);
+        return std::optional<std::string> {std::string(value)};
     } else {
-        return value;
+        return std::optional<typename T::Primitive> {value};
     }
 }
 

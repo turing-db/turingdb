@@ -56,10 +56,14 @@ protected:
     std::span<const typename T::Primitive> _props {};
     std::span<const typename T::Primitive>::iterator _propIt {};
     std::span<const EntityID>::iterator _currentIDIt;
+    std::vector<const PropertyContainer*> _newerContainers;
 
     bool nextDatapart();
     void newPropertySpan();
     void nextValid();
+    void collectNewerContainers();
+    void skipOverridden();
+    bool isOverridden(EntityID entityID) const;
 };
 
 template <SupportedType T>
