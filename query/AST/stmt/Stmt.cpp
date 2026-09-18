@@ -13,6 +13,7 @@ bool Stmt::isUpdating(Kind kind) {
         case Kind::CREATE:
         case Kind::MERGE:
         case Kind::SET:
+        case Kind::REMOVE:
         case Kind::DELETE:
             return true;
         break;

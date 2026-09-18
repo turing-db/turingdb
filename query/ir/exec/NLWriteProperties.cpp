@@ -200,6 +200,23 @@ size_t db::committedEdgeCount(const GraphView* view) {
     return reader.getTotalEdgesAllocated();
 }
 
+void db::fillNullProperties(size_t rowCount,
+                            PropertyTypeID propID,
+                            ValueType valueType,
+                            CommitWriteBuffer::UntypedProperties& buf) {
+    const auto fill = [&]<SupportedType T>() {
+        if constexpr (TrivialSupportedType<T>) {
+            using Disengaged = std::optional<typename T::Primitive>;
+            buf.assign(rowCount, CommitWriteBuffer::UntypedProperty {propID, Disengaged {}});
+        } else {
+            using Disengaged = std::optional<typename T::OwningPrimitive>;
+            buf.assign(rowCount, CommitWriteBuffer::UntypedProperty {propID, Disengaged {}});
+        }
+    };
+
+    ValueTypeDispatcher(valueType).execute(fill);
+}
+
 void db::extractColumnProperties(const Column* column,
                                  size_t rowCount,
                                  PropertyTypeID propID,

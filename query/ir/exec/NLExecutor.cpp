@@ -4502,8 +4502,13 @@ void NLExecutor::runSetNodeProperty(NLExecutionContext* context, NLFunctionData*
 
     CommitWriteBuffer::UntypedProperties propsBuffer;
     const PropertyTypeID propID = setData->getPropertyTypeID();
-    const Column* nodeCol = setData->getValue();
-    extractColumnProperties(nodeCol, rowCount, propID, propsBuffer);
+    const ValueType nullValueType = setData->getNullValueType();
+
+    if (nullValueType != ValueType::Invalid) {
+        fillNullProperties(rowCount, propID, nullValueType, propsBuffer);
+    } else {
+        extractColumnProperties(setData->getValue(), rowCount, propID, propsBuffer);
+    }
 
     const ColumnMask* pending = setData->getPending();
     const bool allPending = setData->isAllPending();
@@ -4539,10 +4544,15 @@ void NLExecutor::runSetEdgeProperty(NLExecutionContext* context, NLFunctionData*
     const ColumnEdgeIDs* edges = setData->getInput();
     const size_t rowCount = edges->size();
     const PropertyTypeID propID = setData->getPropertyTypeID();
-    const Column* edgeCol = setData->getValue();
+    const ValueType nullValueType = setData->getNullValueType();
 
     CommitWriteBuffer::UntypedProperties propsBuffer;
-    extractColumnProperties(edgeCol, rowCount, propID, propsBuffer);
+
+    if (nullValueType != ValueType::Invalid) {
+        fillNullProperties(rowCount, propID, nullValueType, propsBuffer);
+    } else {
+        extractColumnProperties(setData->getValue(), rowCount, propID, propsBuffer);
+    }
 
     const ColumnMask* pending = setData->getPending();
     const bool allPending = setData->isAllPending();

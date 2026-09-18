@@ -17,6 +17,7 @@ class CreateStmt;
 class MergeStmt;
 class SetStmt;
 class SetItem;
+class RemoveStmt;
 class DeleteStmt;
 class Pattern;
 class PatternElement;
@@ -63,6 +64,7 @@ private:
     void analyze(const CreateStmt* createStmt);
     void analyze(const MergeStmt* mergeStmt);
     void analyze(const SetStmt* setStmt);
+    void analyze(const RemoveStmt* removeStmt);
     void analyze(const DeleteStmt* deleteStmt);
     void analyze(const Pattern* pattern);
     void analyze(const PatternElement* element);
