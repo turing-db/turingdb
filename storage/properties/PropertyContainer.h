@@ -15,6 +15,8 @@
 
 #include "ID.h"
 
+#include "BioAssert.h"
+
 namespace db {
 
 template <SupportedType T>
@@ -400,6 +402,9 @@ public:
 
     types::Embedding::Primitive get(EntityID entityID) const {
         const auto it = _entityIndexMap.find(entityID);
+        bioassert(it != _entityIndexMap.end(), "Reading an embedding property the entity does not carry");
+        bioassert(it->second != NULL_INDEX, "Reading an embedding property the entity holds as null");
+
         return _values.getView(it->second);
     }
 
@@ -523,20 +528,10 @@ public:
 
     types::List::Primitive get(EntityID entityID) const {
         const auto it = _entityIndexMap.find(entityID);
+        bioassert(it != _entityIndexMap.end(), "Reading a list property the entity does not carry");
+        bioassert(it->second != NULL_INDEX, "Reading a list property the entity holds as null");
+
         return _values.getView(it->second);
-    }
-
-    types::List::Primitive get(size_t offset) const {
-        return _values.getView(offset);
-    }
-
-    const types::List::Primitive* tryGet(EntityID entityID) const {
-        const auto it = _entityIndexMap.find(entityID);
-        if (it == _entityIndexMap.end()) {
-            return nullptr;
-        }
-        const auto& views = _values.get();
-        return &views[it->second];
     }
 
     std::optional<const types::List::Primitive*> tryGetWithNull(EntityID entityID) const {

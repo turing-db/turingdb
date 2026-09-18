@@ -25,7 +25,7 @@ void PropertyManager::fillEntityPropertyView(EntityID entityID,
             return;
         }
 
-        const auto* primitive = container.tryGet(entityID);
+        const auto* primitive = container.tryGetWithNull(entityID).value_or(nullptr);
         if (primitive) {
             auto& prop = view._props.emplace_back();
             prop._id = ptID;
