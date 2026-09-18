@@ -98,11 +98,10 @@ protected:
     }
 
     // Drives the explorator to exhaustion maxCount rows at a time. After every fill the trie
-    // may hold the chunk's paths and each walker's current prefix, and nothing else.
+    // may hold the chunk's paths and the walk's current prefix, and nothing else.
     void exploreInChunks(const GraphView& view,
                          const ColumnNodeIDs& input,
                          uint64_t maxHops,
-                         size_t walkerCount,
                          size_t maxCount,
                          std::vector<PathRow>& rows) {
         ColumnVector<size_t> indices;
@@ -114,7 +113,6 @@ protected:
         explorator.setIndices(&indices);
         explorator.setTargets(&targets);
         explorator.setPaths(&paths, &trie);
-        explorator.setWalkerCount(walkerCount);
 
         rows.clear();
         size_t fills = 0;
@@ -123,10 +121,10 @@ protected:
             readRows(indices, targets, paths, trie, rows);
             fills++;
 
-            const size_t heldEntries = 1 + (indices.size() + walkerCount) * maxHops;
+            const size_t heldEntries = 1 + (indices.size() + 1) * maxHops;
             ASSERT_LE(trie.size(), heldEntries)
                 << "fill " << fills << " left " << trie.size() << " entries in the trie for "
-                << indices.size() << " rows and " << walkerCount << " walkers";
+                << indices.size() << " rows";
         }
     }
 
@@ -152,12 +150,10 @@ TEST_F(PathExploratorReclaimTest, holdsTheChunkAndTheWalkedPrefixesAlone) {
     reference.enumerate(input, expected);
     ASSERT_GT(expected.size(), 1000u);
 
-    for (const size_t walkerCount : {1, 16}) {
-        for (const size_t maxCount : {1, 64, 1000}) {
-            std::vector<PathRow> rows;
-            exploreInChunks(view, input, maxHops, walkerCount, maxCount, rows);
-            expectSameRows(expected, rows);
-        }
+    for (const size_t maxCount : {1, 64, 1000}) {
+        std::vector<PathRow> rows;
+        exploreInChunks(view, input, maxHops, maxCount, rows);
+        expectSameRows(expected, rows);
     }
 }
 

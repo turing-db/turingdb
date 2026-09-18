@@ -214,7 +214,6 @@ protected:
                                HopPredicate predicate = nullptr) {
         SCOPED_TRACE("direction " + std::to_string(static_cast<int>(direction))
                      + " hops " + std::to_string(minHops) + " to " + std::to_string(maxHops)
-                     + " walkers " + std::to_string(options._walkerCount)
                      + " chunk " + std::to_string(options._maxCount));
 
         const FrozenCommitTx transaction = _graph->openTransaction();
@@ -377,21 +376,18 @@ TEST_F(PathExploratorCyclicTest, typeFilterAndHopFilterMatchTheReferenceOnACycli
     }
 }
 
-TEST_F(PathExploratorCyclicTest, walkerCountAndChunkSizeDoNotChangeTheRowsOfACyclicGraph) {
+TEST_F(PathExploratorCyclicTest, chunkSizeAndLookaheadDoNotChangeTheRowsOfACyclicGraph) {
     std::vector<Arc> arcs;
     randomArcs(12, 2, 11, arcs);
     build(12, 8, arcs, 4);
 
-    for (const size_t walkers : {size_t {1}, size_t {4}, size_t {16}}) {
-        for (const size_t chunk : {size_t {1}, size_t {2}, size_t {ChunkConfig::CHUNK_SIZE}}) {
-            for (const size_t lookahead : {size_t {0}, size_t {1}}) {
-                ExplorationOptions options;
-                options._walkerCount = walkers;
-                options._maxCount = chunk;
-                options._lookahead = lookahead;
+    for (const size_t chunk : {size_t {1}, size_t {2}, size_t {ChunkConfig::CHUNK_SIZE}}) {
+        for (const size_t lookahead : {size_t {0}, size_t {1}}) {
+            ExplorationOptions options;
+            options._maxCount = chunk;
+            options._lookahead = lookahead;
 
-                expectSameAsReference(PathExplorationDir::BOTH, 0, 3, options);
-            }
+            expectSameAsReference(PathExplorationDir::BOTH, 0, 3, options);
         }
     }
 }

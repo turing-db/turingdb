@@ -150,17 +150,14 @@ TEST_F(PathExploratorTest, matchesTheReferenceEnumerationInEveryConfiguration) {
             ASSERT_FALSE(expected.empty());
 
             for (const size_t maxCount : {size_t {1}, size_t {2}, ChunkConfig::CHUNK_SIZE}) {
-                for (const size_t walkerCount : {size_t {1}, size_t {8}}) {
-                    for (const size_t lookahead : {size_t {0}, size_t {1}}) {
-                        ExplorationOptions options;
-                        options._maxCount = maxCount;
-                        options._walkerCount = walkerCount;
-                        options._lookahead = lookahead;
+                for (const size_t lookahead : {size_t {0}, size_t {1}}) {
+                    ExplorationOptions options;
+                    options._maxCount = maxCount;
+                    options._lookahead = lookahead;
 
-                        std::vector<PathRow> actual;
-                        collectPaths(view, input, direction, minHops, maxHops, options, actual);
-                        expectSameRows(expected, actual);
-                    }
+                    std::vector<PathRow> actual;
+                    collectPaths(view, input, direction, minHops, maxHops, options, actual);
+                    expectSameRows(expected, actual);
                 }
             }
         }
@@ -483,9 +480,8 @@ TEST(PathExploratorChainTest, signatureCollisionsAreResolvedByTheExactScan) {
     }
     ASSERT_EQ(head.size(), 1u);
 
-    for (const size_t walkerCount : {size_t {1}, size_t {8}}) {
+    {
         ExplorationOptions options;
-        options._walkerCount = walkerCount;
 
         std::vector<PathRow> rows;
         collectPaths(view, head, PathExplorationDir::FORWARD, 1, unbounded, options, rows);

@@ -16,11 +16,6 @@ using namespace db;
 
 namespace {
 
-// Interleaved walks stop paying off once a core's outstanding cache misses are all in use:
-// measured with samples/path_bench, the walk plateaus at sixteen on every shape tried and
-// loses nothing in cache
-constexpr size_t defaultWalkerCount = 16;
-
 // How many frontier nodes ahead the distinct mode's search fetches adjacency
 constexpr size_t frontierLookahead = 16;
 
@@ -42,15 +37,14 @@ PathExplorator::PathExplorator(const GraphView& view,
     _maxHops(maxHops),
     _parts(view),
     _tombstones(&view.tombstones()),
-    _filterTombstones(view.tombstones().hasEdges()),
-    _walkers(defaultWalkerCount)
+    _filterTombstones(view.tombstones().hasEdges())
 {
     reset();
 }
 
 PathExplorator::~PathExplorator() {
     if (_trie) {
-        releaseArenas();
+        releaseArena();
     }
 }
 
@@ -59,14 +53,14 @@ void PathExplorator::setPaths(ColumnVector<PathRef>* paths, PathTrie* trie) {
     bioassert(!paths || !_distinctEnds, "The distinct mode emits no path");
 
     if (_trie) {
-        releaseArenas();
+        releaseArena();
     }
 
     _paths = paths;
     _trie = trie;
 
     if (_trie) {
-        acquireArenas();
+        acquireArena();
     }
 }
 
@@ -85,21 +79,6 @@ void PathExplorator::setDistinctEnds(bool distinct) {
     bioassert(!distinct || _minHops == 0 || _direction != PathExplorationDir::BOTH,
               "An undirected distinct mode is exact for a minimum of zero hops alone");
     _distinctEnds = distinct;
-}
-
-void PathExplorator::setWalkerCount(size_t walkerCount) {
-    bioassert(_activeWalkers == 0, "The walker count cannot change while seeds are being walked");
-
-    if (_trie) {
-        releaseArenas();
-    }
-
-    _walkers.resize(std::max<size_t>(walkerCount, 1));
-    _turn = 0;
-
-    if (_trie) {
-        acquireArenas();
-    }
 }
 
 void PathExplorator::setPendingAdjacency(const PendingAdjacency* adjacency, size_t edgeIDBound) {
@@ -134,7 +113,7 @@ void PathExplorator::prefetchNodeData(NodeID node, size_t partIndex) const {
 }
 
 bool PathExplorator::hasWork() const {
-    return _activeWalkers > 0 || _reach._batchActive || _seedCursor < _input->size();
+    return _active || _reach._batchActive || _seedCursor < _input->size();
 }
 
 LabelSetHandle PathExplorator::labelSetOf(NodeID node) const {
@@ -179,22 +158,25 @@ void PathExplorator::resizeOutputs(size_t count) {
 }
 
 void PathExplorator::reset() {
-    for (Walker& walker : _walkers) {
-        const size_t arena = walker._arena;
-        walker = Walker {};
-        walker._arena = arena;
+    _active = false;
+    _seedRow = 0;
+    _pinned = 0;
+    _target = PathTargetHandle {};
+    _pathEdges.clear();
+    _pathEntries.clear();
+    _pathSignatures.clear();
+    _frames.clear();
+    _candidateNodes.clear();
+    _candidateEdges.clear();
 
-        if (_trie) {
-            _trie->truncateArena(arena, 0);
-        }
+    if (_trie) {
+        _trie->truncateArena(_arena, 0);
     }
 
     if (_reach._batchActive) {
         finishBatch();
     }
 
-    _turn = 0;
-    _activeWalkers = 0;
     _seedCursor = 0;
     _written = 0;
     _candidateChecks = 0;
@@ -208,25 +190,21 @@ void PathExplorator::fill(size_t maxCount) {
     }
 
     if (_paths) {
-        retainWalkedPaths();
+        retainWalkedPath();
     }
 
     resizeOutputs(maxCount);
     _written = 0;
 
     const size_t inputSize = _input->size();
-    const size_t walkerCount = _walkers.size();
 
     while (_written < maxCount) {
-        Walker& walker = _walkers[_turn];
-        _turn = _turn + 1 == walkerCount ? 0 : _turn + 1;
-
-        if (walker._active) {
-            advance(walker);
+        if (_active) {
+            step();
         } else if (_seedCursor < inputSize) {
-            startSeed(walker, _seedCursor);
+            startSeed(_seedCursor);
             _seedCursor++;
-        } else if (_activeWalkers == 0) {
+        } else {
             break;
         }
     }
@@ -235,24 +213,24 @@ void PathExplorator::fill(size_t maxCount) {
     _valid = hasWork();
 }
 
-void PathExplorator::startSeed(Walker& walker, size_t row) {
-    walker._seedRow = row;
-    walker._pathEdges.clear();
-    walker._pathSignatures.clear();
-    walker._pathSignatures.push_back(0);
-    walker._pathEntries.clear();
-    walker._pathEntries.push_back(PathTrie::ROOT);
-    walker._frames.clear();
-    walker._candidateNodes.clear();
-    walker._candidateEdges.clear();
-    walker._target = PathTargetHandle {};
+void PathExplorator::startSeed(size_t row) {
+    _seedRow = row;
+    _pathEdges.clear();
+    _pathSignatures.clear();
+    _pathSignatures.push_back(0);
+    _pathEntries.clear();
+    _pathEntries.push_back(PathTrie::ROOT);
+    _frames.clear();
+    _candidateNodes.clear();
+    _candidateEdges.clear();
+    _target = PathTargetHandle {};
 
     const NodeID seed = (*_input)[row];
 
     if (_endNodes) {
-        walker._targetNode = (*_endNodes)[row];
+        _targetNode = (*_endNodes)[row];
         if (_targetIndex) {
-            walker._target = _targetIndex->find(walker._targetNode);
+            _target = _targetIndex->find(_targetNode);
         }
     }
 
@@ -261,44 +239,27 @@ void PathExplorator::startSeed(Walker& walker, size_t row) {
     }
 
     const bool beyondLabels = _distances && !_distances->canReachEndWithin(seed, _maxHops);
-    const bool beyondTarget = !walker._target.canReachWithin(seed, _maxHops);
+    const bool beyondTarget = !_target.canReachWithin(seed, _maxHops);
     if (_maxHops > 0 && !beyondLabels && !beyondTarget) {
-        walker._active = true;
-        _activeWalkers++;
-        requestDescent(walker, seed);
+        _active = true;
+        descend(seed);
     }
 }
 
-void PathExplorator::advance(Walker& walker) {
-    switch (walker._stage) {
-        case Stage::Idle:
-            consume(walker);
-        break;
-
-        case Stage::RangeRequested:
-            readRanges(walker);
-        break;
-
-        case Stage::SpanRequested:
-            pushFrame(walker);
-        break;
-    }
-}
-
-void PathExplorator::consume(Walker& walker) {
-    Frame& frame = walker._frames.back();
+void PathExplorator::step() {
+    Frame& frame = _frames.back();
     if (frame._next == frame._candidateEnd) {
-        popFrame(walker);
+        popFrame();
         return;
     }
 
     const size_t candidate = frame._next;
-    const NodeID node = walker._candidateNodes[candidate];
-    const EdgeID edge = walker._candidateEdges[candidate];
+    const NodeID node = _candidateNodes[candidate];
+    const EdgeID edge = _candidateEdges[candidate];
     frame._next++;
 
-    const uint64_t depth = walker._frames.size();
-    const bool emits = depth >= _minHops && isEnd(walker._seedRow, node);
+    const uint64_t depth = _frames.size();
+    const bool emits = depth >= _minHops && isEnd(_seedRow, node);
     const bool expands = depth < _maxHops;
 
     if (!emits && !expands) {
@@ -307,13 +268,13 @@ void PathExplorator::consume(Walker& walker) {
 
     PathRef entry = PathTrie::ROOT;
     if (_paths) {
-        entry = _trie->append(walker._arena, walker._pathEntries.back(), edge, node, depth);
+        entry = _trie->append(_arena, _pathEntries.back(), edge, node, depth);
     }
 
     if (emits) {
-        emit(walker._seedRow, node, entry);
+        emit(_seedRow, node, entry);
         if (_paths) {
-            walker._pinned = _trie->getArenaSize(walker._arena);
+            _pinned = _trie->getArenaSize(_arena);
         }
     }
 
@@ -323,126 +284,114 @@ void PathExplorator::consume(Walker& walker) {
 
     const size_t ahead = candidate + _lookahead;
     if (_lookahead > 0 && ahead < frame._candidateEnd) {
-        const NodeID aheadNode = walker._candidateNodes[ahead];
+        const NodeID aheadNode = _candidateNodes[ahead];
         prefetchNodeData(aheadNode, _parts.ownerIndex(aheadNode));
     }
 
-    walker._pathEdges.push_back(edge);
-    walker._pathSignatures.push_back(walker._pathSignatures.back() | signatureBit(edge));
+    _pathEdges.push_back(edge);
+    _pathSignatures.push_back(_pathSignatures.back() | signatureBit(edge));
     if (_paths) {
-        walker._pathEntries.push_back(entry);
+        _pathEntries.push_back(entry);
     }
 
-    requestDescent(walker, node);
+    descend(node);
 }
 
-void PathExplorator::popFrame(Walker& walker) {
-    const Frame frame = walker._frames.back();
-    walker._candidateNodes.resize(frame._candidateBegin);
-    walker._candidateEdges.resize(frame._candidateBegin);
-    walker._frames.pop_back();
+void PathExplorator::popFrame() {
+    const Frame frame = _frames.back();
+    _candidateNodes.resize(frame._candidateBegin);
+    _candidateEdges.resize(frame._candidateBegin);
+    _frames.pop_back();
 
-    if (walker._frames.empty()) {
-        walker._active = false;
-        _activeWalkers--;
+    if (_frames.empty()) {
+        _active = false;
         return;
     }
 
-    walker._pathEdges.pop_back();
-    walker._pathSignatures.pop_back();
+    _pathEdges.pop_back();
+    _pathSignatures.pop_back();
     if (_paths) {
-        releasePathEntry(walker);
+        releasePathEntry();
     }
 }
 
-void PathExplorator::requestDescent(Walker& walker, NodeID node) {
-    walker._pendingNode = node;
-    walker._pendingOwner = isPendingNode(node) ? _parts.size() : _parts.ownerIndex(node);
-    prefetchNodeData(node, walker._pendingOwner);
-    walker._stage = Stage::RangeRequested;
-}
-
-void PathExplorator::readRanges(Walker& walker) {
-    walker._pendingOuts = {};
-    walker._pendingIns = {};
-
-    if (walker._pendingOwner < _parts.size()) {
-        const EdgeIndexer& indexer = *_parts.get(walker._pendingOwner)._indexer;
-        const NodeID node = walker._pendingNode;
-
-        if (_direction != PathExplorationDir::BACKWARD) {
-            walker._pendingOuts = indexer.getNodeOutEdges(node);
-            __builtin_prefetch(walker._pendingOuts.data());
-        }
-
-        if (_direction != PathExplorationDir::FORWARD) {
-            walker._pendingIns = indexer.getNodeInEdges(node);
-            __builtin_prefetch(walker._pendingIns.data());
-        }
-    }
-
-    walker._stage = Stage::SpanRequested;
-}
-
-void PathExplorator::generatePendingCandidates(Walker& walker, NodeID node) {
+void PathExplorator::generatePendingCandidates(NodeID node) {
     if (!_pendingAdjacency) {
         return;
     }
 
     if (_direction != PathExplorationDir::BACKWARD) {
-        generateCandidates(walker, _pendingAdjacency->outOf(node, _pendingEdgeIDBound));
+        generateCandidates(_pendingAdjacency->outOf(node, _pendingEdgeIDBound));
     }
 
     if (_direction != PathExplorationDir::FORWARD) {
-        generateCandidates(walker, _pendingAdjacency->into(node, _pendingEdgeIDBound));
+        generateCandidates(_pendingAdjacency->into(node, _pendingEdgeIDBound));
     }
 }
 
-void PathExplorator::pushFrame(Walker& walker) {
-    const NodeID node = walker._pendingNode;
-    const size_t begin = walker._candidateNodes.size();
+// Reads the node's adjacency wherever it lives and pushes the frame of the candidates it
+// offers, which the next steps walk one at a time
+void PathExplorator::descend(NodeID node) {
+    const size_t owner = isPendingNode(node) ? _parts.size() : _parts.ownerIndex(node);
+    prefetchNodeData(node, owner);
 
-    generateCandidates(walker, walker._pendingOuts);
-    generateCandidates(walker, walker._pendingIns);
-    generatePendingCandidates(walker, node);
+    std::span<const EdgeRecord> outs;
+    std::span<const EdgeRecord> ins;
 
-    for (const size_t patchIndex : _parts.patchPartsAfter(walker._pendingOwner)) {
-        const EdgeIndexer& indexer = *_parts.get(patchIndex)._indexer;
+    if (owner < _parts.size()) {
+        const EdgeIndexer& indexer = *_parts.get(owner)._indexer;
 
         if (_direction != PathExplorationDir::BACKWARD) {
-            generateCandidates(walker, indexer.getNodeOutEdges(node));
+            outs = indexer.getNodeOutEdges(node);
         }
 
         if (_direction != PathExplorationDir::FORWARD) {
-            generateCandidates(walker, indexer.getNodeInEdges(node));
+            ins = indexer.getNodeInEdges(node);
         }
     }
 
-    size_t end = walker._candidateNodes.size();
+    const size_t begin = _candidateNodes.size();
+
+    generateCandidates(outs);
+    generateCandidates(ins);
+    generatePendingCandidates(node);
+
+    for (const size_t patchIndex : _parts.patchPartsAfter(owner)) {
+        const EdgeIndexer& indexer = *_parts.get(patchIndex)._indexer;
+
+        if (_direction != PathExplorationDir::BACKWARD) {
+            generateCandidates(indexer.getNodeOutEdges(node));
+        }
+
+        if (_direction != PathExplorationDir::FORWARD) {
+            generateCandidates(indexer.getNodeInEdges(node));
+        }
+    }
+
+    size_t end = _candidateNodes.size();
     if (_hopFilter && end > begin) {
-        const std::span<NodeID> candidateNodes(walker._candidateNodes.data() + begin, end - begin);
-        const std::span<EdgeID> candidateEdges(walker._candidateEdges.data() + begin, end - begin);
+        const std::span<NodeID> candidateNodes(_candidateNodes.data() + begin, end - begin);
+        const std::span<EdgeID> candidateEdges(_candidateEdges.data() + begin, end - begin);
         const size_t survivors = _hopFilter->filter(node, candidateNodes, candidateEdges);
 
         end = begin + survivors;
-        walker._candidateNodes.resize(end);
-        walker._candidateEdges.resize(end);
+        _candidateNodes.resize(end);
+        _candidateEdges.resize(end);
     }
 
-    walker._frames.push_back({begin, end, begin});
-    walker._stage = Stage::Idle;
+    _frames.push_back({begin, end, begin});
 }
 
-void PathExplorator::generateCandidates(Walker& walker, std::span<const EdgeRecord> edges) {
-    const uint64_t signature = walker._pathSignatures.back();
-    const bool hasPathEdges = !walker._pathEdges.empty();
-    const EdgeID lastEdge = hasPathEdges ? walker._pathEdges.back() : EdgeID();
+void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
+    const uint64_t signature = _pathSignatures.back();
+    const bool hasPathEdges = !_pathEdges.empty();
+    const EdgeID lastEdge = hasPathEdges ? _pathEdges.back() : EdgeID();
 
     // The hops a candidate may still take after the one that reaches it
-    const uint64_t remainingHops = _maxHops - (walker._pathEdges.size() + 1);
+    const uint64_t remainingHops = _maxHops - (_pathEdges.size() + 1);
 
-    const auto isOnPath = [&walker](EdgeID edge) {
-        return std::find(walker._pathEdges.begin(), walker._pathEdges.end(), edge) != walker._pathEdges.end();
+    const auto isOnPath = [this](EdgeID edge) {
+        return std::find(_pathEdges.begin(), _pathEdges.end(), edge) != _pathEdges.end();
     };
 
     _candidateChecks += edges.size();
@@ -455,14 +404,14 @@ void PathExplorator::generateCandidates(Walker& walker, std::span<const EdgeReco
         const bool deleted = _filterTombstones && _tombstones->containsEdge(edge);
         const bool onTrail = (signature & signatureBit(edge)) != 0 && isOnPath(edge);
         const bool beyondLabels = _distances && !_distances->canReachEndWithin(record._otherID, remainingHops);
-        const bool beyondTarget = !walker._target.canReachWithin(record._otherID, remainingHops);
+        const bool beyondTarget = !_target.canReachWithin(record._otherID, remainingHops);
 
         if (backtracks || wrongType || deleted || onTrail || beyondLabels || beyondTarget) {
             continue;
         }
 
-        walker._candidateNodes.push_back(record._otherID);
-        walker._candidateEdges.push_back(edge);
+        _candidateNodes.push_back(record._otherID);
+        _candidateEdges.push_back(edge);
     }
 }
 
@@ -480,36 +429,30 @@ void PathExplorator::emit(size_t seedRow, NodeID target, PathRef path) {
     _written++;
 }
 
-void PathExplorator::acquireArenas() {
-    for (Walker& walker : _walkers) {
-        walker._arena = _trie->acquireArena();
-    }
+void PathExplorator::acquireArena() {
+    _arena = _trie->acquireArena();
 }
 
-void PathExplorator::releaseArenas() {
-    for (Walker& walker : _walkers) {
-        _trie->releaseArena(walker._arena);
-        walker._arena = 0;
-    }
+void PathExplorator::releaseArena() {
+    _trie->releaseArena(_arena);
+    _arena = 0;
 }
 
-// The rows of the last chunk have been read once the next fill starts, so an arena keeps
-// its walker's current path alone
-void PathExplorator::retainWalkedPaths() {
-    for (Walker& walker : _walkers) {
-        _trie->retainChain(walker._arena, walker._pathEntries);
-        walker._pinned = 0;
-    }
+// The rows of the last chunk have been read once the next fill starts, so the arena keeps
+// the walk's current path alone
+void PathExplorator::retainWalkedPath() {
+    _trie->retainChain(_arena, _pathEntries);
+    _pinned = 0;
 }
 
-// A backtracked entry no emitted row holds is the top of its arena: the entries above it
+// A backtracked entry no emitted row holds is the top of the arena: the entries above it
 // were its descendants, each released on its own backtrack or pinned, which pins it too
-void PathExplorator::releasePathEntry(Walker& walker) {
-    const size_t index = PathTrie::indexOf(walker._pathEntries.back());
-    walker._pathEntries.pop_back();
+void PathExplorator::releasePathEntry() {
+    const size_t index = PathTrie::indexOf(_pathEntries.back());
+    _pathEntries.pop_back();
 
-    if (index >= walker._pinned) {
-        _trie->truncateArena(walker._arena, index);
+    if (index >= _pinned) {
+        _trie->truncateArena(_arena, index);
     }
 }
 
@@ -617,7 +560,7 @@ void PathExplorator::expandLevel() {
     reach._level++;
 
     // The frontier is known ahead, so each node's adjacency is fetched a few nodes before
-    // its turn: the search has no interleaved walkers to hide that miss behind
+    // the level reaches it
     const size_t frontierSize = reach._frontier.size();
     for (size_t index = 0; index < frontierSize; index++) {
         const size_t ahead = index + frontierLookahead;
