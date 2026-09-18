@@ -490,6 +490,7 @@ public:
         _values.alloc(v);
         _ids.emplace_back(entityID);
         _entityIndexMap[entityID] = index;
+        _sorted = false;
     }
 
     void add(EntityID entityID, const EncodedList& v) {
@@ -497,10 +498,27 @@ public:
         _values.append(v.decodeInto(_values));
         _ids.emplace_back(entityID);
         _entityIndexMap[entityID] = index;
+        _sorted = false;
+    }
+
+    void add(EntityID entityID, const std::optional<types::List::Primitive>& arg) {
+        if (!arg.has_value()) {
+            _nullIds.emplace_back(entityID);
+            _entityIndexMap[entityID] = NULL_INDEX;
+            return;
+        }
+
+        add(entityID, *arg);
     }
 
     bool has(EntityID entityID) const override {
-        return _entityIndexMap.contains(entityID);
+        const auto it = _entityIndexMap.find(entityID);
+
+        if (it == _entityIndexMap.end()) {
+            return false;
+        }
+
+        return it->second != NULL_INDEX;
     }
 
     types::List::Primitive get(EntityID entityID) const {
@@ -519,6 +537,26 @@ public:
         }
         const auto& views = _values.get();
         return &views[it->second];
+    }
+
+    std::optional<const types::List::Primitive*> tryGetWithNull(EntityID entityID) const {
+        const auto findIt = _entityIndexMap.find(entityID);
+
+        const bool present = findIt != _entityIndexMap.end();
+        if (!present) {
+            return nullptr;
+        }
+
+        const size_t offset = findIt->second;
+
+        const bool explicitNull = offset == NULL_INDEX;
+        if (explicitNull) {
+            return std::nullopt;
+        }
+
+        const auto& views = _values.get();
+
+        return &views[offset];
     }
 
     std::span<const types::List::Primitive> all() const {
@@ -546,7 +584,6 @@ private:
     friend DataPartMerger;
 
     ListContainer _values;
-    std::unordered_map<EntityID, size_t> _entityIndexMap;
 };
 
 }

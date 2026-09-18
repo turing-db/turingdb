@@ -3844,9 +3844,9 @@ std::optional<typename T::Primitive> readWrittenValue(NLWrittenValues& written,
 template <typename T>
 CommitWriteBuffer::SupportedTypeVariant pendingValueOf(typename T::Primitive value) {
     if constexpr (std::is_same_v<T, types::String>) {
-        return std::string(value);
+        return std::optional<std::string> {std::string(value)};
     } else {
-        return value;
+        return std::optional<typename T::Primitive> {value};
     }
 }
 

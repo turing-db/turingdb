@@ -48,6 +48,8 @@ DumpResult<void> ListPropertyContainerDumper::dump(const TypedPropertyContainer<
 
     const uint64_t idPageCount = GraphDumpHelper::getPageCountForItems(propCount, idCountPerPage);
     const uint64_t bytePageCount = GraphDumpHelper::getPageCountForItems(totalBytes, bytesPerPage);
+    const uint64_t nullCount = props.nullIds().size();
+    const uint64_t nullPageCount = GraphDumpHelper::getPageCountForItems(nullCount, idCountPerPage);
 
     GraphDumpHelper::writeFileHeader(_writer);
     _writer.writeToCurrentPage(ValueType::List);
@@ -55,6 +57,8 @@ DumpResult<void> ListPropertyContainerDumper::dump(const TypedPropertyContainer<
     _writer.writeToCurrentPage(totalBytes);
     _writer.writeToCurrentPage(idPageCount);
     _writer.writeToCurrentPage(bytePageCount);
+    _writer.writeToCurrentPage(nullCount);
+    _writer.writeToCurrentPage(nullPageCount);
 
     {
         // IDs
@@ -100,6 +104,8 @@ DumpResult<void> ListPropertyContainerDumper::dump(const TypedPropertyContainer<
             offset += countInPage;
         }
     }
+
+    GraphDumpHelper::writeEntityIDPages(_writer, props.nullIds(), idCountPerPage);
 
     _writer.finish();
 
