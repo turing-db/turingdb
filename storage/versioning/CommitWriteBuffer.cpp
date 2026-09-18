@@ -77,14 +77,6 @@ void addNodePropertyValue(DataPartBuilder& builder, NodeID nodeID, PropertyTypeI
     builder.addNodeProperty<Type>(nodeID, propID, value);
 }
 
-void addNodePropertyValue(DataPartBuilder& builder, NodeID nodeID, PropertyTypeID propID, const EncodedList& value) {
-    if (builder.hasProperty<types::List>(nodeID, propID)) {
-        return;
-    }
-
-    builder.addNodeProperty(nodeID, propID, value);
-}
-
 template <typename T>
 void addEdgePropertyValue(DataPartBuilder& builder,
                           const EdgeRecord& edge,
@@ -98,18 +90,6 @@ void addEdgePropertyValue(DataPartBuilder& builder,
     }
 
     builder.addEdgeProperty<Type>(edge, propID, value, srcLblSet);
-}
-
-void addEdgePropertyValue(DataPartBuilder& builder,
-                          const EdgeRecord& edge,
-                          PropertyTypeID propID,
-                          const EncodedList& value,
-                          LabelSetHandle srcLblSet = {}) {
-    if (builder.hasProperty<types::List>(edge._edgeID, propID)) {
-        return;
-    }
-
-    builder.addEdgeProperty(edge, propID, value, srcLblSet);
 }
 
 }

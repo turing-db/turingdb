@@ -198,24 +198,35 @@ void DataPartBuilder::addEdgeProperty<types::Embedding>(const EdgeRecord& edge,
     _edgeProperties->add<types::Embedding>(ptID, edge._edgeID.getValue(), value);
 }
 
-void DataPartBuilder::addNodeProperty(NodeID nodeID, PropertyTypeID ptID, const EncodedList& value) {
+template <SupportedType T>
+requires std::same_as<T, types::List>
+void DataPartBuilder::addNodeProperty(NodeID nodeID,
+                                      PropertyTypeID ptID,
+                                      std::optional<typename T::OwningPrimitive>&& value) {
     if (!_nodeProperties->hasPropertyType(ptID)) {
-        _nodeProperties->registerPropertyType<types::List>(ptID);
+        _nodeProperties->registerPropertyType<T>(ptID);
     }
 
     if (nodeID < _firstNodeID) {
         _patchNodeLabelSets.emplace(nodeID, LabelSetHandle {});
     }
 
-    _nodeProperties->add<types::List>(ptID, nodeID.getValue(), value);
+    if (!value.has_value()) {
+        _nodeProperties->add<T>(ptID, nodeID.getValue(), std::optional<typename T::Primitive> {});
+        return;
+    }
+
+    _nodeProperties->add<T>(ptID, nodeID.getValue(), *value);
 }
 
+template <SupportedType T>
+requires std::same_as<T, types::List>
 void DataPartBuilder::addEdgeProperty(const EdgeRecord& edge,
                                       PropertyTypeID ptID,
-                                      const EncodedList& value,
+                                      std::optional<typename T::OwningPrimitive>&& value,
                                       LabelSetHandle srcLblSet/*={}*/) {
     if (!_edgeProperties->hasPropertyType(ptID)) {
-        _edgeProperties->registerPropertyType<types::List>(ptID);
+        _edgeProperties->registerPropertyType<T>(ptID);
     }
 
     if (edge._edgeID < _firstEdgeID) {
@@ -226,8 +237,21 @@ void DataPartBuilder::addEdgeProperty(const EdgeRecord& edge,
         _patchNodeLabelSets.emplace(edge._nodeID, srcLblSet);
     }
 
-    _edgeProperties->add<types::List>(ptID, edge._edgeID.getValue(), value);
+    if (!value.has_value()) {
+        _edgeProperties->add<T>(ptID, edge._edgeID.getValue(), std::optional<typename T::Primitive> {});
+        return;
+    }
+
+    _edgeProperties->add<T>(ptID, edge._edgeID.getValue(), *value);
 }
+
+template void DataPartBuilder::addNodeProperty<types::List>(NodeID,
+                                                            PropertyTypeID,
+                                                            std::optional<types::List::OwningPrimitive>&&);
+template void DataPartBuilder::addEdgeProperty<types::List>(const EdgeRecord&,
+                                                            PropertyTypeID,
+                                                            std::optional<types::List::OwningPrimitive>&&,
+                                                            LabelSetHandle);
 
 size_t DataPartBuilder::getNodeEmbeddingDimension(PropertyTypeID ptID) const {
     for (const WeakArc<DataPart>& part : rv::reverse(_view.dataparts())) {

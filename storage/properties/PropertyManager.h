@@ -78,6 +78,12 @@ public:
         container.add(entityID, arg);
     }
 
+    template <SupportedType T>
+    void add(PropertyTypeID ptID, EntityID entityID, const typename T::OwningPrimitive& arg) {
+        TypedPropertyContainer<T>& container = getMutableContainer<T>(ptID);
+        container.add(entityID, arg);
+    }
+
     bool hasPropertyType(PropertyTypeID ptID) const {
         return _map.contains(ptID);
     }
