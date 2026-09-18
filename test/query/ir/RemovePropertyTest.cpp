@@ -115,6 +115,13 @@ TEST_F(RemovePropertyTest, removesThePropertyAPendingNodeWasCreatedWith) {
     expectWriteRows("CREATE (t:Tag {name: 'x'}) WITH t REMOVE t.name RETURN t.name", {{"null"}});
 }
 
+// The same removal, in the part that created the node rather than behind a WITH
+TEST_F(RemovePropertyTest, removesThePropertyInThePartThatCreatedTheNode) {
+    applyWrite("CREATE (t:Tag {name: 'x', dob: '01/01'}) REMOVE t.name");
+
+    expectRows("MATCH (t:Tag) RETURN t.name, t.dob", {{"null", "01/01"}});
+}
+
 TEST_F(RemovePropertyTest, rejectsTheRemovalOfALabel) {
     expectWriteRejected("MATCH (p:Person {name: 'Remy'}) REMOVE p:Founder",
                         QueryStatus::Status::PARSE_ERROR,

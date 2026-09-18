@@ -24,4 +24,11 @@ void extractColumnProperties(const Column* column,
                              PropertyTypeID propID,
                              CommitWriteBuffer::UntypedProperties& buf);
 
+// The disengaged value of one property, repeated over every row. A write of a null has no
+// value column to read a type off, so the property's own type picks the variant it stages.
+void fillNullProperties(size_t rowCount,
+                        PropertyTypeID propID,
+                        ValueType valueType,
+                        CommitWriteBuffer::UntypedProperties& buf);
+
 }

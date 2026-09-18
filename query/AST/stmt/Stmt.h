@@ -14,6 +14,7 @@ public:
         CREATE,
         MERGE,
         SET,
+        REMOVE,
         DELETE,
         RETURN,
         SHORTESTPATH,
