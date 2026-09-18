@@ -35,6 +35,7 @@ class Symbol;
 class NodePattern;
 class EdgePattern;
 class ListExpr;
+class ListComprehensionExpr;
 class MapLiteral;
 
 class ExprAnalyzer {
@@ -61,6 +62,7 @@ public:
     void analyzeSymbolExpr(SymbolExpr* expr);
     void analyzeLiteralExpr(LiteralExpr* expr);
     void analyzeListExpr(ListExpr* expr);
+    void analyzeListComprehensionExpr(ListComprehensionExpr* expr);
     void analyzeCaseExpr(CaseExpr* expr);
     void analyzeStringExpr(StringExpr* expr);
     void analyzeEntityTypeExpr(EntityTypeExpr* expr);

@@ -3214,6 +3214,36 @@ void collectListEmit(const Column* values,
     }
 }
 
+// Every cell of the column is a list of its own, so none of them is the null a
+// comprehension hands its row back.
+bool presentCell(const Column*, size_t) {
+    return false;
+}
+
+bool absentListCell(const Column* source, size_t row) {
+    return !(*static_cast<const ColumnOptVector<ListView>*>(source))[row].has_value();
+}
+
+template <typename Primitive>
+bool absentValueCell(const Column* source, size_t row) {
+    return !(*static_cast<const ColumnOptVector<Primitive>*>(source))[row].has_value();
+}
+
+// A cell of a type-erased column carries its own tag, so the null is the one that tag
+// names rather than a cell the column does not hold.
+bool absentTaggedCell(const Column* source, size_t row) {
+    const ListElementView element = (*static_cast<const ColumnVector<ListElementView>*>(source))[row];
+
+    return element.getTag() == ListBufferTypeTag::Null;
+}
+
+bool absentOptTaggedCell(const Column* source, size_t row) {
+    const std::optional<ListElementView>& element =
+        (*static_cast<const ColumnOptVector<ListElementView>*>(source))[row];
+
+    return !element.has_value() || element->getTag() == ListBufferTypeTag::Null;
+}
+
 // Read one cell of a nullable value column as the element it contributes to a list: the
 // value it holds, or the tagged null Cypher leaves in the list where the row has none.
 template <typename Primitive>
@@ -5347,6 +5377,124 @@ void NLExecutor::runMakeList(NLExecutionContext*, NLFunctionData* data) {
     }
 }
 
+void NLExecutor::runListComprehension(NLExecutionContext* context, NLFunctionData* data) {
+    NLListComprehensionData* comprehension = static_cast<NLListComprehensionData*>(data);
+
+    const Column* source = comprehension->getSource();
+    const size_t sourceRows = source->size();
+
+    const NLStmtContainer* body = comprehension->getStmts();
+    const NLUnwindElementCountFunction elementCount = comprehension->getElementCountFunc();
+    const NLUnwindElementEmitFunction elementEmit = comprehension->getElementEmitFunc();
+    const NLListItemReadFunction valueRead = comprehension->getValueRead();
+    const Column* value = comprehension->getValue();
+    LocalMemory* const memory = comprehension->getMemory();
+    const size_t chunkSize = context->getChunkSize();
+
+    ColumnVector<size_t>* rows = comprehension->getRows();
+    ColumnVector<size_t>* positions = comprehension->getPositions();
+    ColumnVector<uint64_t>* rowTags = comprehension->getRowTags();
+
+    // What the whole step gathered, row by row: the elements arrive in row order, so a
+    // row's elements are one contiguous run of this buffer and the counts locate it
+    std::vector<ListBuffer<>::ListItemVariant>& staged = comprehension->stagedElements();
+    std::vector<size_t>& stagedCounts = comprehension->stagedCounts();
+    staged.clear();
+    stagedCounts.assign(sourceRows, 0);
+
+    // Walk every (row, element) pair in row order, as runUnwindLoop does: sourceRow /
+    // elementIndex is the cursor into that flattened sequence, and a cell contributing
+    // nothing - a null, an empty list - is skipped
+    size_t sourceRow = 0;
+    size_t elementIndex = 0;
+    size_t rowElements = 0;
+
+    const auto openNextRow = [&]() {
+        while (sourceRow < sourceRows) {
+            rowElements = elementCount(source, sourceRow);
+            if (rowElements > 0) {
+                return;
+            }
+
+            sourceRow++;
+        }
+    };
+
+    openNextRow();
+
+    while (sourceRow < sourceRows) {
+        std::vector<size_t>& rowsRaw = rows->getRaw();
+        std::vector<size_t>& positionsRaw = positions->getRaw();
+        std::vector<uint64_t>& rowTagsRaw = rowTags->getRaw();
+        rowsRaw.clear();
+        positionsRaw.clear();
+        rowTagsRaw.clear();
+
+        while (rowsRaw.size() < chunkSize && sourceRow < sourceRows) {
+            rowsRaw.push_back(sourceRow);
+            rowTagsRaw.push_back(sourceRow);
+
+            if (elementEmit) {
+                positionsRaw.push_back(elementIndex);
+            }
+
+            elementIndex++;
+
+            if (elementIndex == rowElements) {
+                elementIndex = 0;
+                sourceRow++;
+                openNextRow();
+            }
+        }
+
+        if (elementEmit) {
+            elementEmit(source, rows, positions, comprehension->getElementOutput());
+        }
+
+        for (const NLCarriedColumn& carriedColumn : comprehension->carriedColumns()) {
+            const auto gatherFunc = carriedColumn.getGatherFunc();
+            gatherFunc(carriedColumn.getInput(), rows, carriedColumn.getOutput());
+        }
+
+        runBody(context, body);
+
+        // The body cut the tag alongside the elements a WHERE dropped, so what comes back
+        // is one tag per surviving element, naming the row whose list it goes into
+        const std::vector<uint64_t>& keptRaw =
+            static_cast<const ColumnVector<uint64_t>*>(comprehension->getYieldedRowTags())->getRaw();
+
+        for (size_t element = 0; element < keptRaw.size(); element++) {
+            staged.push_back(valueRead(value, element, memory));
+            stagedCounts[keptRaw[element]]++;
+        }
+    }
+
+    const NLCellAbsentFunction cellAbsent = comprehension->getCellAbsentFunc();
+    ListBuffer<>& listBuffer = comprehension->getMemory()->listBuffer();
+
+    std::vector<std::optional<ListView>>& resultRaw =
+        static_cast<ColumnOptVector<ListView>*>(comprehension->getResult())->getRaw();
+    resultRaw.clear();
+    resultRaw.reserve(sourceRows);
+
+    size_t stagedBegin = 0;
+    for (size_t row = 0; row < sourceRows; row++) {
+        const size_t rowCount = stagedCounts[row];
+        const std::span<const ListBuffer<>::ListItemVariant> elements {staged.data() + stagedBegin, rowCount};
+        stagedBegin += rowCount;
+
+        // A cell holding no list gives its row no list either, which is what Cypher reads
+        // `[x IN null | x]` as - as opposed to the empty list a cell whose elements the
+        // predicate all dropped gives
+        if (cellAbsent(source, row)) {
+            resultRaw.push_back(std::nullopt);
+            continue;
+        }
+
+        resultRaw.push_back(listBuffer.insert(elements));
+    }
+}
+
 NLListItemReadFunction NLExecutor::selectValueListItemRead(ValueType valueType) {
     NLListItemReadFunction selected = nullptr;
 
@@ -5376,6 +5524,29 @@ NLListItemReadFunction NLExecutor::selectTaggedListItemRead(bool nullable) {
 
 NLListItemReadFunction NLExecutor::selectOwnedStringListItemRead(bool nullable) {
     return nullable ? &optOwnedStringListItem : &ownedStringListItem;
+}
+
+NLCellAbsentFunction NLExecutor::selectPresentCell() {
+    return &presentCell;
+}
+
+NLCellAbsentFunction NLExecutor::selectListCellAbsent() {
+    return &absentListCell;
+}
+
+NLCellAbsentFunction NLExecutor::selectTaggedCellAbsent(bool nullable) {
+    return nullable ? &absentOptTaggedCell : &absentTaggedCell;
+}
+
+NLCellAbsentFunction NLExecutor::selectValueCellAbsent(ValueType valueType) {
+    NLCellAbsentFunction selected = nullptr;
+
+    const auto select = [&]<SupportedType T>() {
+        selected = &absentValueCell<typename T::Primitive>;
+    };
+    ValueTypeDispatcher(valueType).execute(select);
+
+    return selected;
 }
 
 NLCaseResetFn NLExecutor::selectCaseReset(ValueType valueType) {

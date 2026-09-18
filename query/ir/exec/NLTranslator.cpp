@@ -738,6 +738,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateCase(caseOp, body);
         } else if (nl::MakeList makeList = mlir::dyn_cast<nl::MakeList>(operation)) {
             translateMakeList(makeList, body);
+        } else if (nl::ListComprehension listComprehension = mlir::dyn_cast<nl::ListComprehension>(operation)) {
+            translateListComprehension(listComprehension, body);
         } else if (lookupUnaryFunctionSelector(operation)) {
             translateUnaryFunction(&operation, body);
         } else if (lookupBinaryFunctionSelector(operation)) {
@@ -860,7 +862,7 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateProcedure(procedureOp, body);
         } else if (nl::Output output = mlir::dyn_cast<nl::Output>(operation)) {
             translateOutput(output, body);
-        } else if (mlir::isa<nl::Yield, mlir::func::ReturnOp>(operation)) {
+        } else if (mlir::isa<nl::Yield, nl::ComprehensionYield, mlir::func::ReturnOp>(operation)) {
             // Structural terminators carry no behavior
         } else if (!_systemTranslator->translate(operation, body)) {
             throw IRException(fmt::format("NLTranslator cannot translate operation '{}'",
@@ -1189,6 +1191,52 @@ NLUnwindElementEmitFunction NLTranslator::selectListUnwindEmit(mlir::Type chunkT
     return NLExecutor::selectListUnwindElementEmit(sourceIsNullable);
 }
 
+// A column whose cells hold more than the element - a list, or a tagged scalar that may
+// itself be a list - drains through its own emit. A scalar column already holds one
+// element per cell, so its element column is the source's own rows gathered by the step:
+// a carried column like the rest, and no drain here.
+void NLTranslator::selectElementDrain(mlir::Type sourceElement,
+                                      mlir::Type elementChunkType,
+                                      NLUnwindElementCountFunction& elementCount,
+                                      NLUnwindElementEmitFunction& elementEmit) {
+    const auto sourceNullable = mlir::dyn_cast<storage::NullableType>(sourceElement);
+    const bool drainsNullableList = sourceNullable && llvm::isa<storage::ListType>(sourceNullable.getValueType());
+
+    elementEmit = nullptr;
+
+    if (llvm::isa<storage::ListType>(sourceElement) || drainsNullableList) {
+        elementCount = NLExecutor::selectListUnwindElementCount(drainsNullableList);
+        elementEmit = selectListUnwindEmit(elementChunkType, drainsNullableList);
+    } else if (llvm::isa<storage::ListElementType>(sourceElement)) {
+        elementCount = NLExecutor::selectTaggedUnwindElementCount();
+        elementEmit = NLExecutor::selectTaggedUnwindElementEmit();
+    } else if (isNullableListElement(sourceElement)) {
+        elementCount = NLExecutor::selectOptTaggedUnwindElementCount();
+        elementEmit = NLExecutor::selectOptTaggedUnwindElementEmit();
+    } else if (sourceNullable) {
+        elementCount = NLExecutor::selectOptUnwindElementCount(valueTypeFromElementType(sourceNullable.getValueType()));
+    } else {
+        elementCount = NLExecutor::selectValueUnwindElementCount();
+    }
+}
+
+NLCellAbsentFunction NLTranslator::selectCellAbsent(mlir::Type sourceElement) {
+    if (llvm::isa<storage::ListElementType>(sourceElement)) {
+        return NLExecutor::selectTaggedCellAbsent(/*nullable=*/false);
+    } else if (isNullableListElement(sourceElement)) {
+        return NLExecutor::selectTaggedCellAbsent(/*nullable=*/true);
+    } else if (isNullableList(sourceElement)) {
+        return NLExecutor::selectListCellAbsent();
+    }
+
+    const auto sourceNullable = mlir::dyn_cast<storage::NullableType>(sourceElement);
+    if (!sourceNullable) {
+        return NLExecutor::selectPresentCell();
+    }
+
+    return NLExecutor::selectValueCellAbsent(valueTypeFromElementType(sourceNullable.getValueType()));
+}
+
 void NLTranslator::translateUnwindLoop(const IteratorConfig& config,
                                        mlir::Block& loopBody,
                                        NLLimitState* limit,
@@ -1202,31 +1250,9 @@ void NLTranslator::translateUnwindLoop(const IteratorConfig& config,
     // An unwind binds the elements first, then one variable per carried column.
     const mlir::Value elementValue = loopBody.getArgument(0);
 
-    // A column whose cells hold more than the element - a list, or a tagged scalar that
-    // may itself be a list - drains through its own emit. A scalar column already holds
-    // one element per cell, so its element column is the source's own rows gathered by
-    // the step: a carried column like the rest, and no drain here.
     NLUnwindElementCountFunction elementCount = nullptr;
     NLUnwindElementEmitFunction elementEmit = nullptr;
-
-    const auto sourceNullable = mlir::dyn_cast<storage::NullableType>(sourceElement);
-    const bool unwindsNullableList = sourceNullable && llvm::isa<storage::ListType>(sourceNullable.getValueType());
-
-    if (llvm::isa<storage::ListType>(sourceElement) || unwindsNullableList) {
-        elementCount = NLExecutor::selectListUnwindElementCount(unwindsNullableList);
-        elementEmit = selectListUnwindEmit(elementValue.getType(), unwindsNullableList);
-    } else if (llvm::isa<storage::ListElementType>(sourceElement)) {
-        elementCount = NLExecutor::selectTaggedUnwindElementCount();
-        elementEmit = NLExecutor::selectTaggedUnwindElementEmit();
-    } else if (isNullableListElement(sourceElement)) {
-        elementCount = NLExecutor::selectOptTaggedUnwindElementCount();
-        elementEmit = NLExecutor::selectOptTaggedUnwindElementEmit();
-    } else if (sourceNullable) {
-        const ValueType valueType = valueTypeFromElementType(sourceNullable.getValueType());
-        elementCount = NLExecutor::selectOptUnwindElementCount(valueType);
-    } else {
-        elementCount = NLExecutor::selectValueUnwindElementCount();
-    }
+    selectElementDrain(sourceElement, elementValue.getType(), elementCount, elementEmit);
 
     Column* const elementOutput = elementEmit ? allocColumn(elementValue) : nullptr;
 
@@ -2323,6 +2349,81 @@ void NLTranslator::translateMakeList(nl::MakeList makeList, NLStmtContainer* bod
     }
 
     body->emplaceStmt(&NLExecutor::runMakeList, data);
+}
+
+void NLTranslator::translateListComprehension(nl::ListComprehension comprehension, NLStmtContainer* body) {
+    const mlir::Value sourceValue = comprehension.getSource();
+    const Column* source = getColumn(sourceValue);
+
+    const mlir::Type sourceElement = mlir::cast<nl::ChunkType>(sourceValue.getType()).getElementType();
+
+    // The body binds the element, then the row tag, then one chunk per carried column -
+    // the block argument order of the op's region.
+    mlir::Block& bodyBlock = comprehension.getBody().front();
+    const mlir::Value elementValue = bodyBlock.getArgument(0);
+    const mlir::Value rowTagValue = bodyBlock.getArgument(1);
+
+    NLUnwindElementCountFunction elementCount = nullptr;
+    NLUnwindElementEmitFunction elementEmit = nullptr;
+    selectElementDrain(sourceElement, elementValue.getType(), elementCount, elementEmit);
+
+    Column* const elementOutput = elementEmit ? allocColumn(elementValue) : nullptr;
+
+    const mlir::Value resultValue = comprehension.getResult();
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    ColumnVector<uint64_t>* const rowTags =
+        static_cast<ColumnVector<uint64_t>*>(allocColumn(rowTagValue));
+
+    NLListComprehensionData* data =
+        _program->allocFunctionData<NLListComprehensionData>(source,
+                                                             elementCount,
+                                                             elementEmit,
+                                                             selectCellAbsent(sourceElement),
+                                                             elementOutput,
+                                                             rowTags,
+                                                             result,
+                                                             _memory);
+
+    const size_t chunkSize = _program->getChunkSize();
+    data->getRows()->reserve(chunkSize);
+    data->getPositions()->reserve(chunkSize);
+    rowTags->reserve(chunkSize);
+
+    if (!elementEmit) {
+        const NLCarriedColumn elementColumn(source,
+                                            allocColumn(elementValue),
+                                            selectGatherForChunkType(sourceValue.getType()));
+        data->addCarriedColumn(elementColumn);
+    }
+
+    const mlir::OperandRange carriedColumns = comprehension.getColumnsToFilter();
+    for (size_t carriedIndex = 0; carriedIndex < carriedColumns.size(); carriedIndex++) {
+        const mlir::Value carriedValue = carriedColumns[carriedIndex];
+        const mlir::Value bodyChunk = bodyBlock.getArgument(static_cast<unsigned>(2 + carriedIndex));
+
+        const NLCarriedColumn carriedColumn(getColumn(carriedValue),
+                                            allocColumn(bodyChunk),
+                                            selectGatherForChunkType(bodyChunk.getType()));
+        data->addCarriedColumn(carriedColumn);
+    }
+
+    translateBlock(bodyBlock, data->getStmts());
+
+    // ListComprehension::verify guarantees the terminator, so a body without one here
+    // means unverified IR.
+    nl::ComprehensionYield yield = mlir::dyn_cast<nl::ComprehensionYield>(bodyBlock.back());
+    if (!yield) {
+        throw IRException("nl.list_comprehension body does not end with an nl.comprehension_yield");
+    }
+
+    const mlir::Value valueValue = yield.getValue();
+    data->setYield(getColumn(yield.getRowTags()),
+                   getColumn(valueValue),
+                   selectListItemRead(valueValue.getType()));
+
+    body->emplaceStmt(&NLExecutor::runListComprehension, data);
 }
 
 void NLTranslator::translateCase(nl::Case caseOp, NLStmtContainer* body) {

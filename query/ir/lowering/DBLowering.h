@@ -193,6 +193,11 @@ private:
     void lowerVectorSearch(mlir::db::VectorSearch vectorSearch);
     void lowerUnwind(mlir::db::Unwind unwind);
     void lowerMakeList(mlir::db::MakeList makeList);
+
+    // Lowers `[x IN xs WHERE p(x) | f(x)]`: the body is lowered into a region of its own
+    // and the op built around it, since the type of the lists is the type of what that
+    // body yields
+    void lowerListComprehension(mlir::db::ListComprehension comprehension);
     void lowerScanEdges(mlir::db::ScanEdges scanEdges);
     void lowerScanEdgesByType(mlir::db::ScanEdgesByType scanEdgesByType);
     void lowerScanOutEdgesByLabelSrc(mlir::db::ScanOutEdgesByLabelSrc scanOutEdgesByLabelSrc);

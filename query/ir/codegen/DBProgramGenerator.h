@@ -49,6 +49,7 @@ class ExprChain;
 class IndexExpr;
 class Literal;
 class ListLiteral;
+class ListComprehensionExpr;
 class LoadCSVStmt;
 class MatchStmt;
 class MergeStmt;
@@ -79,7 +80,10 @@ public:
     using DefinedVars = std::unordered_set<const VariableDependency*>;
     using ExprValueMap = std::unordered_map<const Expr*, mlir::Value>;
     using ProjectedColumnMap = std::unordered_map<const VarDecl*, mlir::Value>;
+    using EdgeTypeColumnMap = std::unordered_map<const VariableDependency*, mlir::Value>;
     using ColumnPredicate = llvm::function_ref<bool(mlir::Value)>;
+    using DeclPredicate = llvm::function_ref<bool(const VarDecl*)>;
+    using DeclSet = std::unordered_set<const VarDecl*>;
     using VariableColumnBinding = llvm::function_ref<void(const VarDecl*, std::string_view, mlir::Value)>;
 
     // Maps a Cypher variable to the last column defined for it, the one the projection
@@ -144,13 +148,19 @@ private:
     struct PartScope {
         VariableIdentityMap _varMap;
 
-        std::unordered_map<const VariableDependency*, mlir::Value> _edgeTypeMap;
+        EdgeTypeColumnMap _edgeTypeMap;
 
         ExprValueMap _exprMap;
 
         // Maps each projected item to the column it produced, under the declaration the
         // alias of that item shares with it
         ProjectedColumnMap _projectedColumns;
+
+        // The element column a list comprehension's variable holds while the body of that
+        // comprehension is translated: the block argument of the op's region. Nothing
+        // outside that body names the variable, so the binding stands only while it is
+        // being translated
+        ProjectedColumnMap _comprehensionElements;
 
         // The column a CALL produced for each of its yielded return values. A yielded
         // variable appears in no pattern, so it is not a VDG variable and cannot live in
@@ -315,6 +325,7 @@ private:
         llvm::SmallVector<const VariableDependency*> _variables;
         llvm::SmallVector<const VariableDependency*> _edgeTypeVariables;
         llvm::SmallVector<size_t> _yieldedIndices;
+        llvm::SmallVector<const VarDecl*> _comprehensionDecls;
     };
 
     // Generates the statements a part writes ahead of its first MATCH that bind variables
@@ -582,6 +593,11 @@ private:
     // take what this block binds.
     void collectInFlightColumns(InFlightColumns& inFlight);
 
+    // The ones of them @param carries accepts, under the declaration each is bound to: a
+    // list comprehension repeats a carried column once per element, so it takes along
+    // only what its body names
+    void collectInFlightColumns(InFlightColumns& inFlight, DeclPredicate carries);
+
     // Cut the rows in flight with a db.skip or a db.limit, given as @tparam CutOp
     template <typename CutOp>
     void cutAllColumns(uint64_t count);
@@ -589,8 +605,8 @@ private:
     // Rebind them to an op's results, so later ops read what it produced. firstResult is
     // where its pass-through results start - zero for an op that only takes them (a
     // filter), past its own results for one that adds some (a call).
-    void rebindInFlightColumns(mlir::Operation::result_range results,
-                               size_t firstResult,
+    void rebindInFlightColumns(mlir::ValueRange columns,
+                               size_t firstColumn,
                                const InFlightColumns& inFlight);
 
     // The column a yielded variable holds, or a null Value when no CALL yielded it.
@@ -777,6 +793,15 @@ private:
     void translateBinaryExpr(const Expr* expr, const BinaryExpr* binExpr);
     void translateStringExpr(const Expr* expr);
     void translateCaseExpr(const Expr* expr, const CaseExpr* caseExpr);
+
+    // Emits the db.list_comprehension of `[x IN xs WHERE p(x) | f(x)]`: the source column,
+    // the columns in flight as its carry set, and a body region binding the element to
+    // the variable and yielding what each one contributes
+    void translateListComprehensionExpr(const Expr* expr, const ListComprehensionExpr* comprehension);
+
+    // The variables @param expr reads at any depth: the symbols it names and the entities
+    // whose properties and labels it reads
+    void collectReadVariables(const Expr* expr, DeclSet& read) const;
 
     // The condition one WHEN value puts on a row: the value itself in the generic form,
     // and the comparison of @param subject against it in the simple one
