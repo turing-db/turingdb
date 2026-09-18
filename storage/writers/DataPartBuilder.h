@@ -55,11 +55,17 @@ public:
 
     // A list arrives from the write buffer as its owning encoding rather than as a
     // ListView, which only names elements the buffer that built it still owns.
-    void addNodeProperty(NodeID nodeID, PropertyTypeID ptID, const EncodedList& value);
+    template <SupportedType T>
+    requires std::same_as<T, types::List>
+    void addNodeProperty(NodeID nodeID,
+                         PropertyTypeID ptID,
+                         std::optional<typename T::OwningPrimitive>&& value);
 
+    template <SupportedType T>
+    requires std::same_as<T, types::List>
     void addEdgeProperty(const EdgeRecord& edge,
                          PropertyTypeID ptID,
-                         const EncodedList& value,
+                         std::optional<typename T::OwningPrimitive>&& value,
                          LabelSetHandle srcLblSet = {});
 
     const EdgeRecord& addEdge(EdgeTypeID typeID, NodeID srcID, NodeID tgtID);

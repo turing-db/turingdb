@@ -1,5 +1,7 @@
 #include "NLWriteProperties.h"
 
+#include <optional>
+
 #include "columns/AllowedKinds.h"
 #include "columns/ColumnConst.h"
 #include "columns/ColumnKind.h"
@@ -10,7 +12,7 @@
 #include "reader/GraphReader.h"
 #include "views/GraphView.h"
 
-#include <optional>
+#include "IRException.h"
 
 using namespace db;
 
