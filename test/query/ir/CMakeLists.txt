@@ -2776,3 +2776,7 @@ target_link_libraries(test_query_ir_integer_sum_past_null PRIVATE
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_integer_sum_past_null PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# What REMOVE takes off a node or an edge, and what it leaves alone.
+add_turing_test(test_query_ir_remove_property RemovePropertyTest.cpp)
+target_link_libraries(test_query_ir_remove_property PRIVATE turing_ir_test_write_query_s)
