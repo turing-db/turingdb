@@ -18,7 +18,10 @@ set(procedures_sources
     GetNodesProcedure.cpp
     GetNodeEdgesProcedure.cpp
     GnnNeighbourhoodSampleProcedure.cpp
-    ProcUtils.cpp)
+    GraphSAGEProcedure.cpp
+
+    ProcUtils.cpp
+)
 
 add_library(turing_db_procedures_s STATIC ${procedures_sources})
 

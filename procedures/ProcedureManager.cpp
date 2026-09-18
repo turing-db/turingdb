@@ -15,6 +15,7 @@
 #include "GetNodesProcedure.h"
 #include "GetNodeEdgesProcedure.h"
 #include "GnnNeighbourhoodSampleProcedure.h"
+#include "GraphSAGEProcedure.h"
 
 using namespace db;
 
@@ -49,6 +50,7 @@ void ProcedureManager::init() {
     ProcedureNamespace* gnn = createNamespace("gnn");
 
     GnnNeighbourhoodSampleProcedure::registerProcedure(gnn);
+    GraphSAGEProcedure::registerProcedure(gnn);
 }
 
 void ProcedureManager::getNamespaces(Namespaces& result) const {
