@@ -398,6 +398,7 @@ public:
 
     // Gather for a nullable value chunk of this value type (sort emit re-chunk).
     static NLGatherFunction selectOptGatherFunction(ValueType valueType);
+    static NLGatherFunction selectOptGatherFunction(NLChunkKind kind);
 
     // Gather for the count result chunk: one non-nullable uint64 tally per row.
     static NLGatherFunction selectCountGatherFunction();
@@ -411,6 +412,7 @@ public:
     // chunk of this value type. Used by nl.sort_collect.
     static NLAppendFunction selectAppendFunction(NLChunkKind kind);
     static NLAppendFunction selectOptAppendFunction(ValueType valueType);
+    static NLAppendFunction selectOptAppendFunction(NLChunkKind kind);
     static NLAppendFunction selectCountAppendFunction();
 
     // The 3-way row comparator for an ID key column of this kind / a nullable
@@ -418,6 +420,7 @@ public:
     // value type with no order (an embedding), which cannot be a sort key.
     static NLCompareFunction selectCompareFunction(NLChunkKind kind);
     static NLCompareFunction selectOptCompareFunction(ValueType valueType);
+    static NLCompareFunction selectOptCompareFunction(NLChunkKind kind);
 
     // The 3-way row comparator for a collected list chunk, ordering two lists
     // lexicographically over their elements.
@@ -465,9 +468,11 @@ public:
 
     // Block-repeat for a nullable value chunk of this value type (outer column).
     static NLBroadcastFunction selectOptBlockRepeatFunction(ValueType valueType);
+    static NLBroadcastFunction selectOptBlockRepeatFunction(NLChunkKind kind);
 
     // Tile for a nullable value chunk of this value type (inner column).
     static NLBroadcastFunction selectOptTileFunction(ValueType valueType);
+    static NLBroadcastFunction selectOptTileFunction(NLChunkKind kind);
 
     // The fill that lays a constant column's single value out over a step's rows,
     // for a nullable value chunk of this value type (nl.broadcast_constant). A chunk
@@ -546,6 +551,7 @@ public:
 
     // Range copy for a nullable value chunk of this value type (skip suffix copy).
     static NLCopyFunction selectOptCopyFunction(ValueType valueType);
+    static NLCopyFunction selectOptCopyFunction(NLChunkKind kind);
 
     // Row-key serialization for an ID chunk of this kind / a nullable value chunk
     // of this value type. Used by nl.distinct_filter to build each row's seen-set
@@ -553,6 +559,7 @@ public:
     // as a key (an embedding), which cannot be a DISTINCT key.
     static NLKeyAppendFunction selectKeyAppendFunction(NLChunkKind kind);
     static NLKeyAppendFunction selectOptKeyAppendFunction(ValueType valueType);
+    static NLKeyAppendFunction selectOptKeyAppendFunction(NLChunkKind kind);
 
     // Hash and equality for a join key: an ID chunk of this kind, a nullable value chunk
     // of this value type, a plain numeric chunk, a type-erased cell. Used by
@@ -579,6 +586,7 @@ public:
     // counts only its present values. Used by nl.count_update.
     static size_t countAllRows(const Column* column);
     static NLCountFunction selectOptCountFunction(ValueType valueType);
+    static NLCountFunction selectOptCountFunction(NLChunkKind kind);
 
     // Non-null row count for a COUNT over a node, edge or edge-type ID chunk, whose null
     // is an invalid ID rather than a missing optional; null for a kind that has no such
@@ -636,6 +644,7 @@ public:
     // grow the key buffers with each new group's key values.
     static NLGroupKeyGatherFunction selectGroupKeyGather(NLChunkKind kind);
     static NLGroupKeyGatherFunction selectOptGroupKeyGather(ValueType valueType);
+    static NLGroupKeyGatherFunction selectOptGroupKeyGather(NLChunkKind kind);
 
     // The collect fold for a column of this value type: appends each present value to
     // its group's list in the flat value buffer. Only the scalar value types are

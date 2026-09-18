@@ -259,65 +259,60 @@ const BinaryFunctionLowering* lookupBinaryFunctionLowering(mlir::Operation& oper
     return it == binaryFunctionLowerings.end() ? nullptr : &it->second;
 }
 
-// The chunk a procedure's return value of this type is read as. The element type
-// names the concrete column the procedure writes into, so an nl chunk of a
-// procedure result is as fully typed as a property chunk: an ID column for the
-// entity types, the storage placeholder for the ones with no MLIR builtin (a value
-// type code, an owned string, a list) and the matching builtin for the numbers.
-nl::ChunkType procedureChunkType(mlir::OpBuilder& builder, ProcedureType procedureType) {
+mlir::Type procedureElementType(mlir::OpBuilder& builder, ProcedureType procedureType) {
     mlir::MLIRContext* const context = builder.getContext();
 
     switch (procedureType) {
         case ProcedureType::NODE:
-            return nl::ChunkType::get(context, storage::NodeIDType::get(context));
+            return storage::NodeIDType::get(context);
         break;
 
         case ProcedureType::EDGE:
-            return nl::ChunkType::get(context, storage::EdgeIDType::get(context));
+            return storage::EdgeIDType::get(context);
         break;
 
         case ProcedureType::LABEL_ID:
-            return nl::ChunkType::get(context, storage::LabelIDType::get(context));
+            return storage::LabelIDType::get(context);
         break;
 
         case ProcedureType::EDGE_TYPE_ID:
-            return nl::ChunkType::get(context, storage::EdgeTypeIDType::get(context));
+            return storage::EdgeTypeIDType::get(context);
         break;
 
         case ProcedureType::PROPERTY_TYPE_ID:
-            return nl::ChunkType::get(context, storage::PropertyTypeIDType::get(context));
+            return storage::PropertyTypeIDType::get(context);
         break;
 
         case ProcedureType::VALUE_TYPE:
-            return nl::ChunkType::get(context, storage::ValueTypeType::get(context));
+            return storage::ValueTypeType::get(context);
         break;
 
         case ProcedureType::UINT_64:
-            return nl::ChunkType::get(context, builder.getIntegerType(64, /*isSigned=*/false));
+            return builder.getIntegerType(64, /*isSigned=*/false);
         break;
 
         case ProcedureType::INT64:
-            return nl::ChunkType::get(context, builder.getIntegerType(64));
+            return builder.getIntegerType(64);
         break;
 
         case ProcedureType::DOUBLE:
-            return nl::ChunkType::get(context, builder.getF64Type());
+            return builder.getF64Type();
         break;
 
         case ProcedureType::BOOL:
-            return nl::ChunkType::get(context, builder.getI1Type());
+            return builder.getI1Type();
         break;
 
         case ProcedureType::STRING_VIEW:
-            return nl::ChunkType::get(context, storage::StringType::get(context));
+            return storage::StringType::get(context);
         break;
 
         case ProcedureType::STRING:
-            return nl::ChunkType::get(context, storage::OwnedStringType::get(context));
+            return storage::OwnedStringType::get(context);
         break;
 
         case ProcedureType::LIST:
-            return nl::ChunkType::get(context, storage::ListType::get(context, mlir::NoneType::get(context)));
+            return storage::ListType::get(context, mlir::NoneType::get(context));
         break;
 
         case ProcedureType::INVALID:
@@ -327,6 +322,20 @@ nl::ChunkType procedureChunkType(mlir::OpBuilder& builder, ProcedureType procedu
     }
 
     throw IRException("Unhandled procedure value type");
+}
+
+// A return value the procedure declared nullable is read as a nullable chunk over that
+// element type - storage's ColumnOptVector - so a row the procedure has no value for is
+// null rather than a value standing in for one.
+nl::ChunkType procedureChunkType(mlir::OpBuilder& builder, const NamedProcedureType& returnValue) {
+    mlir::MLIRContext* const context = builder.getContext();
+    const mlir::Type elementType = procedureElementType(builder, returnValue._type);
+
+    if (returnValue._nullable) {
+        return nl::ChunkType::get(context, storage::NullableType::get(context, elementType));
+    }
+
+    return nl::ChunkType::get(context, elementType);
 }
 
 // The accumulator (and result) element type of an aggregate over a column whose
@@ -2888,9 +2897,9 @@ void DBLowering::lowerCallProcedure(mlir::db::CallProcedure call) {
         const llvm::StringRef name = mlir::cast<mlir::StringAttr>(yield).getValue();
         const std::string_view yieldName(name.data(), name.size());
         const size_t returnIndex = procedure->getReturnValueIndex(yieldName);
-        const ProcedureType returnType = procedure->getReturnValueType(returnIndex);
+        const NamedProcedureType& returnValue = procedure->returnValues()[returnIndex];
 
-        chunkTypes.push_back(procedureChunkType(_builder, returnType));
+        chunkTypes.push_back(procedureChunkType(_builder, returnValue));
     }
 
     // Each carried column comes back with its own chunk type - the call replicates its

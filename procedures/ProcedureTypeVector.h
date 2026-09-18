@@ -47,6 +47,7 @@ struct NamedProcedureType {
     ProcedureType _type {ProcedureType::INVALID};
     bool _optional {false};
     bool _constant {false};
+    bool _nullable {false};
 };
 
 class ProcedureTypeVector {
@@ -68,6 +69,14 @@ public:
         constexpr bool optional = false;
         constexpr bool constant = false;
         _values.emplace_back(name, type, optional, constant);
+        _requiredCount++;
+    }
+
+    void addNullable(std::string_view name, ProcedureType type) {
+        constexpr bool optional = false;
+        constexpr bool constant = false;
+        constexpr bool nullable = true;
+        _values.emplace_back(name, type, optional, constant, nullable);
         _requiredCount++;
     }
 

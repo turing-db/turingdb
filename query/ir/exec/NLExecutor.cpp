@@ -85,6 +85,39 @@ using namespace db;
 
 namespace {
 
+template <typename Handler>
+void dispatchIDChunkKind(NLChunkKind kind, Handler&& handler) {
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return handler.template operator()<NodeID>();
+        break;
+
+        case NLChunkKind::EdgeID:
+            return handler.template operator()<EdgeID>();
+        break;
+
+        case NLChunkKind::EdgeTypeID:
+            return handler.template operator()<EdgeTypeID>();
+        break;
+
+        case NLChunkKind::LabelID:
+            return handler.template operator()<LabelID>();
+        break;
+
+        case NLChunkKind::PropertyTypeID:
+            return handler.template operator()<PropertyTypeID>();
+        break;
+
+        case NLChunkKind::ValueTypeCode:
+            return handler.template operator()<ValueType>();
+        break;
+
+        default:
+            throw IRException("A nullable chunk of this element type is not an ID column");
+        break;
+    }
+}
+
 // Copy a slice of a ListView's tagged scalars straight into a
 // ColumnVector<ListElementView> - the heterogeneous unwind's type-erased column.
 void fillListElementChunk(Column* output, const ListView list, size_t offset, size_t rows) {
@@ -7180,6 +7213,73 @@ NLGatherFunction NLExecutor::selectOptGatherFunction(ValueType valueType) {
     ValueTypeDispatcher(valueType).execute(select);
 
     return gather;
+}
+
+// The ID family of the optional selectors. A nullable ID chunk is a
+// ColumnOptVector<ID> - ColumnVector<std::optional<ID>> - so the same templates their
+// value-typed siblings name, instantiated on std::optional<ID>, carry value and null
+// together. A procedure return value declared nullable is the one producer of these.
+NLGatherFunction NLExecutor::selectOptGatherFunction(NLChunkKind kind) {
+    NLGatherFunction gather = nullptr;
+    dispatchIDChunkKind(kind, [&]<typename ID>() { gather = &gatherColumn<std::optional<ID>>; });
+
+    return gather;
+}
+
+NLAppendFunction NLExecutor::selectOptAppendFunction(NLChunkKind kind) {
+    NLAppendFunction append = nullptr;
+    dispatchIDChunkKind(kind, [&]<typename ID>() { append = &appendColumn<std::optional<ID>>; });
+
+    return append;
+}
+
+NLCopyFunction NLExecutor::selectOptCopyFunction(NLChunkKind kind) {
+    NLCopyFunction copy = nullptr;
+    dispatchIDChunkKind(kind, [&]<typename ID>() { copy = &copyRangeColumn<std::optional<ID>>; });
+
+    return copy;
+}
+
+NLCompareFunction NLExecutor::selectOptCompareFunction(NLChunkKind kind) {
+    NLCompareFunction compare = nullptr;
+    dispatchIDChunkKind(kind, [&]<typename ID>() { compare = &compareOptColumn<ID>; });
+
+    return compare;
+}
+
+NLKeyAppendFunction NLExecutor::selectOptKeyAppendFunction(NLChunkKind kind) {
+    NLKeyAppendFunction keyAppend = nullptr;
+    dispatchIDChunkKind(kind, [&]<typename ID>() { keyAppend = &distinctKeyAppendOptColumn<ID>; });
+
+    return keyAppend;
+}
+
+NLGroupKeyGatherFunction NLExecutor::selectOptGroupKeyGather(NLChunkKind kind) {
+    NLGroupKeyGatherFunction gather = nullptr;
+    dispatchIDChunkKind(kind, [&]<typename ID>() { gather = &groupGatherAppendColumn<std::optional<ID>>; });
+
+    return gather;
+}
+
+NLCountFunction NLExecutor::selectOptCountFunction(NLChunkKind kind) {
+    NLCountFunction count = nullptr;
+    dispatchIDChunkKind(kind, [&]<typename ID>() { count = &countPresentColumn<std::optional<ID>>; });
+
+    return count;
+}
+
+NLBroadcastFunction NLExecutor::selectOptBlockRepeatFunction(NLChunkKind kind) {
+    NLBroadcastFunction broadcast = nullptr;
+    dispatchIDChunkKind(kind, [&]<typename ID>() { broadcast = &blockRepeatColumn<std::optional<ID>>; });
+
+    return broadcast;
+}
+
+NLBroadcastFunction NLExecutor::selectOptTileFunction(NLChunkKind kind) {
+    NLBroadcastFunction broadcast = nullptr;
+    dispatchIDChunkKind(kind, [&]<typename ID>() { broadcast = &tileColumn<std::optional<ID>>; });
+
+    return broadcast;
 }
 
 NLAppendFunction NLExecutor::selectAppendFunction(NLChunkKind kind) {

@@ -32,7 +32,7 @@ template <typename T>
 concept IDLike = IsID<T>::value;
 
 template <typename T>
-concept IsUInt64 = IsID<T>::value
+concept IsUInt64 = IsID<TypeUtils::unwrap_optional_t<T>>::value
                 || std::unsigned_integral<T>
                 || IsHash<T>::value
                 || OptionalUnsignedInteger<T>;
@@ -50,7 +50,7 @@ concept IsString = std::is_convertible_v<T, std::string_view>
                 || OptionalString<T>;
 
 template <typename T>
-concept IsValueType = std::is_same_v<T, ValueType>;
+concept IsValueType = std::is_same_v<TypeUtils::unwrap_optional_t<T>, ValueType>;
 
 template <typename T>
 concept IsBool = std::is_same_v<T, CustomBool>

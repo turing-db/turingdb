@@ -46,6 +46,9 @@ public:
     void setAllocCallback(AllocCallback cb);
     void setDeallocCallback(DeallocCallback cb);
     void addReturnValue(std::string_view name, ProcedureType type);
+
+    void addNullableReturnValue(std::string_view name, ProcedureType type);
+
     void addArgument(std::string_view name, ProcedureType type);
     void addOptionalArgument(std::string_view name, ProcedureType type);
 
@@ -65,6 +68,10 @@ public:
 
     ProcedureType getReturnValueType(size_t index) const {
         return _returnValues[index]._type;
+    }
+
+    bool isReturnValueNullable(size_t index) const {
+        return _returnValues[index]._nullable;
     }
 
     ProcedureType getArgumentType(size_t index) const {
