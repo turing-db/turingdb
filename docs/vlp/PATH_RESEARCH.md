@@ -798,6 +798,13 @@ code is the plain DFS; the value of K is a tuning knob: 1 when the adjacency arr
 cache (interleaving would only add scheduling overhead), 8 or so when they do not, never so
 many that the walkers' own state evicts what they prefetched.
 
+*Measured and rejected (2026-09-19).* Built as described and tuned to sixteen walkers on a
+generated degree-8 graph where every hop misses by construction, the interleaving lost on
+reactome at every shape but one: 42.6 ms against 106.4 at six hops from a hot seed, 10.1 s
+against 27.0 at nine, and a tie only on a two-hop expansion from all 2.98M nodes. callgrind
+put 1.20 of 2.30 billion instructions in the round robin itself. The walkers and their stage
+machine were removed; see PLAN.md, Status.
+
 No graph database engine, to my knowledge, applies AMAC or coroutine interleaving inside its
 variable-length expansion operator; Neo4j and Memgraph expand row by row, Kùzu parallelises
 across threads with morsels. Interleaving is orthogonal to multithreading (each thread can

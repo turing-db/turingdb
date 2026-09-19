@@ -19,7 +19,7 @@ engine is designed to beat the incumbents (Neo4j `VarLengthExpand`, Memgraph
 
 | Tier | What | Why it wins |
 |---|---|---|
-| 1 (this change) | Stack-based depth-first trail enumeration over immutable `DataPart` spans; per-depth candidate frames; 64-bit signature trail check; lazy path materialization; chunked emission into a factorized path column (per-query prefix trie, one 8-byte handle per row); hop predicates evaluated inside the walk, vectorized per frame; per-frame candidate prefetch within a walk; AMAC-style interleaved walkers with software prefetch across seeds | Bounded memory, O(1) expected trail check, O(1) emission and carry per row, vectorizable candidate generation, failing hops cut at the frame, DRAM latency hidden within a walk and across seeds |
+| 1 (this change) | Stack-based depth-first trail enumeration over immutable `DataPart` spans; per-depth candidate frames; 64-bit signature trail check; lazy path materialization; chunked emission into a factorized path column (per-query prefix trie, one 8-byte handle per row); hop predicates evaluated inside the walk, vectorized per frame; per-frame candidate prefetch within a walk | Bounded memory, O(1) expected trail check, O(1) emission and carry per row, vectorizable candidate generation, failing hops cut at the frame, DRAM latency hidden within a walk and across seeds |
 | 2 | End-constraint fusion + query-time reverse-distance pruning index (PathEnum's principle) gated by a runtime cost model | Prunes every prefix that cannot end on a valid node: intermediate cardinality, not traversal speed, dominates constrained queries (ReCAP: up to 400,000×; PathEnum: ~100× fewer edges touched) |
 | 3 | Per-row bound targets with an MS-BFS distance index; join-based bidirectional enumeration cut at hubs where both searches suspend (GraphS); DISTINCT mode via bit-parallel MS-BFS | s-t path queries and DISTINCT reachability stop being enumeration problems; hubs, which carry 93–99 % of long paths, are never expanded blindly |
 | 4 | Storage: type-sorted adjacency runs, SoA edge arrays, patched-node bitmap; optional per-commit oracles (2-hop distance labels, landmark reachability with doomed sets, interval labels, hub segment cache) | Typed traversals touch only matching edges; half the bytes per candidate; no per-row list copies; pruning without a per-query BFS on large append-mostly graphs |
@@ -36,7 +36,9 @@ distinct gate:
 | `f36461521` | 3 | `end_column` and `fuse_explore_end_nodes`, `PathTargetIndex` (multi-source BFS, 64 targets per word, per-chunk, gate charged per batch), `distinct` and `fuse_explore_distinct_ends` with the bit-parallel reachability mode of the explorator |
 | `f475c48bf` | 2-3 | The estimate the three gates share samples the fan-out of the edge type the walk follows and sums the candidates over `min(max, farthest)` levels with the frontier clamped at the graph, so an unbounded walk no longer estimates as infinite; `indexUnitCostInChecks` re-fitted from 0.5 to 0.35; `PathExploratorCyclicTest` |
 | `9e9704046` | 3 | Drops `searchPaysForDistinctEnds`, so a `distinct` exploration always searches; `PathReachTable`, an open-addressing table keyed by the nodes a batch reaches, replaces the dense `ReachWords` array, so a batch of the search costs its ball; `PathReachTableTest` |
-| uncommitted | 1 | `PathTrie` holds one entry arena per walker, named in the handle's top bits; the explorator truncates an arena on backtrack above the chunk's last emitted row and cuts it back to the walker's current path at the next fill, so the trie holds one chunk and the live prefixes instead of the whole search tree; `PathExploratorReclaimTest` |
+| uncommitted | 1 | `PathTrie` holds one entry arena per walk, named in the handle's top bits; the explorator truncates an arena on backtrack above the chunk's last emitted row and cuts it back to the walk's current path at the next fill, so the trie holds one chunk and the live prefixes instead of the whole search tree; `PathExploratorReclaimTest` |
+| `8ff96f5d3` | 1 | Removes the interleaved walkers and the `Stage` machine that yielded between them: `PathExplorator` holds one walk, a descent reads the adjacency and pushes its frame in one step, and `setWalkerCount` goes with them. 2.4-2.5x on reactome's walks, 12.6 ns per emitted path against 37.8 |
+| `3da8feb88` | 3 | Extends `distinct` past a minimum of one hop with a pruned walk: a frame's `_taint` records the shallowest held edge its subtree could not take, and a subtree no edge above it constrained is remembered as `(node, remaining depth)` so later arrivals stop there. The `min_hops <= 1` verifiers and the pass gate go. 195x at ten hops on reactome |
 
 The eight `variable-length-paths-*.json` oracles run through the MLIR engine, and the two v2
 oracles that expected the old "not yet supported" plan error now expect the analyzer's
@@ -45,22 +47,29 @@ rejection of `e.name` on a quantified edge.
 The benchmark harness is `samples/path_bench` (excluded from CI): it generates an out-of-cache
 graph in one commit (`-nodes`, `-degree`, a seed label S every `-seed-stride` nodes, an end
 label T every `-end-stride`, one edge in four of type B) and times, at the storage level, the
-walker count against the candidate lookahead, the end-label filter against
+candidate lookahead, the end-label filter against
 `PathDistanceIndex`, a bound end against `PathTargetIndex`, the distinct mode against the
 enumeration, and, through `QueryInterpreterV3`, the same shapes as Cypher; `-section` runs
 one table. First measurements on the default shape (2M nodes, degree 8, 1000 seeds, hops
 1 to 3, 584,000 rows):
 
-- **Walkers and lookahead**: 1 walker with no lookahead 33.4 ms; lookahead 1 alone 25.0 ms;
-  8 walkers 15.1 ms; 16 walkers 14.8 ms, lookahead indifferent past 4 walkers. In cache
-  (20K nodes) every cell is within noise. Three more shapes, 1000 seeds each unless noted:
-  degree 3 at six hops 105 / 38 / 35 / 35 ms for 1 / 8 / 16 / 32 walkers; degree 32 at two
-  hops (500K nodes) 25 / 19 / 19 / 19 ms, the plateau at 4; a degree-1 functional graph at
-  100 hops (10,000 seeds, chains up to 100 long) 121 / 51 / 42 / 40 ms, the one shape still
-  gaining past 8 since every hop there is a dependent miss. Sixteen is never worse than
-  eight and thirty-two adds nothing beyond noise, so **the explorator's default is 16**,
-  unconditionally: the in-cache run shows the plan's "1 when the adjacency fits in cache"
-  condition is unnecessary. The lookahead stays at 1: it helps only at one walker.
+- **Walkers and lookahead** (superseded, see below): on the generated graph 1 walker with no
+  lookahead 33.4 ms; lookahead 1 alone 25.0 ms; 8 walkers 15.1 ms; 16 walkers 14.8 ms,
+  lookahead indifferent past 4 walkers; in cache (20K nodes) every cell within noise. Three
+  more shapes agreed - degree 3 at six hops 105 / 38 / 35 / 35 ms for 1 / 8 / 16 / 32
+  walkers - so the default was set to 16 unconditionally.
+- **Walkers removed (2026-09-19).** That sweep only ever ran on the generated graph, where
+  every hop is a dependent miss by construction. On reactome one walker wins everywhere:
+  hot seed at 6 hops 42.6 ms against 106.4 at sixteen, at 8 hops 1.65 s against 4.37, at 9
+  hops 10.1 s against 27.0; 83K seeds at 2 hops 68.9 against 91.0; 110K complexes at 3 hops
+  204 against 298. Only a two-hop expansion from all 2.98M nodes is indifferent (1005 ms at
+  four walkers against 1041 at one), which is the cold wide frontier the interleaving was
+  built for. The callgrind profile said why: of 2.30 billion instructions for the 6-hop walk,
+  1.20 billion were the round robin picking the next walker, `advance` entered 5,114,862
+  times against 524,471 real expansions. `PathExplorator` now holds one walk, the `Stage`
+  machine that existed to yield between walkers is gone, and a descent reads the adjacency
+  and pushes its frame in one step: 12.6 ns per emitted path against 37.8, flat from 6 hops
+  to 9. The lookahead stays at 1 and keeps its sweep (`-section lookahead`).
 - **End labels**: the filter costs 36.6 ms, the index 245 ms to build (it reaches the whole
   graph) then 4.4 ms to run, so the break-even is about 7,600 seeds where the gate formula
   with its multiple of 8 needed 281,000. Calibrated on three shapes at 1,000 to 100,000
@@ -125,8 +134,8 @@ one table. First measurements on the default shape (2M nodes, degree 8, 1000 see
   words in one struct (39.9 → 32.6 ms: one miss per candidate instead of three), the
   words dated by the batch that wrote them so nothing is cleared between batches
   (neutral, but it drops a pass and a list), and the frontier's adjacency fetched sixteen
-  nodes ahead of the one being expanded (32.6 → 24.5 ms): the search had no interleaved
-  walkers to hide those misses behind. Prefetching the candidates' words in the collecting
+  nodes ahead of the one being expanded (32.6 → 24.5 ms), the search having nothing else to
+  hide those misses behind. Prefetching the candidates' words in the collecting
   pass changed nothing and was dropped. Result: 1.5× the walk on the no-overlap graph, and
   65 ms against 70 ms for the walk on the deeper degree-3 six-hop shape. **Applied, then
   removed, the overlap gate** (`searchPaysForDistinctEnds`): the pass keeps marking the op
@@ -242,10 +251,10 @@ one table. First measurements on the default shape (2M nodes, degree 8, 1000 see
   count(e)` against `count(r)` cost 146 MB more at N = 24, 983 MB at 28, 3.7 GB at 32 and
   7.7 GB after 60 s at 60, and 8 to 19 % of the time; the unbounded form grows at about
   130 MB/s, so it would have filled the box before its 240 s kill. **Applied**: the trie
-  holds one entry arena per walker - a `PathRef` names its arena in its top 16 bits and its
-  index in the low 48, arena 0 is the root - and an arena is the walker's stack: emitting a
+  holds one entry arena per walk - a `PathRef` names its arena in its top 16 bits and its
+  index in the low 48, arena 0 is the root - and an arena is the walk's stack: emitting a
   row pins the arena at its size, `popFrame` truncates the arena to the entry it backs out of
-  when that lies above the pin, and each `fill` first rewrites the walker's current path to
+  when that lies above the pin, and each `fill` first rewrites the walk's current path to
   the bottom of its arena and drops the rest (`retainChain`), the previous chunk having been
   consumed. Exact because no consumer keeps a handle past its chunk: sort, dedup, `WITH` and
   `RETURN` expand the path first, `count` reads the handle column row by row, and the cross
@@ -257,7 +266,7 @@ one table. First measurements on the default shape (2M nodes, degree 8, 1000 see
   125,690,888 rows, the seed's `{1,28}` 6,291 → 5,164 ms, `RETURN e` over 228,878 paths
   9.79 → 9.68 ms. Trie-free queries move nowhere: the 26 queries of `scripts/bench_paths.py`
   run as a simultaneous pair on separate turing dirs give a median ratio of 1.01 with a 0.99
-  to 1.02 spread, `samples/path_bench`'s 16-walker enumeration with paths 15.3 → 14.8 ms, a
+  to 1.02 spread, `samples/path_bench`'s enumeration with paths 15.3 → 14.8 ms, a
   19-query corpus of every shape a path flows through (cross product, `ORDER BY size(e)`,
   `DISTINCT e`, `WITH e`, nested `e`, `f`, `UNWIND e`, `SKIP`/`LIMIT`) byte-identical.
 
@@ -266,8 +275,9 @@ Remaining, in the suggested order:
 1. **Rerun the harness on a small-world graph**, where the multi-source search is expected to
    share more than on a uniform random graph; reactome covered the larger, non-uniform case
    through Cypher (Status, above), but the storage-level sections have only run on uniform
-   random shapes. The walker default, the two index gates, the hybrid target index and the
-   distinct mode's table are all measured and applied. `db.remove_duplicates` is the cost
+   random shapes. The two index gates, the hybrid target index and the distinct mode's
+   table are all measured and applied; the walkers those shapes argued for were later
+   measured on reactome and removed (Status). `db.remove_duplicates` is the cost
    that remains in `RETURN DISTINCT`.
 2. **Tier 4, type-sorted adjacency runs** first: every typed traversal benefits, not only
    paths. Then SoA edge records, the patched-node bitmap, and the per-commit oracles
@@ -379,7 +389,6 @@ public:
     void setPaths(ColumnVector<PathRef>* paths, PathTrie* trie);             // nullable
     void setHopFilter(PathHopFilter* filter);                                // nullable
     void setEdgeTypeFilter(EdgeTypeID edgeType);
-    void setWalkerCount(size_t walkerCount);                                 // interleaving width
     void setCandidateLookahead(size_t lookahead);                            // prefetch distance, 0 disables
 
     void reset();
@@ -400,8 +409,8 @@ to `"iterators/PathExplorationDir.h"`: `query/pipeline/PipelineBuilder.h:9`,
 disjoint node ranges): `_partFirstNodeIDs`, `_partIndexers` (`&part->edgeIndexer()`),
 `_partEdges` (`&part->edges()`), `_patchPartIndices` (parts with `getPatchNodeCount() > 0`,
 including zero-node SET-only parts, ascending), `_filterTombstones =
-view.tombstones().hasEdges()`, and `_adjacencyBytes` (Σ parts' edge array bytes) for the
-walker-count heuristic.
+view.tombstones().hasEdges()`, and `_adjacencyBytes` (Σ parts' edge array bytes), which the
+index gates weigh their cost against.
 
 **Adjacency of a node `u`**: owner part = last part with `firstNodeID <= u`
 (`std::upper_bound` over `_partFirstNodeIDs`, a handful of parts), its span(s)
@@ -409,34 +418,33 @@ walker-count heuristic.
 the span(s) of every patch part with index > owner. Each edge lives in exactly one part's out
 array and once in its in array, so this yields each edge once per direction with no dedup set.
 
-**Walker state: the current path and one frame per depth** (plain `std::vector`s, reused
-across seeds and input chunks, bounded by depth × degree), one `Walker` per interleaved seed:
+**Walk state: the current path and one frame per depth** (plain `std::vector`s, reused
+across seeds and input chunks, bounded by depth × degree), held by the explorator itself:
 - `_seedRow` of the active seed.
 - Current path, root first: `std::vector<EdgeID> _pathEdges` (length = depth),
   `std::vector<PathRef> _pathEntries` (`[d]` = trie entry of the path's first `d` edges,
   `[0] = PathTrie::ROOT`), `std::vector<uint64_t> _pathSignatures` (`[d]` = OR of one
   Fibonacci-hashed bit `1 << ((id * 0x9E3779B97F4A7C15) >> 58)` per edge of
   `_pathEdges[0..d)`, so `[0] = 0`).
-- Frames: `struct Frame { size_t _candidateBegin; size_t _candidateEnd; size_t _next; }`
-  in `std::vector<Frame> _frames`, one per node on the path whose children are being walked;
+- Frames: `struct Frame { size_t _candidateBegin; size_t _candidateEnd; size_t _next;
+  NodeID _node; uint64_t _budget; size_t _taint; }` in `std::vector<Frame> _frames`, one per
+  node on the path whose children are being walked (`_node`, `_budget` and `_taint` serve the
+  distinct mode below and cost nothing otherwise);
   candidates live in two flat stacks `std::vector<NodeID> _candidateNodes`,
   `std::vector<EdgeID> _candidateEdges`, each frame owning the range above the previous
   frame's end. Popping a frame truncates the candidate stacks to its `_candidateBegin`.
-- Descent stage for interleaving: `_pendingNode`, `_pendingDepth`, `_stage`
-  (`Idle`, `RangeRequested`, `SpanRequested`).
-- `_arena`, the walker's entry stack in the trie, and `_pinned`, the arena size the chunk's
+- `_arena`, the walk's entry stack in the trie, and `_pinned`, the arena size the chunk's
   last emitted row holds.
 
-**Walk (per walker, depth-first):**
+**Walk (depth-first):**
 1. `startSeed(row)`: `_pathEdges`/`_frames` cleared, `_pathSignatures = {0}`,
    `_pathEntries = {ROOT}`; when `minHops == 0` emit the zero-length row (target = seed,
    path = `ROOT`); when `maxHops > 0` request a descent into the seed (step 2). An empty
    candidate range is never pushed.
-2. Descent into `node` at `depth`, in three stages so the memory accesses of different
-   walkers overlap (AMAC): (A) resolve the owner part and `__builtin_prefetch` its
-   `NodeEdgeData` entry (`getNodeData()[getPatchNodeCount() + (node - firstNodeID)]`);
-   (B) read the range and prefetch the first cache lines of the span
-   (`edges().getOuts(first, count)` / `getIns`); (C) `pushFrame`: generate the accepted
+2. `descend(node)` at `depth`: resolve the owner part and `__builtin_prefetch` its
+   `NodeEdgeData` entry (`getNodeData()[getPatchNodeCount() + (node - firstNodeID)]`), read
+   the range and prefetch the first cache lines of the span
+   (`edges().getOuts(first, count)` / `getIns`), then generate the accepted
    children into the candidate stacks in one straight loop over the owner span(s) and the
    patch parts' span(s): reject `edge == _pathEdges.back()` (the immediate backtrack,
    dominant in BOTH), a type mismatch when a filter is set, a tombstoned edge when
@@ -450,7 +458,7 @@ across seeds and input chunks, bounded by depth × degree), one `Walker` per int
 3. Consume: top frame exhausted (`_next == _candidateEnd`) → pop it (truncate candidate
    stacks, `_pathEdges.pop_back()`, `_pathSignatures.pop_back()`, `_pathEntries.pop_back()`
    with the arena truncated to that entry's index when it lies above `_pinned`, unless it is
-   the seed's frame); no frames left → seed done, the walker takes the next seed. Otherwise
+   the seed's frame); no frames left → seed done, the walk takes the next seed. Otherwise
    take candidate `(node, edge)` at `_next++`, child depth `d = _frames.size()`: when
    `d >= minHops` emit a row (indices ← `_seedRow`, targets ← `node`, paths ← the trie entry
    of step 4); when `d < maxHops` push `edge` onto the path (`_pathSignatures.push_back(top |
@@ -463,14 +471,14 @@ across seeds and input chunks, bounded by depth × degree), one `Walker` per int
    pushes the same entry, so a prefix shared by many paths is stored once and a row costs one
    entry whatever its depth. Emitting sets `_pinned` to the arena's size: the entries under an
    emitted row stay through the backtracks over them, everything above the pin is truncated
-   as the walk backs out of it, and the next `fill` rewrites the walker's current path to the
+   as the walk backs out of it, and the next `fill` rewrites the walk's current path to the
    bottom of the arena and drops the rest, the previous chunk's rows having been consumed. A
    candidate below `min` that is descended still gets an entry, as the parent of the rows
    under it; a leaf gets one only when it is emitted. When `paths` is null
    (neither `e` nor a group variable is read) nothing is appended and `_pathEntries` stays
    `{ROOT}`.
 
-**Per-frame candidate prefetch (within one walker):** when a frame descends into candidate
+**Per-frame candidate prefetch:** when a frame descends into candidate
 `k`, it first `__builtin_prefetch`es the `NodeEdgeData` entry of candidate `k + lookahead` of
 the same frame (skipped when `_next + lookahead >= _candidateEnd`; owner part resolved by
 NodeID range, the address stage A computes), so the frame's next descent finds the entry
@@ -480,19 +488,15 @@ children generate leaves and return at once: there the window between prefetch a
 adjacency fetch plus leaf emission, about the latency being hidden. A deeper subtree may evict
 the line before the frame resumes; the prefetch is then wasted, never wrong. Patch-part
 lookups (`_patchNodeOffsets` hash probe) are not prefetched; the patched-node bitmap (Tier 4)
-is where that goes. `lookahead` is `setCandidateLookahead`, default 1, 0 disables. It composes
-with the cross-seed interleaving below and is the only latency hiding at `walkerCount == 1`.
+is where that goes. `lookahead` is `setCandidateLookahead`, default 1, 0 disables. It is the walk's only latency
+hiding.
 
-**Scheduler (`fill(maxCount)`):** clear the bound columns, `resize` them to `maxCount`, then
-round-robin over the active walkers, each turn advancing one walker by one stage (A, B, C, or
-one consume step), admitting a new seed into an idle walker while `_seedCursor <
-input.size()`, until `maxCount` rows are written (walkers keep their state; the next `fill`
-resumes) or every seed is done (truncate the outputs, `_valid = false`). With
-`walkerCount == 1` the three stages run back to back and only the per-frame candidate
-prefetch hides latency; with lookahead 0 as well, this is the plain DFS. Default
-`walkerCount`: 16, measured with `samples/path_bench` (see Status); the executor may
-override. Rows from different seeds interleave, so `indices` is not monotonic;
-correctness never depended on it, and sorted-row tests are unaffected.
+**Loop (`fill(maxCount)`):** clear the bound columns, `resize` them to `maxCount`, then step
+the walk until `maxCount` rows are written (the frame stack keeps the position, so the next
+`fill` resumes from it) or the seeds run out (truncate the outputs, `_valid = false`). A step
+is one consume: pop an exhausted frame, or take the next candidate and descend into it when
+it expands. Seeds are walked one after another, which the interleaved walkers this replaced
+did not do; nothing relies on the order of `indices` either way.
 
 Unused outputs are null and skipped; the trie is not touched when `e` and the group
 variables are unread (the translator passes null when the block argument has no uses).
@@ -503,11 +507,11 @@ column (`ContainerKind::Types`, `LocalMemory` pool, `staticKind`) and joins ever
 kind switch that lists `ListView` today (filter compaction, gather through indices, block
 repeat, copy range, sort permutation), so the path column is carried like a node ID column.
 `PathTrie` holds `PathTrieEntry` `{PathRef _parent; EdgeID _edge; NodeID _node; uint64_t
-_depth;}` in arenas, one per walker, acquired by the explorator and released with it (nested
+_depth;}` in arenas, one per walk, acquired by the explorator and released with it (nested
 explorations share the query's trie and hold their own); a `PathRef` names its arena in its
 top 16 bits and its index in the low 48, and `ROOT`, the zero-length path, is arena 0. An
-arena is the walker's stack: the entries above the chunk's last emitted row are truncated as
-the walk backs out of them, and each `fill` first rewrites the walker's current path to the
+arena is the walk's stack: the entries above the chunk's last emitted row are truncated as
+the walk backs out of them, and each `fill` first rewrites the walk's current path to the
 arena's bottom (`retainChain`) and drops the rest, so the trie holds the chunk being filled
 and the live prefixes, never the search tree. That is exact because no consumer keeps a
 handle past its chunk: sort, dedup, `WITH` and `RETURN` expand the path first, `count` reads
@@ -561,7 +565,7 @@ lower bounds, and tightening it with monotone predicates (ReCAP's viability) is 
 refinement.
 
 Ordering note: rows come per seed in depth-first order (span order within a part, parts
-ascending), interleaved across walkers, not v2's depth-major order, so the v2 JSON oracles
+ascending), not v2's depth-major order, so the v2 JSON oracles
 (exact-string, chunk-sensitive) stay v2-only; v3 tests compare sorted rows as the existing ir
 tests do.
 
@@ -623,7 +627,7 @@ column) emits a candidate only when it is the seed's own target, and every seed 
 prunes against its own target through `PathTargetIndex`: one multi-source BFS per batch of
 64 distinct targets over the reverse direction (Then et al.), into an open-addressing table per batch keyed by the
 nodes it reaches, holding the word of the targets that reached each and a hop count per
-target, so `canReachWithin(v, hops)` is one probe and one byte compare. Each walker
+target, so `canReachWithin(v, hops)` is one probe and one byte compare. The walk
 resolves its target's batch and bit once at `startSeed`; a seed whose target is beyond
 `max` is not descended at all. The index
 honours the edge type filter and edge tombstones and ignores hop predicates, as the Tier 2
@@ -631,22 +635,44 @@ index does, so it stays a lower bound. The executor builds it per input chunk (t
 are the chunk's) behind a gate charging each node a batch is expected to reach (see Status).
 
 **DISTINCT mode (`distinct`).** The pass `fuse_explore_distinct_ends` runs after
-`trim_unread_columns` and marks an exploration `distinct` when `min_hops <= 1`, its `paths`
-result has no use, and every consumer of its other results is dedup-insensitive: a
+`trim_unread_columns` and marks an exploration `distinct` when its `paths`
+result has no use and every consumer of its other results is dedup-insensitive: a
 `db.remove_duplicates`, a `db.count` with `distinct`, a `db.group_aggregate` whose kinds are
 all distinct or min/max, or a row-wise op (property and label reads, expressions, filters,
 plain hops, further explorations) all of whose users are. Deduplicating a relation earlier
 never changes a result that is a set, so the pass is a set-semantics argument, not a
 cardinality one: anything counting, cutting or outputting rows before a dedup refuses. In
-the explorator `setDistinctEnds` switches `fill` to a multi-source BFS from 64 seeds per
+the explorator `setDistinctEnds` picks between two algorithms by the hop bounds.
+
+*Level search, `min <= 1`.* `fill` becomes a multi-source BFS from 64 seeds per
 word with a seen, a frontier and a gained word per node reached, emitting `(seed, end)` the
-first time the end gains the seed's bit at a level in `[min, max]`. Exactness needs `min <= 1` (a walk
-of length in `[1, max]` shortens to a trail of the same range); a `min` of 1 leaves the
-seed's own bit out of its seen word so that a closed trail back to the seed - whose
-shortest form in a directed walk is a simple cycle - is reported once, and a `min` of 0
+first time the end gains the seed's bit at a level in `[min, max]`. It answers "reached
+within `max`", which coincides with "reached by a trail within `max`" only because a walk
+of length in `[1, max]` shortens to a trail of the same range - hence `min <= 1`. A `min` of
+1 leaves the seed's own bit out of its seen word so that a closed trail back to the seed -
+whose shortest form in a directed walk is a simple cycle - is reported once, and a `min` of 0
 reports the seed at level 0 and keeps the bit set. Undirected, the one-edge backtrack is a
-closed walk of two hops with no trail behind it, so the mode is exact for `both` only at a
-`min` of 0; the verifier and the pass require that. Edge type filter, tombstones, hop predicates (run once per
+closed walk of two hops with no trail behind it, so the search is exact for `both` only at a
+`min` of 0 and the walk below takes the rest.
+
+*Pruned walk, deeper minimums (2026-09-19).* The shortening argument fails at an exact
+depth - on `a→b`, `b→a` a 3-hop walk reaches `b` and no 3-hop trail exists - so the walk
+keeps trail semantics and prunes instead. Each frame carries `_taint`, the shallowest path
+position of an edge its subtree could not take because the walk already held it. On pop the
+subtree is remembered as `(node, remaining depth)` when `_taint >= its own depth`: every
+collision was then with an edge the subtree held itself, so the same walk leaves that node
+whatever the prefix above it used, and a later arrival at that pair stops there. Ends are
+deduplicated per seed, so each is emitted once. Remembering unconditionally - the obvious
+rule - is *incomplete*: on `s→v`, `v→s`, `s→t` the only 3-trail needs `s` re-expanded at
+depth 2, and on `s→x→v`, `s→y→v`, `v→x` the only 4-trail needs `v` re-expanded under the
+cleaner prefix. Both are pinned as tests, alongside random cyclic graphs at minimums 2 to 4
+in all three directions against the reference enumerator. Pruning is off when a hop filter
+is set, since a path-dependent predicate would break the invariant. Measured on reactome
+from `R-HSA-162582`, `count(DISTINCT m)` over `-[e*k..k]->`: 96 → 28 ms at 6 hops,
+597 → 87 at 7, 3,782 → 200 at 8, 24,214 → 392 at 9 and 147,109 → 725 at 10, the last a
+195x cut that tracks the 876,262 ends instead of the 4,416,812,730 trails.
+
+Edge type filter, tombstones, hop predicates (run once per
 frontier node, as they depend on the hop alone), end labels and a bound end all compose.
 The words live in `PathReachTable`, an open-addressing table keyed by node that a batch
 fills and clears at the cost of the nodes it reached, so a batch costs its ball, not the
@@ -827,8 +853,8 @@ New:
   on a small fixture; arenas acquired, released and reused, truncation, `retainChain`
   rewriting a chain to the bottom of its arena.
 - `test/storage/iterators/PathExploratorReclaimTest.cpp` (`add_storage_tests`): a complete
-  digraph on six nodes walked 1, 64 and 1,000 rows a fill with 1 and 16 walkers - after every
-  fill the trie holds at most the chunk's paths and the walkers' prefixes and the rows match
+  digraph on six nodes walked 1, 64 and 1,000 rows a fill - after every
+  fill the trie holds at most the chunk's paths and the walk's prefix and the rows match
   the reference; two explorators sharing one trie leave each other's chunk intact.
 - `test/storage/iterators/PathExploratorTest.cpp` (`add_storage_tests`), modeled on
   `GetEdgesByTypeIteratorTest.cpp`'s fixture and collector, with a graph submitted in two
@@ -893,7 +919,7 @@ edges) timed through `QueryInterpreterV3`, in the shape of `samples/query_bench`
   `collectHopCarrySet` factoring), `ctest -R query_analyzer`, and `make run_regress` for
   the sample parse test and v2's untouched behaviour.
 - Unit tests force small `fill(maxCount)` (1 and 2) to cover mid-frame resume within and
-  across seeds, `walkerCount` 1 and 8 and lookahead 0 and 1 giving identical sorted rows (a
+  across seeds, lookahead 0 and 1 giving identical sorted rows (a
   frame with a single candidate exercises the lookahead bound), `min = 0`, unbounded max
   on a cyclic graph terminating with every trail exactly once, `{2,3}`, BACKWARD/BOTH, type
   filter with `min = 0`, `maxHops = 0`, null targets/paths, a hop filter rejecting a whole
@@ -907,8 +933,8 @@ edges) timed through `QueryInterpreterV3`, in the shape of `samples/query_bench`
 - `PathExploratorCyclicTest` carries the shapes a hand-written fixture cannot: a seeded
   generator whose arcs are drawn uniformly over a small node set, so self-loops, parallel
   edges and short cycles arise together, swept against the reference over every direction,
-  every `min` to `max` up to three, the type and hop filters, walkers 1/4/16 against chunk
-  1/2/65536 and lookahead 0/1, end labels with the distance index forced on and off, bound
+  every `min` to `max` up to three, the type and hop filters, chunk
+  1/2/65536 against lookahead 0/1, end labels with the distance index forced on and off, bound
   ends with the target index forced on and off, the distinct mode, and tombstones. Alongside
   it the structural extremes with counts derived by hand: the complete digraph on five nodes,
   a seventy-edge cycle where every signature bit is set past the sixty-fourth hop so only the
@@ -930,25 +956,22 @@ edges) timed through `QueryInterpreterV3`, in the shape of `samples/query_bench`
   engine - `type` does not parse and `id` is rejected as unknown - so nothing reaches codegen
   with a path column. The risk returns the day either is implemented.
 - The trie held every descended prefix until the query ended - 3.7 GB for one seed's
-  2,481,686 closed trails at bound 32, 7.7 GB after 60 s unbounded - fixed by the per-walker
+  2,481,686 closed trails at bound 32, 7.7 GB after 60 s unbounded - fixed by the per-walk
   arenas (Status). What remains is one chunk's chains until the next fill; the list buffer
   only grows where a path is expanded and, at output, per chunk.
 - The `hop` region is the first region on a db op outside `db.cross_product`; `db.yield`'s
   parent constraint, the verifier, `lowerFactor` and the translator's block binding must
   generalize, and `TrimUnreadColumns`/`PushDownFilters` must treat the region as opaque.
 - The hop filter runs its statements once per frame; on low-degree frames the per-call
-  overhead may dominate. If it does, evaluate the filter over the candidate frames of all
-  active walkers at once (the interleaved scheduler already holds them).
+  overhead may dominate. If it does, batch several frames' candidates into one call.
 - Longer inner patterns in the parenthesized form (`((a)-[e1]->(b)-[e2]->(c)){1,3}`) repeat
   a fixed sub-pattern and need their own op; today the grammar stops them first, with a bare
   "unexpected TAIL_BRACKET, expecting CPAREN", so the limitation is a gap to close and the
   message names nothing.
-- Interleaving only pays when adjacency misses cache; the heuristic must not slow down
-  small graphs (measure both, keep `walkerCount == 1` as the fallback).
 - The per-frame prefetch is wasted when the descended child's subtree runs long enough to
   evict the line before the frame resumes, and it costs an owner-part resolution plus one
-  prefetch per descent; measure at `walkerCount == 1` with lookahead 0 and 1 on the
-  out-of-cache graph, and keep 0 as the fallback if deep subtrees dominate.
+  prefetch per descent; measured with lookahead 0 and 1 on the out-of-cache graph, 1 kept.
+  (The cross-seed interleaving this risk was written beside is gone - see Status.)
 - The pruning index is a lower bound only if the BFS runs over the exact reverse of the
   exploration direction and honours the same edge type filter; tombstoned edges must be
   excluded from it too.
