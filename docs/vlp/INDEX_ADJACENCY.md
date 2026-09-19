@@ -10,7 +10,7 @@ neighbours reachable within a budget are a prefix of a list that was filtered on
 
 Here the walk filters on every visit. `generateCandidates` reads the node's raw adjacency and
 tests each 32-byte `EdgeRecord` for backtracking, edge type, tombstones, trail membership and
-the distance bound; `pushFrame` copies the survivors into the walker's stacks and runs the hop
+the distance bound; the descent copies the survivors into the walk's candidate stacks and runs the hop
 predicate over them; a patched node repeats all of it per patch part. None of that is kept. A
 node reached by 40,000 distinct prefixes pays for it 40,000 times, and under trail semantics
 that revisit factor is the normal case, not the extreme one: a node is re-expanded once per
@@ -61,11 +61,11 @@ are never evicted: a range handed to a live frame must stay valid.
 
 On the first expansion of a node the walk does what it does today - read the owner part's
 adjacency, merge the patch parts, drop the wrong type and the tombstoned, run the hop
-predicate - and appends the survivors to the arena instead of to the walker's stacks. The
+predicate - and appends the survivors to the arena instead of to the walk's stacks. The
 `RangeRequested` / `SpanRequested` staging stays on that path; it is the miss that has a
 memory fetch to hide.
 
-A hit skips all of it. There is no adjacency to fetch, so the walker pushes the frame in the
+A hit skips all of it. There is no adjacency to fetch, so the walk pushes the frame in the
 same turn and `prefetchNodeData` is not called.
 
 ### 3. The prefix cut
@@ -115,9 +115,9 @@ The survivors are stable for the whole loop. The distance byte is not.
 
 ### 5. The walk
 
-A `Frame` becomes a range into the arena rather than into the walker's stacks, plus the
+A `Frame` becomes a range into the arena rather than into the walk's stacks, plus the
 cursor it already has. `pushFrame` writes nothing and `popFrame` truncates nothing. The
-walker keeps its own stacks only for the fallback, so `Frame` carries the bit that says which
+walk keeps its own stacks only for the fallback, so `Frame` carries the bit that says which
 of the two it indexes.
 
 The distinct mode shares the store. `collectReachCandidates` re-reads a node's adjacency once
@@ -178,7 +178,7 @@ in `PLAN.md`, and they need a forward index this change does not build.
 
 - `PathCandidateStoreTest` for the table itself.
 - Every existing path test run with the store forced on: `PathExploratorCyclicTest`'s sweep
-  over directions, bounds, filters, walkers, chunk sizes, end labels, bound ends, the distinct
+  over directions, bounds, filters, chunk sizes, end labels, bound ends, the distinct
   mode and tombstones already compares against `ReferenceEnumerator`, so identical sorted rows
   with the store on and off is the correctness argument. The sweep must include a node whose
   candidates are cut by the budget at one depth and not at another, or the prefix cut passes

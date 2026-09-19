@@ -597,7 +597,7 @@ and not just their row counts — the disagreement above is invisible without it
 both engines return one row either way.
 
 The storage-level harness for the same work is `samples/path_bench`, which times the
-explorator directly (walker count, lookahead, the two index gates, the distinct search)
+explorator directly (candidate lookahead, the two index gates, the distinct search)
 on generated out-of-cache graphs rather than through Cypher on Reactome.
 
 For the ladybug column, `pip install ladybug`, then load the graph out of a parquet dump
