@@ -583,6 +583,23 @@ bool isTaggedCellChunk(mlir::Type chunkType) {
     return chunk && mlir::isa<storage::ListElementType>(chunk.getElementType());
 }
 
+// A mask holds a bit and a number holds a zero, so a drain padding one writes a false or a
+// 0 the query cannot tell from a value it was given. An ID column is none of them: it
+// spells its null as the invalid ID, as a list and a tagged cell carry their own.
+bool paddedChunkNeedsNullable(mlir::Type chunkType) {
+    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
+    if (!chunk) {
+        return false;
+    }
+
+    const mlir::Type element = chunk.getElementType();
+
+    return mlir::isa<storage::BoolType,
+                     storage::StringType,
+                     mlir::Float64Type,
+                     mlir::IntegerType>(element);
+}
+
 mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
     const bool anyFloat = mlir::isa<mlir::Float64Type>(lhs) || mlir::isa<mlir::Float64Type>(rhs);
     if (anyFloat) {
@@ -950,7 +967,7 @@ void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock
 
         bool producedByALoop = false;
         for (const mlir::Value column : limit.getColumns()) {
-            producedByALoop |= assignProducerLoops(column, handle, /*rowsDroppedBeforeTheCut=*/false);
+            producedByALoop |= assignProducerLoops(column, handle, /*rowsDroppedBeforeTheCut=*/false, holder);
         }
 
         // A cut over constants alone walks back to no loop at all - the constants are
@@ -958,7 +975,7 @@ void DBLowering::hoistLimitHandles(mlir::Region& region, mlir::Block* hoistBlock
         // projection instead. Without it the nest runs to its end and the budget only
         // stops the output, producing every row to throw all but k away.
         if (!producedByALoop) {
-            assignCardinalityDriverLoop(limit, handle);
+            assignCardinalityDriverLoop(limit, handle, holder);
         }
     }
 }
@@ -1745,16 +1762,9 @@ void DBLowering::lowerCheckEdgeTypeConstraint(mlir::db::CheckEdgeTypeConstraint 
 
 mlir::Block* DBLowering::deepestOwnerBlock(llvm::ArrayRef<mlir::Value> chunks, mlir::Block* fallback) {
     mlir::Block* deepest = fallback;
-    size_t deepestDepth = blockNestingDepth(fallback);
 
     for (const mlir::Value chunk : chunks) {
-        mlir::Block* const owner = ownerBlock(chunk);
-        const size_t ownerDepth = blockNestingDepth(owner);
-
-        if (ownerDepth > deepestDepth) {
-            deepest = owner;
-            deepestDepth = ownerDepth;
-        }
+        deepest = deeperOfBlocks(deepest, ownerBlock(chunk));
     }
 
     return deepest;
@@ -2051,6 +2061,14 @@ void DBLowering::lowerOptionalSubquery(mlir::db::CallSubquery call,
     llvm::SmallVector<mlir::Value, 4> yieldedChunks;
     mlir::Value yieldedTag;
     lowerSubqueryBody(call, bodyRoot, stepChunks, yieldedChunks, yieldedTag);
+
+    // The drain pads the rows the body yielded nothing for, and only a column carrying a
+    // null of its own can hold one
+    for (mlir::Value& yieldedChunk : yieldedChunks) {
+        if (paddedChunkNeedsNullable(yieldedChunk.getType())) {
+            yieldedChunk = nullableValueChunk(yieldedChunk);
+        }
+    }
 
     // What the collect appends: the inputs as the body left them then its own columns
     // when it carries the scope, and the row's chunks crossed with its columns when it
@@ -3001,7 +3019,7 @@ void DBLowering::lowerCollect(mlir::db::Collect collect) {
     // (the same block db.output would emit from), so the group assignment and the
     // per-group appends stay row-aligned.
     const mlir::Value representative = chunks.front();
-    setInsertionInto(ownerBlock(representative));
+    setInsertionInto(accumulatorUpdateBlock(ownerBlock(representative)));
     _builder.create<nl::CollectUpdate>(loc, state, chunks);
 
     // The emit phase: an nl.collect source iterator yielding one row per group - the
@@ -3126,7 +3144,7 @@ void DBLowering::lowerUnwindCollect(mlir::db::UnwindCollect unwindCollect) {
     const mlir::Value state = bufferOp.getState();
 
     const mlir::Value representative = chunks.front();
-    setInsertionInto(ownerBlock(representative));
+    setInsertionInto(accumulatorUpdateBlock(ownerBlock(representative)));
     _builder.create<nl::CollectUpdate>(loc, state, chunks);
 
     // The emit phase: an nl.unwind_collect source iterator yielding one row per element - the
@@ -3280,7 +3298,8 @@ const Procedure* DBLowering::procedureFor(llvm::StringRef name) const {
 
 bool DBLowering::assignProducerLoops(mlir::Value column,
                                      mlir::Value handle,
-                                     bool rowsDroppedBeforeTheCut) {
+                                     bool rowsDroppedBeforeTheCut,
+                                     mlir::db::CallSubquery holder) {
     mlir::Operation* const definingOp = column.getDefiningOp();
     if (!definingOp) {
         // A subquery body reads the rows in flight through its block arguments, so the
@@ -3295,7 +3314,16 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
             return false;
         }
 
-        return assignProducerLoops(call.getInputColumns()[argument.getArgNumber()], handle, rowsDroppedBeforeTheCut);
+        // The handle this body holds is created inside the loop over its input rows, so a
+        // loop outside the body cannot carry it: the walk stops at the boundary.
+        if (call == holder) {
+            return false;
+        }
+
+        return assignProducerLoops(call.getInputColumns()[argument.getArgNumber()],
+                                   handle,
+                                   rowsDroppedBeforeTheCut,
+                                   holder);
     }
 
     const bool opensLoop = opensSourceLoop(definingOp);
@@ -3350,7 +3378,7 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
         mlir::db::HashJoin join = mlir::cast<mlir::db::HashJoin>(definingOp);
         mlir::Operation* const probeYield = join.getLeftFactor().front().getTerminator();
         for (const mlir::Value yielded : probeYield->getOperands()) {
-            reachedALoop |= assignProducerLoops(yielded, handle, rowsDropped);
+            reachedALoop |= assignProducerLoops(yielded, handle, rowsDropped, holder);
         }
     } else if (isCrossProduct) {
         // A cross product takes no column operands - its factors are regions - so
@@ -3361,7 +3389,7 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
         for (mlir::Region* const factor : factors) {
             mlir::Operation* const yield = factor->front().getTerminator();
             for (const mlir::Value yielded : yield->getOperands()) {
-                reachedALoop |= assignProducerLoops(yielded, handle, rowsDropped);
+                reachedALoop |= assignProducerLoops(yielded, handle, rowsDropped, holder);
             }
         }
     } else if (isSubquery) {
@@ -3372,26 +3400,26 @@ bool DBLowering::assignProducerLoops(mlir::Value column,
         mlir::db::CallSubquery call = mlir::cast<mlir::db::CallSubquery>(definingOp);
         mlir::Operation* const yield = call.getBody().front().getTerminator();
         for (const mlir::Value yielded : yield->getOperands()) {
-            reachedALoop |= assignProducerLoops(yielded, handle, rowsDropped);
+            reachedALoop |= assignProducerLoops(yielded, handle, rowsDropped, holder);
         }
 
         if (!call.getCarriesScope()) {
             for (const mlir::Value input : call.getInputColumns()) {
-                reachedALoop |= assignProducerLoops(input, handle, rowsDropped);
+                reachedALoop |= assignProducerLoops(input, handle, rowsDropped, holder);
             }
         }
     } else {
         // A non-loop producer (a property fetch) is traversed but not assigned -
         // it opens no loop - so its input chunk's loop is still reached.
         for (const mlir::Value operand : definingOp->getOperands()) {
-            reachedALoop |= assignProducerLoops(operand, handle, rowsDropped);
+            reachedALoop |= assignProducerLoops(operand, handle, rowsDropped, holder);
         }
     }
 
     return reachedALoop;
 }
 
-void DBLowering::assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value handle) {
+void DBLowering::assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value handle, mlir::db::CallSubquery holder) {
     mlir::Operation* const limitOp = limit.getOperation();
 
     // The relation driving the projection is the loop opened last before the cut: its rows
@@ -3421,7 +3449,7 @@ void DBLowering::assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value 
         return;
     }
 
-    assignProducerLoops(driver->getResult(0), handle, rowsDropped);
+    assignProducerLoops(driver->getResult(0), handle, rowsDropped, holder);
 }
 
 void DBLowering::foldTruncatesIntoOutputs(mlir::func::FuncOp nlFunction) {
@@ -4296,22 +4324,24 @@ mlir::Value DBLowering::deepestBoundChunk(llvm::ArrayRef<mlir::Value> chunks) {
 }
 
 mlir::Block* DBLowering::deeperBlock(mlir::Value first, mlir::Value second) {
-    mlir::Block* const firstBlock = ownerBlock(first);
-    mlir::Block* const secondBlock = ownerBlock(second);
-    if (firstBlock == secondBlock) {
-        return firstBlock;
+    return deeperOfBlocks(ownerBlock(first), ownerBlock(second));
+}
+
+mlir::Block* DBLowering::deeperOfBlocks(mlir::Block* first, mlir::Block* second) {
+    if (first == second) {
+        return first;
     }
 
     // A chunk bound in a block that encloses the other is read once per step of it - a
     // hoisted constant, a metadata tally, the one row a per-row body walks - so the op
     // reading both belongs in the deeper block.
-    if (enclosesBlock(firstBlock, secondBlock)) {
-        return secondBlock;
-    } else if (enclosesBlock(secondBlock, firstBlock)) {
-        return firstBlock;
+    if (enclosesBlock(first, second)) {
+        return second;
+    } else if (enclosesBlock(second, first)) {
+        return first;
     }
 
-    throw IRException("db operands to deeperBlock must be bound in the same loop");
+    throw IRException("db operands read together must be bound in the same loop");
 }
 
 void DBLowering::lowerOutput(mlir::db::Output output) {
@@ -4675,15 +4705,6 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
     nl::BroadcastConstant broadcast = _builder.create<nl::BroadcastConstant>(_builder.getUnknownLoc(), resultType, chunk, cardinality);
 
     return broadcast.getResult();
-}
-
-size_t DBLowering::blockNestingDepth(mlir::Block* block) {
-    size_t depth = 0;
-    for (mlir::Operation* parent = block->getParentOp(); parent; parent = parent->getParentOp()) {
-        depth++;
-    }
-
-    return depth;
 }
 
 bool DBLowering::enclosesBlock(mlir::Block* outer, mlir::Block* inner) {
