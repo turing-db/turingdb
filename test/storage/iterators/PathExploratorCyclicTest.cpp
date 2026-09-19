@@ -496,6 +496,65 @@ TEST_F(PathExploratorCyclicTest, distinctEndsMatchTheDeduplicatedEnumerationOnAC
     }
 }
 
+// Past a minimum of one hop the walk answers the distinct ends itself, remembering a subtree
+// only when no edge it held above that subtree was in its way. Cycles are where that bites: a
+// trail can be forced to re-enter a node the walk has already left.
+TEST_F(PathExploratorCyclicTest, distinctEndsAtADeepMinimumAgreeWithTheReferenceOnACyclicGraph) {
+    for (uint64_t seed = 1; seed <= 4; seed++) {
+        SCOPED_TRACE("seed " + std::to_string(seed));
+
+        std::vector<Arc> arcs;
+        randomArcs(10, 3, seed, arcs);
+        build(10, 7, arcs, 4);
+
+        for (const PathExplorationDir direction : everyDirection) {
+            for (const uint64_t hops : {uint64_t {2}, uint64_t {3}, uint64_t {4}}) {
+                for (const size_t chunk : {size_t {1}, size_t {2}, ChunkConfig::CHUNK_SIZE}) {
+                    ExplorationOptions exact;
+                    exact._distinctEnds = true;
+                    exact._collectPaths = false;
+                    exact._maxCount = chunk;
+
+                    expectSameAsReference(direction, hops, hops, exact);
+                    expectSameAsReference(direction, 2, hops, exact);
+                }
+            }
+        }
+    }
+}
+
+// Four prefixes reach the middle node at the same remaining depth. Enumerating walks the
+// subtree below it four times; asked only for the ends, the walk owes it one visit.
+TEST_F(PathExploratorCyclicTest, remembersASubtreeReachedByManyPrefixes) {
+    const std::vector<Arc> arcs {
+        {0, 1}, {0, 2}, {0, 3}, {0, 4},
+        {1, 5}, {2, 5}, {3, 5}, {4, 5},
+        {5, 6}, {5, 7}, {5, 8},
+    };
+    build(9, 5, arcs, 3);
+
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+
+    ColumnNodeIDs input;
+    input.push_back(NodeID {0});
+
+    ExplorationOptions enumerating;
+    std::vector<PathRow> paths;
+    const size_t enumerationChecks = collectPaths(view, input, PathExplorationDir::FORWARD, 3, 3, enumerating, paths);
+
+    ExplorationOptions distinct;
+    distinct._distinctEnds = true;
+    distinct._collectPaths = false;
+    std::vector<PathRow> pairs;
+    const size_t distinctChecks = collectPaths(view, input, PathExplorationDir::FORWARD, 3, 3, distinct, pairs);
+
+    EXPECT_EQ(paths.size(), 12u);
+    EXPECT_EQ(pairs.size(), 3u);
+    EXPECT_LT(distinctChecks, enumerationChecks) << distinctChecks << " of " << enumerationChecks;
+}
+
 TEST_F(PathExploratorCyclicTest, tombstonedEdgesLeaveTheRemainingCyclesIntact) {
     std::vector<Arc> arcs;
     randomArcs(10, 3, 19, arcs);

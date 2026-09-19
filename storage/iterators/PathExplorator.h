@@ -3,6 +3,7 @@
 #include <span>
 #include <stdint.h>
 #include <stddef.h>
+#include <limits.h>
 #include <vector>
 
 #include "ChunkWriter.h"
@@ -33,6 +34,8 @@ class Tombstones;
 // multi-source breadth-first search instead, emitting each (seed, end) pair once and no path.
 class PathExplorator {
 public:
+    static constexpr size_t NO_TAINT = SIZE_MAX;
+
     PathExplorator(const GraphView& view,
                    const ColumnNodeIDs* inputNodeIDs,
                    PathExplorationDir direction,
@@ -65,11 +68,30 @@ public:
     size_t getCandidateCheckCount() const { return _candidateChecks; }
 
 private:
-    // The candidates of one node on the path, a range of the candidate stacks
+    // The candidates of one node on the path, a range of the candidate stacks. _taint is the
+    // shallowest path position of an edge this frame's subtree could not take because the walk
+    // already held it, which is what decides whether the subtree may be remembered
     struct Frame {
         size_t _candidateBegin {0};
         size_t _candidateEnd {0};
         size_t _next {0};
+        NodeID _node;
+        uint64_t _budget {0};
+        size_t _taint {NO_TAINT};
+    };
+
+    // A set of 64-bit keys emptied in constant time: an entry counts only while its stamp
+    // matches the generation, which a clear bumps
+    struct KeySet {
+        std::vector<uint64_t> _keys;
+        std::vector<uint32_t> _stamps;
+        uint32_t _generation {0};
+        size_t _used {0};
+
+        void clear();
+        bool insert(uint64_t key);
+        bool contains(uint64_t key) const;
+        void grow();
     };
 
     // The multi-source search of the distinct mode: one bit per seed of the current batch in
@@ -132,6 +154,13 @@ private:
     std::vector<NodeID> _candidateNodes;
     std::vector<EdgeID> _candidateEdges;
 
+    // Set while the walk only owes its caller the set of nodes it ends on, which lets a
+    // subtree that no held edge constrained stand in for every later arrival at its node
+    bool _prunes {false};
+    KeySet _emittedEnds;
+    KeySet _cleanExpansions;
+    size_t _descentTaint {NO_TAINT};
+
     size_t _seedCursor {0};
     size_t _written {0};
     size_t _candidateChecks {0};
@@ -149,6 +178,9 @@ private:
     bool hasWork() const;
     bool isEnd(size_t seedRow, NodeID node) const;
     void resizeOutputs(size_t count);
+
+    bool searchesLevels() const;
+    uint64_t expansionKey(NodeID node, uint64_t budget) const;
 
     void startSeed(size_t row);
     void step();

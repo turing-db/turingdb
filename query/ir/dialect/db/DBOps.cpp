@@ -385,15 +385,6 @@ LogicalResult ExplorePaths::verify() {
     }
 
     if (getDistinct()) {
-        if (getMinHops() > 1) {
-            return emitOpError("distinct is exact for a min_hops of at most one");
-        }
-
-        const bool undirected = getDirection() == storage::PathDirection::Both;
-        if (undirected && getMinHops() != 0) {
-            return emitOpError("distinct over both directions is exact for a min_hops of zero alone");
-        }
-
         if (!getPaths().use_empty()) {
             return emitOpError("distinct emits no path, so paths must have no use");
         }

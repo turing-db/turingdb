@@ -2069,10 +2069,7 @@ bool readsRowsAsASet(Operation* op, llvm::SmallPtrSetImpl<Operation*>& visited) 
 }
 
 bool matchDistinctEnds(ExplorePaths exploration) {
-    const uint64_t minHops = exploration.getMinHops();
-    const bool undirected = exploration.getDirection() == storage::PathDirection::Both;
-    const bool exact = minHops == 0 || (minHops == 1 && !undirected);
-    if (!exact || exploration.getDistinct() || !exploration.getPaths().use_empty()) {
+    if (exploration.getDistinct() || !exploration.getPaths().use_empty()) {
         return false;
     }
 

@@ -1190,11 +1190,11 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, DeclareOpInterfaceMethods<Op
 
     `distinct` asks for each (seed, end) pair once and no path at all, which is what a
     downstream DISTINCT or distinct aggregate reads out of an exploration whose path is
-    unread; the fuse_explore_distinct_ends pass sets it. It is exact when `min_hops` is
-    at most one - a walk of one to `max_hops` hops always shortens to a trail of as many -
-    and, over both directions, only when it is zero: walking one edge out and straight
-    back is a closed walk of two hops that is no trail, so the seed's own row cannot be
-    told from a cycle. The verifier requires both, and `paths` must have no use.
+    unread; the fuse_explore_distinct_ends pass sets it. Up to a `min_hops` of one the
+    walk answers it as a reachability search, since a walk of one to `max_hops` hops
+    always shortens to a trail of as many; deeper minimums keep the trail semantics and
+    walk, remembering each subtree no held edge constrained so that the prefixes arriving
+    at a node later stop there. `paths` must have no use, which the verifier requires.
   }];
 
   let arguments = (ins Column:$input_nodes,
