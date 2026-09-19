@@ -8,7 +8,7 @@ class CypherAST;
 class EmbeddingLiteral;
 class ListLiteral;
 class SetStmt;
-class StmtContainer;
+class SinglePartQuery;
 
 class ParserUtils {
 public:
@@ -22,8 +22,9 @@ public:
     static void mergeSetClauses(SetStmt*& held, SetStmt* addition);
 
     // A query that is one CALL and nothing else has no projection of its own, so what the
-    // call yields is the result it reports
-    static void markStandaloneCall(StmtContainer* stmts);
+    // call yields is the result it reports. A subquery body is not such a query: it is a
+    // clause of the query around it, and the RETURN it owes is its own
+    static void markStandaloneCall(const SinglePartQuery* query);
 
 private:
     static void listExprToFloatVector(const ListLiteral* list, std::vector<float>& out);

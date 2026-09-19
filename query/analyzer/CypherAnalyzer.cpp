@@ -250,11 +250,17 @@ void CypherAnalyzer::throwOnReadAfterUpdate(const StmtContainer* stmts) const {
 
         if (kind == Stmt::Kind::WITH) {
             hasWritten = false;
-        } else if (Stmt::isUpdating(stmt)) {
-            hasWritten = true;
-        } else if (hasWritten) {
+            continue;
+        }
+
+        const bool isReadingClause = !Stmt::isUpdating(stmt);
+        if (isReadingClause && hasWritten) {
             throwError("A reading clause cannot follow an updating clause: separate them with a WITH",
                        stmt);
+        }
+
+        if (Stmt::writesToTheGraph(stmt)) {
+            hasWritten = true;
         }
     }
 }
@@ -450,10 +456,13 @@ void CypherAnalyzer::importThroughLeadingWith(CallSubqueryStmt* subquery) const 
                                  && !projection->isDistinct()
                                  && !projection->hasOrderBy()
                                  && !projection->hasSkip()
-                                 && !projection->hasLimit()
-                                 && !projection->isReturningAll();
+                                 && !projection->hasLimit();
 
-    if (!plainProjection) {
+    if (projection->isReturningAll()) {
+        throwError("An importing WITH holds plain variable references only: "
+                   "WITH * names none of them",
+                   with);
+    } else if (!plainProjection) {
         throwError("An importing WITH holds plain variable references only, "
                    "with no WHERE, DISTINCT, ORDER BY, SKIP or LIMIT",
                    with);

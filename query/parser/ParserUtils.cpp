@@ -12,6 +12,7 @@
 #include "stmt/SetStmt.h"
 #include "stmt/StmtContainer.h"
 #include "Literal.h"
+#include "SinglePartQuery.h"
 #include "ParserException.h"
 
 using namespace db;
@@ -75,7 +76,16 @@ EmbeddingLiteral* ParserUtils::listExprToEmbeddingLiteral(CypherAST* ast, const 
     return EmbeddingLiteral::create(ast, std::move(data));
 }
 
-void ParserUtils::markStandaloneCall(StmtContainer* stmts) {
+void ParserUtils::markStandaloneCall(const SinglePartQuery* query) {
+    if (query->getReturnStmt()) {
+        return;
+    }
+
+    const StmtContainer* stmts = query->getStmts();
+    if (!stmts) {
+        return;
+    }
+
     const StmtContainer::Stmts& statements = stmts->stmts();
     if (statements.size() != 1) {
         return;

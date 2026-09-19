@@ -39,7 +39,19 @@ bool Stmt::isUpdating(const Stmt* stmt) {
     if (kind == Kind::CALL_SUBQUERY) {
         const CallSubqueryStmt* subquery = static_cast<const CallSubqueryStmt*>(stmt);
 
-        return !subquery->isReturning() && subquery->getBody()->writesToTheGraph();
+        return !subquery->isReturning() && writesToTheGraph(stmt);
+    }
+
+    return isUpdating(kind);
+}
+
+bool Stmt::writesToTheGraph(const Stmt* stmt) {
+    const Kind kind = stmt->getKind();
+
+    if (kind == Kind::CALL_SUBQUERY) {
+        const CallSubqueryStmt* subquery = static_cast<const CallSubqueryStmt*>(stmt);
+
+        return subquery->getBody()->writesToTheGraph();
     }
 
     return isUpdating(kind);

@@ -4037,7 +4037,7 @@ void DBProgramGenerator::generateCallSubquery(const CallSubqueryStmt* subquery) 
     // What the query holds is set aside while the body builds a scope of its own. A unit
     // body leaves the rows as they were, so it all comes back; a returning body's results
     // are bound afresh under the declarations the inputs and the RETURN carry
-    PartScope outerPart = _part;
+    PartScope outerPart = std::move(_part);
     VariableDependencyGraph outerGraph = std::move(_vdg);
 
     rebindScope(bodyScope);

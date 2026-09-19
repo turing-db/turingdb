@@ -32,9 +32,9 @@ bool SinglePartQuery::writesToTheGraph() const {
         return false;
     }
 
-    const auto isUpdating = [](const Stmt* stmt) {
-        return Stmt::isUpdating(stmt);
+    const auto writes = [](const Stmt* stmt) {
+        return Stmt::writesToTheGraph(stmt);
     };
 
-    return std::ranges::any_of(_stmts->stmts(), isUpdating);
+    return std::ranges::any_of(_stmts->stmts(), writes);
 }

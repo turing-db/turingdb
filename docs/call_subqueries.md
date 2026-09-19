@@ -224,7 +224,10 @@ lowering's decision, in line with the no-optimisation-in-codegen rule.
 ### Lowering
 
 Two strategies, chosen by whether the region holds a pipeline breaker: a sort, skip,
-limit, remove_duplicates, count, aggregate, group_aggregate, collect or a procedure call.
+limit, remove_duplicates, count, aggregate, group_aggregate or collect. A procedure call is
+not one: `generateCrossedCall` crosses its rows with the rows in flight, so each row it
+makes still carries the input row it was paired with, and `statementCarriesRows` classes it
+with the clauses that keep the pairing.
 
 Inline, for a body with none. This is `lowerOptionalMatch` without the buffer, collect and
 drain: map the block arguments to the step chunks, root the body in the step block, lower

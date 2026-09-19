@@ -32,6 +32,11 @@ public:
     // on no RETURN
     static bool isUpdating(const Stmt* stmt);
 
+    // Whether anything under the clause writes, which a CALL subquery answers from its body
+    // whatever the body ends on. A returning body that writes is not an updating clause -
+    // its rows join the ones in flight - and it has still written
+    static bool writesToTheGraph(const Stmt* stmt);
+
     virtual Kind getKind() const = 0;
 
 protected:

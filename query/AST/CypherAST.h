@@ -294,7 +294,6 @@ private:
     void addStmtContainer(StmtContainer* container);
     void addQuery(QueryCommand* query);
 
-    // Moves a query the parser built as one of the script into the subquery bodies
     void adoptSubquery(QueryCommand* query);
     void addDeclContext(DeclContext* ctxt);
     void addVarDecl(VarDecl* decl);

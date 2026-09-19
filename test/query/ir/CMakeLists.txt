@@ -2638,6 +2638,79 @@ target_link_libraries(test_query_ir_call_subquery_optional PRIVATE
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_call_subquery_optional PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# A body returning a boolean: the padded rows must read as null, not as false.
+add_turing_test(test_query_ir_call_subquery_optional_bool CallSubqueryOptionalBoolTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_optional_bool PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_call_subquery_optional_bool PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# A collect in a per-row subquery body whose folded column is bound above the row loop.
+add_turing_test(test_query_ir_call_subquery_constant_collect CallSubqueryConstantCollectTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_constant_collect PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_call_subquery_constant_collect PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# A procedure CALL ending a subquery body must not excuse the body from its RETURN.
+add_turing_test(test_query_ir_call_subquery_procedure_body CallSubqueryProcedureBodyTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_procedure_body PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_call_subquery_procedure_body PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# A CALL subquery body that writes and ends on a RETURN.
+add_turing_test(test_query_ir_call_subquery_writing_return CallSubqueryWritingReturnTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_writing_return PRIVATE
+        turing_ir_test_write_query_s
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_call_subquery_writing_return PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# A procedure call in a subquery body forces the per-row strategy.
+add_turing_test(test_query_ir_call_subquery_procedure_strategy CallSubqueryProcedureStrategyTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_procedure_strategy PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_call_subquery_procedure_strategy PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# The block a subquery body roots in, when its inputs are bound in sibling blocks.
+add_turing_test(test_query_ir_call_subquery_step_block CallSubqueryStepBlockTest.cpp)
+target_link_libraries(test_query_ir_call_subquery_step_block PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_interpreter_v3_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_call_subquery_step_block PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 # The region op and the loops a CALL subquery compiles to, read off EXPLAIN.
 add_ir_tests(test_query_ir_call_subquery_codegen CallSubqueryCodegenTest.cpp)
 target_sources(test_query_ir_call_subquery_codegen PRIVATE StringRowSink.cpp)
