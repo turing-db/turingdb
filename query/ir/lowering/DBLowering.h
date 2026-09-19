@@ -465,12 +465,15 @@ private:
     // alone is produced by none, which is what sends the handle to the driving relation.
     // @param rowsDroppedBeforeTheCut is set once the walk has passed an op that
     // drops rows, which bars the handle from a cross product below it.
-    bool assignProducerLoops(mlir::Value column, mlir::Value handle, bool rowsDroppedBeforeTheCut);
+    bool assignProducerLoops(mlir::Value column,
+                             mlir::Value handle,
+                             bool rowsDroppedBeforeTheCut,
+                             mlir::db::CallSubquery holder);
 
     // Records that the loops producing the relation which drives @param limit's projection
     // carry its handle, so a cut charged to constants alone stops its nest as any other
     // cut does rather than letting it run to the end.
-    void assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value handle);
+    void assignCardinalityDriverLoop(mlir::db::Limit limit, mlir::Value handle, mlir::db::CallSubquery holder);
 
     // Peephole over the lowered nl function: where an nl.limit_truncate's results
     // are consumed exactly by one adjacent nl.output (the terminal-LIMIT shape),
@@ -575,10 +578,13 @@ private:
     // The nl chunk a db value lowered to, and the block that holds a chunk
     mlir::Value mapValue(mlir::Value dbValue) const;
     static mlir::Block* ownerBlock(mlir::Value chunkValue);
-    static size_t blockNestingDepth(mlir::Block* block);
 
     // Whether @param inner is @param outer or lies in a region nested in it
     static bool enclosesBlock(mlir::Block* outer, mlir::Block* inner);
+
+    // The deeper of two blocks: the one the other encloses. Blocks where neither encloses
+    // the other hold no chunks one op can read, so that is an error rather than a choice
+    static mlir::Block* deeperOfBlocks(mlir::Block* first, mlir::Block* second);
 
     // Where an accumulator filled from @param producingBlock is updated. A chunk bound
     // above the root is loop-invariant - a hoisted constant layout, a metadata tally - and

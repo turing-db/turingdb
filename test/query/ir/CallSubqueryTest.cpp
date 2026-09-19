@@ -243,6 +243,13 @@ TEST_F(CallSubqueryTest, rejectsAnImportingWithOfAnExpression) {
                    "An importing WITH holds plain variable references only");
 }
 
+TEST_F(CallSubqueryTest, rejectsAnImportingWithStar) {
+    expectRejected("MATCH (p:Person) "
+                   "CALL { WITH * MATCH (p)-->(x) RETURN x } "
+                   "RETURN x",
+                   "WITH * names none of them");
+}
+
 TEST_F(CallSubqueryTest, rejectsAnImportOfAnUnknownVariable) {
     expectRejected("MATCH (p:Person) "
                    "CALL (q) { RETURN 1 AS one } "

@@ -8,14 +8,14 @@
 
 using namespace turing::test;
 
-// What a standalone CALL yielded is the query's result unless the query writes. A subquery
-// body that only reads writes nothing, whatever it ends on
+// What a standalone CALL yielded is the query's result unless the query writes. A body with
+// no RETURN is a unit subquery, which writes, so the subquery is on the writing side here
 class CallSubqueryYieldedOutputTest : public CallV3Test {
 };
 
-TEST_F(CallSubqueryYieldedOutputTest, keepsTheYieldedResultOfAReadOnlyBody) {
+TEST_F(CallSubqueryYieldedOutputTest, keepsTheYieldedResultOfANonWritingQuery) {
     StringRowSink sink;
-    runQuery("CALL db.labels() YIELD label CALL { CALL db.edgeTypes() }", sink);
+    runQuery("CALL db.labels() YIELD label", sink);
 
     const std::vector<StringRowSink::Row> expected {{"Person"},
                                                     {"SoftwareEngineering"},

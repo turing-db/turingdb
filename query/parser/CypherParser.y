@@ -499,7 +499,7 @@ unionList
     ;
 
 singleQuery
-    : singlePartQuery { $$ = $1; }
+    : singlePartQuery { $$ = $1; ParserUtils::markStandaloneCall($1); }
     | createConstraint { scanner.notImplemented(@$, "CREATE CONSTRAINT"); }
     | dropConstraint { scanner.notImplemented(@$, "DROP CONSTRAINT"); }
     | loadGraph { $$ = $1; }
@@ -811,7 +811,6 @@ singlePartQuery
     | queryStatements {
         $$ = SinglePartQuery::create(ast);
         $$->setStmts($1);
-        ParserUtils::markStandaloneCall($1);
         LOC($$, @$);
       }
     | queryStatements returnSt { $$ = SinglePartQuery::create(ast); $$->setStmts($1); $$->setReturnStmt($2); LOC($$, @$); }
