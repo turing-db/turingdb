@@ -566,6 +566,12 @@ private:
     // or the chunk itself where it already spells one
     mlir::Value paddedColumnChunk(mlir::Value chunk);
 
+    mlir::Value nullableListChunk(mlir::Value chunk);
+
+    // Builds the nl.to_nullable that wraps @param chunk's rows in @param valueElement's
+    // nullable column, which the value and the list siblings above share
+    mlir::Value toNullableChunk(mlir::Value chunk, mlir::Type valueElement);
+
     mlir::Value ownedStringColumnChunk(mlir::Value chunk);
 
     // The chunk element type an unwind of @param sourceElement produces: a drained list
