@@ -377,8 +377,12 @@ The importing WITH is the body's leading WITH when the CALL has no scope clause;
 analyzer reads its items as the import list and then analyzes it as an ordinary WITH.
 `CALL () { ... }` and a body opening on no WITH import nothing. A returned name already in
 the outer scope is rejected. A returning subquery after an updating clause of the same
-part is rejected by the read-after-update rule, as any reading clause is; a WITH between
-them lifts that.
+part is rejected by the read-after-update rule when its body goes to the graph for rows,
+which is what the buffered write above it would be invisible to: a body holding a MATCH, a
+MERGE, a procedure call, a SHORTESTPATH, a LOAD CSV or a vector search, or a nested
+subquery whose own body holds one (`Stmt::readsTheGraph`). A body that only writes is kept,
+since there is no read for the write to hide from: `CREATE (n:A) CALL { CREATE (m:B) RETURN
+m } RETURN n, m` runs. A WITH between the write and the subquery lifts the rule either way.
 
 Tests: `CallSubqueryTest.cpp` (carrying bodies and scoping), `CallSubqueryWriteTest.cpp`
 (unit bodies), `CallSubqueryPerRowTest.cpp` (aggregation, ORDER BY, SKIP, LIMIT and

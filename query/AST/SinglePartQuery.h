@@ -22,6 +22,7 @@ public:
 
     // A CALL subquery counts when its own body does
     bool writesToTheGraph() const;
+    bool readsTheGraph() const;
 
     void setStmts(StmtContainer* stmts) { _stmts = stmts; }
     void addStmt(Stmt* stmt);

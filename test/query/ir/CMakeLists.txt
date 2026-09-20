@@ -3029,3 +3029,16 @@ add_call_v3_test(test_query_ir_subquery_constant_return SubqueryConstantReturnTe
 
 # OPTIONAL CALL over a body returning a column that owns its strings.
 add_call_v3_test(test_query_ir_optional_subquery_string_padding OptionalSubqueryStringPaddingTest.cpp)
+
+# Which CALL subqueries may follow an updating clause.
+add_turing_test(test_query_ir_subquery_after_update SubqueryAfterUpdateTest.cpp)
+target_link_libraries(test_query_ir_subquery_after_update PRIVATE
+        turing_ir_test_write_query_s
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_subquery_after_update PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

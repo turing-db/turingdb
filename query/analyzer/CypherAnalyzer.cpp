@@ -331,7 +331,7 @@ void CypherAnalyzer::throwOnReadAfterUpdate(const StmtContainer* stmts) const {
             continue;
         }
 
-        const bool isReadingClause = !Stmt::isUpdating(stmt);
+        const bool isReadingClause = Stmt::isReading(stmt);
         if (isReadingClause && hasWritten) {
             throwError("A reading clause cannot follow an updating clause: separate them with a WITH",
                        stmt);
