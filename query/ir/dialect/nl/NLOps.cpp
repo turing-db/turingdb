@@ -547,8 +547,8 @@ LogicalResult ListComprehension::verify() {
         return emitOpError("body region must end with an nl.comprehension_yield");
     }
 
-    const size_t carriedCount = getColumnsToFilter().size();
-    const size_t expectedArguments = carriedCount + 2;
+    const OperandRange carried = getColumnsToFilter();
+    const size_t expectedArguments = carried.size() + 2;
 
     if (bodyBlock.getNumArguments() != expectedArguments) {
         return emitOpError("body region takes the element and the row tag plus one chunk per "
@@ -556,10 +556,20 @@ LogicalResult ListComprehension::verify() {
                << "expected " << expectedArguments << " but has " << bodyBlock.getNumArguments();
     }
 
-    for (size_t carriedIndex = 0; carriedIndex < carriedCount; carriedIndex++) {
+    if (!llvm::isa<ChunkType>(bodyBlock.getArgument(0).getType())) {
+        return emitOpError("body argument 0 must be the chunk of elements");
+    }
+
+    const auto rowTagType = llvm::dyn_cast<ChunkType>(bodyBlock.getArgument(1).getType());
+
+    if (!rowTagType || !rowTagType.getElementType().isUnsignedInteger(64)) {
+        return emitOpError("body argument 1 must be the ui64 chunk of row tags");
+    }
+
+    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
         const Type argumentType = bodyBlock.getArgument(carriedIndex + 2).getType();
 
-        if (argumentType != getColumnsToFilter()[carriedIndex].getType()) {
+        if (argumentType != carried[carriedIndex].getType()) {
             return emitOpError("body argument ") << carriedIndex + 2
                                                  << " must have the type of carried chunk "
                                                  << carriedIndex;
