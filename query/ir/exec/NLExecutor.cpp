@@ -118,6 +118,70 @@ void dispatchIDChunkKind(NLChunkKind kind, Handler&& handler) {
     }
 }
 
+// The cursor an unwind loop and a list comprehension both walk: every (row, element) pair
+// of a source column in row order. A cell contributing nothing - a null, an empty list -
+// is skipped, so it emits no row. The cursor is local to the walk, so one nested in an
+// outer loop restarts on every one of its steps.
+class NLElementCursor {
+public:
+    NLElementCursor(const Column* source, NLUnwindElementCountFunction elementCount)
+        : _source(source),
+        _elementCount(elementCount),
+        _sourceRows(source->size())
+    {
+        openNextRow();
+    }
+
+    bool exhausted() const { return _sourceRow >= _sourceRows; }
+    size_t getRow() const { return _sourceRow; }
+    size_t getSourceRows() const { return _sourceRows; }
+
+    // Takes the next @param chunkSize pairs, or what is left of them: the source row each
+    // pair came from, and - for a source whose cells hold more than the element - which
+    // element of its cell the pair took, which the emit handler reads.
+    void fillChunk(size_t chunkSize, std::vector<size_t>& rows, std::vector<size_t>* positions) {
+        rows.clear();
+        if (positions) {
+            positions->clear();
+        }
+
+        while (rows.size() < chunkSize && !exhausted()) {
+            rows.push_back(_sourceRow);
+
+            if (positions) {
+                positions->push_back(_elementIndex);
+            }
+
+            _elementIndex++;
+
+            if (_elementIndex == _rowElements) {
+                _elementIndex = 0;
+                _sourceRow++;
+                openNextRow();
+            }
+        }
+    }
+
+private:
+    const Column* _source {nullptr};
+    NLUnwindElementCountFunction _elementCount {nullptr};
+    size_t _sourceRows {0};
+    size_t _sourceRow {0};
+    size_t _elementIndex {0};
+    size_t _rowElements {0};
+
+    void openNextRow() {
+        while (_sourceRow < _sourceRows) {
+            _rowElements = _elementCount(_source, _sourceRow);
+            if (_rowElements > 0) {
+                return;
+            }
+
+            _sourceRow++;
+        }
+    }
+};
+
 // Copy a slice of a ListView's tagged scalars straight into a
 // ColumnVector<ListElementView> - the heterogeneous unwind's type-erased column.
 void fillListElementChunk(Column* output, const ListView list, size_t offset, size_t rows) {
@@ -4847,10 +4911,8 @@ void NLExecutor::runVectorSearchLoop(NLExecutionContext* context, NLFunctionData
 void NLExecutor::runUnwindLoop(NLExecutionContext* context, NLFunctionData* data) {
     NLUnwindLoopData* loopData = static_cast<NLUnwindLoopData*>(data);
     const Column* source = loopData->getSource();
-    const size_t sourceRows = source->size();
 
     const NLStmtContainer* loopBody = loopData->getStmts();
-    const NLUnwindElementCountFunction elementCount = loopData->getElementCountFunc();
     const NLUnwindElementEmitFunction elementEmit = loopData->getElementEmitFunc();
     const size_t chunkSize = context->getChunkSize();
 
@@ -4860,51 +4922,10 @@ void NLExecutor::runUnwindLoop(NLExecutionContext* context, NLFunctionData* data
     ColumnVector<size_t>* rows = loopData->getRows();
     ColumnVector<size_t>* positions = loopData->getPositions();
 
-    // Walk every (row, element) pair in row order. sourceRow / elementIndex is the cursor
-    // into that flattened sequence; a cell contributing nothing - a null, an empty list -
-    // is skipped, so it emits no row. The cursor is local to this call, so an unwind
-    // nested in an outer loop restarts on every one of its steps.
-    size_t sourceRow = 0;
-    size_t elementIndex = 0;
-    size_t rowElements = 0;
-
-    const auto openNextRow = [&]() {
-        while (sourceRow < sourceRows) {
-            rowElements = elementCount(source, sourceRow);
-            if (rowElements > 0) {
-                return;
-            }
-
-            sourceRow++;
-        }
-    };
-
-    openNextRow();
+    NLElementCursor cursor(source, loopData->getElementCountFunc());
 
     const auto runIteration = [&]() {
-        std::vector<size_t>& rowsRaw = rows->getRaw();
-        std::vector<size_t>& positionsRaw = positions->getRaw();
-        rowsRaw.clear();
-        positionsRaw.clear();
-
-        // Fill up to chunkSize rows, each the next (row, element) pair. Which element of
-        // its cell a row took is the emit handler's to read, so a source without one -
-        // whose cells are the elements already - has no position to record.
-        while (rowsRaw.size() < chunkSize && sourceRow < sourceRows) {
-            rowsRaw.push_back(sourceRow);
-
-            if (elementEmit) {
-                positionsRaw.push_back(elementIndex);
-            }
-
-            elementIndex++;
-
-            if (elementIndex == rowElements) {
-                elementIndex = 0;
-                sourceRow++;
-                openNextRow();
-            }
-        }
+        cursor.fillChunk(chunkSize, rows->getRaw(), elementEmit ? &positions->getRaw() : nullptr);
 
         // A source whose cells hold more than the element drains through its own emit;
         // any other holds the elements already and rides the carry set, gathered by the
@@ -4922,11 +4943,11 @@ void NLExecutor::runUnwindLoop(NLExecutionContext* context, NLFunctionData* data
     };
 
     if (limit) {
-        while (sourceRow < sourceRows && limit->getRemaining() > 0) {
+        while (!cursor.exhausted() && limit->getRemaining() > 0) {
             runIteration();
         }
     } else {
-        while (sourceRow < sourceRows) {
+        while (!cursor.exhausted()) {
             runIteration();
         }
     }
@@ -5439,71 +5460,69 @@ void NLExecutor::runListComprehension(NLExecutionContext* context, NLFunctionDat
     NLListComprehensionData* comprehension = static_cast<NLListComprehensionData*>(data);
 
     const Column* source = comprehension->getSource();
-    const size_t sourceRows = source->size();
 
     const NLStmtContainer* body = comprehension->getStmts();
-    const NLUnwindElementCountFunction elementCount = comprehension->getElementCountFunc();
     const NLUnwindElementEmitFunction elementEmit = comprehension->getElementEmitFunc();
+    const NLCellAbsentFunction cellAbsent = comprehension->getCellAbsentFunc();
     const NLListItemReadFunction valueRead = comprehension->getValueRead();
     const Column* value = comprehension->getValue();
     LocalMemory* const memory = comprehension->getMemory();
+    ListBuffer<>& listBuffer = memory->listBuffer();
     const size_t chunkSize = context->getChunkSize();
 
     ColumnVector<size_t>* rows = comprehension->getRows();
     ColumnVector<size_t>* positions = comprehension->getPositions();
     ColumnVector<uint64_t>* rowTags = comprehension->getRowTags();
 
-    // What the whole step gathered, row by row: the elements arrive in row order, so a
-    // row's elements are one contiguous run of this buffer and the counts locate it
+    NLElementCursor cursor(source, comprehension->getElementCountFunc());
+    const size_t sourceRows = cursor.getSourceRows();
+
+    // What the rows the cursor still has open gathered: the elements arrive in row order,
+    // so a row's elements are one contiguous run of this buffer and the counts locate it
     std::vector<ListBuffer<>::ListItemVariant>& staged = comprehension->stagedElements();
     std::vector<size_t>& stagedCounts = comprehension->stagedCounts();
     staged.clear();
     stagedCounts.assign(sourceRows, 0);
 
-    // Walk every (row, element) pair in row order, as runUnwindLoop does: sourceRow /
-    // elementIndex is the cursor into that flattened sequence, and a cell contributing
-    // nothing - a null, an empty list - is skipped
-    size_t sourceRow = 0;
-    size_t elementIndex = 0;
-    size_t rowElements = 0;
+    std::vector<std::optional<ListView>>& resultRaw =
+        static_cast<ColumnOptVector<ListView>*>(comprehension->getResult())->getRaw();
+    resultRaw.clear();
+    resultRaw.reserve(sourceRows);
 
-    const auto openNextRow = [&]() {
-        while (sourceRow < sourceRows) {
-            rowElements = elementCount(source, sourceRow);
-            if (rowElements > 0) {
-                return;
+    // A row's list is complete as soon as the run past it starts, so the rows behind the
+    // cursor are built and dropped at every step rather than the whole source being held
+    const auto buildRowsBefore = [&](size_t end) {
+        size_t builtElements = 0;
+
+        while (resultRaw.size() < end) {
+            const size_t row = resultRaw.size();
+            const size_t rowElements = stagedCounts[row];
+            const std::span<const ListBuffer<>::ListItemVariant> elements {staged.data() + builtElements,
+                                                                          rowElements};
+
+            // A cell holding no list gives its row no list either, which is what Cypher
+            // reads `[x IN null | x]` as - as opposed to the empty list a cell whose
+            // elements the predicate all dropped gives
+            if (cellAbsent(source, row)) {
+                resultRaw.push_back(std::nullopt);
+            } else {
+                resultRaw.push_back(listBuffer.insert(elements));
             }
 
-            sourceRow++;
+            builtElements += rowElements;
         }
+
+        staged.erase(staged.begin(), staged.begin() + builtElements);
     };
 
-    openNextRow();
+    while (!cursor.exhausted()) {
+        cursor.fillChunk(chunkSize, rows->getRaw(), elementEmit ? &positions->getRaw() : nullptr);
 
-    while (sourceRow < sourceRows) {
-        std::vector<size_t>& rowsRaw = rows->getRaw();
-        std::vector<size_t>& positionsRaw = positions->getRaw();
+        // The tag of an element is the row its list goes into, which is the row the pair
+        // came from: the body hands back the tags of the elements its WHERE kept
+        const std::vector<size_t>& rowsRaw = rows->getRaw();
         std::vector<uint64_t>& rowTagsRaw = rowTags->getRaw();
-        rowsRaw.clear();
-        positionsRaw.clear();
-        rowTagsRaw.clear();
-
-        while (rowsRaw.size() < chunkSize && sourceRow < sourceRows) {
-            rowsRaw.push_back(sourceRow);
-            rowTagsRaw.push_back(sourceRow);
-
-            if (elementEmit) {
-                positionsRaw.push_back(elementIndex);
-            }
-
-            elementIndex++;
-
-            if (elementIndex == rowElements) {
-                elementIndex = 0;
-                sourceRow++;
-                openNextRow();
-            }
-        }
+        rowTagsRaw.assign(rowsRaw.begin(), rowsRaw.end());
 
         if (elementEmit) {
             elementEmit(source, rows, positions, comprehension->getElementOutput());
@@ -5516,41 +5535,21 @@ void NLExecutor::runListComprehension(NLExecutionContext* context, NLFunctionDat
 
         runBody(context, body);
 
-        // The body cut the tag alongside the elements a WHERE dropped, so what comes back
-        // is one tag per surviving element, naming the row whose list it goes into
         const std::vector<uint64_t>& keptRaw =
             static_cast<const ColumnVector<uint64_t>*>(comprehension->getYieldedRowTags())->getRaw();
+
+        bioassert(value->size() == keptRaw.size(),
+                  "Yielded value of a list comprehension is not row-aligned with its row tags.");
 
         for (size_t element = 0; element < keptRaw.size(); element++) {
             staged.push_back(valueRead(value, element, memory));
             stagedCounts[keptRaw[element]]++;
         }
+
+        buildRowsBefore(cursor.getRow());
     }
 
-    const NLCellAbsentFunction cellAbsent = comprehension->getCellAbsentFunc();
-    ListBuffer<>& listBuffer = comprehension->getMemory()->listBuffer();
-
-    std::vector<std::optional<ListView>>& resultRaw =
-        static_cast<ColumnOptVector<ListView>*>(comprehension->getResult())->getRaw();
-    resultRaw.clear();
-    resultRaw.reserve(sourceRows);
-
-    size_t stagedBegin = 0;
-    for (size_t row = 0; row < sourceRows; row++) {
-        const size_t rowCount = stagedCounts[row];
-        const std::span<const ListBuffer<>::ListItemVariant> elements {staged.data() + stagedBegin, rowCount};
-        stagedBegin += rowCount;
-
-        // A cell holding no list gives its row no list either, which is what Cypher reads
-        // `[x IN null | x]` as - as opposed to the empty list a cell whose elements the
-        // predicate all dropped gives
-        if (cellAbsent(source, row)) {
-            resultRaw.push_back(std::nullopt);
-            continue;
-        }
-
-        resultRaw.push_back(listBuffer.insert(elements));
-    }
+    buildRowsBefore(sourceRows);
 }
 
 NLListItemReadFunction NLExecutor::selectValueListItemRead(ValueType valueType) {
