@@ -130,6 +130,56 @@ std::string_view toStringView(llvm::StringRef text) {
     return std::string_view(text.data(), text.size());
 }
 
+// Whether @param column is one @param aggregateOp bound, or one computed from what it
+// bound: anything computed before it holds the matched rows the aggregate consumed. A
+// column of another block is one the body being generated binds, which no aggregate reduced
+bool boundAtOrAfter(mlir::Value column, mlir::Operation* aggregateOp) {
+    mlir::Operation* const definingOp = column.getDefiningOp();
+
+    if (!definingOp || definingOp->getBlock() != aggregateOp->getBlock()) {
+        return true;
+    }
+
+    return definingOp == aggregateOp || aggregateOp->isBeforeInBlock(definingOp);
+}
+
+// Whether @param lhs is computed before @param rhs in the block both are bound in: a block
+// argument comes before any result, then the order the ops were built in
+bool computedBefore(mlir::Value lhs, mlir::Value rhs) {
+    mlir::Operation* const lhsOp = lhs.getDefiningOp();
+    mlir::Operation* const rhsOp = rhs.getDefiningOp();
+
+    if (!lhsOp || !rhsOp) {
+        const auto lhsArgument = mlir::dyn_cast<mlir::BlockArgument>(lhs);
+        const auto rhsArgument = mlir::dyn_cast<mlir::BlockArgument>(rhs);
+
+        if (lhsArgument && rhsArgument) {
+            return lhsArgument.getArgNumber() < rhsArgument.getArgNumber();
+        }
+
+        return !lhsOp;
+    }
+
+    if (lhsOp == rhsOp) {
+        const auto lhsResult = mlir::cast<mlir::OpResult>(lhs);
+        const auto rhsResult = mlir::cast<mlir::OpResult>(rhs);
+
+        return lhsResult.getResultNumber() < rhsResult.getResultNumber();
+    }
+
+    return lhsOp->isBeforeInBlock(rhsOp);
+}
+
+// Puts @param keys in the order the program computes the columns @param columns maps them
+// to. A map hands its entries out in address order, so the same query would otherwise
+// compile to a different operand order from one run to the next.
+template <typename Key, typename Map>
+void sortByProgramOrder(llvm::SmallVectorImpl<Key>& keys, const Map& columns) {
+    std::ranges::sort(keys, [&columns](const Key& lhs, const Key& rhs) {
+        return computedBefore(columns.at(lhs), columns.at(rhs));
+    });
+}
+
 // The variable a projection item publishes as it stands, or null for an item that computes
 // a value from one: only the first keeps an entity, the second leaves it behind. A wildcard
 // expands to the declarations themselves, anything written out to a bare symbol expression
@@ -144,29 +194,6 @@ const VarDecl* projectedVariable(const Projection::ReturnItem& item) {
     }
 
     return itemExpr->getExprVarDecl();
-}
-
-// The variable an expression names of its own: a symbol's declaration, or the entity whose
-// property or labels it reads. Null for anything else, which names a variable only through
-// the expressions below it.
-const VarDecl* namedVariable(const Expr* expr) {
-    switch (expr->getKind()) {
-        case Expr::Kind::SYMBOL:
-            return static_cast<const SymbolExpr*>(expr)->getDecl();
-        break;
-
-        case Expr::Kind::PROPERTY:
-            return static_cast<const PropertyExpr*>(expr)->getEntityVarDecl();
-        break;
-
-        case Expr::Kind::ENTITY_TYPES:
-            return static_cast<const EntityTypeExpr*>(expr)->getEntityVarDecl();
-        break;
-
-        default:
-            return nullptr;
-        break;
-    }
 }
 
 // The untyped null column the null literal compiles to: nullable with no value type of
@@ -1626,13 +1653,9 @@ bool DBProgramGenerator::isRowAlignedHere(mlir::Value column) const {
 }
 
 void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight) {
-    collectInFlightColumns(inFlight, [](const VarDecl*) { return true; });
-}
-
-void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight, DeclPredicate carries) {
     for (auto& [var, values] : _part._varMap) {
         const mlir::Value column = values.back();
-        if (!isRowAlignedHere(column) || !carries(var->getDecl())) {
+        if (!isRowAlignedHere(column)) {
             continue;
         }
 
@@ -1647,7 +1670,7 @@ void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight, DeclP
     }
 
     for (auto& [var, column] : _part._edgeTypeMap) {
-        if (!isRowAlignedHere(column) || !carries(var->getDecl())) {
+        if (!isRowAlignedHere(column)) {
             continue;
         }
 
@@ -1659,7 +1682,7 @@ void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight, DeclP
     // set must take it along, or the rows it holds would stop matching the ones beside it.
     for (size_t yieldedIndex = 0; yieldedIndex < _part._yieldedColumns.size(); yieldedIndex++) {
         const YieldedColumn& yielded = _part._yieldedColumns[yieldedIndex];
-        if (!isRowAlignedHere(yielded._column) || !carries(yielded._decl)) {
+        if (!isRowAlignedHere(yielded._column)) {
             continue;
         }
 
@@ -1667,16 +1690,27 @@ void DBProgramGenerator::collectInFlightColumns(InFlightColumns& inFlight, DeclP
         inFlight._yieldedIndices.push_back(yieldedIndex);
     }
 
-    // The element a list comprehension bound is in flight inside its body, which is where
-    // a comprehension nested in that body has to take it along - once per element of its
-    // own, as it takes the rest along
-    for (const auto& [decl, column] : _part._comprehensionElements) {
-        if (!isRowAlignedHere(column) || !carries(decl)) {
+    collectElementColumns(inFlight);
+}
+
+// The element a list comprehension bound is in flight inside its body, which is where a
+// comprehension nested in that body has to take it along - once per element of its own, as
+// it takes the rest along
+void DBProgramGenerator::collectElementColumns(InFlightColumns& inFlight) {
+    const ElementColumnMap& elements = _part._comprehensionElements;
+
+    for (const auto& [decl, column] : elements) {
+        if (!isRowAlignedHere(column)) {
             continue;
         }
 
-        inFlight._columns.push_back(column);
         inFlight._comprehensionDecls.push_back(decl);
+    }
+
+    sortByProgramOrder(inFlight._comprehensionDecls, elements);
+
+    for (const VarDecl* decl : inFlight._comprehensionDecls) {
+        inFlight._columns.push_back(elements.at(decl));
     }
 }
 
@@ -1702,6 +1736,11 @@ void DBProgramGenerator::rebindInFlightColumns(mlir::ValueRange columns,
 
     for (const VarDecl* decl : inFlight._comprehensionDecls) {
         _part._comprehensionElements[decl] = columns[columnIndex];
+        columnIndex++;
+    }
+
+    for (const Expr* expr : inFlight._exprs) {
+        _part._exprMap[expr] = columns[columnIndex];
         columnIndex++;
     }
 }
@@ -3211,8 +3250,8 @@ void DBProgramGenerator::generateMergeStmt(const MergeStmt* mergeStmt) {
     MergePattern pattern;
     collectMergePattern(mergeStmt, pattern);
 
-    MergeCarrySet carrySet;
-    collectMergeCarrySet(carrySet);
+    CarrySet carrySet;
+    collectCarrySet(carrySet);
 
     llvm::SmallVector<mlir::Type> resultTypes;
     const mlir::db::ColumnType nodeIDType = allocColumnType(mlir::storage::NodeIDType::get(_mlirCtxt));
@@ -3281,7 +3320,7 @@ void DBProgramGenerator::generateMergeStmt(const MergeStmt* mergeStmt) {
 
     const mlir::Value created = results[resultIndex];
 
-    rebindMergeCarrySet(results, carrySet);
+    rebindCarrySet(results, results.size() - carrySet._columns.size(), carrySet);
 
     generateMergeActions(mergeStmt, created);
 }
@@ -3410,18 +3449,18 @@ mlir::storage::EdgeDirection DBProgramGenerator::mergeDirectionOf(const EdgePatt
     return mlir::storage::EdgeDirection::Forward;
 }
 
-void DBProgramGenerator::collectMergeCarrySet(MergeCarrySet& carrySet) {
+void DBProgramGenerator::collectCarrySet(CarrySet& carrySet) {
     collectInFlightColumns(carrySet._inFlight);
     carrySet._columns.append(carrySet._inFlight._columns.begin(), carrySet._inFlight._columns.end());
 
     // What an earlier CREATE or MERGE wrote is in flight too, and no VDG variable, so
-    // collectInFlightColumns knows nothing of it: a merge that fans the rows out has to
-    // take those columns along or they would stop matching the rows beside them. The
+    // collectInFlightColumns knows nothing of it: an op that hands the rows to a body has
+    // to take those columns along or they would stop matching the rows beside them. The
     // value columns of the properties a CREATE recorded go along for the same reason - a
     // projection reads a created property off them rather than off the graph.
     for (const auto& [decl, written] : _part._createdEntities) {
         bioassert(isRowAlignedHere(written._column),
-                  "MERGE cannot carry '{}' along: what wrote it holds another row set here",
+                  "Cannot carry '{}' along: what wrote it holds another row set here",
                   decl->getName());
 
         CarriedEntity carried;
@@ -3435,7 +3474,7 @@ void DBProgramGenerator::collectMergeCarrySet(MergeCarrySet& carrySet) {
             }
 
             bioassert(isRowAlignedHere(propColumn),
-                      "MERGE cannot carry '{}.{}' along: what wrote it holds another row set here",
+                      "Cannot carry '{}.{}' along: what wrote it holds another row set here",
                       decl->getName(),
                       propName);
 
@@ -3468,27 +3507,53 @@ void DBProgramGenerator::collectMergeCarrySet(MergeCarrySet& carrySet) {
     }
 }
 
-void DBProgramGenerator::rebindMergeCarrySet(mlir::Operation::result_range results,
-                                             const MergeCarrySet& carrySet) {
-    const size_t firstCarried = results.size() - carrySet._columns.size();
+void DBProgramGenerator::collectGroupedColumns(CarrySet& carrySet) {
+    InFlightColumns& inFlight = carrySet._inFlight;
+    const ExprValueMap& exprMap = _part._exprMap;
 
-    rebindInFlightColumns(results, firstCarried, carrySet._inFlight);
+    // No grouping reduced the elements of a list, so a comprehension this one sits inside
+    // still holds its element here
+    collectElementColumns(inFlight);
 
-    size_t resultIndex = firstCarried + carrySet._inFlight._columns.size();
+    for (const auto& [expr, column] : exprMap) {
+        const bool holdsTheGroupedRows = isRowAlignedHere(column)
+                                      && !yieldsConstantColumn(column)
+                                      && boundAtOrAfter(column, _part._aggregateOp);
+
+        if (holdsTheGroupedRows) {
+            inFlight._exprs.push_back(expr);
+        }
+    }
+
+    sortByProgramOrder(inFlight._exprs, exprMap);
+
+    for (const Expr* expr : inFlight._exprs) {
+        inFlight._columns.push_back(exprMap.at(expr));
+    }
+
+    carrySet._columns.append(inFlight._columns.begin(), inFlight._columns.end());
+}
+
+void DBProgramGenerator::rebindCarrySet(mlir::ValueRange columns,
+                                        size_t firstColumn,
+                                        const CarrySet& carrySet) {
+    rebindInFlightColumns(columns, firstColumn, carrySet._inFlight);
+
+    size_t columnIndex = firstColumn + carrySet._inFlight._columns.size();
     for (const CarriedEntity& carried : carrySet._writtenEntities) {
         PartScope::CreatedEntity& written = _part._createdEntities.at(carried._decl);
 
-        written._column = results[resultIndex];
-        resultIndex++;
+        written._column = columns[columnIndex];
+        columnIndex++;
 
         if (written._pending) {
-            written._pending = results[resultIndex];
-            resultIndex++;
+            written._pending = columns[columnIndex];
+            columnIndex++;
         }
 
         for (const std::string_view propName : carried._propNames) {
-            written._properties.at(propName) = results[resultIndex];
-            resultIndex++;
+            written._properties.at(propName) = columns[columnIndex];
+            columnIndex++;
         }
     }
 }
@@ -5293,39 +5358,20 @@ void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* u
     }
 }
 
-void DBProgramGenerator::collectReadVariables(const Expr* expr, DeclSet& read) const {
-    if (!expr) {
-        return;
-    }
-
-    if (const VarDecl* decl = namedVariable(expr)) {
-        read.insert(decl);
-    }
-
-    std::vector<const Expr*> children;
-    if (!ExprChildren::collect(expr, children)) {
-        return;
-    }
-
-    for (const Expr* child : children) {
-        collectReadVariables(child, read);
-    }
-}
-
 void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
                                                         const ListComprehensionExpr* comprehension) {
     const mlir::Value source = getOrTranslateExprColumn(comprehension->getSource());
 
-    // The body reads the elements of one row's list rather than the rows in flight, so a
-    // column it names is carried: the op repeats it over the elements of its own row. A
-    // constant stands for every row already and needs no carrying, and neither does a
-    // column the body never names
-    DeclSet read;
-    collectReadVariables(comprehension->getPredicate(), read);
-    collectReadVariables(comprehension->getProjection(), read);
-
-    InFlightColumns inFlight;
-    collectInFlightColumns(inFlight, [&read](const VarDecl* decl) { return read.contains(decl); });
+    // The body reads the elements of one row's list rather than the rows in flight, so
+    // every column of those rows is carried: the op repeats each over the elements of its
+    // own row. A constant stands for every row already and needs no carrying, which is
+    // the one column the collection leaves out.
+    CarrySet carrySet;
+    if (_part._aggregateOp) {
+        collectGroupedColumns(carrySet);
+    } else {
+        collectCarrySet(carrySet);
+    }
 
     const mlir::Location loc = _opBuilder.getUnknownLoc();
     const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
@@ -5335,12 +5381,12 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
     auto comprehensionOp = _opBuilder.create<mlir::db::ListComprehension>(loc,
                                                                           noneType,
                                                                           source,
-                                                                          inFlight._columns);
+                                                                          carrySet._columns);
 
     llvm::SmallVector<mlir::Type> argumentTypes {noneType, rowTagType};
     llvm::SmallVector<mlir::Location> argumentLocations {loc, loc};
 
-    for (const mlir::Value column : inFlight._columns) {
+    for (const mlir::Value column : carrySet._columns) {
         argumentTypes.push_back(column.getType());
         argumentLocations.push_back(loc);
     }
@@ -5351,30 +5397,25 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
                                                           argumentTypes,
                                                           argumentLocations);
 
-    // Inside the body every name resolves to a column of the element rows, so the bindings
-    // of the rows in flight are put back once it is translated - along with the expressions
-    // already computed over those rows, which the body must compute over its own
     const VariableIdentityMap outerVarMap = _part._varMap;
     const EdgeTypeColumnMap outerEdgeTypeMap = _part._edgeTypeMap;
     const std::vector<YieldedColumn> outerYieldedColumns = _part._yieldedColumns;
-    const ProjectedColumnMap outerComprehensionElements = _part._comprehensionElements;
+    const ElementColumnMap outerComprehensionElements = _part._comprehensionElements;
+    const PartScope::CreatedEntityMap outerCreatedEntities = _part._createdEntities;
     const ExprValueMap outerExprMap = _part._exprMap;
 
     const VarDecl* const itemDecl = comprehension->getDecl();
 
     _part._exprMap.clear();
-    rebindInFlightColumns(bodyBlock->getArguments().drop_front(2), /*firstColumn=*/0, inFlight);
+    rebindCarrySet(bodyBlock->getArguments().drop_front(2), /*firstColumn=*/0, carrySet);
     _part._comprehensionElements[itemDecl] = bodyBlock->getArgument(0);
 
     mlir::Value rowTags = bodyBlock->getArgument(1);
 
-    // The WHERE cuts the elements themselves rather than masking what they contribute, so
-    // the projection below runs over the ones that survive and over nothing else
+    // The WHERE cuts the elements themselves rather than masking what they contribute
     if (const Expr* predicateExpr = comprehension->getPredicate()) {
         const mlir::Value predicate = getOrTranslateExprColumn(predicateExpr);
 
-        // The element, the row tag and the carried columns, which the body reads in that
-        // order: the block arguments themselves, since nothing has cut them yet
         const llvm::SmallVector<mlir::Value> filtered(bodyBlock->args_begin(), bodyBlock->args_end());
 
         llvm::SmallVector<mlir::Type> filteredTypes;
@@ -5386,11 +5427,9 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
 
         _part._comprehensionElements[itemDecl] = filterOp.getResult(0);
         rowTags = filterOp.getResult(1);
-        rebindInFlightColumns(filterOp.getResults(), /*firstColumn=*/2, inFlight);
 
-        // The predicate is computed over the elements the filter cut, so the expressions
-        // below it have to be computed over the ones it kept
         _part._exprMap.clear();
+        rebindCarrySet(filterOp.getResults(), /*firstColumn=*/2, carrySet);
     }
 
     // A comprehension with no projection hands each element on as it stands
@@ -5404,6 +5443,7 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
     _part._edgeTypeMap = outerEdgeTypeMap;
     _part._yieldedColumns = outerYieldedColumns;
     _part._comprehensionElements = outerComprehensionElements;
+    _part._createdEntities = outerCreatedEntities;
     _part._exprMap = outerExprMap;
 
     _part._exprMap[expr] = comprehensionOp.getResult();
@@ -6089,6 +6129,8 @@ void DBProgramGenerator::translateFunctionInvocationExpr(const Expr* expr,
     } else {
         throwError(fmt::format("Unsupported aggregate function: {}", funcName), expr);
     }
+
+    _part._aggregateOp = _part._exprMap.at(expr).getDefiningOp();
 }
 
 mlir::Value DBProgramGenerator::translateArg(const Expr* argExpr) {
@@ -6272,12 +6314,16 @@ mlir::db::Collect DBProgramGenerator::createCollect(llvm::ArrayRef<mlir::Value> 
                                                      ? mlir::DenseI64ArrayAttr {}
                                                      : _opBuilder.getDenseI64ArrayAttr(distinctValues);
 
-    return _opBuilder.create<mlir::db::Collect>(_opBuilder.getUnknownLoc(),
-                                                mlir::TypeRange {resultTypes},
-                                                mlir::ValueRange {columns},
-                                                static_cast<uint64_t>(keyColumns.size()),
-                                                kindsAttr,
-                                                distinctAttr);
+    mlir::db::Collect collectOp = _opBuilder.create<mlir::db::Collect>(_opBuilder.getUnknownLoc(),
+                                                                       mlir::TypeRange {resultTypes},
+                                                                       mlir::ValueRange {columns},
+                                                                       static_cast<uint64_t>(keyColumns.size()),
+                                                                       kindsAttr,
+                                                                       distinctAttr);
+
+    _part._aggregateOp = collectOp.getOperation();
+
+    return collectOp;
 }
 
 void DBProgramGenerator::generateKeylessCollect(const Projection* projection) {
@@ -6586,6 +6632,7 @@ void DBProgramGenerator::generateGroupAggregate(const Projection* projection) {
             llvm::ArrayRef<int64_t>{aggKindValues});
 
         aggregateOp = groupAgg.getOperation();
+        _part._aggregateOp = aggregateOp;
     }
 
     const mlir::ResultRange results = aggregateOp->getResults();
