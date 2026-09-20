@@ -648,6 +648,17 @@ bool standsInForTheElements(Value comparedColumn) {
     return !isa<storage::NodeIDType, storage::EdgeIDType>(column.getType());
 }
 
+// A clause reading the rows through a region of its own spells the type of every column it
+// takes in the block argument standing for it, and in the results it hands back, so a
+// column of another type cannot be put in its place.
+bool readThroughABlockArgument(Value column) {
+    const auto takesItThroughARegion = [](Operation* user) {
+        return isa<OptionalMatch, CallSubquery>(user);
+    };
+
+    return llvm::any_of(column.getUsers(), takesItThroughARegion);
+}
+
 // The one equality among the users of @param unwoundColumn, provided nothing else reads it
 // but the filter that equality masks - so dropping the unwind leaves no other reader behind.
 EqOp matchSoleEquality(Value unwoundColumn, FilterOp& filter) {
@@ -741,12 +752,17 @@ bool matchUnwindEqualityCross(CrossProduct product, UnwindEqualityCross& match) 
     for (size_t index = 0; index < carried.size(); index++) {
         const bool holdsTheElements = carried[index] == match._unwoundColumn;
 
-        if (holdsTheElements && filtered[index].use_empty()) {
-            continue;
-        }
+        if (holdsTheElements) {
+            const Value elements = filtered[index];
+            const bool changesTheType = elements.getType() != match._comparedColumn.getType();
 
-        if (holdsTheElements && !standsInForTheElements(match._comparedColumn)) {
-            return false;
+            if (elements.use_empty()) {
+                continue;
+            } else if (!standsInForTheElements(match._comparedColumn)) {
+                return false;
+            } else if (changesTheType && readThroughABlockArgument(elements)) {
+                return false;
+            }
         }
 
         survivingColumns++;

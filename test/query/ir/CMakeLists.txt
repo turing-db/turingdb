@@ -2989,3 +2989,43 @@ target_link_libraries(test_query_ir_call_subquery_import_order_by PRIVATE
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_call_subquery_import_order_by PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# A CALL subquery and an optional pattern over a column matched against an unwound value.
+add_call_v3_test(test_query_ir_unwind_matched_scope UnwindMatchedScopeTest.cpp)
+
+# OPTIONAL CALL: the columns the body was given, on the rows it yielded nothing for.
+add_turing_test(test_query_ir_optional_subquery_carried_column OptionalSubqueryCarriedColumnTest.cpp)
+target_link_libraries(test_query_ir_optional_subquery_carried_column PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_optional_subquery_carried_column PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# A standalone CALL as a branch of a UNION.
+add_call_v3_test(test_query_ir_union_standalone_call UnionStandaloneCallTest.cpp)
+
+# UNION inside a CALL subquery body.
+add_call_v3_test(test_query_ir_subquery_union_body SubqueryUnionBodyTest.cpp)
+
+# OPTIONAL CALL over a body yielding a nullable ID column.
+add_ir_tests(test_query_ir_optional_subquery_nullable_yield OptionalSubqueryNullableYieldTest.cpp)
+target_link_libraries(test_query_ir_optional_subquery_nullable_yield PRIVATE
+        turing_db_procedures_s
+        turing_db_examples_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_optional_subquery_nullable_yield PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# A constant a CALL subquery body returns beside a column of rows.
+add_call_v3_test(test_query_ir_subquery_constant_return SubqueryConstantReturnTest.cpp)
+
+# OPTIONAL CALL over a body returning a column that owns its strings.
+add_call_v3_test(test_query_ir_optional_subquery_string_padding OptionalSubqueryStringPaddingTest.cpp)

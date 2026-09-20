@@ -404,6 +404,7 @@ public:
     // The null pad of every other chunk shape, the siblings of the gather selectors: an
     // absent value in a nullable column, a default value in a plain one, a cleared mask
     static NLFillNullFunction selectOptFillNullFunction(ValueType valueType);
+    static NLFillNullFunction selectOptFillNullFunction(NLChunkKind kind);
     static NLFillNullFunction selectPlainFillNullFunction(ValueType valueType);
     static NLFillNullFunction selectMaskFillNull();
     static NLFillNullFunction selectOptListFillNull();

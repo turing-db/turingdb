@@ -6857,6 +6857,13 @@ NLFillNullFunction NLExecutor::selectOptFillNullFunction(ValueType valueType) {
     return fill;
 }
 
+NLFillNullFunction NLExecutor::selectOptFillNullFunction(NLChunkKind kind) {
+    NLFillNullFunction fill = nullptr;
+    dispatchIDChunkKind(kind, [&]<typename ID>() { fill = &fillNullColumn<std::optional<ID>>; });
+
+    return fill;
+}
+
 NLFillNullFunction NLExecutor::selectPlainFillNullFunction(ValueType valueType) {
     switch (valueType) {
         case ValueType::Int64:

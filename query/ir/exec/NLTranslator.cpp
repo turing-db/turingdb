@@ -4571,11 +4571,16 @@ NLFillNullFunction NLTranslator::selectFillNullForChunkType(mlir::Type chunkType
     }
 
     if (const auto nullableType = mlir::dyn_cast<storage::NullableType>(elementType)) {
-        if (isOwnedStringElement(nullableType.getValueType())) {
+        const mlir::Type wrappedType = nullableType.getValueType();
+        if (isOwnedStringElement(wrappedType)) {
             return NLExecutor::selectOptOwnedStringFillNull();
         }
 
-        const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
+        if (isIDElement(wrappedType)) {
+            return NLExecutor::selectOptFillNullFunction(chunkKindFromElementType(wrappedType));
+        }
+
+        const ValueType valueType = valueTypeFromElementType(wrappedType);
         return NLExecutor::selectOptFillNullFunction(valueType);
     } else if (mlir::isa<storage::ListElementType>(elementType)) {
         return NLExecutor::selectListElementFillNull();
