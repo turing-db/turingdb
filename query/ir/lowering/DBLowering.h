@@ -562,6 +562,10 @@ private:
 
     mlir::Value unionColumnChunk(mlir::Value chunk);
 
+    // The shape @param chunk must take for a drain to pad a missed row of it with null,
+    // or the chunk itself where it already spells one
+    mlir::Value paddedColumnChunk(mlir::Value chunk);
+
     mlir::Value ownedStringColumnChunk(mlir::Value chunk);
 
     // The chunk element type an unwind of @param sourceElement produces: a drained list

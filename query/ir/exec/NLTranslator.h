@@ -812,16 +812,16 @@ private:
     // accumulator, which carries the single group its reset created.
     bool stepKeepsASingleRow(mlir::Block* block) const;
 
-    // Translate the loop over an nl.cross_product: allocate an output column per
-    // crossed column, map each to the matching loop variable, and record the loop
-    // that walks the pairs a chunk at a time (outer columns block-repeated, inner
-    // columns tiled)
     // One step per row of the config's columns, each a one-row gather out of them
     void translateEachRowLoop(const IteratorConfig& config,
                               mlir::Block& loopBody,
                               NLLimitState* limit,
                               NLStmtContainer* body);
 
+    // Translate the loop over an nl.cross_product: allocate an output column per
+    // crossed column, map each to the matching loop variable, and record the loop
+    // that walks the pairs a chunk at a time (outer columns block-repeated, inner
+    // columns tiled)
     void translateCrossProductLoop(const IteratorConfig& config,
                                    mlir::Block& loopBody,
                                    NLLimitState* limit,

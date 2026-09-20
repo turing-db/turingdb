@@ -583,23 +583,6 @@ bool isTaggedCellChunk(mlir::Type chunkType) {
     return chunk && mlir::isa<storage::ListElementType>(chunk.getElementType());
 }
 
-// A mask holds a bit and a number holds a zero, so a drain padding one writes a false or a
-// 0 the query cannot tell from a value it was given. An ID column is none of them: it
-// spells its null as the invalid ID, as a list and a tagged cell carry their own.
-bool paddedChunkNeedsNullable(mlir::Type chunkType) {
-    const nl::ChunkType chunk = mlir::dyn_cast<nl::ChunkType>(chunkType);
-    if (!chunk) {
-        return false;
-    }
-
-    const mlir::Type element = chunk.getElementType();
-
-    return mlir::isa<storage::BoolType,
-                     storage::StringType,
-                     mlir::Float64Type,
-                     mlir::IntegerType>(element);
-}
-
 mlir::Type promoteNumeric(mlir::OpBuilder& builder, mlir::Type lhs, mlir::Type rhs) {
     const bool anyFloat = mlir::isa<mlir::Float64Type>(lhs) || mlir::isa<mlir::Float64Type>(rhs);
     if (anyFloat) {
@@ -1899,6 +1882,7 @@ void DBLowering::lowerCallSubquery(mlir::db::CallSubquery call) {
     }
 
     if (!returning) {
+        setInsertionInto(stepBlock);
         return;
     }
 
@@ -1967,6 +1951,8 @@ void DBLowering::lowerSubqueryPerRow(mlir::db::CallSubquery call,
         if (unit || !_innermostLoopBody) {
             _innermostLoopBody = previousInnermostLoopBody;
             _innermostCardinality = previousInnermostCardinality;
+
+            setInsertionInto(stepBlock);
         }
 
         const mlir::ResultRange results = call.getResults();
@@ -2007,6 +1993,11 @@ void DBLowering::lowerSubqueryPerRow(mlir::db::CallSubquery call,
         setInsertionInto(stepBlock);
         return;
     }
+
+    // A constant the body returned stands for one value over the rows beside it rather
+    // than for a row of its own, and the product reads its row count off the first chunk
+    // it is handed, so the constants are laid out over those rows first.
+    rowAlignFactorChunks(yieldedChunks);
 
     // One row against N pairs the input row with each of the N rows the body yielded for
     // it, which is the op's result: the inputs then the body's columns
@@ -2062,12 +2053,24 @@ void DBLowering::lowerOptionalSubquery(mlir::db::CallSubquery call,
     mlir::Value yieldedTag;
     lowerSubqueryBody(call, bodyRoot, stepChunks, yieldedChunks, yieldedTag);
 
-    // The drain pads the rows the body yielded nothing for, and only a column carrying a
-    // null of its own can hold one
-    for (mlir::Value& yieldedChunk : yieldedChunks) {
-        if (paddedChunkNeedsNullable(yieldedChunk.getType())) {
-            yieldedChunk = nullableValueChunk(yieldedChunk);
+    // The accumulator appends one buffer per column and the drain reads them back by
+    // position, so a constant the body returned is laid out over the rows beside it before
+    // any of them is collected.
+    rowAlignFactorChunks(yieldedChunks);
+
+    // A body carrying the scope hands the input columns back ahead of its own. The drain
+    // rebuilds those out of the step's chunks rather than padding them, so they stay the
+    // chunk the accumulator recorded; only the body's own columns need a null to pad with.
+    const size_t carriedInputs = call.getCarriesScope() ? stepChunks.size() : 0;
+
+    for (size_t inputIndex = 0; inputIndex < carriedInputs; inputIndex++) {
+        if (yieldedChunks[inputIndex].getType() != stepChunks[inputIndex].getType()) {
+            throw IRException("db.call_subquery carries an input column back as another chunk type");
         }
+    }
+
+    for (size_t chunkIndex = carriedInputs; chunkIndex < yieldedChunks.size(); chunkIndex++) {
+        yieldedChunks[chunkIndex] = paddedColumnChunk(yieldedChunks[chunkIndex]);
     }
 
     // What the collect appends: the inputs as the body left them then its own columns
@@ -4659,6 +4662,27 @@ mlir::Value DBLowering::ownedStringColumnChunk(mlir::Value chunk) {
     setInsertionForUnaryOp(chunk);
 
     return _builder.create<nl::ToOwnedString>(_builder.getUnknownLoc(), resultType, chunk).getResult();
+}
+
+// The chunk shape a drain can pad a missed row of. A mask holds a bit and a number a zero,
+// which the query cannot tell from a value it was given, so those are read as nullable
+// value chunks, and a string as the owned nullable one nl.to_owned_string produces. An ID
+// column needs none of it: it spells its null as the invalid ID.
+mlir::Value DBLowering::paddedColumnChunk(mlir::Value chunk) {
+    const nl::ChunkType chunkType = mlir::dyn_cast<nl::ChunkType>(chunk.getType());
+    if (!chunkType) {
+        return chunk;
+    }
+
+    const mlir::Type element = chunkType.getElementType();
+
+    if (mlir::isa<storage::OwnedStringType>(element)) {
+        return ownedStringColumnChunk(chunk);
+    } else if (mlir::isa<storage::BoolType, storage::StringType, mlir::Float64Type, mlir::IntegerType>(element)) {
+        return nullableValueChunk(chunk);
+    }
+
+    return chunk;
 }
 
 mlir::Value DBLowering::cardinalityDriver(llvm::ArrayRef<mlir::Value> chunks) const {
