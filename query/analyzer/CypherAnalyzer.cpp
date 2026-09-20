@@ -39,6 +39,7 @@
 #include "expr/EntityTypeExpr.h"
 #include "expr/Expr.h"
 #include "expr/ExprChildren.h"
+#include "expr/ListComprehensionExpr.h"
 #include "expr/PropertyExpr.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
@@ -937,6 +938,17 @@ void CypherAnalyzer::analyzeAggregateOrderBy(const Projection* projection) const
 }
 
 bool CypherAnalyzer::isGroupWise(const Expr* expr, const Projection* projection) const {
+    DeclSet elements;
+
+    return isGroupWise(expr, projection, elements);
+}
+
+// @param elements holds the variables the list comprehensions above this expression bound.
+// Each is bound per element of its own source rather than per matched row, so it holds one
+// value wherever it is read and orders the groups as a constant does.
+bool CypherAnalyzer::isGroupWise(const Expr* expr,
+                                 const Projection* projection,
+                                 DeclSet& elements) const {
     if (!expr) {
         return true;
     }
@@ -962,16 +974,37 @@ bool CypherAnalyzer::isGroupWise(const Expr* expr, const Projection* projection)
 
     if (kind == Expr::Kind::PROPERTY) {
         const PropertyExpr* property = static_cast<const PropertyExpr*>(expr);
+        const VarDecl* const entityDecl = property->getEntityVarDecl();
 
-        return projection->hasVariableItem(property->getEntityVarDecl());
+        return elements.contains(entityDecl) || projection->hasVariableItem(entityDecl);
     } else if (kind == Expr::Kind::ENTITY_TYPES) {
         const EntityTypeExpr* entityType = static_cast<const EntityTypeExpr*>(expr);
+        const VarDecl* const entityDecl = entityType->getEntityVarDecl();
 
-        return projection->hasVariableItem(entityType->getEntityVarDecl());
+        return elements.contains(entityDecl) || projection->hasVariableItem(entityDecl);
     } else if (kind == Expr::Kind::SYMBOL) {
         // A returned variable, and the alias of a returned item, are both matched above:
-        // a symbol reaching here names a variable the grouping consumed
-        return false;
+        // a symbol reaching here names a variable the grouping consumed, unless a
+        // comprehension over this key bound it
+        const SymbolExpr* symbol = static_cast<const SymbolExpr*>(expr);
+
+        return elements.contains(symbol->getDecl());
+    } else if (kind == Expr::Kind::LIST_COMPREHENSION) {
+        const ListComprehensionExpr* comprehension = static_cast<const ListComprehensionExpr*>(expr);
+
+        if (!isGroupWise(comprehension->getSource(), projection, elements)) {
+            return false;
+        }
+
+        const VarDecl* const elementDecl = comprehension->getDecl();
+        elements.insert(elementDecl);
+
+        const bool predicateIsGroupWise = isGroupWise(comprehension->getPredicate(), projection, elements);
+        const bool projectionIsGroupWise = isGroupWise(comprehension->getProjection(), projection, elements);
+
+        elements.erase(elementDecl);
+
+        return predicateIsGroupWise && projectionIsGroupWise;
     }
 
     std::vector<const Expr*> children;
@@ -979,12 +1012,14 @@ bool CypherAnalyzer::isGroupWise(const Expr* expr, const Projection* projection)
         return false;
     }
 
-    return isGroupWise(children, projection);
+    return isGroupWise(children, projection, elements);
 }
 
-bool CypherAnalyzer::isGroupWise(std::span<const Expr* const> exprs, const Projection* projection) const {
+bool CypherAnalyzer::isGroupWise(std::span<const Expr* const> exprs,
+                                 const Projection* projection,
+                                 DeclSet& elements) const {
     for (const Expr* expr : exprs) {
-        if (!isGroupWise(expr, projection)) {
+        if (!isGroupWise(expr, projection, elements)) {
             return false;
         }
     }

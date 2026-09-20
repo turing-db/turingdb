@@ -2,6 +2,7 @@
 
 #include <span>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 #include "views/GraphView.h"
@@ -84,6 +85,8 @@ public:
     void analyze(Limit* limitSt);
 
 private:
+    using DeclSet = std::unordered_set<const VarDecl*>;
+
     CypherAST* _ast {nullptr};
     GraphView _graphView;
     const GraphMetadata& _graphMetadata;
@@ -134,7 +137,10 @@ private:
     bool readsAnAggregateItem(const Expr* expr, const Projection* projection) const;
     void analyzeAggregateOrderBy(const Projection* projection) const;
     bool isGroupWise(const Expr* expr, const Projection* projection) const;
-    bool isGroupWise(std::span<const Expr* const> exprs, const Projection* projection) const;
+    bool isGroupWise(const Expr* expr, const Projection* projection, DeclSet& elements) const;
+    bool isGroupWise(std::span<const Expr* const> exprs,
+                     const Projection* projection,
+                     DeclSet& elements) const;
 
     // Every branch of a union must project the same columns, in the same order and
     // under the same names: the union emits one result table, so a branch naming
