@@ -3056,3 +3056,35 @@ target_link_libraries(test_query_ir_list_comprehension PRIVATE
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_list_comprehension PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_list_comprehension_edge_variable ListComprehensionEdgeVariableTest.cpp)
+target_link_libraries(test_query_ir_list_comprehension_edge_variable PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_list_comprehension_edge_variable PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_list_comprehension_created_entity ListComprehensionCreatedEntityTest.cpp)
+target_link_libraries(test_query_ir_list_comprehension_created_entity PRIVATE turing_ir_test_write_query_s)
+
+add_turing_test(test_query_ir_list_comprehension_aggregate_order_by ListComprehensionAggregateOrderByTest.cpp)
+target_link_libraries(test_query_ir_list_comprehension_aggregate_order_by PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_list_comprehension_aggregate_order_by PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# The misaligned program is hand-written nl, so it runs against the SimpleGraph fixture
+# through the interpreter rather than through a query.
+add_ir_tests(test_query_ir_list_comprehension_row_alignment ListComprehensionRowAlignmentTest.cpp)
+target_link_libraries(test_query_ir_list_comprehension_row_alignment PRIVATE
+        turing_db_examples_s
+        turing_ir_test_rows_s)
