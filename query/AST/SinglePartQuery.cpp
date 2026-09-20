@@ -38,3 +38,15 @@ bool SinglePartQuery::writesToTheGraph() const {
 
     return std::ranges::any_of(_stmts->stmts(), writes);
 }
+
+bool SinglePartQuery::readsTheGraph() const {
+    if (!_stmts) {
+        return false;
+    }
+
+    const auto reads = [](const Stmt* stmt) {
+        return Stmt::readsTheGraph(stmt);
+    };
+
+    return std::ranges::any_of(_stmts->stmts(), reads);
+}

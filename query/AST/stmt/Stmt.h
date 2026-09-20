@@ -37,6 +37,16 @@ public:
     // its rows join the ones in flight - and it has still written
     static bool writesToTheGraph(const Stmt* stmt);
 
+    // Whether anything under the clause goes to the graph for rows, which is what an
+    // updating clause above it hides its own writes from. A WITH and an UNWIND read the
+    // rows in flight rather than the graph, and a CALL subquery answers from its body
+    static bool readsTheGraph(const Stmt* stmt);
+
+    // Whether the clause belongs to the reading half of a query part. A CALL subquery
+    // joins that half only when its body goes to the graph: one that only writes has
+    // nothing an updating clause above it could hide
+    static bool isReading(const Stmt* stmt);
+
     virtual Kind getKind() const = 0;
 
 protected:
