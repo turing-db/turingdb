@@ -81,10 +81,9 @@ public:
     using DefinedVars = std::unordered_set<const VariableDependency*>;
     using ExprValueMap = std::unordered_map<const Expr*, mlir::Value>;
     using ProjectedColumnMap = std::unordered_map<const VarDecl*, mlir::Value>;
+    using ElementColumnMap = std::unordered_map<const VarDecl*, mlir::Value>;
     using EdgeTypeColumnMap = std::unordered_map<const VariableDependency*, mlir::Value>;
     using ColumnPredicate = llvm::function_ref<bool(mlir::Value)>;
-    using DeclPredicate = llvm::function_ref<bool(const VarDecl*)>;
-    using DeclSet = std::unordered_set<const VarDecl*>;
     using VariableColumnBinding = llvm::function_ref<void(const VarDecl*, std::string_view, mlir::Value)>;
 
     // Maps a Cypher variable to the last column defined for it, the one the projection
@@ -161,7 +160,7 @@ private:
         // comprehension is translated: the block argument of the op's region. Nothing
         // outside that body names the variable, so the binding stands only while it is
         // being translated
-        ProjectedColumnMap _comprehensionElements;
+        ElementColumnMap _comprehensionElements;
 
         // The column a CALL produced for each of its yielded return values. A yielded
         // variable appears in no pattern, so it is not a VDG variable and cannot live in
@@ -186,7 +185,14 @@ private:
             std::unordered_map<std::string_view, mlir::Value> _properties;
         };
 
-        std::unordered_map<const VarDecl*, CreatedEntity> _createdEntities;
+        using CreatedEntityMap = std::unordered_map<const VarDecl*, CreatedEntity>;
+
+        CreatedEntityMap _createdEntities;
+
+        // The aggregate that reduced the rows the part matched, once one has. The columns
+        // bound above it hold those rows and are no longer the rows in flight, which are
+        // the groups: an op emitted below can carry only what this op bound or later.
+        mlir::Operation* _aggregateOp {nullptr};
 
         // What a part cut leaves of an entity the query wrote: every row of it still
         // names one this change has not committed, so a read goes to the write buffer, and
@@ -338,6 +344,7 @@ private:
         llvm::SmallVector<const VariableDependency*> _edgeTypeVariables;
         llvm::SmallVector<size_t> _yieldedIndices;
         llvm::SmallVector<const VarDecl*> _comprehensionDecls;
+        llvm::SmallVector<const Expr*> _exprs;
     };
 
     // Generates the statements a part writes ahead of its first MATCH that bind variables
@@ -449,18 +456,18 @@ private:
         llvm::SmallVector<mlir::Value> _edgePropValues;
     };
 
-    // One entity an earlier write bound that a merge takes along past its fan-out: its
-    // ID column, its pending mask when it has one, then the value column of each
+    // One entity an earlier write bound that an op takes along over the rows it hands its
+    // body: its ID column, its pending mask when it has one, then the value column of each
     // property the write recorded, under the names sorted here
     struct CarriedEntity {
         const VarDecl* _decl {nullptr};
         llvm::SmallVector<std::string_view> _propNames;
     };
 
-    // What a merge takes along past its fan-out: the columns in flight, then the columns
-    // of every entity an earlier write bound, which are in no VDG variable and so in no
-    // in-flight set
-    struct MergeCarrySet {
+    // Every column an op taking the whole row set carries: the columns in flight, then the
+    // columns of every entity an earlier write bound, which are in no VDG variable and so
+    // in no in-flight set
+    struct CarrySet {
         InFlightColumns _inFlight;
         llvm::SmallVector<mlir::Value> _columns;
         llvm::SmallVector<CarriedEntity> _writtenEntities;
@@ -477,8 +484,13 @@ private:
     void collectMergeHop(const EdgePattern* edgePattern, MergePattern& pattern);
     void collectMergeProperties(const PatternData* data, MergeEntity& entity);
 
-    void collectMergeCarrySet(MergeCarrySet& carrySet);
-    void rebindMergeCarrySet(mlir::Operation::result_range results, const MergeCarrySet& carrySet);
+    void collectCarrySet(CarrySet& carrySet);
+
+    // The columns of the grouped rows, in the order the program computes them: once an
+    // aggregate has reduced the matched rows, what an op below carries is what the
+    // grouping bound - the key columns a sort key reads, under the expressions naming them
+    void collectGroupedColumns(CarrySet& carrySet);
+    void rebindCarrySet(mlir::ValueRange columns, size_t firstColumn, const CarrySet& carrySet);
 
     // Emits the ON CREATE and ON MATCH clauses of a merge, each over the rows @param
     // created selects: the rows the merge wrote, and - through its negation - the rows
@@ -602,11 +614,7 @@ private:
     // Collect those columns. One bound in another block is skipped: an op here can only
     // take what this block binds.
     void collectInFlightColumns(InFlightColumns& inFlight);
-
-    // The ones of them @param carries accepts, under the declaration each is bound to: a
-    // list comprehension repeats a carried column once per element, so it takes along
-    // only what its body names
-    void collectInFlightColumns(InFlightColumns& inFlight, DeclPredicate carries);
+    void collectElementColumns(InFlightColumns& inFlight);
 
     // Cut the rows in flight with a db.skip or a db.limit, given as @tparam CutOp
     template <typename CutOp>
@@ -816,10 +824,6 @@ private:
     // the columns in flight as its carry set, and a body region binding the element to
     // the variable and yielding what each one contributes
     void translateListComprehensionExpr(const Expr* expr, const ListComprehensionExpr* comprehension);
-
-    // The variables @param expr reads at any depth: the symbols it names and the entities
-    // whose properties and labels it reads
-    void collectReadVariables(const Expr* expr, DeclSet& read) const;
 
     // The condition one WHEN value puts on a row: the value itself in the generic form,
     // and the comparison of @param subject against it in the simple one
