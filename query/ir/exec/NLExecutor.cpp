@@ -5559,8 +5559,14 @@ NLUnaryFn NLExecutor::selectToNullable(ValueType valueType, const Column* operan
             return selectToNullableOf<types::String::Primitive>(operand, memory, result);
         break;
 
+        // A cell is a view into the query's list buffer, so the nullable column holds the
+        // views the plain one held and an empty optional where a row has no list at all
+        case ValueType::List:
+            return selectToNullableOf<types::List::Primitive>(operand, memory, result);
+        break;
+
         default:
-            throw IRException("Only a scalar value column can be read as a nullable value column");
+            throw IRException("Only a scalar or a list column can be read as a nullable value column");
         break;
     }
 

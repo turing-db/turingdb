@@ -3042,3 +3042,6 @@ target_link_libraries(test_query_ir_subquery_after_update PRIVATE
         turing_db_ir_exec_s
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_subquery_after_update PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# OPTIONAL CALL over a body returning a list.
+add_call_v3_test(test_query_ir_optional_subquery_list_padding OptionalSubqueryListPaddingTest.cpp)

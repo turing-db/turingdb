@@ -4591,6 +4591,23 @@ mlir::Value DBLowering::nullableValueChunk(mlir::Value chunk) {
         throw IRException("Only a scalar value column can be read as a nullable value column");
     }
 
+    return toNullableChunk(chunk, valueElement);
+}
+
+// The nullable column a list rides where a row of it can be absent - the drain padding the
+// input rows a subquery body yielded nothing for. Kept apart from the value sibling so the
+// reductions and comparisons that read only a scalar still turn a list away.
+mlir::Value DBLowering::nullableListChunk(mlir::Value chunk) {
+    const auto chunkType = mlir::cast<nl::ChunkType>(chunk.getType());
+    const mlir::Type element = chunkType.getElementType();
+    if (mlir::isa<storage::NullableType>(element)) {
+        return chunk;
+    }
+
+    return toNullableChunk(chunk, element);
+}
+
+mlir::Value DBLowering::toNullableChunk(mlir::Value chunk, mlir::Type valueElement) {
     mlir::MLIRContext* const context = _builder.getContext();
     const storage::NullableType nullableType = storage::NullableType::get(context, valueElement);
     const nl::ChunkType resultType = nl::ChunkType::get(context, nullableType);
@@ -4678,6 +4695,8 @@ mlir::Value DBLowering::paddedColumnChunk(mlir::Value chunk) {
 
     if (mlir::isa<storage::OwnedStringType>(element)) {
         return ownedStringColumnChunk(chunk);
+    } else if (mlir::isa<storage::ListType>(element)) {
+        return nullableListChunk(chunk);
     } else if (mlir::isa<storage::BoolType, storage::StringType, mlir::Float64Type, mlir::IntegerType>(element)) {
         return nullableValueChunk(chunk);
     }
@@ -4709,8 +4728,8 @@ mlir::Value DBLowering::rowAlignedChunk(mlir::Value chunk, mlir::Value cardinali
 
     // The rows are laid out as a nullable value chunk - present in every row - which is
     // what every fold, key serialization and reduction reads a value column as. A list is
-    // laid out as the list chunk an nl.collect drain emits instead: a cell is a view over
-    // the query's list buffer, which is never absent, and no nullable list column exists.
+    // laid out as the plain list chunk an nl.collect drain emits instead: the value being
+    // laid out is a literal, so no row of it is absent.
     mlir::MLIRContext* const context = _builder.getContext();
     const bool isList = llvm::isa<storage::ListType>(valueElement);
     const mlir::Type resultElement = isList ? valueElement
