@@ -1102,8 +1102,8 @@ LogicalResult ListComprehension::verify() {
         return emitOpError("body region must end with a db.comprehension_yield");
     }
 
-    const size_t carriedCount = getColumnsToFilter().size();
-    const size_t expectedArguments = carriedCount + 2;
+    const mlir::OperandRange carried = getColumnsToFilter();
+    const size_t expectedArguments = carried.size() + 2;
 
     if (bodyBlock.getNumArguments() != expectedArguments) {
         return emitOpError("body region takes the element and the row tag plus one argument per "
@@ -1111,10 +1111,20 @@ LogicalResult ListComprehension::verify() {
                << "expected " << expectedArguments << " but has " << bodyBlock.getNumArguments();
     }
 
-    for (size_t carriedIndex = 0; carriedIndex < carriedCount; carriedIndex++) {
+    if (!llvm::isa<ColumnType>(bodyBlock.getArgument(0).getType())) {
+        return emitOpError("body argument 0 must be the column of elements");
+    }
+
+    const auto rowTagType = llvm::dyn_cast<ColumnType>(bodyBlock.getArgument(1).getType());
+
+    if (!rowTagType || !rowTagType.getType().isUnsignedInteger(64)) {
+        return emitOpError("body argument 1 must be the ui64 column of row tags");
+    }
+
+    for (size_t carriedIndex = 0; carriedIndex < carried.size(); carriedIndex++) {
         const mlir::Type argumentType = bodyBlock.getArgument(carriedIndex + 2).getType();
 
-        if (argumentType != getColumnsToFilter()[carriedIndex].getType()) {
+        if (argumentType != carried[carriedIndex].getType()) {
             return emitOpError("body argument ") << carriedIndex + 2
                                                  << " must have the type of carried column "
                                                  << carriedIndex;
