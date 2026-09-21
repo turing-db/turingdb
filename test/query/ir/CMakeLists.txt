@@ -3088,3 +3088,14 @@ add_ir_tests(test_query_ir_list_comprehension_row_alignment ListComprehensionRow
 target_link_libraries(test_query_ir_list_comprehension_row_alignment PRIVATE
         turing_db_examples_s
         turing_ir_test_rows_s)
+
+add_turing_test(test_query_ir_list_comprehension_outer_variable ListComprehensionOuterVariableTest.cpp)
+target_sources(test_query_ir_list_comprehension_outer_variable PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_list_comprehension_outer_variable PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_list_comprehension_outer_variable PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
