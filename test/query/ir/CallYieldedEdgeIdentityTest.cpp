@@ -167,9 +167,7 @@ TEST_F(CallYieldedEdgeIdentityTest, patternReusesTheYieldedEdgeAndItsEndpoints) 
 // MATCH (n) CALL gnn.neighbourhoodSample(n, 1, 42) YIELD edge, src, tgt
 // MATCH (x)-[edge]->(y) RETURN edge, src, tgt, x, y: a call driven per matched row yields
 // an edge the pattern then reuses, so x and y are the endpoints the procedure reported for
-// that very edge on every row. The sample is undirected, so src is the node it sampled
-// from and tgt the neighbour it reached - on an in-edge that is the reverse of the edge's
-// own direction, and the pattern reads x and y the other way round.
+// that very edge on every row.
 TEST_F(CallYieldedEdgeIdentityTest, perRowCallYieldedEdgeBindsThePattern) {
     EdgeThenNodesSink sink;
     runQuery("MATCH (n) CALL gnn.neighbourhoodSample(n, 1, 42) YIELD edge, src, tgt "
@@ -181,8 +179,7 @@ TEST_F(CallYieldedEdgeIdentityTest, perRowCallYieldedEdgeBindsThePattern) {
 
     ASSERT_FALSE(rows.empty());
     for (const EdgeThenNodesSink::Row& row : rows) {
-        const bool sampledAlongTheEdge = row[3] == row[1] && row[4] == row[2];
-        const bool sampledAgainstIt = row[3] == row[2] && row[4] == row[1];
-        EXPECT_TRUE(sampledAlongTheEdge || sampledAgainstIt);
+        EXPECT_EQ(row[3], row[1]);
+        EXPECT_EQ(row[4], row[2]);
     }
 }

@@ -28,11 +28,10 @@ constexpr const char* concatenatedListQuery =
     "CALL gnn.neighbourhoodSample(node, 8, 43) YIELD src, tgt "
     "RETURN DISTINCT src, tgt";
 
-// The sample is undirected, so sampling Remy(0) and Adam(1) reaches {1, 2, 3, 6} and
-// {0, 4, 5}, which already holds both seeds: appending them changes nothing and either
-// frontier samples the same 15 edges. Remy is joined to Adam, Computers(2), Eighties(3)
-// and Ghosts(6); Adam to Remy, Bio(4) and Cooking(5); Computers to Luc(9); Bio to
-// Maxime(8); Cooking to Martina(11).
+// Sampling Remy(0) and Adam(1) reaches {1, 6, 2, 3} and {0, 4, 5}, which already holds both
+// seeds, so appending them changes nothing: either frontier samples the same eight edges.
+// Remy cites Adam(1), Ghosts(6), Computers(2) and Eighties(3); Adam cites Remy, Bio(4) and
+// Cooking(5); Ghosts cites Remy; the rest cite nobody.
 const std::vector<StringRowSink::Row> frontierEdges {{"0", "1"},
                                                      {"0", "2"},
                                                      {"0", "3"},
@@ -40,13 +39,6 @@ const std::vector<StringRowSink::Row> frontierEdges {{"0", "1"},
                                                      {"1", "0"},
                                                      {"1", "4"},
                                                      {"1", "5"},
-                                                     {"2", "0"},
-                                                     {"2", "9"},
-                                                     {"3", "0"},
-                                                     {"4", "1"},
-                                                     {"4", "8"},
-                                                     {"5", "1"},
-                                                     {"5", "11"},
                                                      {"6", "0"}};
 
 }

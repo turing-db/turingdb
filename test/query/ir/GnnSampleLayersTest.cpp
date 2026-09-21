@@ -145,16 +145,16 @@ protected:
     }
 
     // Eleven papers around a two-paper minibatch, laid out in the layers a 3-layer
-    // GraphSAGE samples:
+    // GraphSAGE samples. No node cites more than two others, so a fan-out of two or more
+    // takes the whole neighbourhood at every layer and the sample is the seed's full
+    // three-hop reach whatever the seed value:
     //
     //   seeds     0 -> {2, 3}          1 -> {3, 4}      (3 cited by both seeds)
     //   layer 2   2 -> {5, 10}         3 -> {6, 7}      4 -> {7}
     //   layer 3   5 -> {8}             6 -> {8, 9}      7 -> {9}
     //
-    // The sample is undirected, so a paper's neighbourhood is the papers it cites and the
-    // papers citing it. That puts paper 3 at degree four and papers 2, 6 and 7 at three,
-    // above the fan-out of the layer sampling them, so every layer makes a real draw and
-    // the rows below are the ones seed 42 produces.
+    // Node 10 cites nothing, so the path through it dies at the third layer rather than
+    // reaching it - the drop a minibatch pads over.
     std::unique_ptr<Graph> buildCitationGraph() {
         auto graph = Graph::create();
 
@@ -267,9 +267,9 @@ protected:
     std::unique_ptr<JobSystem> _jobSystem;
 };
 
-// The 16 paths the two seeds reach in three hops. The neighbourhood is undirected, so a
-// path may walk back the way it came - 0 -> 2 -> 0 -> 3 is one - and paper 3 is sampled
-// from both seeds, so its subtree appears under each of them.
+// The eight paths the two seeds reach in three hops. Seed 0 loses the path through paper
+// 10, which cites nothing; paper 3 is sampled from both seeds, so its subtree appears
+// under each of them.
 TEST_F(GnnSampleLayersTest, threeLayerSampleWalksEveryPath) {
     auto graph = buildCitationGraph();
     const FrozenCommitTx transaction = graph->openTransaction();
@@ -280,21 +280,13 @@ TEST_F(GnnSampleLayersTest, threeLayerSampleWalksEveryPath) {
 
     std::vector<SampledPathSink::Row> rows;
     sink.sortedRows(rows);
-    const std::vector<SampledPathSink::Row> expected {{0, 2, 0, 2},
-                                                      {0, 2, 0, 3},
-                                                      {0, 2, 5, 2},
-                                                      {0, 2, 5, 8},
-                                                      {0, 3, 0, 2},
-                                                      {0, 3, 0, 3},
-                                                      {0, 3, 6, 3},
+    const std::vector<SampledPathSink::Row> expected {{0, 2, 5, 8},
                                                       {0, 3, 6, 8},
+                                                      {0, 3, 6, 9},
+                                                      {0, 3, 7, 9},
                                                       {1, 3, 6, 8},
                                                       {1, 3, 6, 9},
-                                                      {1, 3, 7, 3},
                                                       {1, 3, 7, 9},
-                                                      {1, 4, 1, 3},
-                                                      {1, 4, 1, 4},
-                                                      {1, 4, 7, 4},
                                                       {1, 4, 7, 9}};
     EXPECT_EQ(rows, expected);
 }
@@ -312,21 +304,13 @@ TEST_F(GnnSampleLayersTest, threeLayerSampleSurvivesChunking) {
 
     std::vector<SampledPathSink::Row> rows;
     sink.sortedRows(rows);
-    const std::vector<SampledPathSink::Row> expected {{0, 2, 0, 2},
-                                                      {0, 2, 0, 3},
-                                                      {0, 2, 5, 2},
-                                                      {0, 2, 5, 8},
-                                                      {0, 3, 0, 2},
-                                                      {0, 3, 0, 3},
-                                                      {0, 3, 6, 3},
+    const std::vector<SampledPathSink::Row> expected {{0, 2, 5, 8},
                                                       {0, 3, 6, 8},
+                                                      {0, 3, 6, 9},
+                                                      {0, 3, 7, 9},
                                                       {1, 3, 6, 8},
                                                       {1, 3, 6, 9},
-                                                      {1, 3, 7, 3},
                                                       {1, 3, 7, 9},
-                                                      {1, 4, 1, 3},
-                                                      {1, 4, 1, 4},
-                                                      {1, 4, 7, 4},
                                                       {1, 4, 7, 9}};
     EXPECT_EQ(rows, expected);
 }
@@ -351,9 +335,7 @@ TEST_F(GnnSampleLayersTest, threeLayerSampleReturningTheFrontierAlone) {
 
     std::vector<SampledFrontierSink::Row> rows;
     sink.sortedRows(rows);
-    const std::vector<SampledFrontierSink::Row> expected {{0, 2}, {0, 2}, {0, 2}, {0, 3},
-                                                          {0, 3}, {0, 3}, {0, 8}, {0, 8},
-                                                          {1, 3}, {1, 3}, {1, 4}, {1, 4},
+    const std::vector<SampledFrontierSink::Row> expected {{0, 8}, {0, 8}, {0, 9}, {0, 9},
                                                           {1, 8}, {1, 9}, {1, 9}, {1, 9}};
     EXPECT_EQ(rows, expected);
 }

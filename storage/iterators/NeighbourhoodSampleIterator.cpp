@@ -29,11 +29,8 @@ NeighbourhoodSampleIterator::NeighbourhoodSampleIterator(const GraphView& view,
     init();
 }
 
-bool NeighbourhoodSampleIterator::skipped(const EdgeRecord& e) const {
-    const bool selfLoopAlreadyRead = _onInEdges && e._otherID == e._nodeID;
-    const bool deleted = _view.tombstones().containsEdge(e._edgeID);
-
-    return deleted || selfLoopAlreadyRead;
+bool NeighbourhoodSampleIterator::deleted(const EdgeRecord& e) const {
+    return _view.tombstones().containsEdge(e._edgeID);
 }
 
 void NeighbourhoodSampleIterator::init() {
@@ -55,74 +52,62 @@ void NeighbourhoodSampleIterator::next() {
     nextValidForCurrentNode();
 }
 
-// Point @ref _edges at the side of the current DataPart given by @ref _onInEdges
-void NeighbourhoodSampleIterator::loadEdges() {
-    const DataPart* part = _partIt.get();
-    const EdgeIndexer& indexer = part->edgeIndexer();
-    const NodeID curNode = *_nodeIt;
+// Point @ref _edgeIt to the first edge for the current value of @ref _nodeIt
+void NeighbourhoodSampleIterator::syncEdges() {
+    bioassert(_nodeIt != _inputNodeIDs->end(), "Null node iterator.");
 
-    _edges = _onInEdges ? indexer.getNodeInEdges(curNode)
-                        : indexer.getNodeOutEdges(curNode);
-    _edgeIt = _edges.begin();
-}
+    _partIt.goToStart();
+    while (_partIt.isNotEnd()) {
+        const DataPart* part = _partIt.get();
+        const EdgeIndexer& indexer = part->edgeIndexer();
+        _edges = indexer.getNodeOutEdges(*_nodeIt);
+        _edgeIt = _edges.begin();
 
-bool NeighbourhoodSampleIterator::changeDirection() {
-    if (!_onInEdges) {
-        _onInEdges = true;
-        loadEdges();
-        return true;
-    }
-
-    if (_partIt.isEnd()) {
-        return false;
-    }
-
-    _partIt.next();
-    if (_partIt.isEnd()) {
-        return false;
-    }
-
-    _onInEdges = false;
-    loadEdges();
-    return true;
-}
-
-// Traverses every side of every DataPart for the current NodeID
-void NeighbourhoodSampleIterator::nextValidEdge() {
-    for (;;) {
-        while (_edgeIt != _edges.end() and skipped(*_edgeIt)) {
+        while (_edgeIt != _edges.end() and deleted(*_edgeIt)) {
             _edgeIt++;
         }
         if (_edgeIt != _edges.end()) {
             return;
         }
 
-        if (!changeDirection()) {
-            return;
-        }
+        _partIt.next();
     }
 }
 
-// Point @ref _edgeIt to the first edge for the current value of @ref _nodeIt
-void NeighbourhoodSampleIterator::syncEdges() {
-    bioassert(_nodeIt != _inputNodeIDs->end(), "Null node iterator.");
+// Traverses each DataPart for every NodeID
+void NeighbourhoodSampleIterator::nextValidForCurrentNode() {
+    _edgeIt++;
 
-    _partIt.goToStart();
-    _onInEdges = false;
-
-    if (_partIt.isEnd()) {
-        _edges = {};
-        _edgeIt = _edges.begin();
+    // Skip deleted edges
+    while (_edgeIt != _edges.end() and deleted(*_edgeIt)) {
+        _edgeIt++;
+    }
+    if (_edgeIt != _edges.end()) {
         return;
     }
 
-    loadEdges();
-    nextValidEdge();
-}
+    if (_partIt.isEnd()) {
+        return;
+    }
 
-void NeighbourhoodSampleIterator::nextValidForCurrentNode() {
-    _edgeIt++;
-    nextValidEdge();
+    _partIt.next();
+    while (_partIt.isNotEnd()) {
+        const DataPart* part = _partIt.get();
+        const EdgeIndexer& indexer = part->edgeIndexer();
+        const NodeID curNode = *_nodeIt;
+
+        _edges = indexer.getNodeOutEdges(curNode);
+        _edgeIt = _edges.begin();
+
+        while (_edgeIt != _edges.end() and deleted(*_edgeIt)) {
+            _edgeIt++;
+        }
+        if (_edgeIt != _edges.end()) {
+            return;
+        }
+
+        _partIt.next();
+    }
 }
 
 NeighbourhoodSampleChunkWriter::NeighbourhoodSampleChunkWriter(const GraphView& view,

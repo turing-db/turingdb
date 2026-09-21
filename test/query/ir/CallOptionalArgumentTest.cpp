@@ -229,8 +229,7 @@ TEST_F(CallOptionalArgumentTest, runsWithTheOptionalSeedOmitted) {
 
     std::vector<NodePairSink::Row> rows;
     sink.sortedRows(rows);
-    const std::vector<NodePairSink::Row> expected {{0, 1}, {0, 2}, {1, 0}, {1, 4},
-                                                   {2, 0}, {2, 3}, {3, 2}, {4, 1}};
+    const std::vector<NodePairSink::Row> expected {{0, 1}, {0, 2}, {1, 4}, {2, 3}};
     EXPECT_EQ(rows, expected);
 }
 
