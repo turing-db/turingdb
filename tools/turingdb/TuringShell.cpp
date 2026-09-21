@@ -16,6 +16,10 @@
 #include <termcolor/termcolor.hpp>
 #include <range/v3/view/drop.hpp>
 
+#ifdef CALLGRIND_PROFILE
+#include <valgrind/callgrind.h>
+#endif
+
 #include "TuringDB.h"
 #include "Graph.h"
 #include "SystemManager.h"
@@ -223,6 +227,25 @@ void unquietCommand(const TuringShell::Command::Words& args, TuringShell& shell,
     shell.setQuiet(false);
 }
 
+#ifdef CALLGRIND_PROFILE
+void callgrindCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
+    if (args.size() != 2) {
+        spdlog::error("The callgrind command takes start or stop");
+        return;
+    }
+
+    if (args[1] == "start") {
+        CALLGRIND_ZERO_STATS;
+        CALLGRIND_START_INSTRUMENTATION;
+    } else if (args[1] == "stop") {
+        CALLGRIND_STOP_INSTRUMENTATION;
+        CALLGRIND_DUMP_STATS;
+    } else {
+        spdlog::error("The callgrind command takes start or stop");
+    }
+}
+#endif
+
 void readCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
     std::string fileName;
 
@@ -359,6 +382,9 @@ TuringShell::TuringShell(TuringDB& turingDB,
     _localCommands.emplace("quiet", Command {quietCommand});
     _localCommands.emplace("unquiet", Command {unquietCommand});
     _localCommands.emplace("read", Command {readCommand});
+#ifdef CALLGRIND_PROFILE
+    _localCommands.emplace("callgrind", Command {callgrindCommand});
+#endif
     _localCommands.emplace("sh", Command {shCommand});
     _localCommands.emplace("shell", Command {shCommand});
     _localCommands.emplace("connect", Command {connectCommand});
