@@ -3,7 +3,7 @@
     "graph": "simpledb",
     "query": "MATCH (n:Person)-[e]->{2,4}(m:Interest) RETURN n.name, e, m.name",
     "expect": {
-        "result": "n.name,e,m.name\nRemy,\"[0, 4, 1]\",Ghosts\nAdam,\"[4, 0, 5]\",Bio\nRemy,\"[0, 4, 2]\",Computers\nAdam,\"[4, 0, 6]\",Cooking\nRemy,\"[0, 4, 3]\",Eighties\nAdam,\"[4, 1]\",Ghosts\nRemy,\"[0, 5]\",Bio\nAdam,\"[4, 1, 7, 2]\",Computers\nAdam,\"[4, 1, 7, 3]\",Eighties\nRemy,\"[0, 6]\",Cooking\nAdam,\"[4, 2]\",Computers\nAdam,\"[4, 3]\",Eighties\nRemy,\"[1, 7, 0, 5]\",Bio\nRemy,\"[1, 7, 0, 6]\",Cooking\nRemy,\"[1, 7, 2]\",Computers\nRemy,\"[1, 7, 3]\",Eighties"
+        "result": "n.name,e,m.name\nRemy,\"[0, 4, 1]\",Ghosts\nRemy,\"[0, 4, 2]\",Computers\nRemy,\"[0, 4, 3]\",Eighties\nRemy,\"[0, 5]\",Bio\nRemy,\"[0, 6]\",Cooking\nRemy,\"[1, 7, 0, 5]\",Bio\nRemy,\"[1, 7, 0, 6]\",Cooking\nRemy,\"[1, 7, 2]\",Computers\nRemy,\"[1, 7, 3]\",Eighties\nAdam,\"[4, 0, 5]\",Bio\nAdam,\"[4, 0, 6]\",Cooking\nAdam,\"[4, 1]\",Ghosts\nAdam,\"[4, 1, 7, 2]\",Computers\nAdam,\"[4, 1, 7, 3]\",Eighties\nAdam,\"[4, 2]\",Computers\nAdam,\"[4, 3]\",Eighties"
     },
     "tags": [
         "variable",

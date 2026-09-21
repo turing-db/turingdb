@@ -3,7 +3,7 @@
     "graph": "simpledb",
     "query": "MATCH (n:Person)-[e]->+(m:Person) RETURN n.name, e, m.name",
     "expect": {
-        "result": "n.name,e,m.name\nRemy,[0],Adam\nAdam,[4],Remy\nRemy,\"[0, 4]\",Remy\nAdam,\"[4, 0]\",Adam\nRemy,\"[0, 4, 1, 7]\",Remy\nAdam,\"[4, 1, 7]\",Remy\nAdam,\"[4, 1, 7, 0]\",Adam\nRemy,\"[1, 7]\",Remy\nRemy,\"[1, 7, 0]\",Adam\nRemy,\"[1, 7, 0, 4]\",Remy"
+        "result": "n.name,e,m.name\nRemy,[0],Adam\nRemy,\"[0, 4]\",Remy\nRemy,\"[0, 4, 1, 7]\",Remy\nRemy,\"[1, 7]\",Remy\nRemy,\"[1, 7, 0]\",Adam\nRemy,\"[1, 7, 0, 4]\",Remy\nAdam,[4],Remy\nAdam,\"[4, 0]\",Adam\nAdam,\"[4, 1, 7]\",Remy\nAdam,\"[4, 1, 7, 0]\",Adam"
     },
     "tags": [
         "variable",

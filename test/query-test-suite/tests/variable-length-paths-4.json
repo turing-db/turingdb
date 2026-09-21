@@ -3,7 +3,7 @@
     "graph": "simpledb",
     "query": "MATCH (n:Person)-[e]-*(m) RETURN n.name, e, m.name SKIP 50 LIMIT 5",
     "expect": {
-        "result": "n.name,e,m.name\nSuhas,[16],JiuJitsu\nCyrus,[14],Travel\nRemy,\"[0, 4, 1, 7, 2, 11, 10]\",Animals\nAdam,\"[4, 0, 6]\",Cooking\nMartina,\"[12, 6, 4, 0, 5, 8, 9]\",Padel"
+        "result": "n.name,e,m.name\nRemy,\"[1, 7, 4, 0, 2, 11, 10]\",Animals\nRemy,\"[1, 7, 4, 0, 3]\",Eighties\nRemy,[2],Computers\nRemy,\"[2, 11]\",Luc\nRemy,\"[2, 11, 10]\",Animals"
     },
     "tags": [
         "variable",
