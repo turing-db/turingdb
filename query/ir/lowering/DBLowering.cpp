@@ -983,6 +983,8 @@ void DBLowering::lowerOperation(mlir::Operation& operation) {
         lowerUnwind(unwind);
     } else if (mlir::db::MakeList makeList = mlir::dyn_cast<mlir::db::MakeList>(operation)) {
         lowerMakeList(makeList);
+    } else if (mlir::db::Range range = mlir::dyn_cast<mlir::db::Range>(operation)) {
+        lowerRange(range);
     } else if (mlir::db::ListComprehension listComprehension = mlir::dyn_cast<mlir::db::ListComprehension>(operation)) {
         lowerListComprehension(listComprehension);
     } else if (mlir::db::ScanEdges scanEdges = mlir::dyn_cast<mlir::db::ScanEdges>(operation)) {
@@ -1569,6 +1571,38 @@ void DBLowering::lowerMakeList(mlir::db::MakeList makeList) {
 
     nl::MakeList lists = _builder.create<nl::MakeList>(_builder.getUnknownLoc(), resultType, chunks);
     _valueMap[makeList.getResult()] = lists.getResult();
+}
+
+void DBLowering::lowerRange(mlir::db::Range range) {
+    llvm::SmallVector<mlir::Value, 3> bounds {mapValue(range.getStart()), mapValue(range.getEnd())};
+
+    const mlir::Value step = range.getStep();
+    if (step) {
+        bounds.push_back(mapValue(step));
+    }
+
+    // A bound holding one value for every row rather than one per row is laid out over the
+    // rows the others carry, as lowerMakeList lays its element columns out
+    const mlir::Value cardinality = cardinalityDriver(bounds);
+
+    for (mlir::Value& bound : bounds) {
+        bound = nullableValueChunk(rowAlignedChunk(bound, cardinality));
+    }
+
+    mlir::MLIRContext* const context = _builder.getContext();
+    const mlir::Type listType = storage::ListType::get(context, _builder.getI64Type());
+    const nl::ChunkType resultType = nl::ChunkType::get(context,
+                                                        storage::NullableType::get(context, listType));
+
+    setInsertionForNaryOp(bounds);
+
+    nl::Range lists = _builder.create<nl::Range>(_builder.getUnknownLoc(),
+                                                 resultType,
+                                                 bounds[0],
+                                                 bounds[1],
+                                                 step ? bounds[2] : mlir::Value {});
+
+    _valueMap[range.getResult()] = lists.getResult();
 }
 
 void DBLowering::lowerScanEdges(mlir::db::ScanEdges scanEdges) {

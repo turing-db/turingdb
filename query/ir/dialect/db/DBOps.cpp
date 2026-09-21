@@ -1152,6 +1152,25 @@ LogicalResult MakeList::verify() {
     return success();
 }
 
+// The integers a range spans ride the list it builds, so the result is a column of them.
+LogicalResult Range::verify() {
+    const ColumnType resultColumn = llvm::dyn_cast<ColumnType>(getResult().getType());
+    if (!resultColumn) {
+        return emitOpError("result must be a column");
+    }
+
+    const storage::ListType listType = llvm::dyn_cast<storage::ListType>(resultColumn.getType());
+    if (!listType) {
+        return emitOpError("result must be a column of lists");
+    }
+
+    if (!llvm::isa<mlir::IntegerType>(listType.getElementType())) {
+        return emitOpError("result must be a column of integer lists");
+    }
+
+    return success();
+}
+
 // The unwound column's element type is the homogeneity verdict: a type-erased
 // list_element column accepts any elements, a typed one requires them to share that one
 // type - the shared check the const_list verifier runs too.

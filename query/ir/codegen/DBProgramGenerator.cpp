@@ -6184,6 +6184,11 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
         return;
     }
 
+    if (funcName == "range") {
+        translateRange(expr, args);
+        return;
+    }
+
     // An entity is named by its ID throughout the engine, so the column holding it already
     // holds what id() answers: the call emits no op and stands for its argument's column. A
     // type-erased cell holds its entity behind a tag, so that one is read out of it.
@@ -6228,6 +6233,30 @@ void DBProgramGenerator::translateFunctionExpr(const Expr* expr,
     }
 
     throwError(fmt::format("Unsupported function: {}", funcName), expr);
+}
+
+void DBProgramGenerator::translateRange(const Expr* expr, const ExprChain* args) {
+    const size_t argCount = args ? args->size() : 0;
+    const bool boundsGiven = argCount == 2 || argCount == 3;
+    if (!boundsGiven) {
+        throwError("range() expects 2 or 3 arguments.", expr);
+    }
+
+    const ExprChain::ExprVector& argExprs = args->getExprs();
+
+    const mlir::Value start = translateArg(argExprs[0]);
+    const mlir::Value end = translateArg(argExprs[1]);
+    const mlir::Value step = argExprs.size() == 3 ? translateArg(argExprs[2]) : mlir::Value {};
+
+    const mlir::Type listType = mlir::storage::ListType::get(_mlirCtxt, _opBuilder.getI64Type());
+
+    mlir::db::Range range = _opBuilder.create<mlir::db::Range>(_opBuilder.getUnknownLoc(),
+                                                               allocColumnType(listType),
+                                                               start,
+                                                               end,
+                                                               step);
+
+    _part._exprMap[expr] = range.getResult();
 }
 
 void DBProgramGenerator::translateCoalesce(const Expr* expr, const ExprChain* args) {

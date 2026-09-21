@@ -536,6 +536,28 @@ LogicalResult MakeList::verify() {
     return success();
 }
 
+// A bound is read as a nullable value chunk, so a row missing one gets no list, and what
+// the lists hold is integers whatever the bounds were.
+LogicalResult Range::verify() {
+    const Type elementType = llvm::cast<ChunkType>(getResult().getType()).getElementType();
+
+    const storage::NullableType nullableType = llvm::dyn_cast<storage::NullableType>(elementType);
+    if (!nullableType) {
+        return emitOpError("result must be a chunk of nullable lists");
+    }
+
+    const storage::ListType listType = llvm::dyn_cast<storage::ListType>(nullableType.getValueType());
+    if (!listType) {
+        return emitOpError("result must be a chunk of nullable lists");
+    }
+
+    if (!llvm::isa<mlir::IntegerType>(listType.getElementType())) {
+        return emitOpError("result must be a chunk of integer lists");
+    }
+
+    return success();
+}
+
 // The body binds the element, the row tag and one chunk per carried column, and ends
 // naming what each element contributes. The result holds one list per row of the source
 // chunk.

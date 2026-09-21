@@ -201,6 +201,7 @@ private:
     void lowerVectorSearch(mlir::db::VectorSearch vectorSearch);
     void lowerUnwind(mlir::db::Unwind unwind);
     void lowerMakeList(mlir::db::MakeList makeList);
+    void lowerRange(mlir::db::Range range);
 
     // Lowers `[x IN xs WHERE p(x) | f(x)]`: the body is lowered into a region of its own
     // and the op built around it, since the type of the lists is the type of what that

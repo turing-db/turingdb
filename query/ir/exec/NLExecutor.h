@@ -316,6 +316,10 @@ public:
     // holds at r, in operand order, as one contiguous run of the query's list buffer.
     static void runMakeList(NLExecutionContext* context, NLFunctionData* data);
 
+    // Build one list per row (nl.range): row r counts from its start bound to its end
+    // bound by its step, as one contiguous run of the query's list buffer.
+    static void runRange(NLExecutionContext* context, NLFunctionData* data);
+
     // Build one list per row (nl.list_comprehension): the body runs over the elements of
     // the step's cells, a chunkful at a time, and row r takes the ones it kept of its own
     // cell as one contiguous run of the query's list buffer.
@@ -712,6 +716,10 @@ public:
     static NLListItemReadFunction selectOptNestedListItemRead();
     static NLListItemReadFunction selectTaggedListItemRead(bool nullable);
     static NLListItemReadFunction selectOwnedStringListItemRead(bool nullable);
+
+    // The read an nl.range takes one bound out of a column with, which is a nullable
+    // integer one however the query wrote the bound.
+    static NLRangeBoundReadFunction selectRangeBoundRead(ValueType valueType);
 
     // Whether a cell of a list comprehension's source holds no list: a null one where a
     // column carries nulls, a cell tagged null where it carries tagged scalars, and never

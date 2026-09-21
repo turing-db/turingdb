@@ -265,6 +265,36 @@ def MakeList : NLOp<"make_list", [Pure, RowAlignedThroughOperands]> {
 }
 
 /**
+* Range
+*/
+def Range : NLOp<"range", [Pure, RowAlignedThroughOperands]> {
+  let summary = "Row-wise build of the list of integers each row's bounds span";
+
+  let description = [{
+    Imperative counterpart of db.range. Row r of the result is the list counting from row
+    r of `start` to row r of `end`, both included, by row r of `step`, written into the
+    query's list buffer as one contiguous run:
+
+      %xs = nl.range %from, %to
+              : (!nl.chunk<!storage.nullable<i64>>, !nl.chunk<!storage.nullable<i64>>)
+              -> !nl.chunk<!storage.nullable<!storage.list<i64>>>
+
+    Every bound carries rows - lowering lays a constant one out over them first - and is
+    read as a nullable value chunk, so a row whose bound is absent gets no list. The step
+    is absent where the query gave none, which counts by 1; a step of 0 is the error the
+    row raises, as is a row spanning more than 100000 integers.
+  }];
+
+  // The step is the only variable-length operand, so MLIR tells it apart from the bounds
+  // without operand-segment sizes, as nl.broadcast_constant's cardinality is.
+  let arguments = (ins NLChunk:$start, NLChunk:$end, Optional<NLChunk>:$step);
+  let results   = (outs NLChunk:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = "$start `,` $end (`,` $step^)? attr-dict `:` functional-type(operands, results)";
+}
+
+/**
 * ListComprehension
 */
 def ListComprehension : NLOp<"list_comprehension", [Pure, RowAlignedThroughOperands]> {

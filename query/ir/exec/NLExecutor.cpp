@@ -3353,6 +3353,23 @@ ListBuffer<>::ListItemVariant valueListItem(const Column* input, size_t row, Loc
     return ListBuffer<>::ListItemVariant {*cell};
 }
 
+// A range's list is held in memory in full, and one row of it is enough to exhaust the
+// machine: range(0, 9223372036854775807) asks for 9.2e18 integers. The bound is what a
+// row that overruns it is turned away by.
+constexpr uint64_t rangeLengthLimit = 100000;
+
+// Read one cell of a nullable integer column as a bound of a range: the number it holds,
+// or nothing where the row has none.
+template <typename Primitive>
+std::optional<types::Int64::Primitive> rangeBound(const Column* input, size_t row) {
+    const std::optional<Primitive>& cell = (*static_cast<const ColumnOptVector<Primitive>*>(input))[row];
+    if (!cell.has_value()) {
+        return std::nullopt;
+    }
+
+    return static_cast<types::Int64::Primitive>(*cell);
+}
+
 // The sibling of valueListItem for a column whose cells are present in every row: a
 // nested list, held as the one element it is.
 template <typename Element>
@@ -5456,6 +5473,77 @@ void NLExecutor::runMakeList(NLExecutionContext*, NLFunctionData* data) {
     }
 }
 
+void NLExecutor::runRange(NLExecutionContext*, NLFunctionData* data) {
+    const NLRangeData* range = static_cast<NLRangeData*>(data);
+
+    const NLRangeData::Bound& start = range->getStart();
+    const NLRangeData::Bound& end = range->getEnd();
+    const NLRangeData::Bound& step = range->getStep();
+
+    ListBuffer<>& listBuffer = range->getMemory()->listBuffer();
+
+    const size_t rowCount = start._column->size();
+    bioassert(end._column->size() == rowCount, "Bound columns of a range are not row-aligned.");
+    bioassert(!step._column || step._column->size() == rowCount,
+              "Step column of a range is not row-aligned with its bounds.");
+
+    std::vector<std::optional<ListView>>& outputRaw =
+        static_cast<ColumnOptVector<ListView>*>(range->getResult())->getRaw();
+    outputRaw.clear();
+    outputRaw.reserve(rowCount);
+
+    std::vector<ListBuffer<>::ListItemVariant> elements;
+
+    for (size_t rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        const std::optional<types::Int64::Primitive> from = start._read(start._column, rowIndex);
+        const std::optional<types::Int64::Primitive> to = end._read(end._column, rowIndex);
+        const std::optional<types::Int64::Primitive> by =
+            step._column ? step._read(step._column, rowIndex) : std::optional<types::Int64::Primitive> {1};
+
+        const bool boundsPresent = from.has_value() && to.has_value() && by.has_value();
+        if (!boundsPresent) {
+            outputRaw.push_back(std::nullopt);
+            continue;
+        }
+
+        if (*by == 0) {
+            throw IRException("range() cannot count by a step of 0");
+        }
+
+        elements.clear();
+
+        const bool ascending = *by > 0;
+        const bool reachesEnd = ascending ? *from <= *to : *from >= *to;
+
+        if (reachesEnd) {
+            // A range's span and its stride can each be wider than an int64 holds, so both
+            // are counted unsigned and every element is offset from the first that way
+            const uint64_t first = static_cast<uint64_t>(*from);
+            const uint64_t last = static_cast<uint64_t>(*to);
+            const uint64_t span = ascending ? last - first : first - last;
+            const uint64_t stride = ascending ? static_cast<uint64_t>(*by) : 0 - static_cast<uint64_t>(*by);
+            const uint64_t length = span / stride + 1;
+
+            if (length > rangeLengthLimit) {
+                throw IRException(fmt::format("range() builds at most {} integers, and this one spans {}",
+                                              rangeLengthLimit,
+                                              length));
+            }
+
+            elements.reserve(length);
+
+            for (uint64_t position = 0; position < length; position++) {
+                const uint64_t offset = position * stride;
+                const uint64_t value = ascending ? first + offset : first - offset;
+
+                elements.push_back(ListBuffer<>::ListItemVariant {static_cast<types::Int64::Primitive>(value)});
+            }
+        }
+
+        outputRaw.push_back(listBuffer.insert(elements));
+    }
+}
+
 void NLExecutor::runListComprehension(NLExecutionContext* context, NLFunctionData* data) {
     NLListComprehensionData* comprehension = static_cast<NLListComprehensionData*>(data);
 
@@ -5561,6 +5649,22 @@ NLListItemReadFunction NLExecutor::selectValueListItemRead(ValueType valueType) 
     ValueTypeDispatcher(valueType).execute(select);
 
     return selected;
+}
+
+NLRangeBoundReadFunction NLExecutor::selectRangeBoundRead(ValueType valueType) {
+    switch (valueType) {
+        case ValueType::Int64:
+            return &rangeBound<types::Int64::Primitive>;
+        break;
+
+        case ValueType::UInt64:
+            return &rangeBound<types::UInt64::Primitive>;
+        break;
+
+        default:
+            throw IRException("nl.range reads its bounds out of integer columns");
+        break;
+    }
 }
 
 NLListItemReadFunction NLExecutor::selectNodeListItemRead() {

@@ -4,6 +4,7 @@
 #include <string_view>
 
 #include "decl/EvaluatedType.h"
+#include "decl/ListShape.h"
 
 namespace db {
 
@@ -82,6 +83,11 @@ public:
     // argument, so an UNWIND of it binds what an UNWIND of the argument would - tail.
     bool returnsItsArgumentShape() const { return _returnsItsArgumentShape; }
 
+    // The shape the list this returns has whatever it was called with - range, whose
+    // elements are integers however its bounds were written. A signature naming none
+    // leaves the shape to the rule its other flags name.
+    const ListShape& returnedListShape() const { return _returnedListShape; }
+
     size_t getMinArgCount() const { return _requiredArgCount; }
 
     void setArguments(ArgumentTypes&& args) {
@@ -104,10 +110,13 @@ public:
 
     void setReturnsItsArgumentShape(bool returnsShape) { _returnsItsArgumentShape = returnsShape; }
 
+    void setReturnedListShape(const ListShape& shape) { _returnedListShape = shape; }
+
 private:
     std::string_view _fullName;
     ArgumentTypes _argumentTypes;
     std::vector<FunctionReturnType> _returnTypes;
+    ListShape _returnedListShape;
     size_t _requiredArgCount {0};
     bool _isAggregate {false};
     bool _isProcedure {false};

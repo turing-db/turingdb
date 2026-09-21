@@ -1137,6 +1137,11 @@ void ExprAnalyzer::analyzeFuncInvocExpr(FunctionInvocationExpr* expr, FunctionRe
             expr->setListShape(providedArgs.front()->getListShape());
         }
 
+        const ListShape& returnedShape = signature->returnedListShape();
+        if (returnedShape.isList()) {
+            expr->setListShape(returnedShape);
+        }
+
         if (signature->isAggregate()) {
             if (isAggregate) {
                 throwError(fmt::format("Aggregate functions may not be nested: the argument of "
