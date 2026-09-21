@@ -1326,9 +1326,13 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
     mlir::StringAttr edgeTypeAttr;
     const std::optional<VariableDependency::Constraint>& constraints = edge->constraints();
     if (constraints) {
-        const auto* edgeType = std::get_if<VariableDependency::EdgeType>(&*constraints);
-        if (edgeType && !edgeType->empty()) {
-            edgeTypeAttr = _opBuilder.getStringAttr(llvm::StringRef(edgeType->data(), edgeType->size()));
+        const auto* edgeTypes = std::get_if<VariableDependency::EdgeTypeNames>(&*constraints);
+        if (edgeTypes && !edgeTypes->_names.empty()) {
+            bioassert(edgeTypes->_names.size() == 1,
+                      "db.explore_paths restricts a walk to one edge type, not a disjunction over several");
+
+            const std::string_view edgeType = edgeTypes->_names.front();
+            edgeTypeAttr = _opBuilder.getStringAttr(llvm::StringRef(edgeType.data(), edgeType.size()));
         }
     }
 
@@ -2270,8 +2274,8 @@ void DBProgramGenerator::rebindInFlightColumns(mlir::ValueRange columns,
     }
 
     for (const VarDecl* decl : inFlight._namedPathDecls) {
-        _part._namedPaths[decl] = results[resultIndex];
-        resultIndex++;
+        _part._namedPaths[decl] = columns[columnIndex];
+        columnIndex++;
     }
 
     for (const size_t yieldedIndex : inFlight._yieldedIndices) {

@@ -194,12 +194,10 @@ void FunctionDecls::initDefault() {
     countMaps->setReturnTypes({{EvaluatedType::Integer}});
     countMaps->setIsAggregate(true);
 
-    // count over a named path, which the legacy engine has no column of
     FunctionSignature* countPaths = createFunction("count");
     countPaths->setArguments({EvaluatedType::GraphPath});
     countPaths->setReturnTypes({{EvaluatedType::Integer}});
     countPaths->setIsAggregate(true);
-    countPaths->setIsV3Only(true);
 
     FunctionSignature* countEmbeddings = createFunction("count");
     countEmbeddings->setArguments({EvaluatedType::Embedding});
@@ -426,12 +424,10 @@ void FunctionDecls::initDefault() {
     range->setReturnTypes({{EvaluatedType::List}});
     range->setReturnedListShape(ListShape(EvaluatedType::Integer, 1));
 
-    // The hop count of a variable-length path; the legacy engine has no path column to
-    // read it from
+    // The hop count of a variable-length path
     FunctionSignature* sizePath = createFunction("size");
     sizePath->setArguments({EvaluatedType::EdgePattern});
     sizePath->setReturnTypes({{EvaluatedType::Integer}});
-    sizePath->setIsV3Only(true);
 
     // Conversion functions
     FunctionSignature* toInteger = createFunction("toInteger");

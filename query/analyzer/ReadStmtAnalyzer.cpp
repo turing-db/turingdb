@@ -395,10 +395,6 @@ void ReadStmtAnalyzer::analyzeNamedPath(PatternElement* element) {
 
     const std::string_view name = symbol->getName();
 
-    if (!_isV3) {
-        throwError("Named paths are not supported yet", element);
-    }
-
     if (_ctxt->getDecl(name)) {
         throwError(fmt::format("Variable '{}' is already bound: a named path takes a name of its own", name),
                    element);

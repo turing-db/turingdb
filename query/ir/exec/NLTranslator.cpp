@@ -673,7 +673,9 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             IteratorConfig config {IteratorKind::ExplorePaths, explorePaths.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = explorePaths.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
-            config._edgeType = explorePaths.getEdgeType().value_or(llvm::StringRef());
+            if (const std::optional<llvm::StringRef> edgeType = explorePaths.getEdgeType()) {
+                config._edgeTypes.push_back(*edgeType);
+            }
             config._direction = toPathExplorationDir(explorePaths.getDirection());
             config._minHops = explorePaths.getMinHops();
             config._maxHops = explorePaths.getMaxHops().value_or(std::numeric_limits<uint64_t>::max());
@@ -1829,11 +1831,11 @@ void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
 
     // An edge type is resolved as translateEdgeLoop resolves a by-type hop's: a name
     // absent from the schema matches no edge, and the loop is marked unmatchable
-    const bool filtersByType = !config._edgeType.empty();
+    const bool filtersByType = !config._edgeTypes.empty();
     EdgeTypeID edgeType;
     bool matchable = true;
     if (filtersByType) {
-        const std::optional<EdgeTypeID> edgeTypeID = _view->metadata().edgeTypes().get(config._edgeType);
+        const std::optional<EdgeTypeID> edgeTypeID = _view->metadata().edgeTypes().get(config._edgeTypes.front());
         matchable = edgeTypeID.has_value();
         edgeType = matchable ? *edgeTypeID : EdgeTypeID();
     }
