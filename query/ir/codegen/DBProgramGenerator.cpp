@@ -3607,6 +3607,22 @@ void DBProgramGenerator::rebindCarrySet(mlir::ValueRange columns,
     }
 }
 
+// A projected item publishes its column under the declaration its alias shares with it, and
+// a symbol reads that column before any variable of the same name. The binding has to
+// follow the carried columns into a body, or a read there answers with the outer rows.
+void DBProgramGenerator::rebindProjectedColumns(mlir::ValueRange from, mlir::ValueRange to) {
+    for (auto& [decl, column] : _part._projectedColumns) {
+        for (size_t columnIndex = 0; columnIndex < from.size(); columnIndex++) {
+            if (column != from[columnIndex]) {
+                continue;
+            }
+
+            column = to[columnIndex];
+            break;
+        }
+    }
+}
+
 void DBProgramGenerator::generateMergeActions(const MergeStmt* mergeStmt, mlir::Value created) {
     const SetStmt* onCreate = mergeStmt->getOnCreate();
     if (onCreate) {
@@ -5458,11 +5474,13 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
     const ElementColumnMap outerComprehensionElements = _part._comprehensionElements;
     const PartScope::CreatedEntityMap outerCreatedEntities = _part._createdEntities;
     const ExprValueMap outerExprMap = _part._exprMap;
+    const ProjectedColumnMap outerProjectedColumns = _part._projectedColumns;
 
     const VarDecl* const itemDecl = comprehension->getDecl();
 
     _part._exprMap.clear();
     rebindCarrySet(bodyBlock->getArguments().drop_front(2), /*firstColumn=*/0, carrySet);
+    rebindProjectedColumns(carrySet._columns, bodyBlock->getArguments().drop_front(2));
     _part._comprehensionElements[itemDecl] = bodyBlock->getArgument(0);
 
     mlir::Value rowTags = bodyBlock->getArgument(1);
@@ -5485,6 +5503,7 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
 
         _part._exprMap.clear();
         rebindCarrySet(filterOp.getResults(), /*firstColumn=*/2, carrySet);
+        rebindProjectedColumns(filtered, filterOp.getResults());
     }
 
     // A comprehension with no projection hands each element on as it stands
@@ -5500,6 +5519,7 @@ void DBProgramGenerator::translateListComprehensionExpr(const Expr* expr,
     _part._comprehensionElements = outerComprehensionElements;
     _part._createdEntities = outerCreatedEntities;
     _part._exprMap = outerExprMap;
+    _part._projectedColumns = outerProjectedColumns;
 
     _part._exprMap[expr] = comprehensionOp.getResult();
 }
