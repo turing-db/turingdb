@@ -80,7 +80,7 @@ TaggedSizeFunction::ResultType TaggedSizeFunction::operator()(const ArgType cell
         return std::nullopt;
     }
 
-    throw TuringException("size() reads a list or a string, and this row holds a value that is neither");
+    throw TuringException("size() and length() read a list or a string, and this row holds a value that is neither");
 }
 
 StringSizeFunction::ResultType StringSizeFunction::operator()(const ArgType string) const {

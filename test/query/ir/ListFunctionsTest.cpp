@@ -425,7 +425,7 @@ TEST_F(ListFunctionsTest, reportsACellHoldingNoList) {
     write("CREATE (n:Tagged {name: 'a', tags: [[1, 2], 3]})");
 
     expectRejected("MATCH (n:Tagged) UNWIND n.tags AS l RETURN size(l)",
-                   "size() reads a list or a string, and this row holds a value that is neither");
+                   "size() and length() read a list or a string, and this row holds a value that is neither");
 }
 
 TEST_F(ListFunctionsTest, unwindsTheTailOfATaggedCell) {

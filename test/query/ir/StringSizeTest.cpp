@@ -201,7 +201,7 @@ TEST_F(StringSizeTest, sizesANullCellAsNull) {
 }
 
 TEST_F(StringSizeTest, rejectsTheSizeOfACellHoldingNeitherAListNorAString) {
-    expectRejected("RETURN size(head([1, 2]))", "size() reads a list or a string");
+    expectRejected("RETURN size(head([1, 2]))", "size() and length() read a list or a string");
 }
 
 TEST_F(StringSizeTest, rejectsTheSizeOfANumber) {

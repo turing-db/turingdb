@@ -137,7 +137,7 @@ mlir::Type sizeFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement
     const bool readsAString = llvm::isa<storage::StringType, storage::OwnedStringType>(inputElement);
 
     if (!readsAList && !readsAString) {
-        throw IRException("size() reads a list column or a string column");
+        throw IRException("size() and length() read a list column or a string column");
     }
 
     return builder.getI64Type();
