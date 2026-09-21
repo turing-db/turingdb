@@ -104,12 +104,47 @@ void PathDistanceIndex::build(const GraphView& view,
     std::vector<NodeID> frontier;
     collectEnds(parts, endLabels, frontier);
 
+    search(parts, view.tombstones(), frontier, direction, edgeType, maxHops);
+    _built = true;
+}
+
+void PathDistanceIndex::build(const GraphView& view,
+                              std::span<const NodeID> ends,
+                              PathExplorationDir direction,
+                              std::optional<EdgeTypeID> edgeType,
+                              uint64_t maxHops) {
+    const PartDirectory parts(view);
+
+    _distances.assign(parts.getAllocatedNodeCount(), unreachable);
+    _reached = 0;
+
+    std::vector<NodeID> frontier;
+    for (const NodeID end : ends) {
+        const size_t index = end.getValue();
+        if (index >= _distances.size() || _distances[index] != unreachable) {
+            continue;
+        }
+
+        _distances[index] = 0;
+        _reached++;
+        frontier.push_back(end);
+    }
+
+    search(parts, view.tombstones(), frontier, direction, edgeType, maxHops);
+    _built = true;
+}
+
+void PathDistanceIndex::search(const PartDirectory& parts,
+                               const Tombstones& tombstones,
+                               std::vector<NodeID>& frontier,
+                               PathExplorationDir direction,
+                               std::optional<EdgeTypeID> edgeType,
+                               uint64_t maxHops) {
     // A hop the exploration takes forward is walked back here: the distances of the nodes
     // an out-edge leaves grow along in-edges
     const bool walksIns = direction != PathExplorationDir::BACKWARD;
     const bool walksOuts = direction != PathExplorationDir::FORWARD;
 
-    const Tombstones& tombstones = view.tombstones();
     const Tombstones* edgeTombstones = tombstones.hasEdges() ? &tombstones : nullptr;
 
     std::vector<NodeID> next;
@@ -148,8 +183,6 @@ void PathDistanceIndex::build(const GraphView& view,
 
         std::swap(frontier, next);
     }
-
-    _built = true;
 }
 
 uint8_t PathDistanceIndex::getDistance(NodeID node) const {
@@ -444,6 +477,19 @@ double PathDistanceIndex::sampleHopPassRate(const PartDirectory& parts,
     }
 
     return static_cast<double>(kept) / static_cast<double>(offered);
+}
+
+double PathDistanceIndex::estimatedBuildChecks(const PartDirectory& parts,
+                                               PathExplorationDir direction,
+                                               std::optional<EdgeTypeID> edgeType,
+                                               size_t sourceCount,
+                                               uint64_t maxHops) {
+    const double nodeCount = static_cast<double>(parts.getAllocatedNodeCount());
+    const double graph = nodeCount + static_cast<double>(parts.getAllocatedEdgeCount());
+    const double touched = std::min(graph, estimatedSearchChecks(parts, direction, edgeType, sourceCount, maxHops));
+
+    // The distance bytes are written once before the search, a word for every eight nodes
+    return indexUnitCostInChecks * (touched + nodeCount / 8.0);
 }
 
 bool PathDistanceIndex::isWorthBuilding(const GraphView& view,

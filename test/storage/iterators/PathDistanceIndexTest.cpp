@@ -445,3 +445,37 @@ TEST_F(PathDistanceIndexTest, chargesTheFrontierWhileItGrowsAndNotAfter) {
     EXPECT_DOUBLE_EQ(checks(unbounded), checks(PathDistanceIndex::farthest));
     EXPECT_DOUBLE_EQ(checks(unbounded), checks(PathDistanceIndex::farthest / 2));
 }
+
+TEST_F(PathDistanceIndexTest, buildsFromAListOfEnds) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+
+    // Neither end carries the T label, and 3 is listed twice
+    const std::vector<NodeID> ends {NodeID(3), NodeID(8), NodeID(3)};
+    std::vector<bool> listed(nodeCount, false);
+    listed[3] = true;
+    listed[8] = true;
+
+    Distances expected;
+    for (const PathExplorationDir direction : {PathExplorationDir::FORWARD, PathExplorationDir::BACKWARD, PathExplorationDir::BOTH}) {
+        for (const uint64_t maxHops : {uint64_t {1}, uint64_t {2}, unbounded}) {
+            referenceDistances(_adjacency, listed, direction, std::nullopt, maxHops, expected);
+
+            PathDistanceIndex index;
+            index.build(view, ends, direction, std::nullopt, maxHops);
+            ASSERT_TRUE(index.isBuilt());
+
+            for (size_t node = 0; node < nodeCount; node++) {
+                EXPECT_EQ(index.getDistance(NodeID(node)), expected[node])
+                    << "node " << node << " direction " << static_cast<int>(direction) << " max " << maxHops;
+            }
+            EXPECT_EQ(index.getReachedCount(), reachedCount(expected));
+        }
+    }
+
+    PathDistanceIndex beyond;
+    beyond.build(view, std::vector<NodeID> {NodeID(1000)}, PathExplorationDir::FORWARD, std::nullopt, unbounded);
+    EXPECT_EQ(beyond.getReachedCount(), 0u);
+    EXPECT_FALSE(beyond.canReachEndWithin(NodeID(0), unbounded));
+}

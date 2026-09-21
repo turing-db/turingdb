@@ -39,6 +39,13 @@ public:
                std::optional<EdgeTypeID> edgeType,
                uint64_t maxHops);
 
+    // The same search from a list of ends, the hops to the nearest of them
+    void build(const GraphView& view,
+               std::span<const NodeID> ends,
+               PathExplorationDir direction,
+               std::optional<EdgeTypeID> edgeType,
+               uint64_t maxHops);
+
     bool isBuilt() const { return _built; }
     uint8_t getDistance(NodeID node) const;
     bool isEnd(NodeID node) const { return getDistance(node) == 0; }
@@ -109,6 +116,14 @@ public:
                                              uint64_t maxHops,
                                              double hopPassRate = 1.0);
 
+    // The candidate checks a search from that many sources costs to build: the nodes and edges
+    // it touches, at most the graph, and the distance byte written for every node
+    static double estimatedBuildChecks(const PartDirectory& parts,
+                                       PathExplorationDir direction,
+                                       std::optional<EdgeTypeID> edgeType,
+                                       size_t sourceCount,
+                                       uint64_t maxHops);
+
     // Whether the enumeration the seeds imply is expected to cost more than the index
     static bool isWorthBuilding(const GraphView& view,
                                 const SeedExpansion& expansion,
@@ -122,6 +137,12 @@ private:
     bool _built {false};
 
     void collectEnds(const PartDirectory& parts, const LabelSet& endLabels, std::vector<NodeID>& ends);
+    void search(const PartDirectory& parts,
+                const Tombstones& tombstones,
+                std::vector<NodeID>& frontier,
+                PathExplorationDir direction,
+                std::optional<EdgeTypeID> edgeType,
+                uint64_t maxHops);
     void relax(std::span<const EdgeRecord> edges,
                uint8_t level,
                std::optional<EdgeTypeID> edgeType,
