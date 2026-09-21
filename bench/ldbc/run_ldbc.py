@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Runs the official LDBC SNB queries against the TuringDB v3 (MLIR) query engine.
 
-The v3 engine is reachable through the `#v3 ` prefix of the turingdb shell in local
-mode, so the runner drives one shell process over stdin: a `cd <graph>`, then each
-query on a single line, with a marker line between them to segment the output. It
-reports, per query, whether the engine ran it and how long it took.
+The v3 engine is the only one the shell runs in local mode, so the runner drives one
+shell process over stdin: a `cd <graph>`, then each query on a single line, with a
+marker line between them to segment the output. It reports, per query, whether the
+engine ran it and how long it took.
 
 The engine takes no query parameters, so each `$name` is replaced by its literal from
 params/turingdb.json before the query is sent.
@@ -165,7 +165,7 @@ def buildInput(queries, graphName, repeat):
 
         for run in range(repeat):
             lines.append(f"sh echo {MARKER}{index}:{run}")
-            lines.append("#v3 " + query["query"])
+            lines.append(query["query"])
 
     lines.append(f"sh echo {MARKER}end:0")
     lines.append("quit")
