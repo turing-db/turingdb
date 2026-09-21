@@ -3,7 +3,7 @@
     "graph": "simpledb",
     "query": "MATCH (n:Person)<-[e]-*(m:Person) RETURN n.name, e, m.name",
     "expect": {
-        "result": "n.name,e,m.name\nRemy,[],Remy\nAdam,[],Adam\nMaxime,[],Maxime\nLuc,[],Luc\nMartina,[],Martina\nSuhas,[],Suhas\nCyrus,[],Cyrus\nDoruk,[],Doruk\nRemy,[4],Adam\nAdam,[0],Remy\nRemy,\"[4, 0]\",Remy\nAdam,\"[0, 4]\",Adam\nRemy,\"[4, 0, 7, 1]\",Remy\nAdam,\"[0, 7, 1]\",Remy\nAdam,\"[0, 7, 1, 4]\",Adam\nRemy,\"[7, 1]\",Remy\nRemy,\"[7, 1, 4]\",Adam\nRemy,\"[7, 1, 4, 0]\",Remy"
+        "result": "n.name,e,m.name\nRemy,[],Remy\nRemy,[4],Adam\nRemy,\"[4, 0]\",Remy\nRemy,\"[4, 0, 7, 1]\",Remy\nRemy,\"[7, 1]\",Remy\nRemy,\"[7, 1, 4]\",Adam\nRemy,\"[7, 1, 4, 0]\",Remy\nAdam,[],Adam\nAdam,[0],Remy\nAdam,\"[0, 4]\",Adam\nAdam,\"[0, 7, 1]\",Remy\nAdam,\"[0, 7, 1, 4]\",Adam\nMaxime,[],Maxime\nLuc,[],Luc\nMartina,[],Martina\nSuhas,[],Suhas\nCyrus,[],Cyrus\nDoruk,[],Doruk"
     },
     "tags": [
         "variable",

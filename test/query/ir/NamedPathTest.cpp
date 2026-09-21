@@ -150,8 +150,8 @@ TEST_F(NamedPathTest, sortsAndCutsTheRowsAPathRidesOn) {
 
     EXPECT_EQ(rows, sorted(Rows {
         {"Adam", "(1), [4], (0)"},
+        {"Adam", "(1), [4], (0), [0], (1)"},
         {"Adam", "(1), [4], (0), [1], (6), [7], (0)"},
-        {"Adam", "(1), [4], (0), [1], (6), [7], (0), [0], (1)"},
     }));
 }
 
