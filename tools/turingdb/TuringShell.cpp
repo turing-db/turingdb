@@ -228,9 +228,9 @@ void unquietCommand(const TuringShell::Command::Words& args, TuringShell& shell,
 }
 
 #ifdef CALLGRIND_PROFILE
-void callgrindCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
+void profilerCommand(const TuringShell::Command::Words& args, TuringShell& shell, std::string& line) {
     if (args.size() != 2) {
-        spdlog::error("The callgrind command takes start or stop");
+        spdlog::error("The profiler command takes start or stop");
         return;
     }
 
@@ -241,7 +241,7 @@ void callgrindCommand(const TuringShell::Command::Words& args, TuringShell& shel
         CALLGRIND_STOP_INSTRUMENTATION;
         CALLGRIND_DUMP_STATS;
     } else {
-        spdlog::error("The callgrind command takes start or stop");
+        spdlog::error("The profiler command takes start or stop");
     }
 }
 #endif
@@ -383,7 +383,7 @@ TuringShell::TuringShell(TuringDB& turingDB,
     _localCommands.emplace("unquiet", Command {unquietCommand});
     _localCommands.emplace("read", Command {readCommand});
 #ifdef CALLGRIND_PROFILE
-    _localCommands.emplace("callgrind", Command {callgrindCommand});
+    _localCommands.emplace("profiler", Command {profilerCommand});
 #endif
     _localCommands.emplace("sh", Command {shCommand});
     _localCommands.emplace("shell", Command {shCommand});
