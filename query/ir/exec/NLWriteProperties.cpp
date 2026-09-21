@@ -12,8 +12,6 @@
 #include "reader/GraphReader.h"
 #include "views/GraphView.h"
 
-#include "IRException.h"
-
 using namespace db;
 
 namespace {
@@ -151,13 +149,17 @@ public:
         }
     }
 
+    /// Owning encoding as outlives query
     void operator()(const ColumnVector<std::optional<ListView>>* typed) {
         _buf.clear();
         _buf.reserve(typed->size());
         for (const std::optional<ListView>& val : *typed) {
-            if (!val) {
-                throw IRException("Cannot set a property to NULL in CREATE.");
+            if (!val.has_value()) {
+                using Disengaged = std::optional<types::List::OwningPrimitive>;
+                _buf.emplace_back(_propID, Disengaged {});
+                continue;
             }
+
             _buf.emplace_back(_propID, types::List::OwningPrimitive(*val));
         }
     }
