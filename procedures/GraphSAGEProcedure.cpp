@@ -10,6 +10,7 @@
 
 #include <spdlog/fmt/bundled/format.h>
 
+#include "BioAssert.h"
 #include "samplers/GraphSAGESampler.h"
 
 #include "ProcUtils.h"
@@ -116,8 +117,6 @@ void prepareImpl(ProcedureState* state) {
     const ProcedureContext* ctxt = state->getContext();
     const GraphView& view = *ctxt->getGraphView();
 
-    data.sampler = std::make_unique<GraphSAGESampler>(view, seed);
-
     const GraphSAGESampler::Fanouts fanouts = [&] -> auto {
         GraphSAGESampler::Fanouts out;
         using FanoutColType = const ColumnConst<ListView>;
@@ -133,6 +132,8 @@ void prepareImpl(ProcedureState* state) {
         return out;
     }();
 
+    data.sampler = std::make_unique<GraphSAGESampler>(view, seed);
+
     for (size_t hop = 0; hop < GraphSAGESampler::hops; hop++) {
         const size_t base = hop * returnValuesPerHop;
 
@@ -142,10 +143,6 @@ void prepareImpl(ProcedureState* state) {
 
         data.sampler->setHopData(hop, srcs, tgts, dst, fanouts[hop]);
     }
-}
-
-void executeImpl(ProcedureState* state) {
-    Data& data = state->data<Data>();
 
     ColumnNodeIDs nodes;
     const Column* x = data.getInputColumn(0);
@@ -155,7 +152,22 @@ void executeImpl(ProcedureState* state) {
     for (const ListElementView ele : list) {
         nodes.emplace_back(ele.getAs<types::Int64::Primitive>());
     }
-    data.sampler->sample(&nodes);
+
+    data.sampler->seed(&nodes);
+}
+
+void executeImpl(ProcedureState* state) {
+    Data& data = state->data<Data>();
+
+    std::unique_ptr<GraphSAGESampler>& sampler = data.sampler;
+
+    bioassert(sampler, "Null sampler");
+
+    sampler->sample();
+
+    if (sampler->finished()) {
+        state->finish();
+    }
 }
 
 }
@@ -200,10 +212,9 @@ void GraphSAGEProcedure::execute(ProcedureState* state) {
         }
         break;
 
-        case ProcedureState::Step::EXECUTE:
+        case ProcedureState::Step::EXECUTE: {
             executeImpl(state);
-            state->finish();
-            // throw FatalException("execute not implemented");
+        }
         break;
     }
 }

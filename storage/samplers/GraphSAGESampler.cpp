@@ -80,16 +80,24 @@ void GraphSAGESampler::reset() {
     }
     _requiredLength = 0;
     _currentHop = 0;
+    _seeded = false;
+    _finished = false;
 }
 
-void GraphSAGESampler::sample(const ColumnNodeIDs* seeds) {
-    static_assert(hops >= 1);
-
+void GraphSAGESampler::seed(const ColumnNodeIDs* seeds) {
     _requiredLength = std::max(_requiredLength, seeds->size());
 
     // first hop's dst_nodes are the query seeds
     colAssign(seeds, _sampleData[0]._dstNodes);
     deduplicate(_sampleData[0]._dstNodes, _sampleData[0]._dstNodes);
+
+    _seeded = true;
+}
+
+void GraphSAGESampler::sample() {
+    static_assert(hops >= 1);
+
+    bioassert(_seeded, "Attempted to sample without seeding");
 
     while (_currentHop < hops) {
         sampleHop();
@@ -98,6 +106,10 @@ void GraphSAGESampler::sample(const ColumnNodeIDs* seeds) {
     // pad all columns with nulls to ensure all columns are square
     for (HopData& data : _sampleData) {
         data.resize(_requiredLength);
+    }
+
+    if (_currentHop == hops) {
+        _finished = true;
     }
 }
 
