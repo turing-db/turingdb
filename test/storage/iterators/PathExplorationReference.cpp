@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <span>
 #include <sstream>
 #include <stdexcept>
 
@@ -183,7 +184,7 @@ size_t turing::test::collectPaths(const GraphView& view,
         explorator.setPaths(&paths, &trie);
     }
     if (options._edgeType) {
-        explorator.setEdgeTypeFilter(*options._edgeType);
+        explorator.setEdgeTypeFilter(options.getEdgeTypes());
     }
     explorator.setHopFilter(options._hopFilter);
     explorator.setEndLabels(options._endLabels);

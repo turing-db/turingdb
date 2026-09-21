@@ -733,12 +733,12 @@ change.
   `AggregateKind`), usable by both dialects through `StorageTypes.td`.
 - `StorageTypes.td`: `PathRefType` (`!storage.path_ref`); `DBTypes.td`: `ColumnPathRefs` constraint
   (`CPred` over `ColumnType` → `PathRefType`) for the paths result.
-- `db.explore_paths(%input, forward, {carries}) hops 1 to 3 type "KNOWS"` →
+- `db.explore_paths(%input, forward, {carries}) hops 1 to 3 edge_types ["KNOWS"]` →
   `(srcids: node_id, tgtids: node_id, paths: path, filtered...)`. Attributes:
   `PathDirection:$direction`, `UI64Attr:$min_hops`, `OptionalAttr<UI64Attr>:$max_hops`
-  (absent = unbounded), `OptionalAttr<StrAttr>:$edge_type`; Tier 2 adds
+  (absent = unbounded), `OptionalAttr<StrArrayAttr>:$edge_types` (a disjunction); Tier 2 adds
   `OptionalAttr<StrArrayAttr>:$end_labels`. `Pure`, numeric result names. Verifier: carried
-  count and types = filtered, `max >= min`, non-empty type when present. `srcids` is always
+  count and types = filtered, `max >= min`, non-empty type set when present. `srcids` is always
   the seed (result 0) regardless of direction: no orientation swap. An optional single-block
   `hop` region (`MaxSizedRegion<1>`) with the three block arguments of Hop predicates,
   terminated by `db.yield` of one `column<bool>`; `Yield`'s `HasParent` widens to
@@ -802,7 +802,7 @@ change.
   `collectInFlightColumns`, which skips constants and walks all of `_varMap`).
 - `walkExplorePaths`/`addExplorePaths(src, edge, tgt, carrySet, direction, min, max)`:
   results `{node, node, path} ++ carried types`; the edge's type constraint from
-  `edge->constraints()` becomes the `edge_type` attribute; the inner node constraints, the
+  `edge->constraints()` becomes the `edge_types` attribute; the inner node constraints, the
   property map and the inline WHERE become the `hop` region (see Hop predicates); register
   `src` → srcids, `edge` → paths, the hop node decls → paths as group variables, `tgt` →
   tgtids (or `joinedTarget`); `rebindInFlightColumns(results, 3, carried)`; no

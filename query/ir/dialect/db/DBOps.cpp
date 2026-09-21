@@ -352,9 +352,10 @@ LogicalResult ExplorePaths::verify() {
         return emitOpError("max_hops must be at least min_hops");
     }
 
-    const std::optional<llvm::StringRef> edgeType = getEdgeType();
-    if (edgeType && edgeType->empty()) {
-        return emitOpError("edge_type must name an edge type");
+    if (const ArrayAttr edgeTypes = getEdgeTypesAttr()) {
+        if (failed(verifyEdgeTypesNotEmpty(getOperation(), edgeTypes))) {
+            return failure();
+        }
     }
 
     if (const std::optional<ArrayAttr> endLabels = getEndLabels()) {

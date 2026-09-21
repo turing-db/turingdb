@@ -89,8 +89,8 @@ TEST_F(PathBranchingSampleTest, branchesByTheNodesTheWalkReaches) {
 
     PathDistanceIndex::TypeBranching cascade;
     PathDistanceIndex::TypeBranching chain;
-    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::FORWARD, _cascade, cascade);
-    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::FORWARD, _chain, chain);
+    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::FORWARD, {&_cascade, 1}, cascade);
+    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::FORWARD, {&_chain, 1}, chain);
 
     // A node the cascade reaches continues along three edges of its own, and one the chain
     // reaches along a single one. Spread over the two thousand nodes of the graph instead,
@@ -139,7 +139,7 @@ TEST_F(PathBranchingSampleTest, measuresTheBranchingWhereTheSeedsAre) {
 
     const auto fanOut = [&parts](const std::vector<NodeID>& seeds) {
         PathDistanceIndex::SeedExpansion expansion;
-        PathDistanceIndex::sampleSeedExpansion(parts, PathExplorationDir::FORWARD, std::nullopt, seeds, expansion);
+        PathDistanceIndex::sampleSeedExpansion(parts, PathExplorationDir::FORWARD, {}, seeds, expansion);
 
         return expansion._levels == 0 ? 0.0 : expansion._tailFanOut;
     };
@@ -158,9 +158,9 @@ TEST_F(PathBranchingSampleTest, chargesACascadeMoreThanAChainPerHop) {
     const GraphReader reader = transaction.readGraph();
     const PartDirectory parts(reader.getView());
 
-    const auto checks = [&parts](std::optional<EdgeTypeID> edgeType, uint64_t maxHops) {
+    const auto checks = [&parts](EdgeTypeID edgeType, uint64_t maxHops) {
         PathDistanceIndex::TypeBranching branching;
-        PathDistanceIndex::sampleBranching(parts, PathExplorationDir::FORWARD, edgeType, branching);
+        PathDistanceIndex::sampleBranching(parts, PathExplorationDir::FORWARD, {&edgeType, 1}, branching);
 
         PathDistanceIndex::SeedExpansion expansion;
         flatExpansion(branching._fanOut, expansion);
@@ -178,8 +178,8 @@ TEST_F(PathBranchingSampleTest, theSearchFrontierStopsAtTheNodesCarryingTheType)
     const GraphReader reader = transaction.readGraph();
     const PartDirectory parts(reader.getView());
 
-    const auto checks = [&parts](std::optional<EdgeTypeID> edgeType, uint64_t maxHops) {
-        return PathDistanceIndex::estimatedSearchChecks(parts, PathExplorationDir::FORWARD, edgeType, 1, maxHops);
+    const auto checks = [&parts](EdgeTypeID edgeType, uint64_t maxHops) {
+        return PathDistanceIndex::estimatedSearchChecks(parts, PathExplorationDir::FORWARD, {&edgeType, 1}, 1, maxHops);
     };
 
     // The cascade spans forty nodes, so a search covers them within a few hops
@@ -201,10 +201,10 @@ TEST_F(PathBranchingSampleTest, theEnumerationFrontierOutgrowsTheNodesCarryingTh
     const PartDirectory parts(reader.getView());
 
     PathDistanceIndex::TypeBranching cascade;
-    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::FORWARD, _cascade, cascade);
+    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::FORWARD, {&_cascade, 1}, cascade);
 
     const auto searchChecks = [&parts, this](uint64_t maxHops) {
-        return PathDistanceIndex::estimatedSearchChecks(parts, PathExplorationDir::FORWARD, _cascade, 1, maxHops);
+        return PathDistanceIndex::estimatedSearchChecks(parts, PathExplorationDir::FORWARD, {&_cascade, 1}, 1, maxHops);
     };
 
     const auto walkChecks = [&parts, &cascade](uint64_t maxHops) {

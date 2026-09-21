@@ -552,8 +552,8 @@ TEST_F(ExploreBoundEndsGeneratedGraphTest, targetIndexKeepsTheFilteredRows) {
     }
 
     PathDistanceIndex::SeedExpansion expansion;
-    PathDistanceIndex::sampleSeedExpansion(PartDirectory(view), PathExplorationDir::FORWARD, std::nullopt, seeds, expansion);
-    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, nodeCount * outDegree, nodeCount, 3));
+    PathDistanceIndex::sampleSeedExpansion(PartDirectory(view), PathExplorationDir::FORWARD, {}, seeds, expansion);
+    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, {}, expansion, nodeCount * outDegree, nodeCount, 3));
 
     RowSink filtered;
     runProgram(generatedFilterProgram, view, filtered);

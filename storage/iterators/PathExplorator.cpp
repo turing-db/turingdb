@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <bit>
 
+#include "EdgeTypeMatch.h"
 #include "PathDistanceIndex.h"
 #include "PathHopFilter.h"
 #include "datapart/NodeContainer.h"
@@ -141,9 +142,9 @@ void PathExplorator::setPaths(ColumnVector<PathRef>* paths, PathTrie* trie) {
     }
 }
 
-void PathExplorator::setEdgeTypeFilter(EdgeTypeID edgeType) {
+void PathExplorator::setEdgeTypeFilter(std::span<const EdgeTypeID> edgeTypes) {
     _filterByType = true;
-    _edgeType = edgeType;
+    _edgeTypes = edgeTypes;
 }
 
 void PathExplorator::setEndLabels(const LabelSet* labels) {
@@ -526,13 +527,15 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
         return found == _pathEdges.end() ? NO_TAINT : static_cast<size_t>(found - _pathEdges.begin());
     };
 
+    const std::span<const EdgeTypeID> edgeTypes = _edgeTypes;
+
     _candidateChecks += edges.size();
 
     for (const EdgeRecord& record : edges) {
         const EdgeID edge = record._edgeID;
 
         const bool backtracks = hasPathEdges && edge == lastEdge;
-        const bool wrongType = _filterByType && record._edgeTypeID != _edgeType;
+        const bool wrongType = _filterByType && !edgeTypeMatches(edgeTypes, record._edgeTypeID);
         const bool deleted = _filterTombstones && _tombstones->containsEdge(edge);
         const size_t heldAt = backtracks ? _pathEdges.size() - 1
             : (signature & signatureBit(edge)) != 0 ? positionOnPath(edge) : NO_TAINT;
@@ -788,10 +791,12 @@ void PathExplorator::appendPendingReachCandidates(NodeID node) {
 }
 
 void PathExplorator::appendReachCandidates(std::span<const EdgeRecord> edges) {
+    const std::span<const EdgeTypeID> edgeTypes = _edgeTypes;
+
     _candidateChecks += edges.size();
 
     for (const EdgeRecord& record : edges) {
-        const bool wrongType = _filterByType && record._edgeTypeID != _edgeType;
+        const bool wrongType = _filterByType && !edgeTypeMatches(edgeTypes, record._edgeTypeID);
         const bool deleted = _filterTombstones && _tombstones->containsEdge(record._edgeID);
         if (wrongType || deleted) {
             continue;

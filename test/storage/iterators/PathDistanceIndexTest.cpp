@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <math.h>
 #include <memory>
-#include <optional>
+#include <span>
 #include <vector>
 
 #include "PathExplorationReference.h"
@@ -37,7 +37,7 @@ constexpr uint8_t unreachable = PathDistanceIndex::unreachable;
 void referenceDistances(const Adjacency& adjacency,
                         const std::vector<bool>& ends,
                         PathExplorationDir direction,
-                        std::optional<uint64_t> edgeType,
+                        std::span<const uint64_t> edgeTypes,
                         uint64_t maxHops,
                         Distances& distances) {
     distances.assign(ends.size(), unreachable);
@@ -52,7 +52,8 @@ void referenceDistances(const Adjacency& adjacency,
 
     const auto relax = [&](const std::vector<ReferenceEdge>& edges, uint8_t level, std::vector<uint64_t>& next) {
         for (const ReferenceEdge& edge : edges) {
-            const bool wrongType = edgeType && edge._type != *edgeType;
+            const bool wrongType = !edgeTypes.empty()
+                                   && std::ranges::find(edgeTypes, edge._type) == edgeTypes.end();
             if (wrongType || distances[edge._other] != unreachable) {
                 continue;
             }
@@ -192,19 +193,19 @@ protected:
     void expectMatchesTheReference(const GraphView& view,
                                    const Adjacency& adjacency,
                                    PathExplorationDir direction,
-                                   std::optional<EdgeTypeID> edgeType,
+                                   std::span<const EdgeTypeID> edgeTypes,
                                    uint64_t maxHops) {
-        std::optional<uint64_t> referenceType;
-        if (edgeType) {
-            referenceType = edgeType->getValue();
+        std::vector<uint64_t> referenceTypes;
+        for (const EdgeTypeID edgeType : edgeTypes) {
+            referenceTypes.push_back(edgeType.getValue());
         }
 
         Distances expected;
-        referenceDistances(adjacency, _ends, direction, referenceType, maxHops, expected);
+        referenceDistances(adjacency, _ends, direction, referenceTypes, maxHops, expected);
 
         PathDistanceIndex index;
         ASSERT_FALSE(index.isBuilt());
-        index.build(view, _endLabels, direction, edgeType, maxHops);
+        index.build(view, _endLabels, direction, edgeTypes, maxHops);
         ASSERT_TRUE(index.isBuilt());
 
         for (size_t node = 0; node < nodeCount; node++) {
@@ -229,12 +230,12 @@ TEST_F(PathDistanceIndexTest, matchesTheReferenceInEveryConfiguration) {
     const GraphReader reader = transaction.readGraph();
     const GraphView& view = reader.getView();
 
-    const std::vector<std::optional<EdgeTypeID>> edgeTypes {std::nullopt, _typeA, _typeB};
+    const std::vector<std::vector<EdgeTypeID>> edgeTypeSets {{}, {_typeA}, {_typeB}, {_typeA, _typeB}};
 
     for (const PathExplorationDir direction : {PathExplorationDir::FORWARD, PathExplorationDir::BACKWARD, PathExplorationDir::BOTH}) {
         for (const uint64_t maxHops : {uint64_t {1}, uint64_t {2}, unbounded}) {
-            for (const std::optional<EdgeTypeID>& edgeType : edgeTypes) {
-                expectMatchesTheReference(view, _adjacency, direction, edgeType, maxHops);
+            for (const std::vector<EdgeTypeID>& edgeTypes : edgeTypeSets) {
+                expectMatchesTheReference(view, _adjacency, direction, edgeTypes, maxHops);
             }
         }
     }
@@ -249,17 +250,17 @@ TEST_F(PathDistanceIndexTest, distancesFollowTheReverseOfEachDirection) {
     Distances distances;
 
     // Forward: 2, 4 and 5 are one hop from an end, 1 and 3 two, 0 three, 8 four
-    index.build(view, _endLabels, PathExplorationDir::FORWARD, std::nullopt, unbounded);
+    index.build(view, _endLabels, PathExplorationDir::FORWARD, {}, unbounded);
     sortedDistances(index, nodeCount, distances);
     EXPECT_EQ(distances, (Distances {0, 0, 1, 1, 1, 2, 2, 3, 4}));
 
     // Backward: 7->0 puts 0 one hop away, 5 is four hops down 0->3->4->5, nothing enters 8
-    index.build(view, _endLabels, PathExplorationDir::BACKWARD, std::nullopt, unbounded);
+    index.build(view, _endLabels, PathExplorationDir::BACKWARD, {}, unbounded);
     sortedDistances(index, nodeCount, distances);
     EXPECT_EQ(distances, (Distances {0, 0, 1, 2, 2, 3, 3, 4, unreachable}));
 
     // Both: every node is within two hops of an end
-    index.build(view, _endLabels, PathExplorationDir::BOTH, std::nullopt, unbounded);
+    index.build(view, _endLabels, PathExplorationDir::BOTH, {}, unbounded);
     sortedDistances(index, nodeCount, distances);
     EXPECT_EQ(distances, (Distances {0, 0, 1, 1, 1, 1, 2, 2, 2}));
 }
@@ -273,13 +274,13 @@ TEST_F(PathDistanceIndexTest, boundsAndTypeFilterCutTheReach) {
     Distances distances;
 
     // Two hops leave 0 and 8 out of reach
-    index.build(view, _endLabels, PathExplorationDir::FORWARD, std::nullopt, 2);
+    index.build(view, _endLabels, PathExplorationDir::FORWARD, {}, 2);
     sortedDistances(index, nodeCount, distances);
     EXPECT_EQ(distances, (Distances {0, 0, 1, 1, 1, 2, 2, unreachable, unreachable}));
     EXPECT_EQ(index.getReachedCount(), 7u);
 
     // Type A alone: 3->4 and 5->7 are gone, so 3 and 5 reach no end
-    index.build(view, _endLabels, PathExplorationDir::FORWARD, _typeA, unbounded);
+    index.build(view, _endLabels, PathExplorationDir::FORWARD, {&_typeA, 1}, unbounded);
     sortedDistances(index, nodeCount, distances);
     EXPECT_EQ(distances, (Distances {0, 0, 1, 1, 2, 3, 4, unreachable, unreachable}));
     EXPECT_EQ(index.getDistance(NodeID(3)), unreachable);
@@ -298,13 +299,13 @@ TEST_F(PathDistanceIndexTest, tombstonedEdgesAreNotWalked) {
     buildAdjacency(view, nodeCount, deletedAdjacency);
 
     for (const PathExplorationDir direction : {PathExplorationDir::FORWARD, PathExplorationDir::BACKWARD, PathExplorationDir::BOTH}) {
-        expectMatchesTheReference(view, deletedAdjacency, direction, std::nullopt, unbounded);
-        expectMatchesTheReference(view, deletedAdjacency, direction, _typeA, unbounded);
+        expectMatchesTheReference(view, deletedAdjacency, direction, {}, unbounded);
+        expectMatchesTheReference(view, deletedAdjacency, direction, {&_typeA, 1}, unbounded);
     }
 
     // With 2->6 gone the type A edges reach an end from 4 alone
     PathDistanceIndex index;
-    index.build(view, _endLabels, PathExplorationDir::FORWARD, _typeA, unbounded);
+    index.build(view, _endLabels, PathExplorationDir::FORWARD, {&_typeA, 1}, unbounded);
     EXPECT_EQ(index.getReachedCount(), 3u);
     EXPECT_EQ(index.getDistance(NodeID(4)), 1);
     EXPECT_EQ(index.getDistance(NodeID(1)), unreachable);
@@ -316,7 +317,7 @@ TEST_F(PathDistanceIndexTest, answersReachabilityWithinABudget) {
     const GraphView& view = reader.getView();
 
     PathDistanceIndex index;
-    index.build(view, _endLabels, PathExplorationDir::FORWARD, std::nullopt, unbounded);
+    index.build(view, _endLabels, PathExplorationDir::FORWARD, {}, unbounded);
 
     EXPECT_TRUE(index.isEnd(NodeID(6)));
     EXPECT_TRUE(index.canReachEndWithin(NodeID(6), 0));
@@ -329,7 +330,7 @@ TEST_F(PathDistanceIndexTest, answersReachabilityWithinABudget) {
     EXPECT_EQ(index.getDistance(NodeID(1000)), unreachable);
     EXPECT_FALSE(index.canReachEndWithin(NodeID(1000), unbounded));
 
-    index.build(view, _endLabels, PathExplorationDir::FORWARD, _typeA, unbounded);
+    index.build(view, _endLabels, PathExplorationDir::FORWARD, {&_typeA, 1}, unbounded);
     EXPECT_FALSE(index.canReachEndWithin(NodeID(3), unbounded));
 }
 
@@ -346,8 +347,8 @@ TEST_F(PathDistanceIndexTest, costGateNeedsEnoughSeeds) {
     const PartDirectory parts(view);
     PathDistanceIndex::SeedExpansion forward;
     PathDistanceIndex::SeedExpansion both;
-    PathDistanceIndex::sampleSeedExpansion(parts, PathExplorationDir::FORWARD, std::nullopt, seeds, forward);
-    PathDistanceIndex::sampleSeedExpansion(parts, PathExplorationDir::BOTH, std::nullopt, seeds, both);
+    PathDistanceIndex::sampleSeedExpansion(parts, PathExplorationDir::FORWARD, {}, seeds, forward);
+    PathDistanceIndex::sampleSeedExpansion(parts, PathExplorationDir::BOTH, {}, seeds, both);
 
     EXPECT_FALSE(PathDistanceIndex::isWorthBuilding(view, forward, 1, 4));
     EXPECT_TRUE(PathDistanceIndex::isWorthBuilding(view, forward, 100000, 4));
@@ -362,7 +363,7 @@ TEST_F(PathDistanceIndexTest, estimatesAnUnboundedWalkFinitely) {
     const PartDirectory parts(reader.getView());
 
     PathDistanceIndex::TypeBranching branching;
-    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::FORWARD, std::nullopt, branching);
+    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::FORWARD, {}, branching);
 
     PathDistanceIndex::SeedExpansion expansion;
     flatExpansion(branching._fanOut, expansion);
@@ -387,7 +388,7 @@ TEST_F(PathDistanceIndexTest, estimatesTheWalkAPredicateLeaves) {
     const PartDirectory parts(reader.getView());
 
     PathDistanceIndex::TypeBranching branching;
-    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::BOTH, std::nullopt, branching);
+    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::BOTH, {}, branching);
     ASSERT_GT(branching._fanOut, 1.0);
 
     PathDistanceIndex::SeedExpansion expansion;
@@ -414,8 +415,8 @@ TEST_F(PathDistanceIndexTest, estimatesTheWalkOfTheTypeItFollows) {
     // the two B edges, whose frontier never leaves the nodes carrying them
     PathDistanceIndex::TypeBranching untypedBranching;
     PathDistanceIndex::TypeBranching typedBranching;
-    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::BOTH, std::nullopt, untypedBranching);
-    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::BOTH, _typeB, typedBranching);
+    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::BOTH, {}, untypedBranching);
+    PathDistanceIndex::sampleBranching(parts, PathExplorationDir::BOTH, {&_typeB, 1}, typedBranching);
 
     PathDistanceIndex::SeedExpansion untypedExpansion;
     PathDistanceIndex::SeedExpansion typedExpansion;
@@ -434,7 +435,7 @@ TEST_F(PathDistanceIndexTest, chargesTheFrontierWhileItGrowsAndNotAfter) {
     const PartDirectory parts(reader.getView());
 
     const auto checks = [&parts](uint64_t maxHops) {
-        return PathDistanceIndex::estimatedSearchChecks(parts, PathExplorationDir::BOTH, std::nullopt, 1, maxHops);
+        return PathDistanceIndex::estimatedSearchChecks(parts, PathExplorationDir::BOTH, {}, 1, maxHops);
     };
 
     // A deeper bound costs more only while the frontier can still grow
@@ -460,10 +461,10 @@ TEST_F(PathDistanceIndexTest, buildsFromAListOfEnds) {
     Distances expected;
     for (const PathExplorationDir direction : {PathExplorationDir::FORWARD, PathExplorationDir::BACKWARD, PathExplorationDir::BOTH}) {
         for (const uint64_t maxHops : {uint64_t {1}, uint64_t {2}, unbounded}) {
-            referenceDistances(_adjacency, listed, direction, std::nullopt, maxHops, expected);
+            referenceDistances(_adjacency, listed, direction, {}, maxHops, expected);
 
             PathDistanceIndex index;
-            index.build(view, ends, direction, std::nullopt, maxHops);
+            index.build(view, ends, direction, {}, maxHops);
             ASSERT_TRUE(index.isBuilt());
 
             for (size_t node = 0; node < nodeCount; node++) {
@@ -475,7 +476,7 @@ TEST_F(PathDistanceIndexTest, buildsFromAListOfEnds) {
     }
 
     PathDistanceIndex beyond;
-    beyond.build(view, std::vector<NodeID> {NodeID(1000)}, PathExplorationDir::FORWARD, std::nullopt, unbounded);
+    beyond.build(view, std::vector<NodeID> {NodeID(1000)}, PathExplorationDir::FORWARD, {}, unbounded);
     EXPECT_EQ(beyond.getReachedCount(), 0u);
     EXPECT_FALSE(beyond.canReachEndWithin(NodeID(0), unbounded));
 }

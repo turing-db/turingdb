@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <math.h>
 
+#include "EdgeTypeMatch.h"
 #include "PartDirectory.h"
 #include "PathHopFilter.h"
 #include "datapart/NodeContainer.h"
@@ -43,11 +44,11 @@ constexpr size_t seedSampleBudget = 4096;
 constexpr size_t hopSampleTarget = 1024;
 
 void appendMatching(std::span<const EdgeRecord> edges,
-                    std::optional<EdgeTypeID> edgeType,
+                    std::span<const EdgeTypeID> edgeTypes,
                     std::vector<NodeID>& candidateNodes,
                     std::vector<EdgeID>& candidateEdges) {
     for (const EdgeRecord& record : edges) {
-        if (edgeType && record._edgeTypeID != *edgeType) {
+        if (!edgeTypes.empty() && !edgeTypeMatches(edgeTypes, record._edgeTypeID)) {
             continue;
         }
 
@@ -57,11 +58,11 @@ void appendMatching(std::span<const EdgeRecord> edges,
 }
 
 size_t appendMatchingNodes(std::span<const EdgeRecord> edges,
-                           std::optional<EdgeTypeID> edgeType,
+                           std::span<const EdgeTypeID> edgeTypes,
                            std::vector<NodeID>& nodes) {
     size_t appended = 0;
     for (const EdgeRecord& record : edges) {
-        if (edgeType && record._edgeTypeID != *edgeType) {
+        if (!edgeTypes.empty() && !edgeTypeMatches(edgeTypes, record._edgeTypeID)) {
             continue;
         }
 
@@ -72,14 +73,14 @@ size_t appendMatchingNodes(std::span<const EdgeRecord> edges,
     return appended;
 }
 
-size_t countMatching(std::span<const EdgeRecord> edges, std::optional<EdgeTypeID> edgeType) {
-    if (!edgeType) {
+size_t countMatching(std::span<const EdgeRecord> edges, std::span<const EdgeTypeID> edgeTypes) {
+    if (edgeTypes.empty()) {
         return edges.size();
     }
 
     size_t matching = 0;
     for (const EdgeRecord& record : edges) {
-        if (record._edgeTypeID == *edgeType) {
+        if (edgeTypeMatches(edgeTypes, record._edgeTypeID)) {
             matching++;
         }
     }
@@ -98,7 +99,7 @@ PathDistanceIndex::~PathDistanceIndex() {
 void PathDistanceIndex::build(const GraphView& view,
                               const LabelSet& endLabels,
                               PathExplorationDir direction,
-                              std::optional<EdgeTypeID> edgeType,
+                              std::span<const EdgeTypeID> edgeTypes,
                               uint64_t maxHops) {
     const PartDirectory parts(view);
 
@@ -108,14 +109,14 @@ void PathDistanceIndex::build(const GraphView& view,
     std::vector<NodeID> frontier;
     collectEnds(parts, endLabels, frontier);
 
-    search(parts, view.tombstones(), frontier, direction, edgeType, maxHops);
+    search(parts, view.tombstones(), frontier, direction, edgeTypes, maxHops);
     _built = true;
 }
 
 void PathDistanceIndex::build(const GraphView& view,
                               std::span<const NodeID> ends,
                               PathExplorationDir direction,
-                              std::optional<EdgeTypeID> edgeType,
+                              std::span<const EdgeTypeID> edgeTypes,
                               uint64_t maxHops) {
     const PartDirectory parts(view);
 
@@ -134,7 +135,7 @@ void PathDistanceIndex::build(const GraphView& view,
         frontier.push_back(end);
     }
 
-    search(parts, view.tombstones(), frontier, direction, edgeType, maxHops);
+    search(parts, view.tombstones(), frontier, direction, edgeTypes, maxHops);
     _built = true;
 }
 
@@ -142,7 +143,7 @@ void PathDistanceIndex::search(const PartDirectory& parts,
                                const Tombstones& tombstones,
                                std::vector<NodeID>& frontier,
                                PathExplorationDir direction,
-                               std::optional<EdgeTypeID> edgeType,
+                               std::span<const EdgeTypeID> edgeTypes,
                                uint64_t maxHops) {
     // A hop the exploration takes forward is walked back here: the distances of the nodes
     // an out-edge leaves grow along in-edges
@@ -168,19 +169,19 @@ void PathDistanceIndex::search(const PartDirectory& parts,
 
             const EdgeIndexer& ownerIndexer = *parts.get(owner)._indexer;
             if (walksIns) {
-                relax(ownerIndexer.getNodeInEdges(node), distance, edgeType, edgeTombstones, next);
+                relax(ownerIndexer.getNodeInEdges(node), distance, edgeTypes, edgeTombstones, next);
             }
             if (walksOuts) {
-                relax(ownerIndexer.getNodeOutEdges(node), distance, edgeType, edgeTombstones, next);
+                relax(ownerIndexer.getNodeOutEdges(node), distance, edgeTypes, edgeTombstones, next);
             }
 
             for (const size_t patchIndex : parts.patchPartsAfter(owner)) {
                 const EdgeIndexer& patchIndexer = *parts.get(patchIndex)._indexer;
                 if (walksIns) {
-                    relax(patchIndexer.getNodeInEdges(node), distance, edgeType, edgeTombstones, next);
+                    relax(patchIndexer.getNodeInEdges(node), distance, edgeTypes, edgeTombstones, next);
                 }
                 if (walksOuts) {
-                    relax(patchIndexer.getNodeOutEdges(node), distance, edgeType, edgeTombstones, next);
+                    relax(patchIndexer.getNodeOutEdges(node), distance, edgeTypes, edgeTombstones, next);
                 }
             }
         }
@@ -206,7 +207,7 @@ bool PathDistanceIndex::canReachEndWithin(NodeID node, uint64_t hops) const {
 
 void PathDistanceIndex::sampleBranching(const PartDirectory& parts,
                                         PathExplorationDir direction,
-                                        std::optional<EdgeTypeID> edgeType,
+                                        std::span<const EdgeTypeID> edgeTypes,
                                         TypeBranching& branching) {
     branching = TypeBranching {};
 
@@ -217,7 +218,7 @@ void PathDistanceIndex::sampleBranching(const PartDirectory& parts,
 
     const size_t edgeCount = parts.getAllocatedEdgeCount();
     EdgeBranchingCache& cache = parts.getBranchingCache();
-    if (cache.lookup(direction, edgeType, nodeCount, edgeCount, branching)) {
+    if (cache.lookup(direction, edgeTypes, nodeCount, edgeCount, branching)) {
         return;
     }
 
@@ -238,8 +239,8 @@ void PathDistanceIndex::sampleBranching(const PartDirectory& parts,
         const EdgeIndexer& ownerIndexer = *parts.get(owner)._indexer;
         sampled++;
 
-        const size_t outs = countMatching(ownerIndexer.getNodeOutEdges(sample), edgeType);
-        const size_t ins = countMatching(ownerIndexer.getNodeInEdges(sample), edgeType);
+        const size_t outs = countMatching(ownerIndexer.getNodeOutEdges(sample), edgeTypes);
+        const size_t ins = countMatching(ownerIndexer.getNodeInEdges(sample), edgeTypes);
 
         // A hop arrives at a node against the direction the next one leaves it by, so a node
         // joins the frontier as often as it has arriving edges and then branches by the ones
@@ -277,12 +278,12 @@ void PathDistanceIndex::sampleBranching(const PartDirectory& parts,
                                   / static_cast<double>(sampled);
     }
 
-    cache.store(direction, edgeType, nodeCount, edgeCount, branching);
+    cache.store(direction, edgeTypes, nodeCount, edgeCount, branching);
 }
 
 void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
                                             PathExplorationDir direction,
-                                            std::optional<EdgeTypeID> edgeType,
+                                            std::span<const EdgeTypeID> edgeTypes,
                                             std::span<const NodeID> seeds,
                                             SeedExpansion& expansion) {
     expansion = SeedExpansion {};
@@ -324,19 +325,19 @@ void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
 
             size_t continuing = 0;
             if (walksOuts) {
-                continuing += appendMatchingNodes(ownerIndexer.getNodeOutEdges(node), edgeType, next);
+                continuing += appendMatchingNodes(ownerIndexer.getNodeOutEdges(node), edgeTypes, next);
             }
             if (walksIns) {
-                continuing += appendMatchingNodes(ownerIndexer.getNodeInEdges(node), edgeType, next);
+                continuing += appendMatchingNodes(ownerIndexer.getNodeInEdges(node), edgeTypes, next);
             }
 
             for (const size_t patchIndex : parts.patchPartsAfter(owner)) {
                 const EdgeIndexer& patchIndexer = *parts.get(patchIndex)._indexer;
                 if (walksOuts) {
-                    continuing += appendMatchingNodes(patchIndexer.getNodeOutEdges(node), edgeType, next);
+                    continuing += appendMatchingNodes(patchIndexer.getNodeOutEdges(node), edgeTypes, next);
                 }
                 if (walksIns) {
-                    continuing += appendMatchingNodes(patchIndexer.getNodeInEdges(node), edgeType, next);
+                    continuing += appendMatchingNodes(patchIndexer.getNodeInEdges(node), edgeTypes, next);
                 }
             }
 
@@ -363,7 +364,7 @@ void PathDistanceIndex::sampleSeedExpansion(const PartDirectory& parts,
 
 double PathDistanceIndex::estimatedSearchChecks(const PartDirectory& parts,
                                                 PathExplorationDir direction,
-                                                std::optional<EdgeTypeID> edgeType,
+                                                std::span<const EdgeTypeID> edgeTypes,
                                                 size_t sourceCount,
                                                 uint64_t maxHops) {
     const size_t nodeCount = parts.getAllocatedNodeCount();
@@ -373,7 +374,7 @@ double PathDistanceIndex::estimatedSearchChecks(const PartDirectory& parts,
     }
 
     TypeBranching branching;
-    sampleBranching(parts, direction, edgeType, branching);
+    sampleBranching(parts, direction, edgeTypes, branching);
 
     const double fanOut = std::max(1.0, branching._fanOut);
     const double support = std::clamp(branching._supportNodes, 1.0, static_cast<double>(nodeCount));
@@ -434,7 +435,7 @@ double PathDistanceIndex::estimatedEnumerationChecks(const PartDirectory& parts,
 
 double PathDistanceIndex::sampleHopPassRate(const PartDirectory& parts,
                                             PathExplorationDir direction,
-                                            std::optional<EdgeTypeID> edgeType,
+                                            std::span<const EdgeTypeID> edgeTypes,
                                             PathHopFilter& hopFilter) {
     const size_t nodeCount = parts.getAllocatedNodeCount();
     if (nodeCount == 0) {
@@ -462,10 +463,10 @@ double PathDistanceIndex::sampleHopPassRate(const PartDirectory& parts,
         candidateEdges.clear();
 
         if (direction != PathExplorationDir::BACKWARD) {
-            appendMatching(ownerIndexer.getNodeOutEdges(sample), edgeType, candidateNodes, candidateEdges);
+            appendMatching(ownerIndexer.getNodeOutEdges(sample), edgeTypes, candidateNodes, candidateEdges);
         }
         if (direction != PathExplorationDir::FORWARD) {
-            appendMatching(ownerIndexer.getNodeInEdges(sample), edgeType, candidateNodes, candidateEdges);
+            appendMatching(ownerIndexer.getNodeInEdges(sample), edgeTypes, candidateNodes, candidateEdges);
         }
 
         if (candidateNodes.empty()) {
@@ -485,12 +486,12 @@ double PathDistanceIndex::sampleHopPassRate(const PartDirectory& parts,
 
 double PathDistanceIndex::estimatedBuildChecks(const PartDirectory& parts,
                                                PathExplorationDir direction,
-                                               std::optional<EdgeTypeID> edgeType,
+                                               std::span<const EdgeTypeID> edgeTypes,
                                                size_t sourceCount,
                                                uint64_t maxHops) {
     const double nodeCount = static_cast<double>(parts.getAllocatedNodeCount());
     const double graph = nodeCount + static_cast<double>(parts.getAllocatedEdgeCount());
-    const double touched = std::min(graph, estimatedSearchChecks(parts, direction, edgeType, sourceCount, maxHops));
+    const double touched = std::min(graph, estimatedSearchChecks(parts, direction, edgeTypes, sourceCount, maxHops));
 
     return indexUnitCostInChecks * touched + filledByteCostInChecks * nodeCount;
 }
@@ -525,11 +526,11 @@ void PathDistanceIndex::collectEnds(const PartDirectory& parts, const LabelSet& 
 
 void PathDistanceIndex::relax(std::span<const EdgeRecord> edges,
                               uint8_t level,
-                              std::optional<EdgeTypeID> edgeType,
+                              std::span<const EdgeTypeID> edgeTypes,
                               const Tombstones* tombstones,
                               std::vector<NodeID>& next) {
     for (const EdgeRecord& record : edges) {
-        const bool wrongType = edgeType && record._edgeTypeID != *edgeType;
+        const bool wrongType = !edgeTypes.empty() && !edgeTypeMatches(edgeTypes, record._edgeTypeID);
         const bool deleted = tombstones && tombstones->containsEdge(record._edgeID);
         if (wrongType || deleted) {
             continue;

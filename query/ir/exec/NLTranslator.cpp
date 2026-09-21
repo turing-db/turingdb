@@ -667,8 +667,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             IteratorConfig config {IteratorKind::ExplorePaths, explorePaths.getInputNodes(), {}};
             const mlir::OperandRange carriedColumns = explorePaths.getColumnsToFilter();
             config._carriedColumns.assign(carriedColumns.begin(), carriedColumns.end());
-            if (const std::optional<llvm::StringRef> edgeType = explorePaths.getEdgeType()) {
-                config._edgeTypes.push_back(*edgeType);
+            if (const mlir::Value handle = explorePaths.getEdgeTypes()) {
+                edgeTypeNames(handle, config._edgeTypes);
             }
             config._direction = toPathExplorationDir(explorePaths.getDirection());
             config._minHops = explorePaths.getMinHops();
@@ -1823,15 +1823,15 @@ void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
 
     const ColumnNodeIDs* inputNodeIDs = static_cast<const ColumnNodeIDs*>(getColumn(config._inputNodes));
 
-    // An edge type is resolved as translateEdgeLoop resolves a by-type hop's: a name
-    // absent from the schema matches no edge, and the loop is marked unmatchable
+    // The types are resolved as translateEdgeLoop resolves a by-type hop's: a name absent
+    // from the schema drops out of the set, and a set left empty that way marks the loop
+    // unmatchable
     const bool filtersByType = !config._edgeTypes.empty();
-    EdgeTypeID edgeType;
+    llvm::SmallVector<EdgeTypeID, 4> edgeTypes;
     bool matchable = true;
     if (filtersByType) {
-        const std::optional<EdgeTypeID> edgeTypeID = _view->metadata().edgeTypes().get(config._edgeTypes.front());
-        matchable = edgeTypeID.has_value();
-        edgeType = matchable ? *edgeTypeID : EdgeTypeID();
+        resolveEdgeTypes(config._edgeTypes, edgeTypes);
+        matchable = !edgeTypes.empty();
     }
 
     NLExplorePathsLoopData* loopData = _program->allocFunctionData<NLExplorePathsLoopData>(inputNodeIDs,
@@ -1843,7 +1843,7 @@ void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
                                                                                          config._minHops,
                                                                                          config._maxHops,
                                                                                          filtersByType,
-                                                                                         edgeType,
+                                                                                         edgeTypes,
                                                                                          matchable);
     loopData->setLimit(limit);
     loopData->getIndices()->reserve(_program->getChunkSize());

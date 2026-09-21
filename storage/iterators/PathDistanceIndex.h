@@ -36,14 +36,14 @@ public:
     void build(const GraphView& view,
                const LabelSet& endLabels,
                PathExplorationDir direction,
-               std::optional<EdgeTypeID> edgeType,
+               std::span<const EdgeTypeID> edgeTypes,
                uint64_t maxHops);
 
     // The same search from a list of ends, the hops to the nearest of them
     void build(const GraphView& view,
                std::span<const NodeID> ends,
                PathExplorationDir direction,
-               std::optional<EdgeTypeID> edgeType,
+               std::span<const EdgeTypeID> edgeTypes,
                uint64_t maxHops);
 
     bool isBuilt() const { return _built; }
@@ -58,7 +58,7 @@ public:
 
     static void sampleBranching(const PartDirectory& parts,
                                 PathExplorationDir direction,
-                                std::optional<EdgeTypeID> edgeType,
+                                std::span<const EdgeTypeID> edgeTypes,
                                 TypeBranching& branching);
 
     // The share of a strided sample's candidates the hop predicate keeps. The branching
@@ -69,7 +69,7 @@ public:
     // so the gates take it only once the cheap estimate has said the index is worth it.
     static double sampleHopPassRate(const PartDirectory& parts,
                                     PathExplorationDir direction,
-                                    std::optional<EdgeTypeID> edgeType,
+                                    std::span<const EdgeTypeID> edgeTypes,
                                     PathHopFilter& hopFilter);
 
     // What a sample of a walk's own seeds expanded to, level by level, and the ratio the last
@@ -90,7 +90,7 @@ public:
     // carrying the type misses that by the exponent of the bound.
     static void sampleSeedExpansion(const PartDirectory& parts,
                                     PathExplorationDir direction,
-                                    std::optional<EdgeTypeID> edgeType,
+                                    std::span<const EdgeTypeID> edgeTypes,
                                     std::span<const NodeID> seeds,
                                     SeedExpansion& expansion);
 
@@ -99,7 +99,7 @@ public:
     // first level that covers them.
     static double estimatedSearchChecks(const PartDirectory& parts,
                                         PathExplorationDir direction,
-                                        std::optional<EdgeTypeID> edgeType,
+                                        std::span<const EdgeTypeID> edgeTypes,
                                         size_t sourceCount,
                                         uint64_t maxHops);
 
@@ -120,7 +120,7 @@ public:
     // it touches, at most the graph, and the distance byte filled for every node
     static double estimatedBuildChecks(const PartDirectory& parts,
                                        PathExplorationDir direction,
-                                       std::optional<EdgeTypeID> edgeType,
+                                       std::span<const EdgeTypeID> edgeTypes,
                                        size_t sourceCount,
                                        uint64_t maxHops);
 
@@ -141,11 +141,11 @@ private:
                 const Tombstones& tombstones,
                 std::vector<NodeID>& frontier,
                 PathExplorationDir direction,
-                std::optional<EdgeTypeID> edgeType,
+                std::span<const EdgeTypeID> edgeTypes,
                 uint64_t maxHops);
     void relax(std::span<const EdgeRecord> edges,
                uint8_t level,
-               std::optional<EdgeTypeID> edgeType,
+               std::span<const EdgeTypeID> edgeTypes,
                const Tombstones* tombstones,
                std::vector<NodeID>& next);
 };

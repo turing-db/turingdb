@@ -101,7 +101,7 @@ protected:
         distinctTargets(endNodes, targets);
 
         PathTargetIndex index;
-        index.build(view, targets, direction, options._edgeType, maxHops);
+        index.build(view, targets, direction, options.getEdgeTypes(), maxHops);
         options._targetIndex = &index;
 
         collectPaths(view, input, direction, minHops, maxHops, options, actual);
@@ -216,7 +216,7 @@ TEST_F(PathExploratorEndNodesTest, hopFilterAgreesWithTheReference) {
     distinctTargets(endNodes, targets);
 
     PathTargetIndex index;
-    index.build(view, targets, PathExplorationDir::BOTH, std::nullopt, unbounded);
+    index.build(view, targets, PathExplorationDir::BOTH, {}, unbounded);
     options._targetIndex = &index;
 
     collectPaths(view, input, PathExplorationDir::BOTH, 1, unbounded, options, actual);
@@ -243,7 +243,7 @@ TEST_F(PathExploratorEndNodesTest, indexPrunesSeedsThatCannotReachTheirTarget) {
     const size_t unprunedChecks = collectPaths(view, input, PathExplorationDir::FORWARD, 1, 3, options, unpruned);
 
     PathTargetIndex index;
-    index.build(view, std::vector<NodeID> {NodeID(_hubGraph._target)}, PathExplorationDir::FORWARD, std::nullopt, 3);
+    index.build(view, std::vector<NodeID> {NodeID(_hubGraph._target)}, PathExplorationDir::FORWARD, {}, 3);
     options._targetIndex = &index;
 
     std::vector<PathRow> pruned;
@@ -259,7 +259,7 @@ TEST_F(PathExploratorEndNodesTest, indexPrunesSeedsThatCannotReachTheirTarget) {
     options._endNodes = &unreachable;
 
     PathTargetIndex farIndex;
-    farIndex.build(view, std::vector<NodeID> {NodeID(_hubGraph._secondTarget)}, PathExplorationDir::BACKWARD, std::nullopt, unbounded);
+    farIndex.build(view, std::vector<NodeID> {NodeID(_hubGraph._secondTarget)}, PathExplorationDir::BACKWARD, {}, unbounded);
     options._targetIndex = &farIndex;
 
     std::vector<PathRow> rows;
@@ -306,7 +306,7 @@ TEST_F(PathExploratorEndNodesTest, setIndexAgreesWithTheReference) {
             expectSameRows(expected, unpruned);
 
             PathTargetIndex index;
-            index.buildSet(view, endSet, direction, std::nullopt, maxHops);
+            index.buildSet(view, endSet, direction, {}, maxHops);
             options._targetIndex = &index;
 
             std::vector<PathRow> pruned;
@@ -327,7 +327,7 @@ TEST_F(PathExploratorEndNodesTest, setIndexAgreesWithTheReference) {
     const size_t unprunedChecks = collectPaths(view, input, PathExplorationDir::FORWARD, 1, 3, options, unpruned);
 
     PathTargetIndex index;
-    index.buildSet(view, ends, PathExplorationDir::FORWARD, std::nullopt, 3);
+    index.buildSet(view, ends, PathExplorationDir::FORWARD, {}, 3);
     options._targetIndex = &index;
 
     std::vector<PathRow> pruned;

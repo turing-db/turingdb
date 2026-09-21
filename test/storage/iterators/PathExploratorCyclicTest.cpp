@@ -410,7 +410,7 @@ TEST_F(PathExploratorCyclicTest, endLabelsAgreeWithThePruningIndexOnACyclicGraph
             expectSameAsReference(direction, 0, maxHops, filtered);
 
             PathDistanceIndex index;
-            index.build(view, _endLabels, direction, std::nullopt, maxHops);
+            index.build(view, _endLabels, direction, {}, maxHops);
 
             ExplorationOptions pruned = filtered;
             pruned._distanceIndex = &index;
@@ -466,7 +466,7 @@ TEST_F(PathExploratorCyclicTest, boundEndsAgreeWithTheTargetIndexOnACyclicGraph)
         expectSameRows(expected, actual);
 
         PathTargetIndex index;
-        index.build(view, distinctTargets, PathExplorationDir::FORWARD, std::nullopt, maxHops);
+        index.build(view, distinctTargets, PathExplorationDir::FORWARD, {}, maxHops);
 
         ExplorationOptions indexed = bound;
         indexed._targetIndex = &index;

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <bit>
 
+#include "EdgeTypeMatch.h"
 #include "PartDirectory.h"
 #include "PathDistanceIndex.h"
 #include "indexers/EdgeIndexer.h"
@@ -184,14 +185,14 @@ PathTargetIndex::~PathTargetIndex() {
 
 void PathTargetIndex::planBatch(const PartDirectory& parts,
                                 PathExplorationDir direction,
-                                std::optional<EdgeTypeID> edgeType,
+                                std::span<const EdgeTypeID> edgeTypes,
                                 size_t targetCount,
                                 uint64_t maxHops,
                                 BatchPlan& plan) {
     const double nodeCount = static_cast<double>(parts.getAllocatedNodeCount());
 
     // A batch's search reaches at most what its targets fan out to, and at most the graph
-    const double candidatesPerTarget = PathDistanceIndex::estimatedSearchChecks(parts, direction, edgeType, 1, maxHops);
+    const double candidatesPerTarget = PathDistanceIndex::estimatedSearchChecks(parts, direction, edgeTypes, 1, maxHops);
     const double reachedPerBatch = std::min(nodeCount, static_cast<double>(targetCount) * candidatesPerTarget);
     const double levelCount = static_cast<double>(std::min<uint64_t>(maxHops, PathDistanceIndex::farthest) + 1);
     const double words = levelCount * nodeCount;
@@ -207,7 +208,7 @@ void PathTargetIndex::planBatch(const PartDirectory& parts,
 void PathTargetIndex::build(const GraphView& view,
                             std::span<const NodeID> targets,
                             PathExplorationDir direction,
-                            std::optional<EdgeTypeID> edgeType,
+                            std::span<const EdgeTypeID> edgeTypes,
                             uint64_t maxHops) {
     const PartDirectory parts(view);
     const Tombstones& tombstones = view.tombstones();
@@ -224,14 +225,14 @@ void PathTargetIndex::build(const GraphView& view,
         const size_t count = std::min(targetsPerBatch, targets.size() - first);
 
         BatchPlan plan;
-        planBatch(parts, direction, edgeType, count, maxHops, plan);
+        planBatch(parts, direction, edgeTypes, count, maxHops, plan);
 
         PathTargetBatch& batch = _batches.emplace_back();
         if (plan._dense) {
             batch.setDense(parts.getAllocatedNodeCount());
         }
 
-        buildBatch(parts, targets.subspan(first, count), direction, edgeType, edgeTombstones, maxHops, batch);
+        buildBatch(parts, targets.subspan(first, count), direction, edgeTypes, edgeTombstones, maxHops, batch);
     }
 
     _built = true;
@@ -242,29 +243,29 @@ void PathTargetIndex::build(const GraphView& view,
 // for every node of the graph
 void PathTargetIndex::planSet(const PartDirectory& parts,
                               PathExplorationDir direction,
-                              std::optional<EdgeTypeID> edgeType,
+                              std::span<const EdgeTypeID> edgeTypes,
                               size_t targetCount,
                               uint64_t maxHops,
                               SetPlan& plan) {
     const double nodeCount = static_cast<double>(parts.getAllocatedNodeCount());
-    const double candidatesPerTarget = PathDistanceIndex::estimatedSearchChecks(parts, direction, edgeType, 1, maxHops);
+    const double candidatesPerTarget = PathDistanceIndex::estimatedSearchChecks(parts, direction, edgeTypes, 1, maxHops);
     const double reached = std::min(nodeCount, static_cast<double>(targetCount) * candidatesPerTarget);
     const double tableBytes = reached * bytesPerReachedNode;
 
     plan._sparse = tableBytes < nodeCount;
-    plan._checks = plan._sparse ? reachedNodeCostInChecks * reached : PathDistanceIndex::estimatedBuildChecks(parts, direction, edgeType, targetCount, maxHops);
+    plan._checks = plan._sparse ? reachedNodeCostInChecks * reached : PathDistanceIndex::estimatedBuildChecks(parts, direction, edgeTypes, targetCount, maxHops);
     plan._bytes = plan._sparse ? tableBytes : nodeCount;
 }
 
 void PathTargetIndex::buildSet(const GraphView& view,
                                std::span<const NodeID> targets,
                                PathExplorationDir direction,
-                               std::optional<EdgeTypeID> edgeType,
+                               std::span<const EdgeTypeID> edgeTypes,
                                uint64_t maxHops) {
     const PartDirectory parts(view);
 
     SetPlan plan;
-    planSet(parts, direction, edgeType, targets.size(), maxHops, plan);
+    planSet(parts, direction, edgeTypes, targets.size(), maxHops, plan);
 
     _handles.clear();
     _batches.clear();
@@ -274,9 +275,9 @@ void PathTargetIndex::buildSet(const GraphView& view,
         const Tombstones* edgeTombstones = tombstones.hasEdges() ? &tombstones : nullptr;
 
         PathTargetBatch& batch = _batches.emplace_back();
-        buildSetBatch(parts, targets, direction, edgeType, edgeTombstones, maxHops, batch);
+        buildSetBatch(parts, targets, direction, edgeTypes, edgeTombstones, maxHops, batch);
     } else {
-        _set.build(view, targets, direction, edgeType, maxHops);
+        _set.build(view, targets, direction, edgeTypes, maxHops);
     }
 
     _built = true;
@@ -310,7 +311,7 @@ PathTargetHandle PathTargetIndex::find(NodeID target) const {
 
 bool PathTargetIndex::isWorthBuilding(const GraphView& view,
                                       PathExplorationDir direction,
-                                      std::optional<EdgeTypeID> edgeType,
+                                      std::span<const EdgeTypeID> edgeTypes,
                                       const PathDistanceIndex::SeedExpansion& expansion,
                                       size_t seedCount,
                                       size_t targetCount,
@@ -332,13 +333,13 @@ bool PathTargetIndex::isWorthBuilding(const GraphView& view,
     double bytes = 0.0;
     if (fullBatchCount > 0) {
         BatchPlan full;
-        planBatch(parts, direction, edgeType, targetsPerBatch, maxHops, full);
+        planBatch(parts, direction, edgeTypes, targetsPerBatch, maxHops, full);
         checks += static_cast<double>(fullBatchCount) * full._checks;
         bytes += static_cast<double>(fullBatchCount) * full._bytes;
     }
     if (lastBatchSize > 0) {
         BatchPlan last;
-        planBatch(parts, direction, edgeType, lastBatchSize, maxHops, last);
+        planBatch(parts, direction, edgeTypes, lastBatchSize, maxHops, last);
         checks += last._checks;
         bytes += last._bytes;
     }
@@ -352,7 +353,7 @@ bool PathTargetIndex::isWorthBuilding(const GraphView& view,
 
 bool PathTargetIndex::isWorthBuildingSet(const GraphView& view,
                                          PathExplorationDir direction,
-                                         std::optional<EdgeTypeID> edgeType,
+                                         std::span<const EdgeTypeID> edgeTypes,
                                          const PathDistanceIndex::SeedExpansion& expansion,
                                          size_t seedCount,
                                          size_t targetCount,
@@ -369,7 +370,7 @@ bool PathTargetIndex::isWorthBuildingSet(const GraphView& view,
     }
 
     SetPlan plan;
-    planSet(parts, direction, edgeType, targetCount, maxHops, plan);
+    planSet(parts, direction, edgeTypes, targetCount, maxHops, plan);
     if (plan._bytes > bytesLimit) {
         return false;
     }
@@ -380,7 +381,7 @@ bool PathTargetIndex::isWorthBuildingSet(const GraphView& view,
 void PathTargetIndex::buildBatch(const PartDirectory& parts,
                                  std::span<const NodeID> targets,
                                  PathExplorationDir direction,
-                                 std::optional<EdgeTypeID> edgeType,
+                                 std::span<const EdgeTypeID> edgeTypes,
                                  const Tombstones* tombstones,
                                  uint64_t maxHops,
                                  PathTargetBatch& batch) {
@@ -400,7 +401,7 @@ void PathTargetIndex::buildBatch(const PartDirectory& parts,
         _handles[target.getValue()] = PathTargetHandle {&batch, bit};
     }
 
-    searchBatch(parts, frontier, direction, edgeType, tombstones, maxHops, batch);
+    searchBatch(parts, frontier, direction, edgeTypes, tombstones, maxHops, batch);
 }
 
 // Every target of a set shares the one bit, so the word a node gains says it is in reach of
@@ -408,7 +409,7 @@ void PathTargetIndex::buildBatch(const PartDirectory& parts,
 void PathTargetIndex::buildSetBatch(const PartDirectory& parts,
                                     std::span<const NodeID> targets,
                                     PathExplorationDir direction,
-                                    std::optional<EdgeTypeID> edgeType,
+                                    std::span<const EdgeTypeID> edgeTypes,
                                     const Tombstones* tombstones,
                                     uint64_t maxHops,
                                     PathTargetBatch& batch) {
@@ -425,13 +426,13 @@ void PathTargetIndex::buildSetBatch(const PartDirectory& parts,
         }
     }
 
-    searchBatch(parts, frontier, direction, edgeType, tombstones, maxHops, batch);
+    searchBatch(parts, frontier, direction, edgeTypes, tombstones, maxHops, batch);
 }
 
 void PathTargetIndex::searchBatch(const PartDirectory& parts,
                                   std::vector<NodeID>& frontier,
                                   PathExplorationDir direction,
-                                  std::optional<EdgeTypeID> edgeType,
+                                  std::span<const EdgeTypeID> edgeTypes,
                                   const Tombstones* tombstones,
                                   uint64_t maxHops,
                                   PathTargetBatch& batch) {
@@ -466,19 +467,19 @@ void PathTargetIndex::searchBatch(const PartDirectory& parts,
 
             const EdgeIndexer& ownerIndexer = *parts.get(owner)._indexer;
             if (walksIns) {
-                relax(ownerIndexer.getNodeInEdges(node), word, distance, edgeType, tombstones, batch, next);
+                relax(ownerIndexer.getNodeInEdges(node), word, distance, edgeTypes, tombstones, batch, next);
             }
             if (walksOuts) {
-                relax(ownerIndexer.getNodeOutEdges(node), word, distance, edgeType, tombstones, batch, next);
+                relax(ownerIndexer.getNodeOutEdges(node), word, distance, edgeTypes, tombstones, batch, next);
             }
 
             for (const size_t patchIndex : parts.patchPartsAfter(owner)) {
                 const EdgeIndexer& patchIndexer = *parts.get(patchIndex)._indexer;
                 if (walksIns) {
-                    relax(patchIndexer.getNodeInEdges(node), word, distance, edgeType, tombstones, batch, next);
+                    relax(patchIndexer.getNodeInEdges(node), word, distance, edgeTypes, tombstones, batch, next);
                 }
                 if (walksOuts) {
-                    relax(patchIndexer.getNodeOutEdges(node), word, distance, edgeType, tombstones, batch, next);
+                    relax(patchIndexer.getNodeOutEdges(node), word, distance, edgeTypes, tombstones, batch, next);
                 }
             }
         }
@@ -496,12 +497,12 @@ void PathTargetIndex::searchBatch(const PartDirectory& parts,
 void PathTargetIndex::relax(std::span<const EdgeRecord> edges,
                             uint64_t word,
                             uint8_t distance,
-                            std::optional<EdgeTypeID> edgeType,
+                            std::span<const EdgeTypeID> edgeTypes,
                             const Tombstones* tombstones,
                             PathTargetBatch& batch,
                             std::vector<NodeID>& next) {
     for (const EdgeRecord& record : edges) {
-        const bool wrongType = edgeType && record._edgeTypeID != *edgeType;
+        const bool wrongType = !edgeTypes.empty() && !edgeTypeMatches(edgeTypes, record._edgeTypeID);
         const bool deleted = tombstones && tombstones->containsEdge(record._edgeID);
         if (wrongType || deleted) {
             continue;
