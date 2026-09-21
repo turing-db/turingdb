@@ -2727,7 +2727,7 @@ public:
 
     // The scratch the search reuses to expand one popped node's out-edges and read their
     // weights, allocated once at translation. The edge/node/weight columns are LocalMemory
-    // columns; the index columns are plain scratch, as on NLEdgeLoopData / NLSortLoopData.
+    // columns; the index column is plain scratch, as on NLEdgeLoopData / NLSortLoopData.
     void setExpansionScratch(ColumnNodeIDs* input,
                              ColumnEdgeIDs* edges,
                              ColumnNodeIDs* targets,
@@ -2743,7 +2743,6 @@ public:
     ColumnNodeIDs* getExpandedTargets() const { return _expandedTargets; }
     Column* getWeightValues() const { return _weightValues; }
     ColumnVector<size_t>* getExpandedIndices() { return &_expandedIndices; }
-    ColumnVector<size_t>* getWeightIndices() { return &_weightIndices; }
 
     NLStmtContainer* getStmts() { return &_stmts; }
     const NLStmtContainer* getStmts() const { return &_stmts; }
@@ -2759,7 +2758,6 @@ private:
     ColumnNodeIDs* _expandedTargets {nullptr};
     Column* _weightValues {nullptr};
     ColumnVector<size_t> _expandedIndices;
-    ColumnVector<size_t> _weightIndices;
 
     NLStmtContainer _stmts;
 };

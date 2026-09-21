@@ -867,17 +867,18 @@ TEST_F(IteratorsTest, GetNodeViewsIteratorTest) {
     }
 }
 
-TEST_F(IteratorsTest, GetNodePropertiesIteratorTest) {
+TEST_F(IteratorsTest, GetNodePropertiesWithNullIteratorTest) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
     ColumnNodeIDs inputNodeIDs = {1, 3, 8};
 
     {
-        std::vector<uint64_t> compareSet = {1, 4, 5};
+        std::vector<std::optional<uint64_t>> compareSet = {1, 4, 5};
         auto it = compareSet.begin();
         size_t count = 0;
-        for (const uint64_t v : reader.getNodeProperties<types::UInt64>(0, &inputNodeIDs)) {
-            fmt::print("v={}\n", v);
+        const auto range = reader.getNodePropertiesWithNull<types::UInt64>(0, &inputNodeIDs);
+        for (auto valueIt = range.begin(); valueIt.isValid(); valueIt.next()) {
+            const std::optional<uint64_t> v = valueIt.get();
             ASSERT_EQ(*it, v);
             count++;
             it++;
@@ -886,15 +887,18 @@ TEST_F(IteratorsTest, GetNodePropertiesIteratorTest) {
     }
 
     {
-        std::vector<std::string_view> compareSet = {
+        // Node 3 carries a UIntProp but no StringProp
+        std::vector<std::optional<std::string_view>> compareSet = {
             "TmpID1",
+            std::nullopt,
             "TmpID5",
         };
         auto it = compareSet.begin();
         size_t count = 0;
-        for (std::string_view v : reader.getNodeProperties<types::String>(1, &inputNodeIDs)) {
-            spdlog::info("{} ?= {}", *it, v);
-            ASSERT_TRUE(*it == v);
+        const auto range = reader.getNodePropertiesWithNull<types::String>(1, &inputNodeIDs);
+        for (auto valueIt = range.begin(); valueIt.isValid(); valueIt.next()) {
+            const std::optional<std::string_view> v = valueIt.get();
+            ASSERT_EQ(*it, v);
             count++;
             it++;
         }
