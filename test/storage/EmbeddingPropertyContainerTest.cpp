@@ -25,7 +25,7 @@ TEST(EmbeddingPropertyContainerTest, EmptyContainer) {
     ASSERT_EQ(container.getValueType(), ValueType::Embedding);
     ASSERT_EQ(container.all().size(), 0);
     ASSERT_FALSE(container.has(EntityID(0)));
-    ASSERT_EQ(container.tryGet(EntityID(0)), nullptr);
+    ASSERT_EQ(container.tryGetWithNull(EntityID(0)), nullptr);
 }
 
 TEST(EmbeddingPropertyContainerTest, AddAndGet) {
@@ -54,19 +54,19 @@ TEST(EmbeddingPropertyContainerTest, AddAndGet) {
     ASSERT_EQ(v2[2], 6.0f);
 }
 
-TEST(EmbeddingPropertyContainerTest, TryGet) {
+TEST(EmbeddingPropertyContainerTest, TryGetWithNull) {
     TypedPropertyContainer<types::Embedding> container(2);
 
     const float data[] = {1.0f, 2.0f};
     container.add(EntityID(5), data);
 
-    const auto* found = container.tryGet(EntityID(5));
-    ASSERT_NE(found, nullptr);
-    ASSERT_EQ((*found)[0], 1.0f);
-    ASSERT_EQ((*found)[1], 2.0f);
+    const std::optional<const types::Embedding::Primitive*> found = container.tryGetWithNull(EntityID(5));
+    ASSERT_TRUE(found.has_value());
+    ASSERT_NE(found.value(), nullptr);
+    ASSERT_EQ((*found.value())[0], 1.0f);
+    ASSERT_EQ((*found.value())[1], 2.0f);
 
-    const auto* notFound = container.tryGet(EntityID(99));
-    ASSERT_EQ(notFound, nullptr);
+    ASSERT_EQ(container.tryGetWithNull(EntityID(99)), nullptr);
 }
 
 TEST(EmbeddingPropertyContainerTest, ExplicitNullHoldsNoValue) {
@@ -82,9 +82,12 @@ TEST(EmbeddingPropertyContainerTest, ExplicitNullHoldsNoValue) {
     ASSERT_FALSE(container.has(EntityID(20)));
     ASSERT_FALSE(container.has(EntityID(30)));
 
-    ASSERT_NE(container.tryGet(EntityID(10)), nullptr);
-    ASSERT_EQ(container.tryGet(EntityID(20)), nullptr);
-    ASSERT_EQ(container.tryGet(EntityID(30)), nullptr);
+    const std::optional<const types::Embedding::Primitive*> value = container.tryGetWithNull(EntityID(10));
+    ASSERT_TRUE(value.has_value());
+    ASSERT_NE(value.value(), nullptr);
+
+    ASSERT_FALSE(container.tryGetWithNull(EntityID(20)).has_value());
+    ASSERT_EQ(container.tryGetWithNull(EntityID(30)), nullptr);
 }
 
 TEST(EmbeddingPropertyContainerTest, TryGetWithNullSeparatesNullFromAbsent) {
@@ -119,13 +122,17 @@ TEST(EmbeddingPropertyContainerTest, SortKeepsExplicitNull) {
     container.sort();
 
     ASSERT_FALSE(container.has(EntityID(30)));
-    ASSERT_EQ(container.tryGet(EntityID(30)), nullptr);
     ASSERT_FALSE(container.tryGetWithNull(EntityID(30)).has_value());
 
-    ASSERT_NE(container.tryGet(EntityID(10)), nullptr);
-    ASSERT_NE(container.tryGet(EntityID(50)), nullptr);
-    ASSERT_EQ((*container.tryGet(EntityID(10)))[0], 1.0f);
-    ASSERT_EQ((*container.tryGet(EntityID(50)))[0], 3.0f);
+    const std::optional<const types::Embedding::Primitive*> first = container.tryGetWithNull(EntityID(10));
+    ASSERT_TRUE(first.has_value());
+    ASSERT_NE(first.value(), nullptr);
+    ASSERT_EQ((*first.value())[0], 1.0f);
+
+    const std::optional<const types::Embedding::Primitive*> second = container.tryGetWithNull(EntityID(50));
+    ASSERT_TRUE(second.has_value());
+    ASSERT_NE(second.value(), nullptr);
+    ASSERT_EQ((*second.value())[0], 3.0f);
 }
 
 TEST(EmbeddingPropertyContainerTest, SortKeepsNullsWithNoValues) {
