@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "remote-enabled": false,
+  "graph": "simpledb",
+  "query": "RETURN range(1, 5) AS counted",
+  "expect": {
+    "result": "counted\n\"[1, 2, 3, 4, 5]\""
+  },
+  "tags": [
+    "lists",
+    "range",
+    "return"
+  ],
+  "write-required": false
+}
