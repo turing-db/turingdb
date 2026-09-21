@@ -14,11 +14,16 @@
 #include "ProcedureData.h"
 #include "ProcedureNamespace.h"
 #include "ProcedureState.h"
-
 #include "ProcedureTypeVector.h"
+
+#include "columns/Column.h"
 #include "columns/ColumnConst.h"
 
 #include "list/ListBufferTypeTag.h"
+#include "list/ListElementView.h"
+#include "list/ListView.h"
+
+#include "metadata/PropertyType.h"
 
 using namespace db;
 
@@ -85,10 +90,28 @@ void prepareImpl(ProcedureState* state) {
 }
 
 void executeImpl(ProcedureState* state) {
-    /*
     Data& data = state->data<Data>();
-    const Column* seeds = data.getInputColumn(0);
-    */
+    auto& sampler = data.sampler;
+
+    for (size_t hop = 0; hop < GraphSAGESampler::hops; hop++) {
+        const size_t base = hop * returnValuesPerHop;
+
+        auto* dst = data.getReturnColumn(base)->cast<GraphSAGESampler::NodeCol>();
+        auto* srcs = data.getReturnColumn(base + 1)->cast<GraphSAGESampler::NodeCol>();
+        auto* tgts = data.getReturnColumn(base + 2)->cast<GraphSAGESampler::NodeCol>();
+
+        sampler->setHopData(hop, srcs, tgts, dst, 2);
+    }
+
+    ColumnNodeIDs nodes;
+    const Column* x = data.getInputColumn(0);
+    const auto* seeds = dynamic_cast<const ColumnConst<ListView>*>(x);
+    bioassert(seeds, "invalid seeds");
+    const ListView list = seeds->getRaw();
+    for (const ListElementView ele : list) {
+        nodes.emplace_back(ele.getAs<types::Int64::Primitive>());
+    }
+    sampler->sample(&nodes);
 }
 
 }
@@ -113,7 +136,7 @@ void GraphSAGEProcedure::registerProcedure(ProcedureNamespace* ns) {
     proc->addOptionalConstantArgument("seed", ProcedureType::INT64);
 
     for (const std::string_view name : returnValueNames | rv::join) {
-        proc->addReturnValue(name, ProcedureType::NODE);
+        proc->addNullableReturnValue(name, ProcedureType::NODE);
     }
 
     ns->addProcedure(proc);
