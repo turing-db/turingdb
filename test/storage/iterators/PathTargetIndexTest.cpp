@@ -147,26 +147,40 @@ TEST_F(PathTargetIndexTest, matchesTheReferenceInEveryConfiguration) {
     }
 }
 
-TEST_F(PathTargetIndexTest, choosesTheLayoutByTheBoundAndTheGraph) {
+TEST_F(PathTargetIndexTest, choosesTheLayoutByTheBoundTheGraphAndTheTargets) {
     const FrozenCommitTx transaction = _graph->openTransaction();
     const GraphReader reader = transaction.readGraph();
     const GraphView& view = reader.getView();
 
-    const std::vector<NodeID> targets {NodeID(_hubGraph._target)};
+    // One target reaches a handful of nodes at any bound: a table of as many slots
+    const std::vector<NodeID> target {NodeID(_hubGraph._target)};
 
-    // A shallow bound on this small graph writes a few words per node, cheaper than a probe
-    // per node reached; an unbounded one would write a word per node per level
     PathTargetIndex shallow;
-    shallow.build(view, targets, PathExplorationDir::FORWARD, std::nullopt, 3);
-    EXPECT_TRUE(shallow.isDense());
+    shallow.build(view, target, PathExplorationDir::FORWARD, std::nullopt, 3);
+    EXPECT_FALSE(shallow.isDense());
 
     PathTargetIndex deep;
-    deep.build(view, targets, PathExplorationDir::FORWARD, std::nullopt, unbounded);
+    deep.build(view, target, PathExplorationDir::FORWARD, std::nullopt, unbounded);
     EXPECT_FALSE(deep.isDense());
 
     // Both count the nodes they reach the same way
     EXPECT_EQ(shallow.getReachedCount(), 4u);
     EXPECT_EQ(deep.getReachedCount(), 5u);
+
+    // A batch of every node reaches the graph: at a shallow bound a few words per node are
+    // cheaper than a probe per node reached, at an unbounded one a word per node per level is not
+    std::vector<NodeID> everyNode;
+    for (size_t node = 0; node < nodeCount; node++) {
+        everyNode.push_back(NodeID(node));
+    }
+
+    PathTargetIndex wide;
+    wide.build(view, everyNode, PathExplorationDir::FORWARD, std::nullopt, 3);
+    EXPECT_TRUE(wide.isDense());
+
+    PathTargetIndex wideAndDeep;
+    wideAndDeep.build(view, everyNode, PathExplorationDir::FORWARD, std::nullopt, unbounded);
+    EXPECT_FALSE(wideAndDeep.isDense());
 }
 
 TEST_F(PathTargetIndexTest, growsTheTablePastItsFirstCapacity) {

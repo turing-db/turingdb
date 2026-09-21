@@ -176,13 +176,14 @@ PathTargetIndex::~PathTargetIndex() {
 void PathTargetIndex::planBatch(const PartDirectory& parts,
                                 PathExplorationDir direction,
                                 std::optional<EdgeTypeID> edgeType,
+                                size_t targetCount,
                                 uint64_t maxHops,
                                 BatchPlan& plan) {
     const double nodeCount = static_cast<double>(parts.getAllocatedNodeCount());
 
     // A batch's search reaches at most what its targets fan out to, and at most the graph
     const double candidatesPerTarget = PathDistanceIndex::estimatedSearchChecks(parts, direction, edgeType, 1, maxHops);
-    const double reachedPerBatch = std::min(nodeCount, static_cast<double>(targetsPerBatch) * candidatesPerTarget);
+    const double reachedPerBatch = std::min(nodeCount, static_cast<double>(targetCount) * candidatesPerTarget);
     const double levelCount = static_cast<double>(std::min<uint64_t>(maxHops, PathDistanceIndex::farthest) + 1);
     const double words = levelCount * nodeCount;
 
@@ -203,9 +204,6 @@ void PathTargetIndex::build(const GraphView& view,
     const Tombstones& tombstones = view.tombstones();
     const Tombstones* edgeTombstones = tombstones.hasEdges() ? &tombstones : nullptr;
 
-    BatchPlan plan;
-    planBatch(parts, direction, edgeType, maxHops, plan);
-
     _handles.clear();
     _batches.clear();
 
@@ -215,6 +213,10 @@ void PathTargetIndex::build(const GraphView& view,
 
     for (size_t first = 0; first < targets.size(); first += targetsPerBatch) {
         const size_t count = std::min(targetsPerBatch, targets.size() - first);
+
+        BatchPlan plan;
+        planBatch(parts, direction, edgeType, count, maxHops, plan);
+
         PathTargetBatch& batch = _batches.emplace_back();
         if (plan._dense) {
             batch.setDense(parts.getAllocatedNodeCount());
@@ -265,17 +267,29 @@ bool PathTargetIndex::isWorthBuilding(const GraphView& view,
         return false;
     }
 
-    BatchPlan plan;
-    planBatch(parts, direction, edgeType, maxHops, plan);
+    const size_t fullBatchCount = targetCount / targetsPerBatch;
+    const size_t lastBatchSize = targetCount % targetsPerBatch;
 
-    const double batchCount = static_cast<double>((targetCount + targetsPerBatch - 1) / targetsPerBatch);
-    if (batchCount * plan._bytes > bytesLimit) {
+    double checks = 0.0;
+    double bytes = 0.0;
+    if (fullBatchCount > 0) {
+        BatchPlan full;
+        planBatch(parts, direction, edgeType, targetsPerBatch, maxHops, full);
+        checks += static_cast<double>(fullBatchCount) * full._checks;
+        bytes += static_cast<double>(fullBatchCount) * full._bytes;
+    }
+    if (lastBatchSize > 0) {
+        BatchPlan last;
+        planBatch(parts, direction, edgeType, lastBatchSize, maxHops, last);
+        checks += last._checks;
+        bytes += last._bytes;
+    }
+
+    if (bytes > bytesLimit) {
         return false;
     }
 
-    const double budget = batchCount * plan._checks;
-
-    return PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, seedCount, maxHops, hopPassRate) > budget;
+    return PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, seedCount, maxHops, hopPassRate) > checks;
 }
 
 void PathTargetIndex::buildBatch(const PartDirectory& parts,
