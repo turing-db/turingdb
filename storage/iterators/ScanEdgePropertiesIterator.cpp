@@ -12,13 +12,20 @@ ScanEdgePropertiesIterator<T>::ScanEdgePropertiesIterator(const GraphView& view,
     : Iterator(view),
     _propTypeID(propTypeID)
 {
+    init();
+}
+
+template <SupportedType T>
+void ScanEdgePropertiesIterator<T>::init() {
     for (; _partIt.isNotEnd(); _partIt.next()) {
         const PropertyManager& properties = _partIt.get()->edgeProperties();
         if (properties.hasPropertyType(_propTypeID)) {
-            _props = properties.template all<T>(_propTypeID);
-            _propIt = _props.begin();
-            _currentID = properties.ids(_propTypeID).begin();
-            return;
+            newPropertySpan();
+            skipOverridden();
+
+            if (_propIt != _props.end()) {
+                return;
+            }
         }
     }
 }
@@ -51,10 +58,53 @@ void ScanEdgePropertiesIterator<T>::newPropertySpan() {
     _props = properties.template all<T>(_propTypeID);
     _propIt = _props.begin();
     _currentID = properties.ids(_propTypeID).begin();
+
+    collectNewerContainers();
+}
+
+template <SupportedType T>
+void ScanEdgePropertiesIterator<T>::collectNewerContainers() {
+    _newerContainers.clear();
+
+    PartIterator newerIt = _partIt;
+
+    for (newerIt.next(); newerIt.isNotEnd(); newerIt.next()) {
+        const PropertyManager& edgeProperties = newerIt.get()->edgeProperties();
+        const TypedPropertyContainer<T>* container = edgeProperties.tryGetContainer<T>(_propTypeID);
+
+        if (container) {
+            _newerContainers.push_back(container);
+        }
+    }
+}
+
+template <SupportedType T>
+void ScanEdgePropertiesIterator<T>::skipOverridden() {
+    if (_newerContainers.empty()) {
+        return;
+    }
+
+    while (_propIt != _props.end() && isOverridden(*_currentID)) {
+        _propIt++;
+        _currentID++;
+    }
+}
+
+template <SupportedType T>
+bool ScanEdgePropertiesIterator<T>::isOverridden(EntityID entityID) const {
+    for (const PropertyContainer* container : _newerContainers) {
+        if (container->hasEntry(entityID)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 template <SupportedType T>
 void ScanEdgePropertiesIterator<T>::nextValid() {
+    skipOverridden();
+
     while (_propIt == _props.end()) {
         _partIt.next();
         if (!_partIt.isNotEnd()) {
@@ -64,7 +114,7 @@ void ScanEdgePropertiesIterator<T>::nextValid() {
         const DataPart* part = _partIt.get();
         if (part->edgeProperties().hasPropertyType(_propTypeID)) {
             newPropertySpan();
-            return;
+            skipOverridden();
         }
     }
 }
@@ -105,17 +155,6 @@ void ScanEdgePropertiesChunkWriter<T>::fill(size_t maxCount) {
     static constexpr auto bools = generateArray<NColumns, NCombinations>();
     static constexpr auto masks = generateBitmasks<NColumns, NCombinations>();
 
-    const auto getPrevSize = [&]() {
-        if (_properties) {
-            return _properties->size();
-        }
-        if (_edgeIDs) {
-            return _edgeIDs->size();
-        }
-
-        bioassert(false, "At least one column must be set");
-    };
-
     if (_properties) {
         _properties->clear();
     }
@@ -124,32 +163,49 @@ void ScanEdgePropertiesChunkWriter<T>::fill(size_t maxCount) {
     }
 
     const auto fill = [&]<std::array<bool, NColumns> conditions>() {
+        size_t size = 0;
         while (this->isValid() && remainingToMax > 0) {
-            const auto partOutEnd = this->_props.end();
-            const size_t availInPart = std::distance(this->_propIt, partOutEnd);
+            const size_t availInPart = std::distance(this->_propIt, this->_props.end());
             const size_t rangeSize = std::min(remainingToMax, availInPart);
-            const size_t prevSize = getPrevSize();
-            const size_t newSize = prevSize + rangeSize;
+            const size_t newSize = size + rangeSize;
 
             if constexpr (conditions[0]) {
-                this->_properties->resize(newSize);
+                if (this->_properties->size() < newSize) {
+                    this->_properties->resize(newSize);
+                }
             }
             if constexpr (conditions[1]) {
-                this->_edgeIDs->resize(newSize);
+                if (this->_edgeIDs->size() < newSize) {
+                    this->_edgeIDs->resize(newSize);
+                }
             }
-            remainingToMax -= rangeSize;
+            const size_t previousSize = size;
 
-            for (size_t i = prevSize; i < newSize; i++) {
-                if constexpr (conditions[0]) {
-                    (*this->_properties)[i] = *this->_propIt;
+            for (size_t row = 0; row < rangeSize; row++) {
+                if (!this->isOverridden(*this->_currentID)) {
+                    if constexpr (conditions[0]) {
+                        (*this->_properties)[size] = *this->_propIt;
+                    }
+                    if constexpr (conditions[1]) {
+                        (*this->_edgeIDs)[size] = this->_currentID->getValue();
+                    }
+                    size++;
                 }
-                if constexpr (conditions[1]) {
-                    (*this->_edgeIDs)[i] = this->_currentID->getValue();
-                }
+
                 ++this->_propIt;
                 ++this->_currentID;
             }
+
+            remainingToMax -= size - previousSize;
+
             this->nextValid();
+        }
+
+        if constexpr (conditions[0]) {
+            this->_properties->resize(size);
+        }
+        if constexpr (conditions[1]) {
+            this->_edgeIDs->resize(size);
         }
     };
 
