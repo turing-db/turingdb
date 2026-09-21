@@ -1,6 +1,6 @@
 #include <algorithm>
 #include <memory>
-#include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -34,7 +34,7 @@ constexpr uint64_t unreached = std::numeric_limits<uint64_t>::max();
 void referenceDistances(const Adjacency& adjacency,
                         uint64_t target,
                         PathExplorationDir direction,
-                        std::optional<uint64_t> edgeType,
+                        std::span<const uint64_t> edgeTypes,
                         std::vector<uint64_t>& distances) {
     distances.assign(adjacency._outs.size(), unreached);
     distances[target] = 0;
@@ -46,7 +46,8 @@ void referenceDistances(const Adjacency& adjacency,
         for (const uint64_t node : frontier) {
             const auto relax = [&](const std::vector<ReferenceEdge>& edges) {
                 for (const ReferenceEdge& edge : edges) {
-                    const bool wrongType = edgeType && edge._type != *edgeType;
+                    const bool wrongType = !edgeTypes.empty()
+                                           && std::ranges::find(edgeTypes, edge._type) == edgeTypes.end();
                     if (wrongType || distances[edge._other] != unreached) {
                         continue;
                     }
@@ -90,22 +91,23 @@ protected:
     void expectMatchesTheReference(const GraphView& view,
                                    const std::vector<NodeID>& targets,
                                    PathExplorationDir direction,
-                                   std::optional<EdgeTypeID> edgeType,
+                                   std::span<const EdgeTypeID> edgeTypes,
                                    uint64_t maxHops) {
-        SCOPED_TRACE("direction " + std::to_string(static_cast<int>(direction)) + " max " + std::to_string(maxHops) + " type " + std::to_string(edgeType ? edgeType->getValue() : 999));
+        std::vector<uint64_t> referenceTypes;
+        for (const EdgeTypeID edgeType : edgeTypes) {
+            referenceTypes.push_back(edgeType.getValue());
+        }
+
+        SCOPED_TRACE("direction " + std::to_string(static_cast<int>(direction)) + " max " + std::to_string(maxHops)
+                     + " types " + std::to_string(referenceTypes.size()));
 
         PathTargetIndex index;
-        index.build(view, targets, direction, edgeType, maxHops);
+        index.build(view, targets, direction, edgeTypes, maxHops);
         ASSERT_TRUE(index.isBuilt());
-
-        std::optional<uint64_t> referenceType;
-        if (edgeType) {
-            referenceType = edgeType->getValue();
-        }
 
         std::vector<uint64_t> distances;
         for (const NodeID target : targets) {
-            referenceDistances(_hubGraph._adjacency, target.getValue(), direction, referenceType, distances);
+            referenceDistances(_hubGraph._adjacency, target.getValue(), direction, referenceTypes, distances);
 
             const PathTargetHandle handle = index.find(target);
             ASSERT_TRUE(handle.isValid());
@@ -136,12 +138,15 @@ TEST_F(PathTargetIndexTest, matchesTheReferenceInEveryConfiguration) {
         targets.push_back(NodeID(node));
     }
 
-    const std::vector<std::optional<EdgeTypeID>> edgeTypes {std::nullopt, _hubGraph._typeA, _hubGraph._typeB};
+    const std::vector<std::vector<EdgeTypeID>> edgeTypeSets {{},
+                                                             {_hubGraph._typeA},
+                                                             {_hubGraph._typeB},
+                                                             {_hubGraph._typeA, _hubGraph._typeB}};
 
     for (const PathExplorationDir direction : {PathExplorationDir::FORWARD, PathExplorationDir::BACKWARD, PathExplorationDir::BOTH}) {
         for (const uint64_t maxHops : {uint64_t {1}, uint64_t {3}, unbounded}) {
-            for (const std::optional<EdgeTypeID>& edgeType : edgeTypes) {
-                expectMatchesTheReference(view, targets, direction, edgeType, maxHops);
+            for (const std::vector<EdgeTypeID>& edgeTypes : edgeTypeSets) {
+                expectMatchesTheReference(view, targets, direction, edgeTypes, maxHops);
             }
         }
     }
@@ -156,11 +161,11 @@ TEST_F(PathTargetIndexTest, choosesTheLayoutByTheBoundTheGraphAndTheTargets) {
     const std::vector<NodeID> target {NodeID(_hubGraph._target)};
 
     PathTargetIndex shallow;
-    shallow.build(view, target, PathExplorationDir::FORWARD, std::nullopt, 3);
+    shallow.build(view, target, PathExplorationDir::FORWARD, {}, 3);
     EXPECT_FALSE(shallow.isDense());
 
     PathTargetIndex deep;
-    deep.build(view, target, PathExplorationDir::FORWARD, std::nullopt, unbounded);
+    deep.build(view, target, PathExplorationDir::FORWARD, {}, unbounded);
     EXPECT_FALSE(deep.isDense());
 
     // Both count the nodes they reach the same way
@@ -175,11 +180,11 @@ TEST_F(PathTargetIndexTest, choosesTheLayoutByTheBoundTheGraphAndTheTargets) {
     }
 
     PathTargetIndex wide;
-    wide.build(view, everyNode, PathExplorationDir::FORWARD, std::nullopt, 3);
+    wide.build(view, everyNode, PathExplorationDir::FORWARD, {}, 3);
     EXPECT_TRUE(wide.isDense());
 
     PathTargetIndex wideAndDeep;
-    wideAndDeep.build(view, everyNode, PathExplorationDir::FORWARD, std::nullopt, unbounded);
+    wideAndDeep.build(view, everyNode, PathExplorationDir::FORWARD, {}, unbounded);
     EXPECT_FALSE(wideAndDeep.isDense());
 }
 
@@ -196,11 +201,11 @@ TEST_F(PathTargetIndexTest, growsTheTablePastItsFirstCapacity) {
     }
 
     PathTargetIndex index;
-    index.build(view, targets, PathExplorationDir::BOTH, std::nullopt, unbounded);
+    index.build(view, targets, PathExplorationDir::BOTH, {}, unbounded);
     EXPECT_EQ(index.getBatchCount(), 1u);
     EXPECT_EQ(index.getReachedCount(), nodeCount);
 
-    expectMatchesTheReference(view, targets, PathExplorationDir::BOTH, std::nullopt, unbounded);
+    expectMatchesTheReference(view, targets, PathExplorationDir::BOTH, {}, unbounded);
 }
 
 TEST_F(PathTargetIndexTest, batchesSixtyFourTargetsPerWord) {
@@ -218,10 +223,10 @@ TEST_F(PathTargetIndexTest, batchesSixtyFourTargetsPerWord) {
     ASSERT_GT(targets.size(), PathTargetIndex::targetsPerBatch);
 
     PathTargetIndex index;
-    index.build(view, targets, PathExplorationDir::FORWARD, std::nullopt, 3);
+    index.build(view, targets, PathExplorationDir::FORWARD, {}, 3);
     EXPECT_EQ(index.getBatchCount(), 2u);
 
-    expectMatchesTheReference(view, targets, PathExplorationDir::FORWARD, std::nullopt, 3);
+    expectMatchesTheReference(view, targets, PathExplorationDir::FORWARD, {}, 3);
 }
 
 TEST_F(PathTargetIndexTest, unindexedTargetsPruneNothing) {
@@ -233,7 +238,7 @@ TEST_F(PathTargetIndexTest, unindexedTargetsPruneNothing) {
 
     PathTargetIndex index;
     EXPECT_FALSE(index.isBuilt());
-    index.build(view, targets, PathExplorationDir::FORWARD, std::nullopt, unbounded);
+    index.build(view, targets, PathExplorationDir::FORWARD, {}, unbounded);
 
     // The end, the three nodes of the live branch and the entrance: nothing else gets a slot
     EXPECT_EQ(index.getReachedCount(), 5u);
@@ -269,18 +274,18 @@ TEST_F(PathTargetIndexTest, costGateChargesEveryBatch) {
     }
 
     PathDistanceIndex::SeedExpansion expansion;
-    PathDistanceIndex::sampleSeedExpansion(PartDirectory(view), PathExplorationDir::FORWARD, std::nullopt, seeds, expansion);
+    PathDistanceIndex::sampleSeedExpansion(PartDirectory(view), PathExplorationDir::FORWARD, {}, seeds, expansion);
 
-    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 1, 1, 4));
-    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 0, 4));
-    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 1, 4));
-    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 64, 4));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, {}, expansion, 1, 1, 4));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, {}, expansion, 100000, 0, 4));
+    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, {}, expansion, 100000, 1, 4));
+    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, {}, expansion, 100000, 64, 4));
 
     // Fifty thousand batches of words cost more than a hundred thousand seeds fanning out
-    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 3000000, 4));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, {}, expansion, 100000, 3000000, 4));
 
     // And ten million batches would not fit in memory, whatever the walk costs
-    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 640000000, unbounded));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, {}, expansion, 100000, 640000000, unbounded));
 }
 
 TEST_F(PathTargetIndexTest, setModeMatchesTheReference) {
@@ -289,30 +294,34 @@ TEST_F(PathTargetIndexTest, setModeMatchesTheReference) {
     const GraphView& view = reader.getView();
 
     const std::vector<NodeID> targets {NodeID(_hubGraph._target), NodeID(_hubGraph._secondTarget), NodeID(_hubGraph._hub)};
-    const std::vector<std::optional<EdgeTypeID>> edgeTypes {std::nullopt, _hubGraph._typeA, _hubGraph._typeB};
+    const std::vector<std::vector<EdgeTypeID>> edgeTypeSets {{},
+                                                             {_hubGraph._typeA},
+                                                             {_hubGraph._typeB},
+                                                             {_hubGraph._typeA, _hubGraph._typeB}};
 
     std::vector<uint64_t> distances;
     std::vector<uint64_t> nearest;
     for (const PathExplorationDir direction : {PathExplorationDir::FORWARD, PathExplorationDir::BACKWARD, PathExplorationDir::BOTH}) {
         for (const uint64_t maxHops : {uint64_t {1}, uint64_t {3}, unbounded}) {
-            for (const std::optional<EdgeTypeID>& edgeType : edgeTypes) {
-                SCOPED_TRACE("direction " + std::to_string(static_cast<int>(direction)) + " max " + std::to_string(maxHops) + " type " + std::to_string(edgeType ? edgeType->getValue() : 999));
-
-                std::optional<uint64_t> referenceType;
-                if (edgeType) {
-                    referenceType = edgeType->getValue();
+            for (const std::vector<EdgeTypeID>& edgeTypes : edgeTypeSets) {
+                std::vector<uint64_t> referenceTypes;
+                for (const EdgeTypeID edgeType : edgeTypes) {
+                    referenceTypes.push_back(edgeType.getValue());
                 }
+
+                SCOPED_TRACE("direction " + std::to_string(static_cast<int>(direction)) + " max " + std::to_string(maxHops)
+                             + " types " + std::to_string(referenceTypes.size()));
 
                 nearest.assign(nodeCount, unreached);
                 for (const NodeID target : targets) {
-                    referenceDistances(_hubGraph._adjacency, target.getValue(), direction, referenceType, distances);
+                    referenceDistances(_hubGraph._adjacency, target.getValue(), direction, referenceTypes, distances);
                     for (size_t node = 0; node < nodeCount; node++) {
                         nearest[node] = std::min(nearest[node], distances[node]);
                     }
                 }
 
                 PathTargetIndex index;
-                index.buildSet(view, targets, direction, edgeType, maxHops);
+                index.buildSet(view, targets, direction, edgeTypes, maxHops);
                 ASSERT_TRUE(index.isBuilt());
                 EXPECT_TRUE(index.isDense());
                 EXPECT_EQ(index.getBatchCount(), 0u);
@@ -341,20 +350,20 @@ TEST_F(PathTargetIndexTest, pricesTheSetAsOneSearch) {
     }
 
     PathDistanceIndex::SeedExpansion expansion;
-    PathDistanceIndex::sampleSeedExpansion(PartDirectory(view), PathExplorationDir::FORWARD, std::nullopt, seeds, expansion);
+    PathDistanceIndex::sampleSeedExpansion(PartDirectory(view), PathExplorationDir::FORWARD, {}, seeds, expansion);
 
     // Two thousand targets are 32 batches of words over the graph; the set is one search
     // over it, so the fewest seeds that pay for the set are far from paying for the batches
     size_t seedCount = 1;
-    while (!PathTargetIndex::isWorthBuildingSet(view, PathExplorationDir::FORWARD, std::nullopt, expansion, seedCount, 2000, 3)) {
+    while (!PathTargetIndex::isWorthBuildingSet(view, PathExplorationDir::FORWARD, {}, expansion, seedCount, 2000, 3)) {
         seedCount++;
         ASSERT_LT(seedCount, 100000u);
     }
-    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, seedCount, 2000, 3));
-    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 2000, 3));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, {}, expansion, seedCount, 2000, 3));
+    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, {}, expansion, 100000, 2000, 3));
 
-    EXPECT_FALSE(PathTargetIndex::isWorthBuildingSet(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 0, 3));
-    EXPECT_FALSE(PathTargetIndex::isWorthBuildingSet(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 2000, 0));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuildingSet(view, PathExplorationDir::FORWARD, {}, expansion, 100000, 0, 3));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuildingSet(view, PathExplorationDir::FORWARD, {}, expansion, 100000, 2000, 0));
 }
 
 // Pseudo-random out-edges over enough nodes for a set's table of reached nodes to weigh less
@@ -406,7 +415,7 @@ protected:
     // reference distance
     void expectSetMatchesTheReference(const GraphView& view, const std::vector<NodeID>& targets, uint64_t maxHops, bool dense) {
         PathTargetIndex index;
-        index.buildSet(view, targets, PathExplorationDir::FORWARD, std::nullopt, maxHops);
+        index.buildSet(view, targets, PathExplorationDir::FORWARD, {}, maxHops);
         ASSERT_TRUE(index.isBuilt());
         EXPECT_EQ(index.isDense(), dense);
         EXPECT_FALSE(index.find(targets.front()).isValid());
@@ -414,7 +423,7 @@ protected:
         std::vector<uint64_t> distances;
         std::vector<uint64_t> nearest(nodeCount, unreached);
         for (const NodeID target : targets) {
-            referenceDistances(_adjacency, target.getValue(), PathExplorationDir::FORWARD, std::nullopt, distances);
+            referenceDistances(_adjacency, target.getValue(), PathExplorationDir::FORWARD, {}, distances);
             for (size_t node = 0; node < nodeCount; node++) {
                 nearest[node] = std::min(nearest[node], distances[node]);
             }

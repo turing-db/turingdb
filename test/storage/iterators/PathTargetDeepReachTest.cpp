@@ -102,7 +102,7 @@ TEST_F(PathTargetDeepReachTest, reachesATargetFartherThanADistanceByteHolds) {
     const std::vector<NodeID> targets {tail()};
 
     PathTargetIndex index;
-    index.build(view, targets, PathExplorationDir::FORWARD, _type, unbounded);
+    index.build(view, targets, PathExplorationDir::FORWARD, {&_type, 1}, unbounded);
 
     const PathTargetHandle handle = index.find(tail());
     ASSERT_TRUE(handle.isValid());
@@ -121,7 +121,7 @@ TEST_F(PathTargetDeepReachTest, prunesByTheBoundItWasBuiltFor) {
     const std::vector<NodeID> targets {tail()};
 
     PathTargetIndex index;
-    index.build(view, targets, PathExplorationDir::FORWARD, _type, 4);
+    index.build(view, targets, PathExplorationDir::FORWARD, {&_type, 1}, 4);
 
     const PathTargetHandle handle = index.find(tail());
     ASSERT_TRUE(handle.isValid());
@@ -161,7 +161,7 @@ TEST_F(PathTargetDeepReachTest, walksTheWholeChainWithAndWithoutTheIndex) {
 
     const std::vector<NodeID> targets {tail()};
     PathTargetIndex index;
-    index.build(view, targets, PathExplorationDir::FORWARD, _type, unbounded);
+    index.build(view, targets, PathExplorationDir::FORWARD, {&_type, 1}, unbounded);
     options._targetIndex = &index;
 
     collectPaths(view, input, PathExplorationDir::FORWARD, 1, unbounded, options, actual);

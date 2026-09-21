@@ -77,7 +77,7 @@ protected:
         expectSameRows(expected, actual);
 
         PathDistanceIndex index;
-        index.build(view, _endLabels, direction, options._edgeType, maxHops);
+        index.build(view, _endLabels, direction, options.getEdgeTypes(), maxHops);
         options._distanceIndex = &index;
 
         collectPaths(view, input, direction, minHops, maxHops, options, actual);
@@ -147,7 +147,7 @@ TEST_F(PathExploratorEndLabelsTest, prunesTheDeadEndRegion) {
     const size_t unprunedChecks = collectPaths(view, input, PathExplorationDir::FORWARD, 1, 3, options, unpruned);
 
     PathDistanceIndex index;
-    index.build(view, _endLabels, PathExplorationDir::FORWARD, std::nullopt, 3);
+    index.build(view, _endLabels, PathExplorationDir::FORWARD, {}, 3);
     options._distanceIndex = &index;
 
     std::vector<PathRow> pruned;
@@ -183,7 +183,7 @@ TEST_F(PathExploratorEndLabelsTest, hopFilterRejectingEveryFrameLeavesTheZeroLen
     expectSameRows(expected, rows);
 
     PathDistanceIndex index;
-    index.build(view, _endLabels, PathExplorationDir::FORWARD, std::nullopt, unbounded);
+    index.build(view, _endLabels, PathExplorationDir::FORWARD, {}, unbounded);
     options._distanceIndex = &index;
 
     collectPaths(view, input, PathExplorationDir::FORWARD, 0, unbounded, options, rows);
@@ -212,7 +212,7 @@ TEST_F(PathExploratorEndLabelsTest, labelNoNodeCarriesEmitsNothing) {
 
     // No node is an end, so no seed is worth descending into
     PathDistanceIndex index;
-    index.build(view, unused, PathExplorationDir::BOTH, std::nullopt, unbounded);
+    index.build(view, unused, PathExplorationDir::BOTH, {}, unbounded);
     EXPECT_EQ(index.getReachedCount(), 0u);
     options._distanceIndex = &index;
 
@@ -246,7 +246,7 @@ TEST_F(PathExploratorEndLabelsTest, patchEdgeReachesTheSecondCommitEnd) {
     expectSameRows(expected, rows);
 
     PathDistanceIndex index;
-    index.build(view, _endLabels, PathExplorationDir::FORWARD, std::nullopt, 3);
+    index.build(view, _endLabels, PathExplorationDir::FORWARD, {}, 3);
     options._distanceIndex = &index;
 
     collectPaths(view, input, PathExplorationDir::FORWARD, 1, 3, options, rows);

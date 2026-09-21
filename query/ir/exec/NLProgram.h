@@ -853,7 +853,7 @@ public:
                            uint64_t minHops,
                            uint64_t maxHops,
                            bool filtersByType,
-                           EdgeTypeID edgeType,
+                           std::span<const EdgeTypeID> edgeTypes,
                            bool matchable)
         : NLExpansionLoopData(input, sources, targets),
         _paths(paths),
@@ -862,7 +862,7 @@ public:
         _minHops(minHops),
         _maxHops(maxHops),
         _filtersByType(filtersByType),
-        _edgeType(edgeType),
+        _edgeTypes(edgeTypes.begin(), edgeTypes.end()),
         _matchable(matchable)
     {
     }
@@ -873,7 +873,7 @@ public:
     uint64_t getMinHops() const { return _minHops; }
     uint64_t getMaxHops() const { return _maxHops; }
     bool filtersByType() const { return _filtersByType; }
-    EdgeTypeID getEdgeType() const { return _edgeType; }
+    std::span<const EdgeTypeID> getEdgeTypes() const { return _edgeTypes; }
     bool isMatchable() const { return _matchable; }
 
     bool hasHopFilter() const { return _hopMask != nullptr; }
@@ -937,7 +937,7 @@ private:
     uint64_t _minHops {0};
     uint64_t _maxHops {0};
     bool _filtersByType {false};
-    EdgeTypeID _edgeType;
+    std::vector<EdgeTypeID> _edgeTypes;
     bool _matchable {true};
 
     LabelSet _endLabels;

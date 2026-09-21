@@ -1323,16 +1323,12 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
         maxHopsAttr = mlir::IntegerAttr::get(hopType, metadata.getMaxHops());
     }
 
-    mlir::StringAttr edgeTypeAttr;
+    mlir::ArrayAttr edgeTypesAttr;
     const std::optional<VariableDependency::Constraint>& constraints = edge->constraints();
     if (constraints) {
         const auto* edgeTypes = std::get_if<VariableDependency::EdgeTypeNames>(&*constraints);
         if (edgeTypes && !edgeTypes->_names.empty()) {
-            bioassert(edgeTypes->_names.size() == 1,
-                      "db.explore_paths restricts a walk to one edge type, not a disjunction over several");
-
-            const std::string_view edgeType = edgeTypes->_names.front();
-            edgeTypeAttr = _opBuilder.getStringAttr(llvm::StringRef(edgeType.data(), edgeType.size()));
+            edgeTypesAttr = strArrayAttr(_opBuilder, edgeTypes->_names);
         }
     }
 
@@ -1344,7 +1340,7 @@ void DBProgramGenerator::addExplorePaths(const VariableDependency* src,
                                                         direction,
                                                         metadata.getMinHops(),
                                                         maxHopsAttr,
-                                                        edgeTypeAttr,
+                                                        edgeTypesAttr,
                                                         mlir::ArrayAttr(),
                                                         mlir::IntegerAttr(),
                                                         false);

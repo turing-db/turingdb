@@ -41,7 +41,7 @@ namespace {
 const char* const boundedProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %0:3 = db.explore_paths(%n, {}) forward hops 1 to 3 edge_type "KNOWS" : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  %0:3 = db.explore_paths(%n, {}) forward hops 1 to 3 edge_types ["KNOWS"] : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
   %e = db.expand_path(%0#2, %0#0) kind edges : (!db.column<!storage.path_ref>, !db.column<!storage.node_id>) -> !db.column<!storage.list<!storage.edge_id>>
   %l = db.path_length(%0#2) : (!db.column<!storage.path_ref>) -> !db.column<ui64>
   db.output(%0#0, %e, %0#1, %l) : !db.column<!storage.node_id>, !db.column<!storage.list<!storage.edge_id>>, !db.column<!storage.node_id>, !db.column<ui64>
@@ -75,10 +75,19 @@ func.func @main() {
 }
 )mlir";
 
-const char* const emptyEdgeTypeProgram = R"mlir(
+const char* const edgeTypeDisjunctionProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
-  %0:3 = db.explore_paths(%n, {}) forward hops 1 edge_type "" : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  %0:3 = db.explore_paths(%n, {}) forward hops 1 to 3 edge_types ["KNOWS", "LIKES"] : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  db.output(%0#1) : !db.column<!storage.node_id>
+  return
+}
+)mlir";
+
+const char* const emptyEdgeTypesProgram = R"mlir(
+func.func @main() {
+  %n = db.scan_nodes() : !db.column<!storage.node_id>
+  %0:3 = db.explore_paths(%n, {}) forward hops 1 edge_types [] : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
   db.output(%0#1) : !db.column<!storage.node_id>
   return
 }
@@ -148,7 +157,7 @@ const char* const trimProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %h:4 = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %0:5 = db.explore_paths(%h#3, {%h#0, %h#1}) forward hops 1 to 2 edge_type "KNOWS_WELL" {
+  %0:5 = db.explore_paths(%h#3, {%h#0, %h#1}) forward hops 1 to 2 edge_types ["KNOWS_WELL"] {
   ^bb0(%src: !db.column<!storage.node_id>, %edge: !db.column<!storage.edge_id>, %end: !db.column<!storage.node_id>):
     %ls = db.get_node_label_set(%end) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
     %ok = db.check_label_constraint(%ls, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
@@ -182,7 +191,7 @@ func.func @main() {
 const char* const unmatchableTypeProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
-  %0:3 = db.explore_paths(%n, {}) forward hops 0 edge_type "NOPE" : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  %0:3 = db.explore_paths(%n, {}) forward hops 0 edge_types ["NOPE"] : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
   %e = db.expand_path(%0#2, %0#0) kind edges : (!db.column<!storage.path_ref>, !db.column<!storage.node_id>) -> !db.column<!storage.list<!storage.edge_id>>
   db.output(%0#0, %e, %0#1) : !db.column<!storage.node_id>, !db.column<!storage.list<!storage.edge_id>>, !db.column<!storage.node_id>
   return
@@ -239,7 +248,7 @@ func.func @main() {
 const char* const rawPathOutputProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes_by_label(["Person"]) : !db.column<!storage.node_id>
-  %0:3 = db.explore_paths(%n, {}) forward hops 1 to 2 edge_type "KNOWS_WELL" : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
+  %0:3 = db.explore_paths(%n, {}) forward hops 1 to 2 edge_types ["KNOWS_WELL"] : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.node_id>, !db.column<!storage.path_ref>)
   db.output(%0#0, %0#2, %0#1) : !db.column<!storage.node_id>, !db.column<!storage.path_ref>, !db.column<!storage.node_id>
   return
 }
@@ -260,6 +269,19 @@ protected:
         });
 
         return mlir::parseSourceString<mlir::ModuleOp>(programText, mlir::ParserConfig(&_context));
+    }
+
+    // The names a db.explore_paths restricts its hops to, in the order the op spells them
+    static std::vector<std::string> edgeTypeNamesOf(mlir::db::ExplorePaths exploration) {
+        std::vector<std::string> names;
+
+        if (const mlir::ArrayAttr edgeTypes = exploration.getEdgeTypesAttr()) {
+            for (const mlir::Attribute name : edgeTypes) {
+                names.push_back(mlir::cast<mlir::StringAttr>(name).getValue().str());
+            }
+        }
+
+        return names;
     }
 
     static mlir::db::ExplorePaths findExplorePaths(mlir::ModuleOp module) {
@@ -315,7 +337,7 @@ protected:
 }
 
 TEST_F(ExplorePathsDialectTest, roundTripsThroughThePrinter) {
-    for (const char* program : {boundedProgram, hopRegionProgram}) {
+    for (const char* program : {boundedProgram, hopRegionProgram, edgeTypeDisjunctionProgram}) {
         mlir::OwningOpRef<mlir::ModuleOp> module = parse(program);
         ASSERT_TRUE(module);
         EXPECT_TRUE(mlir::succeeded(mlir::verify(*module)));
@@ -335,7 +357,7 @@ TEST_F(ExplorePathsDialectTest, roundTripsThroughThePrinter) {
         EXPECT_EQ(original.getDirection(), copy.getDirection());
         EXPECT_EQ(original.getMinHops(), copy.getMinHops());
         EXPECT_EQ(original.getMaxHops(), copy.getMaxHops());
-        EXPECT_EQ(original.getEdgeType(), copy.getEdgeType());
+        EXPECT_EQ(edgeTypeNamesOf(original), edgeTypeNamesOf(copy));
         EXPECT_EQ(original.getHop().empty(), copy.getHop().empty());
     }
 }
@@ -348,9 +370,13 @@ TEST_F(ExplorePathsDialectTest, readsTheAttributesAndTheRegion) {
     EXPECT_EQ(boundedOp.getDirection(), mlir::storage::PathDirection::Forward);
     EXPECT_EQ(boundedOp.getMinHops(), 1u);
     EXPECT_EQ(boundedOp.getMaxHops(), std::optional<uint64_t> {3});
-    EXPECT_EQ(boundedOp.getEdgeType(), std::optional<llvm::StringRef> {"KNOWS"});
+    EXPECT_EQ(edgeTypeNamesOf(boundedOp), std::vector<std::string> {"KNOWS"});
     EXPECT_TRUE(boundedOp.getHop().empty());
     EXPECT_EQ(boundedOp.getColumnsToFilter().size(), 0u);
+
+    const mlir::OwningOpRef<mlir::ModuleOp> disjunction = parse(edgeTypeDisjunctionProgram);
+    ASSERT_TRUE(disjunction);
+    EXPECT_EQ(edgeTypeNamesOf(findExplorePaths(*disjunction)), (std::vector<std::string> {"KNOWS", "LIKES"}));
 
     const mlir::OwningOpRef<mlir::ModuleOp> region = parse(hopRegionProgram);
     ASSERT_TRUE(region);
@@ -359,7 +385,7 @@ TEST_F(ExplorePathsDialectTest, readsTheAttributesAndTheRegion) {
     EXPECT_EQ(regionOp.getDirection(), mlir::storage::PathDirection::Both);
     EXPECT_EQ(regionOp.getMinHops(), 0u);
     EXPECT_FALSE(regionOp.getMaxHops().has_value());
-    EXPECT_FALSE(regionOp.getEdgeType().has_value());
+    EXPECT_TRUE(edgeTypeNamesOf(regionOp).empty());
     ASSERT_FALSE(regionOp.getHop().empty());
     EXPECT_EQ(regionOp.getHop().front().getNumArguments(), 3u);
     EXPECT_EQ(regionOp.getColumnsToFilter().size(), 1u);
@@ -368,7 +394,7 @@ TEST_F(ExplorePathsDialectTest, readsTheAttributesAndTheRegion) {
 
 TEST_F(ExplorePathsDialectTest, rejectsMalformedExplorations) {
     for (const char* program : {maxBelowMinProgram,
-                                emptyEdgeTypeProgram,
+                                emptyEdgeTypesProgram,
                                 carryMismatchProgram,
                                 hopWrongArgumentsProgram,
                                 hopYieldsNodesProgram,
@@ -397,7 +423,7 @@ TEST_F(ExplorePathsDialectTest, trimDropsUnreadCarriesAndKeepsTheRest) {
         mlir::cast<mlir::db::ColumnType>(trimmed.getFilteredColumns().front().getType()).getType()));
     EXPECT_EQ(trimmed.getMinHops(), 1u);
     EXPECT_EQ(trimmed.getMaxHops(), std::optional<uint64_t> {2});
-    EXPECT_EQ(trimmed.getEdgeType(), std::optional<llvm::StringRef> {"KNOWS_WELL"});
+    EXPECT_EQ(edgeTypeNamesOf(trimmed), std::vector<std::string> {"KNOWS_WELL"});
     ASSERT_FALSE(trimmed.getHop().empty());
     EXPECT_EQ(trimmed.getHop().front().getNumArguments(), 3u);
     EXPECT_TRUE(mlir::isa<mlir::db::Yield>(trimmed.getHop().front().getTerminator()));

@@ -2199,7 +2199,7 @@ void fuseExploreEndFactor(const FactorEndExploration& match, mlir::OpBuilder& bu
                                                     exploration.getDirection(),
                                                     exploration.getMinHops(),
                                                     exploration.getMaxHopsAttr(),
-                                                    exploration.getEdgeTypeAttr(),
+                                                    exploration.getEdgeTypesAttr(),
                                                     exploration.getEndLabelsAttr(),
                                                     IntegerAttr(),
                                                     false,

@@ -805,8 +805,10 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor, AttrSizedOpe
       %paths = nl.explore_paths(%a, {%x}) forward hops 1 to 3 : !nl.chunk<!storage.node_id>
       nl.for %seeds, %ends, %p, %x2 in %paths { ... }
 
-    The direction, hop bounds, edge type, end labels, end column and distinct flag are the
-    db op's, carried through unchanged. The db op's end_nodes column arrives as a node set
+    The direction, hop bounds, end labels, end column and distinct flag are the db op's,
+    carried through unchanged. Its edge_types names arrive resolved, as the same
+    nl.get_edge_type_set handle a by-type hop takes, so a query resolves one set above the
+    loops and both read it. The db op's end_nodes column arrives as a node set
     handle instead: the loop binding it fills the set through nl.node_set_collect, and the
     walk reads the set once that loop has run to its end. The optional `hop` region is the
     db op's hop predicate lowered: a block over the source node, edge and end node chunks of one hop,
@@ -817,10 +819,10 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor, AttrSizedOpe
   let arguments = (ins NLNodeIDChunk:$input_nodes,
                        Variadic<NLChunk>:$columns_to_filter,
                        Optional<NLNodeSetStateHandle>:$end_nodes,
+                       Optional<NLEdgeTypeHandle>:$edge_types,
                        PathDirection:$direction,
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
-                       OptionalAttr<StrAttr>:$edge_type,
                        OptionalAttr<StrArrayAttr>:$end_labels,
                        OptionalAttr<UI64Attr>:$end_column,
                        UnitAttr:$ends_on_seed,
@@ -831,7 +833,7 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor, AttrSizedOpe
 
   let assemblyFormat = [{
     `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
-    (`to` $max_hops^)? (`edge_type` $edge_type^)? (`end_labels` $end_labels^)?
+    (`to` $max_hops^)? (`edge_types` $edge_types^)? (`end_labels` $end_labels^)?
     (`end_nodes` $end_nodes^)? (`end_column` $end_column^)? (`ends_on_seed` $ends_on_seed^)?
     (`distinct` $distinct^)? ($hop^)?
     attr-dict ( `:` qualified(type($columns_to_filter))^ )?

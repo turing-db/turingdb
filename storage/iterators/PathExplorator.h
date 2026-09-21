@@ -48,7 +48,7 @@ public:
     void setTargets(ColumnNodeIDs* targets) { _targets = targets; }
     void setPaths(ColumnVector<PathRef>* paths, PathTrie* trie);
     void setHopFilter(PathHopFilter* filter) { _hopFilter = filter; }
-    void setEdgeTypeFilter(EdgeTypeID edgeType);
+    void setEdgeTypeFilter(std::span<const EdgeTypeID> edgeTypes);
     void setEndLabels(const LabelSet* labels);
     void setEndNodes(const ColumnNodeIDs* endNodes) { _endNodes = endNodes; }
     // The ends every seed shares, sorted and without duplicates
@@ -125,7 +125,7 @@ private:
     PathTrie* _trie {nullptr};
     PathHopFilter* _hopFilter {nullptr};
     bool _filterByType {false};
-    EdgeTypeID _edgeType;
+    std::span<const EdgeTypeID> _edgeTypes;
     LabelSetHandle _endLabels;
     const ColumnNodeIDs* _endNodes {nullptr};
     std::span<const NodeID> _endNodeSet;

@@ -158,14 +158,14 @@ public:
     void build(const GraphView& view,
                std::span<const NodeID> targets,
                PathExplorationDir direction,
-               std::optional<EdgeTypeID> edgeType,
+               std::span<const EdgeTypeID> edgeTypes,
                uint64_t maxHops);
 
     // The set mode: one search from every target at once
     void buildSet(const GraphView& view,
                   std::span<const NodeID> targets,
                   PathExplorationDir direction,
-                  std::optional<EdgeTypeID> edgeType,
+                  std::span<const EdgeTypeID> edgeTypes,
                   uint64_t maxHops);
 
     bool isBuilt() const { return _built; }
@@ -194,7 +194,7 @@ public:
     // Whether the enumeration the seeds imply is expected to cost more than the batches
     static bool isWorthBuilding(const GraphView& view,
                                 PathExplorationDir direction,
-                                std::optional<EdgeTypeID> edgeType,
+                                std::span<const EdgeTypeID> edgeTypes,
                                 const PathDistanceIndex::SeedExpansion& expansion,
                                 size_t seedCount,
                                 size_t targetCount,
@@ -204,7 +204,7 @@ public:
     // The same for the set mode, priced as the one search it is
     static bool isWorthBuildingSet(const GraphView& view,
                                    PathExplorationDir direction,
-                                   std::optional<EdgeTypeID> edgeType,
+                                   std::span<const EdgeTypeID> edgeTypes,
                                    const PathDistanceIndex::SeedExpansion& expansion,
                                    size_t seedCount,
                                    size_t targetCount,
@@ -233,14 +233,14 @@ private:
 
     static void planBatch(const PartDirectory& parts,
                           PathExplorationDir direction,
-                          std::optional<EdgeTypeID> edgeType,
+                          std::span<const EdgeTypeID> edgeTypes,
                           size_t targetCount,
                           uint64_t maxHops,
                           BatchPlan& plan);
 
     static void planSet(const PartDirectory& parts,
                         PathExplorationDir direction,
-                        std::optional<EdgeTypeID> edgeType,
+                        std::span<const EdgeTypeID> edgeTypes,
                         size_t targetCount,
                         uint64_t maxHops,
                         SetPlan& plan);
@@ -248,28 +248,28 @@ private:
     void buildBatch(const PartDirectory& parts,
                     std::span<const NodeID> targets,
                     PathExplorationDir direction,
-                    std::optional<EdgeTypeID> edgeType,
+                    std::span<const EdgeTypeID> edgeTypes,
                     const Tombstones* tombstones,
                     uint64_t maxHops,
                     PathTargetBatch& batch);
     void buildSetBatch(const PartDirectory& parts,
                        std::span<const NodeID> targets,
                        PathExplorationDir direction,
-                       std::optional<EdgeTypeID> edgeType,
+                       std::span<const EdgeTypeID> edgeTypes,
                        const Tombstones* tombstones,
                        uint64_t maxHops,
                        PathTargetBatch& batch);
     void searchBatch(const PartDirectory& parts,
                      std::vector<NodeID>& frontier,
                      PathExplorationDir direction,
-                     std::optional<EdgeTypeID> edgeType,
+                     std::span<const EdgeTypeID> edgeTypes,
                      const Tombstones* tombstones,
                      uint64_t maxHops,
                      PathTargetBatch& batch);
     void relax(std::span<const EdgeRecord> edges,
                uint64_t word,
                uint8_t distance,
-               std::optional<EdgeTypeID> edgeType,
+               std::span<const EdgeTypeID> edgeTypes,
                const Tombstones* tombstones,
                PathTargetBatch& batch,
                std::vector<NodeID>& next);

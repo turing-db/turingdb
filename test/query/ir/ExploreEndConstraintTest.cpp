@@ -80,7 +80,7 @@ const char* const carriedFilterFormProgram = R"mlir(
 func.func @main() {
   %a = db.scan_nodes() : !db.column<!storage.node_id>
   %h:4 = db.get_out_edges(%a, {}) : (!db.column<!storage.node_id>) -> (!db.column<!storage.node_id>, !db.column<!storage.edge_id>, !db.column<!storage.edge_type_id>, !db.column<!storage.node_id>)
-  %0:4 = db.explore_paths(%h#3, {%h#0}) forward hops 1 to 3 edge_type "KNOWS_WELL" {
+  %0:4 = db.explore_paths(%h#3, {%h#0}) forward hops 1 to 3 edge_types ["KNOWS_WELL"] {
   ^bb0(%src: !db.column<!storage.node_id>, %edge: !db.column<!storage.edge_id>, %end: !db.column<!storage.node_id>):
     %hls = db.get_node_label_set(%end) : (!db.column<!storage.node_id>) -> !db.column<!storage.labelset_id>
     %hok = db.check_label_constraint(%hls, ["Person"]) : (!db.column<!storage.labelset_id>) -> !db.column<!storage.bool>
@@ -296,6 +296,17 @@ protected:
         EXPECT_EQ(labels, expected);
     }
 
+    static void expectEdgeTypes(mlir::db::ExplorePaths exploration, const std::vector<std::string>& expected) {
+        const std::optional<mlir::ArrayAttr> edgeTypes = exploration.getEdgeTypes();
+        ASSERT_TRUE(edgeTypes.has_value());
+
+        std::vector<std::string> names;
+        for (const mlir::Attribute name : *edgeTypes) {
+            names.push_back(mlir::cast<mlir::StringAttr>(name).getValue().str());
+        }
+        EXPECT_EQ(names, expected);
+    }
+
     void runPass(mlir::ModuleOp module, std::unique_ptr<mlir::Pass> pass) {
         mlir::PassManager passManager(&_context);
         passManager.addPass(std::move(pass));
@@ -469,7 +480,7 @@ TEST_F(ExploreEndConstraintTest, keepsTheTypeTheRegionAndTheCarrySet) {
     mlir::db::ExplorePaths fused = findExplorePaths(*module);
     ASSERT_TRUE(fused);
     expectEndLabels(fused, {"Person"});
-    EXPECT_EQ(fused.getEdgeType(), std::optional<llvm::StringRef> {"KNOWS_WELL"});
+    expectEdgeTypes(fused, {"KNOWS_WELL"});
     EXPECT_EQ(fused.getMaxHops(), std::optional<uint64_t> {3});
     EXPECT_EQ(fused.getColumnsToFilter().size(), 1u);
     ASSERT_FALSE(fused.getHop().empty());
@@ -487,7 +498,7 @@ TEST_F(ExploreEndConstraintTest, keepsTheTypeTheRegionAndTheCarrySet) {
     ASSERT_TRUE(trimmed);
     expectEndLabels(trimmed, {"Person"});
     EXPECT_EQ(trimmed.getColumnsToFilter().size(), 1u);
-    EXPECT_EQ(trimmed.getEdgeType(), std::optional<llvm::StringRef> {"KNOWS_WELL"});
+    expectEdgeTypes(trimmed, {"KNOWS_WELL"});
 }
 
 TEST_F(ExploreEndConstraintTest, mergesChainedLabelFilters) {
@@ -630,7 +641,7 @@ TEST_F(ExploreEndConstraintGeneratedGraphTest, pruningIndexKeepsTheFilteredRows)
     }
 
     PathDistanceIndex::SeedExpansion expansion;
-    PathDistanceIndex::sampleSeedExpansion(PartDirectory(view), PathExplorationDir::FORWARD, std::nullopt, seeds, expansion);
+    PathDistanceIndex::sampleSeedExpansion(PartDirectory(view), PathExplorationDir::FORWARD, {}, seeds, expansion);
     EXPECT_TRUE(PathDistanceIndex::isWorthBuilding(view, expansion, nodeCount, 4));
 
     RowSink filtered;

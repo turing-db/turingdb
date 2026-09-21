@@ -1154,11 +1154,13 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
     `max_hops` is unbounded, which trail semantics keep finite.
 
       %s, %t, %p = db.explore_paths(%n, {}) forward hops 1 to 3
-      %s, %t, %p, %a2 = db.explore_paths(%n, {%a}) both hops 0 edge_type "KNOWS"
+      %s, %t, %p, %a2 = db.explore_paths(%n, {%a}) both hops 0 edge_types ["KNOWS"]
       %s, %t, %p = db.explore_paths(%n, {}) forward hops 2 to 4 end_labels ["Interest"]
 
     `direction` is which edges a hop follows; `srcids` is always the seed, whatever the
-    direction. `edge_type` restricts every hop to edges of that type. The optional `hop`
+    direction. `edge_types` restricts every hop to edges carrying one of those types, a
+    disjunction as `-[:KNOWS|LIKES*]->` spells it; a name absent from the schema drops
+    out, and a set left empty that way matches no edge. The optional `hop`
     region is a predicate on each hop, evaluated over its source node, its edge and its
     end node - the three block arguments - and yielding one boolean column; a hop that
     fails it is neither emitted nor expanded. The region reads nothing from outside but
@@ -1214,7 +1216,7 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
                        PathDirection:$direction,
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
-                       OptionalAttr<StrAttr>:$edge_type,
+                       OptionalAttr<StrArrayAttr>:$edge_types,
                        OptionalAttr<StrArrayAttr>:$end_labels,
                        OptionalAttr<UI64Attr>:$end_column,
                        UnitAttr:$ends_on_seed,
@@ -1229,7 +1231,7 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, De
 
   let assemblyFormat = [{
     `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
-    (`to` $max_hops^)? (`edge_type` $edge_type^)? (`end_labels` $end_labels^)?
+    (`to` $max_hops^)? (`edge_types` $edge_types^)? (`end_labels` $end_labels^)?
     (`end_nodes` $end_nodes^)? (`end_column` $end_column^)? (`ends_on_seed` $ends_on_seed^)?
     (`distinct` $distinct^)? ($hop^)?
     attr-dict `:` functional-type(operands, results)

@@ -111,6 +111,10 @@ struct ExplorationOptions {
     bool _distinctEnds {false};
     bool _collectTargets {true};
     bool _collectPaths {true};
+
+    std::span<const db::EdgeTypeID> getEdgeTypes() const {
+        return _edgeType ? std::span<const db::EdgeTypeID> {&*_edgeType, 1} : std::span<const db::EdgeTypeID> {};
+    }
 };
 
 // Drives the explorator to exhaustion, expanding every emitted path through the trie, and

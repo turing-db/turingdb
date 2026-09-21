@@ -5238,16 +5238,21 @@ void DBLowering::lowerExplorePaths(mlir::db::ExplorePaths explorePaths) {
         endNodeSet = buildEndNodeSet(endNodeColumn, inputChunk);
     }
 
+    mlir::Value edgeTypeSet;
+    if (const mlir::ArrayAttr edgeTypes = explorePaths.getEdgeTypesAttr()) {
+        edgeTypeSet = getOrCreateEdgeTypeSetHandle(edgeTypes);
+    }
+
     setInsertionInto(ownerBlock(inputChunk));
 
     nl::ExplorePaths exploration = _builder.create<nl::ExplorePaths>(_builder.getUnknownLoc(),
                                                                      inputChunk,
                                                                      carriedChunks,
                                                                      endNodeSet,
+                                                                     edgeTypeSet,
                                                                      explorePaths.getDirection(),
                                                                      explorePaths.getMinHops(),
                                                                      explorePaths.getMaxHopsAttr(),
-                                                                     explorePaths.getEdgeTypeAttr(),
                                                                      explorePaths.getEndLabelsAttr(),
                                                                      explorePaths.getEndColumnAttr(),
                                                                      explorePaths.getEndsOnSeed(),

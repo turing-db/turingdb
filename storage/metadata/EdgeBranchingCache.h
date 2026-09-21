@@ -1,7 +1,7 @@
 #pragma once
 
 #include <mutex>
-#include <optional>
+#include <span>
 #include <stddef.h>
 #include <vector>
 
@@ -10,7 +10,7 @@
 
 namespace db {
 
-// What a walk of one edge type branches by at the nodes it reaches, and how many nodes its
+// What a walk of a set of edge types branches by at the nodes it reaches, and how many nodes its
 // frontier can occupy. A relation held by a fraction of the nodes is walked only through
 // those, so averaging its degree over every node describes no walk at all.
 struct EdgeBranching {
@@ -31,13 +31,13 @@ public:
     EdgeBranchingCache& operator=(const EdgeBranchingCache&) = delete;
 
     bool lookup(PathExplorationDir direction,
-                std::optional<EdgeTypeID> edgeType,
+                std::span<const EdgeTypeID> edgeTypes,
                 size_t nodeCount,
                 size_t edgeCount,
                 EdgeBranching& branching) const;
 
     void store(PathExplorationDir direction,
-               std::optional<EdgeTypeID> edgeType,
+               std::span<const EdgeTypeID> edgeTypes,
                size_t nodeCount,
                size_t edgeCount,
                const EdgeBranching& branching);
@@ -45,7 +45,7 @@ public:
 private:
     struct Entry {
         PathExplorationDir _direction {PathExplorationDir::FORWARD};
-        std::optional<EdgeTypeID> _edgeType;
+        std::vector<EdgeTypeID> _edgeTypes;
         size_t _nodeCount {0};
         size_t _edgeCount {0};
         EdgeBranching _branching;
