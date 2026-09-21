@@ -405,9 +405,16 @@ TEST_F(ExploreBoundEndsTest, roundTripsTheEndColumnAndTheDistinctFlag) {
 }
 
 TEST_F(ExploreBoundEndsTest, rejectsMalformedBoundsAndDistinctFlags) {
-    for (const char* program : {endColumnOutOfRangeProgram, endColumnNotANodeProgram, distinctMinTwoProgram, distinctUndirectedMinOneProgram, distinctReadsPathProgram}) {
+    for (const char* program : {endColumnOutOfRangeProgram, endColumnNotANodeProgram, distinctReadsPathProgram}) {
         mlir::OwningOpRef<mlir::ModuleOp> module = parse(program);
         EXPECT_FALSE(module) << program;
+    }
+}
+
+TEST_F(ExploreBoundEndsTest, acceptsDistinctAtAnyBoundAndDirection) {
+    for (const char* program : {distinctMinTwoProgram, distinctUndirectedMinOneProgram}) {
+        mlir::OwningOpRef<mlir::ModuleOp> module = parse(program);
+        EXPECT_TRUE(module) << program;
     }
 }
 

@@ -137,7 +137,7 @@ func.func @main() {
 }
 )mlir";
 
-// MATCH (n)-[e]->{2,3}(m) RETURN DISTINCT n, m: a walk of two hops may have no trail
+// MATCH (n)-[e]->{2,3}(m) RETURN DISTINCT n, m: a minimum past one keeps the trail walk
 const char* const minTwoDedupProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
@@ -148,8 +148,8 @@ func.func @main() {
 }
 )mlir";
 
-// MATCH (n)-[e]-{1,3}(m) RETURN DISTINCT n, m: undirected, the one-edge backtrack is a closed
-// walk of two hops with no trail behind it
+// MATCH (n)-[e]-{1,3}(m) RETURN DISTINCT n, m: undirected past a minimum of zero keeps the
+// trail walk too
 const char* const undirectedMinOneDedupProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
@@ -413,6 +413,8 @@ TEST_F(ExploreDistinctEndsTest, marksExplorationsOnlyEverReadAsASet) {
     EXPECT_TRUE(marksDistinct(hopThenDedupProgram));
     EXPECT_TRUE(marksDistinct(bothEnumeratedProgram));
     EXPECT_TRUE(marksDistinct(hopEnumeratedProgram));
+    EXPECT_TRUE(marksDistinct(minTwoDedupProgram));
+    EXPECT_TRUE(marksDistinct(undirectedMinOneDedupProgram));
 }
 
 TEST_F(ExploreDistinctEndsTest, leavesExplorationsWhoseRowsAreCounted) {
@@ -420,8 +422,6 @@ TEST_F(ExploreDistinctEndsTest, leavesExplorationsWhoseRowsAreCounted) {
     EXPECT_FALSE(marksDistinct(outputProgram));
     EXPECT_FALSE(marksDistinct(limitThenDedupProgram));
     EXPECT_FALSE(marksDistinct(pathDedupProgram));
-    EXPECT_FALSE(marksDistinct(minTwoDedupProgram));
-    EXPECT_FALSE(marksDistinct(undirectedMinOneDedupProgram));
 }
 
 TEST_F(ExploreDistinctEndsSimpleGraphTest, distinctFormsEmitTheDeduplicatedRows) {
@@ -438,7 +438,7 @@ TEST_F(ExploreDistinctEndsSimpleGraphTest, passedProgramsEmitTheDeduplicatedRows
     const GraphReader reader = transaction.readGraph();
     const GraphView& view = reader.getView();
 
-    for (const char* program : {dedupProgram, filteredDedupProgram, countDistinctProgram, hopThenDedupProgram}) {
+    for (const char* program : {dedupProgram, filteredDedupProgram, countDistinctProgram, hopThenDedupProgram, minTwoDedupProgram, undirectedMinOneDedupProgram}) {
         RowSink enumerated;
         runProgram(program, view, enumerated);
 
