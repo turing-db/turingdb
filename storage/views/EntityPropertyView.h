@@ -92,6 +92,9 @@ private:
     std::vector<PropertyView> _props;
 
     EntityPropertyView() = default;
+
+    void setProperty(PropertyTypeID propTypeID, const PropertyVariant& value);
+    void removeProperty(PropertyTypeID propTypeID);
 };
 
 static_assert((size_t)ValueType::_SIZE == 8);

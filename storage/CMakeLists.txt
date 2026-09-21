@@ -36,6 +36,7 @@ set(storage_sources
         metadata/LabelMap.cpp
         metadata/LabelSetMap.cpp
 
+        views/EntityPropertyView.cpp
         views/GraphView.cpp
         views/NodeEdgeView.cpp
 

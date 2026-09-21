@@ -25,11 +25,17 @@ void PropertyManager::fillEntityPropertyView(EntityID entityID,
             return;
         }
 
-        const auto* primitive = container.tryGetWithNull(entityID).value_or(nullptr);
+        const auto value = container.tryGetWithNull(entityID);
+
+        const bool explicitNull = !value.has_value();
+        if (explicitNull) {
+            view.removeProperty(ptID);
+            return;
+        }
+
+        const auto* primitive = value.value();
         if (primitive) {
-            auto& prop = view._props.emplace_back();
-            prop._id = ptID;
-            prop._value = primitive;
+            view.setProperty(ptID, primitive);
         }
     };
 
