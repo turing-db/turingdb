@@ -314,6 +314,7 @@ TEST_F(PathTargetIndexTest, setModeMatchesTheReference) {
                 PathTargetIndex index;
                 index.buildSet(view, targets, direction, edgeType, maxHops);
                 ASSERT_TRUE(index.isBuilt());
+                EXPECT_TRUE(index.isDense());
                 EXPECT_EQ(index.getBatchCount(), 0u);
                 EXPECT_FALSE(index.find(NodeID(_hubGraph._target)).isValid());
 
@@ -354,4 +355,104 @@ TEST_F(PathTargetIndexTest, pricesTheSetAsOneSearch) {
 
     EXPECT_FALSE(PathTargetIndex::isWorthBuildingSet(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 0, 3));
     EXPECT_FALSE(PathTargetIndex::isWorthBuildingSet(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 2000, 0));
+}
+
+// Pseudo-random out-edges over enough nodes for a set's table of reached nodes to weigh less
+// than a byte per node of the graph, which is where the set is laid out as that table
+class PathTargetIndexGeneratedGraphTest : public TuringTest {
+protected:
+    static constexpr size_t nodeCount = 4096;
+    static constexpr size_t outDegree = 2;
+
+    void initialize() override {
+        _jobSystem = std::make_unique<JobSystem>();
+        _jobSystem->init();
+        _graph = Graph::create();
+
+        auto change = _graph->newChange();
+        auto* commitBuilder = change->access().getTip();
+        auto& builder = commitBuilder->newBuilder();
+        auto& metadata = builder.getMetadata();
+
+        const LabelSet plain = LabelSet::fromList({metadata.getOrCreateLabel("N")});
+        const EdgeTypeID type = metadata.getOrCreateEdgeType("A");
+
+        std::vector<NodeID> nodes;
+        for (size_t node = 0; node < nodeCount; node++) {
+            nodes.push_back(builder.addNode(plain));
+        }
+
+        uint64_t state = 424242;
+        for (const NodeID source : nodes) {
+            for (size_t edge = 0; edge < outDegree; edge++) {
+                state = state * 6364136223846793005ull + 1442695040888963407ull;
+                builder.addEdge(type, source, nodes[(state >> 33) % nodeCount]);
+            }
+        }
+
+        const auto submitted = change->access().submit(*_jobSystem);
+        ASSERT_TRUE(submitted);
+
+        const FrozenCommitTx transaction = _graph->openTransaction();
+        const GraphReader reader = transaction.readGraph();
+        buildAdjacency(reader.getView(), nodeCount, _adjacency);
+    }
+
+    void terminate() override {
+        _jobSystem->terminate();
+    }
+
+    // Every node's reach of the set within every budget agrees with the nearest target's
+    // reference distance
+    void expectSetMatchesTheReference(const GraphView& view, const std::vector<NodeID>& targets, uint64_t maxHops, bool dense) {
+        PathTargetIndex index;
+        index.buildSet(view, targets, PathExplorationDir::FORWARD, std::nullopt, maxHops);
+        ASSERT_TRUE(index.isBuilt());
+        EXPECT_EQ(index.isDense(), dense);
+        EXPECT_FALSE(index.find(targets.front()).isValid());
+
+        std::vector<uint64_t> distances;
+        std::vector<uint64_t> nearest(nodeCount, unreached);
+        for (const NodeID target : targets) {
+            referenceDistances(_adjacency, target.getValue(), PathExplorationDir::FORWARD, std::nullopt, distances);
+            for (size_t node = 0; node < nodeCount; node++) {
+                nearest[node] = std::min(nearest[node], distances[node]);
+            }
+        }
+
+        size_t reached = 0;
+        for (size_t node = 0; node < nodeCount; node++) {
+            for (const uint64_t hops : {uint64_t {0}, uint64_t {1}, uint64_t {2}, uint64_t {4}, unbounded}) {
+                const uint64_t distance = nearest[node];
+                const bool expected = distance != unreached && distance <= hops && distance <= maxHops;
+                EXPECT_EQ(index.canReachAnyWithin(NodeID(node), hops), expected) << "node " << node << " within " << hops;
+            }
+
+            reached += nearest[node] != unreached && nearest[node] <= maxHops ? 1 : 0;
+        }
+        EXPECT_EQ(index.getReachedCount(), reached);
+    }
+
+    std::unique_ptr<JobSystem> _jobSystem;
+    std::unique_ptr<Graph> _graph;
+    Adjacency _adjacency;
+};
+
+TEST_F(PathTargetIndexGeneratedGraphTest, laysTheSetOutByItsFootprint) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+
+    // One target two hops out reaches a handful of nodes: a table of as many slots
+    expectSetMatchesTheReference(view, {NodeID(1234)}, 2, false);
+
+    // A hundred targets reach more than a byte per node weighs
+    std::vector<NodeID> hundred;
+    for (size_t target = 0; target < 100; target++) {
+        hundred.push_back(NodeID(target * 37 % nodeCount));
+    }
+    expectSetMatchesTheReference(view, hundred, 4, true);
+
+    // And so does one target with no bound on the search
+    expectSetMatchesTheReference(view, {NodeID(1234)}, unbounded, true);
 }

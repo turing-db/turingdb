@@ -144,37 +144,46 @@ that has both.
 expansion sampled, the gate is `isWorthBuilding`: build iff the enumeration the sample
 predicts costs more than the index, the index priced for what it is. A set-bound walk asks
 only whether any target is in reach, so its index is one multi-source search from all T
-targets, a distance byte per node: `PathTargetIndex::buildSet`, which is `PathDistanceIndex`
-built from the set instead of a label's nodes. `isWorthBuildingSet` prices it as that index
-prices its own build, 0.35 checks per node and edge the search touches, at most T times one
-target's reach and at most the graph, plus the byte written for every node. A per-row walk
-keeps its batches of 64 distinct targets, each priced by the targets it holds. Until
-2026-09-21 the set was priced as ceil(T/64) batches and every batch at 64 targets' reach, 64
-times over for a single target, which is what kept the one-target index unbuilt below seven
-hops.
+targets, `PathTargetIndex::buildSet`, in one of two layouts: a table of the nodes the search
+reaches, or a distance byte for every node of the graph, which is `PathDistanceIndex` built
+from the set instead of a label's nodes. The two cost the same search; what differs is the
+probe the walk makes at every candidate, and the smaller index is the faster to probe, so
+`planSet` takes the table while its slots weigh less than a byte per node: 162 bytes a
+reached node against 2.98M bytes on reactome, so one target up to six hops is a table and
+200 targets or eight hops a byte per node. `isWorthBuildingSet` prices the layout chosen, 3
+checks a reached node for the table and 0.35 a node or edge touched for the bytes, at most T
+times one target's reach and at most the graph. A per-row walk keeps its batches of 64
+distinct targets, each priced by the targets it holds. Until 2026-09-21 the set was priced as
+ceil(T/64) batches and every batch at 64 targets' reach, 64 times over for a single target,
+which is what kept the one-target index unbuilt below seven hops; and the set's first layout
+was the byte per node alone, which lost 0.7 ms to the per-row table at four and five hops on
+probes into 2.98M bytes where the table sat in cache.
 
-Both gates re-measured on the same programs, same machine, one run each:
+Both gates re-measured on the same programs, same machine, the one-target cells the minimum
+of three runs:
 
 | targets | hops | `end_column` before | after | `end_nodes` before | after | rows |
 |---|---|---|---|---|---|---|
-| 1 | 1..3 | 2.72 ms | 2.85 ms | 2.59 ms | 2.60 ms | 3 |
-| 1 | 1..4 | 3.46 ms | 2.75 ms | 3.45 ms | 3.46 ms | 3 |
-| 1 | 1..5 | 8.20 ms | 2.89 ms | 8.62 ms | 3.71 ms | 18 |
-| 1 | 1..6 | 36.7 ms | 3.50 ms | 41.3 ms | 3.74 ms | 68 |
-| 1 | 1..7 | 67.5 ms | 3.83 ms | 69.9 ms | 4.07 ms | 457 |
-| 1 | 1..8 | 74.2 ms | 4.82 ms | 74.7 ms | 4.76 ms | 2,657 |
-| 200 | 1..5 | 9.05 ms | 8.87 ms | 7.95 ms | 3.14 ms | 7,016 |
-| 200 | 1..6 | 24.1 ms | 24.0 ms | 43.9 ms | 6.49 ms | 37,977 |
-| 200 | 1..7 | 316 ms | 265 ms | 272 ms | 28.2 ms | 252,517 |
+| 1 | 1..3 | 2.72 ms | 2.69 ms | 2.59 ms | 2.48 ms | 3 |
+| 1 | 1..4 | 3.46 ms | 2.68 ms | 3.45 ms | 2.52 ms | 3 |
+| 1 | 1..5 | 8.20 ms | 2.86 ms | 8.62 ms | 2.66 ms | 18 |
+| 1 | 1..6 | 36.7 ms | 3.29 ms | 41.3 ms | 3.15 ms | 68 |
+| 1 | 1..7 | 67.5 ms | 3.68 ms | 69.9 ms | 3.90 ms | 457 |
+| 1 | 1..8 | 74.2 ms | 4.88 ms | 74.7 ms | 4.69 ms | 2,657 |
+| 200 | 1..5 | 9.05 ms | 8.87 ms | 7.95 ms | 3.25 ms | 7,016 |
+| 200 | 1..6 | 24.1 ms | 24.0 ms | 43.9 ms | 6.46 ms | 37,977 |
+| 200 | 1..7 | 316 ms | 265 ms | 272 ms | 28.5 ms | 252,517 |
 | 200 | 1..8 | 745 ms | 635 ms | 482 ms | 152 ms | 1,467,849 |
-| 2000 | 1..6 | 75,134 ms | - | 96 ms | 94 ms | 1,167,094 |
-| 2000 | 1..7 | 485,705 ms | - | 651 ms | 577 ms | 7,697,006 |
+| 2000 | 1..6 | 75,134 ms | - | 96 ms | 95 ms | 1,167,094 |
+| 2000 | 1..7 | 485,705 ms | - | 651 ms | 583 ms | 7,697,006 |
 
-Every one-target figure past three hops is now the 2.1 ms target scan plus a pruned walk of
-under 3 ms; the per-row index is built from four hops on, the set index from five. The 200-target set index is built at every
-bound, and the six-hop cell went from 44 ms to 6.5 against the column form's 24. At 2000
-targets the set is a third of the ball - 1.17M rows out of 3.5M trails at six hops - so there
-is little to prune and the time is the emission. The 2000-target column form was not re-run.
+Every one-target figure is now the 2.1 ms target scan plus a pruned walk of under 3 ms, both
+indexes built from four hops on, and the set form is level with or ahead of the per-row form
+at every bound but seven, where the table sits at the edge of the footprint rule and loses
+0.2 ms. The 200-target set index is built at every bound, and the six-hop cell went from
+44 ms to 6.5 against the column form's 24. At 2000 targets the set is a third of the ball -
+1.17M rows out of 3.5M trails at six hops - so there is little to prune and the time is the
+emission. The 2000-target column form was not re-run.
 
 **The rule.**
 
@@ -199,7 +208,7 @@ the post-filter codegen emits for a property-pinned end - `explore_paths`,
 `scan_nodes_by_property_value` of its own at the head of the function, the end's labels
 folded into it, and an `end_nodes` operand on the walk. `test/query/ir/ExploreEndPropertyTest.cpp`
 covers it, down to the Cypher query over simpledb. On reactome the query of the first table
-now runs through Cypher in 2.8 ms at three hops, 4.4 at five and 5.8 at eight, against 1.12,
+now runs through Cypher in 2.6 ms at three hops, 2.8 at five and 4.8 at eight, against 1.12,
 23.5 and 5,074 for the post-filter it replaces.
 
 `fuse_explore_end_factor` landed the same day and closes the rule: an exploration whose
