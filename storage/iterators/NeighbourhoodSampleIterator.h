@@ -16,8 +16,8 @@ namespace db {
 class GraphView;
 
 /**
- * @brief Tombstone-aware iterator over the out of edges of each NodeID in @ref _inputNodeIDs 
- * @detail Traverses each DataPart for every NodeID, as opposed to GetOutEdgesIterator 
+ * @brief Tombstone-aware iterator over the in edges of each NodeID in @ref _inputNodeIDs
+ * @detail Traverses each DataPart for every NodeID, as opposed to GetOutEdgesIterator
  */
 class NeighbourhoodSampleIterator : public Iterator {
 public:
@@ -42,7 +42,7 @@ protected:
 };
 
 /**
- * @brief Uniform random sample of the out edges of each NodeID in @ref _inputNodeIDs
+ * @brief Uniform random sample of the in edges of each NodeID in @ref _inputNodeIDs
  */
 class NeighbourhoodSampleChunkWriter final : public NeighbourhoodSampleIterator {
 public:

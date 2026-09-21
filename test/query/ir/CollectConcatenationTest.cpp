@@ -23,10 +23,10 @@ constexpr const char* returnQuery =
     "CALL gnn.neighbourhoodSample(n, 8, 42) YIELD src, tgt "
     "RETURN collect(DISTINCT src) + collect(DISTINCT tgt) AS nodes";
 
-// Remy(0) cites Adam(1), Ghosts(6), Computers(2) and Eighties(3). A fan-out of 8 exceeds
-// his out-degree, so the sample takes the whole neighbourhood: the seed collects to [0]
-// and the targets to [1, 6, 2, 3].
-const std::vector<StringRowSink::Row> concatenatedNodes {{"0, 1, 6, 2, 3"}};
+// Remy(0) is cited by Adam(1) and Ghosts(6). A fan-out of 8 exceeds his in-degree, so the
+// sample takes the whole neighbourhood: the sources collect to [1, 6] and the target to
+// [0].
+const std::vector<StringRowSink::Row> concatenatedNodes {{"1, 6, 0"}};
 
 }
 

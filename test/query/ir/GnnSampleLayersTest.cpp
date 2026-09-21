@@ -124,9 +124,9 @@ private:
 // aggregation would run over.
 constexpr const char* threeLayerQuery =
     "MATCH (n:Seed) "
-    "CALL gnn.neighbourhoodSample(n, 3, 42) YIELD tgt AS hop1 "
-    "CALL gnn.neighbourhoodSample(hop1, 2, 42) YIELD tgt AS hop2 "
-    "CALL gnn.neighbourhoodSample(hop2, 2, 42) YIELD tgt AS hop3 "
+    "CALL gnn.neighbourhoodSample(n, 3, 42) YIELD src AS hop1 "
+    "CALL gnn.neighbourhoodSample(hop1, 2, 42) YIELD src AS hop2 "
+    "CALL gnn.neighbourhoodSample(hop2, 2, 42) YIELD src AS hop3 "
     "RETURN n, hop1, hop2, hop3";
 
 }
@@ -145,15 +145,16 @@ protected:
     }
 
     // Eleven papers around a two-paper minibatch, laid out in the layers a 3-layer
-    // GraphSAGE samples. No node cites more than two others, so a fan-out of two or more
-    // takes the whole neighbourhood at every layer and the sample is the seed's full
-    // three-hop reach whatever the seed value:
+    // GraphSAGE samples. The sample walks citations back to their sources, so every edge
+    // runs from the citing paper to the cited one. No paper is cited by more than two
+    // others, so a fan-out of two or more takes the whole neighbourhood at every layer and
+    // the sample is the seed's full three-hop reach whatever the seed value:
     //
-    //   seeds     0 -> {2, 3}          1 -> {3, 4}      (3 cited by both seeds)
-    //   layer 2   2 -> {5, 10}         3 -> {6, 7}      4 -> {7}
-    //   layer 3   5 -> {8}             6 -> {8, 9}      7 -> {9}
+    //   seeds     0 <- {2, 3}          1 <- {3, 4}      (3 cites both seeds)
+    //   layer 2   2 <- {5, 10}         3 <- {6, 7}      4 <- {7}
+    //   layer 3   5 <- {8}             6 <- {8, 9}      7 <- {9}
     //
-    // Node 10 cites nothing, so the path through it dies at the third layer rather than
+    // Nothing cites node 10, so the path through it dies at the third layer rather than
     // reaching it - the drop a minibatch pads over.
     std::unique_ptr<Graph> buildCitationGraph() {
         auto graph = Graph::create();
@@ -182,21 +183,21 @@ protected:
         const NodeID paper9 = builder.addNode(paper);
         const NodeID paper10 = builder.addNode(paper);
 
-        builder.addEdge(0, seed0, paper2);
-        builder.addEdge(0, seed0, paper3);
-        builder.addEdge(0, seed1, paper3);
-        builder.addEdge(0, seed1, paper4);
+        builder.addEdge(0, paper2, seed0);
+        builder.addEdge(0, paper3, seed0);
+        builder.addEdge(0, paper3, seed1);
+        builder.addEdge(0, paper4, seed1);
 
-        builder.addEdge(0, paper2, paper5);
-        builder.addEdge(0, paper2, paper10);
-        builder.addEdge(0, paper3, paper6);
-        builder.addEdge(0, paper3, paper7);
-        builder.addEdge(0, paper4, paper7);
+        builder.addEdge(0, paper5, paper2);
+        builder.addEdge(0, paper10, paper2);
+        builder.addEdge(0, paper6, paper3);
+        builder.addEdge(0, paper7, paper3);
+        builder.addEdge(0, paper7, paper4);
 
-        builder.addEdge(0, paper5, paper8);
-        builder.addEdge(0, paper6, paper8);
-        builder.addEdge(0, paper6, paper9);
-        builder.addEdge(0, paper7, paper9);
+        builder.addEdge(0, paper8, paper5);
+        builder.addEdge(0, paper8, paper6);
+        builder.addEdge(0, paper9, paper6);
+        builder.addEdge(0, paper9, paper7);
 
         const auto submitResult = change->access().submit(*_jobSystem);
         EXPECT_TRUE(submitResult);
@@ -268,7 +269,7 @@ protected:
 };
 
 // The eight paths the two seeds reach in three hops. Seed 0 loses the path through paper
-// 10, which cites nothing; paper 3 is sampled from both seeds, so its subtree appears
+// 10, which nothing cites; paper 3 is sampled from both seeds, so its subtree appears
 // under each of them.
 TEST_F(GnnSampleLayersTest, threeLayerSampleWalksEveryPath) {
     auto graph = buildCitationGraph();
@@ -325,9 +326,9 @@ TEST_F(GnnSampleLayersTest, threeLayerSampleReturningTheFrontierAlone) {
 
     SampledFrontierSink sink;
     runQuery("MATCH (n:Seed) "
-             "CALL gnn.neighbourhoodSample(n, 3, 42) YIELD tgt AS hop1 "
-             "CALL gnn.neighbourhoodSample(hop1, 2, 42) YIELD tgt AS hop2 "
-             "CALL gnn.neighbourhoodSample(hop2, 2, 42) YIELD tgt AS hop3 "
+             "CALL gnn.neighbourhoodSample(n, 3, 42) YIELD src AS hop1 "
+             "CALL gnn.neighbourhoodSample(hop1, 2, 42) YIELD src AS hop2 "
+             "CALL gnn.neighbourhoodSample(hop2, 2, 42) YIELD src AS hop3 "
              "RETURN n, hop3",
              graph.get(),
              reader.getView(),

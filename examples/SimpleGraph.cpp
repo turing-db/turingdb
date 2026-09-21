@@ -65,6 +65,28 @@ void SimpleGraph::findOutEdges(Graph* graph,
     }
 }
 
+void SimpleGraph::findInEdges(Graph* graph,
+                              const std::vector<NodeID>& nodeIDs,
+                              std::vector<EdgeID>& edgeIDs,
+                              std::vector<EdgeTypeID>& edgeTypes,
+                              std::vector<NodeID>& sourceNodeIDs) {
+    edgeIDs.clear();
+    edgeTypes.clear();
+    sourceNodeIDs.clear();
+
+    const auto transaction = graph->openTransaction();
+    const auto reader = transaction.readGraph();
+
+    ColumnNodeIDs columnNodeIDs(nodeIDs);
+
+    const auto edges = reader.getInEdges(&columnNodeIDs);
+    for (const auto& edge : edges) {
+        edgeIDs.push_back(edge._edgeID);
+        edgeTypes.push_back(edge._edgeTypeID);
+        sourceNodeIDs.push_back(edge._otherID);
+    }
+}
+
 void SimpleGraph::createSimpleGraph(Graph* graph, bool changeName) {
     JobSystem jobSystem;
     jobSystem.init();

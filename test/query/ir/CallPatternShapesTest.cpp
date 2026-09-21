@@ -107,8 +107,8 @@ TEST_F(CallPatternShapesTest, edgeTypeOfAYieldedEdge) {
     EXPECT_EQ(sink.getRows(), expected);
 }
 
-// All four return values of gnn.neighbourhoodSample yielded at once: the sampled edge is one
-// of Remy's, from Remy to one of the four nodes it points at.
+// All four return values of gnn.neighbourhoodSample yielded at once: the sampled edge is
+// one of Remy's two in-edges, running to Remy from one of the nodes that point at him.
 TEST_F(CallPatternShapesTest, yieldsEveryGnnColumnAtOnce) {
     StringRowSink sink;
     runQuery("MATCH (n {name: 'Remy'}) CALL gnn.neighbourhoodSample(n, 1, 42) "
@@ -120,11 +120,11 @@ TEST_F(CallPatternShapesTest, yieldsEveryGnnColumnAtOnce) {
 
     const StringRowSink::Row& row = rows.front();
     ASSERT_EQ(row.size(), 4u);
-    EXPECT_EQ(row[0], "0");
+    EXPECT_EQ(row[3], "0");
 
-    const std::vector<std::string> remyEdges {"0", "1", "2", "3"};
-    const std::vector<std::string> remyTargets {"1", "2", "3", "6"};
-    EXPECT_TRUE(std::find(remyEdges.begin(), remyEdges.end(), row[1]) != remyEdges.end()) << row[1];
+    const std::vector<std::string> remyInEdges {"4", "7"};
+    const std::vector<std::string> remySources {"1", "6"};
+    EXPECT_TRUE(std::find(remySources.begin(), remySources.end(), row[0]) != remySources.end()) << row[0];
+    EXPECT_TRUE(std::find(remyInEdges.begin(), remyInEdges.end(), row[1]) != remyInEdges.end()) << row[1];
     EXPECT_TRUE(row[2] == "0" || row[2] == "1") << row[2];
-    EXPECT_TRUE(std::find(remyTargets.begin(), remyTargets.end(), row[3]) != remyTargets.end()) << row[3];
 }
