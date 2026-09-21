@@ -493,6 +493,11 @@ private:
     void collectGroupedColumns(CarrySet& carrySet);
     void rebindCarrySet(mlir::ValueRange columns, size_t firstColumn, const CarrySet& carrySet);
 
+    // Moves every projected column the carry set took along onto the column standing for
+    // it here: @param from and @param to are the columns as they were bound and as they
+    // are bound now, one for one
+    void rebindProjectedColumns(mlir::ValueRange from, mlir::ValueRange to);
+
     // Emits the ON CREATE and ON MATCH clauses of a merge, each over the rows @param
     // created selects: the rows the merge wrote, and - through its negation - the rows
     // it bound
