@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include "Iterator.h"
 
 #include "PartIterator.h"
@@ -10,6 +12,8 @@
 #include "metadata/PropertyType.h"
 
 namespace db {
+
+class PropertyContainer;
 
 template <SupportedType T>
 class ScanEdgePropertiesIterator : public Iterator {
@@ -53,10 +57,15 @@ protected:
     std::span<const typename T::Primitive> _props {};
     std::span<const typename T::Primitive>::iterator _propIt;
     std::span<const EntityID>::iterator _currentID;
+    std::vector<const PropertyContainer*> _newerContainers;
 
     bool nextDatapart();
     void newPropertySpan();
     void nextValid();
+    void init();
+    void collectNewerContainers();
+    void skipOverridden();
+    bool isOverridden(EntityID entityID) const;
 };
 
 template <SupportedType T>
