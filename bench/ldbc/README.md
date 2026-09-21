@@ -41,9 +41,9 @@ parameters are replaced by.
 
 ## How queries reach the engine
 
-The v3 engine is reachable through the shell's `#v3 ` prefix in local mode, so
-`run_ldbc.py` drives one shell process over stdin and reads the per-query timing the shell
-prints. The engine takes no query parameters, so each `$name` is replaced by a literal from
+The v3 engine is the only one the shell runs in local mode, so `run_ldbc.py` drives one
+shell process over stdin and reads the row count and the timing the shell prints. The
+engine takes no query parameters, so each `$name` is replaced by a literal from
 `params/turingdb.json` first. A list parameter is spelled as a list there, so `$tagIds`,
 `$studyAt` and `$workAt` reach the engine as `[1524]` and `[[2435, 2004]]`. Writes need an
 open change, so the update queries run after `CHANGE NEW` / `checkout change-0`.
@@ -52,48 +52,46 @@ open change, so the update queries run after `CHANGE NEW` / `checkout change-0`.
 
 ## Results
 
-Run on 2026-09-16 against main at 7f2b0883f, release build, `--repeat 5`.
+Run on 2026-09-21 against main at 451e6f8a8, release build.
 
 **18 of the 55 queries run.** Setting aside the 10 that call a Neo4j library (`gds.*` in
 BI 15, 19 and 20; `apoc.*` in BI 10) rather than the Cypher language, it is 18 of 45.
 
-| query | rows | ms |
-| --- | --- | --- |
-| interactive-short-1 | 1 | 0.90 |
-| interactive-short-3 | 48 | 0.95 |
-| interactive-short-4 | 1 | 0.83 |
-| interactive-short-5 | 1 | 0.84 |
-| interactive-short-7 | 14 | 1.40 |
-| interactive-complex-2 | 20 | 1.08 |
-| interactive-complex-8 | 20 | 0.97 |
-| interactive-update-1 | 0 | 2.59 |
-| interactive-update-2 | 0 | 0.83 |
-| interactive-update-3 | 0 | 0.82 |
-| interactive-update-4 | 0 | 1.48 |
-| interactive-update-5 | 0 | 0.83 |
-| interactive-update-6 | 0 | 1.63 |
-| interactive-update-7 | 0 | 1.75 |
-| interactive-update-8 | 0 | 0.81 |
-| bi-5 | 20 | 1.34 |
-| bi-6 | 20 | 1.83 |
-| bi-11 | 1 | 12.70 |
+| query | rows |
+| --- | --- |
+| interactive-short-1 | 1 |
+| interactive-short-3 | 48 |
+| interactive-short-4 | 1 |
+| interactive-short-5 | 1 |
+| interactive-short-7 | 14 |
+| interactive-complex-2 | 20 |
+| interactive-complex-8 | 20 |
+| interactive-update-1 | 0 |
+| interactive-update-2 | 0 |
+| interactive-update-3 | 0 |
+| interactive-update-4 | 0 |
+| interactive-update-5 | 0 |
+| interactive-update-6 | 0 |
+| interactive-update-7 | 0 |
+| interactive-update-8 | 0 |
+| bi-5 | 20 |
+| bi-6 | 20 |
+| bi-11 | 1 |
+
+It is the same 18 queries as at 7f2b0883f. One thing moved underneath the count: BI 16 no
+longer stops at `CALL { subquery }`, which main implemented at 0de9efdcc, and stops at the
+map literals it unwinds instead.
 
 The answers are right, not just the row counts. BI 11 counts 25 friend triangles in India,
 which is what counting them over the CSVs in Python gives. IC 8's top 20 replies match that
 computation row for row, ids, names, dates and order. IS 3 returns 48 friends for person
 4398046511333, its degree in `person_knows_person`.
 
-The one that runs now and did not at ec20eb10d is IU 1, which indexes an element of a nested
-list. It was read back after `COMMIT`. Person 999999999 is Bench Mark, its `STUDY_AT` edge
-carries classYear 2004 to organisation 2435, its `WORKS_AT` edge carries workFrom 2010 to
-organisation 296, its `HAS_INTEREST` edge reaches tag 1524 and its `IS_LOCATED_IN` edge
-reaches city 1073. The two years come from `s[1]` and `w[1]`, the two organisations from
-`s[0]` and `w[0]`.
-
-Every query timed 0.3 to 0.6 ms higher than at ec20eb10d: IS 1 0.54 ms to 0.90 ms, IC 2
-0.73 ms to 1.08 ms, BI 11 12.27 ms to 12.70 ms. A second run on a freshly loaded graph
-reproduced this within 5%. The same constant lands on queries that share no code path, so it
-is read as the machine rather than the engine.
+IU 1 indexes an element of a nested list, and its write was read back after `COMMIT`.
+Person 999999999 is Bench Mark, its `STUDY_AT` edge carries classYear 2004 to organisation
+2435, its `WORKS_AT` edge carries workFrom 2010 to organisation 296, its `HAS_INTEREST`
+edge reaches tag 1524 and its `IS_LOCATED_IN` edge reaches city 1073. The two years come
+from `s[1]` and `w[1]`, the two organisations from `s[0]` and `w[0]`.
 
 ### What stops the other 27
 
@@ -107,7 +105,7 @@ is read as the machine rather than the engine.
 | IC 14 | `allShortestPaths` |
 | IC 12 | edge type alternation, `[:A\|B]` |
 | BI 8 | pattern comprehensions, `size([(a)-[r]-(b) \| r])` |
-| BI 16 | `CALL { subquery }` |
+| BI 16 | map literals, `UNWIND [{letter: 'A'}] AS param` then `param.letter` |
 | IC 4 | chained comparison, `a <= b < c` |
 
 The last one is not a missing feature. It is a query the engine has every piece to run and
