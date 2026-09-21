@@ -3996,11 +3996,30 @@ void DBLowering::lowerDeleteEdge(mlir::db::DeleteEdge deleteEdge) {
 }
 
 void DBLowering::lowerConstant(mlir::db::ConstantOp constant) {
-    // Constants are loop-invariant so hoist
-    _builder.setInsertionPointToStart(_entryBlock);
+    // Constants are loop-invariant so hoist, each behind the ones hoisted before it: an op
+    // goes after its own operands, and landing in front of an earlier constant would put it
+    // - and every region hanging under it - above a constant its body still reads.
+    setInsertionAfterHoistedConstants();
 
     nl::Constant nlConstant = _builder.create<nl::Constant>(_builder.getUnknownLoc(), constant.getValue());
     _valueMap[constant.getResult()] = nlConstant.getResult();
+}
+
+void DBLowering::setInsertionAfterHoistedConstants() {
+    mlir::Operation* lastConstant = nullptr;
+    for (mlir::Operation& operation : *_entryBlock) {
+        if (!mlir::isa<nl::Constant>(operation)) {
+            break;
+        }
+
+        lastConstant = &operation;
+    }
+
+    if (lastConstant) {
+        _builder.setInsertionPointAfter(lastConstant);
+    } else {
+        _builder.setInsertionPointToStart(_entryBlock);
+    }
 }
 
 void DBLowering::lowerBroadcastConstant(mlir::db::BroadcastConstant broadcast) {
