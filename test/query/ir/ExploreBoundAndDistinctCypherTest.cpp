@@ -119,14 +119,13 @@ TEST_F(ExploreBoundAndDistinctCypherTest, explainShowsTheDistinctExploration) {
     EXPECT_TRUE(exploresDistinctly("MATCH (n)-[e]->*(m) RETURN count(DISTINCT m.name)"));
     EXPECT_TRUE(exploresDistinctly("MATCH (n:Person)-[e]-{0,3}(m) WHERE m.age > 30 RETURN DISTINCT m.name"));
     EXPECT_TRUE(exploresDistinctly("MATCH (n)-[e]->*(m) RETURN n.name, count(DISTINCT m.name)"));
+    EXPECT_TRUE(exploresDistinctly("MATCH (n)-[e]->{2,3}(m) RETURN DISTINCT n.name, m.name"));
+    EXPECT_TRUE(exploresDistinctly("MATCH (n:Person)-[e]-{1,3}(m) RETURN DISTINCT m.name"));
 
-    // The path is read, the rows are counted, a two-hop minimum leaves walks with no trail,
-    // and undirected the one-edge backtrack does the same past a minimum of zero
+    // The path is read, or the rows are counted
     EXPECT_FALSE(exploresDistinctly("MATCH (n)-[e]->*(m) RETURN DISTINCT n.name, e"));
     EXPECT_FALSE(exploresDistinctly("MATCH (n)-[e]->*(m) RETURN count(*)"));
     EXPECT_FALSE(exploresDistinctly("MATCH (n)-[e]->*(m) RETURN n.name, m.name"));
-    EXPECT_FALSE(exploresDistinctly("MATCH (n)-[e]->{2,3}(m) RETURN DISTINCT n.name, m.name"));
-    EXPECT_FALSE(exploresDistinctly("MATCH (n:Person)-[e]-{1,3}(m) RETURN DISTINCT m.name"));
 }
 
 TEST_F(ExploreBoundAndDistinctCypherTest, distinctExplorationEmitsTheDeduplicatedRows) {
