@@ -1927,7 +1927,7 @@ bool matchEndBoundExploration(FilterOp filter, EndBoundExploration& bound) {
         exploration = ends.getDefiningOp<ExplorePaths>();
     }
 
-    const bool alreadyBound = exploration && (exploration.getEndColumn() || exploration.getEndsOnSeed());
+    const bool alreadyBound = exploration && (exploration.getEndColumn() || exploration.getEndsOnSeed() || exploration.getEndNodes());
     if (!exploration || ends != exploration.getTgtids() || alreadyBound) {
         return false;
     }
@@ -2136,18 +2136,22 @@ struct CountPathRows : public impl::CountPathRowsBase<CountPathRows> {
 };
 
 // Where an op's carry set sits: the carried operands start at _operandOffset and each comes
-// back as the result at the same position from _resultOffset.
+// back as the result at the same position from _resultOffset. _trailingOperandCount is what
+// the op takes after its carry set, which a trim keeps as it found it.
 struct CarrySetLayout {
     size_t _operandOffset {0};
     size_t _resultOffset {0};
+    size_t _trailingOperandCount {0};
 };
 
 bool matchCarrySetLayout(Operation* op, CarrySetLayout& layout) {
     if (isEdgeHop(op)) {
         layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = hopFixedResultCount};
         return true;
-    } else if (isa<ExplorePaths>(op)) {
-        layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = pathFixedResultCount};
+    } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
+        layout = CarrySetLayout {._operandOffset = 1,
+                                 ._resultOffset = pathFixedResultCount,
+                                 ._trailingOperandCount = exploration.getEndNodes() ? 1u : 0u};
         return true;
     } else if (isa<FilterOp>(op)) {
         layout = CarrySetLayout {._operandOffset = 1, ._resultOffset = 0};
@@ -2342,11 +2346,21 @@ void renumberEndColumn(ExplorePaths exploration, llvm::ArrayRef<size_t> kept, Op
     state.attributes.set(exploration.getEndColumnAttrName(), unsignedAttribute(static_cast<uint64_t>(keptIt - kept.begin()), builder));
 }
 
+// The carry set is an exploration's second operand segment, so a trim of it rewrites the
+// segment sizes as a trimmed procedure call's are rewritten
+void trimExploreSegments(ExplorePaths exploration, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
+    const int32_t keptCount = static_cast<int32_t>(kept.size());
+    const int32_t endNodeCount = exploration.getEndNodes() ? 1 : 0;
+
+    state.attributes.set(exploration.getOperandSegmentSizesAttrName(), builder.getDenseI32ArrayAttr({1, keptCount, endNodeCount}));
+}
+
 void trimAttributes(Operation* op, llvm::ArrayRef<size_t> kept, OperationState& state, mlir::OpBuilder& builder) {
     if (Sort sort = dyn_cast<Sort>(op)) {
         renumberSortKeys(sort, kept, state, builder);
     } else if (ExplorePaths exploration = dyn_cast<ExplorePaths>(op)) {
         renumberEndColumn(exploration, kept, state, builder);
+        trimExploreSegments(exploration, kept, state, builder);
     } else if (GroupAggregate groupAggregate = dyn_cast<GroupAggregate>(op)) {
         trimGroupAggregateKinds(groupAggregate, kept, state, builder);
     } else if (Collect collect = dyn_cast<Collect>(op)) {
@@ -2372,6 +2386,8 @@ void trimCarrySet(Operation* op, const CarrySetLayout& layout, llvm::ArrayRef<si
         trimmedOperands.push_back(operands[layout._operandOffset + carriedIndex]);
         trimmedTypes.push_back(results[layout._resultOffset + carriedIndex].getType());
     }
+
+    llvm::append_range(trimmedOperands, operands.take_back(layout._trailingOperandCount));
 
     OperationState state(op->getLoc(), op->getName());
     state.addOperands(trimmedOperands);

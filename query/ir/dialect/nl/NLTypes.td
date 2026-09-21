@@ -204,6 +204,17 @@ def NLShortestPathState : NLType<"ShortestPathState", "shortest_path_state"> {
     }];
 }
 
+def NLNodeSetState : NLType<"NodeSetState", "node_set_state"> {
+    let summary = "A node set handle";
+    let description = [{
+        Stands for the set of nodes a whole column holds, sorted and without duplicates.
+        Produced by nl.node_set_buffer, appended to by nl.node_set_collect once per
+        producing-loop step, and read by the nl.explore_paths that binds its ends to the set.
+        It is a handle, not a chunk: it owns the accumulated nodes, which the walk reads once
+        the producing loop has run to its end.
+    }];
+}
+
 def NLProcedureState : NLType<"ProcedureState", "procedure_state"> {
     let summary = "A live procedure call handle";
     let description = [{
@@ -426,6 +437,12 @@ def NLShortestPathStateHandle : Type<
         CPred<"::llvm::isa<::mlir::nl::ShortestPathStateType>($_self)">,
         "shortest path state handle", "::mlir::nl::ShortestPathStateType">,
     BuildableType<"::mlir::nl::ShortestPathStateType::get($_builder.getContext())">;
+
+// Constrains an operand to an !nl.node_set_state handle
+def NLNodeSetStateHandle : Type<
+        CPred<"::llvm::isa<::mlir::nl::NodeSetStateType>($_self)">,
+        "node set state handle", "::mlir::nl::NodeSetStateType">,
+    BuildableType<"::mlir::nl::NodeSetStateType::get($_builder.getContext())">;
 
 // Constrains an operand to an !nl.procedure_state handle, the same way
 // NLSortStateHandle constrains the sort handle. The single concrete type - there

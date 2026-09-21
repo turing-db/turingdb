@@ -685,6 +685,9 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             }
             config._endColumn = explorePaths.getEndColumn();
             config._endsOnSeed = explorePaths.getEndsOnSeed();
+            if (const mlir::Value endNodes = explorePaths.getEndNodes()) {
+                config._endNodeSet = nodeSetStateFor(endNodes);
+            }
             config._distinctEnds = explorePaths.getDistinct();
             _iteratorConfigs[explorePaths.getResult()] = config;
         } else if (nl::Sort sort = mlir::dyn_cast<nl::Sort>(operation)) {
@@ -944,6 +947,10 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateCollectBuffer(collectBuffer, body);
         } else if (nl::CollectUpdate collectUpdate = mlir::dyn_cast<nl::CollectUpdate>(operation)) {
             translateCollectUpdate(collectUpdate, body);
+        } else if (nl::NodeSetBuffer nodeSetBuffer = mlir::dyn_cast<nl::NodeSetBuffer>(operation)) {
+            translateNodeSetBuffer(nodeSetBuffer, body);
+        } else if (nl::NodeSetCollect nodeSetCollect = mlir::dyn_cast<nl::NodeSetCollect>(operation)) {
+            translateNodeSetCollect(nodeSetCollect, body);
         } else if (nl::ShortestPathBuffer shortestPathBuffer = mlir::dyn_cast<nl::ShortestPathBuffer>(operation)) {
             translateShortestPathBuffer(shortestPathBuffer, body);
         } else if (nl::ShortestPathUpdate shortestPathUpdate = mlir::dyn_cast<nl::ShortestPathUpdate>(operation)) {
@@ -1862,6 +1869,8 @@ void NLTranslator::translateExplorePathsLoop(const IteratorConfig& config,
         loopData->setEndNodes(static_cast<const ColumnNodeIDs*>(getColumn(endValue)));
     } else if (config._endsOnSeed) {
         loopData->setEndNodes(static_cast<const ColumnNodeIDs*>(getColumn(config._inputNodes)));
+    } else if (config._endNodeSet) {
+        loopData->setEndNodeSet(config._endNodeSet);
     }
 
     if (config._distinctEnds) {
@@ -4880,6 +4889,33 @@ NLShortestPathState* NLTranslator::allocShortestPathStateFor(const PropertyType&
             throw IRException("SHORTESTPATH weight must be an Int64, UInt64 or Double property");
         break;
     }
+}
+
+void NLTranslator::translateNodeSetBuffer(nl::NodeSetBuffer buffer, NLStmtContainer* body) {
+    NLNodeSetState* state = _program->allocNodeSetState();
+    _nodeSetStates[buffer.getState()] = state;
+
+    // The reset empties the set each time the block holding this nl.node_set_buffer runs
+    NLNodeSetResetData* resetData = _program->allocFunctionData<NLNodeSetResetData>(state);
+    body->emplaceStmt(&NLExecutor::runNodeSetReset, resetData);
+}
+
+void NLTranslator::translateNodeSetCollect(nl::NodeSetCollect collect, NLStmtContainer* body) {
+    NLNodeSetState* state = nodeSetStateFor(collect.getState());
+
+    const ColumnNodeIDs* nodes = static_cast<const ColumnNodeIDs*>(getColumn(collect.getNodes()));
+
+    NLNodeSetCollectData* data = _program->allocFunctionData<NLNodeSetCollectData>(state, nodes);
+    body->emplaceStmt(&NLExecutor::runNodeSetCollect, data);
+}
+
+NLNodeSetState* NLTranslator::nodeSetStateFor(mlir::Value handle) const {
+    const auto stateIt = _nodeSetStates.find(handle);
+    if (stateIt == _nodeSetStates.end()) {
+        throw IRException("node set handle must be produced by an nl.node_set_buffer");
+    }
+
+    return stateIt->second;
 }
 
 void NLTranslator::translateShortestPathBuffer(nl::ShortestPathBuffer buffer, NLStmtContainer* body) {

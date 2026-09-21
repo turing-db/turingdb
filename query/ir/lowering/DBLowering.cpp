@@ -5190,6 +5190,41 @@ nl::Output DBLowering::lowerOutput(mlir::db::Output output) {
                                        output.getColumnNamesAttr());
 }
 
+mlir::Operation* DBLowering::topLevelNestOf(mlir::Block* block) const {
+    if (block == _entryBlock) {
+        return nullptr;
+    }
+
+    mlir::Operation* enclosing = block->getParentOp();
+    while (enclosing->getBlock() != _entryBlock) {
+        enclosing = enclosing->getBlock()->getParentOp();
+    }
+
+    return enclosing;
+}
+
+mlir::Value DBLowering::buildEndNodeSet(mlir::Value endNodeColumn, mlir::Value inputChunk) {
+    const mlir::Value endChunk = mapValue(endNodeColumn);
+    mlir::Block* const collectBlock = ownerBlock(endChunk);
+
+    mlir::Operation* const collectNest = topLevelNestOf(collectBlock);
+    mlir::Operation* const walkNest = topLevelNestOf(ownerBlock(inputChunk));
+    const bool fillsBeforeTheWalk = collectNest && walkNest && collectNest->isBeforeInBlock(walkNest);
+    if (!fillsBeforeTheWalk) {
+        throw IRException("The end nodes of an exploration must be bound by a loop of their own, closing before the loop the walk runs in");
+    }
+
+    const mlir::Location loc = _builder.getUnknownLoc();
+
+    _builder.setInsertionPointToStart(_entryBlock);
+    const mlir::Value state = _builder.create<nl::NodeSetBuffer>(loc).getState();
+
+    setInsertionInto(collectBlock);
+    _builder.create<nl::NodeSetCollect>(loc, state, endChunk);
+
+    return state;
+}
+
 void DBLowering::lowerExplorePaths(mlir::db::ExplorePaths explorePaths) {
     const mlir::Value inputChunk = mapValue(explorePaths.getInputNodes());
 
@@ -5198,11 +5233,17 @@ void DBLowering::lowerExplorePaths(mlir::db::ExplorePaths explorePaths) {
         carriedChunks.push_back(mapValue(carriedColumn));
     }
 
+    mlir::Value endNodeSet;
+    if (const mlir::Value endNodeColumn = explorePaths.getEndNodes()) {
+        endNodeSet = buildEndNodeSet(endNodeColumn, inputChunk);
+    }
+
     setInsertionInto(ownerBlock(inputChunk));
 
     nl::ExplorePaths exploration = _builder.create<nl::ExplorePaths>(_builder.getUnknownLoc(),
                                                                      inputChunk,
                                                                      carriedChunks,
+                                                                     endNodeSet,
                                                                      explorePaths.getDirection(),
                                                                      explorePaths.getMinHops(),
                                                                      explorePaths.getMaxHopsAttr(),

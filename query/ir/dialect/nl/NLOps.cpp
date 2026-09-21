@@ -343,6 +343,10 @@ LogicalResult ExplorePaths::verify() {
         return emitOpError("ends_on_seed names the end already named by end_column");
     }
 
+    if (getEndNodes() && (endColumn || getEndsOnSeed())) {
+        return emitOpError("end_nodes names the end already named by end_column or ends_on_seed");
+    }
+
     Region& hop = getHop();
     if (hop.empty()) {
         return success();

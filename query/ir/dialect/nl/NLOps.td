@@ -758,9 +758,44 @@ def GetInEdgesByLabel : NLOp<"get_in_edges_by_label", [Pure, InferTypeOpAdaptor]
 }
 
 /**
+* NodeSetBuffer
+*/
+def NodeSetBuffer : NLOp<"node_set_buffer", []> {
+  let summary = "Create (and empty) the node set one exploration ends on";
+  let description = [{
+    Hoisted above the loops; produces the !nl.node_set_state handle the collects append
+    chunks to and nl.explore_paths reads its ends from. The result type is buildable and
+    omitted.
+
+      %ends = nl.node_set_buffer
+  }];
+
+  let results = (outs NLNodeSetState:$state);
+
+  let assemblyFormat = "attr-dict";
+}
+
+/**
+* NodeSetCollect
+*/
+def NodeSetCollect : NLOp<"node_set_collect", []> {
+  let summary = "Append this step's nodes to a node set";
+  let description = [{
+    Runs in the loop that binds the node chunk, once per step, so that by the time that loop
+    is exhausted the set holds every node of the column.
+
+      nl.node_set_collect %ends, %b
+  }];
+
+  let arguments = (ins NLNodeSetStateHandle:$state, NLNodeIDChunk:$nodes);
+
+  let assemblyFormat = "$state `,` $nodes attr-dict";
+}
+
+/**
 * ExplorePaths
 */
-def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor]> {
+def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor, AttrSizedOperandSegments]> {
   let summary = "Create a database iterator over the variable-length paths leaving a chunk of nodes";
   let description = [{
     Imperative counterpart of db.explore_paths. Each step of an enclosing nl.for fills
@@ -771,14 +806,17 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor]> {
       nl.for %seeds, %ends, %p, %x2 in %paths { ... }
 
     The direction, hop bounds, edge type, end labels, end column and distinct flag are the
-    db op's, carried through unchanged. The optional `hop` region is the db op's hop
-    predicate lowered: a block over the source node, edge and end node chunks of one hop,
+    db op's, carried through unchanged. The db op's end_nodes column arrives as a node set
+    handle instead: the loop binding it fills the set through nl.node_set_collect, and the
+    walk reads the set once that loop has run to its end. The optional `hop` region is the
+    db op's hop predicate lowered: a block over the source node, edge and end node chunks of one hop,
     yielding a boolean mask chunk. The input chunk type and the three fixed result chunks
     are inferred; only the carried chunk types are spelled out, after the colon.
   }];
 
   let arguments = (ins NLNodeIDChunk:$input_nodes,
                        Variadic<NLChunk>:$columns_to_filter,
+                       Optional<NLNodeSetStateHandle>:$end_nodes,
                        PathDirection:$direction,
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
@@ -794,7 +832,7 @@ def ExplorePaths : NLOp<"explore_paths", [Pure, InferTypeOpAdaptor]> {
   let assemblyFormat = [{
     `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
     (`to` $max_hops^)? (`edge_type` $edge_type^)? (`end_labels` $end_labels^)?
-    (`end_column` $end_column^)? (`ends_on_seed` $ends_on_seed^)?
+    (`end_nodes` $end_nodes^)? (`end_column` $end_column^)? (`ends_on_seed` $ends_on_seed^)?
     (`distinct` $distinct^)? ($hop^)?
     attr-dict ( `:` qualified(type($columns_to_filter))^ )?
   }];

@@ -105,6 +105,7 @@ struct ExplorationOptions {
     db::PathHopFilter* _hopFilter {nullptr};
     const db::LabelSet* _endLabels {nullptr};
     const db::ColumnNodeIDs* _endNodes {nullptr};
+    std::span<const db::NodeID> _endNodeSet;
     const db::PathDistanceIndex* _distanceIndex {nullptr};
     const db::PathTargetIndex* _targetIndex {nullptr};
     bool _distinctEnds {false};

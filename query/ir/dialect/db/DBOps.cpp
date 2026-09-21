@@ -384,6 +384,10 @@ LogicalResult ExplorePaths::verify() {
         return emitOpError("ends_on_seed names the end already named by end_column");
     }
 
+    if (getEndNodes() && (getEndColumn() || getEndsOnSeed())) {
+        return emitOpError("end_nodes names the end already named by end_column or ends_on_seed");
+    }
+
     if (getDistinct()) {
         if (!getPaths().use_empty()) {
             return emitOpError("distinct emits no path, so paths must have no use");
