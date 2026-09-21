@@ -21,9 +21,13 @@ public:
 
     void setHopData(size_t idx, NodeCol* srcs, NodeCol* tgts, NodeCol* dst, size_t fanout);
 
-    void sample(const ColumnNodeIDs* seeds);
+    void seed(const ColumnNodeIDs* seeds);
+
+    void sample();
 
     void reset();
+
+    bool finished() const { return _finished; }
 
 private:
     struct HopData;
@@ -52,6 +56,10 @@ private:
     size_t _currentHop {0};
 
     size_t _seed {NOSEED};
+
+    bool _seeded {false};
+
+    bool _finished {false};
 
     void sampleHop();
 };

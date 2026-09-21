@@ -257,7 +257,8 @@ int main(int argc, const char** argv) {
         sampler.setHopData(hop, &srcs[hop], &tgts[hop], &dstNodes[hop], fanouts[hop]);
     }
 
-    sampler.sample(&seeds);
+    sampler.seed(&seeds);
+    sampler.sample();
 
     fmt::print("\nseeds: {}\nfanouts: {}\n", seedList, fanoutList);
 
