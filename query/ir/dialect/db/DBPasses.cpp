@@ -4,6 +4,7 @@
 #include <limits>
 #include <optional>
 
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Operation.h"
@@ -48,6 +49,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_FUSEEXPLOREENDCONSTRAINT
 #define GEN_PASS_DEF_FUSEEXPLOREENDNODES
+#define GEN_PASS_DEF_FUSEEXPLOREENDSET
 #define GEN_PASS_DEF_FUSEEXPLOREDISTINCTENDS
 #define GEN_PASS_DEF_COUNTPATHROWS
 #define GEN_PASS_DEF_TRIMUNREADCOLUMNS
@@ -1999,6 +2001,113 @@ struct FuseExploreEndNodes : public impl::FuseExploreEndNodesBase<FuseExploreEnd
     void runOnOperation() override {
         mlir::OpBuilder builder(&getContext());
         runFilterPass<EndBoundExploration>(getOperation(), matchEndBoundExploration, fuseExploreEndNodes, builder);
+    }
+};
+
+// A path exploration whose rows are then cut down to those ending on a node whose property
+// holds a literal: the end set spelled the long way, since the nodes holding the value can
+// be scanned before the walk and handed to it as the set to head for, and the prefixes that
+// cannot reach one are then not walked. The end's labels go into that scan.
+struct EndSetExploration {
+    ExplorePaths _exploration;
+    GetNodeProperties _read;
+    EqOp _equality;
+    ConstantOp _constant;
+};
+
+bool matchEndSetExploration(FilterOp filter, EndSetExploration& endSet) {
+    EqOp equality = filter.getMask().getDefiningOp<EqOp>();
+    if (!equality || !equality.getResult().hasOneUse()) {
+        return false;
+    }
+
+    // One side reads the property of the end nodes, the other is the literal
+    GetNodeProperties read = equality.getLhs().getDefiningOp<GetNodeProperties>();
+    Value literalSide = equality.getRhs();
+    if (!read) {
+        read = equality.getRhs().getDefiningOp<GetNodeProperties>();
+        literalSide = equality.getLhs();
+    }
+
+    // A read of the write buffer sees nodes no scan of the graph does
+    const bool readsCommittedEnds = read && !read.getPending() && !read.getAllPending() && read.getResult().hasOneUse();
+    if (!readsCommittedEnds) {
+        return false;
+    }
+
+    const Value ends = read.getInputNodes();
+    ExplorePaths exploration = ends.getDefiningOp<ExplorePaths>();
+    const bool alreadyBound = exploration && (exploration.getEndColumn() || exploration.getEndsOnSeed() || exploration.getEndNodes());
+    if (!exploration || ends != exploration.getTgtids() || alreadyBound) {
+        return false;
+    }
+
+    ConstantOp constant = literalSide.getDefiningOp<ConstantOp>();
+    if (!constant) {
+        return false;
+    }
+
+    const TypedAttr literal = dyn_cast<TypedAttr>(constant.getValue());
+    if (!literal || !storage::isPropertyScanLiteral(literal)) {
+        return false;
+    }
+
+    for (const Value column : filter.getColumnsToFilter()) {
+        if (column.getDefiningOp() != exploration.getOperation()) {
+            return false;
+        }
+    }
+
+    for (const Value result : exploration.getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            const bool readsThePair = user == filter.getOperation() || user == read.getOperation();
+            if (!readsThePair) {
+                return false;
+            }
+        }
+    }
+
+    endSet = EndSetExploration {._exploration = exploration, ._read = read, ._equality = equality, ._constant = constant};
+
+    return true;
+}
+
+void fuseExploreEndSet(FilterOp filter, const EndSetExploration& endSet, mlir::OpBuilder& builder) {
+    ExplorePaths exploration = endSet._exploration;
+    GetNodeProperties read = endSet._read;
+    EqOp equality = endSet._equality;
+    ConstantOp constant = endSet._constant;
+
+    // Lowering fills the set in a loop of its own that has to close before the walk's opens,
+    // so the scan stands at the head of the function, ahead of whatever feeds the seeds
+    mlir::func::FuncOp function = exploration->getParentOfType<mlir::func::FuncOp>();
+    builder.setInsertionPointToStart(&function.getBody().front());
+
+    ScanNodesByPropertyValue set = builder.create<ScanNodesByPropertyValue>(exploration.getLoc(),
+                                                                            exploration.getTgtids().getType(),
+                                                                            read.getPropertyAttr(),
+                                                                            cast<TypedAttr>(constant.getValue()),
+                                                                            exploration.getEndLabelsAttr());
+
+    exploration.getEndNodesMutable().assign(set.getResult());
+    exploration.removeEndLabelsAttr();
+
+    const Operation::operand_range columns = filter.getColumnsToFilter();
+    const mlir::ResultRange filtered = filter.getFilteredColumns();
+    for (size_t index = 0; index < filtered.size(); index++) {
+        filtered[index].replaceAllUsesWith(columns[index]);
+    }
+
+    filter.erase();
+    eraseIfUnused(equality);
+    eraseIfUnused(read);
+    eraseIfUnused(constant);
+}
+
+struct FuseExploreEndSet : public impl::FuseExploreEndSetBase<FuseExploreEndSet> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+        runFilterPass<EndSetExploration>(getOperation(), matchEndSetExploration, fuseExploreEndSet, builder);
     }
 };
 
