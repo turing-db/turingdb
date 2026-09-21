@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "WITH 1 AS x, 2 AS y, 3 AS z RETURN x <= y < z",
+  "expect": {
+    "result": "x <= y < z\ntrue",
+    "resultJson": "{\"header\":{\"column_names\":[\"x <= y < z\"],\"column_types\":[\"Bool\"]},\"data\":[[[true]]]}"
+  },
+  "tags": [
+    "chained-comparison",
+    "operators",
+    "return"
+  ],
+  "write-required": false
+}

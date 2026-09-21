@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) WHERE 30 < n.age <= 32 RETURN n.name",
+  "expect": {
+    "result": "n.name\nRemy\nAdam",
+    "resultJson": "{\"header\":{\"column_names\":[\"n.name\"],\"column_types\":[\"String\"]},\"data\":[[[\"Remy\",\"Adam\"]]]}"
+  },
+  "tags": [
+    "chained-comparison",
+    "operators",
+    "where"
+  ],
+  "write-required": false
+}

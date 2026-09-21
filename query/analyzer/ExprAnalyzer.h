@@ -3,6 +3,7 @@
 #include <span>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "decl/EvaluatedType.h"
 #include "expr/CaseExpr.h"
@@ -94,6 +95,8 @@ private:
 
     // The LOAD CSV each row variable in scope was bound by
     std::unordered_map<const VarDecl*, LoadCSVStmt*> _csvSources;
+
+    std::unordered_set<const Expr*> _analyzedExprs;
 
     void analyzeListElements(Expr* expr, std::span<Expr* const> elements);
     void analyzeMapEntries(Expr* expr, const MapLiteral* map);

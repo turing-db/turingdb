@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) RETURN 30 < n.age <= 32",
+  "expect": {
+    "result": "30 < n.age <= 32\ntrue\ntrue\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull",
+    "resultJson": "{\"header\":{\"column_names\":[\"30 < n.age <= 32\"],\"column_types\":[\"Bool\"]},\"data\":[[[true,true,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]]]}"
+  },
+  "tags": [
+    "chained-comparison",
+    "null",
+    "return"
+  ],
+  "write-required": false
+}

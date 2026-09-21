@@ -179,6 +179,10 @@ ExprAnalyzer::~ExprAnalyzer() {
 }
 
 void ExprAnalyzer::analyzeRootExpr(Expr* expr) {
+    // Each root is walked on its own: a SET analyzes its value expression a second time,
+    // once the property it assigns has been declared, and that walk has to run again
+    _analyzedExprs.clear();
+
     analyzeExpr(expr);
 
     if (!expr->getExprVarDecl()) {
@@ -187,6 +191,13 @@ void ExprAnalyzer::analyzeRootExpr(Expr* expr) {
 }
 
 void ExprAnalyzer::analyzeExpr(Expr* expr) {
+    // A comparison chain hands its middle operand to both of its sides, so one walk
+    // reaches that expression twice. Analyzing it again declares a second unnamed
+    // variable for a value that already has one, and orphans the first
+    if (!_analyzedExprs.insert(expr).second) {
+        return;
+    }
+
     switch (expr->getKind()) {
         case Expr::Kind::BINARY:
             analyzeBinaryExpr(static_cast<BinaryExpr*>(expr));

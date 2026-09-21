@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN 0 < 1 < 2 < 3 < 'x'",
+  "expect": {
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN 0 < 1 < 2 < 3 < 'x'\n       |                    ^^^^^^^\n-------* Operands are not valid or compatible numeric types: 'Integer' and 'String'",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | RETURN 0 < 1 < 2 < 3 < 'x'\\n       |                    ^^^^^^^\\n-------* Operands are not valid or compatible numeric types: 'Integer' and 'String'\"}"
+  },
+  "tags": [
+    "chained-comparison",
+    "operators",
+    "error"
+  ],
+  "write-required": false
+}

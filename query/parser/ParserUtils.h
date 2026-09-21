@@ -2,16 +2,28 @@
 
 #include <vector>
 
+#include "expr/Operators.h"
+#include "SourceLocation.h"
+
 namespace db {
 
 class CypherAST;
 class EmbeddingLiteral;
+class Expr;
 class ListLiteral;
 class SetStmt;
 class SinglePartQuery;
 
 class ParserUtils {
 public:
+    // openCypher reads `a < b <= c` as `a < b AND b <= c`, so a chain being built carries
+    // the operand the last sign ended on: the next sign compares against that one
+    struct ComparisonChain {
+        Expr* _expr {nullptr};
+        Expr* _rightOperand {nullptr};
+        SourceLocation _rightOperandLocation;
+    };
+
     ParserUtils() = delete;
     ~ParserUtils() = delete;
 
@@ -25,6 +37,21 @@ public:
     // call yields is the result it reports. A subquery body is not such a query: it is a
     // clause of the query around it, and the RETURN it owes is its own
     static void markStandaloneCall(const SinglePartQuery* query);
+
+    static void startComparisonChain(CypherAST* ast,
+                                     ComparisonChain& chain,
+                                     Expr* lhs,
+                                     BinaryOperator op,
+                                     Expr* rhs,
+                                     const SourceLocation& rhsLocation,
+                                     const SourceLocation& chainLocation);
+
+    static void extendComparisonChain(CypherAST* ast,
+                                      ComparisonChain& chain,
+                                      BinaryOperator op,
+                                      Expr* rhs,
+                                      const SourceLocation& rhsLocation,
+                                      const SourceLocation& chainLocation);
 
 private:
     static void listExprToFloatVector(const ListLiteral* list, std::vector<float>& out);

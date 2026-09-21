@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "WITH [1, 2] AS l RETURN 1 IN l = true",
+  "expect": {
+    "result": "1 IN l = true\ntrue",
+    "resultJson": "{\"header\":{\"column_names\":[\"1 IN l = true\"],\"column_types\":[\"Bool\"]},\"data\":[[[true]]]}"
+  },
+  "tags": [
+    "chained-comparison",
+    "operators",
+    "return"
+  ],
+  "write-required": false
+}

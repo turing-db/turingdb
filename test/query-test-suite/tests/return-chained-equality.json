@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "WITH false AS a, false AS b, false AS c RETURN a = b = c",
+  "expect": {
+    "result": "a = b = c\ntrue",
+    "resultJson": "{\"header\":{\"column_names\":[\"a = b = c\"],\"column_types\":[\"Bool\"]},\"data\":[[[true]]]}"
+  },
+  "tags": [
+    "chained-comparison",
+    "operators",
+    "return"
+  ],
+  "write-required": false
+}

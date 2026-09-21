@@ -619,7 +619,14 @@ mlir::Value findVarOrThrow(const DBProgramGenerator::VariableIdentityMap& map,
 void flattenConjuncts(const Expr* expr, std::vector<const Expr*>& conjuncts) {
     if (expr->getKind() == Expr::Kind::BINARY) {
         const BinaryExpr* binaryExpr = static_cast<const BinaryExpr*>(expr);
-        if (binaryExpr->getOperator() == BinaryOperator::And) {
+
+        // Both sides of a comparison chain read the same operand, so a filter standing
+        // between them would leave the second side reading a column laid out over rows the
+        // first one cut. The chain is one predicate and filters once
+        const bool splitsInTwo = binaryExpr->getOperator() == BinaryOperator::And
+                                 && !binaryExpr->isComparisonChain();
+
+        if (splitsInTwo) {
             flattenConjuncts(binaryExpr->getLHS(), conjuncts);
             flattenConjuncts(binaryExpr->getRHS(), conjuncts);
             return;
@@ -6896,7 +6903,12 @@ bool DBProgramGenerator::collectAggregateInvocations(const Expr* expr,
         // An aggregate over an aggregate is invalid Cypher the analyzer turns away, so a
         // reduced call is a leaf: its argument is the group's input, not another aggregate
         if (invocation->getSignature()->isAggregate()) {
-            found.push_back(funcExpr);
+            // A comparison chain hands its middle operand to both of its sides, so an
+            // aggregate standing there is reached twice and reduces one column, not two
+            if (std::ranges::find(found, funcExpr) == found.end()) {
+                found.push_back(funcExpr);
+            }
+
             return true;
         }
     }
