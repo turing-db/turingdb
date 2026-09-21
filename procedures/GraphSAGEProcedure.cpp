@@ -114,6 +114,15 @@ void validateInput(Data& data) {
     }
 }
 
+GraphSAGESampler::NodeCol* nodeColumn(Data& data, size_t index) {
+    Column* col = data.getReturnColumn(index);
+    if (!col) {
+        return nullptr;
+    }
+
+    return col->cast<GraphSAGESampler::NodeCol>();
+}
+
 void prepareImpl(ProcedureState* state) {
     Data& data = state->data<Data>();
     validateInput(data);
@@ -148,9 +157,9 @@ void prepareImpl(ProcedureState* state) {
     for (size_t hop = 0; hop < GraphSAGESampler::hops; hop++) {
         const size_t base = hop * returnValuesPerHop;
 
-        auto* dst = data.getReturnColumn(base)->cast<GraphSAGESampler::NodeCol>();
-        auto* srcs = data.getReturnColumn(base + 1)->cast<GraphSAGESampler::NodeCol>();
-        auto* tgts = data.getReturnColumn(base + 2)->cast<GraphSAGESampler::NodeCol>();
+        GraphSAGESampler::NodeCol* dst = nodeColumn(data, base);
+        GraphSAGESampler::NodeCol* srcs = nodeColumn(data, base + 1);
+        GraphSAGESampler::NodeCol* tgts = nodeColumn(data, base + 2);
 
         data.sampler->setHopData(hop, srcs, tgts, dst, fanouts[hop]);
     }

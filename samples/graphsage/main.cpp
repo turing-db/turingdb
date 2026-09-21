@@ -191,7 +191,7 @@ int main(int argc, const char** argv) {
              .metavar("n,n,n")
              .store_into(fanoutList)
              .help(fmt::format("Comma separated neighbourhood sample size per hop (default: {})", fanoutList));
-    argParser.add_argument("--explain-", "-e")
+    argParser.add_argument("--explain", "-e")
         .store_into(explain)
         .flag()
         .help(fmt::format("Print hop-by-hop explanation", explain));
@@ -203,7 +203,7 @@ int main(int argc, const char** argv) {
         .metavar("n")
         .store_into(rngSeed)
         .help("RNG seed, for a reproducible sample (default: nondeterministic)");
-    argParser.add_argument("--dump-", "-d")
+    argParser.add_argument("--dump", "-d")
         .store_into(dump)
         .flag()
         .help(fmt::format("Dump dataframe", dump));
