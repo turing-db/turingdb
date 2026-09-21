@@ -24,17 +24,19 @@ NeighbourhoodSampleIterator::NeighbourhoodSampleIterator(const GraphView& view,
                                                          const ColumnNodeIDs* inputNodeIDs)
     : Iterator(view),
     _inputNodeIDs(inputNodeIDs),
-    _nodeIt(inputNodeIDs->cend())
+    _nodeIndex(inputNodeIDs->size())
 {
-    init();
+    initFrom(0);
 }
 
 bool NeighbourhoodSampleIterator::deleted(const EdgeRecord& e) const {
     return _view.tombstones().containsEdge(e._edgeID);
 }
 
-void NeighbourhoodSampleIterator::init() {
-    for (_nodeIt = _inputNodeIDs->begin(); _nodeIt != _inputNodeIDs->cend(); _nodeIt++) {
+void NeighbourhoodSampleIterator::initFrom(size_t index) {
+    const size_t nodeCount = _inputNodeIDs->size();
+
+    for (_nodeIndex = index; _nodeIndex < nodeCount; _nodeIndex++) {
         syncEdges();
         if (_edgeIt != _edges.end()) {
             return;
@@ -44,17 +46,18 @@ void NeighbourhoodSampleIterator::init() {
 
 void NeighbourhoodSampleIterator::reset() {
     Iterator::reset();
-    _nodeIt = _inputNodeIDs->cend();
-    init();
+    initFrom(0);
 }
 
 void NeighbourhoodSampleIterator::next() {
     nextValidForCurrentNode();
 }
 
-// Point @ref _edgeIt to the first edge for the current value of @ref _nodeIt
-void NeighbourhoodSampleIterator::syncEdges() {
-    bioassert(_nodeIt != _inputNodeIDs->end(), "Null node iterator.");
+// Point @ref _edges at the side of the current DataPart given by @ref _onInEdges
+void NeighbourhoodSampleIterator::loadEdges() {
+    const DataPart* part = _partIt.get();
+    const EdgeIndexer& indexer = part->edgeIndexer();
+    const NodeID curNode = (*_inputNodeIDs)[_nodeIndex];
 
     _partIt.goToStart();
     while (_partIt.isNotEnd()) {
@@ -77,6 +80,11 @@ void NeighbourhoodSampleIterator::syncEdges() {
 // Traverses each DataPart for every NodeID
 void NeighbourhoodSampleIterator::nextValidForCurrentNode() {
     _edgeIt++;
+}
+
+// Point @ref _edgeIt to the first edge for the current value of @ref _nodeIndex
+void NeighbourhoodSampleIterator::syncEdges() {
+    bioassert(_nodeIndex < _inputNodeIDs->size(), "Node index past the input.");
 
     // Skip deleted edges
     while (_edgeIt != _edges.end() and deleted(*_edgeIt)) {
@@ -160,12 +168,16 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
 		if (_indices) {
 			_indices->clear();
 		}
-		_nodeIt = _inputNodeIDs->cend();
+		_nodeIndex = _inputNodeIDs->size();
 		return;
     }
 
+    if (_edgeIt == _edges.end() && !isDone()) {
+        initFrom(_nodeIndex);
+    }
+
     const size_t samplesPerChunk = maxCount / _sampleSize;
-    const size_t nodesRemaining = std::distance(_nodeIt, _inputNodeIDs->cend());
+    const size_t nodesRemaining = _inputNodeIDs->size() - _nodeIndex;
     const size_t nodesToSample = std::min(nodesRemaining, samplesPerChunk);
     const size_t thisSize = nodesToSample * _sampleSize;
 
@@ -190,7 +202,7 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
     }
 
     size_t writeIndex = 0;
-    size_t nodeIndex = std::distance(_inputNodeIDs->cbegin(), _nodeIt);
+    size_t nodeIndex = _nodeIndex;
 
     // Algorithm L (improvement on Reservoir sampling)
     // https://en.wikipedia.org/wiki/Reservoir_sampling
@@ -265,9 +277,9 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
             // Update sample threshold to make next sample less likely
             W *= std::pow(rand01(), _sampleRatio);
         }
-        _nodeIt++;
+        _nodeIndex++;
         nodeIndex++;
-        if (_nodeIt != _inputNodeIDs->cend()) {
+        if (!isDone()) {
             syncEdges();
         }
     }

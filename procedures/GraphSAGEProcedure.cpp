@@ -11,6 +11,7 @@
 #include <spdlog/fmt/bundled/format.h>
 
 #include "BioAssert.h"
+#include "iterators/ChunkConfig.h"
 #include "samplers/GraphSAGESampler.h"
 
 #include "ProcUtils.h"
@@ -41,6 +42,9 @@ namespace {
 
 constexpr std::string_view fanoutSizeErr =
     "Fanout parameter must be a list of size {}, not {}.";
+
+constexpr std::string_view fanoutWidthErr =
+    "Fanout {} exceeds the maximum of {}: a hop's sample must fit in one chunk.";
 
 constexpr std::string_view seedErr = "graphSAGE() seed must be a constant int";
 
@@ -80,11 +84,18 @@ void validFanoutList(const ListView l) {
     const size_t listSize = l.size();
     constexpr size_t reqSize = GraphSAGESampler::hops;
 
-    if (listSize == reqSize) {
-        return;
+    if (listSize != reqSize) {
+        throw TuringException(fmt::format(fanoutSizeErr, reqSize, listSize));
     }
 
-    throw TuringException(fmt::format(fanoutSizeErr, reqSize, listSize));
+    // One node's sample is emitted whole, so a fanout wider than a chunk could not be
+    // returned without a step running over the row budget it promises
+    for (const ListElementView ele : l) {
+        const size_t fanout = ele.getAs<types::Int64::Primitive>();
+        if (fanout > ChunkConfig::CHUNK_SIZE) {
+            throw TuringException(fmt::format(fanoutWidthErr, fanout, ChunkConfig::CHUNK_SIZE));
+        }
+    }
 }
 
 void validateInput(Data& data) {
@@ -163,7 +174,8 @@ void executeImpl(ProcedureState* state) {
 
     bioassert(sampler, "Null sampler");
 
-    sampler->sample();
+    const size_t chunkSize = state->getContext()->getChunkSize();
+    sampler->sample(chunkSize);
 
     if (sampler->finished()) {
         state->finish();
