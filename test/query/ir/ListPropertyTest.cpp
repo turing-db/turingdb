@@ -221,6 +221,26 @@ TEST_F(ListPropertyTest, copiesAStoredListOntoAnotherNode) {
     expectRows("MATCH (n:Copied) RETURN n.tags", {{"[1, 2]"}});
 }
 
+TEST_F(ListPropertyTest, setsAListPropertyToAnAbsentList) {
+    write("CREATE (a:Tagged {name: 'a', tags: [1, 2]})");
+    write("CREATE (b:Tagged {name: 'b'})");
+
+    // b carries no list, so the nullable value column the fetch produces hands the write a
+    // disengaged element: a's stored list is replaced by an explicit null.
+    write("MATCH (a:Tagged {name: 'a'}), (b:Tagged {name: 'b'}) SET a.tags = b.tags");
+
+    expectRows("MATCH (n:Tagged) RETURN n.name, n.tags", {{"a", "null"}, {"b", "null"}});
+}
+
+TEST_F(ListPropertyTest, createsANodeFromAnAbsentList) {
+    write("CREATE (a:Tagged {name: 'a', tags: [1, 2]})");
+    write("CREATE (b:Tagged {name: 'b'})");
+
+    write("MATCH (b:Tagged {name: 'b'}) CREATE (c:Copied {name: 'c', tags: b.tags})");
+
+    expectRows("MATCH (n:Copied) RETURN n.tags", {{"null"}});
+}
+
 TEST_F(ListPropertyTest, unwindsAStoredList) {
     write("CREATE (n:Tagged {name: 'a', tags: [1, 2, 3]})");
     expectRows("MATCH (n:Tagged) UNWIND n.tags AS tag RETURN tag",
