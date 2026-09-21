@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "remote-enabled": false,
+  "graph": "simpledb",
+  "query": "UNWIND range(1, 4) AS x RETURN sum(x)",
+  "expect": {
+    "result": "sum(x)\n10"
+  },
+  "tags": [
+    "lists",
+    "range",
+    "unwind",
+    "aggregate"
+  ],
+  "write-required": false
+}

@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "remote-enabled": false,
+  "graph": "simpledb",
+  "query": "MATCH (n:Person) RETURN n.name, size(range(1, n.age)) AS counted ORDER BY n.name",
+  "expect": {
+    "result": "n.name,counted\nAdam,32\nCyrus,null\nDoruk,null\nLuc,null\nMartina,null\nMaxime,null\nRemy,32\nSuhas,null"
+  },
+  "tags": [
+    "lists",
+    "range",
+    "match",
+    "return"
+  ],
+  "write-required": false
+}

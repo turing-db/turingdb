@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "remote-enabled": false,
+  "graph": "simpledb",
+  "query": "RETURN range(1, 100001)",
+  "expect": {
+    "result": "EXEC ERROR\nrange() builds at most 100000 integers, and this one spans 100001"
+  },
+  "tags": [
+    "lists",
+    "range",
+    "return",
+    "error"
+  ],
+  "write-required": false
+}
