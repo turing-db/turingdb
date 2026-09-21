@@ -100,6 +100,10 @@ public:
     // An unmatchable edge type never expands, so only a min of zero emits its rows.
     static void runExplorePathsLoop(NLExecutionContext* context, NLFunctionData* data);
 
+    static void runNodeSetReset(NLExecutionContext* context, NLFunctionData* data);
+
+    static void runNodeSetCollect(NLExecutionContext* context, NLFunctionData* data);
+
     // Expand each path handle of a chunk into a list (nl.expand_path), and read each
     // handle's hop count (nl.path_length)
     static void runExpandPath(NLExecutionContext* context, NLFunctionData* data);

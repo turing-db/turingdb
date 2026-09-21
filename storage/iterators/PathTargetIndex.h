@@ -58,6 +58,25 @@ public:
         return distance != unreached && distance <= hops;
     }
 
+    bool canReachAnyWithin(NodeID node, uint64_t hops) const {
+        if (_dense) {
+            const size_t last = _levels.size() - 1;
+            const std::vector<uint64_t>& reached = _levels[hops < last ? hops : last];
+            const size_t index = node.getValue();
+
+            return index < reached.size() && reached[index] != 0;
+        }
+
+        const size_t slot = find(node);
+        if (slot == _keys.size()) {
+            return false;
+        }
+
+        const uint8_t distance = _minDistances[slot];
+
+        return distance != unreached && distance <= hops;
+    }
+
     // The targets that have reached the node so far
     uint64_t getReached(NodeID node) const;
 
@@ -84,6 +103,7 @@ private:
     std::vector<uint64_t> _keys;
     std::vector<uint64_t> _reached;
     std::vector<uint8_t> _distances;
+    std::vector<uint8_t> _minDistances;
     std::vector<uint8_t> _queued;
     uint64_t _mask {0};
 
@@ -124,8 +144,9 @@ struct PathTargetHandle {
 
 // For each of a chunk's distinct targets, the hops every node it reaches needs to get to it
 // along the exploration direction: one multi-source breadth-first search per 64 targets over
-// the reverse direction. Like PathDistanceIndex it ignores trail uniqueness and hop
-// predicates, so pruning by it never drops a valid path.
+// the reverse direction. In the set mode it is one search from every target, the hops to the
+// nearest, which answers only whether any target is in reach. Like PathDistanceIndex it
+// ignores trail uniqueness and hop predicates, so pruning by it never drops a valid path.
 class PathTargetIndex {
 public:
     static constexpr size_t targetsPerBatch = PathTargetBatch::targetsPerBatch;
@@ -139,12 +160,35 @@ public:
                std::optional<EdgeTypeID> edgeType,
                uint64_t maxHops);
 
+    // The set mode: one search from every target at once, a distance byte per node
+    void buildSet(const GraphView& view,
+                  std::span<const NodeID> targets,
+                  PathExplorationDir direction,
+                  std::optional<EdgeTypeID> edgeType,
+                  uint64_t maxHops);
+
     bool isBuilt() const { return _built; }
     bool isDense() const;
     size_t getBatchCount() const { return _batches.size(); }
     size_t getReachedCount() const;
 
     PathTargetHandle find(NodeID target) const;
+
+    // Whether any target of the index is within that many hops of the node, which is what a
+    // walk bound to a whole set of ends prunes by
+    bool canReachAnyWithin(NodeID node, uint64_t hops) const {
+        if (_set.isBuilt()) {
+            return _set.canReachEndWithin(node, hops);
+        }
+
+        for (const PathTargetBatch& batch : _batches) {
+            if (batch.canReachAnyWithin(node, hops)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     // Whether the enumeration the seeds imply is expected to cost more than the batches
     static bool isWorthBuilding(const GraphView& view,
@@ -156,6 +200,16 @@ public:
                                 uint64_t maxHops,
                                 double hopPassRate = 1.0);
 
+    // The same for the set mode, priced as the one search it is
+    static bool isWorthBuildingSet(const GraphView& view,
+                                   PathExplorationDir direction,
+                                   std::optional<EdgeTypeID> edgeType,
+                                   const PathDistanceIndex::SeedExpansion& expansion,
+                                   size_t seedCount,
+                                   size_t targetCount,
+                                   uint64_t maxHops,
+                                   double hopPassRate = 1.0);
+
 private:
     // What one batch of the build is expected to cost in the cheaper of the two layouts
     struct BatchPlan {
@@ -166,6 +220,7 @@ private:
 
     std::vector<PathTargetBatch> _batches;
     std::unordered_map<uint64_t, PathTargetHandle> _handles;
+    PathDistanceIndex _set;
     bool _built {false};
 
     static void planBatch(const PartDirectory& parts,

@@ -824,6 +824,24 @@ private:
 // when one was absent from the schema, so no path can end and nothing is emitted. The
 // distance index that prunes the walk is owned here so every chunk of the loop shares it;
 // the target index of a bound end is owned here too, rebuilt for each chunk's targets.
+// The nodes one column holds, gathered chunk by chunk while the loop that binds it runs. The
+// walk that ends on the set reads it sorted and without duplicates, which is the order its
+// membership test and its target index both want.
+class NLNodeSetState {
+public:
+    NLNodeSetState();
+    ~NLNodeSetState();
+
+    void reset();
+    void add(const std::vector<NodeID>& nodes);
+
+    std::span<const NodeID> getNodes();
+
+private:
+    std::vector<NodeID> _nodes;
+    bool _ordered {false};
+};
+
 class NLExplorePathsLoopData : public NLExpansionLoopData {
 public:
     NLExplorePathsLoopData(const ColumnNodeIDs* input,
@@ -903,6 +921,10 @@ public:
 
     void setEndNodes(const ColumnNodeIDs* endNodes) { _endNodes = endNodes; }
     const ColumnNodeIDs* getEndNodes() const { return _endNodes; }
+
+    void setEndNodeSet(NLNodeSetState* endNodeSet) { _endNodeSet = endNodeSet; }
+    NLNodeSetState* getEndNodeSet() const { return _endNodeSet; }
+
     PathTargetIndex* getTargetIndex() { return &_targetIndex; }
 
     void setDistinctEnds() { _distinctEnds = true; }
@@ -926,6 +948,7 @@ private:
     std::optional<double> _hopPassRate;
 
     const ColumnNodeIDs* _endNodes {nullptr};
+    NLNodeSetState* _endNodeSet {nullptr};
     PathTargetIndex _targetIndex;
     bool _distinctEnds {false};
 
@@ -2958,6 +2981,35 @@ private:
 
 // nl.shortest_path_buffer data: empties the accumulator each time the block it lives
 // in runs - once at function scope
+class NLNodeSetResetData : public NLFunctionData {
+public:
+    NLNodeSetResetData(NLNodeSetState* state)
+        : _state(state)
+    {
+    }
+
+    NLNodeSetState* getState() const { return _state; }
+
+private:
+    NLNodeSetState* _state {nullptr};
+};
+
+class NLNodeSetCollectData : public NLFunctionData {
+public:
+    NLNodeSetCollectData(NLNodeSetState* state, const ColumnNodeIDs* nodes)
+        : _state(state),
+        _nodes(nodes)
+    {
+    }
+
+    NLNodeSetState* getState() const { return _state; }
+    const ColumnNodeIDs* getNodes() const { return _nodes; }
+
+private:
+    NLNodeSetState* _state {nullptr};
+    const ColumnNodeIDs* _nodes {nullptr};
+};
+
 class NLShortestPathResetData : public NLFunctionData {
 public:
     NLShortestPathResetData(NLShortestPathState* state)
@@ -4543,6 +4595,12 @@ public:
         return statePtr;
     }
 
+    NLNodeSetState* allocNodeSetState() {
+        _nodeSetStates.emplace_back(std::make_unique<NLNodeSetState>());
+
+        return _nodeSetStates.back().get();
+    }
+
     template <SupportedType T>
     NLShortestPathState* allocShortestPathState(ValueType valueType, PropertyTypeID propertyType) {
         _shortestPathStates.emplace_back(
@@ -4652,6 +4710,7 @@ private:
     std::vector<std::unique_ptr<NLAggregateState>> _aggregateStates;
     std::vector<std::unique_ptr<NLGroupAggregateState>> _groupAggregateStates;
     std::vector<std::unique_ptr<NLCollectState>> _collectStates;
+    std::vector<std::unique_ptr<NLNodeSetState>> _nodeSetStates;
     std::vector<std::unique_ptr<NLShortestPathState>> _shortestPathStates;
     std::vector<std::unique_ptr<NLOptionalState>> _optionalStates;
     std::vector<std::unique_ptr<NLExistsState>> _existsStates;

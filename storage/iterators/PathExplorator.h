@@ -28,10 +28,11 @@ class Tombstones;
 
 // Enumerates every trail of minHops to maxHops edges leaving each input node, depth first,
 // as a chunk writer: each fill emits up to maxCount rows of (input row, end node, path).
-// With end labels or end nodes set only the paths ending on a node carrying them, or on the
-// seed's own target, are emitted, and with a distance or target index set the prefixes that
-// cannot reach such a node in time are not walked. In the distinct mode the walk is a
-// multi-source breadth-first search instead, emitting each (seed, end) pair once and no path.
+// With end labels, end nodes or an end node set only the paths ending on a node carrying
+// them, on the seed's own target, or on a node of the set are emitted, and with a distance
+// or target index set the prefixes that cannot reach such a node in time are not walked. In
+// the distinct mode the walk is a multi-source breadth-first search instead, emitting each
+// (seed, end) pair once and no path.
 class PathExplorator {
 public:
     static constexpr size_t NO_TAINT = SIZE_MAX;
@@ -50,6 +51,8 @@ public:
     void setEdgeTypeFilter(EdgeTypeID edgeType);
     void setEndLabels(const LabelSet* labels);
     void setEndNodes(const ColumnNodeIDs* endNodes) { _endNodes = endNodes; }
+    // The ends every seed shares, sorted and without duplicates
+    void setEndNodeSet(std::span<const NodeID> endNodeSet);
     void setDistanceIndex(const PathDistanceIndex* index) { _distances = index; }
     void setTargetIndex(const PathTargetIndex* index) { _targetIndex = index; }
     // The edges this change has written and not committed, walked beside the graph's own, up
@@ -125,6 +128,8 @@ private:
     EdgeTypeID _edgeType;
     LabelSetHandle _endLabels;
     const ColumnNodeIDs* _endNodes {nullptr};
+    std::span<const NodeID> _endNodeSet;
+    bool _filtersByEndNodeSet {false};
     const PathDistanceIndex* _distances {nullptr};
     const PathTargetIndex* _targetIndex {nullptr};
     const PendingAdjacency* _pendingAdjacency {nullptr};
@@ -177,6 +182,7 @@ private:
     void prefetchNodeData(NodeID node, size_t partIndex) const;
     bool hasWork() const;
     bool isEnd(size_t seedRow, NodeID node) const;
+    bool canReachTargetWithin(NodeID node, uint64_t hops) const;
     void resizeOutputs(size_t count);
 
     bool searchesLevels() const;

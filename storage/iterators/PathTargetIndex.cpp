@@ -77,6 +77,12 @@ uint64_t PathTargetBatch::gain(NodeID node, uint64_t word, uint8_t distance) {
 
     const size_t slot = findOrInsert(node);
     const uint64_t gained = word & ~_reached[slot];
+
+    // The search opens the levels in order, so the first targets a node gains are its nearest
+    if (_reached[slot] == 0 && gained != 0) {
+        _minDistances[slot] = distance;
+    }
+
     _reached[slot] |= gained;
 
     uint8_t* distances = &_distances[slot * targetsPerBatch];
@@ -114,6 +120,7 @@ void PathTargetBatch::allocate(size_t capacity) {
     _keys.assign(capacity, emptyKey);
     _reached.assign(capacity, 0);
     _distances.assign(capacity * targetsPerBatch, unreached);
+    _minDistances.assign(capacity, unreached);
     _queued.assign(capacity, 0);
     _mask = capacity - 1;
     _count = 0;
@@ -145,6 +152,7 @@ void PathTargetBatch::grow() {
     const std::vector<uint64_t> keys = std::move(_keys);
     const std::vector<uint64_t> reached = std::move(_reached);
     const std::vector<uint8_t> distances = std::move(_distances);
+    const std::vector<uint8_t> minDistances = std::move(_minDistances);
     const std::vector<uint8_t> queued = std::move(_queued);
 
     allocate(keys.size() * 2);
@@ -161,6 +169,7 @@ void PathTargetBatch::grow() {
 
         _keys[slot] = keys[oldSlot];
         _reached[slot] = reached[oldSlot];
+        _minDistances[slot] = minDistances[oldSlot];
         _queued[slot] = queued[oldSlot];
         std::copy_n(&distances[oldSlot * targetsPerBatch], targetsPerBatch, &_distances[slot * targetsPerBatch]);
         _count++;
@@ -228,11 +237,27 @@ void PathTargetIndex::build(const GraphView& view,
     _built = true;
 }
 
+void PathTargetIndex::buildSet(const GraphView& view,
+                               std::span<const NodeID> targets,
+                               PathExplorationDir direction,
+                               std::optional<EdgeTypeID> edgeType,
+                               uint64_t maxHops) {
+    _handles.clear();
+    _batches.clear();
+
+    _set.build(view, targets, direction, edgeType, maxHops);
+    _built = true;
+}
+
 bool PathTargetIndex::isDense() const {
     return !_batches.empty() && _batches.front().isDense();
 }
 
 size_t PathTargetIndex::getReachedCount() const {
+    if (_set.isBuilt()) {
+        return _set.getReachedCount();
+    }
+
     size_t reached = 0;
     for (const PathTargetBatch& batch : _batches) {
         reached += batch.size();
@@ -290,6 +315,33 @@ bool PathTargetIndex::isWorthBuilding(const GraphView& view,
     }
 
     return PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, seedCount, maxHops, hopPassRate) > checks;
+}
+
+bool PathTargetIndex::isWorthBuildingSet(const GraphView& view,
+                                         PathExplorationDir direction,
+                                         std::optional<EdgeTypeID> edgeType,
+                                         const PathDistanceIndex::SeedExpansion& expansion,
+                                         size_t seedCount,
+                                         size_t targetCount,
+                                         uint64_t maxHops,
+                                         double hopPassRate) {
+    if (targetCount == 0) {
+        return false;
+    }
+
+    const PartDirectory parts(view);
+    const size_t nodeCount = parts.getAllocatedNodeCount();
+    if (nodeCount == 0 || parts.getAllocatedEdgeCount() == 0) {
+        return false;
+    }
+
+    if (static_cast<double>(nodeCount) > bytesLimit) {
+        return false;
+    }
+
+    const double budget = PathDistanceIndex::estimatedBuildChecks(parts, direction, edgeType, targetCount, maxHops);
+
+    return PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, seedCount, maxHops, hopPassRate) > budget;
 }
 
 void PathTargetIndex::buildBatch(const PartDirectory& parts,

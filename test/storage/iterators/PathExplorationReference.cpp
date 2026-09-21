@@ -188,6 +188,9 @@ size_t turing::test::collectPaths(const GraphView& view,
     explorator.setHopFilter(options._hopFilter);
     explorator.setEndLabels(options._endLabels);
     explorator.setEndNodes(options._endNodes);
+    if (!options._endNodeSet.empty()) {
+        explorator.setEndNodeSet(options._endNodeSet);
+    }
     explorator.setDistanceIndex(options._distanceIndex);
     explorator.setTargetIndex(options._targetIndex);
     explorator.setDistinctEnds(options._distinctEnds);

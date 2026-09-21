@@ -1141,7 +1141,7 @@ def GetInEdgesByLabel : TuringOp<"get_in_edges_by_label", [Pure, DeclareOpInterf
 /**
 * ExplorePaths
 */
-def ExplorePaths : TuringOp<"explore_paths", [Pure, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+def ExplorePaths : TuringOp<"explore_paths", [Pure, AttrSizedOperandSegments, DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Enumerate the variable-length paths leaving each input node, filtering carried columns alongside";
 
   let description = [{
@@ -1180,6 +1180,17 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, DeclareOpInterfaceMethods<Op
 
       %s, %t, %p, %b2 = db.explore_paths(%a, {%b}) forward hops 1 end_column 0
 
+    `end_nodes` binds the end to one set of nodes every seed shares, the way
+    `MATCH (a)-[e]->+(b {name:"Adam"})` ends on the nodes named Adam: where `end_column`
+    gives each row its own target, this gives the whole walk the same ones. The column is
+    consumed in full before the walk runs, as db.shortest_path consumes its two node columns,
+    so it is a pipeline breaker on that operand: it comes from a scan of its own, standing
+    ahead of the one the seeds come from, and lowering rejects a set the walk would outrun.
+    Only the paths ending on a node of the set are emitted, the prefixes that cannot reach one
+    in time are not walked, and an empty set emits nothing.
+
+      %s, %t, %p = db.explore_paths(%a, {}) forward hops 1 to 5 end_nodes %b
+
     `ends_on_seed` is that same constraint when the end the pattern names is the seed it
     started from - `MATCH (a)-[e]->+(a)`, the cycle through `a` - so each row's target is
     its own `srcids` and no carried column holds it. The same pass sets it, from the
@@ -1199,6 +1210,7 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, DeclareOpInterfaceMethods<Op
 
   let arguments = (ins Column:$input_nodes,
                        Variadic<Column>:$columns_to_filter,
+                       Optional<ColumnNodeIDs>:$end_nodes,
                        PathDirection:$direction,
                        UI64Attr:$min_hops,
                        OptionalAttr<UI64Attr>:$max_hops,
@@ -1218,7 +1230,7 @@ def ExplorePaths : TuringOp<"explore_paths", [Pure, DeclareOpInterfaceMethods<Op
   let assemblyFormat = [{
     `(` $input_nodes `,` `{` $columns_to_filter `}` `)` $direction `hops` $min_hops
     (`to` $max_hops^)? (`edge_type` $edge_type^)? (`end_labels` $end_labels^)?
-    (`end_column` $end_column^)? (`ends_on_seed` $ends_on_seed^)?
+    (`end_nodes` $end_nodes^)? (`end_column` $end_column^)? (`ends_on_seed` $ends_on_seed^)?
     (`distinct` $distinct^)? ($hop^)?
     attr-dict `:` functional-type(operands, results)
   }];

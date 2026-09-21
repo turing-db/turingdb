@@ -246,6 +246,12 @@ private:
     // binds the seed, end and path columns to the loop variables
     void lowerExplorePaths(mlir::db::ExplorePaths explorePaths);
 
+    // Gather the end nodes a whole exploration is bound to into an nl node set: the buffer
+    // above every loop, a collect in the loop binding the column, and the handle for the
+    // walk. The gathering nest must close before the walk's opens, or the walk would read a
+    // set the loop that fills it has not finished filling.
+    mlir::Value buildEndNodeSet(mlir::Value endNodeColumn, mlir::Value inputChunk);
+
     // Lower the hop predicate of a db.explore_paths into the nl op's region: one block over
     // the source, edge and end chunks, its ops lowered as any other, ending in an nl.yield of
     // the mask laid out over the hop's rows
@@ -698,6 +704,10 @@ private:
     // above the root is loop-invariant - a hoisted constant layout, a metadata tally - and
     // the accumulator it feeds lives in the root, so it is charged there instead.
     mlir::Block* accumulatorUpdateBlock(mlir::Block* producingBlock) const;
+
+    // The op of the entry block whose loop nest holds @param block, or null when the block
+    // is the entry block itself
+    mlir::Operation* topLevelNestOf(mlir::Block* block) const;
 
     // The chunk of @param chunks bound deepest - the one whose block every other is
     // valid in, which is where an op reading all of them belongs. A null Value for an

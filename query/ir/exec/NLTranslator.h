@@ -144,6 +144,7 @@ private:
         // and whether it reports each (seed, end) pair once instead of every path
         std::optional<uint64_t> _endColumn;
         bool _endsOnSeed {false};
+        NLNodeSetState* _endNodeSet {nullptr};
         bool _distinctEnds {false};
 
         // The node IDs a ConstScanNodes iterator emits; empty for the other kinds.
@@ -255,6 +256,7 @@ private:
     // table and per-group lists
     llvm::DenseMap<mlir::Value, NLCollectState*> _collectStates;
 
+    llvm::DenseMap<mlir::Value, NLNodeSetState*> _nodeSetStates;
     llvm::DenseMap<mlir::Value, NLShortestPathState*> _shortestPathStates;
 
     // nl.optional_buffer handle SSA value -> the runtime accumulator it produces, so
@@ -748,6 +750,12 @@ private:
     void translateCollectLoop(const IteratorConfig& config,
                               mlir::Block& loopBody,
                               NLStmtContainer* body);
+
+    void translateNodeSetBuffer(mlir::nl::NodeSetBuffer buffer, NLStmtContainer* body);
+
+    void translateNodeSetCollect(mlir::nl::NodeSetCollect collect, NLStmtContainer* body);
+
+    NLNodeSetState* nodeSetStateFor(mlir::Value handle) const;
 
     void translateShortestPathBuffer(mlir::nl::ShortestPathBuffer buffer, NLStmtContainer* body);
 

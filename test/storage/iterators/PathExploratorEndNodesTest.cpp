@@ -267,3 +267,72 @@ TEST_F(PathExploratorEndNodesTest, indexPrunesSeedsThatCannotReachTheirTarget) {
     EXPECT_TRUE(rows.empty());
     EXPECT_EQ(checks, 0u);
 }
+
+TEST_F(PathExploratorEndNodesTest, setIndexAgreesWithTheReference) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+
+    // Every node a seed, all bound to the same three ends
+    ColumnNodeIDs input;
+    for (size_t node = 0; node < nodeCount; node++) {
+        input.push_back(NodeID(node));
+    }
+
+    std::vector<NodeID> endSet {NodeID(_hubGraph._target), NodeID(_hubGraph._secondTarget), NodeID(_hubGraph._chainOne)};
+    std::sort(endSet.begin(), endSet.end());
+
+    const std::vector<std::pair<uint64_t, uint64_t>> bounds {
+        {1, 1}, {1, 3}, {0, 2}, {2, unbounded}, {0, unbounded},
+    };
+
+    for (const PathExplorationDir direction : {PathExplorationDir::FORWARD, PathExplorationDir::BACKWARD, PathExplorationDir::BOTH}) {
+        for (const auto& [minHops, maxHops] : bounds) {
+            SCOPED_TRACE("direction " + std::to_string(static_cast<int>(direction)) + " hops " + std::to_string(minHops) + " to " + std::to_string(maxHops));
+
+            ReferenceEnumerator reference(_hubGraph._adjacency, direction, minHops, maxHops);
+
+            std::vector<PathRow> expected;
+            reference.enumerate(input, expected);
+            std::erase_if(expected, [&endSet](const PathRow& row) {
+                return !std::binary_search(endSet.begin(), endSet.end(), NodeID(row._target));
+            });
+
+            ExplorationOptions options;
+            options._endNodeSet = endSet;
+
+            std::vector<PathRow> unpruned;
+            const size_t unprunedChecks = collectPaths(view, input, direction, minHops, maxHops, options, unpruned);
+            expectSameRows(expected, unpruned);
+
+            PathTargetIndex index;
+            index.buildSet(view, endSet, direction, std::nullopt, maxHops);
+            options._targetIndex = &index;
+
+            std::vector<PathRow> pruned;
+            const size_t prunedChecks = collectPaths(view, input, direction, minHops, maxHops, options, pruned);
+            expectSameRows(expected, pruned);
+            EXPECT_LE(prunedChecks, unprunedChecks);
+        }
+    }
+
+    // Aimed forward at the two T nodes alone, the dead branch is never descended into
+    const std::vector<NodeID> ends {std::min(NodeID(_hubGraph._target), NodeID(_hubGraph._secondTarget)),
+                                    std::max(NodeID(_hubGraph._target), NodeID(_hubGraph._secondTarget))};
+
+    ExplorationOptions options;
+    options._endNodeSet = ends;
+
+    std::vector<PathRow> unpruned;
+    const size_t unprunedChecks = collectPaths(view, input, PathExplorationDir::FORWARD, 1, 3, options, unpruned);
+
+    PathTargetIndex index;
+    index.buildSet(view, ends, PathExplorationDir::FORWARD, std::nullopt, 3);
+    options._targetIndex = &index;
+
+    std::vector<PathRow> pruned;
+    const size_t prunedChecks = collectPaths(view, input, PathExplorationDir::FORWARD, 1, 3, options, pruned);
+    expectSameRows(unpruned, pruned);
+    EXPECT_FALSE(pruned.empty());
+    EXPECT_LT(prunedChecks * 2, unprunedChecks) << prunedChecks << " of " << unprunedChecks;
+}

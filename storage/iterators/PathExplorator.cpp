@@ -150,6 +150,11 @@ void PathExplorator::setEndLabels(const LabelSet* labels) {
     _endLabels = labels ? LabelSetHandle(*labels) : LabelSetHandle();
 }
 
+void PathExplorator::setEndNodeSet(std::span<const NodeID> endNodeSet) {
+    _endNodeSet = endNodeSet;
+    _filtersByEndNodeSet = true;
+}
+
 void PathExplorator::setDistinctEnds(bool distinct) {
     bioassert(!distinct || !_paths, "The distinct mode emits no path");
     _distinctEnds = distinct;
@@ -222,6 +227,10 @@ bool PathExplorator::isEnd(size_t seedRow, NodeID node) const {
         return false;
     }
 
+    if (_filtersByEndNodeSet && !std::binary_search(_endNodeSet.begin(), _endNodeSet.end(), node)) {
+        return false;
+    }
+
     if (_distances) {
         return _distances->isEnd(node);
     }
@@ -233,6 +242,14 @@ bool PathExplorator::isEnd(size_t seedRow, NodeID node) const {
     const LabelSetHandle labels = labelSetOf(node);
 
     return labels.isValid() && labels.hasAtLeastLabels(_endLabels);
+}
+
+bool PathExplorator::canReachTargetWithin(NodeID node, uint64_t hops) const {
+    if (_filtersByEndNodeSet) {
+        return !_targetIndex || _targetIndex->canReachAnyWithin(node, hops);
+    }
+
+    return _target.canReachWithin(node, hops);
 }
 
 void PathExplorator::resizeOutputs(size_t count) {
@@ -334,7 +351,7 @@ void PathExplorator::startSeed(size_t row) {
     }
 
     const bool beyondLabels = _distances && !_distances->canReachEndWithin(seed, _maxHops);
-    const bool beyondTarget = !_target.canReachWithin(seed, _maxHops);
+    const bool beyondTarget = !canReachTargetWithin(seed, _maxHops);
     if (_maxHops > 0 && !beyondLabels && !beyondTarget) {
         _active = true;
         descend(seed);
@@ -521,7 +538,7 @@ void PathExplorator::generateCandidates(std::span<const EdgeRecord> edges) {
             : (signature & signatureBit(edge)) != 0 ? positionOnPath(edge) : NO_TAINT;
         const bool onTrail = heldAt != NO_TAINT;
         const bool beyondLabels = _distances && !_distances->canReachEndWithin(record._otherID, remainingHops);
-        const bool beyondTarget = !_target.canReachWithin(record._otherID, remainingHops);
+        const bool beyondTarget = !canReachTargetWithin(record._otherID, remainingHops);
 
         if (backtracks || wrongType || deleted || onTrail || beyondLabels || beyondTarget) {
             if (_prunes && onTrail) {

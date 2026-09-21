@@ -87,6 +87,32 @@ NLProcedureState::~NLProcedureState() {
 NLShortestPathState::~NLShortestPathState() {
 }
 
+NLNodeSetState::NLNodeSetState() {
+}
+
+NLNodeSetState::~NLNodeSetState() {
+}
+
+void NLNodeSetState::reset() {
+    _nodes.clear();
+    _ordered = false;
+}
+
+void NLNodeSetState::add(const std::vector<NodeID>& nodes) {
+    _nodes.insert(_nodes.end(), nodes.begin(), nodes.end());
+    _ordered = false;
+}
+
+std::span<const NodeID> NLNodeSetState::getNodes() {
+    if (!_ordered) {
+        std::sort(_nodes.begin(), _nodes.end());
+        _nodes.erase(std::unique(_nodes.begin(), _nodes.end()), _nodes.end());
+        _ordered = true;
+    }
+
+    return _nodes;
+}
+
 void NLProcedureState::prepareOrResetForNewDrive() {
     // A procedure reads its argument columns in its prepare step - gnn.neighbourhoodSample
     // builds its sampling iterator over the input nodes there - so the call is prepared

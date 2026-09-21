@@ -282,3 +282,76 @@ TEST_F(PathTargetIndexTest, costGateChargesEveryBatch) {
     // And ten million batches would not fit in memory, whatever the walk costs
     EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 640000000, unbounded));
 }
+
+TEST_F(PathTargetIndexTest, setModeMatchesTheReference) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+
+    const std::vector<NodeID> targets {NodeID(_hubGraph._target), NodeID(_hubGraph._secondTarget), NodeID(_hubGraph._hub)};
+    const std::vector<std::optional<EdgeTypeID>> edgeTypes {std::nullopt, _hubGraph._typeA, _hubGraph._typeB};
+
+    std::vector<uint64_t> distances;
+    std::vector<uint64_t> nearest;
+    for (const PathExplorationDir direction : {PathExplorationDir::FORWARD, PathExplorationDir::BACKWARD, PathExplorationDir::BOTH}) {
+        for (const uint64_t maxHops : {uint64_t {1}, uint64_t {3}, unbounded}) {
+            for (const std::optional<EdgeTypeID>& edgeType : edgeTypes) {
+                SCOPED_TRACE("direction " + std::to_string(static_cast<int>(direction)) + " max " + std::to_string(maxHops) + " type " + std::to_string(edgeType ? edgeType->getValue() : 999));
+
+                std::optional<uint64_t> referenceType;
+                if (edgeType) {
+                    referenceType = edgeType->getValue();
+                }
+
+                nearest.assign(nodeCount, unreached);
+                for (const NodeID target : targets) {
+                    referenceDistances(_hubGraph._adjacency, target.getValue(), direction, referenceType, distances);
+                    for (size_t node = 0; node < nodeCount; node++) {
+                        nearest[node] = std::min(nearest[node], distances[node]);
+                    }
+                }
+
+                PathTargetIndex index;
+                index.buildSet(view, targets, direction, edgeType, maxHops);
+                ASSERT_TRUE(index.isBuilt());
+                EXPECT_EQ(index.getBatchCount(), 0u);
+                EXPECT_FALSE(index.find(NodeID(_hubGraph._target)).isValid());
+
+                for (size_t node = 0; node < nodeCount; node++) {
+                    for (const uint64_t hops : {uint64_t {0}, uint64_t {1}, uint64_t {2}, uint64_t {3}, uint64_t {5}, unbounded}) {
+                        const uint64_t distance = nearest[node];
+                        const bool expected = distance != unreached && distance <= hops && distance <= maxHops;
+                        EXPECT_EQ(index.canReachAnyWithin(NodeID(node), hops), expected) << "node " << node << " within " << hops;
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST_F(PathTargetIndexTest, pricesTheSetAsOneSearch) {
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+    const GraphView& view = reader.getView();
+
+    std::vector<NodeID> seeds;
+    for (size_t node = 0; node < nodeCount; node++) {
+        seeds.push_back(NodeID(node));
+    }
+
+    PathDistanceIndex::SeedExpansion expansion;
+    PathDistanceIndex::sampleSeedExpansion(PartDirectory(view), PathExplorationDir::FORWARD, std::nullopt, seeds, expansion);
+
+    // Two thousand targets are 32 batches of words over the graph; the set is one search
+    // over it, so the fewest seeds that pay for the set are far from paying for the batches
+    size_t seedCount = 1;
+    while (!PathTargetIndex::isWorthBuildingSet(view, PathExplorationDir::FORWARD, std::nullopt, expansion, seedCount, 2000, 3)) {
+        seedCount++;
+        ASSERT_LT(seedCount, 100000u);
+    }
+    EXPECT_FALSE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, seedCount, 2000, 3));
+    EXPECT_TRUE(PathTargetIndex::isWorthBuilding(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 2000, 3));
+
+    EXPECT_FALSE(PathTargetIndex::isWorthBuildingSet(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 0, 3));
+    EXPECT_FALSE(PathTargetIndex::isWorthBuildingSet(view, PathExplorationDir::FORWARD, std::nullopt, expansion, 100000, 2000, 0));
+}
