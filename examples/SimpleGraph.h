@@ -24,6 +24,12 @@ public:
                              std::vector<EdgeTypeID>& edgeTypes,
                              std::vector<NodeID>& targetNodeIDs);
 
+    static void findInEdges(Graph* graph,
+                            const std::vector<NodeID>& nodeIDs,
+                            std::vector<EdgeID>& edgeIDs,
+                            std::vector<EdgeTypeID>& edgeTypes,
+                            std::vector<NodeID>& sourceNodeIDs);
+
     SimpleGraph() = delete;
 };
 }

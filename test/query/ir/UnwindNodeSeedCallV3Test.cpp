@@ -10,12 +10,11 @@ using namespace turing::test;
 
 namespace {
 
-// Remy (0) has edges out to Adam (1), Computers (2), Eighties (3) and Ghosts (6); Adam to
-// Remy, Bio (4) and Cooking (5); Ghosts to Remy. A sample size above every out-degree takes
-// them all.
+// Remy (0) has edges in from Adam (1) and Ghosts (6); Adam from Remy; Ghosts from Remy. A
+// sample size above every in-degree takes them all.
 const std::vector<StringRowSink::Row> seededNeighbours {
-    {"0", "1"}, {"0", "2"}, {"0", "3"}, {"0", "6"},
-    {"1", "0"}, {"1", "4"}, {"1", "5"},
+    {"0", "1"}, {"0", "6"},
+    {"1", "0"},
     {"6", "0"}};
 
 }
@@ -28,7 +27,7 @@ class UnwindNodeSeedCallV3Test : public CallV3Test {
 TEST_F(UnwindNodeSeedCallV3Test, seedsACallFromTheListedNodes) {
     StringRowSink sink;
     runQuery("UNWIND [0, 1, 6] AS id MATCH (n) WHERE n = id "
-             "CALL gnn.neighbourhoodSample(n, 10, 11) YIELD tgt RETURN n, tgt",
+             "CALL gnn.neighbourhoodSample(n, 10, 11) YIELD src RETURN n, src",
              sink);
 
     std::vector<StringRowSink::Row> rows;
@@ -39,7 +38,7 @@ TEST_F(UnwindNodeSeedCallV3Test, seedsACallFromTheListedNodes) {
 TEST_F(UnwindNodeSeedCallV3Test, readsTheUnwoundValuePastTheCall) {
     StringRowSink sink;
     runQuery("UNWIND [0, 1, 6] AS id MATCH (n) WHERE n = id "
-             "CALL gnn.neighbourhoodSample(n, 10, 11) YIELD tgt RETURN id, tgt",
+             "CALL gnn.neighbourhoodSample(n, 10, 11) YIELD src RETURN id, src",
              sink);
 
     std::vector<StringRowSink::Row> rows;
@@ -47,12 +46,12 @@ TEST_F(UnwindNodeSeedCallV3Test, readsTheUnwoundValuePastTheCall) {
     EXPECT_EQ(rows, seededNeighbours);
 }
 
-// Every path of three out-edges from the seeds: 8 leave Remy, 4 leave Adam and 4 leave
-// Ghosts, all of them through Remy.
+// Every path of three in-edges back from the seeds: 4 reach Remy, 2 reach Adam and 2
+// reach Ghosts, all of them through Remy.
 TEST_F(UnwindNodeSeedCallV3Test, matchesTheDisjunctionFormThroughChainedCalls) {
-    const std::string calls = " CALL gnn.neighbourhoodSample(n, 10, 11) YIELD tgt AS m"
-                              " CALL gnn.neighbourhoodSample(m, 10, 22) YIELD tgt AS k"
-                              " CALL gnn.neighbourhoodSample(k, 10, 33) YIELD tgt AS l"
+    const std::string calls = " CALL gnn.neighbourhoodSample(n, 10, 11) YIELD src AS m"
+                              " CALL gnn.neighbourhoodSample(m, 10, 22) YIELD src AS k"
+                              " CALL gnn.neighbourhoodSample(k, 10, 33) YIELD src AS l"
                               " RETURN n, m, k, l";
 
     StringRowSink bySeed;
@@ -66,6 +65,6 @@ TEST_F(UnwindNodeSeedCallV3Test, matchesTheDisjunctionFormThroughChainedCalls) {
     std::vector<StringRowSink::Row> byDisjunctionRows;
     byDisjunction.sortedRows(byDisjunctionRows);
 
-    EXPECT_EQ(bySeedRows.size(), 16u);
+    EXPECT_EQ(bySeedRows.size(), 8u);
     EXPECT_EQ(bySeedRows, byDisjunctionRows);
 }

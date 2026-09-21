@@ -39,9 +39,9 @@ constexpr std::string_view searchThree = "VECTOR SEARCH IN people FOR 3 (1.0, 0.
 constexpr std::string_view searchTwo = "VECTOR SEARCH IN people FOR 2 (1.0, 0.0, 0.0, 0.0) ";
 constexpr std::string_view searchOne = "VECTOR SEARCH IN people FOR 1 (1.0, 0.0, 0.0, 0.0) ";
 
-// Wider than the out-degree of every node the tests sample, so a sample is the whole
+// Wider than the in-degree of every node the tests sample, so a sample is the whole
 // neighbourhood and the rows do not depend on the seed.
-constexpr std::string_view sampleWhole = "CALL gnn.neighbourhoodSample(ids, 8, 42) YIELD tgt ";
+constexpr std::string_view sampleWhole = "CALL gnn.neighbourhoodSample(ids, 8, 42) YIELD src ";
 
 // simpledb carries eight Person nodes, which is one factor of the cross product a search
 // crossed with an unconstrained match builds.
@@ -217,11 +217,9 @@ TEST_F(VectorSearchCompositionTest, callSamplesTheNodeTheSearchYielded) {
 
     expectRows(std::string(searchOne) + "YIELD ids "
                + std::string(sampleWhole) +
-               "RETURN ids.name, tgt.name",
+               "RETURN ids.name, src.name",
                {{"Remy", "Adam"},
-                {"Remy", "Ghosts"},
-                {"Remy", "Computers"},
-                {"Remy", "Eighties"}});
+                {"Remy", "Ghosts"}});
 }
 
 TEST_F(VectorSearchCompositionTest, callCarriesTheScoreOfTheRowThatDroveIt) {
@@ -229,24 +227,20 @@ TEST_F(VectorSearchCompositionTest, callCarriesTheScoreOfTheRowThatDroveIt) {
 
     expectRows(std::string(searchTwo) + "YIELD ids, score "
                + std::string(sampleWhole) +
-               "RETURN score, tgt.name",
+               "RETURN score, src.name",
                {{"0", "Adam"},
                 {"0", "Ghosts"},
-                {"0", "Computers"},
-                {"0", "Eighties"},
-                {"9", "Remy"},
-                {"9", "Bio"},
-                {"9", "Cooking"}});
+                {"9", "Remy"}});
 }
 
 TEST_F(VectorSearchCompositionTest, searchAfterACallCrossesWhatTheCallYielded) {
     loadPeopleVectors();
 
     expectRows("MATCH (n {name: 'Adam'}) "
-               "CALL gnn.neighbourhoodSample(n, 8, 42) YIELD tgt "
+               "CALL gnn.neighbourhoodSample(n, 8, 42) YIELD src "
                + std::string(searchOne) + "YIELD ids "
-               "RETURN tgt.name, ids.name",
-               {{"Remy", "Remy"}, {"Bio", "Remy"}, {"Cooking", "Remy"}});
+               "RETURN src.name, ids.name",
+               {{"Remy", "Remy"}});
 }
 
 // A search between two calls: the first reads what the search yielded, the second what the
@@ -256,25 +250,23 @@ TEST_F(VectorSearchCompositionTest, searchDrivesTwoChainedCalls) {
 
     expectRows(std::string(searchOne) + "YIELD ids "
                + std::string(sampleWhole) +
-               "CALL gnn.neighbourhoodSample(tgt, 8, 42) YIELD tgt AS hop2 "
-               "RETURN tgt.name, hop2.name",
+               "CALL gnn.neighbourhoodSample(src, 8, 42) YIELD src AS hop2 "
+               "RETURN src.name, hop2.name",
                {{"Adam", "Remy"},
-                {"Adam", "Bio"},
-                {"Adam", "Cooking"},
                 {"Ghosts", "Remy"}});
 }
 
 // Both statements ahead of the MATCH bind variables of their own, so the root the
 // traversal is driven from is looked for across a VECTOR SEARCH's YIELD and a CALL's
-// alike: Remy is the neighbour, its out-neighbours are what the sample hands the MATCH,
+// alike: Remy is the neighbour, its in-neighbours are what the sample hands the MATCH,
 // and the MATCH walks one hop on from each of them.
 TEST_F(VectorSearchCompositionTest, aSearchAndACallTogetherDriveTheMatchTheyYieldInto) {
     loadPeopleVectors();
 
     expectRows(std::string(searchOne) + "YIELD ids "
                + std::string(sampleWhole) +
-               "MATCH (tgt)-->(m) "
-               "RETURN tgt.name, m.name",
+               "MATCH (src)-->(m) "
+               "RETURN src.name, m.name",
                {{"Adam", "Remy"},
                 {"Adam", "Bio"},
                 {"Adam", "Cooking"},

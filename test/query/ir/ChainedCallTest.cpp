@@ -74,7 +74,7 @@ protected:
 TEST_F(ChainedCallTest, singleCallYieldsRows) {
     const size_t rowCount = run(
         "MATCH (n) "
-        "CALL gnn.neighbourhoodSample(n, 2) YIELD tgt AS m "
+        "CALL gnn.neighbourhoodSample(n, 2) YIELD src AS m "
         "RETURN m");
 
     EXPECT_GT(rowCount, 0u);
@@ -83,8 +83,8 @@ TEST_F(ChainedCallTest, singleCallYieldsRows) {
 TEST_F(ChainedCallTest, chainedCallNeverCrashes) {
     constexpr std::string_view query =
         "MATCH (n) "
-        "CALL gnn.neighbourhoodSample(n, 2) YIELD tgt AS m "
-        "CALL gnn.neighbourhoodSample(m, 2) YIELD tgt AS o "
+        "CALL gnn.neighbourhoodSample(n, 2) YIELD src AS m "
+        "CALL gnn.neighbourhoodSample(m, 2) YIELD src AS o "
         "RETURN o";
 
     for (size_t run = 0; run < 5; run++) {
@@ -93,16 +93,16 @@ TEST_F(ChainedCallTest, chainedCallNeverCrashes) {
     }
 }
 
-// age=32 matches exactly Remy (4 out-edges) and Adam (3 out-edges).
-// Total is deterministically 5 regardless of scan order or random replacements.
+// age=32 matches exactly Remy (2 in-edges) and Adam (1 in-edge).
+// Total is deterministically 4 regardless of scan order or random replacements.
 TEST_F(ChainedCallTest, chainedCallYieldsRowsWithPersonNodes) {
     const size_t rowCount = run(
         "MATCH (n) WHERE n.age = 32 "
-        "CALL gnn.neighbourhoodSample(n, 4) YIELD tgt AS m "
-        "CALL gnn.neighbourhoodSample(m, 2) YIELD tgt AS o "
+        "CALL gnn.neighbourhoodSample(n, 4) YIELD src AS m "
+        "CALL gnn.neighbourhoodSample(m, 2) YIELD src AS o "
         "RETURN o");
 
-    EXPECT_EQ(rowCount, 5u);
+    EXPECT_EQ(rowCount, 4u);
 }
 
 int main(int argc, char** argv) {

@@ -73,7 +73,7 @@ private:
     std::vector<Row> _rows;
 };
 
-// MATCH (n) CALL gnn.neighbourhoodSample(n, 2) YIELD tgt RETURN n, tgt: two of the
+// MATCH (n) CALL gnn.neighbourhoodSample(n, 2) YIELD src RETURN n, src: two of the
 // procedure's three declared arguments, leaving the optional seed unwritten. The
 // declared count is 3 but the required count is 2, so both the lowering's and the
 // translator's argument checks must accept the call.
@@ -81,8 +81,8 @@ constexpr const char* omittedSeedProgram = R"mlir(
 func.func @main() {
   %n = db.scan_nodes() : !db.column<!storage.node_id>
   %size = db.constant(2 : i64)
-  %tgt, %n2 = db.call_procedure("gnn.neighbourhoodSample", {%n, %size}, {%n}) yields ["tgt"] : (!db.column<!storage.node_id>, !db.column<i64>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<!storage.node_id>)
-  db.output(%n2, %tgt) : !db.column<!storage.node_id>, !db.column<none>
+  %src, %n2 = db.call_procedure("gnn.neighbourhoodSample", {%n, %size}, {%n}) yields ["src"] : (!db.column<!storage.node_id>, !db.column<i64>, !db.column<!storage.node_id>) -> (!db.column<none>, !db.column<!storage.node_id>)
+  db.output(%n2, %src) : !db.column<!storage.node_id>, !db.column<none>
   return
 }
 )mlir";
@@ -128,7 +128,7 @@ protected:
     }
 
     // Five nodes and four edges - 0->1, 0->2, 1->4, 2->3. The sample size of 2 is at
-    // least every node's out-degree, so the sample is all four edges whatever seed the
+    // least every node's in-degree, so the sample is all four edges whatever seed the
     // procedure picks for itself.
     std::unique_ptr<Graph> buildHopGraph() {
         auto graph = Graph::create();
@@ -229,7 +229,7 @@ TEST_F(CallOptionalArgumentTest, runsWithTheOptionalSeedOmitted) {
 
     std::vector<NodePairSink::Row> rows;
     sink.sortedRows(rows);
-    const std::vector<NodePairSink::Row> expected {{0, 1}, {0, 2}, {1, 4}, {2, 3}};
+    const std::vector<NodePairSink::Row> expected {{1, 0}, {2, 0}, {3, 2}, {4, 1}};
     EXPECT_EQ(rows, expected);
 }
 

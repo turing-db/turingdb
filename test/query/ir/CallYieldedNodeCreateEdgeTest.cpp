@@ -93,10 +93,10 @@ TEST_F(CallYieldedNodeCreateEdgeTest, createsAnEdgeFromAYieldedNode) {
     EXPECT_EQ(sink.getRows(), expected);
 }
 
-// MATCH (n) CALL gnn.neighbourhoodSample(n, 1, 42) YIELD tgt CREATE (n)-[:SAMPLED]->(tgt):
+// MATCH (n) CALL gnn.neighbourhoodSample(n, 1, 42) YIELD src CREATE (n)-[:SAMPLED]->(src):
 // the created edge joins a carried node to a yielded one, one edge per sampled row.
 TEST_F(CallYieldedNodeCreateEdgeTest, createsAnEdgeBetweenACarriedAndAYieldedNode) {
-    runWrite("MATCH (n {name: 'Remy'}) CALL gnn.neighbourhoodSample(n, 1, 42) YIELD tgt CREATE (n)-[:SAMPLED]->(tgt)");
+    runWrite("MATCH (n {name: 'Remy'}) CALL gnn.neighbourhoodSample(n, 1, 42) YIELD src CREATE (n)-[:SAMPLED]->(src)");
 
     StringRowSink sink;
     runQuery("MATCH (n {name: 'Remy'})-[:SAMPLED]->(m) RETURN count(m)", sink);

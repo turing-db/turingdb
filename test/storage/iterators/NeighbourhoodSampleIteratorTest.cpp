@@ -33,145 +33,124 @@ protected:
         _jobSystem->terminate();
     }
 
+    // The sampler reports each edge as the graph holds it, so the neighbour it reached is
+    // the source column and the node it sampled for is the target one.
+    void sampleNeighbours(const ColumnNodeIDs& input, size_t sampleSize, ColumnNodeIDs& neighbours) {
+        const FrozenCommitTx transaction = _graph->openTransaction();
+        const GraphReader reader = transaction.readGraph();
+
+        NeighbourhoodSampleChunkWriter writer(reader.getView(), &input, sampleSize);
+        writer.setOutputColumns(&neighbours, nullptr, nullptr, nullptr);
+        writer.fill(ChunkConfig::CHUNK_SIZE);
+    }
+
+    void deleteEdges(const std::vector<EdgeID>& edgeIDs) {
+        GraphWriter writer(_graph.get(), _jobSystem.get());
+        for (const EdgeID edgeID : edgeIDs) {
+            writer.deleteEdge(edgeID);
+        }
+        writer.submit();
+    }
+
     std::unique_ptr<Graph> _graph;
     std::unique_ptr<JobSystem> _jobSystem;
 };
 
-TEST_F(NeighbourhoodSampleIteratorTest, leafFirstInputYieldsSamples) {
-    const FrozenCommitTx transaction = _graph->openTransaction();
-    const GraphReader reader = transaction.readGraph();
+TEST_F(NeighbourhoodSampleIteratorTest, rootFirstInputYieldsSamples) {
+    // Luc (9) has no in-edges, Computers (2) has two.
+    const ColumnNodeIDs input = {9, 2};
+    ColumnNodeIDs neighbours;
 
-    const ColumnNodeIDs input = {2, 0};
-    ColumnNodeIDs dstIDs;
+    sampleNeighbours(input, 2, neighbours);
 
-    NeighbourhoodSampleChunkWriter writer(reader.getView(), &input, 2);
-    writer.setOutputColumns(nullptr, nullptr, nullptr, &dstIDs);
-    writer.fill(ChunkConfig::CHUNK_SIZE);
-
-    EXPECT_GT(dstIDs.size(), 0U);
+    EXPECT_GT(neighbours.size(), 0U);
 }
 
-TEST_F(NeighbourhoodSampleIteratorTest, allLeafInputYieldsEmpty) {
-    const FrozenCommitTx transaction = _graph->openTransaction();
-    const GraphReader reader = transaction.readGraph();
+TEST_F(NeighbourhoodSampleIteratorTest, allRootInputYieldsEmpty) {
+    // Maxime (8), Luc (9), Martina (11), Suhas (12) are never the target of an edge.
+    const ColumnNodeIDs input = {8, 9, 11, 12};
+    ColumnNodeIDs neighbours;
 
-    // Computers (2), Eighties (3), Bio (4), Cooking (5) all have no out-edges.
-    const ColumnNodeIDs input = {2, 3, 4, 5};
-    ColumnNodeIDs dstIDs;
+    sampleNeighbours(input, 2, neighbours);
 
-    NeighbourhoodSampleChunkWriter writer(reader.getView(), &input, 2);
-    writer.setOutputColumns(nullptr, nullptr, nullptr, &dstIDs);
-    writer.fill(ChunkConfig::CHUNK_SIZE);
-
-    EXPECT_EQ(dstIDs.size(), 0U);
+    EXPECT_EQ(neighbours.size(), 0U);
 }
 
 TEST_F(NeighbourhoodSampleIteratorTest, sampleSizeCapRespected) {
-    const FrozenCommitTx transaction = _graph->openTransaction();
-    const GraphReader reader = transaction.readGraph();
+    // Gym (13) has 3 in-edges, from Cyrus, Doruk and Suhas; sampleSize 2 must cap the
+    // output to exactly 2.
+    const ColumnNodeIDs input = {13};
+    ColumnNodeIDs neighbours;
 
-    // Remy (0) has 4 out-edges; sampleSize 2 must cap the output to exactly 2.
-    const ColumnNodeIDs input = {0};
-    ColumnNodeIDs dstIDs;
+    sampleNeighbours(input, 2, neighbours);
 
-    NeighbourhoodSampleChunkWriter writer(reader.getView(), &input, 2);
-    writer.setOutputColumns(nullptr, nullptr, nullptr, &dstIDs);
-    writer.fill(ChunkConfig::CHUNK_SIZE);
-
-    EXPECT_EQ(dstIDs.size(), 2U);
+    EXPECT_EQ(neighbours.size(), 2U);
 }
 
 TEST_F(NeighbourhoodSampleIteratorTest, deletedEdgesAreNotSampled) {
-    // Delete one of Remy's out-edges (Remy=0 has 4: Adam, Ghosts, Computers, Eighties).
-    // The sampler must not return it.
+    // Delete one of Remy's in-edges (Remy=0 has 2: from Adam and from Ghosts). The
+    // sampler must not return the node it came from.
     std::vector<EdgeID> edgeIDs;
     std::vector<EdgeTypeID> edgeTypes;
-    std::vector<NodeID> targets;
-    SimpleGraph::findOutEdges(_graph.get(), {0}, edgeIDs, edgeTypes, targets);
+    std::vector<NodeID> sources;
+    SimpleGraph::findInEdges(_graph.get(), {0}, edgeIDs, edgeTypes, sources);
     ASSERT_FALSE(edgeIDs.empty());
 
-    const EdgeID deletedEdge = edgeIDs[0];
-    const NodeID deletedTarget = targets[0];
-
-    GraphWriter writer(_graph.get(), _jobSystem.get());
-    writer.deleteEdge(deletedEdge);
-    writer.submit();
-
-    const FrozenCommitTx transaction = _graph->openTransaction();
-    const GraphReader reader = transaction.readGraph();
+    const NodeID deletedSource = sources[0];
+    deleteEdges({edgeIDs[0]});
 
     const ColumnNodeIDs input = {0};
-    ColumnNodeIDs dstIDs;
+    ColumnNodeIDs neighbours;
 
-    NeighbourhoodSampleChunkWriter chunkWriter(reader.getView(), &input, 4);
-    chunkWriter.setOutputColumns(nullptr, nullptr, nullptr, &dstIDs);
-    chunkWriter.fill(ChunkConfig::CHUNK_SIZE);
+    sampleNeighbours(input, 4, neighbours);
 
-    for (const NodeID dstID : dstIDs) {
-        EXPECT_NE(dstID, deletedTarget);
+    for (const NodeID neighbour : neighbours) {
+        EXPECT_NE(neighbour, deletedSource);
     }
 }
 
 TEST_F(NeighbourhoodSampleIteratorTest, allEdgesDeletedYieldsEmpty) {
-    // Delete all of Remy's out-edges; the sampler must produce no rows for Remy.
+    // Delete all of Remy's in-edges; the sampler must produce no rows for Remy.
     std::vector<EdgeID> edgeIDs;
     std::vector<EdgeTypeID> edgeTypes;
-    std::vector<NodeID> targets;
-    SimpleGraph::findOutEdges(_graph.get(), {0}, edgeIDs, edgeTypes, targets);
+    std::vector<NodeID> sources;
+    SimpleGraph::findInEdges(_graph.get(), {0}, edgeIDs, edgeTypes, sources);
     ASSERT_FALSE(edgeIDs.empty());
 
-    GraphWriter writer(_graph.get(), _jobSystem.get());
-    for (const EdgeID edgeID : edgeIDs) {
-        writer.deleteEdge(edgeID);
-    }
-    writer.submit();
-
-    const FrozenCommitTx transaction = _graph->openTransaction();
-    const GraphReader reader = transaction.readGraph();
+    deleteEdges(edgeIDs);
 
     const ColumnNodeIDs input = {0};
-    ColumnNodeIDs dstIDs;
+    ColumnNodeIDs neighbours;
 
-    NeighbourhoodSampleChunkWriter chunkWriter(reader.getView(), &input, 4);
-    chunkWriter.setOutputColumns(nullptr, nullptr, nullptr, &dstIDs);
-    chunkWriter.fill(ChunkConfig::CHUNK_SIZE);
+    sampleNeighbours(input, 4, neighbours);
 
-    EXPECT_EQ(dstIDs.size(), 0U);
+    EXPECT_EQ(neighbours.size(), 0U);
 }
 
 TEST_F(NeighbourhoodSampleIteratorTest, deletedEdgesNotSampledAcrossMultipleNodes) {
-    // Delete Adam's out-edges; sampling both Remy and Adam must still return
-    // Remy's neighbours but nothing for Adam.
-    std::vector<EdgeID> adamEdgeIDs;
-    std::vector<EdgeTypeID> adamEdgeTypes;
-    std::vector<NodeID> adamTargets;
-    SimpleGraph::findOutEdges(_graph.get(), {1}, adamEdgeIDs, adamEdgeTypes, adamTargets);
-    ASSERT_FALSE(adamEdgeIDs.empty());
+    // Delete Gym's in-edges; sampling both Computers and Gym must still return
+    // Computers' neighbours but nothing for Gym.
+    std::vector<EdgeID> gymEdgeIDs;
+    std::vector<EdgeTypeID> gymEdgeTypes;
+    std::vector<NodeID> gymSources;
+    SimpleGraph::findInEdges(_graph.get(), {13}, gymEdgeIDs, gymEdgeTypes, gymSources);
+    ASSERT_FALSE(gymEdgeIDs.empty());
 
-    GraphWriter writer(_graph.get(), _jobSystem.get());
-    for (const EdgeID edgeID : adamEdgeIDs) {
-        writer.deleteEdge(edgeID);
-    }
-    writer.submit();
+    deleteEdges(gymEdgeIDs);
 
-    const FrozenCommitTx transaction = _graph->openTransaction();
-    const GraphReader reader = transaction.readGraph();
+    const ColumnNodeIDs input = {2, 13};
+    ColumnNodeIDs neighbours;
 
-    const ColumnNodeIDs input = {0, 1};
-    ColumnNodeIDs dstIDs;
+    sampleNeighbours(input, 4, neighbours);
 
-    NeighbourhoodSampleChunkWriter chunkWriter(reader.getView(), &input, 4);
-    chunkWriter.setOutputColumns(nullptr, nullptr, nullptr, &dstIDs);
-    chunkWriter.fill(ChunkConfig::CHUNK_SIZE);
-
-    // None of Adam's neighbours must appear.
-    for (const NodeID target : adamTargets) {
-        const bool found = std::ranges::find(dstIDs, target) != dstIDs.end();
+    // None of Gym's neighbours must appear.
+    for (const NodeID source : gymSources) {
+        const bool found = std::ranges::find(neighbours, source) != neighbours.end();
         EXPECT_FALSE(found);
     }
 
-    // Remy still has live edges so output must be non-empty.
-    EXPECT_GT(dstIDs.size(), 0U);
+    // Computers still has live in-edges so output must be non-empty.
+    EXPECT_GT(neighbours.size(), 0U);
 }
 
 int main(int argc, char** argv) {

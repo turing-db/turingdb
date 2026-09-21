@@ -125,15 +125,15 @@ TEST_F(CallYieldedPropertyTest, readsAPropertyOfAYieldedEdge) {
 }
 
 // A call driven per matched row yields a node the projection reads a property of: the
-// one neighbour sampled from Remy is one of the four nodes Remy points at.
+// one neighbour sampled from Remy is one of the two nodes that point at him.
 TEST_F(CallYieldedPropertyTest, readsAPropertyOfANodeAPerRowCallYielded) {
     StringRowSink sink;
-    runQuery("MATCH (n {name: 'Remy'}) CALL gnn.neighbourhoodSample(n, 1, 42) YIELD tgt RETURN tgt.name", sink);
+    runQuery("MATCH (n {name: 'Remy'}) CALL gnn.neighbourhoodSample(n, 1, 42) YIELD src RETURN src.name", sink);
 
     const std::vector<StringRowSink::Row>& rows = sink.getRows();
     ASSERT_EQ(rows.size(), 1u);
 
-    const std::vector<std::string> neighbours {"Adam", "Computers", "Eighties", "Ghosts"};
+    const std::vector<std::string> neighbours {"Adam", "Ghosts"};
     EXPECT_TRUE(std::find(neighbours.begin(), neighbours.end(), rows.front().front()) != neighbours.end());
 }
 

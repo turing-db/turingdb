@@ -60,7 +60,7 @@ void NeighbourhoodSampleIterator::syncEdges() {
     while (_partIt.isNotEnd()) {
         const DataPart* part = _partIt.get();
         const EdgeIndexer& indexer = part->edgeIndexer();
-        _edges = indexer.getNodeOutEdges(*_nodeIt);
+        _edges = indexer.getNodeInEdges(*_nodeIt);
         _edgeIt = _edges.begin();
 
         while (_edgeIt != _edges.end() and deleted(*_edgeIt)) {
@@ -96,7 +96,7 @@ void NeighbourhoodSampleIterator::nextValidForCurrentNode() {
         const EdgeIndexer& indexer = part->edgeIndexer();
         const NodeID curNode = *_nodeIt;
 
-        _edges = indexer.getNodeOutEdges(curNode);
+        _edges = indexer.getNodeInEdges(curNode);
         _edgeIt = _edges.begin();
 
         while (_edgeIt != _edges.end() and deleted(*_edgeIt)) {
@@ -210,8 +210,9 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
             // Unconditionally take the first k elements
             if (i <= _sampleSize) {
                 const EdgeRecord& e = *_edgeIt;
+
                 if (_srcIDs) {
-                    _srcIDs->operator[](writeIndex) = e._nodeID;
+                    _srcIDs->operator[](writeIndex) = e._otherID;
                 }
                 if (_edgeIDs) {
                     _edgeIDs->operator[](writeIndex) = e._edgeID;
@@ -220,7 +221,7 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
                     _edgeTypes->operator[](writeIndex) = e._edgeTypeID;
                 }
                 if (_otherIDs) {
-                    _otherIDs->operator[](writeIndex) = e._otherID;
+                    _otherIDs->operator[](writeIndex) = e._nodeID;
                 }
                 if (_indices) {
                     _indices->operator[](writeIndex) = nodeIndex;
@@ -248,7 +249,7 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
 
             const EdgeRecord& sample = *_edgeIt;
             if (_srcIDs) {
-                _srcIDs->operator[](replacedIndex) = sample._nodeID;
+                _srcIDs->operator[](replacedIndex) = sample._otherID;
             }
             if (_edgeIDs) {
                 _edgeIDs->operator[](replacedIndex) = sample._edgeID;
@@ -257,7 +258,7 @@ void NeighbourhoodSampleChunkWriter::fill(size_t maxCount) {
                 _edgeTypes->operator[](replacedIndex) = sample._edgeTypeID;
             }
             if (_otherIDs) {
-                _otherIDs->operator[](replacedIndex) = sample._otherID;
+                _otherIDs->operator[](replacedIndex) = sample._nodeID;
             }
             nextValidForCurrentNode();
 
