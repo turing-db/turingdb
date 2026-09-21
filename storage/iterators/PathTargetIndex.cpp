@@ -237,20 +237,53 @@ void PathTargetIndex::build(const GraphView& view,
     _built = true;
 }
 
+// The two layouts of a set cost the same search; the smaller one is the faster to probe at
+// every candidate the walk checks, so the table wins while its slots weigh less than a byte
+// for every node of the graph
+void PathTargetIndex::planSet(const PartDirectory& parts,
+                              PathExplorationDir direction,
+                              std::optional<EdgeTypeID> edgeType,
+                              size_t targetCount,
+                              uint64_t maxHops,
+                              SetPlan& plan) {
+    const double nodeCount = static_cast<double>(parts.getAllocatedNodeCount());
+    const double candidatesPerTarget = PathDistanceIndex::estimatedSearchChecks(parts, direction, edgeType, 1, maxHops);
+    const double reached = std::min(nodeCount, static_cast<double>(targetCount) * candidatesPerTarget);
+    const double tableBytes = reached * bytesPerReachedNode;
+
+    plan._sparse = tableBytes < nodeCount;
+    plan._checks = plan._sparse ? reachedNodeCostInChecks * reached : PathDistanceIndex::estimatedBuildChecks(parts, direction, edgeType, targetCount, maxHops);
+    plan._bytes = plan._sparse ? tableBytes : nodeCount;
+}
+
 void PathTargetIndex::buildSet(const GraphView& view,
                                std::span<const NodeID> targets,
                                PathExplorationDir direction,
                                std::optional<EdgeTypeID> edgeType,
                                uint64_t maxHops) {
+    const PartDirectory parts(view);
+
+    SetPlan plan;
+    planSet(parts, direction, edgeType, targets.size(), maxHops, plan);
+
     _handles.clear();
     _batches.clear();
 
-    _set.build(view, targets, direction, edgeType, maxHops);
+    if (plan._sparse) {
+        const Tombstones& tombstones = view.tombstones();
+        const Tombstones* edgeTombstones = tombstones.hasEdges() ? &tombstones : nullptr;
+
+        PathTargetBatch& batch = _batches.emplace_back();
+        buildSetBatch(parts, targets, direction, edgeType, edgeTombstones, maxHops, batch);
+    } else {
+        _set.build(view, targets, direction, edgeType, maxHops);
+    }
+
     _built = true;
 }
 
 bool PathTargetIndex::isDense() const {
-    return !_batches.empty() && _batches.front().isDense();
+    return _set.isBuilt() || (!_batches.empty() && _batches.front().isDense());
 }
 
 size_t PathTargetIndex::getReachedCount() const {
@@ -335,13 +368,13 @@ bool PathTargetIndex::isWorthBuildingSet(const GraphView& view,
         return false;
     }
 
-    if (static_cast<double>(nodeCount) > bytesLimit) {
+    SetPlan plan;
+    planSet(parts, direction, edgeType, targetCount, maxHops, plan);
+    if (plan._bytes > bytesLimit) {
         return false;
     }
 
-    const double budget = PathDistanceIndex::estimatedBuildChecks(parts, direction, edgeType, targetCount, maxHops);
-
-    return PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, seedCount, maxHops, hopPassRate) > budget;
+    return PathDistanceIndex::estimatedEnumerationChecks(parts, expansion, seedCount, maxHops, hopPassRate) > plan._checks;
 }
 
 void PathTargetIndex::buildBatch(const PartDirectory& parts,
@@ -367,6 +400,41 @@ void PathTargetIndex::buildBatch(const PartDirectory& parts,
         _handles[target.getValue()] = PathTargetHandle {&batch, bit};
     }
 
+    searchBatch(parts, frontier, direction, edgeType, tombstones, maxHops, batch);
+}
+
+// Every target of a set shares the one bit, so the word a node gains says it is in reach of
+// the set and its first distance is the hops to the nearest target
+void PathTargetIndex::buildSetBatch(const PartDirectory& parts,
+                                    std::span<const NodeID> targets,
+                                    PathExplorationDir direction,
+                                    std::optional<EdgeTypeID> edgeType,
+                                    const Tombstones* tombstones,
+                                    uint64_t maxHops,
+                                    PathTargetBatch& batch) {
+    std::vector<NodeID> frontier;
+    for (const NodeID target : targets) {
+        if (target.getValue() >= parts.getAllocatedNodeCount()) {
+            continue;
+        }
+
+        batch.gain(target, 1ull, 0);
+        if (!batch.isQueued(target)) {
+            batch.setQueued(target, true);
+            frontier.push_back(target);
+        }
+    }
+
+    searchBatch(parts, frontier, direction, edgeType, tombstones, maxHops, batch);
+}
+
+void PathTargetIndex::searchBatch(const PartDirectory& parts,
+                                  std::vector<NodeID>& frontier,
+                                  PathExplorationDir direction,
+                                  std::optional<EdgeTypeID> edgeType,
+                                  const Tombstones* tombstones,
+                                  uint64_t maxHops,
+                                  PathTargetBatch& batch) {
     // A frontier node's word is read as it stood when the level closed: two adjacent frontier
     // nodes would otherwise hand each other this level's bits one level too early
     std::vector<uint64_t> frontierWords;

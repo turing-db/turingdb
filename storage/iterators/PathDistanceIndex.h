@@ -117,7 +117,7 @@ public:
                                              double hopPassRate = 1.0);
 
     // The candidate checks a search from that many sources costs to build: the nodes and edges
-    // it touches, at most the graph, and the distance byte written for every node
+    // it touches, at most the graph, and the distance byte filled for every node
     static double estimatedBuildChecks(const PartDirectory& parts,
                                        PathExplorationDir direction,
                                        std::optional<EdgeTypeID> edgeType,

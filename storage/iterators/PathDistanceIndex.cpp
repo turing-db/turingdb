@@ -21,6 +21,10 @@ namespace {
 // highest of those keeps the gate within 1.4 of each shape's measured break-even either way
 constexpr double indexUnitCostInChecks = 0.35;
 
+// Filling the distance byte of every node before the search: 0.02 ns a byte measured
+// against 47 ns a check on reactome
+constexpr double filledByteCostInChecks = 0.0005;
+
 constexpr size_t fanOutSampleTarget = 4096;
 
 // The seeds expanded to measure what a walk costs, the levels they are expanded over and the
@@ -488,8 +492,7 @@ double PathDistanceIndex::estimatedBuildChecks(const PartDirectory& parts,
     const double graph = nodeCount + static_cast<double>(parts.getAllocatedEdgeCount());
     const double touched = std::min(graph, estimatedSearchChecks(parts, direction, edgeType, sourceCount, maxHops));
 
-    // The distance bytes are written once before the search, a word for every eight nodes
-    return indexUnitCostInChecks * (touched + nodeCount / 8.0);
+    return indexUnitCostInChecks * touched + filledByteCostInChecks * nodeCount;
 }
 
 bool PathDistanceIndex::isWorthBuilding(const GraphView& view,

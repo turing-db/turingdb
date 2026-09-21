@@ -145,7 +145,8 @@ struct PathTargetHandle {
 // For each of a chunk's distinct targets, the hops every node it reaches needs to get to it
 // along the exploration direction: one multi-source breadth-first search per 64 targets over
 // the reverse direction. In the set mode it is one search from every target, the hops to the
-// nearest, which answers only whether any target is in reach. Like PathDistanceIndex it
+// nearest, which answers only whether any target is in reach: a table of the nodes reached
+// or a distance byte per node, whichever is the smaller to probe. Like PathDistanceIndex it
 // ignores trail uniqueness and hop predicates, so pruning by it never drops a valid path.
 class PathTargetIndex {
 public:
@@ -160,7 +161,7 @@ public:
                std::optional<EdgeTypeID> edgeType,
                uint64_t maxHops);
 
-    // The set mode: one search from every target at once, a distance byte per node
+    // The set mode: one search from every target at once
     void buildSet(const GraphView& view,
                   std::span<const NodeID> targets,
                   PathExplorationDir direction,
@@ -218,6 +219,13 @@ private:
         double _bytes {0.0};
     };
 
+    // What the set is expected to cost in the smaller of its two layouts
+    struct SetPlan {
+        bool _sparse {false};
+        double _checks {0.0};
+        double _bytes {0.0};
+    };
+
     std::vector<PathTargetBatch> _batches;
     std::unordered_map<uint64_t, PathTargetHandle> _handles;
     PathDistanceIndex _set;
@@ -230,6 +238,13 @@ private:
                           uint64_t maxHops,
                           BatchPlan& plan);
 
+    static void planSet(const PartDirectory& parts,
+                        PathExplorationDir direction,
+                        std::optional<EdgeTypeID> edgeType,
+                        size_t targetCount,
+                        uint64_t maxHops,
+                        SetPlan& plan);
+
     void buildBatch(const PartDirectory& parts,
                     std::span<const NodeID> targets,
                     PathExplorationDir direction,
@@ -237,6 +252,20 @@ private:
                     const Tombstones* tombstones,
                     uint64_t maxHops,
                     PathTargetBatch& batch);
+    void buildSetBatch(const PartDirectory& parts,
+                       std::span<const NodeID> targets,
+                       PathExplorationDir direction,
+                       std::optional<EdgeTypeID> edgeType,
+                       const Tombstones* tombstones,
+                       uint64_t maxHops,
+                       PathTargetBatch& batch);
+    void searchBatch(const PartDirectory& parts,
+                     std::vector<NodeID>& frontier,
+                     PathExplorationDir direction,
+                     std::optional<EdgeTypeID> edgeType,
+                     const Tombstones* tombstones,
+                     uint64_t maxHops,
+                     PathTargetBatch& batch);
     void relax(std::span<const EdgeRecord> edges,
                uint64_t word,
                uint8_t distance,
