@@ -38,6 +38,8 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSESCANEDGES
 #define GEN_PASS_DEF_FUSEEDGESBYTYPE
 #define GEN_PASS_DEF_FUSESCANEDGESBYTYPE
+#define GEN_PASS_DEF_FUSEEDGETYPEPREDICATES
+#define GEN_PASS_DEF_NARROWEDGETYPEREADS
 #define GEN_PASS_DEF_FUSESCANOUTEDGESBYLABEL
 #define GEN_PASS_DEF_FUSESCANINEDGESBYLABEL
 #define GEN_PASS_DEF_FUSESCANEDGESBYENDPOINTLABEL
@@ -1226,6 +1228,237 @@ struct FuseScanEdgesByType : public impl::FuseScanEdgesByTypeBase<FuseScanEdgesB
 
             fuseScanEdgesByType(filter, typedScan, builder);
         }
+    }
+};
+
+// A WHERE spelling a type disjunction reaches here as one check per type OR-ed together,
+// which no by-type fusion can read. Two checks over the same type column are one check over
+// the combined set - the union for an OR, the intersection for an AND - and that single
+// check is what the by-type reads below can take.
+struct CombinedTypeChecks {
+    CheckEdgeTypeConstraint _left;
+    CheckEdgeTypeConstraint _right;
+};
+
+bool matchCombinedTypeChecks(Operation* op, CombinedTypeChecks& combined) {
+    if (!isa<AndOp, OrOp>(op)) {
+        return false;
+    }
+
+    CheckEdgeTypeConstraint left = op->getOperand(0).getDefiningOp<CheckEdgeTypeConstraint>();
+    CheckEdgeTypeConstraint right = op->getOperand(1).getDefiningOp<CheckEdgeTypeConstraint>();
+    if (!left || !right) {
+        return false;
+    }
+
+    // Both checks must read the same column, or they are asking about different edges
+    if (left.getEdgeTypeIds() != right.getEdgeTypeIds()) {
+        return false;
+    }
+
+    combined = CombinedTypeChecks {._left = left, ._right = right};
+
+    return true;
+}
+
+void combineEdgeTypes(bool isUnion,
+                      ArrayAttr left,
+                      ArrayAttr right,
+                      llvm::SmallVectorImpl<Attribute>& edgeTypes) {
+    if (isUnion) {
+        edgeTypes.assign(left.begin(), left.end());
+
+        for (const Attribute edgeType : right) {
+            if (!llvm::is_contained(edgeTypes, edgeType)) {
+                edgeTypes.push_back(edgeType);
+            }
+        }
+
+        return;
+    }
+
+    for (const Attribute edgeType : left) {
+        if (llvm::is_contained(right, edgeType)) {
+            edgeTypes.push_back(edgeType);
+        }
+    }
+}
+
+void fuseTypeChecks(Operation* op, const CombinedTypeChecks& combined, mlir::OpBuilder& builder) {
+    const bool isUnion = isa<OrOp>(op);
+
+    // The op wrappers are handles, so copying them out of the const match is what lets their
+    // accessors be called
+    CheckEdgeTypeConstraint left = combined._left;
+    CheckEdgeTypeConstraint right = combined._right;
+
+    llvm::SmallVector<Attribute, 4> edgeTypes;
+    combineEdgeTypes(isUnion, left.getEdgeTypes(), right.getEdgeTypes(), edgeTypes);
+
+    // An edge carries one type, so an AND over two disjoint sets is a predicate no edge
+    // passes. The check op has no way to spell that, so the pair stays as it is.
+    if (edgeTypes.empty()) {
+        return;
+    }
+
+    builder.setInsertionPoint(op);
+
+    CheckEdgeTypeConstraint fused = builder.create<CheckEdgeTypeConstraint>(op->getLoc(),
+                                                                            op->getResult(0).getType(),
+                                                                            left.getEdgeTypeIds(),
+                                                                            builder.getArrayAttr(edgeTypes));
+
+    op->getResult(0).replaceAllUsesWith(fused.getResult());
+    op->erase();
+
+    Operation* const leftOp = left.getOperation();
+    Operation* const rightOp = right.getOperation();
+
+    eraseIfUnused(leftOp);
+    if (rightOp != leftOp) {
+        eraseIfUnused(rightOp);
+    }
+}
+
+struct FuseEdgeTypePredicates : public impl::FuseEdgeTypePredicatesBase<FuseEdgeTypePredicates> {
+    void runOnOperation() override {
+        Operation* const root = getOperation();
+
+        // Collect first, as every rewrite here erases ops the walk would still visit. Program
+        // order then folds a chain of ORs in one run: an operand is already one check by the
+        // time the op combining it is reached.
+        llvm::SmallVector<Operation*> predicates;
+        root->walk([&](Operation* op) {
+            if (isa<AndOp, OrOp>(op)) {
+                predicates.push_back(op);
+            }
+        });
+
+        mlir::OpBuilder builder(&getContext());
+        for (Operation* const op : predicates) {
+            CombinedTypeChecks combined;
+            if (!matchCombinedTypeChecks(op, combined)) {
+                continue;
+            }
+
+            fuseTypeChecks(op, combined, builder);
+        }
+    }
+};
+
+// A type check over a read that already narrows by type is that read's types ANDed with the
+// check's: the rows that survive are the ones both keep. Folding the check into the read
+// leaves the walk to skip everything else, and the check and its filter go. A check the read
+// already guarantees is the case where the intersection changes nothing, so only the check
+// goes.
+struct TypeCheckOverRead {
+    CheckEdgeTypeConstraint _check;
+    Operation* _read {nullptr};
+    llvm::SmallVector<Attribute, 4> _intersection;
+    bool _narrowsTheRead {false};
+};
+
+// The by-type read a column comes off, or null for a column no read constrains. The by-type
+// reads declare four columns and only the edge type one is constrained, so which result the
+// value is matters as much as which op produced it.
+Operation* byTypeReadOf(Value column) {
+    Operation* const producer = column.getDefiningOp();
+    if (!producer || !isa<ScanEdgesByType, GetOutEdgesByType, GetInEdgesByType>(producer)) {
+        return nullptr;
+    }
+
+    constexpr size_t etypesResultIndex = 2;
+    if (column != producer->getResult(etypesResultIndex)) {
+        return nullptr;
+    }
+
+    return producer;
+}
+
+// Narrowing a read changes what every reader of it sees, so it is only safe when the check
+// and the filter over it are the only ones.
+bool readOnlyFeeds(Operation* read, CheckEdgeTypeConstraint check, FilterOp filter) {
+    Operation* const checkOp = check.getOperation();
+    Operation* const filterOp = filter.getOperation();
+
+    for (const Value result : read->getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            const bool feedsThePair = user == checkOp || user == filterOp;
+            if (!feedsThePair) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+// Every column the filter cuts has to be one the read bound, or narrowing the read shortens
+// its own columns while the carried one comes back whole.
+bool readBindsEveryColumn(Operation* read, FilterOp filter) {
+    for (const Value column : filter.getColumnsToFilter()) {
+        if (column.getDefiningOp() != read) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool matchTypeCheckOverRead(FilterOp filter, TypeCheckOverRead& matched) {
+    CheckEdgeTypeConstraint check = filter.getMask().getDefiningOp<CheckEdgeTypeConstraint>();
+    if (!check) {
+        return false;
+    }
+
+    Operation* const read = byTypeReadOf(check.getEdgeTypeIds());
+    if (!read) {
+        return false;
+    }
+
+    const ArrayAttr readTypes = read->getAttrOfType<ArrayAttr>("edge_types");
+    combineEdgeTypes(false, readTypes, check.getEdgeTypes(), matched._intersection);
+
+    // An empty intersection is a read that matches no edge, which an empty type set on the
+    // read says outright: the loop is then unmatchable and walks nothing.
+    // The intersection is a subset of the read's types, so a smaller one is a narrower read
+    matched._narrowsTheRead = matched._intersection.size() < readTypes.size();
+
+    const bool checkIsPrivate = check.getResult().hasOneUse();
+    const bool columnsAreTheReads = readBindsEveryColumn(read, filter);
+    const bool narrowingIsSafe = checkIsPrivate && columnsAreTheReads && readOnlyFeeds(read, check, filter);
+    if (matched._narrowsTheRead && !narrowingIsSafe) {
+        return false;
+    }
+
+    matched._check = check;
+    matched._read = read;
+
+    return true;
+}
+
+void foldTypeCheckIntoRead(FilterOp filter, const TypeCheckOverRead& matched, mlir::OpBuilder& builder) {
+    if (matched._narrowsTheRead) {
+        matched._read->setAttr("edge_types", builder.getArrayAttr(matched._intersection));
+    }
+
+    // The read now emits only the rows the check kept, so each column the filter handed on is
+    // the one it was given.
+    const Operation::operand_range columns = filter.getColumnsToFilter();
+    const mlir::ResultRange filtered = filter.getFilteredColumns();
+    for (size_t index = 0; index < filtered.size(); index++) {
+        filtered[index].replaceAllUsesWith(columns[index]);
+    }
+
+    filter.erase();
+    CheckEdgeTypeConstraint check = matched._check;
+    eraseIfUnused(check.getOperation());
+}
+
+struct NarrowEdgeTypeReads : public impl::NarrowEdgeTypeReadsBase<NarrowEdgeTypeReads> {
+    void runOnOperation() override {
+        mlir::OpBuilder builder(&getContext());
+        runFilterPass<TypeCheckOverRead>(getOperation(), matchTypeCheckOverRead, foldTypeCheckIntoRead, builder);
     }
 };
 
@@ -2666,7 +2899,13 @@ std::optional<size_t> estimateSourceRows(Operation* op,
         // The edges hanging off those nodes, read as the by-label scan and hop it fused
         // were: the node count the labels select, at the graph's average degree.
         return multiplySaturating(estimation.estimateNodeCount(labels), estimation.estimateEdgeCount()) / nodeCount;
-    } else if (isa<ScanEdges, ScanEdgesByType>(op)) {
+    } else if (ScanEdgesByType byType = dyn_cast<ScanEdgesByType>(op)) {
+        if (byType.getEdgeTypes().empty()) {
+            return 0;
+        }
+
+        return estimation.estimateEdgeCount();
+    } else if (isa<ScanEdges>(op)) {
         return estimation.estimateEdgeCount();
     }
 
@@ -2695,6 +2934,12 @@ std::optional<RowMultiplier> estimateRowMultiplier(Operation* op, const ::db::Ca
     const bool walksBoth = isa<GetEdges>(op);
     if (!walksOneDirection && !walksBoth) {
         return std::nullopt;
+    }
+
+    const bool isByTypeHop = isa<GetOutEdgesByType, GetInEdgesByType>(op);
+    const bool walksNoEdge = isByTypeHop && op->getAttrOfType<ArrayAttr>("edge_types").empty();
+    if (walksNoEdge) {
+        return RowMultiplier {0, 1};
     }
 
     const size_t nodeCount = estimation.estimateNodeCount(::db::LabelSet {});

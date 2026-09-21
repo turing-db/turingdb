@@ -3256,3 +3256,62 @@ target_link_libraries(test_query_ir_comparison_chain_codegen PRIVATE
         turing_db_system_s
         turing_db_ir_exec_s)
 target_include_directories(test_query_ir_comparison_chain_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_ir_tests(test_query_ir_narrow_edge_type_reads NarrowEdgeTypeReadsTest.cpp)
+target_link_libraries(test_query_ir_narrow_edge_type_reads PRIVATE turing_db_examples_s)
+
+add_ir_tests(test_query_ir_fuse_edge_type_predicates FuseEdgeTypePredicatesTest.cpp)
+target_link_libraries(test_query_ir_fuse_edge_type_predicates PRIVATE turing_db_examples_s)
+
+add_turing_test(test_query_ir_fuse_edge_type_predicates_codegen FuseEdgeTypePredicatesCodegenTest.cpp)
+target_link_libraries(test_query_ir_fuse_edge_type_predicates_codegen PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s
+        turing_db_ir_dbdialect_s
+        turing_db_ir_nldialect_s
+        turing_db_ir_storagedialect_s
+        turing_db_ir_common_s
+        turing_db_storage_s)
+target_include_directories(test_query_ir_fuse_edge_type_predicates_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_narrow_edge_type_reads_codegen NarrowEdgeTypeReadsCodegenTest.cpp)
+target_link_libraries(test_query_ir_narrow_edge_type_reads_codegen PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_ast_s
+        turing_db_parser_s
+        turing_db_analyzer_s
+        turing_db_frontend_cypher_s
+        turing_db_ir_codegen_s
+        turing_db_ir_dbdialect_s
+        turing_db_ir_nldialect_s
+        turing_db_ir_storagedialect_s
+        turing_db_ir_common_s
+        turing_db_storage_s)
+target_include_directories(test_query_ir_narrow_edge_type_reads_codegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_turing_test(test_query_ir_narrow_edge_type_reads_query NarrowEdgeTypeReadsQueryTest.cpp)
+target_link_libraries(test_query_ir_narrow_edge_type_reads_query PRIVATE
+        turing_db_s
+        turing_testenv_s
+        turing_db_examples_s
+        turing_db_system_s
+        turing_db_storage_s
+        turing_db_ir_exec_s
+        turing_ir_test_rows_s)
+target_include_directories(test_query_ir_narrow_edge_type_reads_query PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_ir_tests(test_query_ir_shared_edge_type_check SharedEdgeTypeCheckTest.cpp)
+
+add_ir_tests(test_query_ir_foreign_filter_column ForeignFilterColumnTest.cpp)
+
+add_ir_tests(test_query_ir_two_filters_over_one_read TwoFiltersOverOneReadTest.cpp)

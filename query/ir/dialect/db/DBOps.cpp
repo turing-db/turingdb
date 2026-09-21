@@ -700,18 +700,6 @@ LogicalResult CheckEdgeTypeConstraint::verify() {
     return verifyEdgeTypesNotEmpty(getOperation(), getEdgeTypes());
 }
 
-LogicalResult ScanEdgesByType::verify() {
-    return verifyEdgeTypesNotEmpty(getOperation(), getEdgeTypes());
-}
-
-LogicalResult GetOutEdgesByType::verify() {
-    return verifyEdgeTypesNotEmpty(getOperation(), getEdgeTypes());
-}
-
-LogicalResult GetInEdgesByType::verify() {
-    return verifyEdgeTypesNotEmpty(getOperation(), getEdgeTypes());
-}
-
 void Output::build(OpBuilder& builder, OperationState& state, ValueRange columns) {
     Output::build(builder, state, columns, ArrayAttr());
 }

@@ -567,7 +567,9 @@ def ScanEdgesByType : TuringOp<"scan_edges_by_type", [Pure, DeclareOpInterfaceMe
     types the pattern named, as `-[:KNOWS|LIKES]->` spells it: an edge matches when
     it carries any one of them. The names are spelled the same as in the query and
     resolved against the graph schema; one absent from the schema drops out, and a
-    set nothing resolved into matches no edge, so the scan yields no rows. Like
+    set nothing resolved into matches no edge, so the scan yields no rows. An empty
+    `edge_types` says that outright - a pass narrowing the read to nothing writes one -
+    and the scan then walks no edge at all. Like
     db.scan_edges it reads no column and takes no input, so it opens a dataflow
     rather than consuming one, and the result shape is identical - only the rows
     are narrowed.
@@ -590,7 +592,6 @@ def ScanEdgesByType : TuringOp<"scan_edges_by_type", [Pure, DeclareOpInterfaceMe
     `(` $edge_types `)` attr-dict `:` qualified(type($srcids)) `,` qualified(type($eids)) `,`
     qualified(type($etypes)) `,` qualified(type($tgtids))
   }];
-  let hasVerifier = 1;
 }
 
 /**
@@ -873,7 +874,9 @@ def GetOutEdgesByType : TuringOp<"get_out_edges_by_type", [Pure, DeclareOpInterf
     types the pattern named, as `-[:KNOWS|LIKES]->` spells it: an edge matches when
     it carries any one of them. The names are spelled the same as in the query and
     resolved against the graph schema; one absent from the schema drops out, and a
-    set nothing resolved into matches no edge, so the hop yields no rows.
+    set nothing resolved into matches no edge, so the hop yields no rows. An empty
+    `edge_types` says that outright - a pass narrowing the read to nothing writes one -
+    and the hop then walks no edge at all.
     `columns_to_filter` is the carry set, exactly as on get_out_edges: each one
     comes back in `filtered_columns`, and the result chunk shape - srcids, eids,
     etypes, tgtids - is identical, so a hop is interchangeable with the unfiltered
@@ -900,7 +903,6 @@ def GetOutEdgesByType : TuringOp<"get_out_edges_by_type", [Pure, DeclareOpInterf
     `(` $input_nodes `,` $edge_types `,` `{` $columns_to_filter `}` `)` attr-dict `:`
     functional-type(operands, results)
   }];
-  let hasVerifier = 1;
 }
 
 /**
@@ -920,7 +922,7 @@ def GetInEdgesByType : TuringOp<"get_in_edges_by_type", [Pure, DeclareOpInterfac
     The result chunk shape - srcids, eids, etypes, tgtids - and the
     `columns_to_filter` carry set match get_out_edges_by_type, so the two are
     interchangeable in a hop; `edge_types` is resolved the same way and a set
-    nothing resolved into yields no rows.
+    nothing resolved into, or an empty one a pass wrote, yields no rows.
   }];
 
   let arguments = (ins Column:$input_nodes, StrArrayAttr:$edge_types, Variadic<Column>:$columns_to_filter);
@@ -935,7 +937,6 @@ def GetInEdgesByType : TuringOp<"get_in_edges_by_type", [Pure, DeclareOpInterfac
     `(` $input_nodes `,` $edge_types `,` `{` $columns_to_filter `}` `)` attr-dict `:`
     functional-type(operands, results)
   }];
-  let hasVerifier = 1;
 }
 
 /**

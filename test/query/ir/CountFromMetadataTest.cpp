@@ -17,24 +17,13 @@
 #include "DBPasses.h"
 #include "StorageDialect.h"
 
+#include "IRTestOps.h"
+
+using namespace turing::test;
+
 namespace {
 
 using Conjunctions = std::vector<std::vector<std::string>>;
-
-template <typename OpType>
-llvm::SmallVector<OpType> collect(mlir::ModuleOp module) {
-    llvm::SmallVector<OpType> ops;
-    module.walk([&](OpType op) {
-        ops.push_back(op);
-    });
-
-    return ops;
-}
-
-template <typename OpType>
-size_t countOps(mlir::ModuleOp module) {
-    return collect<OpType>(module).size();
-}
 
 // The property the tally is narrowed to, or an empty string when it is over the scans
 // themselves.

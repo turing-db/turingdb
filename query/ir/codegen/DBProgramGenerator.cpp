@@ -225,7 +225,7 @@ using DBPassFactory = std::unique_ptr<mlir::Pass> (*)(const mlir::db::DBPassCont
 // pipeline it reports on and the pipeline that runs the same one. Every factory is handed
 // the context; only the join's cost model reads it, the rewrites beside it answering off
 // the IR alone.
-const std::array<DBPassFactory, 17> dbPassPipeline = {
+const std::array<DBPassFactory, 19> dbPassPipeline = {
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanByLabel(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createPushDownFilters(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createTrimUnreadColumns(); },
@@ -233,8 +233,10 @@ const std::array<DBPassFactory, 17> dbPassPipeline = {
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanByNodeIDs(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanByPropertyValue(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanEdges(); },
+    [](const mlir::db::DBPassContext&) { return mlir::db::createFuseEdgeTypePredicates(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseEdgesByType(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanEdgesByType(); },
+    [](const mlir::db::DBPassContext&) { return mlir::db::createNarrowEdgeTypeReads(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanOutEdgesByLabel(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanInEdgesByLabel(); },
     [](const mlir::db::DBPassContext&) { return mlir::db::createFuseScanEdgesByEndpointLabel(); },

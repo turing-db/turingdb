@@ -32,25 +32,12 @@
 #include "SimpleGraph.h"
 #include "TuringTest.h"
 
+#include "IRTestOps.h"
+
 using namespace db;
 using namespace turing::test;
 
 namespace {
-
-template <typename OpType>
-llvm::SmallVector<OpType> collect(mlir::ModuleOp module) {
-    llvm::SmallVector<OpType> ops;
-    module.walk([&](OpType op) {
-        ops.push_back(op);
-    });
-
-    return ops;
-}
-
-template <typename OpType>
-size_t countOps(mlir::ModuleOp module) {
-    return collect<OpType>(module).size();
-}
 
 // Accumulates the two node-ID columns of an emitted (source, target) pair.
 class CollectingPairSink : public NLOutputSink {

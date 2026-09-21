@@ -36,22 +36,11 @@
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
+#include "IRTestOps.h"
+
 using namespace db;
 using namespace turing::test;
 
-namespace {
-
-template <typename OpType>
-size_t countOps(mlir::ModuleOp module) {
-    size_t count = 0;
-    module.walk([&count](OpType) {
-        count++;
-    });
-
-    return count;
-}
-
-}
 
 // An UNWIND of a literal list whose elements are only compared against a property is the
 // disjunction that comparison spells out, so the db program the query compiles to reads

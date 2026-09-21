@@ -16,24 +16,10 @@
 #include "StorageDialect.h"
 #include "StorageTypes.h"
 
-namespace {
+#include "IRTestOps.h"
 
-template <typename OpType>
-llvm::SmallVector<OpType> collect(mlir::ModuleOp module) {
-    llvm::SmallVector<OpType> ops;
-    module.walk([&](OpType op) {
-        ops.push_back(op);
-    });
+using namespace turing::test;
 
-    return ops;
-}
-
-template <typename OpType>
-size_t countOps(mlir::ModuleOp module) {
-    return collect<OpType>(module).size();
-}
-
-}
 
 class FuseScanByPropertyValueTest : public ::testing::Test {
 protected:
