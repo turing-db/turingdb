@@ -163,14 +163,6 @@ public:
         return _values;
     }
 
-    const T::Primitive* tryGet(EntityID entityID) const {
-        auto it = find(entityID);
-        if (it == _values.end()) {
-            return nullptr;
-        }
-        return &(*it);
-    }
-
     /**
      * @brief Gets the (possibly null) value of the property associated with @param
      * entityID.
@@ -311,14 +303,6 @@ public:
         return _values.get();
     }
 
-    const std::string_view* tryGet(EntityID entityID) const {
-        auto it = find(entityID);
-        if (it == _values.end()) {
-            return nullptr;
-        }
-        return &(*it);
-    }
-
     std::optional<const types::String::Primitive*> tryGetWithNull(EntityID entityID) const {
         const auto findIt = _entityIndexMap.find(entityID);
 
@@ -410,23 +394,6 @@ public:
 
     types::Embedding::Primitive get(size_t offset) const {
         return _values.getView(offset);
-    }
-
-    const types::Embedding::Primitive* tryGet(EntityID entityID) const {
-        const auto it = _entityIndexMap.find(entityID);
-        if (it == _entityIndexMap.end()) {
-            return nullptr;
-        }
-
-        const size_t offset = it->second;
-
-        if (offset == NULL_INDEX) {
-            return nullptr;
-        }
-
-        const auto& views = _values.get();
-
-        return &views[offset];
     }
 
     std::optional<const types::Embedding::Primitive*> tryGetWithNull(EntityID entityID) const {

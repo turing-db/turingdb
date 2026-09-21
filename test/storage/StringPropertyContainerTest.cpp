@@ -19,9 +19,12 @@ TEST(StringPropertyContainerTest, ExplicitNullHoldsNoValue) {
     ASSERT_FALSE(container.has(EntityID(2)));
     ASSERT_FALSE(container.has(EntityID(3)));
 
-    ASSERT_NE(container.tryGet(EntityID(1)), nullptr);
-    ASSERT_EQ(container.tryGet(EntityID(2)), nullptr);
-    ASSERT_EQ(container.tryGet(EntityID(3)), nullptr);
+    const std::optional<const types::String::Primitive*> value = container.tryGetWithNull(EntityID(1));
+    ASSERT_TRUE(value.has_value());
+    ASSERT_NE(value.value(), nullptr);
+
+    ASSERT_FALSE(container.tryGetWithNull(EntityID(2)).has_value());
+    ASSERT_EQ(container.tryGetWithNull(EntityID(3)), nullptr);
 }
 
 TEST(StringPropertyContainerTest, TryGetWithNullSeparatesNullFromAbsent) {
@@ -52,13 +55,17 @@ TEST(StringPropertyContainerTest, SortKeepsExplicitNull) {
     container.sort();
 
     ASSERT_FALSE(container.has(EntityID(3)));
-    ASSERT_EQ(container.tryGet(EntityID(3)), nullptr);
     ASSERT_FALSE(container.tryGetWithNull(EntityID(3)).has_value());
 
-    ASSERT_NE(container.tryGet(EntityID(1)), nullptr);
-    ASSERT_NE(container.tryGet(EntityID(5)), nullptr);
-    ASSERT_EQ(*container.tryGet(EntityID(1)), "Remy");
-    ASSERT_EQ(*container.tryGet(EntityID(5)), "Adam");
+    const std::optional<const types::String::Primitive*> remy = container.tryGetWithNull(EntityID(1));
+    ASSERT_TRUE(remy.has_value());
+    ASSERT_NE(remy.value(), nullptr);
+    ASSERT_EQ(*remy.value(), "Remy");
+
+    const std::optional<const types::String::Primitive*> adam = container.tryGetWithNull(EntityID(5));
+    ASSERT_TRUE(adam.has_value());
+    ASSERT_NE(adam.value(), nullptr);
+    ASSERT_EQ(*adam.value(), "Adam");
 }
 
 TEST(StringPropertyContainerTest, SortKeepsNullsWithNoValues) {
