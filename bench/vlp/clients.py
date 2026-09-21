@@ -6,9 +6,11 @@ implementation takes the same openCypher text, so a query is written once and as
 each database as written; nothing here rewrites a query to dodge what an engine cannot
 run.
 
-TuringDBClient drives the turingdb shell over a pipe, which is the only way to reach
-the v3 engine - `#v3` is a shell prefix, not a server route. BoltClient speaks bolt,
-which serves memgraph and neo4j. FalkorClient speaks the redis protocol.
+EmbeddedTuringDBClient runs the engine in this process through its python bindings and
+times the `TuringDB::query` call itself. TuringDBClient drives the turingdb shell over a
+pipe instead, which reports the engine's own execution time but costs a fork per query.
+BoltClient speaks bolt, which serves memgraph and neo4j. FalkorClient speaks the redis
+protocol.
 
 LadybugClient translates, because ladybug is embedded and its dialect is not openCypher:
 `toLadybug` says exactly what it changes. A translation that changed the question shows
@@ -18,6 +20,7 @@ up as a disagreeing count in the report, which is what keeps it honest.
 import queue
 import re
 import subprocess
+import sys
 import threading
 import time
 
@@ -69,15 +72,14 @@ class DBClient(ABC):
 
 
 class TuringDBClient(DBClient):
-    """The turingdb shell over a pipe; engine is 'v2' for the default engine or 'v3' for MLIR."""
+    """The turingdb shell over a pipe, on one graph of one turing dir."""
 
-    def __init__(self, name, binary, turingDir, graph, port, engine, timeout, loadTimeout=600):
+    def __init__(self, name, binary, turingDir, graph, port, timeout, loadTimeout=600):
         super().__init__(name, timeout)
         self._binary = binary
         self._turingDir = turingDir
         self._graph = graph
         self._port = port
-        self._engine = engine
         self._loadTimeout = loadTimeout
         self._process = None
         self._output = None
@@ -114,11 +116,10 @@ class TuringDBClient(DBClient):
         self._process = None
 
     def run(self, query):
-        text = query if self._engine == "v2" else f"#v3 {query}"
-
         start = time.perf_counter()
+
         try:
-            reply = self._ask([text], self._timeout)
+            reply = self._ask([query], self._timeout)
         except TimeoutError:
             self._restart()
             return QueryResult(wallMilliseconds=self._timeout * 1000, error="TIMEOUT")
@@ -165,6 +166,61 @@ class TuringDBClient(DBClient):
             self._process = None
 
         self.open()
+
+
+class EmbeddedTuringDBClient(DBClient):
+    """The engine in this process, through turingdb's python bindings.
+
+    `query_raw` calls straight into `TuringDB::query` and hands the result back as numpy
+    columns, so the time measured around it is the query plus one copy per column - no
+    shell, no socket, and none of the fork the shell's sentinel pays.
+    """
+
+    def __init__(self, name, turingDir, graph, timeout, sdkPath=""):
+        super().__init__(name, timeout)
+        self._turingDir = turingDir
+        self._graph = graph
+        self._sdkPath = sdkPath
+        self._client = None
+
+    def open(self):
+        if self._sdkPath and self._sdkPath not in sys.path:
+            sys.path.insert(0, self._sdkPath)
+
+        try:
+            from turingdb.embedded_client import EmbeddedClient
+        except ImportError as error:
+            raise RuntimeError(f"{self.name}: no embedded engine, build python/turingdb/_embedded") from error
+
+        self._client = EmbeddedClient(self._turingDir)
+        self._client.query_raw(f"load graph {self._graph}")
+        self._client.set_graph(self._graph)
+
+    def close(self):
+        self._client = None
+
+    def run(self, query):
+        start = time.perf_counter()
+
+        try:
+            result = self._client.query_raw(query)
+        except Exception as error:
+            return QueryResult(wallMilliseconds=(time.perf_counter() - start) * 1000, error=shortenError(error))
+
+        wallMilliseconds = (time.perf_counter() - start) * 1000
+        columns = result["data"]
+        rows = len(next(iter(columns.values()))) if columns else 0
+
+        return QueryResult(wallMilliseconds=wallMilliseconds, rows=rows, value=columnScalar(columns, rows))
+
+
+def columnScalar(columns, rows):
+    if rows != 1 or len(columns) != 1:
+        return None
+
+    only = next(iter(columns.values()))[0]
+
+    return int(only) if isinstance(only, (int, float)) and float(only).is_integer() else None
 
 
 class BoltClient(DBClient):

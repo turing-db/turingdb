@@ -46,7 +46,7 @@ the node id and nothing else. Group S times that lookup on its own.
 
 Examples:
   ./bench_vlp.py
-  ./bench_vlp.py reactome -clients v2,v3,memgraph,ladybug,falkor
+  ./bench_vlp.py reactome -clients turingdb,memgraph,ladybug,falkor
   ./bench_vlp.py fraud -groups SAC -reps 9 -out fraud.json
 """
 
@@ -61,7 +61,7 @@ from dataclasses import dataclass, field
 from clients import BoltClient, FalkorClient, LadybugClient, TuringDBClient
 from workloads import WORKLOADS
 
-CLIENTS = ("v2", "v3", "memgraph", "neo4j", "ladybug", "falkor")
+CLIENTS = ("turingdb", "memgraph", "neo4j", "ladybug", "falkor")
 
 
 @dataclass
@@ -100,12 +100,11 @@ class Measurement:
 def createClient(name, workload, args):
     fixture = workload.fixture
 
-    if name in ("v2", "v3"):
+    if name == "turingdb":
         turingDir = os.path.expanduser(args.turingDir or fixture.turingDir)
         graph = args.turingGraph or fixture.graph
-        port = args.port if name == "v2" else args.port + 1
 
-        return TuringDBClient(f"turingdb-{name}", args.binary, turingDir, graph, port, name, args.timeout)
+        return TuringDBClient(name, args.binary, turingDir, graph, args.port, args.timeout)
     elif name == "memgraph":
         return BoltClient("memgraph", args.boltURI or fixture.memgraphURI, args.timeout)
     elif name == "ladybug":
@@ -294,14 +293,14 @@ def main():
 
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("workloads", nargs="*", default=list(WORKLOADS), help=f"one or more of {','.join(WORKLOADS)}")
-    parser.add_argument("-clients", default="v3,memgraph", help=f"comma-separated, from {','.join(CLIENTS)}")
+    parser.add_argument("-clients", default="turingdb,memgraph", help=f"comma-separated, from {','.join(CLIENTS)}")
     parser.add_argument("-reps", type=int, default=5, help="runs per query; the first is a warmup")
     parser.add_argument("-timeout", type=float, default=60, help="seconds a single run may take")
     parser.add_argument("-budget", type=float, default=120, help="seconds a query may spend across its runs")
     parser.add_argument("-groups", default="SABCD", help="query groups to run")
     parser.add_argument("-only", default="", help="comma-separated query ids")
     parser.add_argument("-binary", default=os.path.join(repoRoot, "build/tools/turingdb/turingdb"))
-    parser.add_argument("-port", type=int, default=6941, help="port for the turingdb clients")
+    parser.add_argument("-port", type=int, default=6941, help="port for the turingdb client")
     parser.add_argument("-turing-dir", dest="turingDir", default="", help="overrides the workload's turing dir")
     parser.add_argument("-turing-graph", dest="turingGraph", default="", help="overrides the workload's graph name")
     parser.add_argument("-bolt-uri", dest="boltURI", default="", help="overrides the workload's memgraph uri; required by the neo4j client")
