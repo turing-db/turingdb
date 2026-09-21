@@ -2639,6 +2639,8 @@ void DBLowering::lowerSort(mlir::db::Sort sort) {
         throw IRException("db.sort requires at least one column");
     }
 
+    rowAlignBufferedChunks(chunks);
+
     const mlir::Location loc = _builder.getUnknownLoc();
 
     // The accumulator and its sort spec are hoisted to the top of the root block,
@@ -2829,6 +2831,8 @@ void DBLowering::lowerRemoveDuplicates(mlir::db::RemoveDuplicates distinct) {
     if (chunks.empty()) {
         throw IRException("db.remove_duplicates requires at least one column");
     }
+
+    rowAlignBufferedChunks(chunks);
 
     const mlir::Location loc = _builder.getUnknownLoc();
 
@@ -4729,6 +4733,24 @@ void DBLowering::followCardinalityThrough(mlir::ValueRange inputChunks, mlir::Va
 
 void DBLowering::rowAlignFactorChunks(llvm::SmallVectorImpl<mlir::Value>& chunks) {
     mlir::Value cardinality;
+    for (const mlir::Value chunk : chunks) {
+        if (!yieldsConstantColumn(chunk)) {
+            cardinality = chunk;
+            break;
+        }
+    }
+
+    for (mlir::Value& chunk : chunks) {
+        chunk = rowAlignedChunk(chunk, cardinality);
+    }
+}
+
+// A buffer holds rows, and a constant holds one value standing for every row of the step
+// instead, so what an accumulator would append is a column with no rows in it. The
+// constants are laid out first: over the relation driving the step, or - where none drives
+// it - over the single row the projection is.
+void DBLowering::rowAlignBufferedChunks(llvm::SmallVectorImpl<mlir::Value>& chunks) {
+    mlir::Value cardinality = _innermostCardinality;
     for (const mlir::Value chunk : chunks) {
         if (!yieldsConstantColumn(chunk)) {
             cardinality = chunk;
