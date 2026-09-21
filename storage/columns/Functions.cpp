@@ -32,7 +32,7 @@ std::optional<ListView> taggedList(const ListElementView cell) {
         return std::nullopt;
     }
 
-    throw TuringException("size(), head(), last() and tail() read a list, and this row holds a value that is not one");
+    throw TuringException("head(), last() and tail() read a list, and this row holds a value that is not one");
 }
 
 // The edge a tagged cell holds, or nothing when it holds a null. Anything else is an edge
@@ -54,17 +54,22 @@ std::optional<EdgeID> taggedEdge(const ListElementView cell) {
 
 // A row holding no cell at all - an index past the end of a stored list, or a list the row
 // does not carry - answers what the cell holding a null answers.
-TaggedListSizeFunction::ResultType TaggedListSizeFunction::operator()(const std::optional<ArgType>& cell) const {
+TaggedSizeFunction::ResultType TaggedSizeFunction::operator()(const std::optional<ArgType>& cell) const {
     return cell.has_value() ? (*this)(*cell) : std::nullopt;
 }
 
-TaggedListSizeFunction::ResultType TaggedListSizeFunction::operator()(const ArgType cell) const {
-    const std::optional<ListView> list = taggedList(cell);
-    if (!list) {
+TaggedSizeFunction::ResultType TaggedSizeFunction::operator()(const ArgType cell) const {
+    const ListBufferTypeTag tag = cell.getTag();
+
+    if (tag == ListBufferTypeTag::ListView) {
+        return static_cast<types::Int64::Primitive>(cell.getAs<ListView>().size());
+    } else if (tag == ListBufferTypeTag::String) {
+        return static_cast<types::Int64::Primitive>(cell.getAs<types::String::Primitive>().size());
+    } else if (tag == ListBufferTypeTag::Null) {
         return std::nullopt;
     }
 
-    return static_cast<types::Int64::Primitive>(list->size());
+    throw TuringException("size() reads a list or a string, and this row holds a value that is neither");
 }
 
 TaggedListHeadFunction::ResultType TaggedListHeadFunction::operator()(const std::optional<ArgType>& cell) const {
