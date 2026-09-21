@@ -514,6 +514,10 @@ private:
     // lowered op belongs
     void setInsertionInto(mlir::Block* block);
 
+    // Point the builder at the end of the entry block's run of hoisted constants, where
+    // the next one belongs
+    void setInsertionAfterHoistedConstants();
+
     // The chunks one group of a db op's column operands lowered to, in order
     void mapColumns(mlir::OperandRange columns, llvm::SmallVectorImpl<mlir::Value>& chunks);
 
