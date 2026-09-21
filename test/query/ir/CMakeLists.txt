@@ -1819,6 +1819,12 @@ target_link_libraries(test_query_ir_string_size PRIVATE
         turing_ir_test_rows_s)
 target_include_directories(test_query_ir_string_size PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+add_turing_test(test_query_ir_length_alias LengthAliasTest.cpp)
+target_link_libraries(test_query_ir_length_alias PRIVATE
+        turing_ir_test_write_query_s
+        turing_db_ir_exec_s)
+target_include_directories(test_query_ir_length_alias PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 add_turing_test(test_query_ir_list_property_order_collect ListPropertyOrderCollectTest.cpp)
 target_link_libraries(test_query_ir_list_property_order_collect PRIVATE
         turing_db_s

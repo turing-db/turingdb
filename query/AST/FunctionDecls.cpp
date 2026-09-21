@@ -371,6 +371,20 @@ void FunctionDecls::initDefault() {
     tailCell->setArguments({EvaluatedType::ListItem});
     tailCell->setReturnTypes({{EvaluatedType::List}});
 
+    // length() is the other Cypher name for size(): the same three arguments answered the
+    // same way, down to the db.size the call emits.
+    FunctionSignature* lengthList = createFunction("length");
+    lengthList->setArguments({EvaluatedType::List});
+    lengthList->setReturnTypes({{EvaluatedType::Integer}});
+
+    FunctionSignature* lengthString = createFunction("length");
+    lengthString->setArguments({EvaluatedType::String});
+    lengthString->setReturnTypes({{EvaluatedType::Integer}});
+
+    FunctionSignature* lengthCell = createFunction("length");
+    lengthCell->setArguments({EvaluatedType::ListItem});
+    lengthCell->setReturnTypes({{EvaluatedType::Integer}});
+
     // range counts from its first bound to its second, both included, by the stride the
     // third gives - 1 where it is left out, and a negative one counting down. The list
     // holds integers whatever the bounds were, so the shape is the signature's to name.
