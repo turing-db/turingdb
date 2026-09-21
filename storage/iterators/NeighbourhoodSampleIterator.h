@@ -30,12 +30,13 @@ public:
 
 protected:
     const ColumnNodeIDs* _inputNodeIDs {nullptr};
-    ColumnNodeIDs::ConstIterator _nodeIt;
+
+    size_t _nodeIndex {0};
 
     std::span<const EdgeRecord> _edges;
     std::span<const EdgeRecord>::iterator _edgeIt;
 
-    void init();
+    void initFrom(size_t index);
     void nextValidForCurrentNode();
     void syncEdges();
     bool deleted(const EdgeRecord& e) const;
@@ -55,7 +56,7 @@ public:
 
     void fill(size_t maxCount);
 
-    bool isDone() const { return _nodeIt == _inputNodeIDs->cend(); }
+    bool isDone() const { return _nodeIndex == _inputNodeIDs->size(); }
 
     size_t getSampleSize() const { return _sampleSize; }
 

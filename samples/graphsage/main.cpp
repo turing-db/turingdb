@@ -22,6 +22,7 @@
 #include "SimpleGraph.h"
 #include "columns/ColumnIDs.h"
 #include "metadata/PropertyType.h"
+#include "iterators/ChunkConfig.h"
 #include "reader/GraphReader.h"
 #include "samplers/GraphSAGESampler.h"
 #include "versioning/Transaction.h"
@@ -178,6 +179,8 @@ int main(int argc, const char** argv) {
     std::string fanoutList = "2,2,2";
     bool explain = false;
     bool dump = false;
+    size_t chunkSize = ChunkConfig::CHUNK_SIZE;
+    size_t rngSeed = GraphSAGESampler::NOSEED;
 
     auto& argParser = toolInit.getArgParser();
     argParser.add_argument("--seeds", "-s")
@@ -192,6 +195,14 @@ int main(int argc, const char** argv) {
         .store_into(explain)
         .flag()
         .help(fmt::format("Print hop-by-hop explanation", explain));
+    argParser.add_argument("--chunk", "-c")
+        .metavar("rows")
+        .store_into(chunkSize)
+        .help("Row budget per sampling step (default: the engine chunk size)");
+    argParser.add_argument("--seed")
+        .metavar("n")
+        .store_into(rngSeed)
+        .help("RNG seed, for a reproducible sample (default: nondeterministic)");
     argParser.add_argument("--dump-", "-d")
         .store_into(dump)
         .flag()
@@ -235,6 +246,14 @@ int main(int argc, const char** argv) {
         seeds.push_back(NodeID(seed));
     }
 
+    const size_t widestFanout = *std::ranges::max_element(fanouts);
+    if (chunkSize < widestFanout) {
+        spdlog::error("--chunk must be at least the widest fanout ({}), got {}",
+                      widestFanout,
+                      chunkSize);
+        return EXIT_FAILURE;
+    }
+
     JobSystem jobSystem;
     jobSystem.init();
 
@@ -252,36 +271,41 @@ int main(int argc, const char** argv) {
     std::array<NodeCol, hops> tgts {};
     std::array<NodeCol, hops> dstNodes {};
 
-    GraphSAGESampler sampler(view);
+    GraphSAGESampler sampler(view, rngSeed);
     for (size_t hop = 0; hop < hops; hop++) {
         sampler.setHopData(hop, &srcs[hop], &tgts[hop], &dstNodes[hop], fanouts[hop]);
     }
 
-    sampler.seed(&seeds);
-    sampler.sample();
+    std::vector<DumpColumn> columns;
+    columns.reserve(hops * 3);
 
-    fmt::print("\nseeds: {}\nfanouts: {}\n", seedList, fanoutList);
-
-    if (explain) {
-        for (size_t hop = 0; hop < hops; hop++) {
-            fmt::print("\n=== hop {} (fanout {}) ===\n", hop, fanouts[hop]);
-            printNodeColumn("dstNodes", dstNodes[hop], names);
-            printEdgeColumns(srcs[hop], tgts[hop], names);
-        }
+    for (size_t hop = 0; hop < hops; hop++) {
+        columns.emplace_back(fmt::format("dstNodes{}", hop), &dstNodes[hop]);
+        columns.emplace_back(fmt::format("srcs{}", hop), &srcs[hop]);
+        columns.emplace_back(fmt::format("tgts{}", hop), &tgts[hop]);
     }
 
-    if (dump) {
-        std::vector<DumpColumn> columns;
-        columns.reserve(hops * 3);
+    fmt::print("\nseeds: {}\nfanouts: {}\nchunk: {}\n", seedList, fanoutList, chunkSize);
 
-        for (size_t hop = 0; hop < hops; hop++) {
-            columns.emplace_back(fmt::format("dstNodes{}", hop), &dstNodes[hop]);
-            columns.emplace_back(fmt::format("srcs{}", hop), &srcs[hop]);
-            columns.emplace_back(fmt::format("tgts{}", hop), &tgts[hop]);
+    sampler.seed(&seeds);
+
+    for (size_t chunk = 0; !sampler.finished(); chunk++) {
+        sampler.sample(chunkSize);
+
+        fmt::print("\n######## chunk {} ({} rows) ########\n", chunk, dstNodes[0].size());
+
+        if (explain) {
+            for (size_t hop = 0; hop < hops; hop++) {
+                fmt::print("\n=== hop {} (fanout {}) ===\n", hop, fanouts[hop]);
+                printNodeColumn("dstNodes", dstNodes[hop], names);
+                printEdgeColumns(srcs[hop], tgts[hop], names);
+            }
         }
 
-        fmt::print("\n");
-        dumpColumns(std::cout, columns);
+        if (dump) {
+            fmt::print("\n");
+            dumpColumns(std::cout, columns);
+        }
     }
 
     fmt::print("\n");
