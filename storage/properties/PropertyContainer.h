@@ -57,7 +57,15 @@ public:
     virtual void sort() = 0;
     virtual size_t size() const = 0;
 
-    virtual bool has(EntityID entityID) const = 0;
+    bool has(EntityID entityID) const {
+        const auto it = _entityIndexMap.find(entityID);
+
+        if (it == _entityIndexMap.end()) {
+            return false;
+        }
+
+        return it->second != NULL_INDEX;
+    }
 
     /// @returns true if stores a value or explicit NULL for @param entityID 
     bool hasEntry(EntityID entityID) const { return _entityIndexMap.contains(entityID); }
@@ -129,30 +137,12 @@ public:
         _sorted = false;
     }
 
-    bool has(EntityID entityID) const override {
-        auto it = find(entityID);
-        return it != _values.end();
-    }
-
-    Values::const_iterator find(EntityID id) const {
-        const auto it = _entityIndexMap.find(id);
-
-        if (it == _entityIndexMap.end()) {
-            return _values.end();
-        }
-
-        const size_t offset = it->second;
-
-        if (offset == NULL_INDEX) {
-            return _values.end();
-        }
-
-        return _values.begin() + offset;
-    }
-
     const T::Primitive& get(EntityID entityID) const {
-        const auto it = find(entityID);
-        return *it;
+        const auto it = _entityIndexMap.find(entityID);
+        bioassert(it != _entityIndexMap.end(), "Reading a property the entity does not carry");
+        bioassert(it->second != NULL_INDEX, "Reading a property the entity holds as null");
+
+        return _values[it->second];
     }
 
     const T::Primitive& get(size_t offset) const {
@@ -265,30 +255,12 @@ public:
         _sorted = false;
     }
 
-    bool has(EntityID entityID) const override {
-        const auto it = find(entityID);
-        return it != _values.end();
-    }
-
-    Values::const_iterator find(EntityID id) const {
-        auto it = _entityIndexMap.find(id);
-
-        if (it == _entityIndexMap.end()) {
-            return _values.end();
-        }
-
-        const size_t offset = it->second;
-
-        if (offset == NULL_INDEX) {
-            return _values.end();
-        }
-
-        return _values.begin() + offset;
-    }
-
     const std::string_view& get(EntityID entityID) const {
-        const auto it = find(entityID);
-        return *it;
+        const auto it = _entityIndexMap.find(entityID);
+        bioassert(it != _entityIndexMap.end(), "Reading a string property the entity does not carry");
+        bioassert(it->second != NULL_INDEX, "Reading a string property the entity holds as null");
+
+        return _values.getView(it->second);
     }
 
     const std::string_view& get(size_t offset) const {
@@ -372,16 +344,6 @@ public:
         _ids.emplace_back(entityID);
         _sorted = false;
         _entityIndexMap[entityID] = index;
-    }
-
-    bool has(EntityID entityID) const override {
-        const auto it = _entityIndexMap.find(entityID);
-
-        if (it == _entityIndexMap.end()) {
-            return false;
-        }
-
-        return it->second != NULL_INDEX;
     }
 
     types::Embedding::Primitive get(EntityID entityID) const {
@@ -481,16 +443,6 @@ public:
         }
 
         add(entityID, *arg);
-    }
-
-    bool has(EntityID entityID) const override {
-        const auto it = _entityIndexMap.find(entityID);
-
-        if (it == _entityIndexMap.end()) {
-            return false;
-        }
-
-        return it->second != NULL_INDEX;
     }
 
     types::List::Primitive get(EntityID entityID) const {
