@@ -98,6 +98,11 @@ def FuseExploreEndNodes : Pass<"fuse_explore_end_nodes"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseExploreEndSet : Pass<"fuse_explore_end_set"> {
+    let summary = "Fuse a path exploration and the property-equality filter over its end nodes into an exploration ending on the set of nodes holding that value";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseExploreDistinctEnds : Pass<"fuse_explore_distinct_ends"> {
     let summary = "Mark a path exploration whose path is unread and whose rows are only ever deduplicated as distinct, so it emits each end once";
     let dependentDialects = ["mlir::db::DB"];
