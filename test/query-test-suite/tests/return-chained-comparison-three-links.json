@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN 1 < 2 < 3 < 4",
+  "expect": {
+    "result": "1 < 2 < 3 < 4\ntrue",
+    "resultJson": "{\"header\":{\"column_names\":[\"1 < 2 < 3 < 4\"],\"column_types\":[\"Bool\"]},\"data\":[[[true]]]}"
+  },
+  "tags": [
+    "chained-comparison",
+    "operators",
+    "return"
+  ],
+  "write-required": false
+}

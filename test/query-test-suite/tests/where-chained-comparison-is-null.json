@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) WHERE 30 < n.age IS NULL RETURN n.name",
+  "expect": {
+    "result": "n.name\nComputers\nEighties\nBio\nCooking\nGhosts\nPadel\nMaxime\nLuc\nAnimals\nMartina\nSuhas\nGym\nTravel\nCyrus\nJiuJitsu\nDoruk",
+    "resultJson": "{\"header\":{\"column_names\":[\"n.name\"],\"column_types\":[\"String\"]},\"data\":[[[\"Computers\",\"Eighties\",\"Bio\",\"Cooking\",\"Ghosts\",\"Padel\",\"Maxime\",\"Luc\",\"Animals\",\"Martina\",\"Suhas\",\"Gym\",\"Travel\",\"Cyrus\",\"JiuJitsu\",\"Doruk\"]]]}"
+  },
+  "tags": [
+    "chained-comparison",
+    "null",
+    "where"
+  ],
+  "write-required": false
+}

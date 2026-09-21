@@ -27,6 +27,7 @@
 
     #include "SourceLocation.h"
     #include "SourceManager.h"
+    #include "ParserUtils.h"
 
     #include "stmt/StmtContainer.h"
     #include "stmt/ReturnStmt.h"
@@ -297,6 +298,7 @@
 %type<db::Expr*> andExpr
 %type<db::Expr*> notExpr
 %type<db::Expr*> comparisonExpr
+%type<db::ParserUtils::ComparisonChain> comparisonChain
 %type<db::Expr*> addSubExpr
 %type<db::Expr*> multDivExpr
 %type<db::Expr*> powerExpr
@@ -1171,9 +1173,16 @@ notExpr
 
 comparisonExpr
     : addSubExpr { $$ = $1; }
-    | comparisonExpr comparisonSign addSubExpr {
-        $$ = BinaryExpr::create(ast, $2, $1, $3);
-        LOC($$, @$);
+    | comparisonChain { $$ = $1._expr; }
+    ;
+
+comparisonChain
+    : addSubExpr comparisonSign addSubExpr {
+        ParserUtils::startComparisonChain(ast, $$, $1, $2, $3, @3, @$);
+      }
+    | comparisonChain comparisonSign addSubExpr {
+        $$ = $1;
+        ParserUtils::extendComparisonChain(ast, $$, $2, $3, @3, @$);
       }
     ;
 

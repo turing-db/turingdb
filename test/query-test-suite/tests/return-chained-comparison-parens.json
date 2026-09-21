@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "RETURN (1 < 2) < 3",
+  "expect": {
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN (1 < 2) < 3\n       |        ^^^^^^^^^^^\n-------* Operands are not valid or compatible numeric types: 'Bool' and 'Integer'",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | RETURN (1 < 2) < 3\\n       |        ^^^^^^^^^^^\\n-------* Operands are not valid or compatible numeric types: 'Bool' and 'Integer'\"}"
+  },
+  "tags": [
+    "chained-comparison",
+    "operators",
+    "error"
+  ],
+  "write-required": false
+}

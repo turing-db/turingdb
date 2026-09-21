@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "graph": "simpledb",
+  "query": "MATCH (n) WHERE 'B' < n.name < 'D' RETURN n.name",
+  "expect": {
+    "result": "n.name\nComputers\nBio\nCooking\nCyrus",
+    "resultJson": "{\"header\":{\"column_names\":[\"n.name\"],\"column_types\":[\"String\"]},\"data\":[[[\"Computers\",\"Bio\",\"Cooking\",\"Cyrus\"]]]}"
+  },
+  "tags": [
+    "chained-comparison",
+    "operators",
+    "where"
+  ],
+  "write-required": false
+}

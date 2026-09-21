@@ -6,16 +6,32 @@
 
 #include <spdlog/fmt/bundled/format.h>
 
+#include "expr/BinaryExpr.h"
 #include "expr/ListExpr.h"
 #include "expr/LiteralExpr.h"
 #include "stmt/CallStmt.h"
 #include "stmt/SetStmt.h"
 #include "stmt/StmtContainer.h"
+#include "CypherAST.h"
 #include "Literal.h"
 #include "SinglePartQuery.h"
+#include "SourceManager.h"
 #include "ParserException.h"
 
 using namespace db;
+
+namespace {
+
+bool isChainableComparison(BinaryOperator op) {
+    return op == BinaryOperator::Equal
+           || op == BinaryOperator::NotEqual
+           || op == BinaryOperator::LessThan
+           || op == BinaryOperator::GreaterThan
+           || op == BinaryOperator::LessThanOrEqual
+           || op == BinaryOperator::GreaterThanOrEqual;
+}
+
+}
 
 void ParserUtils::listExprToFloatVector(const ListLiteral* list, std::vector<float>& out) {
     out.clear();
@@ -97,4 +113,54 @@ void ParserUtils::markStandaloneCall(const SinglePartQuery* query) {
     }
 
     static_cast<CallStmt*>(stmt)->setStandaloneCall(true);
+}
+
+void ParserUtils::startComparisonChain(CypherAST* ast,
+                                       ComparisonChain& chain,
+                                       Expr* lhs,
+                                       BinaryOperator op,
+                                       Expr* rhs,
+                                       const SourceLocation& rhsLocation,
+                                       const SourceLocation& chainLocation) {
+    chain._expr = BinaryExpr::create(ast, op, lhs, rhs);
+    chain._rightOperand = isChainableComparison(op) ? rhs : nullptr;
+    chain._rightOperandLocation = rhsLocation;
+
+    ast->getSourceManager()->setLocation(chain._expr, chainLocation);
+}
+
+void ParserUtils::extendComparisonChain(CypherAST* ast,
+                                        ComparisonChain& chain,
+                                        BinaryOperator op,
+                                        Expr* rhs,
+                                        const SourceLocation& rhsLocation,
+                                        const SourceLocation& chainLocation) {
+    SourceManager* const sourceManager = ast->getSourceManager();
+    const bool chains = isChainableComparison(op);
+
+    // IN and the two IS tests take a right side of their own, so what stands to their left
+    // is the comparison before them rather than the operand it ended on
+    if (!chains || !chain._rightOperand) {
+        chain._expr = BinaryExpr::create(ast, op, chain._expr, rhs);
+        chain._rightOperand = chains ? rhs : nullptr;
+        chain._rightOperandLocation = rhsLocation;
+
+        sourceManager->setLocation(chain._expr, chainLocation);
+        return;
+    }
+
+    // A link spans the two operands it compares, not the chain that ended on the left
+    // one: a diagnostic about `2 < 'a'` of `1 < 2 < 'a'` underlines that much
+    SourceLocation comparisonLocation = chain._rightOperandLocation;
+    comparisonLocation._endLine = rhsLocation._endLine;
+    comparisonLocation._endColumn = rhsLocation._endColumn;
+
+    BinaryExpr* const comparison = BinaryExpr::create(ast, op, chain._rightOperand, rhs);
+    sourceManager->setLocation(comparison, comparisonLocation);
+
+    chain._expr = BinaryExpr::createComparisonChain(ast, chain._expr, comparison);
+    chain._rightOperand = rhs;
+    chain._rightOperandLocation = rhsLocation;
+
+    sourceManager->setLocation(chain._expr, chainLocation);
 }
