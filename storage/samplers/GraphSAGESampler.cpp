@@ -39,8 +39,9 @@ const auto resizeImpl = [](auto* col, size_t size) -> void { col->resize(size); 
 const auto clearImpl = [](auto* col) -> void { col->clear(); };
 }
 
-GraphSAGESampler::GraphSAGESampler(GraphView view)
-    : _view(view)
+GraphSAGESampler::GraphSAGESampler(GraphView view, size_t seed)
+    : _view(view),
+    _seed(seed)
 {
 }
 
@@ -112,7 +113,7 @@ void GraphSAGESampler::sampleHop() {
 
     const size_t sampleSize = thisHop._fanout;
 
-    NeighbourhoodSampleChunkWriter writer(_view, &tmpSeeds, sampleSize);
+    NeighbourhoodSampleChunkWriter writer(_view, &tmpSeeds, sampleSize, _seed);
 
     ColumnNodeIDs tmpSrcs;
     ColumnNodeIDs tmpTgts;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <limits>
 #include <stddef.h>
 
 #include "columns/ColumnIDs.h"
@@ -14,8 +15,9 @@ public:
     using NodeCol = ColumnOptVector<NodeID>;
     constexpr static size_t hops = 3;
     using Fanouts = std::array<size_t, hops>;
+    static constexpr size_t NOSEED = std::numeric_limits<size_t>::max();
 
-    explicit GraphSAGESampler(GraphView view);
+    GraphSAGESampler(GraphView view, size_t seed = NOSEED);
 
     void setHopData(size_t idx, NodeCol* srcs, NodeCol* tgts, NodeCol* dst, size_t fanout);
 
@@ -26,6 +28,8 @@ public:
 private:
     struct HopData;
     using Samples = std::array<HopData, hops>;
+    // Cypher parser prevents SIZE_MAX from being entered, meaning it is a valid sentinel
+    // which is always distinguishable from a user-specified seed
 
     // TODO: check whether dst_nodes should include srcs of previous
     // i.e. unique(seeds_k ∪ tgts_k)
@@ -46,6 +50,8 @@ private:
 
     size_t _requiredLength {0};
     size_t _currentHop {0};
+
+    size_t _seed {NOSEED};
 
     void sampleHop();
 };
