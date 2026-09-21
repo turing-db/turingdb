@@ -425,7 +425,7 @@ TEST_F(ListFunctionsTest, reportsACellHoldingNoList) {
     write("CREATE (n:Tagged {name: 'a', tags: [[1, 2], 3]})");
 
     expectRejected("MATCH (n:Tagged) UNWIND n.tags AS l RETURN size(l)",
-                   "read a list, and this row holds a value that is not one");
+                   "size() reads a list or a string, and this row holds a value that is neither");
 }
 
 TEST_F(ListFunctionsTest, unwindsTheTailOfATaggedCell) {
@@ -488,7 +488,7 @@ TEST_F(ListFunctionsTest, ordersStoredListsByTheirHead) {
 }
 
 TEST_F(ListFunctionsTest, rejectsAListFunctionOnANonList) {
-    expectRejected("MATCH (n:Person) RETURN size(n.name)", "size");
+    expectRejected("MATCH (n:Person) RETURN size(n.age)", "size");
     expectRejected("MATCH (n:Person) RETURN head(n.age)", "head");
     expectRejected("MATCH (n:Person) RETURN last(n.age)", "last");
     expectRejected("MATCH (n:Person) RETURN tail(n.name)", "tail");

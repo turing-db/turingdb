@@ -323,6 +323,10 @@ void FunctionDecls::initDefault() {
     size->setArguments({EvaluatedType::List});
     size->setReturnTypes({{EvaluatedType::Integer}});
 
+    FunctionSignature* sizeString = createFunction("size");
+    sizeString->setArguments({EvaluatedType::String});
+    sizeString->setReturnTypes({{EvaluatedType::Integer}});
+
     // The first element of a list carries whichever type that element has, and a stored
     // list may mix them, so head answers with the tagged scalar an UNWIND of the list
     // binds: an empty list - and an absent one - head into the null such a cell holds.
@@ -347,7 +351,8 @@ void FunctionDecls::initDefault() {
     // The same four over a type-erased cell, which is the only thing an UNWIND of a
     // stored list of lists can bind: a stored list names no element type, so what its
     // elements are is known per row rather than in the plan. A cell holding a null
-    // answers null; one holding no list at all is the type error the row raises.
+    // answers null; one holding neither a list nor, under size(), a string is the type
+    // error the row raises.
     FunctionSignature* sizeCell = createFunction("size");
     sizeCell->setArguments({EvaluatedType::ListItem});
     sizeCell->setReturnTypes({{EvaluatedType::Integer}});

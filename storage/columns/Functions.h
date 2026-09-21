@@ -338,10 +338,11 @@ struct ConversionFunctorFor<toFloatFunction, Argument> {
 
 // The list family over a type-erased cell, which is what a list looks like wherever its
 // type is known only per row - an element an UNWIND of a list of lists hands on. A cell
-// holding a null answers null, as Cypher answers a list function over one; a cell holding
-// no list at all is a type error only the row it is in can find out about, so each throws.
+// holding a null answers null, as Cypher answers a list function over one; one holding
+// no list - and, under size(), no string - is a type error only the row it is in can find
+// out about, so each throws.
 
-class TaggedListSizeFunction {
+class TaggedSizeFunction {
 public:
     using ArgType = ListElementView;
     using ResultType = std::optional<types::Int64::Primitive>;
@@ -381,10 +382,23 @@ class ListSizeFunction {
 public:
     using ArgType = types::List::Primitive;
     using ResultType = types::Int64::Primitive;
-    using TaggedCounterpart = TaggedListSizeFunction;
+    using TaggedCounterpart = TaggedSizeFunction;
 
     ResultType operator()(const ArgType list) const {
         return static_cast<ResultType>(list.size());
+    }
+};
+
+// The size of a string is the number of bytes it holds, as every other string operation
+// in the engine reads one.
+class StringSizeFunction {
+public:
+    using ArgType = types::String::Primitive;
+    using ResultType = types::Int64::Primitive;
+    using TaggedCounterpart = TaggedSizeFunction;
+
+    ResultType operator()(const ArgType string) const {
+        return static_cast<ResultType>(string.size());
     }
 };
 

@@ -366,6 +366,10 @@ public:
     template <typename StringFunctor>
     static NLUnaryFunctionKernel selectConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
+    // size() counts the elements of a list or the bytes of a string, so it picks its
+    // functor from the argument column as a conversion does.
+    static NLUnaryFunctionKernel selectSize(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
+
     // The owned-string members of the nullable handler families, for the chunk kind
     // labels() and type() produce: a nullable value whose rows own their characters
     // rather than borrowing them, so the value type alone does not pick the handler.

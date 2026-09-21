@@ -132,8 +132,13 @@ void throwIfNotAListInput(mlir::Type inputElement) {
     }
 }
 
-mlir::Type listSizeFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
-    throwIfNotAListInput(inputElement);
+mlir::Type sizeFunctionElement(mlir::OpBuilder& builder, mlir::Type inputElement) {
+    const bool readsAList = llvm::isa<storage::ListType, storage::ListElementType>(inputElement);
+    const bool readsAString = llvm::isa<storage::StringType, storage::OwnedStringType>(inputElement);
+
+    if (!readsAList && !readsAString) {
+        throw IRException("size() reads a list column or a string column");
+    }
 
     return builder.getI64Type();
 }
@@ -217,7 +222,7 @@ const std::unordered_map<std::string_view, UnaryFunctionLowering> unaryFunctionL
     {"db.to_float",   {&emitNLUnaryFunction<nl::ToFloat>,   &floatFunctionElement,       ResultNullability::AlwaysNullable}},
     {"db.to_boolean", {&emitNLUnaryFunction<nl::ToBoolean>, &booleanFunctionElement,     ResultNullability::AlwaysNullable}},
     {"db.element_id", {&emitNLUnaryFunction<nl::ElementID>,  &integerFunctionElement,     ResultNullability::FollowsInput}},
-    {"db.size",       {&emitNLUnaryFunction<nl::Size>,      &listSizeFunctionElement,    ResultNullability::FollowsInput}},
+    {"db.size",       {&emitNLUnaryFunction<nl::Size>,      &sizeFunctionElement,        ResultNullability::FollowsInput}},
     {"db.head",       {&emitNLUnaryFunction<nl::Head>,      &listElementFunctionElement, ResultNullability::NeverNullable}},
     {"db.last",       {&emitNLUnaryFunction<nl::Last>,      &listElementFunctionElement, ResultNullability::NeverNullable}},
     {"db.tail",       {&emitNLUnaryFunction<nl::Tail>,      &listTailFunctionElement,    ResultNullability::FollowsInput}}
