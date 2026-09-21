@@ -116,14 +116,6 @@ LogicalResult ConstScanNodes::inferReturnTypes(MLIRContext* context,
     return success();
 }
 
-LogicalResult GetEdgeTypeSet::verify() {
-    if (getNames().empty()) {
-        return emitOpError("requires at least one edge type");
-    }
-
-    return success();
-}
-
 LogicalResult ScanNodesByPropertyValue::verify() {
     if (getProperty().empty()) {
         return emitOpError("requires a non-empty property name");

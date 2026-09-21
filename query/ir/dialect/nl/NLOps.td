@@ -751,7 +751,8 @@ def GetEdgeTypeSet : NLOp<"get_edge_type_set", [Pure]> {
 
     The names are a disjunction, as `-[:KNOWS|LIKES]->` spells it: an edge matches
     when it carries any one of them. A name no edge has ever carried drops out of
-    the set when it is resolved, and a set left empty that way matches no edge.
+    the set when it is resolved, and a set left empty that way matches no edge. An empty
+    `names` says the same outright, for a read a pass has narrowed to nothing.
 
     The result is always !nl.edge_type_set. That type is parameterless and so
     buildable, so the assembly omits it. Pure, so it can be hoisted and shared
@@ -764,7 +765,6 @@ def GetEdgeTypeSet : NLOp<"get_edge_type_set", [Pure]> {
 
   // No operands and a constant result type, so nothing is printed after the names.
   let assemblyFormat = "`(` $names `)` attr-dict";
-  let hasVerifier = 1;
 }
 
 /**

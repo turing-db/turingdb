@@ -63,6 +63,16 @@ def FuseEdgesByEndpointLabel : Pass<"fuse_edges_by_endpoint_label"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseEdgeTypePredicates : Pass<"fuse_edge_type_predicates"> {
+    let summary = "Combine two edge-type checks over the same column into one";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
+def NarrowEdgeTypeReads : Pass<"narrow_edge_type_reads"> {
+    let summary = "Fold an edge-type check into the by-type read feeding it, narrowing its types";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def ReusePropertyReads : Pass<"reuse_property_reads"> {
     let summary = "Reuse a property already read of the same rows instead of reading it again";
     let dependentDialects = ["mlir::db::DB"];

@@ -36,22 +36,11 @@
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
+#include "IRTestOps.h"
+
 using namespace db;
 using namespace turing::test;
 
-namespace {
-
-template <typename OpType>
-size_t countOps(mlir::ModuleOp module) {
-    size_t count = 0;
-    module.walk([&count](OpType) {
-        count++;
-    });
-
-    return count;
-}
-
-}
 
 // A MATCH that walks out of a variable an UNWIND bound expands the rows the unwind emitted
 // rather than the graph's: the elements open the traversal, the way a CALL's yielded nodes

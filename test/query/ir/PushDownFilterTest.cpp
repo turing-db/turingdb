@@ -14,19 +14,10 @@
 #include "DBPasses.h"
 #include "StorageDialect.h"
 
-namespace {
+#include "IRTestOps.h"
 
-template <typename OpType>
-llvm::SmallVector<OpType> collect(mlir::ModuleOp module) {
-    llvm::SmallVector<OpType> ops;
-    module.walk([&](OpType op) {
-        ops.push_back(op);
-    });
+using namespace turing::test;
 
-    return ops;
-}
-
-}
 
 class PushDownFilterTest : public ::testing::Test {
 protected:

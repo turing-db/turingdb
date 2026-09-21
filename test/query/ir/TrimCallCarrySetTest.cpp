@@ -13,19 +13,10 @@
 #include "DBPasses.h"
 #include "StorageDialect.h"
 
-namespace {
+#include "IRTestOps.h"
 
-template <typename OpType>
-llvm::SmallVector<OpType> collect(mlir::ModuleOp module) {
-    llvm::SmallVector<OpType> ops;
-    module.walk([&](OpType op) {
-        ops.push_back(op);
-    });
+using namespace turing::test;
 
-    return ops;
-}
-
-}
 
 // A call replicates each carried column once per row the procedure emits for it, so a
 // column nothing reads past the call is copied for no reader. The trim cuts it from the

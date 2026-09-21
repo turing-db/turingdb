@@ -28,27 +28,11 @@
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
+#include "IRTestOps.h"
+
 using namespace db;
 using namespace turing::test;
 
-namespace {
-
-template <typename OpType>
-llvm::SmallVector<OpType> collect(mlir::ModuleOp module) {
-    llvm::SmallVector<OpType> ops;
-    module.walk([&](OpType op) {
-        ops.push_back(op);
-    });
-
-    return ops;
-}
-
-template <typename OpType>
-size_t countOps(mlir::ModuleOp module) {
-    return collect<OpType>(module).size();
-}
-
-}
 
 // Generates the db program a Cypher query compiles to, passes included, so a test reads
 // the shape the engine will lower rather than a hand-written approximation of it.

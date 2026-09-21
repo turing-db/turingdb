@@ -28,27 +28,11 @@
 #include "TuringTest.h"
 #include "TuringTestEnv.h"
 
+#include "IRTestOps.h"
+
 using namespace db;
 using namespace turing::test;
 
-namespace {
-
-template <typename OpType>
-llvm::SmallVector<OpType> collect(mlir::ModuleOp module) {
-    llvm::SmallVector<OpType> ops;
-    module.walk([&](OpType op) {
-        ops.push_back(op);
-    });
-
-    return ops;
-}
-
-template <typename OpType>
-size_t countOps(mlir::ModuleOp module) {
-    return collect<OpType>(module).size();
-}
-
-}
 
 // A pattern component the leading calls do not reach matches on its own and is crossed with
 // the rows they drive, which must leave the driven component itself seeded: the column a

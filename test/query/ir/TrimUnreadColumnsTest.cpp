@@ -18,21 +18,10 @@
 
 #include "IRTestEdgeTypes.h"
 
+#include "IRTestOps.h"
+
 using namespace turing::test;
 
-namespace {
-
-template <typename OpType>
-llvm::SmallVector<OpType> collect(mlir::ModuleOp module) {
-    llvm::SmallVector<OpType> ops;
-    module.walk([&](OpType op) {
-        ops.push_back(op);
-    });
-
-    return ops;
-}
-
-}
 
 class TrimUnreadColumnsTest : public ::testing::Test {
 protected:
