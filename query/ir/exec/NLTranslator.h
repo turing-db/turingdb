@@ -126,7 +126,8 @@ private:
         llvm::SmallVector<llvm::StringRef, 4> _labels;
 
         // The edge type names a ScanEdgesByType / GetOutEdgesByType / GetInEdgesByType
-        // iterator filters by, as a disjunction; empty for the other kinds. Like
+        // iterator filters by, as a disjunction, or the single type an ExplorePaths
+        // iterator restricts every hop to; empty for the other kinds. Like
         // _labels, views into the op's interned StringAttr storage, which the
         // MLIRContext keeps alive for the whole translation; resolved to EdgeTypeIDs
         // when the loop is translated.
