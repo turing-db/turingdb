@@ -366,6 +366,15 @@ void FunctionDecls::initDefault() {
     tailCell->setArguments({EvaluatedType::ListItem});
     tailCell->setReturnTypes({{EvaluatedType::List}});
 
+    // range counts from its first bound to its second, both included, by the stride the
+    // third gives - 1 where it is left out, and a negative one counting down. The list
+    // holds integers whatever the bounds were, so the shape is the signature's to name.
+    FunctionSignature* range = createFunction("range");
+    range->setArguments({EvaluatedType::Integer, EvaluatedType::Integer, EvaluatedType::Integer});
+    range->setRequiredArgCount(2);
+    range->setReturnTypes({{EvaluatedType::List}});
+    range->setReturnedListShape(ListShape(EvaluatedType::Integer, 1));
+
     // Conversion functions
     FunctionSignature* toInteger = createFunction("toInteger");
     toInteger->setArguments({EvaluatedType::String});

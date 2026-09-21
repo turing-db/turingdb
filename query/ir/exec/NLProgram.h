@@ -3413,6 +3413,50 @@ private:
     std::vector<Element> _elements;
 };
 
+// Read the bound one column of an nl.range holds at @param row, or nothing where the row
+// has no bound. One per integer column kind, selected during translation the way the list
+// item reads are.
+using NLRangeBoundReadFunction = std::optional<types::Int64::Primitive> (*)(const Column* input,
+                                                                           size_t row);
+
+// Row-wise list build (nl.range): row r of the result counts from row r of the start to
+// row r of the end by row r of the step, written into the query's list buffer as one
+// contiguous run. The step reads no column where the query gave none, which counts by 1.
+class NLRangeData : public NLFunctionData {
+public:
+    struct Bound {
+        const Column* _column {nullptr};
+        NLRangeBoundReadFunction _read {nullptr};
+    };
+
+    NLRangeData(Column* result,
+                LocalMemory* memory,
+                const Bound& start,
+                const Bound& end,
+                const Bound& step)
+        : _result(result),
+        _memory(memory),
+        _start(start),
+        _end(end),
+        _step(step)
+    {
+    }
+
+    Column* getResult() const { return _result; }
+    LocalMemory* getMemory() const { return _memory; }
+
+    const Bound& getStart() const { return _start; }
+    const Bound& getEnd() const { return _end; }
+    const Bound& getStep() const { return _step; }
+
+private:
+    Column* _result {nullptr};
+    LocalMemory* _memory {nullptr};
+    Bound _start;
+    Bound _end;
+    Bound _step;
+};
+
 // nl.list_comprehension data: the per-row list build of `[x IN xs WHERE p(x) | f(x)]`.
 // Holds the source column with the handler counting the elements each of its cells
 // contributes, the drain filling the element chunk from them and the one telling a cell

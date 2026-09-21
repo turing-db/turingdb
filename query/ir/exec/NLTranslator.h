@@ -814,9 +814,17 @@ private:
     // source column's shape, and translate the body the elements run through
     void translateListComprehension(mlir::nl::ListComprehension comprehension, NLStmtContainer* body);
 
+    // Allocates the list column an nl.range writes, and binds the read each bound column
+    // is taken through
+    void translateRange(mlir::nl::Range range, NLStmtContainer* body);
+
     // The read one element column of an nl.make_list contributes its cell through, chosen
     // by what the chunk holds
     static NLListItemReadFunction selectListItemRead(mlir::Type chunkType);
+
+    // The read one bound column of an nl.range is taken through, chosen by the integer
+    // the chunk holds
+    static NLRangeBoundReadFunction selectRangeBoundRead(mlir::Type chunkType);
 
     void translateUnaryFunction(mlir::Operation* op, NLStmtContainer* body);
 

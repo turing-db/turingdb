@@ -400,6 +400,42 @@ def MakeList : TuringOp<"make_list", [Pure]> {
 }
 
 /**
+* Range
+*/
+def Range : TuringOp<"range", [Pure]> {
+  let summary = "Build one list of the integers a row's bounds span";
+
+  let description = [{
+    Cypher's `range(start, end)` and `range(start, end, step)`. The op reads one column
+    per bound and produces one list cell per row, as db.make_list does:
+
+      %xs = db.range(%from, %to) : (!db.column<i64>, !db.column<i64>)
+                                -> !db.column<!storage.list<i64>>
+
+    Row r's list counts from row r of `start` to row r of `end`, both included, by
+    `step` - 1 where it is absent, and negative to count down. A step walking away from
+    `end` gives the empty list; a step of 0 is the error the row raises, as is a row
+    spanning more than 100000 integers. A bound holding no value gives its row no list,
+    which is what Cypher reads `range(null, 3)` as.
+
+    The elements are integers whatever the bounds were, so the result element type is
+    written here rather than inferred, unlike db.make_list's homogeneity verdict. A bound
+    holding one value for every row rather than one per row is laid out over the rows
+    during lowering, so `range(1, n.age)` is read at the rows the fetch carries.
+  }];
+
+  // The step is the only variable-length operand, so MLIR tells it apart from the bounds
+  // without operand-segment sizes, as db.get_node_properties' pending mask is.
+  let arguments = (ins Column:$start, Column:$end, Optional<Column>:$step);
+  let results   = (outs Column:$result);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    `(` $start `,` $end (`,` $step^)? `)` attr-dict `:` functional-type(operands, results)
+  }];
+}
+
+/**
 * ListComprehension
 */
 def ListComprehension : TuringOp<"list_comprehension", [Pure]> {

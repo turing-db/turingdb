@@ -754,6 +754,8 @@ void NLTranslator::translateBlock(mlir::Block& block, NLStmtContainer* body) {
             translateCase(caseOp, body);
         } else if (nl::MakeList makeList = mlir::dyn_cast<nl::MakeList>(operation)) {
             translateMakeList(makeList, body);
+        } else if (nl::Range range = mlir::dyn_cast<nl::Range>(operation)) {
+            translateRange(range, body);
         } else if (nl::ListComprehension listComprehension = mlir::dyn_cast<nl::ListComprehension>(operation)) {
             translateListComprehension(listComprehension, body);
         } else if (lookupUnaryFunctionSelector(operation)) {
@@ -2375,6 +2377,43 @@ void NLTranslator::translateMakeList(nl::MakeList makeList, NLStmtContainer* bod
     }
 
     body->emplaceStmt(&NLExecutor::runMakeList, data);
+}
+
+NLRangeBoundReadFunction NLTranslator::selectRangeBoundRead(mlir::Type chunkType) {
+    const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
+
+    const storage::NullableType nullableType = mlir::dyn_cast<storage::NullableType>(elementType);
+    if (!nullableType) {
+        throw IRException("nl.range requires a nullable integer chunk for each bound");
+    }
+
+    return NLExecutor::selectRangeBoundRead(valueTypeFromElementType(nullableType.getValueType()));
+}
+
+void NLTranslator::translateRange(nl::Range range, NLStmtContainer* body) {
+    const mlir::Value resultValue = range.getResult();
+
+    Column* const result = allocColumnForChunkType(resultValue.getType());
+    _valueSlots[resultValue] = result;
+
+    const auto bound = [this](mlir::Value chunk) {
+        if (!chunk) {
+            return NLRangeData::Bound {};
+        }
+
+        return NLRangeData::Bound {
+            ._column = getColumn(chunk),
+            ._read = selectRangeBoundRead(chunk.getType()),
+        };
+    };
+
+    NLRangeData* data = _program->allocFunctionData<NLRangeData>(result,
+                                                                 _memory,
+                                                                 bound(range.getStart()),
+                                                                 bound(range.getEnd()),
+                                                                 bound(range.getStep()));
+
+    body->emplaceStmt(&NLExecutor::runRange, data);
 }
 
 void NLTranslator::translateListComprehension(nl::ListComprehension comprehension, NLStmtContainer* body) {
