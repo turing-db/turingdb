@@ -389,17 +389,15 @@ public:
     }
 };
 
-// The size of a string is the number of bytes it holds, as every other string operation
-// in the engine reads one.
+// The size of a string is the number of Unicode characters it holds, not the number of
+// bytes its UTF-8 encoding spends on them.
 class StringSizeFunction {
 public:
     using ArgType = types::String::Primitive;
     using ResultType = types::Int64::Primitive;
     using TaggedCounterpart = TaggedSizeFunction;
 
-    ResultType operator()(const ArgType string) const {
-        return static_cast<ResultType>(string.size());
-    }
+    ResultType operator()(const ArgType string) const;
 };
 
 class ListHeadFunction {

@@ -2,6 +2,8 @@
 
 #include <math.h>
 
+#include <algorithm>
+
 #include <range/v3/view/drop.hpp>
 
 #include "datapart/EdgeRecord.h"
@@ -35,6 +37,15 @@ std::optional<ListView> taggedList(const ListElementView cell) {
     throw TuringException("head(), last() and tail() read a list, and this row holds a value that is not one");
 }
 
+// The number of Unicode characters a UTF-8 string holds. Every byte of a character but
+// its first is a continuation byte, which the two top bits mark as 10, so the characters
+// are the bytes that are not marked.
+types::Int64::Primitive characterCount(const types::String::Primitive string) {
+    return std::count_if(string.begin(), string.end(), [](const char byte) {
+        return (static_cast<unsigned char>(byte) & 0xC0) != 0x80;
+    });
+}
+
 // The edge a tagged cell holds, or nothing when it holds a null. Anything else is an edge
 // function applied to something that is no edge, which no plan can see coming because the
 // cell carries its type per row.
@@ -64,12 +75,16 @@ TaggedSizeFunction::ResultType TaggedSizeFunction::operator()(const ArgType cell
     if (tag == ListBufferTypeTag::ListView) {
         return static_cast<types::Int64::Primitive>(cell.getAs<ListView>().size());
     } else if (tag == ListBufferTypeTag::String) {
-        return static_cast<types::Int64::Primitive>(cell.getAs<types::String::Primitive>().size());
+        return characterCount(cell.getAs<types::String::Primitive>());
     } else if (tag == ListBufferTypeTag::Null) {
         return std::nullopt;
     }
 
     throw TuringException("size() reads a list or a string, and this row holds a value that is neither");
+}
+
+StringSizeFunction::ResultType StringSizeFunction::operator()(const ArgType string) const {
+    return characterCount(string);
 }
 
 TaggedListHeadFunction::ResultType TaggedListHeadFunction::operator()(const std::optional<ArgType>& cell) const {

@@ -366,8 +366,8 @@ public:
     template <typename StringFunctor>
     static NLUnaryFunctionKernel selectConversion(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
-    // size() counts the elements of a list or the bytes of a string, so it picks its
-    // functor from the argument column as a conversion does.
+    // size() counts the elements of a list or the characters of a string, so it picks
+    // its functor from the argument column as a conversion does.
     static NLUnaryFunctionKernel selectSize(const Column* input, bool inputNullable, LocalMemory* memory, Column*& result);
 
     // The owned-string members of the nullable handler families, for the chunk kind
