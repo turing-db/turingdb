@@ -171,6 +171,7 @@ private:
     static void planBatch(const PartDirectory& parts,
                           PathExplorationDir direction,
                           std::optional<EdgeTypeID> edgeType,
+                          size_t targetCount,
                           uint64_t maxHops,
                           BatchPlan& plan);
 
