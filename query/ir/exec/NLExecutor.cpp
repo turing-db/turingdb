@@ -1347,6 +1347,37 @@ void appendColumn(const Column* input, Column* buffer) {
     bufferRaw.insert(bufferRaw.end(), inputRaw.begin(), inputRaw.end());
 }
 
+ListView ownedList(const ListView& list, QueryListBuffer& lists) {
+    return lists.copy(list);
+}
+
+std::optional<ListView> ownedList(const std::optional<ListView>& list, QueryListBuffer& lists) {
+    if (!list.has_value()) {
+        return std::nullopt;
+    }
+
+    return lists.copy(*list);
+}
+
+// The append of a column of lists, for a buffer that outlives the loop filling it: the
+// views a chunk carries point into the buffer that built them, which the producing step
+// empties when it comes round again, so the list itself goes into the accumulator's own.
+template <typename ElementType>
+void appendOwnedListColumn(const Column* input, Column* buffer, QueryListBuffer& lists) {
+    const ColumnVector<ElementType>* typedInput = static_cast<const ColumnVector<ElementType>*>(input);
+    ColumnVector<ElementType>* typedBuffer = static_cast<ColumnVector<ElementType>*>(buffer);
+
+    const auto& inputRaw = typedInput->getRaw();
+    auto& bufferRaw = typedBuffer->getRaw();
+
+    const size_t firstRow = bufferRaw.size();
+    bufferRaw.resize(firstRow + inputRaw.size());
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        bufferRaw[firstRow + row] = ownedList(inputRaw[row], lists);
+    }
+}
+
 // 3-way compare two rows of a non-null orderable column (an ID column, or a plain scalar
 // a procedure yielded): negative if row a sorts before row b, positive if after, zero if
 // they are equal.
@@ -6051,6 +6082,11 @@ void NLExecutor::runSortCollect(NLExecutionContext* context, NLFunctionData* dat
     // Append this step's chunk of every column onto its buffer's tail; the
     // columns are taken together so the buffers stay row-aligned.
     for (const NLSortCollectData::Append& append : collect->appends()) {
+        if (append._appendLists) {
+            append._appendLists(append._input, append._buffer, collect->getState()->listBuffer());
+            continue;
+        }
+
         append._append(append._input, append._buffer);
     }
 
@@ -7407,6 +7443,14 @@ NLBroadcastFunction NLExecutor::selectOptListTileFunction() {
 
 NLAppendFunction NLExecutor::selectOptListAppendFunction() {
     return &appendColumn<std::optional<ListView>>;
+}
+
+NLListAppendFunction NLExecutor::selectOwnedListAppendFunction() {
+    return &appendOwnedListColumn<ListView>;
+}
+
+NLListAppendFunction NLExecutor::selectOwnedOptListAppendFunction() {
+    return &appendOwnedListColumn<std::optional<ListView>>;
 }
 
 NLGatherFunction NLExecutor::selectOptListGatherFunction() {

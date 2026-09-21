@@ -1,6 +1,7 @@
 #include "ListBuffer.h"
 
 #include <type_traits>
+#include <vector>
 
 #include "ListBufferTypeTag.h"
 #include "ListByteBuffer.h"
@@ -97,6 +98,27 @@ ListView ListBuffer<N>::concatenate(ListView a, ListView b) {
     }
 
     return cursor.getView();
+}
+
+template <size_t N>
+ListView ListBuffer<N>::copy(ListView list) {
+    std::vector<ListItemVariant> elements;
+    elements.reserve(list.size());
+
+    const auto asVariant = [this]<typename T>(const ListElementView view) -> ListItemVariant {
+        if constexpr (std::same_as<T, ListView>) {
+            return copy(view.getAs<ListView>());
+        } else {
+            return view.getAs<T>();
+        }
+    };
+
+    for (const ListElementView element : list) {
+        const ListTagDispatcher dispatcher {element.getTag()};
+        elements.push_back(dispatcher.execute(asVariant, element));
+    }
+
+    return insert(elements);
 }
 
 template <size_t N>

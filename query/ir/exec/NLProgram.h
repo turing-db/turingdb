@@ -1253,6 +1253,10 @@ private:
 // translation, the same way the gather and broadcast families are.
 using NLAppendFunction = void (*)(const Column* input, Column* buffer);
 
+// Appends a chunk of lists onto the tail of a buffer, storing each list in @param lists so
+// the buffer owns what it holds rather than viewing the buffer the chunk was built in
+using NLListAppendFunction = void (*)(const Column* input, Column* buffer, QueryListBuffer& lists);
+
 // Type of handle that 3-way compares two rows of one sort key column: negative
 // if row a sorts before row b, positive if after, zero if they tie on this key.
 // Direction (ascending vs descending) is applied by the caller, so the function
@@ -1321,6 +1325,11 @@ public:
 
     const ColumnVector<size_t>& permutation() const { return _permutation; }
 
+    // The lists the buffers hold. A collected list is copied in here, because the views a
+    // chunk carries point into the buffer the producing step built them in, and that step
+    // comes round again long before the emit loop reads them.
+    QueryListBuffer& listBuffer() { return _listBuffer; }
+
 private:
     // Strict-weak-ordering row comparison by the keys, most significant first;
     // each key's direction flips the sign. Shared by sort() and the trim.
@@ -1345,6 +1354,8 @@ private:
 
     // The kept-row indices a trim selects, fed to the per-buffer gather.
     ColumnVector<size_t> _keptIndices;
+
+    QueryListBuffer _listBuffer;
 
     // The top-K bound (valid only when _bounded); 0 with _bounded means keep none.
     size_t _topK {0};
@@ -1377,6 +1388,10 @@ public:
         const Column* _input {nullptr};
         Column* _buffer {nullptr};
         NLAppendFunction _append {nullptr};
+
+        // Set in place of _append for a column of lists, which the accumulator takes a
+        // copy of rather than a view of
+        NLListAppendFunction _appendLists {nullptr};
     };
 
     NLSortCollectData(NLSortState* state)

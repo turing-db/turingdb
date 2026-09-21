@@ -3111,10 +3111,14 @@ void NLTranslator::translateSortCollect(nl::SortCollect collect, NLStmtContainer
         const NLGatherFunction gather = bounded ? selectGatherForChunkType(column.getType()) : nullptr;
         state->addColumnBuffer(bufferColumn, tempColumn, gather);
 
-        const NLSortCollectData::Append append {getColumn(column),
-                                                bufferColumn,
-                                                selectAppendForChunkType(column.getType())};
-        data->addAppend(append);
+        const mlir::Type columnType = column.getType();
+        const NLListAppendFunction appendLists = selectOwnedListAppendForChunkType(columnType);
+        const NLAppendFunction append = appendLists ? nullptr : selectAppendForChunkType(columnType);
+
+        data->addAppend(NLSortCollectData::Append {getColumn(column),
+                                                   bufferColumn,
+                                                   append,
+                                                   appendLists});
     }
 
     // Build the comparators from the spec, most significant key first. Each key
@@ -4767,6 +4771,20 @@ NLAppendFunction NLTranslator::selectAppendForChunkType(mlir::Type chunkType) {
     }
 
     return NLExecutor::selectAppendFunction(chunkKindFromElementType(elementType));
+}
+
+// The append a sort collects this column with when its rows are lists, and nothing for any
+// other column: a list is the one value a chunk carries as a view rather than as itself.
+NLListAppendFunction NLTranslator::selectOwnedListAppendForChunkType(mlir::Type chunkType) {
+    const mlir::Type elementType = mlir::cast<nl::ChunkType>(chunkType).getElementType();
+
+    if (isNullableList(elementType)) {
+        return NLExecutor::selectOwnedOptListAppendFunction();
+    } else if (llvm::isa<storage::ListType>(elementType)) {
+        return NLExecutor::selectOwnedListAppendFunction();
+    }
+
+    return nullptr;
 }
 
 NLGatherFunction NLTranslator::selectGatherForChunkType(mlir::Type chunkType) {
