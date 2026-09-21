@@ -113,7 +113,10 @@ void GraphSAGESampler::sampleHop() {
 
     const size_t sampleSize = thisHop._fanout;
 
-    NeighbourhoodSampleChunkWriter writer(_view, &tmpSeeds, sampleSize, _seed);
+    const bool haveSeed = _seed != NOSEED;
+    NeighbourhoodSampleChunkWriter writer =
+        haveSeed ? NeighbourhoodSampleChunkWriter(_view, &tmpSeeds, sampleSize, _seed)
+                 : NeighbourhoodSampleChunkWriter(_view, &tmpSeeds, sampleSize);
 
     ColumnNodeIDs tmpSrcs;
     ColumnNodeIDs tmpTgts;

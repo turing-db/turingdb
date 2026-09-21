@@ -4,14 +4,15 @@
 #include <array>
 #include <memory>
 #include <string>
-
-#include <range/v3/view/join.hpp>
 #include <string_view>
 
-#include "FatalException.h"
-#include "TuringException.h"
+#include <range/v3/view/join.hpp>
+
+#include <spdlog/fmt/bundled/format.h>
+
 #include "samplers/GraphSAGESampler.h"
 
+#include "ProcUtils.h"
 #include "Procedure.h"
 #include "ProcedureContext.h"
 #include "ProcedureData.h"
@@ -27,7 +28,8 @@
 #include "list/ListView.h"
 
 #include "metadata/PropertyType.h"
-#include "spdlog/fmt/bundled/format.h"
+
+#include "TuringException.h"
 
 using namespace db;
 
@@ -38,6 +40,8 @@ namespace {
 
 constexpr std::string_view fanoutSizeErr =
     "Fanout parameter must be a list of size {}, not {}.";
+
+constexpr std::string_view seedErr = "graphSAGE() seed must be a constant int";
 
 constexpr size_t returnValuesPerHop = 3;
 
@@ -103,24 +107,16 @@ void prepareImpl(ProcedureState* state) {
     validateInput(data);
 
     const size_t seed = [&] -> size_t {
-        using SeedColType = const ColumnConst<std::optional<types::Int64::Primitive>>;
         const Column* col = data.getInputColumn(2);
-        const auto* seedCol = dynamic_cast<SeedColType*>(col);
-        if (!seedCol) {
-            return GraphSAGESampler::NOSEED;
-        }
-        return seedCol->getRaw().value_or(GraphSAGESampler::NOSEED);
+
+        return col ? ProcUtils::constArg<types::Int64::Primitive>(col, seedErr)
+                   : GraphSAGESampler::NOSEED;
     }();
 
     const ProcedureContext* ctxt = state->getContext();
     const GraphView& view = *ctxt->getGraphView();
 
     data.sampler = std::make_unique<GraphSAGESampler>(view, seed);
-}
-
-void executeImpl(ProcedureState* state) {
-    Data& data = state->data<Data>();
-    auto& sampler = data.sampler;
 
     const GraphSAGESampler::Fanouts fanouts = [&] -> auto {
         GraphSAGESampler::Fanouts out;
@@ -144,8 +140,12 @@ void executeImpl(ProcedureState* state) {
         auto* srcs = data.getReturnColumn(base + 1)->cast<GraphSAGESampler::NodeCol>();
         auto* tgts = data.getReturnColumn(base + 2)->cast<GraphSAGESampler::NodeCol>();
 
-        sampler->setHopData(hop, srcs, tgts, dst, fanouts[hop]);
+        data.sampler->setHopData(hop, srcs, tgts, dst, fanouts[hop]);
     }
+}
+
+void executeImpl(ProcedureState* state) {
+    Data& data = state->data<Data>();
 
     ColumnNodeIDs nodes;
     const Column* x = data.getInputColumn(0);
@@ -155,7 +155,7 @@ void executeImpl(ProcedureState* state) {
     for (const ListElementView ele : list) {
         nodes.emplace_back(ele.getAs<types::Int64::Primitive>());
     }
-    sampler->sample(&nodes);
+    data.sampler->sample(&nodes);
 }
 
 }
