@@ -96,6 +96,16 @@ public:
         return containerIt->second->has(entityID);
     }
 
+    /// @returns true if stores a value or explicit NULL for @param entityID
+    bool hasEntry(PropertyTypeID ptID, EntityID entityID) const {
+        const auto containerIt = _map.find(ptID);
+        if (containerIt == _map.end()) {
+            return false;
+        }
+
+        return containerIt->second->hasEntry(entityID);
+    }
+
     template <SupportedType T>
     bool has(PropertyTypeID ptID, EntityID entityID) const {
         const TypedPropertyContainer<T>& container = getContainer<T>(ptID);

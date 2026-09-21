@@ -33,15 +33,13 @@ bool holdsPropertyLater(DataPartSpan parts, size_t partIndex, PropertyTypeID pro
     return false;
 }
 
-// Whether a data part after @param partIndex holds this property for the entity too. A read
-// returns the newest entry, so the older one stands for the same node and must not be
-// counted a second time.
+// Whether a data part after @param partIndex holds this property for the entity too
 bool isPropertyOverriddenLater(DataPartSpan parts,
                                size_t partIndex,
                                PropertyTypeID propertyTypeID,
                                EntityID entityID) {
     for (size_t newer = partIndex + 1; newer < parts.size(); newer++) {
-        if (parts[newer]->nodeProperties().has(propertyTypeID, entityID)) {
+        if (parts[newer]->nodeProperties().hasEntry(propertyTypeID, entityID)) {
             return true;
         }
     }
