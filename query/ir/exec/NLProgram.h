@@ -3601,6 +3601,27 @@ private:
 // kind, selected during translation the way the gather and append families are.
 using NLFillNullFunction = void (*)(Column* output, size_t rowCount);
 
+// nl.to_nullable data for the null literal's chunk: the result holds one absent value per
+// row of the chunk the null was laid out over, in the type the result's own chunk names
+class NLFillNullData : public NLFunctionData {
+public:
+    NLFillNullData(const Column* rows, Column* output, NLFillNullFunction fill)
+        : _rows(rows),
+        _output(output),
+        _fill(fill)
+    {
+    }
+
+    const Column* getRows() const { return _rows; }
+    Column* getOutput() const { return _output; }
+    NLFillNullFunction getFill() const { return _fill; }
+
+private:
+    const Column* _rows {nullptr};
+    Column* _output {nullptr};
+    NLFillNullFunction _fill {nullptr};
+};
+
 // Runtime state of one OPTIONAL MATCH over one step of the rows its pattern joins onto:
 // that step's own chunks, a matched flag per row of them, and the buffers the matched rows
 // are collected into. The sibling of NLSortState, except that it covers one step rather

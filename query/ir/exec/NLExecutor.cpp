@@ -5454,6 +5454,12 @@ void NLExecutor::runUnary(NLExecutionContext*, NLFunctionData* data) {
     unary->getFn()(unary->getResult(), unary->getOperand());
 }
 
+void NLExecutor::runFillNull(NLExecutionContext*, NLFunctionData* data) {
+    const NLFillNullData* fillNull = static_cast<NLFillNullData*>(data);
+
+    fillNull->getFill()(fillNull->getOutput(), fillNull->getRows()->size());
+}
+
 void NLExecutor::runCase(NLExecutionContext*, NLFunctionData* data) {
     const NLCaseData* caseData = static_cast<NLCaseData*>(data);
 

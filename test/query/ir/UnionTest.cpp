@@ -350,11 +350,11 @@ TEST_F(UnionTest, rejectsBranchesNamingTheirItemsDifferently) {
 TEST_F(UnionTest, rejectsBranchesWhoseColumnTypesDisagree) {
     expectError("MATCH (a:Person) RETURN a.name AS v UNION ALL MATCH (b:Person) RETURN b.age AS v",
                 QueryStatus::Status::EXEC_ERROR,
-                "'v' is Int64 in this sub-query and String in the first");
+                "'v' is Int64 in this sub-query and String in another");
 
     expectError("MATCH (a:Person) RETURN a AS v UNION ALL MATCH (b:Person) RETURN b.name AS v",
                 QueryStatus::Status::EXEC_ERROR,
-                "'v' is String in this sub-query and Node in the first");
+                "'v' is String in this sub-query and Node in another");
 }
 
 // A literal and a stored property of the same type do agree: the literal is laid out over

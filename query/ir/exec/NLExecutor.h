@@ -294,6 +294,7 @@ public:
                                             LocalMemory* memory, Column*& result);
 
     static void runUnary(NLExecutionContext* context, NLFunctionData* data);
+    static void runFillNull(NLExecutionContext* context, NLFunctionData* data);
 
     static NLUnaryFn selectNot(const Column* operand, LocalMemory* memory, Column*& result);
     // Read a node or edge column as a nullable column of its IDs' integers, an invalid ID
