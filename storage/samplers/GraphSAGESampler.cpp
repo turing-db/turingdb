@@ -16,6 +16,10 @@ const auto resizeImpl = [](auto* col, size_t size) -> void { col->resize(size); 
 const auto clearImpl = [](auto* col) -> void { col->clear(); };
 
 void colAssign(const ColumnNodeIDs* src, ColumnOptVector<NodeID>* dst) {
+    if (!dst) {
+        return;
+    }
+
     auto& raw = dst->getRaw();
     raw.assign(src->begin(), src->end());
 }
@@ -30,9 +34,17 @@ GraphSAGESampler::GraphSAGESampler(GraphView view, size_t seed)
 
 template <typename F, typename... Args>
 void GraphSAGESampler::HopData::apply(const F& func, Args&&... args) {
-    func(_dstNodes, std::forward<Args>(args)...);
-    func(_srcs, std::forward<Args>(args)...);
-    func(_tgts, std::forward<Args>(args)...);
+    if (_dstNodes) {
+        func(_dstNodes, std::forward<Args>(args)...);
+    }
+
+    if (_srcs) {
+        func(_srcs, std::forward<Args>(args)...);
+    }
+
+    if (_tgts) {
+        func(_tgts, std::forward<Args>(args)...);
+    }
 
     constexpr size_t numCols = sizeof(HopColumns) / sizeof(NodeCol*);
     static_assert(numCols == 3, "Member added, update apply.");
@@ -76,8 +88,6 @@ void GraphSAGESampler::reset() {
         data.clear();
         data.reset();
     }
-
-    _seeded = false;
 }
 
 bool GraphSAGESampler::finished() const {
@@ -115,9 +125,11 @@ size_t GraphSAGESampler::emitFrontier(size_t hop, size_t maxRows) {
         return 0;
     }
 
-    const ColumnNodeIDs::ConstIterator begin = data._frontier.cbegin() + data._emitted;
-    auto& raw = data._dstNodes->getRaw();
-    raw.insert(raw.end(), begin, begin + rows);
+    if (data._dstNodes) {
+        const ColumnNodeIDs::ConstIterator begin = data._frontier.cbegin() + data._emitted;
+        auto& raw = data._dstNodes->getRaw();
+        raw.insert(raw.end(), begin, begin + rows);
+    }
 
     data._emitted += rows;
 
@@ -155,7 +167,7 @@ size_t GraphSAGESampler::expandHop(size_t hop, size_t maxRows) {
     colAssign(&srcs, data._srcs);
     colAssign(&tgts, data._tgts);
 
-    bioassert(data._srcs->size() == data._tgts->size(), "Mismatched srcs, tgts");
+    bioassert(srcs.size() == tgts.size(), "Mismatched srcs, tgts");
 
     if (hop + 1 < hops) {
         pushFrontier(hop + 1, &tgts);

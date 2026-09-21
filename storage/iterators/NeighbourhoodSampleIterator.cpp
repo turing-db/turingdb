@@ -53,17 +53,17 @@ void NeighbourhoodSampleIterator::next() {
     nextValidForCurrentNode();
 }
 
-// Point @ref _edges at the side of the current DataPart given by @ref _onInEdges
-void NeighbourhoodSampleIterator::loadEdges() {
-    const DataPart* part = _partIt.get();
-    const EdgeIndexer& indexer = part->edgeIndexer();
+// Point @ref _edgeIt to the first edge for the current value of @ref _nodeIndex
+void NeighbourhoodSampleIterator::syncEdges() {
+    bioassert(_nodeIndex < _inputNodeIDs->size(), "Node index past the input.");
+
     const NodeID curNode = (*_inputNodeIDs)[_nodeIndex];
 
     _partIt.goToStart();
     while (_partIt.isNotEnd()) {
         const DataPart* part = _partIt.get();
         const EdgeIndexer& indexer = part->edgeIndexer();
-        _edges = indexer.getNodeInEdges(*_nodeIt);
+        _edges = indexer.getNodeInEdges(curNode);
         _edgeIt = _edges.begin();
 
         while (_edgeIt != _edges.end() and deleted(*_edgeIt)) {
@@ -80,11 +80,6 @@ void NeighbourhoodSampleIterator::loadEdges() {
 // Traverses each DataPart for every NodeID
 void NeighbourhoodSampleIterator::nextValidForCurrentNode() {
     _edgeIt++;
-}
-
-// Point @ref _edgeIt to the first edge for the current value of @ref _nodeIndex
-void NeighbourhoodSampleIterator::syncEdges() {
-    bioassert(_nodeIndex < _inputNodeIDs->size(), "Node index past the input.");
 
     // Skip deleted edges
     while (_edgeIt != _edges.end() and deleted(*_edgeIt)) {
@@ -102,7 +97,7 @@ void NeighbourhoodSampleIterator::syncEdges() {
     while (_partIt.isNotEnd()) {
         const DataPart* part = _partIt.get();
         const EdgeIndexer& indexer = part->edgeIndexer();
-        const NodeID curNode = *_nodeIt;
+        const NodeID curNode = (*_inputNodeIDs)[_nodeIndex];
 
         _edges = indexer.getNodeInEdges(curNode);
         _edgeIt = _edges.begin();

@@ -626,3 +626,59 @@ TEST_F(GraphSAGESamplerTest, everyBudgetProducesRectangularSteps) {
         EXPECT_GT(stats._steps, 0U) << "budget " << budget << " produced no step";
     }
 }
+
+TEST_F(GraphSAGESamplerTest, unwiredColumnsAreSkipped) {
+    const ColumnNodeIDs seeds = {0, 8, 12};
+    const GraphSAGESampler::Fanouts fanouts {2, 2, 2};
+    constexpr size_t rngSeed = 97;
+
+    RunRows full;
+    RunStats fullStats;
+    runSample(seeds, fanouts, ChunkConfig::CHUNK_SIZE, rngSeed, full, fullStats);
+
+    const FrozenCommitTx transaction = _graph->openTransaction();
+    const GraphReader reader = transaction.readGraph();
+
+    NodeCol firstDstNodes;
+    NodeCol lastTgts;
+
+    GraphSAGESampler sampler(reader.getView(), rngSeed);
+    sampler.setHopData(0, nullptr, nullptr, &firstDstNodes, fanouts[0]);
+    sampler.setHopData(1, nullptr, nullptr, nullptr, fanouts[1]);
+    sampler.setHopData(2, nullptr, &lastTgts, nullptr, fanouts[2]);
+
+    sampler.seed(&seeds);
+
+    std::vector<uint64_t> dstNodes;
+    std::vector<uint64_t> targets;
+    size_t steps = 0;
+
+    while (!sampler.finished()) {
+        sampler.sample(ChunkConfig::CHUNK_SIZE);
+        steps++;
+
+        ASSERT_LE(steps, fullStats._steps) << "the wired run outlasted the full one";
+
+        for (const std::optional<NodeID>& node : firstDstNodes) {
+            if (node.has_value()) {
+                dstNodes.push_back(node->getValue());
+            }
+        }
+
+        for (const std::optional<NodeID>& node : lastTgts) {
+            if (node.has_value()) {
+                targets.push_back(node->getValue());
+            }
+        }
+    }
+
+    EXPECT_EQ(steps, fullStats._steps);
+    EXPECT_EQ(dstNodes, full[0]._dstNodes);
+
+    std::vector<uint64_t> expectedTargets;
+    for (const SampledEdge& edge : full[2]._edges) {
+        expectedTargets.push_back(edge._tgt);
+    }
+
+    EXPECT_EQ(targets, expectedTargets);
+}
