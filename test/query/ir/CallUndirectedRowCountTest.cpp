@@ -32,13 +32,13 @@ TEST_F(CallUndirectedRowCountTest, crossedCallMultipliesEveryUndirectedRow) {
 }
 
 // Remy's six incident edges put Adam and Ghosts twice in m, Computers and Eighties once. A
-// sample of four is above every degree here, so a row fans out to m's whole neighbourhood:
-// four for Adam, two for Ghosts, two for Computers, one for Eighties.
+// sample of four is above every out-degree, so a row fans out to all of m's out-edges:
+// three for Adam, one for Ghosts, none at all for the two interests.
 TEST_F(CallUndirectedRowCountTest, countsTheFanOutOfEveryFarEnd) {
     StringRowSink sink;
     runQuery("MATCH (n {name: 'Remy'})--(m) CALL gnn.neighbourhoodSample(m, 4, 42) YIELD tgt RETURN count(*)", sink);
 
-    const std::vector<StringRowSink::Row> expected {{"15"}};
+    const std::vector<StringRowSink::Row> expected {{"8"}};
     EXPECT_EQ(sink.getRows(), expected);
 }
 
@@ -53,13 +53,6 @@ TEST_F(CallUndirectedRowCountTest, yieldsTheFanOutOfEveryFarEnd) {
                                                     {"Bio"},
                                                     {"Cooking"},
                                                     {"Cooking"},
-                                                    {"Luc"},
-                                                    {"Remy"},
-                                                    {"Remy"},
-                                                    {"Remy"},
-                                                    {"Remy"},
-                                                    {"Remy"},
-                                                    {"Remy"},
                                                     {"Remy"},
                                                     {"Remy"},
                                                     {"Remy"},
@@ -67,13 +60,13 @@ TEST_F(CallUndirectedRowCountTest, yieldsTheFanOutOfEveryFarEnd) {
     EXPECT_EQ(rows, expected);
 }
 
-// Each of the 36 rows fans out to the degree of its far end, capped at four, summing
-// degree(m) times min(4, degree(m)) over the graph: 24 for Remy, 16 for Adam, nine for
-// Gym, four each for the eight nodes of degree two, one each for the seven leaves.
+// Each of the 36 rows fans out to the out-degree of its far end, summing degree(m) times
+// outDegree(m) over the graph: 24 for Remy, 12 for Adam, four each for Maxime, Luc, Suhas
+// and Cyrus, two for Ghosts, one each for Martina and Doruk.
 TEST_F(CallUndirectedRowCountTest, countsTheFanOutOverTheWholeGraph) {
     StringRowSink sink;
     runQuery("MATCH (n)--(m) CALL gnn.neighbourhoodSample(m, 4, 42) YIELD tgt RETURN count(*)", sink);
 
-    const std::vector<StringRowSink::Row> expected {{"88"}};
+    const std::vector<StringRowSink::Row> expected {{"56"}};
     EXPECT_EQ(sink.getRows(), expected);
 }

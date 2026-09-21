@@ -10,13 +10,13 @@ using namespace turing::test;
 
 namespace {
 
-// The sample is undirected. Remy (0) is joined to Adam (1) twice and to Ghosts (6) twice,
-// once each way, and to Computers (2) and Eighties (3) once; Adam to Remy twice, Bio (4)
-// and Cooking (5); Ghosts to Remy twice. A sample size above every degree takes them all.
+// Remy (0) has edges out to Adam (1), Computers (2), Eighties (3) and Ghosts (6); Adam to
+// Remy, Bio (4) and Cooking (5); Ghosts to Remy. A sample size above every out-degree takes
+// them all.
 const std::vector<StringRowSink::Row> seededNeighbours {
-    {"0", "1"}, {"0", "1"}, {"0", "2"}, {"0", "3"}, {"0", "6"}, {"0", "6"},
-    {"1", "0"}, {"1", "0"}, {"1", "4"}, {"1", "5"},
-    {"6", "0"}, {"6", "0"}};
+    {"0", "1"}, {"0", "2"}, {"0", "3"}, {"0", "6"},
+    {"1", "0"}, {"1", "4"}, {"1", "5"},
+    {"6", "0"}};
 
 }
 
@@ -47,8 +47,8 @@ TEST_F(UnwindNodeSeedCallV3Test, readsTheUnwoundValuePastTheCall) {
     EXPECT_EQ(rows, seededNeighbours);
 }
 
-// Every three-hop undirected path from the seeds: 70 from Remy, 41 from Adam and 30 from
-// Ghosts, whose only neighbour is Remy.
+// Every path of three out-edges from the seeds: 8 leave Remy, 4 leave Adam and 4 leave
+// Ghosts, all of them through Remy.
 TEST_F(UnwindNodeSeedCallV3Test, matchesTheDisjunctionFormThroughChainedCalls) {
     const std::string calls = " CALL gnn.neighbourhoodSample(n, 10, 11) YIELD tgt AS m"
                               " CALL gnn.neighbourhoodSample(m, 10, 22) YIELD tgt AS k"
@@ -66,6 +66,6 @@ TEST_F(UnwindNodeSeedCallV3Test, matchesTheDisjunctionFormThroughChainedCalls) {
     std::vector<StringRowSink::Row> byDisjunctionRows;
     byDisjunction.sortedRows(byDisjunctionRows);
 
-    EXPECT_EQ(bySeedRows.size(), 141u);
+    EXPECT_EQ(bySeedRows.size(), 16u);
     EXPECT_EQ(bySeedRows, byDisjunctionRows);
 }
