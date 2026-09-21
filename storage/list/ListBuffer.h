@@ -70,6 +70,16 @@ public:
      */
     ListView concatenate(ListView a, ListView b);
 
+    /**
+     * @brief Stores the elements of @param list - the elements of a nested list among them
+     * - as one new list in this buffer and returns a @ref ListView over the copy.
+     *
+     * For a value that has to outlive the buffer it was built in. A string or embedding
+     * element keeps only a view of its payload, which is copied no more than the source
+     * list is: the copy stands as long as those payloads do.
+     */
+    ListView copy(ListView list);
+
     void clear();
 
 private:

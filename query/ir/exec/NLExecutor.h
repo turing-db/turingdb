@@ -557,6 +557,11 @@ public:
     static NLBroadcastFunction selectOptListBlockRepeatFunction();
     static NLBroadcastFunction selectOptListTileFunction();
     static NLAppendFunction selectOptListAppendFunction();
+
+    // The appends a sort collects a column of lists with: the list goes into the
+    // accumulator's own buffer, so it stands once the loop that built it has moved on
+    static NLListAppendFunction selectOwnedListAppendFunction();
+    static NLListAppendFunction selectOwnedOptListAppendFunction();
     static NLGatherFunction selectOptListGatherFunction();
     static NLCompareFunction selectOptListCompareFunction();
     static NLKeyAppendFunction selectOptListKeyAppendFunction();

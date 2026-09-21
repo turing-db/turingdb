@@ -216,6 +216,7 @@ void NLSortState::reset() {
         buffer->clear();
     }
 
+    _listBuffer.clear();
     _permutation.clear();
     _sorted = false;
 }
