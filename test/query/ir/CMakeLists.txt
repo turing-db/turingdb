@@ -67,6 +67,14 @@ add_ir_tests(test_query_ir_explore_bound_ends ExploreBoundEndsTest.cpp)
 target_link_libraries(test_query_ir_explore_bound_ends PRIVATE turing_ir_test_rows_s turing_db_examples_s)
 add_ir_tests(test_query_ir_explore_end_node_set ExploreEndNodeSetTest.cpp)
 target_link_libraries(test_query_ir_explore_end_node_set PRIVATE turing_ir_test_rows_s turing_db_examples_s)
+add_ir_tests(test_query_ir_explore_end_factor ExploreEndFactorTest.cpp)
+target_sources(test_query_ir_explore_end_factor PRIVATE StringRowSink.cpp)
+target_link_libraries(test_query_ir_explore_end_factor PRIVATE
+        turing_ir_test_rows_s
+        turing_db_examples_s
+        turing_db_s
+        turing_testenv_s
+        turing_db_system_s)
 add_ir_tests(test_query_ir_explore_end_property ExploreEndPropertyTest.cpp)
 target_sources(test_query_ir_explore_end_property PRIVATE StringRowSink.cpp)
 target_link_libraries(test_query_ir_explore_end_property PRIVATE

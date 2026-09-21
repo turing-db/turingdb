@@ -49,6 +49,7 @@ namespace mlir::db {
 #define GEN_PASS_DEF_FUSEHASHJOIN
 #define GEN_PASS_DEF_FUSEEXPLOREENDCONSTRAINT
 #define GEN_PASS_DEF_FUSEEXPLOREENDNODES
+#define GEN_PASS_DEF_FUSEEXPLOREENDFACTOR
 #define GEN_PASS_DEF_FUSEEXPLOREENDSET
 #define GEN_PASS_DEF_FUSEEXPLOREDISTINCTENDS
 #define GEN_PASS_DEF_COUNTPATHROWS
@@ -2001,6 +2002,245 @@ struct FuseExploreEndNodes : public impl::FuseExploreEndNodesBase<FuseExploreEnd
     void runOnOperation() override {
         mlir::OpBuilder builder(&getContext());
         runFilterPass<EndBoundExploration>(getOperation(), matchEndBoundExploration, fuseExploreEndNodes, builder);
+    }
+};
+
+// A path exploration whose end column is one factor of the cross product its seeds come
+// from: every row carries the same targets, so the walk can head for them as a set and run
+// once per seed instead of once per pair. That factor's rows are the set, so its ops move to
+// the head of the function and the product goes on without the column.
+struct FactorEndExploration {
+    ExplorePaths _exploration;
+    CrossProduct _product;
+    size_t _endResult {0};
+};
+
+// The factor of a product yielding one of its results, and where in its yield
+struct FactorColumn {
+    Region* _factor {nullptr};
+    Region* _other {nullptr};
+    size_t _position {0};
+    bool _left {false};
+};
+
+void locateFactorColumn(CrossProduct product, size_t resultIndex, FactorColumn& column) {
+    Region& leftFactor = product.getLeftFactor();
+    Region& rightFactor = product.getRightFactor();
+    const size_t leftCount = factorYieldColumns(leftFactor).size();
+
+    column._left = resultIndex < leftCount;
+    column._factor = column._left ? &leftFactor : &rightFactor;
+    column._other = column._left ? &rightFactor : &leftFactor;
+    column._position = column._left ? resultIndex : resultIndex - leftCount;
+}
+
+// Whether the result can be taken out of the product as a set: its factor yields it alone,
+// or yields it off a product of its own that nothing but the yield reads, and so on down
+bool canHoistFactorColumn(CrossProduct product, size_t resultIndex) {
+    FactorColumn column;
+    locateFactorColumn(product, resultIndex, column);
+
+    const Operation::operand_range yielded = factorYieldColumns(*column._factor);
+    if (yielded.size() == 1) {
+        return true;
+    }
+
+    const Value value = yielded[column._position];
+    CrossProduct inner = value.getDefiningOp<CrossProduct>();
+    if (!inner || inner->getParentRegion() != column._factor) {
+        return false;
+    }
+
+    Operation* const yield = column._factor->front().getTerminator();
+    for (const Value result : inner.getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            if (user != yield) {
+                return false;
+            }
+        }
+    }
+
+    return canHoistFactorColumn(inner, cast<OpResult>(value).getResultNumber());
+}
+
+bool matchFactorEndExploration(ExplorePaths exploration, FactorEndExploration& match) {
+    const std::optional<uint64_t> endColumn = exploration.getEndColumn();
+    if (!endColumn || exploration.getEndNodes()) {
+        return false;
+    }
+
+    const Value input = exploration.getInputNodes();
+    const Value end = exploration.getColumnsToFilter()[*endColumn];
+    CrossProduct product = input.getDefiningOp<CrossProduct>();
+    if (!product || end.getDefiningOp() != product.getOperation()) {
+        return false;
+    }
+
+    // A target drawn from the seed's own factor differs row by row
+    const size_t inputResult = cast<OpResult>(input).getResultNumber();
+    const size_t endResult = cast<OpResult>(end).getResultNumber();
+    FactorColumn seed;
+    FactorColumn target;
+    locateFactorColumn(product, inputResult, seed);
+    locateFactorColumn(product, endResult, target);
+    if (seed._factor == target._factor) {
+        return false;
+    }
+
+    for (const Value result : product.getResults()) {
+        for (Operation* const user : result.getUsers()) {
+            if (user != exploration.getOperation()) {
+                return false;
+            }
+        }
+    }
+
+    if (!canHoistFactorColumn(product, endResult)) {
+        return false;
+    }
+
+    match = FactorEndExploration {._exploration = exploration, ._product = product, ._endResult = endResult};
+
+    return true;
+}
+
+void moveFactorBody(Region& factor, Block* target, Block::iterator position) {
+    Block& block = factor.front();
+    target->getOperations().splice(position, block.getOperations(), block.begin(), Block::iterator(block.getTerminator()));
+}
+
+// Takes the result out of the product as a value at the head of the function and leaves the
+// product without it: collapsed to its other factor when the result was all its factor
+// yielded, rebuilt one column narrower otherwise
+Value hoistFactorColumn(CrossProduct product, size_t resultIndex, Block* head, mlir::OpBuilder& builder) {
+    FactorColumn column;
+    locateFactorColumn(product, resultIndex, column);
+
+    const llvm::SmallVector<Value> yielded(factorYieldColumns(*column._factor));
+    if (yielded.size() == 1) {
+        const llvm::SmallVector<Value> otherYielded(factorYieldColumns(*column._other));
+
+        moveFactorBody(*column._factor, head, head->begin());
+        moveFactorBody(*column._other, product->getBlock(), Block::iterator(product));
+
+        const size_t firstOtherResult = column._left ? 1 : 0;
+        for (size_t index = 0; index < otherYielded.size(); index++) {
+            product.getResult(firstOtherResult + index).replaceAllUsesWith(otherYielded[index]);
+        }
+
+        const Value hoisted = yielded.front();
+        product.getResult(resultIndex).replaceAllUsesWith(hoisted);
+        product.erase();
+
+        return hoisted;
+    }
+
+    const Value value = yielded[column._position];
+    CrossProduct inner = value.getDefiningOp<CrossProduct>();
+    const Value hoisted = hoistFactorColumn(inner, cast<OpResult>(value).getResultNumber(), head, builder);
+
+    Yield yield = cast<Yield>(column._factor->front().getTerminator());
+    yield.getColumnsMutable().erase(static_cast<unsigned>(column._position));
+
+    llvm::SmallVector<Type> narrowedTypes;
+    for (size_t index = 0; index < product.getNumResults(); index++) {
+        if (index != resultIndex) {
+            narrowedTypes.push_back(product.getResult(index).getType());
+        }
+    }
+
+    builder.setInsertionPoint(product);
+    CrossProduct narrowed = builder.create<CrossProduct>(product.getLoc(), narrowedTypes);
+    narrowed.getLeftFactor().takeBody(product.getLeftFactor());
+    narrowed.getRightFactor().takeBody(product.getRightFactor());
+
+    size_t kept = 0;
+    for (size_t index = 0; index < product.getNumResults(); index++) {
+        if (index == resultIndex) {
+            product.getResult(index).replaceAllUsesWith(hoisted);
+        } else {
+            product.getResult(index).replaceAllUsesWith(narrowed.getResult(kept));
+            kept++;
+        }
+    }
+
+    product.erase();
+
+    return hoisted;
+}
+
+void fuseExploreEndFactor(const FactorEndExploration& match, mlir::OpBuilder& builder) {
+    ExplorePaths exploration = match._exploration;
+    CrossProduct product = match._product;
+    const size_t endColumn = *exploration.getEndColumn();
+    const Value endResult = product.getResult(match._endResult);
+
+    const Operation::operand_range carried = exploration.getColumnsToFilter();
+    const mlir::ResultRange carriedResults = exploration.getFilteredColumns();
+
+    llvm::SmallVector<Value> keptColumns;
+    llvm::SmallVector<Type> resultTypes {exploration.getSrcids().getType(), exploration.getTgtids().getType(), exploration.getPaths().getType()};
+    for (size_t index = 0; index < carried.size(); index++) {
+        if (index == endColumn) {
+            continue;
+        }
+
+        keptColumns.push_back(carried[index]);
+        resultTypes.push_back(carriedResults[index].getType());
+    }
+
+    // The set is the product's own result until the hoist puts the factor's value in its place
+    builder.setInsertionPoint(exploration);
+    ExplorePaths set = builder.create<ExplorePaths>(exploration.getLoc(),
+                                                    resultTypes,
+                                                    exploration.getInputNodes(),
+                                                    keptColumns,
+                                                    endResult,
+                                                    exploration.getDirection(),
+                                                    exploration.getMinHops(),
+                                                    exploration.getMaxHopsAttr(),
+                                                    exploration.getEdgeTypeAttr(),
+                                                    exploration.getEndLabelsAttr(),
+                                                    IntegerAttr(),
+                                                    false,
+                                                    exploration.getDistinct());
+    set.getHop().takeBody(exploration.getHop());
+
+    exploration.getSrcids().replaceAllUsesWith(set.getSrcids());
+    exploration.getTgtids().replaceAllUsesWith(set.getTgtids());
+    exploration.getPaths().replaceAllUsesWith(set.getPaths());
+
+    const mlir::ResultRange setCarried = set.getFilteredColumns();
+    size_t kept = 0;
+    for (size_t index = 0; index < carried.size(); index++) {
+        if (index == endColumn) {
+            carriedResults[index].replaceAllUsesWith(set.getTgtids());
+        } else {
+            carriedResults[index].replaceAllUsesWith(setCarried[kept]);
+            kept++;
+        }
+    }
+
+    exploration.erase();
+
+    mlir::func::FuncOp function = set->getParentOfType<mlir::func::FuncOp>();
+    hoistFactorColumn(product, match._endResult, &function.getBody().front(), builder);
+}
+
+struct FuseExploreEndFactor : public impl::FuseExploreEndFactorBase<FuseExploreEndFactor> {
+    void runOnOperation() override {
+        llvm::SmallVector<ExplorePaths> explorations;
+        getOperation()->walk([&](ExplorePaths exploration) {
+            explorations.push_back(exploration);
+        });
+
+        mlir::OpBuilder builder(&getContext());
+        for (ExplorePaths exploration : explorations) {
+            FactorEndExploration match;
+            if (matchFactorEndExploration(exploration, match)) {
+                fuseExploreEndFactor(match, builder);
+            }
+        }
     }
 };
 

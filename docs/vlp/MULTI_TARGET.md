@@ -202,8 +202,11 @@ covers it, down to the Cypher query over simpledb. On reactome the query of the 
 now runs through Cypher in 2.8 ms at three hops, 4.4 at five and 5.8 at eight, against 1.12,
 23.5 and 5,074 for the post-filter it replaces.
 
-The work the rule still points at:
-
-| piece | where |
-|---|---|
-| cross-product factor as `end_column` to `end_nodes` | `fuse_explore_end_nodes`, or a pass after it |
+`fuse_explore_end_factor` landed the same day and closes the rule: an exploration whose
+`end_column` is one factor of the cross product its seeds come from has that factor's ops
+moved to the head of the function as the set, the product collapsed to its other factor or
+rebuilt one column narrower, and the walk rebuilt with `end_nodes` and the end column gone
+from its carry set. It peels the end out of a product nested inside the factor too, which is
+what `MATCH (a), (b), (c) WITH a, b, c MATCH (a)-[e*]->(b)` compiles to; an end drawn from
+the seed's own factor, or yielded beside a hop off it, stays per row.
+`test/query/ir/ExploreEndFactorTest.cpp` covers it, down to the Cypher queries over simpledb.

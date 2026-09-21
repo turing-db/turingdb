@@ -98,6 +98,11 @@ def FuseExploreEndNodes : Pass<"fuse_explore_end_nodes"> {
     let dependentDialects = ["mlir::db::DB"];
 }
 
+def FuseExploreEndFactor : Pass<"fuse_explore_end_factor"> {
+    let summary = "Turn the cross-product factor a path exploration's end column is drawn from into the set of ends the walk heads for";
+    let dependentDialects = ["mlir::db::DB"];
+}
+
 def FuseExploreEndSet : Pass<"fuse_explore_end_set"> {
     let summary = "Fuse a path exploration and the property-equality filter over its end nodes into an exploration ending on the set of nodes holding that value";
     let dependentDialects = ["mlir::db::DB"];
