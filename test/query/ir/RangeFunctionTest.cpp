@@ -155,6 +155,10 @@ TEST_F(RangeFunctionTest, indexesTheListItBuilds) {
     expectRows("RETURN range(10, 20)[0], range(10, 20)[3]", {{"10", "13"}});
 }
 
+TEST_F(RangeFunctionTest, filtersAndProjectsTheListItBuilds) {
+    expectRows("RETURN [ x in range(1,10) where x%2 = 0 | 2*x+1 ]", {{"[5, 9, 13, 17, 21]"}});
+}
+
 TEST_F(RangeFunctionTest, countsUpToAStoredBound) {
     expectRows("MATCH (n:Person {name: 'Remy'}) RETURN size(range(1, n.age))", {{"32"}});
 }
