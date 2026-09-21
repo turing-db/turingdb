@@ -6,7 +6,10 @@
 #include <string>
 
 #include <range/v3/view/join.hpp>
+#include <string_view>
 
+#include "FatalException.h"
+#include "TuringException.h"
 #include "samplers/GraphSAGESampler.h"
 
 #include "Procedure.h"
@@ -24,6 +27,7 @@
 #include "list/ListView.h"
 
 #include "metadata/PropertyType.h"
+#include "spdlog/fmt/bundled/format.h"
 
 using namespace db;
 
@@ -31,6 +35,9 @@ namespace rg = ranges;
 namespace rv = rg::views;
 
 namespace {
+
+constexpr std::string_view fanoutSizeErr =
+    "Fanout parameter must be a list of size {}, not {}.";
 
 constexpr size_t returnValuesPerHop = 3;
 
@@ -54,7 +61,7 @@ struct Data final : public IndexedProcedureData {
     std::unique_ptr<GraphSAGESampler> sampler;
 };
 
-void numericList(ListView l) {
+void numericList(const ListView l) {
     const auto isInt = [](ListElementView ele) -> bool {
         return ele.getTag() == ListBufferTypeTag::Int;
     };
@@ -62,6 +69,17 @@ void numericList(ListView l) {
     if (!allInts) {
         throw TuringException("graphSAGE() seeds must be a list of ints");
     }
+}
+
+void validFanoutList(const ListView l) {
+    const size_t listSize = l.size();
+    constexpr size_t reqSize = GraphSAGESampler::hops;
+
+    if (listSize == reqSize) {
+        return;
+    }
+
+    throw TuringException(fmt::format(fanoutSizeErr, reqSize, listSize));
 }
 
 void validateInput(Data& data) {
@@ -76,6 +94,7 @@ void validateInput(Data& data) {
         const auto* fanouts = dynamic_cast<const ColumnConst<ListView>*>(erased);
         bioassert(fanouts, "Invalid fanouts column");
         numericList(fanouts->getRaw());
+        validFanoutList(fanouts->getRaw());
     }
 }
 
@@ -83,15 +102,40 @@ void prepareImpl(ProcedureState* state) {
     Data& data = state->data<Data>();
     validateInput(data);
 
+    const size_t seed = [&] -> size_t {
+        using SeedColType = const ColumnConst<std::optional<types::Int64::Primitive>>;
+        const Column* col = data.getInputColumn(2);
+        const auto* seedCol = dynamic_cast<SeedColType*>(col);
+        if (!seedCol) {
+            return GraphSAGESampler::NOSEED;
+        }
+        return seedCol->getRaw().value_or(GraphSAGESampler::NOSEED);
+    }();
+
     const ProcedureContext* ctxt = state->getContext();
     const GraphView& view = *ctxt->getGraphView();
 
-    data.sampler = std::make_unique<GraphSAGESampler>(view);
+    data.sampler = std::make_unique<GraphSAGESampler>(view, seed);
 }
 
 void executeImpl(ProcedureState* state) {
     Data& data = state->data<Data>();
     auto& sampler = data.sampler;
+
+    const GraphSAGESampler::Fanouts fanouts = [&] -> auto {
+        GraphSAGESampler::Fanouts out;
+        using FanoutColType = const ColumnConst<ListView>;
+        const Column* col = data.getInputColumn(1);
+        const auto* fanoutsCol = dynamic_cast<FanoutColType*>(col);
+        bioassert(fanoutsCol, "Invalid fanouts col passed validation");
+        const ListView l = fanoutsCol->getRaw();
+        const auto eles = l.elements();
+        for (size_t i = 0; i < GraphSAGESampler::hops; i++) {
+            const size_t fanout = eles[i].getAs<types::Int64::Primitive>();
+            out[i] = fanout;
+        }
+        return out;
+    }();
 
     for (size_t hop = 0; hop < GraphSAGESampler::hops; hop++) {
         const size_t base = hop * returnValuesPerHop;
@@ -100,7 +144,7 @@ void executeImpl(ProcedureState* state) {
         auto* srcs = data.getReturnColumn(base + 1)->cast<GraphSAGESampler::NodeCol>();
         auto* tgts = data.getReturnColumn(base + 2)->cast<GraphSAGESampler::NodeCol>();
 
-        sampler->setHopData(hop, srcs, tgts, dst, 2);
+        sampler->setHopData(hop, srcs, tgts, dst, fanouts[hop]);
     }
 
     ColumnNodeIDs nodes;
