@@ -26,6 +26,7 @@ add_storage_tests(test_storage_edgecontainer EdgeContainerTest.cpp)
 add_storage_tests(test_storage_comparator ComparatorTest.cpp)
 add_storage_tests(test_storage_arcmanager ArcManagerTest.cpp)
 add_storage_tests(test_storage_graphwriter GraphWriterTest.cpp)
+add_storage_tests(test_storage_node_count_with_property NodeCountWithPropertyTest.cpp)
 
 add_storage_tests(test_storage_iterator iterators/IteratorsTest.cpp)
 add_storage_tests(test_storage_scan_nodes_by_property_value iterators/ScanNodesByPropertyValueTest.cpp)
