@@ -10,6 +10,7 @@
 #include "llvm/ADT/StringMap.h"
 
 #include "DBOps.h"
+#include "NLOps.h"
 
 namespace db {
 
@@ -252,12 +253,19 @@ private:
     // rows in, hoisted where every branch's filter can reach it
     void lowerDistinctSet(mlir::db::DistinctSet distinctSet);
 
-    // The types the first branch of a union resolved its result columns to, which the
-    // branches after it are checked against
-    void collectBranchResultTypes(mlir::Region& branch, llvm::SmallVectorImpl<mlir::Type>& resultTypes);
+    // Brings every branch's result columns to the one type each column of the result
+    // carries, once the branches have been lowered and their types are known
+    void reconcileBranchResultTypes(llvm::ArrayRef<mlir::nl::Output> branchOutputs);
 
-    void throwOnDisagreeingBranchTypes(mlir::Region& branch,
-                                       llvm::SmallVectorImpl<mlir::Type>& resultTypes);
+    mlir::Type unionResultType(llvm::ArrayRef<mlir::nl::Output> branchOutputs, size_t columnIndex);
+
+    void throwOnDisagreeingBranchTypes(mlir::nl::Output branchOutput,
+                                       mlir::nl::Output resultBranch,
+                                       size_t columnIndex);
+
+    // Reads the null literal's chunk as a column of @param chunkType, holding one absent
+    // value per row of it
+    mlir::Value typedNullChunk(mlir::Value chunk, mlir::Type chunkType);
 
     // Lower a db.optional_match into an nl.optional_buffer, the pattern's own loop nest,
     // an nl.optional_collect at its deepest point and an nl.optional_drain loop yielding
@@ -449,7 +457,9 @@ private:
 
     void lowerCallProcedure(mlir::db::CallProcedure call);
 
-    void lowerOutput(mlir::db::Output output);
+    // Emits the nl.output the sink reads this result off, and hands it back: a union
+    // reaches for it again once every branch has said what its columns hold
+    mlir::nl::Output lowerOutput(mlir::db::Output output);
 
     // Lower one factor region of a db.cross_product or a db.hash_join into a loop
     // nest rooted at rootBlock, collecting its db.yield columns (mapped to their nl

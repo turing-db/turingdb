@@ -2400,6 +2400,21 @@ void NLTranslator::translateToNullable(nl::ToNullable toNullable, NLStmtContaine
 
     const auto resultChunk = mlir::cast<nl::ChunkType>(toNullable.getResult().getType());
     const auto nullableType = mlir::cast<storage::NullableType>(resultChunk.getElementType());
+
+    // The null literal's chunk names no value type of its own, so there is no value to read
+    // through: the result is one absent value per row, in the type it does name - what a
+    // UNION branch spelling a column's value null hands the sink.
+    if (isUntypedNullChunk(operandValue.getType())) {
+        Column* const nulls = allocColumnForChunkType(resultChunk);
+        _valueSlots[toNullable.getResult()] = nulls;
+
+        NLFillNullData* fillData = _program->allocFunctionData<NLFillNullData>(operand,
+                                                                               nulls,
+                                                                               selectFillNullForChunkType(resultChunk));
+        body->emplaceStmt(&NLExecutor::runFillNull, fillData);
+        return;
+    }
+
     const ValueType valueType = valueTypeFromElementType(nullableType.getValueType());
 
     // An entity column carries its null in the ID rather than in an optional, so it is
