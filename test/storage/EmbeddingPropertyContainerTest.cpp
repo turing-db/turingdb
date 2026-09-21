@@ -9,7 +9,6 @@
 #include "metadata/GraphMetadata.h"
 #include "metadata/PropertyType.h"
 #include "reader/GraphReader.h"
-#include "iterators/GetPropertiesIterator.h"
 #include "versioning/Transaction.h"
 #include "views/GraphView.h"
 #include "writers/GraphWriter.h"
@@ -230,7 +229,7 @@ protected:
     std::unique_ptr<JobSystem> _jobSystem;
 };
 
-TEST_F(EmbeddingGraphTest, GetPropertiesIterator) {
+TEST_F(EmbeddingGraphTest, GetPropertiesWithNullIteratorAcrossBuckets) {
     const size_t dimension = 4;
 
     EmbeddingBucket probe(dimension);
@@ -270,12 +269,15 @@ TEST_F(EmbeddingGraphTest, GetPropertiesIterator) {
     }
 
     // Iterate embeddings and verify against the idx property
-    const auto vecRange = reader.getNodeProperties<types::Embedding>(vecType->_id, &nodeIDs);
+    const auto vecRange = reader.getNodePropertiesWithNull<types::Embedding>(vecType->_id, &nodeIDs);
 
     size_t total = 0;
     for (auto it = vecRange.begin(); it.isValid(); it.next()) {
-        const NodeID nodeID = it.getCurrentEntityID();
-        const auto view = it.get();
+        const NodeID nodeID = it.getCurrentID();
+        const auto value = it.get();
+        ASSERT_TRUE(value.has_value());
+
+        const auto view = value.value();
         ASSERT_EQ(view.size(), dimension);
 
         // Look up the original loop index via the idx property

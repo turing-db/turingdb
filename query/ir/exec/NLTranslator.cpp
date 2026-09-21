@@ -4154,7 +4154,7 @@ void NLTranslator::translateShortestPathLoop(const IteratorConfig& config,
     ColumnNodeIDs* expansionInput = _memory->alloc<ColumnNodeIDs>();
     ColumnEdgeIDs* expandedEdges = _memory->alloc<ColumnEdgeIDs>();
     ColumnNodeIDs* expandedTargets = _memory->alloc<ColumnNodeIDs>();
-    Column* weightValues = allocValueColumnForValueType(state->getValueType());
+    Column* weightValues = allocOptColumnForValueType(state->getValueType());
     loopData->setExpansionScratch(expansionInput, expandedEdges, expandedTargets, weightValues);
 
     body->emplaceStmt(&NLExecutor::runShortestPathLoop, loopData);

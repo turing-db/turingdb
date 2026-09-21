@@ -3,7 +3,6 @@
 #include "ID.h"
 #include "views/EdgeView.h"
 #include "views/GraphView.h"
-#include "iterators/GetPropertiesIterator.h"
 #include "iterators/GetPropertiesWithNullIterator.h"
 #include "iterators/GetInEdgesIterator.h"
 #include "iterators/GetEdgesIterator.h"
@@ -137,21 +136,9 @@ public:
     }
 
     template <SupportedType T>
-    [[nodiscard]] GetNodePropertiesRange<T> getNodeProperties(PropertyTypeID ptID,
-                                                              const ColumnNodeIDs* inputNodeIDs) const {
-        return GetNodePropertiesRange<T>(_view, ptID, inputNodeIDs);
-    }
-
-    template <SupportedType T>
     [[nodiscard]] GetNodePropertiesWithNullRange<T> getNodePropertiesWithNull(PropertyTypeID ptID,
                                                                               const ColumnNodeIDs* inputNodeIDs) const {
         return GetNodePropertiesWithNullRange<T>(_view, ptID, inputNodeIDs);
-    }
-
-    template <SupportedType T>
-    [[nodiscard]] GetEdgePropertiesRange<T> getEdgeProperties(PropertyTypeID ptID,
-                                                              const ColumnEdgeIDs* inputEdgeIDs) const {
-        return GetEdgePropertiesRange<T>(_view, ptID, inputEdgeIDs);
     }
 
     template <SupportedType T>

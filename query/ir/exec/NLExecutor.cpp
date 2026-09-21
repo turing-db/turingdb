@@ -28,7 +28,6 @@
 #include "iterators/GetOutEdgesIterator.h"
 #include "iterators/GetOutEdgesByTypeIterator.h"
 #include "iterators/GetOutEdgesByLabelIterator.h"
-#include "iterators/GetPropertiesIterator.h"
 #include "iterators/GetPropertiesWithNullIterator.h"
 #include "iterators/ScanEdgesByTypeIterator.h"
 #include "iterators/ScanEdgesIterator.h"
@@ -4128,17 +4127,17 @@ void shortestPathSearch(NLExecutionContext* context, NLShortestPathLoopData* loo
     ColumnEdgeIDs* outputEdges = loopData->getExpandedEdges();
     ColumnNodeIDs* outputNodes = loopData->getExpandedTargets();
     ColumnVector<size_t>* outputIndices = loopData->getExpandedIndices();
-    ColumnVector<size_t>* propertyIndices = loopData->getWeightIndices();
-    ColumnVector<EdgePropType>* properties = static_cast<ColumnVector<EdgePropType>*>(loopData->getWeightValues());
+    ColumnOptVector<EdgePropType>* properties =
+        static_cast<ColumnOptVector<EdgePropType>*>(loopData->getWeightValues());
 
     GetOutEdgesChunkWriter getOutEdgesWriter(view, input);
     getOutEdgesWriter.setIndices(outputIndices);
     getOutEdgesWriter.setEdgeIDs(outputEdges);
     getOutEdgesWriter.setTgtIDs(outputNodes);
 
-    GetPropertiesChunkWriter<EdgeID, T> getPropertiesWriter(view, state->getPropertyType(), outputEdges);
+    GetPropertiesWithNullChunkWriter<EdgeID, T> getPropertiesWriter(
+        view, state->getPropertyType(), outputEdges);
     getPropertiesWriter.setOutput(properties);
-    getPropertiesWriter.setIndices(propertyIndices);
 
     const std::unordered_set<NodeID>& targetNodes = state->targets();
 
@@ -4177,20 +4176,21 @@ void shortestPathSearch(NLExecutionContext* context, NLShortestPathLoopData* loo
 
         // loop over all the edge properties
         for (size_t i = 0; i < properties->size(); ++i) {
+            const std::optional<EdgePropType>& weight = (*properties)[i];
+
+            if (!weight.has_value()) {
+                continue;
+            }
 
             if constexpr (std::is_signed_v<EdgePropType>) {
-                if ((*properties)[i] < 0) {
+                if (*weight < 0) {
                     throw IRException("Cannot Do Shortest Path With Negative Weights");
                 }
             }
 
-            // Using the indices we for each edge we have the:
-            // 1.Target Node
-            // 2.EdgeID
-            // 3.Edge Property
-            const auto outputNodeId = (*outputNodes)[(*propertyIndices)[i]];
-            const auto outputEdgeId = (*outputEdges)[(*propertyIndices)[i]];
-            const auto dist = val.distance + (*properties)[i];
+            const auto outputNodeId = (*outputNodes)[i];
+            const auto outputEdgeId = (*outputEdges)[i];
+            const auto dist = val.distance + *weight;
 
             const auto it = heapValueMap.find(outputNodeId);
             if (it == heapValueMap.end()) {
