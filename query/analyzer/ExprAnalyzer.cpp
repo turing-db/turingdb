@@ -257,7 +257,8 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
             type = EvaluatedType::Bool;
 
             if (pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Bool)
-                || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Null)) {
+                || pair == TypePairBitset(EvaluatedType::Bool, EvaluatedType::Null)
+                || pair == TypePairBitset(EvaluatedType::Null, EvaluatedType::Null)) {
                 break;
             }
 
@@ -464,6 +465,13 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
+            // Arithmetic over an unknown value is unknown, whatever the other side holds.
+            // The list cases come first: [1, 2] + null appends the null instead
+            if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
+                type = EvaluatedType::Null;
+                break;
+            }
+
             if (computesOverListItem(pair)) {
                 type = EvaluatedType::Double;
                 break;
@@ -497,6 +505,11 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
                 break;
             }
 
+            if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
+                type = EvaluatedType::Null;
+                break;
+            }
+
             const std::string error = fmt::format(
                 "Operands are not valid and compatible numeric types: '{} ' and '{}'",
                 EvaluatedTypeName::value(a),
@@ -518,6 +531,11 @@ void ExprAnalyzer::analyzeBinaryExpr(BinaryExpr* expr) {
 
             if (computesOverListItem(pair)) {
                 type = EvaluatedType::Double;
+                break;
+            }
+
+            if (a == EvaluatedType::Null || b == EvaluatedType::Null) {
+                type = EvaluatedType::Null;
                 break;
             }
 
@@ -576,9 +594,13 @@ void ExprAnalyzer::analyzeUnaryExpr(UnaryExpr* expr) {
 
     switch (expr->getOperator()) {
         case UnaryOperator::Not: {
-            if (operand->getType() != EvaluatedType::Bool) {
+            const EvaluatedType operandType = operand->getType();
+            const bool negatesATruthValue = operandType == EvaluatedType::Bool
+                                            || operandType == EvaluatedType::Null;
+
+            if (!negatesATruthValue) {
                 const std::string error = fmt::format("NOT operand must be a boolean, not '{}'",
-                                                      EvaluatedTypeName::value(operand->getType()));
+                                                      EvaluatedTypeName::value(operandType));
                 throwError(error, expr);
             }
 
@@ -592,6 +614,8 @@ void ExprAnalyzer::analyzeUnaryExpr(UnaryExpr* expr) {
                 type = EvaluatedType::Integer;
             } else if (operandType == EvaluatedType::Double) {
                 type = EvaluatedType::Double;
+            } else if (operandType == EvaluatedType::Null) {
+                type = EvaluatedType::Null;
             } else {
                 const std::string error = fmt::format("Operand must be an integer or double, not '{}'",
                                                       EvaluatedTypeName::value(operandType));

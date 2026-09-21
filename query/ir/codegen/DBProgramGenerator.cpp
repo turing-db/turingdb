@@ -5385,6 +5385,13 @@ void DBProgramGenerator::translateUnaryExpr(const Expr* expr, const UnaryExpr* u
         break;
 
         case UnaryOperator::Minus: {
+            // Negating an unknown value is unknown, and there is no zero to subtract it
+            // from: the null the operand is stands as the negation
+            if (expr->getType() == EvaluatedType::Null) {
+                _part._exprMap[expr] = nullConstantColumn();
+                break;
+            }
+
             // -x is 0 - x, the subtraction the engine already lowers: the promotion of the
             // zero against the operand is what gives the negation its type
             const mlir::db::ColumnType noneType = allocColumnType(mlir::NoneType::get(_mlirCtxt));
@@ -5680,6 +5687,21 @@ void DBProgramGenerator::translateBinaryExpr(const Expr* expr, const BinaryExpr*
                                     || op == BinaryOperator::Or
                                     || op == BinaryOperator::Xor;
     if (isThreeValuedLogic && isUntypedNullColumn(lhs) && isUntypedNullColumn(rhs)) {
+        _part._exprMap[expr] = nullConstantColumn();
+        return;
+    }
+
+    // Arithmetic over an unknown value is unknown, and the null names no column the result
+    // could be carried in, so the analyzer types such an expression Null. A list
+    // concatenation is not one of them: [1, 2] + null appends the null instead
+    const bool isArithmetic = op == BinaryOperator::Add
+                              || op == BinaryOperator::Sub
+                              || op == BinaryOperator::Mult
+                              || op == BinaryOperator::Div
+                              || op == BinaryOperator::Mod
+                              || op == BinaryOperator::Pow;
+
+    if (isArithmetic && binExpr->getType() == EvaluatedType::Null) {
         _part._exprMap[expr] = nullConstantColumn();
         return;
     }
