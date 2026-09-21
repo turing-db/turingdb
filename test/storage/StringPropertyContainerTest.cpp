@@ -5,6 +5,8 @@
 #include "comparators/PropertyContainerComparator.h"
 #include "properties/PropertyContainer.h"
 
+#include "TuringException.h"
+
 using namespace db;
 
 TEST(StringPropertyContainerTest, ExplicitNullHoldsNoValue) {
@@ -43,6 +45,18 @@ TEST(StringPropertyContainerTest, TryGetWithNullSeparatesNullFromAbsent) {
     const std::optional<const types::String::Primitive*> absent = container.tryGetWithNull(EntityID(3));
     ASSERT_TRUE(absent.has_value());
     ASSERT_EQ(absent.value(), nullptr);
+}
+
+TEST(StringPropertyContainerTest, GetRefusesANullAndAnAbsentEntity) {
+    TypedPropertyContainer<types::String> container;
+
+    container.add(EntityID(1), std::optional<types::String::Primitive> {"Remy"});
+    container.add(EntityID(2), std::nullopt);
+
+    EXPECT_EQ(container.get(EntityID(1)), "Remy");
+
+    EXPECT_THROW(container.get(EntityID(2)), TuringException);
+    EXPECT_THROW(container.get(EntityID(3)), TuringException);
 }
 
 TEST(StringPropertyContainerTest, SortKeepsExplicitNull) {

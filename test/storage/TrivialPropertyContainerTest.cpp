@@ -4,6 +4,8 @@
 
 #include "properties/PropertyContainer.h"
 
+#include "TuringException.h"
+
 using namespace db;
 
 // sort() rebuilds the entity ID map from the value and null ID lists, so a null recorded
@@ -24,4 +26,16 @@ TEST(TrivialPropertyContainerTest, PropertyNullSurvivesSort) {
     ASSERT_TRUE(value.has_value());
     ASSERT_NE(value.value(), nullptr);
     EXPECT_EQ(*value.value(), 7);
+}
+
+TEST(TrivialPropertyContainerTest, GetRefusesANullAndAnAbsentEntity) {
+    TypedPropertyContainer<types::Int64> container;
+
+    container.add(EntityID(1), types::Int64::Primitive {7});
+    container.add(EntityID(2), PropertyNull {});
+
+    EXPECT_EQ(container.get(EntityID(1)), 7);
+
+    EXPECT_THROW(container.get(EntityID(2)), TuringException);
+    EXPECT_THROW(container.get(EntityID(3)), TuringException);
 }
