@@ -27,7 +27,7 @@ using namespace turing::test;
 // size() over the kinds of string a query holds: the literal it spells out, the stored
 // property it reads back out of a datapart, the string a function builds characters of its
 // own for, and the one a heterogeneous list hands on as a type-erased cell. The size is
-// the number of bytes the string holds.
+// the number of Unicode characters the string holds, not the bytes UTF-8 spends on them.
 class StringSizeTest : public TuringTest {
 protected:
     void initialize() override {
@@ -130,8 +130,12 @@ TEST_F(StringSizeTest, sizesAnEmptyStringLiteral) {
     expectRows("RETURN size('')", {{"0"}});
 }
 
-TEST_F(StringSizeTest, sizesAMultibyteStringByItsBytes) {
-    expectRows("RETURN size('héllo')", {{"6"}});
+TEST_F(StringSizeTest, sizesAMultibyteStringByItsCharacters) {
+    expectRows("RETURN size('héllo')", {{"5"}});
+}
+
+TEST_F(StringSizeTest, sizesAFourByteCharacterAsOne) {
+    expectRows("RETURN size('a😀')", {{"2"}});
 }
 
 TEST_F(StringSizeTest, sizesAStoredStringProperty) {
@@ -168,12 +172,22 @@ TEST_F(StringSizeTest, sizesAnEmptyStoredString) {
     expectRows("MATCH (n:Tagged) RETURN size(n.text)", {{"0"}});
 }
 
+TEST_F(StringSizeTest, sizesAStoredMultibyteStringByItsCharacters) {
+    write("CREATE (n:Tagged {name: 'a', text: 'héllo'})");
+
+    expectRows("MATCH (n:Tagged) RETURN size(n.text)", {{"5"}});
+}
+
 TEST_F(StringSizeTest, sizesAnEdgeTypeString) {
     expectRows("MATCH ()-[e:KNOWS_WELL]->() RETURN size(type(e))", {{"10"}, {"10"}, {"10"}});
 }
 
 TEST_F(StringSizeTest, sizesAStringHeldInATaggedCell) {
     expectRows("RETURN size(head(['abcd', 2]))", {{"4"}});
+}
+
+TEST_F(StringSizeTest, sizesAMultibyteStringHeldInATaggedCell) {
+    expectRows("RETURN size(head(['héllo', 2]))", {{"5"}});
 }
 
 TEST_F(StringSizeTest, sizesAStringHeldInAStoredListCell) {
@@ -194,6 +208,6 @@ TEST_F(StringSizeTest, rejectsTheSizeOfANumber) {
     expectRejected("RETURN size(1)", "size");
 }
 
-TEST_F(StringSizeTest, countsTheNamesLongerThanFiveBytes) {
+TEST_F(StringSizeTest, countsTheNamesLongerThanFiveCharacters) {
     expectRows("MATCH (n:Person) WHERE size(n.name) > 5 RETURN count(*)", {{"2"}});
 }
