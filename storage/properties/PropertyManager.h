@@ -124,11 +124,6 @@ public:
         return container.all();
     }
 
-    template <SupportedType T>
-    std::optional<const typename T::Primitive*> tryGet(PropertyTypeID ptID, EntityID entityID) const {
-        return tryGetWithNull<T>(ptID, entityID);
-    }
-
     /**
      * @brief Gets the (possibly null) value of the property with ID @param ptID
      * associated with @param entityID.

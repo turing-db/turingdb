@@ -133,7 +133,7 @@ protected:
         for (size_t index = parts.size(); index > 0; index--) {
             const PropertyManager& properties = parts[index - 1]->nodeProperties();
             const typename T::Primitive* value =
-                properties.tryGet<T>(property, EntityID {node}).value_or(nullptr);
+                properties.tryGetWithNull<T>(property, EntityID {node}).value_or(nullptr);
             if (value) {
                 return *value;
             }
