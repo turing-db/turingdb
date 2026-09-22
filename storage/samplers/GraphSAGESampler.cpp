@@ -1,6 +1,7 @@
 #include "GraphSAGESampler.h"
 
 #include <algorithm>
+#include <optional>
 #include <stddef.h>
 
 #include "iterators/NeighbourhoodSampleIterator.h"
@@ -12,17 +13,19 @@ using namespace db;
 
 namespace {
 
-const auto resizeImpl = [](auto* col, size_t size) -> void { col->resize(size); };
-const auto clearImpl = [](auto* col) -> void { col->clear(); };
-
-void assignColumn(const ColumnNodeIDs* src, ColumnOptVector<NodeID>* dst) {
-    if (!dst) {
+const auto resizeImpl = [](auto* col, size_t size) -> void {
+    if (!col) {
         return;
     }
+    col->resize(size);
+};
 
-    auto& raw = dst->getRaw();
-    raw.assign(src->begin(), src->end());
-}
+const auto clearImpl = [](auto* col) -> void {
+    if (!col) {
+        return;
+    }
+    col->clear();
+};
 
 }
 
@@ -102,17 +105,34 @@ void GraphSAGESampler::seed(const ColumnNodeIDs* seeds) {
     _seeded = true;
 }
 
+void GraphSAGESampler::pushNode(HopData& data, NodeID node) {
+    const bool inserted = data._seen.insert(node.getValue()).second;
+    if (!inserted) {
+        return;
+    }
+
+    data._frontier.push_back(node);
+}
+
 void GraphSAGESampler::pushFrontier(size_t hop, const ColumnNodeIDs* nodes) {
     bioassert(hop < hops, "Tried to seed an OOB hop");
     HopData& data = _sampleData[hop];
 
     for (const NodeID node : *nodes) {
-        const bool inserted = data._seen.insert(node.getValue()).second;
-        if (!inserted) {
+        pushNode(data, node);
+    }
+}
+
+void GraphSAGESampler::pushFrontier(size_t hop, const NodeCol* nodes) {
+    bioassert(hop < hops, "Tried to seed an OOB hop");
+    HopData& data = _sampleData[hop];
+
+    for (const std::optional<NodeID>& node : *nodes) {
+        if (!node.has_value()) {
             continue;
         }
 
-        data._frontier.push_back(node);
+        pushNode(data, *node);
     }
 }
 
@@ -146,32 +166,31 @@ size_t GraphSAGESampler::expandHop(size_t hop, size_t maxRows) {
     if (!data._writer) {
         const bool haveSeed = _seed != NOSEED;
         data._writer = haveSeed
-            ? std::make_unique<NeighbourhoodSampleChunkWriter>(_view, &data._frontier, data._fanout, _seed)
-            : std::make_unique<NeighbourhoodSampleChunkWriter>(_view, &data._frontier, data._fanout);
+            ? std::make_unique<NullableNeighbourhoodSampleWriter>(_view, &data._frontier, data._fanout, _seed)
+            : std::make_unique<NullableNeighbourhoodSampleWriter>(_view, &data._frontier, data._fanout);
     }
 
-    std::unique_ptr<NeighbourhoodSampleChunkWriter>& writer = data._writer;
+    std::unique_ptr<NullableNeighbourhoodSampleWriter>& writer = data._writer;
 
     if (writer->isDone()) {
         return 0;
     }
 
-    ColumnNodeIDs srcs;
-    ColumnNodeIDs tgts;
-    writer->setOutputColumns(&srcs, nullptr, nullptr, &tgts);
+    NodeCol* srcs = data._srcs ? data._srcs : &_srcsScratch;
+
+    writer->setOutputColumns(srcs, nullptr, nullptr, data._tgts);
 
     writer->fill(maxRows);
 
-    assignColumn(&srcs, data._srcs);
-    assignColumn(&tgts, data._tgts);
-
-    bioassert(srcs.size() == tgts.size(), "Mismatched srcs, tgts");
-
-    if (hop + 1 < hops) {
-        pushFrontier(hop + 1, &srcs);
+    if (data._tgts) {
+        bioassert(srcs->size() == data._tgts->size(), "Mismatched srcs, tgts");
     }
 
-    return srcs.size();
+    if (hop + 1 < hops) {
+        pushFrontier(hop + 1, srcs);
+    }
+
+    return srcs->size();
 }
 
 void GraphSAGESampler::sample(size_t maxRows) {

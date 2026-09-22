@@ -29,13 +29,13 @@ constexpr std::string_view sampleSizeErr = "gnn.neighbourhood_sample: sampleSize
 constexpr std::string_view seedErr = "gnn.neighbourhoodSample: seed must be a constant int";
 
 struct Data : public IndexedProcedureData {
-    std::unique_ptr<NeighbourhoodSampleChunkWriter> writer;
+    std::unique_ptr<NeighbourhoodSampleWriter> writer;
 };
 
 void executeImpl(ProcedureState* proc) {
     Data& data = proc->data<Data>();
 
-    std::unique_ptr<NeighbourhoodSampleChunkWriter>& chunkWriter = data.writer;
+    std::unique_ptr<NeighbourhoodSampleWriter>& chunkWriter = data.writer;
     bioassert(chunkWriter, "Null chunk writer.");
 
     // A node's sample is emitted whole, so a sample wider than the chunk the caller
@@ -87,10 +87,10 @@ void prepareImpl(ProcedureState* proc) {
         seed = signedSeed;
     }
 
-    data.writer = std::make_unique<NeighbourhoodSampleChunkWriter>(view,
-                                                                   inputNodeIDs,
-                                                                   sampleSize,
-                                                                   seed);
+    data.writer = std::make_unique<NeighbourhoodSampleWriter>(view,
+                                                              inputNodeIDs,
+                                                              sampleSize,
+                                                              seed);
     data.writer->setOutputColumns(srcCol, edgeCol, edgeTypeCol, tgtCol);
     data.writer->setIndices(indices);
 }

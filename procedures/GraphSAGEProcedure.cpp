@@ -84,17 +84,15 @@ void validFanoutList(const ListView l) {
 
 void validateInput(Data& data) {
     {
-        const Column* erased =  data.getInputColumn(0);
-        const auto* seeds = dynamic_cast<const ColumnConst<ListView>*>(erased);
-        bioassert(seeds, "Invalid seed column");
-        numericList(seeds->getRaw());
+        const Column* seedsCol =  data.getInputColumn(0);
+        const ListView seeds = ProcUtils::constArg<ListView>(seedsCol, "Invalid seed column.");
+        numericList(seeds);
     }
     {
-        const Column* erased = data.getInputColumn(1);
-        const auto* fanouts = dynamic_cast<const ColumnConst<ListView>*>(erased);
-        bioassert(fanouts, "Invalid fanouts column");
-        numericList(fanouts->getRaw());
-        validFanoutList(fanouts->getRaw());
+        const Column* fanoutsCol = data.getInputColumn(1);
+        const ListView fanouts = ProcUtils::constArg<ListView>(fanoutsCol, "Invalid fanouts column");
+        numericList(fanouts);
+        validFanoutList(fanouts);
     }
 }
 
@@ -164,7 +162,6 @@ void executeImpl(ProcedureState* state) {
     Data& data = state->data<Data>();
 
     std::unique_ptr<GraphSAGESampler>& sampler = data.sampler;
-
     bioassert(sampler, "Null sampler");
 
     const size_t chunkSize = state->getContext()->getChunkSize();

@@ -39,7 +39,7 @@ protected:
         const FrozenCommitTx transaction = _graph->openTransaction();
         const GraphReader reader = transaction.readGraph();
 
-        NeighbourhoodSampleChunkWriter writer(reader.getView(), &input, sampleSize);
+        NeighbourhoodSampleWriter writer(reader.getView(), &input, sampleSize);
         writer.setOutputColumns(&neighbours, nullptr, nullptr, nullptr);
         writer.fill(ChunkConfig::CHUNK_SIZE);
     }
