@@ -10,11 +10,14 @@ LOCAL_FILENAME = "reactome.jsonl"
 
 # Resolve repo root from TURING_HOME (set by run_regress.sh) or fall back
 REPO_ROOT = os.environ.get("SOURCE_DIR", os.path.join(os.environ.get("TURING_HOME", ""), ".."))
-DATASET_CACHE = os.path.join(REPO_ROOT, "external", "datasets", LOCAL_FILENAME)
+DATASET_CACHE_DIR = os.path.join(REPO_ROOT, "external", "datasets", "reactome")
+DATASET_CACHE = os.path.join(DATASET_CACHE_DIR, LOCAL_FILENAME)
 
 
 def download_from_s3(dest_path: str) -> None:
     import boto3
+
+    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
 
     print(f"Downloading s3://{BUCKET}/{S3_KEY} -> {dest_path}")
     s3 = boto3.client("s3")
@@ -23,11 +26,18 @@ def download_from_s3(dest_path: str) -> None:
 
 
 def ensure_reactome(dest_path: str) -> None:
-    if os.path.isfile(DATASET_CACHE):
-        print(f"Copying cached {DATASET_CACHE} -> {dest_path}")
-        shutil.copy2(DATASET_CACHE, dest_path)
-    else:
+    if not os.path.isfile(DATASET_CACHE):
         download_from_s3(DATASET_CACHE)
+
+    # dest_path may already be a hard link to the cached file, which a copy onto
+    # it would truncate.
+    if os.path.exists(dest_path):
+        os.remove(dest_path)
+
+    try:
+        os.link(DATASET_CACHE, dest_path)
+        print(f"Hard-linked {DATASET_CACHE} -> {dest_path}")
+    except OSError:
         print(f"Copying {DATASET_CACHE} -> {dest_path}")
         shutil.copy2(DATASET_CACHE, dest_path)
 

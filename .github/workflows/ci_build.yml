@@ -252,16 +252,24 @@ jobs:
         aws-region: eu-west-2
 
     # The reactome regress test runs on Linux only (load_jsonl_reactome/run.sh
-    # skips on macOS), so reactome.jsonl is only ever downloaded on the Linux
-    # runners. Cache it there; there is nothing to cache on macOS. This stays on
-    # the GitHub-hosted cache (not the local on-disk cache used for deps above)
-    # because corca-ai/local-cache is directory-only and hard-fails on a
-    # single-file path like this one.
-    - name: Cache reactome dataset (Linux)
-      if: runner.os == 'Linux'
+    # skips on macOS). The self-hosted runners cache the dataset on local disk
+    # like the dependencies above, where a hit is a symlink rather than a 1.1 GB
+    # pull expanded to 14.9 GB. It gets its own directory because
+    # corca-ai/local-cache is directory-only.
+    - name: Cache reactome dataset (self-hosted Linux)
+      if: runner.os == 'Linux' && contains(matrix.os, 'turing')
+      uses: corca-ai/local-cache@v2
+      with:
+        base: /opt/actions-local-cache
+        path: external/datasets/reactome
+        key: dataset-reactome-v1
+
+    # The GitHub-hosted ARM runners are ephemeral and have no local cache base.
+    - name: Cache reactome dataset (GitHub-hosted Linux)
+      if: runner.os == 'Linux' && !contains(matrix.os, 'turing')
       uses: actions/cache@v4
       with:
-        path: external/datasets/reactome.jsonl
+        path: external/datasets/reactome
         key: dataset-reactome-v1
 
     - name: Disk usage (before regress)

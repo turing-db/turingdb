@@ -20,6 +20,6 @@ python/turingdb/_embedded/*.dylib
 *.whl
 wheel/
 dist
-external/datasets/reactome.jsonl
+external/datasets/reactome
 fuzz_results
 build_afl
