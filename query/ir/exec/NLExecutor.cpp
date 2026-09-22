@@ -3021,6 +3021,59 @@ void collectValidIDFold(Column* values,
     }
 }
 
+template <typename IDType>
+void collectOptValidIDFold(Column* values,
+                           const Column* input,
+                           const std::vector<size_t>& groups,
+                           std::vector<std::vector<size_t>>& groupPositions,
+                           NLGroupDistinctTally& distinct) {
+    auto& valuesRaw = static_cast<ColumnVector<IDType>*>(values)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnOptVector<IDType>*>(input)->getRaw();
+
+    valuesRaw.reserve(valuesRaw.size() + inputRaw.size());
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const std::optional<IDType>& id = inputRaw[row];
+        if (!id.has_value() || !id->isValid()) {
+            continue;
+        }
+
+        const size_t position = valuesRaw.size();
+        valuesRaw.push_back(*id);
+        groupPositions[groups[row]].push_back(position);
+    }
+}
+
+template <typename IDType>
+void collectOptValidIDFoldDistinct(Column* values,
+                                   const Column* input,
+                                   const std::vector<size_t>& groups,
+                                   std::vector<std::vector<size_t>>& groupPositions,
+                                   NLGroupDistinctTally& distinct) {
+    auto& valuesRaw = static_cast<ColumnVector<IDType>*>(values)->getRaw();
+    const auto& inputRaw = static_cast<const ColumnOptVector<IDType>*>(input)->getRaw();
+
+    for (size_t row = 0; row < inputRaw.size(); row++) {
+        const std::optional<IDType>& id = inputRaw[row];
+        if (!id.has_value() || !id->isValid()) {
+            continue;
+        }
+
+        const size_t group = groups[row];
+
+        distinct.beginKey(group);
+        distinctAppendValueBytes(distinct.getKey(), id->getValue());
+
+        if (!distinct.insertIfNew()) {
+            continue;
+        }
+
+        const size_t position = valuesRaw.size();
+        valuesRaw.push_back(*id);
+        groupPositions[group].push_back(position);
+    }
+}
+
 // The ID sibling of collectFoldDistinct: an entity repeated within its group joins the
 // list once, keyed by the ID's underlying integer, and the null an unmatched pattern left
 // is no key of its own.
@@ -3456,6 +3509,14 @@ void selectCollectIDHandlers(bool distinctValues,
                              NLCollectFoldFunction& fold,
                              NLCollectListEmitFunction& listEmit) {
     fold = distinctValues ? &collectValidIDFoldDistinct<IDType> : &collectValidIDFold<IDType>;
+    listEmit = &collectListEmit<IDType>;
+}
+
+template <typename IDType>
+void selectCollectOptIDHandlers(bool distinctValues,
+                                NLCollectFoldFunction& fold,
+                                NLCollectListEmitFunction& listEmit) {
+    fold = distinctValues ? &collectOptValidIDFoldDistinct<IDType> : &collectOptValidIDFold<IDType>;
     listEmit = &collectListEmit<IDType>;
 }
 
@@ -6949,6 +7010,25 @@ void NLExecutor::selectCollectEntityHandlers(NLChunkKind kind,
 
         case NLChunkKind::EdgeID:
             return selectCollectIDHandlers<EdgeID>(distinctValues, fold, listEmit);
+        break;
+
+        default:
+            throw IRException("collect does not support this chunk kind");
+        break;
+    }
+}
+
+void NLExecutor::selectCollectOptEntityHandlers(NLChunkKind kind,
+                                                bool distinctValues,
+                                                NLCollectFoldFunction& fold,
+                                                NLCollectListEmitFunction& listEmit) {
+    switch (kind) {
+        case NLChunkKind::NodeID:
+            return selectCollectOptIDHandlers<NodeID>(distinctValues, fold, listEmit);
+        break;
+
+        case NLChunkKind::EdgeID:
+            return selectCollectOptIDHandlers<EdgeID>(distinctValues, fold, listEmit);
         break;
 
         default:

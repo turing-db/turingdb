@@ -736,6 +736,13 @@ public:
                                             NLCollectFoldFunction& fold,
                                             NLCollectListEmitFunction& listEmit);
 
+    // The nullable-entity sibling, for a chunk whose absent rows collect drops as it
+    // drops an invalid ID
+    static void selectCollectOptEntityHandlers(NLChunkKind kind,
+                                               bool distinctValues,
+                                               NLCollectFoldFunction& fold,
+                                               NLCollectListEmitFunction& listEmit);
+
     // The handlers a collect of a list column reads: the cells nest into a list of lists.
     static void selectCollectListHandlers(bool distinctValues,
                                           NLCollectFoldFunction& fold,
