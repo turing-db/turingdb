@@ -1,0 +1,17 @@
+{
+  "enabled": false,
+  "graph": "simpledb",
+  "query": "RETURN COUNT(*), toFloat(\"10\")",
+  "expect": {
+    "result": "COUNT(*),\"toFloat(\"\"10\"\")\"\n1,10",
+    "resultJson": "{\"header\":{\"column_names\":[\"COUNT(*)\",\"toFloat(\\\"10\\\")\"],\"column_types\":[\"UInt64\",\"Double\"]},\"data\":[[[1],[10.0]]]}"
+  },
+  "tags": [
+    "fuzz",
+    "crash",
+    "count",
+    "aggregate"
+  ],
+  "write-required": false,
+  "disabled-reason": "SEGFAULT - keep disabled, the suite runs in one process. distinctKeyAppendOptColumn reads past the end of the grouping key column in NLExecutor::runGroupAggregateUpdate when COUNT is grouped by a nullable column (toFloat, toInteger, toBoolean, head, size)"
+}

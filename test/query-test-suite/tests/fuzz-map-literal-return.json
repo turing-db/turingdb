@@ -1,0 +1,16 @@
+{
+  "enabled": false,
+  "graph": "simpledb",
+  "query": "RETURN {}",
+  "expect": {
+    "result": "ANALYZE ERROR\n-------* Query error\n     1 | RETURN {}\n       |        ^^\n-------* Map literals are not supported",
+    "resultJson": "{\"error\":\"ANALYZE_ERROR\",\"error_details\":\"-------* Query error\\n     1 | RETURN {}\\n       |        ^^\\n-------* Map literals are not supported\"}"
+  },
+  "tags": [
+    "fuzz",
+    "crash",
+    "literals"
+  ],
+  "write-required": false,
+  "disabled-reason": "Reaches codegen and throws FatalException 'Unsupported literal kind in WHERE clause expression' for a RETURN with no WHERE; needs a clean analyzer rejection, whose wording this fixture guesses"
+}

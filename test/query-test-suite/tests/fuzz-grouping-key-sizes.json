@@ -1,0 +1,17 @@
+{
+  "enabled": false,
+  "graph": "simpledb",
+  "query": "MATCH (n) RETURN n.age, toFloat(\"10\"), COUNT(*)",
+  "expect": {
+    "result": "n.age,\"toFloat(\"\"10\"\")\",COUNT(*)\n32,10,2\nnull,10,16",
+    "resultJson": "{\"header\":{\"column_names\":[\"n.age\",\"toFloat(\\\"10\\\")\",\"COUNT(*)\"],\"column_types\":[\"Int64\",\"Double\",\"UInt64\"]},\"data\":[[[32,null],[10.0,10.0],[2,16]]]}"
+  },
+  "tags": [
+    "fuzz",
+    "crash",
+    "count",
+    "aggregate"
+  ],
+  "write-required": false,
+  "disabled-reason": "Grouping by a per-row key next to a constant-derived one asserts 'keyColumn._input->size() == rowCount' at query/ir/exec/NLExecutor.cpp:6511. Values taken from MATCH (n) RETURN n.age, 10.0, COUNT(*)"
+}
