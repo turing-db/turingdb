@@ -113,6 +113,82 @@ TEST_F(SetPropertyNullTest, setsThePropertyToNullOnARowAMergeCreated) {
     expectRows("MATCH (t:Tag) RETURN t.name, t.age", {{"x", "null"}});
 }
 
+TEST_F(SetPropertyNullTest, readsNullForTheBoolPropertySetToNullOnAMatchedNode) {
+    expectWriteRows("MATCH (p:Person {name: 'Remy'}) SET p.isFrench = null RETURN p.isFrench, p.hasPhD",
+                    {{"null", "true"}});
+
+    expectRows("MATCH (p:Person) WHERE p.isFrench IS NULL RETURN p.name", {{"Remy"}});
+}
+
+// Remy, Adam, Maxime and Luc are the four Person nodes whose isFrench is true
+TEST_F(SetPropertyNullTest, theBoolPropertySetToNullNoLongerMatchesItsOldValue) {
+    applyWrite("MATCH (p:Person {name: 'Remy'}) SET p.isFrench = null");
+
+    expectRows("MATCH (p:Person {isFrench: true}) RETURN p.name", {{"Adam"}, {"Maxime"}, {"Luc"}});
+}
+
+TEST_F(SetPropertyNullTest, readsNullForTheDoublePropertySetToNull) {
+    applyWrite("CREATE (t:Tag {name: 'x', score: 1.5})");
+
+    expectWriteRows("MATCH (t:Tag {name: 'x'}) SET t.score = null RETURN t.score", {{"null"}});
+
+    expectRows("MATCH (t:Tag) RETURN t.name, t.score", {{"x", "null"}});
+}
+
+TEST_F(SetPropertyNullTest, readsNullForTheListPropertySetToNull) {
+    applyWrite("CREATE (t:Tag {name: 'x', vals: [1, 2, 3]})");
+
+    expectWriteRows("MATCH (t:Tag {name: 'x'}) SET t.vals = null RETURN t.vals", {{"null"}});
+
+    expectRows("MATCH (t:Tag) WHERE t.vals IS NULL RETURN t.name", {{"x"}});
+}
+
+TEST_F(SetPropertyNullTest, writesThePropertyAgainAfterItWasSetToNull) {
+    applyWrite("MATCH (p:Person {name: 'Remy'}) SET p.age = null");
+
+    expectWriteRows("MATCH (p:Person {name: 'Remy'}) SET p.age = 40 RETURN p.age", {{"40"}});
+
+    expectRows("MATCH (p:Person) WHERE p.age IS NOT NULL RETURN p.name, p.age",
+               {{"Remy", "40"}, {"Adam", "32"}});
+}
+
+// Remy and Adam are the only two nodes of the graph carrying an age, so the clause takes
+// the property off it entirely
+TEST_F(SetPropertyNullTest, takesThePropertyOffEveryNodeCarryingIt) {
+    applyWrite("MATCH (p:Person) SET p.age = null");
+
+    expectRows("MATCH (p) WHERE p.age IS NOT NULL RETURN p.name", {});
+    expectCounts("MATCH (p:Person) RETURN count(p.age)", {0});
+}
+
+// Remy, Adam, Maxime and Luc are the four Person nodes carrying a dob
+TEST_F(SetPropertyNullTest, takesTheStringPropertyOffEveryNodeCarryingIt) {
+    applyWrite("MATCH (p:Person) SET p.dob = null");
+
+    expectRows("MATCH (p:Person) WHERE p.dob IS NOT NULL RETURN p.name", {});
+    expectRows("MATCH (p:Person {name: 'Remy'}) RETURN p.name, p.dob", {{"Remy", "null"}});
+}
+
+// Adam keeps the one age left, so every aggregate reads that row alone
+TEST_F(SetPropertyNullTest, aggregatesOverThePropertySkipTheRowSetToNull) {
+    expectRows("MATCH (p:Person) RETURN count(p.age), sum(p.age), min(p.age), max(p.age)",
+               {{"2", "64", "32", "32"}});
+
+    applyWrite("MATCH (p:Person {name: 'Remy'}) SET p.age = null");
+
+    expectRows("MATCH (p:Person) RETURN count(p.age), sum(p.age), min(p.age), max(p.age)",
+               {{"1", "32", "32", "32"}});
+}
+
+// Five edges carry a proficiency; Ghosts -> Remy is the one the INTERESTED_IN pattern
+// does not reach
+TEST_F(SetPropertyNullTest, setsThePropertyToNullOnTheEdgesOfTheTypeMatchedAlone) {
+    applyWrite("MATCH ()-[e:INTERESTED_IN]->() SET e.proficiency = null");
+
+    expectRows("MATCH ()-[e]->() WHERE e.proficiency IS NOT NULL RETURN e.name",
+               {{"Ghosts -> Remy"}});
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
