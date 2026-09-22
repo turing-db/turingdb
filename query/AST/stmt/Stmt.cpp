@@ -88,6 +88,7 @@ bool Stmt::readsTheGraph(const Stmt* stmt) {
 
         case Kind::CREATE:
         case Kind::SET:
+        case Kind::REMOVE:
         case Kind::DELETE:
         case Kind::UNWIND:
         case Kind::WITH:
