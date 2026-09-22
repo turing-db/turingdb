@@ -10,6 +10,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <memory>
 #include <span>
 #include <string>
@@ -64,7 +65,11 @@ void initOnce() {
         return;
     }
 
-    g_env = TuringTestEnv::create(fs::Path("/tmp/fuzz_query_engine"));
+    // TuringDB locks its root directory, so a fixed path would let the fuzzer
+    // lock out any triage run reproducing a crash while it is still fuzzing.
+    const std::string rootDirectory = "/tmp/fuzz_query_engine_" + std::to_string(getpid());
+
+    g_env = TuringTestEnv::create(fs::Path(rootDirectory));
     db::SystemAccessor system = g_env->getSystemManager().accessUnique();
     db::Graph* graph = system.createGraph(g_graphName);
     db::SimpleGraph::createSimpleGraph(graph);
