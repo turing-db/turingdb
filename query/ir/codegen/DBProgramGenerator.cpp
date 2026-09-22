@@ -1893,8 +1893,8 @@ void DBProgramGenerator::addMergeFilter(const VariableDependency* mergeVar,
     bioassert(fstMergeSource && sndMergeSource, "MERGE target without two sources");
 
     const mlir::Location uloc = _opBuilder.getUnknownLoc();
-    const mlir::Value fstSourceCol = _part._varMap.at(fstMergeSource).back();
-    const mlir::Value sndSourceCol = _part._varMap.at(sndMergeSource).back();
+    const mlir::Value fstSourceCol = findVarOrThrow(_part._varMap, fstMergeSource);
+    const mlir::Value sndSourceCol = findVarOrThrow(_part._varMap, sndMergeSource);
     const mlir::db::ColumnType boolType = allocColumnType(mlir::storage::BoolType::get(_mlirCtxt));
     // Create an EQ op to keep only rows where both sources are the same
     auto eq =
