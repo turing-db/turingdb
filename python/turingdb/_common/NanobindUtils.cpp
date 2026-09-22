@@ -192,6 +192,8 @@ struct ValueToPyObject {
             return floats;
         } else if constexpr (std::is_same_v<T, db::ListView>) {
             return view(element.getAs<T>());
+        } else if constexpr (std::is_same_v<T, db::PropertyNull>) {
+            return nb::none();
         } else {
             return nb::cast(element.getAs<T>());
         }
