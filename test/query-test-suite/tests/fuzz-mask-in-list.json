@@ -1,0 +1,17 @@
+{
+  "enabled": false,
+  "graph": "simpledb",
+  "query": "RETURN COUNT(*) = 1 IN [1, 2, 3]",
+  "expect": {
+    "result": "\"COUNT(*) = 1 IN [1, 2, 3]\"\nfalse",
+    "resultJson": "{\"header\":{\"column_names\":[\"COUNT(*) = 1 IN [1, 2, 3]\"],\"column_types\":[\"Bool\"]},\"data\":[[[false]]]}"
+  },
+  "tags": [
+    "fuzz",
+    "crash",
+    "list",
+    "expression"
+  ],
+  "write-required": false,
+  "disabled-reason": "IN over the mask an aggregate comparison produces has no kernel: FatalException 'Unsupported binary operation of columns of kinds db::ColumnMask and db::ColumnConst<db::ListView>'. A per-row mask works, so MATCH (n) RETURN (n.age = 1) IN [1, 2, 3] is fine. Value taken from RETURN true IN [1, 2, 3]"
+}

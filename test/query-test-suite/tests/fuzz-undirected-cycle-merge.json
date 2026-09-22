@@ -1,0 +1,17 @@
+{
+  "enabled": false,
+  "graph": "simpledb",
+  "query": "MATCH (a)-->(b)--(a) RETURN id(a) ORDER BY id(a)",
+  "expect": {
+    "result": "id(a)\n0\n0\n0\n0\n0\n0\n1\n1\n1\n1\n6\n6\n8\n8\n9\n9\n11\n12\n12\n15\n15\n17",
+    "resultJson": "{\"header\":{\"column_names\":[\"id(a)\"],\"column_types\":[\"UInt64\"]},\"data\":[[[0,0,0,0,0,0,1,1,1,1,6,6,8,8,9,9,11,12,12,15,15,17]]]}"
+  },
+  "tags": [
+    "fuzz",
+    "crash",
+    "match",
+    "multipath"
+  ],
+  "write-required": false,
+  "disabled-reason": "DBProgramGenerator::addMergeFilter looks the merge sources up with a raw _varMap.at(), which throws an uncaught std::out_of_range when the closing hop is undirected"
+}

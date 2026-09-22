@@ -1,0 +1,16 @@
+{
+  "enabled": false,
+  "graph": "simpledb",
+  "query": "MATCH (n) RETURN COUNT(n), toFloat(\"10\")",
+  "expect": {
+    "result": "COUNT(n),\"toFloat(\"\"10\"\")\"\n18,10",
+    "resultJson": "{\"header\":{\"column_names\":[\"COUNT(n)\",\"toFloat(\\\"10\\\")\"],\"column_types\":[\"UInt64\",\"Double\"]},\"data\":[[[18],[10.0]]]}"
+  },
+  "tags": [
+    "fuzz",
+    "count",
+    "aggregate"
+  ],
+  "write-required": false,
+  "disabled-reason": "Codegen emits IR where the grouping key does not dominate its use ('operand #2 does not dominate this use'), so lowering rejects it with EXEC_ERROR 'DBLowering produced an invalid nl function'. Same COUNT-over-a-nullable-key path as fuzz-count-with-nullable-key, which segfaults without the MATCH"
+}

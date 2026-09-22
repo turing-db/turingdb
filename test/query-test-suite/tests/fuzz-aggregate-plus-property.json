@@ -1,0 +1,18 @@
+{
+  "enabled": false,
+  "graph": "simpledb",
+  "query": "MATCH (n) RETURN COUNT(*) + n.age",
+  "expect": {
+    "result": "COUNT(*) + n.age\n34\nnull",
+    "resultJson": "{\"header\":{\"column_names\":[\"COUNT(*) + n.age\"],\"column_types\":[\"Int64\"]},\"data\":[[[34,null]]]}"
+  },
+  "tags": [
+    "fuzz",
+    "crash",
+    "count",
+    "aggregate",
+    "expression"
+  ],
+  "write-required": false,
+  "disabled-reason": "The one-row aggregate meets the per-row property without being broadcast, so the kernel asserts 'lhs->size() == rhs->size()' at storage/columns/BinaryOperators.h:70. Values taken from MATCH (n) WITH n.age AS age, COUNT(*) AS c RETURN c + age"
+}

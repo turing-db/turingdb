@@ -1,0 +1,17 @@
+{
+  "enabled": false,
+  "graph": "simpledb",
+  "query": "MATCH (a)-->(b)-->(b) RETURN id(a) ORDER BY id(a)",
+  "expect": {
+    "result": "id(a)",
+    "resultJson": "{\"header\":{\"column_names\":[\"id(a)\"],\"column_types\":[\"UInt64\"]},\"data\":[]}"
+  },
+  "tags": [
+    "fuzz",
+    "crash",
+    "match",
+    "multipath"
+  ],
+  "write-required": false,
+  "disabled-reason": "Codegen asserts '_part._varMap.contains(var)' in DBProgramGenerator::expandComponent when a hop lands on a node variable already bound in the same component"
+}
