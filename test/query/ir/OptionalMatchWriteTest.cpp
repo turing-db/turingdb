@@ -294,6 +294,31 @@ TEST_F(OptionalMatchWriteTest, rejectsCreatingAnEdgeToANullEndpoint) {
                         QueryStatus::Status::EXEC_ERROR);
 }
 
+// The same two families of column inside a subquery body, where the body's own pattern
+// WHERE writes the null: of the eight bodies only Remy's holds a friend to write to
+TEST_F(OptionalMatchWriteTest, setsInsideABodyOnWhatItsPatternWhereKept) {
+    applyWrite("MATCH (p:Person) CALL (p) { OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) "
+               "WHERE f.name = 'Adam' SET f.dob = '02/02' }");
+
+    expectRows("MATCH (p:Person {dob: '02/02'}) RETURN p.name", {{"Adam"}});
+}
+
+// And the delete reads the same column: Adam goes, the seven nulls name nobody
+TEST_F(OptionalMatchWriteTest, detachDeletesInsideABodyWhatItsPatternWhereKept) {
+    applyWrite("MATCH (p:Person) CALL (p) { OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) "
+               "WHERE f.name = 'Adam' DETACH DELETE f }");
+
+    expectCounts("MATCH (p:Person) RETURN count(*)", {7});
+    EXPECT_EQ(graphNodeCount(), 17u);
+}
+
+// An edge to a null endpoint is turned away from inside a body as it is outside one
+TEST_F(OptionalMatchWriteTest, rejectsCreatingAnEdgeInsideABodyToANullEndpoint) {
+    expectWriteRejected("MATCH (p:Person) CALL (p) { OPTIONAL MATCH (p)-[:KNOWS_WELL]->(f) "
+                        "WHERE f.name = 'Adam' CREATE (p)-[:PROBE]->(f) }",
+                        QueryStatus::Status::EXEC_ERROR);
+}
+
 int main(int argc, char** argv) {
     return turing::test::turingTestMain(argc, argv);
 }
