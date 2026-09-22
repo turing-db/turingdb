@@ -93,14 +93,25 @@ The harnesses only catch expected user-input errors. For the query engine that i
 
 Token dictionaries improve AFL's mutation quality for structured inputs:
 
-- `fuzz/cypher.dict` — 178 Cypher keywords, operators, functions, procedures
+- `fuzz/cypher.dict` — Cypher keywords, operators, functions, procedures and patterns
 - `fuzz/http.dict` — HTTP methods, headers, TuringDB endpoints, URI parameters
 
-These are automatically loaded by `run_afl.sh` for the corresponding harness.
+These are automatically loaded by `run_afl.sh` for the corresponding harness. The
+keyword, function and procedure sections come from `query/parser/CypherLexer.l`,
+`query/AST/FunctionDecls.cpp` and `procedures/`; refresh them when the language grows.
 
 ## Seed Corpus
 
-- `fuzz/corpus/cypher/` — 312 Cypher queries extracted from the test suite
+- `fuzz/corpus/cypher/` — Cypher queries from the query test suite and the regression tests
 - `fuzz/corpus/http/` — 272 HTTP inputs (AFL++-generated corpus covering all parser edges)
 - `fuzz/corpus/csv/` — 3 CSV files (basic, quoted, no headers)
 - `fuzz/corpus/gml/` — 1 GML graph file
+
+The Cypher seeds go stale as the language grows, so regenerate them from the
+repository's own queries:
+
+```bash
+python3 fuzz/make_corpus.py            # add every query the sources produce
+python3 fuzz/make_corpus.py --dry-run  # report what would change
+python3 fuzz/make_corpus.py --prune    # also drop seeds no source produces any more
+```
