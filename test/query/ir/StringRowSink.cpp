@@ -36,6 +36,22 @@ bool textOfID(const Column* chunk, size_t rowIndex, std::string& text) {
     return true;
 }
 
+// A nullable entity column, which is what a procedure declaring a nullable NODE return
+// value writes: an absent row reads as null, as an invalid ID does
+template <typename IDType>
+bool textOfOptionalID(const Column* chunk, size_t rowIndex, std::string& text) {
+    const auto* column = dynamic_cast<const ColumnOptVector<IDType>*>(chunk);
+    if (!column) {
+        return false;
+    }
+
+    const std::optional<IDType>& id = column->getRaw()[rowIndex];
+    const bool present = id.has_value() && id->isValid();
+    text = present ? fmt::format("{}", id->getValue()) : "null";
+
+    return true;
+}
+
 // A constant column holds the one value every row of the relation reads, so the row index
 // says nothing about which value to read
 template <typename ElementType>
@@ -378,6 +394,10 @@ std::string StringRowSink::cellText(const Column* chunk, size_t rowIndex) {
     } else if (textOfOptional<std::string_view>(chunk, rowIndex, text)) {
         return text;
     } else if (textOfOptional<std::string>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfOptionalID<NodeID>(chunk, rowIndex, text)) {
+        return text;
+    } else if (textOfOptionalID<EdgeID>(chunk, rowIndex, text)) {
         return text;
     } else if (textOfOptionalBool(chunk, rowIndex, text)) {
         return text;

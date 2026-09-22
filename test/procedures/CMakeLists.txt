@@ -22,3 +22,10 @@ target_link_libraries(test_procedures_describe_commit_chunk PRIVATE
         turing_db_storage_s
         turing_db_jobs_s
         turing_db_examples_s)
+
+add_turing_test(test_procedures_graphsage GraphSAGEProcedureTest.cpp)
+target_link_libraries(test_procedures_graphsage PRIVATE
+        turing_db_procedures_s
+        turing_db_storage_s
+        turing_db_jobs_s
+        turing_db_examples_s)
